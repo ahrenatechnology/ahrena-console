@@ -101,7 +101,7 @@ test('em outras superfícies o painel cai para a versão simples', async ($, on)
 
 test('com o painel largo, as raias do kanban ficam lado a lado', async ($, on) => {
   fakeCore(on)
-  const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE, props: { ...PANE.props, bodyColumns: 140 } })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE, props: { ...PANE.props, bodyColumns: 180 } })
   await ui.press({ key: 'retry' })
   await ui.press({ key: 'refresh' })
   await ui.press({ key: 'tab-kanban' })
