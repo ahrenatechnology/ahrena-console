@@ -22,6 +22,10 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 
 [docs/proposta-0.0.1.md](docs/proposta-0.0.1.md): arquitetura da 0.0.1 (local-first, núcleo único, superfícies no Claude Desktop) e o recorte de features.
 
+## Backlog
+
+[docs/backlog-0.0.1.md](docs/backlog-0.0.1.md): a 0.0.1 na linha do Claude Code Agent Monitor, local primeiro (M1) e AWS serverless em seguida (M2).
+
 ## Validações
 
 [docs/validacoes-0.0.1.md](docs/validacoes-0.0.1.md): o que funcionou nos testes de painel, artefato, UI inline e ferramentas internas do Desktop. O código dos testes está em [spikes/](spikes/).
@@ -33,6 +37,7 @@ Em [docs/benchmark/](docs/benchmark/):
 | Arquivo | Frente |
 | --- | --- |
 | [00-agent-monitor.md](docs/benchmark/00-agent-monitor.md) | Claude Code Agent Monitor, a referência principal |
+| [00-agent-monitor-detalhado.md](docs/benchmark/00-agent-monitor-detalhado.md) | Claude Code Agent Monitor em detalhe: telas, componentes, estados e o que levar |
 | [01-dashboards.md](docs/benchmark/01-dashboards.md) | Dashboards de sessões do Claude Code (Podium, agents-observe e outros) |
 | [02-custo-uso.md](docs/benchmark/02-custo-uso.md) | Custo, uso, limites e telemetria (ccusage, OTel, Grafana) |
 | [03-orquestradores.md](docs/benchmark/03-orquestradores.md) | Orquestradores de agentes em paralelo (Vibe Kanban, Conductor e outros) |
