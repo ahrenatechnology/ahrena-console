@@ -10,6 +10,7 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 - **Dentro do Claude Desktop.** A interface principal abre no próprio app: artefato, painel ou UI inline. Nada de depender de terminal ou TUI.
 - **Standalone é opcional.** Pode existir uma interface web separada, mas ela não é o centro.
 - **Projeto novo.** Podium e Claude Code Agent Monitor são referências de ideias, não base de código.
+- **Interface e marca.** Visual na linha do Claude Code Agent Monitor, com a marca da Ahrena (a mesma do The Forward Deployed Engineer). Detalhes em [docs/design.md](docs/design.md).
 
 ## Em aberto
 
