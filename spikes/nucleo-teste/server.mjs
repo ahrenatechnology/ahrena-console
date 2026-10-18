@@ -508,7 +508,8 @@ const warm = async () => {
     await work().catch(() => null);
   } catch {}
 };
-restore().finally(() => setTimeout(warm, 2_000));
-setInterval(warm, PROJECTS_TTL_MS);
+// Sem aquecimento automático: o núcleo só chama o GitHub quando o painel pede.
+void restore();
+void warm;
 http.listen(PORT, HOST, () => console.log(`ahrena-console (teste) em http://${HOST}:${PORT}  MCP: /mcp  API: /api/overview`));
 }
