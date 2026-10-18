@@ -17,6 +17,7 @@ const PINK = '#df285d'
 const YELLOW = '#ffc30a'
 const GREEN = '#1baf7a'
 const VIOLET = '#9085e9'
+const RED = '#e34948'
 const MUTED = '#a6a6aa'
 const STATE_COLOR: Record<SessionRow['state'], string> = { ativa: ORANGE, ociosa: YELLOW, encerrada: MUTED }
 const STAGES = ['a fazer', 'em andamento', 'ci rodando', 'ci falhou', 'ajustes pedidos', 'em revisão', 'mergeado', 'concluída'] as const
@@ -24,8 +25,8 @@ const STAGE_COLOR: Record<string, string> = {
   'a fazer': MUTED,
   'em andamento': YELLOW,
   'ci rodando': YELLOW,
-  'ci falhou': PINK,
-  'ajustes pedidos': PINK,
+  'ci falhou': RED,
+  'ajustes pedidos': RED,
   'em revisão': ORANGE,
   mergeado: GREEN,
   concluída: GREEN,
@@ -53,6 +54,14 @@ const LANES: { id: string; label: string; color: string; stages: string[] }[] = 
 const LANE_LIMIT = 8
 // Abaixo desta largura (em colunas) as raias do kanban ficam empilhadas na vertical.
 const KANBAN_WIDE_COLUMNS = 100
+const laneOf = (stage: string) => LANES.find(l => l.stages.includes(stage)) ?? LANES[0]!
+// Selo do CI com cor semântica: verde passou, vermelho falhou, amarelo rodando.
+function ciBadge(ci: string | null) {
+  if (!ci) return null
+  if (ci === 'SUCCESS') return { text: 'CI ✓', color: GREEN }
+  if (ci === 'FAILURE' || ci === 'ERROR') return { text: 'CI ✕', color: RED }
+  return { text: 'CI …', color: YELLOW }
+}
 const typeStyle = (t: string | null) => (t && TYPE_STYLE[t]) || { color: MUTED, label: t ?? 'Issue' }
 const TABS: { id: Tab; label: string }[] = [
   { id: 'visao', label: 'Visão geral' },
@@ -199,7 +208,7 @@ function stagesSvg(byStage: Record<string, number>) {
 function prLine(n: WorkNode) {
   const p = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
   if (!p) return null
-  return `PR #${p.number} · ${p.isDraft ? 'rascunho' : p.state.toLowerCase()}${p.ci ? ` · CI ${p.ci.toLowerCase()}` : ''}`
+  return `PR #${p.number} · ${p.isDraft ? 'rascunho' : p.state === 'OPEN' ? 'aberto' : p.state === 'MERGED' ? 'mergeado' : 'fechado'}`
 }
 
 export const register: Register = on => {
@@ -279,11 +288,13 @@ export const register: Register = on => {
       const ts = typeStyle(n.type)
       const isOpen = v.expanded.includes(n.key)
       const pr = prLine(n)
+      const openPr = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
+      const ci = ciBadge(openPr?.ci ?? null)
       return (
         <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
           <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
             <Text size="caption" weight="bold" color={ts.color}>{ts.label.toUpperCase()}</Text>
-            <Text size="caption" color={STAGE_COLOR[n.stage] ?? MUTED}>● {n.stage}</Text>
+            <Text size="caption" weight="semibold" color={laneOf(n.stage).color}>{n.state === 'CLOSED' ? 'Feito' : laneOf(n.stage).label}</Text>
             <Text size="caption" dimColor wrap="truncate-end">{narrow ? `#${n.number}` : `${n.repo.split('/')[1]}#${n.number}`}</Text>
           </Box>
           <Text weight="semibold" wrap="wrap">{n.title}</Text>
@@ -295,6 +306,9 @@ export const register: Register = on => {
           )}
           <Box flexDirection="row" gap="sm" alignItems="center" flexWrap="wrap">
             {pr && <Text size="caption" dimColor>{pr}</Text>}
+            {ci && <Text size="caption" weight="bold" color={ci.color}>{ci.text}</Text>}
+            {openPr?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes pedidos</Text>}
+            {openPr?.review === 'APPROVED' && <Text size="caption" weight="bold" color={GREEN}>aprovado</Text>}
             {n.assignees.length > 0 && <Text size="caption" dimColor>@{n.assignees.join(' @')}</Text>}
             <Text size="caption" dimColor>atualizada há {ago(n.updatedAt)}</Text>
           </Box>
@@ -320,9 +334,9 @@ export const register: Register = on => {
           <Text size="footnote" wrap="truncate-end">{n.title}</Text>
           <Box flexDirection="row" gap="xs">
             <Text size="caption" dimColor>#{n.number}</Text>
-            {n.stage === 'ci falhou' && <Text size="caption" color={PINK}>CI ✕</Text>}
-            {n.stage === 'ajustes pedidos' && <Text size="caption" color={PINK}>ajustes</Text>}
-            {p && n.stage !== 'ci falhou' && n.stage !== 'ajustes pedidos' && <Text size="caption" dimColor>PR #{p.number}</Text>}
+            {p && <Text size="caption" dimColor>PR #{p.number}</Text>}
+            {ciBadge(p?.ci ?? null) && <Text size="caption" weight="bold" color={ciBadge(p?.ci ?? null)!.color}>{ciBadge(p?.ci ?? null)!.text}</Text>}
+            {p?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes</Text>}
           </Box>
           <Link href={n.url} label="abrir" />
         </Box>
