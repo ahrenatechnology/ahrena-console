@@ -18,6 +18,10 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 - Escopo da 0.0.1: uso interno da Ahrena ou já com clientes.
 - Se os agentes headless de produção entram na 0.0.1.
 
+## Proposta
+
+[docs/proposta-0.0.1.md](docs/proposta-0.0.1.md): arquitetura da 0.0.1 (local-first, núcleo único, superfícies no Claude Desktop) e o recorte de features.
+
 ## Benchmark
 
 Em [docs/benchmark/](docs/benchmark/):
