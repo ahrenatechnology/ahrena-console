@@ -32,6 +32,33 @@ const WORK = {
   generatedAt: NOW,
 }
 
+
+const PROJECTS = {
+  projects: [{
+    id: 'acme/1', org: 'acme', number: 1, title: 'Acme', url: 'https://github.com/orgs/acme/projects/1', updatedAt: NOW, itemCount: 3,
+    views: [
+      { number: 1, name: '01 · Tudo', layout: 'table', filter: '', groupBy: null, columnsBy: null },
+      { number: 2, name: '02 · Cliente X', layout: 'table', filter: 'label:"cliente:x" -type:Initiative', groupBy: 'Milestone', columnsBy: null },
+      { number: 3, name: '91 · Quadro', layout: 'board', filter: '', groupBy: null, columnsBy: 'Status' },
+    ],
+    selects: { Status: [{ name: 'Todo', color: '#8c8c8c' }, { name: 'In Progress', color: '#ffc30a' }, { name: 'Done', color: '#1baf7a' }] },
+  }],
+  generatedAt: NOW,
+}
+const pitem = (id: string, extra: Record<string, unknown>) => ({
+  id, kind: 'Issue', number: Number(id.slice(1)), title: `Item ${id}`, url: `https://github.com/acme/app/issues/${id.slice(1)}`, state: 'OPEN', updatedAt: NOW,
+  repo: 'acme/app', type: 'Task', milestone: null, assignees: [], labels: [], parent: null, progress: null, prs: [], fields: {}, ...extra,
+})
+const PROJECT_ITEMS = {
+  id: 'acme/1',
+  items: [
+    pitem('i1', { labels: ['cliente:x'], milestone: 'M1', fields: { Status: 'Todo' } }),
+    pitem('i2', { type: 'Initiative', labels: ['cliente:x'], fields: { Status: 'In Progress' } }),
+    pitem('i3', { fields: { Status: 'Done' }, prs: [{ number: 7, state: 'OPEN', isDraft: false, url: 'https://github.com/acme/app/pull/7', review: 'APPROVED', ci: 'SUCCESS' }] }),
+  ],
+  generatedAt: NOW,
+}
+
 const PANE = {
   component: 'Pane',
   requestId: 'ahrena-console',
@@ -40,7 +67,7 @@ const PANE = {
 
 const fakeCore = (on: any) => (
   on('http.fetch', async (_$: unknown, e: { url: string }) => ({
-    value: { status: 200, ok: true, headers: {}, text: JSON.stringify(e.url.endsWith('/api/work') ? WORK : FLEET) },
+    value: { status: 200, ok: true, headers: {}, text: JSON.stringify(e.url.endsWith('/api/work') ? WORK : e.url.endsWith('/api/projects') ? PROJECTS : e.url.includes('/api/project/') ? PROJECT_ITEMS : FLEET) },
   })),
   mock.clock(on, { now: Date.now() }),
   on('ui.status', async () => ({ value: undefined }))
@@ -76,12 +103,12 @@ test('a aba Trabalho mostra a hierarquia em cards e agrupa por estágio', async 
   expect(await ui.find({ key: 'card-acme/app#2' })).toBeDefined()
   await ui.press({ key: 'expand-all' })
   expect(await ui.find({ key: 'card-acme/app#3' })).toBeDefined()
-  await ui.press({ key: 'tab-kanban' })
+  await ui.press({ key: 'tab-trabalho' })
+  await ui.select({ key: 'modo', value: 'kanban' })
   expect(await ui.find({ key: 'kanban-narrow' })).toBeDefined()
   expect(await ui.find({ key: 'lane-revisao' })).toBeDefined()
   expect(await ui.find({ key: 'mini-acme/app#3' })).toBeDefined()
   expect(await ui.find({ key: 'mini-acme/app#4' })).toBeDefined()
-  await ui.press({ key: 'tab-trabalho' })
   await ui.select({ key: 'modo', value: 'estagio' })
   await ui.select({ key: 'stage', value: 'ci falhou' })
   expect(await ui.find({ key: 'card-acme/app#3' })).toBeDefined()
@@ -104,7 +131,8 @@ test('com o painel largo, as raias do kanban ficam lado a lado', async ($, on) =
   const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE, props: { ...PANE.props, bodyColumns: 140 } })
   await ui.press({ key: 'retry' })
   await ui.press({ key: 'refresh' })
-  await ui.press({ key: 'tab-kanban' })
+  await ui.press({ key: 'tab-trabalho' })
+  await ui.select({ key: 'modo', value: 'kanban' })
   expect(await ui.find({ key: 'kanban-wide' })).toBeDefined()
   expect(await ui.find({ key: 'kanban-narrow' })).toBeUndefined()
   await ui.unmount()
@@ -115,7 +143,7 @@ test('num painel bem estreito tudo continua desenhando', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE, props: { ...PANE.props, bodyColumns: 36 } })
   await ui.press({ key: 'retry' })
   await ui.press({ key: 'refresh' })
-  for (const tab of ['visao', 'kanban', 'trabalho', 'sessoes']) {
+  for (const tab of ['visao', 'projetos', 'trabalho', 'sessoes']) {
     await ui.press({ key: `tab-${tab}` })
     expect(await ui.find({ type: 'Button' })).toBeDefined()
   }
@@ -123,5 +151,25 @@ test('num painel bem estreito tudo continua desenhando', async ($, on) => {
   await ui.select({ key: 'modo', value: 'arvore' })
   await ui.press({ key: 'expand-all' })
   expect(await ui.find({ key: 'card-acme/app#3' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a aba Projetos espelha as views do GitHub: abas, filtro, agrupamento e quadro', async ($, on) => {
+  fakeCore(on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE, props: { ...PANE.props, bodyColumns: 140 } })
+  await ui.press({ key: 'retry' })
+  await ui.press({ key: 'refresh' })
+  await ui.press({ key: 'tab-projetos' })
+  expect(await ui.find({ key: 'view-1' })).toBeDefined()
+  expect(await ui.find({ key: 'view-3' })).toBeDefined()
+  expect(await ui.find({ key: 'pi-i3' })).toBeDefined()
+  await ui.press({ key: 'view-2' })
+  expect(await ui.find({ key: 'pi-i1' })).toBeDefined()
+  expect(await ui.find({ key: 'pi-i2' })).toBeUndefined()
+  expect(await ui.find({ key: 'pi-i3' })).toBeUndefined()
+  expect(await ui.find({ key: 'pg-M1' })).toBeDefined()
+  await ui.press({ key: 'view-3' })
+  expect(await ui.find({ key: 'board-wide' })).toBeDefined()
+  expect(await ui.find({ key: 'pl-In Progress' })).toBeDefined()
   await ui.unmount()
 })

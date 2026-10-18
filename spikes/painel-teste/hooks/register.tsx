@@ -4,13 +4,17 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register, RenderElement } from 'claude-code'
 
-import type { Fleet, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import type { Fleet, Project, ProjectItem, ProjectItems, ProjectView, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import { matchesFilter, parseFilter } from './filtro.ts'
 
 const PANE = 'ahrena-console'
 const CORE = 'http://127.0.0.1:4720'
 const REPO = 'https://github.com/ahrenatechnology/ahrena-console'
 const FLEET_EVERY_MS = 5000
 const WORK_EVERY_MS = 60_000
+const PROJECTS_EVERY_MS = 120_000
+const PROJECT_ITEMS_EVERY_MS = 60_000
+const GROUP_LIMIT = 12
 
 const ORANGE = '#f47720'
 const PINK = '#df285d'
@@ -65,15 +69,15 @@ function ciBadge(ci: string | null) {
 const typeStyle = (t: string | null) => (t && TYPE_STYLE[t]) || { color: MUTED, label: t ?? 'Issue' }
 const TABS: { id: Tab; label: string }[] = [
   { id: 'visao', label: 'Visão geral' },
-  { id: 'kanban', label: 'Kanban' },
+  { id: 'projetos', label: 'Projetos' },
   { id: 'trabalho', label: 'Trabalho' },
   { id: 'sessoes', label: 'Sessões' },
 ]
 
-const EMPTY_READING: Reading = { fleet: null, work: null, error: null, workError: null, polls: 0, latencies: [] }
+const EMPTY_READING: Reading = { fleet: null, work: null, projects: null, projectItems: null, projectsError: null, error: null, workError: null, polls: 0, latencies: [] }
 const EMPTY_VIEW: View = {
   tab: 'visao', filter: 'todas', query: '', selected: null, stage: 'todas', org: 'todas', issueQuery: '', selectedIssue: null,
-  workMode: 'kanban', expanded: [],
+  workMode: 'kanban', expanded: [], project: null, projectView: null,
 }
 
 const reading = atom({ plugin: 'ahrena-console-painel', key: 'reading' } as const, EMPTY_READING)
@@ -81,17 +85,34 @@ const view = atom({ plugin: 'ahrena-console-painel', key: 'view' } as const, EMP
 
 let fleetTimer: { cancel: () => void } | undefined
 let workTimer: { cancel: () => void } | undefined
+let projectsTimer: { cancel: () => void } | undefined
+let itemsTimer: { cancel: () => void } | undefined
 
-async function readingNow($: Engine): Promise<Reading> {
-  // Estado salvo por uma versão anterior do painel pode vir sem campos novos.
-  const raw = (await read($, reading)) as Partial<Reading> | undefined
+// Estado salvo por uma versão anterior do painel pode vir sem campos novos.
+function normalize(value: unknown): Reading {
+  const raw = value as Partial<Reading> | undefined
   return {
     ...EMPTY_READING,
     ...raw,
     fleet: raw?.fleet?.totals ? raw.fleet : null,
     work: raw?.work?.nodes ? raw.work : null,
+    projects: Array.isArray(raw?.projects) ? raw.projects : null,
+    projectItems: raw?.projectItems?.items ? raw.projectItems : null,
     latencies: raw?.latencies ?? [],
   }
+}
+
+async function readingNow($: Engine): Promise<Reading> {
+  return normalize(await read($, reading))
+}
+
+// Cada leitura grava só a parte dela, sobre o estado do momento da gravação:
+// leituras em paralelo (sessões, trabalho, projetos) não apagam umas às outras.
+async function patchReading($: Engine, fn: (r: Reading) => Partial<Reading>) {
+  await update($, reading, cur => {
+    const r = normalize(cur)
+    return { ...r, ...fn(r) }
+  })
 }
 
 async function viewNow($: Engine): Promise<View> {
@@ -99,24 +120,34 @@ async function viewNow($: Engine): Promise<View> {
   return { ...v, tab: TABS.some(t => t.id === v.tab) ? v.tab : 'visao', expanded: Array.isArray(v.expanded) ? v.expanded : [] }
 }
 
+// Lê a resposta do núcleo sem quebrar: corpo vazio ou erro viram uma mensagem legível,
+// e quem chamou mantém o último dado bom na tela.
+function readJson<T>(res: { ok: boolean; status: number; text: string }): { data: T | null; error: string | null } {
+  if (!res.text) return { data: null, error: `HTTP ${res.status}: resposta vazia` }
+  try {
+    const json = JSON.parse(res.text) as T & { error?: string; stale?: boolean; staleReason?: string }
+    if (!res.ok) return { data: null, error: json.error ?? `HTTP ${res.status}` }
+    return { data: json, error: json.stale ? `mostrando dados antigos: ${json.staleReason ?? 'GitHub indisponível'}` : null }
+  } catch {
+    return { data: null, error: `HTTP ${res.status}: resposta inválida` }
+  }
+}
+
 async function pollFleet($: Engine) {
   const t0 = await $.clock.now()
   try {
     const res = await $.http.fetch(`${CORE}/api/fleet`)
     const ms = (await $.clock.now()) - t0
-    const fleet = res.ok ? (JSON.parse(res.text) as Fleet) : null
-    const r = await readingNow($)
-    await update($, reading, () => ({
-      ...r,
+    const { data: fleet, error: fleetError } = readJson<Fleet>(res)
+    await patchReading($, r => ({
       fleet: fleet ?? r.fleet,
-      error: res.ok ? null : `HTTP ${res.status}`,
+      error: fleetError,
       polls: r.polls + 1,
       latencies: [...r.latencies, ms].slice(-24),
     }))
     $.ui.status(fleet ? `ahrena-console ● ${fleet.totals.active} ativa · ${fleet.totals.idle} ociosa` : 'ahrena-console ○ erro')
   } catch (err) {
-    const r = await readingNow($)
-    await update($, reading, () => ({ ...r, error: String(err), polls: r.polls + 1 }))
+    await patchReading($, r => ({ error: String(err), polls: r.polls + 1 }))
     $.ui.status('ahrena-console ○ offline')
   }
 }
@@ -124,20 +155,51 @@ async function pollFleet($: Engine) {
 async function pollWork($: Engine) {
   try {
     const res = await $.http.fetch(`${CORE}/api/work`)
-    const work = res.ok ? (JSON.parse(res.text) as Work) : null
-    const r = await readingNow($)
-    await update($, reading, () => ({ ...r, work: work ?? r.work, workError: res.ok ? null : `HTTP ${res.status}` }))
+    const { data: work, error } = readJson<Work>(res)
+    await patchReading($, r => ({ work: work ?? r.work, workError: error }))
   } catch (err) {
-    const r = await readingNow($)
-    await update($, reading, () => ({ ...r, workError: String(err) }))
+    await patchReading($, r => ({ workError: String(err) }))
+  }
+}
+
+async function pollProjects($: Engine) {
+  try {
+    const res = await $.http.fetch(`${CORE}/api/projects`)
+    const { data, error } = readJson<{ projects: Project[] }>(res)
+    const list = data?.projects ?? null
+    await patchReading($, r => ({ projects: list ?? r.projects, projectsError: error }))
+    const v = await viewNow($)
+    if (list?.length && !v.project) await setView($, { project: list.find(p => p.views.length > 1)?.id ?? list[0]!.id })
+    await pollProjectItems($)
+  } catch (err) {
+    await patchReading($, r => ({ projectsError: String(err) }))
+  }
+}
+
+// Itens do projeto escolhido; o núcleo mantém o cache aquecido, então a resposta é rápida.
+async function pollProjectItems($: Engine) {
+  const v = await viewNow($)
+  if (!v.project) return
+  try {
+    const [org, number] = v.project.split('/')
+    const res = await $.http.fetch(`${CORE}/api/project/${encodeURIComponent(org ?? '')}/${number}`)
+    const { data, error } = readJson<ProjectItems>(res)
+    await patchReading($, r => ({ projectItems: data ?? r.projectItems, projectsError: error }))
+  } catch (err) {
+    await patchReading($, r => ({ projectsError: String(err) }))
   }
 }
 
 function start($: Engine) {
   fleetTimer?.cancel()
   workTimer?.cancel()
+  projectsTimer?.cancel()
+  itemsTimer?.cancel()
   void pollFleet($)
   void pollWork($)
+  void pollProjects($)
+  projectsTimer = $.clock.every(PROJECTS_EVERY_MS, () => void pollProjects($))
+  itemsTimer = $.clock.every(PROJECT_ITEMS_EVERY_MS, () => void pollProjectItems($))
   fleetTimer = $.clock.every(FLEET_EVERY_MS, () => void pollFleet($))
   workTimer = $.clock.every(WORK_EVERY_MS, () => void pollWork($))
 }
@@ -492,7 +554,7 @@ export const register: Register = on => {
     const stageCards = openLeafs.filter(matches).filter(n => v.stage === 'todas' || n.stage === v.stage)
     const trabalho = (
       <Box flexDirection="column" gap="md">
-        {r.workError && <Text color={PINK}>Não deu para ler o GitHub: {r.workError}</Text>}
+        {r.workError && <Text size="caption" color={w ? YELLOW : RED}>{w ? `⚠ ${r.workError}` : `Não deu para ler o GitHub: ${r.workError}`}</Text>}
         {!w && !r.workError && <Text dimColor>Lendo a hierarquia do GitHub…</Text>}
         {w && (
           <Box flexDirection="column" gap="md">
@@ -559,32 +621,150 @@ export const register: Register = on => {
       </Box>
     )
 
+
+    // Projetos: espelho do GitHub Projects. Mesmos projetos, mesmas abas (views) na
+    // mesma ordem, o filtro de cada view e as colunas e cores do campo de Status.
+    const plist = r.projects ?? []
+    const proj = plist.find(p => p.id === v.project) ?? plist[0] ?? null
+    const pview: ProjectView | null = proj ? (proj.views.find(x => x.number === v.projectView) ?? proj.views[0] ?? null) : null
+    const pitems = r.projectItems && proj && r.projectItems.id === proj.id ? r.projectItems.items : null
+    const statusField = pview?.columnsBy ?? 'Status'
+    const statusOptions = proj?.selects[statusField] ?? proj?.selects.Status ?? []
+    const colorOf = (field: string, value: string | null) => proj?.selects[field]?.find(o => o.name === value)?.color ?? MUTED
+    const visible = pitems && pview ? pitems.filter(i => matchesFilter(i, parseFilter(pview.filter))).filter(i => !v.issueQuery || `${i.repo ?? ''} ${i.title}`.toLowerCase().includes(v.issueQuery.toLowerCase())) : []
+
+    const pCard = (i: ProjectItem, compact: boolean) => {
+      const ts = typeStyle(i.type)
+      const status = i.fields[statusField] ?? i.fields.Status ?? null
+      const openPr = i.prs.find(x => x.state === 'OPEN') ?? i.prs[0]
+      const ci = ciBadge(openPr?.ci ?? null)
+      return (
+        <Box key={`pi-${i.id}`} flexDirection="column" borderStyle="round" borderColor={ts.color} paddingX={compact ? 'xs' : 'sm'} gap="xs">
+          <Box flexDirection="row" gap="sm" flexWrap="wrap" alignItems="center">
+            <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
+            {!compact && status && <Text size="caption" weight="semibold" color={colorOf(statusField, status)}>{status}</Text>}
+            {i.number !== null && <Text size="caption" dimColor>#{i.number}</Text>}
+            {i.fields.Priority && <Text size="caption" color={colorOf('Priority', i.fields.Priority)}>{i.fields.Priority}</Text>}
+          </Box>
+          <Text size={compact ? 'footnote' : 'body'} weight="semibold" wrap={compact ? 'truncate-end' : 'wrap'}>{i.title}</Text>
+          {!compact && i.progress && (
+            <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
+              <Svg source={progressSvg(i.progress.pct, ts.color)} alt={`${i.progress.completed} de ${i.progress.total} concluídas`} width={svgW(160)} height={6} />
+              <Text size="caption" tabular dimColor>{i.progress.completed}/{i.progress.total}</Text>
+            </Box>
+          )}
+          <Box flexDirection="row" gap="sm" flexWrap="wrap" alignItems="center">
+            {openPr && <Text size="caption" dimColor>PR #{openPr.number}</Text>}
+            {ci && <Text size="caption" weight="bold" color={ci.color}>{ci.text}</Text>}
+            {openPr?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes</Text>}
+            {openPr?.review === 'APPROVED' && <Text size="caption" weight="bold" color={GREEN}>aprovado</Text>}
+            {!compact && i.assignees.length > 0 && <Text size="caption" dimColor>@{i.assignees.join(' @')}</Text>}
+            {!compact && i.fields.Frente && <Text size="caption" dimColor>{i.fields.Frente}</Text>}
+            {i.url && <Link href={i.url} label="abrir" />}
+          </Box>
+        </Box>
+      )
+    }
+
+    // Quadro: uma raia por opção do campo de colunas, na ordem e na cor do GitHub.
+    const boardLanes = [...statusOptions.map(o => ({ name: o.name, color: o.color })), { name: 'Sem status', color: MUTED }]
+      .map(l => ({ ...l, items: visible.filter(i => (i.fields[statusField] ?? null) === (l.name === 'Sem status' ? null : l.name)) }))
+      .filter(l => l.items.length || l.name !== 'Sem status')
+    const lane = (l: { name: string; color: string; items: ProjectItem[] }, compact: boolean) => (
+      <Box key={`pl-${l.name}`} flexDirection="column" gap="xs" flexGrow={1} width={wide ? `${Math.floor(100 / boardLanes.length)}%` : undefined} minWidth={wide ? 14 : undefined}>
+        <Box flexDirection="row" gap="xs" borderStyle="round" borderColor={l.color} paddingX="xs">
+          <Text size="footnote" weight="bold" color={l.color}>{l.name}</Text>
+          <Text size="footnote" tabular dimColor>{l.items.length}</Text>
+        </Box>
+        {l.items.slice(0, GROUP_LIMIT).map(i => pCard(i, compact))}
+        {l.items.length > GROUP_LIMIT && <Text size="caption" dimColor>+{l.items.length - GROUP_LIMIT} mais</Text>}
+        {l.items.length === 0 && <Text size="caption" dimColor>vazio</Text>}
+      </Box>
+    )
+    // Tabela: agrupada como a view agrupa (Milestone, Frente…); sem agrupamento, por Status.
+    const groupKey = pview?.groupBy ?? statusField
+    const groupValue = (i: ProjectItem) => (groupKey === 'Milestone' ? i.milestone : groupKey === 'Repository' ? i.repo : (i.fields[groupKey] ?? null)) ?? `Sem ${groupKey.toLowerCase()}`
+    const groups = [...new Set(visible.map(groupValue))].sort((a, b) => {
+      const opts = proj?.selects[groupKey]?.map(o => o.name) ?? []
+      const ia = opts.indexOf(a), ib = opts.indexOf(b)
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b)
+    })
+
+    const projetos = (
+      <Box flexDirection="column" gap="md">
+        {r.projectsError && <Text size="caption" color={proj ? YELLOW : RED}>{proj ? `⚠ ${r.projectsError}` : `Não deu para ler os projetos do GitHub: ${r.projectsError}`}</Text>}
+        {!proj && !r.projectsError && <Text dimColor>Lendo os projetos do GitHub…</Text>}
+        {proj && (
+          <Box flexDirection="column" gap="sm">
+            <Box flexDirection={narrow ? 'column' : 'row'} gap="sm" alignItems={narrow ? 'stretch' : 'flex-end'} flexWrap="wrap">
+              <Select
+                key="projeto"
+                label="Projeto"
+                value={proj.id}
+                options={plist.map(p => ({ value: p.id, label: `${p.title} (${p.itemCount})` }))}
+                onSelect={async (value: string) => {
+                  await setView($, { project: value, projectView: null })
+                  await pollProjectItems($)
+                }}
+              />
+              <Input key="busca-projeto" label="Busca" placeholder="título ou repositório" value={v.issueQuery} submitLabel="Buscar" onInput={(value: string) => setView($, { issueQuery: value })} onSubmit={(value: string) => setView($, { issueQuery: value })} />
+              <Link href={proj.url} label="Abrir no GitHub" />
+            </Box>
+            <Box flexDirection="row" gap="xs" flexWrap="wrap">
+              {proj.views.map(x => (
+                <Button key={`view-${x.number}`} label={x.name} variant={pview?.number === x.number ? 'primary' : 'secondary'} onPress={() => setView($, { projectView: x.number })} />
+              ))}
+            </Box>
+            {pview && (
+              <Text size="caption" dimColor>
+                {pview.layout === 'board' ? 'Quadro' : pview.layout === 'roadmap' ? 'Roadmap' : 'Tabela'}
+                {pview.filter ? ` · filtro: ${pview.filter}` : ' · sem filtro'}
+                {pview.groupBy ? ` · agrupado por ${pview.groupBy}` : ''} · {visible.length} itens
+                {r.projectItems ? ` · lido há ${ago(r.projectItems.generatedAt)}` : ''}
+              </Text>
+            )}
+            {!pitems && <Text dimColor>Lendo os itens do projeto…</Text>}
+            {pitems && pview?.layout === 'board' && (
+              wide
+                ? <Box key="board-wide" flexDirection="row" gap="xs" alignItems="flex-start">{boardLanes.map(l => lane(l, true))}</Box>
+                : <Box key="board-narrow" flexDirection="column" gap="md">{boardLanes.map(l => lane(l, false))}</Box>
+            )}
+            {pitems && pview?.layout !== 'board' && (
+              <Box key="table-groups" flexDirection="column" gap="md">
+                {groups.map(g => {
+                  const items = visible.filter(i => groupValue(i) === g)
+                  return (
+                    <Box key={`pg-${g}`} flexDirection="column" gap="xs">
+                      <Box flexDirection="row" gap="xs" borderStyle="round" borderColor={colorOf(groupKey, g)} paddingX="xs">
+                        <Text size="footnote" weight="bold" color={colorOf(groupKey, g)}>{g}</Text>
+                        <Text size="footnote" tabular dimColor>{items.length}</Text>
+                      </Box>
+                      <Box flexDirection="row" gap="xs" flexWrap="wrap">
+                        {items.slice(0, GROUP_LIMIT).map(i => (
+                          <Box key={`ps-${i.id}`} minWidth={narrow ? undefined : 28} width={narrow ? '100%' : undefined} flexGrow={1}>{pCard(i, false)}</Box>
+                        ))}
+                      </Box>
+                      {items.length > GROUP_LIMIT && <Text size="caption" dimColor>+{items.length - GROUP_LIMIT} mais</Text>}
+                    </Box>
+                  )
+                })}
+                {visible.length === 0 && <Text dimColor>Nenhum item nesta view.</Text>}
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+    )
+
     return (
       <Box flexDirection="column" gap="md" padding="sm">
         {header}
         {v.tab === 'visao' && visao}
         {v.tab === 'sessoes' && sessoes}
-        {v.tab === 'kanban' && (
-          <Box flexDirection="column" gap="md">
-            {!w && <Text dimColor>{r.workError ? `Não deu para ler o GitHub: ${r.workError}` : 'Lendo a hierarquia do GitHub…'}</Text>}
-            {w && (
-              <Box flexDirection={narrow ? 'column' : 'row'} gap="sm" alignItems={narrow ? 'stretch' : 'flex-end'} flexWrap="wrap">
-                <Select
-                  key="org-kanban"
-                  label="Organização"
-                  value={v.org}
-                  options={[{ value: 'todas', label: 'Todas' }, ...orgs.map(o => ({ value: o, label: o }))]}
-                  onSelect={(value: string) => setView($, { org: value })}
-                />
-                <Input key="busca-kanban" label="Busca" placeholder="título ou repositório" value={v.issueQuery} submitLabel="Buscar" onInput={(value: string) => setView($, { issueQuery: value })} onSubmit={(value: string) => setView($, { issueQuery: value })} />
-              </Box>
-            )}
-            {w && kanbanBoard}
-          </Box>
-        )}
+        {v.tab === 'projetos' && projetos}
         {v.tab === 'trabalho' && trabalho}
         <Box flexDirection="row" gap="sm" flexWrap="wrap">
-          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => Promise.all([pollFleet($), pollWork($)])} />
+          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => Promise.all([pollFleet($), pollWork($), pollProjects($)])} />
           <Button
             key="clear"
             label="Limpar filtros"

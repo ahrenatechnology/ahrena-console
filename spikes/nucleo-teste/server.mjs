@@ -117,11 +117,13 @@ function stageOf(prs) {
 
 async function issues() {
   if (issuesCache.data && Date.now() - issuesCache.at < ISSUES_TTL_MS) return issuesCache.data;
-  const { execFile } = await import('node:child_process');
-  const out = await new Promise((resolve, reject) =>
-    execFile('/opt/homebrew/bin/gh', ['api', 'graphql', '-f', `query=${ISSUES_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc'], { timeout: 20_000, maxBuffer: 8 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
-  );
-  const search = JSON.parse(out).data.search;
+  let search;
+  try {
+    search = (await gh(['-f', `query=${ISSUES_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc'])).search;
+  } catch (err) {
+    if (issuesCache.data) return { ...issuesCache.data, stale: true, staleReason: err.message };
+    throw err;
+  }
   const items = search.nodes.map((n) => {
     const prs = n.closedByPullRequestsReferences.nodes.map((p) => ({
       number: p.number, state: p.state, isDraft: p.isDraft, url: p.url, review: p.reviewDecision,
@@ -141,7 +143,7 @@ async function issues() {
 // Hierarquia do trabalho: Iniciativa → Épico → História/Tarefa → Plano, montada a
 // partir do tipo de issue e das sub-issues do GitHub. Parte das issues abertas em que
 // a pessoa está envolvida e sobe até os pais e desce até as filhas.
-const WORK_TTL_MS = 60_000;
+const WORK_TTL_MS = 3 * 60_000;
 let workCache = { at: 0, data: null };
 const NODE_FIELDS = `number title url state updatedAt repository { nameWithOwner } issueType { name }
   subIssuesSummary { total completed percentCompleted } assignees(first: 2) { nodes { login } } labels(first: 4) { nodes { name } }
@@ -171,10 +173,13 @@ function toNode(n) {
 
 async function work() {
   if (workCache.data && Date.now() - workCache.at < WORK_TTL_MS) return workCache.data;
-  const { execFile } = await import('node:child_process');
-  const out = await new Promise((resolve, reject) =>
-    execFile('/opt/homebrew/bin/gh', ['api', 'graphql', '-H', 'GraphQL-Features: sub_issues,issue_types', '-f', `query=${WORK_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc'], { timeout: 30_000, maxBuffer: 16 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
-  );
+  let searchData;
+  try {
+    searchData = await gh(['-f', `query=${WORK_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc']);
+  } catch (err) {
+    if (workCache.data) return { ...workCache.data, stale: true, staleReason: err.message };
+    throw err;
+  }
   const nodes = new Map();
   const add = (raw) => {
     const node = toNode(raw);
@@ -198,14 +203,164 @@ async function work() {
       walkDown(c, child);
     }
   };
-  for (const raw of JSON.parse(out).data.search.nodes) walkDown(raw, walkUp(raw));
+  for (const raw of searchData.search.nodes) walkDown(raw, walkUp(raw));
   const byRank = (a, b) => a.rank - b.rank || Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
   for (const n of nodes.values()) n.children.sort((a, b) => byRank(nodes.get(a), nodes.get(b)));
   const roots = [...nodes.values()].filter((n) => !n.parent).sort(byRank).map((n) => n.key);
   const byType = {};
   for (const n of nodes.values()) byType[n.type ?? 'Sem tipo'] = (byType[n.type ?? 'Sem tipo'] ?? 0) + 1;
   workCache = { at: Date.now(), data: { nodes: Object.fromEntries(nodes), roots, byType, count: nodes.size, generatedAt: new Date().toISOString() } };
+  void saveCache('work', workCache);
   return workCache.data;
+}
+
+// GitHub Projects: os mesmos projetos, abas (views), filtros e colunas de Status que
+// a pessoa vê no GitHub. As organizações vêm de AHRENA_CONSOLE_ORGS (separadas por vírgula).
+const PROJECT_ORGS = (process.env.AHRENA_CONSOLE_ORGS ?? 'ahrenatechnology,barte-ai-services').split(',').map((s) => s.trim()).filter(Boolean);
+const PROJECTS_TTL_MS = 5 * 60_000;
+let projectsCache = { at: 0, data: null };
+let lastProjectsError = null;
+const projectItemsCache = new Map();
+const GH_COLOR = { GRAY: '#8c8c8c', BLUE: '#3987e5', GREEN: '#1baf7a', YELLOW: '#ffc30a', ORANGE: '#f47720', RED: '#e34948', PINK: '#df285d', PURPLE: '#9085e9' };
+
+// Cache em disco: o que veio do GitHub sobrevive a reinícios do núcleo, que antes
+// zeravam tudo e faziam o núcleo bater no GitHub de novo (e estourar o limite).
+const CACHE_DIR = join(homedir(), 'Library', 'Caches', 'ahrena-console');
+async function saveCache(name, value) {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  await mkdir(CACHE_DIR, { recursive: true }).catch(() => null);
+  await writeFile(join(CACHE_DIR, `${name}.json`), JSON.stringify(value)).catch(() => null);
+}
+async function loadCache(name) {
+  try { return JSON.parse(await readFile(join(CACHE_DIR, `${name}.json`), 'utf8')); } catch { return null; }
+}
+
+// Quando o GitHub limita (rate limit), o núcleo para de chamar por alguns minutos e
+// serve o último dado bom. Toda chamada ao GitHub passa por aqui.
+const RATE_LIMIT_BACKOFF_MS = 5 * 60_000;
+let ghBlockedUntil = 0;
+async function gh(args) {
+  if (Date.now() < ghBlockedUntil) throw new Error(`GitHub limitou as chamadas; nova tentativa em ${Math.ceil((ghBlockedUntil - Date.now()) / 60_000)} min`);
+  const { execFile } = await import('node:child_process');
+  const out = await new Promise((resolve, reject) =>
+    execFile('/opt/homebrew/bin/gh', ['api', 'graphql', '-H', 'GraphQL-Features: sub_issues,issue_types', ...args], { timeout: 45_000, maxBuffer: 32 << 20 }, (err, stdout, stderr) => {
+      if (!err) return resolve(stdout);
+      const msg = (stderr || err.message || '').trim();
+      if (/rate limit/i.test(msg)) ghBlockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      reject(new Error(msg.split('\n')[0] || 'falha no gh'));
+    }),
+  );
+  const json = JSON.parse(out);
+  if (json.errors) throw new Error(json.errors[0].message);
+  return json.data;
+}
+
+async function projects() {
+  if (projectsCache.data && Date.now() - projectsCache.at < PROJECTS_TTL_MS) return projectsCache.data;
+  const list = [];
+  for (const org of PROJECT_ORGS) {
+    const data = await gh(['-f', `query=query($org: String!) { organization(login: $org) { projectsV2(first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes {
+      number title closed url updatedAt items { totalCount }
+      views(first: 20) { nodes { name number layout filter
+        groupByFields(first: 1) { nodes { ... on ProjectV2FieldCommon { name } } }
+        verticalGroupByFields(first: 1) { nodes { ... on ProjectV2FieldCommon { name } } } } }
+      fields(first: 40) { nodes { ... on ProjectV2SingleSelectField { name options { name color } } } }
+    } } } }`, '-f', `org=${org}`]).catch((err) => { lastProjectsError = err.message; return null; });
+    for (const p of data?.organization?.projectsV2?.nodes ?? []) {
+      if (p.closed) continue;
+      const selects = {};
+      for (const fl of p.fields.nodes) if (fl?.options) selects[fl.name] = fl.options.map((o) => ({ name: o.name, color: GH_COLOR[o.color] ?? GH_COLOR.GRAY }));
+      list.push({
+        id: `${org}/${p.number}`, org, number: p.number, title: p.title, url: p.url, updatedAt: p.updatedAt, itemCount: p.items.totalCount,
+        views: p.views.nodes.map((v) => ({
+          number: v.number, name: v.name, layout: v.layout === 'BOARD_LAYOUT' ? 'board' : v.layout === 'ROADMAP_LAYOUT' ? 'roadmap' : 'table',
+          filter: v.filter ?? '', groupBy: v.groupByFields.nodes[0]?.name ?? null, columnsBy: v.verticalGroupByFields.nodes[0]?.name ?? null,
+        })),
+        selects,
+      });
+    }
+  }
+  if (!list.length && projectsCache.data) return { ...projectsCache.data, stale: true, staleReason: lastProjectsError };
+  if (!list.length && lastProjectsError) throw new Error(lastProjectsError);
+  projectsCache = { at: Date.now(), data: { projects: list, generatedAt: new Date().toISOString() } };
+  void saveCache('projects', projectsCache);
+  return projectsCache.data;
+}
+
+const ITEM_CONTENT = `
+  ... on Issue { __typename number title url state updatedAt repository { nameWithOwner } issueType { name } milestone { title }
+    assignees(first: 3) { nodes { login } } labels(first: 8) { nodes { name } } parent { number title }
+    subIssuesSummary { total completed percentCompleted }
+    closedByPullRequestsReferences(first: 2, includeClosedPrs: true) { nodes { number state isDraft url reviewDecision commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } }
+  ... on PullRequest { __typename number title url state isDraft updatedAt reviewDecision repository { nameWithOwner } milestone { title }
+    assignees(first: 3) { nodes { login } } labels(first: 8) { nodes { name } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+  ... on DraftIssue { __typename title updatedAt }`;
+
+async function projectItems(org, number) {
+  const key = `${org}/${number}`;
+  const hit = projectItemsCache.get(key);
+  if (hit) {
+    if (Date.now() - hit.at >= PROJECTS_TTL_MS && !hit.refreshing) {
+      hit.refreshing = true;
+      fetchProjectItems(org, number).catch(() => { hit.refreshing = false; });
+    }
+    return hit.data;
+  }
+  return fetchProjectItems(org, number);
+}
+
+async function fetchProjectItems(org, number) {
+  const key = `${org}/${number}`;
+  try {
+    return await fetchProjectItemsNow(org, number);
+  } catch (err) {
+    const old = projectItemsCache.get(key);
+    if (old) { old.refreshing = false; return { ...old.data, stale: true, staleReason: err.message }; }
+    throw err;
+  }
+}
+
+async function fetchProjectItemsNow(org, number) {
+  const key = `${org}/${number}`;
+  const items = [];
+  let after = null;
+  for (let page = 0; page < 12; page++) {
+    const data = await gh(['-f', `query=query($org: String!, $n: Int!, $after: String) { organization(login: $org) { projectV2(number: $n) { items(first: 100, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes { id isArchived fieldValues(first: 20) { nodes {
+        ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+        ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
+        ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+        ... on ProjectV2ItemFieldIterationValue { title field { ... on ProjectV2FieldCommon { name } } } } }
+        content { ${ITEM_CONTENT} } } } } } }`, '-f', `org=${org}`, '-F', `n=${number}`, ...(after ? ['-f', `after=${after}`] : [])]);
+    const conn = data.organization.projectV2.items;
+    for (const it of conn.nodes) {
+      if (it.isArchived || !it.content) continue;
+      const c = it.content;
+      const fields = {};
+      for (const fv of it.fieldValues.nodes) if (fv?.field?.name) fields[fv.field.name] = fv.name ?? fv.date ?? fv.text ?? fv.title ?? null;
+      const prs = c.__typename === 'Issue'
+        ? c.closedByPullRequestsReferences.nodes.map((p) => ({ number: p.number, state: p.state, isDraft: p.isDraft, url: p.url, review: p.reviewDecision, ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null }))
+        : c.__typename === 'PullRequest'
+          ? [{ number: c.number, state: c.state, isDraft: c.isDraft, url: c.url, review: c.reviewDecision, ci: c.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null }]
+          : [];
+      items.push({
+        id: it.id, kind: c.__typename, number: c.number ?? null, title: c.title, url: c.url ?? null, state: c.state ?? 'OPEN', updatedAt: c.updatedAt,
+        repo: c.repository?.nameWithOwner ?? null, type: c.issueType?.name ?? (c.__typename === 'PullRequest' ? 'Pull request' : c.__typename === 'DraftIssue' ? 'Rascunho' : null),
+        milestone: c.milestone?.title ?? null, assignees: (c.assignees?.nodes ?? []).map((a) => a.login), labels: (c.labels?.nodes ?? []).map((l) => l.name),
+        parent: c.parent ? `#${c.parent.number} ${c.parent.title}` : null,
+        progress: c.subIssuesSummary?.total ? { total: c.subIssuesSummary.total, completed: c.subIssuesSummary.completed, pct: c.subIssuesSummary.percentCompleted } : null,
+        prs, fields,
+      });
+    }
+    if (!conn.pageInfo.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  const data = { id: key, items, generatedAt: new Date().toISOString() };
+  projectItemsCache.set(key, { at: Date.now(), data });
+  void saveCache(`project-${key.replace('/', '-')}`, { at: Date.now(), data });
+  return data;
 }
 
 // Cada chamada de ferramenta vai para um log próprio: o log do Claude Desktop não
@@ -264,24 +419,41 @@ const http = createServer(async (req, res) => {
   requests++;
   console.log(new Date().toISOString(), req.method, req.url, req.headers['user-agent'] ?? '');
   try {
-    if (req.url === '/api/work') {
+    if (req.url === '/api/projects') {
+      const body = JSON.stringify(await projects());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(await work()));
+      res.end(body);
+      return;
+    }
+    const pm = req.url?.match(/^\/api\/project\/([^/]+)\/(\d+)$/);
+    if (pm) {
+      const body = JSON.stringify(await projectItems(decodeURIComponent(pm[1]), Number(pm[2])));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+      return;
+    }
+    if (req.url === '/api/work') {
+      const body = JSON.stringify(await work());
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
       return;
     }
     if (req.url === '/api/issues') {
+      const body = JSON.stringify(await issues());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(await issues()));
+      res.end(body);
       return;
     }
     if (req.url === '/api/fleet') {
+      const body = JSON.stringify(await fleet());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(await fleet()));
+      res.end(body);
       return;
     }
     if (req.url === '/api/overview') {
+      const body = JSON.stringify(await overview());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(await overview()));
+      res.end(body);
       return;
     }
     if (req.url?.startsWith('/mcp')) {
@@ -312,10 +484,31 @@ const http = createServer(async (req, res) => {
     res.writeHead(404).end();
   } catch (err) {
     console.error(err);
-    if (!res.headersSent) res.writeHead(500);
-    res.end();
+    if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err?.message ?? err) }));
   }
 });
 
+const restore = async () => {
+  const w = await loadCache('work');
+  if (w?.data) workCache = w;
+  const pr = await loadCache('projects');
+  if (pr?.data) {
+    projectsCache = pr;
+    for (const p of pr.data.projects) {
+      const it = await loadCache(`project-${p.org}-${p.number}`);
+      if (it?.data) projectItemsCache.set(`${p.org}/${p.number}`, it);
+    }
+  }
+};
+const warm = async () => {
+  try {
+    const { projects: list } = await projects();
+    for (const p of list) await projectItems(p.org, p.number).catch(() => null);
+    await work().catch(() => null);
+  } catch {}
+};
+restore().finally(() => setTimeout(warm, 2_000));
+setInterval(warm, PROJECTS_TTL_MS);
 http.listen(PORT, HOST, () => console.log(`ahrena-console (teste) em http://${HOST}:${PORT}  MCP: /mcp  API: /api/overview`));
 }
