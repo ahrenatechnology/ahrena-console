@@ -53,7 +53,13 @@ const LANES: { id: string; label: string; color: string; stages: string[] }[] = 
 ]
 const LANE_LIMIT = 8
 // Abaixo desta largura (em colunas) as raias do kanban ficam empilhadas na vertical.
-const KANBAN_WIDE_COLUMNS = 100
+const KANBAN_WIDE_COLUMNS = 150
+// Tamanho único dos cards, medido no painel do Claude Desktop (estreito ≈ 38 colunas,
+// expandido ≈ 121): a largura da tela muda quantos cabem por linha, nunca o tamanho.
+const CARD_W = 34
+const CARD_H = 7
+const KPI_W = 16
+const KPI_H = 4
 const laneOf = (stage: string) => LANES.find(l => l.stages.includes(stage)) ?? LANES[0]!
 // Selo do CI com cor semântica: verde passou, vermelho falhou, amarelo rodando.
 function ciBadge(ci: string | null) {
@@ -80,6 +86,8 @@ const reading = atom({ plugin: 'ahrena-console-painel', key: 'reading' } as cons
 const view = atom({ plugin: 'ahrena-console-painel', key: 'view' } as const, EMPTY_VIEW)
 
 let fleetTimer: { cancel: () => void } | undefined
+// Largura que o painel recebeu no último desenho; vai ao núcleo para calibrar o layout.
+let lastBodyColumns: number | null = null
 let workTimer: { cancel: () => void } | undefined
 
 // Estado salvo por uma versão anterior do painel pode vir sem campos novos.
@@ -128,7 +136,7 @@ async function viewNow($: Engine): Promise<View> {
 async function pollFleet($: Engine) {
   const t0 = await $.clock.now()
   try {
-    const res = await $.http.fetch(`${CORE}/api/fleet`)
+    const res = await $.http.fetch(`${CORE}/api/fleet${lastBodyColumns ? `?cols=${lastBodyColumns}` : ''}`)
     const ms = (await $.clock.now()) - t0
     const { data: fleet, error } = readJson<Fleet>(res)
     await patchReading($, r => ({
@@ -264,7 +272,8 @@ export const register: Register = on => {
     // Layout responsivo: a largura do painel (em colunas) decide estreito, médio ou largo.
     // Gráficos em SVG crescem com o painel; recuos e larguras mínimas encolhem.
     const cols = e.props.bodyColumns ?? 60
-    const narrow = cols < 60
+    lastBodyColumns = cols
+    const narrow = cols < 90
     const PX_PER_COL = 6
     const svgW = (max: number) => Math.max(60, Math.min(max, Math.floor((cols - 8) * PX_PER_COL)))
     const indent = (depth: number) => Math.min(depth, 3) * (narrow ? 1 : 2)
@@ -312,13 +321,13 @@ export const register: Register = on => {
       const openPr = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
       const ci = ciBadge(openPr?.ci ?? null)
       return (
-        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} minWidth={0} flexShrink={1} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
+        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
           <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
             <Text size="caption" weight="bold" color={ts.color}>{ts.label.toUpperCase()}</Text>
             <Text size="caption" weight="semibold" color={laneOf(n.stage).color}>{n.state === 'CLOSED' ? 'Feito' : laneOf(n.stage).label}</Text>
             <Text size="caption" dimColor wrap="truncate-end">{narrow ? `#${n.number}` : `${n.repo.split('/')[1]}#${n.number}`}</Text>
           </Box>
-          <Text weight="semibold" wrap="wrap">{n.title}</Text>
+          <Text weight="semibold" wrap="truncate-end">{n.title}</Text>
           {n.progress && (
             <Box flexDirection="row" alignItems="center" gap="sm">
               <Svg source={progressSvg(n.progress.pct, ts.color)} alt={`${n.progress.completed} de ${n.progress.total} concluídas`} width={svgW(160)} height={6} />
@@ -350,7 +359,7 @@ export const register: Register = on => {
       const ts = typeStyle(n.type)
       const p = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
       return (
-        <Box key={`mini-${n.key}`} flexDirection="column" minWidth={0} flexShrink={1} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
+        <Box key={`mini-${n.key}`} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
           <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
           <Text size="footnote" wrap="truncate-end">{n.title}</Text>
           <Box flexDirection="row" gap="xs">
@@ -387,7 +396,7 @@ export const register: Register = on => {
             { k: 'Iniciativas', n: w?.byType.Initiative ?? 0, c: ORANGE },
             { k: 'Itens abertos', n: openLeafs.length, c: PINK },
           ].map(c => (
-            <Box key={c.k} flexDirection="column" borderStyle="round" borderColor={c.c} paddingX="sm" flexGrow={1} flexShrink={1} overflow="hidden" width={narrow ? '48%' : undefined} minWidth={0}>
+            <Box key={c.k} flexDirection="column" borderStyle="round" borderColor={c.c} paddingX="sm" width={KPI_W} height={KPI_H} flexShrink={0} overflow="hidden">
               <Text size="caption" dimColor>{c.k}</Text>
               <Text size="title" weight="bold" tabular color={c.c}>{c.n}</Text>
             </Box>
@@ -476,7 +485,7 @@ export const register: Register = on => {
         {LANES.map(l => {
           const items = laneItems(l)
           return (
-            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" flexGrow={1} flexShrink={1} width="25%" minWidth={0} overflow="hidden">
+            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" width={CARD_W} flexShrink={0}>
               {laneHeader(l, items.length)}
               {items.slice(0, LANE_LIMIT).map(n => miniCard(n))}
               {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
@@ -494,7 +503,7 @@ export const register: Register = on => {
               {laneHeader(l, items.length)}
               <Box flexDirection="row" gap="xs" flexWrap="wrap">
                 {items.slice(0, LANE_LIMIT).map(n => (
-                  <Box key={`slot-${n.key}`} minWidth={0} flexShrink={1} overflow="hidden" width={narrow ? '100%' : wide ? undefined : '48%'} flexGrow={1}>{miniCard(n)}</Box>
+                  <Box key={`slot-${n.key}`} flexShrink={0}>{miniCard(n)}</Box>
                 ))}
               </Box>
               {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
@@ -560,7 +569,7 @@ export const register: Register = on => {
                 {withChildren.length === 0 && loose.length === 0 && <Text dimColor>Nada com esses filtros.</Text>}
                 {withChildren.flatMap(k => tree(k, 0))}
                 {loose.length > 0 && <Text size="footnote" weight="semibold">Fora de uma iniciativa ({loose.length})</Text>}
-                {loose.slice(0, 15).map(k => card(w.nodes[k] as WorkNode, 0))}
+                <Box flexDirection="row" gap="xs" flexWrap="wrap">{loose.slice(0, 15).map(k => card(w.nodes[k] as WorkNode, 0))}</Box>
               </Box>
             )}
             {v.workMode === 'kanban' && kanbanBoard}
@@ -569,7 +578,7 @@ export const register: Register = on => {
                 {STAGES.filter(s => stageCards.some(n => n.stage === s)).map(s => (
                   <Box key={`grp-${s}`} flexDirection="column" gap="xs">
                     <Text size="footnote" weight="semibold" color={STAGE_COLOR[s]}>● {s} ({stageCards.filter(n => n.stage === s).length})</Text>
-                    {stageCards.filter(n => n.stage === s).slice(0, 12).map(n => card(n, 0))}
+                    <Box flexDirection="row" gap="xs" flexWrap="wrap">{stageCards.filter(n => n.stage === s).slice(0, 12).map(n => card(n, 0))}</Box>
                   </Box>
                 ))}
                 {stageCards.length === 0 && <Text dimColor>Nada com esses filtros.</Text>}

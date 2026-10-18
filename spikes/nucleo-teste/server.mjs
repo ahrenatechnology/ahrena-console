@@ -446,7 +446,7 @@ const http = createServer(async (req, res) => {
       res.end(body);
       return;
     }
-    if (req.url === '/api/fleet') {
+    if (req.url?.startsWith('/api/fleet')) {
       const body = JSON.stringify(await fleet());
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(body);
