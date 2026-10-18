@@ -17,20 +17,26 @@ Do Podium entram ideias pontuais, não o visual: o estado "quem precisa de você
 
 A marca é a da Ahrena, a mesma do **The Forward Deployed Engineer** ([theforwarddeployedengineer.io](https://theforwarddeployedengineer.io)).
 
-Tokens em [brand/tokens.json](brand/tokens.json):
+A paleta parte da do The Forward Deployed Engineer ([brand/tokens.json](brand/tokens.json)) e vai se afastando dela aos poucos. **Só o laranja fica.** As outras cores são trocadas uma de cada vez, testando na tela.
 
-| Papel | Token | Hex |
-| --- | --- | --- |
-| Destaque, ações, barras | `orange.500` | `#f47720` |
-| Institucional, réguas, seleção | `purple.500` | `#552973` |
-| Alerta | `yellow.500` | `#ffc30a` |
-| Erro, falha | `pink.500` | `#db6286` |
+| Papel | Cor | Hex | Origem |
+| --- | --- | --- | --- |
+| Destaque, ações, barras | laranja | `#f47720` | The Forward Deployed Engineer (fica) |
+| Institucional, réguas, seleção | rosa | `#df285d` | Barte (`--bg-brand` do `barte-design-system`); substitui o roxo `#552973` desde 2026-10-18 |
+| Alerta | amarelo | `#ffc30a` | The Forward Deployed Engineer (a revisar) |
+| Erro, falha | a definir | `#db6286` por enquanto | Fica parecido demais com o rosa novo; precisa de outra cor |
 | Fundo (tema escuro) | `gray.900` | `#17171b` |
 | Superfícies | `gray.800` / `gray.700` | `#1e1e24` / `#28282f` |
 | Texto principal | `gray.100` | `#d7d7d9` |
 
+## Logo
+
+![Ahrena Console](brand/logo.svg)
+
+O logo é um **"A" com um ponto** ([brand/logo.svg](brand/logo.svg)): o A em traço escuro sobre um quadrado laranja de cantos arredondados, com o ponto em rosa no lugar da barra do A. Nasceu no painel de teste do mod em 2026-10-18 e foi escolhido como o logo do Ahrena Console.
+
 Em aberto:
 
 - a tipografia (Poppins, a confirmar com o site);
-- o logo: usar o do The Forward Deployed Engineer ou um próprio do Ahrena Console;
+- a cor de erro;
 - o tema claro.
