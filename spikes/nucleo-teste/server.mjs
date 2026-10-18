@@ -158,11 +158,23 @@ const http = createServer(async (req, res) => {
       return;
     }
     if (req.url?.startsWith('/mcp')) {
+      if (req.method === 'POST') {
+        const chunks = [];
+        for await (const c of req) chunks.push(c);
+        const body = Buffer.concat(chunks).toString('utf8');
+        try {
+          const msg = JSON.parse(body);
+          for (const m of Array.isArray(msg) ? msg : [msg]) {
+            console.log('  mcp>', m.method ?? 'resposta', m.method === 'initialize' ? JSON.stringify(m.params?.capabilities) : (m.params?.uri ?? m.params?.name ?? ''));
+          }
+        } catch {}
+        req.body = body ? JSON.parse(body) : undefined;
+      }
       const server = buildMcp();
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on('close', () => { transport.close(); server.close(); });
       await server.connect(transport);
-      await transport.handleRequest(req, res);
+      await transport.handleRequest(req, res, req.body);
       return;
     }
     if (req.url === '/' || req.url === '/ui') {

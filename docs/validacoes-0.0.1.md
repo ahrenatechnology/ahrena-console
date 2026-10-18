@@ -8,7 +8,7 @@ As quatro validações que a [proposta](proposta-0.0.1.md) pediu antes do códig
 | --- | --- | --- |
 | **V1** | Um mod consegue mostrar um painel lateral que lê o núcleo local? | **Sim.** Atualiza a cada 5 s, sem limite |
 | **V2** | Um artefato consegue ler o núcleo local via `host:`? | **Sim**, com o núcleo instalado como extensão do Desktop. Atualização automática a cada 30 s, ou quase instantânea com long polling |
-| **V3** | A UI inline (MCP App) aparece na aba Code a partir de um servidor local? | **Não testado ainda** |
+| **V3** | A UI inline (MCP App) aparece na aba Code a partir de um servidor local? | **Não como MCP App.** Funciona por outro caminho: o Claude lê o núcleo e desenha com a ferramenta `visualize` |
 | **V4** | O núcleo ou um artefato alcançam as ferramentas internas do Desktop? | **Não.** O controle vai por hooks |
 
 ## O núcleo de teste
@@ -50,9 +50,15 @@ As quatro validações que a [proposta](proposta-0.0.1.md) pediu antes do códig
 - **O log da extensão no app não registra as chamadas que vêm da ponte dos artefatos.** Para medir, o núcleo precisa de log próprio.
 - **Long polling contorna o piso de 30 s.** Uma ferramenta que segura a resposta até haver novidade (como o `wait_for_update` do servidor de telemetria da workstation, que responde de 9 a 90 s depois) dá atualização quase instantânea. O app espera uma resposta por cerca de 130 s.
 
-## V3: UI inline (MCP App)
+## V3: UI inline na conversa
 
-**Não testado ainda.** O servidor já entrega a UI em `ui://ahrena-console/teste.html` com o `_meta.ui.resourceUri` na ferramenta `open_console`. Falta chamar a ferramenta numa sessão da aba Code e ver se o card aparece. A [issue #1069](https://github.com/anthropics/claude-ai-mcp/issues/1069) relata que MCP Apps de servidores locais saem só como texto no Desktop.
+**Como:** a ferramenta `open_console` declara `_meta.ui.resourceUri = ui://ahrena-console/teste.html`, e o servidor entrega a página com o MIME `text/html;profile=mcp-app`.
+
+**Resultado como MCP App: não funciona na aba Code.** O resultado da ferramenta volta só como texto. O núcleo, com log de cada método MCP, mostra o motivo: ao conectar, o Claude Code anuncia só `{"roots":{...},"elicitation":{...}}`, sem suporte a MCP Apps. Depois da chamada, a página nunca pediu dados ao núcleo.
+
+**O que funciona:** a aba Code desenha os widgets da ferramenta `visualize`. O Claude lê os dados do núcleo (`fleet_overview`, `/api/fleet`) e desenha um card do Console dentro da conversa, com logo, números, gráfico, sessões recentes e botões que mandam mensagens ao Claude (`sendPrompt`).
+
+**Limites desse caminho:** é uma foto do momento (atualiza quando o usuário pede), e o widget não fala direto com o núcleo. No produto, vira uma skill do plugin ("mostra o console"). A MCP App continua valendo para o chat do Claude Desktop e o claude.ai, que anunciam suporte.
 
 ## V4: ferramentas internas do Desktop
 
@@ -67,3 +73,4 @@ E um processo externo como o núcleo não tem API para chamá-las. O controle de
 - **Instalação:** o núcleo é distribuído como **extensão `.mcpb`** (dois cliques, sem terminal, sem Node próprio, sem reiniciar) **e** como plugin do Claude Code (painel, hooks e comando `/console`).
 - **Atualização ao vivo no artefato:** uma ferramenta `wait_for_changes` com long polling, e o `watchTool` de 30 s como reserva.
 - **Painel:** abre só por `/console` e aceita estado salvo por versões anteriores.
+- **Inline na aba Code:** por uma skill que desenha o card com a `visualize`; a MCP App fica para o chat do Desktop e o claude.ai.
