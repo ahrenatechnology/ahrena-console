@@ -57,7 +57,7 @@ const KANBAN_WIDE_COLUMNS = 150
 // Tamanho único dos cards, medido no painel do Claude Desktop (estreito ≈ 38 colunas,
 // expandido ≈ 121): a largura da tela muda quantos cabem por linha, nunca o tamanho.
 const CARD_W = 34
-const CARD_H = 7
+const CARD_H = 6
 const KPI_W = 16
 const KPI_H = 4
 const laneOf = (stage: string) => LANES.find(l => l.stages.includes(stage)) ?? LANES[0]!
@@ -314,64 +314,44 @@ export const register: Register = on => {
     for (const n of openLeafs) byStage[n.stage] = (byStage[n.stage] ?? 0) + 1
 
     // Card de uma issue: tipo em destaque, título, estágio, progresso das filhas e PR.
+    // Card único de item de trabalho, o mesmo em todas as visões (Kanban, árvore, por
+    // estágio): sempre 4 linhas, na altura exata do conteúdo, e a mesma largura.
     const card = (n: WorkNode, depth: number) => {
       const ts = typeStyle(n.type)
       const isOpen = v.expanded.includes(n.key)
-      const pr = prLine(n)
       const openPr = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
       const ci = ciBadge(openPr?.ci ?? null)
+      const lane = n.state === 'CLOSED' ? 'Feito' : laneOf(n.stage).label
       return (
-        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
-          <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
-            <Text size="caption" weight="bold" color={ts.color}>{ts.label.toUpperCase()}</Text>
-            <Text size="caption" weight="semibold" color={laneOf(n.stage).color}>{n.state === 'CLOSED' ? 'Feito' : laneOf(n.stage).label}</Text>
-            <Text size="caption" dimColor wrap="truncate-end">{narrow ? `#${n.number}` : `${n.repo.split('/')[1]}#${n.number}`}</Text>
+        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
+          <Box flexDirection="row" gap="xs" overflow="hidden">
+            <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
+            <Text size="caption" weight="semibold" color={laneOf(n.stage).color}>· {lane}</Text>
+            <Text size="caption" dimColor>· #{n.number}</Text>
           </Box>
-          <Text weight="semibold" wrap="truncate-end">{n.title}</Text>
-          {n.progress && (
-            <Box flexDirection="row" alignItems="center" gap="sm">
-              <Svg source={progressSvg(n.progress.pct, ts.color)} alt={`${n.progress.completed} de ${n.progress.total} concluídas`} width={svgW(160)} height={6} />
-              <Text size="caption" tabular dimColor>{n.progress.completed}/{n.progress.total} · {n.progress.pct}%</Text>
-            </Box>
-          )}
-          <Box flexDirection="row" gap="sm" alignItems="center" flexWrap="wrap">
-            {pr && <Text size="caption" dimColor>{pr}</Text>}
+          <Text size="footnote" weight="semibold" wrap="truncate-end">{n.title}</Text>
+          <Box flexDirection="row" gap="xs" overflow="hidden">
+            {n.progress && <Text size="caption" tabular color={ts.color}>{n.progress.completed}/{n.progress.total}</Text>}
+            {openPr && <Text size="caption" dimColor>PR #{openPr.number}</Text>}
             {ci && <Text size="caption" weight="bold" color={ci.color}>{ci.text}</Text>}
-            {openPr?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes pedidos</Text>}
+            {openPr?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes</Text>}
             {openPr?.review === 'APPROVED' && <Text size="caption" weight="bold" color={GREEN}>aprovado</Text>}
-            {n.assignees.length > 0 && <Text size="caption" dimColor>@{n.assignees.join(' @')}</Text>}
-            <Text size="caption" dimColor>atualizada há {ago(n.updatedAt)}</Text>
+            <Text size="caption" dimColor>{ago(n.updatedAt)}</Text>
           </Box>
-          <Box flexDirection="row" gap="sm" flexWrap="wrap">
+          <Box flexDirection="row" gap="sm" overflow="hidden">
             {n.children.length > 0 && (
               <Button key={`toggle-${n.key}`} plain onPress={() => toggle($, n.key)}>
-                <Text color={ts.color}>{isOpen ? '▾' : '▸'}</Text> {isOpen ? 'Recolher' : `Ver ${n.children.length} ${n.children.length === 1 ? 'item' : 'itens'}`}
+                <Text color={ts.color}>{isOpen ? '▾' : '▸'}</Text> {isOpen ? 'Recolher' : `${n.children.length} ${n.children.length === 1 ? 'item' : 'itens'}`}
               </Button>
             )}
-            <Link href={n.url} label="Abrir no GitHub" />
+            <Link href={n.url} label="Abrir" />
           </Box>
         </Box>
       )
     }
 
-    // Card compacto para as raias: tipo, título curto, número e o sinal do PR.
-    const miniCard = (n: WorkNode) => {
-      const ts = typeStyle(n.type)
-      const p = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
-      return (
-        <Box key={`mini-${n.key}`} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
-          <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
-          <Text size="footnote" wrap="truncate-end">{n.title}</Text>
-          <Box flexDirection="row" gap="xs">
-            <Text size="caption" dimColor>#{n.number}</Text>
-            {p && <Text size="caption" dimColor>PR #{p.number}</Text>}
-            {ciBadge(p?.ci ?? null) && <Text size="caption" weight="bold" color={ciBadge(p?.ci ?? null)!.color}>{ciBadge(p?.ci ?? null)!.text}</Text>}
-            {p?.review === 'CHANGES_REQUESTED' && <Text size="caption" weight="bold" color={RED}>ajustes</Text>}
-          </Box>
-          <Link href={n.url} label="abrir" />
-        </Box>
-      )
-    }
+    // O Kanban usa o mesmo card das outras visões.
+    const miniCard = (n: WorkNode) => card(n, 0)
 
     const matches = (n: WorkNode) =>
       (v.org === 'todas' || n.repo.startsWith(`${v.org}/`)) &&
