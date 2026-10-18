@@ -25,15 +25,23 @@ A paleta parte da do The Forward Deployed Engineer ([brand/tokens.json](brand/to
 | Institucional, réguas, seleção | rosa | `#df285d` | Barte (`--bg-brand` do `barte-design-system`); substitui o roxo `#552973` desde 2026-10-18 |
 | Alerta | amarelo | `#ffc30a` | The Forward Deployed Engineer (a revisar) |
 | Erro, falha | a definir | `#db6286` por enquanto | Fica parecido demais com o rosa novo; precisa de outra cor |
-| Fundo (tema escuro) | `gray.900` | `#17171b` |
-| Superfícies | `gray.800` / `gray.700` | `#1e1e24` / `#28282f` |
-| Texto principal | `gray.100` | `#d7d7d9` |
+| Fundo (tema escuro) | cinza 900 | `#17171b` | The Forward Deployed Engineer (a revisar) |
+| Superfícies | cinza 800 / 700 | `#1e1e24` / `#28282f` | The Forward Deployed Engineer (a revisar) |
+| Texto principal | cinza 100 | `#d7d7d9` | The Forward Deployed Engineer (a revisar) |
 
 ## Logo
 
-![Ahrena Console](brand/logo.svg)
+| Fundo laranja | Fundo preto |
+| --- | --- |
+| ![Logo com fundo laranja](brand/logo-laranja.svg) | ![Logo com fundo preto](brand/logo-preto.svg) |
+| [brand/logo-laranja.svg](brand/logo-laranja.svg) | [brand/logo-preto.svg](brand/logo-preto.svg) |
 
-O logo é um **"A" com um ponto** ([brand/logo.svg](brand/logo.svg)): o A em traço escuro sobre um quadrado laranja de cantos arredondados, com o ponto em rosa no lugar da barra do A. Nasceu no painel de teste do mod em 2026-10-18 e foi escolhido como o logo do Ahrena Console.
+O logo é um **"A" com um triângulo apontando para baixo no centro**, num quadrado de cantos arredondados. Existem duas versões, uma o negativo da outra:
+
+- **fundo laranja, "A" preto:** para telas escuras, onde o quadrado laranja se destaca. É a versão padrão ([brand/logo.svg](brand/logo.svg));
+- **fundo preto, "A" laranja:** para telas claras.
+
+O triângulo é sempre rosa (`#df285d`). O logo nasceu no painel de teste do mod em 2026-10-18.
 
 Em aberto:
 
