@@ -21,6 +21,46 @@ Base: o estudo do Claude Code Agent Monitor ([benchmark/00-agent-monitor-detalha
 
 **Ahrena Console 0.0.1:** console MCP-first, na linha do Claude Code Agent Monitor, para ver e acompanhar sessões, agentes e trabalho de dentro do Claude Desktop, local e na nuvem.
 
+## Do Claude Code Agent Monitor para o backlog
+
+Cada tela e recurso do Claude Code Agent Monitor (CCAM), e onde ele entra aqui. O detalhe de cada um está no [estudo](benchmark/00-agent-monitor-detalhado.md).
+
+### Telas
+
+| Tela do CCAM | O que faz lá | Onde entra | Como fica aqui |
+| --- | --- | --- | --- |
+| **Dashboard** | 6 cards de números, árvore de agentes ativos, atividade recente, aba de saúde do servidor | **3.2** (M1); saúde em **1.8** | Igual, com o inbox "quem precisa de você" em destaque. O resumo também vai para o painel lateral (**4.1**) |
+| **Kanban** | Duas visões (agentes e sessões), colunas por status, só leitura, 10 por coluna | **3.6** (M1) | Igual. O painel lateral ganha o kanban do trabalho do GitHub (**4.3**) |
+| **Sessions** | Tabela com busca, filtro por diretório, pílulas de status, ordenação, paginação | **3.3** (M1); resumo em **4.2** | Igual. No hub ganha colunas de pessoa e máquina (**7.8**) |
+| **Session Detail** | Abas Agentes (números, árvore, custo por modelo), Conversa e Linha do tempo; faixa "esperando sua resposta" | **3.4** e **3.5** (M1) | Igual |
+| **Activity Feed** | Stream de eventos com filtros facetados, pausa, paginação | Depois da entrega | Entra logo após M2. O painel mostra os últimos eventos |
+| **Analytics** | Heatmap de 52 semanas, custo por dia, modelo e dia da semana, tokens, ferramentas, exportação | Custo básico em **3.7** (M1); o resto depois | A tela de custo vem primeiro; o resto, depois da entrega |
+| **Workflows** | 11 visualizações de orquestração (DAG, Sankey, concorrência) e os runs do Workflow tool | Depois da entrega | Valor alto para demonstração, baixo no dia a dia |
+| **Agent Config** (editor de configuração) | Explora e edita skills, subagentes, comandos, memória, hooks e MCP, com backup | 0.0.2 | Entra com o controle, porque escreve em `~/.claude` |
+| **Run** | Lança e retoma sessões do Claude Code e do Codex pelo navegador | 0.0.2 | Entra com o controle das sessões (responder, aprovar, retomar) |
+| **Settings** | Preços, hooks, locais dos dados, importação, máquinas remotas, notificações, alertas, limpeza | Preços em **1.6**; hooks em **1.4** e **6.2**; importação em **1.2**; diagnóstico em **1.8**; alertas no hub (depois) | Sem tela de configurações própria na 0.0.1: cada parte vive no item que a usa |
+
+### Recursos por baixo
+
+| Recurso do CCAM | Onde entra | Como fica aqui |
+| --- | --- | --- |
+| Máquina de estados (waiting como camada, motivos, watchdog de 120 s, sonda de processo, abandoned em 180 min, cura de erro) | **1.5** | Copiamos as regras, não o código |
+| Custo pelo transcript (preço por modelo, cache 5 min e 1 h, piso na compactação, "sem preço") | **1.6** | Igual, sempre marcado como estimativa |
+| Importação do histórico no início | **1.2** | Igual |
+| Tempo real por WebSocket | **2.4** | Long polling (`wait_for_changes`), porque é o que o artefato do Claude Desktop aceita |
+| Instalação dos hooks | **1.4** e **6.2** | Pelo plugin do Claude Code, sem caminho absoluto do checkout |
+| MCP com 103 ferramentas espelhando a API | **Épico 2** | Cerca de 10 ferramentas, desenhadas pelas perguntas do usuário |
+| Plugins com skills (relatórios, standup, custo) | Depois da entrega | Relatórios viram skills do plugin |
+| Statusline (contexto, custo, branch) | **1.6** e **1.7** | Também é a fonte dos limites oficiais de uso |
+| Paleta de comandos ⌘K | Depois da entrega | No artefato |
+| Notificações e sons | Depois da entrega | Aviso no painel e, no hub, Slack ou push |
+| Alertas por regra e webhooks | Depois da entrega, no hub | As regras valem para o time inteiro |
+| Máquinas remotas por SSH | **Épico 7** | Substituído pelo envio da máquina para o hub |
+| App desktop (Electron) e extensão do VS Code | Não entra | O Claude Desktop já é a casa: painel lateral e artefato |
+| Gato assistente (Tabby) | Não entra na 0.0.1 | A ideia útil, perguntar ao console, é o próprio MCP |
+| Codex e Cursor | Em aberto | Depende de você querer acompanhar outros agentes além do Claude Code |
+| Multiusuário | **Épico 7** (o CCAM não tem) | Território novo, sem referência |
+
 ---
 
 ## Épico 1 · Núcleo e máquina de estados (M1)
@@ -127,7 +167,9 @@ Registrados como próximos passos, sem issue agora:
 - Alertas por regra e webhooks (Slack, Teams), no hub (CCAM P1)
 - Paleta de comandos ⌘K no artefato (CCAM P1)
 - Workflows dinâmicos e análise de orquestração (CCAM P1 e P2)
-- Controle: responder, aprovar, run e resume pelo console (0.0.2)
+- Controle (0.0.2): responder, aprovar, run e resume pelo console (tela Run do CCAM)
+- Editor de configuração (0.0.2): skills, subagentes, comandos, memória, hooks e MCP, com backup (tela Agent Config do CCAM)
+- Relatórios como skills do plugin: standup, semanal, executivo (plugins do CCAM)
 - Espelhar o GitHub Projects, carregando só o projeto aberto
 
 ## Premissas
