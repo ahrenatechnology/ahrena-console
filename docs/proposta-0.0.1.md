@@ -132,6 +132,8 @@ Vocabulário alinhado ao OpenTelemetry GenAI, com um modelo próprio pequeno por
 
 ## 6. Validações antes de escrever código
 
+> **Feitas em 2026-10-18.** V1, V2 e V4 confirmadas; V3 pendente. Resultados e o que mudou na proposta em [validacoes-0.0.1.md](validacoes-0.0.1.md). Mudanças principais: o núcleo é instalado como extensão `.mcpb` do Claude Desktop (sem reiniciar) além do plugin do Claude Code; o artefato usa long polling (`wait_for_changes`) para ficar ao vivo; o painel abre só por `/console`.
+
 Quatro pontos que o benchmark não conseguiu confirmar, testados com protótipos mínimos:
 
 1. **O painel lateral (mod) lê o núcleo** por `$.http.fetch` em localhost e se atualiza por timer.

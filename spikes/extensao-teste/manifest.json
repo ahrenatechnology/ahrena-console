@@ -1,0 +1,21 @@
+{
+  "manifest_version": "0.2",
+  "name": "ahrena-console",
+  "display_name": "ahrena-console",
+  "version": "0.0.2",
+  "description": "Ahrena Console (teste): visão das sessões do Claude Code nesta máquina, por MCP.",
+  "author": { "name": "Ahrena" },
+  "server": {
+    "type": "node",
+    "entry_point": "server/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/server.mjs", "--stdio"]
+    }
+  },
+  "tools": [
+    { "name": "fleet_overview", "description": "Contagem de projetos e sessões do Claude Code e última atividade." },
+    { "name": "open_console", "description": "Abre a visão do Ahrena Console (UI inline)." }
+  ],
+  "compatibility": { "platforms": ["darwin"] }
+}

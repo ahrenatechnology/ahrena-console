@@ -1,0 +1,8 @@
+{
+  "name": "ahrena-console-testes",
+  "owner": { "name": "Ahrena" },
+  "metadata": { "description": "Plugins de teste das validações do Ahrena Console 0.0.1" },
+  "plugins": [
+    { "name": "ahrena-console-painel", "source": "./painel-teste", "description": "Teste V1: painel lateral que lê o núcleo local", "version": "0.0.1" }
+  ]
+}
