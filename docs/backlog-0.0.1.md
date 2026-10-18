@@ -154,12 +154,13 @@ Estratégia: **o essencial ao lado do trabalho.** O que é pesado fica no artefa
 
 ## Épico 5 · Integração com o GitHub (M1)
 
-Estratégia: **leve e sob demanda.** O spike estourou o limite do GitHub; esta versão consulta pouco e guarda em cache.
+Estratégia: **leve e sob demanda.** O spike estourou o limite do GitHub; esta versão consulta pouco e guarda em cache. Critério da 0.0.1: o próprio desenvolvimento do Ahrena Console é gerenciado pelo kanban do console (5.3).
 
 | # | Tipo | Título | Produz | Depende de |
 | --- | --- | --- | --- | --- |
 | 5.1 | Spike | Consulta enxuta, cache em disco e busca sob demanda ao expandir (timebox: 1 dia) | decisão | — |
 | 5.2 | Tech task | Hierarquia iniciativa → épico → item → plano, com PR, CI e review por item | dados de trabalho | 5.1, 1.1 |
+| 5.3 | User story, frontend | Gerenciar o projeto do Ahrena Console pelo kanban: ver as issues do GitHub Project por Status e mover um card muda o Status no GitHub | o console gerenciando o próprio desenvolvimento | 5.2 |
 
 ## Épico 6 · Distribuição (M1)
 
