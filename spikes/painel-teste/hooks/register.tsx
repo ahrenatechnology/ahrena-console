@@ -265,8 +265,8 @@ export const register: Register = on => {
     // Gráficos em SVG crescem com o painel; recuos e larguras mínimas encolhem.
     const cols = e.props.bodyColumns ?? 60
     const narrow = cols < 60
-    const PX_PER_COL = 7
-    const svgW = (max: number) => Math.max(80, Math.min(max, Math.floor((cols - 4) * PX_PER_COL)))
+    const PX_PER_COL = 6
+    const svgW = (max: number) => Math.max(60, Math.min(max, Math.floor((cols - 8) * PX_PER_COL)))
     const indent = (depth: number) => Math.min(depth, 3) * (narrow ? 1 : 2)
 
     const header = (
@@ -312,7 +312,7 @@ export const register: Register = on => {
       const openPr = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
       const ci = ciBadge(openPr?.ci ?? null)
       return (
-        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
+        <Box key={`card-${n.key}`} flexDirection="column" marginLeft={indent(depth)} minWidth={0} flexShrink={1} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="sm" paddingY="xs" gap="xs">
           <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
             <Text size="caption" weight="bold" color={ts.color}>{ts.label.toUpperCase()}</Text>
             <Text size="caption" weight="semibold" color={laneOf(n.stage).color}>{n.state === 'CLOSED' ? 'Feito' : laneOf(n.stage).label}</Text>
@@ -350,7 +350,7 @@ export const register: Register = on => {
       const ts = typeStyle(n.type)
       const p = n.prs.find(x => x.state === 'OPEN') ?? n.prs[0]
       return (
-        <Box key={`mini-${n.key}`} flexDirection="column" borderStyle="round" borderColor={ts.color} paddingX="xs">
+        <Box key={`mini-${n.key}`} flexDirection="column" minWidth={0} flexShrink={1} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
           <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
           <Text size="footnote" wrap="truncate-end">{n.title}</Text>
           <Box flexDirection="row" gap="xs">
@@ -387,7 +387,7 @@ export const register: Register = on => {
             { k: 'Iniciativas', n: w?.byType.Initiative ?? 0, c: ORANGE },
             { k: 'Itens abertos', n: openLeafs.length, c: PINK },
           ].map(c => (
-            <Box key={c.k} flexDirection="column" borderStyle="round" borderColor={c.c} paddingX="sm" flexGrow={1} width={narrow ? '48%' : undefined} minWidth={narrow ? undefined : 11}>
+            <Box key={c.k} flexDirection="column" borderStyle="round" borderColor={c.c} paddingX="sm" flexGrow={1} flexShrink={1} overflow="hidden" width={narrow ? '48%' : undefined} minWidth={0}>
               <Text size="caption" dimColor>{c.k}</Text>
               <Text size="title" weight="bold" tabular color={c.c}>{c.n}</Text>
             </Box>
@@ -476,7 +476,7 @@ export const register: Register = on => {
         {LANES.map(l => {
           const items = laneItems(l)
           return (
-            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" flexGrow={1} width="25%" minWidth={14}>
+            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" flexGrow={1} flexShrink={1} width="25%" minWidth={0} overflow="hidden">
               {laneHeader(l, items.length)}
               {items.slice(0, LANE_LIMIT).map(n => miniCard(n))}
               {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
@@ -490,11 +490,11 @@ export const register: Register = on => {
         {LANES.map(l => {
           const items = laneItems(l)
           return (
-            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs">
+            <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" minWidth={0} overflow="hidden">
               {laneHeader(l, items.length)}
               <Box flexDirection="row" gap="xs" flexWrap="wrap">
                 {items.slice(0, LANE_LIMIT).map(n => (
-                  <Box key={`slot-${n.key}`} minWidth={narrow ? undefined : 22} width={narrow ? '100%' : undefined} flexGrow={1}>{miniCard(n)}</Box>
+                  <Box key={`slot-${n.key}`} minWidth={0} flexShrink={1} overflow="hidden" width={narrow ? '100%' : wide ? undefined : '48%'} flexGrow={1}>{miniCard(n)}</Box>
                 ))}
               </Box>
               {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
@@ -581,7 +581,7 @@ export const register: Register = on => {
     )
 
     return (
-      <Box flexDirection="column" gap="md" padding="sm">
+      <Box flexDirection="column" gap="md" padding="sm" minWidth={0} overflow="hidden">
         {header}
         {v.tab === 'visao' && visao}
         {v.tab === 'sessoes' && sessoes}

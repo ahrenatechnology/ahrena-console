@@ -149,10 +149,12 @@ const NODE_FIELDS = `number title url state updatedAt repository { nameWithOwner
   subIssuesSummary { total completed percentCompleted } assignees(first: 2) { nodes { login } } labels(first: 4) { nodes { name } }
   closedByPullRequestsReferences(first: 2, includeClosedPrs: true) { nodes { number state isDraft url reviewDecision
     commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } }`;
-const WORK_QUERY = `query($q: String!) { search(query: $q, type: ISSUE, first: 50) { issueCount nodes { ... on Issue {
+// Consulta enxuta: o GitHub cobra pelo número de nós, e a versão anterior (3 níveis de
+// pais, 25 filhas e 15 netas por issue) estourava o limite. Netas entram pelos pais delas.
+const WORK_QUERY = `query($q: String!) { search(query: $q, type: ISSUE, first: 30) { issueCount nodes { ... on Issue {
   ${NODE_FIELDS}
-  parent { ${NODE_FIELDS} parent { ${NODE_FIELDS} parent { ${NODE_FIELDS} } } }
-  subIssues(first: 25) { nodes { ${NODE_FIELDS} subIssues(first: 15) { nodes { ${NODE_FIELDS} } } } }
+  parent { ${NODE_FIELDS} parent { ${NODE_FIELDS} } }
+  subIssues(first: 15) { nodes { ${NODE_FIELDS} } }
 } } } }`;
 const TYPE_RANK = { Initiative: 0, Epic: 1, 'Epic / Milestone': 1, Milestone: 1, 'User Story': 2, Story: 2, Feature: 2, Task: 3, 'Tech Task': 3, Spike: 3, Bug: 3, Plan: 4 };
 
@@ -237,7 +239,7 @@ async function loadCache(name) {
 
 // Quando o GitHub limita (rate limit), o núcleo para de chamar por alguns minutos e
 // serve o último dado bom. Toda chamada ao GitHub passa por aqui.
-const RATE_LIMIT_BACKOFF_MS = 5 * 60_000;
+const RATE_LIMIT_BACKOFF_MS = 2 * 60_000;
 let ghBlockedUntil = 0;
 async function gh(args) {
   if (Date.now() < ghBlockedUntil) throw new Error(`GitHub limitou as chamadas; nova tentativa em ${Math.ceil((ghBlockedUntil - Date.now()) / 60_000)} min`);
