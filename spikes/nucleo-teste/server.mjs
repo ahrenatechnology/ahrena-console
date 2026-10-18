@@ -91,6 +91,123 @@ async function uiHtml() {
   return page.replace('/*APP_BUNDLE*/', () => app.replace(/export\{[^}]*\};?\s*$/, '') + '\nwindow.__App = OO;');
 }
 
+// Issues do GitHub em que a pessoa está envolvida, com o estado de execução:
+// PR ligado (rascunho, aberto, mergeado) e o resultado do CI. Usa o `gh` já
+// autenticado na máquina; o resultado fica 60 s em cache.
+const ISSUES_TTL_MS = 60_000;
+let issuesCache = { at: 0, data: null };
+const ISSUES_QUERY = `query($q: String!) { search(query: $q, type: ISSUE, first: 40) {
+  issueCount
+  nodes { ... on Issue { number title url updatedAt createdAt repository { nameWithOwner }
+    labels(first: 4) { nodes { name } } assignees(first: 3) { nodes { login } }
+    closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number state isDraft url reviewDecision
+      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } } } } }`;
+
+function stageOf(prs) {
+  const open = prs.filter((p) => p.state === 'OPEN');
+  if (prs.some((p) => p.state === 'MERGED')) return 'mergeado';
+  if (!open.length) return 'a fazer';
+  const p = open[0];
+  if (p.isDraft) return 'em andamento';
+  if (p.ci === 'FAILURE' || p.ci === 'ERROR') return 'ci falhou';
+  if (p.ci === 'PENDING' || p.ci === 'EXPECTED') return 'ci rodando';
+  if (p.review === 'CHANGES_REQUESTED') return 'ajustes pedidos';
+  return 'em revisão';
+}
+
+async function issues() {
+  if (issuesCache.data && Date.now() - issuesCache.at < ISSUES_TTL_MS) return issuesCache.data;
+  const { execFile } = await import('node:child_process');
+  const out = await new Promise((resolve, reject) =>
+    execFile('/opt/homebrew/bin/gh', ['api', 'graphql', '-f', `query=${ISSUES_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc'], { timeout: 20_000, maxBuffer: 8 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
+  );
+  const search = JSON.parse(out).data.search;
+  const items = search.nodes.map((n) => {
+    const prs = n.closedByPullRequestsReferences.nodes.map((p) => ({
+      number: p.number, state: p.state, isDraft: p.isDraft, url: p.url, review: p.reviewDecision,
+      ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+    }));
+    return {
+      repo: n.repository.nameWithOwner, number: n.number, title: n.title, url: n.url, updatedAt: n.updatedAt,
+      labels: n.labels.nodes.map((l) => l.name), assignees: n.assignees.nodes.map((a) => a.login), prs, stage: stageOf(prs),
+    };
+  });
+  const byStage = {};
+  for (const i of items) byStage[i.stage] = (byStage[i.stage] ?? 0) + 1;
+  issuesCache = { at: Date.now(), data: { total: search.issueCount, shown: items.length, byStage, items, generatedAt: new Date().toISOString() } };
+  return issuesCache.data;
+}
+
+// Hierarquia do trabalho: Iniciativa → Épico → História/Tarefa → Plano, montada a
+// partir do tipo de issue e das sub-issues do GitHub. Parte das issues abertas em que
+// a pessoa está envolvida e sobe até os pais e desce até as filhas.
+const WORK_TTL_MS = 60_000;
+let workCache = { at: 0, data: null };
+const NODE_FIELDS = `number title url state updatedAt repository { nameWithOwner } issueType { name }
+  subIssuesSummary { total completed percentCompleted } assignees(first: 2) { nodes { login } } labels(first: 4) { nodes { name } }
+  closedByPullRequestsReferences(first: 2, includeClosedPrs: true) { nodes { number state isDraft url reviewDecision
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } }`;
+const WORK_QUERY = `query($q: String!) { search(query: $q, type: ISSUE, first: 50) { issueCount nodes { ... on Issue {
+  ${NODE_FIELDS}
+  parent { ${NODE_FIELDS} parent { ${NODE_FIELDS} parent { ${NODE_FIELDS} } } }
+  subIssues(first: 25) { nodes { ${NODE_FIELDS} subIssues(first: 15) { nodes { ${NODE_FIELDS} } } } }
+} } } }`;
+const TYPE_RANK = { Initiative: 0, Epic: 1, 'Epic / Milestone': 1, Milestone: 1, 'User Story': 2, Story: 2, Feature: 2, Task: 3, 'Tech Task': 3, Spike: 3, Bug: 3, Plan: 4 };
+
+function toNode(n) {
+  const prs = n.closedByPullRequestsReferences.nodes.map((p) => ({
+    number: p.number, state: p.state, isDraft: p.isDraft, url: p.url, review: p.reviewDecision,
+    ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+  }));
+  const type = n.issueType?.name ?? null;
+  return {
+    key: `${n.repository.nameWithOwner}#${n.number}`, repo: n.repository.nameWithOwner, number: n.number, title: n.title, url: n.url,
+    state: n.state, updatedAt: n.updatedAt, type, rank: TYPE_RANK[type] ?? 3,
+    progress: n.subIssuesSummary?.total ? { total: n.subIssuesSummary.total, completed: n.subIssuesSummary.completed, pct: n.subIssuesSummary.percentCompleted } : null,
+    assignees: n.assignees.nodes.map((a) => a.login), labels: n.labels.nodes.map((l) => l.name), prs,
+    stage: n.state === 'CLOSED' ? 'concluída' : stageOf(prs), parent: null, children: [],
+  };
+}
+
+async function work() {
+  if (workCache.data && Date.now() - workCache.at < WORK_TTL_MS) return workCache.data;
+  const { execFile } = await import('node:child_process');
+  const out = await new Promise((resolve, reject) =>
+    execFile('/opt/homebrew/bin/gh', ['api', 'graphql', '-H', 'GraphQL-Features: sub_issues,issue_types', '-f', `query=${WORK_QUERY}`, '-f', 'q=is:issue is:open involves:@me sort:updated-desc'], { timeout: 30_000, maxBuffer: 16 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
+  );
+  const nodes = new Map();
+  const add = (raw) => {
+    const node = toNode(raw);
+    if (!nodes.has(node.key)) nodes.set(node.key, node);
+    return nodes.get(node.key);
+  };
+  const link = (child, parent) => {
+    if (child.parent) return;
+    child.parent = parent.key;
+    if (!parent.children.includes(child.key)) parent.children.push(child.key);
+  };
+  const walkUp = (raw) => {
+    const node = add(raw);
+    if (raw.parent) link(node, walkUp(raw.parent));
+    return node;
+  };
+  const walkDown = (raw, node) => {
+    for (const c of raw.subIssues?.nodes ?? []) {
+      const child = add(c);
+      link(child, node);
+      walkDown(c, child);
+    }
+  };
+  for (const raw of JSON.parse(out).data.search.nodes) walkDown(raw, walkUp(raw));
+  const byRank = (a, b) => a.rank - b.rank || Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+  for (const n of nodes.values()) n.children.sort((a, b) => byRank(nodes.get(a), nodes.get(b)));
+  const roots = [...nodes.values()].filter((n) => !n.parent).sort(byRank).map((n) => n.key);
+  const byType = {};
+  for (const n of nodes.values()) byType[n.type ?? 'Sem tipo'] = (byType[n.type ?? 'Sem tipo'] ?? 0) + 1;
+  workCache = { at: Date.now(), data: { nodes: Object.fromEntries(nodes), roots, byType, count: nodes.size, generatedAt: new Date().toISOString() } };
+  return workCache.data;
+}
+
 // Cada chamada de ferramenta vai para um log próprio: o log do Claude Desktop não
 // registra as chamadas que chegam pela ponte dos artefatos.
 const CALL_LOG = join(homedir(), 'Library', 'Logs', 'ahrena-console', 'mcp-calls.log');
@@ -147,6 +264,16 @@ const http = createServer(async (req, res) => {
   requests++;
   console.log(new Date().toISOString(), req.method, req.url, req.headers['user-agent'] ?? '');
   try {
+    if (req.url === '/api/work') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(await work()));
+      return;
+    }
+    if (req.url === '/api/issues') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(await issues()));
+      return;
+    }
     if (req.url === '/api/fleet') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(await fleet()));
