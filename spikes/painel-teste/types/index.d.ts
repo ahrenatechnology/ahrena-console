@@ -28,11 +28,14 @@ export type IssueRow = {
 }
 export type Issues = { total: number; shown: number; byStage: Record<string, number>; items: IssueRow[]; generatedAt: string }
 
-export type Tab = 'visao' | 'kanban' | 'trabalho' | 'sessoes'
+export type Tab = 'visao' | 'projetos' | 'trabalho' | 'sessoes'
 
 export type Reading = {
   fleet: Fleet | null
   work: Work | null
+  projects: Project[] | null
+  projectItems: ProjectItems | null
+  projectsError: string | null
   error: string | null
   workError: string | null
   polls: number
@@ -50,6 +53,8 @@ export type View = {
   selectedIssue: string | null
   workMode: 'arvore' | 'estagio' | 'kanban'
   expanded: string[]
+  project: string | null
+  projectView: number | null
 }
 
 declare module 'claude-code' {
@@ -77,3 +82,26 @@ export type WorkNode = {
   children: string[]
 }
 export type Work = { nodes: Record<string, WorkNode>; roots: string[]; byType: Record<string, number>; count: number; generatedAt: string }
+
+export type SelectOption = { name: string; color: string }
+export type ProjectView = { number: number; name: string; layout: 'board' | 'table' | 'roadmap'; filter: string; groupBy: string | null; columnsBy: string | null }
+export type Project = { id: string; org: string; number: number; title: string; url: string; updatedAt: string; itemCount: number; views: ProjectView[]; selects: Record<string, SelectOption[]> }
+export type ProjectItem = {
+  id: string
+  kind: 'Issue' | 'PullRequest' | 'DraftIssue'
+  number: number | null
+  title: string
+  url: string | null
+  state: string
+  updatedAt: string
+  repo: string | null
+  type: string | null
+  milestone: string | null
+  assignees: string[]
+  labels: string[]
+  parent: string | null
+  progress: { total: number; completed: number; pct: number } | null
+  prs: IssuePr[]
+  fields: Record<string, string | null>
+}
+export type ProjectItems = { id: string; items: ProjectItem[]; generatedAt: string }
