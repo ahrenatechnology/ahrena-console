@@ -22,6 +22,10 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 
 [docs/proposta-0.0.1.md](docs/proposta-0.0.1.md): arquitetura da 0.0.1 (local-first, núcleo único, superfícies no Claude Desktop) e o recorte de features.
 
+## Validações
+
+[docs/validacoes-0.0.1.md](docs/validacoes-0.0.1.md): o que funcionou nos testes de painel, artefato, UI inline e ferramentas internas do Desktop. O código dos testes está em [spikes/](spikes/).
+
 ## Benchmark
 
 Em [docs/benchmark/](docs/benchmark/):

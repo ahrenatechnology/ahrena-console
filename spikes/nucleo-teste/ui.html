@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ahrena Console</title>
+<style>
+  :root { --orange: #f47720; --purple: #df285d; --bg: #17171b; --surface: #1e1e24; --text: #d7d7d9; --muted: #a6a6aa; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 14px/1.5 Poppins, system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 12px; color: var(--orange); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .card { background: var(--surface); border-left: 3px solid var(--purple); padding: 10px 12px; border-radius: 6px; }
+  .label { color: var(--muted); font-size: 12px; }
+  .value { font-size: 20px; font-weight: 600; }
+  #status { margin-top: 12px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Ahrena Console · teste</h1>
+<div class="grid">
+  <div class="card"><div class="label">Projetos</div><div class="value" id="projects">–</div></div>
+  <div class="card"><div class="label">Sessões</div><div class="value" id="sessions">–</div></div>
+  <div class="card"><div class="label">Última atividade</div><div class="value" id="last">–</div></div>
+</div>
+<div id="status">conectando…</div>
+<script type="module">
+/*APP_BUNDLE*/
+const $ = (id) => document.getElementById(id);
+function show(o, via) {
+  $('projects').textContent = o.projects;
+  $('sessions').textContent = o.sessions;
+  $('last').textContent = o.lastActivity ? new Date(o.lastActivity).toLocaleTimeString('pt-BR') : '–';
+  $('status').textContent = `atualizado ${new Date(o.generatedAt).toLocaleTimeString('pt-BR')} via ${via}`;
+}
+const inHost = window.parent !== window;
+if (inHost) {
+  const app = new window.__App({ name: 'ahrena-console-teste', version: '0.0.0' });
+  app.ontoolresult = (r) => { if (r.structuredContent) show(r.structuredContent, 'resultado da ferramenta'); };
+  await app.connect();
+  setInterval(async () => {
+    try {
+      const r = await app.callServerTool({ name: 'fleet_overview', arguments: {} });
+      if (r.structuredContent) show(r.structuredContent, 'polling MCP');
+    } catch (e) { $('status').textContent = 'erro no polling: ' + e.message; }
+  }, 5000);
+} else {
+  const tick = async () => show(await (await fetch('/api/overview')).json(), 'HTTP');
+  tick(); setInterval(tick, 5000);
+}
+</script>
+</body>
+</html>

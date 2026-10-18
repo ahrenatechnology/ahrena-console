@@ -1,0 +1,95 @@
+<title>Ahrena Console Teste</title>
+<style>
+  :root {
+    --orange: #f47720; --purple: #df285d; --pink: #db6286;
+    --bg: #fdfdfd; --surface: #f1eff3; --text: #17171b; --muted: #5a5a63; --border: #d7d7d9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #17171b; --surface: #1e1e24; --text: #d7d7d9; --muted: #a6a6aa; --border: #28282f; }
+  }
+  :root[data-theme="dark"] { --bg: #17171b; --surface: #1e1e24; --text: #d7d7d9; --muted: #a6a6aa; --border: #28282f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Poppins, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h1 span { color: var(--orange); }
+  p.sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .card { background: var(--surface); border-left: 3px solid var(--purple); border-radius: 8px; padding: 10px 12px; }
+  .label { color: var(--muted); font-size: 12px; }
+  .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  section { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  h2 { font-size: 14px; margin: 0 0 8px; }
+  ol { margin: 0; padding-left: 20px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .err { color: var(--pink); }
+  button { background: var(--orange); color: #17171b; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  code { font-size: 12px; overflow-wrap: anywhere; }
+</style>
+<main>
+  <h1><span>Ahrena Console</span> · validação V2</h1>
+  <p class="sub">Este artefato tenta ler o núcleo local pelo servidor MCP <code>host:ahrena-console</code>.</p>
+
+  <div class="grid">
+    <div class="card"><div class="label">Projetos</div><div class="value" id="projects">–</div></div>
+    <div class="card"><div class="label">Sessões</div><div class="value" id="sessions">–</div></div>
+    <div class="card"><div class="label">Leituras recebidas</div><div class="value" id="count">0</div></div>
+  </div>
+
+  <section>
+    <h2>Estado da conexão</h2>
+    <div id="state">Carregando…</div>
+  </section>
+
+  <section>
+    <h2>Intervalo real entre leituras (pedido: 5 s)</h2>
+    <ol id="intervals"><li>aguardando a primeira leitura</li></ol>
+  </section>
+
+  <section>
+    <h2>Chamada avulsa</h2>
+    <button id="once">Ler agora com callTool</button>
+    <div id="onceOut" class="label" style="margin-top:8px"></div>
+  </section>
+</main>
+<script>
+(async () => {
+  const SERVER = 'host:ahrena-console';
+  const $ = (id) => document.getElementById(id);
+  const stamps = [];
+  let count = 0;
+  const say = (html, isErr) => { $('state').innerHTML = isErr ? `<span class="err">${html}</span>` : html; };
+  const show = (o) => { $('projects').textContent = o.projects; $('sessions').textContent = o.sessions; };
+
+  const mcp = window.claude ? await window.claude.use('mcp') : null;
+  if (!mcp) { say('A capability <code>mcp</code> não está disponível nesta visualização (fora do app, ou não concedida).', true); return; }
+
+  try {
+    const list = await mcp.listTools(SERVER);
+    const s = list.servers[0];
+    say(s ? `Servidor listado: <code>${s.server}</code> · auth ${s.authStatus} · tools: ${s.tools.map(t => t.name).join(', ') || '(nenhuma)'}` : 'O servidor <code>host:ahrena-console</code> não aparece em listTools (sem ponte local nesta superfície, ou o servidor não está conectado no app).', !s);
+  } catch (e) { say(`listTools falhou: <code>${e.code}</code> ${e.message ?? ''}`, true); }
+
+  mcp.watchTool(SERVER, 'fleet_overview', null, (ev) => {
+    if (ev.type === 'error') { say(`watchTool: <code>${ev.error.code}</code> ${ev.error.message ?? ''}`, true); return; }
+    const o = ev.result.payload;
+    if (!o) return;
+    show(o);
+    say(`Conectado ao <code>${SERVER}</code> · última leitura às ${new Date().toLocaleTimeString('pt-BR')}${ev.result.cache ? ' (do cache)' : ''}`);
+    count++; $('count').textContent = count;
+    const t = Date.now();
+    const prev = stamps[stamps.length - 1];
+    stamps.push(t);
+    const items = stamps.slice(1).map((x, i) => `<li>${((x - stamps[i]) / 1000).toFixed(1)} s${ev.result.cache ? ' (cache)' : ''}</li>`);
+    $('intervals').innerHTML = items.length ? items.slice(-10).join('') : '<li>primeira leitura recebida</li>';
+  }, { refetchInterval: 5000 });
+
+  $('once').addEventListener('click', async () => {
+    $('onceOut').textContent = 'chamando…';
+    try {
+      const r = await mcp.callTool(SERVER, 'fleet_overview');
+      show(r.payload);
+      $('onceOut').textContent = `ok às ${new Date().toLocaleTimeString('pt-BR')} · requisições no núcleo: ${r.payload.requests}`;
+    } catch (e) { $('onceOut').innerHTML = `<span class="err">${e.code}: ${e.message ?? ''}</span>`; }
+  });
+})();
+</script>

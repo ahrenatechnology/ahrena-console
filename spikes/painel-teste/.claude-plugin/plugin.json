@@ -1,0 +1,1 @@
+{ "name": "ahrena-console-painel", "version": "0.0.2", "description": "Teste do Ahrena Console: painel lateral que lê o núcleo local", "author": { "name": "Ahrena" }, "types": "./types/index.d.ts" }
