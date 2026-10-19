@@ -3,3 +3,13 @@ export * from './pricing.ts';
 export * from './storage-port.ts';
 export { SqliteStorage, openSqliteStorage, type SqliteStorageOptions } from './adapters/sqlite/sqlite-storage.ts';
 export { MIGRATIONS, migrate, schemaVersion, type Migration } from './adapters/sqlite/migrations.ts';
+export {
+  importHistory,
+  mainAgentId,
+  subagentId,
+  eventId,
+  type ImportOptions,
+  type ImportReport,
+  type ImportCursor,
+} from './ingest/historico/importer.ts';
+export { defaultProjectsRoot } from './ingest/historico/files.ts';
