@@ -39,13 +39,13 @@ class HttpError extends Error {
   }
 }
 
-function send(res: ServerResponse, status: number, body: unknown): void {
+export function send(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) });
   res.end(text);
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+export function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const declared = Number(req.headers['content-length']);
     if (declared > MAX_HOOK_BODY_BYTES) return reject(new HttpError(413, 'payload grande demais'));
@@ -68,7 +68,16 @@ const header = (req: IncomingMessage, name: string): string | null => {
   return typeof v === 'string' && v.length > 0 ? v : null;
 };
 
-export function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiver> {
+/** Rota dos hooks sem servidor próprio: o servidor da API local (src/api) a monta na mesma porta. */
+export type HookRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+/**
+ * `POST /api/hooks` e `GET /api/hooks/health`. Quem monta a rota confere `Origin` e `Host` antes
+ * (decisão 0003); `startHookReceiver` faz isso para o receptor sozinho.
+ */
+export type HookRouteOptions = Omit<HookReceiverOptions, 'host' | 'port'>;
+
+export function createHookRoute(opts: HookRouteOptions): HookRoute {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console hooks] ${m}`));
   const now = opts.now ?? (() => new Date());
   // Uma gravação por vez: os hooks de uma sessão chegam em rajada e a leitura-e-gravação da sessão
@@ -80,14 +89,7 @@ export function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiv
     return run;
   };
 
-  let port = 0;
-
-  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Contra CSRF e DNS rebinding (decisão 0003): hook não vem de navegador, e o Host tem de ser o nosso.
-    const host = header(req, 'host');
-    if (header(req, 'origin') || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) {
-      return send(res, 403, { error: 'origem não permitida' });
-    }
+  return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = (req.url ?? '/').split('?')[0];
     if (path === `${HOOKS_PATH}/health` && req.method === 'GET') return send(res, 200, { ok: true });
     if (path !== HOOKS_PATH) return send(res, 404, { error: 'não encontrado' });
@@ -126,6 +128,23 @@ export function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiv
       log(`falha ao gravar hook: ${(err as Error).message}`);
       send(res, 500, { error: 'falha ao gravar' });
     }
+  };
+}
+
+/** Contra CSRF e DNS rebinding (decisão 0003): nada de navegador, e o Host tem de ser o nosso. */
+export function allowedLocalRequest(req: IncomingMessage, port: number): boolean {
+  const host = header(req, 'host');
+  return !header(req, 'origin') && (host === `127.0.0.1:${port}` || host === `localhost:${port}`);
+}
+
+export function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiver> {
+  const log = opts.log ?? ((m: string) => console.error(`[ahrena-console hooks] ${m}`));
+  const route = createHookRoute(opts);
+  let port = 0;
+
+  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!allowedLocalRequest(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    return route(req, res);
   }
 
   const server = createServer((req, res) => {

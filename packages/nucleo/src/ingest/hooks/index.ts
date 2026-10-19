@@ -6,7 +6,11 @@ export {
   DEFAULT_HOOK_PORT,
   HOOKS_PATH,
   MAX_HOOK_BODY_BYTES,
+  allowedLocalRequest,
+  createHookRoute,
   startHookReceiver,
+  type HookRoute,
+  type HookRouteOptions,
   type HookReceiver,
   type HookReceiverOptions,
 } from './receiver.ts';

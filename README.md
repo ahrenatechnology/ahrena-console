@@ -12,6 +12,16 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 - **Projeto novo.** Podium e Claude Code Agent Monitor são referências de ideias, não base de código.
 - **Interface e marca.** Visual na linha do Claude Code Agent Monitor, com a marca da Ahrena (a mesma do The Forward Deployed Engineer). Detalhes em [docs/design.md](docs/design.md).
 
+## Painel lateral
+
+O painel da sessão (`/console`) está em [plugins/ahrena-console](plugins/ahrena-console/), sobre a API local do núcleo ([packages/nucleo](packages/nucleo/#api-local)). Para instalar:
+
+```
+/plugin install ahrena-console --marketplace ahrenatechnology/ahrena-console
+```
+
+Como subir o núcleo e o que cada tela mostra: [plugins/ahrena-console/README.md](plugins/ahrena-console/README.md).
+
 ## Em aberto
 
 - Onde roda: só local, só nuvem, ou híbrido (agente local em cada máquina mais um hub para time e clientes).

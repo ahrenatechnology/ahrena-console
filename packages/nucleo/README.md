@@ -19,6 +19,43 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/github/](src/github/) | Trabalho do GitHub: hierarquia, PR, CI e review por item, e o kanban de um Project (seção abaixo) |
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
 | [src/estados/](src/estados/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |
+| [src/api/](src/api/) | API local mínima para o painel lateral (começo da #21; seção abaixo) |
+
+## API local
+
+O começo da #21: um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o receptor de hooks e a máquina de estados, e responde só o que o painel lateral ([plugins/ahrena-console](../../plugins/ahrena-console/)) precisa.
+
+```bash
+npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
+npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
+npm run api -- --help
+```
+
+| Rota | O quê |
+| --- | --- |
+| `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
+| `GET /api/overview` | Saúde |
+| `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
+| `POST /api/hooks` | O receptor de hooks, na mesma porta |
+
+`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003).
+
+| Arquivo | O quê |
+| --- | --- |
+| [painel.ts](src/api/painel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, família, conta e "precisam de você" |
+| [resumo.ts](src/api/resumo.ts) | Turno, plano (`TodoWrite`), pergunta, pedido de permissão, erro e contexto, lidos dos eventos de forma incremental |
+| [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
+| [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`) e conta pela pasta, relido só quando muda |
+| [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
+| [servidor.ts](src/api/servidor.ts) | As rotas |
+
+**Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
+
+```bash
+node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
+```
+
+O transcript passou a guardar a entrada de duas ferramentas, `TodoWrite` (o plano) e `AskUserQuestion` (a pergunta), cortada como os outros textos; a de nenhuma outra.
 
 ## Importação do histórico
 

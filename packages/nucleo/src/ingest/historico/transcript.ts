@@ -43,6 +43,8 @@ export interface EventData {
   isError?: boolean;
   subtype?: string;
   usage?: MessageUsage;
+  /** Entrada da ferramenta, só para as de `INPUT_KEPT`. */
+  tool_input?: unknown;
 }
 
 export interface ParsedLine {
@@ -127,6 +129,17 @@ export function parseUsage(message: Json, requestId: string | null): MessageUsag
     webFetchRequests: count(server.web_fetch_requests),
     codeExecutionRequests: count(server.code_execution_requests),
   };
+}
+
+/** Ferramentas cuja entrada fica no evento: o plano (TodoWrite) e a pergunta (AskUserQuestion). */
+const INPUT_KEPT = new Set(['TodoWrite', 'AskUserQuestion']);
+const INPUT_STRING_MAX = 500;
+
+function keepInput(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return v.length > INPUT_STRING_MAX ? `${v.slice(0, INPUT_STRING_MAX - 1)}…` : v;
+  if (v === null || typeof v !== 'object' || depth > 4) return typeof v === 'object' ? null : v;
+  if (Array.isArray(v)) return v.slice(0, 50).map((x) => keepInput(x, depth + 1));
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keepInput(x, depth + 1)]));
 }
 
 const TITLE_KINDS: Record<string, string> = {
@@ -214,13 +227,15 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
       const name = str(toolUse.name);
       const toolUseId = str(toolUse.id);
       if (name && toolUseId) toolNames.set(toolUseId, name);
+      // O plano e a pergunta vivem na entrada da ferramenta: guardada só para estas, curta.
+      const input = name && INPUT_KEPT.has(name) && isObj(toolUse.input) ? { tool_input: keepInput(toolUse.input) } : {};
       out.events.push({
         uuid,
         type: 'ToolUse',
         toolName: name,
         summary: toolSummary(toolUse.input),
         createdAt: timestamp,
-        data: toolUseId ? { ...data, toolUseId } : data,
+        data: toolUseId ? { ...data, ...input, toolUseId } : { ...data, ...input },
       });
     } else {
       out.events.push({ uuid, type: 'AssistantMessage', toolName: null, summary: truncate(textOf(blocks), SUMMARY_MAX), createdAt: timestamp, data });

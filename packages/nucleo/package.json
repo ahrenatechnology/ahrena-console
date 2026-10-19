@@ -7,13 +7,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./simulador": "./src/simulador/index.ts"
+    "./simulador": "./src/simulador/index.ts",
+    "./api": "./src/api/index.ts"
   },
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
-    "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts"
+    "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts",
+    "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts"
   }
 }
