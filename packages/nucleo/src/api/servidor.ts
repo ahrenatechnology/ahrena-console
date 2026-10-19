@@ -13,6 +13,7 @@
 // | `GET /abrir/<local_…>`        | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
+// | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -23,6 +24,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
+import type { CursorDeMudancas } from '../mudancas/cursor.ts';
+import { ROTA_DAS_MUDANCAS, responderMudancas } from '../mudancas/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
@@ -50,6 +53,8 @@ export interface OpcoesDaApi {
   mcp?: ServidorMcp;
   /** O commit do código no ar, em `/api/overview`: quem sobe outro núcleo compara (src/dono). */
   commit?: string | null;
+  /** O cursor de mudanças; liga `GET /api/mudancas`. */
+  mudancas?: CursorDeMudancas;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -193,10 +198,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (abrir) return abrirNoDesktop(res, abrir[1]);
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
+    if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,
         eventosLidos: opts.montador.resumos.eventosLidos,
+        ...(opts.mudancas ? { esperasAbertas: opts.mudancas.abertas } : {}),
         ...(opts.carga?.() ?? {}),
       });
     }
@@ -225,6 +232,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         url: `http://${address}:${bound}`,
         close: () =>
           new Promise<void>((done, fail) => {
+            opts.mudancas?.encerrar();
             server.close((err) => (err ? fail(err) : done()));
             server.closeAllConnections();
           }),

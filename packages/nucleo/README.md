@@ -22,6 +22,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/decisoes/](src/decisoes/README.md) | Decisões da sessão: modelo, porta, captura pelos hooks e pelo transcript, e a cadeia de substituição (#99) |
 | [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
+| [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
 
@@ -48,6 +49,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
+| `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
 
 `?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003).
 
@@ -262,4 +264,20 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 ```bash
 npm install   # só a devDependency do teste de contrato do MCP (o cliente oficial)
 npm test
+```
+
+## Mudanças e long polling (item 2.4)
+
+O que deixa as telas ao vivo sem polling curto: o artefato, cujo `watchTool` tem piso de 30 s (validação V2), o app de bandeja (decisão 0005) e o painel.
+
+- **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave, sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reiniciar: true` (releia tudo).
+- **Espera.** `aguardarMudancas(cursor, { filtros, timeoutMs, signal })` responde na hora se já há novidade; senão segura até chegar uma que passe nos filtros (sessão, conta, tipo) ou até o timeout (padrão 25 s, máximo 110 s, abaixo dos ~130 s do app). Cada espera responde no mínimo 1 s depois de começar: com hooks chegando sem parar, quem faz long polling em laço acorda no máximo uma vez por segundo, e a rajada sai numa resposta só, uma vez por (tipo, chave). O cursor devolvido é sempre o de agora: as mudanças que os filtros deixaram de fora ficam para trás e não voltam num pedido seguinte com outros filtros. No máximo 256 esperas abertas; acima disso, `ErroDeLotacao` (503 no HTTP).
+- **Fontes.** [fontes.ts](src/mudancas/fontes.ts): `comMudancas(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `sessao` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisoesComMudancas` a das decisões, e `aoMudarDaMaquina` vai no `aoMudar` da máquina de estados (`estado` e, quando entra ou sai do inbox, `precisa-de-voce`). A API (`cli.ts`) liga as três.
+- **HTTP.** `GET /api/mudancas?desde=<cursor>&espera=<s>&sessao=<id>&conta=<id|sem-conta>&tipo=<tipo>` ([http.ts](src/mudancas/http.ts)). O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
+- **MCP.** [mcp.ts](src/mudancas/mcp.ts): a ferramenta `wait_for_changes` no formato `Ferramenta` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `criarServidorMcp`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types`; saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.sinal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/mudancas/contrato-sdk.test.ts](test/mudancas/contrato-sdk.test.ts).
+
+**Consumo.** Parado, cada espera aberta é só um timer; nada varre o banco. Para medir, parado e com hooks sintéticos pelo receptor de verdade:
+
+```bash
+node scripts/medir-esperas.mjs --esperas 50 --segundos 60 --hooks-por-min 600
 ```

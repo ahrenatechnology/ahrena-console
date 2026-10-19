@@ -6,6 +6,7 @@ O servidor MCP de produção do Ahrena Console (épico 2, a partir da 2.1). Resp
 | --- | --- | --- |
 | `sessions_needing_attention` | Quem precisa de mim? | 2.1 |
 | `fleet_overview` | Como está tudo? | 2.1 |
+| `wait_for_changes` | O que mudou? (long polling, [src/mudancas](../mudancas/mcp.ts)) | 2.4 |
 
 ## Como registrar
 
