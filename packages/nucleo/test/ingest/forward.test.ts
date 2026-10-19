@@ -154,6 +154,32 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
+  test('núcleo fora da máquina: recusa sem enviar nada', async () => {
+    for (const url of ['http://192.0.2.10:4720', 'http://127.0.0.1.example.test:4720', 'file:///tmp/x', 'não é url']) {
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: url, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' });
+      assert.equal(r.code, 0, url);
+      assert.equal(r.stdout, '', url);
+      assert.match(r.log, /SessionStart não enviado: AHRENA_CONSOLE_URL precisa ser 127\.0\.0\.1, localhost ou ::1/, url);
+    }
+  });
+
+  test('::1 vale como núcleo local', async () => {
+    let hits = 0;
+    const v6 = createServer((_req, res) => {
+      hits++;
+      res.writeHead(202);
+      res.end('{}');
+    });
+    const port = await new Promise<number>((resolve) => v6.listen(0, '::1', () => resolve((v6.address() as AddressInfo).port)));
+    try {
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_URL: `http://[::1]:${port}` });
+      assert.equal(r.log, '');
+      assert.equal(hits, 1);
+    } finally {
+      await new Promise((r) => v6.close(r));
+    }
+  });
+
   test('stdin que não fecha não prende o hook', async () => {
     const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' }, { keepStdinOpen: true });
     assert.equal(r.code, 0);

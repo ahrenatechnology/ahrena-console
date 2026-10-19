@@ -1,7 +1,7 @@
 export { HOOK_CONTEXT_FIELD, HOOK_EVENTS, InvalidHookError, MAX_STRING_IN_DATA, compactData, normalizeHook } from './normalize.ts';
 export type { HookEnv, HookEventName, NormalizeOptions, NormalizedHook, SessionHints } from './normalize.ts';
 export { ingestHook, type IngestOptions, type IngestResult } from './ingest.ts';
-export { pastaDeConfiguracao, resolverConta, type ContaResolvida, type LerContaDaPasta, type ResolucaoDaConta } from './conta.ts';
+export { pastaDoHook, resolverConta, type ContaResolvida, type LerContaDaPasta, type ResolucaoDaConta } from './conta.ts';
 export { arquivoDaConta, contaDaPasta, type ContaDaPasta } from './conta-da-pasta.ts';
 export {
   DEFAULT_HOOK_HOST,
