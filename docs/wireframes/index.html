@@ -538,7 +538,7 @@ const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="wi
 function lado(ativo, q = 4) {
   const nav = [
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
-    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'],
+    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
   return `<aside class="cc-lado">
@@ -1101,6 +1101,94 @@ function telaDecisoes() {
     ${l.map(decLinha).join('')}</div>`).join('')}`
 }
 
+// ---------- Repositórios ----------
+const REPOS = [
+  ['exemplo-labs', [
+    ['vitrine-demo', 'TypeScript', 'público', 14, 3, '2 min', 'ok', 4, 1],
+    ['motor-de-regras', 'TypeScript', 'privado', 9, 5, '12 min', 'rod', 3, 2],
+    ['painel-de-metricas', 'Python', 'privado', 6, 2, '3 min', 'fal', 1, 1],
+    ['gateway-sandbox', 'Go', 'privado', 4, 1, 'ontem', 'ok', 0, 0],
+  ]],
+  ['estudio-ficticio', [
+    ['app-receitas', 'Kotlin', 'privado', 11, 4, '6 min', 'ok', 1, 0],
+    ['catalogo-exemplo', 'TypeScript', 'público', 3, 1, 'agora', 'ok', 1, 0],
+  ]],
+  ['você (pessoal)', [
+    ['cli-de-notas', 'Rust', 'público', 2, 0, '2 dias', 'ok', 0, 0],
+    ['blog-estatico', 'Astro', 'público', 1, 1, '1 h', 'ok', 0, 0],
+  ]],
+]
+const ciPill = c => ({ ok: '<span class="pill b-completed">CI ✓</span>', fal: '<span class="pill b-error">CI ✕</span>', rod: '<span class="pill b-waiting">CI …</span>' })[c]
+const spk = (seed, w = 90, h = 22) => { const v = Array.from({ length: 12 }, (_, i) => 3 + Math.round((Math.abs(Math.sin(seed * 9.1 + i * 1.7)) * 9))); const m = Math.max(...v)
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" class="graf"><polyline points="${v.map((n, i) => `${(i * (w - 2) / 11 + 1).toFixed(1)},${(h - 2 - n / m * (h - 4)).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>` }
+function telaRepos() {
+  let k = 0
+  return `${cab('folder-git-2', 'Repositórios', 'Organizações e repositórios da sua conta do GitHub', `<span class="chip">${ic('github')}conta: dev-sintetico</span>${atualizar}`)}
+  <div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+    ${stat('Organizações', '2', '+ a conta pessoal', 'building-2', 'var(--accent-text)')}
+    ${stat('Repositórios', '8', '5 com sessões este mês', 'folder-git-2', 'var(--accent-text)')}
+    ${stat('PRs abertos', '10', '4 esperando review', 'git-pull-request', 'var(--status-waiting-text)')}
+    ${stat('Issues abertas', '50', '17 fechadas na semana', 'circle-dot', 'var(--accent-text)')}
+    ${stat('CI', '92%', 'de execuções verdes · 7 dias', 'check-circle-2', 'var(--status-completed-text)')}
+  </div>
+  <div class="cartao filtros"><span class="campo" style="flex:1">${ic('search')}Buscar repositórios…</span><span class="campo" style="width:200px">Todas as organizações<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo" style="width:200px">Atividade: recente<span style="margin-left:auto">${ic('chevron-down')}</span></span><div class="seg"><span class="on">Todos</span><span>Com sessões</span><span>Públicos</span><span>Privados</span></div></div>
+  ${REPOS.map(([org, l]) => `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic(org.startsWith('você') ? 'user' : 'building-2')}<span style="text-transform:none;letter-spacing:0;color:var(--text);font-size:12.5px">${org}</span><span style="text-transform:none;letter-spacing:0;font-weight:400">${l.length} repositórios</span></div>
+    <div class="cartao"><table class="tabela"><thead><tr><th>Repositório</th><th>Linguagem</th><th>Commits · 12 sem.</th><th>Issues</th><th>PRs</th><th>CI</th><th>Sessões</th><th>Último push</th><th></th></tr></thead><tbody>
+    ${l.map(([n, lg, vis, is, prs, push, ci, ses, ag]) => `<tr><td class="nm"><b>${n}</b><small>${org.startsWith('você') ? 'dev-sintetico' : org}/${n} · ${vis}</small></td><td>${lg}</td><td>${spk(++k)}</td><td class="mono">${is}</td><td class="mono">${prs}</td><td>${ciPill(ci)}</td>
+      <td>${ses ? `<span class="badge b-active"><span class="p"></span>${ses}</span>${ag ? ` <span class="mot">${ag} precisa${ag > 1 ? 'm' : ''} de você</span>` : ''}` : '<span class="c-muted">—</span>'}</td><td class="c-muted">${push}</td><td class="c-muted">${ic('chevron-right')}</td></tr>`).join('')}</tbody></table></div></div>`).join('')}`
+}
+function barrasSem(v, cor = 'var(--accent)', h = 90) {
+  const m = Math.max(...v), W = 520
+  return `<svg viewBox="0 0 ${W} ${h + 16}" class="graf" style="width:100%;height:auto">${v.map((n, i) => `<rect x="${i * (W / v.length) + 1}" y="${h - n / m * (h - 6)}" width="${W / v.length - 3}" height="${n / m * (h - 6)}" rx="1.5" fill="${cor}" fill-opacity="${i === v.length - 1 ? 1 : .65}"/>`).join('')}
+    <line x1="0" x2="${W}" y1="${h + .5}" y2="${h + .5}" stroke="var(--border)"/><text x="0" y="${h + 13}">52 semanas atrás</text><text x="${W}" y="${h + 13}" text-anchor="end">esta semana</text></svg>`
+}
+function freqCodigo() {
+  const a = Array.from({ length: 26 }, (_, i) => 400 + Math.round(Math.abs(Math.sin(i * .9)) * 2600)), d = a.map((x, i) => Math.round(x * (.3 + Math.abs(Math.cos(i * 1.3)) * .5)))
+  const W = 520, H = 120, mid = 64, m = 3000
+  return `<svg viewBox="0 0 ${W} ${H + 14}" class="graf" style="width:100%;height:auto">${a.map((x, i) => `<rect x="${i * 20 + 2}" y="${mid - x / m * 58}" width="16" height="${x / m * 58}" rx="1.5" fill="var(--status-completed-dot)" fill-opacity=".8"/><rect x="${i * 20 + 2}" y="${mid}" width="16" height="${d[i] / m * 52}" rx="1.5" fill="var(--status-error-dot)" fill-opacity=".75"/>`).join('')}
+    <line x1="0" x2="${W}" y1="${mid}" y2="${mid}" stroke="var(--border)"/><text x="0" y="${H + 12}">26 semanas atrás</text><text x="${W}" y="${H + 12}" text-anchor="end">esta semana</text></svg>`
+}
+function telaRepo() {
+  const tipos = [['História', 'var(--accent)', 21, 4], ['Tarefa técnica', 'var(--orange-200)', 17, 6], ['Bug', 'var(--status-error-dot)', 9, 2], ['Spike', 'var(--status-waiting-dot)', 5, 1], ['Épico', 'var(--rose)', 1, 3]]
+  const ling = [['TypeScript', 71, 'var(--accent)'], ['CSS', 12, 'var(--orange-200)'], ['HTML', 9, 'var(--orange-700)'], ['Shell', 5, 'var(--muted)'], ['Outras', 3, 'var(--border)']]
+  const pessoas = [['dev-sintetico', 412, '+38,2 k', '−12,4 k'], ['colega-a', 188, '+14,1 k', '−6,0 k'], ['colega-b', 96, '+5,3 k', '−2,2 k'], ['github-actions[bot]', 41, '+1,1 k', '−0,9 k']]
+  return `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>exemplo-labs/vitrine-demo</h4><span class="pill b-completed">CI ✓</span><span class="chip" style="font-family:var(--font-sans)">público</span><span style="margin-left:auto;display:flex;gap:8px"><span class="seg"><span>30 dias</span><span class="on">90 dias</span><span>1 ano</span></span><span class="btn contorno">${ic('external-link')}Abrir no GitHub</span></span></div>
+    <div class="chips"><span class="chip">${ic('git-branch')}main</span><span class="chip">${ic('star')}128</span><span class="chip">${ic('git-fork')}14</span><span class="chip">${ic('eye')}9</span><span class="chip">${ic('tag')}v0.4.2 · há 6 dias</span><span class="chip">${ic('scale')}MIT</span></div></div>
+  <div class="abas"><span class="on">${ic('bar-chart-3')}Métricas</span><span>${ic('circle-dot')}Issues (14)</span><span>${ic('git-pull-request')}PRs (3)</span><span>${ic('play-circle')}CI</span><span>${ic('folder-open')}Sessões (4)</span><span>${ic('git-commit-horizontal')}Decisões (6)</span></div>
+  <div class="stats" style="grid-template-columns:repeat(6,minmax(0,1fr))">
+    ${stat('Linhas', '48,3 mil', '+6,1 mil em 90 dias', 'file-code', 'var(--accent-text)')}
+    ${stat('Commits', '737', '~57 por semana', 'git-commit-horizontal', 'var(--accent-text)')}
+    ${stat('PRs mergeados', '64', 'merge em 1 d 4 h (mediana)', 'git-merge', 'var(--status-completed-text)')}
+    ${stat('Issues fechadas', '53', 'fecha em 2 d 9 h (mediana)', 'circle-check', 'var(--status-completed-text)')}
+    ${stat('Review', '3 h 12', 'até o 1º review (mediana)', 'message-square', 'var(--status-waiting-text)')}
+    ${stat('CI verde', '94%', '312 execuções · 6 min médio', 'play-circle', 'var(--status-completed-text)')}
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">Commits por semana<span class="r">52 semanas</span></div>${barrasSem(Array.from({ length: 52 }, (_, i) => 10 + Math.round(Math.abs(Math.sin(i * .37)) * 60 + (i > 40 ? 20 : 0))))}</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">Frequência de código<span class="r">linhas adicionadas e removidas por semana</span></div>${freqCodigo()}
+      <div class="leg"><span><span class="ponto d-completed"></span>Adicionadas <b>+61,4 k</b></span><span><span class="ponto d-error"></span>Removidas <b>−21,5 k</b></span></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div class="cartao" style="padding:14px 16px"><div class="ttl">Issues fechadas por tipo<span class="r">fechadas · abertas</span></div><div style="margin-top:8px">${tipos.map(([n, c, f, a]) => `<div class="ferr" style="grid-template-columns:104px minmax(0,1fr) 54px"><span class="trunc" style="font-size:12px">${n}</span>${barra(f / 21 * 100, c)}<span class="q">${f} · ${a}</span></div>`).join('')}</div></div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div class="ttl">Pull requests<span class="r">90 dias</span></div>
+      <div class="barra-h" style="height:10px"><i style="width:84%;background:var(--status-completed-dot)"></i><i style="width:12%;background:var(--muted)"></i><i style="width:4%;background:var(--status-waiting-dot)"></i></div>
+      <div class="leg"><span><span class="ponto d-completed"></span>Mergeados <b>64</b></span><span><span class="ponto" style="background:var(--muted)"></span>Fechados sem merge <b>9</b></span><span><span class="ponto d-waiting"></span>Abertos <b>3</b></span></div>
+      <div class="leg"><span>Tamanho mediano <b>+212 −64</b></span><span>Rodadas de review <b>1,6</b></span><span>Abertos por agentes <b>71%</b></span></div></div>
+    <div class="cartao" style="padding:14px 16px"><div class="ttl">Linguagens<span class="r">bytes</span></div>
+      <div class="barra-h" style="height:10px;margin-top:10px">${ling.map(([, p, c]) => `<i style="width:${p}%;background:${c}"></i>`).join('')}</div>
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:12px">${ling.map(([n, p, c]) => `<span style="display:flex;gap:6px;align-items:center"><span class="ponto" style="background:${c}"></span>${n}<span class="mono c-muted" style="margin-left:auto">${p}%</span></span>`).join('')}</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px">
+    <div class="cartao"><table class="tabela"><thead><tr><th>Quem contribuiu</th><th style="text-align:right">Commits</th><th style="text-align:right">Adicionadas</th><th style="text-align:right">Removidas</th></tr></thead><tbody>${pessoas.map(([n, c, a, d]) => `<tr><td>${n}</td><td class="mono" style="text-align:right">${c}</td><td class="mono c-completed" style="text-align:right">${a}</td><td class="mono c-error" style="text-align:right">${d}</td></tr>`).join('')}</tbody></table></div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">Tráfego e segurança<span class="r">14 dias</span></div>
+      <div class="leg"><span>Visitas <b>1.204</b> (311 únicas)</span><span>Clones <b>86</b></span></div>
+      <div class="leg"><span>Origem: <b>github.com</b>, <b>busca</b>, <b>npm</b></span></div>
+      <div class="leg"><span><span class="ponto d-waiting"></span>Alertas do Dependabot <b>2</b></span><span><span class="ponto d-completed"></span>Code scanning <b>0</b></span></div>
+      <div class="leg"><span>Saúde da comunidade <b>86%</b></span><span>Releases <b>12</b></span></div>
+      <span class="c-muted" style="font-size:11px">Tráfego e alertas só aparecem para quem tem acesso de escrita no repositório.</span></div>
+  </div>`
+}
+
 function telaVazios() {
   return `${cab('layout-dashboard', 'Dashboard', 'Estados de carregamento, vazio e erro, iguais em todas as telas')}
   <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
@@ -1422,6 +1510,10 @@ const TELAS = [
     n: N(['A moldura do Session Detail e as linhas do Activity Feed.'], ['Território novo: nenhuma ferramenta de referência guarda decisões.', 'Escopo Sessão, Família ou Branch no mesmo seletor.', '"Promover a registro" gera um rascunho em <code>docs/decisoes/</code>, como os registros 0001 a 0005 deste projeto.']) },
   { id: 'console-decisoes', cod: 'C21', nome: 'Decisões', sub: 'Todas as decisões, agrupadas por branch, com busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma.', html: () => `<div class="fila">${cc('decisoes', telaDecisoes())}</div>`,
     n: N(['StatCards e a lista agrupada do Histórico.'], ['Agrupa por branch, porque é onde as decisões de várias sessões se encontram.']) },
+  { id: 'console-repos', cod: 'C22', nome: 'Repositórios', sub: 'Todas as organizações e repositórios da conta do GitHub, com atividade, issues, PRs, CI e as sessões que mexem em cada um.', html: () => `<div class="fila">${cc('repos', telaRepos())}</div>`,
+    n: N(['A tabela de Sessions (filtros, pílulas, linha que leva ao detalhe) e os StatCards.'], ['O CCAM não lê o GitHub; aqui o repositório liga as sessões ao trabalho.', 'Lido com a consulta enxuta e o cache da decisão 0001, para não estourar o limite da API.']) },
+  { id: 'console-repo', cod: 'C23', nome: 'Repositório · métricas', sub: 'As métricas que a API do GitHub dá: commits por semana, frequência de código (linhas adicionadas e removidas), issues fechadas por tipo, PRs e tempo até o merge e o review, CI, linguagens, contribuidores, tráfego e alertas.', html: () => `<div class="fila">${cc('repos', telaRepo())}</div>`,
+    n: N(['O cabeçalho com chips do Session Detail, os 6 KPIs, barras horizontais e a barra empilhada do Token Flow.'], ['"Linhas de código" não vem pronta do GitHub: soma a frequência de código (adições − remoções) desde o primeiro commit; os bytes por linguagem ficam ao lado.', 'Issues por tipo usam os tipos de issue da organização (História, Tarefa técnica, Bug, Spike, Épico).', '"Abertos por agentes" cruza os PRs com as sessões que os abriram.', 'Tráfego, Dependabot e code scanning exigem acesso de escrita; sem ele, o card some.']) },
 ]
 
 // =====================================================================
