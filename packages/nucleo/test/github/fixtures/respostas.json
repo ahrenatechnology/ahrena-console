@@ -1,0 +1,1714 @@
+[
+ {
+  "operation": "WorkShallow",
+  "variables": {
+   "q": "repo:ahrenatechnology/ahrena-console is:issue is:open",
+   "after": null
+  },
+  "status": 200,
+  "body": {
+   "data": {
+    "rateLimit": {
+     "cost": 1,
+     "remaining": 3794,
+     "resetAt": "2026-10-19T00:50:15Z"
+    },
+    "search": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOjYw"
+     },
+     "nodes": [
+      {
+       "number": 65,
+       "title": "Tokens compartilhados entre painel e artefato",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/65",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:25:09Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 10,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 63,
+       "title": "Editor de configuração: skills, subagentes, comandos, memória, hooks e MCP, com backup (tela Agent Config do CCAM)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/63",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:25:03Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 9,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 62,
+       "title": "Lançar e retomar sessões pelo console (tela Run do CCAM)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/62",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:25:01Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 9,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 61,
+       "title": "Mandar mensagem e `/clear`, `/compact` para uma sessão parada (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/61",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:58Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 9,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 60,
+       "title": "Permitir ou negar uma ferramenta, uma vez (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/60",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:55Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 9,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 59,
+       "title": "Responder perguntas e aprovar planos pelo console (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/59",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:53Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 9,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 57,
+       "title": "Admin do hub: preços por modelo, chaves de recursos, avisos, máquinas que reportam, compatibilidade de versão, log (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/57",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:48Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 56,
+       "title": "Ingestão dos agentes headless por OpenTelemetry",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/56",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:45Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 55,
+       "title": "GitHub consultado pelo hub uma vez para o time, com cache",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/55",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:42Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 54,
+       "title": "Visão do time no artefato: sessões e trabalho por pessoa, máquina e cliente",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/54",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:39Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 53,
+       "title": "Hub como conector MCP remoto: as mesmas ferramentas do Épico 2, para o time",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/53",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:37Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 52,
+       "title": "Agente local envia ao hub, com controle do que sai e redação de segredos",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/52",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:34Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 51,
+       "title": "API de ingestão com token por máquina",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/51",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:32Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 50,
+       "title": "Identidade, organizações e papéis (quem vê o quê)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/50",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:29Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 49,
+       "title": "Infraestrutura como código (CDK) e deploy",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/49",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:26Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 48,
+       "title": "Adaptador DynamoDB da porta de armazenamento",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/48",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:23Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 8,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 46,
+       "title": "Simulador de sessões, com modo caos, para testar e demonstrar sem dados reais (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/46",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:18Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 7,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 45,
+       "title": "Releases no GitHub com os dois pacotes e guia de instalação",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/45",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:15Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 7,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 44,
+       "title": "Plugin do Claude Code: painel, hooks e `/console`, num marketplace",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/44",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:10Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 7,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 43,
+       "title": "Extensão `.mcpb` do núcleo (instala com dois cliques, sem reiniciar)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/43",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:08Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 7,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 42,
+       "title": "Gerenciar o projeto do Ahrena Console pelo kanban: ver as issues do GitHub Project por Status e mover um card muda o Status no GitHub",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/42",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:05Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 6,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 41,
+       "title": "Hierarquia iniciativa → épico → item → plano, com PR, CI e review por item",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/41",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:24:02Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 6,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 39,
+       "title": "Status line `ahrena-console ● N ao vivo`, com aviso de versão (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/39",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:57Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 5,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 38,
+       "title": "Layout responsivo validado em larguras de 36 a 160 colunas, e estado salvo compatível entre versões",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/38",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:54Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 5,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 37,
+       "title": "Trabalho do GitHub: hierarquia e kanban (o que foi testado no spike)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/37",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:52Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 5,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 36,
+       "title": "Sessões em resumo: as 10 mais recentes, com status colorido, medidor de contexto e link para o detalhe no artefato",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/36",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:49Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 5,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 35,
+       "title": "Inbox e contadores: quem precisa de você, com motivo e tempo esperando; ativas, esperando, com erro, custo de hoje",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/35",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:46Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 5,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 34,
+       "title": "Mural de sessões ao vivo: um card por sessão com status, modelo, esforço, plano, agentes, contexto e custo (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/34",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:43Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 33,
+       "title": "Histórico: sessões encerradas por dia, com detalhe e ligação depois de `/clear` (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/33",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:40Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 32,
+       "title": "Custo: linha diária, divisão por modelo, por projeto",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/32",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:38Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 31,
+       "title": "Kanban só leitura, com duas visões como no CCAM: sessões (Ativas, Esperando, Concluídas, Erro, Abandonadas) e agentes (Trabalhando, Esperando, Concluídos, Erro); 10 cards por coluna com \"mostrar mais\"",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/31",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:34Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 30,
+       "title": "Detalhe da sessão, abas Conversa e Linha do tempo: mensagens, blocos de ferramenta que expandem, seletor de subagente; eventos filtráveis e expansíveis; faixa \"esperando sua resposta\" com o motivo",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/30",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:31Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 29,
+       "title": "Detalhe da sessão, aba Agentes: números, ferramentas mais usadas, fluxo de tokens, árvore de subagentes com custo por nó, progresso das tarefas",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/29",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:28Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 28,
+       "title": "Sessões como no CCAM: tabela (Sessão, Status com motivo, Última atividade, Duração, Agentes, Custo, Diretório), busca, filtro por diretório, pílulas de status (Todas, Ativas, Esperando, Concluídas, Erro, Abandonadas), ordenação por atividade, duração e custo, 10 por página",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/28",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:26Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 27,
+       "title": "Dashboard como o do CCAM: 6 cards (sessões, agentes ativos, subagentes ativos, eventos hoje, eventos no total, custo), inbox \"quem precisa de você\", árvore de agentes ativos com subagentes e atividade recente com link para a sessão",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/27",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:23Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 26,
+       "title": "Moldura do artefato: barra lateral de navegação, indicador Live, tema com a paleta do Ahrena, leitura do núcleo por `host:` com long polling",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/26",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:20Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 4,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 25,
+       "title": "Respostas paginadas, transcript tratado como conteúdo não confiável, ferramentas de escrita desligadas",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/25",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:17Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 3,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 24,
+       "title": "`wait_for_changes` (long polling) para as telas ficarem ao vivo",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/24",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:15Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 3,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 23,
+       "title": "Relatório de uso e custo (`usage_report`) e SQL só de leitura (`query_sql`)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/23",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:12Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 3,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 22,
+       "title": "Sessões: listar, detalhar e buscar (`list_sessions`, `get_session`, `search_sessions`)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/22",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:09Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 3,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 21,
+       "title": "Quem precisa de mim e visão geral (`sessions_needing_attention`, `fleet_overview`)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/21",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:06Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "User Story"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 3,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 20,
+       "title": "Falhas: captura e explicação opcional por um modelo pequeno (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/20",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:04Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 19,
+       "title": "Plano da sessão a partir de TaskCreate, TodoWrite e update_plan, com dono de cada passo (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/19",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:23:01Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 18,
+       "title": "Saúde da coleta e `doctor`",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/18",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:58Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 17,
+       "title": "Medidor de contexto por sessão e agente, com contagem de estouros e alerta a partir de 2 (Podium)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/17",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:56Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 16,
+       "title": "Custo e tokens: tabela de preços editável, cache de 5 min e 1 h, piso depois da compactação, \"sem preço\" explícito, tudo marcado como estimativa",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/16",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:53Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 15,
+       "title": "Máquina de estados como a do CCAM: `active/waiting/completed/error/abandoned`, motivo do waiting (`notification`, `interrupted`, `stop`, `session_start`), watchdog de turno morto (120 s), sonda de processo vivo, `abandoned` após 180 min, cura de erro já superado",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/15",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:50Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 14,
+       "title": "Receber os hooks do Claude Code (SessionStart/End, Pre/PostToolUse, Stop, SubagentStop, Notification, UserPromptSubmit)",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/14",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:47Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 13,
+       "title": "Seguir os transcripts em tempo real",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/13",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:45Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 12,
+       "title": "Importar o histórico de `~/.claude/projects`, incluindo subagentes, sem contar duas vezes",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/12",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:42Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Tech Task"
+       },
+       "subIssuesSummary": {
+        "total": 0,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 2,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 10,
+       "title": "Identidade visual",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/10",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:37Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 2,
+        "completed": 1,
+        "percentCompleted": 50
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 9,
+       "title": "Responder e controlar pelo console",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/9",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:34Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 6,
+        "completed": 1,
+        "percentCompleted": 16
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 8,
+       "title": "Hub na nuvem, AWS serverless",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/8",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:32Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 11,
+        "completed": 1,
+        "percentCompleted": 9
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 7,
+       "title": "Distribuição",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/7",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:29Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 4,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 6,
+       "title": "Integração com o GitHub",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/6",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:26Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 3,
+        "completed": 1,
+        "percentCompleted": 33
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 5,
+       "title": "Painel lateral",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/5",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:23Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 5,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 4,
+       "title": "Artefato: o console completo",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/4",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:21Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 9,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 3,
+       "title": "Servidor MCP",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/3",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:18Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 5,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 2,
+       "title": "Núcleo e máquina de estados",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/2",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:15Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 10,
+        "completed": 1,
+        "percentCompleted": 10
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        }
+       }
+      },
+      {
+       "number": 1,
+       "title": "Ahrena Console 0.0.1",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/1",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:12Z",
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "issueType": {
+        "name": "Initiative"
+       },
+       "subIssuesSummary": {
+        "total": 9,
+        "completed": 0,
+        "percentCompleted": 0
+       },
+       "parent": null
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "operation": "WorkChildren",
+  "variables": {
+   "o": "ahrenatechnology",
+   "r": "ahrena-console",
+   "n": 6
+  },
+  "status": 200,
+  "body": {
+   "data": {
+    "rateLimit": {
+     "cost": 2,
+     "remaining": 3788,
+     "resetAt": "2026-10-19T00:50:15Z"
+    },
+    "repository": {
+     "issue": {
+      "subIssues": {
+       "totalCount": 3,
+       "nodes": [
+        {
+         "number": 40,
+         "title": "Consulta enxuta, cache em disco e busca sob demanda ao expandir (timebox: 1 dia)",
+         "url": "https://github.com/ahrenatechnology/ahrena-console/issues/40",
+         "state": "CLOSED",
+         "updatedAt": "2026-10-19T00:25:03Z",
+         "repository": {
+          "nameWithOwner": "ahrenatechnology/ahrena-console"
+         },
+         "issueType": {
+          "name": "Spike"
+         },
+         "subIssuesSummary": {
+          "total": 0,
+          "completed": 0,
+          "percentCompleted": 0
+         },
+         "parent": {
+          "number": 6,
+          "repository": {
+           "nameWithOwner": "ahrenatechnology/ahrena-console"
+          }
+         },
+         "closedByPullRequestsReferences": {
+          "nodes": [
+           {
+            "number": 67,
+            "url": "https://github.com/ahrenatechnology/ahrena-console/pull/67",
+            "state": "MERGED",
+            "isDraft": false,
+            "reviewDecision": null,
+            "commits": {
+             "nodes": [
+              {
+               "commit": {
+                "statusCheckRollup": null
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        {
+         "number": 41,
+         "title": "Hierarquia iniciativa → épico → item → plano, com PR, CI e review por item",
+         "url": "https://github.com/ahrenatechnology/ahrena-console/issues/41",
+         "state": "OPEN",
+         "updatedAt": "2026-10-18T06:24:02Z",
+         "repository": {
+          "nameWithOwner": "ahrenatechnology/ahrena-console"
+         },
+         "issueType": {
+          "name": "Tech Task"
+         },
+         "subIssuesSummary": {
+          "total": 0,
+          "completed": 0,
+          "percentCompleted": 0
+         },
+         "parent": {
+          "number": 6,
+          "repository": {
+           "nameWithOwner": "ahrenatechnology/ahrena-console"
+          }
+         },
+         "closedByPullRequestsReferences": {
+          "nodes": []
+         }
+        },
+        {
+         "number": 42,
+         "title": "Gerenciar o projeto do Ahrena Console pelo kanban: ver as issues do GitHub Project por Status e mover um card muda o Status no GitHub",
+         "url": "https://github.com/ahrenatechnology/ahrena-console/issues/42",
+         "state": "OPEN",
+         "updatedAt": "2026-10-18T06:24:05Z",
+         "repository": {
+          "nameWithOwner": "ahrenatechnology/ahrena-console"
+         },
+         "issueType": {
+          "name": "User Story"
+         },
+         "subIssuesSummary": {
+          "total": 0,
+          "completed": 0,
+          "percentCompleted": 0
+         },
+         "parent": {
+          "number": 6,
+          "repository": {
+           "nameWithOwner": "ahrenatechnology/ahrena-console"
+          }
+         },
+         "closedByPullRequestsReferences": {
+          "nodes": []
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "operation": "WorkDetail",
+  "variables": {
+   "o": "ahrenatechnology",
+   "r": "ahrena-console",
+   "n": 6
+  },
+  "status": 200,
+  "body": {
+   "data": {
+    "rateLimit": {
+     "cost": 1,
+     "remaining": 3787,
+     "resetAt": "2026-10-19T00:50:15Z"
+    },
+    "repository": {
+     "issue": {
+      "number": 6,
+      "state": "OPEN",
+      "repository": {
+       "nameWithOwner": "ahrenatechnology/ahrena-console"
+      },
+      "closedByPullRequestsReferences": {
+       "nodes": []
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "operation": "WorkNodes",
+  "variables": {
+   "o0": "ahrenatechnology",
+   "r0": "ahrena-console",
+   "n0": 40,
+   "o1": "ahrenatechnology",
+   "r1": "ahrena-console",
+   "n1": 99999
+  },
+  "status": 200,
+  "body": {
+   "data": {
+    "rateLimit": {
+     "cost": 1,
+     "remaining": 4834,
+     "resetAt": "2026-10-19T00:58:10Z"
+    },
+    "i0": {
+     "issue": {
+      "number": 40,
+      "title": "Consulta enxuta, cache em disco e busca sob demanda ao expandir (timebox: 1 dia)",
+      "url": "https://github.com/ahrenatechnology/ahrena-console/issues/40",
+      "state": "CLOSED",
+      "updatedAt": "2026-10-19T00:25:03Z",
+      "repository": {
+       "nameWithOwner": "ahrenatechnology/ahrena-console"
+      },
+      "issueType": {
+       "name": "Spike"
+      },
+      "subIssuesSummary": {
+       "total": 0,
+       "completed": 0,
+       "percentCompleted": 0
+      },
+      "parent": {
+       "number": 6,
+       "repository": {
+        "nameWithOwner": "ahrenatechnology/ahrena-console"
+       },
+       "title": "Integração com o GitHub",
+       "url": "https://github.com/ahrenatechnology/ahrena-console/issues/6",
+       "state": "OPEN",
+       "updatedAt": "2026-10-18T06:22:26Z",
+       "issueType": {
+        "name": "Epic"
+       },
+       "subIssuesSummary": {
+        "total": 3,
+        "completed": 1,
+        "percentCompleted": 33
+       },
+       "parent": {
+        "number": 1,
+        "repository": {
+         "nameWithOwner": "ahrenatechnology/ahrena-console"
+        },
+        "title": "Ahrena Console 0.0.1",
+        "url": "https://github.com/ahrenatechnology/ahrena-console/issues/1",
+        "state": "OPEN",
+        "updatedAt": "2026-10-18T06:22:12Z",
+        "issueType": {
+         "name": "Initiative"
+        },
+        "subIssuesSummary": {
+         "total": 9,
+         "completed": 0,
+         "percentCompleted": 0
+        },
+        "parent": null
+       }
+      }
+     }
+    },
+    "i1": {
+     "issue": null
+    }
+   },
+   "errors": [
+    {
+     "type": "NOT_FOUND",
+     "path": [
+      "i1",
+      "issue"
+     ],
+     "locations": [
+      {
+       "line": 6,
+       "column": 43
+      }
+     ],
+     "message": "Could not resolve to an Issue with the number of 99999."
+    }
+   ]
+  }
+ }
+]
