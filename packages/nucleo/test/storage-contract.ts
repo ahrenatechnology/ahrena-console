@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
-import { T0, agent, at, event, pricing, session, usage } from './fixtures.ts';
+import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {
   describe(`contrato da porta de armazenamento: ${name}`, () => {
@@ -92,6 +92,91 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
 
       test('cursor inválido é erro', async () => {
         await assert.rejects(store.listSessions({ cursor: 'lixo' }), RangeError);
+      });
+    });
+
+    describe('contas', () => {
+      test('grava e lê a conta inteira, com pastas e metadados', async () => {
+        const a = account({ color: '#5b8def', configDirs: ['/simulacao/.claude', '/simulacao/.claude-b'], metadata: { x: 1 } });
+        await store.putAccount(a);
+        assert.deepEqual(await store.getAccount(a.id), a);
+        assert.equal(await store.getAccount('nada/nada'), null);
+      });
+
+      test('put substitui a conta inteira (upsert)', async () => {
+        await store.putAccount(account());
+        const editada = account({ label: 'Cliente X (sintético)', organizationName: null, lastSeenAt: at(10) });
+        await store.putAccount(editada);
+        assert.deepEqual(await store.listAccounts(), [editada]);
+      });
+
+      test('lista na ordem em que foram vistas pela primeira vez', async () => {
+        const a2 = account({ n: 2, firstSeenAt: at(1), lastSeenAt: at(1) });
+        const a1 = account({ n: 1, firstSeenAt: at(0) });
+        const a3 = account({ n: 3, firstSeenAt: at(2), lastSeenAt: at(2) });
+        for (const a of [a3, a1, a2]) await store.putAccount(a);
+        assert.deepEqual(await store.listAccounts(), [a1, a2, a3]);
+      });
+
+      test('a mesma pessoa em duas orgs são duas contas', async () => {
+        const org1 = account({ n: 1 });
+        const org2 = account({ n: 1, organizationUuid: '00000000-0000-4000-8000-0000000000b9' });
+        await store.putAccount(org1);
+        await store.putAccount(org2);
+        assert.equal((await store.listAccounts()).length, 2);
+      });
+
+      test('recusa id fora do formato <accountUuid>/<organizationUuid>', async () => {
+        await assert.rejects(store.putAccount(account({ id: 'outra-coisa' })), InvalidModelError);
+        assert.deepEqual(await store.listAccounts(), []);
+      });
+
+      test('a sessão guarda a conta e a procedência', async () => {
+        const s = session({ accountId: account().id, accountSource: 'transcript' });
+        await store.putSession(s);
+        assert.deepEqual(await store.getSession('s1'), s);
+      });
+
+      test('recusa conta sem procedência, procedência sem conta e procedência fora da lista', async () => {
+        await assert.rejects(store.putSession(session({ accountId: account().id })), InvalidModelError);
+        await assert.rejects(store.putSession(session({ accountSource: 'env' })), InvalidModelError);
+        await assert.rejects(
+          store.putSession(session({ accountId: account().id, accountSource: 'palpite' as never })),
+          InvalidModelError,
+        );
+        assert.equal(await store.getSession('s1'), null);
+      });
+
+      test('filtra as sessões por conta, com null pedindo as "Sem conta"', async () => {
+        const c1 = account({ n: 1 }).id;
+        const c2 = account({ n: 2 }).id;
+        await store.putSession(session({ id: 'c1-a', accountId: c1, accountSource: 'env', updatedAt: at(1) }));
+        await store.putSession(session({ id: 'c2-a', accountId: c2, accountSource: 'config', updatedAt: at(2) }));
+        await store.putSession(session({ id: 'sem', updatedAt: at(3) }));
+        await store.putSession(session({ id: 'c1-b', accountId: c1, accountSource: 'profile', updatedAt: at(4), status: 'completed', endedAt: at(4) }));
+
+        const ids = async (q: Parameters<StoragePort['listSessions']>[0]) =>
+          (await store.listSessions(q)).items.map((s) => s.id);
+        assert.deepEqual(await ids({}), ['c1-b', 'sem', 'c2-a', 'c1-a']);
+        assert.deepEqual(await ids({ accountIds: [c1] }), ['c1-b', 'c1-a']);
+        assert.deepEqual(await ids({ accountIds: [c2, c1] }), ['c1-b', 'c2-a', 'c1-a']);
+        assert.deepEqual(await ids({ accountIds: [null] }), ['sem']);
+        assert.deepEqual(await ids({ accountIds: [c2, null] }), ['sem', 'c2-a']);
+        assert.deepEqual(await ids({ accountIds: [] }), []);
+        assert.deepEqual(await ids({ accountIds: ['nada/nada'] }), []);
+        assert.deepEqual(await ids({ accountIds: [c1], status: ['active'] }), ['c1-a']);
+      });
+
+      test('o filtro por conta pagina por cursor', async () => {
+        const c1 = account({ n: 1 }).id;
+        for (let i = 0; i < 5; i++) {
+          await store.putSession(session({ id: `c1-${i}`, accountId: c1, accountSource: 'env', updatedAt: at(i) }));
+          await store.putSession(session({ id: `sem-${i}`, updatedAt: at(i) }));
+        }
+        const p1 = await store.listSessions({ accountIds: [c1], limit: 3 });
+        const p2 = await store.listSessions({ accountIds: [c1], limit: 3, cursor: p1.nextCursor });
+        assert.deepEqual([...p1.items, ...p2.items].map((s) => s.id), ['c1-4', 'c1-3', 'c1-2', 'c1-1', 'c1-0']);
+        assert.equal(p2.nextCursor, null);
       });
     });
 

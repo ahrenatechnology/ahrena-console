@@ -79,7 +79,7 @@ try {
     .map(([r, n]) => `${r} ${n}`)
     .join(', ');
   const g = resumo.gravados;
-  console.log(`${resumo.interrompido ? 'interrompido' : 'pronto'}: ${g.sessoes} sessões, ${g.agentes} agentes, ${g.eventos} eventos novos, ${g.usos} gravações de uso, ${g.precos} preços`);
+  console.log(`${resumo.interrompido ? 'interrompido' : 'pronto'}: ${g.contas} contas, ${g.sessoes} sessões, ${g.agentes} agentes, ${g.eventos} eventos novos, ${g.usos} gravações de uso, ${g.precos} preços`);
   console.log(`roteiros: ${roteiros}`);
   console.log(`para repetir: npm run simular -- --seed ${semente}${args.caos ? ' --caos' : ''}`);
 } finally {

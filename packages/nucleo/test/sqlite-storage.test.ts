@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, test } from 'node:test';
 import { MIGRATIONS, migrate, schemaVersion, type Migration } from '../src/adapters/sqlite/migrations.ts';
 import { openSqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
-import { session } from './fixtures.ts';
+import { T0, account, session } from './fixtures.ts';
 import { storageContract } from './storage-contract.ts';
 
 storageContract('SQLite em memória', async () => openSqliteStorage({ path: ':memory:' }));
@@ -31,7 +31,7 @@ describe('adaptador SQLite', () => {
     await a.close();
 
     const b = openSqliteStorage({ path });
-    assert.equal(b.schemaVersion, 1);
+    assert.equal(b.schemaVersion, MIGRATIONS.at(-1)?.version);
     assert.equal((await b.getSession('s1'))?.id, 's1');
     assert.equal((b.db.prepare('PRAGMA journal_mode').get() as { journal_mode: string }).journal_mode, 'wal');
     await b.close();
@@ -54,17 +54,19 @@ describe('adaptador SQLite', () => {
 });
 
 describe('migrações', () => {
+  const ultima = MIGRATIONS.at(-1)!.version;
   const extra: Migration[] = [
     ...MIGRATIONS,
-    { version: 2, description: 'coluna de teste', sql: 'ALTER TABLE sessions ADD COLUMN teste TEXT' },
+    { version: ultima + 1, description: 'coluna de teste', sql: 'ALTER TABLE sessions ADD COLUMN teste TEXT' },
   ];
 
   test('aplica só as que faltam, em ordem', () => {
     const db = new DatabaseSync(':memory:');
-    assert.deepEqual(migrate(db, MIGRATIONS), [1]);
-    assert.deepEqual(migrate(db, extra), [2]);
+    assert.deepEqual(migrate(db, MIGRATIONS.slice(0, 1)), [1]);
+    assert.deepEqual(migrate(db, MIGRATIONS), MIGRATIONS.slice(1).map((m) => m.version));
+    assert.deepEqual(migrate(db, extra), [ultima + 1]);
     assert.deepEqual(migrate(db, extra), []);
-    assert.equal(schemaVersion(db), 2);
+    assert.equal(schemaVersion(db), ultima + 1);
     db.close();
   });
 
@@ -73,10 +75,10 @@ describe('migrações', () => {
     migrate(db, MIGRATIONS);
     const broken: Migration[] = [
       ...MIGRATIONS,
-      { version: 2, description: 'quebrada', sql: 'CREATE TABLE ok (x TEXT); SELECT * FROM tabela_que_nao_existe;' },
+      { version: ultima + 1, description: 'quebrada', sql: 'CREATE TABLE ok (x TEXT); SELECT * FROM tabela_que_nao_existe;' },
     ];
-    assert.throws(() => migrate(db, broken), /migração 2 \(quebrada\) falhou/);
-    assert.equal(schemaVersion(db), 1);
+    assert.throws(() => migrate(db, broken), new RegExp(`migração ${ultima + 1} \\(quebrada\\) falhou`));
+    assert.equal(schemaVersion(db), ultima);
     assert.equal(db.prepare(`SELECT name FROM sqlite_master WHERE name = 'ok'`).get(), undefined);
     db.close();
   });
@@ -86,5 +88,57 @@ describe('migrações', () => {
     migrate(db, extra);
     assert.throws(() => migrate(db, MIGRATIONS), /mais nova que a deste código/);
     db.close();
+  });
+});
+
+describe('migração 2: contas (decisão 0006)', () => {
+  test('banco da versão 1 com dados ganha as contas, e as sessões antigas ficam em "Sem conta"', async () => {
+    const path = join(dir, 'v1-com-dados.sqlite');
+    const v1 = new DatabaseSync(path);
+    migrate(v1, MIGRATIONS.filter((m) => m.version === 1));
+    v1.prepare(
+      `INSERT INTO sessions (id, name, status, cwd, model, source, started_at, updated_at, metadata)
+       VALUES ('antiga', 'sessão de antes', 'completed', '/repo/app', 'claude-opus-5-5', 'import', ?, ?, '{"x":1}')`,
+    ).run(T0, T0);
+    v1.prepare(
+      `INSERT INTO events (id, session_id, type, created_at) VALUES ('e-antigo', 'antiga', 'SessionStart', ?)`,
+    ).run(T0);
+    v1.close();
+
+    const store = openSqliteStorage({ path });
+    assert.equal(store.schemaVersion, MIGRATIONS.at(-1)?.version);
+    const antiga = await store.getSession('antiga');
+    assert.equal(antiga?.name, 'sessão de antes');
+    assert.deepEqual(antiga?.metadata, { x: 1 });
+    assert.equal(antiga?.accountId, null);
+    assert.equal(antiga?.accountSource, null);
+    assert.deepEqual((await store.listEvents('antiga')).items.map((e) => e.id), ['e-antigo']);
+    assert.deepEqual((await store.listSessions({ accountIds: [null] })).items.map((s) => s.id), ['antiga']);
+
+    const c = account();
+    await store.putAccount(c);
+    await store.putSession({ ...antiga!, accountId: c.id, accountSource: 'transcript' });
+    assert.deepEqual((await store.listSessions({ accountIds: [c.id] })).items.map((s) => s.id), ['antiga']);
+    assert.deepEqual((await store.listSessions({ accountIds: [null] })).items, []);
+    await store.close();
+  });
+
+  test('cria o índice (account_id, updated_at DESC, id DESC) e o esquema barra procedência inválida', () => {
+    const store = openSqliteStorage({ path: ':memory:' });
+    const cols = store.db.prepare(`PRAGMA index_xinfo('sessions_by_account')`).all() as { name: string | null; desc: number; key: number }[];
+    assert.deepEqual(
+      cols.filter((c) => c.key === 1).map((c) => [c.name, c.desc]),
+      [['account_id', 0], ['updated_at', 1], ['id', 1]],
+    );
+    const plano = store.db
+      .prepare(`EXPLAIN QUERY PLAN SELECT * FROM sessions WHERE account_id = 'a/b' ORDER BY updated_at DESC, id DESC`)
+      .all() as { detail: string }[];
+    assert.ok(plano.some((p) => p.detail.includes('sessions_by_account')), JSON.stringify(plano));
+    assert.throws(() =>
+      store.db
+        .prepare(`INSERT INTO sessions (id, status, started_at, updated_at, account_id, account_source)
+                  VALUES ('x', 'active', 'a', 'b', 'u/o', 'palpite')`)
+        .run(),
+    );
   });
 });

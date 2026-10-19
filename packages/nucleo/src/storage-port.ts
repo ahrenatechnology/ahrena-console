@@ -10,6 +10,7 @@
 
 import type {
   Agent,
+  ClaudeAccount,
   ModelPricing,
   SessionEvent,
   Session,
@@ -29,6 +30,8 @@ export interface ListSessionsQuery {
   /** `true`: só as que esperam alguém; `false`: só as que não esperam. */
   awaiting?: boolean;
   cwd?: string;
+  /** Filtra pela conta (`ClaudeAccount.id`); `null` na lista pede as sessões "Sem conta". */
+  accountIds?: readonly (string | null)[];
   /** Padrão 50, máximo 500. */
   limit?: number;
   cursor?: string | null;
@@ -45,6 +48,12 @@ export interface StoragePort {
   getSession(id: string): Promise<Session | null>;
   /** Mais recentes primeiro, por `updatedAt`. */
   listSessions(query?: ListSessionsQuery): Promise<Page<Session>>;
+
+  /** Grava a conta inteira (cria ou substitui). */
+  putAccount(account: ClaudeAccount): Promise<void>;
+  getAccount(id: string): Promise<ClaudeAccount | null>;
+  /** Na ordem em que foram vistas pela primeira vez. Sem paginação: são poucas por máquina. */
+  listAccounts(): Promise<ClaudeAccount[]>;
 
   putAgent(agent: Agent): Promise<void>;
   getAgent(id: string): Promise<Agent | null>;

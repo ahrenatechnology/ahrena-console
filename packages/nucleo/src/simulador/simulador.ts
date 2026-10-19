@@ -38,7 +38,7 @@ export interface Resumo {
   modo: Modo;
   inicio: string;
   roteiros: Record<Roteiro, number>;
-  gravados: { sessoes: number; agentes: number; eventos: number; usos: number; precos: number };
+  gravados: { contas: number; sessoes: number; agentes: number; eventos: number; usos: number; precos: number };
   /** `true` quando o `signal` parou a simulação antes do fim. */
   interrompido: boolean;
 }
@@ -96,7 +96,7 @@ export async function simular(porta: StoragePort, opcoes: OpcoesDaSimulacao): Pr
     modo,
     inicio: new Date(inicio).toISOString(),
     roteiros: { normal: 0, travada: 0, erro: 0, abandono: 0, estouro: 0, enxame: 0 },
-    gravados: { sessoes: 0, agentes: 0, eventos: 0, usos: 0, precos: 0 },
+    gravados: { contas: 0, sessoes: 0, agentes: 0, eventos: 0, usos: 0, precos: 0 },
     interrompido: false,
   };
   for (const r of cenario.roteiros) resumo.roteiros[r]++;
@@ -110,6 +110,11 @@ export async function simular(porta: StoragePort, opcoes: OpcoesDaSimulacao): Pr
     }
   }
 
+  // As contas vão antes das sessões; o `lastSeenAt` acompanha a última atividade gravada de cada uma.
+  const contas = new Map(cenario.contas.map((c) => [c.id, c]));
+  for (const c of contas.values()) await porta.putAccount(c);
+  resumo.gravados.contas = contas.size;
+
   const sessoes = new Set<string>();
   const agentes = new Set<string>();
   for (const op of cenario.operacoes) {
@@ -122,10 +127,17 @@ export async function simular(porta: StoragePort, opcoes: OpcoesDaSimulacao): Pr
       break;
     }
     switch (op.tipo) {
-      case 'sessao':
+      case 'sessao': {
         await porta.putSession(op.registro);
         sessoes.add(op.registro.id);
+        const conta = op.registro.accountId ? contas.get(op.registro.accountId) : undefined;
+        if (conta && op.registro.updatedAt > conta.lastSeenAt) {
+          const vista = { ...conta, lastSeenAt: op.registro.updatedAt };
+          contas.set(conta.id, vista);
+          await porta.putAccount(vista);
+        }
         break;
+      }
       case 'agente':
         await porta.putAgent(op.registro);
         agentes.add(op.registro.id);

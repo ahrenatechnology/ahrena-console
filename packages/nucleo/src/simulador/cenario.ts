@@ -6,8 +6,11 @@
 // o simulador não decide transições, só encena roteiros plausíveis.
 
 import {
+  claudeAccountId,
   emptyTokenCounts,
+  type AccountSource,
   type Agent,
+  type ClaudeAccount,
   type AwaitingReason,
   type Session,
   type SessionEvent,
@@ -66,6 +69,8 @@ export interface Cenario {
   /** Prefixo dos ids desta semente (`sim-<hash>`); reaplicar a mesma semente sobrescreve, não duplica. */
   prefixo: string;
   roteiros: Roteiro[];
+  /** As duas contas sintéticas; as sessões se alternam entre elas. */
+  contas: ClaudeAccount[];
   operacoes: Operacao[];
 }
 
@@ -82,6 +87,20 @@ export function gerarCenario(opcoes: OpcoesDoCenario): Cenario {
   const mestre = new Aleatorio(`${opcoes.semente}:mestre`);
   const roteiros = distribuirRoteiros(mestre, total, opcoes.caos ?? false, opcoes.intensidadeDoCaos ?? 0.4);
 
+  const contas: ClaudeAccount[] = V.CONTAS.map((c) => ({
+    id: claudeAccountId(c.accountUuid, c.organizationUuid),
+    accountUuid: c.accountUuid,
+    organizationUuid: c.organizationUuid,
+    organizationName: c.organizationName,
+    organizationType: c.organizationType,
+    label: c.label,
+    color: c.color,
+    configDirs: [c.configDir],
+    firstSeenAt: opcoes.relogio(0),
+    lastSeenAt: opcoes.relogio(0),
+    metadata: { simulado: true },
+  }));
+
   const operacoes: Operacao[] = [];
   roteiros.forEach((roteiro, i) => {
     const rng = new Aleatorio(`${opcoes.semente}:sessao:${i}`);
@@ -89,13 +108,16 @@ export function gerarCenario(opcoes: OpcoesDoCenario): Cenario {
     // último terço, para chegarem ao ponto da falha; as normais, a qualquer hora (as tardias ficam em andamento).
     const fracao = roteiro === 'abandono' ? 0.15 : roteiro === 'normal' ? 0.85 : 0.6;
     const inicio = rng.inteiro(0, Math.floor(duracaoMs * fracao));
-    const sessao = new SessaoSimulada(rng, opcoes.relogio, `${prefixo}-s${String(i + 1).padStart(3, '0')}`, i, roteiro);
+    // Alterna as contas pelo índice, sem consumir o sorteio: as duas sempre têm sessões (a partir de 2).
+    const k = i % contas.length;
+    const conta = { id: contas[k].id, source: V.CONTAS[k].source };
+    const sessao = new SessaoSimulada(rng, opcoes.relogio, `${prefixo}-s${String(i + 1).padStart(3, '0')}`, i, roteiro, conta);
     sessao.encenar(inicio);
     for (const op of sessao.operacoes) if (op.deslocamentoMs <= duracaoMs) operacoes.push(op);
   });
 
   operacoes.sort((a, b) => a.deslocamentoMs - b.deslocamentoMs || a.sessao - b.sessao || a.seq - b.seq);
-  return { prefixo, roteiros, operacoes };
+  return { prefixo, roteiros, contas, operacoes };
 }
 
 /** Sem caos, tudo normal. Com caos, garante uma sessão de cada falha e sorteia mais pela intensidade. */
@@ -148,7 +170,14 @@ class SessaoSimulada {
   private readonly indice: number;
   private readonly roteiro: Roteiro;
 
-  constructor(rng: Aleatorio, relogio: (ms: number) => string, id: string, indice: number, roteiro: Roteiro) {
+  constructor(
+    rng: Aleatorio,
+    relogio: (ms: number) => string,
+    id: string,
+    indice: number,
+    roteiro: Roteiro,
+    conta: { id: string; source: AccountSource },
+  ) {
     this.rng = rng;
     this.relogio = relogio;
     this.id = id;
@@ -169,6 +198,8 @@ class SessaoSimulada {
       awaitingInputSince: null,
       awaitingReason: null,
       updatedAt: t,
+      accountId: conta.id,
+      accountSource: conta.source,
       metadata: {},
     };
     this.principal = {

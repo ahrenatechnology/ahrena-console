@@ -8,7 +8,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 
 | Arquivo | O quê |
 | --- | --- |
-| [src/model.ts](src/model.ts) | Sessão, agente, evento, uso de tokens e preço, com os validadores |
+| [src/model.ts](src/model.ts) | Sessão, conta do Claude, agente, evento, uso de tokens e preço, com os validadores |
 | [src/storage-port.ts](src/storage-port.ts) | A porta: a única coisa de que o resto do núcleo depende |
 | [src/pricing.ts](src/pricing.ts) | Preço pelo padrão mais longo e custo estimado, com modificadores e "sem preço" explícito |
 | [src/custo/](src/custo/) | Tabela de preços editável, piso da compactação e agregações de custo (item 1.6, seção abaixo) |
@@ -63,6 +63,12 @@ Item 1.6. Tudo é **estimativa**: não há leitura de fatura, e todo resultado l
 ## Estados
 
 A sessão persiste `active`, `completed`, `error` ou `abandoned`. `waiting` não é gravado: é uma camada sobre `awaitingInputSince`, com o motivo em `awaitingReason` (`notification`, `interrupted`, `stop`, `session_start`). `displayStatus()` devolve o que a interface mostra. As transições são da máquina de estados, em [src/estados/](src/estados/README.md), que também dá ao inbox os estados "delegando" e "esperando processo em background".
+
+## Contas
+
+A 0.0.1 acompanha várias contas do Claude ao mesmo tempo ([decisão 0006](../../docs/decisoes/0006-multiplas-contas.md)). A conta é `ClaudeAccount`, com id `<accountUuid>/<organizationUuid>`, e é um atributo da sessão: `Session.accountId` e a procedência em `Session.accountSource` (`env`, `config`, `transcript`, `desktop`, `profile`), os dois nulos na "Sem conta". A porta grava e lista as contas (`putAccount`, `getAccount`, `listAccounts`) e filtra as sessões com `listSessions({ accountIds })`, em que `null` na lista pede as "Sem conta".
+
+A precedência fica em `accountSourceOverrides(nova, gravada)` e `applySessionAccount(sessao, contaId, fonte)`: uma fonte de ordem menor corrige uma maior, nunca o contrário, e a mesma ordem não troca a conta gravada. Quem resolve a conta (hooks, importador, perfis) usa essas funções em vez de decidir sozinho.
 
 ## Migrações
 
@@ -169,7 +175,7 @@ O **modo caos** garante pelo menos uma sessão de cada falha:
 
 Os estados são gravados como dados; as transições continuam sendo da máquina de estados (item 1.5).
 
-Tudo é sintético: projetos inventados sob `/simulacao/`, nenhum nome de pessoa nem caminho real. Todo registro leva `metadata.simulado = true`, a sessão leva o `roteiro` e o medidor de contexto (`metadata.contexto`), e os ids começam por `sim-<hash da semente>`, então rodar a mesma semente de novo no mesmo banco sobrescreve em vez de duplicar.
+Tudo é sintético: projetos inventados sob `/simulacao/`, nenhum nome de pessoa nem caminho real. Grava duas contas sintéticas (UUIDs do bloco `00000000-…`, pastas sob `/simulacao/`) e alterna as sessões entre elas, com procedência `env` numa e `config` na outra. Todo registro leva `metadata.simulado = true`, a sessão leva o `roteiro` e o medidor de contexto (`metadata.contexto`), e os ids começam por `sim-<hash da semente>`, então rodar a mesma semente de novo no mesmo banco sobrescreve em vez de duplicar.
 
 Pelo código:
 

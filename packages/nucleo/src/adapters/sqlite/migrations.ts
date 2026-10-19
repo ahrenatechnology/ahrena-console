@@ -95,6 +95,32 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 2,
+    description: 'contas do Claude e a conta de cada sessão (decisão 0006)',
+    // Aditiva: as sessões que já existem ficam em "Sem conta" (account_id e account_source nulos).
+    sql: `
+      CREATE TABLE accounts (
+        id TEXT PRIMARY KEY,
+        account_uuid TEXT NOT NULL,
+        organization_uuid TEXT NOT NULL,
+        organization_name TEXT,
+        organization_type TEXT,
+        label TEXT,
+        color TEXT,
+        config_dirs TEXT NOT NULL DEFAULT '[]',
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}'
+      ) STRICT;
+      CREATE INDEX accounts_by_first_seen ON accounts (first_seen_at, id);
+
+      ALTER TABLE sessions ADD COLUMN account_id TEXT;
+      ALTER TABLE sessions ADD COLUMN account_source TEXT
+        CHECK (account_source IN ('env', 'config', 'transcript', 'desktop', 'profile'));
+      CREATE INDEX sessions_by_account ON sessions (account_id, updated_at DESC, id DESC);
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {
