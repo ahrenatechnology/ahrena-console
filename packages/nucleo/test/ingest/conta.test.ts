@@ -13,7 +13,7 @@ import {
   contaDaPasta,
   ingestHook,
   normalizeHook,
-  pastaDeConfiguracao,
+  pastaDoHook,
   resolverConta,
   type HookEnv,
 } from '../../src/ingest/hooks/index.ts';
@@ -62,10 +62,10 @@ describe('campo do encaminhador no payload', () => {
 describe('pasta de configuração do hook', () => {
   const env = (configDir: string | null): HookEnv => ({ configDir, accountUuid: null, organizationUuid: null, ssh: false });
   test('CLAUDE_CONFIG_DIR primeiro, senão a raiz do transcript', () => {
-    assert.equal(pastaDeConfiguracao(env('/cfg/a/'), '/home/dev/.claude/projects/-x/s.jsonl'), '/cfg/a');
-    assert.equal(pastaDeConfiguracao(env(null), '/home/dev/projects/.claude-b/projects/-repo/s.jsonl'), '/home/dev/projects/.claude-b');
-    assert.equal(pastaDeConfiguracao(env('relativa'), null), null);
-    assert.equal(pastaDeConfiguracao(null, '/sem/transcript.txt'), null);
+    assert.equal(pastaDoHook(env('/cfg/a/'), '/home/dev/.claude/projects/-x/s.jsonl'), '/cfg/a');
+    assert.equal(pastaDoHook(env(null), '/home/dev/projects/.claude-b/projects/-repo/s.jsonl'), '/home/dev/projects/.claude-b');
+    assert.equal(pastaDoHook(env('relativa'), null), null);
+    assert.equal(pastaDoHook(null, '/sem/transcript.txt'), null);
   });
 });
 
@@ -233,6 +233,18 @@ describe('sessão por SSH', () => {
     assert.equal(s?.accountId, `${CONTA_A}/${ORG_2}`);
     assert.equal(s?.metadata.desktopScope, `${CONTA_A}/${ORG_1}`);
     assert.equal(s?.metadata.desktopScopeConflict, true);
+  });
+
+  test('um SessionStart posterior sem as variáveis do Desktop limpa o desktopScope', async () => {
+    const remota = pasta('remota-depois', CONTA_A, ORG_2);
+    const comDesktop = { CLAUDE_CONFIG_DIR: remota, CLAUDE_CODE_ACCOUNT_UUID: CONTA_A, CLAUDE_CODE_ORGANIZATION_UUID: ORG_1, ssh: true };
+    await ingestHook(store, start('s-ssh5', comDesktop), { receivedAt: at(0) });
+    assert.equal((await store.getSession('s-ssh5'))?.metadata.desktopScopeConflict, true);
+    await ingestHook(store, start('s-ssh5', { CLAUDE_CONFIG_DIR: remota, ssh: true }), { receivedAt: at(1) });
+    const s = await store.getSession('s-ssh5');
+    assert.equal(s?.metadata.desktopScope, undefined);
+    assert.equal(s?.metadata.desktopScopeConflict, undefined);
+    assert.equal(s?.accountId, `${CONTA_A}/${ORG_2}`);
   });
 
   test('SSH sem as variáveis do Desktop: só a pasta, sem desktopScope', async () => {

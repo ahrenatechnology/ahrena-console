@@ -64,7 +64,9 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   if (event.type === 'SessionStart' || next.metadata.accountCheckedAt === undefined) {
     const r = await resolverConta(hints.env, hints.transcriptPath, opts.lerContaDaPasta ?? ((pasta) => contaDaPasta(pasta)));
     if (r.conta) next = applySessionAccount(next, r.conta.id, r.conta.source);
-    const metadata: Session['metadata'] = { ...next.metadata, accountCheckedAt: event.createdAt };
+    // O que um SessionStart anterior gravou do Desktop não vale mais se este não trouxe.
+    const { desktopScope: _escopo, desktopScopeConflict: _conflito, ...anterior } = next.metadata;
+    const metadata: Session['metadata'] = { ...anterior, accountCheckedAt: event.createdAt };
     if (r.desktopScope) metadata.desktopScope = r.desktopScope;
     if (r.desktopScopeConflict !== null) metadata.desktopScopeConflict = r.desktopScopeConflict;
     next = { ...next, metadata };

@@ -10,7 +10,8 @@
 // Junto do payload vai o campo `ahrena_console.env`, com a pasta de configuração e a conta e a org do
 // ambiente (decisão 0006): só `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_ACCOUNT_UUID` e
 // `CLAUDE_CODE_ORGANIZATION_UUID`, mais `ssh: true` quando o hook roda numa sessão SSH (só a presença
-// de `SSH_CONNECTION`, nunca o valor). Nenhuma outra variável, e nunca token ou chave.
+// de `SSH_CONNECTION`, nunca o valor). Nenhuma outra variável, e nunca token ou chave. Por isso só
+// envia para o núcleo local: `AHRENA_CONSOLE_URL` fora de 127.0.0.1, localhost e ::1 é recusado.
 //
 // JavaScript puro e sem dependências, para rodar em qualquer Node >= 18 sem o núcleo instalado.
 
@@ -81,6 +82,18 @@ function withContext(body) {
   return JSON.stringify({ ...payload, ahrena_console: { env: context } });
 }
 
+const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
+
+/** O endereço do núcleo, se for local; senão `null`. */
+function localBase(url) {
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && LOCAL_HOSTS.includes(u.hostname) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 function eventName(body) {
   const m = /"hook_event_name"\s*:\s*"([A-Za-z0-9]+)"/.exec(body);
   return m ? m[1] : 'desconhecido';
@@ -90,6 +103,7 @@ async function main() {
   const { body, problem } = await readStdin();
   if (problem) return record(`${eventName(body)} não enviado: ${problem}`);
   if (!body.trim()) return record('hook sem payload, nada a enviar');
+  if (!localBase(base)) return record(`${eventName(body)} não enviado: AHRENA_CONSOLE_URL precisa ser 127.0.0.1, localhost ou ::1`);
   try {
     const res = await fetch(`${base}/api/hooks`, {
       method: 'POST',
