@@ -27,6 +27,9 @@ import { commitMaisVelho } from '../dono/codigo.ts';
 import { assumirTrava, avisoDeCodigo, planejarSubida, vigiarPai } from '../dono/dono.ts';
 import { esperarNucleo, pidVivo, reservarPorta, soltarPorta } from '../dono/sonda.ts';
 import { lerTrava, liberarTrava, pastaPadrao, prepararPasta } from '../dono/trava.ts';
+import { CursorDeMudancas } from '../mudancas/cursor.ts';
+import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
+import { waitForChanges } from '../mudancas/mcp.ts';
 import {
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
@@ -156,11 +159,20 @@ if (banco !== ':memory:') {
   else mkdirSync(dirname(banco), { recursive: true });
 }
 
-const storage = openSqliteStorage({ path: banco });
+// Toda gravação passa pelo cursor de mudanças (item 2.4): é dele que sai o long polling.
+const mudancas = new CursorDeMudancas();
+const sqlite = openSqliteStorage({ path: banco });
+const contasDasSessoes = new ContasDasSessoes(sqlite);
+const storage = comMudancas(sqlite, mudancas, contasDasSessoes);
 // As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
-const decisoes = new SqliteDecisionStore(storage.db);
+const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
 const captura = new HookDecisionCapture({ decisions: decisoes });
-const maquina = new MaquinaDeEstados({ storage, log, ...(demo ? { sonda: null } : {}) });
+const maquina = new MaquinaDeEstados({
+  storage,
+  log,
+  aoMudar: aoMudarDaMaquina(mudancas, contasDasSessoes),
+  ...(demo ? { sonda: null } : {}),
+});
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
 const trabalho = new TrabalhoPorBranch({
@@ -226,6 +238,7 @@ relerPerfis?.unref();
 
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
+mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 
 let historicoPronto = false;
 const follower =
@@ -258,6 +271,7 @@ const api: ApiLocal = await iniciarApiLocal({
   abrirNoDesktop,
   mcp: mcp.servidor,
   commit,
+  mudancas,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
