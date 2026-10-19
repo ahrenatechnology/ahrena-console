@@ -17,6 +17,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/ingest/historico/](src/ingest/historico/) | Importação do histórico de `~/.claude/projects` (item 1.2) |
 | [src/github/](src/github/) | Trabalho do GitHub: hierarquia, PR, CI e review por item (seção abaixo) |
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
+| [src/estados/](src/estados/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |
 
 ## Importação do histórico
 
@@ -29,7 +30,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 
 ## Estados
 
-A sessão persiste `active`, `completed`, `error` ou `abandoned`. `waiting` não é gravado: é uma camada sobre `awaitingInputSince`, com o motivo em `awaitingReason` (`notification`, `interrupted`, `stop`, `session_start`). `displayStatus()` devolve o que a interface mostra. As transições ficam para a máquina de estados (item 1.5).
+A sessão persiste `active`, `completed`, `error` ou `abandoned`. `waiting` não é gravado: é uma camada sobre `awaitingInputSince`, com o motivo em `awaitingReason` (`notification`, `interrupted`, `stop`, `session_start`). `displayStatus()` devolve o que a interface mostra. As transições são da máquina de estados, em [src/estados/](src/estados/README.md), que também dá ao inbox os estados "delegando" e "esperando processo em background".
 
 ## Migrações
 
