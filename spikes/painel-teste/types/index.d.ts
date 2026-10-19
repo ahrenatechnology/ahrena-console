@@ -14,6 +14,13 @@ export type Fleet = {
   generatedAt: string
 }
 
+/** O que o painel pede a cada 5 s: esta sessão e quantas outras precisam de você (/api/sessao/<id>). */
+export type SessionPulse = {
+  session: SessionRow | null
+  needsYou: number
+  generatedAt: string
+}
+
 export type IssuePr = { number: number; state: string; isDraft: boolean; url: string; review: string | null; ci: string | null }
 export type IssueRow = {
   repo: string
@@ -28,9 +35,10 @@ export type IssueRow = {
 }
 export type Issues = { total: number; shown: number; byStage: Record<string, number>; items: IssueRow[]; generatedAt: string }
 
-export type Tab = 'visao' | 'kanban' | 'trabalho' | 'sessoes'
+export type Tab = 'sessao' | 'visao' | 'kanban' | 'trabalho' | 'sessoes'
 
 export type Reading = {
+  session: SessionPulse | null
   fleet: Fleet | null
   work: Work | null
   kanban: Kanban | null

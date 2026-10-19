@@ -15,9 +15,21 @@ As quatro validações que a [proposta](proposta-0.0.1.md) pediu antes do códig
 
 [spikes/nucleo-teste/server.mjs](../spikes/nucleo-teste/server.mjs) é um processo Node que lê só nomes, datas e tamanhos dos arquivos em `~/.claude/projects`, nunca o conteúdo. Ele expõe os mesmos dados de três jeitos:
 
-- `GET /api/overview` e `GET /api/fleet` em `127.0.0.1:4720`, para o painel;
+- `GET /api/sessao/<id>` (esta sessão e quantas precisam de você), `GET /api/overview` e `GET /api/fleet` em `127.0.0.1:4720`, para o painel;
 - MCP em `/mcp` (HTTP) ou por stdio (`--stdio`), com as ferramentas `fleet_overview` e `open_console`;
 - uma MCP App em `ui://ahrena-console/teste.html`.
+
+Os nomes e datas ficam num índice em memória: a primeira leitura varre `~/.claude/projects` uma vez e depois o `fs.watch` atualiza só o arquivo que mudou ([#81](https://github.com/ahrenatechnology/ahrena-console/issues/81)).
+
+### Medir o consumo
+
+[scripts/medir-carga.mjs](../scripts/medir-carga.mjs) sobe o núcleo numa porta separada (4799 por padrão, nunca a 4720), simula as sessões consultando a cada 5 s e mede a CPU e a memória do processo do núcleo (`ps`) e a latência de cada pedido. No fim, desliga o núcleo. Precisa de `npm ci` em `spikes/nucleo-teste`.
+
+```bash
+node scripts/medir-carga.mjs --rota sessao --sessoes 20 --abertos 1 --segundos 60
+```
+
+`--rota sessao` é o painel de hoje: só os painéis abertos pedem `/api/sessao/<id>`. `--rota frota` repete o comportamento antigo: todas as sessões pedem `/api/fleet`, abertas ou não. `--servidor` mede outro `server.mjs`, para comparar versões. CPU é o tempo de CPU do núcleo na janela dividido pela duração: 100% é um núcleo inteiro. A meta (decisão 0004) é ficar abaixo de 1% com 20 sessões e um painel aberto.
 
 ## V1: painel lateral (mod)
 
