@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paleta do Ahrena Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<!-- Os logos são cópias de logo-laranja.svg e logo-preto.svg. Os valores vêm de tokens.json. O teste test/tokens.test.mjs confere que estão todos aqui. -->
+<style>
+  :root {
+    --sans: "Poppins", "Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --orange: #f47720;
+    --rose: #df285d;
+    --error: #e34948;
+  }
+  .dark {
+    --bg: #17171b; --surface: #1e1e24; --raised: #28282f; --border: #3a3a44;
+    --text: #d7d7d9; --muted: #a6a6aa; --accent: #f47720; --on-accent: #17171b; --accent-text: #f47720;
+    --active-dot: #f47720; --active-text: #f47720; --active-badge: #382924;
+    --waiting-dot: #ffc30a; --waiting-text: #ffc30a; --waiting-badge: #393221;
+    --completed-dot: #1baf7a; --completed-text: #1baf7a; --completed-badge: #1e2f2e;
+    --error-dot: #e34948; --error-text: #f06463; --error-badge: #362328;
+    --abandoned-dot: #a6a6aa; --abandoned-text: #a6a6aa; --abandoned-badge: #2e2e34;
+  }
+  .light {
+    --bg: #f4f4f5; --surface: #fdfdfd; --raised: #efeff1; --border: #d7d7d9;
+    --text: #17171b; --muted: #5a5a63; --accent: #f47720; --on-accent: #17171b; --accent-text: #ab5316;
+    --active-dot: #ab5316; --active-text: #ab5316; --active-badge: #fcede2;
+    --waiting-dot: #664e04; --waiting-text: #664e04; --waiting-badge: #fdf6e0;
+    --completed-dot: #0d7350; --completed-text: #0d7350; --completed-badge: #e2f4ed;
+    --error-dot: #b42a2a; --error-text: #b42a2a; --error-badge: #fae7e7;
+    --abandoned-dot: #5a5a63; --abandoned-text: #5a5a63; --abandoned-badge: #f3f3f3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--sans); background: #0e1016; color: #d7d7d9; }
+  .page-head { padding: 28px 24px 8px; max-width: 1360px; margin: 0 auto; }
+  .page-head h1 { font-size: 28px; font-weight: 600; margin: 0 0 4px; }
+  .page-head p { margin: 0; color: #a6a6aa; font-size: 14px; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 620px), 1fr)); gap: 16px; padding: 16px 24px 40px; max-width: 1360px; margin: 0 auto; }
+  .theme { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 20px; min-width: 0; }
+  .theme-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .theme-head .logo { width: 36px; height: 36px; flex: none; }
+  .theme-head h2 { font-size: 20px; font-weight: 600; margin: 0; }
+  .theme-head span { color: var(--muted); font-size: 13px; }
+  h3 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 8px; }
+  .sw { border-radius: 8px; border: 1px solid var(--border); overflow: hidden; background: var(--surface); }
+  .sw i { display: block; height: 40px; }
+  .sw b, .sw code { display: block; padding: 0 8px; font-size: 12px; }
+  .sw b { font-weight: 500; padding-top: 6px; }
+  .sw code { font-family: var(--mono); color: var(--muted); padding-bottom: 6px; }
+  .btn { font: 500 14px var(--sans); border-radius: 8px; padding: 7px 14px; border: 1px solid transparent; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .link { color: var(--accent-text); font-weight: 500; font-size: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; border-radius: 999px; padding: 3px 10px 3px 8px; border: 1px solid transparent; white-space: nowrap; }
+  .pill .g { font-family: var(--mono); font-size: 12px; }
+  .chip { font-size: 12px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--border); color: var(--text); background: var(--raised); }
+  .chip.urgent { border-color: var(--waiting-dot); }
+  .s-active { color: var(--active-text); background: var(--active-badge); } .s-active .g { color: var(--active-dot); }
+  .s-waiting { color: var(--waiting-text); background: var(--waiting-badge); } .s-waiting .g { color: var(--waiting-dot); }
+  .s-completed { color: var(--completed-text); background: var(--completed-badge); } .s-completed .g { color: var(--completed-dot); }
+  .s-error { color: var(--error-text); background: var(--error-badge); } .s-error .g { color: var(--error-dot); }
+  .s-abandoned { color: var(--abandoned-text); background: var(--abandoned-badge); } .s-abandoned .g { color: var(--abandoned-dot); }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .col { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; min-width: 0; }
+  .col-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px; color: var(--text); }
+  .col-head .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .col-head .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .col-head .n { flex: none; margin-left: auto; color: var(--muted); font-family: var(--mono); font-weight: 400; }
+  .sc { background: var(--raised); border-radius: 8px; padding: 8px; border-left: 3px solid; font-size: 12px; }
+  .sc b { display: block; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc code { font-family: var(--mono); color: var(--muted); font-size: 11px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .table td.why { color: var(--muted); }
+  .table tr:hover td { background: var(--raised); }
+  .mono { font-family: var(--mono); }
+  .type .t1 { font-size: 28px; font-weight: 600; margin: 0; }
+  .type .t2 { font-size: 16px; font-weight: 500; margin: 4px 0; }
+  .type .t3 { font-size: 14px; margin: 4px 0; }
+  .type .t4 { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 4px 0; }
+  .terminal { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.55; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; white-space: pre; overflow-x: auto; }
+  .terminal .h { font-weight: 700; }
+  .terminal .m { color: var(--muted); }
+  .near { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .near div { border-radius: 8px; padding: 10px; font-size: 12px; color: #fdfdfd; font-weight: 500; }
+  .near code { font-family: var(--mono); display: block; font-weight: 400; opacity: .9; }
+  @media (max-width: 640px) { .board { grid-template-columns: 1fr 1fr; } .themes, .page-head { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <h1>Paleta do Ahrena Console</h1>
+  <p>Os dois temas, os 5 status de sessão e a tipografia, a partir de <code>tokens.json</code>. Issue #64.</p>
+</header>
+
+<main class="themes">
+  <section class="theme dark" aria-label="Tema escuro">
+    <div class="theme-head">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" class="logo" role="img" aria-label="Logo com fundo laranja"><rect width="32" height="32" rx="8" fill="#f47720"/><path d="M9 23 L16 8 L23 23" stroke="#17171b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="#df285d" stroke="#df285d" stroke-width="1" stroke-linejoin="round"/></svg>
+      <div><h2>Tema escuro</h2><span>padrão</span></div>
+    </div>
+    <div class="slot"></div>
+  </section>
+
+  <section class="theme light" aria-label="Tema claro">
+    <div class="theme-head">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" class="logo" role="img" aria-label="Logo com fundo preto"><rect width="32" height="32" rx="8" fill="#17171b"/><path d="M9 23 L16 8 L23 23" stroke="#f47720" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="#df285d" stroke="#df285d" stroke-width="1" stroke-linejoin="round"/></svg>
+      <div><h2>Tema claro</h2><span>equivalente ao escuro</span></div>
+    </div>
+    <div class="slot"></div>
+  </section>
+</main>
+
+<template id="conteudo">
+  <h3>Superfícies e texto</h3>
+  <div class="swatches" data-swatches></div>
+
+  <h3>Ações</h3>
+  <div class="card row">
+    <button class="btn primary" type="button">Abrir sessão</button>
+    <button class="btn ghost" type="button">Filtrar</button>
+    <a class="link" href="#">Ver tudo →</a>
+  </div>
+
+  <h3>Status de sessão</h3>
+  <div class="card">
+    <div class="row">
+      <span class="pill s-active"><span class="g">●</span>Ativa</span>
+      <span class="pill s-waiting"><span class="g">◐</span>Esperando você</span>
+      <span class="pill s-completed"><span class="g">✓</span>Concluída</span>
+      <span class="pill s-error"><span class="g">✕</span>Com erro</span>
+      <span class="pill s-abandoned"><span class="g">○</span>Abandonada</span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="pill s-waiting"><span class="g">◐</span>Esperando você</span>
+      <span class="chip urgent">Pede permissão</span>
+      <span class="chip urgent">Interrompida</span>
+      <span class="chip">Sua vez</span>
+      <span class="chip">No prompt</span>
+    </div>
+  </div>
+
+  <h3>Kanban de sessões</h3>
+  <div class="board">
+    <div class="col"><div class="col-head"><span class="dot" style="background:var(--active-dot)"></span><span class="l">Ativa</span><span class="n">2</span></div>
+      <div class="sc" style="border-color:var(--active-dot)"><b>Implementar o coletor</b><code>~/ahrena-console</code></div></div>
+    <div class="col"><div class="col-head"><span class="dot" style="background:var(--waiting-dot)"></span><span class="l">Esperando</span><span class="n">3</span></div>
+      <div class="sc" style="border-color:var(--waiting-dot)"><b>Revisar o PR #64</b><code>Pede permissão · 4 min</code></div></div>
+    <div class="col"><div class="col-head"><span class="dot" style="background:var(--completed-dot)"></span><span class="l">Concluída</span><span class="n">41</span></div>
+      <div class="sc" style="border-color:var(--completed-dot)"><b>Spike do painel</b><code>ran 12m · US$ 0,84</code></div></div>
+    <div class="col"><div class="col-head"><span class="dot" style="background:var(--error-dot)"></span><span class="l">Com erro</span><span class="n">1</span></div>
+      <div class="sc" style="border-color:var(--error-dot)"><b>Sincronizar sessões</b><code>APIError 529</code></div></div>
+    <div class="col"><div class="col-head"><span class="dot" style="background:var(--abandoned-dot)"></span><span class="l">Abandonada</span><span class="n">6</span></div>
+      <div class="sc" style="border-color:var(--abandoned-dot)"><b>Rascunho antigo</b><code>sem sinal há 3h</code></div></div>
+  </div>
+
+  <h3>Por que cada status existe</h3>
+  <div class="card" style="padding:4px 6px">
+    <table class="table">
+      <thead><tr><th>Status</th><th>Motivo</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill s-active"><span class="g">●</span>Ativa</span></td><td class="why">O Claude está no meio de um turno. Não pede nada, só dá para acompanhar.</td></tr>
+        <tr><td><span class="pill s-waiting"><span class="g">◐</span>Esperando você</span></td><td class="why">A vez é sua: permissão, pergunta ou fim de turno. Alimenta o inbox "quem precisa de você".</td></tr>
+        <tr><td><span class="pill s-completed"><span class="g">✓</span>Concluída</span></td><td class="why">Terminou sem erro. Verde como o sucesso do CI.</td></tr>
+        <tr><td><span class="pill s-error"><span class="g">✕</span>Com erro</span></td><td class="why">Parou num erro e não se recuperou. Vermelho como a falha do CI.</td></tr>
+        <tr><td><span class="pill s-abandoned"><span class="g">○</span>Abandonada</span></td><td class="why">Ficou ativa sem sinal por 180 min. Não pede ação e não é erro.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Tipografia no artefato</h3>
+  <div class="card type">
+    <p class="t1">Quem precisa de você</p>
+    <p class="t2">Poppins 500 · rótulos e títulos</p>
+    <p class="t3">Poppins 400 · texto corrido do console, 14 px.</p>
+    <p class="t4">JetBrains Mono · 7f3a2c1e · ~/ahrena-console · 62.6k / 200k · US$ 18,98</p>
+  </div>
+
+  <h3>Painel nativo (só monoespaçada)</h3>
+  <div class="terminal"><span class="h">QUEM PRECISA DE VOCÊ</span>
+<span style="color:var(--waiting-dot)">◐</span> <span style="color:var(--waiting-text)">Esperando você</span>  Revisar o PR #64   <span class="m">Pede permissão · 4m</span>
+<span style="color:var(--error-dot)">✕</span> <span style="color:var(--error-text)">Com erro</span>        Sincronizar        <span class="m">APIError 529</span>
+
+<span class="h">SESSÕES</span>
+<span style="color:var(--active-dot)">●</span> <span style="color:var(--active-text)">Ativa</span>           Implementar o coletor
+<span style="color:var(--completed-dot)">✓</span> <span style="color:var(--completed-text)">Concluída</span>       Spike do painel    <span class="m">US$ 0,84</span>
+<span style="color:var(--abandoned-dot)">○</span> <span style="color:var(--abandoned-text)">Abandonada</span>      Rascunho antigo</div>
+
+  <h3>Erro, rosa e laranja lado a lado</h3>
+  <div class="near">
+    <div style="background:var(--rose)">Rosa · marca<code>#df285d</code></div>
+    <div style="background:var(--error)">Erro · CI<code>#e34948</code></div>
+    <div style="background:var(--orange);color:#17171b">Laranja · destaque<code>#f47720</code></div>
+  </div>
+</template>
+
+<script>
+  const swatches = {
+    dark: [['Fundo', '#17171b'], ['Cartão', '#1e1e24'], ['Realce', '#28282f'], ['Borda', '#3a3a44'], ['Texto', '#d7d7d9'], ['Secundário', '#a6a6aa'], ['Destaque', '#f47720'], ['Rosa', '#df285d']],
+    light: [['Fundo', '#f4f4f5'], ['Cartão', '#fdfdfd'], ['Realce', '#efeff1'], ['Borda', '#d7d7d9'], ['Texto', '#17171b'], ['Secundário', '#5a5a63'], ['Destaque', '#f47720'], ['Texto laranja', '#ab5316']],
+  }
+  const tpl = document.getElementById('conteudo')
+  for (const theme of ['dark', 'light']) {
+    const slot = document.querySelector(`.${theme} .slot`)
+    slot.append(tpl.content.cloneNode(true))
+    slot.querySelector('[data-swatches]').innerHTML = swatches[theme]
+      .map(([name, hex]) => `<div class="sw"><i style="background:${hex}"></i><b>${name}</b><code>${hex}</code></div>`)
+      .join('')
+  }
+</script>
+</body>
+</html>
