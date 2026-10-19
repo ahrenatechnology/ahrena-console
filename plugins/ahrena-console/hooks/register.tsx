@@ -13,7 +13,9 @@ import type { Leitura, Painel, PrecisaDeVoce, Vista } from '../types'
 import { desenhar, type Elementos } from './desenho'
 import { linhaDeStatus, modelo, precisamTexto, STATUS, statusDe } from './formato'
 
-const PANE = 'ahrena-console'
+// Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
+// por id o painel que a pessoa já abriu.
+export const PANE = 'ahrena-console-sessao'
 const A_CADA_MS = 5000
 // `127.0.0.1:<porta>`; a porta vem da opção `porta` do plugin (padrão 4720).
 let nucleo = '127.0.0.1:4720'
@@ -135,9 +137,14 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'console' }, async ($) => {
-    const { isPlaced } = await $.ui.open({ id: PANE, title: 'Ahrena Console' })
-    if (isPlaced) iniciar($)
-    return { text: isPlaced ? 'Painel do Ahrena Console aberto.' : 'Esta superfície não desenha painéis.' }
+    const aberto = await $.ui.open({ id: PANE, title: 'Ahrena Console', focus: true })
+    if (aberto.isPlaced) {
+      iniciar($)
+      return { text: 'Painel do Ahrena Console aberto.' }
+    }
+    // Aberto, mas sem lugar agora (largura, superfície): o engine desenha quando houver, e o
+    // render começa o polling. O motivo vem do engine.
+    return { text: `O painel do Ahrena Console fica aberto e aparece quando houver lugar (${aberto.reason}).` }
   })
 
   // Fechou (a pessoa, o plugin ou um unload): o polling para na hora.

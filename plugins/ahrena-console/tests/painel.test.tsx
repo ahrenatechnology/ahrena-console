@@ -7,7 +7,7 @@ type Pedido = { method: string; url: string }
 
 const PANE = {
   component: 'Pane',
-  requestId: 'ahrena-console',
+  requestId: 'ahrena-console-sessao',
   props: { title: 'Ahrena Console', isFocused: true, bodyColumns: 38, placement: 'dock', scroll: { offset: 0, bodyRows: 80 } },
 } as const
 const LARGO = { ...PANE, props: { ...PANE.props, bodyColumns: 121 } }
@@ -15,7 +15,7 @@ const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presen
 
 // Núcleo e engine falsos: o núcleo responde o cenário pedido (ou cai, com `fora`); o engine tem
 // a lista de painéis abertos, o /console que abre e o ambiente da sessão, como o Claude Desktop.
-function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record<string, string> } = {}) {
+function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record<string, string>; semLugar?: string } = {}) {
   const pedidos: Pedido[] = []
   const estado = { cenario: opts.cenario ?? 'p1', fora: opts.fora ?? false }
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string } }) => {
@@ -35,9 +35,10 @@ function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record
   on('session.model', async () => ({ value: 'claude-sonnet-5-5' }))
   on('session.cwd', async () => ({ value: '/simulacao/cli-de-notas' }))
   on('ui.panes', async () => ({
-    value: pane.open ? [{ id: 'ahrena-console', title: 'Ahrena Console', isShown: pane.shown, isFocused: false, isPlaced: true }] : [],
+    value: pane.open ? [{ id: 'ahrena-console-sessao', title: 'Ahrena Console', isShown: pane.shown, isFocused: false, isPlaced: true }] : [],
   }))
   on('ui.open', async () => {
+    if (opts.semLugar) return { value: { isPlaced: false, reason: opts.semLugar } }
     pane.open = true
     return { value: { isPlaced: true } }
   })
@@ -220,4 +221,12 @@ test('no terminal, o painel cai para o resumo em texto', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Kanban de sessões no artefato · Opus 5\.5 · turno 18/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /2 precisam de você/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('sem lugar para o painel, o /console diz o motivo que o engine deu', async ($, on) => {
+  const f = falsos(on, { semLugar: 'no-surface' })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  const r = (await $.command.run(CONSOLE)) as { text?: string }
+  expect(r?.text).toMatch(/no-surface/)
+  expect(f.pedidos).toHaveLength(0)
 })

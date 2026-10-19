@@ -1,13 +1,17 @@
 {
   "name": "ahrena-console",
-  "owner": { "name": "Ahrena" },
-  "metadata": { "description": "Ahrena Console: painel lateral da sessão e os hooks que alimentam o núcleo local" },
+  "owner": {
+    "name": "Ahrena"
+  },
+  "metadata": {
+    "description": "Ahrena Console: painel lateral da sessão e os hooks que alimentam o núcleo local"
+  },
   "plugins": [
     {
       "name": "ahrena-console",
       "source": "./plugins/ahrena-console",
       "description": "Painel lateral (/console): esta sessão, o que roda dentro dela, o trabalho pelo branch e quem precisa de você",
-      "version": "0.0.1"
+      "version": "0.0.2"
     }
   ]
 }
