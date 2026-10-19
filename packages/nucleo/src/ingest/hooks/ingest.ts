@@ -2,12 +2,22 @@
 // Além do evento, garante um registro mínimo da sessão (para ela aparecer nas listas) e mantém
 // `updatedAt`, `cwd` e `model` em dia. Status, espera e agentes não mudam aqui: são da máquina de
 // estados (item 1.5), que pode se pendurar no `onEvent` do receptor.
+//
+// A conta da sessão (#110) é resolvida no `SessionStart` e no primeiro evento que o receptor vê de
+// cada sessão (ver conta.ts); o resultado respeita a precedência da decisão 0006.
 
-import type { Session } from '../../model.ts';
+import { applySessionAccount, type Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
 import { atualizarContexto } from '../../contexto/gravacao.ts';
+import { Perfis } from '../../perfis/perfis.ts';
+import { resolverConta, type PerfisDoHook } from './conta.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
+
+export interface IngestOptions extends NormalizeOptions {
+  /** Perfis (#109), que leem a conta de uma pasta e gravam a `ClaudeAccount`; o padrão é um novo sobre a porta. */
+  perfis?: PerfisDoHook;
+}
 
 export interface IngestResult extends NormalizedHook {
   /** `false` quando o evento já existia (entrega repetida). */
@@ -16,14 +26,14 @@ export interface IngestResult extends NormalizedHook {
   sessionCreated: boolean;
 }
 
-export async function ingestHook(storage: StoragePort, raw: unknown, opts: NormalizeOptions): Promise<IngestResult> {
+export async function ingestHook(storage: StoragePort, raw: unknown, opts: IngestOptions): Promise<IngestResult> {
   const normalized = normalizeHook(raw, opts);
   const { event, hints } = normalized;
 
   const current = await storage.getSession(event.sessionId);
-  let sessionCreated = false;
+  let next: Session;
   if (!current) {
-    const created: Session = {
+    next = {
       id: event.sessionId,
       name: null,
       status: 'active',
@@ -35,15 +45,12 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Norma
       awaitingInputSince: null,
       awaitingReason: null,
       updatedAt: event.createdAt,
-      // A conta pelo ambiente e pela pasta do hook é da #110; até lá, "Sem conta".
       accountId: null,
       accountSource: null,
       metadata: hookMetadata({}, hints),
     };
-    await storage.putSession(created);
-    sessionCreated = true;
   } else {
-    const next: Session = {
+    next = {
       ...current,
       cwd: current.cwd ?? hints.cwd,
       model: hints.model ?? current.model,
@@ -52,8 +59,21 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Norma
       updatedAt: event.createdAt > current.updatedAt ? event.createdAt : current.updatedAt,
       metadata: hookMetadata(current.metadata, hints),
     };
-    if (changed(current, next)) await storage.putSession(next);
   }
+
+  if (event.type === 'SessionStart' || next.metadata.accountCheckedAt === undefined) {
+    const r = await resolverConta(hints.env, hints.transcriptPath, opts.perfis ?? new Perfis({ storage }));
+    if (r.conta) next = applySessionAccount(next, r.conta.account.id, r.conta.source);
+    // O que um SessionStart anterior gravou do Desktop não vale mais se este não trouxe.
+    const { desktopScope: _escopo, desktopScopeConflict: _conflito, ...anterior } = next.metadata;
+    const metadata: Session['metadata'] = { ...anterior, accountCheckedAt: event.createdAt };
+    if (r.desktopScope) metadata.desktopScope = r.desktopScope;
+    if (r.desktopScopeConflict !== null) metadata.desktopScopeConflict = r.desktopScopeConflict;
+    next = { ...next, metadata };
+  }
+
+  const sessionCreated = !current;
+  if (!current || changed(current, next)) await storage.putSession(next);
 
   const appended = await storage.appendEvent(event);
   // Plano da sessão (item 1.9): TodoWrite, TaskCreate, TaskUpdate, update_plan e /clear.

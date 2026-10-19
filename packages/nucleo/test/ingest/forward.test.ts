@@ -31,6 +31,11 @@ interface Run {
   log: string;
 }
 
+/** O ambiente de quem roda os testes, sem a conta, a pasta de configuração e o SSH dele. */
+const cleanEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !/^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_|SSH_)/.test(k)),
+);
+
 /** Roda o comando do hooks.json como o Claude Code: via shell, com o payload no stdin. */
 function runHook(event: string, payload: unknown, env: Record<string, string>, opts: { keepStdinOpen?: boolean } = {}): Promise<Run> {
   const command = hooksJson.hooks[event][0].hooks[0].command;
@@ -39,7 +44,7 @@ function runHook(event: string, payload: unknown, env: Record<string, string>, o
   return new Promise((resolve, reject) => {
     const child = spawn(command, {
       shell: true,
-      env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, AHRENA_CONSOLE_HOOK_LOG: logPath, ...env },
+      env: { ...cleanEnv, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, AHRENA_CONSOLE_HOOK_LOG: logPath, ...env },
     });
     let stdout = '';
     let stderr = '';
@@ -149,10 +154,102 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
+  test('núcleo fora da máquina: recusa sem enviar nada', async () => {
+    for (const url of ['http://192.0.2.10:4720', 'http://127.0.0.1.example.test:4720', 'file:///tmp/x', 'não é url']) {
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: url, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' });
+      assert.equal(r.code, 0, url);
+      assert.equal(r.stdout, '', url);
+      assert.match(r.log, /SessionStart não enviado: AHRENA_CONSOLE_URL precisa ser 127\.0\.0\.1, localhost ou ::1/, url);
+    }
+  });
+
+  test('::1 vale como núcleo local', async () => {
+    let hits = 0;
+    const v6 = createServer((_req, res) => {
+      hits++;
+      res.writeHead(202);
+      res.end('{}');
+    });
+    const port = await new Promise<number>((resolve) => v6.listen(0, '::1', () => resolve((v6.address() as AddressInfo).port)));
+    try {
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_URL: `http://[::1]:${port}` });
+      assert.equal(r.log, '');
+      assert.equal(hits, 1);
+    } finally {
+      await new Promise((r) => v6.close(r));
+    }
+  });
+
   test('stdin que não fecha não prende o hook', async () => {
     const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' }, { keepStdinOpen: true });
     assert.equal(r.code, 0);
     assert.ok(r.ms < 2000, `demorou ${r.ms} ms`);
     assert.match(r.log, /SessionStart não enviado: stdin não fechou a tempo/);
+  });
+});
+
+describe('encaminhador manda a pasta e a conta do ambiente', () => {
+  const CONTA = '00000000-0000-4000-8000-00000000000a';
+  const ORG = '00000000-0000-4000-8000-000000000001';
+
+  async function capture(env: Record<string, string>): Promise<Record<string, unknown>> {
+    let received = '';
+    const server = createServer((req, res) => {
+      req.on('data', (c) => (received += c));
+      req.on('end', () => {
+        res.writeHead(202);
+        res.end('{}');
+      });
+    });
+    const port = await listen(server);
+    try {
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}`, ...env });
+      assert.equal(r.code, 0);
+      assert.equal(r.log, '');
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+    return JSON.parse(received) as Record<string, unknown>;
+  }
+
+  test('só as três variáveis, num campo próprio, e o payload intacto', async () => {
+    const body = await capture({
+      CLAUDE_CONFIG_DIR: '/cfg/sintetica',
+      CLAUDE_CODE_ACCOUNT_UUID: CONTA,
+      CLAUDE_CODE_ORGANIZATION_UUID: ORG,
+      CLAUDE_CODE_USER_EMAIL: 'pessoa@example.test',
+      CLAUDE_CODE_OAUTH_TOKEN: 'token-sintetico',
+      ANTHROPIC_API_KEY: 'chave-sintetica',
+    });
+    const { ahrena_console: context, ...payload } = body;
+    assert.deepEqual(payload, HOOK_PAYLOADS.SessionStart);
+    assert.deepEqual(context, {
+      env: { CLAUDE_CONFIG_DIR: '/cfg/sintetica', CLAUDE_CODE_ACCOUNT_UUID: CONTA, CLAUDE_CODE_ORGANIZATION_UUID: ORG },
+    });
+    assert.doesNotMatch(JSON.stringify(body), /chave-sintetica|token-sintetico|example\.test/);
+  });
+
+  test('em SSH, só a marca ssh, nunca o valor de SSH_CONNECTION', async () => {
+    const body = await capture({ SSH_CONNECTION: '192.0.2.1 50000 192.0.2.2 22' });
+    assert.deepEqual(body.ahrena_console, { env: { ssh: true } });
+    assert.doesNotMatch(JSON.stringify(body), /192\.0\.2/);
+  });
+
+  test('de ponta a ponta, a sessão chega ao núcleo com a conta', async () => {
+    const store = openSqliteStorage({ path: ':memory:' });
+    const receiver = await startHookReceiver({ storage: store, port: 0, log: () => {} });
+    try {
+      await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, {
+        AHRENA_CONSOLE_URL: receiver.url,
+        CLAUDE_CODE_ACCOUNT_UUID: CONTA,
+        CLAUDE_CODE_ORGANIZATION_UUID: ORG,
+      });
+      const s = await store.getSession('sess-hooks-1');
+      assert.equal(s?.accountId, `${CONTA}/${ORG}`);
+      assert.equal(s?.accountSource, 'env');
+    } finally {
+      await receiver.close();
+      await store.close();
+    }
   });
 });
