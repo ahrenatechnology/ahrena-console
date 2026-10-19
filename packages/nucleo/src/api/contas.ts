@@ -8,21 +8,20 @@
 //
 // Sem nenhuma, a sessão fica em "Sem conta": nunca é atribuída a outra por palpite.
 // Rótulo e cor: os de `~/.ahrena-console/contas.json` (`{ "<conta>/<org>": { "rotulo", "cor" } }`,
-// cor em hex), que sobrepõem; senão os da `ClaudeAccount` (os perfis, #109, gravam o nome da org
-// e uma cor da marca); senão "conta 1", "conta 2"… na ordem em que aparecem, com as cores da
+// cor em hex), que sobrepõem; senão os da `ClaudeAccount`: o rótulo editado, senão o nome atual
+// da org (os perfis, #109, gravam o nome e uma cor da marca); senão "conta 1", "conta 2"… na ordem em que aparecem, com as cores da
 // marca. O id nunca é mostrado.
 
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { paleta } from '../../../marca/gerado/marca.ts';
 import { accountSourceRank, claudeAccountId, type AccountSource, type ClaudeAccount, type Session } from '../model.ts';
+import { CORES_DAS_CONTAS } from '../perfis/cores.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { SessaoDoDesktop } from './indice-desktop.ts';
 import type { ContaDoPainel } from './tipos.ts';
 
-/** Cores das contas sem cor própria, da paleta da marca. Laranja e vermelho ficam para status. */
-export const CORES_DAS_CONTAS: readonly string[] = [paleta.rose['500'], paleta.green['500'], paleta.yellow['500'], paleta.gray['200']];
+export { CORES_DAS_CONTAS };
 const UUID = /^[0-9a-f-]{8,64}$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
 

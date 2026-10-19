@@ -10,4 +10,5 @@ export {
   type OrigemDoPerfil,
   type PastaDeConfiguracao,
 } from './descoberta.ts';
+export { CORES_DAS_CONTAS, corLivre } from './cores.ts';
 export { contaDoClaudeJson, lerContaDoClaudeJson, type ContaDoPerfil } from './leitura.ts';

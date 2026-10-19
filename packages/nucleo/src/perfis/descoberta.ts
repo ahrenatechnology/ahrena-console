@@ -3,7 +3,7 @@
 // que os hooks revelarem (`CLAUDE_CONFIG_DIR`). Só a estrutura é lida: se a pasta existe e tem
 // as entradas de uma pasta de configuração. Nenhum arquivo é aberto aqui.
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -100,12 +100,15 @@ export async function descobrirPastas({ home = homedir(), arquivo = arquivoPadra
   for (const d of await pastasConfiguradas(arquivo, home)) candidatas.push(pastaDeConfiguracao(d, 'configurada', home));
   for (const d of reveladas) candidatas.push(pastaDeConfiguracao(d, 'hook', home));
 
+  // Um symlink e o alvo dele são a mesma pasta: o caminho real decide o que repete.
   const vistas = new Set<string>();
   const pastas: PastaDeConfiguracao[] = [];
   for (const p of candidatas) {
-    if (vistas.has(p.dir)) continue;
-    vistas.add(p.dir);
-    if (await pareceConfiguracao(p)) pastas.push(p);
+    if (!(await pareceConfiguracao(p))) continue;
+    const real = await realpath(p.dir).catch(() => p.dir);
+    if (vistas.has(real)) continue;
+    vistas.add(real);
+    pastas.push(p);
   }
   return pastas;
 }

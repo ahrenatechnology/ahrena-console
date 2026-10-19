@@ -1,12 +1,15 @@
 // Perfis (decisão 0006, seção 2): as pastas de configuração que o núcleo conhece, a conta atual
 // de cada uma e onde ficam os transcripts. Cada conta lida vira uma `ClaudeAccount` na porta,
-// com o nome da org como rótulo padrão e uma cor da marca. O que a pessoa já editou na conta
-// (rótulo, cor) não é sobrescrito, e o `~/.ahrena-console/contas.json` continua por cima na API.
+// com o nome atual da org e uma cor da marca. O `label` fica nulo até a pessoa editar: o rótulo
+// padrão é derivado na leitura (o nome da org, ou "conta N"), para uma org renomeada aparecer
+// com o nome novo. O e-mail nunca entra. O `~/.ahrena-console/contas.json` continua por cima.
 
+import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { CORES_DAS_CONTAS } from '../api/contas.ts';
+import { join } from 'node:path';
 import { claudeAccountId, type ClaudeAccount } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
+import { corLivre } from './cores.ts';
 import { arquivoPadraoDePerfis, descobrirPastas, normalizarPasta, pareceConfiguracao, pastaDeConfiguracao, type PastaDeConfiguracao } from './descoberta.ts';
 import { lerContaDoClaudeJson, type ContaDoPerfil } from './leitura.ts';
 
@@ -65,11 +68,19 @@ export class Perfis {
    * existe, não tem a estrutura de uma pasta de configuração ou não tem login OAuth.
    */
   async contaDaPasta(dir: string): Promise<ClaudeAccount | null> {
-    const pasta = pastaDeConfiguracao(dir, 'hook', this.home);
+    const pasta = pastaDeConfiguracao(await this.caminhoCanonico(dir), 'hook', this.home);
     if (!(await pareceConfiguracao(pasta))) return null;
     this.revelar(pasta.dir);
     const { conta } = await this.lerPerfil(pasta);
     return conta ? this.gravar(conta, pasta.dir) : null;
+  }
+
+  /** Um symlink para a pasta padrão é a pasta padrão; os outros ficam como vieram. */
+  private async caminhoCanonico(dir: string): Promise<string> {
+    const abs = normalizarPasta(dir.trim(), this.home);
+    const padrao = join(this.home, '.claude');
+    const [real, realPadrao] = await Promise.all([realpath(abs).catch(() => abs), realpath(padrao).catch(() => padrao)]);
+    return real === realPadrao ? padrao : abs;
   }
 
   private async lerPerfil(p: PastaDeConfiguracao): Promise<Perfil> {
@@ -87,21 +98,34 @@ export class Perfis {
     const id = claudeAccountId(conta.accountUuid, conta.organizationUuid);
     const agora = this.agora();
     const gravada = this.storage ? await this.storage.getAccount(id) : null;
-    const cor = gravada?.color ?? (this.storage ? CORES_DAS_CONTAS[(await this.storage.listAccounts()).length % CORES_DAS_CONTAS.length] : CORES_DAS_CONTAS[0]);
+    const cor = gravada?.color ?? corLivre(this.storage ? (await this.storage.listAccounts()).map((a) => a.color) : []);
     const a: ClaudeAccount = {
       id,
       accountUuid: conta.accountUuid,
       organizationUuid: conta.organizationUuid,
       organizationName: conta.organizationName ?? gravada?.organizationName ?? null,
       organizationType: conta.organizationType ?? gravada?.organizationType ?? null,
-      label: gravada?.label ?? conta.rotuloSugerido,
+      label: gravada?.label ?? null,
       color: cor,
       configDirs: [...new Set([...(gravada?.configDirs ?? []), dir])].sort(),
       firstSeenAt: gravada?.firstSeenAt ?? agora,
       lastSeenAt: agora,
       metadata: gravada?.metadata ?? {},
     };
+    // Sem mudança além do `lastSeenAt`, não grava: a releitura periódica não acorda quem espera
+    // por mudanças na porta (long polling, #24).
+    if (gravada && semMudanca(gravada, a)) return gravada;
     if (this.storage) await this.storage.putAccount(a);
     return a;
   }
+}
+
+function semMudanca(antes: ClaudeAccount, depois: ClaudeAccount): boolean {
+  return (
+    antes.organizationName === depois.organizationName &&
+    antes.organizationType === depois.organizationType &&
+    antes.color === depois.color &&
+    antes.configDirs.length === depois.configDirs.length &&
+    antes.configDirs.every((d, i) => d === depois.configDirs[i])
+  );
 }
