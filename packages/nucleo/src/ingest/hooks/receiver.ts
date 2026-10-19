@@ -4,6 +4,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { StoragePort } from '../../storage-port.ts';
+import type { LerContaDaPasta } from './conta.ts';
 import { ingestHook, type IngestResult } from './ingest.ts';
 import { InvalidHookError } from './normalize.ts';
 
@@ -23,6 +24,8 @@ export interface HookReceiverOptions {
   /** Para onde vão os erros; o padrão é `console.error`. */
   log?: (message: string) => void;
   now?: () => Date;
+  /** Lê a conta logada numa pasta de configuração (testes); o padrão lê o `.claude.json` dela. */
+  lerContaDaPasta?: LerContaDaPasta;
 }
 
 export interface HookReceiver {
@@ -113,6 +116,7 @@ export function createHookRoute(opts: HookRouteOptions): HookRoute {
           receivedAt: now().toISOString(),
           firedAt: header(req, 'x-ahrena-hook-at'),
           deliveryId: header(req, 'x-ahrena-delivery-id'),
+          lerContaDaPasta: opts.lerContaDaPasta,
         }),
       );
       send(res, 202, { id: result.event.id, duplicate: !result.appended });
