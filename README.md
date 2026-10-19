@@ -32,17 +32,7 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 
 ## Benchmark
 
-Em [docs/benchmark/](docs/benchmark/):
-
-| Arquivo | Frente |
-| --- | --- |
-| [00-agent-monitor.md](docs/benchmark/00-agent-monitor.md) | Claude Code Agent Monitor, a referência principal |
-| [00-agent-monitor-detalhado.md](docs/benchmark/00-agent-monitor-detalhado.md) | Claude Code Agent Monitor em detalhe: telas, componentes, estados e o que levar |
-| [01-dashboards.md](docs/benchmark/01-dashboards.md) | Dashboards de sessões do Claude Code (Podium, agents-observe e outros) |
-| [02-custo-uso.md](docs/benchmark/02-custo-uso.md) | Custo, uso, limites e telemetria (ccusage, OTel, Grafana) |
-| [03-orquestradores.md](docs/benchmark/03-orquestradores.md) | Orquestradores de agentes em paralelo (Vibe Kanban, Conductor e outros) |
-| [04-llm-ops.md](docs/benchmark/04-llm-ops.md) | Plataformas de LLM e agent ops (Langfuse, Phoenix, Laminar e outros) |
-| [05-mcp-ui.md](docs/benchmark/05-mcp-ui.md) | Como entregar UI e dados via MCP dentro do Claude Desktop (MCP Apps, artefatos, mods) |
+O estudo das referências fica num repositório interno da Ahrena. Os documentos daqui o citam como "benchmark interno".
 
 ## Licença
 
