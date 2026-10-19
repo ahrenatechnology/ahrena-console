@@ -36,6 +36,8 @@ Os valores ficam em [brand/tokens.json](brand/tokens.json), e a amostra com os d
 node --test test/
 ```
 
+O painel e o artefato não copiam esses valores: leem o que [packages/marca](../packages/marca/) gera do `tokens.json` (um módulo TS com as cores em hex para o painel e as variáveis CSS para o artefato). Para mudar uma cor, edite o `tokens.json` e rode `node packages/marca/src/gerar.ts`.
+
 ### Cor de erro
 
 O erro usa o **mesmo vermelho do CI, `#e34948`**. Uma sessão com erro e um CI que falhou dizem a mesma coisa para quem olha: algo falhou e precisa de você. Dois vermelhos para a mesma ideia só confundiriam.
