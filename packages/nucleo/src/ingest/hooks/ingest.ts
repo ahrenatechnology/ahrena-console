@@ -6,6 +6,7 @@
 import type { Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
+import { atualizarContexto } from '../../contexto/gravacao.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
 
 export interface IngestResult extends NormalizedHook {
@@ -57,6 +58,8 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Norma
   const appended = await storage.appendEvent(event);
   // Plano da sessão (item 1.9): TodoWrite, TaskCreate, TaskUpdate, update_plan e /clear.
   if (appended) await atualizarPlano(storage, event.sessionId, [event]);
+  // Medidor de contexto (item 1.7): o hook PreCompact conta um estouro.
+  if (appended) await atualizarContexto(storage, event.sessionId, [event]);
   return { ...normalized, appended, sessionCreated };
 }
 

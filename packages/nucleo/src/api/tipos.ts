@@ -51,10 +51,29 @@ export interface SessaoDoPainel {
 }
 
 export interface ContextoDoPainel {
+  /** Tokens que o principal mandou na última mensagem (input mais cache). */
   usados: number;
+  /** Janela do modelo, em tokens (200k, ou 1M no modo longo). */
   limite: number;
   /** 0 a 100. */
   pct: number;
+  /** Estouros da sessão: cada compactação, automática ou `/compact`. */
+  estouros: number;
+  /** A partir de 2 estouros (como no Podium). */
+  alerta: boolean;
+  /** "62.6k / 200k (31%)". */
+  rotulo: string;
+  /** O medidor de cada subagente que já mandou mensagem; `agenteId` é o `SubagenteDoPainel.id`. */
+  agentes: ContextoDoAgente[];
+}
+
+export interface ContextoDoAgente {
+  agenteId: string;
+  usados: number;
+  limite: number;
+  pct: number;
+  estouros: number;
+  alerta: boolean;
 }
 
 export interface CustoDoPainel {

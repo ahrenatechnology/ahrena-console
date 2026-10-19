@@ -18,6 +18,7 @@ import type {
   TokenUsage,
 } from './model.ts';
 import type { PlanRecord, SessionPlan } from './plano/modelo.ts';
+import type { ContextMeter } from './contexto/modelo.ts';
 
 export interface Page<T> {
   items: T[];
@@ -84,6 +85,11 @@ export interface StoragePort {
   listPlanRecords(sessionId: string): Promise<PlanRecord[]>;
   /** Apaga o histórico de planos da sessão, para reconstruí-lo dos eventos. */
   deletePlanRecords(sessionId: string): Promise<void>;
+
+  /** Grava o medidor de contexto de um agente da sessão (cria ou substitui). Item 1.7. */
+  putContextMeter(meter: ContextMeter): Promise<void>;
+  /** Medidores da sessão: o principal primeiro, depois os subagentes por id. */
+  listContextMeters(sessionId: string): Promise<ContextMeter[]>;
 
   close(): Promise<void>;
 }
