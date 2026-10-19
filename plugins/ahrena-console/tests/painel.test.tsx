@@ -139,7 +139,7 @@ test('P2 e P3: a faixa traz a pergunta ou a permissão; P5: o erro', async ($, o
   expect(await ui.find({ key: 'faixa' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /sigo com SQLite em memória ou subo um Postgres no Docker\?/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /3 opções · responda na conversa ao lado/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /ninguém mais precisa de você/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ninguém precisa de você/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /sem PR · branch sem push/ })).toBeDefined()
   await ui.unmount()
 
@@ -198,6 +198,39 @@ test('CI com contagem: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7"; sem a cont
     await f.relogio.advance(15_000)
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
     expect(await ui.find({ type: 'Text', text: re })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('0.0.14: nada cortado nem em markdown cru; o e-mail da org nunca aparece', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const conta = { ...(p1.sessao!.conta ?? { id: 'c', cor: '#1baf7a', fonte: 'config' as const }), rotulo: "pessoa@exemplo.test's Organization" }
+  f.estado.painel = {
+    ...p1,
+    sessao: { ...p1.sessao!, conta, estado: 'waiting', status: 'waiting', motivo: 'stop', atividade: { tipo: 'sua-vez', texto: '"Fechei o [#131](#local_00000000-0000-4000-8000-000000000001) com **tudo** verde e o `npm test` ok"' } },
+    precisam: { ...p1.precisam, total: 0, suaVez: 2, porConta: [{ conta, n: 1 }] },
+    prs: { total: 1, itens: [{ numero: 7, titulo: 'pr sintético', url: 'https://example.invalid/pr/7', repo: 'exemplo/sintetico', sessao: { id: 's', titulo: 'sessão sintética', local: null } }] },
+    trabalho: { branch: 'feat/podium-replay-com-um-nome-sintetico-bem-comprido', repo: 'exemplo/sintetico', issue: null, pr: null, semPush: false, erro: null },
+  }
+  await f.relogio.advance(5_000)
+  for (const [base, linhas] of [[PANE, 45], [PANE, 120], [LARGO, 120]] as const) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+    const textos = (await ui.findAll({ type: 'Text' })).map((t) => t.text ?? '')
+    // O e-mail não aparece em lugar nenhum; a org pessoal é "conta pessoal".
+    expect(textos.some((t) => t.includes('@'))).toBe(false)
+    expect(textos.some((t) => /conta pessoal/.test(t))).toBe(true)
+    // A última mensagem sem o markdown cru.
+    expect(textos.some((t) => t.includes('Fechei o #131 com tudo verde e o npm test ok'))).toBe(true)
+    expect(textos.some((t) => /\]\(|\*\*|`/.test(t))).toBe(false)
+    // As faixas de uma linha quebram em vez de cortar.
+    const precisam = await ui.find({ key: 'precisam' })
+    expect(precisam?.text).toMatch(/○ ninguém precisa de você · 2 na sua vez/)
+    expect((await ui.findAll({ type: 'Text' })).find((t) => /ninguém precisa de você/.test(t.text ?? ''))?.props.wrap).toBe('wrap')
+    expect((await ui.find({ key: 'prs' }))?.text).toMatch(base === PANE ? /⇄ 1 PR p\/ aprovar/ : /⇄ 1 PR aguardando sua aprovação/)
+    // O branch inteiro, no card ou no resumo.
+    expect(textos.some((t) => t.includes('feat/podium-replay-com-um-nome-sintetico-bem-comprido'))).toBe(true)
+    expect(textos.some((t) => /feat\/podium-rep[^l]*…/.test(t))).toBe(false)
     await ui.unmount()
   }
 })
@@ -805,7 +838,7 @@ test('#140: só a sua vez não ganha destaque nem conta; aparece neutra, e "Ver"
   // Sem o amarelo de quem está bloqueada: borda neutra.
   expect(linha?.props.borderColor).not.toBe(paleta.yellow['500'])
   expect(linha?.props.backgroundColor).toBe(paleta.gray['800'])
-  expect(linha?.text).toMatch(/ninguém mais precisa de você · 3 na sua vez/)
+  expect(linha?.text).toMatch(/ninguém precisa de você · 3 na sua vez/)
   expect(await ui.find({ type: 'Text', text: /precisam? de você$/ })).toBeUndefined()
   expect(f.status.at(-1)).toMatch(/ninguém mais$/)
   await ui.press({ key: 'ver-precisam' })
@@ -846,7 +879,7 @@ test('#140: PRs aguardando aprovação num indicador próprio, com a lista de li
   await f.relogio.advance(5_000)
   for (const base of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
-    expect((await ui.find({ key: 'prs' }))?.text).toMatch(base === LARGO ? /7 PRs aguardando sua aprovação/ : /7 PRs aguardando aprovação/)
+    expect((await ui.find({ key: 'prs' }))?.text).toMatch(base === LARGO ? /7 PRs aguardando sua aprovação/ : /7 PRs p\/ aprovar/)
     await ui.unmount()
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })

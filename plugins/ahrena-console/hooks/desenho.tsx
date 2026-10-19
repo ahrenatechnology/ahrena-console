@@ -48,6 +48,8 @@ import {
   precisamTexto,
   quando,
   quemDecidiu,
+  rotuloDaConta,
+  semMarkdown,
   statusDe,
   tokens,
   usd,
@@ -61,7 +63,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.13'
+export const VERSAO_DO_PLUGIN = '0.0.14'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -326,7 +328,7 @@ function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: Re
         </Text>
         {conta && (
           <Text mono size="caption" color={corDaConta(conta)} wrap="truncate-end">
-            ◆ {conta.rotulo}
+            ◆ {rotuloDaConta(conta.rotulo)}
           </Text>
         )}
       </Box>
@@ -366,7 +368,7 @@ function faixa(c: Contexto, s: SessaoDoPainel, largura: number, estreito: boolea
         )}
       </Box>
       <Text mono weight="semibold" wrap={estreito ? 'wrap' : 'truncate-end'}>
-        {estreito ? corta(f.texto, 64) : f.texto}
+        {estreito ? corta(semMarkdown(f.texto), 64) : semMarkdown(f.texto)}
       </Text>
       <Text mono size="caption" wrap="truncate-end">
         {f.rodape}
@@ -380,7 +382,8 @@ function faixa(c: Contexto, s: SessaoDoPainel, largura: number, estreito: boolea
 const GLIFO_DA_ATIVIDADE: Record<string, string> = {
   ferramenta: '↻', delegando: '⋔', pergunta: '?', permissao: '⛉', erro: '⊗', prompt: '›_', 'sua-vez': '↵', interrompida: '⏸', concluida: '', abandonada: '', ociosa: '',
 }
-const textoDaAtividade = (s: SessaoDoPainel) => (s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
+/** A atividade da sessão como texto: a do erro, a primeira frase; a última mensagem, sem o markdown cru. */
+const textoDaAtividade = (s: SessaoDoPainel) => semMarkdown(s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
 const linhaDoModelo = (s: SessaoDoPainel, agora: number) => `${modelo(s.modelo)} · ${desde(s.iniciadaEm, agora)} · turno ${s.turno}`
 /** A atividade numa linha só, quando falta altura. */
 const ATIVIDADE_UMA_LINHA = UTIL - 4
@@ -561,7 +564,7 @@ function faixaPergunta(c: Contexto, largura: number) {
           ? ESTA SESSÃO PERGUNTA
         </Text>
         <Text mono weight="bold" wrap="wrap">
-          {q.texto}
+          {semMarkdown(q.texto)}
         </Text>
         <Box flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
           {respostas.map((a, i) => (
@@ -639,7 +642,16 @@ function faixaCompactar(c: Contexto, largura: number) {
 function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_DO_CARD) {
   const { Box, Text, Link, Svg } = c.el
   if (linhas < LINHAS_DO_CARD) {
-    const resumo = t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'
+    // Sem issue, o branch inteiro numa linha própria, que quebra: nunca "feat/podium-rep…".
+    if (t && !t.issue) {
+      return cartao(c, 'card-trabalho', [
+        cabecalho(c, '⎇', 'TRABALHO', 'pelo branch'),
+        <Text mono size="footnote" wrap="wrap">
+          {t.branch}
+        </Text>,
+      ], BORDA, FUNDO_CARTAO, linhas)
+    }
+    const resumo = t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : '…'
     return cartao(c, 'card-trabalho', [cabecalho(c, '⎇', 'TRABALHO', resumo)], BORDA, FUNDO_CARTAO, linhas)
   }
   const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⎇', 'TRABALHO', 'pelo branch')]
@@ -1172,36 +1184,53 @@ const porqueDe = (i: PrecisaDeVoce) => (i.porque ? PORQUE[i.porque] : i.estado =
  * pergunta, plano, decisão pedida, erro). A sua vez no bate-bola aparece em cor neutra, ao lado,
  * sem somar na contagem.
  */
-function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolean) {
-  const { Box, Text, Button } = c.el
+/** Quem precisa de você, pelo nome e pelo motivo: as duas primeiras, no largo. */
+const nomesQuePrecisam = (p: Painel) =>
+  p.precisam.maquina
+    .filter(precisa)
+    .slice(0, 2)
+    .map((i) => `${i.titulo} (${porqueDe(i)})`)
+    .join(', ')
+
+/** As partes da linha de quem precisa de você: o que desenha e o que a estimativa da altura mede. */
+function partesDePrecisam(p: Painel, estreito: boolean) {
   const n = p.precisam.total
   const vez = p.precisam.suaVez ?? 0
   const naVez = vez ? `${vez} na sua vez` : ''
+  const nomes = !estreito && n > 0 ? nomesQuePrecisam(p) : ''
+  const principal = n === 0 ? '○ ninguém precisa de você' : `🔔 ${precisamTexto(n)}`
+  return { n, vez, naVez, nomes, texto: `${principal}${nomes ? ` · ${nomes}` : ''}${naVez ? ` · ${naVez}` : ''}`, principal }
+}
+
+/** O botão "Ver" ao lado e o espaço antes dele, em colunas. */
+const BOTAO_VER = 7
+
+/** Linhas da faixa de quem precisa de você: o texto quebra linha, nunca corta. */
+const linhasDePrecisam = (p: Painel, util: number, estreito: boolean) => LINHA_SOLTA - 1 + linhasDoTexto(partesDePrecisam(p, estreito).texto, util - BOTAO_VER)
+
+function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolean) {
+  const { Box, Text, Button } = c.el
+  const { n, vez, naVez, nomes, principal } = partesDePrecisam(p, estreito)
   if (n === 0) {
     return (
       <Box key="precisam" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
         <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono dimColor wrap="truncate-end">
-            ○ ninguém mais precisa de você{naVez ? ` · ${naVez}` : ''}
+          <Text mono dimColor wrap="wrap">
+            {principal}{naVez ? ` · ${naVez}` : ''}
           </Text>
         </Box>
         {vez ? <Button key="ver-precisam" label="Ver" variant="secondary" onPress={c.acoes.verPrecisam} /> : null}
       </Box>
     )
   }
-  const nomes = p.precisam.maquina
-    .filter(precisa)
-    .slice(0, 2)
-    .map((i) => `${i.titulo} (${porqueDe(i)})`)
-    .join(', ')
-  const divisao = p.precisam.porConta.map((d) => `${d.conta?.rotulo ?? 'sem conta'} ${d.n}`).join(' · ')
+  const divisao = p.precisam.porConta.map((d) => `${d.conta ? rotuloDaConta(d.conta.rotulo) : 'sem conta'} ${d.n}`).join(' · ')
   return (
     <Box key="precisam" flexDirection="column" width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1} hover={{ borderColor: LARANJA }}>
       <Box flexDirection="row" alignItems="center" gap={1}>
         <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono weight="bold" color={AMARELO} wrap="truncate-end">
-            🔔 {precisamTexto(n)}
-            {!estreito && nomes ? <Text weight="regular" color={paleta.gray['100']}> · {nomes}</Text> : null}
+          <Text mono weight="bold" color={AMARELO} wrap="wrap">
+            {principal}
+            {nomes ? <Text weight="regular" color={paleta.gray['100']}> · {nomes}</Text> : null}
             {naVez ? <Text weight="regular" color={CINZA}> · {naVez}</Text> : null}
           </Text>
         </Box>
@@ -1217,6 +1246,9 @@ function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolea
 }
 
 /** #140: o indicador próprio dos PRs que aguardam a sua aprovação, com a lista de links. */
+/** "⇄ 1 PR aguardando sua aprovação"; no estreito, "⇄ 1 PR p/ aprovar", que cabe sem cortar. */
+const textoDePrs = (n: number, estreito: boolean) => `⇄ ${n === 1 ? '1 PR' : `${n} PRs`} ${estreito ? 'p/ aprovar' : 'aguardando sua aprovação'}`
+
 function linhaPrs(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const n = p.prs?.total ?? 0
   if (n === 0) return null
@@ -1224,8 +1256,8 @@ function linhaPrs(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   return (
     <Box key="prs" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={ROSA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text mono weight="bold" color={ROSA} wrap="truncate-end">
-          ⇄ {n === 1 ? '1 PR aguardando' : `${n} PRs aguardando`} {estreito ? 'aprovação' : 'sua aprovação'}
+        <Text mono weight="bold" color={ROSA} wrap="wrap">
+          {textoDePrs(n, estreito)}
         </Text>
       </Box>
       <Button key="ver-prs" label="Ver" variant="secondary" onPress={c.acoes.verPrs} />
@@ -1639,11 +1671,11 @@ function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
         )}
       </Box>,
       <Text mono size="footnote" wrap="truncate-end" color={erro ? VERMELHO_TEXTO : undefined}>
-        {i.texto}
+        {semMarkdown(i.texto)}
       </Text>,
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {relacao} · {modelo(i.modelo)}
-        {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {i.conta.rotulo}</Text> : null}
+        {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {rotuloDaConta(i.conta.rotulo)}</Text> : null}
       </Text>,
       <Box flexDirection="row">
         {abreDireto(c, i.local) ? (
@@ -1820,8 +1852,8 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
   if (p.decisoes) partes.push(LINHA_SOLTA)
-  partes.push(LINHA_SOLTA)
-  if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA)
+  partes.push(linhasDePrecisam(p, util, estreito))
+  if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDePrs(p.prs!.total, estreito), util - BOTAO_VER))
   partes.push(linhasDoRodape(p))
   return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
 }
@@ -1834,7 +1866,7 @@ function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abri
       return { texto: `◠ ${contextoDaSessao(c, p)?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
     case 'trabalho': {
       const t = p.trabalho
-      return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'}` }
+      return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? t.branch : '…'}` }
     }
     case 'plano':
       return { texto: `☰ ${p.plano ? `${p.plano.feitos}/${p.plano.total}` : '0/0'}`, abrir: (p.planos ?? []).length ? c.acoes.verPlanos : undefined }
@@ -1850,13 +1882,12 @@ function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura:
   if (!ids.length) return null
   const { Box, Button, Text } = c.el
   const n = ids.length
-  // Um card como os outros, da largura da grade: a borda, o cabeçalho e os resumos, que quebram linha.
+  // Um card da largura da grade: a borda, o cabeçalho e os resumos, que quebram linha.
   return (
     <Box
       key="resumos"
       flexDirection="column"
       width={largura}
-      minHeight={BORDA_DO_CARD + linhasInternasDosResumos(c, p, ids, largura)}
       flexShrink={0}
       borderStyle="round"
       borderColor={BORDA}
@@ -1889,9 +1920,9 @@ function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura:
 const linhasInternasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
   1 + linhasDoTexto(ids.map((id) => resumoDoCard(c, p, id).texto.replace(/\s/g, '\u00a0')).join('  '), largura - 4)
 
-/** Linhas do card de resumos, com o espaço antes dele. */
+/** Linhas do card de resumos, com o espaço antes dele: a borda fina conta uma linha, como nas faixas. */
 const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  ids.length ? 1 + BORDA_DO_CARD + linhasInternasDosResumos(c, p, ids, largura) : 0
+  ids.length ? 1 + (LINHA_SOLTA - 1) + linhasInternasDosResumos(c, p, ids, largura) : 0
 
 /**
  * Quantas linhas internas cada card recebe, pela altura do painel e pela prioridade. Quando nem o
@@ -1903,7 +1934,8 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
   const todas: Peca[] = [
     ...(p.sessao ? [pecaSessao(p.sessao, c.agora)] : []),
     { id: 'contexto', minimo: LINHAS_DO_CONTEXTO, inteiro: LINHAS_DO_CONTEXTO, tudoOuNada: true, resumo: linhasDoResumoDoContexto(contextoDaSessao(c as Contexto, p)?.pct ?? 0) },
-    { id: 'trabalho', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true },
+    // O resumo sem issue tem o branch inteiro embaixo do cabeçalho.
+    { id: 'trabalho', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true, resumo: p.trabalho && !p.trabalho.issue ? 1 + linhasDoTexto(p.trabalho.branch, UTIL) : 1 },
     pecaPlano(p.plano, p.planos ?? [], estreito),
     pecaSubagentes(p.subagentes),
     pecaFilhas(c, p.filhas),

@@ -167,3 +167,25 @@ export function dataEHora(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${hora(d.getTime())}`
 }
+
+/**
+ * O rótulo da conta, sem e-mail (decisão 0006): a org pessoal do Claude ("<e-mail>'s Organization")
+ * vira "conta pessoal", e um rótulo com e-mail vira "conta". O núcleo já manda assim; isto cobre o
+ * núcleo antigo.
+ */
+export function rotuloDaConta(rotulo: string): string {
+  if (/^\S+@\S+'s Organization$/i.test(rotulo.trim())) return 'conta pessoal'
+  return rotulo.includes('@') ? 'conta' : rotulo
+}
+
+/**
+ * A mensagem do agente como texto, sem o markdown cru: o link vira só o texto (também o que veio
+ * cortado no meio, "[#131](#local_…"), e saem os `**`, `__`, as crases e o "#" de título.
+ */
+export function semMarkdown(texto: string): string {
+  return texto
+    .replace(/\[([^\]\n]*)\]\([^)\s]*\)?/g, '$1')
+    .replace(/\*\*|__/g, '')
+    .replace(/`/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+}

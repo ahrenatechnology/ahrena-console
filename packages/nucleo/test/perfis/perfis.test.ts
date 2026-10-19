@@ -181,6 +181,25 @@ describe('Perfis na porta', () => {
     await storage.close();
   });
 
+  test('org pessoal ("<e-mail>\'s Organization"): o e-mail nunca vira rótulo; a API mostra "conta pessoal"', async () => {
+    mkdirSync(join(home, '.claude'));
+    writeFileSync(join(home, '.claude.json'), claudeJson(UUID_A, ORG_A, { organizationName: "pessoa@exemplo.test's Organization" }));
+    pasta('.claude-cliente', claudeJson(UUID_B, ORG_B, { organizationName: "pessoa@exemplo.test's Organization" }));
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await new Perfis({ storage, home, arquivo: null, agora: () => T0 }).sincronizar();
+    const arquivo = join(home, 'contas.json');
+    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente' } }));
+    const contas = new Contas({ storage, arquivo });
+    await contas.atualizar();
+    const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
+    const a = contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null);
+    assert.equal(a?.rotulo, 'conta pessoal');
+    assert.ok(!JSON.stringify(a).includes('@'));
+    // O contas.json continua por cima.
+    assert.equal(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null)?.rotulo, 'cliente');
+    await storage.close();
+  });
+
   test('org renomeada aparece com o nome novo; o rótulo editado continua', async () => {
     const dir = pasta('.claude-x', claudeJson(UUID_A, ORG_A, { organizationName: 'Nome Antigo' }));
     const storage = openSqliteStorage({ path: ':memory:' });

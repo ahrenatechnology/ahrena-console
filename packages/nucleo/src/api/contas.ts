@@ -10,7 +10,7 @@
 // Rótulo e cor: os de `~/.ahrena-console/contas.json` (`{ "<conta>/<org>": { "rotulo", "cor" } }`,
 // cor em hex), que sobrepõem; senão os da `ClaudeAccount`: o rótulo editado, senão o nome atual
 // da org (os perfis, #109, gravam o nome e uma cor da marca); senão "conta 1", "conta 2"… na ordem em que aparecem, com as cores da
-// marca. O id nunca é mostrado.
+// marca. O id nunca é mostrado, nem o e-mail: a org pessoal ("<e-mail>'s Organization") vira "conta pessoal".
 
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -24,6 +24,19 @@ import type { ContaDoPainel } from './tipos.ts';
 export { CORES_DAS_CONTAS };
 const UUID = /^[0-9a-f-]{8,64}$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
+
+/** O nome que o Claude dá à org pessoal: "<e-mail>'s Organization". */
+const ORG_PESSOAL = /^\S+@\S+'s Organization$/i;
+
+/**
+ * O nome da org para o rótulo, sem e-mail (decisão 0006): a org pessoal vira "conta pessoal"; um
+ * nome com e-mail que não é esse padrão não serve de rótulo.
+ */
+export function nomeDaOrg(nome: string | null | undefined): string | null {
+  if (!nome) return null;
+  if (ORG_PESSOAL.test(nome.trim())) return 'conta pessoal';
+  return nome.includes('@') ? null : nome;
+}
 
 export function arquivoPadraoDeContas(): string {
   return join(homedir(), '.ahrena-console', 'contas.json');
@@ -104,6 +117,6 @@ export class Contas {
     const a = this.daPorta.get(id);
     const c = this.configurados.get(id);
     const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? CORES_DAS_CONTAS[i % CORES_DAS_CONTAS.length];
-    return { id, rotulo: c?.rotulo ?? a?.label ?? a?.organizationName ?? `conta ${i + 1}`, cor, fonte };
+    return { id, rotulo: c?.rotulo ?? a?.label ?? nomeDaOrg(a?.organizationName) ?? `conta ${i + 1}`, cor, fonte };
   }
 }
