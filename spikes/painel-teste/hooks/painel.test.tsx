@@ -11,6 +11,11 @@ const FLEET = {
   topProjects: [{ project: 'demo · a', sessions: 7 }],
   generatedAt: NOW,
 }
+const SESSAO = {
+  session: { project: 'demo · a', id: 's1', state: 'ativa', lastActivity: NOW, sizeKb: 12 },
+  needsYou: 2,
+  generatedAt: NOW,
+}
 const node = (key: string, type: string, children: string[], extra: Record<string, unknown> = {}) => ({
   key, repo: key.split('#')[0], number: Number(key.split('#')[1]), title: `Item ${key}`, url: `https://github.com/${key.replace('#', '/issues/')}`,
   state: 'OPEN', updatedAt: NOW, type, rank: 0, progress: children.length ? { total: children.length, completed: 0, pct: 0 } : null,
@@ -70,6 +75,7 @@ const fakeCore = (on: any, opts: { moveError?: { status: number; error: string }
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; body?: string } }) => {
     const call = { method: e.init?.method ?? 'GET', url: e.url, body: e.init?.body ? JSON.parse(e.init.body) : undefined }
     calls.push(call)
+    if (e.url.includes('/api/sessao/')) return reply(200, SESSAO)
     if (e.url.endsWith('/api/work')) return reply(200, WORK)
     if (call.method === 'POST' && e.url.endsWith('/api/kanban/move')) {
       if (opts.moveError) return reply(opts.moveError.status, { error: opts.moveError.error })
@@ -79,9 +85,10 @@ const fakeCore = (on: any, opts: { moveError?: { status: number; error: string }
     if (e.url.includes('/api/kanban')) return reply(200, board(items))
     return reply(200, FLEET)
   })
-  mock.clock(on, { now: Date.now() })
+  const clock = mock.clock(on, { now: Date.now() })
   on('ui.status', async () => ({ value: undefined }))
-  return calls
+  on('session.id', async () => ({ value: 'sessao-teste' }))
+  return Object.assign(calls, { clock })
 }
 
 test('a aba Sessões desenha os componentes e reage a filtro e seleção', async ($, on) => {
@@ -195,7 +202,7 @@ test('em outras superfícies o painel cai para a versão simples', async ($, on)
   await desk.press({ key: 'retry' })
   await desk.unmount()
   const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /1 ativa/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Esta sessão: ativa · 2 precisam de você/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -230,5 +237,71 @@ test('num painel bem estreito tudo continua desenhando', async ($, on) => {
   await ui.select({ key: 'modo', value: 'arvore' })
   await ui.press({ key: 'expand-all' })
   expect(await ui.find({ key: 'card-acme/app#3' })).toBeDefined()
+  await ui.unmount()
+})
+
+// Engine falso para o ciclo de vida do painel: a lista de painéis abertos (`$.ui.panes()`)
+// e o /console que abre, como o Claude Desktop faz. `pane.close()` é a pessoa fechando:
+// o painel some da lista do engine.
+const fakePanes = (on: any) => {
+  const pane = { open: false, shown: true, close: () => { pane.open = false } }
+  on('ui.panes', async () => ({
+    value: pane.open ? [{ id: 'ahrena-console', title: 'Ahrena Console', isShown: pane.shown, isFocused: false, isPlaced: true }] : [],
+  }))
+  on('ui.open', async () => {
+    pane.open = true
+    return { value: { isPlaced: true } }
+  })
+  on('command.register', async () => ({ value: undefined }))
+  on('session.start', async (_$: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
+  return pane
+}
+const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presentation: 'text' } as any
+
+test('fechado não consulta: só com o painel aberto, e só a própria sessão', async ($, on) => {
+  const calls = fakeCore(on)
+  const pane = fakePanes(on)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  // Sessão aberta, painel fechado: um minuto sem nenhum pedido ao núcleo.
+  await calls.clock.advance(60_000)
+  expect(calls).toHaveLength(0)
+
+  // /console abre o painel: um pedido a cada 5 s, só desta sessão; nunca a frota.
+  await $.command.run(CONSOLE)
+  await calls.clock.advance(30_000)
+  expect(calls.length).toBeGreaterThanOrEqual(6)
+  expect(calls.every(c => c.url.endsWith('/api/sessao/sessao-teste'))).toBe(true)
+
+  // Fechou: no máximo o tick em curso, e mais nenhum pedido.
+  pane.close()
+  await calls.clock.advance(5_000)
+  const fechado = calls.length
+  await calls.clock.advance(60_000)
+  expect(calls).toHaveLength(fechado)
+})
+
+test('aberto atrás de outra aba, o painel não consulta; à vista de novo, volta', async ($, on) => {
+  const calls = fakeCore(on)
+  const pane = fakePanes(on)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await $.command.run(CONSOLE)
+  pane.shown = false
+  await calls.clock.advance(5_000)
+  const escondido = calls.length
+  await calls.clock.advance(60_000)
+  expect(calls).toHaveLength(escondido)
+  pane.shown = true
+  await calls.clock.advance(5_000)
+  expect(calls.length).toBeGreaterThan(escondido)
+})
+
+test('a frota só é pedida com a aba dela à vista', async ($, on) => {
+  const calls = fakeCore(on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console-painel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'retry' })
+  expect(await ui.find({ type: 'Text', text: /2 precisam de você/ })).toBeDefined()
+  expect(calls.some(c => c.url.includes('/api/fleet'))).toBe(false)
+  await ui.press({ key: 'tab-sessoes' })
+  expect(calls.some(c => c.url.includes('/api/fleet'))).toBe(true)
   await ui.unmount()
 })
