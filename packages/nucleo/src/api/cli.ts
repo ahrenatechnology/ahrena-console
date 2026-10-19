@@ -23,9 +23,10 @@ import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import { Perfis } from '../perfis/perfis.ts';
 import { registrarCliente } from '../dono/clientes.ts';
-import { assumirTrava, planejarSubida, vigiarPai } from '../dono/dono.ts';
+import { commitMaisVelho } from '../dono/codigo.ts';
+import { assumirTrava, avisoDeCodigo, planejarSubida, vigiarPai } from '../dono/dono.ts';
 import { esperarNucleo, pidVivo, reservarPorta, soltarPorta } from '../dono/sonda.ts';
-import { liberarTrava } from '../dono/trava.ts';
+import { lerTrava, liberarTrava, pastaPadrao, prepararPasta } from '../dono/trava.ts';
 import {
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
@@ -65,9 +66,13 @@ const AJUDA = `Uso: npm run api -- [opções]
   --cenario <p1..p9>  O cenário da demonstração (padrão p1), como nos wireframes
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
-  --substituir        Se o núcleo de pé for mais velho que este, para ele e sobe este
+  --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
+                      deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
-                      parte). A --demo já é sem trava. A porta continua sendo de um só
+                      parte). A --demo já é sem trava. As duas falham se a porta tem dono
+
+Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
+versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
   --help
 `;
 
@@ -100,6 +105,8 @@ const pai = o.pai === undefined ? null : Number(o.pai);
 if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--pai: um pid');
 if (pai !== null && !pidVivo(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
 const comTrava = !demo && !o['sem-trava'];
+const commit = commitDoCheckout();
+const codigo = { versao: VERSAO_DA_API, commit, commitMaisVelho };
 
 function adotar(p: number, versao: string, aviso: string | null = null): never {
   if (aviso) log(`atenção: ${aviso}`);
@@ -110,22 +117,44 @@ function adotar(p: number, versao: string, aviso: string | null = null): never {
 
 // Antes de abrir o banco: adota o núcleo vivo da trava, ou a recupera se for órfã.
 if (comTrava) {
-  const plano = await planejarSubida({ versao: VERSAO_DA_API, substituir: o.substituir, log });
+  const plano = await planejarSubida({ ...codigo, substituir: o.substituir, log });
   if (plano.acao === 'adotar') adotar(plano.trava.porta, plano.trava.versao, plano.aviso);
   if (plano.recuperou) log(`trava órfã recuperada: ${plano.recuperou}`);
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
+// A --demo e a --sem-trava não adotam: quem pede a demo nunca recebe o núcleo real, nem o contrário.
 async function adotarQuemTemAPorta(): Promise<never> {
   const v = await esperarNucleo(porta, 30_000);
-  if (v) adotar(porta, v.versao);
+  if (v && !comTrava) {
+    log(`a porta ${porta} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
+    process.exit(1);
+  }
+  if (v) {
+    // Quem ganhou a porta grava a trava logo depois de ouvir: espera um pouco antes de dizer que não tem.
+    let semTrava = v.pid === null;
+    for (let i = 0; !semTrava && v.pid !== travaDaPorta(); i++) {
+      if (i === 20) semTrava = true;
+      else await new Promise((r) => setTimeout(r, 100));
+    }
+    const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, avisoDeCodigo(v, codigo)];
+    adotar(porta, v.versao, aviso.filter(Boolean).join('; ') || null);
+  }
   log(`a porta ${porta} está ocupada e não responde como núcleo`);
   process.exit(1);
+}
+function travaDaPorta(): number | null {
+  const t = lerTrava();
+  return t && t !== 'invalida' && t.porta === porta ? t.pid : null;
 }
 const reserva = await reservarPorta(porta);
 if (reserva === 'ocupada') await adotarQuemTemAPorta();
 const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
-if (banco !== ':memory:') mkdirSync(dirname(banco), { recursive: true });
+if (banco !== ':memory:') {
+  // A pasta do núcleo fecha em 0700 (o banco mora nela); outra pasta dada em --banco fica como está.
+  if (dirname(banco) === pastaPadrao()) prepararPasta();
+  else mkdirSync(dirname(banco), { recursive: true });
+}
 
 const storage = openSqliteStorage({ path: banco });
 // As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
@@ -165,7 +194,7 @@ const abrirNoDesktop =
 // A mesma `Contas` no painel e no MCP: o rótulo "conta 1" é o mesmo nas duas superfícies.
 const contas = new Contas({ storage, ...(demo ? { arquivo: null } : {}) });
 const montador = new MontadorDoPainel({
-  commit: commitDoCheckout(),
+  commit,
   commitDaPasta,
   abreSessao: abrirNoDesktop !== null,
   storage,
@@ -226,6 +255,7 @@ const api: ApiLocal = await iniciarApiLocal({
   log,
   abrirNoDesktop,
   mcp: mcp.servidor,
+  commit,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

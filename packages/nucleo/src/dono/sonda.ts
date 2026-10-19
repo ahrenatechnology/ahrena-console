@@ -19,6 +19,10 @@ export function pidVivo(pid: number): boolean {
 export interface Visao {
   nome: string;
   versao: string;
+  /** O pid de quem responde. `null` num núcleo de antes da #86. */
+  pid: number | null;
+  /** O commit do código no ar, se ele sabe. */
+  commit: string | null;
 }
 
 /** `GET /api/overview` em 127.0.0.1. `null` se ninguém responde, ou se não é JSON. */
@@ -34,7 +38,16 @@ export function sondar(porta: number, timeoutMs = 1000): Promise<Visao | null> {
       res.on('end', () => {
         try {
           const v = JSON.parse(corpo) as Partial<Visao>;
-          resolve(typeof v.nome === 'string' ? { nome: v.nome, versao: typeof v.versao === 'string' ? v.versao : '?' } : null);
+          resolve(
+            typeof v.nome === 'string'
+              ? {
+                  nome: v.nome,
+                  versao: typeof v.versao === 'string' ? v.versao : '?',
+                  pid: Number.isInteger(v.pid) ? v.pid! : null,
+                  commit: typeof v.commit === 'string' ? v.commit : null,
+                }
+              : null,
+          );
         } catch {
           resolve(null);
         }

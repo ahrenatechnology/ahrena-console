@@ -3,7 +3,7 @@
 // legível pelo dono (0600). Quem escreve é o núcleo, depois que a porta já é dele.
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,13 +33,26 @@ export function novoToken(): string {
   return randomBytes(32).toString('hex');
 }
 
+/**
+ * Cria a pasta com 0700 e, se ela já existia mais aberta (o `mkdir` de antes da #86 dava 0755),
+ * fecha. O banco mora nela: com a pasta fechada, outro usuário não chega ao SQLite.
+ */
+export function prepararPasta(pasta = pastaPadrao()): void {
+  mkdirSync(pasta, { recursive: true, mode: 0o700 });
+  chmodSync(pasta, 0o700);
+}
+
 const inteiro = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0;
 
 /** A trava, `null` se não existe, ou `'invalida'` se o arquivo não é uma trava (conta como órfã). */
 export function lerTrava(pasta = pastaPadrao()): Trava | 'invalida' | null {
+  return lerArquivo(arquivoDaTrava(pasta));
+}
+
+function lerArquivo(arquivo: string): Trava | 'invalida' | null {
   let texto: string;
   try {
-    texto = readFileSync(arquivoDaTrava(pasta), 'utf8');
+    texto = readFileSync(arquivo, 'utf8');
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw e;
@@ -55,12 +68,19 @@ export function lerTrava(pasta = pastaPadrao()): Trava | 'invalida' | null {
   }
 }
 
-/** Grava a trava inteira de uma vez: quem lê vê a antiga ou a nova, nunca metade. */
+const temporario = (pasta: string, rotulo: string) => join(pasta, `.${ARQUIVO_DA_TRAVA}.${rotulo}.${process.pid}.${randomBytes(4).toString('hex')}`);
+
+function escreverTemporario(trava: Trava, pasta: string): string {
+  prepararPasta(pasta);
+  const tmp = temporario(pasta, 'nova');
+  writeFileSync(tmp, `${JSON.stringify(trava, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  return tmp;
+}
+
+/** Grava a trava inteira de uma vez, por cima da que houver: quem lê vê a antiga ou a nova, nunca metade. */
 export function gravarTrava(trava: Trava, pasta = pastaPadrao()): void {
-  mkdirSync(pasta, { recursive: true, mode: 0o700 });
-  const tmp = join(pasta, `.${ARQUIVO_DA_TRAVA}.${process.pid}.${randomBytes(4).toString('hex')}`);
+  const tmp = escreverTemporario(trava, pasta);
   try {
-    writeFileSync(tmp, `${JSON.stringify(trava, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
     renameSync(tmp, arquivoDaTrava(pasta));
   } catch (e) {
     rmSync(tmp, { force: true });
@@ -68,14 +88,51 @@ export function gravarTrava(trava: Trava, pasta = pastaPadrao()): void {
   }
 }
 
-/** Apaga a trava só se ela ainda é a deste token (outro núcleo pode tê-la recuperado). */
-export function liberarTrava(token: string, pasta = pastaPadrao()): boolean {
-  const t = lerTrava(pasta);
-  if (!t || t === 'invalida' || t.token !== token) return false;
-  rmSync(arquivoDaTrava(pasta), { force: true });
-  return true;
+/**
+ * Cria a trava só se não houver nenhuma (`link` falha se o arquivo existe): de dois que tentam ao
+ * mesmo tempo, um só consegue. `false` se já havia trava.
+ */
+export function criarTrava(trava: Trava, pasta = pastaPadrao()): boolean {
+  const tmp = escreverTemporario(trava, pasta);
+  try {
+    linkSync(tmp, arquivoDaTrava(pasta));
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
-export function apagarTrava(pasta = pastaPadrao()): void {
-  rmSync(arquivoDaTrava(pasta), { force: true });
+/**
+ * Tira a trava do lugar só se ela é a esperada (`token`, ou `null` para uma ilegível). Move antes de
+ * ler: se nesse meio-tempo outro núcleo gravou a dele, ela volta para o lugar. `true` se tirou.
+ */
+export function tirarTrava(token: string | null, pasta = pastaPadrao()): boolean {
+  const arquivo = arquivoDaTrava(pasta);
+  const movida = temporario(pasta, 'velha');
+  try {
+    renameSync(arquivo, movida);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw e;
+  }
+  const t = lerArquivo(movida);
+  const era = token === null ? t === 'invalida' : t !== null && t !== 'invalida' && t.token === token;
+  if (!era) {
+    try {
+      linkSync(movida, arquivo);
+    } catch (e) {
+      // EEXIST: já há uma mais nova que a que tiramos sem querer; essa fica.
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    }
+  }
+  rmSync(movida, { force: true });
+  return era;
+}
+
+/** Apaga a trava só se ela ainda é a deste token (outro núcleo pode tê-la recuperado). */
+export function liberarTrava(token: string, pasta = pastaPadrao()): boolean {
+  return tirarTrava(token, pasta);
 }

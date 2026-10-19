@@ -5,11 +5,12 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pidVivo } from './sonda.ts';
-import { pastaPadrao } from './trava.ts';
+import { pastaPadrao, prepararPasta } from './trava.ts';
 
 const pastaDosClientes = (pasta: string) => join(pasta, 'clientes');
 
 export function registrarCliente(pid: number, pasta = pastaPadrao()): void {
+  prepararPasta(pasta);
   const dir = pastaDosClientes(pasta);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileSync(join(dir, String(pid)), `${JSON.stringify({ pid, desde: new Date().toISOString() })}\n`, { mode: 0o600 });

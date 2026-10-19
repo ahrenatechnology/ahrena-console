@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,15 +11,21 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   arquivoDaTrava,
+  assumirTrava,
   clientesVivos,
+  commitDoCodigo,
   compararVersoes,
   examinar,
   gravarTrava,
   lerTrava,
   liberarTrava,
   novoToken,
+  pararNucleo,
   pidVivo,
+  planejarSubida,
   registrarCliente,
+  sondar,
+  tirarTrava,
   vigiarPai,
   type Trava,
 } from '../../src/dono/index.ts';
@@ -70,7 +76,9 @@ beforeEach(() => {
 afterEach(async () => {
   const t = lerTrava(pasta);
   for (const p of filhos.splice(0)) if (p.exitCode === null && p.signalCode === null) p.kill('SIGKILL');
-  if (t && t !== 'invalida' && pidVivo(t.pid) && t.pid !== process.pid) process.kill(t.pid, 'SIGKILL');
+  // Só os núcleos que os testes subiram: a trava de um teste de unidade pode ter um pid qualquer.
+  const subidos = (await examinar(pasta).catch(() => null))?.estado === 'vivo';
+  if (subidos && t && t !== 'invalida' && t.pid !== process.pid) process.kill(t.pid, 'SIGKILL');
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -147,6 +155,25 @@ describe('trava', () => {
     assert.equal(lerTrava(pasta), null);
   });
 
+  test('tirar a trava de outro token a devolve ao lugar', () => {
+    const t: Trava = { pid: 1, porta: 1, versao: '0.0.1', inicio: 'x', token: novoToken(), pai: null };
+    gravarTrava(t, pasta);
+    assert.equal(tirarTrava('outro', pasta), false);
+    assert.deepEqual(lerTrava(pasta), t);
+    assert.deepEqual(readdirSync(pasta), ['nucleo.json'], 'nenhum temporário sobra');
+    assert.equal(tirarTrava(null, pasta), false, 'null só tira trava ilegível');
+    writeFileSync(arquivoDaTrava(pasta), 'lixo');
+    assert.equal(tirarTrava(null, pasta), true);
+    assert.equal(lerTrava(pasta), null);
+  });
+
+  test('a pasta que já existia aberta fecha em 0700', () => {
+    mkdirSync(pasta, { mode: 0o755 });
+    chmodSync(pasta, 0o755);
+    gravarTrava({ pid: 1, porta: 1, versao: '0.0.1', inicio: 'x', token: novoToken(), pai: null }, pasta);
+    assert.equal(statSync(pasta).mode & 0o777, 0o700);
+  });
+
   test('compara versões por número', () => {
     assert.equal(compararVersoes('0.0.1', '0.0.2'), -1);
     assert.equal(compararVersoes('0.10.0', '0.9.9'), 1);
@@ -191,6 +218,7 @@ describe('subir ou adotar', { timeout: 60_000 }, () => {
     const s = await outro.saida;
     assert.equal(s.codigo, 0, s.stderr);
     assert.match(s.stdout, new RegExp(`127\\.0\\.0\\.1:${porta} · versão 0\\.0\\.1 \\(adotado\\)`));
+    assert.doesNotMatch(s.stderr, /atenção/, 'o mesmo código, com trava: adota sem aviso');
     assert.equal(vivo.proc.exitCode, null);
   });
 
@@ -321,5 +349,96 @@ describe('--pai', { timeout: 60_000 }, () => {
     await travaViva();
     await dormir(1500);
     assert.equal(a.proc.exitCode, null);
+  });
+});
+
+describe('posse e código', { timeout: 60_000 }, () => {
+  test('o /api/overview diz o pid e o commit de quem responde', async () => {
+    const porta = await portaLivre();
+    const a = api(porta);
+    const t = await travaViva();
+    const v = await sondar(porta);
+    assert.equal(v?.pid, a.proc.pid);
+    assert.equal(t.pid, a.proc.pid);
+    assert.equal(v?.commit, commitDoCodigo());
+  });
+
+  test('pid reaproveitado: a trava é órfã e ninguém sinaliza o processo estranho', async () => {
+    const porta = await portaLivre();
+    const a = api(porta);
+    const t = await travaViva();
+    const estranho = dormente();
+    gravarTrava({ ...t, pid: estranho.pid! }, pasta);
+    const ex = await examinar(pasta);
+    assert.equal(ex.estado, 'orfa');
+    assert.match(ex.estado === 'orfa' ? ex.motivo : '', /é de outro processo \(pid \d+\), não do pid \d+/);
+
+    assert.equal(await pararNucleo({ ...t, pid: estranho.pid! }, { pasta, timeoutMs: 500 }), false);
+    const r = await nucleo('parar').saida;
+    assert.equal(r.codigo, 0);
+    assert.match(r.stdout, /trava órfã apagada/);
+    await dormir(200);
+    assert.ok(pidVivo(estranho.pid!), 'o processo estranho continua vivo');
+    assert.equal(a.proc.exitCode, null, 'e o núcleo de verdade também');
+  });
+
+  test('a --demo e a --sem-trava falham se a porta já tem núcleo', async () => {
+    const porta = await portaLivre();
+    api(porta);
+    await travaViva();
+    for (const opcao of ['--demo', '--sem-trava']) {
+      const r = await rodar(CLI_API, ['--porta', String(porta), ...SO_HOOKS, opcao]).saida;
+      assert.equal(r.codigo, 1, opcao);
+      assert.match(r.stderr, /já tem um núcleo \(pid \d+\); a --(demo|sem-trava) precisa de uma porta livre/);
+      assert.equal(r.stdout, '');
+    }
+  });
+
+  test('a API cria a pasta do núcleo em 0700, e fecha a que estava aberta', async () => {
+    mkdirSync(pasta, { mode: 0o755 });
+    chmodSync(pasta, 0o755);
+    api(await portaLivre());
+    await travaViva();
+    assert.equal(statSync(pasta).mode & 0o777, 0o700);
+  });
+
+  test('outro commit da mesma versão: avisa e adota; commit mais velho com --substituir troca', async () => {
+    const porta = await portaLivre();
+    const a = api(porta);
+    const t = await travaViva();
+    const meu = { versao: t.versao, pasta };
+
+    const outro = await planejarSubida({ ...meu, commit: 'f00dfeed', commitMaisVelho: () => false, substituir: true });
+    assert.equal(outro.acao, 'adotar');
+    assert.match(outro.acao === 'adotar' ? (outro.aviso ?? '') : '', /roda o commit \w+, que não é este \(f00dfeed\) nem um ancestral dele/);
+    assert.ok(pidVivo(t.pid), 'outro código nunca é trocado sozinho');
+
+    const semSubstituir = await planejarSubida({ ...meu, commit: 'f00dfeed', commitMaisVelho: () => true });
+    assert.match(semSubstituir.acao === 'adotar' ? (semSubstituir.aviso ?? '') : '', /mais velho que este \(f00dfeed\).*--substituir/);
+
+    const mesmo = await planejarSubida({ ...meu, commit: commitDoCodigo() });
+    assert.deepEqual(mesmo.acao === 'adotar' && mesmo.aviso, null);
+
+    const troca = await planejarSubida({ ...meu, commit: 'f00dfeed', commitMaisVelho: () => true, substituir: true });
+    assert.equal(troca.acao, 'subir');
+    await a.saida;
+    assert.ok(!pidVivo(t.pid));
+    assert.equal(lerTrava(pasta), null);
+  });
+
+  test('a trava é exclusiva: com outro núcleo vivo, assumir devolve o conflito; órfã é trocada', async () => {
+    const porta = await portaLivre();
+    api(porta);
+    const t = await travaViva();
+    const r = await assumirTrava({ pasta, porta: 1, versao: '0.0.1', pai: null });
+    assert.ok('conflito' in r && r.conflito.pid === t.pid);
+    assert.deepEqual(lerTrava(pasta), t, 'a trava viva fica');
+
+    rmSync(pasta, { recursive: true });
+    gravarTrava({ ...t, pid: await pidMorto() }, pasta);
+    const minha = await assumirTrava({ pasta, porta: 1, versao: '0.0.1', pai: null });
+    assert.ok(!('conflito' in minha) && minha.pid === process.pid);
+    assert.deepEqual(lerTrava(pasta), minha);
+    rmSync(arquivoDaTrava(pasta));
   });
 });
