@@ -323,3 +323,29 @@ test('rodapé: a versão do plugin e a da API, discretas, nas duas larguras e se
   expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api —/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('"← voltar" no topo de toda tela que toma o lugar da sessão, e o "fechar" de baixo continua', async ($, on) => {
+  await abrir($, on, { cenario: 'p1' })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect(await ui.find({ key: 'voltar-sessao' })).toBeUndefined()
+  for (const abrirTela of ['ver-precisam', 'ver-planos']) {
+    await ui.press({ key: abrirTela })
+    expect(await ui.find({ key: 'card-sessao' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /← voltar/ })).toBeDefined()
+    await ui.press({ key: 'voltar-sessao' })
+    expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
+  }
+  await ui.press({ key: 'ver-precisam' })
+  expect(await ui.find({ key: 'fechar-precisam' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('"← voltar" também na tela das decisões', async ($, on) => {
+  await abrir($, on, { cenario: 'p9' })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui.press({ key: 'ver-decisoes' })
+  expect(await ui.find({ key: 'card-sessao' })).toBeUndefined()
+  await ui.press({ key: 'voltar-sessao' })
+  expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
+  await ui.unmount()
+})

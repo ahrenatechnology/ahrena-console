@@ -51,7 +51,7 @@ export const CARD_W = 34
 export const CARD_H = 9
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.5'
+export const VERSAO_DO_PLUGIN = '0.0.6'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -970,6 +970,20 @@ function telaOffline(c: Contexto, g: ReturnType<typeof grade>, estreito: boolean
   ]
 }
 
+/** "← voltar" no topo de toda tela que toma o lugar da sessão; o "fechar" de baixo continua. */
+function voltar(c: Contexto, largura: number) {
+  const { Box, Button, Text } = c.el
+  return (
+    <Box key="voltar" flexDirection="row" width={largura}>
+      <Button key="voltar-sessao" plain onPress={c.acoes.fechar}>
+        <Text mono color={LARANJA} underline>
+          ← voltar
+        </Text>
+      </Button>
+    </Box>
+  )
+}
+
 /** O painel inteiro, no desktop. */
 export function desenhar(c: Contexto): RenderElement {
   const { Box } = c.el
@@ -987,11 +1001,11 @@ export function desenhar(c: Contexto): RenderElement {
       ...(offline ? telaOffline(c, g, estreito) : []),
     ]
   } else if (c.vista.tela === 'precisam') {
-    corpo = telaPrecisam(c, p, g, estreito)
+    corpo = [voltar(c, g.largura), ...telaPrecisam(c, p, g, estreito)]
   } else if (c.vista.tela === 'decisoes') {
-    corpo = telaDecisoes(c, p, g, estreito)
+    corpo = [voltar(c, g.largura), ...telaDecisoes(c, p, g, estreito)]
   } else if (c.vista.tela === 'planos') {
-    corpo = telaPlanos(c, p, g, estreito)
+    corpo = [voltar(c, g.largura), ...telaPlanos(c, p, g, estreito)]
   } else {
     const cards = [
       s ? cardSessao(c, s) : null,
