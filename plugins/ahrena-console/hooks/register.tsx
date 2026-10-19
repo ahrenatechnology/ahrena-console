@@ -286,6 +286,7 @@ export const register: Register = (on, options) => {
       leitura: l,
       vista: v,
       cols: colunas,
+      linhas: (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows,
       agora,
       nucleo,
       acoes: {

@@ -11,7 +11,7 @@
       "name": "ahrena-console",
       "source": "./plugins/ahrena-console",
       "description": "Painel lateral (/console): esta sessão, o que roda dentro dela, o trabalho pelo branch e quem precisa de você",
-      "version": "0.0.7"
+      "version": "0.0.8"
     }
   ]
 }
