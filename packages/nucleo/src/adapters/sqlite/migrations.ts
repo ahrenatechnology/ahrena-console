@@ -2,6 +2,7 @@
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { DECISOES_MIGRATION_DESCRIPTION, DECISOES_MIGRATION_SQL } from '../../decisoes/migracao.ts';
 
 export interface Migration {
   version: number;
@@ -138,6 +139,8 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  // O esquema das decisões fica na pasta delas (src/decisoes/migracao.ts).
+  { version: 4, description: DECISOES_MIGRATION_DESCRIPTION, sql: DECISOES_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

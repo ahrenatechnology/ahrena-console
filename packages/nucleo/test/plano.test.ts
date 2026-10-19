@@ -294,7 +294,7 @@ describe('migração 3: plano da sessão', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, MIGRATIONS.filter((m) => m.version <= 2));
     assert.equal(schemaVersion(db), 2);
-    assert.deepEqual(migrate(db), [3]);
+    assert.deepEqual(migrate(db, MIGRATIONS.filter((m) => m.version <= 3)), [3]);
     const cols = (db.prepare('PRAGMA table_info(session_plans)').all() as { name: string }[]).map((c) => c.name);
     assert.deepEqual(cols, ['session_id', 'source', 'steps', 'done', 'total', 'current_step_id', 'changed_at', 'metadata']);
     db.close();
