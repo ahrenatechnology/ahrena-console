@@ -33,7 +33,27 @@ export type SessaoDoPainel = {
   cwd: string | null
 }
 
-export type PlanoDoPainel = { feitos: number; total: number; atual: string | null; proximo: string | null; restantes: number }
+export type PlanoDoPainel = {
+  feitos: number
+  total: number
+  atual: string | null
+  proximo: string | null
+  restantes: number
+  /** Item 1.9: quem faz o item em andamento, a hora da última mudança e os passos com o dono. */
+  atualDono?: DonoDoPasso | null
+  mudouEm?: string | null
+  passos?: PassoDoPainel[]
+}
+
+export type DonoDoPasso = { tipo: 'principal' | 'subagente' | 'sessao'; nome: string | null; agenteId: string | null }
+
+export type PassoDoPainel = {
+  id: string
+  texto: string
+  textoAtivo: string | null
+  estado: 'pending' | 'in_progress' | 'completed'
+  dono: DonoDoPasso
+}
 
 export type SubagenteDoPainel = {
   id: string

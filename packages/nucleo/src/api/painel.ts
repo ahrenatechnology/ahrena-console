@@ -16,6 +16,7 @@ import { lerInbox, type LeituraDoInbox } from '../estados/leitura.ts';
 import { lerMemoria, principalDe } from '../estados/regras.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
+import type { PlanOwner, SessionPlan } from '../plano/modelo.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
@@ -24,6 +25,7 @@ import type {
   AtividadeDaSessao,
   ContaDoPainel,
   ContextoDoPainel,
+  DonoDoPasso,
   CustoDoPainel,
   FaixaDaSessao,
   FilhaDoPainel,
@@ -136,7 +138,7 @@ export class MontadorDoPainel {
       custo,
       tokens,
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
-      plano: resumo ? planoDe(resumo) : null,
+      plano: session ? planoDe(await this.storage.getPlan(session.id), resumo!, agentes) : null,
       subagentes: subagentesDe(agentes),
       filhas: await this.filhasDe(session, desktop),
       trabalho: this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null,
@@ -337,12 +339,39 @@ function contextoDe(session: Session, r: ResumoDosEventos): ContextoDoPainel | n
   return { usados, limite, pct: Math.min(100, Math.round((usados / limite) * 100)) };
 }
 
-function planoDe(r: ResumoDosEventos): PlanoDoPainel | null {
+/** O plano gravado pela porta (item 1.9); sem ele, o último TodoWrite lido dos eventos. */
+function planoDe(plano: SessionPlan | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
+  if (plano) {
+    if (plano.total === 0) return null;
+    const passos = plano.steps.map((s) => ({ id: s.id, texto: s.text, textoAtivo: s.activeText, estado: s.status, dono: donoDe(s.owner, agentes) }));
+    return resumirPlano(passos, plano.changedAt, plano.currentStepId);
+  }
   if (!r.plano || r.plano.length === 0) return null;
-  const feitos = r.plano.filter((i) => i.status === 'completed').length;
-  const atual = r.plano.find((i) => i.status === 'in_progress')?.texto ?? null;
-  const pendentes = r.plano.filter((i) => i.status === 'pending');
-  return { feitos, total: r.plano.length, atual, proximo: pendentes[0]?.texto ?? null, restantes: Math.max(0, pendentes.length - 1) };
+  const principal: DonoDoPasso = { tipo: 'principal', nome: null, agenteId: null };
+  const passos = r.plano.map((i, n) => ({ id: String(n + 1), texto: i.texto, textoAtivo: null, estado: i.status, dono: principal }));
+  return resumirPlano(passos, null, null);
+}
+
+function resumirPlano(passos: PlanoDoPainel['passos'], mudouEm: string | null, atualId: string | null): PlanoDoPainel {
+  const atual = passos.find((p) => p.id === atualId) ?? passos.find((p) => p.estado === 'in_progress') ?? null;
+  const pendentes = passos.filter((p) => p.estado === 'pending');
+  return {
+    feitos: passos.filter((p) => p.estado === 'completed').length,
+    total: passos.length,
+    atual: atual?.texto ?? null,
+    proximo: pendentes[0]?.texto ?? null,
+    restantes: Math.max(0, pendentes.length - 1),
+    atualDono: atual?.dono ?? null,
+    mudouEm,
+    passos,
+  };
+}
+
+function donoDe(o: PlanOwner, agentes: Agent[]): DonoDoPasso {
+  if (o.kind === 'main') return { tipo: 'principal', nome: null, agenteId: o.agentId };
+  if (o.kind === 'session') return { tipo: 'sessao', nome: o.name, agenteId: null };
+  const a = o.agentId ? agentes.find((x) => x.id === o.agentId) : undefined;
+  return { tipo: 'subagente', nome: o.name ?? a?.subagentType ?? a?.name ?? null, agenteId: o.agentId };
 }
 
 function subagentesDe(agentes: Agent[]): { ativos: number; itens: SubagenteDoPainel[] } {
