@@ -10,6 +10,7 @@ Protótipos descartáveis das validações da 0.0.1. Os resultados estão em [do
 | [extensao-teste](extensao-teste/) | Manifesto e script para empacotar o núcleo como extensão `.mcpb` |
 | [github-consulta](github-consulta/) | Custo das consultas ao GitHub e prova do cache (spike #40) |
 | [resposta-teste](resposta-teste/) | Spike #58: o plugin consulta o núcleo antes de abrir o diálogo de permissão, pergunta ou plano ([decisão 0003](../docs/decisoes/0003-responder-sessao.md)) |
+| [app-desktop](app-desktop/) | Spike #82: app Tauri na bandeja que adota ou sobe o núcleo ([decisão 0005](../docs/decisoes/0005-app-desktop.md)) |
 | [.claude-plugin](.claude-plugin/) | Marketplace local para instalar o painel |
 
 ## Rodar
