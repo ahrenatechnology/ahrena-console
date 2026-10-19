@@ -2,8 +2,10 @@
 // (Box, Text, Button, Link, Select, Svg), sem HTML. Recebe a leitura e devolve a árvore; quem
 // pede ao núcleo e guarda o estado é o register.tsx.
 //
-// Grade: cards de CARD_W colunas, sempre do mesmo tamanho. A largura do painel decide quantos
-// cabem por linha (1 no estreito de 38 colunas, 3 no largo de 121), nunca o tamanho do card.
+// Grade: cards de CARD_W colunas e no mínimo CARD_H linhas. A largura do painel decide quantos
+// cabem por linha (1 no estreito de 38 colunas, 3 no largo de 121), nunca a largura do card.
+// Nenhum texto é cortado na vertical: o card cresce até caber, e na mesma linha da grade os cards
+// acompanham o mais alto.
 // Cabeçalho, faixa e linhas de baixo ocupam a largura da grade.
 
 import type { RenderElement } from 'claude-code'
@@ -53,6 +55,8 @@ import { paleta, status as STATUS_COR } from './marca'
 export const CARD_W = 34
 export const CARD_H = 9
 export const GAP = 2
+/** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
+export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
 export const VERSAO_DO_PLUGIN = '0.0.7'
 const KPI_W = 15
@@ -228,20 +232,7 @@ function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, 
 function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO) {
   const { Box } = c.el
   return (
-    <Box key={key} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} paddingX={1} gap="xs">
-      {filhos.filter(Boolean)}
-    </Box>
-  )
-}
-
-/**
- * Card de lista (subagentes, sessões filhas): a mesma largura, mas cresce para baixo com os itens,
- * no mínimo a altura dos outros. Os nomes quebram linha em vez de cortar.
- */
-function cartaoDeLista(c: Contexto, key: string, filhos: (RenderElement | false | null)[]) {
-  const { Box } = c.el
-  return (
-    <Box key={key} flexDirection="column" width={CARD_W} minHeight={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
+    <Box key={key} flexDirection="column" width={CARD_W} minHeight={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} paddingX={1} gap="xs">
       {filhos.filter(Boolean)}
     </Box>
   )
@@ -368,15 +359,17 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
         {pilulaDeStatus(c, 'status', s.estado)}
         {st === 'waiting' && s.motivo && pilulaDeMotivo(c, 'motivo', s.motivo)}
       </Box>,
-      <Text mono weight="bold" wrap="truncate-end">
+      // Título, modelo, idade e turno sempre inteiros: quebram linha, e o card cresce.
+      <Text mono weight="bold" wrap="wrap">
         {s.titulo}
       </Text>,
-      <Text mono size="footnote" dimColor wrap="truncate-end">
+      <Text mono size="footnote" dimColor wrap="wrap">
         {modelo(s.modelo)} · {dur} · turno {s.turno}
       </Text>,
-      <Text mono size="footnote" wrap="truncate-end" color={corAtividade} dimColor={!corAtividade}>
+      // O que ela faz agora: no máximo duas linhas, com reticências.
+      <Text mono size="footnote" wrap="wrap" color={corAtividade} dimColor={!corAtividade}>
         {glifo[a.tipo] ? <Text color={corAtividade ?? CINZA}>{glifo[a.tipo]} </Text> : null}
-        <Text color={a.tipo === 'erro' ? VERMELHO_TEXTO : undefined}>{a.tipo === 'erro' ? corta(a.texto.split('.')[0]!, 40) : a.texto}</Text>
+        <Text color={a.tipo === 'erro' ? VERMELHO_TEXTO : undefined}>{corta(a.tipo === 'erro' ? a.texto.split('.')[0]! : a.texto, ATIVIDADE_MAX)}</Text>
       </Text>,
     ],
     cor.borda,
@@ -631,7 +624,7 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const todos = subagentesEmOrdem(s)
   const mostrar = todos.slice(0, ITENS_NO_CARD)
   const fora = todos.length - mostrar.length
-  return cartaoDeLista(c, 'card-subagentes', [
+  return cartao(c, 'card-subagentes', [
     cabecalho(c, '⑂', 'SUBAGENTES', direita),
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={200} height={4} />,
     ...mostrar.map((i) => linhaDeSubagente(c, i)),
@@ -685,7 +678,7 @@ function cardFilhas(c: Contexto, filhas: FilhaDoPainel[]) {
   }
   const mostrar = filhas.slice(0, ITENS_NO_CARD)
   const fora = filhas.length - mostrar.length
-  return cartaoDeLista(c, 'card-filhas', [
+  return cartao(c, 'card-filhas', [
     cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length)),
     // O nome no card é cortado só no link (que não quebra linha); o resto quebra.
     ...mostrar.map((f) => linhaDeFilha(c, f, 18)),

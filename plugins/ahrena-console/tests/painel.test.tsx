@@ -365,8 +365,8 @@ test('#131: Subagentes e Sessões filhas crescem para baixo, sem cortar o nome; 
     expect(card?.props.width).toBe(34)
     expect(card?.props.height).toBeUndefined()
     expect(card?.props.minHeight).toBe(9)
-    // Os cards de resumo continuam com a altura padrão.
-    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(9)
+    // Os cards de resumo continuam com a altura mínima padrão.
+    expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
     const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
     expect(linhas).toHaveLength(8)
     expect((await ui.findAll({ type: 'Text' })).some((t) => t.props.wrap === 'wrap' && /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))).toBe(true)
@@ -411,4 +411,34 @@ test('#131: a sessão no índice do Desktop vira um link (pelo núcleo, para cla
   // Sem `local` (só de terminal): o botão de antes, que copia o nome.
   expect((await ui.find({ key: `ir-${p7.precisam.maquina[1]!.id}` }))?.type).toBe('Button')
   await ui.unmount()
+})
+
+test('#131: nenhum texto do card "Esta sessão" é cortado na vertical, nas duas larguras e com textos longos', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const titulo = 'Uma sessão sintética com um título bem comprido que não cabe numa linha só do card'
+  const mensagem = `"Mandei os dois pedidos para a sessão filha, ${'e depois conferi tudo de novo com calma '.repeat(5)}fim"`
+  f.estado.painel = {
+    ...p1,
+    sessao: { ...p1.sessao!, titulo, estado: 'waiting', status: 'waiting', motivo: 'stop', turno: 212, atividade: { tipo: 'sua-vez', texto: mensagem } },
+  }
+  await f.relogio.advance(5_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    // Nenhum card tem altura fixa: crescem até caber, com 9 linhas no mínimo.
+    for (const key of CARDS) {
+      const card = await ui.find({ key })
+      expect(card?.props.height).toBeUndefined()
+      expect(card?.props.minHeight).toBe(9)
+    }
+    const t = await ui.find({ type: 'Text', text: titulo })
+    expect(t?.props.wrap).toBe('wrap')
+    const linha = await ui.find({ type: 'Text', text: /turno 212/ })
+    expect(linha?.props.wrap).toBe('wrap')
+    // A última mensagem: duas linhas no máximo (60 colunas úteis), com reticências.
+    const atividade = (await ui.findAll({ type: 'Text' })).find((x) => (x.text ?? '').startsWith('"Mandei os dois pedidos'))!
+    expect(atividade.text!.length).toBeLessThanOrEqual(56)
+    expect(atividade.text!.endsWith('…')).toBe(true)
+    await ui.unmount()
+  }
 })
