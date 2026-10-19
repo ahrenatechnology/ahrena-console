@@ -11,7 +11,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register } from 'claude-code'
 
-import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PrecisaDeVoce, Vista } from '../types'
+import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PerguntaDaSessao, PrecisaDeVoce, Vista } from '../types'
 import { desenhar, escopoDasDecisoes, type Elementos } from './desenho'
 import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe, tokens } from './formato'
 
@@ -28,6 +28,8 @@ const ESCOPOS_DE_DECISAO: readonly EscopoDasDecisoes[] = ['sessao', 'familia', '
 
 const leitura = atom({ plugin: 'ahrena-console', key: 'leitura' } as const, LEITURA_VAZIA)
 const vista = atom({ plugin: 'ahrena-console', key: 'vista' } as const, VISTA_VAZIA)
+// A pergunta com que esta sessão terminou o turno (#140): no topo do painel até a pessoa responder.
+const pergunta = atom({ plugin: 'ahrena-console', key: 'pergunta' } as const, null as PerguntaDaSessao | null)
 
 // O relógio do polling: existe só enquanto o painel está aberto (iniciar/parar).
 let relogio: { cancel: () => void } | undefined
@@ -298,6 +300,53 @@ async function compactar($: Engine) {
   }
 }
 
+type Json = Record<string, unknown>
+const obj = (v: unknown): Json | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : null)
+const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
+
+/** A caixa de próximo passo do Desktop (`wrap_up`): só quando ela pergunta algo (`ask`). */
+export function perguntaDoFechamento(e: Json, em: number): PerguntaDaSessao | null {
+  const ask = texto(e.ask)
+  if (!ask) return null
+  const acoes = (Array.isArray(e.actions) ? e.actions : [])
+    .map(obj)
+    .filter((a): a is Json => !!a)
+    .map((a) => {
+      const doApp = texto(a.action) !== null
+      const rotulo = texto(a.label) ?? texto(a.action) ?? '?'
+      // Uma resposta manda a mensagem (ou o rótulo, quando a mensagem é ele mesmo); uma ação do app não manda texto.
+      return { rotulo, mensagem: doApp ? null : (texto(a.message) ?? rotulo), doApp }
+    })
+  return { tipo: 'fechamento', texto: ask, acoes, em }
+}
+
+/** O AskUserQuestion: as perguntas, com o cabeçalho e as opções inteiras. */
+export function perguntaDoAskUserQuestion(e: Json, em: number): PerguntaDaSessao | null {
+  const perguntas = (Array.isArray(e.questions) ? e.questions : [])
+    .map(obj)
+    .filter((q): q is Json => !!q && texto(q.question) !== null)
+    .map((q) => ({
+      texto: texto(q.question)!,
+      cabecalho: texto(q.header),
+      opcoes: (Array.isArray(q.options) ? q.options : [])
+        .map(obj)
+        .filter((o): o is Json => !!o && texto(o.label) !== null)
+        .map((o) => ({ rotulo: texto(o.label)!, descricao: texto(o.description) })),
+      varias: q.multiSelect === true,
+    }))
+  return perguntas.length ? { tipo: 'pergunta', perguntas, em } : null
+}
+
+/** O botão de uma resposta da caixa de próximo passo: manda a mensagem ao chat, como a pessoa. */
+async function responder($: Engine, mensagem: string) {
+  try {
+    await update($, pergunta, () => null)
+    await $.prompt.submit({ text: mensagem, asUser: true })
+  } catch (err) {
+    $.ui.toast(`Não deu para mandar a resposta: ${(err as Error)?.message ?? String(err)}. Responda no chat.`)
+  }
+}
+
 /** Pede à API local que abra a conversa no Claude Desktop (no macOS, `open claude://…`). */
 async function abrirSessao($: Engine, local: string, titulo: string) {
   try {
@@ -362,6 +411,42 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // #140: a pergunta com que o turno termina, direto do engine, sem passar pelo núcleo. Só a do
+  // agente principal (`agentId` ausente); a de um subagente não é desta conversa.
+  on('tool.call', { tool: 'mcp__ccd_turn__wrap_up' }, async ($, e, next) => {
+    try {
+      if (!(e as { agentId?: string }).agentId) {
+        const p = perguntaDoFechamento(e as unknown as Json, await $.clock.now())
+        await update($, pergunta, () => p)
+      }
+    } catch {
+      // a pergunta no painel nunca impede o fechamento do turno
+    }
+    return next(e)
+  })
+
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    const principal = !(e as { agentId?: string }).agentId
+    try {
+      if (principal) {
+        const p = perguntaDoAskUserQuestion(e as unknown as Json, await $.clock.now())
+        await update($, pergunta, () => p)
+      }
+    } catch {
+      // idem
+    }
+    // A ferramenta só volta quando a pessoa responde no diálogo: aí a pergunta sai do painel.
+    const r = await next(e)
+    if (principal) await update($, pergunta, () => null).catch(() => undefined)
+    return r
+  })
+
+  // A pessoa escreveu no chat: a pergunta do fechamento foi respondida (ou deixada de lado).
+  on('prompt.submit', async ($, e, next) => {
+    await update($, pergunta, () => null).catch(() => undefined)
+    return next(e)
+  })
+
   on('session.end', async ($, e, next) => {
     parar($)
     return next(e)
@@ -397,11 +482,13 @@ export const register: Register = (on, options) => {
     }
     const el = $.ui.resolve(e) as unknown as Elementos
     const v = normalizarVista(await read($, vista))
+    const q = ((await read($, pergunta)) ?? null) as PerguntaDaSessao | null
     colunas = e.props.bodyColumns ?? 38
     return desenhar({
       el,
       leitura: l,
       vista: v,
+      pergunta: q,
       cols: colunas,
       linhas: (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows,
       agora,
@@ -433,6 +520,7 @@ export const register: Register = (on, options) => {
         verSubagentes: () => void mudarVista($, { tela: 'subagentes' }),
         verFilhas: () => void mudarVista($, { tela: 'filhas' }),
         verPrs: () => void mudarVista($, { tela: 'prs' }),
+        responder: (mensagem) => void responder($, mensagem),
       },
     })
   })

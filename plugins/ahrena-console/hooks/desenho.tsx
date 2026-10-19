@@ -17,6 +17,7 @@ import type {
   FilhaDoPainel,
   Leitura,
   Painel,
+  PerguntaDaSessao,
   PlanoDaSessao,
   PrAguardando,
   PrecisaDeVoce,
@@ -60,7 +61,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.11'
+export const VERSAO_DO_PLUGIN = '0.0.12'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -131,6 +132,8 @@ export type Acoes = {
   verFilhas: () => void
   /** #140: a lista dos PRs aguardando a sua aprovação. */
   verPrs: () => void
+  /** #140: manda ao chat a resposta de um botão da caixa de próximo passo. */
+  responder: (mensagem: string) => void
 }
 
 export type Contexto = {
@@ -141,6 +144,8 @@ export type Contexto = {
   cols: number
   /** Linhas do corpo do painel (`scroll.bodyRows`); sem elas, sem limite de altura. */
   linhas?: number
+  /** #140: a pergunta com que esta sessão terminou o turno, em destaque no topo. */
+  pergunta?: PerguntaDaSessao | null
   agora: number
   /** `127.0.0.1:<porta>` do núcleo. */
   nucleo: string
@@ -531,6 +536,87 @@ function cardContexto(c: Contexto, p: Painel | null, linhas = LINHAS_DO_CONTEXTO
     ],
     alto ? VERMELHO : BORDA,
   )
+}
+
+/**
+ * #140 (6 e 7): a pergunta com que a sessão terminou o turno, no topo, inteira e em destaque. Na
+ * caixa de próximo passo, cada resposta com mensagem é um botão que a manda ao chat; as ações do app
+ * (commit, criar PR) e o AskUserQuestion se respondem no chat.
+ */
+function faixaPergunta(c: Contexto, largura: number) {
+  const q = c.pergunta
+  if (!q) return null
+  const { Box, Button, Text } = c.el
+  const noChat = (
+    <Text key="responder-no-chat" mono size="footnote" color={AMARELO}>
+      responder no chat ↓
+    </Text>
+  )
+  if (q.tipo === 'fechamento') {
+    const respostas = q.acoes.filter((a) => a.mensagem !== null)
+    const doApp = q.acoes.filter((a) => a.doApp)
+    return (
+      <Box key="pergunta" flexDirection="column" width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1} gap="xs">
+        <Text mono size="caption" weight="semibold" color={AMARELO}>
+          ? ESTA SESSÃO PERGUNTA
+        </Text>
+        <Text mono weight="bold" wrap="wrap">
+          {q.texto}
+        </Text>
+        <Box flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
+          {respostas.map((a, i) => (
+            <Button key={`responder-${i}`} label={a.rotulo} variant={i === 0 ? 'primary' : 'secondary'} onPress={() => c.acoes.responder(a.mensagem!)} />
+          ))}
+          {doApp.length ? (
+            <Text mono size="footnote" dimColor wrap="wrap">
+              {doApp.map((a) => a.rotulo).join(' · ')}: no chat ↓
+            </Text>
+          ) : null}
+          {respostas.length === 0 && !doApp.length ? noChat : null}
+        </Box>
+      </Box>
+    )
+  }
+  return (
+    <Box key="pergunta" flexDirection="column" width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1} gap="xs">
+      <Text mono size="caption" weight="semibold" color={AMARELO}>
+        ? ESTA SESSÃO PERGUNTA
+      </Text>
+      {q.perguntas.map((p, i) => (
+        <Box key={`pergunta-${i}`} flexDirection="column">
+          <Text mono weight="bold" wrap="wrap">
+            {p.cabecalho ? <Text color={AMARELO}>{p.cabecalho} · </Text> : null}
+            {p.texto}
+          </Text>
+          {p.opcoes.map((o, j) => (
+            <Text key={`opcao-${i}-${j}`} mono size="footnote" wrap="wrap">
+              <Text color={AMARELO}>{p.varias ? '☐' : '○'} </Text>
+              <Text weight="semibold">{o.rotulo}</Text>
+              {o.descricao ? <Text dimColor> · {o.descricao}</Text> : null}
+            </Text>
+          ))}
+        </Box>
+      ))}
+      {noChat}
+    </Box>
+  )
+}
+
+/** Linhas da faixa da pergunta (com o espaço antes dela): a borda, o rótulo, os textos e as ações. */
+function linhasDaPergunta(c: Pick<Contexto, 'pergunta'>, largura: number): number {
+  const q = c.pergunta
+  if (!q) return 0
+  const util = largura - 4
+  if (q.tipo === 'fechamento') {
+    const acoes = q.acoes.map((a) => a.rotulo).join('    ')
+    return 1 + 2 + 1 + linhasDoTexto(q.texto, util) + Math.max(1, linhasDoTexto(acoes, util) * 2)
+  }
+  let n = 1 + 2 + 1 + 1
+  for (const p of q.perguntas) {
+    n += linhasDoTexto(`${p.cabecalho ?? ''} · ${p.texto}`, util)
+    for (const o of p.opcoes) n += linhasDoTexto(`○ ${o.rotulo}${o.descricao ? ` · ${o.descricao}` : ''}`, util)
+  }
+  return n
 }
 
 /** A confirmação do "Compactar", no topo: age só nesta sessão. */
@@ -1667,7 +1753,7 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
   ].map(comODesenho)
   // Sem a altura do painel, cada card aparece inteiro.
   if (c.linhas === undefined) return { linhas: distribuir(todas, g.porLinha, Number.POSITIVE_INFINITY, ETAPAS_DA_ALTURA), fora: [] }
-  const base = c.linhas - linhasForaDaGrade(p, g, estreito, c.vista?.compactar) - FOLGA
+  const base = c.linhas - linhasForaDaGrade(p, g, estreito, c.vista?.compactar) - linhasDaPergunta(c, g.largura) - FOLGA
   const fora: string[] = []
   for (;;) {
     const pecas = todas.filter((x) => !fora.includes(x.id))
@@ -1692,7 +1778,7 @@ export function linhasDaVisao(c: Contexto, p: Painel): number {
   const estreito = g.porLinha === 1
   const { linhas, fora } = alturaDosCards(c, p, g, estreito)
   const ids = [...(p.sessao ? ['sessao'] : []), 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'].filter((id) => !fora.includes(id))
-  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + alturaDaGrade(ids.map((id) => linhas.get(id)!), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
+  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + linhasDaPergunta(c, g.largura) + alturaDaGrade(ids.map((id) => linhas.get(id)!), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
 }
 
 /** O painel inteiro, no desktop. */
@@ -1735,6 +1821,7 @@ export function desenhar(c: Contexto): RenderElement {
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
       rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', 'auto · 5 s'), s?.conta),
+      faixaPergunta(c, g.largura),
       faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,
       faixaCompactar(c, g.largura),

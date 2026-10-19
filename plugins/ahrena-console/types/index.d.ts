@@ -236,8 +236,18 @@ export type Vista = {
   escopoDecisoes?: EscopoDasDecisoes | null
 }
 
+/**
+ * #140 (critérios 6 e 7): a pergunta com que esta sessão terminou o turno, capturada no próprio mod.
+ * - `fechamento`: a caixa de próximo passo do Desktop (`wrap_up` com `ask`); cada ação com mensagem
+ *   vira um botão que manda a mensagem ao chat; as ações do app (commit, criar PR) ficam no chat;
+ * - `pergunta`: o AskUserQuestion, com as perguntas e as opções inteiras; responde-se no chat.
+ */
+export type PerguntaDaSessao =
+  | { tipo: 'fechamento'; texto: string; acoes: { rotulo: string; mensagem: string | null; doApp: boolean }[]; em: number }
+  | { tipo: 'pergunta'; perguntas: { texto: string; cabecalho: string | null; opcoes: { rotulo: string; descricao: string | null }[]; varias: boolean }[]; em: number }
+
 declare module 'claude-code' {
   interface PluginState {
-    'ahrena-console': { leitura: Leitura; vista: Vista }
+    'ahrena-console': { leitura: Leitura; vista: Vista; pergunta: PerguntaDaSessao | null }
   }
 }

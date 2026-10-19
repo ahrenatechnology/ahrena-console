@@ -820,3 +820,110 @@ test('"Compactar agora" não esmaga a telemetria: no cabeçalho do card inteiro,
   expect(await ui.find({ key: 'compactar' })).toBeDefined()
   await ui.unmount()
 })
+
+// --- #140 (6 e 7): a pergunta com que a sessão terminou o turno, no topo ---
+
+test('#140: a caixa de próximo passo (wrap_up com ask) vai para o topo, inteira; o botão manda a resposta ao chat', async ($, on) => {
+  const enviados: { text: string; asUser?: boolean }[] = []
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('prompt.submit', async (_$: unknown, e: { text: string; origin?: { kind?: string; asUser?: boolean } }) => {
+    enviados.push({ text: e.text, asUser: e.origin?.asUser })
+    return { text: e.text }
+  })
+  const f = await abrir($, on, { cenario: 'p1' })
+  const ask = 'Faço o merge do #141 agora ou espero o Fernando validar a 0.0.11 no painel dele antes de seguir?'
+  await ($ as any).tool.call({
+    tool: 'mcp__ccd_turn__wrap_up',
+    recap: 'feito',
+    ask,
+    actions: [
+      { label: 'Merge agora', message: 'Pode fazer o merge do #141.' },
+      { label: 'Esperar' },
+      { action: 'create_pr' },
+    ],
+  })
+  await f.relogio.advance(10)
+  for (const base of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
+    const faixa = await ui.find({ key: 'pergunta' })
+    expect(faixa).toBeDefined()
+    // O texto inteiro, quebrando linha, nunca cortado.
+    const t = await ui.find({ type: 'Text', text: ask })
+    expect(t?.props.wrap).toBe('wrap')
+    expect((await ui.find({ key: 'responder-0' }))?.props.label).toBe('Merge agora')
+    expect((await ui.find({ key: 'responder-1' }))?.props.label).toBe('Esperar')
+    // A ação do app não tem mensagem: no chat.
+    expect(faixa?.text).toMatch(/create_pr: no chat ↓/)
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  await ui.press({ key: 'responder-0' })
+  for (let i = 0; i < 20 && !enviados.length; i++) await f.relogio.advance(10)
+  expect(enviados).toEqual([{ text: 'Pode fazer o merge do #141.', asUser: true }])
+  expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('#140: o wrap_up sem pergunta não mostra nada; o da pessoa no chat tira a pergunta', async ($, on) => {
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('prompt.submit', async (_$: unknown, e: { text: string }) => ({ text: e.text }))
+  const f = await abrir($, on, { cenario: 'p1' })
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito' })
+  await f.relogio.advance(10)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
+  await ui.unmount()
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito', ask: 'Sigo?' })
+  await f.relogio.advance(10)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ key: 'pergunta' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /responder no chat ↓/ })).toBeDefined()
+  await ui.unmount()
+  // A pessoa respondeu no chat.
+  await ($ as any).prompt.submit({ text: 'sim' })
+  await f.relogio.advance(10)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('#140: o AskUserQuestion aparece no topo com as perguntas e as opções inteiras, até a pessoa responder', async ($, on) => {
+  let soltar: (() => void) | null = null
+  on('tool.call', async () => {
+    await new Promise<void>((r) => (soltar = r))
+    return { result: { answers: {} } }
+  })
+  const f = await abrir($, on, { cenario: 'p1' })
+  const chamada = ($ as any).tool.call({
+    tool: 'AskUserQuestion',
+    questions: [
+      {
+        header: 'Banco',
+        question: 'Nos testes de integração, sigo com SQLite em memória ou subo um Postgres no Docker para chegar mais perto da produção?',
+        multiSelect: false,
+        options: [
+          { label: 'SQLite em memória', description: 'rápido, sem dependência' },
+          { label: 'Postgres no Docker', description: 'igual à produção' },
+        ],
+      },
+    ],
+  })
+  for (let i = 0; i < 20 && !soltar; i++) await f.relogio.advance(10)
+  for (const base of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
+    const faixa = await ui.find({ key: 'pergunta' })
+    expect(faixa?.text).toMatch(/Banco · Nos testes de integração, sigo com SQLite em memória ou subo um Postgres no Docker para chegar mais perto da produção\?/)
+    expect(faixa?.text).toMatch(/SQLite em memória · rápido, sem dependência/)
+    expect(faixa?.text).toMatch(/Postgres no Docker · igual à produção/)
+    expect(faixa?.text).toMatch(/responder no chat ↓/)
+    // Sem botões de resposta: o diálogo do engine é que responde.
+    expect(await ui.find({ key: 'responder-0' })).toBeUndefined()
+    await ui.unmount()
+  }
+  soltar!()
+  await chamada
+  await f.relogio.advance(10)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
+  await ui.unmount()
+})
