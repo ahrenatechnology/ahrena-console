@@ -232,11 +232,11 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .cc-marca { display: flex; gap: 10px; align-items: center; padding: 2px 6px 14px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
 .cc-marca img { width: 32px; height: 32px; }
 .cc-marca b { display: block; font-size: 13.5px; font-weight: 600; } .cc-marca small { color: var(--muted); font-size: 11px; }
-.cc-nav { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); }
+.cc-nav { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); }
 .cc-nav svg { font-size: 16px; }
 .cc-nav.on { background: var(--raised); color: var(--text); box-shadow: inset 2px 0 0 var(--rose); }
 .cc-nav .q { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 0 7px; border-radius: 99px; background: var(--status-waiting-badge); color: var(--status-waiting-text); }
-.cc-pe { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+.cc-pe { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
 .cc-pe .cartao { padding: 8px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .cc-pe .cartao b { color: var(--status-completed-text); font-weight: 500; }
 .cc-main { padding: 20px 24px 24px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -312,7 +312,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .det-cab .chips { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 34px; }
 .det-cab .cwd { padding-left: 34px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
-.abas span { display: inline-flex; gap: 7px; align-items: center; padding: 9px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.abas span { white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; padding: 9px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .abas span.on { color: var(--text); border-bottom-color: var(--accent); }
 .faixa { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 10px; font-size: 12.5px;
   background: color-mix(in srgb, var(--status-waiting-badge) 70%, var(--surface)); border: 1px solid color-mix(in srgb, var(--status-waiting-dot) 50%, var(--border)); }
@@ -451,7 +451,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .notif img { width: 38px; height: 38px; border-radius: 9px; }
 .notif .app { display: flex; font-size: 11px; color: var(--muted); letter-spacing: .02em; } .notif .app span { margin-left: auto; }
 .notif .tit { font-weight: 600; margin: 1px 0; } .notif .acoes { grid-column: 1 / -1; display: flex; gap: 8px; }
-.notif .acoes span { flex: 1; text-align: center; padding: 5px; border-radius: 8px; background: var(--raised); font-size: 12px; }
+.notif .acoes span { flex: 1; text-align: center; padding: 5px; border-radius: 8px; background: var(--raised); font-size: 12px; white-space: nowrap; }
 .janela { position: absolute; left: 70px; top: 56px; width: 1140px; height: 730px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--bg);
   box-shadow: 0 24px 70px color-mix(in srgb, var(--mono-black) 55%, transparent); display: grid; grid-template-rows: 32px minmax(0, 1fr); }
 .janela .tb { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
@@ -523,7 +523,8 @@ const S = [
   { id: '3e9b1f6a', nome: 'Documentar a autenticação', pj: 'gateway-sandbox', st: 'completed', mo: 'Opus 5.5', esf: 'médio', custo: '1,12', dur: '41 min', idade: '5 h', ag: 2, sub: 1, turnos: 14, br: 'docs/auth', msgs: ['documente o fluxo de autenticação'], plano: [5, 5], ctx: 0 },
 ]
 const byId = id => S.find(s => s.id === id)
-const PRECISAM = ['b91d04aa', '2c8e6f10', 'e04b7d93'].map(byId) // urgentes primeiro
+// Recomendação: precisa de você = esperando (Pede permissão, Interrompida, Sua vez) + com erro. Urgentes primeiro.
+const PRECISAM = ['b91d04aa', '2c8e6f10', '5a61c2bf', 'e04b7d93'].map(byId)
 
 // =====================================================================
 // Peças
@@ -533,14 +534,15 @@ const motChip = mot => `<span class="mot${MOT[mot].u ? '' : ' leve'}">${ic(MOT[m
 const ponto = st => `<span class="ponto d-${st}"></span>`
 const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="width:${pct}%;background:${cor}"></i></div>`
 
-function lado(ativo, q = 3) {
+function lado(ativo, q = 4) {
   const nav = [
-    ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'],
-    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['custo', 'bar-chart-3', 'Custo'], ['historico', 'history', 'Histórico'],
+    ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
+    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'],
+    ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
   return `<aside class="cc-lado">
     <div class="cc-marca"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>Claude Code</small></div></div>
-    ${nav.map(([k, i, r]) => `<div class="cc-nav${k === ativo ? ' on' : ''}">${ic(i)}${r}${k === 'dashboard' && q ? `<span class="q">${q}</span>` : ''}</div>`).join('')}
+    ${nav.map(([k, i, r]) => k === '-' ? `<div class="olhinho" style="padding:12px 10px 4px">${r}</div>` : `<div class="cc-nav${k === ativo ? ' on' : ''}">${ic(i)}${r}${k === 'dashboard' && q ? `<span class="q">${q}</span>` : ''}</div>`).join('')}
     <div class="cc-pe">
       <div class="cartao">${ic('radio')}<b>Ao vivo</b><span style="margin-left:auto" class="mono">v0.0.1</span></div>
       <div class="cartao">${ic('cpu')}<span class="mono">127.0.0.1:4720</span></div>
@@ -566,7 +568,7 @@ function agentCard(s, aberto) {
 // =====================================================================
 // CONSOLE (artefato e janela do app)
 // =====================================================================
-function telaDashboard(q = 3) {
+function telaDashboard(q = 4) {
   const ativos = [byId('7f3a2c1e'), byId('c3f09b52'), byId('b91d04aa')]
   const ativ = [
     ['waiting', 'Pede permissão: Bash npm run migrate', 'motor-de-regras', 'agora'],
@@ -580,7 +582,7 @@ function telaDashboard(q = 3) {
   ]
   return `${cab('layout-dashboard', 'Dashboard', 'O agora das suas sessões', `<div class="seg"><span class="on">${ic('activity')}Monitor</span><span>${ic('gauge')}Saúde</span></div>${atualizar}`)}
   <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-    ${stat('Sessões', '12<small>4 ativas</small>', '3 esperando você', 'folder-open', 'var(--accent-text)')}
+    ${stat('Sessões', '12<small>4 ativas</small>', '4 esperando · 1 com erro', 'folder-open', 'var(--accent-text)')}
     ${stat('Agentes ativos', '4', 'em 4 sessões', 'bot', 'var(--status-active-text)')}
     ${stat('Subagentes ativos', '7', 'em 3 sessões', 'git-fork', 'var(--accent-text)')}
     ${stat('Eventos hoje', '3,2 mil', '+412 na última hora', 'zap', 'var(--status-waiting-text)')}
@@ -588,10 +590,9 @@ function telaDashboard(q = 3) {
     ${stat('Custo', '~US$ 41,20', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
   </div>
   <div class="cartao inbox">
-    <div class="ttl">${ic('bell')}<span class="c-waiting">${q} precisam de você</span><span class="r">urgentes primeiro · ${ic('chevron-right')}</span></div>
-    <div class="grade4">${PRECISAM.slice(0, q).map(s => `<div class="cartao mini"><div style="display:flex;gap:6px;align-items:center">${motChip(s.mot)}<span style="margin-left:auto;font-size:11px" class="c-muted">${s.idade}</span></div>
-      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede}</div><div class="pe"><span>${s.mo}</span><b>Abrir ›</b></div></div>`).join('')}
-      <div class="cartao mini" style="justify-content:center;align-items:center;color:var(--muted)"><span style="font-size:11.5px">${ic('alert-triangle')} 1 com erro</span><span class="trunc" style="font-size:12.5px;font-weight:600;color:var(--status-error-text)">painel-de-metricas</span></div>
+    <div class="ttl">${ic('bell')}<span class="c-waiting">${q} precisam de você</span><span class="r">esperando e com erro · urgentes primeiro ${ic('chevron-right')}</span></div>
+    <div class="grade4">${PRECISAM.slice(0, q).map(s => `<div class="cartao mini"><div style="display:flex;gap:6px;align-items:center">${s.mot ? motChip(s.mot) : badge('error')}<span style="margin-left:auto;font-size:11px" class="c-muted">${s.idade}</span></div>
+      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo}</span><b>Abrir ›</b></div></div>`).join('')}
     </div>
   </div>
   <div class="duas">
@@ -629,7 +630,7 @@ function telaSessoes() {
 const detCab = s => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>${s.nome}</h4>${badge(s.st, s.mot)}<span style="margin-left:auto" class="c-muted">${ic('refresh-cw')}</span></div>
   <div class="chips"><span class="chip">${s.id}-4e1 ${ic('copy')}</span><span class="chip">${ic('cpu')}${s.mo}</span><span class="chip">${ic('clock')}hoje, 22:41 (${s.dur})</span><span class="chip custo">~US$ ${s.custo}</span><span class="chip">${ic('git-branch')}${s.br}</span></div>
   <div class="cwd">${ic('folder')}/simulacao/${s.pj} ${ic('copy')}</div></div>`
-const abas = (on, n = 4, ev = '186/1.204') => `<div class="abas"><span class="${on === 0 ? 'on' : ''}">${ic('bot')}Agentes (${n})</span><span class="${on === 1 ? 'on' : ''}">${ic('message-square')}Conversa</span><span class="${on === 2 ? 'on' : ''}">${ic('list')}Linha do tempo (${ev})</span></div>`
+const abas = (on, n = 4, ev = '186/1.204') => `<div class="abas"><span class="${on === 0 ? 'on' : ''}">${ic('bot')}Agentes (${n})</span><span class="${on === 1 ? 'on' : ''}">${ic('message-square')}Conversa</span><span class="${on === 2 ? 'on' : ''}">${ic('list')}Linha do tempo (${ev})</span><span class="${on === 3 ? 'on' : ''}">${ic('workflow')}Workflow</span></div>`
 
 function telaDetAgentes() {
   const s = byId('c3f09b52')
@@ -671,7 +672,7 @@ function anel(pct, tam) {
 function telaConversa() {
   const s = byId('b91d04aa')
   return `${detCab(s)}
-  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Esperando você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude ${ic('external-link')}</span></div>
+  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Esperando você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span></div>
   ${abas(1, 3, '240/1.877')}
   <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="width:260px">Agente principal<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="chip">${ic('message-square')}184 mensagens</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></div>
   <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
@@ -753,7 +754,8 @@ function donut() {
 }
 function telaCusto() {
   const pj = [['motor-de-regras', 128.4], ['painel-de-metricas', 74.9], ['vitrine-demo', 52.1], ['gateway-sandbox', 33.6], ['catalogo-exemplo', 21.8], ['app-receitas', 18.2]]
-  return `${cab('bar-chart-3', 'Custo', 'Estimativa pelo transcript, com o preço de cada modelo', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div><span class="btn">${ic('download')}Exportar</span>`)}
+  return `${cab('bar-chart-3', 'Analytics', 'Custo estimado pelo transcript, com o preço de cada modelo', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div><span class="btn">${ic('download')}Exportar</span>`)}
+  ${abasAnalytics(1)}
   <div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr))">
     ${stat('Hoje', '~US$ 12,40', '9 sessões', 'dollar-sign', 'var(--status-completed-text)')}
     ${stat('30 dias', '~US$ 341', 'média ~US$ 11,40 por dia', 'calendar', 'var(--accent-text)')}
@@ -794,6 +796,213 @@ function telaProjeto() {
     ${l.map(([t, n, tt, sub, pr, ciS, rvS]) => `<div class="cartao ic-card"><div class="tipo"><b style="color:${tipo[t][1]}">${tipo[t][0]}</b><span class="c-muted mono">#${n}</span><span class="grip">${ic('grip-vertical')}</span></div><div class="tt">${tt}</div>
       <div class="pe">${sub ? `<span>${ic('list-checks')}${sub}</span>` : ''}${pr ? `<span>${ic('git-pull-request')}#${pr}</span>` : ''}${ciS ? `<span class="pill ${ci[ciS][1]}">${ci[ciS][0]}</span>` : ''}${rvS ? `<span class="pill ${rv[rvS][1]}">${rv[rvS][0]}</span>` : ''}</div></div>`).join('')}</div>`).join('')}</div>
   <div class="toast">${ic('check-circle-2')}<span><b>#92</b> movido para <b>In Review</b> no GitHub</span><span class="c-accent">Desfazer</span></div></div>`
+}
+
+// ---------- Feed de atividade ----------
+function telaFeed() {
+  const ev = [
+    ['23:12', 'waiting', 'motor-de-regras', 'Migração do esquema de pedidos', 'principal', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
+    ['23:12', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'test-runner', 'Bash: npm test -- cobranca', 'Bash', 'agora', true],
+    ['23:11', 'active', 'vitrine-demo', 'Kanban de sessões no artefato', 'principal', 'Turno concluído em 38,2 s', '', '12 s'],
+    ['23:11', 'waiting', 'fila-de-tarefas', 'Retry com backoff na fila', 'principal', 'Sua vez: "Terminei a migração. Rodo os testes?"', '', '1 min'],
+    ['23:09', 'error', 'painel-de-metricas', 'Relatório mensal mais rápido', 'principal', 'Erro de API 529 · overloaded_error', '', '3 min'],
+    ['23:08', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'code-reviewer', 'Read: src/cobranca/servico.ts', 'Read', '4 min'],
+    ['23:06', 'waiting', 'app-receitas', 'Filtro por categoria', 'principal', 'Interrompida (Esc)', '', '6 min'],
+  ]
+  return `${cab('activity', 'Feed de atividade', 'Todos os eventos das sessões, ao vivo', `<span class="btn">${ic('pause')}Pausar</span>${atualizar}`)}
+  <div class="cartao" style="padding:9px 14px;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')}<b style="color:var(--text);font-size:10.5px;letter-spacing:.08em">SOBRE EVENTOS, FILTROS E AGRUPAMENTO</b> · como ler as pílulas, o ciclo de vida e os filtros</div>
+  <div class="cartao" style="padding:10px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px"><span class="campo" style="flex:1">${ic('filter')}Buscar no resumo, ferramenta, conteúdo…</span><span class="campo" style="width:150px">${ic('calendar')}De</span><span class="campo" style="width:150px">${ic('calendar')}Até</span></div>
+    <div style="display:flex;gap:6px"><span class="chip">Status</span><span class="chip">Tipo de evento</span><span class="chip">Ferramenta</span><span class="chip">Sessão</span></div></div>
+  <div class="cartao linhas">${ev.map(([h, st, pj, se, ag, f, fe, t, aberto]) => `<div class="linha"><span class="c-muted">${ic(aberto ? 'chevron-down' : 'chevron-right')}</span><span class="o mono" style="width:44px">${h}</span>${badge(st)}
+      <span class="o trunc" style="max-width:330px">${pj} › ${se} › ${ag}</span><span class="trunc" style="flex:1">${f}</span>${fe ? `<span class="chip">${fe}</span>` : ''}<span class="o" style="width:44px;text-align:right">${t}</span><span class="btn contorno" style="height:26px">Sessão ${ic('external-link')}</span></div>
+    ${aberto ? `<div style="padding:4px 14px 14px 52px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;border-bottom:1px solid var(--border)">
+      <div class="cartao" style="padding:10px 12px;background:var(--bg)"><div class="olhinho">Resumo</div><div class="ferrbloco" style="background:var(--surface)">${ic('terminal')}<span class="n">Bash</span><span class="cmd">npm test -- cobranca</span><span class="esp">${ic('loader-2')}rodando</span></div></div>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:3px 10px;font-size:11.5px;font-family:var(--font-mono)">${[['Evento', 'PreToolUse'], ['Registrado', '18/10 23:12:04'], ['Sessão', 'c3f09b52-4e1'], ['Agente', 'test-runner · a7c2'], ['Ferramenta', 'Bash'], ['Call id', 'toolu_01Hx…9Qe']].map(([k, v]) => `<span class="c-muted">${k}</span><span>${v}</span>`).join('')}</div></div>` : ''}`).join('')}</div>`
+}
+
+// ---------- Analytics ----------
+function heatmap() {
+  let cells = ''
+  for (let w = 0; w < 52; w++) for (let d = 0; d < 7; d++) {
+    const n = Math.floor((Math.abs(Math.sin(w * 12.9898 + d * 78.233) * 43758.5453) % 1) * 97) - (d >= 5 ? 25 : 0)
+    const nivel = w < 10 ? 0 : n < 30 ? 0 : n < 55 ? 1 : n < 75 ? 2 : n < 90 ? 3 : 4
+    cells += `<rect x="${30 + w * 13}" y="${14 + d * 13}" width="10" height="10" rx="2" fill="${nivel ? `color-mix(in srgb, var(--accent) ${[0, 25, 50, 75, 100][nivel]}%, var(--raised))` : 'var(--raised)'}"/>`
+  }
+  const meses = ['nov', 'dez', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out']
+  return `<svg viewBox="0 0 712 116" class="graf" style="width:100%;height:auto">${meses.map((m, i) => `<text x="${30 + i * 56}" y="9">${m}</text>`).join('')}
+    ${['seg', 'qua', 'sex'].map((d, i) => `<text x="0" y="${31 + i * 26}">${d}</text>`).join('')}${cells}</svg>
+    <div class="leg"><span>menos</span>${[0, 25, 50, 75, 100].map(p => `<span class="ponto" style="border-radius:2px;width:10px;height:10px;background:${p ? `color-mix(in srgb, var(--accent) ${p}%, var(--raised))` : 'var(--raised)'}"></span>`).join('')}<span>mais</span></div>`
+}
+function barras30() {
+  const v = [12, 18, 9, 22, 30, 14, 6, 25, 33, 28, 19, 31, 11, 8, 27, 40, 36, 24, 21, 17, 9, 34, 44, 38, 29, 47, 20, 16, 39, 31]
+  return `<svg viewBox="0 0 300 110" class="graf" style="width:100%;height:auto">${v.map((n, i) => `<rect x="${i * 10}" y="${96 - n * 1.9}" width="7" height="${n * 1.9}" rx="1.5" fill="var(--accent)" fill-opacity="${i === v.length - 1 ? 1 : 0.6}"/>`).join('')}
+    <line x1="0" x2="300" y1="96.5" y2="96.5" stroke="var(--border)"/><text x="0" y="108">19 set</text><text x="300" y="108" text-anchor="end">18 out</text></svg>`
+}
+const abasAnalytics = on => `<div class="seg" style="width:max-content">${['Visão geral', 'Custo', 'Tokens', 'Produtividade'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>`
+function telaAnalytics() {
+  const modelos = [['Opus 5.5', 1180, 'var(--accent)'], ['Sonnet 5.5', 610, 'var(--orange-200)'], ['Haiku 5.5', 128, 'var(--orange-700)']]
+  const dias = [['seg', 58], ['ter', 71], ['qua', 64], ['qui', 80], ['sex', 52], ['sáb', 14], ['dom', 9]]
+  return `${cab('bar-chart-3', 'Analytics', 'Uso, custo e produtividade das sessões', `<span class="chip">${ic('clock')}23:12:40</span><span class="btn">${ic('download')}Exportar</span>`)}
+  <div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+    ${stat('Sessões', '412', '4 ativas', 'folder-open', 'var(--accent-text)')}
+    ${stat('Agentes', '1.086', '7 ativos', 'bot', 'var(--status-active-text)')}
+    ${stat('Tokens', '1,9 B', '71% de cache', 'cpu', 'var(--accent-text)')}
+    ${stat('Custo', '~US$ 341', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
+    ${stat('Eventos', '48,1 mil', '~117 por sessão', 'zap', 'var(--status-waiting-text)')}
+  </div>
+  ${abasAnalytics(0)}
+  <div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:12px">
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">Atividade · últimas 52 semanas<span class="r">eventos por dia</span></div>${heatmap()}</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">Últimos 30 dias<span class="r">sessões por dia</span></div>${barras30()}
+      <div class="leg" style="justify-content:space-between"><span>Pico <b>47</b> em 13 out</span><span>Total <b>742</b></span></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div class="cartao" style="padding:14px 16px"><div class="ttl">Tokens por modelo<span class="r">milhões</span></div><div style="margin-top:8px">${modelos.map(([n, v, c]) => `<div class="ferr" style="grid-template-columns:84px minmax(0,1fr) 54px"><span class="n">${n}</span>${barra(v / 11.8, c)}<span class="q">${v}</span></div>`).join('')}</div></div>
+    <div class="cartao" style="padding:14px 16px"><div class="ttl">Ferramentas<span class="r">30 dias</span></div><div style="margin-top:8px">${[['Bash', 100], ['Edit', 62], ['Read', 55], ['Grep', 21], ['Agent', 12]].map(([n, p]) => `<div class="ferr" style="grid-template-columns:84px minmax(0,1fr) 54px"><span class="n">${n}</span>${barra(p)}<span class="q">${p * 41}</span></div>`).join('')}</div></div>
+    <div class="cartao" style="padding:14px 16px"><div class="ttl">Por dia da semana<span class="r">sessões</span></div><div style="margin-top:8px">${dias.map(([n, v]) => `<div class="ferr" style="grid-template-columns:84px minmax(0,1fr) 54px"><span class="n">${n}</span>${barra(v / 0.8)}<span class="q">${v}</span></div>`).join('')}</div></div>
+  </div>`
+}
+
+// ---------- Workflows ----------
+const fase = n => `<span class="chip" style="font-family:var(--font-sans);color:var(--text)">${n}</span>`
+function grafoOrquestracao() {
+  const col = [10, 200, 395, 600, 800], W = 152, H = 30
+  const nos = {
+    prompt: [0, 60, 'Prompt novo', 286], ret: [0, 130, 'Retomada', 126],
+    main: [1, 95, 'Agente principal', 412],
+    gp: [2, 10, 'general-purpose', 164], cr: [2, 52, 'code-reviewer', 118], ex: [2, 94, 'Explore', 97], tr: [2, 136, 'test-runner', 71], pl: [2, 178, 'Plan', 44],
+    semc: [3, 70, 'Sem compactação', 431], comp: [3, 140, 'Compactou', 63],
+    ok: [4, 70, 'Concluída', 441], er: [4, 140, 'Com erro', 53],
+  }
+  const ar = [['prompt', 'main', 286], ['ret', 'main', 126], ['main', 'gp', 164], ['main', 'cr', 118], ['main', 'ex', 97], ['main', 'tr', 71], ['main', 'pl', 44],
+    ['gp', 'semc', 140], ['gp', 'comp', 24], ['cr', 'semc', 112], ['cr', 'comp', 6], ['ex', 'semc', 97], ['tr', 'semc', 60], ['tr', 'comp', 11], ['pl', 'semc', 22], ['pl', 'comp', 22],
+    ['semc', 'ok', 409], ['semc', 'er', 22], ['comp', 'ok', 32], ['comp', 'er', 31]]
+  const p = k => ({ x: col[nos[k][0]], y: nos[k][1] })
+  const arestas = ar.map(([a, b, v]) => { const A = p(a), B = p(b), x1 = A.x + W, y1 = A.y + H / 2, x2 = B.x, y2 = B.y + H / 2, m = (x1 + x2) / 2
+    return `<path d="M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}" fill="none" stroke="${b === 'er' ? 'var(--status-error-dot)' : 'var(--accent)'}" stroke-opacity="0.35" stroke-width="${Math.max(1.2, v / 18)}"/>` }).join('')
+  const nosSvg = Object.entries(nos).map(([k, [c, y, t, n]]) => `<rect x="${col[c]}" y="${y}" width="${W}" height="${H}" rx="7" fill="var(--raised)" stroke="${k === 'er' ? 'var(--status-error-dot)' : k === 'ok' ? 'var(--status-completed-dot)' : 'var(--border)'}"/>
+    <text x="${col[c] + 9}" y="${y + 19}" style="fill:var(--text);font-size:10.5px">${t}</text><text x="${col[c] + W - 10}" y="${y + 19}" text-anchor="end">${n}</text>`).join('')
+  const cab = ['ORIGEM', 'AGENTE PRINCIPAL', 'TIPOS DE SUBAGENTE', 'COMPACTAÇÃO', 'RESULTADO'].map((t, i) => `<text x="${col[i] + W / 2}" y="-8" text-anchor="middle" style="letter-spacing:.08em">${t}</text>`).join('')
+  return `<svg viewBox="0 -24 960 240" class="graf" style="width:100%;height:auto">${cab}${arestas}${nosSvg}</svg>`
+}
+function telaWorkflows() {
+  const ag = [['dev:r1', 'general-purpose', 'Implementar', ['Concluído', 'b-completed'], '88 k', 14, '8 min'], ['review:r1', 'code-reviewer', 'Revisar', ['3 ajustes', 'b-error'], '41 k', 6, '3 min'],
+    ['dev:r2', 'general-purpose', 'Corrigir', ['Concluído', 'b-completed'], '52 k', 9, '7 min'], ['review:r2', 'code-reviewer', 'Revisar', ['Rodando', 'b-active'], '30 k', 4, '6 min'], ['test', 'test-runner', 'Testar', ['Rodando', 'b-active'], '12 k', 3, '3 min']]
+  return `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: delegação, rodadas de review e resultado', `<div class="seg"><span class="on">Todas as sessões</span><span>Só ativas</span><span>Concluídas</span></div><span class="btn">${ic('download')}</span>`)}
+  <div class="stats" style="grid-template-columns:repeat(6,minmax(0,1fr))">
+    ${stat('Profundidade', '1,6', 'níveis de agente', 'git-fork', 'var(--accent-text)')}
+    ${stat('Subagentes', '2,4', 'por sessão', 'users', 'var(--accent-text)')}
+    ${stat('Sucesso', '96%', 'dos subagentes', 'check-circle-2', 'var(--status-completed-text)')}
+    ${stat('Fluxo comum', '<span style="font-size:18px">dev → review</span>', '38% das sessões', 'repeat', 'var(--accent-text)')}
+    ${stat('Rodadas', '1,7', 'de review por PR', 'refresh-cw', 'var(--accent-text)')}
+    ${stat('Duração', '31 min', 'média', 'timer', 'var(--status-waiting-text)')}
+  </div>
+  <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <div class="ttl">${ic('workflow')}Workflows dinâmicos<span class="r">frotas do Workflow tool, lidas dos journals</span></div>
+    <div class="cartao" style="padding:10px 12px;background:var(--bg);display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center"><span class="c-muted">${ic('chevron-down')}</span><b>dev-review</b>${badge('active')}<span class="chip">Opus 5.5</span><span class="c-muted" style="font-size:12px">motor-de-regras · 5 agentes · 36 ferramentas · 223 k tokens · 28 min</span><span class="c-muted" style="margin-left:auto">${ic('external-link')}</span></div>
+      <div style="display:flex;gap:6px;align-items:center"><span class="c-muted">${ic('layers')}</span>${['Implementar', 'Revisar', 'Corrigir', 'Testar'].map(fase).join(`<span class="c-muted">${ic('arrow-right')}</span>`)}<span class="c-muted" style="font-size:11.5px;margin-left:8px">volta para Corrigir enquanto o review pedir ajustes</span></div>
+      <table class="tabela"><thead><tr><th>Agente</th><th>Fase</th><th>Estado</th><th style="text-align:right">Tokens</th><th style="text-align:right">Ferramentas</th><th style="text-align:right">Duração</th></tr></thead><tbody>
+      ${ag.map(([a, t, f, [e, c], tk, fe, d]) => `<tr><td><span class="mono">${a}</span> <span class="c-muted">· ${t}</span></td><td>${fase(f)}</td><td><span class="pill ${c}">${e}</span></td><td class="mono" style="text-align:right">${tk}</td><td class="mono" style="text-align:right">${fe}</td><td class="mono" style="text-align:right">${d}</td></tr>`).join('')}</tbody></table>
+    </div>
+    ${[['triagem-de-bugs', 'completed', 'vitrine-demo · 4 agentes · 22 ferramentas · 140 k tokens · 12 min · ontem'], ['comparar-bibliotecas', 'completed', 'gateway-sandbox · 3 agentes · 17 ferramentas · 96 k tokens · 9 min · há 2 dias']].map(([n, st, m]) =>
+      `<div style="display:flex;gap:10px;align-items:center;padding:6px 12px"><span class="c-muted">${ic('chevron-right')}</span><b>${n}</b>${badge(st)}<span class="c-muted" style="font-size:12px">${m}</span><span class="c-muted" style="margin-left:auto">${ic('external-link')}</span></div>`).join('')}
+  </div>
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px"><div class="ttl"><span class="chip" style="height:20px">1</span>Grafo de orquestração<span class="r">todas as sessões · clique num nó para filtrar</span></div>${grafoOrquestracao()}</div>`
+}
+
+// ---------- Detalhe · Workflow (grafo de agentes da sessão) ----------
+function telaDetWorkflow() {
+  const s = byId('c3f09b52'), W = 118, H = 60
+  const n = {
+    main: [0, 115, 'Principal', 'Opus 5.5 · 28 min', 'active'], ex: [170, 18, 'Explore', 'achar usos · 1 min', 'active'],
+    pl: [170, 115, 'Plan', 'plano · 3 min', 'completed'], d1: [340, 115, 'dev · r1', 'implementa', 'completed'],
+    r1: [510, 115, 'review · r1', '3 ajustes pedidos', 'completed', 'error'], d2: [680, 115, 'dev · r2', 'corrige · 7 min', 'completed'],
+    r2: [850, 115, 'review · r2', 'rodando · 6 min', 'active'], tr: [850, 212, 'test-runner', 'bateria · 12 s', 'active'],
+  }
+  const e = [['main', 'ex', ''], ['main', 'pl', ''], ['pl', 'd1', 'plano'], ['d1', 'r1', 'diff'], ['r1', 'd2', 'ajustes', 'e'], ['d2', 'r2', 'v2'], ['d2', 'tr', '']]
+  const ar = e.map(([a, b, rot, t]) => { const A = n[a], B = n[b], x1 = A[0] + W, y1 = A[1] + H / 2, x2 = B[0], y2 = B[1] + H / 2, m = (x1 + x2) / 2
+    const cor = t === 'e' ? 'var(--status-error-dot)' : 'var(--muted)'
+    return `<path d="M${x1},${y1} C${m},${y1} ${m},${y2} ${x2 - 4},${y2}" fill="none" stroke="${cor}" stroke-width="1.6" ${t === 'e' ? 'stroke-dasharray="5 4"' : ''} marker-end="url(#seta${t === 'e' ? 'E' : ''})"/>
+      ${rot ? `<text x="${m}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle" style="${t === 'e' ? 'fill:var(--status-error-text);' : ''}font-size:9.5px">${rot}</text>` : ''}` }).join('')
+  const nos = Object.values(n).map(([x, y, t, sub, st, sx]) => `<div class="cartao" style="position:absolute;left:${x}px;top:${y}px;width:${W}px;height:${H}px;padding:7px 9px;border-left:3px solid var(--status-${st}-dot);display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:11.5px;font-weight:600" class="trunc">${t}</span><span class="trunc ${sx ? 'c-error' : 'c-muted'}" style="font-size:10.5px">${sub}</span><span class="c-${st}" style="font-size:10px">${ST[st].g} ${ST[st].r}</span></div>`).join('')
+  const faixas = [['Agente principal', [[0, 28, 'active']]], ['Explore', [[0, 2, 'completed'], [26, 28, 'active']]], ['Plan', [[1, 4, 'completed']]], ['dev · r1', [[4, 12, 'completed']]], ['review · r1', [[12, 15, 'completed']]],
+    ['dev · r2', [[15, 22, 'completed']]], ['review · r2', [[22, 28, 'active']]], ['test-runner', [[25, 28, 'active']]]]
+  return `${detCab(s)}${abas(3)}
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div class="ttl">${ic('git-fork')}Grafo de agentes<span class="r">dev → review até aprovar · termina no PR #90</span></div>
+    <div style="position:relative;width:980px;height:282px">
+      <svg width="980" height="282" class="graf" style="position:absolute;inset:0"><defs><marker id="seta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)"/></marker>
+        <marker id="setaE" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--status-error-dot)"/></marker></defs>${ar}</svg>${nos}</div>
+    <div class="leg"><span>${ponto('active')}Ativo</span><span>${ponto('completed')}Concluído</span><span><span style="display:inline-block;width:18px;border-top:2px dashed var(--status-error-dot)"></span>review pediu ajustes: volta para o dev</span><span>Rodadas de review <b>2</b></span><span>Ajustes <b>3</b></span></div>
+  </div>
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+    <div class="ttl">${ic('gantt-chart')}Linha do tempo dos agentes<span class="r">0 a 28 min · concorrência</span></div>
+    ${faixas.map(([nm, bs]) => `<div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:center;font-size:11.5px"><span class="mono trunc">${nm}</span>
+      <div style="position:relative;height:16px;background:var(--bg);border-radius:4px">${bs.map(([a, b, st]) => `<i style="position:absolute;left:${a / 28 * 100}%;width:${(b - a) / 28 * 100}%;top:2px;bottom:2px;border-radius:3px;background:var(--status-${st}-dot);opacity:${st === 'active' ? 1 : .6}"></i>`).join('')}</div></div>`).join('')}
+    <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;font-size:10px;color:var(--muted);font-family:var(--font-mono)"><span></span><div style="display:flex;justify-content:space-between"><span>0</span><span>7 min</span><span>14 min</span><span>21 min</span><span>28 min</span></div></div>
+  </div>`
+}
+
+// ---------- Agent Config ----------
+const abasConfig = on => `<div class="abas">${[['layout-grid', 'Visão geral'], ['sparkles', 'Skills', 24], ['users', 'Subagentes', 9], ['slash', 'Comandos', 12], ['book-open', 'Memória', 6], ['plug', 'Plugins', 7], ['server', 'MCP', 5], ['webhook', 'Hooks', 8]].map(([i, t, q], k) => `<span class="${k === on ? 'on' : ''}">${ic(i)}${t}${q ? ` <span class="chip" style="height:18px;padding:0 6px;font-size:10.5px">${q}</span>` : ''}</span>`).join('')}</div>`
+const faixaControle = `<div class="faixa"><span class="ic">${ic('lock')}</span><div><b>Edição desligada.</b> Ver é livre. Gravar em <code>~/.claude</code> precisa ser liberado pelo admin e pelo dono da máquina (épico 9), e toda gravação faz backup antes.</div><span class="btn contorno">${ic('history')}Backups</span></div>`
+function telaConfig() {
+  const raizes = [['Claude home', '~/.claude'], ['.claude do projeto', '/simulacao/motor-de-regras/.claude'], ['Raiz do projeto', '/simulacao/motor-de-regras'], ['Configuração', '~/.claude.json']]
+  const res = [['sparkles', 'Skills', 24, '18 do usuário · 6 do projeto'], ['users', 'Subagentes', 9, '7 · 2'], ['slash', 'Comandos', 12, '10 · 2'], ['server', 'Servidores MCP', 5, '4 · 1'],
+    ['plug', 'Plugins', 7, '7 · 0'], ['webhook', 'Hooks', 8, '6 · 2'], ['book-open', 'Memória', 6, '4 · 2'], ['settings', 'Configurações', 3, '2 · 1']]
+  return `${cab('bot', 'Agent Config', 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', `<div class="seg"><span class="on">Todos os escopos</span><span>Usuário</span><span>Projeto</span></div>${atualizar}`)}
+  ${faixaControle}${abasConfig(0)}
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+    <div class="olhinho">Raízes</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${raizes.map(([t, c]) => `<div class="cartao" style="padding:9px 12px;display:flex;gap:10px;align-items:center;background:var(--bg);border-left:3px solid var(--accent)"><span class="c-accent">${ic('folder-tree')}</span><div class="trunc" style="flex:1"><div class="olhinho" style="font-size:10px">${t}</div><div class="mono trunc" style="font-size:11.5px">${c}</div></div><span class="c-muted">${ic('copy')}</span></div>`).join('')}</div>
+    <div class="olhinho">Resumo</div>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">${res.map(([i, t, q, s]) => `<div class="cartao" style="padding:10px 12px;height:82px;display:flex;flex-direction:column;justify-content:space-between;background:var(--bg)"><div class="olhinho"><span class="c-accent">${ic(i)}</span>${t}</div><div style="display:flex;align-items:baseline;gap:8px"><span class="mono" style="font-size:20px;font-weight:600">${q}</span><span class="c-muted" style="font-size:11px">${s}</span></div></div>`).join('')}</div>
+  </div>`
+}
+function telaConfigSkills() {
+  const sk = [['revisar-pr', 'Usuário', 'Revisa um PR contra o guia de estilo do projeto', '~/.claude/skills/revisar-pr/SKILL.md', true], ['abrir-issue', 'Projeto', 'Abre uma issue no modelo do repositório', '.claude/skills/abrir-issue/SKILL.md'],
+    ['rodar-bateria', 'Usuário', 'Roda os testes e resume as falhas', '~/.claude/skills/rodar-bateria/SKILL.md'], ['migracao-segura', 'Projeto', 'Escreve migrações com volta e teste', '.claude/skills/migracao-segura/SKILL.md']]
+  return `${cab('bot', 'Agent Config', 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', `<div class="seg"><span class="on">Todos os escopos</span><span>Usuário</span><span>Projeto</span></div>${atualizar}`)}
+  ${abasConfig(1)}
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:12px">
+    <div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:8px"><span class="campo" style="flex:1">${ic('search')}Buscar skills…</span><span class="btn cheio">${ic('plus')}Nova</span></div>
+      ${sk.map(([n, e, d, p, on]) => `<div class="cartao" style="padding:10px 12px;height:96px;display:flex;flex-direction:column;gap:4px;${on ? 'border-color:var(--accent)' : ''}"><div style="display:flex;gap:8px;align-items:center"><span class="c-accent">${ic('sparkles')}</span><b style="font-size:13px">${n}</b><span class="chip" style="height:20px;font-size:10.5px">${e}</span></div>
+        <span class="c-muted trunc" style="font-size:12px">${d}</span><div style="display:flex;gap:10px;align-items:center;margin-top:auto"><span class="mono c-muted trunc" style="font-size:10.5px;flex:1">${p}</span><span class="c-accent" style="font-size:11.5px">Ver</span><span class="c-accent" style="font-size:11.5px">Editar</span><span class="c-error" style="font-size:11.5px">Apagar</span></div></div>`).join('')}</div>
+    <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px"><div class="ttl">${ic('file-text')}revisar-pr / SKILL.md<span class="r">Usuário · editado há 3 dias</span></div>
+      <pre style="margin:0;padding:12px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-family:var(--font-mono);font-size:11.5px;line-height:1.6;white-space:pre-wrap;color:var(--muted);height:300px;overflow:hidden"><span class="c-accent">---</span>
+<span style="color:var(--text)">name:</span> revisar-pr
+<span style="color:var(--text)">description:</span> Revisa um PR contra o guia de estilo
+  do projeto. Use quando pedirem review de um PR.
+<span class="c-accent">---</span>
+
+# Revisar PR
+
+1. Leia o diff inteiro antes de comentar.
+2. Confira os testes que cobrem a mudança.
+3. Aponte o que quebra, depois o que melhora.</pre>
+      <div style="display:flex;gap:8px;align-items:center"><span class="c-muted" style="font-size:11.5px">${ic('lock')} Salvar desligado (épico 9)</span><span class="btn contorno" style="margin-left:auto">Cancelar</span><span class="btn cheio" style="opacity:.45">${ic('save')}Salvar com backup</span></div></div>
+  </div>`
+}
+
+// ---------- Rodar agente ----------
+function telaRun() {
+  const op = (t, s, on) => `<div class="cartao" style="padding:10px 12px;flex:1;${on ? 'border-color:var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--surface))' : ''}"><b style="font-size:13px;${on ? 'color:var(--accent-text)' : ''}">${t}</b><div class="c-muted" style="font-size:11.5px">${s}</div></div>`
+  const sel = (r, v, s) => `<div style="flex:1;display:flex;flex-direction:column;gap:4px"><span class="olhinho">${r}</span><span class="campo">${v}<span style="margin-left:auto">${ic('chevron-down')}</span></span>${s ? `<span class="c-muted" style="font-size:11px">${s}</span>` : ''}</div>`
+  return `${cab('play', 'Rodar agente', 'Lança ou retoma uma sessão do Claude Code com o seu CLI e o seu login', `<span class="btn contorno">${ic('list')}Execuções pelo console <span class="chip" style="height:18px;padding:0 6px">6</span></span>`)}
+  <div class="faixa"><span class="ic">${ic('lock')}</span><div><b>Lançar está desligado.</b> Precisa ser liberado pelo admin e pelo dono da máquina (épico 9). Quem lança é o núcleo, com o seu CLI e o seu login.</div></div>
+  <div class="cartao" style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="cartao" style="padding:10px 12px;background:color-mix(in srgb, var(--status-completed-badge) 60%, var(--surface))"><div class="olhinho c-completed">${ic('check-circle-2')}Funciona aqui</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted)"><li>texto, raciocínio e ferramentas ao vivo</li><li>conversa com vários turnos e retomada</li><li>comandos <code>/</code> do usuário e do projeto, e <code>@</code> de arquivos</li><li>medidor de contexto</li></ul></div>
+    <div class="cartao" style="padding:10px 12px;background:color-mix(in srgb, var(--status-error-badge) 60%, var(--surface))"><div class="olhinho c-error">${ic('x-circle')}Só no terminal</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted)"><li><code>/model</code>, <code>/clear</code> e <code>/compact</code></li><li>pedidos de permissão no meio do turno (escolha o modo antes)</li><li>trocar modelo ou esforço durante a sessão</li></ul></div>
+  </div>
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+    <span class="olhinho">Modo</span><div style="display:flex;gap:10px">${op('Conversa', 'vários turnos: continue escrevendo enquanto o agente trabalha', true)}${op('Uma vez', 'um prompt, uma resposta')}</div>
+    <span class="olhinho">Sessão de origem</span><div style="display:flex;gap:10px">${op('Nova sessão', 'começa do zero', true)}${op('Retomar uma sessão', 'escolha no histórico; o diretório fica o da sessão original')}</div>
+    <span class="olhinho">Prompt</span><div class="campo" style="height:90px;align-items:flex-start;padding-top:10px">Peça qualquer coisa ao Claude Code…</div><span class="c-muted" style="font-size:11px">⌘↵ envia · <code>/</code> para comandos · <code>@</code> para arquivos</span>
+    <div style="display:flex;gap:12px">${sel('Diretório', '/simulacao/motor-de-regras', 'caminho absoluto')}${sel('Modelo', 'Padrão do Claude Code', 'o configurado no seu CLI')}${sel('Modo de permissão', 'acceptEdits (recomendado)', '')}</div>
+    <div style="display:flex;justify-content:flex-end"><span class="btn cheio" style="opacity:.45">${ic('play')}Lançar</span></div>
+  </div>`
 }
 
 function telaVazios() {
@@ -948,15 +1157,15 @@ function painel(nome) {
   return `<div class="fila">${pane(38, miolo, d.status)}${pane(121, miolo, d.status)}</div>`
 }
 function painelPrecisam() {
-  const card = s => `<div class="pc st-waiting"><div class="t">${ponto('waiting')}<span style="letter-spacing:0;text-transform:none;color:var(--text);font-size:12.5px" class="trunc">${s.pj}</span><span class="r c-muted">${s.idade}</span></div>
-    <div class="ln">${motChip(s.mot)}<span class="mut">${MOT[s.mot].u ? 'urgente' : ''}</span></div><div class="ln"><span class="trunc">${s.pede}</span></div>
-    <div class="ln mut"><span class="trunc">${s.pj === 'app-receitas' ? 'outro projeto' : s.pj === 'motor-de-regras' ? 'mãe desta' : 'filha desta'} · ${s.mo}</span></div>
+  const card = s => `<div class="pc st-${s.st}"><div class="t">${ponto(s.st)}<span style="letter-spacing:0;text-transform:none;color:var(--text);font-size:12.5px" class="trunc">${s.pj}</span><span class="r c-muted">${s.idade}</span></div>
+    <div class="ln">${s.mot ? motChip(s.mot) : badge('error')}<span class="mut">${!s.mot || MOT[s.mot].u ? 'urgente' : ''}</span></div><div class="ln"><span class="trunc">${s.pede ?? s.erro}</span></div>
+    <div class="ln mut"><span class="trunc">${s.pj === 'painel-de-metricas' ? 'outro projeto' : s.pj === 'motor-de-regras' ? 'mãe desta' : 'filha desta'} · ${s.mo}</span></div>
     <div class="ln"><span class="pn-btn sec">Ir para a sessão</span></div></div>`
   const miolo = largo => {
-    const l = largo ? PRECISAM : PRECISAM.filter(s => s.pj !== 'app-receitas')
+    const l = largo ? ['b91d04aa', '5a61c2bf', 'e04b7d93'].map(byId) : ['b91d04aa', 'e04b7d93'].map(byId)
     return `${pnServidor()}<div class="pn-sec">Precisam de você · ${l.length}<span style="margin-left:auto" class="pn-sel">${largo ? 'Máquina inteira' : 'Família'} ${ic('chevron-down')}</span></div>
       <div class="pn-grade" style="--cols:${largo ? 3 : 1}">${l.map(card).join('')}</div>
-      <div class="pn-pe"><span class="mut">urgentes primeiro${largo ? ' · o clique leva à sessão' : ''}</span><span class="pn-link" style="margin-left:auto">fechar</span></div>`
+      <div class="pn-pe"><span class="mut">urgentes primeiro${largo ? ' · esperando e com erro' : ''}</span><span class="pn-link" style="margin-left:auto">fechar</span></div>`
   }
   return `<div class="fila">${pane(38, miolo, '● Ativa · 3 precisam de você')}${pane(121, miolo, '● Ativa · 3 precisam de você')}</div>`
 }
@@ -1002,23 +1211,28 @@ const APP = {
   zero: () => mbar(0, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
     ${mi('<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Ninguém precisa de você', 'off')}${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('error')}nenhuma com erro`, 'off')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;bottom:24px;width:440px">Só o <b>ícone template</b>, sem número: o macOS pinta conforme a barra.<br>O menu é refeito a cada clique, como o <code>tray.ts</code> do CCAM.</div>`,
-  tres: () => mbar(3, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
-    ${mi('3 precisam de você', 'cab')}
-    ${mi(`${ponto('waiting')}<b>motor-de-regras</b><span class="mt">· Pede permissão · 2 min</span>`, 'foco')}
-    ${mi(`${ponto('waiting')}<b>app-receitas</b><span class="mt">· Interrompida · 6 min</span>`)}
-    ${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
-    ${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('error')}1 com erro`, 'off')}${msep}${menuPe}</div>
-    <div class="anota" style="left:28px;bottom:24px;width:440px"><b>3</b> ao lado do ícone (<code>tray.set_title</code>). Urgentes primeiro e em negrito.<br>Clicar numa sessão abre a sessão (pergunta 2).</div>`,
-  notif: () => mbar(2, false) + `
-    <div class="notif" style="top:42px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora</span></div><div class="tit">motor-de-regras pede permissão</div><div>Bash: <code>npm run migrate</code></div></div>
-      <div class="acoes"><span>Abrir a sessão</span><span>Silenciar esta sessão</span></div></div>
-    <div class="notif" style="top:190px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 1 min</span></div><div class="tit">fila-de-tarefas: sua vez</div><div>“Terminei a migração. Rodo os testes?”</div></div></div>
-    <div class="anota" style="left:28px;top:64px;width:420px">Uma notificação quando a sessão <b>passa</b> a esperar, nunca a cada leitura.<br><br>Título: sessão e motivo. Corpo: o que ela pede.<br>
-      Ações: <b>Abrir a sessão</b> e <b>Silenciar esta sessão</b> (6.8).<br><br>A segunda já está na Central de Notificações, sem as ações.</div>`,
+  tres: () => {
+    const lista = alt => `${mi(`${ponto('waiting')}<b>motor-de-regras</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Pede permissão · 2 min'}</span>`, 'foco')}
+    ${mi(`${ponto('error')}<b>painel-de-metricas</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Com erro · 3 min'}</span>`)}
+    ${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Sua vez · 1 min'}</span>`)}`
+    return mbar(3, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('3 precisam de você · abrir na janela', 'cab')}${lista(false)}${msep}
+    ${mi(`${ponto('active')}4 ativas`, 'off')}${msep}${menuPe}</div>
+    <div class="menu" style="right:600px;width:330px">${mi('Com ⌥ pressionado', 'cab')}${msep}${mi('3 precisam de você · abrir no Claude Desktop', 'cab')}${lista(true)}</div>
+    <div class="anota" style="left:28px;bottom:20px;width:520px"><b>3</b> ao lado do ícone (<code>tray.set_title</code>): esperando e com erro, urgentes primeiro.<br>Clique: abre a sessão <b>na janela do app</b>. Com ⌥, o item diz <b>Abrir no Claude Desktop</b> (item alternativo nativo do macOS).</div>`
+  },
+  notif: () => mbar(3, false) + `
+    <div class="notif" style="top:42px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora · ${ic('volume-2')}</span></div><div class="tit">motor-de-regras pede permissão</div><div>Bash: <code>npm run migrate</code></div></div>
+      <div class="acoes"><span>Abrir</span><span>Abrir no Claude Desktop</span><span>Silenciar</span></div></div>
+    <div class="notif" style="top:196px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 3 min · ${ic('volume-2')}</span></div><div class="tit">painel-de-metricas parou com erro</div><div>API 529 · overloaded_error</div></div></div>
+    <div class="notif" style="top:300px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 1 min · sem som</span></div><div class="tit">fila-de-tarefas: sua vez</div><div>“Terminei a migração. Rodo os testes?”</div></div></div>
+    <div class="anota" style="left:28px;top:64px;width:420px">Uma notificação quando a sessão <b>passa</b> a esperar ou para com erro, nunca a cada leitura.<br><br>Título: sessão e motivo. Corpo: o que ela pede.<br>
+      <b>Abrir</b> abre na janela do app. <b>Abrir no Claude Desktop</b> diz isso com todas as letras. <b>Silenciar</b> cala só essa sessão (6.8).<br><br>
+      Com som: Pede permissão, Interrompida e Com erro. Sem som: Sua vez e No prompt.</div>`,
   parado: () => mbar(0, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('error')}Núcleo parado`, 'off')}${mi('<span class="ck"></span><span class="mt">Node não encontrado no PATH do login</span>', 'off')}${msep}
     ${mi('Como instalar o Node 24', 'foco')}${mi('Procurar o núcleo de novo', '')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;bottom:24px;width:460px">O app <b>adota</b> o núcleo que já roda (a extensão ou um terminal). Se ninguém subiu, ele sobe com o <code>node</code> da máquina.<br>Sem Node, avisa e deixa o núcleo para a extensão (decisão 0005).</div>`,
-  janela: () => mbar(3, false) + `<div class="janela"><div class="tb"><span class="sem"><i></i><i></i><i></i></span><span class="nm">Ahrena Console</span><span class="mono">127.0.0.1:4720/ui</span></div>${cc('dashboard', telaDashboard())}</div>`,
+  janela: () => mbar(3, false) + `<div class="janela"><div class="tb"><span class="sem"><i></i><i></i><i></i></span><span class="nm">Ahrena Console · motor-de-regras</span><span class="mono">127.0.0.1:4720/ui/sessoes/b91d04aa</span></div>${cc('sessoes', telaConversa())}</div>`,
 }
 
 // =====================================================================
@@ -1052,16 +1266,16 @@ const TELAS = [
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja com 0 esperando', sub: 'Ninguém precisa de você: só o ícone na barra de menus.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
-  { id: 'app-bandeja-3', cod: 'A2', nome: 'Bandeja com 3 esperando', sub: 'O número aparece ao lado do ícone e o menu lista as sessões esperando.', html: () => `<div class="fila"><div class="mac">${APP.tres()}</div></div>`,
-    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
-  { id: 'app-notificacao', cod: 'A3', nome: 'Notificação do sistema', sub: 'Quando uma sessão passa a esperar, com o motivo no título e silêncio por sessão.', html: () => `<div class="fila"><div class="mac">${APP.notif()}</div></div>`,
-    n: N(['<code>useNotifications</code>: aviso para waiting e erro (lá, no navegador).'], ['Nativa do macOS, aparece com o Claude fechado.', 'Silenciar uma sessão, não tudo (6.8).']) },
+  { id: 'app-bandeja-3', cod: 'A2', nome: 'Bandeja com 3 esperando', sub: 'O número aparece ao lado do ícone. Clicar numa sessão abre na janela do app; com ⌥, o item vira "Abrir no Claude Desktop".', html: () => `<div class="fila"><div class="mac">${APP.tres()}</div></div>`,
+    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'Sessão com erro entra na lista (recomendação), em vermelho.', 'Abrir no Claude Desktop é sempre explícito: um item alternativo com ⌥, nunca o clique padrão.', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
+  { id: 'app-notificacao', cod: 'A3', nome: 'Notificação do sistema', sub: 'Quando uma sessão passa a esperar ou para com erro. Som só nos urgentes. Abrir vai para a janela do app; Abrir no Claude Desktop é uma ação à parte.', html: () => `<div class="fila"><div class="mac">${APP.notif()}</div></div>`,
+    n: N(['<code>useNotifications</code>: aviso para waiting e erro (lá, no navegador).'], ['Nativa do macOS, aparece com o Claude fechado.', 'Silenciar uma sessão, não tudo (6.8).', 'Som só para Pede permissão, Interrompida e Com erro.']) },
   { id: 'app-parado', cod: 'A4', nome: 'Núcleo parado', sub: 'Ninguém subiu o núcleo e não há Node no PATH do login.', html: () => `<div class="fila"><div class="mac">${APP.parado()}</div></div>`,
     n: N(['A adoção do servidor que já responde em <code>/api/health</code> e a correção do PATH (<code>shell-path.ts</code>).'], ['Não embute Node: avisa e deixa o núcleo para a extensão.']) },
-  { id: 'app-janela', cod: 'A5', nome: 'A janela', sub: '"Abrir o console" (⌘O) abre a WebView em 127.0.0.1:4720/ui: a mesma interface do console, sem telas próprias.', html: () => `<div class="fila"><div class="mac alto">${APP.janela()}</div></div>`,
-    n: N(['A janela do app desktop com o dashboard; fechar esconde e o app fica na bandeja (<code>main.ts</code>).'], ['Não há uma terceira cópia de telas: é o console servido pelo núcleo.']) },
+  { id: 'app-janela', cod: 'A5', nome: 'A janela', sub: 'Clicar em motor-de-regras no menu abre a janela já no detalhe da sessão (127.0.0.1:4720/ui). O botão "Abrir no Claude Desktop" é o único caminho para o Claude. ⌘O abre no Dashboard.', html: () => `<div class="fila"><div class="mac alto">${APP.janela()}</div></div>`,
+    n: N(['A janela do app desktop; fechar esconde e o app fica na bandeja (<code>main.ts</code>).', 'O Session Detail com a faixa de waiting.'], ['Não há uma terceira cópia de telas: é o console servido pelo núcleo.']) },
 
-  { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo do épico 3, que é também o que a janela do app mostra. Moldura, cabeçalho, cards e tabelas seguem o CCAM tela a tela.' },
+  { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
   { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc('dashboard', telaDashboard())}</div>`,
     n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Custo sempre com "~" e "estimativa".']) },
   { id: 'console-mural', cod: 'C2', nome: 'Mural ao vivo', sub: 'Um card por sessão aberta, com status, modelo, esforço, plano, agentes, contexto e custo (3.9).', html: () => `<div class="fila">${cc('mural', telaMural())}</div>`,
@@ -1071,20 +1285,34 @@ const TELAS = [
   { id: 'console-det-agentes', cod: 'C4', nome: 'Detalhe · Agentes', sub: 'Números, ferramentas, tarefas, fluxo de tokens e a árvore de agentes com custo por nó (3.4).', html: () => `<div class="fila">${cc('sessoes', telaDetAgentes())}</div>`,
     n: N(['Session Detail · Agents: chips copiáveis, 6 KPIs, Top Tools, Task Progress, Token Flow e a árvore de agentes.'], ['Barras de ferramenta no laranja, sem uma cor por ferramenta: a paleta fica fechada.', 'Custo por nó da árvore.']) },
   { id: 'console-det-conversa', cod: 'C5', nome: 'Detalhe · Conversa', sub: 'A sessão espera uma permissão: faixa amarela no topo e o bloco da ferramenta aguardando (3.5).', html: () => `<div class="fila">${cc('sessoes', telaConversa())}</div>`,
-    n: N(['Conversation: seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem, código inline.', 'A faixa amarela de waiting do Session Detail.'], ['"Abrir no Claude" no lugar de responder ali: responder é o épico 9.']) },
+    n: N(['Conversation: seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem, código inline.', 'A faixa amarela de waiting do Session Detail.'], ['"Abrir no Claude Desktop", com o nome inteiro, no lugar de responder ali: responder é o épico 9.']) },
   { id: 'console-det-tempo', cod: 'C6', nome: 'Detalhe · Linha do tempo', sub: 'Os eventos da sessão, filtráveis e expansíveis (3.5).', html: () => `<div class="fila">${cc('sessoes', telaLinhaTempo())}</div>`,
     n: N(['Timeline: busca, intervalo De–Até, filtros Status, Event type, Tool e Agent, linhas que expandem com o chip da ferramenta.'], ['O tipo do hook aparece na linha, para ler a máquina de estados.']) },
-  { id: 'console-kanban', cod: 'C7', nome: 'Kanban · sessões', sub: '5 colunas por status, só leitura, 3 cards e "mostrar mais" (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanban())}</div>`,
+  { id: 'console-det-workflow', cod: 'C7', nome: 'Detalhe · Workflow', sub: 'O grafo de agentes da sessão: o laço dev → review → ajustes → review, e a linha do tempo dos agentes em paralelo.', html: () => `<div class="fila">${cc('sessoes', telaDetWorkflow())}</div>`,
+    n: N(['Session Drill-In da tela Workflows: árvore de agentes e timeline de ferramentas da sessão.', 'Concurrency Timeline: faixas por agente.', 'Dynamic Workflows dentro do Session Detail.'], ['Uma aba própria no detalhe, porque o laço dev/review é o que se quer ver numa sessão.', 'A volta do review para o dev é uma aresta tracejada em vermelho (ajustes pedidos), com o número da rodada no nó.']) },
+  { id: 'console-feed', cod: 'C8', nome: 'Feed de atividade', sub: 'Todos os eventos, ao vivo, com filtros, pausa e uma linha aberta com o detalhe.', html: () => `<div class="fila">${cc('feed', telaFeed())}</div>`,
+    n: N(['Activity Feed: banner "About events", EventFilters (busca, De–Até, Status, Event type, Tool, Session), linhas com hora, pílula, breadcrumb projeto › sessão › agente, chip da ferramenta e Session ↗; EventDetail com resumo e chave-valor; Pause.'], ['No backlog estava para depois da entrega; entra no pacote a pedido do dono (precisa de item no épico 3).']) },
+  { id: 'console-kanban', cod: 'C9', nome: 'Kanban · sessões', sub: '5 colunas por status, só leitura, 3 cards e "mostrar mais" (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanban())}</div>`,
     n: N(['Kanban Board · Sessions: colunas com ponto, título em caixa alta e contador; SessionCard com id, última mensagem, cwd, agentes, modelo, custo e "running".'], ['Cards de altura fixa: nenhum cresce com o texto.']) },
-  { id: 'console-kanban-agentes', cod: 'C8', nome: 'Kanban · agentes', sub: '4 colunas: Trabalhando, Esperando, Concluídos e Erro (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanbanAgentes())}</div>`,
+  { id: 'console-kanban-agentes', cod: 'C10', nome: 'Kanban · agentes', sub: '4 colunas: Trabalhando, Esperando, Concluídos e Erro (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanbanAgentes())}</div>`,
     n: N(['Kanban Board · Agents (<code>AGENT_COLUMNS</code>).'], ['"Trabalhando" usa o laranja de "Ativa".']) },
-  { id: 'console-custo', cod: 'C9', nome: 'Custo', sub: 'Custo por dia, por modelo e por projeto (3.7).', html: () => `<div class="fila">${cc('custo', telaCusto())}</div>`,
-    n: N(['Analytics · Cost: linha diária com pico e total, donut por modelo, barras horizontais.'], ['Só a parte de custo na 0.0.1; heatmap e o resto do Analytics vêm depois.', 'Gráficos no laranja e nos seus tons.']) },
-  { id: 'console-historico', cod: 'C10', nome: 'Histórico', sub: 'Sessões encerradas por dia, com a ligação depois do /clear (3.8).', html: () => `<div class="fila">${cc('historico', telaHistorico())}</div>`,
-    n: N(['As linhas do Activity Feed e da tabela de Sessions.'], ['A ligação entre sessões depois do <code>/clear</code> vem do Podium.']) },
   { id: 'console-projeto', cod: 'C11', nome: 'Kanban do projeto', sub: 'O GitHub Project por Status; arrastar um card muda o Status no GitHub (3.10).', html: () => `<div class="fila">${cc('projeto', telaProjeto())}</div>`,
     n: N(['A moldura do Kanban Board.'], ['O CCAM não arrasta; aqui arrastar escreve no GitHub, com confirmação e Desfazer.', 'Tipo da issue, PR, CI e review no card.']) },
-  { id: 'console-estados', cod: 'C12', nome: 'Carregando, vazio e erro', sub: 'Os três estados que toda tela tem.', html: () => `<div class="fila">${cc('dashboard', telaVazios(), 0)}</div>`,
+  { id: 'console-analytics', cod: 'C12', nome: 'Analytics · Visão geral', sub: 'Números, atividade de 52 semanas, últimos 30 dias, tokens por modelo, ferramentas e dia da semana.', html: () => `<div class="fila">${cc('analytics', telaAnalytics())}</div>`,
+    n: N(['Analytics: 5 StatCards, Event Activity de 52 semanas, Last 30 Days, abas Cost / Token / Productivity, barras horizontais.'], ['O heatmap usa o laranja em 4 tons, sem o índigo do CCAM.', 'Custo virou a aba "Custo" desta tela (3.7); o resto entra a pedido do dono.']) },
+  { id: 'console-custo', cod: 'C13', nome: 'Analytics · Custo', sub: 'Custo por dia, por modelo e por projeto (3.7).', html: () => `<div class="fila">${cc('analytics', telaCusto())}</div>`,
+    n: N(['Analytics · Cost Analytics: linha diária com pico e total, donut por modelo, barras horizontais.'], ['Gráficos no laranja e nos seus tons, sem uma cor por série.', 'Custo sempre com "~" e "estimativa".']) },
+  { id: 'console-workflows', cod: 'C14', nome: 'Workflows', sub: 'KPIs de orquestração, os workflows dinâmicos (dev-review aberto, com fases e agentes) e o grafo de orquestração de todas as sessões.', html: () => `<div class="fila">${cc('workflows', telaWorkflows())}</div>`,
+    n: N(['Workflows: 6 KPIs (profundidade, subagentes por sessão, sucesso, fluxo mais comum), Dynamic Workflows com chips de fase e tabela Agent / Phase / State / Tokens / Tools / Duration, e o Agent Orchestration Graph em colunas com arestas de espessura pelo volume.'], ['KPI "Rodadas de review por PR" no lugar de "Avg Compactions": é o que mede o laço dev/review.', 'Só o grafo de orquestração das 11 seções; as outras ficam para depois.']) },
+  { id: 'console-historico', cod: 'C15', nome: 'Histórico', sub: 'Sessões encerradas por dia, com a ligação depois do /clear (3.8).', html: () => `<div class="fila">${cc('historico', telaHistorico())}</div>`,
+    n: N(['As linhas do Activity Feed e da tabela de Sessions.'], ['A ligação entre sessões depois do <code>/clear</code> vem do Podium.']) },
+  { id: 'console-config', cod: 'C16', nome: 'Agent Config · Visão geral', sub: 'Raízes copiáveis e o resumo de skills, subagentes, comandos, MCP, plugins, hooks e memória (9.6).', html: () => `<div class="fila">${cc('config', telaConfig())}</div>`,
+    n: N(['Agent Config: escopo Todos / Usuário / Projeto, Backups, abas com contador, Roots copiáveis e Quick summary em grade de cards.'], ['Sem a aba Codex: o console é do Claude Code.', 'Faixa no topo: editar fica desligado até o épico 9 liberar (escreve em <code>~/.claude</code>).']) },
+  { id: 'console-config-skills', cod: 'C17', nome: 'Agent Config · Skills', sub: 'A lista com busca e Nova, e o editor do SKILL.md com Salvar com backup (desligado até o épico 9).', html: () => `<div class="fila">${cc('config', telaConfigSkills())}</div>`,
+    n: N(['A lista de Skills (busca, + New, card com escopo, descrição, caminho, View source / Edit / Delete) e o editor de texto com backup antes de gravar (<code>cc-mutate.js</code>).'], ['Editor ao lado da lista, sem trocar de tela.', 'Apagar em vermelho e salvar com o backup no rótulo.']) },
+  { id: 'console-run', cod: 'C18', nome: 'Rodar agente', sub: 'Lançar ou retomar uma sessão com o CLI e o login do usuário (9.5).', html: () => `<div class="fila">${cc('run', telaRun())}</div>`,
+    n: N(['Run Agent: painel "Works here / CLI only", Mode (Conversation, One-shot), Source session (New, Resume), Prompt, Working directory, Model e Permission mode; "Dashboard runs".'], ['Sem Codex.', 'Desligado por padrão (épico 9): quem lança é o núcleo, com o CLI e o login do usuário (0005).']) },
+  { id: 'console-estados', cod: 'C19', nome: 'Carregando, vazio e erro', sub: 'Os três estados que toda tela tem.', html: () => `<div class="fila">${cc('dashboard', telaVazios(), 0)}</div>`,
     n: N(['EmptyState, Skeleton e o aviso inline de erro de API.'], ['Erro do GitHub mostra o cache e a hora dele (decisão 0001).']) },
 ]
 
@@ -1099,13 +1327,14 @@ function montar() {
     htmlI += `<a href="#${t.id}"><span>${t.cod}</span>${t.nome}</a>`
     htmlM += `<section class="tela" id="${t.id}"><div class="olho">${t.cod}</div><h3>${t.nome}</h3><p>${t.sub}</p><div class="palco">${t.html()}</div>${t.n}</section>`
   }
-  htmlI += `<h3>Fechamento</h3><a href="#perguntas"><span>?</span>Perguntas para o dono</a>`
-  htmlM += `<section class="tela perguntas" id="perguntas"><div class="capitulo"><h2>Perguntas para o dono</h2></div><ol>
-    <li><b>Motivo de uma pergunta.</b> O <code>tokens.json</code> tem 4 motivos e "Pede permissão" (<code>notification</code>) cobre pergunta e permissão. A proposta é manter os 4 e dizer o tipo na faixa (P2 e P3). Ou o rótulo muda?</li>
-    <li><b>Clique numa sessão no menu da bandeja:</b> abre a sessão no Claude Desktop ou o detalhe na janela do app?</li>
-    <li><b>Erro conta como "precisa de você"?</b> Aqui não: aparece à parte ("1 com erro"), como no CCAM.</li>
-    <li><b>Barra de contexto</b> laranja até 79% e vermelha a partir de 80%. Serve?</li>
-    <li><b>Som da notificação</b> só para os urgentes?</li></ol></section>`
+  htmlI += `<h3>Fechamento</h3><a href="#perguntas"><span>✓</span>Decisões e o que falta</a>`
+  htmlM += `<section class="tela perguntas" id="perguntas"><div class="capitulo"><h2>Decisões do dono e o que falta</h2></div><ol>
+    <li><b>Motivo de uma pergunta:</b> fica "Pede permissão" (<code>notification</code>), com o tipo dito na faixa.</li>
+    <li><b>Clique numa sessão na bandeja:</b> abre na janela do app. Abrir no Claude Desktop é sempre explícito: item alternativo com ⌥ no menu, ação própria na notificação e botão no detalhe (A2, A3, A5).</li>
+    <li><b>Barra de contexto:</b> laranja até 79%, vermelha a partir de 80%.</li>
+    <li><b>Som da notificação:</b> só nos urgentes (Pede permissão, Interrompida e Com erro).</li>
+    <li><b>Recomendação, para confirmar:</b> sessão com erro <b>entra</b> em "precisam de você". Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
+    <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
 }

@@ -4,7 +4,7 @@ Wireframes de todas as telas da 0.0.1, para aprovação antes de construir:
 
 - **Painel lateral** (mod do Claude Code, decisão [0004](../decisoes/0004-painel-da-sessao.md)): P0 a P8, em 38 e 121 colunas.
 - **App de bandeja** (Tauri, decisão [0005](../decisoes/0005-app-desktop.md)): A1 a A5.
-- **Console** (artefato, épico 3, que também é a janela do app): C1 a C12.
+- **Console** (artefato, que também é a janela do app): C1 a C19, com Feed, Analytics, Workflows (grafo de agentes e o laço dev/review), Agent Config e Rodar agente.
 
 A referência é o Claude Code Agent Monitor. Cada tela diz o que veio dele e onde diverge.
 
