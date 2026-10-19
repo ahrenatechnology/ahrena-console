@@ -18,3 +18,4 @@ export * from './github/index.ts';
 export * from './ingest/hooks/index.ts';
 export * from './estados/index.ts';
 export * from './custo/index.ts';
+export * from './plano/index.ts';

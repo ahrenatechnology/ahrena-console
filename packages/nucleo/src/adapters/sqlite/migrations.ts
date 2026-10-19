@@ -121,6 +121,23 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX sessions_by_account ON sessions (account_id, updated_at DESC, id DESC);
     `,
   },
+  {
+    version: 3,
+    description: 'plano da sessão (item 1.9)',
+    // Aditiva: tabela nova, um plano por sessão; os passos ficam em JSON, na ordem do plano.
+    sql: `
+      CREATE TABLE session_plans (
+        session_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL CHECK (source IN ('TodoWrite', 'Task', 'update_plan')),
+        steps TEXT NOT NULL DEFAULT '[]',
+        done INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        current_step_id TEXT,
+        changed_at TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}'
+      ) STRICT;
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

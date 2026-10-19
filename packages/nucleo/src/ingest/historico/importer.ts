@@ -27,6 +27,7 @@ import {
 import { parseLine, truncate, TASK_MAX, type EventData } from './transcript.ts';
 import { aggregateUsage, bucketKey, type UsageSample } from './usage.ts';
 import { aplicarPiso } from '../../custo/piso.ts';
+import { atualizarPlano } from '../../plano/gravacao.ts';
 
 export interface ImportOptions {
   storage: StoragePort;
@@ -117,6 +118,8 @@ class SessionImport {
   facts = new Map<string, AgentFacts>();
   /** `tool_use_id → agente` que chamou a ferramenta; dá o pai de cada subagente. */
   toolUseOwner = new Map<string, string>();
+  /** Eventos novos desta rodada, para o plano da sessão (item 1.9). */
+  added: SessionEvent[] = [];
   read = false;
 
   constructor(sessionId: string, storage: StoragePort, report: ImportReport) {
@@ -180,8 +183,10 @@ class SessionImport {
           data: e.data,
           createdAt: e.createdAt,
         };
-        if (await this.storage.appendEvent(event)) this.report.eventsAdded++;
-        else this.report.eventsExisting++;
+        if (await this.storage.appendEvent(event)) {
+          this.report.eventsAdded++;
+          this.added.push(event);
+        } else this.report.eventsExisting++;
       }
     }
     const tail = await readTail(file.path, offset);
@@ -281,6 +286,8 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
   const updatedAt = lastAt ?? startedAt;
 
   const tokensByAgent = await run.writeUsage(updatedAt);
+  // Só os eventos novos: o que já estava gravado já passou pelo plano (relidos não reaplicam).
+  await atualizarPlano(storage, sessionId, run.added);
   const tokens = (id: string) => tokensByAgent.get(id) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 };
 
   // Agente principal.

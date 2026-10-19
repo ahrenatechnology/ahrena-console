@@ -20,6 +20,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
 | [src/estados/](src/estados/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |
 | [src/api/](src/api/) | API local mínima para o painel lateral (começo da #21; seção abaixo) |
+| [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 
 ## API local
 
@@ -55,7 +56,7 @@ npm run api -- --help
 node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 ```
 
-O transcript passou a guardar a entrada de duas ferramentas, `TodoWrite` (o plano) e `AskUserQuestion` (a pergunta), cortada como os outros textos; a de nenhuma outra.
+O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das ferramentas do plano (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `update_plan`), cortada como os outros textos; a de nenhuma outra.
 
 ## Importação do histórico
 
@@ -100,6 +101,17 @@ Item 1.6. Tudo é **estimativa**: não há leitura de fatura, e todo resultado l
 ## Estados
 
 A sessão persiste `active`, `completed`, `error` ou `abandoned`. `waiting` não é gravado: é uma camada sobre `awaitingInputSince`, com o motivo em `awaitingReason` (`notification`, `interrupted`, `stop`, `session_start`). `displayStatus()` devolve o que a interface mostra. As transições são da máquina de estados, em [src/estados/](src/estados/README.md), que também dá ao inbox os estados "delegando" e "esperando processo em background".
+
+## Plano da sessão
+
+Item 1.9. O plano é a lista de tarefas que o agente mantém enquanto trabalha, não a issue do GitHub (essa é o Trabalho). `getPlan(sessionId)` devolve o `SessionPlan`: os passos na ordem, cada um com texto, texto no gerúndio (`activeForm`), estado (`pending`, `in_progress`, `completed`) e dono, mais `done`/`total`, o passo atual (`currentStepId`, o primeiro em andamento) e a hora da última mudança (`changedAt`).
+
+- **De onde vem:** dos hooks `PreToolUse` e `PostToolUse` (`ingestHook`) e do transcript (importador e seguidor), que chamam `atualizarPlano(porta, sessionId, eventos)` com os eventos que acabaram de gravar. O transcript guarda a entrada dessas ferramentas no evento (`tool_input`, curta) e o id da tarefa no resultado do TaskCreate (`taskId`).
+- **Lista inteira:** TodoWrite e `update_plan` com `items` (de qualquer plugin: `mcp__<servidor>__update_plan`) reescrevem o plano. O passo de mesmo texto mantém o dono e a hora. Lista mais velha que a última mudança não volta o plano.
+- **Incremental:** TaskCreate acrescenta um passo com id provisório (o próximo número), trocado pelo do resultado; TaskUpdate muda estado, texto e dono, e `deleted` tira o passo. `update_plan` com `advance`, `done` e `start` (posições a partir de 1) anda na lista que já existe.
+- **`/clear`:** `SessionStart` com `source: clear` ou o prompt `/clear` do transcript esvazia o plano.
+- **Dono:** o principal, por padrão; o subagente que criou ou pegou (`in_progress`) a tarefa; o `owner` do TaskUpdate; a sessão filha da `session` de um item do `update_plan`. A lista de TodoWrite ou `update_plan` de um subagente é dele e não troca o plano da sessão.
+- **Sem contar duas vezes:** a mesma chamada chega pelo Pre, pelo Post e pelo transcript; vale a primeira, pelo `tool_use_id`. Resultado com erro desfaz a última chamada aplicada. O estado disso fica em `metadata.extracao`.
 
 ## Contas
 
