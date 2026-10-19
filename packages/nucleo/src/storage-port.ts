@@ -90,6 +90,8 @@ export interface StoragePort {
   putContextMeter(meter: ContextMeter): Promise<void>;
   /** Medidores da sessão: o principal primeiro, depois os subagentes por id. */
   listContextMeters(sessionId: string): Promise<ContextMeter[]>;
+  /** Apaga os medidores da sessão, para refazê-los do zero (reprocessamento). */
+  deleteContextMeters(sessionId: string): Promise<void>;
 
   close(): Promise<void>;
 }

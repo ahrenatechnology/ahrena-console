@@ -410,7 +410,8 @@ function contextoDe(session: Session, r: ResumoDosEventos, medidores: ContextMet
   const agentes = medidores
     .filter((m) => m.agentId !== null && m.measuredAt !== null)
     .map((m) => ({ agenteId: m.agentId!, usados: m.usedTokens, limite: m.windowTokens, pct: pctDoContexto(m), estouros: m.compactions, alerta: alertaDeContexto(m) }));
-  const principal = medidores.find((m) => m.agentId === null);
+  // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
+  const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
   const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
   if (principal && typeof sim?.usados !== 'number') {
     return {
@@ -419,6 +420,7 @@ function contextoDe(session: Session, r: ResumoDosEventos, medidores: ContextMet
       pct: pctDoContexto(principal),
       estouros: principal.compactions,
       alerta: alertaDeContexto(principal),
+      compactacoesManuais: principal.manualCompactions,
       rotulo: rotuloDoContexto(principal),
       agentes,
     };
@@ -428,8 +430,14 @@ function contextoDe(session: Session, r: ResumoDosEventos, medidores: ContextMet
   const limite = typeof sim?.limite === 'number' && sim.limite > 0 ? sim.limite : usados > LIMITE_PADRAO_DE_CONTEXTO ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
   usados = Math.max(0, usados);
   const estouros = typeof sim?.estouros === 'number' && Number.isInteger(sim.estouros) && sim.estouros > 0 ? sim.estouros : 0;
-  const m = { usedTokens: usados, windowTokens: limite, compactions: estouros };
-  return { usados, limite, pct: pctDoContexto(m), estouros, alerta: alertaDeContexto(m), rotulo: rotuloDoContexto(m), agentes };
+  // Sem medição do principal, os estouros que o medidor já contou (pelo PreCompact) continuam valendo.
+  const contado = medidores.find((x) => x.agentId === null);
+  const total = Math.max(estouros, contado?.compactions ?? 0);
+  const c = { usedTokens: usados, windowTokens: limite, compactions: total };
+  return {
+    usados, limite, pct: pctDoContexto(c), estouros: total, alerta: alertaDeContexto(c),
+    compactacoesManuais: contado?.manualCompactions ?? 0, rotulo: rotuloDoContexto(c), agentes,
+  };
 }
 
 type PlanoGravado = Pick<SessionPlan, 'steps' | 'total' | 'changedAt' | 'currentStepId'>;

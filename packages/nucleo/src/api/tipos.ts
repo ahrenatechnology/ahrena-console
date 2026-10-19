@@ -57,10 +57,12 @@ export interface ContextoDoPainel {
   limite: number;
   /** 0 a 100. */
   pct: number;
-  /** Estouros da sessão: cada compactação, automática ou `/compact`. */
+  /** Estouros da sessão: cada compactação automática (a janela encheu). */
   estouros: number;
   /** A partir de 2 estouros (como no Podium). */
   alerta: boolean;
+  /** Compactações manuais (`/compact`, o botão Compactar): à parte, não são estouro. */
+  compactacoesManuais: number;
   /** "62.6k / 200k (31%)". */
   rotulo: string;
   /** O medidor de cada subagente que já mandou mensagem; `agenteId` é o `SubagenteDoPainel.id`. */

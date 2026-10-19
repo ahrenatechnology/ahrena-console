@@ -11,12 +11,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate, schemaVersion } from '../src/adapters/sqlite/migrations.ts';
 import { Contas, MontadorDoPainel } from '../src/api/index.ts';
+import { reprocessarContexto } from '../src/api/reprocessamento.ts';
 import {
   JANELA_LONGA,
   JANELA_PADRAO,
   alertaDeContexto,
   aplicarAoMedidor,
   medidorVazio,
+  atualizarContexto,
   rotuloDoContexto,
   validateContextMeter,
   type ContextMeter,
@@ -118,19 +120,21 @@ describe('medidor pelo transcript', () => {
     assert.deepEqual([m.usedTokens, m.compactions], [15_200, 1]);
   });
 
-  test('3 compactações: três estouros e o alerta; reimportar não conta de novo', async () => {
+  test('3 compactações automáticas: três estouros e o alerta; a manual fica à parte; reimportar não conta de novo', async () => {
     const sid = '00000000-0000-4000-8000-0000000000c3';
     const { root } = await importar('tres', sid, [
       mensagem(sid, 1, { input: 1_000, cacheRead: 150_000 }),
       compactacao(sid, 2, 'auto', 160_000, 10_000),
       mensagem(sid, 3, { input: 1_000, cacheRead: 150_000 }),
-      compactacao(sid, 4, 'manual', 151_000, 8_000),
+      compactacao(sid, 4, 'auto', 151_000, 8_000),
       mensagem(sid, 5, { input: 1_000, cacheRead: 150_000 }),
-      compactacao(sid, 6, 'auto', 158_000, 12_000),
-      mensagem(sid, 7, { input: 500, cacheRead: 40_000 }),
+      compactacao(sid, 6, 'manual', 151_000, 9_000),
+      mensagem(sid, 7, { input: 1_000, cacheRead: 150_000 }),
+      compactacao(sid, 8, 'auto', 158_000, 12_000),
+      mensagem(sid, 9, { input: 500, cacheRead: 40_000 }),
     ]);
     let m = await principal(sid);
-    assert.deepEqual([m.compactions, m.compactionsTranscript, m.usedTokens, m.lastCompactionTrigger], [3, 3, 40_500, 'auto']);
+    assert.deepEqual([m.compactions, m.compactionsTranscript, m.manualCompactions, m.usedTokens, m.lastCompactionTrigger], [3, 3, 1, 40_500, 'auto']);
     assert.equal(alertaDeContexto(m), true);
     await importHistory({ storage: store, root });
     m = await principal(sid);
@@ -173,13 +177,21 @@ describe('estouros pelo hook PreCompact', () => {
   const pre = (sid: string, m: number, trigger: string, id: string) =>
     ingestHook(store, { session_id: sid, hook_event_name: 'PreCompact', trigger, custom_instructions: '' }, { receivedAt: at(m), deliveryId: id });
 
-  test('o hook conta, e a entrega repetida não', async () => {
+  test('o hook automático conta, o manual fica à parte, e a entrega repetida não', async () => {
     const sid = 'sess-hook-1';
-    await pre(sid, 1, 'manual', 'd1');
-    await pre(sid, 1, 'manual', 'd1');
-    await pre(sid, 2, 'auto', 'd2');
+    await pre(sid, 1, 'auto', 'd1');
+    await pre(sid, 1, 'auto', 'd1');
+    await pre(sid, 2, 'manual', 'd2');
+    await pre(sid, 3, 'auto', 'd4');
     const m = await principal(sid);
-    assert.deepEqual([m.compactions, m.compactionsHook, m.lastCompactionTrigger, m.measuredAt], [2, 2, 'auto', null]);
+    assert.deepEqual([m.compactions, m.compactionsHook, m.manualCompactions, m.lastCompactionTrigger, m.measuredAt], [2, 2, 1, 'auto', null]);
+  });
+
+  test('medidor só do PreCompact: o card não mostra "0 / 200k"', async () => {
+    const sid = 'sess-hook-2';
+    await pre(sid, 1, 'auto', 'd5');
+    const montador = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
+    assert.equal((await montador.montar({ sessionId: sid })).contexto, null);
   });
 
   test('hook e transcript veem a mesma compactação: vale o maior, nunca a soma', async () => {
@@ -192,6 +204,24 @@ describe('estouros pelo hook PreCompact', () => {
 });
 
 describe('aplicarAoMedidor', () => {
+  test('o preTokens da compactação não muda a janela ("prompt too long" acima de 200k)', () => {
+    const c = event({ id: 'c1', type: 'Compaction', createdAt: at(1), data: { subtype: 'compact_boundary', compact: { trigger: 'auto', preTokens: 260_000, postTokens: 20_000 } } });
+    const m = aplicarAoMedidor(medidorVazio('s1', null, at(0)), c, null)!;
+    assert.deepEqual([m.windowTokens, m.windowSource, m.usedTokens, m.compactions], [JANELA_PADRAO, 'modelo', 20_000, 1]);
+  });
+
+  test('datas com precisões diferentes são comparadas como instante', async () => {
+    const uso = (id: string, createdAt: string, input: number) =>
+      event({ id, type: 'AssistantMessage', createdAt, data: { usage: { model: 'claude-opus-5-5', tokens: { input, output: 1, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 } } } });
+    // Como texto, "12:00:00Z" vem depois de "12:00:00.500Z"; como instante, antes.
+    const gravados: ContextMeter[] = [];
+    const porta = { getSession: async () => null, listContextMeters: async () => [], putContextMeter: async (m: ContextMeter) => void gravados.push(m) };
+    await atualizarContexto(porta, 's1', [uso('b', '2026-11-02T12:00:00.500Z', 5_000), uso('a', '2026-11-02T12:00:00Z', 3_000)]);
+    assert.deepEqual([gravados[0].usedTokens, gravados[0].measuredAt], [5_000, '2026-11-02T12:00:00.500Z']);
+    const m = aplicarAoMedidor(gravados[0], uso('c', '2026-11-02T12:00:00Z', 1_000), null)!;
+    assert.equal(m.usedTokens, 5_000, 'a mensagem mais velha não substitui');
+  });
+
   test('mensagem mais velha que a medição não a substitui', () => {
     let m = medidorVazio('s1', null, at(0));
     const uso = (minuto: number, input: number) =>
@@ -232,7 +262,8 @@ describe('API do painel', () => {
       mensagem(sid, 1, { input: 1_000, cacheRead: 150_000 }),
       compactacao(sid, 2, 'auto', 160_000, 10_000),
       mensagem(sid, 3, { input: 1_000, cacheRead: 150_000 }),
-      compactacao(sid, 4, 'manual', 151_000, 8_000),
+      compactacao(sid, 4, 'auto', 151_000, 8_000),
+      compactacao(sid, 4.5, 'manual', 70_000, 7_000),
       mensagem(sid, 5, { input: 600, cacheRead: 62_000 }),
     ], [mensagem(sid, 6, { input: 50, cacheRead: 20_000 }, { agentId: A })]);
     const montador = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
@@ -243,9 +274,51 @@ describe('API do painel', () => {
       pct: 31,
       estouros: 2,
       alerta: true,
+      compactacoesManuais: 1,
       rotulo: '62.6k / 200k (31%)',
       agentes: [{ agenteId: `${sid}:${A}`, usados: 20_050, limite: 200_000, pct: 10, estouros: 0, alerta: false }],
     });
     assert.ok(p.subagentes.itens.some((s) => s.id === `${sid}:${A}`), 'agenteId é o id do subagente no card');
+  });
+});
+
+describe('reprocessamento contexto-1', () => {
+  test('refaz o medidor da sessão importada antes do 1.7, com as compactações relidas do transcript e do subagente', async () => {
+    const sid = '00000000-0000-4000-8000-0000000000c9';
+    const linhas = [
+      mensagem(sid, 1, { input: 1_000, cacheRead: 150_000 }),
+      compactacao(sid, 2, 'auto', 160_000, 10_000),
+      mensagem(sid, 3, { input: 1_000, cacheRead: 150_000 }),
+      compactacao(sid, 4, 'auto', 151_000, 8_000),
+      mensagem(sid, 5, { input: 600, cacheRead: 62_000 }),
+    ];
+    const { root, arquivo } = await importar('reprocessar', sid, linhas, [
+      mensagem(sid, 6, { input: 50, cacheRead: 20_000 }, { agentId: A }),
+      compactacao(sid, 7, 'auto', 20_050, 4_000).replace('"sessionId"', `"isSidechain":true,"agentId":"${A}","sessionId"`),
+    ]);
+    // Como a importação antiga: sem medidor, e a compactação gravada sem o compactMetadata.
+    const antigo = openSqliteStorage({ path: ':memory:' });
+    const sessao = (await store.getSession(sid))!;
+    await antigo.putSession({ ...sessao, metadata: { ...sessao.metadata, transcriptPath: arquivo } });
+    let cursor: string | null = null;
+    do {
+      const page = await store.listEvents(sid, { limit: 500, cursor });
+      for (const e of page.items) {
+        const d = e.data as Record<string, unknown>;
+        await antigo.appendEvent(e.type === 'Compaction' ? { ...e, data: { ...d, compact: undefined } } : e);
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    assert.deepEqual(await antigo.listContextMeters(sid), []);
+
+    const r = await reprocessarContexto({ storage: antigo, raiz: root });
+    assert.deepEqual(r, { sessoes: 1, medidores: 2 });
+    const [p, sub] = await antigo.listContextMeters(sid);
+    assert.deepEqual([p.usedTokens, p.compactions, alertaDeContexto(p)], [62_600, 2, true]);
+    assert.deepEqual([sub.agentId, sub.usedTokens, sub.compactions], [`${sid}:${A}`, 4_000, 1]);
+    // Rodar de novo dá o mesmo: refaz do zero, não soma.
+    await reprocessarContexto({ storage: antigo, raiz: root });
+    assert.equal((await antigo.listContextMeters(sid))[0].compactions, 2);
+    await antigo.close();
   });
 });

@@ -8,9 +8,13 @@
 //   AskUserQuestion, os planos aprovados e as permissões negadas que ficaram só no transcript
 //   entram pela captura do transcript, que agora roda na importação (`capturarDoTranscript`) e
 //   uma vez para o histórico já importado (`reprocessarHistorico`).
+// - Medidor de contexto (item 1.7): a gravação só vê eventos novos, e a importação antiga não
+//   guardou o `compactMetadata` da compactação. `reprocessarContexto` refaz os medidores de cada
+//   sessão a partir dos eventos gravados e das compactações relidas do transcript (e dos subagentes).
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+import { reconstruirContexto } from '../contexto/gravacao.ts';
 import { captureTranscriptFile } from '../decisoes/captura-transcript.ts';
 import type { Decision } from '../decisoes/modelo.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
@@ -131,6 +135,42 @@ export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPor
           await decisoes.putDecision({ ...d, choice: curta, metadata: { ...d.metadata, texto }, updatedAt: agora });
           r.encurtadas++;
         }
+      }
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return r;
+}
+
+/** O reprocessamento do medidor de contexto; um nome novo faz rodar de novo em todo banco. */
+export const REPROCESSAMENTO_DO_CONTEXTO = 'contexto-1';
+
+/** Os transcripts dos subagentes da sessão, ao lado do principal (`<sessão>/subagents/agent-*.jsonl`). */
+function transcriptsDosSubagentes(principal: string): string[] {
+  const pasta = join(dirname(principal), basename(principal, '.jsonl'), 'subagents');
+  try {
+    return readdirSync(pasta).filter((f) => f.startsWith('agent-') && f.endsWith('.jsonl')).map((f) => join(pasta, f));
+  } catch {
+    return [];
+  }
+}
+
+/** Uma passada por todas as sessões: refaz os medidores de contexto e os estouros. */
+export async function reprocessarContexto(o: { storage: StoragePort; raiz: string; log?: (m: string) => void }): Promise<{ sessoes: number; medidores: number }> {
+  const r = { sessoes: 0, medidores: 0 };
+  let cursor: string | null = null;
+  do {
+    const page = await o.storage.listSessions({ limit: 200, cursor });
+    for (const s of page.items) {
+      r.sessoes++;
+      try {
+        const t = transcriptDe(s, o.raiz);
+        const arquivos = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
+        const relidos: SessionEvent[] = [];
+        for (const a of arquivos) relidos.push(...(await eventosDoTranscript(a, s.id, (e) => e.type === 'Compaction')));
+        r.medidores += await reconstruirContexto(o.storage, s.id, relidos);
+      } catch (err) {
+        o.log?.(`medidor de contexto de ${s.id}: ${(err as Error).message}`);
       }
     }
     cursor = page.nextCursor;

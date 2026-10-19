@@ -1,6 +1,6 @@
 // Medidor de contexto (item 1.7): quanto da janela a sessão, ou um subagente, ocupa agora, e
-// quantas vezes a janela estourou (cada compactação, automática ou `/compact`). Como no Podium,
-// a partir de 2 estouros a sessão ganha um alerta.
+// quantas vezes a janela estourou (cada compactação automática; a manual fica à parte). Como no
+// Podium, a partir de 2 estouros a sessão ganha um alerta.
 
 import { InvalidModelError } from '../model.ts';
 
@@ -30,12 +30,20 @@ export interface ContextMeter {
   usedTokens: number;
   windowTokens: number;
   windowSource: WindowSource;
-  /** Estouros: o maior entre as duas fontes, que contam as mesmas compactações. */
+  /**
+   * Estouros: as compactações automáticas (a janela encheu). O maior entre as duas fontes, que
+   * contam as mesmas compactações. A manual (`/compact`, o botão Compactar) não é estouro.
+   */
   compactions: number;
-  /** Marcas `compact_boundary` no transcript. */
+  /** Marcas `compact_boundary` automáticas no transcript. */
   compactionsTranscript: number;
-  /** Hooks `PreCompact`. */
+  /** Hooks `PreCompact` automáticos. */
   compactionsHook: number;
+  /** Compactações manuais, à parte: o maior entre as duas fontes. */
+  manualCompactions: number;
+  manualCompactionsTranscript: number;
+  manualCompactionsHook: number;
+  /** A última compactação, automática ou manual. */
   lastCompactionAt: string | null;
   lastCompactionTrigger: CompactionTrigger | null;
   /** Hora do evento que deu `usedTokens`; nulo enquanto não houve medição. */
@@ -78,12 +86,15 @@ const iso = (v: unknown, nullable: boolean) => (nullable && v === null) || (type
 export function validateContextMeter(m: ContextMeter): void {
   if (typeof m.sessionId !== 'string' || m.sessionId.length === 0) fail('sessionId é obrigatório');
   if (m.agentId !== null && (typeof m.agentId !== 'string' || m.agentId.length === 0)) fail('agentId precisa ser texto ou nulo');
-  for (const k of ['usedTokens', 'compactions', 'compactionsTranscript', 'compactionsHook'] as const) {
+  for (const k of ['usedTokens', 'compactions', 'compactionsTranscript', 'compactionsHook', 'manualCompactions', 'manualCompactionsTranscript', 'manualCompactionsHook'] as const) {
     if (!count(m[k])) fail(`${k} precisa ser inteiro >= 0`);
   }
   if (!Number.isInteger(m.windowTokens) || m.windowTokens <= 0) fail('windowTokens precisa ser inteiro > 0');
   if (!WINDOW_SOURCES.includes(m.windowSource)) fail(`windowSource inválido: ${JSON.stringify(m.windowSource)}`);
   if (m.compactions !== Math.max(m.compactionsTranscript, m.compactionsHook)) fail('compactions precisa ser o maior entre as duas fontes');
+  if (m.manualCompactions !== Math.max(m.manualCompactionsTranscript, m.manualCompactionsHook)) {
+    fail('manualCompactions precisa ser o maior entre as duas fontes');
+  }
   if (m.lastCompactionTrigger !== null && !COMPACTION_TRIGGERS.includes(m.lastCompactionTrigger)) {
     fail(`lastCompactionTrigger inválido: ${JSON.stringify(m.lastCompactionTrigger)}`);
   }

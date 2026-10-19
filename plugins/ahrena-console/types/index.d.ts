@@ -166,13 +166,14 @@ export type DecisoesDoPainel = {
   lista: ListaDeDecisoes | null
 }
 
-/** Medidor de contexto (item 1.7). `estouros`: compactações da sessão; `alerta`: a partir de 2. */
+/** Medidor de contexto (item 1.7). `estouros`: compactações automáticas; `alerta`: a partir de 2; as manuais à parte. */
 export type ContextoDoPainel = {
   usados: number
   limite: number
   pct: number
   estouros: number
   alerta: boolean
+  compactacoesManuais: number
   rotulo: string
   agentes: { agenteId: string; usados: number; limite: number; pct: number; estouros: number; alerta: boolean }[]
 }

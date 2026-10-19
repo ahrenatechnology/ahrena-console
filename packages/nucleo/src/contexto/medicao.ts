@@ -4,10 +4,17 @@
 // - Mensagem do assistente com uso (`data.usage`, do transcript): o contexto que ela mandou é o
 //   input mais o cache lido e escrito. Vale a mais recente; uma mensagem mais velha que a medição
 //   gravada não a substitui.
-// - Compactação no transcript (`Compaction`, a marca `compact_boundary`): um estouro. Se a marca traz
-//   o contexto depois da compactação (`postTokens`), ele vira a medição até a próxima mensagem.
-// - Hook `PreCompact`: outro jeito de ver o mesmo estouro. As duas fontes contam as mesmas
-//   compactações, por isso o estouro é o maior entre elas, nunca a soma.
+// - Compactação no transcript (`Compaction`, a marca `compact_boundary`): a automática
+//   (`trigger: 'auto'`, a janela encheu) é um estouro; a manual (`/compact`, o botão Compactar do
+//   painel) é contada à parte e não é estouro. Se a marca traz o contexto depois da compactação
+//   (`postTokens`), ele vira a medição até a próxima mensagem.
+// - Hook `PreCompact`: outro jeito de ver a mesma compactação. As duas fontes contam as mesmas
+//   compactações, por isso cada contagem é o maior entre elas, nunca a soma.
+// - O `preTokens` da compactação não muda a janela: um "prompt too long" acima de 200k não prova
+//   que a sessão está na janela de 1M.
+//
+// As datas são comparadas como instante (`Date.parse`), não como texto: o hook e o transcript
+// gravam precisões diferentes.
 
 import type { SessionEvent } from '../model.ts';
 import { janelaDe } from './janela.ts';
@@ -32,29 +39,34 @@ export function contextoDaMensagem(e: Pick<SessionEvent, 'data'>): { tokens: num
   return tokens > 0 ? { tokens, modelo: str(uso.model) } : null;
 }
 
-interface Estouro {
+interface Compactacao {
   fonte: 'transcript' | 'hook';
   gatilho: CompactionTrigger | null;
-  antes: number;
   depois: number;
 }
 
-function estouroDe(e: SessionEvent): Estouro | null {
+function compactacaoDe(e: SessionEvent): Compactacao | null {
   const d = obj(e.data);
   if (e.type === 'Compaction') {
     const c = obj(d?.compact);
-    return { fonte: 'transcript', gatilho: gatilho(c?.trigger), antes: n(c?.preTokens), depois: n(c?.postTokens) };
+    return { fonte: 'transcript', gatilho: gatilho(c?.trigger), depois: n(c?.postTokens) };
   }
-  if (e.type === 'PreCompact') return { fonte: 'hook', gatilho: gatilho(d?.trigger), antes: 0, depois: 0 };
+  if (e.type === 'PreCompact') return { fonte: 'hook', gatilho: gatilho(d?.trigger), depois: 0 };
   return null;
 }
+
+/** Instante do evento em ms; data inválida vale 0. */
+export const instante = (iso: string | null): number => {
+  const ms = iso === null ? Number.NaN : Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+};
 
 const gatilho = (v: unknown): CompactionTrigger | null =>
   COMPACTION_TRIGGERS.includes(v as CompactionTrigger) ? (v as CompactionTrigger) : null;
 
 /** Se o evento muda algum medidor. */
 export function eventoDoContexto(e: SessionEvent): boolean {
-  return estouroDe(e) !== null || contextoDaMensagem(e) !== null;
+  return compactacaoDe(e) !== null || contextoDaMensagem(e) !== null;
 }
 
 export function medidorVazio(sessionId: string, agentId: string | null, em: string): ContextMeter {
@@ -68,6 +80,9 @@ export function medidorVazio(sessionId: string, agentId: string | null, em: stri
     compactions: 0,
     compactionsTranscript: 0,
     compactionsHook: 0,
+    manualCompactions: 0,
+    manualCompactionsTranscript: 0,
+    manualCompactionsHook: 0,
     lastCompactionAt: null,
     lastCompactionTrigger: null,
     measuredAt: null,
@@ -81,37 +96,43 @@ export function medidorVazio(sessionId: string, agentId: string | null, em: stri
  */
 export function aplicarAoMedidor(atual: ContextMeter, e: SessionEvent, modeloDaSessao: string | null): ContextMeter | null {
   const mensagem = contextoDaMensagem(e);
-  const estouro = estouroDe(e);
-  if (!mensagem && !estouro) return null;
+  const compactacao = compactacaoDe(e);
+  if (!mensagem && !compactacao) return null;
 
-  const m: ContextMeter = { ...atual, updatedAt: e.createdAt > atual.updatedAt ? e.createdAt : atual.updatedAt };
-  const maisNovo = m.measuredAt === null || e.createdAt >= m.measuredAt;
-  let visto = 0;
+  const t = instante(e.createdAt);
+  const m: ContextMeter = { ...atual, updatedAt: t > instante(atual.updatedAt) ? e.createdAt : atual.updatedAt };
+  const maisNovo = m.measuredAt === null || t >= instante(m.measuredAt);
 
-  if (mensagem) {
-    visto = mensagem.tokens;
-    if (maisNovo) {
-      m.usedTokens = mensagem.tokens;
-      m.model = mensagem.modelo ?? m.model;
-      m.measuredAt = e.createdAt;
-    }
+  if (mensagem && maisNovo) {
+    m.usedTokens = mensagem.tokens;
+    m.model = mensagem.modelo ?? m.model;
+    m.measuredAt = e.createdAt;
   }
-  if (estouro) {
-    if (estouro.fonte === 'transcript') m.compactionsTranscript++;
-    else m.compactionsHook++;
+  if (compactacao) {
+    const transcript = compactacao.fonte === 'transcript';
+    // Só a automática é estouro; a manual, e a sem gatilho conhecido, fica à parte.
+    if (compactacao.gatilho === 'auto') {
+      if (transcript) m.compactionsTranscript++;
+      else m.compactionsHook++;
+    } else if (compactacao.gatilho === 'manual') {
+      if (transcript) m.manualCompactionsTranscript++;
+      else m.manualCompactionsHook++;
+    }
     m.compactions = Math.max(m.compactionsTranscript, m.compactionsHook);
-    if (m.lastCompactionAt === null || e.createdAt >= m.lastCompactionAt) {
+    m.manualCompactions = Math.max(m.manualCompactionsTranscript, m.manualCompactionsHook);
+    if (m.lastCompactionAt === null || t >= instante(m.lastCompactionAt)) {
       m.lastCompactionAt = e.createdAt;
-      m.lastCompactionTrigger = estouro.gatilho ?? m.lastCompactionTrigger;
+      m.lastCompactionTrigger = compactacao.gatilho ?? m.lastCompactionTrigger;
     }
-    visto = estouro.antes;
-    if (estouro.depois > 0 && maisNovo) {
-      m.usedTokens = estouro.depois;
+    if (compactacao.depois > 0 && maisNovo) {
+      m.usedTokens = compactacao.depois;
       m.measuredAt = e.createdAt;
     }
   }
 
-  const janela = janelaDe(m.model, modeloDaSessao, Math.max(visto, m.usedTokens), { tokens: m.windowTokens, source: m.windowSource });
+  // A janela sai só do que a API aceitou (a mensagem), nunca do `preTokens` da compactação.
+  const visto = mensagem ? Math.max(mensagem.tokens, m.usedTokens) : m.usedTokens;
+  const janela = janelaDe(m.model, modeloDaSessao, visto, { tokens: m.windowTokens, source: m.windowSource });
   m.windowTokens = janela.tokens;
   m.windowSource = janela.source;
   return m;

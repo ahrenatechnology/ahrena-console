@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
 import type { PlanRecord, SessionPlan } from '../src/plano/modelo.ts';
+import type { ContextMeter } from '../src/contexto/modelo.ts';
 import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {
@@ -273,6 +274,48 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         await assert.rejects(store.putTokenUsage(bad), InvalidModelError);
         bad.tokens = { ...bad.tokens, output: 1.5 };
         await assert.rejects(store.putTokenUsage(bad), InvalidModelError);
+      });
+    });
+
+    describe('medidor de contexto (item 1.7)', () => {
+      const medidor = (over: Partial<ContextMeter> = {}): ContextMeter => ({
+        sessionId: 's1',
+        agentId: null,
+        model: 'claude-opus-5-5',
+        usedTokens: 62_600,
+        windowTokens: 200_000,
+        windowSource: 'modelo',
+        compactions: 2,
+        compactionsTranscript: 2,
+        compactionsHook: 1,
+        manualCompactions: 1,
+        manualCompactionsTranscript: 1,
+        manualCompactionsHook: 0,
+        lastCompactionAt: at(2),
+        lastCompactionTrigger: 'auto',
+        measuredAt: at(3),
+        updatedAt: at(3),
+        ...over,
+      });
+
+      test('grava, lista com o principal primeiro, substitui pela chave e apaga por sessão', async () => {
+        assert.deepEqual(await store.listContextMeters('s1'), []);
+        const sub = medidor({ agentId: 's1:a1', usedTokens: 4_000, compactions: 0, compactionsTranscript: 0, compactionsHook: 0 });
+        await store.putContextMeter(sub);
+        await store.putContextMeter(medidor({ usedTokens: 1 }));
+        await store.putContextMeter(medidor());
+        await store.putContextMeter(medidor({ sessionId: 's2' }));
+        assert.deepEqual(await store.listContextMeters('s1'), [medidor(), sub]);
+        await store.deleteContextMeters('s1');
+        assert.deepEqual(await store.listContextMeters('s1'), []);
+        assert.equal((await store.listContextMeters('s2')).length, 1);
+      });
+
+      test('recusa contagem que não é o maior das fontes, janela zero e gatilho inválido', async () => {
+        await assert.rejects(store.putContextMeter(medidor({ compactions: 3 })), InvalidModelError);
+        await assert.rejects(store.putContextMeter(medidor({ manualCompactions: 0 })), InvalidModelError);
+        await assert.rejects(store.putContextMeter(medidor({ windowTokens: 0 })), InvalidModelError);
+        await assert.rejects(store.putContextMeter(medidor({ lastCompactionTrigger: 'outro' as ContextMeter['lastCompactionTrigger'] })), InvalidModelError);
       });
     });
 

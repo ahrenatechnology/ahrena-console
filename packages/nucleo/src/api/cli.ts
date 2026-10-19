@@ -28,7 +28,15 @@ import {
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
-import { capturarDoTranscript, LIMPEZA_DAS_DECISOES, limparDecisoes, REPROCESSAMENTO, reprocessarHistorico } from './reprocessamento.ts';
+import {
+  capturarDoTranscript,
+  LIMPEZA_DAS_DECISOES,
+  limparDecisoes,
+  REPROCESSAMENTO,
+  REPROCESSAMENTO_DO_CONTEXTO,
+  reprocessarContexto,
+  reprocessarHistorico,
+} from './reprocessamento.ts';
 import { iniciarApiLocal } from './servidor.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
@@ -177,7 +185,8 @@ if (follower) {
 }
 
 // Uma vez por banco, depois da importação inicial: planos e decisões das sessões importadas antes
-// da captura existir, e a limpeza do que a captura antiga gravou e não é decisão.
+// da captura existir, a limpeza do que a captura antiga gravou e não é decisão, e os medidores
+// de contexto das sessões importadas antes do item 1.7.
 async function reprocessarUmaVez() {
   if (!storage.reprocessado(REPROCESSAMENTO)) {
     const inicio = Date.now();
@@ -189,6 +198,11 @@ async function reprocessarUmaVez() {
     const r = await limparDecisoes(storage, decisoes);
     storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
     log(`decisões limpas: ${r.ruido} fora das listas, ${r.encurtadas} com o título encurtado`);
+  }
+  if (!storage.reprocessado(REPROCESSAMENTO_DO_CONTEXTO)) {
+    const r = await reprocessarContexto({ storage, raiz: o.projetos ?? defaultProjectsRoot(), log });
+    storage.marcarReprocessado(REPROCESSAMENTO_DO_CONTEXTO, new Date().toISOString());
+    log(`medidor de contexto refeito: ${r.medidores} medidores em ${r.sessoes} sessões`);
   }
 }
 
