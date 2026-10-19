@@ -130,6 +130,16 @@ export class GithubCache {
     return this.blockedUntil;
   }
 
+  /** Quanto falta da pausa por limite do GitHub (0 se não há). */
+  pauseLeftMs(): number {
+    return Math.max(0, this.blockedUntil - this.now());
+  }
+
+  /** Suspende as chamadas por limite do GitHub vindo de fora das leituras (ex.: uma mutação). */
+  pause(ms: number): void {
+    this.blockedUntil = Math.max(this.blockedUntil, this.now() + ms);
+  }
+
   /**
    * Dentro do TTL não chama o GitHub; fora dele chama uma vez por chave; se falhar e
    * houver dado de até 24 h, serve o velho com `stale: true` e o motivo.
