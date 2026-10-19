@@ -223,8 +223,14 @@ Estratégia: **por ação**, cada uma desligada por padrão e liberada pelo admi
 | 9.2 | User story, frontend | Responder perguntas e aprovar planos pelo console (Podium) | respostas sem terminal | 9.1, 4.1 |
 | 9.3 | User story, frontend | Permitir ou negar uma ferramenta, uma vez (Podium) | aprovações sem terminal | 9.2 |
 | 9.4 | User story, frontend | Mandar mensagem e `/clear`, `/compact` para uma sessão parada (Podium) | comandos sem terminal | 9.2 |
-| 9.5 | User story, frontend | Lançar e retomar sessões pelo console (tela Run do CCAM) | run e resume | 9.1 |
+| 9.5 | User story, frontend | Lançar e retomar sessões pelo console (tela Run do CCAM); feito pelo 9.8 e pelo 9.10 ([decisão 0007](decisoes/0007-chat-e-delegacao.md)) | run e resume | 9.1, 9.7 |
 | 9.6 | User story, frontend | Editor de configuração: skills, subagentes, comandos, memória, hooks e MCP, com backup (tela Agent Config do CCAM) | configuração sem terminal | 3.1 |
+| 9.7 | Spike | Chat e delegação de prompts pelo console às sessões do terminal, com várias contas (timebox: 1 dia, [decisão 0007](decisoes/0007-chat-e-delegacao.md)) | decisão | — |
+| 9.8 | Tech task | Host de sessões no núcleo: `claude` em `stream-json` por conta e por pasta, retomada pelo id, um escritor por sessão, fila, parar, permissões pelos pedidos da 0003, eventos por SSE, ambiente sem credenciais e auditoria ([decisão 0007](decisoes/0007-chat-e-delegacao.md)) | chat ao vivo com qualquer conta | 9.7, 1.12, 1.15, 6.6 |
+| 9.9 | User story, frontend | Janela de chat no app de bandeja: sessões de todas as contas, chat ao vivo com a escolhida, parar, permitir ou negar uma vez | conversar sem terminal | 9.8, 6.7 |
+| 9.10 | User story, frontend | Caixa "delegar": mandar um prompt a uma sessão existente ou abrir uma nova com conta, pasta permitida, worktree opcional e prompt | delegar sem terminal | 9.8, 9.11 |
+| 9.11 | Tech task | Entrega a sessões abertas fora do núcleo (terminal, editor, `remote-control`) pela caixa de entrada da mensageria entre sessões, com a fila do plugin (9.4) de reserva | prompt para a sessão do terminal | 1.15 |
+| 9.12 | Tech task | Delegar pelo artefato e pelo MCP: ferramentas `delegate_prompt` e `start_session`, com o estado pelo long polling | delegar de dentro do Claude | 9.10, 2.4 |
 
 ## Épico 8 · Identidade visual (M1)
 

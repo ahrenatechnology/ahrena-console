@@ -1,0 +1,8 @@
+{
+  "name": "spike-chat-delegacao",
+  "private": true,
+  "type": "module",
+  "description": "Spike #120: chat e delegação de prompts pelo console às sessões do terminal",
+  "scripts": { "prova": "node prova.mjs", "prova:sdk": "node sdk.mjs" },
+  "dependencies": { "@anthropic-ai/claude-agent-sdk": "0.3.302" }
+}
