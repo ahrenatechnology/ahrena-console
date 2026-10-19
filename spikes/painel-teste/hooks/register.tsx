@@ -7,6 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register, RenderElement } from 'claude-code'
 
 import type { Fleet, Kanban, KanbanCard, KanbanLane, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import { paleta } from './marca'
 
 const PANE = 'ahrena-console'
 const CORE = 'http://127.0.0.1:4720'
@@ -16,13 +17,13 @@ const WORK_EVERY_MS = 60_000
 // O mesmo TTL do Project no núcleo (decisão 0001): reler antes disso sairia do cache.
 const KANBAN_EVERY_MS = 2 * 60_000
 
-const ORANGE = '#f47720'
-const PINK = '#df285d'
-const YELLOW = '#ffc30a'
-const GREEN = '#1baf7a'
+const ORANGE = paleta.orange['500']
+const PINK = paleta.rose['500']
+const YELLOW = paleta.yellow['500']
+const GREEN = paleta.green['500']
 const VIOLET = '#9085e9'
-const RED = '#e34948'
-const MUTED = '#a6a6aa'
+const RED = paleta.red['500']
+const MUTED = paleta.gray['200']
 const STATE_COLOR: Record<SessionRow['state'], string> = { ativa: ORANGE, ociosa: YELLOW, encerrada: MUTED }
 const STAGES = ['a fazer', 'em andamento', 'ci rodando', 'ci falhou', 'ajustes pedidos', 'em revisão', 'mergeado', 'concluída'] as const
 const STAGE_COLOR: Record<string, string> = {
@@ -246,7 +247,7 @@ function ago(iso: string) {
 }
 
 function logoSvg() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${ORANGE}"/><path d="M9 23 L16 8 L23 23" stroke="#17171b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="${PINK}" stroke="${PINK}" stroke-width="1" stroke-linejoin="round"/></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${ORANGE}"/><path d="M9 23 L16 8 L23 23" stroke="${paleta.gray['900']}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="${PINK}" stroke="${PINK}" stroke-width="1" stroke-linejoin="round"/></svg>`
 }
 
 function barsSvg(values: number[]) {
