@@ -25,6 +25,8 @@ const AJUDA = `Uso: npm run api -- [opções]
   --banco <arquivo>   SQLite do núcleo. Padrão AHRENA_CONSOLE_DB ou ~/.ahrena-console/nucleo.sqlite
   --projetos <pasta>  Transcripts a seguir. Padrão ~/.claude/projects
   --sem-historico     Não importa nem segue transcripts (só hooks)
+  --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
+                      avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
@@ -39,6 +41,7 @@ const { values: o } = parseArgs({
     porta: { type: 'string' },
     banco: { type: 'string' },
     projetos: { type: 'string' },
+    varredura: { type: 'string', default: '30' },
     'sem-historico': { type: 'boolean', default: false },
     'sem-desktop': { type: 'boolean', default: false },
     'sem-github': { type: 'boolean', default: false },
@@ -82,7 +85,15 @@ if (demo) {
 }
 
 let historicoPronto = false;
-const follower = demo || o['sem-historico'] ? null : followTranscripts({ storage, root: o.projetos, onError: (e) => log(`seguidor: ${(e as Error).message}`) });
+const follower =
+  demo || o['sem-historico']
+    ? null
+    : followTranscripts({
+        storage,
+        root: o.projetos,
+        scanIntervalMs: Math.max(1, Number(o.varredura) || 30) * 1000,
+        onError: (e) => log(`seguidor: ${(e as Error).message}`),
+      });
 
 const api = await iniciarApiLocal({
   montador,

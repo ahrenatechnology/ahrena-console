@@ -8,7 +8,7 @@
 // Uso:
 //   node scripts/medir-carga.mjs [--rota painel|sessao|frota] [--sessoes 20] [--abertos 1]
 //                                [--segundos 60] [--porta 4799] [--servidor caminho]
-//                                [--hooks-por-min 0] [--sessao <id>]
+//                                [--hooks-por-min 0] [--sessao <id>] [--varredura <s>]
 //
 //   --rota painel  a API de produção (packages/nucleo/src/api/cli.ts): importa e segue
 //                  ~/.claude/projects de verdade, num banco temporário, e só começa a
@@ -16,6 +16,7 @@
 //                  /api/painel/<sessão> a cada 5 s; a sessão é `--sessao` ou o transcript
 //                  mais recente. `--hooks-por-min` soma hooks sintéticos das `--sessoes`
 //                  (POST /api/hooks), como sessões trabalhando ao mesmo tempo.
+//                  `--varredura` passa ao núcleo o intervalo da varredura de reserva.
 //   --rota sessao  núcleo de teste: só os `--abertos` painéis consultam, cada um
 //                  /api/sessao/<id> a cada 5 s; as outras sessões não pedem nada.
 //   --rota frota   núcleo de teste, comportamento antigo: todas as `--sessoes` consultam
@@ -82,7 +83,7 @@ async function esperarNucleo(filho) {
 }
 
 const pastaTemp = rota === 'painel' ? mkdtempSync(join(tmpdir(), 'ahrena-carga-')) : null;
-const nucleo = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', servidor, ...(rota === 'painel' ? ['--sem-github'] : [])], {
+const nucleo = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', servidor, ...(rota === 'painel' ? ['--sem-github', ...(args.varredura ? ['--varredura', args.varredura] : [])] : [])], {
   env: { ...process.env, AHRENA_CONSOLE_PORT: String(porta), ...(pastaTemp ? { AHRENA_CONSOLE_DB: join(pastaTemp, 'nucleo.sqlite') } : {}) },
   stdio: ['ignore', 'ignore', 'inherit'],
 });

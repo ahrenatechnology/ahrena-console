@@ -156,6 +156,9 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // Desenhado é aberto: se o polling não começou (reload, ou o painel aberto por outro
+    // caminho que não o /console), começa agora; o tick confere se ele está à vista.
+    iniciar($)
     const l = await lerLeitura($)
     const agora = await $.clock.now()
     if (e.surface !== 'desktop') {
