@@ -156,6 +156,8 @@ Estratégia: **o essencial ao lado do trabalho.** O que é pesado fica no artefa
 
 Estratégia: **leve e sob demanda.** O spike estourou o limite do GitHub; esta versão consulta pouco e guarda em cache. Critério da 0.0.1: o próprio desenvolvimento do Ahrena Console é gerenciado pelo kanban do console (5.3).
 
+Decisão do spike 5.1: [consulta rasa, filhas ao expandir, delta e cache](decisoes/0001-github-consulta-cache.md).
+
 | # | Tipo | Título | Produz | Depende de |
 | --- | --- | --- | --- | --- |
 | 5.1 | Spike | Consulta enxuta, cache em disco e busca sob demanda ao expandir (timebox: 1 dia) | decisão | — |
