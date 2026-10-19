@@ -1,0 +1,156 @@
+{
+  "quando": "2026-10-19T00:15:46.574Z",
+  "graphql": {
+    "antiga": {
+      "estimativa": {
+        "cost": 614,
+        "nodeCount": 133230
+      }
+    },
+    "atual": {
+      "estimativa": {
+        "cost": 27,
+        "nodeCount": 5880
+      },
+      "real": {
+        "cost": 27,
+        "remaining": 4398,
+        "ms": 1659,
+        "bytes": 40859,
+        "issues": 30
+      }
+    },
+    "enxuta": {
+      "estimativa": {
+        "cost": 1,
+        "nodeCount": 30
+      },
+      "real": {
+        "cost": 1,
+        "remaining": 4395,
+        "ms": 770,
+        "bytes": 14234,
+        "issues": 30
+      }
+    },
+    "enxutaComPr": {
+      "estimativa": {
+        "cost": 2,
+        "nodeCount": 330
+      },
+      "real": {
+        "cost": 2,
+        "remaining": 4392,
+        "ms": 775,
+        "bytes": 17025,
+        "issues": 30
+      }
+    },
+    "filhasDoEpico": {
+      "estimativa": {
+        "cost": 3,
+        "nodeCount": 550
+      },
+      "real": {
+        "cost": 3,
+        "remaining": 4389,
+        "ms": 498,
+        "bytes": 1641,
+        "itens": 3
+      }
+    },
+    "projeto": {
+      "estimativa": {
+        "cost": 4,
+        "nodeCount": 2500
+      },
+      "real": {
+        "cost": 4,
+        "remaining": 4385,
+        "ms": 1252,
+        "bytes": 25194,
+        "itens": 65
+      }
+    },
+    "projetoStatus": {
+      "estimativa": {
+        "cost": 1,
+        "nodeCount": 100
+      },
+      "real": {
+        "cost": 1,
+        "remaining": 4384,
+        "ms": 1093,
+        "bytes": 21718,
+        "itens": 65
+      }
+    },
+    "deltaUltimaHora": {
+      "real": {
+        "cost": 1,
+        "ms": 463,
+        "bytes": 126,
+        "issues": 0
+      }
+    }
+  },
+  "rest": {
+    "issuesAbertas": {
+      "primeira": {
+        "status": 200,
+        "ms": 642,
+        "etag": "W/\"68ca110d910392ecdb0b678c85477b963b4d228072291b2af1e1fdacd0f4d9c7\"",
+        "remaining": 4903,
+        "used": 97,
+        "itens": 65
+      },
+      "condicional": {
+        "status": 304,
+        "ms": 746,
+        "etag": "\"68ca110d910392ecdb0b678c85477b963b4d228072291b2af1e1fdacd0f4d9c7\"",
+        "remaining": 4902,
+        "used": 98,
+        "itens": null
+      },
+      "consumiu": 1
+    },
+    "filhasDoEpico": {
+      "primeira": {
+        "status": 200,
+        "ms": 584,
+        "etag": "W/\"bb206d5fde1d4fcff41c13948efefbd4fb7f5886f064c36fe452a6ed6d4128a2\"",
+        "remaining": 4896,
+        "used": 104,
+        "itens": 3
+      },
+      "condicional": {
+        "status": 304,
+        "ms": 604,
+        "etag": "\"bb206d5fde1d4fcff41c13948efefbd4fb7f5886f064c36fe452a6ed6d4128a2\"",
+        "remaining": 4896,
+        "used": 104,
+        "itens": null
+      },
+      "consumiu": 0
+    },
+    "eventosDoRepo": {
+      "primeira": {
+        "status": 200,
+        "ms": 647,
+        "etag": "W/\"c136ce296ae151e2d31f6af325315ed8e2550a90f3641859dba1f8311fb5a61c\"",
+        "remaining": 4900,
+        "used": 100,
+        "itens": 30
+      },
+      "condicional": {
+        "status": 304,
+        "ms": 720,
+        "etag": "\"c136ce296ae151e2d31f6af325315ed8e2550a90f3641859dba1f8311fb5a61c\"",
+        "remaining": 4899,
+        "used": 101,
+        "itens": null
+      },
+      "consumiu": 1
+    }
+  }
+}
