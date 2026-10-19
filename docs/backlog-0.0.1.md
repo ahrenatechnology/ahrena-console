@@ -2,7 +2,7 @@
 
 Status: **proposta para confirmação.** Nada foi criado no GitHub ainda.
 
-Base: o estudo do Claude Code Agent Monitor ([benchmark/00-agent-monitor-detalhado.md](benchmark/00-agent-monitor-detalhado.md), seção 7, e o inventário das telas), o Podium ([benchmark/01-dashboards.md](benchmark/01-dashboards.md)), as [validações](validacoes-0.0.1.md) e as decisões de 2026-10-18:
+Base: o estudo do Claude Code Agent Monitor (benchmark interno, seção 7, e o inventário das telas), o Podium (benchmark interno), as [validações](validacoes-0.0.1.md) e as decisões de 2026-10-18:
 
 - **Claude-first.** O pacote nasce para o Claude e vive dentro dele: MCP primeiro, painel lateral, artefato e conversa no Claude Desktop.
 - **Pacote completo.** Tudo o que o Claude Code Agent Monitor (CCAM) e o Podium entregam, com o mapa de cada recurso abaixo.
@@ -26,7 +26,7 @@ Base: o estudo do Claude Code Agent Monitor ([benchmark/00-agent-monitor-detalha
 
 ## Do Claude Code Agent Monitor para o backlog
 
-Cada tela e recurso do Claude Code Agent Monitor (CCAM), e onde ele entra aqui. O detalhe de cada um está no [estudo](benchmark/00-agent-monitor-detalhado.md).
+Cada tela e recurso do Claude Code Agent Monitor (CCAM), e onde ele entra aqui. O detalhe de cada um está no estudo do benchmark interno.
 
 ### Telas
 

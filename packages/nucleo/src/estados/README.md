@@ -1,6 +1,6 @@
 # Máquina de estados
 
-Decide o estado de cada sessão e dos agentes dela a partir dos eventos de hook e do transcript, e cobre os hooks que se perdem com um vigia. Item 1.5 do [backlog](../../../../docs/backlog-0.0.1.md). As regras vêm do Claude Code Agent Monitor ([benchmark](../../../../docs/benchmark/00-agent-monitor-detalhado.md), seção 3); copiamos as regras, não o código. "Delegando" e "esperando processo em background" vêm do Podium.
+Decide o estado de cada sessão e dos agentes dela a partir dos eventos de hook e do transcript, e cobre os hooks que se perdem com um vigia. Item 1.5 do [backlog](../../../../docs/backlog-0.0.1.md). As regras vêm do Claude Code Agent Monitor (benchmark interno, seção 3); copiamos as regras, não o código. "Delegando" e "esperando processo em background" vêm do Podium.
 
 | Arquivo | O quê |
 | --- | --- |

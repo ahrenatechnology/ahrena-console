@@ -1,5 +1,5 @@
 // Tabela de transições: estado de partida + eventos → estado esperado.
-// Cada linha é uma regra de docs/benchmark/00-agent-monitor-detalhado.md (seção 3) ou do Podium.
+// Cada linha é uma regra de benchmark interno do Agent Monitor (seção 3) ou do Podium.
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
