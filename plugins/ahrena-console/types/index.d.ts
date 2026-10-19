@@ -240,6 +240,11 @@ export type Vista = {
   ajustando?: boolean
   /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
   ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
+  /**
+   * Os `tool_use_id` das decisões abertas cuja mensagem ainda está na conversa (`$.session.messages()`):
+   * só elas têm "ver na conversa". As de antes de uma compactação mostram o trecho original no detalhe.
+   */
+  alcancaveis?: string[]
   /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
   compactar?: 'confirmar' | 'compactando' | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */

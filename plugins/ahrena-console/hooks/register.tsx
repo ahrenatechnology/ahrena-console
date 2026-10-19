@@ -61,6 +61,7 @@ function normalizarVista(v: unknown): Vista {
     decisao,
     ajustando: r.ajustando === true,
     ultimaAcao: u && typeof u.id === 'string' && typeof u.em === 'number' ? u : null,
+    alcancaveis: Array.isArray(r.alcancaveis) ? r.alcancaveis.filter((x): x is string => typeof x === 'string') : [],
     // "compactando" não sobrevive a um reload: a chamada que o mostrava acabou com o módulo.
     compactar: r.compactar === 'compactando' && compactando ? 'compactando' : r.compactar === 'confirmar' ? 'confirmar' : null,
   }
@@ -257,6 +258,26 @@ async function decidir($: Engine, id: string, rotulo: string, acao: AcaoNaDecisa
     $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${rotulo} ficou como estava.`)
   }
   await consultar($)
+}
+
+/**
+ * Quais decisões abertas ainda têm a mensagem na conversa: a compactação tira as antigas, e o
+ * engine só rola até o que está nela. Só elas ganham "ver na conversa".
+ */
+async function atualizarAlcance($: Engine) {
+  try {
+    const l = normalizarLeitura(await read($, leitura))
+    const v = normalizarVista(await read($, vista))
+    const ids = new Set<string>()
+    for (const d of [...(l.painel?.decisoes?.lista?.itens ?? []), ...(v.decisao ? [v.decisao] : [])]) if (d.toolUseId) ids.add(d.toolUseId)
+    if (!ids.size) return
+    const naConversa = new Set<string>()
+    for (const m of await $.session.messages()) for (const t of m.toolUses ?? []) if (ids.has(t.tool_use_id)) naConversa.add(t.tool_use_id)
+    const alcancaveis = [...naConversa].sort()
+    if (JSON.stringify(alcancaveis) !== JSON.stringify(v.alcancaveis ?? [])) await mudarVista($, { alcancaveis })
+  } catch {
+    // sem a leitura da conversa, nenhuma decisão ganha "ver na conversa": o detalhe traz o trecho
+  }
 }
 
 /**
@@ -503,16 +524,16 @@ export const register: Register = (on, options) => {
         compactar: (passo) =>
           void (passo === 'pedir' ? mudarVista($, { compactar: 'confirmar' }) : passo === 'cancelar' ? mudarVista($, { compactar: null }) : compactar($)),
         // Abrir as decisões ou trocar o escopo já pede a lista, sem esperar o próximo tick.
-        verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)),
+        verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)).then(() => atualizarAlcance($)),
         escopoDecisoes: (valor) =>
           void mudarVista($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }).then(() =>
-            consultar($),
+            consultar($).then(() => atualizarAlcance($)),
           ),
         confirmar: (d) => void decidir($, d.id, d.rotulo, 'confirmar'),
         descartar: (d) => void decidir($, d.id, d.rotulo, 'descartar'),
         verNaConversa: (d) => void verNaConversa($, d),
         verPlanos: () => void mudarVista($, { tela: 'planos' }),
-        abrirDecisao: (d) => void mudarVista($, { tela: 'decisao', decisao: d, ajustando: false }),
+        abrirDecisao: (d) => void mudarVista($, { tela: 'decisao', decisao: d, ajustando: false }).then(() => atualizarAlcance($)),
         voltarDecisoes: () => void mudarVista($, { tela: 'decisoes', ajustando: false }).then(() => consultar($)),
         desfazer: (id, rotulo) => void decidir($, id, rotulo, 'desfazer'),
         ajustar: (abrir) => void mudarVista($, { ajustando: abrir }),

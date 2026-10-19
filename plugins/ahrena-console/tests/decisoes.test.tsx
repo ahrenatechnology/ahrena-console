@@ -18,7 +18,7 @@ const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presen
 
 const copia = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
-function falsos(on: any, base: Painel = CENARIOS.p9) {
+function falsos(on: any, base: Painel = CENARIOS.p9, conversa: 'inteira' | 'compactada' = 'inteira') {
   const pedidos: Pedido[] = []
   const toasts: string[] = []
   const rolagens: unknown[] = []
@@ -78,6 +78,11 @@ function falsos(on: any, base: Painel = CENARIOS.p9) {
     rolagens.push(e)
     return { value: {} }
   })
+  // A conversa como o engine a tem: inteira (as mensagens das decisões estão nela) ou compactada (não estão).
+  const ids = Object.values(LISTAS_DO_P9).flatMap((l) => l.itens.map((d) => d.toolUseId)).filter((x): x is string => !!x)
+  on('session.messages', async () => ({
+    value: conversa === 'inteira' ? [{ role: 'assistant', text: '', toolUses: ids.map((tool_use_id) => ({ tool_use_id, tool: 'AskUserQuestion', input: {} })) }] : [{ role: 'user', text: 'resumo da compactação', toolUses: [] }],
+  }))
   on('session.id', async () => ({ value: 'sessao-teste' }))
   on('session.model', async () => ({ value: 'claude-opus-5-5' }))
   on('session.cwd', async () => ({ value: '/simulacao/ahrena-demo' }))
@@ -88,8 +93,8 @@ function falsos(on: any, base: Painel = CENARIOS.p9) {
   return { pedidos, toasts, rolagens, status, relogio, painel }
 }
 
-async function abrir($: any, on: any, base?: Painel) {
-  const f = falsos(on, base)
+async function abrir($: any, on: any, base?: Painel, conversa: 'inteira' | 'compactada' = 'inteira') {
+  const f = falsos(on, base, conversa)
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   await $.command.run(CONSOLE)
   await f.relogio.advance(5_000)
@@ -99,14 +104,16 @@ async function abrir($: any, on: any, base?: Painel) {
 const porRotulo = (escopo: EscopoDasDecisoes, rotulo: string) => LISTAS_DO_P9[escopo].itens.find((i) => i.rotulo === rotulo) as DecisaoDoPainel
 const card = (d: DecisaoDoPainel) => `decisao-${d.id}`
 
-test('a linha "N decisões vigentes", com as a confirmar, nas duas larguras e na linha de status', async ($, on) => {
+test('a linha "N decisões registradas", neutra, com as a confirmar, nas duas larguras e na linha de status', async ($, on) => {
   const f = await abrir($, on)
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
     expect(await ui.find({ key: 'decisoes' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: alvo === LARGO ? /4 decisões vigentes · 1 a confirmar/ : /^1 a confirmar$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /4 decisões vigentes/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: alvo === LARGO ? /4 decisões registradas nesta sessão · 1 a confirmar/ : /^1 a confirmar$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /4 decisões registradas/ })).toBeDefined()
+    // Registro, não pendência: sem cara de ação.
+    expect((await ui.find({ key: 'decisoes' }))?.text).not.toMatch(/vigentes/)
     expect(await ui.find({ key: 'ver-decisoes' })).toBeDefined()
     expect(await ui.find({ key: 'retomada' })).toBeUndefined()
     await ui.unmount()
@@ -117,7 +124,7 @@ test('a linha "N decisões vigentes", com as a confirmar, nas duas larguras e na
 test('sem decisões, a linha diz que não há', async ($, on) => {
   await abrir($, on, CENARIOS.p1)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /nenhuma decisão vigente/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /nenhuma decisão registrada/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -243,15 +250,18 @@ test('Descartar tira a sugerida da lista', async ($, on) => {
   await ui.unmount()
 })
 
-test('"ver na conversa" pede a rolagem até a mensagem desta sessão; a da sessão mãe diz onde está', async ($, on) => {
+test('"ver na conversa" pede a rolagem até a mensagem desta sessão; a da sessão mãe mostra o trecho', async ($, on) => {
   const f = await abrir($, on)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
   await ui.press({ key: 'ver-decisoes' })
   await ui.press({ key: `ver-${porRotulo('familia', 'D4').id}` })
   // O kit de testes não tem a conversa: o pedido de rolagem é recusado e o painel diz isso.
   expect(f.rolagens.length ? JSON.stringify(f.rolagens.at(-1)) : f.toasts.at(-1)).toMatch(/sim-toolu-p9-4|D4 não está à vista/)
-  await ui.press({ key: `ver-${porRotulo('familia', 'D1').id}` })
-  expect(f.toasts.at(-1)).toMatch(/D1 foi decidida na sessão mãe/)
+  // A da sessão mãe não está nesta conversa: sem "ver na conversa", o trecho original no detalhe.
+  const d1 = porRotulo('familia', 'D1')
+  expect(await ui.find({ key: `ver-${d1.id}` })).toBeUndefined()
+  await ui.press({ key: `detalhe-${d1.id}` })
+  expect((await ui.find({ key: 'detalhe-decisao' }))?.text).toMatch(/TRECHO ORIGINAL.*na sessão mãe:/s)
   await ui.unmount()
 })
 
@@ -263,7 +273,7 @@ test('P10: a faixa da retomada só aparece quando o núcleo manda, nas duas larg
   expect(await largo.find({ key: 'retomada' })).toBeDefined()
   expect(await largo.find({ type: 'Text', text: /4 decisões da sessão anterior continuam valendo/ })).toBeDefined()
   expect(await largo.find({ type: 'Text', text: /~620 tokens/ })).toBeDefined()
-  expect(await largo.find({ type: 'Text', text: /4 decisões vigentes/ })).toBeDefined()
+  expect(await largo.find({ type: 'Text', text: /4 decisões registradas/ })).toBeDefined()
   await largo.unmount()
   const estreito = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await estreito.find({ type: 'Text', text: /4 decisões da sessão anterior$/ })).toBeDefined()
@@ -327,5 +337,22 @@ test('#131: Ajustar abre um campo; o texto da pessoa vai ao núcleo e o detalhe 
   expect(await ui.find({ key: 'ajuste-texto' })).toBeUndefined()
   expect(await ui.find({ key: `desfazer-${sugerida.id}` })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /D6 ajustada/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('0.0.13: decisão de antes da compactação não tem "ver na conversa"; o detalhe mostra o trecho original, sem erro', async ($, on) => {
+  await abrir($, on, undefined, 'compactada')
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'ver-decisoes' })
+  const d = porRotulo('sessao', 'D4')
+  expect(await ui.find({ key: `ver-${d.id}` })).toBeUndefined()
+  expect((await ui.find({ key: card(d) }))?.text).toMatch(/ver o trecho/)
+  await ui.press({ key: `detalhe-${d.id}` })
+  const detalhe = await ui.find({ key: 'detalhe-decisao' })
+  expect(detalhe?.text).toMatch(/TRECHO ORIGINAL/)
+  expect(detalhe?.text).toMatch(/você, \d\d\/\d\d \d\d:\d\d, nesta sessão, antes de uma compactação:/)
+  expect(detalhe?.text).toMatch(/SQLite em memória nos testes/)
+  expect(detalhe?.text).not.toMatch(/não está à vista|não está visível/)
+  expect(await ui.find({ key: `conversa-${d.id}` })).toBeUndefined()
   await ui.unmount()
 })

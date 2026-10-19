@@ -1176,7 +1176,7 @@ function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   ]
 }
 
-// --- Decisões: a linha "N decisões vigentes", a faixa da retomada (P10) e a lista (P9) ---
+// --- Decisões: a linha "N decisões registradas", a faixa da retomada (P10) e a lista (P9) ---
 
 /** O escopo das decisões na vista, ou o da largura: sessão no estreito, família no largo. */
 export function escopoDasDecisoes(vista: Vista, cols: number): EscopoDasDecisoes {
@@ -1194,9 +1194,11 @@ function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolea
     <Box key="decisoes" flexDirection="column" width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Box flexDirection="row" alignItems="center" gap={1}>
         <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono weight={nada ? 'regular' : 'bold'} dimColor={nada} wrap="truncate-end">
-            <Text color={LARANJA}>⊸ </Text>
-            {nada ? 'nenhuma decisão vigente' : decisoesTexto(d.vigentes)}
+          {/* Registro do que já foi decidido, em cor neutra: o destaque fica para o que pede ação (#140). */}
+          <Text mono color={CINZA} wrap="truncate-end">
+            <Text dimColor>⊸ </Text>
+            {nada ? 'nenhuma decisão registrada' : decisoesTexto(d.vigentes)}
+            {!nada && !estreito ? ' nesta sessão' : ''}
             {aConfirmar && !estreito ? <Text color={AMARELO}> · {aConfirmar}</Text> : null}
           </Text>
         </Box>
@@ -1274,13 +1276,22 @@ function cardDecisao(c: Contexto, d: DecisaoDoPainel) {
       </Text>
     )
   } else {
+    // "ver na conversa" só quando a mensagem ainda está na conversa; senão, o detalhe traz o trecho.
     acao = (
       <Box flexDirection="row">
-        <Button key={`ver-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
-          <Text mono size="footnote" color={LARANJA} underline>
-            ver na conversa
-          </Text>
-        </Button>
+        {alcancavel(c, d) ? (
+          <Button key={`ver-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
+            <Text mono size="footnote" color={LARANJA} underline>
+              ver na conversa
+            </Text>
+          </Button>
+        ) : (
+          <Button key={`detalhe-${d.id}`} plain onPress={() => c.acoes.abrirDecisao(d)}>
+            <Text mono size="footnote" color={LARANJA} underline>
+              ver o trecho
+            </Text>
+          </Button>
+        )}
       </Box>
     )
   }
@@ -1403,6 +1414,30 @@ function blocoDoDetalhe(c: Contexto, key: string, rotulo: string, texto: string,
   )
 }
 
+/** A mensagem da decisão ainda está na conversa desta sessão? (Sai dela numa compactação.) */
+const alcancavel = (c: Contexto, d: DecisaoDoPainel) => d.sessao === 'esta' && !!d.toolUseId && (c.vista.alcancaveis ?? []).includes(d.toolUseId)
+
+/**
+ * O trecho original da decisão, quando a mensagem não está mais na conversa (antes de uma
+ * compactação, ou de outra sessão): quem disse, quando e o texto. Sem aviso de erro.
+ */
+function trechoOriginal(c: Contexto, d: DecisaoDoPainel) {
+  const { Box, Text } = c.el
+  const quem = d.decididaPor === 'agente' ? 'o agente' : 'você'
+  const onde = d.sessao === 'esta' ? 'nesta sessão, antes de uma compactação' : d.sessao === 'mae' ? 'na sessão mãe' : 'em outra sessão'
+  return (
+    <Box key="trecho" flexDirection="column">
+      <Text mono size="caption" weight="semibold" dimColor>
+        TRECHO ORIGINAL
+      </Text>
+      <Text mono size="footnote" dimColor wrap="wrap">
+        {quem}, {dataEHora(d.decididaEm)}, {onde}:
+      </Text>
+      <Text mono wrap="wrap">“{d.texto ?? d.titulo}”</Text>
+    </Box>
+  )
+}
+
 /** A decisão inteira: escolha, o que foi descartado, contexto, quem, quando, origem e as ações. */
 function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
   const { Box, Text, Button, Input } = c.el
@@ -1423,13 +1458,15 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
   if (d.desfazer) {
     acoes.push(<Button key={`desfazer-${d.id}`} label={`Desfazer: ${DESFAZER[d.desfazer].volta}`} variant="secondary" onPress={() => c.acoes.desfazer(d.id, d.rotulo)} />)
   }
-  acoes.push(
-    <Button key={`conversa-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
-      <Text mono size="footnote" color={LARANJA} underline>
-        ver na conversa
-      </Text>
-    </Button>,
-  )
+  if (alcancavel(c, d)) {
+    acoes.push(
+      <Button key={`conversa-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
+        <Text mono size="footnote" color={LARANJA} underline>
+          ver na conversa
+        </Text>
+      </Button>,
+    )
+  }
   return [
     rotuloDaSecao(c, g.largura, `DECISÃO ${d.rotulo}`, pilulaDaDecisao(c, d)),
     barraDesfazer(c, g.largura),
@@ -1441,6 +1478,7 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
       {d.contexto ? blocoDoDetalhe(c, 'contexto', 'CONTEXTO', d.contexto) : null}
       {d.nao.length ? blocoDoDetalhe(c, 'nao', 'NÃO', d.nao.join('\n')) : null}
       {d.substituidaPor ? blocoDoDetalhe(c, 'substituida', 'SUBSTITUÍDA POR', d.substituidaPor) : null}
+      {alcancavel(c, d) ? null : trechoOriginal(c, d)}
       {c.vista.ajustando ? (
         <Box key="ajuste" flexDirection="column" gap="xs">
           <Input key="ajuste-texto" autoFocus placeholder="a versão certa, ou um comentário" submitLabel="gravar" onSubmit={(v: string) => c.acoes.enviarAjuste(d, v)} />
@@ -1769,8 +1807,10 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
     const sessaoOk = !sessao || linhas.get('sessao')! >= sessao.minimo
     // Os tiles do Contexto (P1) também ficam inteiros: antes deles, os de menor prioridade vão para a faixa.
     const contextoOk = !pecas.some((x) => x.id === 'contexto') || linhas.get('contexto')! >= LINHAS_DO_CONTEXTO
+    // Um card de lista no P1 tem os itens: só o cabeçalho ("⑃ SESSÕES FILHAS 15") não é card, vai para a faixa.
+    const listasOk = pecas.filter((x) => x.id === 'subagentes' || x.id === 'filhas').every((x) => linhas.get(x.id)! >= x.minimo)
     const proximo = [...PRIORIDADE_DA_ALTURA].reverse().find((id) => id !== 'sessao' && id !== 'contexto' && pecas.some((x) => x.id === id))
-    if ((cabe && sessaoOk && contextoOk) || !proximo) {
+    if ((cabe && sessaoOk && contextoOk && listasOk) || !proximo) {
       // Só a sessão sobrou e ainda não cabe: ela aparece mesmo assim, o mínimo dela.
       if (sessao && !sessaoOk) linhas.set('sessao', sessao.minimo)
       return { linhas, fora: PRIORIDADE_DA_ALTURA.filter((id) => fora.includes(id)) }

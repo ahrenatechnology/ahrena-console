@@ -146,7 +146,8 @@ export function quemDecidiu(d: DecisaoDoPainel): string {
 /** "não: 20 por coluna; rolagem infinita". */
 export const naoTexto = (d: DecisaoDoPainel) => `não: ${d.nao.length ? d.nao.join('; ') : '—'}`
 
-export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão vigente' : `${n} decisões vigentes`)
+/** As decisões são registro do que já se decidiu, não pendência (0.0.13): "10 decisões registradas". */
+export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão registrada' : `${n} decisões registradas`)
 
 /** O que o "Desfazer" volta, dito para a pessoa. */
 export const DESFAZER: Record<'confirmar' | 'descartar' | 'ajustar', { feito: string; volta: string }> = {

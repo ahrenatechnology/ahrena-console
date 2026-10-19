@@ -500,10 +500,12 @@ test('altura: nas listas, o que aparece mais o "+N" é sempre o total, e o "+N" 
     }
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 60) })
-  await ui.press({ key: 'ver-subagentes' })
+  // No card, ou na faixa de resumos quando o card não cabe com pelo menos um item.
+  const noCard = !!(await ui.find({ key: 'card-subagentes' }))
+  await ui.press({ key: noCard ? 'ver-subagentes' : 'resumo-subagentes' })
   expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
   await ui.press({ key: 'voltar-sessao' })
-  expect(await ui.find({ key: 'card-subagentes' })).toBeDefined()
+  expect(await ui.find({ key: noCard ? 'card-subagentes' : 'resumo-subagentes' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -940,5 +942,21 @@ test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, a parti
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
     await ui.unmount()
+  }
+})
+
+test('P1: os cards de Subagentes e Sessões filhas nunca aparecem só com o cabeçalho; com pelo menos um item, ou na faixa de resumos', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  f.estado.painel = carregado()
+  await f.relogio.advance(5_000)
+  for (const base of [PANE, LARGO]) {
+    for (const linhas of [41, 50, 60, 80, 120]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+      for (const [card, prefixo] of [['card-subagentes', 'sub-'], ['card-filhas', 'filha-']] as const) {
+        if (!(await ui.find({ key: card }))) continue
+        expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith(prefixo)).length).toBeGreaterThan(0)
+      }
+      await ui.unmount()
+    }
   }
 })
