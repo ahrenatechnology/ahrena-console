@@ -1,0 +1,13 @@
+{
+  "name": "ahrena-console-app-desktop-teste",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spike #82: app desktop em Tauri que adota ou sobe o núcleo e mostra o estado na bandeja",
+  "license": "Apache-2.0",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}
