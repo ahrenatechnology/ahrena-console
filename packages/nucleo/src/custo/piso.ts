@@ -2,7 +2,7 @@
 //
 // Quando a contagem viva cai (compactação, transcript reescrito menor), o que sumiu vira piso:
 // `baseline' = baseline + (vivo_antigo − vivo_novo)`. Enquanto a contagem só cresce, o piso fica como está.
-// É a regra de high-water mark do Agent Monitor (docs/benchmark/00-agent-monitor-detalhado.md), aplicada
+// É a regra de high-water mark do Agent Monitor (benchmark interno do Agent Monitor), aplicada
 // só na queda; aplicada a cada leitura, ela descontaria do piso o que o vivo voltou a crescer.
 
 import { emptyTokenCounts, type TokenCounts, type TokenUsage } from '../model.ts';

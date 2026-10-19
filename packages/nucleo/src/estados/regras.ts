@@ -1,5 +1,5 @@
 // Regras de transição da máquina de estados, como funções puras: estado da sessão + evento → novo estado.
-// Copia as regras do Claude Code Agent Monitor (docs/benchmark/00-agent-monitor-detalhado.md, seção 3),
+// Copia as regras do Claude Code Agent Monitor (benchmark interno do Agent Monitor, seção 3),
 // não o código, e acrescenta duas do Podium: "delegando" e "esperando processo em background".
 //
 // Quem grava é a máquina (maquina.ts); aqui nada lê a porta nem o relógio.
