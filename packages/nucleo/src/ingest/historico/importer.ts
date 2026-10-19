@@ -26,6 +26,7 @@ import {
 } from './files.ts';
 import { parseLine, truncate, TASK_MAX, type EventData } from './transcript.ts';
 import { aggregateUsage, bucketKey, type UsageSample } from './usage.ts';
+import { aplicarPiso } from '../../custo/piso.ts';
 
 export interface ImportOptions {
   storage: StoragePort;
@@ -206,8 +207,8 @@ class SessionImport {
     const existing = new Map((await this.storage.listTokenUsage(this.sessionId)).map((u) => [bucketKey(u), u]));
     for (const b of buckets) {
       const prev = existing.get(bucketKey(b));
-      // O piso da compactação não vem do transcript (item 1.6): preserva o que já estava gravado.
-      await this.storage.putTokenUsage({ ...b, baseline: prev?.baseline ?? { input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, updatedAt });
+      // Piso da compactação (item 1.6): se a contagem viva caiu, o que sumiu vai para o piso.
+      await this.storage.putTokenUsage({ ...b, baseline: aplicarPiso(prev, b.tokens), updatedAt });
     }
     return byAgent;
   }
