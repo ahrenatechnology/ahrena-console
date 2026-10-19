@@ -1,6 +1,7 @@
 // Núcleo de teste do Ahrena Console: só para as validações da proposta 0.0.1.
 // Expõe o mesmo dado de três jeitos: GET /api/overview (para o mod), MCP em /mcp
-// (ferramentas e artefato) e uma MCP App em ui://ahrena-console/teste.html.
+// (ferramentas e artefato) e uma MCP App em ui://ahrena-console/teste.html. O kanban
+// do Project (GET /api/kanban, POST /api/kanban/move) usa o núcleo de packages/nucleo.
 // Lê só nomes e datas dos arquivos em ~/.claude/projects, nunca o conteúdo.
 import { createServer } from 'node:http';
 import { readdir, stat, readFile } from 'node:fs/promises';
@@ -8,6 +9,7 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { createGithubProject, GithubCache, MemoryCacheStore, ProjectPermissionError, RateLimitedError } from '../../packages/nucleo/src/index.ts';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 const PORT = Number(process.env.AHRENA_CONSOLE_PORT ?? 4720);
@@ -365,6 +367,23 @@ async function fetchProjectItemsNow(org, number) {
   return data;
 }
 
+// Kanban do próprio projeto (item 5.3): o GitHub Project por Status, pelas funções do
+// núcleo (decisão 0001: custo 1 por 100 itens, TTL de 2 min, mover sem reler).
+// Qual Project: AHRENA_CONSOLE_PROJECT=dono/número; o padrão é o deste repositório.
+const [KANBAN_OWNER, KANBAN_NUMBER] = (process.env.AHRENA_CONSOLE_PROJECT ?? 'ahrenatechnology/3').split('/');
+const kanban = createGithubProject({
+  project: { owner: KANBAN_OWNER, number: Number(KANBAN_NUMBER) },
+  cache: new GithubCache({ store: new MemoryCacheStore() }),
+  onCost: (c) => console.log(`  github> ${c.operation} custo ${c.cost}, restam ${c.remaining}`),
+});
+const statusOf = (err) => (err instanceof ProjectPermissionError ? 403 : err instanceof RateLimitedError ? 429 : 502);
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+}
+
 // Cada chamada de ferramenta vai para um log próprio: o log do Claude Desktop não
 // registra as chamadas que chegam pela ponte dos artefatos.
 const CALL_LOG = join(homedir(), 'Library', 'Logs', 'ahrena-console', 'mcp-calls.log');
@@ -433,6 +452,23 @@ const http = createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(body);
       return;
+    }
+    if (req.url?.startsWith('/api/kanban')) {
+      const sendJson = (status, o) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(o));
+      };
+      try {
+        if (req.method === 'POST' && req.url === '/api/kanban/move') {
+          const { itemId, optionId } = await readBody(req);
+          if (!itemId || !optionId) return sendJson(400, { error: 'informe itemId e optionId' });
+          return sendJson(200, await kanban.move(itemId, optionId));
+        }
+        if (req.method === 'GET') return sendJson(200, await kanban.board({ force: req.url.includes('force=1') }));
+        return sendJson(405, { error: 'método não suportado' });
+      } catch (err) {
+        return sendJson(statusOf(err), { error: String(err?.message ?? err) });
+      }
     }
     if (req.url === '/api/work') {
       const body = JSON.stringify(await work());
