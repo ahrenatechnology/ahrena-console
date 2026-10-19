@@ -523,7 +523,7 @@ const S = [
   { id: '3e9b1f6a', nome: 'Documentar a autenticação', pj: 'gateway-sandbox', st: 'completed', mo: 'Opus 5.5', esf: 'médio', custo: '1,12', dur: '41 min', idade: '5 h', ag: 2, sub: 1, turnos: 14, br: 'docs/auth', msgs: ['documente o fluxo de autenticação'], plano: [5, 5], ctx: 0 },
 ]
 const byId = id => S.find(s => s.id === id)
-// Recomendação: precisa de você = esperando (Pede permissão, Interrompida, Sua vez) + com erro. Urgentes primeiro.
+// Decidido pelo dono: precisa de você = esperando (Pede permissão, Interrompida, Sua vez) + com erro. Urgentes primeiro.
 const PRECISAM = ['b91d04aa', '2c8e6f10', '5a61c2bf', 'e04b7d93'].map(byId)
 
 // =====================================================================
@@ -1267,7 +1267,7 @@ const TELAS = [
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja com 0 esperando', sub: 'Ninguém precisa de você: só o ícone na barra de menus.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
   { id: 'app-bandeja-3', cod: 'A2', nome: 'Bandeja com 3 esperando', sub: 'O número aparece ao lado do ícone. Clicar numa sessão abre na janela do app; com ⌥, o item vira "Abrir no Claude Desktop".', html: () => `<div class="fila"><div class="mac">${APP.tres()}</div></div>`,
-    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'Sessão com erro entra na lista (recomendação), em vermelho.', 'Abrir no Claude Desktop é sempre explícito: um item alternativo com ⌥, nunca o clique padrão.', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
+    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'Sessão com erro entra na lista (decisão do dono), em vermelho.', 'Abrir no Claude Desktop é sempre explícito: um item alternativo com ⌥, nunca o clique padrão.', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
   { id: 'app-notificacao', cod: 'A3', nome: 'Notificação do sistema', sub: 'Quando uma sessão passa a esperar ou para com erro. Som só nos urgentes. Abrir vai para a janela do app; Abrir no Claude Desktop é uma ação à parte.', html: () => `<div class="fila"><div class="mac">${APP.notif()}</div></div>`,
     n: N(['<code>useNotifications</code>: aviso para waiting e erro (lá, no navegador).'], ['Nativa do macOS, aparece com o Claude fechado.', 'Silenciar uma sessão, não tudo (6.8).', 'Som só para Pede permissão, Interrompida e Com erro.']) },
   { id: 'app-parado', cod: 'A4', nome: 'Núcleo parado', sub: 'Ninguém subiu o núcleo e não há Node no PATH do login.', html: () => `<div class="fila"><div class="mac">${APP.parado()}</div></div>`,
@@ -1333,7 +1333,7 @@ function montar() {
     <li><b>Clique numa sessão na bandeja:</b> abre na janela do app. Abrir no Claude Desktop é sempre explícito: item alternativo com ⌥ no menu, ação própria na notificação e botão no detalhe (A2, A3, A5).</li>
     <li><b>Barra de contexto:</b> laranja até 79%, vermelha a partir de 80%.</li>
     <li><b>Som da notificação:</b> só nos urgentes (Pede permissão, Interrompida e Com erro).</li>
-    <li><b>Recomendação, para confirmar:</b> sessão com erro <b>entra</b> em "precisam de você". Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
+    <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
