@@ -1,0 +1,19 @@
+{
+  "name": "ahrena-console",
+  "version": "0.0.1",
+  "description": "Ahrena Console: painel lateral da sessão (/console) e os hooks que alimentam o núcleo local",
+  "author": {
+    "name": "Ahrena"
+  },
+  "homepage": "https://github.com/ahrenatechnology/ahrena-console",
+  "license": "Apache-2.0",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "porta": {
+      "type": "number",
+      "title": "Porta do núcleo",
+      "description": "Porta do núcleo local em 127.0.0.1 (a mesma de AHRENA_CONSOLE_PORT)",
+      "default": 4720
+    }
+  }
+}
