@@ -75,6 +75,14 @@ export class Perfis {
     return conta ? this.gravar(conta, pasta.dir) : null;
   }
 
+  /**
+   * Grava na porta uma conta vista por outra fonte (o ambiente do hook, ordem 1), com a pasta de
+   * configuração em que apareceu, se houver. Mesma gravação de `contaDaPasta`: uma rota só.
+   */
+  async registrar(conta: ContaDoPerfil, dir: string | null): Promise<ClaudeAccount> {
+    return this.gravar(conta, dir ? await this.caminhoCanonico(dir) : null);
+  }
+
   /** Um symlink para a pasta padrão é a pasta padrão; os outros ficam como vieram. */
   private async caminhoCanonico(dir: string): Promise<string> {
     const abs = normalizarPasta(dir.trim(), this.home);
@@ -88,13 +96,13 @@ export class Perfis {
     return { ...p, conta, accountId: conta ? claudeAccountId(conta.accountUuid, conta.organizationUuid) : null };
   }
 
-  private gravar(conta: ContaDoPerfil, dir: string): Promise<ClaudeAccount> {
+  private gravar(conta: ContaDoPerfil, dir: string | null): Promise<ClaudeAccount> {
     const feito = this.fila.then(() => this.gravarAgora(conta, dir));
     this.fila = feito.catch(() => undefined);
     return feito;
   }
 
-  private async gravarAgora(conta: ContaDoPerfil, dir: string): Promise<ClaudeAccount> {
+  private async gravarAgora(conta: ContaDoPerfil, dir: string | null): Promise<ClaudeAccount> {
     const id = claudeAccountId(conta.accountUuid, conta.organizationUuid);
     const agora = this.agora();
     const gravada = this.storage ? await this.storage.getAccount(id) : null;
@@ -107,7 +115,7 @@ export class Perfis {
       organizationType: conta.organizationType ?? gravada?.organizationType ?? null,
       label: gravada?.label ?? null,
       color: cor,
-      configDirs: [...new Set([...(gravada?.configDirs ?? []), dir])].sort(),
+      configDirs: [...new Set([...(gravada?.configDirs ?? []), ...(dir ? [dir] : [])])].sort(),
       firstSeenAt: gravada?.firstSeenAt ?? agora,
       lastSeenAt: agora,
       metadata: gravada?.metadata ?? {},
