@@ -13,7 +13,7 @@ const recordingFetch: typeof fetch = async (url, init) => {
   const res = await fetch(url, init);
   const text = await res.text();
   const { query, variables } = JSON.parse(String(init?.body));
-  const operation = /query (\w+)/.exec(query)?.[1] ?? '?';
+  const operation = /(?:query|mutation) (\w+)/.exec(query)?.[1] ?? '?';
   recorded.push({ operation, variables, status: res.status, body: JSON.parse(text) });
   return new Response(text, { status: res.status, headers: res.headers });
 };
