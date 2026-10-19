@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
+//
+// Um núcleo por máquina (#86, src/dono/): se já há um de pé, este processo o adota (imprime a porta
+// e a versão e sai com 0) em vez de subir outro.
 
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -19,6 +22,10 @@ import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import { Perfis } from '../perfis/perfis.ts';
+import { registrarCliente } from '../dono/clientes.ts';
+import { assumirTrava, planejarSubida, vigiarPai } from '../dono/dono.ts';
+import { esperarNucleo, pidVivo, reservarPorta, soltarPorta } from '../dono/sonda.ts';
+import { liberarTrava } from '../dono/trava.ts';
 import {
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
@@ -39,7 +46,7 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessamento.ts';
-import { iniciarApiLocal } from './servidor.ts';
+import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -56,6 +63,11 @@ const AJUDA = `Uso: npm run api -- [opções]
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
   --cenario <p1..p9>  O cenário da demonstração (padrão p1), como nos wireframes
+  --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
+                      cliente esteja registrado. Se adotar, registra o pid como cliente
+  --substituir        Se o núcleo de pé for mais velho que este, para ele e sobe este
+  --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
+                      parte). A --demo já é sem trava. A porta continua sendo de um só
   --help
 `;
 
@@ -70,6 +82,9 @@ const { values: o } = parseArgs({
     'sem-github': { type: 'boolean', default: false },
     demo: { type: 'boolean', default: false },
     cenario: { type: 'string', default: 'p1' },
+    pai: { type: 'string' },
+    substituir: { type: 'boolean', default: false },
+    'sem-trava': { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
   },
 });
@@ -81,6 +96,34 @@ if (o.help) {
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
 const porta = Number(o.porta ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
 const demo = o.demo;
+const pai = o.pai === undefined ? null : Number(o.pai);
+if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--pai: um pid');
+if (pai !== null && !pidVivo(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
+const comTrava = !demo && !o['sem-trava'];
+
+function adotar(p: number, versao: string, aviso: string | null = null): never {
+  if (aviso) log(`atenção: ${aviso}`);
+  if (pai !== null && comTrava) registrarCliente(pai);
+  process.stdout.write(`núcleo de pé em http://127.0.0.1:${p} · versão ${versao} (adotado)\n`);
+  process.exit(0);
+}
+
+// Antes de abrir o banco: adota o núcleo vivo da trava, ou a recupera se for órfã.
+if (comTrava) {
+  const plano = await planejarSubida({ versao: VERSAO_DA_API, substituir: o.substituir, log });
+  if (plano.acao === 'adotar') adotar(plano.trava.porta, plano.trava.versao, plano.aviso);
+  if (plano.recuperou) log(`trava órfã recuperada: ${plano.recuperou}`);
+}
+
+// A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
+async function adotarQuemTemAPorta(): Promise<never> {
+  const v = await esperarNucleo(porta, 30_000);
+  if (v) adotar(porta, v.versao);
+  log(`a porta ${porta} está ocupada e não responde como núcleo`);
+  process.exit(1);
+}
+const reserva = await reservarPorta(porta);
+if (reserva === 'ocupada') await adotarQuemTemAPorta();
 const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
 if (banco !== ':memory:') mkdirSync(dirname(banco), { recursive: true });
 
@@ -168,7 +211,8 @@ const follower =
         onError: (e) => log(`seguidor: ${(e as Error).message}`),
       });
 
-const api = await iniciarApiLocal({
+if (reserva !== 'ocupada') await soltarPorta(reserva);
+const api: ApiLocal = await iniciarApiLocal({
   montador,
   hooks: {
     storage,
@@ -188,8 +232,30 @@ const api = await iniciarApiLocal({
     desktopLidos: desktop?.lidos ?? 0,
     trabalho: trabalho.chamadas,
   }),
+}).catch(async (e: NodeJS.ErrnoException) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  await storage.close();
+  return adotarQuemTemAPorta();
 });
+
+const trava = comTrava ? await assumirTrava({ porta, versao: VERSAO_DA_API, pai }) : null;
+if (trava && 'conflito' in trava) {
+  await api.close().catch(() => undefined);
+  await storage.close();
+  adotar(trava.conflito.porta, trava.conflito.versao);
+}
 log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
+
+const pararDeVigiarPai =
+  pai === null
+    ? () => {}
+    : vigiarPai({
+        pai,
+        aoSumir: (motivo) => {
+          log(`${motivo}; saindo`);
+          void desligar();
+        },
+      });
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
@@ -229,6 +295,8 @@ async function reprocessarUmaVez() {
 async function desligar() {
   pararVigia();
   if (relerPerfis) clearInterval(relerPerfis);
+  pararDeVigiarPai();
+  if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();

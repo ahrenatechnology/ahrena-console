@@ -83,7 +83,7 @@ async function esperarNucleo(filho) {
 }
 
 const pastaTemp = rota === 'painel' ? mkdtempSync(join(tmpdir(), 'ahrena-carga-')) : null;
-const nucleo = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', servidor, ...(rota === 'painel' ? ['--sem-github', ...(args.varredura ? ['--varredura', args.varredura] : [])] : [])], {
+const nucleo = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', servidor, ...(rota === 'painel' ? ['--sem-github', '--sem-trava', ...(args.varredura ? ['--varredura', args.varredura] : [])] : [])], {
   env: { ...process.env, AHRENA_CONSOLE_PORT: String(porta), ...(pastaTemp ? { AHRENA_CONSOLE_DB: join(pastaTemp, 'nucleo.sqlite') } : {}) },
   stdio: ['ignore', 'ignore', 'inherit'],
 });
