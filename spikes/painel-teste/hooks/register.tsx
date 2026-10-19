@@ -1,18 +1,22 @@
-// Painel do Ahrena Console (teste): abas Visão geral, Kanban, Trabalho e Sessões, montadas
-// com os elementos que a aba Code do Claude Desktop oferece a um mod. Lê o núcleo
-// local: /api/fleet (sessões) a cada 5 s, /api/work (hierarquia do GitHub) a cada 60 s e
-// /api/kanban (o GitHub Project por Status) a cada 2 min; mover um card chama
-// /api/kanban/move, que muda o Status no GitHub.
+// Painel do Ahrena Console (teste): abas Esta sessão, Visão geral, Kanban, Trabalho e
+// Sessões, montadas com os elementos que a aba Code do Claude Desktop oferece a um mod.
+//
+// Consumo (issue #81, decisão 0004): o painel só consulta o núcleo enquanto está aberto
+// e à vista. Abre com /console (ou desenhado de novo depois de um reload) e para quando
+// fecha, sai de cena ou a sessão termina; sessão sem painel aberto não faz nenhum pedido.
+// A cada 5 s pede só /api/sessao/<id> (esta sessão e quantas precisam de você). A frota
+// (/api/fleet), o trabalho (/api/work, 60 s) e o kanban (/api/kanban, 2 min) só são
+// pedidos com a aba deles à vista; mover um card chama /api/kanban/move.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register, RenderElement } from 'claude-code'
 
-import type { Fleet, Kanban, KanbanCard, KanbanLane, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import type { Fleet, Kanban, SessionPulse, KanbanCard, KanbanLane, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
 import { paleta } from './marca'
 
 const PANE = 'ahrena-console'
 const CORE = 'http://127.0.0.1:4720'
 const REPO = 'https://github.com/ahrenatechnology/ahrena-console'
-const FLEET_EVERY_MS = 5000
+const EVERY_MS = 5000
 const WORK_EVERY_MS = 60_000
 // O mesmo TTL do Project no núcleo (decisão 0001): reler antes disso sairia do cache.
 const KANBAN_EVERY_MS = 2 * 60_000
@@ -85,6 +89,7 @@ function ciBadge(ci: string | null) {
 }
 const typeStyle = (t: string | null) => (t && TYPE_STYLE[t]) || { color: MUTED, label: t ?? 'Issue' }
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'sessao', label: 'Esta sessão' },
   { id: 'visao', label: 'Visão geral' },
   { id: 'kanban', label: 'Kanban' },
   { id: 'trabalho', label: 'Trabalho' },
@@ -92,21 +97,26 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 const EMPTY_READING: Reading = {
-  fleet: null, work: null, kanban: null, error: null, workError: null, kanbanError: null, moving: null, polls: 0, latencies: [],
+  session: null, fleet: null, work: null, kanban: null, error: null, workError: null, kanbanError: null, moving: null, polls: 0, latencies: [],
+}
+const EMPTY_FLEET: Fleet = {
+  totals: { projects: 0, sessions: 0, active: 0, idle: 0, sizeMb: 0 }, recent: [], activityByHour: [], topProjects: [], generatedAt: '',
 }
 const EMPTY_VIEW: View = {
-  tab: 'visao', filter: 'todas', query: '', selected: null, stage: 'todas', org: 'todas', issueQuery: '', selectedIssue: null,
+  tab: 'sessao', filter: 'todas', query: '', selected: null, stage: 'todas', org: 'todas', issueQuery: '', selectedIssue: null,
   workMode: 'kanban', expanded: [], fullLanes: [],
 }
 
 const reading = atom({ plugin: 'ahrena-console-painel', key: 'reading' } as const, EMPTY_READING)
 const view = atom({ plugin: 'ahrena-console-painel', key: 'view' } as const, EMPTY_VIEW)
 
-let fleetTimer: { cancel: () => void } | undefined
+// O relógio do polling: existe só enquanto o painel está aberto (startPolling/stopPolling).
+let ticker: { cancel: () => void } | undefined
+let sessionId: string | undefined
+let lastWorkAt = 0
+let lastKanbanAt = 0
 // Largura que o painel recebeu no último desenho; vai ao núcleo para calibrar o layout.
 let lastBodyColumns: number | null = null
-let workTimer: { cancel: () => void } | undefined
-let kanbanTimer: { cancel: () => void } | undefined
 
 // Estado salvo por uma versão anterior do painel pode vir sem campos novos.
 function normalize(value: unknown): Reading {
@@ -114,6 +124,7 @@ function normalize(value: unknown): Reading {
   return {
     ...EMPTY_READING,
     ...raw,
+    session: raw?.session && typeof raw.session.needsYou === 'number' ? raw.session : null,
     fleet: raw?.fleet?.totals ? raw.fleet : null,
     work: raw?.work?.nodes ? raw.work : null,
     kanban: raw?.kanban?.lanes ? raw.kanban : null,
@@ -151,28 +162,43 @@ async function viewNow($: Engine): Promise<View> {
   const v = { ...EMPTY_VIEW, ...((await read($, view)) as Partial<View> | undefined) }
   return {
     ...v,
-    tab: TABS.some(t => t.id === v.tab) ? v.tab : 'visao',
+    tab: TABS.some(t => t.id === v.tab) ? v.tab : 'sessao',
     expanded: Array.isArray(v.expanded) ? v.expanded : [],
     fullLanes: Array.isArray(v.fullLanes) ? v.fullLanes : [],
   }
 }
 
-async function pollFleet($: Engine) {
+const needsYouText = (n: number) => (n === 1 ? '1 precisa de você' : `${n} precisam de você`)
+
+// O pedido de todo tick: esta sessão e a contagem de quem precisa de você, nunca a frota.
+async function pollSession($: Engine) {
   const t0 = await $.clock.now()
   try {
-    const res = await $.http.fetch(`${CORE}/api/fleet${lastBodyColumns ? `?cols=${lastBodyColumns}` : ''}`)
+    sessionId ??= await $.session.id()
+    const res = await $.http.fetch(`${CORE}/api/sessao/${encodeURIComponent(sessionId)}`)
     const ms = (await $.clock.now()) - t0
-    const { data: fleet, error } = readJson<Fleet>(res)
+    const { data: session, error } = readJson<SessionPulse>(res)
     await patchReading($, r => ({
-      fleet: fleet ?? r.fleet,
+      session: session ?? r.session,
       error,
       polls: r.polls + 1,
       latencies: [...r.latencies, ms].slice(-24),
     }))
-    $.ui.status(fleet ? `ahrena-console ● ${fleet.totals.active} ativa · ${fleet.totals.idle} ociosa` : 'ahrena-console ○ erro')
+    $.ui.status(session ? `ahrena-console ● ${session.session?.state ?? 'sessão nova'} · ${needsYouText(session.needsYou)}` : 'ahrena-console ○ erro')
   } catch (err) {
     await patchReading($, r => ({ error: String(err), polls: r.polls + 1 }))
     $.ui.status('ahrena-console ○ offline')
+  }
+}
+
+// A frota inteira: só com a aba Visão geral ou Sessões à vista (elas vão para o artefato, 3.10).
+async function pollFleet($: Engine) {
+  try {
+    const res = await $.http.fetch(`${CORE}/api/fleet${lastBodyColumns ? `?cols=${lastBodyColumns}` : ''}`)
+    const { data: fleet, error } = readJson<Fleet>(res)
+    await patchReading($, r => ({ fleet: fleet ?? r.fleet, error }))
+  } catch (err) {
+    await patchReading($, () => ({ error: String(err) }))
   }
 }
 
@@ -215,21 +241,64 @@ async function moveCard($: Engine, itemId: string, optionId: string) {
   }
 }
 
-function start($: Engine) {
-  fleetTimer?.cancel()
-  workTimer?.cancel()
-  kanbanTimer?.cancel()
-  void pollFleet($)
-  void pollWork($)
-  void pollKanban($)
-  fleetTimer = $.clock.every(FLEET_EVERY_MS, () => void pollFleet($))
-  workTimer = $.clock.every(WORK_EVERY_MS, () => void pollWork($))
-  kanbanTimer = $.clock.every(KANBAN_EVERY_MS, () => void pollKanban($))
+const FLEET_TABS: Tab[] = ['visao', 'sessoes']
+
+// Uma rodada: a sessão sempre; o resto só se a aba à vista usa. `force` (botão, troca de
+// aba) ignora a validade do trabalho e do kanban; o timer respeita.
+async function pollNow($: Engine, force = false) {
+  const v = await viewNow($)
+  const now = await $.clock.now()
+  const jobs = [pollSession($)]
+  if (FLEET_TABS.includes(v.tab)) jobs.push(pollFleet($))
+  if (v.tab === 'trabalho' && (force || now - lastWorkAt >= WORK_EVERY_MS)) {
+    lastWorkAt = now
+    jobs.push(pollWork($))
+  }
+  if (v.tab === 'kanban' && (force || now - lastKanbanAt >= KANBAN_EVERY_MS)) {
+    lastKanbanAt = now
+    jobs.push(pollKanban($, force))
+  }
+  await Promise.all(jobs)
+}
+
+// O painel deste plugin como o engine o vê: ausente quando fechado.
+async function ourPane($: Engine) {
+  return (await $.ui.panes()).find(p => p.id === PANE)
+}
+
+// Cada tick confere o painel antes de pedir: fechado ou não desenhado, o polling para;
+// aberto atrás de outra aba, o tick passa sem pedir nada.
+async function tick($: Engine) {
+  try {
+    const pane = await ourPane($)
+    if (!pane?.isPlaced) return stopPolling($)
+    if (!pane.isShown) return
+    await pollNow($)
+  } catch (err) {
+    await patchReading($, () => ({ error: String(err) }))
+  }
+}
+
+function startPolling($: Engine) {
+  if (ticker) return
+  lastWorkAt = 0
+  lastKanbanAt = 0
+  ticker = $.clock.every(EVERY_MS, () => void tick($))
+  void tick($)
+}
+
+function stopPolling($: Engine) {
+  if (!ticker) return
+  ticker.cancel()
+  ticker = undefined
+  $.ui.status(undefined)
 }
 
 async function setView($: Engine, patch: Partial<View>) {
   const v = await viewNow($)
   await update($, view, () => ({ ...v, ...patch }))
+  // Trocar de aba busca na hora o que a aba nova mostra.
+  if (patch.tab && patch.tab !== v.tab) await pollNow($, true)
 }
 
 async function toggle($: Engine, key: string) {
@@ -297,26 +366,40 @@ function prLine(n: WorkNode) {
 }
 
 export const register: Register = on => {
+  // A sessão começa sem consultar nada: só registra o /console. Se o painel já estava
+  // aberto (o módulo recarregou com ele à vista), retoma o polling.
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'console', description: 'Abre o painel do Ahrena Console' })
-    start($)
+    if ((await ourPane($).catch(() => undefined))?.isPlaced) startPolling($)
     return next(e)
   })
 
   on('command.run', { command: 'console' }, async $ => {
     const { isPlaced } = await $.ui.open({ id: PANE, title: 'Ahrena Console' })
+    if (isPlaced) startPolling($)
     return { text: isPlaced ? 'Painel do Ahrena Console aberto.' : 'Esta superfície não desenha painéis.' }
+  })
+
+  // Fechou (a pessoa, o plugin ou um unload): o polling para na hora.
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE) stopPolling($)
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    stopPolling($)
+    return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const r = await readingNow($)
     if (e.surface !== 'desktop') {
       const { Box, Text } = $.ui.resolve(e)
-      const t = r.fleet?.totals
+      const p = r.session
       return (
         <Box flexDirection="column">
           <Text bold color={ORANGE}>Ahrena Console</Text>
-          <Text>{t ? `${t.active} ativa · ${t.idle} ociosa · ${t.sessions} sessões` : 'sem leitura do núcleo'}</Text>
+          <Text>{p ? `Esta sessão: ${p.session?.state ?? 'nova'} · ${needsYouText(p.needsYou)}` : 'sem leitura do núcleo'}</Text>
         </Box>
       )
     }
@@ -344,7 +427,7 @@ export const register: Register = on => {
           </Box>
           <Link href={REPO} label="GitHub" />
         </Box>
-        <Client key="pulso" module="./pulso.tsx" props={{ generatedAt: f?.generatedAt ?? null }} />
+        <Client key="pulso" module="./pulso.tsx" props={{ generatedAt: r.session?.generatedAt ?? null }} />
         <Box flexDirection="row" gap="xs" flexWrap="wrap">
           {TABS.map(t => (
             <Button key={`tab-${t.id}`} label={t.label} variant={v.tab === t.id ? 'primary' : 'secondary'} onPress={() => setView($, { tab: t.id })} />
@@ -353,15 +436,37 @@ export const register: Register = on => {
       </Box>
     )
 
-    if (!f) {
+    const p = r.session
+    if (!p || (!f && FLEET_TABS.includes(v.tab))) {
       return (
         <Box flexDirection="column" gap="md" padding="sm">
           {header}
           <Text color={PINK}>Sem conexão com o núcleo: {r.error ?? 'aguardando a primeira leitura'}</Text>
-          <Button key="retry" label="Tentar de novo" variant="primary" onPress={() => pollFleet($)} />
+          <Button key="retry" label="Tentar de novo" variant="primary" onPress={() => pollNow($, true)} />
         </Box>
       )
     }
+
+    // Abas que não mostram a frota desenham sem ela; as que mostram já saíram acima sem ela.
+    const fl = f ?? EMPTY_FLEET
+
+    // Esta sessão: o que o painel pede a cada 5 s. O redesenho completo é a 4.1.
+    const me = p.session
+    const sessao = (
+      <Box flexDirection="column" gap="sm">
+        {me ? (
+          <Box flexDirection="column" gap="xs">
+            <Text weight="bold" color={STATE_COLOR[me.state]}>● {me.state} · última escrita há {ago(me.lastActivity)}</Text>
+            <Text size="caption" dimColor wrap="truncate-end">{me.project}</Text>
+            <Text size="caption" dimColor tabular>transcript {me.sizeKb} KB</Text>
+          </Box>
+        ) : (
+          <Text dimColor>Esta sessão ainda não tem transcript.</Text>
+        )}
+        <Text weight="semibold" color={p.needsYou ? YELLOW : MUTED}>⚠ {needsYouText(p.needsYou)}</Text>
+        <Text size="caption" dimColor>Estimativa pelo transcript: sessões que pararam há pouco, à espera da próxima mensagem.</Text>
+      </Box>
+    )
 
     const avgMs = r.latencies.length ? Math.round(r.latencies.reduce((a, b) => a + b, 0) / r.latencies.length) : 0
     const nodes = w ? Object.values(w.nodes) : []
@@ -424,8 +529,8 @@ export const register: Register = on => {
       <Box flexDirection="column" gap="md">
         <Box flexDirection="row" gap="sm" flexWrap="wrap">
           {[
-            { k: 'Ativas', n: f.totals.active, c: ORANGE },
-            { k: 'Ociosas', n: f.totals.idle, c: YELLOW },
+            { k: 'Ativas', n: fl.totals.active, c: ORANGE },
+            { k: 'Ociosas', n: fl.totals.idle, c: YELLOW },
             { k: 'Iniciativas', n: w?.byType.Initiative ?? 0, c: ORANGE },
             { k: 'Itens abertos', n: openLeafs.length, c: PINK },
           ].map(c => (
@@ -437,7 +542,7 @@ export const register: Register = on => {
         </Box>
         <Box flexDirection="column" gap="xs">
           <Text size="footnote" weight="semibold">Atividade nas últimas 12 h</Text>
-          <Svg source={barsSvg(f.activityByHour)} alt={`Sessões com atividade por hora: ${f.activityByHour.join(', ')}`} width={svgW(420)} height={46} />
+          <Svg source={barsSvg(fl.activityByHour)} alt={`Sessões com atividade por hora: ${fl.activityByHour.join(', ')}`} width={svgW(420)} height={46} />
         </Box>
         {w && (
           <Box flexDirection="column" gap="xs">
@@ -457,15 +562,15 @@ export const register: Register = on => {
           <Svg source={sparkSvg(r.latencies)} alt={`Latência média ${avgMs} ms`} width={svgW(160)} height={20} />
           <Text size="caption" tabular>{avgMs} ms</Text>
         </Box>
-        <Markdown dimColor text={`**Projetos mais usados:** ${f.topProjects.map(p => `${p.project} (${p.sessions})`).join(', ')}`} />
+        <Markdown dimColor text={`**Projetos mais usados:** ${fl.topProjects.map(p => `${p.project} (${p.sessions})`).join(', ')}`} />
       </Box>
     )
 
     // Sessões: filtro por estado, busca por projeto, lista e detalhe.
-    const rows = f.recent
+    const rows = fl.recent
       .filter(s => v.filter === 'todas' || s.state === v.filter)
       .filter(s => !v.query || s.project.toLowerCase().includes(v.query.toLowerCase()))
-    const sel = f.recent.find(s => s.id === v.selected) ?? null
+    const sel = fl.recent.find(s => s.id === v.selected) ?? null
     const sessoes = (
       <Box flexDirection="column" gap="md">
         <Box flexDirection={narrow ? 'column' : 'row'} gap="sm" alignItems={narrow ? 'stretch' : 'flex-end'} flexWrap="wrap">
@@ -691,6 +796,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap="md" padding="sm" minWidth={0} overflow="hidden">
         {header}
+        {v.tab === 'sessao' && sessao}
         {v.tab === 'visao' && visao}
         {v.tab === 'sessoes' && sessoes}
         {v.tab === 'kanban' && (
@@ -712,7 +818,7 @@ export const register: Register = on => {
         )}
         {v.tab === 'trabalho' && trabalho}
         <Box flexDirection="row" gap="sm" flexWrap="wrap">
-          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => Promise.all([pollFleet($), pollWork($), pollKanban($, true)])} />
+          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => pollNow($, true)} />
           <Button
             key="clear"
             label="Limpar filtros"

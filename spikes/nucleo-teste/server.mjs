@@ -1,10 +1,11 @@
 // Núcleo de teste do Ahrena Console: só para as validações da proposta 0.0.1.
-// Expõe o mesmo dado de três jeitos: GET /api/overview (para o mod), MCP em /mcp
+// Expõe o mesmo dado de três jeitos: GET /api/overview e /api/sessao/<id> (para o mod), MCP em /mcp
 // (ferramentas e artefato) e uma MCP App em ui://ahrena-console/teste.html. O kanban
 // do Project (GET /api/kanban, POST /api/kanban/move) usa o núcleo de packages/nucleo.
 // Lê só nomes e datas dos arquivos em ~/.claude/projects, nunca o conteúdo.
 import { createServer } from 'node:http';
 import { readdir, stat, readFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,24 +21,86 @@ const here = dirname(fileURLToPath(import.meta.url));
 const startedAt = new Date().toISOString();
 let requests = 0;
 
-async function overview() {
-  const root = join(homedir(), '.claude', 'projects');
-  let projects = 0;
-  let sessions = 0;
-  let last = 0;
-  for (const dir of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+// Índice dos transcripts de ~/.claude/projects, em memória (issue #81): a primeira
+// leitura varre tudo uma vez; depois o fs.watch atualiza só o arquivo que mudou. Sem
+// watch (sistema que não suporta), uma nova varredura a cada RESCAN_MS, uma por vez
+// mesmo com pedidos simultâneos. Antes cada pedido varria os ~1.900 arquivos (~80 ms de CPU).
+const ROOT = join(homedir(), '.claude', 'projects');
+const RESCAN_MS = 15_000;
+// Rede de segurança contra eventos perdidos do watch: varredura de fundo, só quando alguém pede.
+const SAFETY_RESCAN_MS = 10 * 60_000;
+const FLUSH_MS = 500;
+const index = new Map(); // "dir/arquivo.jsonl" → { dir, id, mtime, size }
+let firstScan = null;
+let rescan = null;
+let scannedAt = 0;
+let watcher = null;
+const pending = new Set();
+let flushTimer = null;
+
+async function fullScan() {
+  const next = new Map();
+  for (const dir of await readdir(ROOT, { withFileTypes: true }).catch(() => [])) {
     if (!dir.isDirectory()) continue;
-    projects++;
-    for (const f of await readdir(join(root, dir.name)).catch(() => [])) {
+    for (const f of await readdir(join(ROOT, dir.name)).catch(() => [])) {
       if (!f.endsWith('.jsonl')) continue;
-      sessions++;
-      const s = await stat(join(root, dir.name, f)).catch(() => null);
-      if (s && s.mtimeMs > last) last = s.mtimeMs;
+      const s = await stat(join(ROOT, dir.name, f)).catch(() => null);
+      if (s) next.set(`${dir.name}/${f}`, { dir: dir.name, id: f.replace(/\.jsonl$/, ''), mtime: s.mtimeMs, size: s.size });
     }
   }
+  index.clear();
+  for (const [k, v] of next) index.set(k, v);
+  scannedAt = Date.now();
+  summaryMemo = null;
+}
+
+function scanOnce() {
+  rescan ??= fullScan().finally(() => { rescan = null; });
+  return rescan;
+}
+
+// Só os transcripts do primeiro nível de cada projeto, como a varredura (subagentes ficam fora).
+async function flush() {
+  flushTimer = null;
+  const names = [...pending];
+  pending.clear();
+  for (const name of names) {
+    const [dir, f, ...rest] = name.split(/[\\/]/);
+    if (!f || rest.length || !f.endsWith('.jsonl')) continue;
+    const s = await stat(join(ROOT, dir, f)).catch(() => null);
+    if (s) index.set(`${dir}/${f}`, { dir, id: f.replace(/\.jsonl$/, ''), mtime: s.mtimeMs, size: s.size });
+    else index.delete(`${dir}/${f}`);
+  }
+  if (names.length) summaryMemo = null;
+}
+
+function startWatch() {
+  try {
+    watcher = watch(ROOT, { recursive: true, persistent: false }, (_event, name) => {
+      if (!name || !String(name).endsWith('.jsonl')) return;
+      pending.add(String(name));
+      flushTimer ??= setTimeout(() => void flush(), FLUSH_MS);
+    });
+    watcher.on('error', () => { watcher?.close(); watcher = null; });
+  } catch {
+    watcher = null;
+  }
+}
+
+async function transcripts() {
+  if (!firstScan) firstScan = scanOnce().then(startWatch);
+  await firstScan;
+  if (!watcher && Date.now() - scannedAt > RESCAN_MS) await scanOnce();
+  else if (Date.now() - scannedAt > SAFETY_RESCAN_MS) void scanOnce();
+  return index;
+}
+
+async function overview() {
+  const files = [...(await transcripts()).values()];
+  const last = files.reduce((m, f) => Math.max(m, f.mtime), 0);
   return {
-    projects,
-    sessions,
+    projects: new Set(files.map((f) => f.dir)).size,
+    sessions: files.length,
     lastActivity: last ? new Date(last).toISOString() : null,
     generatedAt: new Date().toISOString(),
     startedAt,
@@ -50,24 +113,16 @@ async function overview() {
 const ACTIVE_MS = 2 * 60_000;
 const IDLE_MS = 30 * 60_000;
 const label = (dir) => dir.replace(/^-Users-[^-]+(-[^-]+)?-/, '').replace(/^Workspace-/, '').replace(/--claude-worktrees-/, ' · ').replace(/^ssh-([0-9a-f]{8}).*$/, 'remota · $1');
+const stateAt = (now, m) => (now - m < ACTIVE_MS ? 'ativa' : now - m < IDLE_MS ? 'ociosa' : 'encerrada');
+const rowOf = (f, now) => ({ project: label(f.dir), id: f.id, mtime: f.mtime, size: f.size, state: stateAt(now, f.mtime), lastActivity: new Date(f.mtime).toISOString(), sizeKb: Math.round(f.size / 1024) });
 
 async function fleet() {
-  const root = join(homedir(), '.claude', 'projects');
   const now = Date.now();
-  const files = [];
+  const files = [...(await transcripts()).values()].map((f) => ({ project: label(f.dir), id: f.id, mtime: f.mtime, size: f.size }));
   const perProject = new Map();
-  for (const dir of await readdir(root, { withFileTypes: true }).catch(() => [])) {
-    if (!dir.isDirectory()) continue;
-    for (const f of await readdir(join(root, dir.name)).catch(() => [])) {
-      if (!f.endsWith('.jsonl')) continue;
-      const s = await stat(join(root, dir.name, f)).catch(() => null);
-      if (!s) continue;
-      files.push({ project: label(dir.name), id: f.replace(/\.jsonl$/, ''), mtime: s.mtimeMs, size: s.size });
-      perProject.set(label(dir.name), (perProject.get(label(dir.name)) ?? 0) + 1);
-    }
-  }
+  for (const f of files) perProject.set(f.project, (perProject.get(f.project) ?? 0) + 1);
   files.sort((a, b) => b.mtime - a.mtime);
-  const state = (m) => (now - m < ACTIVE_MS ? 'ativa' : now - m < IDLE_MS ? 'ociosa' : 'encerrada');
+  const state = (m) => stateAt(now, m);
   const hours = Array.from({ length: 12 }, (_, i) => files.filter((f) => {
     const age = now - f.mtime;
     return age >= (11 - i) * 3_600_000 && age < (12 - i) * 3_600_000;
@@ -83,6 +138,37 @@ async function fleet() {
     recent: files.slice(0, 12).map((f) => ({ ...f, state: state(f.mtime), lastActivity: new Date(f.mtime).toISOString(), sizeKb: Math.round(f.size / 1024) })),
     activityByHour: hours,
     topProjects: [...perProject].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([project, sessions]) => ({ project, sessions })),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+// O que o painel pede a cada 5 s (decisão 0004): a própria sessão e quantas precisam
+// de você, nunca a frota. "Precisa de você" aqui é uma estimativa: sessão que parou de
+// escrever há pouco (ociosa), à espera da próxima mensagem. O estado de verdade vem dos
+// hooks (1.4) quando o painel por sessão (4.1) chegar. O resumo vale SUMMARY_MS.
+const SUMMARY_MS = 2000;
+let summaryMemo = null;
+async function summary() {
+  const files = await transcripts();
+  const now = Date.now();
+  if (summaryMemo && now - summaryMemo.at < SUMMARY_MS) return summaryMemo;
+  const byId = new Map();
+  const waiting = new Set();
+  for (const f of files.values()) {
+    byId.set(f.id, f);
+    if (stateAt(now, f.mtime) === 'ociosa') waiting.add(f.id);
+  }
+  summaryMemo = { at: now, byId, waiting };
+  return summaryMemo;
+}
+
+async function sessionView(id) {
+  const { at, byId, waiting } = await summary();
+  const f = byId.get(id);
+  const { mtime, size, ...session } = f ? rowOf(f, at) : {};
+  return {
+    session: f ? session : null,
+    needsYou: waiting.size - (waiting.has(id) ? 1 : 0),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -478,6 +564,13 @@ const http = createServer(async (req, res) => {
     }
     if (req.url === '/api/issues') {
       const body = JSON.stringify(await issues());
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+      return;
+    }
+    const sm = req.url?.match(/^\/api\/sessao\/([^/?]+)/);
+    if (sm) {
+      const body = JSON.stringify(await sessionView(decodeURIComponent(sm[1])));
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(body);
       return;
