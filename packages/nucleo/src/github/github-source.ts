@@ -212,35 +212,59 @@ export class GithubGraphqlSource implements WorkSource {
   }
 
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
-    const doFetch = this.opts.fetch ?? fetch;
-    const now = this.opts.now ?? Date.now;
-    const res = await doFetch(this.opts.url ?? GITHUB_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        authorization: `bearer ${await this.token()}`,
-        'content-type': 'application/json',
-        'GraphQL-Features': 'sub_issues,issue_types',
-      },
-      body: JSON.stringify({ query, variables }),
-    });
-    const text = await res.text();
-    let json: { data?: (T & { rateLimit?: { cost: number; remaining: number } }) | null; errors?: GraphqlError[]; message?: string } = {};
-    try {
-      json = JSON.parse(text);
-    } catch {
-      // corpo vazio ou HTML: decide pelo status abaixo
-    }
-    const message = json.errors?.[0]?.message ?? json.message ?? `HTTP ${res.status}`;
-    if (res.status === 429 || (res.status === 403 && (/rate limit/i.test(message) || res.headers.get('x-ratelimit-remaining') === '0')))
-      throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));
-    if (!res.ok) throw new Error(`GitHub respondeu ${res.status}: ${message}`);
-    if (json.errors?.some((e) => e.type === 'RATE_LIMITED'))
-      throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));
-    const fatal = json.errors?.filter((e) => !(tolerateNotFound && e.type === 'NOT_FOUND')) ?? [];
-    if (fatal.length || !json.data) throw new Error(`GitHub: ${fatal[0]?.message ?? message}`);
-    if (json.data.rateLimit) this.opts.onCost?.({ operation, cost: json.data.rateLimit.cost, remaining: json.data.rateLimit.remaining });
-    return json.data;
+    return githubGraphql<T>({ ...this.opts, token: await this.token() }, operation, query, variables, { tolerateNotFound });
   }
+}
+
+/** O token não tem o escopo que a operação pede (ex.: `project` para mover um card). */
+export class GithubScopeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GithubScopeError';
+  }
+}
+
+/**
+ * Uma chamada ao GraphQL do GitHub (consulta ou mutação), com os erros traduzidos:
+ * limite → `RateLimitedError`, escopo faltando → `GithubScopeError`, resto → `Error`.
+ */
+export async function githubGraphql<T>(
+  opts: Omit<GithubGraphqlSourceOptions, 'token'> & { token: string },
+  operation: string,
+  query: string,
+  variables: Record<string, unknown>,
+  { tolerateNotFound = false } = {},
+): Promise<T> {
+  const doFetch = opts.fetch ?? fetch;
+  const now = opts.now ?? Date.now;
+  const res = await doFetch(opts.url ?? GITHUB_GRAPHQL_URL, {
+    method: 'POST',
+    headers: {
+      authorization: `bearer ${opts.token}`,
+      'content-type': 'application/json',
+      'GraphQL-Features': 'sub_issues,issue_types',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  const text = await res.text();
+  let json: { data?: (T & { rateLimit?: { cost: number; remaining: number } }) | null; errors?: GraphqlError[]; message?: string } = {};
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // corpo vazio ou HTML: decide pelo status abaixo
+  }
+  const message = json.errors?.[0]?.message ?? json.message ?? `HTTP ${res.status}`;
+  if (res.status === 429 || (res.status === 403 && (/rate limit/i.test(message) || res.headers.get('x-ratelimit-remaining') === '0')))
+    throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));
+  if (!res.ok) throw new Error(`GitHub respondeu ${res.status}: ${message}`);
+  if (json.errors?.some((e) => e.type === 'RATE_LIMITED'))
+    throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));
+  const scope = json.errors?.find((e) => e.type === 'INSUFFICIENT_SCOPES');
+  if (scope) throw new GithubScopeError(`o token do GitHub não tem o escopo pedido: ${scope.message}`);
+  const fatal = json.errors?.filter((e) => !(tolerateNotFound && e.type === 'NOT_FOUND')) ?? [];
+  if (fatal.length || !json.data) throw new Error(`GitHub: ${fatal[0]?.message ?? message}`);
+  if (json.data.rateLimit) opts.onCost?.({ operation, cost: json.data.rateLimit.cost, remaining: json.data.rateLimit.remaining });
+  return json.data;
 }
 
 /** Token do `gh` já autenticado na máquina. */

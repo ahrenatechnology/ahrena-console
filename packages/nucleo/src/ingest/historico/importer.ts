@@ -7,7 +7,8 @@
 //   da sessão (arquivo principal) ou do agente (arquivo do subagente) e é gravado por último.
 //   Se a importação cair no meio, a próxima relê do cursor anterior e os ids absorvem a repetição.
 //
-// Não segue os arquivos em tempo real (item 1.3) nem decide estados (item 1.5): sessão nova nasce
+// Seguir em tempo real é do `follower.ts` (item 1.3), que chama esta importação só com os arquivos
+// que mudaram. Não decide estados (item 1.5): sessão nova nasce
 // `completed`, e sessão que já existe (criada pelos hooks, por exemplo) mantém status e espera.
 
 import type { Agent, Metadata, Session, SessionEvent, TokenCounts } from '../../model.ts';
@@ -18,6 +19,7 @@ import {
   fileStat,
   readLinesFrom,
   readSubagentMeta,
+  readTail,
   type FileStat,
   type SubagentMeta,
   type TranscriptFile,
@@ -30,6 +32,11 @@ export interface ImportOptions {
   storage: StoragePort;
   /** Padrão: `~/.claude/projects`. */
   root?: string;
+  /**
+   * Só estes arquivos, em vez de varrer a raiz. É o que o seguidor (item 1.3) usa para importar
+   * apenas o que mudou. Cada sessão afetada continua sendo gravada inteira pelo cursor.
+   */
+  files?: TranscriptFile[];
 }
 
 export interface ImportReport {
@@ -45,6 +52,8 @@ export interface ImportReport {
   /** Eventos que já estavam gravados (releitura). */
   eventsExisting: number;
   linesInvalid: number;
+  /** Arquivos relidos do início porque encolheram ou foram reescritos desde o cursor. */
+  filesRewound: number;
 }
 
 /** Cursor gravado em `metadata.importacao`. */
@@ -53,6 +62,8 @@ export interface ImportCursor {
   offset: number;
   size: number;
   mtimeMs: number;
+  /** Bytes logo antes de `offset` (`readTail`). Ausente nos cursores gravados antes do item 1.3. */
+  tail?: string;
 }
 
 export const mainAgentId = (sessionId: string): string => `${sessionId}:main`;
@@ -124,11 +135,15 @@ class SessionImport {
   async readFile(file: TranscriptFile, cursor: ImportCursor | null, defaultAgentId: string): Promise<ImportCursor | null> {
     const st = await fileStat(file.path);
     if (!st) return null;
-    const start = resumeOffset(cursor, file.relPath, st);
+    let start = resumeOffset(cursor, file.relPath, st);
     if (start === null) {
       this.report.filesUnchanged++;
       return null;
     }
+    const sameFile = cursor !== null && cursor.file === file.relPath && cursor.offset > 0;
+    // Reescrito com tamanho igual ou maior: os bytes antes do cursor não são mais os mesmos.
+    if (start > 0 && cursor?.tail !== undefined && (await readTail(file.path, start)) !== cursor.tail) start = 0;
+    if (sameFile && start === 0) this.report.filesRewound++;
     this.report.filesRead++;
     this.read = true;
     const toolNames = new Map<string, string>();
@@ -169,7 +184,8 @@ class SessionImport {
         else this.report.eventsExisting++;
       }
     }
-    return { file: file.relPath, offset, size: st.size, mtimeMs: st.mtimeMs };
+    const tail = await readTail(file.path, offset);
+    return { file: file.relPath, offset, size: st.size, mtimeMs: st.mtimeMs, ...(tail !== null ? { tail } : {}) };
   }
 
   /** Recalcula o uso de tokens de todos os eventos importados da sessão e grava os buckets. */
@@ -352,7 +368,7 @@ async function sessionIdFromLines(path: string): Promise<string | null> {
 /** Importa (ou continua importando) todo o histórico sob `root`. */
 export async function importHistory(options: ImportOptions): Promise<ImportReport> {
   const root = options.root ?? defaultProjectsRoot();
-  const files = await discoverTranscripts(root);
+  const files = options.files ?? (await discoverTranscripts(root));
   const report: ImportReport = {
     filesFound: files.length,
     filesRead: 0,
@@ -362,6 +378,7 @@ export async function importHistory(options: ImportOptions): Promise<ImportRepor
     eventsAdded: 0,
     eventsExisting: 0,
     linesInvalid: 0,
+    filesRewound: 0,
   };
 
   const work = new Map<string, SessionWork>();

@@ -1,24 +1,29 @@
-// Painel do Ahrena Console (teste): abas Visão geral, Sessões e Trabalho, montadas
+// Painel do Ahrena Console (teste): abas Visão geral, Kanban, Trabalho e Sessões, montadas
 // com os elementos que a aba Code do Claude Desktop oferece a um mod. Lê o núcleo
-// local: /api/fleet (sessões) a cada 5 s e /api/work (hierarquia do GitHub) a cada 60 s.
+// local: /api/fleet (sessões) a cada 5 s, /api/work (hierarquia do GitHub) a cada 60 s e
+// /api/kanban (o GitHub Project por Status) a cada 2 min; mover um card chama
+// /api/kanban/move, que muda o Status no GitHub.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register, RenderElement } from 'claude-code'
 
-import type { Fleet, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import type { Fleet, Kanban, KanbanCard, KanbanLane, Reading, SessionRow, Tab, View, Work, WorkNode } from '../types'
+import { paleta } from './marca'
 
 const PANE = 'ahrena-console'
 const CORE = 'http://127.0.0.1:4720'
 const REPO = 'https://github.com/ahrenatechnology/ahrena-console'
 const FLEET_EVERY_MS = 5000
 const WORK_EVERY_MS = 60_000
+// O mesmo TTL do Project no núcleo (decisão 0001): reler antes disso sairia do cache.
+const KANBAN_EVERY_MS = 2 * 60_000
 
-const ORANGE = '#f47720'
-const PINK = '#df285d'
-const YELLOW = '#ffc30a'
-const GREEN = '#1baf7a'
+const ORANGE = paleta.orange['500']
+const PINK = paleta.rose['500']
+const YELLOW = paleta.yellow['500']
+const GREEN = paleta.green['500']
 const VIOLET = '#9085e9'
-const RED = '#e34948'
-const MUTED = '#a6a6aa'
+const RED = paleta.red['500']
+const MUTED = paleta.gray['200']
 const STATE_COLOR: Record<SessionRow['state'], string> = { ativa: ORANGE, ociosa: YELLOW, encerrada: MUTED }
 const STAGES = ['a fazer', 'em andamento', 'ci rodando', 'ci falhou', 'ajustes pedidos', 'em revisão', 'mergeado', 'concluída'] as const
 const STAGE_COLOR: Record<string, string> = {
@@ -52,6 +57,16 @@ const LANES: { id: string; label: string; color: string; stages: string[] }[] = 
   { id: 'feito', label: 'Feito', color: GREEN, stages: ['mergeado', 'concluída'] },
 ]
 const LANE_LIMIT = 8
+// Cores das opções de um campo do GitHub Project.
+const GH_COLOR: Record<string, string> = {
+  GRAY: MUTED, BLUE: '#5aa9e6', GREEN: GREEN, YELLOW: YELLOW, ORANGE: ORANGE, RED: RED, PINK: PINK, PURPLE: VIOLET,
+}
+const KIND_STYLE: Record<KanbanCard['kind'], { color: string; label: string } | null> = {
+  Issue: null,
+  PullRequest: { color: GREEN, label: 'PR' },
+  DraftIssue: { color: MUTED, label: 'Rascunho' },
+}
+const short = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s)
 // Abaixo desta largura (em colunas) as raias do kanban ficam empilhadas na vertical.
 const KANBAN_WIDE_COLUMNS = 150
 // Tamanho único dos cards, medido no painel do Claude Desktop (estreito ≈ 38 colunas,
@@ -76,10 +91,12 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'sessoes', label: 'Sessões' },
 ]
 
-const EMPTY_READING: Reading = { fleet: null, work: null, error: null, workError: null, polls: 0, latencies: [] }
+const EMPTY_READING: Reading = {
+  fleet: null, work: null, kanban: null, error: null, workError: null, kanbanError: null, moving: null, polls: 0, latencies: [],
+}
 const EMPTY_VIEW: View = {
   tab: 'visao', filter: 'todas', query: '', selected: null, stage: 'todas', org: 'todas', issueQuery: '', selectedIssue: null,
-  workMode: 'kanban', expanded: [],
+  workMode: 'kanban', expanded: [], fullLanes: [],
 }
 
 const reading = atom({ plugin: 'ahrena-console-painel', key: 'reading' } as const, EMPTY_READING)
@@ -89,6 +106,7 @@ let fleetTimer: { cancel: () => void } | undefined
 // Largura que o painel recebeu no último desenho; vai ao núcleo para calibrar o layout.
 let lastBodyColumns: number | null = null
 let workTimer: { cancel: () => void } | undefined
+let kanbanTimer: { cancel: () => void } | undefined
 
 // Estado salvo por uma versão anterior do painel pode vir sem campos novos.
 function normalize(value: unknown): Reading {
@@ -98,6 +116,7 @@ function normalize(value: unknown): Reading {
     ...raw,
     fleet: raw?.fleet?.totals ? raw.fleet : null,
     work: raw?.work?.nodes ? raw.work : null,
+    kanban: raw?.kanban?.lanes ? raw.kanban : null,
     latencies: raw?.latencies ?? [],
   }
 }
@@ -130,7 +149,12 @@ function readJson<T>(res: { ok: boolean; status: number; text: string }): { data
 
 async function viewNow($: Engine): Promise<View> {
   const v = { ...EMPTY_VIEW, ...((await read($, view)) as Partial<View> | undefined) }
-  return { ...v, tab: TABS.some(t => t.id === v.tab) ? v.tab : 'visao', expanded: Array.isArray(v.expanded) ? v.expanded : [] }
+  return {
+    ...v,
+    tab: TABS.some(t => t.id === v.tab) ? v.tab : 'visao',
+    expanded: Array.isArray(v.expanded) ? v.expanded : [],
+    fullLanes: Array.isArray(v.fullLanes) ? v.fullLanes : [],
+  }
 }
 
 async function pollFleet($: Engine) {
@@ -162,13 +186,45 @@ async function pollWork($: Engine) {
   }
 }
 
+// O quadro do Project. `force` é o botão de atualizar (o núcleo respeita o mínimo de 30 s).
+async function pollKanban($: Engine, force = false) {
+  try {
+    const res = await $.http.fetch(`${CORE}/api/kanban${force ? '?force=1' : ''}`)
+    const { data: kanban, error } = readJson<Kanban>(res)
+    await patchReading($, r => ({ kanban: kanban ?? r.kanban, kanbanError: error }))
+  } catch (err) {
+    await patchReading($, () => ({ kanbanError: String(err) }))
+  }
+}
+
+// Move um card de raia: o núcleo muda o Status no GitHub e devolve o quadro já atualizado,
+// sem reler o Project. Enquanto isso, o card mostra que está esperando.
+async function moveCard($: Engine, itemId: string, optionId: string) {
+  if ((await readingNow($)).moving) return
+  await patchReading($, () => ({ moving: itemId }))
+  try {
+    const res = await $.http.fetch(`${CORE}/api/kanban/move`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ itemId, optionId }),
+    })
+    const { data: kanban, error } = readJson<Kanban>(res)
+    await patchReading($, r => ({ kanban: kanban ?? r.kanban, kanbanError: error && `Não deu para mover: ${error}`, moving: null }))
+  } catch (err) {
+    await patchReading($, () => ({ kanbanError: `Não deu para mover: ${String(err)}`, moving: null }))
+  }
+}
+
 function start($: Engine) {
   fleetTimer?.cancel()
   workTimer?.cancel()
+  kanbanTimer?.cancel()
   void pollFleet($)
   void pollWork($)
+  void pollKanban($)
   fleetTimer = $.clock.every(FLEET_EVERY_MS, () => void pollFleet($))
   workTimer = $.clock.every(WORK_EVERY_MS, () => void pollWork($))
+  kanbanTimer = $.clock.every(KANBAN_EVERY_MS, () => void pollKanban($))
 }
 
 async function setView($: Engine, patch: Partial<View>) {
@@ -191,7 +247,7 @@ function ago(iso: string) {
 }
 
 function logoSvg() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${ORANGE}"/><path d="M9 23 L16 8 L23 23" stroke="#17171b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="${PINK}" stroke="${PINK}" stroke-width="1" stroke-linejoin="round"/></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${ORANGE}"/><path d="M9 23 L16 8 L23 23" stroke="${paleta.gray['900']}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="${PINK}" stroke="${PINK}" stroke-width="1" stroke-linejoin="round"/></svg>`
 }
 
 function barsSvg(values: number[]) {
@@ -350,9 +406,6 @@ export const register: Register = on => {
       )
     }
 
-    // O Kanban usa o mesmo card das outras visões.
-    const miniCard = (n: WorkNode) => card(n, 0)
-
     const matches = (n: WorkNode) =>
       (v.org === 'todas' || n.repo.startsWith(`${v.org}/`)) &&
       (!v.issueQuery || `${n.repo} ${n.title}`.toLowerCase().includes(v.issueQuery.toLowerCase()))
@@ -449,50 +502,117 @@ export const register: Register = on => {
       </Box>
     )
 
-    // Kanban: as folhas da hierarquia (o que de fato se executa) em quatro raias.
-    // Kanban responsivo: com o painel largo, quatro raias lado a lado; estreito, as
-    // raias empilhadas na ordem do fluxo, cada uma com os cards embaixo.
+    // Quadro em raias, o mesmo para o Kanban do Project e para o fluxo do Trabalho.
+    // Responsivo: com o painel largo, as raias lado a lado, quebrando linha se não couberem
+    // (nunca estoura a largura); estreito, as raias empilhadas, cada uma com os cards embaixo.
+    // Cada raia mostra os primeiros cards e abre por inteiro no "+N mais".
+    type BoardLane = { id: string; label: string; color: string; cards: RenderElement[] }
     const wide = (e.props.bodyColumns ?? 0) >= KANBAN_WIDE_COLUMNS
-    const laneItems = (l: (typeof LANES)[number]) => nodes.filter(n => !n.children.length && matches(n) && l.stages.includes(n.stage))
-    const laneHeader = (l: (typeof LANES)[number], count: number) => (
+    const laneHeader = (l: BoardLane) => (
       <Box flexDirection="row" gap="xs" borderStyle="round" borderColor={l.color} paddingX="xs">
-        <Text size="footnote" weight="bold" color={l.color}>{l.label}</Text>
-        <Text size="footnote" tabular dimColor>{count}</Text>
+        <Text size="footnote" weight="bold" color={l.color} wrap="truncate-end">{l.label}</Text>
+        <Text size="footnote" tabular dimColor>{l.cards.length}</Text>
       </Box>
     )
-    const kanbanBoard = wide ? (
-      <Box key="kanban-wide" flexDirection="row" gap="xs" alignItems="flex-start">
-        {LANES.map(l => {
-          const items = laneItems(l)
-          return (
+    const laneFooter = (l: BoardLane) => {
+      const full = v.fullLanes.includes(l.id)
+      if (l.cards.length === 0) return <Text size="caption" dimColor>vazio</Text>
+      if (l.cards.length <= LANE_LIMIT) return null
+      return (
+        <Button key={`more-${l.id}`} plain onPress={() => setView($, { fullLanes: full ? v.fullLanes.filter(x => x !== l.id) : [...v.fullLanes, l.id] })}>
+          <Text size="caption" dimColor>{full ? '▴ mostrar menos' : `+${l.cards.length - LANE_LIMIT} mais`}</Text>
+        </Button>
+      )
+    }
+    const visible = (l: BoardLane) => (v.fullLanes.includes(l.id) ? l.cards : l.cards.slice(0, LANE_LIMIT))
+    const laneBoard = (prefix: string, lanes: BoardLane[]) =>
+      wide ? (
+        <Box key={`${prefix}-wide`} flexDirection="row" gap="xs" alignItems="flex-start" flexWrap="wrap">
+          {lanes.map(l => (
             <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" width={CARD_W} flexShrink={0}>
-              {laneHeader(l, items.length)}
-              {items.slice(0, LANE_LIMIT).map(n => miniCard(n))}
-              {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
-              {items.length === 0 && <Text size="caption" dimColor>vazio</Text>}
+              {laneHeader(l)}
+              {visible(l)}
+              {laneFooter(l)}
             </Box>
-          )
-        })}
-      </Box>
-    ) : (
-      <Box key="kanban-narrow" flexDirection="column" gap="md">
-        {LANES.map(l => {
-          const items = laneItems(l)
-          return (
+          ))}
+        </Box>
+      ) : (
+        <Box key={`${prefix}-narrow`} flexDirection="column" gap="md">
+          {lanes.map(l => (
             <Box key={`lane-${l.id}`} flexDirection="column" gap="xs" minWidth={0} overflow="hidden">
-              {laneHeader(l, items.length)}
-              <Box flexDirection="row" gap="xs" flexWrap="wrap">
-                {items.slice(0, LANE_LIMIT).map(n => (
-                  <Box key={`slot-${n.key}`} flexShrink={0}>{miniCard(n)}</Box>
-                ))}
-              </Box>
-              {items.length > LANE_LIMIT && <Text size="caption" dimColor>+{items.length - LANE_LIMIT} mais</Text>}
-              {items.length === 0 && <Text size="caption" dimColor>vazio</Text>}
+              {laneHeader(l)}
+              <Box flexDirection="row" gap="xs" flexWrap="wrap">{visible(l)}</Box>
+              {laneFooter(l)}
             </Box>
-          )
-        })}
-      </Box>
+          ))}
+        </Box>
+      )
+
+    // Fluxo do Trabalho: as folhas da hierarquia (o que de fato se executa) por estágio do PR.
+    const fluxoBoard = laneBoard(
+      'fluxo',
+      LANES.map(l => ({
+        ...l,
+        cards: nodes.filter(n => !n.children.length && matches(n) && l.stages.includes(n.stage)).map(n => <Box key={`slot-${n.key}`} flexShrink={0}>{card(n, 0)}</Box>),
+      })),
     )
+
+    // Kanban do GitHub Project: raias na ordem das opções do Status, e cada card com ◂ ▸
+    // para ir à raia vizinha, o que muda o Status no GitHub. Mesmo tamanho dos outros cards.
+    const k = r.kanban
+    const options = k ? k.lanes.filter((l): l is KanbanLane & { id: string } => l.id !== null) : []
+    const laneColor = (l: KanbanLane) => (l.color && GH_COLOR[l.color]) || MUTED
+    const kanbanCard = (c: KanbanCard, lane: KanbanLane) => {
+      const ts = KIND_STYLE[c.kind] ?? typeStyle(c.type)
+      const at = options.findIndex(o => o.id === lane.id)
+      const prev = at > 0 ? options[at - 1] : undefined
+      const next = at < 0 ? options[0] : options[at + 1]
+      const moving = r.moving === c.itemId
+      const parent = c.parent?.split('#')[1]
+      return (
+        <Box key={`card-${c.itemId}`} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={ts.color} paddingX="xs">
+          <Box flexDirection="row" gap="xs" overflow="hidden">
+            <Text size="caption" weight="bold" color={ts.color}>{ts.label}</Text>
+            <Text size="caption" weight="semibold" color={laneColor(lane)} wrap="truncate-end">· {lane.name}</Text>
+            {c.number !== null && <Text size="caption" dimColor>· #{c.number}</Text>}
+          </Box>
+          <Text size="footnote" weight="semibold" wrap="truncate-end">{c.title}</Text>
+          <Box flexDirection="row" gap="xs" overflow="hidden">
+            {parent && <Text size="caption" dimColor>↑ #{parent}</Text>}
+            {c.state === 'CLOSED' && <Text size="caption" weight="bold" color={MUTED}>fechada</Text>}
+            {c.state === 'MERGED' && <Text size="caption" weight="bold" color={GREEN}>mergeado</Text>}
+            {c.updatedAt && <Text size="caption" dimColor>{ago(c.updatedAt)}</Text>}
+          </Box>
+          <Box flexDirection="row" gap="xs" overflow="hidden">
+            {moving && <Text size="caption" color={YELLOW}>movendo…</Text>}
+            {!moving && prev && (
+              <Button key={`move-prev-${c.itemId}`} plain onPress={() => moveCard($, c.itemId, prev.id)}>
+                <Text color={laneColor(prev)}>◂</Text> {short(prev.name, 9)}
+              </Button>
+            )}
+            {!moving && next && (
+              <Button key={`move-next-${c.itemId}`} plain onPress={() => moveCard($, c.itemId, next.id)}>
+                {short(next.name, 9)} <Text color={laneColor(next)}>▸</Text>
+              </Button>
+            )}
+            {c.url && <Link href={c.url} label="Abrir" />}
+          </Box>
+        </Box>
+      )
+    }
+    const kanbanMatches = (c: KanbanCard) =>
+      !v.issueQuery || `${c.repo ?? ''} ${c.number ?? ''} ${c.title}`.toLowerCase().includes(v.issueQuery.toLowerCase())
+    const kanbanBoard =
+      k &&
+      laneBoard(
+        'kanban',
+        k.lanes.map(l => ({
+          id: l.id ?? 'sem-status',
+          label: l.name,
+          color: laneColor(l),
+          cards: l.items.filter(kanbanMatches).map(c => kanbanCard(c, l)),
+        })),
+      )
 
     // Trabalho: a hierarquia do GitHub em cards, como árvore ou agrupada por estágio.
     const orgs = [...new Set(nodes.map(n => n.repo.split('/')[0] ?? ''))].sort()
@@ -528,8 +648,7 @@ export const register: Register = on => {
                 options={[{ value: 'todas', label: 'Todas' }, ...orgs.map(o => ({ value: o, label: o }))]}
                 onSelect={(value: string) => setView($, { org: value })}
               />
-              {v.workMode === 'kanban' && kanbanBoard}
-            {v.workMode === 'estagio' && (
+              {v.workMode === 'estagio' && (
                 <Select
                   key="stage"
                   label="Estágio"
@@ -552,7 +671,7 @@ export const register: Register = on => {
                 <Box flexDirection="row" gap="xs" flexWrap="wrap">{loose.slice(0, 15).map(k => card(w.nodes[k] as WorkNode, 0))}</Box>
               </Box>
             )}
-            {v.workMode === 'kanban' && kanbanBoard}
+            {v.workMode === 'kanban' && fluxoBoard}
             {v.workMode === 'estagio' && (
               <Box flexDirection="column" gap="sm">
                 {STAGES.filter(s => stageCards.some(n => n.stage === s)).map(s => (
@@ -576,25 +695,24 @@ export const register: Register = on => {
         {v.tab === 'sessoes' && sessoes}
         {v.tab === 'kanban' && (
           <Box flexDirection="column" gap="md">
-            {!w && <Text dimColor>{r.workError ? `Não deu para ler o GitHub: ${r.workError}` : 'Lendo a hierarquia do GitHub…'}</Text>}
-            {w && (
-              <Box flexDirection={narrow ? 'column' : 'row'} gap="sm" alignItems={narrow ? 'stretch' : 'flex-end'} flexWrap="wrap">
-                <Select
-                  key="org-kanban"
-                  label="Organização"
-                  value={v.org}
-                  options={[{ value: 'todas', label: 'Todas' }, ...orgs.map(o => ({ value: o, label: o }))]}
-                  onSelect={(value: string) => setView($, { org: value })}
-                />
-                <Input key="busca-kanban" label="Busca" placeholder="título ou repositório" value={v.issueQuery} submitLabel="Buscar" onInput={(value: string) => setView($, { issueQuery: value })} onSubmit={(value: string) => setView($, { issueQuery: value })} />
+            {r.kanbanError && <Text size="caption" color={k ? YELLOW : PINK}>{k ? `⚠ ${r.kanbanError}` : `Não deu para ler o GitHub Project: ${r.kanbanError}`}</Text>}
+            {!k && !r.kanbanError && <Text dimColor>Lendo o GitHub Project…</Text>}
+            {k && (
+              <Box flexDirection="row" gap="xs" flexWrap="wrap" alignItems="center">
+                <Text size="footnote" weight="semibold" wrap="truncate-end">{k.title}</Text>
+                <Text size="caption" dimColor>· {k.count} itens por {k.field} · lido há {ago(new Date(k.fetchedAt).toISOString())}</Text>
+                <Link href={k.url} label="Abrir no GitHub" />
               </Box>
             )}
-            {w && kanbanBoard}
+            {k && (
+              <Input key="busca-kanban" label="Busca" placeholder="título ou número" value={v.issueQuery} submitLabel="Buscar" onInput={(value: string) => setView($, { issueQuery: value })} onSubmit={(value: string) => setView($, { issueQuery: value })} />
+            )}
+            {kanbanBoard}
           </Box>
         )}
         {v.tab === 'trabalho' && trabalho}
         <Box flexDirection="row" gap="sm" flexWrap="wrap">
-          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => Promise.all([pollFleet($), pollWork($)])} />
+          <Button key="refresh" label="Atualizar agora" variant="primary" onPress={() => Promise.all([pollFleet($), pollWork($), pollKanban($, true)])} />
           <Button
             key="clear"
             label="Limpar filtros"

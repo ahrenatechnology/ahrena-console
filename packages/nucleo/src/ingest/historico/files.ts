@@ -10,7 +10,7 @@
 
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 export interface TranscriptFile {
   /** Caminho absoluto. */
@@ -111,6 +111,54 @@ export async function fileStat(path: string): Promise<FileStat | null> {
   } catch {
     return null;
   }
+}
+
+const TAIL = 64;
+
+/**
+ * Impressão digital dos bytes logo antes de `offset` (até 64), em base64. Fica no cursor: se o
+ * arquivo for reescrito com tamanho igual ou maior, os bytes antes do cursor mudam e a leitura
+ * recomeça do início. `null` se o arquivo sumiu ou é menor que `offset`.
+ */
+export async function readTail(path: string, offset: number): Promise<string | null> {
+  const length = Math.min(TAIL, offset);
+  try {
+    const handle = await open(path, 'r');
+    try {
+      const buf = Buffer.alloc(length);
+      const { bytesRead } = await handle.read(buf, 0, length, offset - length);
+      return bytesRead === length ? buf.toString('base64') : null;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classifica um caminho sob a raiz como transcript, pelos mesmos layouts de `discoverTranscripts`.
+ * `null` para o que não é transcript (diretório, `.meta.json`, `superseded`, outro arquivo).
+ * Não toca o disco, exceto para saber se o `.meta.json` do subagente existe.
+ */
+export function classifyTranscript(root: string, relPath: string, exists: (path: string) => boolean): TranscriptFile | null {
+  const parts = relPath.split(sep).filter((p) => p.length > 0);
+  const path = join(root, ...parts);
+  const rel = parts.join(sep);
+  if (parts.length === 2) {
+    const agent = AGENT_FILE.exec(parts[1]);
+    if (agent) return { path, relPath: rel, kind: 'subagent', sessionId: null, agentId: agent[1], metaPath: null };
+    const session = SESSION_FILE.exec(parts[1]);
+    if (session) return { path, relPath: rel, kind: 'main', sessionId: session[1], agentId: null, metaPath: null };
+    return null;
+  }
+  if (parts.length === 4 && parts[2] === 'subagents') {
+    const m = AGENT_FILE.exec(parts[3]);
+    if (!m) return null;
+    const meta = join(root, parts[0], parts[1], 'subagents', `agent-${m[1]}.meta.json`);
+    return { path, relPath: rel, kind: 'subagent', sessionId: parts[1], agentId: m[1], metaPath: exists(meta) ? meta : null };
+  }
+  return null;
 }
 
 const CHUNK = 1 << 20;
