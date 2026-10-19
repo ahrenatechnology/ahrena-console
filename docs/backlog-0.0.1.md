@@ -111,6 +111,12 @@ Estratégia: **por camada**, de baixo para cima. Tudo atrás de portas (armazena
 | 1.8 | Tech task | Saúde da coleta e `doctor` | hooks falhando, última leitura, o que falta | 1.4 |
 | 1.9 | Tech task | Plano da sessão a partir de TaskCreate, TodoWrite e update_plan, com dono de cada passo (Podium) | `feitos/total` por sessão | 1.4 |
 | 1.10 | Tech task | Falhas: captura e explicação opcional por um modelo pequeno (Podium) | motivo de cada falha | 1.4 |
+| 1.11 | Spike | Múltiplas contas do Claude em simultâneo, sem trocar de conta: identificar, separar e somar por conta, local e no hub (timebox: 1 dia) | [decisão 0006](decisoes/0006-multiplas-contas.md) | — |
+| 1.12 | Tech task | Conta no modelo e na porta: `ClaudeAccount`, `Session.accountId` e `accountSource`, filtro por conta em `listSessions`, migração aditiva, testes de contrato e simulador com duas contas sintéticas | sessões com conta | 1.1 |
+| 1.13 | Tech task | Conta pelos hooks: o encaminhador manda `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_ACCOUNT_UUID` e `CLAUDE_CODE_ORGANIZATION_UUID`, e o receptor resolve a conta no `SessionStart`, inclusive por SSH | conta ao vivo | 1.4, 1.12 |
+| 1.14 | Tech task | Importador e seguidor com várias pastas de configuração, e conta pelo transcript (`bridge-session`), pelo índice do Desktop e pelo perfil, com procedência | conta no histórico | 1.2, 1.3, 1.12, 1.15 |
+| 1.15 | Tech task | Perfis: descobrir as pastas de configuração, ler só a conta e a org de cada `.claude.json`, rótulo e cor por conta | lista de contas da máquina | 1.12 |
+| 1.16 | Tech task | Custo, uso e limites por conta: agregações com a dimensão conta; limites por conta, nunca somados | custo e limites por conta | 1.6, 1.12 |
 
 ## Épico 2 · Servidor MCP (M1)
 
@@ -123,6 +129,7 @@ Estratégia: **pelas perguntas do usuário**, não pelos endpoints. O CCAM espel
 | 2.3 | User story, API | Relatório de uso e custo (`usage_report`) e SQL só de leitura (`query_sql`) | análise por conversa | 1.6 |
 | 2.4 | Tech task | `wait_for_changes` (long polling) para as telas ficarem ao vivo | atualização quase instantânea | 1.5 |
 | 2.5 | Tech task | Respostas paginadas, transcript tratado como conteúdo não confiável, ferramentas de escrita desligadas | segurança e limite de contexto | 2.2 |
+| 2.6 | User story, API | MCP por conta: parâmetro `account` em todas as ferramentas, conta em cada sessão, divisão por conta no `fleet_overview` e no `sessions_needing_attention` ([decisão 0006](decisoes/0006-multiplas-contas.md)) | perguntas por conta | 2.1, 2.2, 1.12 |
 
 ## Épico 3 · Artefato: o console completo (M1)
 
@@ -140,6 +147,8 @@ Estratégia: **por tela**, na ordem do CCAM. Cada tela funciona sozinha. Gráfic
 | 3.8 | User story, frontend | Histórico: sessões encerradas por dia, com detalhe e ligação depois de `/clear` (Podium) | tela de histórico | 3.3 |
 | 3.9 | User story, frontend | Mural de sessões ao vivo: um card por sessão com status, modelo, esforço, plano, agentes, contexto e custo (Podium) | tela do mural | 3.1, 1.9, 1.7 |
 | 3.10 | User story, frontend | Kanban do projeto no artefato: o GitHub Project por Status, e mover um card muda o Status no GitHub | o projeto inteiro numa tela | 3.1, 5.3 |
+| 3.11 | User story, frontend | Artefato por conta: seletor de conta na moldura, coluna Conta em Sessões, Dashboard, Custo, mural e kanban por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | console de todas as contas | 3.1, 2.6 |
+| 3.12 | Tech task | Validar o artefato e a ponte `host:` com o Claude Desktop em cada org, e decidir entre um link por org ou um só | artefato em qualquer org | 3.1 |
 
 ## Épico 4 · Painel lateral (M1)
 
@@ -153,6 +162,7 @@ Estratégia: **o painel olha a sessão em que está aberto.** O projeto, a frota
 | 4.4 | Tech task | Layout responsivo validado em larguras de 36 a 160 colunas, e estado salvo compatível entre versões | painel sem estouro | 4.1, 4.2 |
 | 4.5 | Tech task | Status line `ahrena-console ● N ao vivo`, com aviso de versão (Podium) | estado sempre visível | 4.1 |
 | 4.6 | Tech task | Consumo baixo: o painel consulta só enquanto está aberto e só a própria sessão, com medição repetível | painel que não pesa no Mac | — |
+| 4.8 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | painel multiconta | 4.1, 1.13 |
 
 ## Épico 5 · Integração com o GitHub (M1)
 
@@ -180,6 +190,8 @@ Decisão do spike 5.1: [consulta rasa, filhas ao expandir, delta e cache](deciso
 | 6.8 | User story, frontend | Notificações do sistema quando uma sessão passa a esperar, com o motivo | aviso sem olhar a tela | 6.7, 1.5 |
 | 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja | núcleo vivo desde o login | 6.7 |
 | 6.10 | Tech task | Release do app assinado e notarizado, com updater e build no CI | instalar e atualizar sem atrito | 6.7, 6.3 |
+| 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil e guia de contas simultâneas com alias e `remote-control` por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | várias contas instaladas | 6.2, 1.15 |
+| 6.12 | User story, frontend | Bandeja e notificações por conta: menu agrupado por conta e rótulo da conta na notificação | bandeja multiconta | 6.7, 6.8, 1.12 |
 
 ## Épico 7 · Hub na nuvem, AWS serverless (M2)
 
@@ -198,6 +210,7 @@ Estratégia: **por camada**, reaproveitando o núcleo atrás das portas do Épic
 | 7.9 | Tech task | GitHub consultado pelo hub uma vez para o time, com cache | fim do problema de limite | 7.3, 5.2 |
 | 7.10 | Tech task | Ingestão dos agentes headless por OpenTelemetry | headless no mesmo console | 7.5 |
 | 7.11 | User story, frontend | Admin do hub: preços por modelo, chaves de recursos, avisos, máquinas que reportam, compatibilidade de versão, log (Podium) | administração do time | 7.4 |
+| 7.12 | Tech task | **No M1.** Contrato do hub com conta: `accountKey` com sal do time no lugar do UUID, conta em cada sessão do lote, política de envio e destino por conta na máquina, conta nova sem envio ([decisão 0006](decisoes/0006-multiplas-contas.md)) | pessoa × conta × org | 1.12 |
 
 ## Épico 9 · Responder e controlar pelo console
 
@@ -238,3 +251,4 @@ Registrados como próximos passos, sem issue agora:
 - Tudo no repo `ahrenatechnology/ahrena-console`, com os tipos de issue da organização e sub-issues.
 - O código de `spikes/` é referência; o definitivo nasce dentro destes itens, com testes.
 - Ordem entre épicos registrada como `blocked by` no GitHub.
+- A 0.0.1 suporta várias contas do Claude ao mesmo tempo, sem trocar de conta. Nenhuma parte do console depende de uma conta só: núcleo, plugin, extensão, app de bandeja e hub ([decisão 0006](decisoes/0006-multiplas-contas.md)).
