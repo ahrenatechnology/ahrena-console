@@ -1,0 +1,28 @@
+{
+  "name": "ahrena-console-resposta",
+  "version": "0.0.1",
+  "description": "Spike #58: a sessão consulta o núcleo antes de abrir o diálogo de permissão, pergunta ou plano",
+  "author": { "name": "Ahrena Technology" },
+  "license": "Apache-2.0",
+  "userConfig": {
+    "nucleo": {
+      "type": "string",
+      "title": "Núcleo",
+      "description": "URL do núcleo local",
+      "default": "http://127.0.0.1:4721"
+    },
+    "token": {
+      "type": "string",
+      "title": "Token do núcleo",
+      "description": "O token da sessão no núcleo (TOKEN_SESSAO)",
+      "sensitive": true,
+      "default": ""
+    },
+    "esperaMs": {
+      "type": "number",
+      "title": "Espera pelo console (ms)",
+      "description": "Quanto a sessão espera a resposta do console antes de abrir o diálogo local; 0 desliga",
+      "default": 0
+    }
+  }
+}
