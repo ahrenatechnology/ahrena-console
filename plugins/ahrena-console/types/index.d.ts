@@ -45,6 +45,20 @@ export type PlanoDoPainel = {
   passos?: PassoDoPainel[]
 }
 
+/** Um plano do histórico da sessão (issue #131): o atual, ou um anterior concluído ou abandonado (X de Y). */
+export type PlanoDaSessao = {
+  numero: number
+  resultado: 'atual' | 'concluido' | 'abandonado'
+  /** O primeiro passo do plano. */
+  resumo: string
+  feitos: number
+  total: number
+  /** O passo em andamento, só no atual. */
+  atual: string | null
+  inicio: string
+  fim: string | null
+}
+
 export type DonoDoPasso = { tipo: 'principal' | 'subagente' | 'sessao'; nome: string | null; agenteId: string | null }
 
 export type PassoDoPainel = {
@@ -153,6 +167,8 @@ export type Painel = {
   tokens: { entrada: number; saida: number } | null
   background: { total: number; primeiro: string | null }
   plano: PlanoDoPainel | null
+  /** Do mais recente para o mais antigo. Núcleo anterior à #131 não manda. */
+  planos?: PlanoDaSessao[]
   subagentes: { ativos: number; itens: SubagenteDoPainel[] }
   filhas: FilhaDoPainel[]
   trabalho: TrabalhoDoPainel | null
@@ -175,8 +191,8 @@ export type Leitura = {
 
 /** O que a pessoa abriu no painel. */
 export type Vista = {
-  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9). */
-  tela: 'sessao' | 'precisam' | 'decisoes'
+  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131). */
+  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos'
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
   escopo: 'familia' | 'maquina' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */

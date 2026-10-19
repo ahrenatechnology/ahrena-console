@@ -50,7 +50,7 @@ describe('decisões: modelo e porta', () => {
     await ctx.storage.close();
   });
 
-  test('a migração das decisões é a última e aditiva', () => {
+  test('a migração das decisões é aditiva', () => {
     const m = MIGRATIONS.find((x) => x.sql.includes('CREATE TABLE decisions'));
     assert.ok(m);
     assert.equal(ctx.storage.schemaVersion, MIGRATIONS.at(-1)!.version);
@@ -61,7 +61,7 @@ describe('decisões: modelo e porta', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, MIGRATIONS.filter((m) => m.version <= 3));
     assert.equal(schemaVersion(db), 3);
-    assert.deepEqual(migrate(db), [4]);
+    assert.deepEqual(migrate(db, MIGRATIONS.filter((m) => m.version <= 4)), [4]);
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
     assert.ok(tables.includes('decisions') && tables.includes('session_links'));
     db.close();

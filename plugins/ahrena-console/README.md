@@ -7,7 +7,7 @@ O painel olha a sessão em que está aberto:
 - **Esta sessão:** status com motivo e tempo, modelo, turno, o que ela faz agora e, quando ela espera por você, a faixa com a pergunta, a permissão ou o erro inteiros (P1 a P6);
 - **Contexto e custo:** contexto usado, custo estimado com a curva da sessão, tokens e processos em background;
 - **Trabalho:** a issue e o PR achados pelo branch, com sub-issues, CI e review;
-- **Plano, subagentes e sessões filhas:** o que roda dentro dela (P4);
+- **Plano, subagentes e sessões filhas:** o que roda dentro dela (P4). O card Plano mostra o atual, com a barra e o passo em andamento, e os anteriores com ✓ (concluído) ou ◐ (abandonado), o resumo e a duração; no estreito, "+N planos anteriores" abre a lista (#131);
 - **Decisões, uma linha:** "N decisões vigentes", com quantas estão a confirmar; "Ver" abre os cards de cada decisão (origem, há quanto tempo, o que se decidiu, o que foi descartado, o estado e quem decidiu), com o escopo trocado entre Sessão, Família e Branch. A sugerida tem Confirmar e Descartar; a substituída aparece riscada e aponta a nova (P9). Depois de um `/clear`, uma faixa diz quantas decisões da sessão anterior continuam valendo (P10);
 - **De fora, uma linha:** "N precisam de você", somando todas as contas, com a divisão por conta ao passar o mouse; "Ver" abre a lista, só a família ou a máquina inteira (P7);
 - **Sem o núcleo:** a última leitura, o aviso e uma nova tentativa a cada 5 s (P8).

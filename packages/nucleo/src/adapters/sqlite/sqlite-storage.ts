@@ -15,7 +15,7 @@ import {
   type SessionEvent,
   type TokenUsage,
 } from '../../model.ts';
-import { validatePlan, type SessionPlan } from '../../plano/modelo.ts';
+import { validatePlan, validatePlanRecord, type PlanRecord, type SessionPlan } from '../../plano/modelo.ts';
 import {
   pageSize,
   type ListEventsQuery,
@@ -149,6 +149,23 @@ function toPlan(r: Row): SessionPlan {
   return {
     sessionId: r.session_id as string,
     source: r.source as SessionPlan['source'],
+    steps: JSON.parse(r.steps as string),
+    done: r.done as number,
+    total: r.total as number,
+    currentStepId: r.current_step_id as string | null,
+    changedAt: r.changed_at as string,
+    metadata: JSON.parse(r.metadata as string),
+  };
+}
+
+function toPlanRecord(r: Row): PlanRecord {
+  return {
+    sessionId: r.session_id as string,
+    seq: r.seq as number,
+    source: r.source as PlanRecord['source'],
+    startedAt: r.started_at as string,
+    endedAt: r.ended_at as string | null,
+    result: r.result as PlanRecord['result'],
     steps: JSON.parse(r.steps as string),
     done: r.done as number,
     total: r.total as number,
@@ -385,6 +402,24 @@ export class SqliteStorage implements StoragePort {
   async getPlan(sessionId: string): Promise<SessionPlan | null> {
     const row = this.db.prepare('SELECT * FROM session_plans WHERE session_id = ?').get(sessionId);
     return row ? toPlan(row) : null;
+  }
+
+  async putPlanRecord(r: PlanRecord): Promise<void> {
+    validatePlanRecord(r);
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO session_plan_history (session_id, seq, source, started_at, ended_at, result, steps, done, total,
+           current_step_id, changed_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        r.sessionId, r.seq, r.source, r.startedAt, r.endedAt, r.result, JSON.stringify(r.steps), r.done, r.total,
+        r.currentStepId, r.changedAt, json(r.metadata),
+      );
+  }
+
+  async listPlanRecords(sessionId: string): Promise<PlanRecord[]> {
+    return this.db.prepare('SELECT * FROM session_plan_history WHERE session_id = ? ORDER BY seq DESC').all(sessionId).map(toPlanRecord);
   }
 
   async putModelPricing(p: ModelPricing): Promise<void> {

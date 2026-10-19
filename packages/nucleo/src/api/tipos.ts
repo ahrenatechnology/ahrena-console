@@ -82,6 +82,22 @@ export interface PlanoDoPainel {
   passos: PassoDoPainel[];
 }
 
+/** Um plano do histórico da sessão (issue #131). */
+export interface PlanoDaSessao {
+  /** 1, 2, 3… na ordem em que os planos começaram. */
+  numero: number;
+  resultado: 'atual' | 'concluido' | 'abandonado';
+  /** O primeiro passo do plano. */
+  resumo: string;
+  feitos: number;
+  total: number;
+  /** O passo em andamento (só no atual). */
+  atual: string | null;
+  inicio: string;
+  /** `null` no atual. */
+  fim: string | null;
+}
+
 /** O principal, um subagente ou uma sessão filha, quando o passo foi delegado. */
 export interface DonoDoPasso {
   tipo: 'principal' | 'subagente' | 'sessao';
@@ -172,6 +188,8 @@ export interface Painel {
   tokens: { entrada: number; saida: number } | null;
   background: { total: number; primeiro: string | null };
   plano: PlanoDoPainel | null;
+  /** Os planos da sessão, do mais recente para o mais antigo; o atual, se houver, primeiro. */
+  planos: PlanoDaSessao[];
   subagentes: { ativos: number; itens: SubagenteDoPainel[] };
   filhas: FilhaDoPainel[];
   trabalho: TrabalhoDoPainel | null;

@@ -15,6 +15,7 @@ import type {
   FilhaDoPainel,
   Leitura,
   Painel,
+  PlanoDaSessao,
   PrecisaDeVoce,
   RetomadaDoPainel,
   SessaoDoPainel,
@@ -103,6 +104,7 @@ export type Acoes = {
   confirmar: (d: DecisaoDoPainel) => void
   descartar: (d: DecisaoDoPainel) => void
   verNaConversa: (d: DecisaoDoPainel) => void
+  verPlanos: () => void
 }
 
 export type Contexto = {
@@ -137,17 +139,10 @@ function linhaSvg(serie: number[]) {
   return svg(100, 10, `<polyline points="${xy}" fill="none" stroke="${LARANJA}" stroke-width="1.2" stroke-linejoin="round"/>`)
 }
 
-function roscaSvg(pct: number) {
-  const r = 17
-  const c = 2 * Math.PI * r
-  const feito = (Math.max(0, Math.min(100, pct)) / 100) * c
-  return svg(
-    44,
-    44,
-    `<circle cx="22" cy="22" r="${r}" fill="none" stroke="${BORDA}" stroke-width="5"/>` +
-      `<circle cx="22" cy="22" r="${r}" fill="none" stroke="${LARANJA}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${feito.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 22 22)"/>` +
-      `<text x="22" y="25.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="${paleta.gray['100']}">${Math.round(pct)}%</text>`,
-  )
+/** A barra do plano atual, na largura da barra dos subagentes. */
+function progressoSvg(pct: number) {
+  const w = (Math.max(0, Math.min(100, pct)) / 100) * 200
+  return svg(200, 5, `<clipPath id="p"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#p)"><rect width="200" height="5" fill="${BORDA}"/>${w ? `<rect width="${w.toFixed(1)}" height="5" fill="${LARANJA}"/>` : ''}</g>`)
 }
 
 function subagentesSvg(itens: SubagenteDoPainel[]) {
@@ -451,9 +446,49 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null) {
   return cartao(c, 'card-trabalho', corpo)
 }
 
-function cardPlano(c: Contexto, p: Painel['plano']) {
-  const { Box, Text, Svg } = c.el
-  if (!p) {
+const planosAnteriores = (n: number) => `+${n} ${n === 1 ? 'plano anterior' : 'planos anteriores'}`
+
+/** Quanto o plano durou; o atual, até agora. */
+const duracaoDoPlano = (p: PlanoDaSessao, agora: number) => duracao((p.fim ? Date.parse(p.fim) : agora) - Date.parse(p.inicio))
+
+/** Uma linha de plano: ✓ concluído, ◐ abandonado (X/Y) ou ● o atual, o resumo e a duração. */
+function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
+  const { Box, Text } = c.el
+  const marca = p.resultado === 'concluido' ? { g: '✓', cor: VERDE } : p.resultado === 'abandonado' ? { g: '◐', cor: AMARELO } : { g: '●', cor: LARANJA }
+  const tempo = duracaoDoPlano(p, c.agora)
+  return (
+    <Box key={`plano-${p.numero}`} flexDirection="row" justifyContent="space-between" gap={1}>
+      <Text mono size="footnote" wrap="truncate-end">
+        <Text color={marca.cor}>{marca.g} </Text>
+        <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{p.resumo}</Text>
+        {detalhe && p.atual ? <Text dimColor> · {p.atual}</Text> : null}
+      </Text>
+      <Text mono size="footnote" dimColor tabular>
+        {p.resultado === 'concluido' && !detalhe ? '' : `${p.feitos}/${p.total} · `}
+        {tempo === 'agora' ? '< 10 s' : tempo}
+      </Text>
+    </Box>
+  )
+}
+
+function botaoPlanos(c: Contexto, n: number) {
+  const { Button, Text } = c.el
+  return (
+    <Button key="ver-planos" plain onPress={c.acoes.verPlanos}>
+      <Text mono size="footnote" color={LARANJA} underline>
+        {planosAnteriores(n)}
+      </Text>
+    </Button>
+  )
+}
+
+// O plano atual em destaque (barra e passo em andamento) e os anteriores (issue #131). Cinco
+// linhas abaixo do cabeçalho, como o card dos subagentes: a barra, o atual e mais três. No
+// estreito, os anteriores ficam atrás de "+N planos anteriores", que abre a lista.
+function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[], estreito: boolean) {
+  const { Text, Svg } = c.el
+  const anteriores = planos.filter((x) => x.resultado !== 'atual')
+  if (!p && anteriores.length === 0) {
     return cartao(c, 'card-plano', [
       cabecalho(c, '☰', 'PLANO', '0/0', LARANJA),
       <Text mono size="footnote" dimColor>
@@ -461,33 +496,45 @@ function cardPlano(c: Contexto, p: Painel['plano']) {
       </Text>,
     ])
   }
-  const pct = p.total ? (p.feitos / p.total) * 100 : 0
-  const resto = p.restantes ? ` · +${p.restantes}` : ''
-  return cartao(c, 'card-plano', [
-    cabecalho(c, '☰', 'PLANO', `${p.feitos}/${p.total}`, LARANJA),
-    <Box flexDirection="row" gap={1} alignItems="center" flexGrow={1}>
-      <Svg source={roscaSvg(pct)} alt={`plano ${Math.round(pct)}% feito`} width={44} height={44} />
-      <Box flexDirection="column" flexShrink={1} minWidth={0}>
-        {p.feitos > 0 && (
-          <Text mono size="footnote" color={VERDE}>
-            ✓ {plural(p.feitos, 'feita', 'feitas')}
-          </Text>
-        )}
-        {p.atual && (
-          <Text mono size="footnote" weight="semibold" wrap="truncate-end">
-            <Text color={LARANJA}>● </Text>
-            {p.atual}
-          </Text>
-        )}
-        {p.proximo && (
-          <Text mono size="footnote" dimColor wrap="truncate-end">
-            ○ {corta(p.proximo, 20)}
-            {resto}
-          </Text>
-        )}
-      </Box>
-    </Box>,
-  ])
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '☰', 'PLANO', p ? `${p.feitos}/${p.total}` : '0/0', LARANJA)]
+  let linhas = 3
+  if (p) {
+    const pct = p.total ? (p.feitos / p.total) * 100 : 0
+    const atual = planos.find((x) => x.resultado === 'atual')
+    corpo.push(
+      <Svg source={progressoSvg(pct)} alt={`plano ${Math.round(pct)}% feito, ${p.feitos} de ${p.total}`} width={200} height={4} />,
+      <Text mono size="footnote" weight="semibold" wrap="truncate-end">
+        {p.atual ? <Text color={LARANJA}>● </Text> : p.feitos === p.total ? <Text color={VERDE}>✓ </Text> : <Text dimColor>○ </Text>}
+        {p.atual ?? (p.feitos === p.total ? 'plano concluído' : 'nenhum passo em andamento')}
+        {atual ? <Text weight="regular" dimColor> · {duracaoDoPlano(atual, c.agora)}</Text> : null}
+      </Text>,
+    )
+    if (p.proximo && (estreito || anteriores.length <= 2)) {
+      corpo.push(
+        <Text mono size="footnote" dimColor wrap="truncate-end">
+          ○ {corta(p.proximo, 20)}
+          {p.restantes ? ` · +${p.restantes}` : ''}
+        </Text>,
+      )
+      linhas--
+    }
+  } else {
+    corpo.push(
+      <Text mono size="footnote" dimColor>
+        nenhum plano em andamento
+      </Text>,
+    )
+    linhas++
+  }
+  if (anteriores.length === 0) return cartao(c, 'card-plano', corpo)
+  if (estreito) {
+    corpo.push(botaoPlanos(c, anteriores.length))
+    return cartao(c, 'card-plano', corpo)
+  }
+  const cabem = anteriores.length <= linhas ? anteriores.length : linhas - 1
+  corpo.push(...anteriores.slice(0, cabem).map((x) => linhaDePlano(c, x)))
+  if (cabem < anteriores.length) corpo.push(botaoPlanos(c, anteriores.length - cabem))
+  return cartao(c, 'card-plano', corpo)
 }
 
 function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel) {
@@ -872,6 +919,28 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   ]
 }
 
+// --- Os planos da sessão (issue #131) ---
+
+function telaPlanos(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean) {
+  const { Box, Text, Button } = c.el
+  const planos = p.planos ?? []
+  const conta = (r: PlanoDaSessao['resultado']) => planos.filter((x) => x.resultado === r).length
+  return [
+    rotuloDaSecao(c, g.largura, `PLANOS DA SESSÃO · ${planos.length}`, chip(c, 'chip-planos', `${conta('concluido')} ✓ · ${conta('abandonado')} ◐`)),
+    <Box key="lista-planos" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
+      {planos.length ? planos.map((x) => linhaDePlano(c, x, !estreito)) : [<Text key="vazio" mono dimColor>sem plano nesta sessão</Text>]}
+    </Box>,
+    <Box key="rodape-planos" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      <Text mono wrap="truncate-end">mais recente primeiro{estreito ? '' : ' · ✓ concluído · ◐ abandonado'}</Text>
+      <Button key="fechar-planos" plain onPress={c.acoes.fechar}>
+        <Text color={LARANJA} underline>
+          fechar
+        </Text>
+      </Button>
+    </Box>,
+  ]
+}
+
 // --- P8: sem conexão ---
 
 function telaOffline(c: Contexto, g: ReturnType<typeof grade>, estreito: boolean) {
@@ -919,12 +988,14 @@ export function desenhar(c: Contexto): RenderElement {
     corpo = telaPrecisam(c, p, g, estreito)
   } else if (c.vista.tela === 'decisoes') {
     corpo = telaDecisoes(c, p, g, estreito)
+  } else if (c.vista.tela === 'planos') {
+    corpo = telaPlanos(c, p, g, estreito)
   } else {
     const cards = [
       s ? cardSessao(c, s) : null,
       cardContexto(c, p),
       cardTrabalho(c, p.trabalho),
-      cardPlano(c, p.plano),
+      cardPlano(c, p.plano, p.planos ?? [], estreito),
       cardSubagentes(c, p.subagentes),
       cardFilhas(c, p.filhas),
     ].filter((x): x is RenderElement => x !== null)

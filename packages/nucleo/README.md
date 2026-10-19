@@ -35,7 +35,7 @@ npm run api -- --help
 
 | Rota | O quê |
 | --- | --- |
-| `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
+| `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
 | `GET /api/overview` | Saúde |
 | `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
@@ -44,7 +44,7 @@ npm run api -- --help
 
 | Arquivo | O quê |
 | --- | --- |
-| [painel.ts](src/api/painel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, plano gravado pelo item 1.9 (com o dono de cada passo), família, conta e "precisam de você" |
+| [painel.ts](src/api/painel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, plano atual e a lista dos planos da sessão (item 1.9 e #131, com o dono de cada passo), família, conta e "precisam de você" |
 | [resumo.ts](src/api/resumo.ts) | Turno, plano (`TodoWrite`, só quando a sessão não tem plano gravado), pergunta, pedido de permissão, erro e contexto, lidos dos eventos de forma incremental |
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`) e conta pela pasta, relido só quando muda |
@@ -113,6 +113,14 @@ Item 1.9. O plano é a lista de tarefas que o agente mantém enquanto trabalha, 
 - **`/clear`:** `SessionStart` com `source: clear` ou o prompt `/clear` do transcript esvazia o plano.
 - **Dono:** o principal, por padrão; o subagente que criou ou pegou (`in_progress`) a tarefa; o `owner` do TaskUpdate; a sessão filha da `session` de um item do `update_plan`. A lista de TodoWrite ou `update_plan` de um subagente é dele e não troca o plano da sessão.
 - **Sem contar duas vezes:** a mesma chamada chega pelo Pre, pelo Post e pelo transcript; vale a primeira, pelo `tool_use_id`. Resultado com erro desfaz a última chamada aplicada. O estado disso fica em `metadata.extracao`.
+
+### Histórico dos planos
+
+Issue #131. A sessão abre vários planos; cada um fica guardado como `PlanRecord`, com início, fim, passos, `done`/`total` e resultado: `current` (o aberto), `completed` (todos os passos feitos) ou `abandoned` (X de Y). A porta grava com `putPlanRecord` e lista com `listPlanRecords(sessionId)`, do mais recente para o mais antigo (migração 5, tabela `session_plan_history`).
+
+- **A regra:** `separarPlano(anterior, novo, incremental)` em [historico.ts](src/plano/historico.ts). Plano novo quando a lista é trocada por outra com menos da metade dos passos em comum, ou quando o anterior terminou e vem passo novo por fazer (ou a mesma lista inteira de volta a pendente). Marcar, desmarcar, reordenar, acrescentar e renomear continuam no plano. Lista vazia (`/clear`, TodoWrite vazio) fecha o plano.
+- **TaskCreate depois das tarefas feitas:** as tarefas antigas continuam na lista da ferramenta, mas são do plano anterior; o novo leva só as novas.
+- **Plano gravado antes da #131:** vira o primeiro do histórico na próxima mudança. O estado fica em `metadata.historico`.
 
 ## Contas
 

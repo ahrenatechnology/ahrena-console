@@ -79,78 +79,110 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:59:30.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Ler o artefato",
-          "textoAtivo": null,
+          "textoAtivo": "Ler o artefato",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Montar as raias",
-          "textoAtivo": null,
+          "textoAtivo": "Montar as raias",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Ligar ao núcleo",
-          "textoAtivo": null,
+          "textoAtivo": "Ligar ao núcleo",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Rodar a bateria",
-          "textoAtivo": null,
+          "textoAtivo": "Rodar a bateria",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "5",
           "texto": "Abrir o PR",
-          "textoAtivo": null,
+          "textoAtivo": "Abrir o PR",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "6",
           "texto": "Pedir review",
-          "textoAtivo": null,
+          "textoAtivo": "Pedir review",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 3,
+        "resultado": "atual",
+        "resumo": "Ler o artefato",
+        "feitos": 3,
+        "total": 6,
+        "atual": "Rodar a bateria",
+        "inicio": "2026-11-02T11:54:30.000Z",
+        "fim": null
+      },
+      {
+        "numero": 2,
+        "resultado": "abandonado",
+        "resumo": "Prototipar o arrastar",
+        "feitos": 1,
+        "total": 4,
+        "atual": null,
+        "inicio": "2026-11-02T11:52:00.000Z",
+        "fim": "2026-11-02T11:54:30.000Z"
+      },
+      {
+        "numero": 1,
+        "resultado": "concluido",
+        "resumo": "Ler o wireframe do kanban",
+        "feitos": 3,
+        "total": 3,
+        "atual": null,
+        "inicio": "2026-11-02T11:49:00.000Z",
+        "fim": "2026-11-02T11:52:00.000Z"
+      }
+    ],
     "subagentes": {
       "ativos": 1,
       "itens": [
@@ -342,56 +374,68 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:55:48.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Ler os testes atuais",
-          "textoAtivo": null,
+          "textoAtivo": "Ler os testes atuais",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Decidir o banco",
-          "textoAtivo": null,
+          "textoAtivo": "Decidir o banco",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Escrever os casos de borda",
-          "textoAtivo": null,
+          "textoAtivo": "Escrever os casos de borda",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Rodar no CI",
-          "textoAtivo": null,
+          "textoAtivo": "Rodar no CI",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 1,
+        "resultado": "atual",
+        "resumo": "Ler os testes atuais",
+        "feitos": 1,
+        "total": 4,
+        "atual": "Decidir o banco",
+        "inicio": "2026-11-02T11:55:48.000Z",
+        "fim": null
+      }
+    ],
     "subagentes": {
       "ativos": 0,
       "itens": [
@@ -513,78 +557,90 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:57:48.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Mapear as tabelas",
-          "textoAtivo": null,
+          "textoAtivo": "Mapear as tabelas",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Escrever a migração",
-          "textoAtivo": null,
+          "textoAtivo": "Escrever a migração",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Testar a volta",
-          "textoAtivo": null,
+          "textoAtivo": "Testar a volta",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Revisar índices",
-          "textoAtivo": null,
+          "textoAtivo": "Revisar índices",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "5",
           "texto": "Aplicar a migração",
-          "textoAtivo": null,
+          "textoAtivo": "Aplicar a migração",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "6",
           "texto": "Atualizar o seed",
-          "textoAtivo": null,
+          "textoAtivo": "Atualizar o seed",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 1,
+        "resultado": "atual",
+        "resumo": "Mapear as tabelas",
+        "feitos": 4,
+        "total": 6,
+        "atual": "Aplicar a migração",
+        "inicio": "2026-11-02T11:57:48.000Z",
+        "fim": null
+      }
+    ],
     "subagentes": {
       "ativos": 0,
       "itens": [
@@ -755,78 +811,120 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:59:30.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Mapear o módulo",
-          "textoAtivo": null,
+          "textoAtivo": "Mapear o módulo",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Desenhar os serviços",
-          "textoAtivo": null,
+          "textoAtivo": "Desenhar os serviços",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Extrair a cobrança",
-          "textoAtivo": null,
+          "textoAtivo": "Extrair a cobrança",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Migrar os testes",
-          "textoAtivo": null,
+          "textoAtivo": "Migrar os testes",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "5",
           "texto": "Ajustar o deploy",
-          "textoAtivo": null,
+          "textoAtivo": "Ajustar o deploy",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "6",
           "texto": "Remover o código velho",
-          "textoAtivo": null,
+          "textoAtivo": "Remover o código velho",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 4,
+        "resultado": "atual",
+        "resumo": "Mapear o módulo",
+        "feitos": 2,
+        "total": 6,
+        "atual": "Extrair a cobrança",
+        "inicio": "2026-11-02T11:50:30.000Z",
+        "fim": null
+      },
+      {
+        "numero": 3,
+        "resultado": "concluido",
+        "resumo": "Escrever a decisão de serviços",
+        "feitos": 2,
+        "total": 2,
+        "atual": null,
+        "inicio": "2026-11-02T11:45:00.000Z",
+        "fim": "2026-11-02T11:50:30.000Z"
+      },
+      {
+        "numero": 2,
+        "resultado": "abandonado",
+        "resumo": "Separar por camadas",
+        "feitos": 1,
+        "total": 3,
+        "atual": null,
+        "inicio": "2026-11-02T11:38:00.000Z",
+        "fim": "2026-11-02T11:45:00.000Z"
+      },
+      {
+        "numero": 1,
+        "resultado": "concluido",
+        "resumo": "Ler o módulo de pagamentos",
+        "feitos": 2,
+        "total": 2,
+        "atual": null,
+        "inicio": "2026-11-02T11:33:00.000Z",
+        "fim": "2026-11-02T11:38:00.000Z"
+      }
+    ],
     "subagentes": {
       "ativos": 3,
       "itens": [
@@ -1048,56 +1146,68 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:59:30.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Medir a consulta",
-          "textoAtivo": null,
+          "textoAtivo": "Medir a consulta",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Criar os índices",
-          "textoAtivo": null,
+          "textoAtivo": "Criar os índices",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Cachear o total",
-          "textoAtivo": null,
+          "textoAtivo": "Cachear o total",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Reescrever a consulta",
-          "textoAtivo": null,
+          "textoAtivo": "Reescrever a consulta",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 1,
+        "resultado": "atual",
+        "resumo": "Medir a consulta",
+        "feitos": 3,
+        "total": 4,
+        "atual": "Reescrever a consulta",
+        "inicio": "2026-11-02T11:59:30.000Z",
+        "fim": null
+      }
+    ],
     "subagentes": {
       "ativos": 0,
       "itens": [
@@ -1242,6 +1352,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "primeiro": null
     },
     "plano": null,
+    "planos": [],
     "subagentes": {
       "ativos": 0,
       "itens": []
@@ -1407,6 +1518,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "primeiro": "npm run dev"
     },
     "plano": null,
+    "planos": [],
     "subagentes": {
       "ativos": 0,
       "itens": []
@@ -1639,78 +1751,110 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": null
+        "agenteId": "sim-painel-esta:main"
       },
-      "mudouEm": null,
+      "mudouEm": "2026-11-02T11:59:30.000Z",
       "passos": [
         {
           "id": "1",
           "texto": "Ler o artefato",
-          "textoAtivo": null,
+          "textoAtivo": "Ler o artefato",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "2",
           "texto": "Montar as raias",
-          "textoAtivo": null,
+          "textoAtivo": "Montar as raias",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "3",
           "texto": "Ligar ao núcleo",
-          "textoAtivo": null,
+          "textoAtivo": "Ligar ao núcleo",
           "estado": "completed",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "4",
           "texto": "Rodar a bateria",
-          "textoAtivo": null,
+          "textoAtivo": "Rodar a bateria",
           "estado": "in_progress",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "5",
           "texto": "Abrir o PR",
-          "textoAtivo": null,
+          "textoAtivo": "Abrir o PR",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         },
         {
           "id": "6",
           "texto": "Pedir review",
-          "textoAtivo": null,
+          "textoAtivo": "Pedir review",
           "estado": "pending",
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": null
+            "agenteId": "sim-painel-esta:main"
           }
         }
       ]
     },
+    "planos": [
+      {
+        "numero": 3,
+        "resultado": "atual",
+        "resumo": "Ler o artefato",
+        "feitos": 3,
+        "total": 6,
+        "atual": "Rodar a bateria",
+        "inicio": "2026-11-02T11:54:30.000Z",
+        "fim": null
+      },
+      {
+        "numero": 2,
+        "resultado": "abandonado",
+        "resumo": "Prototipar o arrastar",
+        "feitos": 1,
+        "total": 4,
+        "atual": null,
+        "inicio": "2026-11-02T11:52:00.000Z",
+        "fim": "2026-11-02T11:54:30.000Z"
+      },
+      {
+        "numero": 1,
+        "resultado": "concluido",
+        "resumo": "Ler o wireframe do kanban",
+        "feitos": 3,
+        "total": 3,
+        "atual": null,
+        "inicio": "2026-11-02T11:49:00.000Z",
+        "fim": "2026-11-02T11:52:00.000Z"
+      }
+    ],
     "subagentes": {
       "ativos": 1,
       "itens": [

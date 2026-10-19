@@ -16,7 +16,7 @@ import { lerInbox, type LeituraDoInbox } from '../estados/leitura.ts';
 import { lerMemoria, principalDe } from '../estados/regras.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
-import type { PlanOwner, SessionPlan } from '../plano/modelo.ts';
+import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
@@ -35,6 +35,7 @@ import type {
   FilhaDoPainel,
   ListaDeDecisoes,
   Painel,
+  PlanoDaSessao,
   PlanoDoPainel,
   PrecisaDeVoce,
   PrecisamDoPainel,
@@ -139,6 +140,7 @@ export class MontadorDoPainel {
       : this.sessaoNova(pedido, desktop, conta, agora);
     const { custo, tokens } = session ? await this.custoDe(session) : { custo: null, tokens: null };
     const memoria = session ? lerMemoria(session) : null;
+    const planos = session ? await this.storage.listPlanRecords(session.id) : [];
     const bg = memoria ? Object.values(memoria.background) : [];
     const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
 
@@ -150,7 +152,8 @@ export class MontadorDoPainel {
       custo,
       tokens,
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
-      plano: session ? planoDe(await this.storage.getPlan(session.id), resumo!, agentes) : null,
+      plano: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
+      planos: planos.map(planoDaLista),
       subagentes: subagentesDe(agentes),
       filhas: await this.filhasDe(session, desktop),
       trabalho,
@@ -188,6 +191,12 @@ export class MontadorDoPainel {
   async decidir(pedido: PedidoDoPainel, id: string, acao: AcaoNaDecisao): Promise<DecisaoDoPainel | null> {
     if (!this.decisoes) return null;
     return this.decisoes.decidir(await this.alvoDoPedido(pedido), id, acao, new Date(this.agora()).toISOString());
+  }
+
+  /** O plano aberto do histórico (vazio se todos fecharam); sem histórico (antes da #131), o plano gravado. */
+  private async planoAtual(sessionId: string, planos: PlanRecord[]): Promise<PlanoGravado | null> {
+    if (planos.length) return planos.find((p) => p.result === 'current') ?? { steps: [], total: 0, changedAt: planos[0].changedAt, currentStepId: null };
+    return this.storage.getPlan(sessionId);
   }
 
   private doDesktop(sessionId: string, local: string | null): SessaoDoDesktop | null {
@@ -383,8 +392,25 @@ function contextoDe(session: Session, r: ResumoDosEventos): ContextoDoPainel | n
   return { usados, limite, pct: Math.min(100, Math.round((usados / limite) * 100)) };
 }
 
+type PlanoGravado = Pick<SessionPlan, 'steps' | 'total' | 'changedAt' | 'currentStepId'>;
+
+const RESULTADO = { current: 'atual', completed: 'concluido', abandoned: 'abandonado' } as const;
+
+function planoDaLista(r: PlanRecord): PlanoDaSessao {
+  return {
+    numero: r.seq,
+    resultado: RESULTADO[r.result],
+    resumo: r.steps[0]?.text ?? '',
+    feitos: r.done,
+    total: r.total,
+    atual: r.result === 'current' ? (r.steps.find((s) => s.id === r.currentStepId)?.text ?? null) : null,
+    inicio: r.startedAt,
+    fim: r.endedAt,
+  };
+}
+
 /** O plano gravado pela porta (item 1.9); sem ele, o último TodoWrite lido dos eventos. */
-function planoDe(plano: SessionPlan | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
+function planoDe(plano: PlanoGravado | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
   if (plano) {
     if (plano.total === 0) return null;
     const passos = plano.steps.map((s) => ({ id: s.id, texto: s.text, textoAtivo: s.activeText, estado: s.status, dono: donoDe(s.owner, agentes) }));

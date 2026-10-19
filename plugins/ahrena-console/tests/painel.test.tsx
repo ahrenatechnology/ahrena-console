@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import type { Painel } from '../types'
 import { AGORA, CENARIOS } from './cenarios'
 
 type Cenario = keyof typeof CENARIOS
@@ -17,11 +18,11 @@ const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presen
 // a lista de painéis abertos, o /console que abre e o ambiente da sessão, como o Claude Desktop.
 function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record<string, string>; semLugar?: string } = {}) {
   const pedidos: Pedido[] = []
-  const estado = { cenario: opts.cenario ?? 'p1', fora: opts.fora ?? false }
+  const estado: { cenario: Cenario; fora: boolean; painel?: Painel } = { cenario: opts.cenario ?? 'p1', fora: opts.fora ?? false }
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string } }) => {
     pedidos.push({ method: e.init?.method ?? 'GET', url: e.url })
     if (estado.fora) throw new Error('connect ECONNREFUSED 127.0.0.1:4720')
-    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(CENARIOS[estado.cenario]) } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(estado.painel ?? CENARIOS[estado.cenario]) } }
   })
   const relogio = mock.clock(on, { now: AGORA })
   mock.env(on, opts.env ?? {})
@@ -229,4 +230,78 @@ test('sem lugar para o painel, o /console diz o motivo que o engine deu', async 
   const r = (await $.command.run(CONSOLE)) as { text?: string }
   expect(r?.text).toMatch(/no-surface/)
   expect(f.pedidos).toHaveLength(0)
+})
+
+test('#131 no largo: o plano atual com a barra e o passo em andamento, e os anteriores com ✓ e ◐', async ($, on) => {
+  await abrir($, on, { cenario: 'p1' })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
+  expect(await ui.find({ key: 'plano-2' })).toBeDefined()
+  expect(await ui.find({ key: 'plano-1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Prototipar o arrastar/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1\/4 · 3 min/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Ler o wireframe do kanban/ })).toBeDefined()
+  expect(await ui.find({ key: 'ver-planos' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('#131 no estreito: só o atual e "+N planos anteriores", que abre a lista', async ($, on) => {
+  await abrir($, on, { cenario: 'p1' })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Abrir o PR/ })).toBeDefined()
+  expect(await ui.find({ key: 'plano-2' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\+2 planos anteriores/ })).toBeDefined()
+  await ui.press({ key: 'ver-planos' })
+  expect(await ui.find({ key: 'card-plano' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /PLANOS DA SESSÃO · 3/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1 ✓ · 1 ◐/ })).toBeDefined()
+  for (const n of [3, 2, 1]) expect(await ui.find({ key: `plano-${n}` })).toBeDefined()
+  await ui.press({ key: 'fechar-planos' })
+  expect(await ui.find({ key: 'card-plano' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131 com mais planos do que cabem no largo, "+N" abre o resto', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const anteriores = (p4.planos ?? []).filter((x) => x.resultado !== 'atual')
+  expect(anteriores).toHaveLength(3)
+  const extra = { ...anteriores[2]!, numero: 0, resumo: 'Plano sintético mais antigo' }
+  f.estado.painel = { ...p4, planos: [...(p4.planos ?? []), extra] }
+  await f.relogio.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  expect(await ui.find({ key: 'plano-3' })).toBeDefined()
+  expect(await ui.find({ key: 'plano-2' })).toBeDefined()
+  expect(await ui.find({ key: 'plano-1' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\+2 planos anteriores/ })).toBeDefined()
+  await ui.press({ key: 'ver-planos' })
+  expect(await ui.find({ type: 'Text', text: /PLANOS DA SESSÃO · 5/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Plano sintético mais antigo/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131 depois do /clear: sem plano em andamento, os anteriores continuam', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  f.estado.painel = { ...p1, plano: null, planos: (p1.planos ?? []).map((x) => (x.resultado === 'atual' ? { ...x, resultado: 'abandonado' as const, atual: null, fim: x.inicio } : x)) }
+  await f.relogio.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  expect(await ui.find({ type: 'Text', text: /nenhum plano em andamento/ })).toBeDefined()
+  for (const n of [3, 2, 1]) expect(await ui.find({ key: `plano-${n}` })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131 núcleo sem o histórico: o card mostra só o plano, como antes', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const { planos: _, ...semHistorico } = CENARIOS.p1
+  f.estado.painel = semHistorico as Painel
+  await f.relogio.advance(5_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
+    expect(await ui.find({ key: 'ver-planos' })).toBeUndefined()
+    await ui.unmount()
+  }
 })

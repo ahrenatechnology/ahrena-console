@@ -46,7 +46,7 @@ function normalizarLeitura(v: unknown): Leitura {
 function normalizarVista(v: unknown): Vista {
   const r = (v ?? {}) as Partial<Vista>
   return {
-    tela: r.tela === 'precisam' || r.tela === 'decisoes' ? r.tela : 'sessao',
+    tela: r.tela === 'precisam' || r.tela === 'decisoes' || r.tela === 'planos' ? r.tela : 'sessao',
     escopo: r.escopo === 'familia' || r.escopo === 'maquina' ? r.escopo : null,
     escopoDecisoes: ESCOPOS_DE_DECISAO.includes(r.escopoDecisoes as EscopoDasDecisoes) ? (r.escopoDecisoes as EscopoDasDecisoes) : null,
   }
@@ -273,6 +273,7 @@ export const register: Register = (on, options) => {
         confirmar: (d) => void decidir($, d, 'confirmar'),
         descartar: (d) => void decidir($, d, 'descartar'),
         verNaConversa: (d) => void verNaConversa($, d),
+        verPlanos: () => void mudarVista($, { tela: 'planos' }),
       },
     })
   })

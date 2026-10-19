@@ -6,6 +6,7 @@
 import type { AccountSource, Agent, AwaitingReason, Session, SessionStatus, TokenUsage } from '../model.ts';
 import { claudeAccountId, emptyTokenCounts } from '../model.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
+import { atualizarPlano } from '../plano/gravacao.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { linkSession, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
@@ -41,6 +42,8 @@ interface Issue {
   pr?: { numero: number; rascunho?: boolean; ci: LinkedPullRequest['ci']; review: LinkedPullRequest['review'] };
 }
 
+type Passos = [string, 'completed' | 'in_progress' | 'pending'][];
+
 interface Esta {
   titulo: string;
   projeto: string;
@@ -56,7 +59,9 @@ interface Esta {
   pergunta?: { texto: string; opcoes: number };
   erro?: { texto: string; haMin: number };
   background?: string[];
-  plano?: [string, 'completed' | 'in_progress' | 'pending'][];
+  plano?: Passos;
+  /** Planos que a sessão já fechou antes do atual (issue #131), do mais antigo para o mais novo. */
+  anteriores?: { desdeMin: number; duracaoMin: number; passos: Passos }[];
   subagentes?: { tipo: string; tarefa: string; status: Agent['status']; haMin: number; duracaoMin?: number }[];
   filhas?: string[];
   branch: string;
@@ -94,6 +99,10 @@ const ESTA: Record<Exclude<CenarioDoPainel, 'p9'>, Esta> = {
     titulo: 'Kanban de sessões no artefato', projeto: 'ahrena-demo', modelo: OPUS, inicioMin: 12, status: 'active', turno: 18,
     contexto: 62_000, custo: 1.84, ferramenta: { nome: 'Bash', resumo: 'npm test' }, background: ['npm run dev', 'npm run watch'],
     plano: [['Ler o artefato', 'completed'], ['Montar as raias', 'completed'], ['Ligar ao núcleo', 'completed'], ['Rodar a bateria', 'in_progress'], ['Abrir o PR', 'pending'], ['Pedir review', 'pending']],
+    anteriores: [
+      { desdeMin: 11, duracaoMin: 3, passos: [['Ler o wireframe do kanban', 'completed'], ['Listar os estados', 'completed'], ['Escolher as raias', 'completed']] },
+      { desdeMin: 8, duracaoMin: 2, passos: [['Prototipar o arrastar', 'completed'], ['Medir a latência', 'in_progress'], ['Trocar a biblioteca', 'pending'], ['Ajustar o tema', 'pending']] },
+    ],
     subagentes: [{ tipo: 'Explore', tarefa: 'mapear usos', status: 'working', haMin: 0.7 }, { tipo: 'Plan', tarefa: 'plano', status: 'completed', haMin: 9, duracaoMin: 2 }],
     branch: 'feat/42-kanban-de-sessoes', issue: { numero: 42, titulo: 'Kanban de sessões', sub: [2, 4], pr: { numero: 78, rascunho: true, ci: 'SUCCESS', review: null } },
   },
@@ -117,6 +126,11 @@ const ESTA: Record<Exclude<CenarioDoPainel, 'p9'>, Esta> = {
     titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 28, status: 'active', turno: 9, contexto: 114_000, custo: 3.47,
     ferramenta: { nome: 'Agent', resumo: '3 subagentes em paralelo' },
     plano: [['Mapear o módulo', 'completed'], ['Desenhar os serviços', 'completed'], ['Extrair a cobrança', 'in_progress'], ['Migrar os testes', 'pending'], ['Ajustar o deploy', 'pending'], ['Remover o código velho', 'pending']],
+    anteriores: [
+      { desdeMin: 27, duracaoMin: 4, passos: [['Ler o módulo de pagamentos', 'completed'], ['Listar os acoplamentos', 'completed']] },
+      { desdeMin: 22, duracaoMin: 6, passos: [['Separar por camadas', 'completed'], ['Mover os adaptadores', 'pending'], ['Trocar as injeções', 'pending']] },
+      { desdeMin: 15, duracaoMin: 5, passos: [['Escrever a decisão de serviços', 'completed'], ['Revisar com o time', 'completed']] },
+    ],
     subagentes: [
       { tipo: 'Explore', tarefa: 'achar usos', status: 'working', haMin: 1 },
       { tipo: 'code-reviewer', tarefa: 'diff', status: 'working', haMin: 0.7 },
@@ -180,7 +194,9 @@ function agente(id: string, sessionId: string, tipo: Agent['type'], inicio: stri
 
 let seq = 0;
 async function evento(porta: StoragePort, sessionId: string, agentId: string | null, createdAt: string, type: string, toolName: string | null, summary: string | null, data: unknown = null) {
-  await porta.appendEvent({ id: `${sessionId}-e${String(++seq).padStart(4, '0')}`, sessionId, agentId, type, toolName, summary, data, createdAt });
+  const e = { id: `${sessionId}-e${String(++seq).padStart(4, '0')}`, sessionId, agentId, type, toolName, summary, data, createdAt };
+  await porta.appendEvent(e);
+  return e;
 }
 
 // Mensagens do assistente com uso, para o custo e os tokens saírem pelo caminho de verdade
@@ -253,9 +269,18 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
   for (let i = 0; i < e.turno; i++) await evento(porta, id, null, new Date(t0 + (i * (agora - t0)) / (e.turno + 1)).toISOString(), 'UserPromptSubmit', null, 'prompt');
   await uso(porta, id, e.modelo, t0, agora - 0.5 * MIN, e.contexto, e.custo);
   if (e.plano) {
-    const todos = e.plano.map(([content, status]) => ({ content, status, activeForm: content }));
+    // Cada plano anterior entra pendente e sai como acabou; o atual começa logo depois do último.
     // O plano vem antes da última ferramenta, que é a que pede permissão ou pergunta.
-    await evento(porta, id, null, iso(agora, (e.espera?.haMin ?? 0.3) + 0.2), 'PreToolUse', 'TodoWrite', 'plano', { tool_name: 'TodoWrite', tool_input: { todos } });
+    const todoWrite = (min: number, passos: Passos, pendente = false) => {
+      const todos = passos.map(([content, status]) => ({ content, status: pendente ? 'pending' : status, activeForm: content }));
+      return evento(porta, id, null, iso(agora, min), 'PreToolUse', 'TodoWrite', 'plano', { tool_name: 'TodoWrite', tool_input: { todos }, tool_use_id: `${id}-plano-${seq}` });
+    };
+    const eventos = [];
+    for (const a of e.anteriores ?? []) eventos.push(await todoWrite(a.desdeMin, a.passos, true), await todoWrite(a.desdeMin - a.duracaoMin, a.passos));
+    const ultimo = e.anteriores?.at(-1);
+    if (ultimo) eventos.push(await todoWrite(ultimo.desdeMin - ultimo.duracaoMin - 0.5, e.plano, true));
+    eventos.push(await todoWrite((e.espera?.haMin ?? 0.3) + 0.2, e.plano));
+    await atualizarPlano(porta, id, eventos);
   }
   if (e.ferramenta) {
     const entrada = e.pergunta ? { questions: [{ question: e.pergunta.texto, options: Array.from({ length: e.pergunta.opcoes }, (_, k) => ({ label: `opção ${k + 1}` })) }] } : { command: e.ferramenta.resumo };

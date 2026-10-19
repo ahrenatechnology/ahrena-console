@@ -141,6 +141,29 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   // O esquema das decisões fica na pasta delas (src/decisoes/migracao.ts).
   { version: 4, description: DECISOES_MIGRATION_DESCRIPTION, sql: DECISOES_MIGRATION_SQL },
+  {
+    version: 5,
+    description: 'histórico dos planos da sessão (issue #131)',
+    // Aditiva: tabela nova, um registro por plano da sessão. O plano gravado na versão 3 vira o
+    // primeiro do histórico na próxima mudança dele.
+    sql: `
+      CREATE TABLE session_plan_history (
+        session_id TEXT NOT NULL,
+        seq INTEGER NOT NULL CHECK (seq >= 1),
+        source TEXT NOT NULL CHECK (source IN ('TodoWrite', 'Task', 'update_plan')),
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        result TEXT NOT NULL CHECK (result IN ('current', 'completed', 'abandoned')),
+        steps TEXT NOT NULL DEFAULT '[]',
+        done INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        current_step_id TEXT,
+        changed_at TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (session_id, seq)
+      ) STRICT;
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {
