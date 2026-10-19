@@ -43,6 +43,7 @@ import type {
   SubagenteDoPainel,
 } from './tipos.ts';
 import type { TrabalhoPorBranch } from './trabalho.ts';
+import { VERSAO_DA_API } from './versao.ts';
 
 export const LIMITE_PADRAO_DE_CONTEXTO = 200_000;
 const LIMITE_LONGO_DE_CONTEXTO = 1_000_000;
@@ -76,6 +77,8 @@ export interface OpcoesDoPainel {
   precisamMs?: number;
   /** Troca o id pedido por outro (a demonstração usa a sessão do cenário). */
   apelido?: (sessionId: string) => string;
+  /** O commit do checkout em que a API roda, para o rodapé do painel. */
+  commit?: string | null;
 }
 
 type Porta = StoragePort;
@@ -104,13 +107,15 @@ export class MontadorDoPainel {
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
+  private readonly commit: string | null;
   private readonly decisoes: DecisoesDaSessao | null;
   readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { em: number; updatedAt: string; custo: CustoDoPainel; tokens: Painel['tokens'] }>();
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null }: OpcoesDoPainel) {
+    this.commit = commit;
     this.apelido = apelido;
     this.storage = storage;
     this.contas = contas;
@@ -146,6 +151,7 @@ export class MontadorDoPainel {
 
     return {
       versao: 1,
+      api: { versao: VERSAO_DA_API, commit: this.commit },
       geradoEm: new Date(agora).toISOString(),
       sessao,
       contexto: session ? contextoDe(session, resumo!) : null,

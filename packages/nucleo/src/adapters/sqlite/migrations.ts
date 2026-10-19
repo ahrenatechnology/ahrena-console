@@ -164,6 +164,18 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 6,
+    description: 'reprocessamentos feitos uma vez por banco (#131)',
+    // Aditiva: guarda o nome de cada reprocessamento de dados já feito (refazer o histórico de
+    // planos e capturar as decisões das sessões importadas antes deles).
+    sql: `
+      CREATE TABLE reprocessamentos (
+        nome TEXT PRIMARY KEY,
+        feito_em TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

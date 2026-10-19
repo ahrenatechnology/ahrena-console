@@ -12,6 +12,9 @@ describe('leitura da saída', () => {
     assert.equal(ehClaude('node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js'), true);
     assert.equal(ehClaude('/Applications/Claude.app/Contents/MacOS/Claude'), false);
     assert.equal(ehClaude('vim claude.md'), false);
+    // O Claude Desktop roda o próprio binário, num caminho com espaço.
+    assert.equal(ehClaude('/Users/dev/Library/Application Support/Claude/claude-code/2.1.0/abc/claude.app/Contents/MacOS/claude --output-format stream-json --verbose'), true);
+    assert.equal(ehClaude('/usr/bin/grep claude'), false);
   });
 
   test('ps → pids', () => {

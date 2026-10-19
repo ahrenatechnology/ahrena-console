@@ -17,7 +17,7 @@ import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import type { StoragePort } from '../../storage-port.ts';
 import { classifyTranscript, defaultProjectsRoot, discoverTranscripts, fileStat, type FileStat, type TranscriptFile } from './files.ts';
-import { importHistory, type ImportReport } from './importer.ts';
+import { importHistory, type ImportOptions, type ImportReport } from './importer.ts';
 
 export interface FollowOptions {
   storage: StoragePort;
@@ -29,6 +29,8 @@ export interface FollowOptions {
   debounceMs?: number;
   /** Usar `fs.watch`. Padrão `true`; com `false`, fica só a varredura. */
   watch?: boolean;
+  /** Repassado ao importador: cada sessão que ganhou eventos. */
+  onSession?: ImportOptions['onSession'];
   /** Chamado depois de cada rodada que importou algo. */
   onImport?: (report: ImportReport) => void;
   /** Erro de uma rodada. O seguidor continua; os arquivos da rodada são tentados de novo. */
@@ -173,7 +175,7 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
     // O `stat` é anotado antes de importar: o que mudar durante a importação aparece na próxima rodada.
     for (const file of changed) known.set(file.path, seen.get(file.path)!);
     try {
-      const report = await importHistory({ storage: options.storage, root, files: changed });
+      const report = await importHistory({ storage: options.storage, root, files: changed, onSession: options.onSession });
       stats.filesImported += changed.length;
       if (report.filesRead > 0) options.onImport?.(report);
       return report;

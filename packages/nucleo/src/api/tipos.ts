@@ -180,6 +180,8 @@ export interface PrecisamDoPainel {
 
 export interface Painel {
   versao: 1;
+  /** A versão da API e o commit do checkout em que ela roda (`null` fora de um git), para o rodapé. */
+  api: { versao: string; commit: string | null };
   geradoEm: string;
   /** `null`: o núcleo ainda não viu esta sessão (nem hook, nem transcript). */
   sessao: SessaoDoPainel | null;

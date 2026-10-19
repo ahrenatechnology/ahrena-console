@@ -305,3 +305,21 @@ test('#131 núcleo sem o histórico: o card mostra só o plano, como antes', asy
     await ui.unmount()
   }
 })
+
+test('rodapé: a versão do plugin e a da API, discretas, nas duas larguras e sem o núcleo', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  f.estado.painel = { ...CENARIOS.p1, api: { versao: '0.0.1', commit: 'abc1234' } }
+  await f.relogio.advance(5_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api 0\.0\.1 · abc1234/ })).toBeDefined()
+    await ui.unmount()
+  }
+  // Núcleo de antes do rodapé, sem `api`: a versão do plugin aparece mesmo assim.
+  const { api: _, ...semApi } = CENARIOS.p1
+  f.estado.painel = semApi as Painel
+  await f.relogio.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api —/ })).toBeDefined()
+  await ui.unmount()
+})

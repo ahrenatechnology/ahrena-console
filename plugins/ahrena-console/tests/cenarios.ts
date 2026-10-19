@@ -8,6 +8,10 @@ export const AGORA = 1793620800000
 export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 'p9', Painel> = {
   "p1": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -298,6 +302,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p2": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -481,6 +489,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p3": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -740,6 +752,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p4": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -1070,6 +1086,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p5": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -1323,6 +1343,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p6": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -1455,6 +1479,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p7": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",
@@ -1680,6 +1708,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
   },
   "p9": {
     "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null
+    },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
       "id": "sim-painel-esta",

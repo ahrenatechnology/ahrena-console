@@ -6,7 +6,7 @@ Decide o estado de cada sessão e dos agentes dela a partir dos eventos de hook 
 | --- | --- |
 | [regras.ts](regras.ts) | `transicionar(estado, evento)`: função pura, uma regra por tipo de evento |
 | [vigia.ts](vigia.ts) | `vigiar(estado, agora, vivos)`: turno morto, sonda e abandono, também puro |
-| [sonda.ts](sonda.ts) | Sonda de processo vivo: `ps` + `lsof` no macOS, `/proc` no Linux, desligada no resto |
+| [sonda.ts](sonda.ts) | Sonda de processo vivo: `ps` + `lsof` no macOS, `/proc` no Linux, desligada no resto. Reconhece o `claude` do Claude Desktop, cujo caminho tem espaço (`Application Support`) |
 | [leitura.ts](leitura.ts) | `lerInbox(sessão, agentes)`: o que o inbox mostra, com delegando e background |
 | [maquina.ts](maquina.ts) | `MaquinaDeEstados`: lê e grava pela porta, em série |
 

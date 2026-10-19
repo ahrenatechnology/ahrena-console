@@ -38,3 +38,36 @@ export async function atualizarPlano(
   await porta.putPlan(plano);
   return plano;
 }
+
+/**
+ * Refaz o plano e o histórico da sessão a partir de todos os eventos gravados. Para as sessões
+ * importadas antes do plano (#19) ou do histórico (#131): a gravação incremental só vê eventos novos.
+ * Devolve quantos planos a sessão teve.
+ */
+export async function reconstruirPlano(
+  porta: Pick<StoragePort, 'listEvents' | 'getPlan' | 'putPlan' | 'putPlanRecord' | 'deletePlanRecords'>,
+  sessionId: string,
+  /** Os mesmos eventos relidos do transcript, com os campos que a importação antiga não guardou. */
+  relidos: readonly SessionEvent[] = [],
+): Promise<number> {
+  const porId = new Map<string, SessionEvent>();
+  let cursor: string | null = null;
+  do {
+    const page = await porta.listEvents(sessionId, { limit: 500, cursor });
+    for (const e of page.items) if (eventoDoPlano(e)) porId.set(e.id, e);
+    cursor = page.nextCursor;
+  } while (cursor);
+  for (const e of relidos) if (e.sessionId === sessionId && eventoDoPlano(e)) porId.set(e.id, e);
+  const doPlano = [...porId.values()];
+  if (doPlano.length === 0) return 0;
+  await porta.deletePlanRecords(sessionId);
+  // Do zero: o plano gravado só viu parte dos eventos.
+  let planos = 0;
+  const doZero = {
+    getPlan: async () => null,
+    putPlan: (p: SessionPlan) => porta.putPlan(p),
+    putPlanRecord: (r: PlanRecord) => ((planos = Math.max(planos, r.seq)), porta.putPlanRecord(r)),
+  };
+  await atualizarPlano(doZero, sessionId, doPlano);
+  return planos;
+}

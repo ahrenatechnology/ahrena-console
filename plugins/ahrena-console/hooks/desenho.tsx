@@ -50,6 +50,8 @@ import { paleta, status as STATUS_COR } from './marca'
 export const CARD_W = 34
 export const CARD_H = 9
 export const GAP = 2
+/** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
+export const VERSAO_DO_PLUGIN = '0.0.5'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -1015,6 +1017,20 @@ export function desenhar(c: Contexto): RenderElement {
     <Box flexDirection="column" alignItems="center" gap={1} paddingY={1} minWidth={0}>
       {topo(c, g.largura)}
       {corpo.filter((x): x is RenderElement => x !== null)}
+      {rodape(c, g.largura)}
+    </Box>
+  )
+}
+
+/** "plugin 0.0.5 · api 0.0.1 · 4a3e196": para saber que o painel e a API são os da mesma versão. */
+function rodape(c: Contexto, largura: number) {
+  const { Box, Text } = c.el
+  const api = c.leitura.painel?.api
+  return (
+    <Box key="rodape-versao" flexDirection="row" justifyContent="center" width={largura}>
+      <Text mono size="caption" dimColor wrap="truncate-end">
+        plugin {VERSAO_DO_PLUGIN} · api {api ? `${api.versao}${api.commit ? ` · ${api.commit}` : ''}` : '—'}
+      </Text>
     </Box>
   )
 }

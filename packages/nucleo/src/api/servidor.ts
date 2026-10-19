@@ -22,8 +22,9 @@ import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteO
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES } from './decisoes.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
+import { VERSAO_DA_API } from './versao.ts';
 
-export const VERSAO_DA_API = '0.0.1';
+export { VERSAO_DA_API };
 
 export interface OpcoesDaApi {
   montador: MontadorDoPainel;

@@ -160,6 +160,8 @@ export type DecisoesDoPainel = {
 
 export type Painel = {
   versao: 1
+  /** A versão da API e o commit do checkout em que ela roda (`null` fora de um git), para o rodapé. */
+  api?: { versao: string; commit: string | null }
   geradoEm: string
   sessao: SessaoDoPainel | null
   contexto: { usados: number; limite: number; pct: number } | null

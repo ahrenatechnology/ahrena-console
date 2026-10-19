@@ -82,6 +82,8 @@ export interface StoragePort {
   putPlanRecord(record: PlanRecord): Promise<void>;
   /** Os planos da sessão, do mais recente para o mais antigo. Sem paginação: são poucos por sessão. */
   listPlanRecords(sessionId: string): Promise<PlanRecord[]>;
+  /** Apaga o histórico de planos da sessão, para reconstruí-lo dos eventos. */
+  deletePlanRecords(sessionId: string): Promise<void>;
 
   close(): Promise<void>;
 }

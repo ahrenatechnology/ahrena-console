@@ -336,6 +336,14 @@ describe('contrato com o plugin', () => {
     assert.equal((bash?.events[0]?.data as { tool_input?: unknown }).tool_input, undefined);
   });
 
+  test('a versão do rodapé do plugin é a do plugin.json e a do marketplace', () => {
+    const ler = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+    const versao = JSON.parse(ler('../../../../plugins/ahrena-console/.claude-plugin/plugin.json')).version;
+    const doMarketplace = JSON.parse(ler('../../../../.claude-plugin/marketplace.json')).plugins.find((p: { name: string }) => p.name === 'ahrena-console').version;
+    assert.equal(/VERSAO_DO_PLUGIN = '([^']+)'/.exec(ler('../../../../plugins/ahrena-console/hooks/desenho.tsx'))?.[1], versao);
+    assert.equal(doMarketplace, versao);
+  });
+
   test('todo campo da resposta está nos tipos do plugin', async () => {
     const { painel, storage } = await cenario('p4');
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');

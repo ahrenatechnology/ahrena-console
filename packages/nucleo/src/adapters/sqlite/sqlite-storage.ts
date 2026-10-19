@@ -197,6 +197,15 @@ export class SqliteStorage implements StoragePort {
     migrate(this.db, options.migrations ?? MIGRATIONS);
   }
 
+  /** Reprocessamento de dados já feito neste banco? Só do adaptador local, fora da porta. */
+  reprocessado(nome: string): boolean {
+    return this.db.prepare('SELECT 1 FROM reprocessamentos WHERE nome = ?').get(nome) !== undefined;
+  }
+
+  marcarReprocessado(nome: string, em: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO reprocessamentos (nome, feito_em) VALUES (?, ?)').run(nome, em);
+  }
+
   get schemaVersion(): number {
     return schemaVersion(this.db);
   }
@@ -420,6 +429,10 @@ export class SqliteStorage implements StoragePort {
 
   async listPlanRecords(sessionId: string): Promise<PlanRecord[]> {
     return this.db.prepare('SELECT * FROM session_plan_history WHERE session_id = ? ORDER BY seq DESC').all(sessionId).map(toPlanRecord);
+  }
+
+  async deletePlanRecords(sessionId: string): Promise<void> {
+    this.db.prepare('DELETE FROM session_plan_history WHERE session_id = ?').run(sessionId);
   }
 
   async putModelPricing(p: ModelPricing): Promise<void> {

@@ -38,6 +38,18 @@ export interface ImportOptions {
    * apenas o que mudou. Cada sessão afetada continua sendo gravada inteira pelo cursor.
    */
   files?: TranscriptFile[];
+  /**
+   * Chamado depois de gravar cada sessão que ganhou eventos, com o transcript principal e os
+   * eventos novos. É onde a API pendura a captura das decisões pelo transcript (#99).
+   */
+  onSession?: (s: SessaoImportada) => Promise<void>;
+}
+
+export interface SessaoImportada {
+  sessionId: string;
+  /** O transcript principal; `null` quando só os subagentes mudaram. */
+  transcriptPath: string | null;
+  added: SessionEvent[];
 }
 
 export interface ImportReport {
@@ -251,7 +263,7 @@ function mergeAgent(
   };
 }
 
-async function importSession(work: SessionWork, storage: StoragePort, report: ImportReport): Promise<void> {
+async function importSession(work: SessionWork, storage: StoragePort, report: ImportReport, onSession?: ImportOptions['onSession']): Promise<void> {
   const { sessionId } = work;
   const run = new SessionImport(sessionId, storage, report);
   const prevSession = await storage.getSession(sessionId);
@@ -288,6 +300,7 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
   const tokensByAgent = await run.writeUsage(updatedAt);
   // Só os eventos novos: o que já estava gravado já passou pelo plano (relidos não reaplicam).
   await atualizarPlano(storage, sessionId, run.added);
+  if (onSession && run.added.length > 0) await onSession({ sessionId, transcriptPath: work.main?.path ?? null, added: run.added });
   const tokens = (id: string) => tokensByAgent.get(id) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 };
 
   // Agente principal.
@@ -375,6 +388,26 @@ async function sessionIdFromLines(path: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Relê um transcript inteiro e devolve os eventos que passam no filtro, com os mesmos ids da
+ * importação. Para reprocessar o que a importação antiga gravou sem os campos de hoje (o
+ * `tool_input` das ferramentas do plano, guardado desde o item 1.9).
+ */
+export async function eventosDoTranscript(path: string, sessionId: string, filtro: (e: SessionEvent) => boolean): Promise<SessionEvent[]> {
+  const out: SessionEvent[] = [];
+  const toolNames = new Map<string, string>();
+  for await (const { line } of readLinesFrom(path, 0)) {
+    const parsed = parseLine(line, toolNames);
+    if (!parsed || (parsed.sessionId && parsed.sessionId !== sessionId)) continue;
+    const agentId = parsed.transcriptAgentId ? subagentId(sessionId, parsed.transcriptAgentId) : mainAgentId(sessionId);
+    for (const e of parsed.events) {
+      const event: SessionEvent = { id: eventId(e.uuid), sessionId, agentId, type: e.type, toolName: e.toolName, summary: e.summary, data: e.data, createdAt: e.createdAt };
+      if (filtro(event)) out.push(event);
+    }
+  }
+  return out;
+}
+
 /** Importa (ou continua importando) todo o histórico sob `root`. */
 export async function importHistory(options: ImportOptions): Promise<ImportReport> {
   const root = options.root ?? defaultProjectsRoot();
@@ -410,6 +443,6 @@ export async function importHistory(options: ImportOptions): Promise<ImportRepor
     group(sessionId).subagents.push({ ...file, sessionId });
   }
 
-  for (const w of work.values()) await importSession(w, options.storage, report);
+  for (const w of work.values()) await importSession(w, options.storage, report, options.onSession);
   return report;
 }

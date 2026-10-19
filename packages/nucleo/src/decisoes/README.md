@@ -48,6 +48,8 @@ Cada decisão tem um assunto (`topic`). Na mesma família, as decisões vigentes
 
 ## Captura
 
+Na API (`npm run api`), a captura do transcript roda na importação e no seguidor, para cada sessão que ganhou um prompt, uma resposta de pergunta ou de plano, ou uma recusa; e uma vez para o histórico já importado (src/api/reprocessamento.ts).
+
 Determinística, nos dois caminhos. A chave de origem é a mesma (`tool:<tool_use_id>`), então hook e transcript não duplicam. O segundo a chegar só completa branch e link.
 
 | O quê | Hooks | Transcript |
