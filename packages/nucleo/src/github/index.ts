@@ -1,5 +1,6 @@
 // Trabalho do GitHub (item 5.2): hierarquia iniciativa → épico → item → plano, com PR,
-// CI e review por item, pela decisão 0001. Ver README do pacote, seção "Trabalho do GitHub".
+// CI e review por item, e o kanban de um Project (item 5.3), pela decisão 0001. Ver README
+// do pacote, seção "Trabalho do GitHub".
 
 import { GithubCache, MemoryCacheStore, type CachePort } from './cache.ts';
 import { ghCliToken, GithubGraphqlSource, type GithubGraphqlSourceOptions } from './github-source.ts';
@@ -12,6 +13,7 @@ export * from './source.ts';
 export * from './github-source.ts';
 export * from './sqlite-cache.ts';
 export * from './work-service.ts';
+export * from './project.ts';
 
 export interface CreateGithubWorkOptions extends Partial<GithubGraphqlSourceOptions> {
   /** Busca do GitHub, ex.: `repo:dono/repo is:issue is:open`. */

@@ -1,0 +1,19 @@
+{
+  "name": "@ahrena-console/marca",
+  "version": "0.0.1",
+  "description": "Tokens da marca do Ahrena Console, gerados de docs/brand/tokens.json para o painel e o artefato",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./gerado/marca.ts",
+    "./marca.css": "./gerado/marca.css"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "gerar": "node src/gerar.ts",
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}
