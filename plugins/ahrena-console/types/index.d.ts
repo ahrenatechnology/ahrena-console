@@ -168,8 +168,11 @@ export type DecisoesDoPainel = {
 
 export type Painel = {
   versao: 1
-  /** A versão da API e o commit do checkout em que ela roda (`null` fora de um git), para o rodapé. */
-  api?: { versao: string; commit: string | null }
+  /**
+   * A versão da API, o commit do código que ela carregou e o da pasta agora (diferentes: reiniciar
+   * a API), e se ela abre a sessão no Claude Desktop (`POST /abrir/<local_…>`, no macOS).
+   */
+  api?: { versao: string; commit: string | null; pasta?: string | null; abreSessao?: boolean }
   geradoEm: string
   sessao: SessaoDoPainel | null
   contexto: { usados: number; limite: number; pct: number } | null

@@ -264,4 +264,39 @@ describe('API das decisões em 127.0.0.1', () => {
       await storage.close();
     }
   });
+
+  test('#131: POST /abrir/<local_…> abre a sessão no Claude Desktop pelo `open`, só com id estrito, JSON e 127.0.0.1', async () => {
+    const { storage, montador } = await cenario();
+    const abertos: string[] = [];
+    let falhar = false;
+    const abrirNoDesktop = async (url: string) => {
+      if (falhar) throw new Error('open saiu com 1');
+      abertos.push(url);
+    };
+    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, abrirNoDesktop });
+    const post = (caminho: string, headers: Record<string, string> = { 'content-type': 'application/json' }) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
+    const local = 'local_00000000-0000-4000-8000-0000000000f1';
+    try {
+      assert.equal((await post(`/abrir/${local}`)).status, 200);
+      assert.deepEqual(abertos, [`claude://claude.ai/epitaxy/${local}`]);
+      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'text/plain' })).status, 415);
+      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
+      assert.equal((await post('/abrir/local_curto')).status, 400);
+      assert.equal((await post(`/abrir/${encodeURIComponent(`${local};rm -rf`)}`)).status, 400);
+      falhar = true;
+      assert.equal((await post(`/abrir/${local}`)).status, 502);
+      assert.equal(abertos.length, 1);
+    } finally {
+      await api.close();
+    }
+    // Sem quem abra (fora do macOS): 501, e o painel fica com o link de reserva.
+    const semOpen = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    try {
+      assert.equal((await fetch(`${semOpen.url}/abrir/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
+      assert.equal(((await (await fetch(`${semOpen.url}/api/painel/qualquer`)).json()) as Painel).api.abreSessao, false);
+    } finally {
+      await semOpen.close();
+      await storage.close();
+    }
+  });
 });

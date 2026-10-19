@@ -77,8 +77,12 @@ export interface OpcoesDoPainel {
   precisamMs?: number;
   /** Troca o id pedido por outro (a demonstração usa a sessão do cenário). */
   apelido?: (sessionId: string) => string;
-  /** O commit do checkout em que a API roda, para o rodapé do painel. */
+  /** O commit do código que a API carregou ao subir, para o rodapé do painel. */
   commit?: string | null;
+  /** O commit da pasta agora: diferente do `commit`, a pasta mudou e a API precisa reiniciar. */
+  commitDaPasta?: () => string | null;
+  /** A API abre a sessão no Claude Desktop (`POST /abrir/<local_…>`): no macOS. */
+  abreSessao?: boolean;
 }
 
 type Porta = StoragePort;
@@ -108,14 +112,18 @@ export class MontadorDoPainel {
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
   private readonly commit: string | null;
+  private readonly commitDaPasta: () => string | null;
+  private readonly abreSessao: boolean;
   private readonly decisoes: DecisoesDaSessao | null;
   readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { em: number; updatedAt: string; custo: CustoDoPainel; tokens: Painel['tokens'] }>();
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false }: OpcoesDoPainel) {
     this.commit = commit;
+    this.commitDaPasta = commitDaPasta;
+    this.abreSessao = abreSessao;
     this.apelido = apelido;
     this.storage = storage;
     this.contas = contas;
@@ -151,7 +159,7 @@ export class MontadorDoPainel {
 
     return {
       versao: 1,
-      api: { versao: VERSAO_DA_API, commit: this.commit },
+      api: { versao: VERSAO_DA_API, commit: this.commit, pasta: this.commitDaPasta(), abreSessao: this.abreSessao },
       geradoEm: new Date(agora).toISOString(),
       sessao,
       contexto: session ? contextoDe(session, resumo!) : null,

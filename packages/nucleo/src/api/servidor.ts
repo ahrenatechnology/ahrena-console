@@ -9,6 +9,7 @@
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
 // | `GET /api/decisoes/<sessão>`  | As decisões de um escopo (`?escopo=sessao|familia|branch`)  |
 // | `POST /api/decisoes/<id>/confirmar` e `/descartar` | O Confirmar e o Descartar de uma sugerida |
+// | `POST /abrir/<local_…>`       | Abre a conversa no Claude Desktop (`open claude://…`, no macOS); JSON, como as outras escritas |
 // | `GET /abrir/<local_…>`        | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 //
@@ -37,7 +38,15 @@ export interface OpcoesDaApi {
   log?: (mensagem: string) => void;
   /** Contadores extras para `/api/carga` (seguidor, índice do Desktop). */
   carga?: () => Record<string, unknown>;
+  /**
+   * Abre um endereço `claude://` no Claude Desktop (no macOS, `open <url>`). Sem ela, o
+   * `POST /abrir/<local_…>` responde 501 e o painel fica com o link de reserva.
+   */
+  abrirNoDesktop?: ((url: string) => Promise<void>) | null;
 }
+
+/** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
+export const LOCAL_DO_DESKTOP = /^local_[0-9a-f-]{36}$/;
 
 export interface ApiLocal {
   server: Server;
@@ -144,11 +153,27 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     res.end(corpo);
   }
 
+  // Escrita como as das decisões: só JSON e só de 127.0.0.1 (o `allowedLocalRequest` do `handle`).
+  async function abrirDireto(req: IncomingMessage, res: ServerResponse, local: string) {
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
+    if (!LOCAL_DO_DESKTOP.test(local)) return send(res, 400, { error: 'id de sessão do Desktop inválido' });
+    if (!opts.abrirNoDesktop) return send(res, 501, { error: 'abrir a sessão só no macOS, com o Claude Desktop' });
+    try {
+      await opts.abrirNoDesktop(`claude://claude.ai/epitaxy/${local}`);
+      log(`sessão ${local} aberta no Claude Desktop`);
+      send(res, 200, { ok: true });
+    } catch (err) {
+      send(res, 502, { error: `não deu para abrir: ${(err as Error).message}` });
+    }
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
     if (!allowedLocalRequest(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
+    const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
+    if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]));
     const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname);
     if (escrita) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });

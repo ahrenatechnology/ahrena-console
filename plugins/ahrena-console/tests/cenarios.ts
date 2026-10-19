@@ -10,7 +10,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -306,7 +308,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -493,7 +497,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -758,7 +764,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -1097,7 +1105,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -1356,7 +1366,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -1495,7 +1507,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {
@@ -1730,7 +1744,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "versao": 1,
     "api": {
       "versao": "0.0.1",
-      "commit": null
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
     },
     "geradoEm": "2026-11-02T12:00:00.000Z",
     "sessao": {

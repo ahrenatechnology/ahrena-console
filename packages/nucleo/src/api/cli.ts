@@ -2,7 +2,7 @@
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
 
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -95,8 +95,24 @@ function commitDoCheckout(): string | null {
   }
 }
 
+// O commit da pasta agora, conferido no máximo a cada 30 s: se mudou desde a subida, o rodapé avisa.
+let pasta = { em: 0, commit: null as string | null };
+function commitDaPasta(): string | null {
+  if (Date.now() - pasta.em > 30_000) pasta = { em: Date.now(), commit: commitDoCheckout() };
+  return pasta.commit;
+}
+
+// No macOS, a API abre a conversa no Claude Desktop: `open` com o endereço como argumento, sem shell.
+const abrirNoDesktop =
+  process.platform === 'darwin' && !demo
+    ? (url: string) =>
+        new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
+    : null;
+
 const montador = new MontadorDoPainel({
   commit: commitDoCheckout(),
+  commitDaPasta,
+  abreSessao: abrirNoDesktop !== null,
   storage,
   contas: new Contas({ storage, ...(demo ? { arquivo: null } : {}) }),
   desktop,
@@ -137,6 +153,7 @@ const api = await iniciarApiLocal({
   },
   port: porta,
   log,
+  abrirNoDesktop,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

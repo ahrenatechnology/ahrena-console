@@ -34,6 +34,11 @@ function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record
     status.push(e?.text)
     return { value: undefined }
   })
+  const toasts: string[] = []
+  on('ui.toast', async (_$: unknown, e: { text?: string } | string) => {
+    toasts.push(typeof e === 'string' ? e : (e?.text ?? ''))
+    return { value: undefined }
+  })
   on('session.id', async () => ({ value: 'sessao-teste' }))
   on('session.model', async () => ({ value: 'claude-sonnet-5-5' }))
   on('session.cwd', async () => ({ value: '/simulacao/cli-de-notas' }))
@@ -47,7 +52,7 @@ function falsos(on: any, opts: { cenario?: Cenario; fora?: boolean; env?: Record
   })
   on('command.register', async () => ({ value: undefined }))
   on('session.start', async (_$: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
-  return { pedidos, relogio, pane, estado, status }
+  return { pedidos, relogio, pane, estado, status, toasts }
 }
 
 async function abrir($: any, on: any, opts: Parameters<typeof falsos>[1] = {}) {
@@ -244,7 +249,8 @@ test('#131 no largo: o plano atual com a barra e o passo em andamento, e os ante
   expect(await ui.find({ key: 'plano-2' })).toBeDefined()
   expect(await ui.find({ key: 'plano-1' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Prototipar o arrastar/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /1\/4 · 3 min/ })).toBeDefined()
+  // "1/4" no texto, numa linha; o tempo na coluna fixa à direita.
+  expect((await ui.find({ key: 'plano-2' }))?.text).toMatch(/Prototipar o arrastar · 1\/4.*3 min/s)
   expect(await ui.find({ type: 'Text', text: /Ler o wireframe do kanban/ })).toBeDefined()
   expect(await ui.find({ key: 'ver-planos' })).toBeUndefined()
   await ui.unmount()
@@ -293,13 +299,20 @@ test('#131 núcleo sem o histórico: o card mostra só o plano, como antes', asy
 
 test('rodapé: a versão do plugin e a da API, discretas, nas duas larguras e sem o núcleo', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p1' })
-  f.estado.painel = { ...CENARIOS.p1, api: { versao: '0.0.1', commit: 'abc1234' } }
+  f.estado.painel = { ...CENARIOS.p1, api: { versao: '0.0.1', commit: 'abc1234', pasta: 'abc1234', abreSessao: false } }
   await f.relogio.advance(5_000)
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
-    expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api 0\.0\.1 · abc1234/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api 0\.0\.1 \(abc1234\)/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /reinicie a API/ })).toBeUndefined()
     await ui.unmount()
   }
+  // A pasta já está em outro commit: a API no ar é a de antes, e o rodapé pede para reiniciar.
+  f.estado.painel = { ...CENARIOS.p1, api: { versao: '0.0.1', commit: 'abc1234', pasta: 'def5678', abreSessao: false } }
+  await f.relogio.advance(5_000)
+  const mudou = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect(await mudou.find({ type: 'Text', text: /pasta em def5678: reinicie a API/ })).toBeDefined()
+  await mudou.unmount()
   // Núcleo de antes do rodapé, sem `api`: a versão do plugin aparece mesmo assim.
   const { api: _, ...semApi } = CENARIOS.p1
   f.estado.painel = semApi as Painel
@@ -309,7 +322,7 @@ test('rodapé: a versão do plugin e a da API, discretas, nas duas larguras e se
   await ui.unmount()
 })
 
-test('"← voltar" no topo de toda tela que toma o lugar da sessão, e o "fechar" de baixo continua', async ($, on) => {
+test('"← voltar" no topo e embaixo de toda tela que toma o lugar da sessão; "fechar" não aparece mais', async ($, on) => {
   await abrir($, on, { cenario: 'p1' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await ui.find({ key: 'voltar-sessao' })).toBeUndefined()
@@ -321,7 +334,8 @@ test('"← voltar" no topo de toda tela que toma o lugar da sessão, e o "fechar
     expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
   }
   await ui.press({ key: 'ver-precisam' })
-  expect(await ui.find({ key: 'fechar-precisam' })).toBeDefined()
+  expect((await ui.find({ key: 'fechar-precisam' }))?.text).toBe('← voltar')
+  expect((await ui.findAll({ type: 'Text' })).some((t) => /\bfechar\b/.test(t.text ?? ''))).toBe(false)
   await ui.unmount()
 })
 
@@ -414,9 +428,11 @@ test('altura: a distribuição dá primeiro à prioridade, e o resto fica no res
 test('altura: em toda altura e nas duas larguras, o painel cabe na janela sem rolagem', async ($, on) => {
   const painel = carregado()
   for (const cols of [38, 121]) {
-    for (const linhas of ALTURAS) {
+    // Abaixo de ~36 linhas no estreito, a sessão e as linhas fixas sozinhas já passam da altura.
+    for (const linhas of [40, 45, 50, 60, 75, 90, 120, 200]) {
       const usadas = linhasDaVisao({ agora: AGORA, nucleo: '127.0.0.1:4720', linhas, cols, acoes: {} } as any, painel)
-      expect(usadas).toBeLessThanOrEqual(linhas)
+      // Com a folga: zero rolagem.
+      expect(usadas).toBeLessThanOrEqual(linhas - 2)
     }
   }
 })
@@ -495,9 +511,9 @@ test('altura: as telas que tomam o lugar da sessão também cabem, com "+N que n
   let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 40) })
   await ui.press({ key: (await ui.find({ key: 'card-plano' })) ? 'ver-planos' : 'resumo-plano' })
   const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
-  // 40 linhas, 19 em volta e uma para o "+N".
-  expect(linhas).toBe(20)
-  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${painel.planos.length - 20} que não cabem nesta altura`) })).toBeDefined()
+  // 40 linhas, 19 em volta, 2 de folga e uma para o "+N".
+  expect(linhas).toBe(18)
+  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${painel.planos.length - 18} que não cabem nesta altura`) })).toBeDefined()
   await ui.press({ key: 'voltar-sessao' })
   await ui.unmount()
 
@@ -509,5 +525,66 @@ test('altura: as telas que tomam o lugar da sessão também cabem, com "+N que n
   await ui.select({ key: 'escopo', value: 'maquina' })
   expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('precisa-'))).toHaveLength(1)
   expect(await ui.find({ type: 'Text', text: /\+2 que não cabem nesta altura/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131: no macOS, o nome da sessão abre a conversa direto pela API, sem o navegador', async ($, on) => {
+  const LOCAL = 'local_00000000-0000-4000-8000-0000000000f1'
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  f.estado.painel = { ...p4, api: { versao: '0.0.1', commit: null, pasta: null, abreSessao: true }, filhas: p4.filhas.map((x, i) => (i === 0 ? { ...x, local: LOCAL } : x)) }
+  await f.relogio.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  const filha = p4.filhas[0]!
+  expect((await ui.findAll({ type: 'Link' })).some((l) => /\/abrir\//.test(l.props.href))).toBe(false)
+  await ui.press({ key: `nome-filha-${filha.id}` })
+  const pedido = f.pedidos.find((x) => x.method === 'POST' && x.url === `http://127.0.0.1:4720/abrir/${LOCAL}`)
+  expect(pedido).toBeDefined()
+  expect(f.toasts.at(-1)).toMatch(/Abrindo "fila-de-tarefas" no Claude Desktop/)
+  await ui.unmount()
+})
+
+test('#131: nas listas do painel, cada item é uma linha com reticências e o tempo numa coluna fixa; inteiro só na tela "+N"', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  f.estado.painel = carregado()
+  await f.relogio.advance(5_000)
+  for (const base of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
+    // No estreito, os planos anteriores ficam atrás do "+N".
+    for (const prefixo of base === LARGO ? ['sub-', 'filha-', 'plano-'] : ['sub-', 'filha-']) {
+      const itens = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith(prefixo))
+      expect(itens.length).toBeGreaterThan(0)
+    }
+    const textos = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
+    expect(textos.some((t) => t.props.wrap === 'truncate-end')).toBe(true)
+    expect(textos.some((t) => t.props.wrap === 'wrap')).toBe(false)
+    // A coluna de tempo tem largura fixa e não encolhe.
+    const colunas = (await ui.findAll({ type: 'Box' })).filter((b) => b.props.width === 7 && b.props.flexShrink === 0)
+    expect(colunas.length).toBeGreaterThan(0)
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  await ui.press({ key: (await ui.find({ key: 'ver-subagentes' })) ? 'ver-subagentes' : 'resumo-subagentes' }).catch(() => undefined)
+  if (await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })) {
+    const inteiros = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
+    expect(inteiros.some((t) => t.props.wrap === 'wrap')).toBe(true)
+  }
+  await ui.unmount()
+})
+
+test('#131: plano sem passo em andamento mostra "Próximo: …" numa linha; sem pendente, "concluído ✓"', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  f.estado.painel = { ...p1, plano: { ...p1.plano!, atual: null, proximo: 'Abrir o PR com um título sintético bem comprido para cortar' } }
+  await f.relogio.advance(5_000)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  const t = await ui.find({ type: 'Text', text: /Próximo: Abrir o PR/ })
+  expect(t).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /nenhum passo em andamento/ })).toBeUndefined()
+  await ui.unmount()
+  f.estado.painel = { ...p1, plano: { ...p1.plano!, atual: null, proximo: null, feitos: p1.plano!.total } }
+  await f.relogio.advance(5_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /concluído ✓/ })).toBeDefined()
   await ui.unmount()
 })

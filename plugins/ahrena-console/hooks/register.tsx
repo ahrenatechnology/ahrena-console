@@ -205,6 +205,30 @@ async function verNaConversa($: Engine, d: DecisaoDoPainel) {
   if ('deny' in r && r.deny) $.ui.toast(`A mensagem de ${d.rotulo} não está à vista nesta conversa.`)
 }
 
+/** Pede à API local que abra a conversa no Claude Desktop (no macOS, `open claude://…`). */
+async function abrirSessao($: Engine, local: string, titulo: string) {
+  try {
+    const res = await $.http.fetch(`http://${nucleo}/abrir/${encodeURIComponent(local)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    if (res.ok) $.ui.toast(`Abrindo "${titulo}" no Claude Desktop…`)
+    else {
+      const erro = (() => {
+        try {
+          return (JSON.parse(res.text ?? '') as { error?: string }).error
+        } catch {
+          return undefined
+        }
+      })()
+      $.ui.toast(`Não deu para abrir "${titulo}": ${erro ?? `HTTP ${res.status}`}.`)
+    }
+  } catch {
+    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; "${titulo}" não foi aberta.`)
+  }
+}
+
 async function irPara($: Engine, i: PrecisaDeVoce, surface: Parameters<Engine['ui']['copy']>[0]['surface']) {
   // O mod não troca de sessão no Desktop: copia o nome e diz onde ela está.
   await $.ui.copy({ text: i.titulo, surface }).catch(() => undefined)
@@ -295,6 +319,7 @@ export const register: Register = (on, options) => {
         escopo: (valor) => void mudarVista($, { escopo: valor === 'familia' ? 'familia' : 'maquina' }),
         tentar: () => void consultar($),
         irPara: (i) => void irPara($, i, e.surface),
+        abrirSessao: (local, titulo) => void abrirSessao($, local, titulo),
         // Abrir as decisões ou trocar o escopo já pede a lista, sem esperar o próximo tick.
         verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)),
         escopoDecisoes: (valor) =>

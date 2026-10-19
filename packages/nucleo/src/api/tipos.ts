@@ -184,8 +184,12 @@ export interface PrecisamDoPainel {
 
 export interface Painel {
   versao: 1;
-  /** A versão da API e o commit do checkout em que ela roda (`null` fora de um git), para o rodapé. */
-  api: { versao: string; commit: string | null };
+  /**
+   * A versão da API e, para o rodapé: o commit do código que ela carregou ao subir e o da pasta
+   * agora (diferentes, a API precisa reiniciar); `null` fora de um git. `abreSessao`: a API abre
+   * a conversa no Claude Desktop (`POST /abrir/<local_…>`).
+   */
+  api: { versao: string; commit: string | null; pasta: string | null; abreSessao: boolean };
   geradoEm: string;
   /** `null`: o núcleo ainda não viu esta sessão (nem hook, nem transcript). */
   sessao: SessaoDoPainel | null;

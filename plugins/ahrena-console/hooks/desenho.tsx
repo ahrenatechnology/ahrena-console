@@ -110,6 +110,8 @@ export type Acoes = {
   escopo: (valor: string) => void
   tentar: () => void
   irPara: (p: PrecisaDeVoce) => void
+  /** Abre a conversa no Claude Desktop pela API local (`open`, no macOS). */
+  abrirSessao: (local: string, titulo: string) => void
   verDecisoes: () => void
   escopoDecisoes: (valor: string) => void
   confirmar: (d: DecisaoDoPainel) => void
@@ -267,8 +269,14 @@ const UTIL = CARD_W - 4
  * epitaxy/<local_…>`, mas o `Link` do mod só leva `https:` ou `http://localhost`: o link vai ao
  * núcleo local (`/abrir/<local_…>`), que redireciona para o endereço do Desktop.
  */
+/** O id `local_<uuid>` do índice do Claude Desktop, o mesmo padrão que a API exige. */
+const LOCAL_DO_DESKTOP = /^local_[0-9a-f-]{36}$/
+
+/** A API abre a sessão direto no Claude Desktop, sem passar pelo navegador? */
+const abreDireto = (c: Contexto, local: string | null | undefined) => !!local && LOCAL_DO_DESKTOP.test(local) && c.leitura.painel?.api?.abreSessao === true
+
 export function enderecoDaSessao(c: Pick<Contexto, 'nucleo'>, local: string | null | undefined): string | null {
-  if (!local || !/^local_[0-9a-f-]+$/i.test(local)) return null
+  if (!local || !LOCAL_DO_DESKTOP.test(local)) return null
   const porta = c.nucleo.split(':')[1] ?? '4720'
   return `http://localhost:${porta}/abrir/${local}`
 }
@@ -523,6 +531,34 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_D
   return cartao(c, 'card-trabalho', corpo)
 }
 
+/** Largura fixa da coluna de tempo das listas: "< 10 s", "19 min", "3 h". */
+const TEMPO_W = 7
+
+/**
+ * Uma linha de lista (planos, subagentes, sessões filhas): o texto numa linha só, com reticências,
+ * e o tempo numa coluna de largura fixa à direita, que nunca divide espaço com o texto. Na tela
+ * "+N" (`inteiro`), o texto quebra e aparece inteiro.
+ */
+function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string | null)[], tempo: string, inteiro = false, esquerda?: RenderElement) {
+  const { Box, Text } = c.el
+  return (
+    <Box key={key} flexDirection="row" gap={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        {esquerda ?? (
+          <Text mono size="footnote" wrap={inteiro ? 'wrap' : 'truncate-end'}>
+            {texto}
+          </Text>
+        )}
+      </Box>
+      <Box width={TEMPO_W} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+        <Text mono size="footnote" dimColor tabular>
+          {tempo === 'agora' ? '< 10 s' : tempo}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
 const planosAnteriores = (n: number) => `+${n} ${n === 1 ? 'plano anterior' : 'planos anteriores'}`
 
 /** Quanto o plano durou; o atual, até agora. */
@@ -530,21 +566,19 @@ const duracaoDoPlano = (p: PlanoDaSessao, agora: number) => duracao((p.fim ? Dat
 
 /** Uma linha de plano: ✓ concluído, ◐ abandonado (X/Y) ou ● o atual, o resumo e a duração. */
 function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
-  const { Box, Text } = c.el
+  const { Text } = c.el
   const marca = p.resultado === 'concluido' ? { g: '✓', cor: VERDE } : p.resultado === 'abandonado' ? { g: '◐', cor: AMARELO } : { g: '●', cor: LARANJA }
-  const tempo = duracaoDoPlano(p, c.agora)
-  return (
-    <Box key={`plano-${p.numero}`} flexDirection="row" justifyContent="space-between" gap={1}>
-      <Text mono size="footnote" wrap="truncate-end">
-        <Text color={marca.cor}>{marca.g} </Text>
-        <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{p.resumo}</Text>
-        {detalhe && p.atual ? <Text dimColor> · {p.atual}</Text> : null}
-      </Text>
-      <Text mono size="footnote" dimColor tabular>
-        {p.resultado === 'concluido' && !detalhe ? '' : `${p.feitos}/${p.total} · `}
-        {tempo === 'agora' ? '< 10 s' : tempo}
-      </Text>
-    </Box>
+  return linhaDeLista(
+    c,
+    `plano-${p.numero}`,
+    [
+      <Text color={marca.cor}>{marca.g} </Text>,
+      <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{p.resumo}</Text>,
+      p.resultado === 'concluido' && !detalhe ? null : <Text dimColor> · {p.feitos}/{p.total}</Text>,
+      detalhe && p.atual ? <Text dimColor> · {p.atual}</Text> : null,
+    ],
+    duracaoDoPlano(p, c.agora),
+    detalhe,
   )
 }
 
@@ -566,7 +600,7 @@ function pecaPlano(p: Painel['plano'], planos: PlanoDaSessao[], estreito: boolea
   const anteriores = planos.filter((x) => x.resultado !== 'atual').length
   if (!p && anteriores === 0) return { id: 'plano', minimo: 2, inteiro: 2 }
   const base = p ? 3 : 2
-  const proximo = p?.proximo ? 1 : 0
+  const proximo = p?.atual && p.proximo ? 1 : 0
   // Com anteriores, o mínimo já tem a linha do "+N": a lista deles nunca fica inalcançável.
   return { id: 'plano', minimo: base + (anteriores ? 1 : 0), inteiro: base + proximo + (anteriores ? (estreito ? 1 : anteriores) : 0) }
 }
@@ -595,11 +629,18 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[], est
     const atual = planos.find((x) => x.resultado === 'atual')
     corpo.push(
       <Svg source={progressoSvg(pct)} alt={`plano ${Math.round(pct)}% feito, ${p.feitos} de ${p.total}`} width={200} height={4} />,
-      <Text mono size="footnote" weight="semibold" wrap="truncate-end">
-        {p.atual ? <Text color={LARANJA}>● </Text> : p.feitos === p.total ? <Text color={VERDE}>✓ </Text> : <Text dimColor>○ </Text>}
-        {p.atual ?? (p.feitos === p.total ? 'plano concluído' : 'nenhum passo em andamento')}
-        {atual ? <Text weight="regular" dimColor> · {duracaoDoPlano(atual, c.agora)}</Text> : null}
-      </Text>,
+      // O passo em andamento; sem ele, o próximo pendente; sem pendente, concluído. Uma linha só,
+      // com a idade do plano na coluna de tempo.
+      linhaDeLista(
+        c,
+        'passo-atual',
+        p.atual
+          ? [<Text color={LARANJA}>● </Text>, <Text weight="semibold">{p.atual}</Text>]
+          : p.proximo
+            ? [<Text dimColor>○ </Text>, <Text weight="semibold">Próximo: {p.proximo}</Text>]
+            : [<Text color={VERDE} weight="semibold">concluído ✓</Text>],
+        atual ? duracaoDoPlano(atual, c.agora) : '',
+      ),
     )
   } else {
     corpo.push(
@@ -610,7 +651,7 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[], est
   }
   let resto = linhas - base
   // O próximo passo, se sobrar linha depois do "+N" que os anteriores pedem.
-  if (p?.proximo && resto >= 1 + (anteriores.length ? 1 : 0)) {
+  if (p?.atual && p.proximo && resto >= 1 + (anteriores.length ? 1 : 0)) {
     corpo.push(
       <Text mono size="footnote" dimColor wrap="truncate-end">
         ○ {corta(p.proximo, 20)}
@@ -630,24 +671,17 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[], est
   return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, linhas)
 }
 
-function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel) {
-  const { Box, Text } = c.el
+function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
+  const { Text } = c.el
   const marca =
     s.status === 'completed' ? { g: '✓', cor: VERDE } : s.status === 'error' ? { g: '✕', cor: VERMELHO_TEXTO } : { g: '●', cor: LARANJA }
   const tempo = s.ate ? duracao(Date.parse(s.ate) - Date.parse(s.desde)) : desde(s.desde, c.agora)
-  return (
-    <Box key={`sub-${s.id}`} flexDirection="row" justifyContent="space-between" gap={1}>
-      <Box flexDirection="row" flexShrink={1} minWidth={0}>
-        <Text mono size="footnote" wrap="wrap">
-          <Text color={marca.cor}>{marca.g} </Text>
-          <Text weight="semibold">{s.nome}</Text>
-          {s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null}
-        </Text>
-      </Box>
-      <Text mono size="footnote" dimColor tabular>
-        {tempo === 'agora' ? '< 10 s' : tempo}
-      </Text>
-    </Box>
+  return linhaDeLista(
+    c,
+    `sub-${s.id}`,
+    [<Text color={marca.cor}>{marca.g} </Text>, <Text weight="semibold">{s.nome}</Text>, s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null],
+    tempo,
+    inteiro,
   )
 }
 
@@ -669,10 +703,8 @@ function subagentesEmOrdem(s: Painel['subagentes']) {
   return [...ativos, ...s.itens.filter((i) => !ativos.includes(i))]
 }
 
-/** Linhas de um subagente no card: o nome e a tarefa quebram, a duração fica à direita. */
-function linhasDoSubagente(s: SubagenteDoPainel): number {
-  return linhasDoTexto(`● ${s.nome}${s.tarefa ? ` · ${s.tarefa}` : ''}`, UTIL - 8)
-}
+/** Cada subagente ocupa uma linha no card: o texto corta com reticências. */
+const linhasDoSubagente = (_: SubagenteDoPainel) => 1
 
 /** Quantos itens cabem em `linhas`; quando nem todos cabem, uma linha fica para o "+N". */
 function quantosCabem(alturas: number[], linhas: number): number {
@@ -719,41 +751,51 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes'], linhas = LINHAS_DO
 }
 
 /** O nome da sessão: um link que abre a conversa no Claude Desktop, quando ela está no índice dele. */
-function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | null | undefined, max: number) {
-  const { Link, Text } = c.el
+function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | null | undefined, max: number, inteiro = false) {
+  const { Button, Link, Text } = c.el
+  const rotulo = inteiro ? titulo : corta(titulo, max)
+  // No macOS, a API abre a conversa direto; fora dele, o link de reserva passa pelo navegador.
+  if (abreDireto(c, local)) {
+    return (
+      <Button key={key} plain onPress={() => c.acoes.abrirSessao(local!, titulo)}>
+        <Text mono size="footnote" weight="semibold" color={LARANJA} underline wrap={inteiro ? 'wrap' : 'truncate-end'}>
+          {rotulo}
+        </Text>
+      </Button>
+    )
+  }
   const href = enderecoDaSessao(c, local)
-  if (href) return <Link key={key} href={href} label={corta(titulo, max)} />
+  if (href) return <Link key={key} href={href} label={rotulo} />
   return (
-    <Text key={key} weight="semibold" wrap="wrap">
+    <Text key={key} mono size="footnote" weight="semibold" wrap={inteiro ? 'wrap' : 'truncate-end'}>
       {titulo}
     </Text>
   )
 }
 
-function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number) {
+function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = false) {
   const { Box, Text } = c.el
   const st = statusDe(f.estado)
   const g = st === 'waiting' ? '◐' : st === 'completed' ? '✓' : st === 'error' ? '✕' : st === 'abandoned' ? '○' : '●'
-  const direita = st === 'waiting' && f.motivo ? MOTIVOS[f.motivo].rotulo : desde(f.desde, c.agora)
-  return (
-    <Box key={`filha-${f.id}`} flexDirection="row" justifyContent="space-between" gap={1}>
-      <Box flexDirection="row" flexShrink={1} minWidth={0}>
-        <Text mono size="footnote" color={COR_STATUS[st].cor}>
-          {g}{' '}
-        </Text>
-        <Box flexShrink={1} minWidth={0}>
-          {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, max)}
-        </Box>
-      </Box>
-      <Text mono size="footnote" color={st === 'waiting' ? AMARELO : undefined} dimColor={st !== 'waiting'}>
-        {direita}
+  return linhaDeLista(
+    c,
+    `filha-${f.id}`,
+    [],
+    desde(f.desde, c.agora),
+    inteiro,
+    <Box flexDirection="row" flexShrink={1} minWidth={0}>
+      <Text mono size="footnote" color={COR_STATUS[st].cor}>
+        {g}{' '}
       </Text>
-    </Box>
+      <Box flexShrink={1} minWidth={0}>
+        {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, max, inteiro)}
+      </Box>
+    </Box>,
   )
 }
 
-/** Linhas de uma filha no card: o link fica numa linha; o nome sem link quebra. */
-const linhasDaFilha = (c: Pick<Contexto, 'nucleo'>, f: FilhaDoPainel) => (enderecoDaSessao(c, f.local) ? 1 : linhasDoTexto(`● ${f.titulo}`, UTIL - 12))
+/** Cada sessão filha ocupa uma linha no card: o nome corta com reticências. */
+const linhasDaFilha = (_c: Pick<Contexto, 'nucleo'>, _f: FilhaDoPainel) => 1
 
 function pecaFilhas(c: Pick<Contexto, 'nucleo'>, filhas: FilhaDoPainel[]): Peca {
   if (filhas.length === 0) return { id: 'filhas', minimo: 2, inteiro: 2 }
@@ -778,13 +820,20 @@ function cardFilhas(c: Contexto, filhas: FilhaDoPainel[], linhas = LINHAS_DO_CAR
   return cartao(c, 'card-filhas', [
     cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length)),
     // O nome no card é cortado só no link (que não quebra linha); o resto quebra.
-    ...mostrar.map((f) => linhaDeFilha(c, f, 18)),
+    ...mostrar.map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3)),
     fora > 0 && maisItens(c, 'ver-filhas', fora, fora === 1 ? 'sessão' : 'sessões', c.acoes.verFilhas),
   ], BORDA, FUNDO_CARTAO, linhas)
 }
 
-/** Linhas livres numa tela que toma o lugar da sessão, descontado o que ela tem em volta. */
-const livres = (c: Contexto, emVolta: number) => (c.linhas === undefined ? Number.POSITIVE_INFINITY : c.linhas - emVolta)
+/**
+ * Folga abaixo da altura do corpo: a estimativa das linhas não conta a pintura do desktop ao
+ * pixel, e o dono não quer nenhuma rolagem.
+ */
+export const FOLGA = 2
+
+/** Linhas livres numa tela que toma o lugar da sessão, descontado o que ela tem em volta e a folga. */
+const livres = (c: Contexto, emVolta: number) =>
+  c.linhas === undefined ? Number.POSITIVE_INFINITY : c.linhas - emVolta - FOLGA - (linhasDoRodape(c.leitura.painel) - 1)
 /** O que não coube nesta altura: o painel não rola. */
 function naoCouberam(c: Contexto, key: string, n: number) {
   if (n <= 0) return null
@@ -805,14 +854,14 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
   const todos = qual === 'subagentes' ? subagentesEmOrdem(p.subagentes) : p.filhas
   const alturas =
     qual === 'subagentes'
-      ? subagentesEmOrdem(p.subagentes).map((x) => linhasDoTexto(`● ${x.nome}${x.tarefa ? ` · ${x.tarefa}` : ''}`, util - 8))
-      : p.filhas.map((f) => (enderecoDaSessao(c, f.local) ? 1 : linhasDoTexto(`● ${f.titulo}`, util - 12)))
+      ? subagentesEmOrdem(p.subagentes).map((x) => linhasDoTexto(`● ${x.nome}${x.tarefa ? ` · ${x.tarefa}` : ''}`, util - TEMPO_W - 1))
+      : p.filhas.map((f) => (enderecoDaSessao(c, f.local) ? 1 : linhasDoTexto(`● ${f.titulo}`, util - TEMPO_W - 3)))
   // Em volta: respiro, topo, voltar, rótulo, borda da caixa, rodapé, versão e os espaços.
   const n = quantosCabem(alturas, livres(c, 2 + 4 + 1 + 1 + 2 + 1 + 1 + 5))
   const itens =
     qual === 'subagentes'
-      ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x))
-      : p.filhas.slice(0, n).map((f) => linhaDeFilha(c, f, g.largura - 16))
+      ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x, true))
+      : p.filhas.slice(0, n).map((f) => linhaDeFilha(c, f, g.largura, true))
   const titulo = qual === 'subagentes' ? `SUBAGENTES · ${p.subagentes.itens.length}` : `SESSÕES FILHAS · ${p.filhas.length}`
   return [
     rotuloDaSecao(c, g.largura, titulo, chip(c, `chip-${qual}`, qual === 'subagentes' ? plural(p.subagentes.ativos, 'ativo', 'ativos') : 'desta sessão')),
@@ -822,7 +871,7 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
     <Box key={`rodape-${qual}`} flexDirection="row" justifyContent="flex-end" width={g.largura}>
       <Button key={`fechar-${qual}`} plain onPress={c.acoes.fechar}>
         <Text color={LARANJA} underline>
-          fechar
+          ← voltar
         </Text>
       </Button>
     </Box>,
@@ -1031,7 +1080,7 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const fechar = (
     <Button key="fechar-decisoes" plain onPress={c.acoes.fechar}>
       <Text color={LARANJA} underline>
-        fechar
+        ← voltar
       </Text>
     </Button>
   )
@@ -1150,7 +1199,7 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
     <Box key="rodape-decisao" flexDirection="row" justifyContent="flex-end" width={g.largura}>
       <Button key="fechar-decisao" plain onPress={c.acoes.voltarDecisoes}>
         <Text color={LARANJA} underline>
-          fechar
+          ← voltar
         </Text>
       </Button>
     </Box>,
@@ -1200,7 +1249,9 @@ function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
         {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {i.conta.rotulo}</Text> : null}
       </Text>,
       <Box flexDirection="row">
-        {enderecoDaSessao(c, i.local) ? (
+        {abreDireto(c, i.local) ? (
+          <Button key={`ir-${i.id}`} label="Ir para a sessão" variant="secondary" onPress={() => c.acoes.abrirSessao(i.local!, i.titulo)} />
+        ) : enderecoDaSessao(c, i.local) ? (
           <Link key={`ir-${i.id}`} href={enderecoDaSessao(c, i.local)!} label="Ir para a sessão" />
         ) : (
           <Button key={`ir-${i.id}`} label="Ir para a sessão" variant="secondary" onPress={() => c.acoes.irPara(i)} />
@@ -1239,7 +1290,7 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
       <Text mono wrap="truncate-end">urgentes primeiro{estreito ? '' : ' · esperando e com erro'}</Text>
       <Button key="fechar-precisam" plain onPress={c.acoes.fechar}>
         <Text color={LARANJA} underline>
-          fechar
+          ← voltar
         </Text>
       </Button>
     </Box>,
@@ -1253,7 +1304,8 @@ function telaPlanos(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreit
   const planos = p.planos ?? []
   const conta = (r: PlanoDaSessao['resultado']) => planos.filter((x) => x.resultado === r).length
   // Em volta: respiro, topo, voltar, rótulo, borda da caixa, rodapé com borda, versão e os espaços.
-  const cabem = quantosCabem(planos.map(() => 1), livres(c, 2 + 4 + 1 + 1 + 2 + 3 + 1 + 5))
+  const util = g.largura - 4 - TEMPO_W - 1
+  const cabem = quantosCabem(planos.map((x) => (estreito ? 1 : linhasDoTexto(`● ${x.resumo} · ${x.feitos}/${x.total}${x.atual ? ` · ${x.atual}` : ''}`, util))), livres(c, 2 + 4 + 1 + 1 + 2 + 3 + 1 + 5))
   return [
     rotuloDaSecao(c, g.largura, `PLANOS DA SESSÃO · ${planos.length}`, chip(c, 'chip-planos', `${conta('concluido')} ✓ · ${conta('abandonado')} ◐`)),
     <Box key="lista-planos" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
@@ -1263,7 +1315,7 @@ function telaPlanos(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreit
       <Text mono wrap="truncate-end">mais recente primeiro{estreito ? '' : ' · ✓ concluído · ◐ abandonado'}</Text>
       <Button key="fechar-planos" plain onPress={c.acoes.fechar}>
         <Text color={LARANJA} underline>
-          fechar
+          ← voltar
         </Text>
       </Button>
     </Box>,
@@ -1297,7 +1349,7 @@ function telaOffline(c: Contexto, g: ReturnType<typeof grade>, estreito: boolean
   ]
 }
 
-/** "← voltar" no topo de toda tela que toma o lugar da sessão; o "fechar" de baixo continua. */
+/** "← voltar" no topo de toda tela que toma o lugar da sessão; o botão de baixo diz o mesmo. */
 function voltar(c: Contexto, largura: number, para: () => void = c.acoes.fechar, key = 'voltar-sessao') {
   const { Box, Button, Text } = c.el
   return (
@@ -1327,7 +1379,7 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
   if (p.decisoes) partes.push(3)
-  partes.push(3, 1)
+  partes.push(3, linhasDoRodape(p))
   return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
 }
 
@@ -1395,7 +1447,7 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
   ].map(comODesenho)
   // Sem a altura do painel, cada card aparece inteiro.
   if (c.linhas === undefined) return { linhas: distribuir(todas, g.porLinha, Number.POSITIVE_INFINITY, PRIORIDADE_DA_ALTURA), fora: [] }
-  const base = c.linhas - linhasForaDaGrade(p, g, estreito)
+  const base = c.linhas - linhasForaDaGrade(p, g, estreito) - FOLGA
   const fora: string[] = []
   for (;;) {
     const pecas = todas.filter((x) => !fora.includes(x.id))
@@ -1482,15 +1534,30 @@ export function desenhar(c: Contexto): RenderElement {
   )
 }
 
-/** "plugin 0.0.5 · api 0.0.1 · 4a3e196": para saber que o painel e a API são os da mesma versão. */
+/** A pasta da API mudou desde que ela subiu: o código no ar é outro. */
+const pastaMudou = (p: Painel | null) => !!p?.api?.pasta && !!p.api.commit && p.api.pasta !== p.api.commit
+
+/** Linhas do rodapé: a versão e, quando a pasta mudou, o aviso para reiniciar a API. */
+const linhasDoRodape = (p: Painel | null) => (pastaMudou(p) ? 2 : 1)
+
+/**
+ * "plugin 0.0.8 · api 0.0.1 (1f9de92)": para saber que o painel e a API são os da mesma versão. O
+ * commit é o do código que a API carregou; se a pasta já está em outro, o rodapé pede para reiniciar.
+ */
 function rodape(c: Contexto, largura: number) {
   const { Box, Text } = c.el
-  const api = c.leitura.painel?.api
+  const p = c.leitura.painel
+  const api = p?.api
   return (
-    <Box key="rodape-versao" flexDirection="row" justifyContent="center" width={largura}>
+    <Box key="rodape-versao" flexDirection="column" alignItems="center" width={largura}>
       <Text mono size="caption" dimColor wrap="truncate-end">
-        plugin {VERSAO_DO_PLUGIN} · api {api ? `${api.versao}${api.commit ? ` · ${api.commit}` : ''}` : '—'}
+        plugin {VERSAO_DO_PLUGIN} · api {api ? `${api.versao}${api.commit ? ` (${api.commit})` : ''}` : '—'}
       </Text>
+      {pastaMudou(p) ? (
+        <Text mono size="caption" color={AMARELO} wrap="truncate-end">
+          pasta em {api!.pasta}: reinicie a API
+        </Text>
+      ) : null}
     </Box>
   )
 }
