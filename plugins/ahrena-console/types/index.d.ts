@@ -175,6 +175,18 @@ export type DecisoesDoPainel = {
 /** Um PR aberto por uma sessão que aguarda a sua aprovação (#140). */
 export type PrAguardando = { numero: number; url: string; repo: string | null; titulo: string; sessao: { id: string; titulo: string; local: string | null } }
 
+/** Medidor de contexto (item 1.7). `estouros`: compactações automáticas; `alerta`: a partir de 2; as manuais à parte. */
+export type ContextoDoPainel = {
+  usados: number
+  limite: number
+  pct: number
+  estouros: number
+  alerta: boolean
+  compactacoesManuais: number
+  rotulo: string
+  agentes: { agenteId: string; usados: number; limite: number; pct: number; estouros: number; alerta: boolean }[]
+}
+
 export type Painel = {
   versao: 1
   /**
@@ -184,7 +196,7 @@ export type Painel = {
   api?: { versao: string; commit: string | null; pasta?: string | null; abreSessao?: boolean }
   geradoEm: string
   sessao: SessaoDoPainel | null
-  contexto: { usados: number; limite: number; pct: number } | null
+  contexto: ContextoDoPainel | null
   custo: { usd: number | null; serie: number[]; estimativa: true } | null
   tokens: { entrada: number; saida: number } | null
   background: { total: number; primeiro: string | null }

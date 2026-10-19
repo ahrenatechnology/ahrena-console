@@ -47,6 +47,8 @@ export interface EventData {
   tool_input?: unknown;
   /** Id da tarefa criada, no resultado do TaskCreate (plano da sessão, item 1.9). */
   taskId?: string;
+  /** Da marca `compact_boundary` (`compactMetadata`): gatilho e contexto antes e depois (item 1.7). */
+  compact?: { trigger: string | null; preTokens: number | null; postTokens: number | null };
 }
 
 export interface ParsedLine {
@@ -260,8 +262,16 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
     const subtype = str(o.subtype);
     const kind = subtype === 'compact_boundary' ? 'Compaction' : subtype === 'api_error' ? 'APIError' : subtype === 'turn_duration' ? 'TurnDuration' : null;
     if (kind && subtype) {
-      out.events.push({ uuid, type: kind, toolName: null, summary: truncate(str(o.content), SUMMARY_MAX), createdAt: timestamp, data: { ...base, subtype } });
+      const compact = kind === 'Compaction' ? compactOf(o.compactMetadata) : null;
+      const data: EventData = compact ? { ...base, subtype, compact } : { ...base, subtype };
+      out.events.push({ uuid, type: kind, toolName: null, summary: truncate(str(o.content), SUMMARY_MAX), createdAt: timestamp, data });
     }
   }
   return out;
+}
+
+function compactOf(v: unknown): EventData['compact'] | null {
+  if (!isObj(v)) return null;
+  const tokens = (t: unknown) => (Number.isInteger(t) && (t as number) >= 0 ? (t as number) : null);
+  return { trigger: str(v.trigger), preTokens: tokens(v.preTokens), postTokens: tokens(v.postTokens) };
 }
