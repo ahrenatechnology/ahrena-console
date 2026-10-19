@@ -17,6 +17,7 @@ import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
+import { Perfis } from '../perfis/perfis.ts';
 import {
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
@@ -128,6 +129,18 @@ if (demo) {
   await semearDecisoesDoPainel(decisoes, cenario);
 }
 
+// Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
+// rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
+const perfis = demo ? null : new Perfis({ storage });
+const sincronizarPerfis = () =>
+  perfis
+    ?.sincronizar()
+    .then((ps) => ps.length)
+    .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
+if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
+relerPerfis?.unref();
+
 let historicoPronto = false;
 const follower =
   demo || o['sem-historico']
@@ -194,6 +207,7 @@ async function reprocessarUmaVez() {
 
 async function desligar() {
   pararVigia();
+  if (relerPerfis) clearInterval(relerPerfis);
   await follower?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
