@@ -1,4 +1,4 @@
-import { emptyTokenCounts, type Agent, type ModelPricing, type Session, type SessionEvent, type TokenUsage } from '../src/model.ts';
+import { emptyTokenCounts, type Agent, type ClaudeAccount, type ModelPricing, type Session, type SessionEvent, type TokenUsage } from '../src/model.ts';
 
 export const T0 = '2026-11-02T12:00:00.000Z';
 
@@ -19,6 +19,8 @@ export function session(over: Partial<Session> = {}): Session {
     awaitingInputSince: null,
     awaitingReason: null,
     updatedAt: T0,
+    accountId: null,
+    accountSource: null,
     metadata: {},
     ...over,
   };
@@ -85,5 +87,26 @@ export function pricing(over: Partial<ModelPricing> = {}): ModelPricing {
     cacheWrite1hPerMTok: null,
     updatedAt: T0,
     ...over,
+  };
+}
+
+/** Conta sintética: UUIDs do bloco de exemplo, nenhum dado real. */
+export function account(over: Partial<ClaudeAccount> & { n?: number } = {}): ClaudeAccount {
+  const { n = 1, ...rest } = over;
+  const accountUuid = rest.accountUuid ?? `00000000-0000-4000-8000-0000000000a${n}`;
+  const organizationUuid = rest.organizationUuid ?? `00000000-0000-4000-8000-0000000000b${n}`;
+  return {
+    id: `${accountUuid}/${organizationUuid}`,
+    accountUuid,
+    organizationUuid,
+    organizationName: `Org Exemplo ${n}`,
+    organizationType: 'claude_max',
+    label: `Conta ${n}`,
+    color: null,
+    configDirs: ['/simulacao/.claude'],
+    firstSeenAt: T0,
+    lastSeenAt: T0,
+    metadata: {},
+    ...rest,
   };
 }

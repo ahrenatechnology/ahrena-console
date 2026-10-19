@@ -3,11 +3,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
   validateAgent,
+  validateClaudeAccount,
   validateEvent,
   validateModelPricing,
   validateSession,
   validateTokenUsage,
   type Agent,
+  type ClaudeAccount,
   type ModelPricing,
   type Session,
   type SessionEvent,
@@ -60,6 +62,24 @@ function toSession(r: Row): Session {
     awaitingInputSince: r.awaiting_input_since as string | null,
     awaitingReason: r.awaiting_reason as Session['awaitingReason'],
     updatedAt: r.updated_at as string,
+    accountId: r.account_id as string | null,
+    accountSource: r.account_source as Session['accountSource'],
+    metadata: JSON.parse(r.metadata as string),
+  };
+}
+
+function toAccount(r: Row): ClaudeAccount {
+  return {
+    id: r.id as string,
+    accountUuid: r.account_uuid as string,
+    organizationUuid: r.organization_uuid as string,
+    organizationName: r.organization_name as string | null,
+    organizationType: r.organization_type as string | null,
+    label: r.label as string | null,
+    color: r.color as string | null,
+    configDirs: JSON.parse(r.config_dirs as string),
+    firstSeenAt: r.first_seen_at as string,
+    lastSeenAt: r.last_seen_at as string,
     metadata: JSON.parse(r.metadata as string),
   };
 }
@@ -155,17 +175,18 @@ export class SqliteStorage implements StoragePort {
     this.db
       .prepare(
         `INSERT INTO sessions (id, name, status, cwd, model, source, started_at, ended_at,
-           awaiting_input_since, awaiting_reason, updated_at, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           awaiting_input_since, awaiting_reason, updated_at, account_id, account_source, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            name = excluded.name, status = excluded.status, cwd = excluded.cwd, model = excluded.model,
            source = excluded.source, started_at = excluded.started_at, ended_at = excluded.ended_at,
            awaiting_input_since = excluded.awaiting_input_since, awaiting_reason = excluded.awaiting_reason,
-           updated_at = excluded.updated_at, metadata = excluded.metadata`,
+           updated_at = excluded.updated_at, account_id = excluded.account_id,
+           account_source = excluded.account_source, metadata = excluded.metadata`,
       )
       .run(
         s.id, s.name, s.status, s.cwd, s.model, s.source, s.startedAt, s.endedAt,
-        s.awaitingInputSince, s.awaitingReason, s.updatedAt, json(s.metadata),
+        s.awaitingInputSince, s.awaitingReason, s.updatedAt, s.accountId, s.accountSource, json(s.metadata),
       );
   }
 
@@ -190,6 +211,15 @@ export class SqliteStorage implements StoragePort {
       where.push('cwd = ?');
       params.push(query.cwd);
     }
+    if (query.accountIds) {
+      if (query.accountIds.length === 0) return { items: [], nextCursor: null };
+      const ids = query.accountIds.filter((id): id is string => id !== null);
+      const any: string[] = [];
+      if (ids.length) any.push(`account_id IN (${ids.map(() => '?').join(', ')})`);
+      if (ids.length < query.accountIds.length) any.push('account_id IS NULL');
+      where.push(`(${any.join(' OR ')})`);
+      params.push(...ids);
+    }
     if (query.cursor) {
       const [updatedAt, id] = decodeCursor(query.cursor, 2);
       where.push('(updated_at < ? OR (updated_at = ? AND id < ?))');
@@ -201,6 +231,35 @@ export class SqliteStorage implements StoragePort {
     const items = rows.slice(0, limit).map(toSession);
     const last = items.at(-1);
     return { items, nextCursor: rows.length > limit && last ? encodeCursor([last.updatedAt, last.id]) : null };
+  }
+
+  async putAccount(a: ClaudeAccount): Promise<void> {
+    validateClaudeAccount(a);
+    this.db
+      .prepare(
+        `INSERT INTO accounts (id, account_uuid, organization_uuid, organization_name, organization_type,
+           label, color, config_dirs, first_seen_at, last_seen_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET
+           account_uuid = excluded.account_uuid, organization_uuid = excluded.organization_uuid,
+           organization_name = excluded.organization_name, organization_type = excluded.organization_type,
+           label = excluded.label, color = excluded.color, config_dirs = excluded.config_dirs,
+           first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at,
+           metadata = excluded.metadata`,
+      )
+      .run(
+        a.id, a.accountUuid, a.organizationUuid, a.organizationName, a.organizationType,
+        a.label, a.color, JSON.stringify(a.configDirs), a.firstSeenAt, a.lastSeenAt, json(a.metadata),
+      );
+  }
+
+  async getAccount(id: string): Promise<ClaudeAccount | null> {
+    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+    return row ? toAccount(row) : null;
+  }
+
+  async listAccounts(): Promise<ClaudeAccount[]> {
+    return this.db.prepare('SELECT * FROM accounts ORDER BY first_seen_at, id').all().map(toAccount);
   }
 
   async putAgent(a: Agent): Promise<void> {

@@ -33,6 +33,9 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Norma
       awaitingInputSince: null,
       awaitingReason: null,
       updatedAt: event.createdAt,
+      // A conta pelo ambiente e pela pasta do hook é da #110; até lá, "Sem conta".
+      accountId: null,
+      accountSource: null,
       metadata: hookMetadata({}, hints),
     };
     await storage.putSession(created);

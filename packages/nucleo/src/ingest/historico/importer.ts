@@ -351,6 +351,9 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
         awaitingInputSince: null,
         awaitingReason: null,
         updatedAt,
+        // A conta pelo transcript e pelos perfis é da #111; até lá, "Sem conta".
+        accountId: null,
+        accountSource: null,
         metadata,
       };
   await storage.putSession(session);

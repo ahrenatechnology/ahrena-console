@@ -4,6 +4,7 @@ import { describe, test } from 'node:test';
 import {
   backoffMs,
   GithubCache,
+  MIGRATIONS,
   MemoryCacheStore,
   NoDataError,
   openSqliteStorage,
@@ -150,7 +151,7 @@ test('o cache SQLite fica no banco do núcleo, ao lado da porta de armazenamento
   const store = new SqliteCacheStore(storage.db);
   await store.set('k', { value: { a: [1] }, fetchedAt: 123, etag: null });
   assert.deepEqual(await new SqliteCacheStore(storage.db).get('k'), { value: { a: [1] }, fetchedAt: 123, etag: null });
-  assert.equal(storage.schemaVersion, 1, 'não mexe na versão das migrações');
+  assert.equal(storage.schemaVersion, MIGRATIONS.at(-1)?.version, 'não mexe na versão das migrações');
   await storage.close();
 });
 

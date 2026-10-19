@@ -312,4 +312,26 @@ describe('simulação em tempo real', () => {
     await assert.rejects(simular(porta, { semente: 1, modo: 'tempo-real', velocidade: 0 }), RangeError);
     await porta.close();
   });
+
+  test('gera duas contas sintéticas e reparte as sessões entre elas', async () => {
+    const { porta, resumo, dados } = await rodar({ sessoes: 6 });
+    const contas = await porta.listAccounts();
+    assert.equal(contas.length, 2);
+    assert.equal(resumo.gravados.contas, 2);
+    for (const c of contas) {
+      assert.match(c.accountUuid, /^00000000-0000-4000-8000-/);
+      assert.match(c.organizationUuid, /^00000000-0000-4000-8000-/);
+      assert.equal(c.metadata.simulado, true);
+      assert.ok(c.configDirs.every((d) => d.startsWith('/simulacao/')));
+      const daConta = dados.sessoes.filter((s) => s.accountId === c.id);
+      assert.equal(daConta.length, 3);
+      assert.equal(c.lastSeenAt, daConta.map((s) => s.updatedAt).sort().at(-1));
+      assert.ok(c.firstSeenAt <= c.lastSeenAt);
+      assert.equal((await porta.listSessions({ accountIds: [c.id] })).items.length, 3);
+    }
+    assert.ok(dados.sessoes.every((s) => s.accountId !== null && s.accountSource !== null));
+    assert.deepEqual(new Set(dados.sessoes.map((s) => s.accountSource)), new Set(['env', 'config']));
+    assert.deepEqual((await porta.listSessions({ accountIds: [null] })).items, []);
+    await porta.close();
+  });
 });

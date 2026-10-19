@@ -1,4 +1,4 @@
-// Modelo de dados do núcleo: sessão, agente, evento, uso de tokens e preço.
+// Modelo de dados do núcleo: sessão, conta, agente, evento, uso de tokens e preço.
 // Segue o modelo do Claude Code Agent Monitor (benchmark interno do Agent Monitor, seção 3),
 // com as regras copiadas, não o código. Datas são strings ISO 8601 em UTC (ordenáveis como texto).
 
@@ -27,6 +27,40 @@ export const URGENT_AWAITING_REASONS: readonly AwaitingReason[] = ['notification
 
 export type Metadata = Record<string, unknown>;
 
+/**
+ * De onde veio a conta da sessão, na ordem de precedência da decisão 0006 (seção 1):
+ * - `env`: ambiente do hook (`CLAUDE_CODE_ACCOUNT_UUID` e `CLAUDE_CODE_ORGANIZATION_UUID`), sessão do Desktop ao vivo;
+ * - `config`: `oauthAccount` da pasta de configuração do hook, lido no `SessionStart`;
+ * - `transcript`: linha `bridge-session` do transcript;
+ * - `desktop`: índice do Desktop, quando a sessão está numa pasta conta/org só;
+ * - `profile`: conta atual da pasta de configuração onde o transcript está (inferida).
+ * Sem fonte, a sessão fica em "Sem conta" (`accountId` e `accountSource` nulos).
+ */
+export const ACCOUNT_SOURCES = ['env', 'config', 'transcript', 'desktop', 'profile'] as const;
+export type AccountSource = (typeof ACCOUNT_SOURCES)[number];
+
+/**
+ * Conta e org do Claude, vistas em alguma sessão. O id é `<accountUuid>/<organizationUuid>`:
+ * a mesma pessoa em duas orgs são duas contas. Nunca guarda token nem chave.
+ */
+export interface ClaudeAccount {
+  id: string;
+  accountUuid: string;
+  organizationUuid: string;
+  organizationName: string | null;
+  /** Tipo da org como o Claude informa (ex.: `claude_max`, `claude_team`). */
+  organizationType: string | null;
+  /** Rótulo que a interface mostra; a pessoa pode editar. */
+  label: string | null;
+  /** Cor da conta na interface (ex.: `#5b8def`). */
+  color: string | null;
+  /** Pastas de configuração em que a conta foi vista (ex.: `~/.claude`, `~/.claude-cliente`). */
+  configDirs: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  metadata: Metadata;
+}
+
 export interface Session {
   id: string;
   name: string | null;
@@ -42,6 +76,10 @@ export interface Session {
   awaitingReason: AwaitingReason | null;
   /** Última atividade; ordena as listas. */
   updatedAt: string;
+  /** `ClaudeAccount.id` da sessão; `null` é "Sem conta". */
+  accountId: string | null;
+  /** Procedência de `accountId`; nula junto com ele. */
+  accountSource: AccountSource | null;
   metadata: Metadata;
 }
 
@@ -145,6 +183,41 @@ export function isUrgent(session: Pick<Session, 'awaitingInputSince' | 'awaiting
   );
 }
 
+/** Id da conta: `<accountUuid>/<organizationUuid>`. */
+export function claudeAccountId(accountUuid: string, organizationUuid: string): string {
+  return `${accountUuid}/${organizationUuid}`;
+}
+
+/** Ordem da fonte (1 = `env`, a mais forte); sem fonte fica depois de todas. */
+export function accountSourceRank(source: AccountSource | null): number {
+  if (source === null) return Number.POSITIVE_INFINITY;
+  const i = ACCOUNT_SOURCES.indexOf(source);
+  if (i < 0) throw new InvalidModelError(`accountSource inválido: ${JSON.stringify(source)}`);
+  return i + 1;
+}
+
+/**
+ * Se a conta vinda de `incoming` substitui a gravada com procedência `current`: só uma fonte de
+ * ordem menor corrige uma maior, nunca o contrário, e a mesma ordem não troca a conta gravada.
+ */
+export function accountSourceOverrides(incoming: AccountSource | null, current: AccountSource | null): boolean {
+  if (incoming === null) return false;
+  return accountSourceRank(incoming) < accountSourceRank(current);
+}
+
+/**
+ * Aplica à sessão a conta resolvida por uma fonte, seguindo a precedência. Devolve a mesma
+ * sessão quando a fonte não vence a gravada, ou uma cópia com a conta nova.
+ */
+export function applySessionAccount<S extends Pick<Session, 'accountId' | 'accountSource'>>(
+  session: S,
+  accountId: string,
+  source: AccountSource,
+): S {
+  if (!accountSourceOverrides(source, session.accountSource)) return session;
+  return { ...session, accountId, accountSource: source };
+}
+
 export class InvalidModelError extends Error {
   constructor(message: string) {
     super(message);
@@ -196,6 +269,25 @@ export function validateSession(s: Session): void {
     fail('Session', 'awaitingInputSince e awaitingReason andam juntos');
   }
   requireTimestamp('Session', 'updatedAt', s.updatedAt);
+  if (s.accountId !== null) requireId('Session', 'accountId', s.accountId);
+  requireOneOf('Session', 'accountSource', s.accountSource, ACCOUNT_SOURCES, true);
+  if ((s.accountId === null) !== (s.accountSource === null)) {
+    fail('Session', 'accountId e accountSource andam juntos');
+  }
+}
+
+export function validateClaudeAccount(a: ClaudeAccount): void {
+  requireId('ClaudeAccount', 'accountUuid', a.accountUuid);
+  requireId('ClaudeAccount', 'organizationUuid', a.organizationUuid);
+  if (a.id !== claudeAccountId(a.accountUuid, a.organizationUuid)) {
+    fail('ClaudeAccount', `id precisa ser <accountUuid>/<organizationUuid>, recebeu ${JSON.stringify(a.id)}`);
+  }
+  if (!Array.isArray(a.configDirs) || a.configDirs.some((d) => typeof d !== 'string' || d.length === 0)) {
+    fail('ClaudeAccount', 'configDirs precisa ser lista de caminhos');
+  }
+  requireTimestamp('ClaudeAccount', 'firstSeenAt', a.firstSeenAt);
+  requireTimestamp('ClaudeAccount', 'lastSeenAt', a.lastSeenAt);
+  if (a.lastSeenAt < a.firstSeenAt) fail('ClaudeAccount', 'lastSeenAt antes de firstSeenAt');
 }
 
 export function validateAgent(a: Agent): void {

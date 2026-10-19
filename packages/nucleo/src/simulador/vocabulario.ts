@@ -16,6 +16,33 @@ export const PROJETOS = [
 
 export const RAIZ = '/simulacao';
 
+/**
+ * Duas contas sintéticas, para o filtro e o agrupamento por conta aparecerem (decisão 0006).
+ * Os UUIDs são do bloco de exemplo `00000000-…`: não existem no Claude.
+ */
+export const CONTAS = [
+  {
+    accountUuid: '00000000-0000-4000-8000-00000000c0a1',
+    organizationUuid: '00000000-0000-4000-8000-00000000c0b1',
+    organizationName: 'Org Exemplo Pessoal',
+    organizationType: 'claude_max',
+    label: 'Pessoal (simulada)',
+    color: '#5b8def',
+    configDir: `${RAIZ}/.claude`,
+    source: 'env',
+  },
+  {
+    accountUuid: '00000000-0000-4000-8000-00000000c0a2',
+    organizationUuid: '00000000-0000-4000-8000-00000000c0b2',
+    organizationName: 'Org Exemplo Equipe',
+    organizationType: 'claude_team',
+    label: 'Equipe (simulada)',
+    color: '#e0803c',
+    configDir: `${RAIZ}/.claude-equipe`,
+    source: 'config',
+  },
+] as const;
+
 export const TAREFAS = [
   'corrigir a paginação da listagem',
   'adicionar testes ao parser de datas',
