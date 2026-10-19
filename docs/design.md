@@ -2,7 +2,7 @@
 
 ## Direção da interface
 
-A referência de interface é o **Claude Code Agent Monitor** ([ficha](benchmark/00-agent-monitor.md)), não o Podium. O que vem dele:
+A referência de interface é o **Claude Code Agent Monitor** (ficha no benchmark interno), não o Podium. O que vem dele:
 
 - dashboard com as sessões e os agentes ao vivo;
 - kanban de status das sessões;
@@ -70,7 +70,7 @@ Todo texto passa AA (4,5:1) sobre fundo, cartão e realce nos dois temas. Pontos
 
 ### Status de sessão
 
-Os cinco status do Claude Code Agent Monitor ([detalhe](benchmark/00-agent-monitor-detalhado.md), seção 3). Cada um tem cor, glifo e rótulo, para que o status nunca dependa só da cor, inclusive no painel nativo, que só tem texto.
+Os cinco status do Claude Code Agent Monitor (detalhe no benchmark interno, seção 3). Cada um tem cor, glifo e rótulo, para que o status nunca dependa só da cor, inclusive no painel nativo, que só tem texto.
 
 | Status | Rótulo | Glifo | Cor | Por que existe |
 | --- | --- | --- | --- | --- |

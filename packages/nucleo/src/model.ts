@@ -1,5 +1,5 @@
 // Modelo de dados do núcleo: sessão, agente, evento, uso de tokens e preço.
-// Segue o modelo do Claude Code Agent Monitor (docs/benchmark/00-agent-monitor-detalhado.md, seção 3),
+// Segue o modelo do Claude Code Agent Monitor (benchmark interno do Agent Monitor, seção 3),
 // com as regras copiadas, não o código. Datas são strings ISO 8601 em UTC (ordenáveis como texto).
 
 export const SESSION_STATUSES = ['active', 'completed', 'error', 'abandoned'] as const;
