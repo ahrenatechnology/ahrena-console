@@ -591,36 +591,74 @@ test('#131: plano sem passo em andamento mostra "Próximo: …" numa linha; sem 
   expect(await ui.find({ type: 'Text', text: /nenhum passo em andamento/ })).toBeUndefined()
   await ui.unmount()
   f.estado.painel = { ...p1, plano: { ...p1.plano!, atual: null, proximo: null, feitos: p1.plano!.total } }
-  await f.relogio.advance(5_000)
+  // Só um texto muda: o painel o mostra no próximo redesenho, até REDESENHO_MINIMO_MS depois do último.
+  await f.relogio.advance(15_000)
   ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await ui.find({ type: 'Text', text: /concluído ✓/ })).toBeDefined()
   await ui.unmount()
 })
 
-test('#131 clique duplo: com os mesmos dados, o polling não regrava o atom, e o desenho (com os handles dos botões) fica o mesmo', async ($, on) => {
+test('#131 clique duplo: o polling só regrava o atom quando o desenho muda (uso, PRs, a sua vez e a pergunta incluídos)', async ($, on) => {
   // Conta as gravações do atom `leitura`: cada uma redesenha o pane e troca os handles dos botões.
   let gravacoes = 0
   on('state.set', async (_$: unknown, e: { key?: string; ref?: { key?: string } }, next: (e: unknown) => unknown) => {
     if ((e.ref?.key ?? e.key) === 'leitura') gravacoes++
     return next(e)
   })
-  const f = await abrir($, on, { cenario: 'p1' })
-  await f.relogio.advance(5_000)
+  // O uso pelo engine, que muda a cada resposta.
+  const uso = { tokens: 120_100, percent: 12.01 }
+  on('session.usage', async () => ({ value: { startedAt: AGORA, context: { tokens: uso.tokens, window: 1_000_000, percent: uso.percent }, rateLimits: [] } }))
+  on('tool.call', async () => ({ result: 'ok' }))
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  // Uma pergunta no painel, um PR aguardando e alguém na sua vez.
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito', ask: 'Sigo?', actions: [{ label: 'Sim' }] })
+  const pr = { numero: 7, titulo: 'pr sintético', url: 'https://example.invalid/pr/7', repo: 'ahrena/sintetico', sessao: { id: 'sim-s', titulo: 'sessão sintética', local: null } }
+  // Os horários do cenário andam com o relógio: os "há N min" ficam parados, e o que mudar no
+  // desenho é o que o tick trouxe.
+  const anda = (p: Painel, ms: number): Painel =>
+    JSON.parse(JSON.stringify(p).replace(/"(\d{4}-\d\d-\d\dT[^"]+Z)"/g, (_, d: string) => JSON.stringify(new Date(Date.parse(d) + ms).toISOString())))
+  let t = 0
+  const base = (i: number, extra: Partial<Painel> = {}): Painel => ({
+    ...anda({ ...p4, prs: { total: 1, itens: [pr] }, ...extra }, t),
+    // O que muda a cada tick sem mudar a tela: a hora da resposta e o `desde` de quem está na sua
+    // vez (a tela principal só mostra quantos).
+    geradoEm: new Date(AGORA + t + i).toISOString(),
+    precisam: { ...p4.precisam, familia: p4.precisam.familia.map((x) => ({ ...x, desde: new Date(AGORA - i * 7_000).toISOString() })) },
+  })
+  const tick = async (ms = 5_000) => {
+    t += ms
+    await f.relogio.advance(ms)
+  }
+  f.estado.painel = base(0)
+  await tick()
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 120) })
   const antes = gravacoes
   expect(antes).toBeGreaterThan(0)
-  // Seis ticks, mesma resposta (só o geradoEm muda): nenhuma gravação, nenhum redesenho.
-  for (let i = 0; i < 6; i++) {
-    f.estado.painel = { ...CENARIOS.p1, geradoEm: new Date(AGORA + i * 5_000).toISOString() }
-    await f.relogio.advance(5_000)
+  // Seis ticks: o uso sobe dentro do mesmo arredondamento (120.1k, 12%), e nada visível muda.
+  for (let i = 1; i <= 6; i++) {
+    uso.tokens = 120_100 + i * 7
+    uso.percent = 12.01 + i * 0.01
+    // A resposta do próximo tick, com os horários já andados até ele.
+    f.estado.painel = anda(base(i), 5_000)
+    await tick()
   }
   expect(gravacoes).toBe(antes)
-  // Dados novos: grava, e o painel redesenha.
-  f.estado.painel = { ...CENARIOS.p1, precisam: { ...CENARIOS.p1.precisam, total: 9 } }
-  await f.relogio.advance(5_000)
+  // O mesmo botão continua lá, com o mesmo desenho: o clique da pessoa chega.
+  expect(await ui.find({ key: 'responder-0' })).toBeDefined()
+  // Uma mudança visível que não troca os botões espera o intervalo mínimo; depois, grava uma vez.
+  uso.percent = 14
+  uso.tokens = 140_000
+  for (let i = 0; i < 4; i++) {
+    f.estado.painel = anda(base(7), 5_000)
+    await tick()
+  }
   expect(gravacoes).toBe(antes + 1)
-  // Um minuto sem mudança: um redesenho só, pelos "há N min".
-  await f.relogio.advance(65_000)
+  // O que troca os botões grava na hora: mais um PR aguardando muda o cabeçalho do card.
+  f.estado.painel = anda(base(8, { prs: { total: 2, itens: [pr, { ...pr, numero: 8 }] } }), 5_000)
+  await tick()
   expect(gravacoes).toBe(antes + 2)
+  await ui.unmount()
 })
 
 test('#131: as sessões filhas aparecem direto na tela principal, as mais recentes, com "ver todas as N sessões filhas"', async ($, on) => {
@@ -890,6 +928,41 @@ test('#140: o wrap_up sem pergunta não mostra nada; o da pessoa no chat tira a 
   ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
   expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('#140: a pergunta fica no painel até a pessoa responder; mensagens automáticas não a tiram', async ($, on) => {
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('prompt.submit', async (_$: unknown, e: { text: string }) => ({ text: e.text }))
+  const f = await abrir($, on, { cenario: 'p1' })
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito', ask: 'Sigo com o merge?' })
+  await f.relogio.advance(10)
+  const temPergunta = async () => {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+    const achou = (await ui.find({ key: 'pergunta' })) !== undefined
+    await ui.unmount()
+    return achou
+  }
+  expect(await temPergunta()).toBe(true)
+  // Outra sessão, uma notificação de tarefa, um gatilho agendado, um plugin falando por si: a pergunta fica.
+  for (const origin of [{ kind: 'peer' }, { kind: 'task-notification' }, { kind: 'scheduled-trigger' }, { kind: 'plugin', name: 'outro' }, { kind: 'unclassified' }]) {
+    await ($ as any).prompt.submit({ text: 'mensagem automática', origin })
+    await f.relogio.advance(10)
+    expect(await temPergunta()).toBe(true)
+  }
+  // Guardada no $.state: um desenho novo (reload do painel) e os ticks seguintes ainda a mostram.
+  await f.relogio.advance(60_000)
+  expect(await temPergunta()).toBe(true)
+  // A pessoa escreveu no Desktop (o host do SDK): sai.
+  await ($ as any).prompt.submit({ text: 'pode', origin: { kind: 'sdk' } })
+  await f.relogio.advance(10)
+  expect(await temPergunta()).toBe(false)
+  // Digitada no terminal, também.
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito', ask: 'E agora?' })
+  await f.relogio.advance(10)
+  expect(await temPergunta()).toBe(true)
+  await ($ as any).prompt.submit({ text: 'segue', origin: { kind: 'composer' } })
+  await f.relogio.advance(10)
+  expect(await temPergunta()).toBe(false)
 })
 
 test('#140: o AskUserQuestion aparece no topo com as perguntas e as opções inteiras, até a pessoa responder', async ($, on) => {

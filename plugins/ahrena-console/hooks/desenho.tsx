@@ -728,7 +728,7 @@ function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string |
       </Box>
       <Box width={TEMPO_W} flexShrink={0} flexDirection="row" justifyContent="flex-end">
         <Text mono size="footnote" dimColor tabular>
-          {tempo === 'agora' ? '< 10 s' : tempo}
+          {tempo}
         </Text>
       </Box>
     </Box>

@@ -3,10 +3,13 @@
 import type { AwaitingReason, DecisaoDoPainel, DisplayStatus, EscopoDasDecisoes, EstadoDoInbox, Painel, SessaoDoPainel } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
+/**
+ * Sem segundos: um contador que anda a cada tick redesenha o painel a cada tick, e cada redesenho
+ * troca os handles dos botões (o clique duplo). O tempo muda no máximo uma vez por minuto.
+ */
 export function duracao(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
-  if (s < 10) return 'agora'
-  if (s < 60) return `${s} s`
+  if (s < 60) return '< 1 min'
   const m = Math.round(s / 60)
   if (m < 60) return `${m} min`
   const h = Math.round(m / 60)
@@ -16,10 +19,10 @@ export function duracao(ms: number): string {
 
 export const desde = (iso: string | null, agora: number) => (iso ? duracao(agora - Date.parse(iso)) : '')
 
-/** "há 4 min"; "agora" fica "agora". */
+/** "há 4 min"; menos de um minuto fica "agora". */
 export function ha(iso: string, agora: number): string {
   const d = desde(iso, agora)
-  return d === 'agora' ? d : `há ${d}`
+  return d === '< 1 min' ? 'agora' : `há ${d}`
 }
 
 /** `claude-opus-5-5` → "Opus 5.5"; `claude-sonnet-4-6[1m]` → "Sonnet 4.6 1M". */
