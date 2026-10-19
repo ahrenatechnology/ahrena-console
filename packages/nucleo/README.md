@@ -12,6 +12,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/storage-port.ts](src/storage-port.ts) | A porta: a única coisa de que o resto do núcleo depende |
 | [src/pricing.ts](src/pricing.ts) | Preço pelo padrão mais longo e custo estimado, com "sem preço" explícito |
 | [src/adapters/sqlite/](src/adapters/sqlite/) | Adaptador SQLite e as migrações do esquema |
+| [src/ingest/hooks/](src/ingest/hooks/) | Receptor dos hooks do Claude Code e a configuração de hooks do plugin (item 1.4) |
 | [test/storage-contract.ts](test/storage-contract.ts) | Contrato da porta. Todo adaptador roda a mesma bateria |
 
 ## Estados
