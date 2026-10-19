@@ -166,6 +166,8 @@ const api = await iniciarApiLocal({
   montador,
   hooks: {
     storage,
+    // Os mesmos perfis: a pasta que um hook revela entra nas próximas listagens.
+    perfis: perfis ?? undefined,
     onEvent: async (r) => {
       await maquina.aoReceberHook(r);
       await captura.onEvent(r.event);

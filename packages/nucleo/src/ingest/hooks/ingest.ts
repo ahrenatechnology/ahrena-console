@@ -6,17 +6,17 @@
 // A conta da sessão (#110) é resolvida no `SessionStart` e no primeiro evento que o receptor vê de
 // cada sessão (ver conta.ts); o resultado respeita a precedência da decisão 0006.
 
-import { applySessionAccount, type ClaudeAccount, type Session } from '../../model.ts';
+import { applySessionAccount, type Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
 import { atualizarContexto } from '../../contexto/gravacao.ts';
-import { contaDaPasta } from './conta-da-pasta.ts';
-import { resolverConta, type ContaResolvida, type LerContaDaPasta } from './conta.ts';
+import { Perfis } from '../../perfis/perfis.ts';
+import { resolverConta, type PerfisDoHook } from './conta.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
 
 export interface IngestOptions extends NormalizeOptions {
-  /** Lê a conta logada numa pasta de configuração; o padrão lê o `.claude.json` dela. */
-  lerContaDaPasta?: LerContaDaPasta;
+  /** Perfis (#109), que leem a conta de uma pasta e gravam a `ClaudeAccount`; o padrão é um novo sobre a porta. */
+  perfis?: PerfisDoHook;
 }
 
 export interface IngestResult extends NormalizedHook {
@@ -62,15 +62,14 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   }
 
   if (event.type === 'SessionStart' || next.metadata.accountCheckedAt === undefined) {
-    const r = await resolverConta(hints.env, hints.transcriptPath, opts.lerContaDaPasta ?? ((pasta) => contaDaPasta(pasta)));
-    if (r.conta) next = applySessionAccount(next, r.conta.id, r.conta.source);
+    const r = await resolverConta(hints.env, hints.transcriptPath, opts.perfis ?? new Perfis({ storage }));
+    if (r.conta) next = applySessionAccount(next, r.conta.account.id, r.conta.source);
     // O que um SessionStart anterior gravou do Desktop não vale mais se este não trouxe.
     const { desktopScope: _escopo, desktopScopeConflict: _conflito, ...anterior } = next.metadata;
     const metadata: Session['metadata'] = { ...anterior, accountCheckedAt: event.createdAt };
     if (r.desktopScope) metadata.desktopScope = r.desktopScope;
     if (r.desktopScopeConflict !== null) metadata.desktopScopeConflict = r.desktopScopeConflict;
     next = { ...next, metadata };
-    if (r.conta) await registrarConta(storage, r.conta, event.createdAt);
   }
 
   const sessionCreated = !current;
@@ -82,30 +81,6 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   // Medidor de contexto (item 1.7): o hook PreCompact conta um estouro.
   if (appended) await atualizarContexto(storage, event.sessionId, [event]);
   return { ...normalized, appended, sessionCreated };
-}
-
-/** Garante a `ClaudeAccount` da conta vista, com a pasta de configuração em que apareceu. */
-async function registrarConta(storage: StoragePort, conta: ContaResolvida, vistaEm: string): Promise<void> {
-  const atual = await storage.getAccount(conta.id);
-  const configDirs = atual?.configDirs ?? [];
-  const novas = conta.configDir && !configDirs.includes(conta.configDir) ? [...configDirs, conta.configDir] : configDirs;
-  if (atual && novas === configDirs && atual.lastSeenAt >= vistaEm) return;
-  const registro: ClaudeAccount = atual
-    ? { ...atual, configDirs: novas, lastSeenAt: vistaEm > atual.lastSeenAt ? vistaEm : atual.lastSeenAt }
-    : {
-        id: conta.id,
-        accountUuid: conta.accountUuid,
-        organizationUuid: conta.organizationUuid,
-        organizationName: null,
-        organizationType: null,
-        label: null,
-        color: null,
-        configDirs: novas,
-        firstSeenAt: vistaEm,
-        lastSeenAt: vistaEm,
-        metadata: {},
-      };
-  await storage.putAccount(registro);
 }
 
 function hookMetadata(base: Session['metadata'], hints: NormalizedHook['hints']): Session['metadata'] {
