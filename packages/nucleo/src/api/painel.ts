@@ -23,6 +23,7 @@ import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from './resumo.ts';
+import { atencaoDe } from './atencao.ts';
 import type {
   AtividadeDaSessao,
   ContaDoPainel,
@@ -39,6 +40,8 @@ import type {
   PlanoDoPainel,
   PrecisaDeVoce,
   PrecisamDoPainel,
+  PrAguardando,
+  PrsDoPainel,
   SessaoDoPainel,
   SubagenteDoPainel,
 } from './tipos.ts';
@@ -48,6 +51,7 @@ import { VERSAO_DA_API } from './versao.ts';
 export const LIMITE_PADRAO_DE_CONTEXTO = 200_000;
 const LIMITE_LONGO_DE_CONTEXTO = 1_000_000;
 const MAX_MAQUINA = 12;
+const MAX_SESSOES_DOS_PRS = 30;
 const PONTOS_DA_SERIE = 16;
 
 /** O que o painel manda junto com o id: o que ele lê do ambiente da própria sessão. */
@@ -118,6 +122,7 @@ export class MontadorDoPainel {
   readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { em: number; updatedAt: string; custo: CustoDoPainel; tokens: Painel['tokens'] }>();
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
+  private sessoesRecentes: { em: number; sessoes: Session[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
   constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false }: OpcoesDoPainel) {
@@ -172,6 +177,7 @@ export class MontadorDoPainel {
       filhas: await this.filhasDe(session, desktop),
       trabalho,
       precisam: await this.precisamDe(pedido.sessionId, session, desktop),
+      prs: await this.prsAguardando(),
       decisoes: this.decisoes
         ? await this.decisoes.doPainel(this.alvo(pedido.sessionId, sessao.cwd ?? pedido.cwd ?? null, sessao.branch ?? trabalho?.branch ?? null, conta), pedido.decisoes ?? null)
         : null,
@@ -349,6 +355,38 @@ export class MontadorDoPainel {
     return this.precisamRodando;
   }
 
+  /**
+   * Os PRs que aguardam a sua aprovação (#140): de cada sessão dos últimos 7 dias, o PR do branch
+   * dela, aberto (não rascunho) e com o review pendente no GitHub. O trabalho por branch responde do
+   * cache e busca por trás, nunca no caminho do pedido; a lista de sessões é refeita a cada 30 s.
+   */
+  private async prsAguardando(): Promise<PrsDoPainel> {
+    if (!this.trabalho) return { total: 0, itens: [] };
+    const agora = this.agora();
+    if (!this.sessoesRecentes || agora - this.sessoesRecentes.em > 30_000) {
+      const page = await this.storage.listSessions({ limit: 200 });
+      const desde = new Date(agora - 7 * 24 * 3_600_000).toISOString();
+      // As 30 mais recentes: cada uma revalida o trabalho a cada minuto (git e o cache do GitHub).
+      this.sessoesRecentes = { em: agora, sessoes: page.items.filter((s) => s.updatedAt >= desde).slice(0, MAX_SESSOES_DOS_PRS) };
+    }
+    const porUrl = new Map<string, PrAguardando>();
+    for (const s of this.sessoesRecentes.sessoes) {
+      const d = this.desktop?.sessaoPorCli(s.id) ?? null;
+      const t = this.trabalho.ler(s.cwd ?? d?.cwd ?? null, d?.branch ?? (s.metadata?.branch as string | undefined) ?? null);
+      const pr = t?.pr;
+      if (!t || !pr || pr.estado !== 'aberto' || pr.review !== 'pendente' || porUrl.has(pr.url)) continue;
+      porUrl.set(pr.url, {
+        numero: pr.numero,
+        url: pr.url,
+        repo: t.repo,
+        titulo: t.issue ? `#${t.issue.numero} ${t.issue.titulo}` : t.branch,
+        sessao: { id: s.id, titulo: d?.titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : s.id.slice(0, 8)), local: d?.localId ?? null },
+      });
+    }
+    const itens = [...porUrl.values()].sort((a, b) => b.numero - a.numero);
+    return { total: itens.length, itens };
+  }
+
   private async precisamDe(sessionId: string, session: Session | null, desktop: SessaoDoDesktop | null): Promise<PrecisamDoPainel> {
     const agora = this.agora();
     const minhaFamilia = familiaDe(session, desktop);
@@ -361,8 +399,11 @@ export class MontadorDoPainel {
         delas.eu && minhaFamilia.mae === delas.eu ? 'mae' : minhaFamilia.eu && delas.mae === minhaFamilia.eu ? 'filha' : minhaFamilia.mae && delas.mae === minhaFamilia.mae ? 'irma' : null;
       const desde = c.session.awaitingInputSince ?? c.session.updatedAt;
       const { atividade, faixa } = atividadeDe(c.session, c.agentes, c.inbox, r, desde, agora);
+      const { nivel, porque } = atencaoDe(c.inbox, r);
       itens.push({
         id: c.session.id,
+        nivel,
+        porque,
         local: c.desktop?.localId ?? null,
         titulo: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
         estado: c.inbox.status === 'error' ? 'error' : 'waiting',
@@ -376,15 +417,20 @@ export class MontadorDoPainel {
         conta: this.contas.daSessao(c.session, c.desktop),
       });
     }
-    // Urgentes primeiro; dentro de cada grupo, o pedido mais recente, que é o que a pessoa lembra.
-    itens.sort((a, b) => Number(b.urgente) - Number(a.urgente) || b.desde.localeCompare(a.desde));
+    // Quem precisa de você antes de quem só está na sua vez (#140); dentro de cada nível, as urgentes
+    // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
+    const peso = (i: PrecisaDeVoce) => (i.nivel === 'precisa' ? 1 : 0)
+    itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgente) - Number(a.urgente) || b.desde.localeCompare(a.desde));
+    // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
+    const precisam = itens.filter((i) => i.nivel === 'precisa');
     const porConta = new Map<string, { conta: ContaDoPainel | null; n: number }>();
-    for (const i of itens) {
+    for (const i of precisam) {
       const k = i.conta?.id ?? '';
       porConta.set(k, { conta: i.conta, n: (porConta.get(k)?.n ?? 0) + 1 });
     }
     return {
-      total: itens.length,
+      total: precisam.length,
+      suaVez: itens.length - precisam.length,
       porConta: [...porConta.values()].sort((a, b) => b.n - a.n),
       familia: itens.filter((i) => i.relacao !== null),
       maquina: itens.slice(0, MAX_MAQUINA),

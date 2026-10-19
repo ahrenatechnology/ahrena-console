@@ -26,6 +26,10 @@ export interface ResumoDosEventos {
   ultimaMensagem: string | null;
   /** Último uso do principal: o tamanho do contexto que ele mandou. */
   contexto: number | null;
+  /** Pergunta com opções e plano para aprovar que o principal fez e ainda não tiveram resposta (#140). */
+  pendentes: { toolUseId: string; ferramenta: 'AskUserQuestion' | 'ExitPlanMode' }[];
+  /** O fechamento do turno (`wrap_up` do Desktop) pediu uma decisão (`ask`) ou disse que trava (`blocked`). */
+  pedidoNoFechamento: { texto: string | null; em: string } | null;
 }
 
 export function resumoVazio(): ResumoDosEventos {
@@ -39,6 +43,8 @@ export function resumoVazio(): ResumoDosEventos {
     ultimoErro: null,
     ultimaMensagem: null,
     contexto: null,
+    pendentes: [],
+    pedidoNoFechamento: null,
   };
 }
 
@@ -47,6 +53,8 @@ const obj = (v: unknown): Json | null => (v && typeof v === 'object' && !Array.i
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
 const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
 const doPrincipal = (e: SessionEvent) => e.agentId === null || e.agentId.endsWith(':main');
+const idDaChamada = (d: Json | null): string | null => str(d?.tool_use_id) ?? str(d?.toolUseId);
+const WRAP_UP = /(^|__)wrap_up$/;
 
 function planoDe(input: Json | null): ItemDoPlano[] | null {
   const todos = input?.todos;
@@ -71,9 +79,16 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
   switch (e.type) {
     case 'UserPromptSubmit':
       r.promptsHook++;
+      r.pendentes = [];
+      r.pedidoNoFechamento = null;
       return;
     case 'UserPrompt':
-      if (doPrincipal(e)) r.promptsTranscript++;
+      if (doPrincipal(e)) {
+        r.promptsTranscript++;
+        // A pessoa escreveu: o que estava pendente foi respondido ou deixado de lado.
+        r.pendentes = [];
+        r.pedidoNoFechamento = null;
+      }
       return;
     case 'PreToolUse':
     case 'ToolUse': {
@@ -88,7 +103,24 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
         const texto = str(q?.question) ?? str(entrada?.question);
         if (texto) r.ultimaPergunta = { texto, opcoes: Array.isArray(q?.options) ? q.options.length : 0, em: e.createdAt };
       }
-      if (doPrincipal(e)) r.ultimaFerramenta = { nome: e.toolName, resumo: e.summary, em: e.createdAt, entrada };
+      if (doPrincipal(e)) {
+        r.ultimaFerramenta = { nome: e.toolName, resumo: e.summary, em: e.createdAt, entrada };
+        const id = idDaChamada(d);
+        if ((e.toolName === 'AskUserQuestion' || e.toolName === 'ExitPlanMode') && id && !r.pendentes.some((x) => x.toolUseId === id)) {
+          r.pendentes = [...r.pendentes, { toolUseId: id, ferramenta: e.toolName }];
+        }
+        if (e.toolName && WRAP_UP.test(e.toolName) && entrada) {
+          const ask = str(entrada.ask);
+          r.pedidoNoFechamento = ask || entrada.blocked === true ? { texto: ask, em: e.createdAt } : null;
+        }
+      }
+      return;
+    }
+    case 'PostToolUse':
+    case 'PostToolUseFailure':
+    case 'ToolResult': {
+      const id = idDaChamada(d);
+      if (id && r.pendentes.length) r.pendentes = r.pendentes.filter((x) => x.toolUseId !== id);
       return;
     }
     case 'Notification':

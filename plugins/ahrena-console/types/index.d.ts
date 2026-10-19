@@ -97,6 +97,9 @@ export type TrabalhoDoPainel = {
 
 export type PrecisaDeVoce = {
   id: string
+  /** #140: `precisa`, bloqueada até você agir, com destaque; `sua-vez`, o bate-bola comum, neutra. Núcleo antigo: ausente (conta como `precisa`). */
+  nivel?: 'precisa' | 'sua-vez'
+  porque?: 'permissao' | 'pergunta' | 'plano' | 'decisao' | 'erro' | 'sua-vez' | 'interrompida' | 'no-prompt'
   /** `local_…` do Claude Desktop, para abrir a conversa; sem ele, a sessão é só de terminal. */
   local?: string | null
   titulo: string
@@ -112,7 +115,10 @@ export type PrecisaDeVoce = {
 }
 
 export type PrecisamDoPainel = {
+  /** Só as que precisam de você. */
   total: number
+  /** As que só estão na sua vez: fora da contagem. */
+  suaVez?: number
   porConta: { conta: ContaDoPainel | null; n: number }[]
   familia: PrecisaDeVoce[]
   maquina: PrecisaDeVoce[]
@@ -166,6 +172,9 @@ export type DecisoesDoPainel = {
   lista: ListaDeDecisoes | null
 }
 
+/** Um PR aberto por uma sessão que aguarda a sua aprovação (#140). */
+export type PrAguardando = { numero: number; url: string; repo: string | null; titulo: string; sessao: { id: string; titulo: string; local: string | null } }
+
 export type Painel = {
   versao: 1
   /**
@@ -186,6 +195,8 @@ export type Painel = {
   filhas: FilhaDoPainel[]
   trabalho: TrabalhoDoPainel | null
   precisam: PrecisamDoPainel
+  /** #140: os PRs aguardando a sua aprovação; núcleo antigo não manda. */
+  prs?: { total: number; itens: PrAguardando[] }
   /** `null`: o núcleo subiu sem as decisões (ou é de antes delas). */
   decisoes?: DecisoesDoPainel | null
 }
@@ -205,7 +216,7 @@ export type Leitura = {
 /** O que a pessoa abriu no painel. */
 export type Vista = {
   /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131). */
-  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas'
+  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas' | 'prs'
   /** `decisao`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
   decisao?: DecisaoDoPainel | null
   /** O detalhe com o campo do Ajustar aberto. */

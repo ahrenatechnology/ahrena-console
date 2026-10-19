@@ -46,7 +46,7 @@ function normalizarLeitura(v: unknown): Leitura {
 // Em andamento neste módulo: o "compactando…" vale enquanto a chamada não volta.
 let compactando = false
 
-const TELAS: readonly Vista['tela'][] = ['sessao', 'precisam', 'decisoes', 'planos', 'decisao', 'subagentes', 'filhas']
+const TELAS: readonly Vista['tela'][] = ['sessao', 'precisam', 'decisoes', 'planos', 'decisao', 'subagentes', 'filhas', 'prs']
 
 function normalizarVista(v: unknown): Vista {
   const r = (v ?? {}) as Partial<Vista>
@@ -416,6 +416,7 @@ export const register: Register = (on, options) => {
         enviarAjuste: (d, texto) => void (texto.trim() ? decidir($, d.id, d.rotulo, 'ajustar', texto) : undefined),
         verSubagentes: () => void mudarVista($, { tela: 'subagentes' }),
         verFilhas: () => void mudarVista($, { tela: 'filhas' }),
+        verPrs: () => void mudarVista($, { tela: 'prs' }),
       },
     })
   })

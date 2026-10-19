@@ -145,8 +145,10 @@ describe('painel por cenário (P1 a P7)', () => {
     assert.equal(p.subagentes.itens[0]?.nome, 'Explore');
     assert.equal(p.trabalho?.issue?.numero, 42);
     assert.equal(p.trabalho?.pr?.estado, 'rascunho');
-    assert.equal(p.precisam.total, 2);
-    assert.deepEqual(p.precisam.maquina.map((i) => i.titulo), ['motor-de-regras', 'app-receitas']);
+    // #140: a permissão precisa de você; a interrompida (Esc) é só a sua vez, fora da contagem.
+    assert.equal(p.precisam.total, 1);
+    assert.equal(p.precisam.suaVez, 1);
+    assert.deepEqual(p.precisam.maquina.map((i) => [i.titulo, i.nivel, i.porque]), [['motor-de-regras', 'precisa', 'permissao'], ['app-receitas', 'sua-vez', 'interrompida']]);
     await storage.close();
   });
 
@@ -200,7 +202,9 @@ describe('painel por cenário (P1 a P7)', () => {
     assert.equal(p.subagentes.itens.length, 0);
     assert.equal(p.trabalho?.branch, 'main');
     assert.equal(p.trabalho?.issue, null);
-    assert.equal(p.precisam.total, 3);
+    // Permissão e erro precisam de você; a interrompida é a sua vez.
+    assert.equal(p.precisam.total, 2);
+    assert.equal(p.precisam.suaVez, 1);
     await storage.close();
   });
 
@@ -210,11 +214,12 @@ describe('painel por cenário (P1 a P7)', () => {
       ['motor-de-regras', 'mae'],
       ['fila-de-tarefas', 'filha'],
     ]);
-    assert.deepEqual(p.precisam.maquina.map((i) => i.titulo), ['motor-de-regras', 'painel-de-metricas', 'fila-de-tarefas']);
+    assert.deepEqual(p.precisam.maquina.map((i) => [i.titulo, i.nivel]), [['motor-de-regras', 'precisa'], ['painel-de-metricas', 'precisa'], ['fila-de-tarefas', 'sua-vez']]);
+    // A divisão por conta conta só as que precisam de você: a sua vez (fila-de-tarefas) não soma.
     assert.deepEqual(
       p.precisam.porConta.map((d) => [d.conta?.rotulo, d.n]),
       [
-        ['equipe', 2],
+        ['equipe', 1],
         ['cliente-exemplo', 1],
       ],
     );

@@ -18,6 +18,7 @@ import type {
   Leitura,
   Painel,
   PlanoDaSessao,
+  PrAguardando,
   PrecisaDeVoce,
   RetomadaDoPainel,
   SessaoDoPainel,
@@ -59,7 +60,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.9'
+export const VERSAO_DO_PLUGIN = '0.0.10'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -128,6 +129,8 @@ export type Acoes = {
   enviarAjuste: (d: DecisaoDoPainel, texto: string) => void
   verSubagentes: () => void
   verFilhas: () => void
+  /** #140: a lista dos PRs aguardando a sua aprovação. */
+  verPrs: () => void
 }
 
 export type Contexto = {
@@ -947,21 +950,48 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
 
 // --- Linha de baixo: "N precisam de você" ---
 
+/** O nível da sessão em "precisam de você"; núcleo antigo, sem o campo: conta como precisa. */
+const precisa = (i: PrecisaDeVoce) => i.nivel !== 'sua-vez'
+
+/** O que bloqueia, dito curto: o motivo da espera ou o erro. */
+const PORQUE: Record<NonNullable<PrecisaDeVoce['porque']>, string> = {
+  permissao: 'Pede permissão',
+  pergunta: 'Pergunta',
+  plano: 'Plano para aprovar',
+  decisao: 'Pede decisão',
+  erro: 'Com erro',
+  'sua-vez': 'Sua vez',
+  interrompida: 'Interrompida',
+  'no-prompt': 'No prompt',
+}
+const porqueDe = (i: PrecisaDeVoce) => (i.porque ? PORQUE[i.porque] : i.estado === 'error' ? 'Com erro' : i.motivo ? MOTIVOS[i.motivo].rotulo : 'Esperando')
+
+/**
+ * "Precisam de você" (#140): o destaque é só de quem está bloqueada até você agir (permissão,
+ * pergunta, plano, decisão pedida, erro). A sua vez no bate-bola aparece em cor neutra, ao lado,
+ * sem somar na contagem.
+ */
 function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const { Box, Text, Button } = c.el
   const n = p.precisam.total
+  const vez = p.precisam.suaVez ?? 0
+  const naVez = vez ? `${vez} na sua vez` : ''
   if (n === 0) {
     return (
-      <Box key="precisam" flexDirection="row" width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
-        <Text mono dimColor>
-          ○ ninguém mais precisa de você
-        </Text>
+      <Box key="precisam" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+        <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text mono dimColor wrap="truncate-end">
+            ○ ninguém mais precisa de você{naVez ? ` · ${naVez}` : ''}
+          </Text>
+        </Box>
+        {vez ? <Button key="ver-precisam" label="Ver" variant="secondary" onPress={c.acoes.verPrecisam} /> : null}
       </Box>
     )
   }
   const nomes = p.precisam.maquina
+    .filter(precisa)
     .slice(0, 2)
-    .map((i) => `${i.titulo} (${i.estado === 'error' ? 'Com erro' : i.motivo ? MOTIVOS[i.motivo].rotulo : 'Esperando'})`)
+    .map((i) => `${i.titulo} (${porqueDe(i)})`)
     .join(', ')
   const divisao = p.precisam.porConta.map((d) => `${d.conta?.rotulo ?? 'sem conta'} ${d.n}`).join(' · ')
   return (
@@ -971,6 +1001,7 @@ function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolea
           <Text mono weight="bold" color={AMARELO} wrap="truncate-end">
             🔔 {precisamTexto(n)}
             {!estreito && nomes ? <Text weight="regular" color={paleta.gray['100']}> · {nomes}</Text> : null}
+            {naVez ? <Text weight="regular" color={CINZA}> · {naVez}</Text> : null}
           </Text>
         </Box>
         <Button key="ver-precisam" label="Ver" variant="primary" onPress={c.acoes.verPrecisam} />
@@ -982,6 +1013,56 @@ function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolea
       </Box>
     </Box>
   )
+}
+
+/** #140: o indicador próprio dos PRs que aguardam a sua aprovação, com a lista de links. */
+function linhaPrs(c: Contexto, p: Painel, largura: number, estreito: boolean) {
+  const n = p.prs?.total ?? 0
+  if (n === 0) return null
+  const { Box, Text, Button } = c.el
+  return (
+    <Box key="prs" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={ROSA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text mono weight="bold" color={ROSA} wrap="truncate-end">
+          ⇄ {n === 1 ? '1 PR aguardando' : `${n} PRs aguardando`} {estreito ? 'aprovação' : 'sua aprovação'}
+        </Text>
+      </Box>
+      <Button key="ver-prs" label="Ver" variant="secondary" onPress={c.acoes.verPrs} />
+    </Box>
+  )
+}
+
+/** A lista dos PRs: um por linha, o número e o título como link, e a sessão que o abriu. */
+function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
+  const { Box, Text, Button, Link } = c.el
+  const itens = p.prs?.itens ?? []
+  // Em volta: respiro, topo, voltar, rótulo, borda da caixa, rodapé, versão e os espaços.
+  const cabem = quantosCabem(itens.map(() => 1), livres(c, 2 + 4 + 1 + 1 + 2 + 1 + 1 + 5))
+  const linha = (pr: PrAguardando) => (
+    <Box key={`pr-${pr.url}`} flexDirection="row" gap={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Link href={pr.url} label={corta(`PR #${pr.numero} · ${pr.titulo}`, Math.max(20, g.largura - 24))} />
+      </Box>
+      <Box width={18} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+        <Text mono size="footnote" dimColor wrap="truncate-end">
+          {pr.sessao.titulo}
+        </Text>
+      </Box>
+    </Box>
+  )
+  return [
+    rotuloDaSecao(c, g.largura, `PRS AGUARDANDO SUA APROVAÇÃO · ${itens.length}`, chip(c, 'chip-prs', 'review pendente')),
+    <Box key="lista-prs" flexDirection="column" width={g.largura} borderStyle="round" borderColor={ROSA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
+      {itens.length ? [...itens.slice(0, cabem).map(linha), naoCouberam(c, 'nao-couberam', itens.length - cabem)] : [<Text key="vazio" mono dimColor>nenhum PR aguardando</Text>]}
+    </Box>,
+    <Box key="rodape-prs" flexDirection="row" justifyContent="flex-end" width={g.largura}>
+      <Button key="fechar-prs" plain onPress={c.acoes.fechar}>
+        <Text color={LARANJA} underline>
+          ← voltar
+        </Text>
+      </Button>
+    </Box>,
+  ]
 }
 
 // --- Decisões: a linha "N decisões vigentes", a faixa da retomada (P10) e a lista (P9) ---
@@ -1278,7 +1359,9 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
 function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
   const { Box, Text, Button, Link } = c.el
   const erro = i.estado === 'error'
-  const cor = erro ? COR_STATUS.error : COR_STATUS.waiting
+  // A sua vez em cor neutra (#140): sem o amarelo de quem está bloqueada.
+  const neutra = { cor: CINZA, fundo: FUNDO_CARTAO, borda: BORDA }
+  const cor = !precisa(i) ? neutra : erro ? COR_STATUS.error : COR_STATUS.waiting
   const relacao = i.relacao === 'mae' ? 'mãe desta' : i.relacao === 'filha' ? 'filha desta' : i.relacao === 'irma' ? 'irmã desta' : i.mesmoProjeto ? 'mesmo projeto' : 'outro projeto'
   return cartao(
     c,
@@ -1301,7 +1384,15 @@ function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
         </Text>
       </Box>,
       <Box flexDirection="row" gap={1} alignItems="center">
-        {erro ? pilulaDeStatus(c, 'st', 'error') : i.motivo ? pilulaDeMotivo(c, 'mt', i.motivo) : null}
+        {!precisa(i)
+          ? pilula(c, 'mt', `↵ ${porqueDe(i)}`, CINZA, BADGE.cinza)
+          : erro
+            ? pilulaDeStatus(c, 'st', 'error')
+            : i.porque
+              ? pilula(c, 'mt', porqueDe(i), AMARELO, BADGE.amarelo, true)
+              : i.motivo
+                ? pilulaDeMotivo(c, 'mt', i.motivo)
+                : null}
         {i.urgente && (
           <Text mono size="caption" dimColor>
             urgente
@@ -1334,8 +1425,14 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const { Box, Text, Button, Select } = c.el
   const escopo = c.vista.escopo ?? (estreito && p.precisam.familia.length ? 'familia' : 'maquina')
   const itens = escopo === 'familia' ? p.precisam.familia : p.precisam.maquina
-  // Em volta: respiro, topo, voltar, rótulo, rodapé com borda, versão, o "+N" e os espaços.
-  const mostrar = itens.slice(0, fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + 3 + 1 + 2 + 5)) * g.porLinha)
+  // #140: quem precisa de você primeiro, com destaque; a sua vez depois, neutra, num grupo à parte.
+  const doNivel = itens.filter(precisa)
+  const naVez = itens.filter((i) => !precisa(i))
+  // Em volta: respiro, topo, voltar, rótulo, o rótulo da sua vez, rodapé com borda, versão, o "+N" e os espaços.
+  const cabem = fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + (naVez.length ? 2 : 0) + 3 + 1 + 2 + 5)) * g.porLinha
+  const mostrar = [...doNivel, ...naVez].slice(0, cabem)
+  const mostrarPrecisa = mostrar.filter(precisa)
+  const mostrarVez = mostrar.filter((i) => !precisa(i))
   const select = (
     <Select
       key="escopo"
@@ -1348,10 +1445,20 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
     />
   )
   return [
-    rotuloDaSecao(c, g.largura, `PRECISAM DE VOCÊ · ${itens.length}`, select),
+    rotuloDaSecao(c, g.largura, `PRECISAM DE VOCÊ · ${doNivel.length}`, select),
     <Box key="lista" flexDirection="row" flexWrap="wrap" gap={GAP} width={g.largura}>
-      {itens.length ? mostrar.map((i) => cardPrecisa(c, i)) : [<Text key="vazio" mono dimColor>ninguém {escopo === 'familia' ? 'da família' : ''} precisa de você agora</Text>]}
+      {doNivel.length ? mostrarPrecisa.map((i) => cardPrecisa(c, i)) : [<Text key="vazio" mono dimColor>ninguém {escopo === 'familia' ? 'da família' : ''} precisa de você agora</Text>]}
     </Box>,
+    mostrarVez.length ? (
+      <Text key="rotulo-sua-vez" mono size="caption" weight="semibold" dimColor>
+        SUA VEZ · {naVez.length} · sem pendência, só a vez de responder
+      </Text>
+    ) : null,
+    mostrarVez.length ? (
+      <Box key="lista-sua-vez" flexDirection="row" flexWrap="wrap" gap={GAP} width={g.largura}>
+        {mostrarVez.map((i) => cardPrecisa(c, i))}
+      </Box>
+    ) : null,
     naoCouberam(c, 'nao-couberam', itens.length - mostrar.length),
     <Box key="rodape-precisam" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Text mono wrap="truncate-end">urgentes primeiro{estreito ? '' : ' · esperando e com erro'}</Text>
@@ -1464,7 +1571,9 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
   if (p.decisoes) partes.push(3)
-  partes.push(3, linhasDoRodape(p))
+  partes.push(3)
+  if ((p.prs?.total ?? 0) > 0) partes.push(3)
+  partes.push(linhasDoRodape(p))
   return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
 }
 
@@ -1584,6 +1693,8 @@ export function desenhar(c: Contexto): RenderElement {
     corpo = [voltar(c, g.largura), ...telaPlanos(c, p, g, estreito)]
   } else if (c.vista.tela === 'decisao') {
     corpo = [voltar(c, g.largura, c.acoes.voltarDecisoes, 'voltar-decisoes'), ...telaDecisao(c, g)]
+  } else if (c.vista.tela === 'prs') {
+    corpo = [voltar(c, g.largura), ...telaPrs(c, p, g)]
   } else if (c.vista.tela === 'subagentes' || c.vista.tela === 'filhas') {
     corpo = [voltar(c, g.largura), ...telaLista(c, p, g, c.vista.tela)]
   } else {
@@ -1608,6 +1719,7 @@ export function desenhar(c: Contexto): RenderElement {
       faixaDeResumos(c, p, fora, g.largura),
       linhaDecisoes(c, p, g.largura, estreito),
       linhaPrecisam(c, p, g.largura, estreito),
+      linhaPrs(c, p, g.largura, estreito),
     ]
   }
 
