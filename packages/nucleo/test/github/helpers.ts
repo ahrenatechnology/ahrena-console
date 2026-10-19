@@ -27,7 +27,7 @@ export interface ReplayFetch {
 export function replayFetch(responses: readonly Recorded[] = recorded): ReplayFetch {
   const f = (async (_input: string | URL | Request, init?: RequestInit) => {
     const { query, variables } = JSON.parse(String(init?.body));
-    const operation = /query (\w+)/.exec(query)?.[1] ?? '?';
+    const operation = /(?:query|mutation) (\w+)/.exec(query)?.[1] ?? '?';
     f.calls.push({ operation, variables, headers: init?.headers as Record<string, string> });
     const hit = responses.find((r) => r.operation === operation && JSON.stringify(r.variables) === JSON.stringify(variables));
     if (!hit) throw new Error(`sem resposta gravada para ${operation} ${JSON.stringify(variables)}`);
