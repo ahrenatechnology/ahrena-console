@@ -147,7 +147,7 @@ Todos no **M1**:
 | 2.6 | User story, API | MCP por conta: parâmetro `account` em todas as ferramentas, conta em cada sessão, divisão por conta no `fleet_overview` e no `sessions_needing_attention` | 2.1, 2.2, 1.12 |
 | 3.11 | User story, frontend | Artefato por conta: seletor na moldura, coluna Conta, Dashboard, Custo, mural e kanban por conta | 3.1, 2.6 |
 | 3.12 | Tech task | Validar o artefato e a ponte `host:` com o Desktop em cada org, e decidir entre um link por org ou um só | 3.1 |
-| 4.7 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão | 4.1, 1.13 |
+| 4.8 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão | 4.1, 1.13 |
 | 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil (inclusive credencial no ambiente) e guia de contas simultâneas com alias e `remote-control` por conta. Medir se o Desktop e o terminal podem ficar em contas diferentes na mesma `~/.claude` | 6.2, 1.15 |
 | 6.12 | User story, frontend | Bandeja e notificações por conta: menu agrupado e rótulo da conta na notificação | 6.7, 6.8, 1.12 |
 | 7.12 | Tech task | Contrato do hub com conta: `accountKey` com sal do time, conta em cada sessão do lote, política de envio e destino por conta na máquina, conta nova em `nada` | 1.12 |

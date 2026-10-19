@@ -162,7 +162,7 @@ Estratégia: **o painel olha a sessão em que está aberto.** O projeto, a frota
 | 4.4 | Tech task | Layout responsivo validado em larguras de 36 a 160 colunas, e estado salvo compatível entre versões | painel sem estouro | 4.1, 4.2 |
 | 4.5 | Tech task | Status line `ahrena-console ● N ao vivo`, com aviso de versão (Podium) | estado sempre visível | 4.1 |
 | 4.6 | Tech task | Consumo baixo: o painel consulta só enquanto está aberto e só a própria sessão, com medição repetível | painel que não pesa no Mac | — |
-| 4.7 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | painel multiconta | 4.1, 1.13 |
+| 4.8 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | painel multiconta | 4.1, 1.13 |
 
 ## Épico 5 · Integração com o GitHub (M1)
 
