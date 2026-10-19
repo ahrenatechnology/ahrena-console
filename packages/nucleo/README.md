@@ -14,7 +14,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/adapters/sqlite/](src/adapters/sqlite/) | Adaptador SQLite e as migrações do esquema |
 | [src/ingest/hooks/](src/ingest/hooks/) | Receptor dos hooks do Claude Code e a configuração de hooks do plugin (item 1.4) |
 | [test/storage-contract.ts](test/storage-contract.ts) | Contrato da porta. Todo adaptador roda a mesma bateria |
-| [src/ingest/historico/](src/ingest/historico/) | Importação do histórico de `~/.claude/projects` (item 1.2) |
+| [src/ingest/historico/](src/ingest/historico/) | Importação do histórico de `~/.claude/projects` (item 1.2) e o seguidor em tempo real (item 1.3) |
 | [src/github/](src/github/) | Trabalho do GitHub: hierarquia, PR, CI e review por item (seção abaixo) |
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
 
@@ -24,8 +24,28 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 
 - **Ids estáveis:** sessão é o `sessionId`; agente principal `<sessão>:main`; subagente `<sessão>:<agentId>`; evento `jsonl:<uuid da linha>`.
 - **Sem contar duas vezes:** o streaming grava a mesma mensagem em várias linhas, com uso parcial e final. O uso é recalculado a partir dos eventos da sessão, deduplicado por `message.id`, ficando a entrada final. Mensagens `<synthetic>` não têm custo. Escrita de cache vai para 5 min ou 1 h pelo `cache_creation`; sem ele, conta como 5 min.
-- **Retoma de onde parou:** o cursor de cada arquivo (bytes lidos, tamanho, mtime) fica em `metadata.importacao` da sessão ou do subagente e é gravado por último. Arquivo sem mudança não é relido; linha pela metade espera a próxima rodada; arquivo reescrito menor é relido do início, e os ids absorvem a repetição.
-- **Não decide estado:** sessão nova nasce `completed` com `source: 'import'`. Sessão que já existe (dos hooks) mantém status, espera e `metadata`. Seguir em tempo real é o item 1.3; a máquina de estados, o 1.5; o custo, o 1.6.
+- **Retoma de onde parou:** o cursor de cada arquivo (bytes lidos, tamanho, mtime e os 64 bytes antes do cursor) fica em `metadata.importacao` da sessão ou do subagente e é gravado por último. Arquivo sem mudança não é relido; linha pela metade espera a próxima rodada; arquivo reescrito, menor ou maior, é relido do início (`filesRewound`), e os ids absorvem a repetição.
+- **Não decide estado:** sessão nova nasce `completed` com `source: 'import'`. Sessão que já existe (dos hooks) mantém status, espera e `metadata`. A máquina de estados é o item 1.5; o custo, o 1.6.
+
+`importHistory({ storage, files })` importa só os arquivos dados, sem varrer a raiz.
+
+## Seguir em tempo real
+
+`followTranscripts({ storage })` observa `~/.claude/projects` e importa só o que mudou, pelo mesmo importador.
+
+```ts
+import { followTranscripts } from '@ahrena-console/nucleo';
+
+const follower = followTranscripts({ storage, onError: console.error });
+await follower.start();  // importação completa e, daí em diante, só o que mudar
+await follower.sync();   // varre agora, sem esperar o intervalo
+await follower.stop();   // espera a rodada em andamento; pode chamar start() de novo
+```
+
+- **Dois avisos:** `fs.watch` recursivo dá o arquivo que mudou em poucas centenas de ms (`debounceMs`, padrão 150). A varredura a cada `scanIntervalMs` (padrão 5 s) é a reserva, porque o watch perde avisos no macOS e não existe enquanto a raiz não existe; ela também religa o watch.
+- **Custo baixo:** o seguidor guarda tamanho e mtime de cada arquivo em memória e só entrega ao importador o que mudou. Rodada sem mudança faz só `stat`, sem ler arquivo nem consultar o banco: com 300 sessões, poucos ms.
+- **Pastas novas:** aviso de uma pasta que ainda não tem transcript conhecido (projeto, sessão, `subagents`) pede uma varredura, para achar o subagente novo mesmo que o arquivo dele não avise.
+- **Sem sobreposição:** as rodadas são em fila. Se uma falhar, `onError` recebe o erro e os arquivos dela voltam a ser tentados na próxima.
 
 ## Estados
 
