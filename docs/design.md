@@ -22,7 +22,7 @@ A paleta parte da do The Forward Deployed Engineer ([brand/tokens.json](brand/to
 | Papel | Cor | Hex | Origem |
 | --- | --- | --- | --- |
 | Destaque, ações, barras | laranja | `#f47720` | The Forward Deployed Engineer (fica) |
-| Institucional, réguas, seleção | rosa | `#df285d` | Barte (`--bg-brand` do `barte-design-system`); substitui o roxo `#552973` desde 2026-10-18 |
+| Institucional, réguas, seleção | rosa | `#df285d` | Rosa da marca; substitui o roxo `#552973` desde 2026-10-18 |
 | Sucesso (CI e sessão concluída) | verde | `#1baf7a` | Cor do CI |
 | Pendente (CI e sessão esperando) | amarelo | `#ffc30a` | Cor do CI |
 | Erro, falha (CI e sessão com erro) | vermelho | `#e34948` | Cor do CI, reaproveitada (ver abaixo) |
