@@ -212,6 +212,8 @@ export type Vista = {
   ajustando?: boolean
   /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
   ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
+  /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
+  compactar?: 'confirmar' | 'compactando' | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
   escopo: 'familia' | 'maquina' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */

@@ -50,7 +50,7 @@ import {
   tokens,
   usd,
 } from './formato'
-import { alturaDaGrade, BORDA_DO_CARD, distribuir, LINHAS_DO_CARD, linhasDoTexto, type Peca } from './altura'
+import { alturaDaGrade, BORDA_DO_CARD, distribuir, LINHAS_DO_CARD, linhasDoTexto, type Etapa, type Peca } from './altura'
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
@@ -59,7 +59,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.8'
+export const VERSAO_DO_PLUGIN = '0.0.9'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -110,6 +110,8 @@ export type Acoes = {
   escopo: (valor: string) => void
   tentar: () => void
   irPara: (p: PrecisaDeVoce) => void
+  /** O "Compactar" do card Contexto: abre a confirmação, confirma ou cancela. */
+  compactar: (passo: 'pedir' | 'confirmar' | 'cancelar') => void
   /** Abre a conversa no Claude Desktop pela API local (`open`, no macOS). */
   abrirSessao: (local: string, titulo: string) => void
   verDecisoes: () => void
@@ -437,27 +439,87 @@ function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | st
   )
 }
 
-function cardContexto(c: Contexto, p: Painel | null, linhas = LINHAS_DO_CARD) {
-  const { Box, Svg } = c.el
+/** A partir daqui, o "Compactar" ganha destaque: "Compactar agora", na cor de atenção. */
+export const CONTEXTO_ALTO = 80
+/** Linhas do card Contexto inteiro: as do desenho mais a do "Compactar". */
+const LINHAS_DO_CONTEXTO = LINHAS_DO_CARD + 1
+
+/** O "Compactar" da sessão em que o painel está aberto: sempre no card; em destaque a partir de 80%. */
+function botaoCompactar(c: Contexto, pct: number) {
+  const { Button, Text } = c.el
+  if (c.vista.compactar === 'compactando') {
+    return (
+      <Text key="compactando" mono size="footnote" color={AMARELO}>
+        compactando…
+      </Text>
+    )
+  }
+  const alto = pct >= CONTEXTO_ALTO
+  return alto ? (
+    <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
+  ) : (
+    <Button key="compactar" plain onPress={() => c.acoes.compactar('pedir')}>
+      <Text mono size="footnote" color={LARANJA} underline>
+        Compactar
+      </Text>
+    </Button>
+  )
+}
+
+function cardContexto(c: Contexto, p: Painel | null, linhas = LINHAS_DO_CONTEXTO) {
+  const { Box, Svg, Text } = c.el
   const ctx = p?.contexto ?? null
   const pct = ctx?.pct ?? 0
-  // Sem altura: só o resumo, numa linha.
-  if (linhas < LINHAS_DO_CARD) return cartao(c, 'card-contexto', [cabecalho(c, '◠', 'CONTEXTO', `${pct}% · ${usd(p?.custo?.usd ?? 0)}`)], BORDA, FUNDO_CARTAO, linhas)
-  const corCtx = pct >= 80 ? VERMELHO : LARANJA
+  const alto = pct >= CONTEXTO_ALTO
+  // Sem altura: só o resumo, numa linha, com o "Compactar" à direita.
+  if (linhas < LINHAS_DO_CONTEXTO) {
+    return cartao(c, 'card-contexto', [
+      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+        <Text mono size="caption" weight="semibold" dimColor={!alto} color={alto ? VERMELHO_TEXTO : undefined} wrap="truncate-end">
+          ◠ {pct}% · {usd(p?.custo?.usd ?? 0)}
+        </Text>
+        {botaoCompactar(c, pct)}
+      </Box>,
+    ], alto ? VERMELHO : BORDA, FUNDO_CARTAO, linhas)
+  }
+  const corCtx = alto ? VERMELHO : LARANJA
   const erro = p?.sessao?.status === 'error'
   const bg = p?.background ?? { total: 0, primeiro: null }
   const tk = p?.tokens
   return cartao(c, 'card-contexto', [
     cabecalho(c, '◠', 'CONTEXTO E CUSTO', 'estimativa'),
     <Box flexDirection="row" gap={1}>
-      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, pct >= 80 ? VERMELHO_TEXTO : undefined)}
+      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
       {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
     </Box>,
     <Box flexDirection="row" gap={1}>
       {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
       {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
     </Box>,
-  ])
+    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+      <Text mono size="footnote" color={alto ? VERMELHO_TEXTO : undefined} dimColor={!alto} wrap="truncate-end">
+        {alto ? 'contexto alto' : 'resumir a conversa'}
+      </Text>
+      {botaoCompactar(c, pct)}
+    </Box>,
+  ], alto ? VERMELHO : BORDA)
+}
+
+/** A confirmação do "Compactar", no topo: age só nesta sessão. */
+function faixaCompactar(c: Contexto, largura: number) {
+  if (c.vista.compactar !== 'confirmar') return null
+  const { Box, Button, Text } = c.el
+  return (
+    <Box key="confirmar-compactar" flexDirection="column" width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1} gap="xs">
+      <Text mono weight="semibold" wrap="truncate-end">
+        Compactar a conversa desta sessão?
+      </Text>
+      <Box flexDirection="row" gap={1}>
+        <Button key="compactar-sim" label="Compactar" variant="primary" onPress={() => c.acoes.compactar('confirmar')} />
+        <Button key="compactar-nao" label="Cancelar" variant="secondary" onPress={() => c.acoes.compactar('cancelar')} />
+      </Box>
+    </Box>
+  )
 }
 
 function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_DO_CARD) {
@@ -686,12 +748,13 @@ function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
 }
 
 /** "+N", que abre a lista completa. */
-function maisItens(c: Contexto, key: string, n: number, texto: string, abrir: () => void) {
+/** "ver todas as 15 sessões filhas": abre a lista completa, dizendo do que é e quantas são. */
+function maisItens(c: Contexto, key: string, texto: string, abrir: () => void) {
   const { Button, Text } = c.el
   return (
     <Button key={key} plain onPress={abrir}>
-      <Text mono size="footnote" color={LARANJA} underline>
-        +{n} {texto}
+      <Text mono size="footnote" color={LARANJA} underline wrap="truncate-end">
+        {texto}
       </Text>
     </Button>
   )
@@ -746,7 +809,7 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes'], linhas = LINHAS_DO
     cabecalho(c, '⑂', 'SUBAGENTES', direita),
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={200} height={4} />,
     ...mostrar.map((i) => linhaDeSubagente(c, i)),
-    fora > 0 && maisItens(c, 'ver-subagentes', fora, fora === 1 ? 'subagente' : 'subagentes', c.acoes.verSubagentes),
+    fora > 0 && maisItens(c, 'ver-subagentes', `ver todos os ${todos.length} subagentes`, c.acoes.verSubagentes),
   ], BORDA, FUNDO_CARTAO, linhas)
 }
 
@@ -802,11 +865,15 @@ function pecaFilhas(c: Pick<Contexto, 'nucleo'>, filhas: FilhaDoPainel[]): Peca 
   return { id: 'filhas', minimo: 2, inteiro: 1 + filhas.reduce((a, f) => a + linhasDaFilha(c, f), 0) }
 }
 
-function cardFilhas(c: Contexto, filhas: FilhaDoPainel[], linhas = LINHAS_DO_CARD) {
+/** As filhas mais recentes primeiro (a última atividade de cada uma). */
+const filhasEmOrdem = (filhas: FilhaDoPainel[]) => [...filhas].sort((a, b) => (b.desde ?? '').localeCompare(a.desde ?? ''))
+
+function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[], linhas = LINHAS_DO_CARD) {
+  const filhas = filhasEmOrdem(todasAsFilhas)
   const { Text } = c.el
   if (filhas.length === 0 || linhas < 2) {
     return cartao(c, 'card-filhas', [
-      cabecalhoQueAbre(c, 'ver-filhas', filhas.length ? c.acoes.verFilhas : null, '⑃', 'SESSÕES FILHAS', String(filhas.length)),
+      cabecalhoQueAbre(c, 'ver-filhas', filhas.length ? c.acoes.verFilhas : null, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
       filhas.length === 0 && linhas >= 2 && (
         <Text mono size="footnote" dimColor>
           nenhuma aberta por esta
@@ -818,10 +885,10 @@ function cardFilhas(c: Contexto, filhas: FilhaDoPainel[], linhas = LINHAS_DO_CAR
   const mostrar = filhas.slice(0, n)
   const fora = filhas.length - mostrar.length
   return cartao(c, 'card-filhas', [
-    cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length)),
+    cabecalho(c, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
     // O nome no card é cortado só no link (que não quebra linha); o resto quebra.
     ...mostrar.map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3)),
-    fora > 0 && maisItens(c, 'ver-filhas', fora, fora === 1 ? 'sessão' : 'sessões', c.acoes.verFilhas),
+    fora > 0 && maisItens(c, 'ver-filhas', `ver todas as ${filhas.length} sessões filhas`, c.acoes.verFilhas),
   ], BORDA, FUNDO_CARTAO, linhas)
 }
 
@@ -861,7 +928,7 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
   const itens =
     qual === 'subagentes'
       ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x, true))
-      : p.filhas.slice(0, n).map((f) => linhaDeFilha(c, f, g.largura, true))
+      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => linhaDeFilha(c, f, g.largura, true))
   const titulo = qual === 'subagentes' ? `SUBAGENTES · ${p.subagentes.itens.length}` : `SESSÕES FILHAS · ${p.filhas.length}`
   return [
     rotuloDaSecao(c, g.largura, titulo, chip(c, `chip-${qual}`, qual === 'subagentes' ? plural(p.subagentes.ativos, 'ativo', 'ativos') : 'desta sessão')),
@@ -1367,12 +1434,30 @@ function voltar(c: Contexto, largura: number, para: () => void = c.acoes.fechar,
 export const PRIORIDADE_DA_ALTURA = ['sessao', 'plano', 'contexto', 'trabalho', 'subagentes', 'filhas'] as const
 
 /**
+ * As etapas da distribuição: a prioridade do dono, com as listas aparecendo na tela principal
+ * (pedido do Fernando): depois do Plano, cada lista recebe o cabeçalho, alguns itens e o "ver
+ * todas"; Contexto e Trabalho vêm em seguida; a sobra volta para as listas.
+ */
+const ITENS_CEDO = 2
+const ETAPAS_DA_ALTURA: Etapa[] = [
+  'sessao',
+  'plano',
+  { id: 'subagentes', ate: 2 + ITENS_CEDO + 1 },
+  { id: 'filhas', ate: 1 + ITENS_CEDO + 1 },
+  'contexto',
+  'trabalho',
+  'subagentes',
+  'filhas',
+]
+
+/**
  * As linhas do painel fora da grade de cards: o respiro, o topo, o rótulo, as faixas, as linhas
  * de decisões e de "precisam de você", o rodapé e o espaço entre eles.
  */
-function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boolean): number {
+function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boolean, compactar: Vista['compactar'] = null): number {
   const util = g.largura - 4
   const partes = [4, 1]
+  if (compactar === 'confirmar') partes.push(4)
   const r = p.decisoes?.retomada
   if (r && r.n > 0) partes.push(2 + 1 + (estreito ? 3 : 2) + 1)
   const f = p.sessao?.faixa
@@ -1387,7 +1472,8 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
 function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abrir?: () => void } {
   switch (id) {
     case 'contexto':
-      return { texto: `◠ ${p.contexto?.pct ?? 0}% · ${usd(p.custo?.usd ?? 0)}` }
+      // O "Compactar" sempre existe: aqui, o próprio resumo o abre.
+      return { texto: `◠ ${p.contexto?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
     case 'trabalho': {
       const t = p.trabalho
       return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'}` }
@@ -1436,23 +1522,23 @@ const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largur
  */
 function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean): { linhas: Map<string, number>; fora: string[] } {
   // Inteiro, o card tem pelo menos as 9 linhas do desenho; o resumo, só o que desenha.
-  const comODesenho = (x: Peca): Peca => ({ ...x, inteiro: Math.max(LINHAS_DO_CARD, x.inteiro) })
+  const comODesenho = (x: Peca): Peca => ({ ...x, desenho: Math.max(LINHAS_DO_CARD, x.inteiro) })
   const todas: Peca[] = [
     ...(p.sessao ? [pecaSessao(p.sessao, c.agora)] : []),
-    { id: 'contexto', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true },
+    { id: 'contexto', minimo: LINHAS_DO_CONTEXTO, inteiro: LINHAS_DO_CONTEXTO, tudoOuNada: true },
     { id: 'trabalho', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true },
     pecaPlano(p.plano, p.planos ?? [], estreito),
     pecaSubagentes(p.subagentes),
     pecaFilhas(c, p.filhas),
   ].map(comODesenho)
   // Sem a altura do painel, cada card aparece inteiro.
-  if (c.linhas === undefined) return { linhas: distribuir(todas, g.porLinha, Number.POSITIVE_INFINITY, PRIORIDADE_DA_ALTURA), fora: [] }
-  const base = c.linhas - linhasForaDaGrade(p, g, estreito) - FOLGA
+  if (c.linhas === undefined) return { linhas: distribuir(todas, g.porLinha, Number.POSITIVE_INFINITY, ETAPAS_DA_ALTURA), fora: [] }
+  const base = c.linhas - linhasForaDaGrade(p, g, estreito, c.vista?.compactar) - FOLGA
   const fora: string[] = []
   for (;;) {
     const pecas = todas.filter((x) => !fora.includes(x.id))
     const disponivel = base - linhasDosResumos(c, p, fora, g.largura)
-    const linhas = distribuir(pecas, g.porLinha, disponivel, PRIORIDADE_DA_ALTURA)
+    const linhas = distribuir(pecas, g.porLinha, disponivel, ETAPAS_DA_ALTURA)
     const sessao = pecas.find((x) => x.id === 'sessao')
     const cabe = alturaDaGrade(pecas.map((x) => linhas.get(x.id)!), g.porLinha) <= disponivel
     const sessaoOk = !sessao || linhas.get('sessao')! >= sessao.minimo
@@ -1472,7 +1558,7 @@ export function linhasDaVisao(c: Contexto, p: Painel): number {
   const estreito = g.porLinha === 1
   const { linhas, fora } = alturaDosCards(c, p, g, estreito)
   const ids = [...(p.sessao ? ['sessao'] : []), 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'].filter((id) => !fora.includes(id))
-  return linhasForaDaGrade(p, g, estreito) + alturaDaGrade(ids.map((id) => linhas.get(id)!), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
+  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + alturaDaGrade(ids.map((id) => linhas.get(id)!), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
 }
 
 /** O painel inteiro, no desktop. */
@@ -1483,12 +1569,11 @@ export function desenhar(c: Contexto): RenderElement {
   const p = c.leitura.painel
   const offline = c.leitura.offline
   const s = p?.sessao ?? null
-  const proxima = c.leitura.proximaEm ? Math.max(1, Math.ceil((c.leitura.proximaEm - c.agora) / 1000)) : 5
 
   let corpo: (RenderElement | null)[]
   if (offline || !p) {
     corpo = [
-      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', offline ? `nova tentativa em ${proxima} s` : 'lendo…')),
+      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', offline ? 'nova tentativa a cada 5 s' : 'lendo…')),
       ...(offline ? telaOffline(c, g, estreito) : []),
     ]
   } else if (c.vista.tela === 'precisam') {
@@ -1516,6 +1601,7 @@ export function desenhar(c: Contexto): RenderElement {
       rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', 'auto · 5 s'), s?.conta),
       faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,
+      faixaCompactar(c, g.largura),
       <Box key="cards" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
         {cards}
       </Box>,

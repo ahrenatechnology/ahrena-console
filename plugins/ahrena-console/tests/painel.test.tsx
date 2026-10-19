@@ -150,7 +150,8 @@ test('P2 e P3: a faixa traz a pergunta ou a permissão; P5: o erro', async ($, o
 
   f.estado.cenario = 'p5'
   await f.relogio.advance(5_000)
-  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  // Alto o bastante para tudo aparecer inteiro: este teste é do conteúdo, não da altura.
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: 120 } } })
   expect(await ui.find({ type: 'Text', text: /API 529 · overloaded_error/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /mande uma mensagem na conversa para retomar/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /CI ✕ falhou/ })).toBeDefined()
@@ -211,7 +212,7 @@ test('P8: sem o núcleo, o painel diz e tenta de novo sozinho', async ($, on) =>
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     expect(await ui.find({ key: 'offline' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Sem conexão com o núcleo/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /nova tentativa em \d s/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /nova tentativa a cada 5 s/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /sem dados de outras sessões/ })).toBeDefined()
     await ui.unmount()
   }
@@ -484,9 +485,9 @@ test('altura: nas listas, o que aparece mais o "+N" é sempre o total, e o "+N" 
     for (const linhas of ALTURAS) {
       const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
       const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-')).length
-      if (subs > 0) expect(subs + (await n(ui, 'ver-subagentes', /^\+\d+ subagentes?$/))).toBe(15)
+      if (subs > 0 && subs < 15) expect(await ui.find({ type: 'Text', text: 'ver todos os 15 subagentes' })).toBeDefined()
       const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).length
-      if (filhas > 0) expect(filhas + (await n(ui, 'ver-filhas', /^\+\d+ sess(ão|ões)$/))).toBe(painel.filhas.length)
+      if (filhas > 0 && filhas < painel.filhas.length) expect(await ui.find({ type: 'Text', text: `ver todas as ${painel.filhas.length} sessões filhas` })).toBeDefined()
       const planos = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
       const anteriores = (painel.planos ?? []).filter((x) => x.resultado !== 'atual').length
       if (planos > 0) expect(planos + (await n(ui, 'ver-planos', /^\+\d+ planos? anteriores?$/))).toBe(anteriores)
@@ -586,5 +587,114 @@ test('#131: plano sem passo em andamento mostra "Próximo: …" numa linha; sem 
   await f.relogio.advance(5_000)
   ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await ui.find({ type: 'Text', text: /concluído ✓/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131 clique duplo: com os mesmos dados, o polling não regrava o atom, e o desenho (com os handles dos botões) fica o mesmo', async ($, on) => {
+  // Conta as gravações do atom `leitura`: cada uma redesenha o pane e troca os handles dos botões.
+  let gravacoes = 0
+  on('state.set', async (_$: unknown, e: { key?: string; ref?: { key?: string } }, next: (e: unknown) => unknown) => {
+    if ((e.ref?.key ?? e.key) === 'leitura') gravacoes++
+    return next(e)
+  })
+  const f = await abrir($, on, { cenario: 'p1' })
+  await f.relogio.advance(5_000)
+  const antes = gravacoes
+  expect(antes).toBeGreaterThan(0)
+  // Seis ticks, mesma resposta (só o geradoEm muda): nenhuma gravação, nenhum redesenho.
+  for (let i = 0; i < 6; i++) {
+    f.estado.painel = { ...CENARIOS.p1, geradoEm: new Date(AGORA + i * 5_000).toISOString() }
+    await f.relogio.advance(5_000)
+  }
+  expect(gravacoes).toBe(antes)
+  // Dados novos: grava, e o painel redesenha.
+  f.estado.painel = { ...CENARIOS.p1, precisam: { ...CENARIOS.p1.precisam, total: 9 } }
+  await f.relogio.advance(5_000)
+  expect(gravacoes).toBe(antes + 1)
+  // Um minuto sem mudança: um redesenho só, pelos "há N min".
+  await f.relogio.advance(65_000)
+  expect(gravacoes).toBe(antes + 2)
+})
+
+test('#131: as sessões filhas aparecem direto na tela principal, as mais recentes, com "ver todas as N sessões filhas"', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const filhas = Array.from({ length: 15 }, (_, i) => ({ ...p4.filhas[0]!, id: `sim-filha-${i}`, titulo: `filha-sintetica-${i}`, desde: new Date(AGORA - (15 - i) * 60_000).toISOString() }))
+  f.estado.painel = { ...p4, filhas }
+  await f.relogio.advance(5_000)
+  for (const base of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 60) })
+    const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))
+    expect(linhas.length).toBeGreaterThanOrEqual(2)
+    // A mais recente primeiro.
+    expect(linhas[0]!.key).toBe('filha-sim-filha-14')
+    expect(await ui.find({ type: 'Text', text: /15 sessões/ })).toBeDefined()
+    // Se nem todas couberem, o "ver todas" diz o que são e quantas.
+    if (linhas.length < 15) expect(await ui.find({ type: 'Text', text: 'ver todas as 15 sessões filhas' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('Compactar: sempre no card; a partir de 80% em destaque; pede confirmação; compacta só esta sessão e diz o resultado', async ($, on) => {
+  let chamadas = 0
+  let soltar: (() => void) | null = null
+  let recusar: string | null = null
+  let vetar: string | null = null
+  // O engine falso: a compactação desta sessão (o que o /compact faz), ou a recusa no meio de um turno.
+  on('session.compact', async () => {
+    chamadas++
+    if (vetar) return { skip: vetar }
+    if (recusar) throw new Error(recusar)
+    await new Promise<void>((r) => (soltar = r))
+    return { messages: [{ role: 'user', text: 'resumo sintético da conversa', toolUses: [] }], tokensBefore: 180_000, tokensAfter: 40_000 }
+  })
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  // Abaixo de 80%: o botão discreto.
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ key: 'compactar' })).toBeDefined()
+  await ui.unmount()
+
+  // A partir de 80%: "Compactar agora", em destaque.
+  f.estado.painel = { ...p1, contexto: { usados: 172_000, limite: 200_000, pct: 86 } }
+  await f.relogio.advance(5_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  const agora = await ui.find({ key: 'compactar' })
+  expect(agora?.props.label).toBe('Compactar agora')
+  expect(agora?.props.variant).toBe('primary')
+
+  // Cancelar não compacta.
+  await ui.press({ key: 'compactar' })
+  expect(await ui.find({ type: 'Text', text: 'Compactar a conversa desta sessão?' })).toBeDefined()
+  await ui.press({ key: 'compactar-nao' })
+  expect(await ui.find({ key: 'confirmar-compactar' })).toBeUndefined()
+  expect(chamadas).toBe(0)
+
+  // Confirmar: "compactando…" até o engine terminar; depois, o resultado.
+  await ui.press({ key: 'compactar' })
+  await ui.press({ key: 'compactar-sim' })
+  for (let i = 0; i < 20 && !soltar; i++) await f.relogio.advance(10)
+  expect(chamadas).toBe(1)
+  expect(await ui.find({ type: 'Text', text: 'compactando…' })).toBeDefined()
+  soltar!()
+  for (let i = 0; i < 20 && !(f.toasts.at(-1) ?? '').startsWith('Conversa'); i++) await f.relogio.advance(10)
+  expect(f.toasts.at(-1)).toBe('Conversa compactada: de 180k para 40k tokens.')
+  expect(await ui.find({ type: 'Text', text: 'compactando…' })).toBeUndefined()
+
+  // Um hook vetou: o painel diz o motivo do veto.
+  vetar = 'no meio de um turno'
+  await ui.press({ key: 'compactar' })
+  await ui.press({ key: 'compactar-sim' })
+  for (let i = 0; i < 20 && !(f.toasts.at(-1) ?? '').startsWith('A conversa não'); i++) await f.relogio.advance(10)
+  expect(f.toasts.at(-1)).toBe('A conversa não foi compactada: no meio de um turno.')
+
+  // O engine recusou (no meio de um turno, ele rejeita a chamada): o painel diz o motivo.
+  vetar = null
+  recusar = 'a turn is running'
+  await ui.press({ key: 'compactar' })
+  await ui.press({ key: 'compactar-sim' })
+  for (let i = 0; i < 20 && !(f.toasts.at(-1) ?? '').startsWith('Não deu'); i++) await f.relogio.advance(10)
+  expect(f.toasts.at(-1)).toMatch(/^Não deu para compactar agora: .+/)
+  expect(await ui.find({ key: 'compactar' })).toBeDefined()
   await ui.unmount()
 })

@@ -21,6 +21,8 @@ export interface Peca {
   inteiro: number
   /** Só o resumo ou inteiro, sem meio-termo (cards de KPIs). */
   tudoOuNada?: boolean
+  /** A altura do desenho, quando sobra espaço depois de todos inteiros (no fim, a menor prioridade). */
+  desenho?: number
 }
 
 /** Linhas que a grade ocupa: por linha da grade, a borda mais o card mais alto; e o espaço entre elas. */
@@ -32,23 +34,44 @@ export function alturaDaGrade(linhas: readonly number[], porLinha: number): numb
 }
 
 /**
- * Distribui `disponivel` linhas entre as peças da grade (na ordem em que aparecem), dando primeiro
- * às de `prioridade`. Devolve as linhas internas de cada peça, já com a sobra da fileira.
+ * Uma etapa da prioridade: o id da peça, ou o id com um teto (`ate`) para a peça receber parte
+ * agora e o resto numa etapa mais adiante (as listas: alguns itens cedo, o resto no fim).
  */
-export function distribuir(pecas: readonly Peca[], porLinha: number, disponivel: number, prioridade: readonly string[]): Map<string, number> {
+export type Etapa = string | { id: string; ate: number }
+
+/**
+ * Distribui `disponivel` linhas entre as peças da grade (na ordem em que aparecem), dando primeiro
+ * às etapas de `prioridade`. Devolve as linhas internas de cada peça, já com a sobra da fileira.
+ */
+export function distribuir(pecas: readonly Peca[], porLinha: number, disponivel: number, prioridade: readonly Etapa[]): Map<string, number> {
   const linhas = pecas.map(() => 1)
   const cabe = () => alturaDaGrade(linhas, porLinha) <= disponivel
-  const ordem = [...prioridade.filter((id) => pecas.some((p) => p.id === id)), ...pecas.map((p) => p.id).filter((id) => !prioridade.includes(id))]
-  for (const id of ordem) {
-    const i = pecas.findIndex((p) => p.id === id)
+  const etapas: { id: string; ate: number }[] = prioridade
+    .map((e) => (typeof e === 'string' ? { id: e, ate: Number.POSITIVE_INFINITY } : e))
+    .filter((e) => pecas.some((p) => p.id === e.id))
+  for (const p of pecas) if (!etapas.some((e) => e.id === p.id)) etapas.push({ id: p.id, ate: Number.POSITIVE_INFINITY })
+  for (const etapa of etapas) {
+    const i = pecas.findIndex((p) => p.id === etapa.id)
     const p = pecas[i]!
-    const opcoes = p.tudoOuNada ? [p.inteiro] : Array.from({ length: Math.max(0, p.inteiro - p.minimo + 1) }, (_, k) => p.inteiro - k)
+    const teto = Math.min(p.inteiro, etapa.ate)
+    if (teto <= linhas[i]!) continue
+    const opcoes = p.tudoOuNada ? (teto === p.inteiro ? [p.inteiro] : []) : Array.from({ length: Math.max(0, teto - Math.max(p.minimo, linhas[i]! + 1) + 1) }, (_, k) => teto - k)
+    const antes = linhas[i]!
     for (const n of opcoes) {
       if (n <= 1) break
       linhas[i] = n
       if (cabe()) break
-      linhas[i] = 1
+      linhas[i] = antes
     }
+  }
+  // Sobrou espaço: os cards ganham a altura do desenho, na ordem da prioridade.
+  for (const etapa of etapas) {
+    const i = pecas.findIndex((p) => p.id === etapa.id)
+    const p = pecas[i]!
+    if (!p.desenho || linhas[i]! < p.inteiro || linhas[i]! >= p.desenho) continue
+    const antes = linhas[i]!
+    linhas[i] = p.desenho
+    if (!cabe()) linhas[i] = antes
   }
   // A sobra da fileira: as peças que podem crescer usam a altura do card mais alto da linha.
   for (let i = 0; i < pecas.length; i += porLinha) {
