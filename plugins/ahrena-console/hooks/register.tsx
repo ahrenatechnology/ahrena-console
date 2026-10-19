@@ -43,12 +43,19 @@ function normalizarLeitura(v: unknown): Leitura {
   return { ...LEITURA_VAZIA, ...r, painel }
 }
 
+const TELAS: readonly Vista['tela'][] = ['sessao', 'precisam', 'decisoes', 'planos', 'decisao', 'subagentes', 'filhas']
+
 function normalizarVista(v: unknown): Vista {
   const r = (v ?? {}) as Partial<Vista>
+  const decisao = r.decisao && typeof r.decisao === 'object' && typeof r.decisao.id === 'string' ? r.decisao : null
+  const u = r.ultimaAcao
   return {
-    tela: r.tela === 'precisam' || r.tela === 'decisoes' || r.tela === 'planos' ? r.tela : 'sessao',
+    tela: TELAS.includes(r.tela as Vista['tela']) && (r.tela !== 'decisao' || decisao) ? (r.tela as Vista['tela']) : 'sessao',
     escopo: r.escopo === 'familia' || r.escopo === 'maquina' ? r.escopo : null,
     escopoDecisoes: ESCOPOS_DE_DECISAO.includes(r.escopoDecisoes as EscopoDasDecisoes) ? (r.escopoDecisoes as EscopoDasDecisoes) : null,
+    decisao,
+    ajustando: r.ajustando === true,
+    ultimaAcao: u && typeof u.id === 'string' && typeof u.em === 'number' ? u : null,
   }
 }
 
@@ -132,29 +139,52 @@ function parar($: Engine) {
 }
 
 /** Confirmar ou Descartar uma sugerida: um POST em nome desta sessão, e a leitura de novo. */
-async function decidir($: Engine, d: DecisaoDoPainel, acao: 'confirmar' | 'descartar') {
+type AcaoNaDecisao = 'confirmar' | 'descartar' | 'ajustar' | 'desfazer'
+
+const FEITO: Record<AcaoNaDecisao, string> = {
+  confirmar: 'confirmada: passa a valer',
+  descartar: 'descartada: fica só no histórico',
+  ajustar: 'ajustada: a sua versão passa a valer',
+  desfazer: 'voltou ao que era',
+}
+
+/**
+ * Confirmar, Descartar, Ajustar (com o texto da pessoa) ou Desfazer, pela API do núcleo. Depois de
+ * uma ação, o "Desfazer" fica à vista por alguns segundos; no detalhe, a decisão aberta é a que voltou.
+ */
+async function decidir($: Engine, id: string, rotulo: string, acao: AcaoNaDecisao, texto: string | null = null) {
   try {
     const base = await endereco($)
     const query = base.includes('?') ? base.slice(base.indexOf('?')) : ''
-    const res = await $.http.fetch(`http://${nucleo}/api/decisoes/${encodeURIComponent(d.id)}/${acao}${query}`, {
+    const res = await $.http.fetch(`http://${nucleo}/api/decisoes/${encodeURIComponent(id)}/${acao}${query}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessao: await $.session.id() }),
+      body: JSON.stringify({ sessao: await $.session.id(), ...(texto === null ? {} : { texto }) }),
     })
+    const corpo = (() => {
+      try {
+        return JSON.parse(res.text ?? '') as { error?: string; decisao?: DecisaoDoPainel }
+      } catch {
+        return {}
+      }
+    })()
     if (!res.ok) {
-      const erro = (() => {
-        try {
-          return (JSON.parse(res.text ?? '') as { error?: string }).error
-        } catch {
-          return undefined
-        }
-      })()
-      $.ui.toast(`Não deu para ${acao} ${d.rotulo}: ${erro ?? `HTTP ${res.status}`}.`)
+      $.ui.toast(`Não deu para ${acao} ${rotulo}: ${corpo.error ?? `HTTP ${res.status}`}.`)
     } else {
-      $.ui.toast(`${d.rotulo} ${acao === 'confirmar' ? 'confirmada: passa a valer' : 'descartada: fica só no histórico'}.`)
+      const agora = await $.clock.now()
+      $.ui.toast(`${rotulo} ${FEITO[acao]}.`)
+      await update($, vista, (v) => {
+        const atual = normalizarVista(v)
+        return {
+          ...atual,
+          ajustando: false,
+          ultimaAcao: acao === 'desfazer' ? null : { id, rotulo, acao, em: agora },
+          decisao: atual.decisao?.id === id && corpo.decisao ? corpo.decisao : atual.decisao,
+        }
+      })
     }
   } catch {
-    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${d.rotulo} continua a confirmar.`)
+    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${rotulo} ficou como estava.`)
   }
   await consultar($)
 }
@@ -270,10 +300,17 @@ export const register: Register = (on, options) => {
           void mudarVista($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }).then(() =>
             consultar($),
           ),
-        confirmar: (d) => void decidir($, d, 'confirmar'),
-        descartar: (d) => void decidir($, d, 'descartar'),
+        confirmar: (d) => void decidir($, d.id, d.rotulo, 'confirmar'),
+        descartar: (d) => void decidir($, d.id, d.rotulo, 'descartar'),
         verNaConversa: (d) => void verNaConversa($, d),
         verPlanos: () => void mudarVista($, { tela: 'planos' }),
+        abrirDecisao: (d) => void mudarVista($, { tela: 'decisao', decisao: d, ajustando: false }),
+        voltarDecisoes: () => void mudarVista($, { tela: 'decisoes', ajustando: false }).then(() => consultar($)),
+        desfazer: (id, rotulo) => void decidir($, id, rotulo, 'desfazer'),
+        ajustar: (abrir) => void mudarVista($, { ajustando: abrir }),
+        enviarAjuste: (d, texto) => void (texto.trim() ? decidir($, d.id, d.rotulo, 'ajustar', texto) : undefined),
+        verSubagentes: () => void mudarVista($, { tela: 'subagentes' }),
+        verFilhas: () => void mudarVista($, { tela: 'filhas' }),
       },
     })
   })

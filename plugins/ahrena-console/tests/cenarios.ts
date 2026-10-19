@@ -257,6 +257,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -275,6 +276,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -705,6 +707,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "familia": [
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -725,6 +728,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -981,6 +985,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "filhas": [
       {
         "id": "sim-painel-fila-de-tarefas",
+        "local": null,
         "titulo": "fila-de-tarefas",
         "estado": "waiting",
         "motivo": "stop",
@@ -988,6 +993,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       },
       {
         "id": "sim-painel-catalogo-exemplo",
+        "local": null,
         "titulo": "catalogo-exemplo",
         "estado": "active",
         "motivo": null,
@@ -995,6 +1001,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       },
       {
         "id": "sim-painel-blog-estatico",
+        "local": null,
         "titulo": "blog-estatico",
         "estado": "completed",
         "motivo": null,
@@ -1039,6 +1046,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "familia": [
         {
           "id": "sim-painel-fila-de-tarefas",
+          "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
           "motivo": "stop",
@@ -1059,6 +1067,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-fila-de-tarefas",
+          "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
           "motivo": "stop",
@@ -1298,6 +1307,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -1316,6 +1326,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -1416,6 +1427,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -1434,6 +1446,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-painel-de-metricas",
+          "local": null,
           "titulo": "painel-de-metricas",
           "estado": "error",
           "motivo": null,
@@ -1452,6 +1465,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -1554,6 +1568,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "filhas": [
       {
         "id": "sim-painel-fila-de-tarefas",
+        "local": null,
         "titulo": "fila-de-tarefas",
         "estado": "waiting",
         "motivo": "stop",
@@ -1607,6 +1622,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "familia": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -1625,6 +1641,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-fila-de-tarefas",
+          "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
           "motivo": "stop",
@@ -1645,6 +1662,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -1663,6 +1681,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-painel-de-metricas",
+          "local": null,
           "titulo": "painel-de-metricas",
           "estado": "error",
           "motivo": null,
@@ -1681,6 +1700,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-fila-de-tarefas",
+          "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
           "motivo": "stop",
@@ -1957,6 +1977,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
           "motivo": "notification",
@@ -1975,6 +1996,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
           "motivo": "interrupted",
@@ -2014,6 +2036,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "sugerida",
         "estado": "a_confirmar",
         "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "texto": "10 cards por coluna, com \"mostrar mais\"",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "20 por coluna",
           "rolagem infinita"
@@ -2031,6 +2056,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "correcao",
         "estado": "vigente",
         "titulo": "SQLite em memória nos testes",
+        "texto": "SQLite em memória nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "Postgres no Docker"
         ],
@@ -2047,6 +2075,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "permissao",
         "estado": "vigente",
         "titulo": "Permitir npm test sem perguntar",
+        "texto": "Permitir npm test sem perguntar",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "perguntar a cada vez"
         ],
@@ -2063,6 +2094,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "pergunta",
         "estado": "substituida",
         "titulo": "Postgres no Docker nos testes",
+        "texto": "Postgres no Docker nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "SQLite em memória"
         ],
@@ -2079,6 +2113,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "plano",
         "estado": "vigente",
         "titulo": "Plano de 5 passos aprovado",
+        "texto": "Plano de 5 passos aprovado",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "plano com drag-and-drop"
         ],
@@ -2102,6 +2139,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "sugerida",
         "estado": "a_confirmar",
         "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "texto": "10 cards por coluna, com \"mostrar mais\"",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "20 por coluna",
           "rolagem infinita"
@@ -2119,6 +2159,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "correcao",
         "estado": "vigente",
         "titulo": "SQLite em memória nos testes",
+        "texto": "SQLite em memória nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "Postgres no Docker"
         ],
@@ -2135,6 +2178,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "permissao",
         "estado": "vigente",
         "titulo": "Permitir npm test sem perguntar",
+        "texto": "Permitir npm test sem perguntar",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "perguntar a cada vez"
         ],
@@ -2151,6 +2197,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "pergunta",
         "estado": "substituida",
         "titulo": "Postgres no Docker nos testes",
+        "texto": "Postgres no Docker nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "SQLite em memória"
         ],
@@ -2167,6 +2216,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "plano",
         "estado": "vigente",
         "titulo": "Plano de 5 passos aprovado",
+        "texto": "Plano de 5 passos aprovado",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "plano com drag-and-drop"
         ],
@@ -2183,6 +2235,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "pergunta",
         "estado": "vigente",
         "titulo": "Kanban só leitura, sem arrastar",
+        "texto": "Kanban só leitura, sem arrastar",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "arrastar muda o status"
         ],
@@ -2206,6 +2261,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "sugerida",
         "estado": "a_confirmar",
         "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "texto": "10 cards por coluna, com \"mostrar mais\"",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "20 por coluna",
           "rolagem infinita"
@@ -2223,6 +2281,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "correcao",
         "estado": "vigente",
         "titulo": "SQLite em memória nos testes",
+        "texto": "SQLite em memória nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "Postgres no Docker"
         ],
@@ -2239,6 +2300,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "permissao",
         "estado": "vigente",
         "titulo": "Permitir npm test sem perguntar",
+        "texto": "Permitir npm test sem perguntar",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "perguntar a cada vez"
         ],
@@ -2255,6 +2319,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "pergunta",
         "estado": "substituida",
         "titulo": "Postgres no Docker nos testes",
+        "texto": "Postgres no Docker nos testes",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "SQLite em memória"
         ],
@@ -2271,6 +2338,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "plano",
         "estado": "vigente",
         "titulo": "Plano de 5 passos aprovado",
+        "texto": "Plano de 5 passos aprovado",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "plano com drag-and-drop"
         ],
@@ -2287,6 +2357,9 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "origem": "pergunta",
         "estado": "vigente",
         "titulo": "Kanban só leitura, sem arrastar",
+        "texto": "Kanban só leitura, sem arrastar",
+        "contexto": null,
+        "desfazer": null,
         "nao": [
           "arrastar muda o status"
         ],

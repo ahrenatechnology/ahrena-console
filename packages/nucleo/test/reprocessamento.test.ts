@@ -10,7 +10,8 @@ import { after, beforeEach, describe, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate } from '../src/adapters/sqlite/migrations.ts';
-import { capturarDoTranscript, reprocessarHistorico } from '../src/api/reprocessamento.ts';
+import { capturarDoTranscript, limparDecisoes, reprocessarHistorico } from '../src/api/reprocessamento.ts';
+import { registerDecision } from '../src/decisoes/registro.ts';
 import { SqliteDecisionStore } from '../src/decisoes/sqlite.ts';
 import { importHistory } from '../src/ingest/historico/importer.ts';
 import { ingestHook } from '../src/ingest/hooks/index.ts';
@@ -132,5 +133,41 @@ describe('captura das decisões na importação', () => {
       added: [{ id: 'e1', sessionId: S, agentId: null, type: 'ToolUse', toolName: 'Bash', summary: null, data: null, createdAt: at(1) }],
     });
     assert.equal(lidas, 0);
+  });
+});
+
+describe('ruído nas decisões (#131)', () => {
+  const DISPENSADA = '[User dismissed — do not proceed, wait for next instruction]';
+
+  test('pergunta fechada sem resposta não vira decisão', async () => {
+    const { root } = projeto([
+      tx.toolUse(o('a1', 1), 'toolu_ask', 'AskUserQuestion', ASK_INPUT),
+      tx.toolResult(o('a2', 2), 'toolu_ask', 'dismissed', { toolUseResult: { questions: ASK_INPUT.questions, answers: { [ASK_INPUT.questions[0].question]: DISPENSADA } } }),
+    ]);
+    let criadas = 0;
+    await importHistory({ storage: store, root, onSession: async (s) => void (criadas += await capturarDoTranscript(decisoes, s)) });
+    assert.equal(criadas, 0);
+  });
+
+  test('a limpeza tira das listas a dispensada e a "correção" que é conversa, e encurta a que fica', async () => {
+    await store.putSession({ id: S, name: null, status: 'active', cwd: '/repo/app', model: null, source: 'startup', startedAt: at(0), endedAt: null, awaitingInputSince: null, awaitingReason: null, updatedAt: at(0), accountId: null, accountSource: null, metadata: {} });
+    const base = { sessionId: S, repo: '/repo/app', branch: 'main', alternatives: [], decidedBy: 'usuario' as const, decidedAt: at(1) };
+    const reg = async (sourceKey: string, extra: object) => (await registerDecision(decisoes, { ...base, sourceKey, topic: null, context: null, choice: 'x', origin: 'pergunta', inferred: false, ...extra } as never, at(1))).decision;
+    const dispensada = await reg('q1', { choice: DISPENSADA, topic: 'pergunta:qual banco' });
+    const conversa = await reg('prompt:p1', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Vou subir o Postgres.', choice: 'Não sei se é possível, mas seria legal, né? A gente marcar os planos já executados' });
+    const real = await reg('prompt:p2', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Sigo com o merge e crio a tag?', choice: 'Não, não solta a tag ainda. Espera o review do time.' });
+    const tocada = await reg('prompt:p3', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Vou subir o Postgres.', choice: 'Não, calma.', metadata: { painel: { acao: 'descartar' } } });
+
+    const r = await limparDecisoes(store, decisoes, at(5));
+    assert.deepEqual(r, { ruido: 2, encurtadas: 1 });
+    assert.equal((await decisoes.getDecision(dispensada.id))?.state, 'descartada');
+    assert.equal((await decisoes.getDecision(dispensada.id))?.metadata.ruido, 'pergunta fechada sem resposta');
+    assert.equal((await decisoes.getDecision(conversa.id))?.state, 'descartada');
+    const ficou = (await decisoes.getDecision(real.id))!;
+    assert.equal(ficou.state, 'a_confirmar');
+    assert.equal(ficou.choice, 'Não, não solta a tag ainda.');
+    assert.equal(ficou.metadata.texto, 'Não, não solta a tag ainda. Espera o review do time.');
+    assert.equal((await decisoes.getDecision(tocada.id))?.state, 'a_confirmar', 'a que a pessoa já mexeu fica');
+    assert.deepEqual(await limparDecisoes(store, decisoes, at(6)), { ruido: 0, encurtadas: 0 });
   });
 });

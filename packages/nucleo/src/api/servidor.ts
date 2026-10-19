@@ -9,6 +9,8 @@
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
 // | `GET /api/decisoes/<sessão>`  | As decisões de um escopo (`?escopo=sessao|familia|branch`)  |
 // | `POST /api/decisoes/<id>/confirmar` e `/descartar` | O Confirmar e o Descartar de uma sugerida |
+// | `GET /abrir/<local_…>`        | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
+// | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -19,7 +21,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
-import { ErroDaDecisao, ESCOPOS_DAS_DECISOES } from './decisoes.ts';
+import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
@@ -108,20 +110,23 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   }
 
   // Escrita: só JSON, com a sessão no corpo; a montagem confere se a sessão enxerga a decisão.
-  async function decidir(req: IncomingMessage, res: ServerResponse, id: string, acao: 'confirmar' | 'descartar', url: URL) {
+  async function decidir(req: IncomingMessage, res: ServerResponse, id: string, acao: AcaoNaDecisao, url: URL) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
     const texto = await lerCorpo(req);
     if (texto === null) return send(res, 413, { error: 'corpo grande demais' });
     let sessao: unknown;
+    let ajuste: unknown;
     try {
-      sessao = (JSON.parse(texto) as { sessao?: unknown } | null)?.sessao;
+      const corpo = JSON.parse(texto) as { sessao?: unknown; texto?: unknown } | null;
+      sessao = corpo?.sessao;
+      ajuste = corpo?.texto;
     } catch {
       return send(res, 400, { error: 'JSON inválido' });
     }
     if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "sessao": "<id>" }' });
     try {
-      const decisao = await opts.montador.decidir(pedidoDe(sessao, url), id, acao);
+      const decisao = await opts.montador.decidir(pedidoDe(sessao, url), id, acao, typeof ajuste === 'string' ? ajuste : null);
       if (!decisao) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
       log(`decisão ${id}: ${acao} pela sessão ${sessao}`);
       send(res, 200, { decisao });
@@ -131,17 +136,27 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
   }
 
+  // O id passou pelo padrão `local_<hex e hífen>`: nada do pedido vai além dele para o endereço.
+  function abrirNoDesktop(res: ServerResponse, local: string) {
+    const destino = `claude://claude.ai/epitaxy/${local}`;
+    const corpo = `<!doctype html><meta charset="utf-8"><title>Abrindo a sessão</title><p>Abrindo a sessão no Claude Desktop… <a href="${destino}">abrir</a></p>`;
+    res.writeHead(302, { location: destino, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(corpo) });
+    res.end(corpo);
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
     if (!allowedLocalRequest(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
-    const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar)$/.exec(url.pathname);
+    const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname);
     if (escrita) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
-      return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as 'confirmar' | 'descartar', url);
+      return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as AcaoNaDecisao, url);
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+    const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
+    if (abrir) return abrirNoDesktop(res, abrir[1]);
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API });
     if (url.pathname === '/api/carga') {
       return send(res, 200, {

@@ -25,25 +25,40 @@ function falsos(on: any, base: Painel = CENARIOS.p9) {
   const status: (string | undefined)[] = []
   const painel = copia(base)
   const listas = copia(LISTAS_DO_P9) as Record<EscopoDasDecisoes, ListaDeDecisoes>
+  const fora = new Map<string, DecisaoDoPainel>()
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; headers?: Record<string, string>; body?: string } }) => {
     pedidos.push({ method: e.init?.method ?? 'GET', url: e.url, headers: e.init?.headers, body: e.init?.body })
     const url = new URL(e.url)
-    const acao = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar)$/.exec(url.pathname)
+    const acao = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname)
     if (acao) {
       const id = decodeURIComponent(acao[1]!)
+      let resposta: DecisaoDoPainel | null = null
       for (const l of Object.values(listas)) {
-        const d = l.itens.find((i) => i.id === id)
+        const d = l.itens.find((i) => i.id === id) ?? fora.get(id)
         if (!d) continue
-        l.aConfirmar--
         if (acao[2] === 'confirmar') {
+          l.aConfirmar--
           d.estado = 'vigente'
           d.confirmadaEm = new Date(AGORA).toISOString()
+          d.desfazer = 'confirmar'
           l.vigentes++
-        } else l.itens = l.itens.filter((i) => i.id !== id)
+        } else if (acao[2] === 'descartar') {
+          l.aConfirmar--
+          d.estado = 'descartada'
+          d.desfazer = 'descartar'
+          fora.set(id, d)
+          l.itens = l.itens.filter((i) => i.id !== id)
+        } else if (acao[2] === 'ajustar') {
+          d.estado = 'substituida'
+          d.desfazer = 'ajustar'
+        } else {
+          d.estado = 'a_confirmar'
+          d.desfazer = null
+          if (!l.itens.includes(d)) l.itens.unshift(d)
+        }
+        resposta = copia(d)
       }
-      painel.decisoes!.aConfirmar = 0
-      if (acao[2] === 'confirmar') painel.decisoes!.vigentes++
-      return { value: { status: 200, ok: true, headers: {}, text: '{}' } }
+      return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ decisao: resposta }) } }
     }
     const escopo = url.searchParams.get('decisoes') as EscopoDasDecisoes | null
     const corpo = painel.decisoes ? { ...painel, decisoes: { ...painel.decisoes, lista: escopo ? listas[escopo] : null } } : painel
@@ -256,4 +271,61 @@ test('P10: a faixa da retomada só aparece quando o núcleo manda, nas duas larg
   expect(await estreito.find({ key: 'escopo-decisoes' })).toBeDefined()
   await estreito.unmount()
   expect(f.status.at(-1)).toBe('ahrena-console ◐ No prompt · 4 decisões herdadas · 3 precisam de você')
+})
+
+test('#131: clicar no título abre a decisão inteira, com "← voltar" para a lista', async ($, on) => {
+  await abrir($, on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'ver-decisoes' })
+  const d = porRotulo('sessao', 'D4')
+  await ui.press({ key: `abrir-${d.id}` })
+  expect(await ui.find({ key: 'detalhe-decisao' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /DECISÃO D4/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^DECIDIDO$/ })).toBeDefined()
+  expect((await ui.find({ key: 'detalhe-decisao' }))?.text).toMatch(/NÃO.*Postgres no Docker/s)
+  expect(await ui.find({ key: `conversa-${d.id}` })).toBeDefined()
+  expect(await ui.find({ key: `ajustar-${d.id}` })).toBeDefined()
+  await ui.press({ key: 'voltar-decisoes' })
+  expect(await ui.find({ key: 'detalhe-decisao' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /DECISÕES · 3 VIGENTES/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131: depois de Descartar, "Desfazer" fica à vista por alguns segundos e volta a sugerida', async ($, on) => {
+  const f = await abrir($, on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'ver-decisoes' })
+  const sugerida = porRotulo('sessao', 'D6')
+  await ui.press({ key: `descartar-${sugerida.id}` })
+  expect(await ui.find({ key: card(sugerida) })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /D6 descartada/ })).toBeDefined()
+  await ui.press({ key: 'desfazer-ultima' })
+  expect(f.pedidos.find((p) => p.method === 'POST' && /\/desfazer\b/.test(p.url))).toBeDefined()
+  expect(await ui.find({ key: card(sugerida) })).toBeDefined()
+  expect(await ui.find({ key: 'barra-desfazer' })).toBeUndefined()
+
+  // Passados os segundos, a barra some.
+  await ui.press({ key: `confirmar-${sugerida.id}` })
+  expect(await ui.find({ key: 'barra-desfazer' })).toBeDefined()
+  await f.relogio.advance(15_000)
+  expect(await ui.find({ key: 'barra-desfazer' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('#131: Ajustar abre um campo; o texto da pessoa vai ao núcleo e o detalhe oferece desfazer o ajuste', async ($, on) => {
+  const f = await abrir($, on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui.press({ key: 'ver-decisoes' })
+  const sugerida = porRotulo('familia', 'D6')
+  await ui.press({ key: `abrir-${sugerida.id}` })
+  expect(await ui.find({ key: 'ajuste-texto' })).toBeUndefined()
+  await ui.press({ key: `ajustar-${sugerida.id}` })
+  expect(await ui.find({ key: 'ajuste-texto' })).toBeDefined()
+  await ui.input({ key: 'ajuste-texto', text: 'Sim, mas com 15 cards por coluna' })
+  const post = f.pedidos.find((p) => p.method === 'POST' && /\/ajustar\b/.test(p.url))!
+  expect(JSON.parse(post.body!)).toEqual({ sessao: 'sessao-teste', texto: 'Sim, mas com 15 cards por coluna' })
+  expect(await ui.find({ key: 'ajuste-texto' })).toBeUndefined()
+  expect(await ui.find({ key: `desfazer-${sugerida.id}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /D6 ajustada/ })).toBeDefined()
+  await ui.unmount()
 })

@@ -127,6 +127,8 @@ export interface SubagenteDoPainel {
 
 export interface FilhaDoPainel {
   id: string;
+  /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
+  local: string | null;
   titulo: string;
   estado: EstadoDoInbox | 'desconhecido';
   motivo: AwaitingReason | null;
@@ -153,6 +155,8 @@ export interface TrabalhoDoPainel {
 
 export interface PrecisaDeVoce {
   id: string;
+  /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
+  local: string | null;
   titulo: string;
   estado: 'waiting' | 'error';
   motivo: AwaitingReason | null;
@@ -209,10 +213,16 @@ export interface DecisaoDoPainel {
   /** "D4": o número na família. */
   rotulo: string;
   origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida';
-  /** Só estes três entram na lista; descartada e revertida ficam no histórico. */
-  estado: 'vigente' | 'substituida' | 'a_confirmar';
-  /** O que foi decidido. */
+  /** Só os três primeiros entram na lista; a descartada só volta como resposta do Descartar. */
+  estado: 'vigente' | 'substituida' | 'a_confirmar' | 'descartada';
+  /** O que foi decidido, numa frase. */
   titulo: string;
+  /** O texto inteiro, para o detalhe (na correção, o que a pessoa escreveu). */
+  texto: string;
+  /** A pergunta, o pedido ou a proposta que levou à decisão. */
+  contexto: string | null;
+  /** A última ação feita pelo painel, que o Desfazer volta; `null` quando não há. */
+  desfazer: 'confirmar' | 'descartar' | 'ajustar' | null;
   /** O que foi descartado ("não: …"). */
   nao: string[];
   decididaPor: 'usuario' | 'agente';

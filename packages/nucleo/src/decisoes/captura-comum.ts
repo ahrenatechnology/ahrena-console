@@ -2,7 +2,7 @@
 // produzem a mesma chave de origem para a mesma chamada, e o registro não duplica.
 
 import type { DecisionDraft } from './registro.ts';
-import { DECISION_LIST_MAX, cleanList, cleanText, planTitle, toolSubject, topicKey } from './texto.ts';
+import { DECISION_LIST_MAX, cleanList, cleanText, isDismissedAnswer, planTitle, shortChoice, toolSubject, topicKey } from './texto.ts';
 
 /** Onde a decisão aconteceu. */
 export interface CaptureBase {
@@ -45,7 +45,8 @@ export function questionDrafts(base: CaptureBase, input: unknown, answers: unkno
     const raw = answers[q.question];
     const choice = cleanText(raw);
     const question = cleanText(q.question);
-    if (!choice || !question) continue;
+    // Fechada sem resposta: a pessoa não decidiu nada.
+    if (!choice || !question || isDismissedAnswer(choice)) continue;
     const labels = cleanList(Array.isArray(q.options) ? q.options.map((o) => (isObj(o) ? o.label : null)) : []);
     const chosen = q.multiSelect === true ? cleanList(String(raw).split(/,\s*/)) : [choice];
     out.push({
@@ -116,11 +117,13 @@ export function correctionDraft(
     sourceKey: opts.sourceKey,
     topic: opts.topic,
     context: opts.proposal,
-    choice: opts.text,
+    // O título é a primeira frase; o que a pessoa escreveu inteiro fica no detalhe.
+    choice: shortChoice(opts.text),
     alternatives: opts.proposal ? [opts.proposal] : [],
     decidedBy: 'usuario',
     origin: 'correcao',
     inferred: opts.inferred,
     state: opts.inferred ? 'a_confirmar' : 'vigente',
+    metadata: { texto: opts.text },
   };
 }

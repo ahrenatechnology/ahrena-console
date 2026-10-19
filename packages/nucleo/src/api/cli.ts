@@ -28,7 +28,7 @@ import {
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
-import { capturarDoTranscript, REPROCESSAMENTO, reprocessarHistorico } from './reprocessamento.ts';
+import { capturarDoTranscript, LIMPEZA_DAS_DECISOES, limparDecisoes, REPROCESSAMENTO, reprocessarHistorico } from './reprocessamento.ts';
 import { iniciarApiLocal } from './servidor.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
@@ -154,15 +154,25 @@ if (follower) {
     .then(() => {
       historicoPronto = true;
       log(`histórico importado; seguindo ${o.projetos ?? '~/.claude/projects'}`);
-      // Uma vez por banco: planos e decisões das sessões importadas antes da captura existir.
-      if (storage.reprocessado(REPROCESSAMENTO)) return;
-      const inicio = Date.now();
-      return reprocessarHistorico({ storage, decisoes, raiz: o.projetos ?? defaultProjectsRoot(), log }).then((r) => {
-        storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
-        log(`reprocessado em ${Math.round((Date.now() - inicio) / 1000)} s: ${r.sessoes} sessões, ${r.planos} planos em ${r.comPlano}, ${r.decisoes} decisões`);
-      });
+      return reprocessarUmaVez();
     })
     .catch((e) => log(`seguidor não começou: ${(e as Error).message}`));
+}
+
+// Uma vez por banco, depois da importação inicial: planos e decisões das sessões importadas antes
+// da captura existir, e a limpeza do que a captura antiga gravou e não é decisão.
+async function reprocessarUmaVez() {
+  if (!storage.reprocessado(REPROCESSAMENTO)) {
+    const inicio = Date.now();
+    const r = await reprocessarHistorico({ storage, decisoes, raiz: o.projetos ?? defaultProjectsRoot(), log });
+    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    log(`reprocessado em ${Math.round((Date.now() - inicio) / 1000)} s: ${r.sessoes} sessões, ${r.planos} planos em ${r.comPlano}, ${r.decisoes} decisões`);
+  }
+  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+    const r = await limparDecisoes(storage, decisoes);
+    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    log(`decisões limpas: ${r.ruido} fora das listas, ${r.encurtadas} com o título encurtado`);
+  }
 }
 
 async function desligar() {

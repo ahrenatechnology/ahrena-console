@@ -94,13 +94,13 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(d[0].message?.uuid, 'b2');
   });
 
-  test('CA2: correção logo depois de uma proposta é inferida, a confirmar, e entra na cadeia do assunto', async () => {
+  test('CA2: o "não, …" a uma pergunta do agente é correção inferida, a confirmar, e entra na cadeia do assunto', async () => {
     const one = { questions: [ASK_INPUT.questions[0]] };
     const lines = [
       tx.prompt({ uuid: 'u0', minute: 0 }, 'Monte o kanban de sessões'),
       tx.toolUse({ uuid: 'u1', minute: 1 }, 'toolu_ask', 'AskUserQuestion', one),
       tx.toolResult({ uuid: 'u2', minute: 2 }, 'toolu_ask', 'answered', { toolUseResult: { questions: one.questions, answers: ASK_ANSWERS } }),
-      tx.say({ uuid: 'a1', minute: 3 }, 'Vou subir o Postgres no Docker para os testes.'),
+      tx.say({ uuid: 'a1', minute: 3 }, 'Subo o Postgres no Docker para os testes?'),
       tx.prompt({ uuid: 'c1', minute: 4 }, 'Não, use SQLite em memória nos testes'),
     ];
     const d = extractTranscriptDecisions(jsonl(lines));
@@ -109,7 +109,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(corr.inferred, true);
     assert.equal(corr.state, 'a_confirmar');
     assert.equal(corr.choice, 'Não, use SQLite em memória nos testes');
-    assert.deepEqual(corr.alternatives, ['Vou subir o Postgres no Docker para os testes.']);
+    assert.deepEqual(corr.alternatives, ['Subo o Postgres no Docker para os testes?']);
     assert.equal(corr.topic, d[0].topic, 'o assunto é o da única decisão do turno');
     assert.equal(corr.message?.uuid, 'c1');
 
@@ -134,11 +134,32 @@ describe('decisões: captura pelo transcript', () => {
 
   test('CA2: com várias decisões no turno, a correção não adivinha o assunto', () => {
     const d = extractTranscriptDecisions(
-      jsonl([...ask, tx.say({ uuid: 'a1', minute: 3 }, 'Vou com Postgres.'), tx.prompt({ uuid: 'c1', minute: 4 }, 'na verdade, SQLite')]),
+      jsonl([...ask, tx.say({ uuid: 'a1', minute: 3 }, 'Vou com Postgres?'), tx.prompt({ uuid: 'c1', minute: 4 }, 'na verdade, use SQLite em memória')]),
     );
     assert.equal(d.length, 3);
     assert.equal(d[2].origin, 'correcao');
     assert.equal(d[2].topic, null);
+  });
+
+  test('conservador (#131): afirmação do agente, reação curta, dúvida, pergunta ou mensagem longa não são correção', () => {
+    const casos = [
+      ['Vou subir o Postgres no Docker.', 'Não, use SQLite em memória nos testes'],
+      ['Subo o Postgres?', 'Não, calma.'],
+      ['Subo o Postgres?', 'Não sei se é possível, mas seria legal marcar os planos já executados'],
+      ['Subo o Postgres?', 'Não, por que Postgres?'],
+      ['Subo o Postgres?', `Não, ${'e depois a gente vê isso com calma '.repeat(6)}`],
+    ];
+    for (const [i, [fala, resposta]] of casos.entries()) {
+      const d = extractTranscriptDecisions(jsonl([tx.say({ uuid: `a${i}`, minute: 1 }, fala), tx.prompt({ uuid: `p${i}`, minute: 2 }, resposta)]));
+      assert.deepEqual(d, [], resposta);
+    }
+  });
+
+  test('a correção tem o título curto e o texto inteiro no detalhe', () => {
+    const resposta = 'Não, use SQLite em memória nos testes. Postgres fica para o ambiente de staging.';
+    const [d] = extractTranscriptDecisions(jsonl([tx.say({ uuid: 'a1', minute: 1 }, 'Subo o Postgres?'), tx.prompt({ uuid: 'p1', minute: 2 }, resposta)]));
+    assert.equal(d.choice, 'Não, use SQLite em memória nos testes.');
+    assert.equal(d.metadata?.texto, resposta);
   });
 
   test('CA2: conservador: sem proposta antes, ou sem tom de correção, não é correção', () => {

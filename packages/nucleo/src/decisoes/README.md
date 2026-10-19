@@ -58,7 +58,8 @@ Determinística, nos dois caminhos. A chave de origem é a mesma (`tool:<tool_us
 | Plano (`ExitPlanMode`) | `PostToolUse` (aprovado) | `tool_result` aprovado; os recusados antes viram alternativas |
 | Permitir | `PreToolUse` → notificação `permission_prompt` → `PostToolUse` da mesma chamada | não aparece: o transcript não diz se houve pedido |
 | Negar | o pedido sem `PostToolUse` até o próximo `Stop` ou prompt, ou `PostToolUseFailure` de recusa | `tool_result` com erro "The user doesn't want to proceed…" |
-| Correção sua | — | recusa de plano com o que a pessoa escreveu (determinística, vigente); prompt que começa contrariando a última fala do agente (inferida, a confirmar) |
+| Correção sua | — | recusa de plano com o que a pessoa escreveu (determinística, vigente); resposta curta (até 160 caracteres, sem pergunta nem dúvida, com pelo menos três palavras depois da negação) que começa contrariando uma pergunta que o agente acabou de fazer (inferida, a confirmar). O título é a primeira frase; o texto inteiro fica em `metadata.texto` |
+| Pergunta fechada sem resposta | — | não é decisão: `[User dismissed…]` não é registrado |
 
 A correção inferida é conservadora. Só conta uma mensagem que começa com "não", "na verdade", "em vez de", "actually", "instead"… logo depois de uma fala do agente. Ela entra na cadeia de um assunto só quando o turno teve uma decisão só.
 

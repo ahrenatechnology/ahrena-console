@@ -59,10 +59,37 @@ export function planTitle(plan: unknown): string | null {
 const CORRECTION_START =
   /^(n[aã]o[\s,.!]|n[aã]o$|nope\b|no[\s,.!]|na verdade\b|melhor n[aã]o\b|em vez d|ao inv[eé]s d|errado\b|pare\b|espera[\s,.!]|actually\b|instead\b|don'?t\b|wrong\b|stop\b)/i;
 
-/** A mensagem da pessoa começa contrariando a proposta anterior? Conservador: só pelo começo. */
+/** "Não" que não contraria nada: dúvida, não ter entendido, não lembrar. */
+const NOT_A_CORRECTION = /\bn[aã]o\s+(sei|entendi|lembro|consigo|tenho certeza|sabia|vi|ficou claro)\b/i;
+/** Correção é curta: uma mensagem longa é conversa, não uma decisão. */
+export const CORRECTION_MAX = 160;
+/** Palavras depois da negação: "Não, calma." é reação; "Não mexa no LangChain agora" é correção. */
+const CORRECTION_MIN_WORDS = 3;
+
+/**
+ * A mensagem da pessoa contraria a proposta anterior? Conservador, na dúvida não: curta, sem
+ * pergunta nem dúvida, começando por uma negação e dizendo o que fazer em vez disso.
+ */
 export function looksLikeCorrection(text: string | null): boolean {
   if (!text) return false;
-  return CORRECTION_START.test(text.trim());
+  const t = text.trim();
+  if (t.length > CORRECTION_MAX || t.includes('?') || NOT_A_CORRECTION.test(t)) return false;
+  const m = CORRECTION_START.exec(t);
+  if (!m) return false;
+  const resto = t.slice(m[0].length).replace(/^[\s,.!;:]+/, '');
+  return resto.split(/\s+/).filter((w) => /\p{L}{2,}/u.test(w)).length >= CORRECTION_MIN_WORDS;
+}
+
+/** A pergunta foi fechada sem resposta ("[User dismissed — do not proceed…]"): não é decisão. */
+export function isDismissedAnswer(answer: string | null): boolean {
+  return answer !== null && /^\[?\s*user dismissed\b/i.test(answer.trim());
+}
+
+/** A primeira frase, para o título da decisão; o texto inteiro fica no detalhe. */
+export const SHORT_CHOICE_MAX = 90;
+export function shortChoice(text: string): string {
+  const first = text.split(/(?<=[.!;])\s+|\n/)[0]?.trim() || text.trim();
+  return cleanText(first, SHORT_CHOICE_MAX) ?? text;
 }
 
 /** O que descreve a chamada de ferramenta numa linha: o comando, o arquivo, a URL... */

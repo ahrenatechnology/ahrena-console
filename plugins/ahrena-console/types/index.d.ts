@@ -78,7 +78,7 @@ export type SubagenteDoPainel = {
   ate: string | null
 }
 
-export type FilhaDoPainel = { id: string; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
+export type FilhaDoPainel = { id: string; local?: string | null; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
 
 export type TrabalhoDoPainel = {
   branch: string
@@ -97,6 +97,8 @@ export type TrabalhoDoPainel = {
 
 export type PrecisaDeVoce = {
   id: string
+  /** `local_…` do Claude Desktop, para abrir a conversa; sem ele, a sessão é só de terminal. */
+  local?: string | null
   titulo: string
   estado: 'waiting' | 'error'
   motivo: AwaitingReason | null
@@ -125,8 +127,14 @@ export type DecisaoDoPainel = {
   /** "D4": o número na família. */
   rotulo: string
   origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida'
-  estado: 'vigente' | 'substituida' | 'a_confirmar'
+  /** A descartada só volta como resposta do Descartar. */
+  estado: 'vigente' | 'substituida' | 'a_confirmar' | 'descartada'
+  /** Numa frase. */
   titulo: string
+  /** #131: o texto inteiro e o contexto, para o detalhe, e a ação do painel que o Desfazer volta. */
+  texto?: string
+  contexto?: string | null
+  desfazer?: 'confirmar' | 'descartar' | 'ajustar' | null
   /** O que foi descartado ("não: …"). */
   nao: string[]
   decididaPor: 'usuario' | 'agente'
@@ -194,7 +202,13 @@ export type Leitura = {
 /** O que a pessoa abriu no painel. */
 export type Vista = {
   /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131). */
-  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos'
+  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas'
+  /** `decisao`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
+  decisao?: DecisaoDoPainel | null
+  /** O detalhe com o campo do Ajustar aberto. */
+  ajustando?: boolean
+  /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
+  ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
   escopo: 'familia' | 'maquina' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */

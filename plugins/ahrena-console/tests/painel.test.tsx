@@ -158,7 +158,9 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /esperando 3 subagentes/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /3 ativos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /code-reviewer/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /\+1 concluído/ })).toBeDefined()
+  // O card de lista cresce: os quatro aparecem, sem "+N".
+  expect(await ui.find({ type: 'Text', text: /Plan/ })).toBeDefined()
+  expect(await ui.find({ key: 'ver-subagentes' })).toBeUndefined()
   for (const filha of ['fila-de-tarefas', 'catalogo-exemplo', 'blog-estatico']) expect(await ui.find({ type: 'Text', text: new RegExp(filha) })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /CI … rodando/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /aprovado/ })).toBeDefined()
@@ -347,5 +349,66 @@ test('"← voltar" também na tela das decisões', async ($, on) => {
   expect(await ui.find({ key: 'card-sessao' })).toBeUndefined()
   await ui.press({ key: 'voltar-sessao' })
   expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131: Subagentes e Sessões filhas crescem para baixo, sem cortar o nome; "+N" abre a lista com "← voltar"', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const sub = p4.subagentes.itens[3]!
+  const muitos = Array.from({ length: 11 }, (_, i) => ({ ...sub, id: `sim-sub-${i}`, nome: `revisor-sintetico-com-nome-longo-${i}`, tarefa: 'uma tarefa sintética de descrição longa' }))
+  f.estado.painel = { ...p4, subagentes: { ativos: p4.subagentes.ativos, itens: [...p4.subagentes.itens, ...muitos] } }
+  await f.relogio.advance(5_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const card = await ui.find({ key: 'card-subagentes' })
+    expect(card?.props.width).toBe(34)
+    expect(card?.props.height).toBeUndefined()
+    expect(card?.props.minHeight).toBe(9)
+    // Os cards de resumo continuam com a altura padrão.
+    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(9)
+    const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
+    expect(linhas).toHaveLength(8)
+    expect((await ui.findAll({ type: 'Text' })).some((t) => t.props.wrap === 'wrap' && /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))).toBe(true)
+    expect(await ui.find({ type: 'Text', text: /\+7 subagentes/ })).toBeDefined()
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'ver-subagentes' })
+  expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
+  expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))).toHaveLength(15)
+  await ui.press({ key: 'voltar-sessao' })
+  expect(await ui.find({ key: 'card-subagentes' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('#131: a sessão no índice do Desktop vira um link (pelo núcleo, para claude://) nas filhas e em "precisam de você"; só de terminal, não', async ($, on) => {
+  const LOCAL = 'local_00000000-0000-4000-8000-0000000000f1'
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  f.estado.painel = { ...p4, filhas: p4.filhas.map((x, i) => (i === 0 ? { ...x, local: LOCAL } : x)) }
+  await f.relogio.advance(5_000)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  const links = (await ui.findAll({ type: 'Link' })).filter((l) => /\/abrir\//.test(l.props.href))
+  const link = links[0]
+  expect(link?.props.href).toBe(`http://localhost:4720/abrir/${LOCAL}`)
+  expect(link?.props.label).toBe('fila-de-tarefas')
+  expect(links).toHaveLength(1)
+  await ui.unmount()
+
+  const p7 = CENARIOS.p7
+  f.estado.painel = { ...p7, precisam: { ...p7.precisam, maquina: p7.precisam.maquina.map((x, i) => (i === 0 ? { ...x, local: LOCAL } : x)) } }
+  await f.relogio.advance(5_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui.press({ key: 'ver-precisam' })
+  await ui.select({ key: 'escopo', value: 'maquina' })
+  const primeiro = p7.precisam.maquina[0]!
+  // O nome e o "Ir para a sessão" do card dela.
+  const abrem = (await ui.findAll({ type: 'Link' })).filter((l) => l.props.href === `http://localhost:4720/abrir/${LOCAL}`)
+  expect(abrem.map((l) => l.props.label)).toEqual([primeiro.titulo, 'Ir para a sessão'])
+  expect(await ui.find({ key: `ir-${primeiro.id}` })).toBeUndefined()
+  // Sem `local` (só de terminal): o botão de antes, que copia o nome.
+  expect((await ui.find({ key: `ir-${p7.precisam.maquina[1]!.id}` }))?.type).toBe('Button')
   await ui.unmount()
 })
