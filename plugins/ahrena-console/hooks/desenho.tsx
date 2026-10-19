@@ -45,9 +45,8 @@ const BADGE = {
   vermelho: STATUS_COR.error.dark.badge,
   cinza: STATUS_COR.abandoned.dark.badge,
 }
-const COR_DA_CONTA: Record<ContaDoPainel['cor'], string> = {
-  rose: ROSA, green: VERDE, yellow: AMARELO, gray: CINZA, orange: LARANJA, red: VERMELHO,
-}
+/** A cor da conta vem em hex do núcleo; qualquer outra coisa vira cinza. */
+const corDaConta = (c: ContaDoPainel) => (/^#[0-9a-f]{6}$/i.test(c.cor) ? c.cor : CINZA)
 /** Cor e fundo de cada status (docs/brand/tokens.json, tema escuro). */
 const COR_STATUS = {
   active: { cor: STATUS_COR.active.dark.text, fundo: BADGE.laranja, borda: LARANJA },
@@ -229,7 +228,7 @@ function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: Re
           {titulo}
         </Text>
         {conta && (
-          <Text mono size="caption" color={COR_DA_CONTA[conta.cor]} wrap="truncate-end">
+          <Text mono size="caption" color={corDaConta(conta)} wrap="truncate-end">
             ◆ {conta.rotulo}
           </Text>
         )}
@@ -611,7 +610,7 @@ function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
       </Text>,
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {relacao} · {modelo(i.modelo)}
-        {i.conta ? <Text color={COR_DA_CONTA[i.conta.cor]}> · ◆ {i.conta.rotulo}</Text> : null}
+        {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {i.conta.rotulo}</Text> : null}
       </Text>,
       <Box flexDirection="row">
         <Button key={`ir-${i.id}`} label="Ir para a sessão" variant="secondary" onPress={() => c.acoes.irPara(i)} />

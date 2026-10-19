@@ -1,10 +1,11 @@
 // Cenários do painel lateral (P1 a P7 dos wireframes, docs/wireframes), para demonstrar e
 // capturar o painel sem dados reais: `npm run api -- --demo p1`. Tudo é sintético, com o
-// vocabulário do simulador: projetos sob /simulacao, repositório `exemplo/simulacao`, contas
-// `sim-conta-*`. A sessão do painel, seja qual for o id que ele mande, vira `sim-painel-esta`.
+// vocabulário do simulador: projetos sob /simulacao, repositório `exemplo/simulacao` e duas
+// contas sintéticas (UUIDs de zeros). A sessão do painel, seja qual for o id que ele mande, vira `sim-painel-esta`.
 
-import type { Agent, AwaitingReason, Session, SessionStatus, TokenUsage } from '../model.ts';
-import { emptyTokenCounts } from '../model.ts';
+import type { AccountSource, Agent, AwaitingReason, Session, SessionStatus, TokenUsage } from '../model.ts';
+import { claudeAccountId, emptyTokenCounts } from '../model.ts';
+import { paleta } from '../../../marca/gerado/marca.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
@@ -16,9 +17,15 @@ export type CenarioDoPainel = (typeof CENARIOS_DO_PAINEL)[number];
 export const SESSAO_DO_PAINEL = 'sim-painel-esta';
 export const REPO_DO_SIMULADOR = 'exemplo/simulacao';
 
+function contaSintetica(n: string, label: string, color: string, tipo: string, source: AccountSource) {
+  const accountUuid = `00000000-0000-4000-8000-00000000${n}a1`;
+  const organizationUuid = `00000000-0000-4000-8000-00000000${n}b1`;
+  return { accountUuid, organizationUuid, id: claudeAccountId(accountUuid, organizationUuid), label, color, tipo, source };
+}
+// Cores da marca (packages/marca): rosa e verde, que não se confundem com os status.
 const CONTAS = {
-  equipe: { id: 'sim-conta-equipe/sim-org-equipe', rotulo: 'equipe', cor: 'rose' },
-  cliente: { id: 'sim-conta-cliente/sim-org-cliente', rotulo: 'cliente-exemplo', cor: 'green' },
+  equipe: contaSintetica('0e', 'equipe', paleta.rose['500'], 'claude_team', 'env'),
+  cliente: contaSintetica('0c', 'cliente-exemplo', paleta.green['500'], 'claude_enterprise', 'config'),
 } as const;
 
 const MIN = 60_000;
@@ -154,7 +161,7 @@ const iso = (agora: number, minAtras: number) => new Date(agora - minAtras * MIN
 function sessaoBase(id: string, cwd: string, model: string, inicio: string, atualizada: string): Session {
   return {
     id, name: null, status: 'active', cwd, model, source: 'startup', startedAt: inicio, endedAt: null,
-    awaitingInputSince: null, awaitingReason: null, updatedAt: atualizada, metadata: { simulado: true },
+    awaitingInputSince: null, awaitingReason: null, updatedAt: atualizada, accountId: null, accountSource: null, metadata: { simulado: true },
   };
 }
 
@@ -215,9 +222,10 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
     s.awaitingReason = e.espera.motivo;
   }
   const background = Object.fromEntries((e.background ?? []).map((c, i) => [`bg-${i}`, { desde: inicio, comando: c }]));
+  s.accountId = CONTAS.equipe.id;
+  s.accountSource = CONTAS.equipe.source;
   s.metadata = {
     simulado: true,
-    conta: CONTAS.equipe,
     familia: { filhas: filhas.map((slug) => `sim-painel-${slug}`) },
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.erro ? iso(agora, e.erro.haMin) : null, delegacoes: {}, background },
   };
@@ -262,9 +270,10 @@ async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
     s.awaitingInputSince = iso(agora, o.espera.haMin);
     s.awaitingReason = o.espera.motivo;
   }
+  s.accountId = CONTAS[o.conta].id;
+  s.accountSource = CONTAS[o.conta].source;
   s.metadata = {
     simulado: true,
-    conta: CONTAS[o.conta],
     familia: o.relacao === 'filha' ? { mae: SESSAO_DO_PAINEL } : {},
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? atualizada : null, delegacoes: {}, background: {} },
   };
@@ -280,6 +289,12 @@ async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
 export async function semearCenariosDoPainel(porta: StoragePort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
   const e = ESTA[cenario];
   const outras = OUTRAS[cenario];
+  for (const c of Object.values(CONTAS)) {
+    await porta.putAccount({
+      id: c.id, accountUuid: c.accountUuid, organizationUuid: c.organizationUuid, organizationName: null, organizationType: c.tipo,
+      label: c.label, color: c.color, configDirs: [], firstSeenAt: iso(agora, 60), lastSeenAt: iso(agora, 0), metadata: { simulado: true },
+    });
+  }
   const filhas = [...(e.filhas ?? []), ...outras.filter((o) => o.relacao === 'filha' && !(e.filhas ?? []).includes(o.slug)).map((o) => o.slug)];
   await gravarEsta(porta, e, agora, filhas);
   const mae = outras.find((o) => o.relacao === 'mae');

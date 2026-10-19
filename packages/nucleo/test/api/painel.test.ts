@@ -28,7 +28,7 @@ async function cenario(nome: CenarioDoPainel, extra: { local?: string; conta?: s
   const storage = openSqliteStorage({ path: ':memory:' });
   await semearCenariosDoPainel(storage, nome, AGORA);
   const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
+  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
   // O primeiro pedido dispara o trabalho por trás; o segundo já o traz.
   await montador.montar({ sessionId: 'qualquer', ...extra });
   await trabalho.esperar();
@@ -221,19 +221,28 @@ describe('conta da sessão (decisão 0006)', () => {
   const UUID_B = '00000000-0000-4000-8000-00000000000b';
   const ORG_B = '00000000-0000-4000-8000-0000000000bb';
 
-  test('o ambiente do painel vale primeiro; o Desktop só com uma pasta; sem fonte, "Sem conta"', async () => {
+  test('vale a fonte de menor ordem: ambiente, porta (config), Desktop só com uma pasta; sem fonte, "Sem conta"', async () => {
     const arquivo = join(dir, 'contas.json');
-    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: 'green' } }));
-    const contas = new Contas({ arquivo });
+    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: '#1baf7a' } }));
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putAccount({
+      id: `${UUID_A}/${ORG_A}`, accountUuid: UUID_A, organizationUuid: ORG_A, organizationName: null, organizationType: null,
+      label: 'equipe', color: '#df285d', configDirs: [], firstSeenAt: T0, lastSeenAt: T0, metadata: {},
+    });
+    const contas = new Contas({ storage, arquivo });
     await contas.atualizar();
+    const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
     const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: escopos });
-    assert.equal(contas.daSessao({ id: 's1', metadata: {} }, desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.equal(contas.daSessao({ id: 's1', metadata: {} }, desktop([`${UUID_B}/${ORG_B}`]))?.rotulo, 'cliente');
-    contas.informar('s1', UUID_A, ORG_A);
-    const a = contas.daSessao({ id: 's1', metadata: {} }, desktop([`${UUID_B}/${ORG_B}`]));
-    assert.deepEqual(a && { fonte: a.fonte, rotulo: a.rotulo }, { fonte: 'env', rotulo: 'conta 2' });
+    assert.equal(contas.daSessao(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
+    assert.deepEqual(contas.daSessao(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, rotulo: 'cliente', cor: '#1baf7a', fonte: 'desktop' });
+    const daPorta = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
+    assert.deepEqual(daPorta && [daPorta.rotulo, daPorta.cor, daPorta.fonte], ['equipe', '#df285d', 'config'], 'config vence desktop');
+    contas.informar('s1', UUID_B, ORG_B);
+    const env = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), null);
+    assert.deepEqual(env && [env.rotulo, env.fonte], ['cliente', 'env'], 'o ambiente vence a porta gravada com fonte pior');
     contas.informar('s2', 'não é uuid', ORG_A);
-    assert.equal(contas.daSessao({ id: 's2', metadata: {} }, null), null);
+    assert.equal(contas.daSessao({ id: 's2', accountId: null, accountSource: null }, null), null);
+    await storage.close();
   });
 
   test('índice do Desktop: título, branch, mãe e conta pela pasta, relendo só o que mudou', async () => {
@@ -272,7 +281,7 @@ describe('servidor da API local', () => {
   afterEach(() => storage.close());
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ arquivo: null }), desktop: null, trabalho: null });
+    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
     const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);

@@ -72,7 +72,7 @@ const trabalho = new TrabalhoPorBranch({
 });
 const montador = new MontadorDoPainel({
   storage,
-  contas: new Contas(demo ? { arquivo: null } : {}),
+  contas: new Contas({ storage, ...(demo ? { arquivo: null } : {}) }),
   desktop,
   trabalho,
   ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),

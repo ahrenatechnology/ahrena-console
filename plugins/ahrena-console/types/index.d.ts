@@ -5,9 +5,8 @@
 export type DisplayStatus = 'active' | 'completed' | 'error' | 'abandoned' | 'waiting'
 export type EstadoDoInbox = DisplayStatus | 'delegating' | 'background'
 export type AwaitingReason = 'notification' | 'interrupted' | 'stop' | 'session_start'
-export type CorDaConta = 'rose' | 'green' | 'yellow' | 'gray' | 'orange' | 'red'
-
-export type ContaDoPainel = { id: string; rotulo: string; cor: CorDaConta; fonte: 'env' | 'desktop' | 'simulador' }
+/** `cor` em hex; `fonte` pela ordem da decisão 0006. */
+export type ContaDoPainel = { id: string; rotulo: string; cor: string; fonte: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
 
 export type AtividadeDaSessao = {
   tipo: 'ferramenta' | 'delegando' | 'pergunta' | 'permissao' | 'erro' | 'prompt' | 'sua-vez' | 'interrompida' | 'concluida' | 'abandonada' | 'ociosa'

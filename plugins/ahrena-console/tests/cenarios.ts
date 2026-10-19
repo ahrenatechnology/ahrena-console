@@ -25,10 +25,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       },
       "faixa": null,
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/ahrena-demo"
@@ -125,19 +125,19 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           },
           "n": 1
         },
         {
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           },
           "n": 1
         }
@@ -156,10 +156,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         },
         {
@@ -174,10 +174,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         }
       ]
@@ -208,10 +208,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
         "desde": "2026-11-02T11:56:00.000Z"
       },
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/gateway-sandbox"
@@ -321,10 +321,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
         "desde": "2026-11-02T11:58:00.000Z"
       },
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/motor-de-regras"
@@ -413,10 +413,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           },
           "n": 1
         }
@@ -434,10 +434,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "mae",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         }
       ],
@@ -454,10 +454,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "mae",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         }
       ]
@@ -483,10 +483,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       },
       "faixa": null,
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/vitrine-demo"
@@ -621,10 +621,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           },
           "n": 1
         }
@@ -642,10 +642,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "filha",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         }
       ],
@@ -662,10 +662,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "filha",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         }
       ]
@@ -696,10 +696,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
         "desde": "2026-11-02T11:57:00.000Z"
       },
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/painel-de-metricas"
@@ -796,19 +796,19 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           },
           "n": 1
         },
         {
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           },
           "n": 1
         }
@@ -827,10 +827,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         },
         {
@@ -845,10 +845,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         }
       ]
@@ -903,19 +903,19 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           },
           "n": 2
         },
         {
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           },
           "n": 1
         }
@@ -934,10 +934,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         },
         {
@@ -952,10 +952,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         },
         {
@@ -970,10 +970,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         }
       ]
@@ -999,10 +999,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       },
       "faixa": null,
       "conta": {
-        "id": "sim-conta-equipe/sim-org-equipe",
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
         "rotulo": "equipe",
-        "cor": "rose",
-        "fonte": "simulador"
+        "cor": "#df285d",
+        "fonte": "env"
       },
       "branch": null,
       "cwd": "/simulacao/ahrena-demo"
@@ -1084,19 +1084,19 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [
         {
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           },
           "n": 2
         },
         {
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           },
           "n": 1
         }
@@ -1114,10 +1114,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "mae",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         },
         {
@@ -1132,10 +1132,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "filha",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         }
       ],
@@ -1152,10 +1152,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "mae",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         },
         {
@@ -1170,10 +1170,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": null,
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-cliente/sim-org-cliente",
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "rotulo": "cliente-exemplo",
-            "cor": "green",
-            "fonte": "simulador"
+            "cor": "#1baf7a",
+            "fonte": "config"
           }
         },
         {
@@ -1188,10 +1188,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           "relacao": "filha",
           "mesmoProjeto": false,
           "conta": {
-            "id": "sim-conta-equipe/sim-org-equipe",
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
             "rotulo": "equipe",
-            "cor": "rose",
-            "fonte": "simulador"
+            "cor": "#df285d",
+            "fonte": "env"
           }
         }
       ]

@@ -12,7 +12,7 @@ for (const nome of CENARIOS_DO_PAINEL) {
   const storage = openSqliteStorage({ path: ':memory:' });
   await semearCenariosDoPainel(storage, nome, AGORA);
   const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
+  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
   const pedido = { sessionId: 'sessao-teste', modelo: 'claude-sonnet-5-5', cwd: '/simulacao/cli-de-notas' };
   await montador.montar(pedido);
   await trabalho.esperar();

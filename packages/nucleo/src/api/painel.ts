@@ -119,7 +119,7 @@ export class MontadorDoPainel {
     const desktop = this.doDesktop(pedido.sessionId, pedido.local ?? null);
     const agentes = session ? await this.storage.listAgents(session.id) : [];
     const resumo = session ? await this.resumos.ler(session.id, session.updatedAt) : null;
-    const conta = this.contas.daSessao({ id: pedido.sessionId, metadata: session?.metadata ?? {} }, desktop);
+    const conta = this.contas.daSessao(session ?? { id: pedido.sessionId, accountId: null, accountSource: null }, desktop);
 
     const sessao = session
       ? this.sessaoDe(session, agentes, resumo!, desktop, conta, agora)

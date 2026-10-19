@@ -63,13 +63,13 @@ Outra porta: `npm run api -- --porta 4730` e, no plugin, a opção `porta` (no `
 
 ### Rótulo e cor das contas
 
-Sem configuração, as contas aparecem como "conta 1", "conta 2". Para dar nome e cor, crie `~/.ahrena-console/contas.json`, com a chave `<accountUuid>/<organizationUuid>` de cada conta e uma cor entre `rose`, `green`, `yellow` e `gray`:
+O rótulo e a cor são os da conta no núcleo (`ClaudeAccount.label` e `color`). Sem eles, valem os de `~/.ahrena-console/contas.json`, com a chave `<accountUuid>/<organizationUuid>` e a cor em hex; sem nada, "conta 1", "conta 2", com as cores da marca:
 
 ```json
-{ "<accountUuid>/<organizationUuid>": { "rotulo": "cliente", "cor": "green" } }
+{ "<accountUuid>/<organizationUuid>": { "rotulo": "cliente", "cor": "#1baf7a" } }
 ```
 
-O painel nunca mostra o id. A conta da sessão vem do ambiente da própria sessão (`CLAUDE_CODE_ACCOUNT_UUID` e `CLAUDE_CODE_ORGANIZATION_UUID`); das outras, do que os painéis delas informaram ou do índice do Claude Desktop, quando a sessão está numa pasta conta/org só. Sem fonte, a sessão fica em "sem conta", nunca na conta de outra.
+O painel nunca mostra o id. Vale a fonte de menor ordem da decisão 0006 entre a conta gravada na sessão, o ambiente da própria sessão (`CLAUDE_CODE_ACCOUNT_UUID` e `CLAUDE_CODE_ORGANIZATION_UUID`, que o painel lê e manda) e o índice do Claude Desktop, quando a sessão está numa pasta conta/org só. Sem fonte, a sessão fica em "sem conta", nunca na conta de outra.
 
 ## Consumo
 

@@ -2,19 +2,17 @@
 // O plugin (plugins/ahrena-console/types) repete estes tipos; mudar um é mudar os dois.
 // Datas em ISO 8601 (UTC); o painel calcula "há quanto tempo" com o próprio relógio.
 
-import type { AwaitingReason, DisplayStatus } from '../model.ts';
+import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { EstadoDoInbox } from '../estados/leitura.ts';
-
-/** Cor da conta: o nome de uma cor da paleta de packages/marca, nunca um hex. */
-export type CorDaConta = 'rose' | 'green' | 'yellow' | 'gray' | 'orange' | 'red';
 
 export interface ContaDoPainel {
   /** `<accountUuid>/<organizationUuid>`; só para agrupar, nunca para mostrar. */
   id: string;
   rotulo: string;
-  cor: CorDaConta;
+  /** Hex: a cor da `ClaudeAccount`, a do arquivo de rótulos ou uma da paleta da marca. */
+  cor: string;
   /** De onde veio, pela ordem da decisão 0006. */
-  fonte: 'env' | 'desktop' | 'simulador';
+  fonte: AccountSource;
 }
 
 /** Linha de baixo do card "Esta sessão": o que ela está fazendo agora. */
