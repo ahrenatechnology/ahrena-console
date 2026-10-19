@@ -33,6 +33,7 @@ import {
 const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
 const CLI_API = join(RAIZ, 'src/api/cli.ts');
 const CLI_NUCLEO = join(RAIZ, 'src/dono/cli.ts');
+const CLI_MCP = join(RAIZ, 'src/mcp/cli.ts');
 const SO_HOOKS = ['--sem-historico', '--sem-desktop', '--sem-github'];
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -94,10 +95,10 @@ function semVariaveisDoNucleo(): NodeJS.ProcessEnv {
   return env;
 }
 
-function rodar(cli: string, args: string[]): Rodada {
+function rodar(cli: string, args: string[], extra: { env?: NodeJS.ProcessEnv; stdin?: boolean } = {}): Rodada {
   const proc = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', cli, ...args], {
-    env: semVariaveisDoNucleo(),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...semVariaveisDoNucleo(), ...extra.env },
+    stdio: [extra.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
   filhos.push(proc);
   let stdout = '';
@@ -440,5 +441,43 @@ describe('posse e código', { timeout: 60_000 }, () => {
     assert.ok(!('conflito' in minha) && minha.pid === process.pid);
     assert.deepEqual(lerTrava(pasta), minha);
     rmSync(arquivoDaTrava(pasta));
+  });
+});
+
+describe('a ponte stdio do MCP', { timeout: 60_000 }, () => {
+  test('sobe o núcleo com --pai nela, responde por ele, e o núcleo sai quando ela sai', async () => {
+    const porta = await portaLivre();
+    const ponte = rodar(CLI_MCP, [], { env: { AHRENA_CONSOLE_PORT: String(porta) }, stdin: true });
+    const t = await travaViva();
+    assert.equal(t.porta, porta);
+    assert.equal(t.pai, ponte.proc.pid, 'o núcleo vigia a ponte');
+
+    const pedir = (m: object) => ponte.proc.stdin!.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
+    pedir({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'teste', version: '0' } } });
+    pedir({ id: 2, method: 'tools/call', params: { name: 'fleet_overview', arguments: {} } });
+    ponte.proc.stdin!.end();
+    const s = await ponte.saida;
+    const respostas = s.stdout.trim().split('\n').map((l) => JSON.parse(l) as { id: number; result?: { isError?: boolean } });
+    const chamada = respostas.find((r) => r.id === 2);
+    assert.ok(chamada?.result, s.stdout);
+    assert.notEqual(chamada.result.isError, true, 'a chamada foi o núcleo que respondeu');
+
+    assert.ok(await ate(() => !pidVivo(t.pid), 10_000), 'a ponte saiu e o núcleo também');
+    assert.equal(lerTrava(pasta), null);
+  });
+
+  test('adota o núcleo de pé e se registra como cliente', async () => {
+    const porta = await portaLivre();
+    const app = dormente();
+    const a = api(porta, '--pai', String(app.pid));
+    await travaViva();
+    const ponte = rodar(CLI_MCP, [], { env: { AHRENA_CONSOLE_PORT: String(await portaLivre()) }, stdin: true });
+    assert.ok(await ate(() => clientesVivos(pasta).includes(ponte.proc.pid!)), 'a ponte é cliente');
+    app.kill('SIGKILL');
+    await dormir(2500);
+    assert.equal(a.proc.exitCode, null, 'a ponte ainda precisa do núcleo');
+    ponte.proc.stdin!.end();
+    await ponte.saida;
+    assert.equal((await a.saida).codigo, 0);
   });
 });
