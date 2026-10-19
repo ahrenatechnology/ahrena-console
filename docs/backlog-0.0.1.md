@@ -176,10 +176,10 @@ Decisão do spike 5.1: [consulta rasa, filhas ao expandir, delta e cache](deciso
 | 6.4 | Tech task | Simulador de sessões, com modo caos, para testar e demonstrar sem dados reais (Podium) | demonstração | 1.1 |
 | 6.5 | Spike | Plataforma desktop externa integrada ao Claude, reaproveitando o que já está instalado; referência no app Electron do CCAM, preferência por Tauri (timebox: 1 dia) | decisão | — |
 | 6.6 | Tech task | Núcleo com dono único: arquivo de trava com pid e porta, adoção pela extensão, pelo app e pelo terminal, saída quando o pai some ([decisão 0005](decisoes/0005-app-desktop.md)) | um núcleo por máquina | 1.1 |
-| 6.7 | User story, frontend | App desktop em Tauri, na bandeja: "N precisam de você" na barra de menus, sessões esperando no menu, janela com a interface do núcleo (depois da 0.0.1) | atenção fora do Claude | 2.1, 2.4, 6.6 |
-| 6.8 | User story, frontend | Notificações do sistema quando uma sessão passa a esperar, com o motivo (depois da 0.0.1) | aviso sem olhar a tela | 6.7, 1.5 |
-| 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja (depois da 0.0.1) | núcleo vivo desde o login | 6.7 |
-| 6.10 | Tech task | Release do app assinado e notarizado, com updater e build no CI (depois da 0.0.1) | instalar e atualizar sem atrito | 6.7, 6.3 |
+| 6.7 | User story, frontend | App desktop em Tauri, na bandeja: "N precisam de você" na barra de menus, sessões esperando no menu, janela com a interface do núcleo | atenção fora do Claude | 2.1, 2.4, 6.6 |
+| 6.8 | User story, frontend | Notificações do sistema quando uma sessão passa a esperar, com o motivo | aviso sem olhar a tela | 6.7, 1.5 |
+| 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja | núcleo vivo desde o login | 6.7 |
+| 6.10 | Tech task | Release do app assinado e notarizado, com updater e build no CI | instalar e atualizar sem atrito | 6.7, 6.3 |
 
 ## Épico 7 · Hub na nuvem, AWS serverless (M2)
 

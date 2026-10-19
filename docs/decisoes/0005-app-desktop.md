@@ -1,12 +1,12 @@
 # 0005 · App desktop: uma bandeja em Tauri que complementa o Claude, sem duplicar
 
-- **Status:** aceita
+- **Status:** aceita; revista no mesmo dia: o app entra na 0.0.1
 - **Data:** 2026-10-18
 - **Issue:** [#82](https://github.com/ahrenatechnology/ahrena-console/issues/82) (spike 6.5 do [backlog](../backlog-0.0.1.md), épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7))
 - **Parte de:** [0004](0004-painel-da-sessao.md), que abriu o spike
 - **Prova:** [spikes/app-desktop](../../spikes/app-desktop/)
 
-> Estudado no código do Claude Code Agent Monitor (CCAM, commit `f9188db` de 2026-10-18, app desktop 2.3.0) e provado com um esqueleto Tauri 2.12 compilado nesta máquina (macOS 26.7, Apple Silicon). Os números do Electron vêm dos releases do CCAM e de benchmarks públicos, não de uma medição minha. Não instalei nada no escopo do usuário: o Rust ficou dentro do worktree. Não assinei nem notarizei: isso exige a conta paga da Apple.
+> Estudado no código do Claude Code Agent Monitor (CCAM, commit `f9188db` de 2026-10-18, app desktop 2.3.0) e provado com um esqueleto Tauri 2.12 compilado nesta máquina (macOS 26.7, Apple Silicon). Os números do Electron vêm dos releases do CCAM e de benchmarks públicos, não de uma medição minha. O Rust ficou dentro do worktree. O app da prova chegou a ser instalado em `/Applications` para testar a bandeja e foi removido depois, com o núcleo que ele subiu. Não assinei nem notarizei: isso exige a conta paga da Apple.
 
 ## Contexto
 
@@ -142,7 +142,7 @@ flowchart LR
 
 **O Ahrena Console ganha um app desktop pequeno, em Tauri 2, que complementa o painel e o artefato. Ele é uma bandeja: mostra quem precisa de você, notifica pelo sistema, abre no login, garante que o núcleo esteja de pé e abre a interface do núcleo numa janela própria. Não tem telas próprias, não grava configuração do Claude e não embute Node.**
 
-Fica **fora da 0.0.1** (M1 · Local), que entrega o núcleo, o plugin e a extensão. O app entra depois do 2.1 (quem precisa de mim) e do 2.4 (long polling), que são a fonte da bandeja e das notificações, e antes do hub, porque a notificação local não depende da nuvem.
+Entra **na 0.0.1** (M1 · Local), junto com o núcleo, o plugin e a extensão, por decisão do dono em 2026-10-18 (a primeira versão deste registro o deixava para depois). A ordem não muda: o app vem depois do 2.1 (quem precisa de mim) e do 2.4 (long polling), que são a fonte da bandeja e das notificações, e antes do hub, porque a notificação local não depende da nuvem.
 
 ## Medições da prova
 
@@ -176,7 +176,7 @@ O que a prova **não** cobre:
 
 ## O que entra no backlog
 
-No épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7) · Distribuição, depois da 0.0.1:
+No épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7) · Distribuição, na 0.0.1 (M1):
 
 | # | Tipo | Item | Depende de |
 | --- | --- | --- | --- |
