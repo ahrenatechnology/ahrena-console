@@ -16,17 +16,30 @@ import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from '../api/contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/indice-desktop.ts';
+import { atencaoDe, type MotivoDaAtencao } from '../api/atencao.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from '../api/resumo.ts';
 import type { ContaDoPainel } from '../api/tipos.ts';
 import { ferramentaSegura, tituloSeguro } from './saida.ts';
 
 /**
- * Por que a sessão precisa de você. As quatro primeiras travam o agente no meio do trabalho; as
- * duas últimas são "sua vez": o agente terminou e espera o próximo prompt.
+ * Por que a sessão precisa de você. A divisão é a do painel (`atencaoDe`, #140): as cinco
+ * primeiras travam a sessão até você agir; as três últimas são "sua vez" no bate-bola (o turno
+ * acabou, Esc, sessão nova no prompt).
  */
-export type Motivo = 'permission' | 'question' | 'plan' | 'interrupted' | 'error' | 'turn_ended' | 'first_prompt';
+export type Motivo = 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt';
 export type Grupo = 'blocking' | 'your_turn';
-export const MOTIVOS_QUE_TRAVAM: readonly Motivo[] = ['permission', 'question', 'plan', 'interrupted', 'error'];
+export const MOTIVOS: readonly Motivo[] = ['permission', 'question', 'plan', 'decision', 'error', 'turn_ended', 'interrupted', 'first_prompt'];
+
+const MOTIVO_DO_PAINEL: Record<MotivoDaAtencao, Motivo> = {
+  permissao: 'permission',
+  pergunta: 'question',
+  plano: 'plan',
+  decisao: 'decision',
+  erro: 'error',
+  'sua-vez': 'turn_ended',
+  interrompida: 'interrupted',
+  'no-prompt': 'first_prompt',
+};
 
 export interface SessaoDaFrota {
   session: Session;
@@ -159,26 +172,20 @@ export class LeituraDaFrota {
   }
 }
 
-/** O motivo pelo estado do inbox (1.5) e pela última ferramenta e o último pedido do principal. */
+/**
+ * O motivo e o grupo vêm de `atencaoDe` (src/api/atencao.ts), a mesma regra do "precisam de você"
+ * do painel; aqui só se acrescenta o que o MCP mostra além dela, sem texto da conversa.
+ */
 export function classificar(inbox: LeituraDoInbox, r: ResumoDosEventos): Atencao {
-  const base = { ferramenta: null, opcoes: null, codigoDoErro: null };
-  if (inbox.estado === 'error') return { ...base, motivo: 'error', grupo: 'blocking', codigoDoErro: codigoDoErro(r.ultimoErro?.texto ?? null) };
-  switch (inbox.motivo) {
-    case 'notification': {
-      const nome = r.ultimaFerramenta?.nome ?? null;
-      if (nome === 'ExitPlanMode') return { ...base, motivo: 'plan', grupo: 'blocking' };
-      if (nome === 'AskUserQuestion' || r.ultimoPedido?.tipo === 'elicitation_dialog') {
-        return { ...base, motivo: 'question', grupo: 'blocking', opcoes: r.ultimaPergunta?.opcoes || null };
-      }
-      return { ...base, motivo: 'permission', grupo: 'blocking', ferramenta: ferramentaSegura(nome) };
-    }
-    case 'interrupted':
-      return { ...base, motivo: 'interrupted', grupo: 'blocking' };
-    case 'session_start':
-      return { ...base, motivo: 'first_prompt', grupo: 'your_turn' };
-    default:
-      return { ...base, motivo: 'turn_ended', grupo: 'your_turn' };
-  }
+  const { nivel, porque } = atencaoDe(inbox, r);
+  const motivo = MOTIVO_DO_PAINEL[porque];
+  return {
+    motivo,
+    grupo: nivel === 'precisa' ? 'blocking' : 'your_turn',
+    ferramenta: motivo === 'permission' ? ferramentaSegura(r.ultimaFerramenta?.nome) : null,
+    opcoes: motivo === 'question' ? r.ultimaPergunta?.opcoes || null : null,
+    codigoDoErro: motivo === 'error' ? codigoDoErro(r.ultimoErro?.texto ?? null) : null,
+  };
 }
 
 /** Só o código: o status HTTP e o tipo do erro da API, nunca a mensagem. */
