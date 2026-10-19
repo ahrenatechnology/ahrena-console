@@ -1,13 +1,14 @@
 // `sessions_needing_attention`: quem precisa de mim, em todas as contas (2.1 e decisão 0006).
 //
 // Dois grupos, como o dono pediu:
-// - `blocking`: o agente está travado no meio do trabalho esperando você (permissão, pergunta,
-//   plano para aprovar, turno interrompido, erro);
-// - `your_turn`: o agente terminou o turno (ou a sessão abriu) e espera o próximo prompt.
+// - `blocking`: a sessão está travada até você agir (permissão, pergunta, plano para aprovar,
+//   decisão pedida no fechamento do turno, erro);
+// - `your_turn`: a vez é sua no bate-bola (o turno acabou, Esc, sessão nova no prompt).
+// A divisão é a mesma do "precisam de você" do painel (`atencaoDe`, #140).
 // Travadas primeiro; dentro do grupo, quem espera há mais tempo primeiro.
 
 import { ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../protocolo.ts';
-import { casaConta, minutosDesde, projetoDe, type Atencao, type Grupo, type LeituraDaFrota, type Motivo, type SessaoDaFrota } from '../frota.ts';
+import { casaConta, minutosDesde, MOTIVOS, projetoDe, type Atencao, type Grupo, type LeituraDaFrota, type Motivo, type SessaoDaFrota } from '../frota.ts';
 import { LOCAL_DO_DESKTOP } from '../../api/servidor.ts';
 import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../saida.ts';
 import { contaDeSaida, linhaDeConta, type ContaDeSaida } from './comum.ts';
@@ -32,7 +33,6 @@ export interface ItemDeAtencao {
 }
 
 const GRUPOS = ['blocking', 'your_turn'] as const;
-const MOTIVOS = ['permission', 'question', 'plan', 'interrupted', 'error', 'turn_ended', 'first_prompt'] as const;
 
 export const ESQUEMA_DO_ITEM = objeto({
   sessionId: T.texto,
@@ -61,6 +61,8 @@ export function frasesDoMotivo(a: Atencao): string {
       return a.opcoes ? `fez uma pergunta (${a.opcoes} opções)` : 'fez uma pergunta';
     case 'plan':
       return 'espera você aprovar o plano';
+    case 'decision':
+      return 'fechou o turno pedindo uma decisão sua';
     case 'interrupted':
       return 'o turno foi interrompido';
     case 'error':
@@ -110,9 +112,9 @@ export function sessionsNeedingAttention(frota: LeituraDaFrota): Ferramenta {
     nome: 'sessions_needing_attention',
     titulo: 'Quem precisa de mim',
     descricao:
-      'Sessões do Claude Code desta máquina que esperam por você, em todas as contas. Separa as que travam o agente ' +
-      '(permissão, pergunta, plano, interrupção, erro: group "blocking") das que só estão na sua vez (o agente terminou o turno: ' +
-      'group "your_turn"). Cada uma traz o motivo, há quanto tempo espera, a conta e como abrir (claude --resume). ' +
+      'Sessões do Claude Code desta máquina que esperam por você, em todas as contas. Separa as que travam a sessão ' +
+      '(permissão, pergunta, plano, decisão pedida, erro: group "blocking") das que só estão na sua vez (o turno acabou, Esc ' +
+      'ou sessão nova: group "your_turn"). Cada uma traz o motivo, há quanto tempo espera, a conta e como abrir (claude --resume). ' +
       'Não devolve texto das conversas. Paginada: use nextCursor.',
     entrada: esquema({
       group: { type: 'string', enum: ['all', 'blocking', 'your_turn'], default: 'all', description: 'Só um dos grupos.' },

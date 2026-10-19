@@ -20,7 +20,7 @@ import {
   type RespostaJsonRpc,
 } from '../../src/mcp/index.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
-import { at } from '../fixtures.ts';
+import { agent, at, event, session } from '../fixtures.ts';
 import { AGORA, c2, MENSAGEM, PERGUNTA, SEGREDO, semear as semearCasos } from './helpers.ts';
 
 type Resultado = { content: { type: string; text: string }[]; structuredContent: any; isError: boolean };
@@ -107,13 +107,13 @@ describe('protocolo', () => {
 describe('sessions_needing_attention', () => {
   beforeEach(semear);
 
-  test('separa as que travam o agente das que estão na sua vez, com motivo, espera, conta e como abrir', async () => {
+  test('separa as que travam a sessão das que estão na sua vez, com motivo, espera, conta e como abrir', async () => {
     const r = await chamar('sessions_needing_attention');
     const d = r.structuredContent;
     assert.equal(r.isError, false);
     assert.equal(d.total, 7);
-    assert.equal(d.blocking, 5);
-    assert.equal(d.yourTurn, 2);
+    assert.equal(d.blocking, 4);
+    assert.equal(d.yourTurn, 3);
     // Travadas primeiro; em cada grupo, quem espera há mais tempo primeiro.
     assert.deepEqual(
       d.items.map((i: any) => [i.sessionId, i.group, i.reason]),
@@ -122,8 +122,9 @@ describe('sessions_needing_attention', () => {
         ['permissao', 'blocking', 'permission'],
         ['erro', 'blocking', 'error'],
         ['pergunta', 'blocking', 'question'],
-        ['interrompida', 'blocking', 'interrupted'],
+        // Esc é a sua vez, como no painel (atencaoDe, #140).
         ['sua-vez', 'your_turn', 'turn_ended'],
+        ['interrompida', 'your_turn', 'interrupted'],
         ['abriu', 'your_turn', 'first_prompt'],
       ],
     );
@@ -137,7 +138,7 @@ describe('sessions_needing_attention', () => {
     assert.equal(d.items.find((i: any) => i.sessionId === 'pergunta').questionOptions, 3);
     assert.equal(d.items.find((i: any) => i.sessionId === 'erro').errorCode, '529 overloaded_error');
     assert.equal(d.items.find((i: any) => i.sessionId === 'erro').account, null);
-    assert.match(r.content[0].text, /7 sessões precisam de você: 5 travando o agente, 2 na sua vez/);
+    assert.match(r.content[0].text, /7 sessões precisam de você: 4 travando o agente, 3 na sua vez/);
     assert.match(r.content[0].text, /Travando o agente:[\s\S]*Na sua vez:/);
   });
 
@@ -152,6 +153,20 @@ describe('sessions_needing_attention', () => {
     assert.equal(itens.find((i: any) => i.sessionId === 'plano').open.desktopLink, null);
   });
 
+  test('o fechamento do turno que pede uma decisão trava a sessão, sem devolver a pergunta', async () => {
+    await storage.putSession(session({ id: 'decisao', name: 'merge', startedAt: at(-60), updatedAt: at(-7), awaitingInputSince: at(-7), awaitingReason: 'stop', accountId: c2.id, accountSource: 'env' }));
+    await storage.putAgent(agent({ id: 'decisao:main', sessionId: 'decisao', status: 'waiting' }));
+    await storage.appendEvent(
+      event({ id: 'decisao-e1', sessionId: 'decisao', agentId: 'decisao:main', type: 'PreToolUse', toolName: 'mcp__ccd_turn__wrap_up', summary: null, createdAt: at(-8), data: { tool_use_id: 'w1', tool_input: { recap: 'feito', ask: `Faço o merge? ${SEGREDO}` } } }),
+    );
+    const r = await chamar('sessions_needing_attention', { group: 'blocking' });
+    const d = r.structuredContent.items.find((i: any) => i.sessionId === 'decisao');
+    assert.equal(d.reason, 'decision');
+    assert.equal(d.reasonText, 'fechou o turno pedindo uma decisão sua');
+    assert.ok(!JSON.stringify(r).includes('Faço o merge'));
+    assert.ok(!JSON.stringify(r).includes(SEGREDO));
+  });
+
   test('não devolve texto da conversa: comando, pergunta, plano, mensagem do assistente nem mensagem de erro', async () => {
     const r = await chamar('sessions_needing_attention');
     const tudo = JSON.stringify(r);
@@ -162,7 +177,7 @@ describe('sessions_needing_attention', () => {
     const d = (await chamar('sessions_needing_attention')).structuredContent;
     assert.deepEqual(
       d.byAccount.map((c: any) => [c.account?.label ?? null, c.total, c.blocking, c.yourTurn]),
-      [['equipe', 4, 2, 2], ['cliente', 2, 2, 0], [null, 1, 1, 0]],
+      [['equipe', 4, 2, 2], ['cliente', 2, 1, 1], [null, 1, 1, 0]],
     );
     const ids = async (account: unknown) => (await chamar('sessions_needing_attention', { account })).structuredContent.items.map((i: any) => i.sessionId);
     assert.deepEqual(await ids('CLIENTE'), ['pergunta', 'interrompida']);
@@ -174,7 +189,7 @@ describe('sessions_needing_attention', () => {
 
   test('filtro por grupo e paginação por cursor', async () => {
     const sv = (await chamar('sessions_needing_attention', { group: 'your_turn' })).structuredContent;
-    assert.deepEqual(sv.items.map((i: any) => i.sessionId), ['sua-vez', 'abriu']);
+    assert.deepEqual(sv.items.map((i: any) => i.sessionId), ['sua-vez', 'interrompida', 'abriu']);
     assert.equal(sv.total, 7, 'os totais são de todos os grupos');
 
     const p1 = (await chamar('sessions_needing_attention', { limit: 3 })).structuredContent;
@@ -206,7 +221,7 @@ describe('fleet_overview', () => {
     assert.deepEqual(t.byState, { active: 1, waiting: 6, delegating: 1, background: 0, error: 1 });
     assert.equal(t.completedToday, 1);
     assert.equal(t.abandonedToday, 0, 'a abandonada de ontem não conta');
-    assert.deepEqual(t.needingAttention, { total: 7, blocking: 5, yourTurn: 2 });
+    assert.deepEqual(t.needingAttention, { total: 7, blocking: 4, yourTurn: 3 });
     assert.ok(t.costTodayUsd > 0);
     assert.equal(t.costEstimate, true);
     assert.equal(r.structuredContent.day, '2026-11-02');
@@ -256,8 +271,15 @@ describe('fleet_overview', () => {
     const montador = new MontadorDoPainel({ storage: sim, contas, desktop: null, trabalho: null, agora: () => AGORA });
     const painel = await montador.montar({ sessionId: 'nenhuma' });
     const mcp = (await chamar('sessions_needing_attention', {}, s)).structuredContent;
-    assert.equal(mcp.total, painel.precisam.total);
-    assert.deepEqual(mcp.byAccount.map((c: any) => c.account?.label).sort(), painel.precisam.porConta.map((c) => c.conta?.rotulo).sort());
+    // O total do painel conta só as que precisam de você; a sua vez vem à parte (#140).
+    assert.equal(mcp.blocking, painel.precisam.total);
+    assert.equal(mcp.yourTurn, painel.precisam.suaVez);
+    assert.deepEqual(
+      mcp.byAccount.filter((c: any) => c.blocking > 0).map((c: any) => [c.account?.label, c.blocking]).sort(),
+      painel.precisam.porConta.map((c) => [c.conta?.rotulo, c.n]).sort(),
+    );
+    const doPainel = new Map(painel.precisam.maquina.map((i) => [i.id, i.nivel === 'precisa' ? 'blocking' : 'your_turn']));
+    for (const i of mcp.items) assert.equal(i.group, doPainel.get(i.sessionId), i.sessionId);
     await sim.close();
   });
 });

@@ -30,17 +30,17 @@ export async function semear(storage: SqliteStorage) {
   await sessao(
     storage,
     { id: 'permissao', name: 'migrar banco', awaitingInputSince: at(-5), awaitingReason: 'notification', ...daConta(c1) },
-    { eventos: [{ type: 'PreToolUse', toolName: 'Bash', summary: SEGREDO, data: { tool_input: { command: SEGREDO } } }, { type: 'Notification', toolName: null, summary: 'Claude needs your permission', data: { notification_type: 'permission_prompt' } }] },
+    { eventos: [{ type: 'PreToolUse', toolName: 'Bash', summary: SEGREDO, data: { tool_use_id: 'b1', tool_input: { command: SEGREDO } } }, { type: 'Notification', toolName: null, summary: 'Claude needs your permission', data: { notification_type: 'permission_prompt' } }] },
   );
   await sessao(
     storage,
     { id: 'pergunta', name: 'testes', awaitingInputSince: at(-3), awaitingReason: 'notification', ...daConta(c2) },
-    { eventos: [{ type: 'PreToolUse', toolName: 'AskUserQuestion', summary: null, data: { tool_input: { questions: [{ question: PERGUNTA, options: [{}, {}, {}] }] } } }] },
+    { eventos: [{ type: 'PreToolUse', toolName: 'AskUserQuestion', summary: null, data: { tool_use_id: 'q1', tool_input: { questions: [{ question: PERGUNTA, options: [{}, {}, {}] }] } } }] },
   );
   await sessao(
     storage,
     { id: 'plano', name: 'refatorar', awaitingInputSince: at(-8), awaitingReason: 'notification', ...daConta(c1) },
-    { eventos: [{ type: 'PreToolUse', toolName: 'ExitPlanMode', summary: null, data: { tool_input: { plan: PERGUNTA } } }] },
+    { eventos: [{ type: 'PreToolUse', toolName: 'ExitPlanMode', summary: null, data: { tool_use_id: 'p1', tool_input: { plan: PERGUNTA } } }] },
   );
   await sessao(storage, { id: 'interrompida', name: 'app', awaitingInputSince: at(-2), awaitingReason: 'interrupted', ...daConta(c2) });
   await sessao(storage, { id: 'erro', name: 'painel', status: 'error', updatedAt: at(-4) }, { eventos: [{ type: 'APIError', toolName: null, summary: `API 529 · overloaded_error · ${MENSAGEM}` }] });
