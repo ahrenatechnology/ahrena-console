@@ -190,7 +190,7 @@ Decisão do spike 5.1: [consulta rasa, filhas ao expandir, delta e cache](deciso
 | 6.8 | User story, frontend | Notificações do sistema quando uma sessão passa a esperar, com o motivo | aviso sem olhar a tela | 6.7, 1.5 |
 | 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja | núcleo vivo desde o login | 6.7 |
 | 6.10 | Tech task | Release do app assinado e notarizado, com updater e build no CI | instalar e atualizar sem atrito | 6.7, 6.3 |
-| 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil e guia de contas simultâneas ([decisão 0006](decisoes/0006-multiplas-contas.md)) | várias contas instaladas | 6.2, 1.15 |
+| 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil e guia de contas simultâneas com alias e `remote-control` por conta ([decisão 0006](decisoes/0006-multiplas-contas.md)) | várias contas instaladas | 6.2, 1.15 |
 | 6.12 | User story, frontend | Bandeja e notificações por conta: menu agrupado por conta e rótulo da conta na notificação | bandeja multiconta | 6.7, 6.8, 1.12 |
 
 ## Épico 7 · Hub na nuvem, AWS serverless (M2)

@@ -31,13 +31,15 @@ Neste registro, **conta** é o par `(conta, org)` do claude.ai: o `accountUuid` 
 
 ### O que separa uma pasta de configuração da outra
 
-- **Login:** no macOS a credencial fica no Keychain com o nome `Claude Code-credentials`; com `CLAUDE_CONFIG_DIR`, o CLI 2.1.302 soma ao nome os 8 primeiros caracteres do SHA-256 da pasta (`Claude Code-credentials-1a2b3c4d`). Cada pasta tem o próprio login, e logar numa não desloga a outra. Visto no código do CLI; não criei credencial na prova.
+- **Login:** é o caminho documentado para várias contas: cada pasta tem "as próprias configurações, histórico de sessões e login do claude.ai ou API key" ([Authentication › Log in with multiple accounts](https://code.claude.com/docs/en/authentication)), com um alias por conta (`alias claude-work='CLAUDE_CONFIG_DIR=~/.claude-work claude'`). No macOS, o item do Keychain fica ligado à pasta: o CLI 2.1.302 soma ao nome `Claude Code-credentials` os 8 primeiros caracteres do SHA-256 da pasta (`Claude Code-credentials-1a2b3c4d`). Logar numa pasta não desloga a outra. Visto na documentação e no código do CLI; não criei credencial na prova.
+- **O que não fica separado:** o login do Claude Console **sem** API key (o perfil da Anthropic, a partir da v2.1.242) fica fora da pasta de configuração, em `~/.config/anthropic`, e a documentação diz que pastas diferentes não o isolam. Credenciais no ambiente (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `apiKeyHelper`) passam na frente do login de qualquer pasta, então não podem ficar exportadas no shell de todas as contas.
 - **Tudo o mais:** `.claude.json`, `settings.json`, plugins, hooks, `projects/` e `sessions/` ficam dentro da pasta. Na prova, duas sessões em `a` e `b` rodaram juntas e nada foi parar no `HOME`.
-- **O Claude Desktop** usa a pasta padrão (`~/.claude`) para todas as orgs e diz ao CLI qual conta usar pelo ambiente. Por isso os transcripts de todas as orgs do Desktop ficam juntos.
+- **O Claude Desktop** usa a pasta padrão (`~/.claude`) para todas as orgs e diz ao CLI qual conta usar pelo ambiente. Por isso os transcripts de todas as orgs do Desktop ficam juntos. A documentação diz que o Desktop entra por OAuth, não lê as variáveis de credencial, compartilha `~/.claude.json` e `~/.claude/settings.json` com o CLI e roda uma cópia própria do Claude Code. Ela **não** diz se o Desktop respeita `CLAUDE_CONFIG_DIR`, nem se ele pode ficar logado numa conta e o CLI do terminal, na mesma `~/.claude`, em outra. Não medi nenhum dos dois: trocar o login para medir mexeria na configuração real.
+- **Do terminal para o Desktop:** `/desktop` no CLI, `claude --desktop --resume <id>` (v2.1.285 em diante; o CLI 2.1.302 tem a opção) ou `/resume` no Desktop levam uma sessão local para o Desktop. É a mesma sessão, não uma cópia, e só vale com login de assinatura. O Desktop e o CLI têm listas de sessões separadas: a barra lateral não mostra as sessões do CLI até alguém trazê-las. Como o Desktop lê `~/.claude`, uma sessão de outra pasta de configuração provavelmente não tem como ser trazida (inferência, não medido).
 
 ## Decisão
 
-**Um núcleo por máquina para todas as contas.** A conta é um atributo da sessão, gravado quando ela é vista pela primeira vez, com a procedência. As superfícies mostram tudo junto e filtram, agrupam e somam por conta. Nenhuma peça depende da conta logada no Claude Desktop. Para rodar contas em simultâneo, o caminho padrão é **o Claude Desktop numa conta e uma pasta de configuração por conta para as outras**, todas alimentando o mesmo núcleo.
+**Um núcleo por máquina para todas as contas.** A conta é um atributo da sessão, gravado quando ela é vista pela primeira vez, com a procedência. As superfícies mostram tudo junto e filtram, agrupam e somam por conta. Nenhuma peça depende da conta logada no Claude Desktop. Para rodar contas em simultâneo, o caminho padrão é **o Claude Code no terminal, com uma pasta de configuração por conta e Remote Control**, todas alimentando o mesmo núcleo. O Claude Desktop entra como mais uma superfície, numa conta.
 
 ### 1. Conta de cada sessão
 
@@ -112,12 +114,15 @@ A conta do Claude é uma **dimensão** dentro do time, não um tenant. O tenant 
 | Caminho | O que funciona | Login | Custo | O que se perde |
 | --- | --- | --- | --- | --- |
 | **Claude Desktop trocando de org** | Tudo do Desktop, numa org por vez | Um login, troca pelo menu | Nenhum | **Não é simultâneo.** A barra lateral só lista as sessões da org logada; o resto some até trocar de volta |
-| **Uma pasta de configuração por conta** (`CLAUDE_CONFIG_DIR`), no terminal ou no editor | **Simultâneo**: provado com duas pastas ao mesmo tempo, com hooks e transcripts separados. Cada uma alimenta o mesmo núcleo | `CLAUDE_CONFIG_DIR=~/.claude-cliente claude auth login`, uma vez por pasta; o Keychain separa as credenciais | Zero; um alias de shell por conta e o plugin instalado em cada pasta | O painel lateral e a barra lateral do Desktop (o painel só existe no Desktop). Configuração duplicada (plugins, MCP, `settings.json`) |
+| **Uma pasta de configuração por conta** (`CLAUDE_CONFIG_DIR`), no terminal ou no editor | **Simultâneo**: provado com duas pastas ao mesmo tempo, com hooks e transcripts separados. Cada uma alimenta o mesmo núcleo | `CLAUDE_CONFIG_DIR=~/.claude-cliente claude auth login`, uma vez por pasta; o Keychain separa as credenciais | Zero; um alias de shell por conta e o plugin instalado em cada pasta | A barra lateral, o navegador, o diff e os outros painéis do Desktop. O painel do console (mod) continua: ele também desenha no terminal (testes do [painel-teste](../../spikes/painel-teste/)). Configuração duplicada (plugins, MCP, `settings.json`) |
+| **Terminal com uma pasta por conta, Remote Control e o console juntando tudo** (indicado pelo dono) | **Simultâneo e com mais paralelismo**: `claude remote-control` fica em modo servidor e abre sessões sob demanda (`--spawn same-dir`, `worktree` ou `session`), até `--capacity` sessões por processo (padrão 32), um processo por conta. `--rc` ou `/rc` liga o Remote Control numa sessão já aberta. Cada sessão aparece no claude.ai/code e no app do celular **da conta dela**. O console junta todas: painel em cada sessão, MCP, bandeja e artefato | Um `claude auth login` por pasta, como acima. Remote Control exige plano Pro, Max, Team ou Enterprise e não aceita API key nem `CLAUDE_CODE_OAUTH_TOKEN`; em Team e Enterprise, um Owner da org precisa ligar a opção, ou seja, **em cada org de cliente** | Zero de infraestrutura; um terminal (ou um serviço) por conta com `remote-control` rodando | A barra lateral e os painéis do Desktop. No claude.ai/code e no celular, cada conta vê só as próprias sessões: quem junta as contas é o console. O artefato do console continua precisando do Desktop com a extensão (ponte `host:`). Sem o Owner ligar o Remote Control, a conta de um cliente fica só no terminal |
 | **Claude Code num container por conta** | Simultâneo e isolado de verdade: disco, rede e credenciais do cliente ficam no container | Login dentro do container; sem Keychain, a credencial fica num arquivo do volume | Docker ou Colima ligados (centenas de MB de RAM por container) e um volume por conta | O painel, os arquivos do Mac fora dos volumes montados e o núcleo em `127.0.0.1`: o hook precisa de um endereço do host. **Não provado** no timebox |
 | **Workstation por SSH** | Sessões da aba Code rodando lá, com o painel no Desktop | O login do CLI na máquina remota, que precisa estar na mesma org do Desktop (hoje um login por usuário remoto) | A máquina remota | Só uma conta por usuário remoto, salvo pasta de configuração por conta lá também. O núcleo remoto precisa juntar-se ao do Mac (pelo túnel ou pelo hub) |
 | **Hub juntando tudo** | A visão única de todas as máquinas e contas da pessoa e do time | GitHub, independente do Claude | O da 0002 | Não faz as contas rodarem juntas, só junta o que cada máquina manda. M2 |
 
-**Recomendação:** o Claude Desktop na conta em que a pessoa mais trabalha, com o painel; as outras contas em pastas de configuração próprias, no terminal ou no editor; o mesmo núcleo para todas, e o hub para juntar máquinas. Container fica para o cliente que exige isolamento, e a workstation para o trabalho remoto que já existe.
+**Recomendação:** o terminal com uma pasta de configuração por conta, cada uma com `claude remote-control` para abrir e acompanhar sessões de qualquer lugar. Esse é o único caminho medido que roda todas as contas ao mesmo tempo, com o paralelismo do modo servidor. O painel do console fica em cada sessão, e o núcleo, a bandeja e o MCP somam todas as contas. O Claude Desktop continua para a conta em que a pessoa quer o navegador, o diff e o artefato. Na pasta padrão, ele não deve disputar a conta com o terminal até a dúvida acima ser medida (6.11). O hub junta máquinas. Container fica para o cliente que exige isolamento, e a workstation para o trabalho remoto que já existe.
+
+Pela linha `bridge-session` que o Remote Control grava, as sessões abertas assim tendem a trazer o dono no próprio transcript (ordem 3). É uma inferência a conferir na 1.14.
 
 ## Prova
 
@@ -126,7 +131,7 @@ A conta do Claude é uma **dimensão** dentro do time, não um tenant. O tenant 
 - `prova.sh`: duas pastas de configuração, contas sintéticas, `HOME` falso e uma API falsa; as duas sessões rodam juntas e os hooks recebem a conta de cada uma pelo ambiente.
 - `medir.py`: os números da seção "O que foi medido", só contagens.
 
-O que a prova **não** cobre: login OAuth de verdade em duas pastas (não criei credencial no Keychain), container, sessões por SSH, a ponte `host:` com o Desktop em outra org e uma segunda instância do Claude Desktop.
+O que a prova **não** cobre: login OAuth de verdade em duas pastas (não criei credencial no Keychain), Remote Control (exige login de assinatura), container, sessões por SSH, a ponte `host:` com o Desktop em outra org, o Desktop e o terminal logados em contas diferentes na mesma `~/.claude`, e uma segunda instância do Claude Desktop.
 
 ## O que entra no backlog
 
@@ -143,7 +148,7 @@ Todos no **M1**:
 | 3.11 | User story, frontend | Artefato por conta: seletor na moldura, coluna Conta, Dashboard, Custo, mural e kanban por conta | 3.1, 2.6 |
 | 3.12 | Tech task | Validar o artefato e a ponte `host:` com o Desktop em cada org, e decidir entre um link por org ou um só | 3.1 |
 | 4.7 | User story, frontend | Painel com a conta desta sessão e "N precisam de você" de todas as contas, com a divisão | 4.1, 1.13 |
-| 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil e guia de contas simultâneas | 6.2, 1.15 |
+| 6.11 | Tech task | Instalação com várias pastas de configuração: `ahrena-console perfis`, plugin em cada perfil, `doctor` por perfil (inclusive credencial no ambiente) e guia de contas simultâneas com alias e `remote-control` por conta. Medir se o Desktop e o terminal podem ficar em contas diferentes na mesma `~/.claude` | 6.2, 1.15 |
 | 6.12 | User story, frontend | Bandeja e notificações por conta: menu agrupado e rótulo da conta na notificação | 6.7, 6.8, 1.12 |
 | 7.12 | Tech task | Contrato do hub com conta: `accountKey` com sal do time, conta em cada sessão do lote, política de envio e destino por conta na máquina, conta nova em `nada` | 1.12 |
 
@@ -163,7 +168,7 @@ Todos no **M1**:
 - O plugin precisa estar em cada pasta de configuração. O `doctor` passa a ser por perfil.
 - O hub (0002) ganha a dimensão conta e a política por conta. O UUID real da conta não sai da máquina.
 - O painel (0004) continua olhando a sessão em que está aberto; só ganha a conta dela e a soma de todas.
-- A recomendação de uso muda: o Desktop numa conta e pastas de configuração para as outras, com o mesmo núcleo.
+- A recomendação de uso muda: o terminal com uma pasta de configuração e um `remote-control` por conta, o Desktop como mais uma superfície, e o mesmo núcleo para todas.
 
 ## Riscos
 
@@ -174,3 +179,5 @@ Todos no **M1**:
 | Sessões copiadas entre orgs pela sincronização | A pasta do Desktop aponta para mais de uma conta | Só usar o índice quando há uma pasta só |
 | Sessão de cliente enviada ao hub errado | Vazamento entre clientes | Conta nova em `nada`, destino por conta, `accountKey` em vez do UUID |
 | Esquecer o plugin numa pasta de configuração | Sessões dessa conta sem hooks, só pelo seguidor | `ahrena-console perfis` e o `doctor` por perfil |
+| Remote Control desligado na org de um cliente (Team ou Enterprise) | Sem acompanhar pelo celular ou pelo claude.ai/code nessa conta | O console mostra a conta do mesmo jeito, pelos hooks; o guia (6.11) explica o pedido ao Owner |
+| Credencial exportada no shell (`ANTHROPIC_API_KEY` e afins) | Passa na frente do login de todas as pastas e mistura as contas | O `doctor` avisa quando há credencial no ambiente |
