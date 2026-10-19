@@ -7,9 +7,10 @@
 // - `desktop`: o índice do Claude Desktop, só quando a sessão está numa pasta conta/org só.
 //
 // Sem nenhuma, a sessão fica em "Sem conta": nunca é atribuída a outra por palpite.
-// Rótulo e cor: os da `ClaudeAccount`; senão os de `~/.ahrena-console/contas.json`
-// (`{ "<conta>/<org>": { "rotulo", "cor" } }`, cor em hex); senão "conta 1", "conta 2"… na
-// ordem em que aparecem, com as cores da marca. O id nunca é mostrado.
+// Rótulo e cor: os de `~/.ahrena-console/contas.json` (`{ "<conta>/<org>": { "rotulo", "cor" } }`,
+// cor em hex), que sobrepõem; senão os da `ClaudeAccount` (os perfis, #109, gravam o nome da org
+// e uma cor da marca); senão "conta 1", "conta 2"… na ordem em que aparecem, com as cores da
+// marca. O id nunca é mostrado.
 
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -103,7 +104,7 @@ export class Contas {
     const i = this.ordem.indexOf(id);
     const a = this.daPorta.get(id);
     const c = this.configurados.get(id);
-    const cor = (a?.color && HEX.test(a.color) ? a.color : null) ?? c?.cor ?? CORES_DAS_CONTAS[i % CORES_DAS_CONTAS.length];
-    return { id, rotulo: a?.label ?? c?.rotulo ?? `conta ${i + 1}`, cor, fonte };
+    const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? CORES_DAS_CONTAS[i % CORES_DAS_CONTAS.length];
+    return { id, rotulo: c?.rotulo ?? a?.label ?? a?.organizationName ?? `conta ${i + 1}`, cor, fonte };
   }
 }
