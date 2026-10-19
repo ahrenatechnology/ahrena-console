@@ -1,0 +1,12 @@
+{
+  "pages": {
+    "wireframes": {
+      "file": "index.html",
+      "title": "Wireframes do Ahrena Console",
+      "files": [],
+      "links": {},
+      "capabilities": {}
+    }
+  },
+  "publishOrder": ["wireframes"]
+}

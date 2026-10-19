@@ -16,12 +16,12 @@ await cdp('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1200, dev
 for (const id of ids) {
   await cdp('Page.navigate', { url: `${base}?captura=${id}` })
   await sleep(1800)
-  const r = await cdp('Runtime.evaluate', { expression: `document.fonts.ready.then(()=>{const m=document.querySelector('main').getBoundingClientRect();return JSON.stringify({x:m.x,y:m.y,w:m.width,h:m.height,e:window.estouros.length})})`, awaitPromise: true, returnByValue: true })
+  const r = await cdp('Runtime.evaluate', { expression: `document.fonts.ready.then(()=>{const m=document.querySelector('main').getBoundingClientRect();return JSON.stringify({x:m.x,y:m.y,w:m.width,h:m.height})})`, awaitPromise: true, returnByValue: true })
   const b = JSON.parse(r.result.result.value)
   if (b.h > 1200) await cdp('Emulation.setDeviceMetricsOverride', { width: 1600, height: Math.ceil(b.h) + 10, deviceScaleFactor: 2, mobile: false })
   const shot = await cdp('Page.captureScreenshot', { format: 'png', clip: { x: b.x, y: b.y, width: b.w, height: b.h, scale: 1 }, captureBeyondViewport: true })
   writeFileSync(`${saida}/${id}.png`, Buffer.from(shot.result.data, 'base64'))
-  console.log(id, Math.round(b.w), 'x', Math.round(b.h), 'estouros:', b.e)
+  console.log(id, Math.round(b.w), 'x', Math.round(b.h))
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1200, deviceScaleFactor: 2, mobile: false })
 }
 ws.close(); proc.kill()
