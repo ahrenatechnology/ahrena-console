@@ -15,6 +15,8 @@ export {
   registerDecision,
   releaseDecisionText,
   revertDecision,
+  reopenDecision,
+  markNoise,
   type DecisionDraft,
   type DecisionLevel,
   type LinkSessionInput,

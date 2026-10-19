@@ -37,10 +37,13 @@ const executarPadrao: Executar = (comando, args) =>
     });
   });
 
-/** A linha de comando é do Claude Code? Binário `claude` ou o pacote npm rodando no node. */
+/**
+ * A linha de comando é do Claude Code? Binário `claude` ou o pacote npm rodando no node. O caminho
+ * do binário pode ter espaço: o do Claude Desktop fica em `~/Library/Application Support/Claude/
+ * claude-code/<versão>/…/MacOS/claude`, e cortar no primeiro espaço perdia todas as sessões dele.
+ */
 export function ehClaude(linhaDeComando: string): boolean {
-  const [primeiro = ''] = linhaDeComando.trim().split(/\s+/);
-  return /(^|\/)claude$/.test(primeiro) || linhaDeComando.includes('@anthropic-ai/claude-code');
+  return /^(?:\S*\/|\/.*?\/)?claude(?:\s|$)/.test(linhaDeComando.trim()) || linhaDeComando.includes('@anthropic-ai/claude-code');
 }
 
 /** Saída de `ps -axo pid=,args=` → pids do Claude Code. */

@@ -116,6 +116,7 @@ export const ESTADOS_DA_DECISAO: Record<DecisaoDoPainel['estado'], string> = {
   vigente: 'Vigente',
   substituida: 'Substituída',
   a_confirmar: 'A confirmar',
+  descartada: 'Descartada',
 }
 
 export const ESCOPOS: { valor: EscopoDasDecisoes; rotulo: string }[] = [
@@ -146,3 +147,19 @@ export function quemDecidiu(d: DecisaoDoPainel): string {
 export const naoTexto = (d: DecisaoDoPainel) => `não: ${d.nao.length ? d.nao.join('; ') : '—'}`
 
 export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão vigente' : `${n} decisões vigentes`)
+
+/** O que o "Desfazer" volta, dito para a pessoa. */
+export const DESFAZER: Record<'confirmar' | 'descartar' | 'ajustar', { feito: string; volta: string }> = {
+  confirmar: { feito: 'confirmada', volta: 'voltar a "a confirmar"' },
+  descartar: { feito: 'descartada', volta: 'voltar a "a confirmar"' },
+  ajustar: { feito: 'ajustada', volta: 'tirar o ajuste' },
+}
+
+/** Quanto tempo o "Desfazer" fica à vista depois de Confirmar, Descartar ou Ajustar. */
+export const DESFAZER_MS = 10_000
+
+/** "19/10 22:41", no fuso de quem olha. */
+export function dataEHora(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${hora(d.getTime())}`
+}

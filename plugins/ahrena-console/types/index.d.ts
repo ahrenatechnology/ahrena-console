@@ -45,6 +45,20 @@ export type PlanoDoPainel = {
   passos?: PassoDoPainel[]
 }
 
+/** Um plano do histórico da sessão (issue #131): o atual, ou um anterior concluído ou abandonado (X de Y). */
+export type PlanoDaSessao = {
+  numero: number
+  resultado: 'atual' | 'concluido' | 'abandonado'
+  /** O primeiro passo do plano. */
+  resumo: string
+  feitos: number
+  total: number
+  /** O passo em andamento, só no atual. */
+  atual: string | null
+  inicio: string
+  fim: string | null
+}
+
 export type DonoDoPasso = { tipo: 'principal' | 'subagente' | 'sessao'; nome: string | null; agenteId: string | null }
 
 export type PassoDoPainel = {
@@ -64,7 +78,7 @@ export type SubagenteDoPainel = {
   ate: string | null
 }
 
-export type FilhaDoPainel = { id: string; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
+export type FilhaDoPainel = { id: string; local?: string | null; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
 
 export type TrabalhoDoPainel = {
   branch: string
@@ -83,6 +97,8 @@ export type TrabalhoDoPainel = {
 
 export type PrecisaDeVoce = {
   id: string
+  /** `local_…` do Claude Desktop, para abrir a conversa; sem ele, a sessão é só de terminal. */
+  local?: string | null
   titulo: string
   estado: 'waiting' | 'error'
   motivo: AwaitingReason | null
@@ -111,8 +127,14 @@ export type DecisaoDoPainel = {
   /** "D4": o número na família. */
   rotulo: string
   origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida'
-  estado: 'vigente' | 'substituida' | 'a_confirmar'
+  /** A descartada só volta como resposta do Descartar. */
+  estado: 'vigente' | 'substituida' | 'a_confirmar' | 'descartada'
+  /** Numa frase. */
   titulo: string
+  /** #131: o texto inteiro e o contexto, para o detalhe, e a ação do painel que o Desfazer volta. */
+  texto?: string
+  contexto?: string | null
+  desfazer?: 'confirmar' | 'descartar' | 'ajustar' | null
   /** O que foi descartado ("não: …"). */
   nao: string[]
   decididaPor: 'usuario' | 'agente'
@@ -146,6 +168,11 @@ export type DecisoesDoPainel = {
 
 export type Painel = {
   versao: 1
+  /**
+   * A versão da API, o commit do código que ela carregou e o da pasta agora (diferentes: reiniciar
+   * a API), e se ela abre a sessão no Claude Desktop (`POST /abrir/<local_…>`, no macOS).
+   */
+  api?: { versao: string; commit: string | null; pasta?: string | null; abreSessao?: boolean }
   geradoEm: string
   sessao: SessaoDoPainel | null
   contexto: { usados: number; limite: number; pct: number } | null
@@ -153,6 +180,8 @@ export type Painel = {
   tokens: { entrada: number; saida: number } | null
   background: { total: number; primeiro: string | null }
   plano: PlanoDoPainel | null
+  /** Do mais recente para o mais antigo. Núcleo anterior à #131 não manda. */
+  planos?: PlanoDaSessao[]
   subagentes: { ativos: number; itens: SubagenteDoPainel[] }
   filhas: FilhaDoPainel[]
   trabalho: TrabalhoDoPainel | null
@@ -175,8 +204,16 @@ export type Leitura = {
 
 /** O que a pessoa abriu no painel. */
 export type Vista = {
-  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9). */
-  tela: 'sessao' | 'precisam' | 'decisoes'
+  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131). */
+  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas'
+  /** `decisao`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
+  decisao?: DecisaoDoPainel | null
+  /** O detalhe com o campo do Ajustar aberto. */
+  ajustando?: boolean
+  /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
+  ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
+  /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
+  compactar?: 'confirmar' | 'compactando' | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
   escopo: 'familia' | 'maquina' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */

@@ -20,6 +20,7 @@ import {
 import type { WorkSource } from '../../src/github/source.ts';
 import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../../src/simulador/painel.ts';
 import { parseLine } from '../../src/ingest/historico/transcript.ts';
+import { ingestHook } from '../../src/ingest/hooks/index.ts';
 import { T0, at, event, session } from '../fixtures.ts';
 import type { SessionPlan } from '../../src/plano/modelo.ts';
 
@@ -128,9 +129,17 @@ describe('painel por cenário (P1 a P7)', () => {
     assert.ok(p.custo?.usd && Math.abs(p.custo.usd - 1.84) < 0.05, `custo ${p.custo?.usd}`);
     assert.ok((p.custo?.serie.length ?? 0) >= 2);
     assert.deepEqual(p.background, { total: 2, primeiro: 'npm run dev' });
-    // Sem plano gravado (o cenário só tem o TodoWrite nos eventos): vem do resumo, tudo do principal.
+    // O plano atual do histórico (#131): dois anteriores, um concluído e um abandonado.
     const { passos, ...plano } = p.plano!;
-    assert.deepEqual(plano, { feitos: 3, total: 6, atual: 'Rodar a bateria', proximo: 'Abrir o PR', restantes: 1, atualDono: { tipo: 'principal', nome: null, agenteId: null }, mudouEm: null });
+    assert.deepEqual(plano, { feitos: 3, total: 6, atual: 'Rodar a bateria', proximo: 'Abrir o PR', restantes: 1, atualDono: { tipo: 'principal', nome: null, agenteId: `${SESSAO_DO_PAINEL}:main` }, mudouEm: at(-0.5) });
+    assert.deepEqual(
+      p.planos.map((x) => [x.numero, x.resultado, x.resumo, `${x.feitos}/${x.total}`, x.atual, x.fim === null]),
+      [
+        [3, 'atual', 'Ler o artefato', '3/6', 'Rodar a bateria', true],
+        [2, 'abandonado', 'Prototipar o arrastar', '1/4', null, false],
+        [1, 'concluido', 'Ler o wireframe do kanban', '3/3', null, false],
+      ],
+    );
     assert.equal(passos.length, 6);
     assert.equal(p.subagentes.ativos, 1);
     assert.equal(p.subagentes.itens[0]?.nome, 'Explore');
@@ -327,6 +336,14 @@ describe('contrato com o plugin', () => {
     assert.equal((bash?.events[0]?.data as { tool_input?: unknown }).tool_input, undefined);
   });
 
+  test('a versão do rodapé do plugin é a do plugin.json e a do marketplace', () => {
+    const ler = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+    const versao = JSON.parse(ler('../../../../plugins/ahrena-console/.claude-plugin/plugin.json')).version;
+    const doMarketplace = JSON.parse(ler('../../../../.claude-plugin/marketplace.json')).plugins.find((p: { name: string }) => p.name === 'ahrena-console').version;
+    assert.equal(/VERSAO_DO_PLUGIN = '([^']+)'/.exec(ler('../../../../plugins/ahrena-console/hooks/desenho.tsx'))?.[1], versao);
+    assert.equal(doMarketplace, versao);
+  });
+
   test('todo campo da resposta está nos tipos do plugin', async () => {
     const { painel, storage } = await cenario('p4');
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');
@@ -345,6 +362,8 @@ describe('contrato com o plugin', () => {
 describe('card Plano pelo plano gravado (item 1.9)', () => {
   test('feitos/total, atual, próximo e o dono de cada passo, com o nome do subagente', async () => {
     const { storage, montador } = await cenario('p4');
+    // Banco de antes do histórico (#131): o card lê o plano gravado.
+    storage.db.exec('DELETE FROM session_plan_history');
     const sub = (await storage.listAgents(SESSAO_DO_PAINEL)).find((a) => a.type === 'subagent')!;
     const passo = (id: string, text: string, status: 'pending' | 'in_progress' | 'completed', owner: SessionPlan['steps'][number]['owner']) =>
       ({ id, text, activeText: null, status, owner, updatedAt: at(1) });
@@ -380,8 +399,26 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
 
   test('plano gravado vazio (depois do /clear) é "sem plano"', async () => {
     const { storage, montador } = await cenario('p1');
+    storage.db.exec('DELETE FROM session_plan_history');
     await storage.putPlan({ sessionId: SESSAO_DO_PAINEL, source: 'TodoWrite', steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3), metadata: {} });
     assert.equal((await montador.montar({ sessionId: 'qualquer' })).plano, null);
+    await storage.close();
+  });
+});
+
+describe('histórico dos planos no painel (#131)', () => {
+  test('depois do /clear não há plano atual, mas os anteriores continuam, do mais recente para o mais antigo', async () => {
+    const { storage, montador } = await cenario('p1');
+    await ingestHook(storage, { session_id: SESSAO_DO_PAINEL, hook_event_name: 'SessionStart', source: 'clear' }, { receivedAt: new Date(T0).toISOString() });
+    const p = await montador.montar({ sessionId: 'qualquer' });
+    assert.equal(p.plano, null);
+    assert.deepEqual(p.planos.map((x) => [x.numero, x.resultado, `${x.feitos}/${x.total}`]), [[3, 'abandonado', '3/6'], [2, 'abandonado', '1/4'], [1, 'concluido', '3/3']]);
+    await storage.close();
+  });
+
+  test('sessão sem plano nenhum: lista vazia', async () => {
+    const { storage, montador } = await cenario('p7');
+    assert.deepEqual((await montador.montar({ sessionId: 'qualquer' })).planos, []);
     await storage.close();
   });
 });

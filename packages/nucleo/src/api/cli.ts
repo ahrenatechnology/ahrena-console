@@ -2,9 +2,11 @@
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
 
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisoes/captura-hooks.ts';
@@ -13,6 +15,7 @@ import { MaquinaDeEstados } from '../estados/maquina.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import {
   CENARIOS_DO_PAINEL,
@@ -25,6 +28,7 @@ import {
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
+import { capturarDoTranscript, LIMPEZA_DAS_DECISOES, limparDecisoes, REPROCESSAMENTO, reprocessarHistorico } from './reprocessamento.ts';
 import { iniciarApiLocal } from './servidor.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
@@ -82,7 +86,33 @@ const trabalho = new TrabalhoPorBranch({
   cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
+// O commit do checkout da API, para o rodapé do painel dizer qual versão está no ar.
+function commitDoCheckout(): string | null {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: dirname(fileURLToPath(import.meta.url)), encoding: 'utf8', timeout: 2_000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// O commit da pasta agora, conferido no máximo a cada 30 s: se mudou desde a subida, o rodapé avisa.
+let pasta = { em: 0, commit: null as string | null };
+function commitDaPasta(): string | null {
+  if (Date.now() - pasta.em > 30_000) pasta = { em: Date.now(), commit: commitDoCheckout() };
+  return pasta.commit;
+}
+
+// No macOS, a API abre a conversa no Claude Desktop: `open` com o endereço como argumento, sem shell.
+const abrirNoDesktop =
+  process.platform === 'darwin' && !demo
+    ? (url: string) =>
+        new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
+    : null;
+
 const montador = new MontadorDoPainel({
+  commit: commitDoCheckout(),
+  commitDaPasta,
+  abreSessao: abrirNoDesktop !== null,
   storage,
   contas: new Contas({ storage, ...(demo ? { arquivo: null } : {}) }),
   desktop,
@@ -106,6 +136,8 @@ const follower =
         storage,
         root: o.projetos,
         scanIntervalMs: Math.max(1, Number(o.varredura) || 30) * 1000,
+        // As decisões que só o transcript traz (respostas, planos, recusas), também de sessões sem hook.
+        onSession: (sessao) => capturarDoTranscript(decisoes, sessao).then(() => undefined),
         onError: (e) => log(`seguidor: ${(e as Error).message}`),
       });
 
@@ -121,6 +153,7 @@ const api = await iniciarApiLocal({
   },
   port: porta,
   log,
+  abrirNoDesktop,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -138,8 +171,25 @@ if (follower) {
     .then(() => {
       historicoPronto = true;
       log(`histórico importado; seguindo ${o.projetos ?? '~/.claude/projects'}`);
+      return reprocessarUmaVez();
     })
     .catch((e) => log(`seguidor não começou: ${(e as Error).message}`));
+}
+
+// Uma vez por banco, depois da importação inicial: planos e decisões das sessões importadas antes
+// da captura existir, e a limpeza do que a captura antiga gravou e não é decisão.
+async function reprocessarUmaVez() {
+  if (!storage.reprocessado(REPROCESSAMENTO)) {
+    const inicio = Date.now();
+    const r = await reprocessarHistorico({ storage, decisoes, raiz: o.projetos ?? defaultProjectsRoot(), log });
+    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    log(`reprocessado em ${Math.round((Date.now() - inicio) / 1000)} s: ${r.sessoes} sessões, ${r.planos} planos em ${r.comPlano}, ${r.decisoes} decisões`);
+  }
+  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+    const r = await limparDecisoes(storage, decisoes);
+    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    log(`decisões limpas: ${r.ruido} fora das listas, ${r.encurtadas} com o título encurtado`);
+  }
 }
 
 async function desligar() {

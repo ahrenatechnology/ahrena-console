@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
-import type { SessionPlan } from '../src/plano/modelo.ts';
+import type { PlanRecord, SessionPlan } from '../src/plano/modelo.ts';
 import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {
@@ -308,6 +308,32 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         const ruim = plano();
         (ruim.steps[0] as { status: string }).status = 'deleted';
         await assert.rejects(store.putPlan(ruim), InvalidModelError);
+      });
+
+      const registro = (over: Partial<PlanRecord> = {}): PlanRecord => {
+        const { sessionId, source, steps, done, total, currentStepId, changedAt } = plano();
+        return { sessionId, seq: 1, source, startedAt: at(1), endedAt: null, result: 'current', steps, done, total, currentStepId, changedAt, metadata: {}, ...over };
+      };
+
+      test('histórico: grava, substitui pelo seq e lista do mais recente para o mais antigo (#131)', async () => {
+        assert.deepEqual(await store.listPlanRecords('s1'), []);
+        const primeiro = registro({ endedAt: at(3), result: 'abandoned' });
+        const segundo = registro({ seq: 2, startedAt: at(3) });
+        await store.putPlanRecord(registro());
+        await store.putPlanRecord(segundo);
+        await store.putPlanRecord(primeiro);
+        await store.putPlanRecord(registro({ sessionId: 's2' }));
+        assert.deepEqual(await store.listPlanRecords('s1'), [segundo, primeiro]);
+      });
+
+      test('histórico: recusa resultado, fim e contagem que não batem', async () => {
+        await assert.rejects(store.putPlanRecord(registro({ seq: 0 })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ result: 'parado' as PlanRecord['result'] })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ endedAt: at(3) })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ result: 'abandoned' })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ result: 'completed', endedAt: at(3) })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ result: 'abandoned', endedAt: at(0) })), InvalidModelError);
+        await assert.rejects(store.putPlanRecord(registro({ done: 2 })), InvalidModelError);
       });
     });
 

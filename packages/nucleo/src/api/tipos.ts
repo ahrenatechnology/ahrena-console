@@ -82,6 +82,22 @@ export interface PlanoDoPainel {
   passos: PassoDoPainel[];
 }
 
+/** Um plano do histórico da sessão (issue #131). */
+export interface PlanoDaSessao {
+  /** 1, 2, 3… na ordem em que os planos começaram. */
+  numero: number;
+  resultado: 'atual' | 'concluido' | 'abandonado';
+  /** O primeiro passo do plano. */
+  resumo: string;
+  feitos: number;
+  total: number;
+  /** O passo em andamento (só no atual). */
+  atual: string | null;
+  inicio: string;
+  /** `null` no atual. */
+  fim: string | null;
+}
+
 /** O principal, um subagente ou uma sessão filha, quando o passo foi delegado. */
 export interface DonoDoPasso {
   tipo: 'principal' | 'subagente' | 'sessao';
@@ -111,6 +127,8 @@ export interface SubagenteDoPainel {
 
 export interface FilhaDoPainel {
   id: string;
+  /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
+  local: string | null;
   titulo: string;
   estado: EstadoDoInbox | 'desconhecido';
   motivo: AwaitingReason | null;
@@ -137,6 +155,8 @@ export interface TrabalhoDoPainel {
 
 export interface PrecisaDeVoce {
   id: string;
+  /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
+  local: string | null;
   titulo: string;
   estado: 'waiting' | 'error';
   motivo: AwaitingReason | null;
@@ -164,6 +184,12 @@ export interface PrecisamDoPainel {
 
 export interface Painel {
   versao: 1;
+  /**
+   * A versão da API e, para o rodapé: o commit do código que ela carregou ao subir e o da pasta
+   * agora (diferentes, a API precisa reiniciar); `null` fora de um git. `abreSessao`: a API abre
+   * a conversa no Claude Desktop (`POST /abrir/<local_…>`).
+   */
+  api: { versao: string; commit: string | null; pasta: string | null; abreSessao: boolean };
   geradoEm: string;
   /** `null`: o núcleo ainda não viu esta sessão (nem hook, nem transcript). */
   sessao: SessaoDoPainel | null;
@@ -172,6 +198,8 @@ export interface Painel {
   tokens: { entrada: number; saida: number } | null;
   background: { total: number; primeiro: string | null };
   plano: PlanoDoPainel | null;
+  /** Os planos da sessão, do mais recente para o mais antigo; o atual, se houver, primeiro. */
+  planos: PlanoDaSessao[];
   subagentes: { ativos: number; itens: SubagenteDoPainel[] };
   filhas: FilhaDoPainel[];
   trabalho: TrabalhoDoPainel | null;
@@ -189,10 +217,16 @@ export interface DecisaoDoPainel {
   /** "D4": o número na família. */
   rotulo: string;
   origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida';
-  /** Só estes três entram na lista; descartada e revertida ficam no histórico. */
-  estado: 'vigente' | 'substituida' | 'a_confirmar';
-  /** O que foi decidido. */
+  /** Só os três primeiros entram na lista; a descartada só volta como resposta do Descartar. */
+  estado: 'vigente' | 'substituida' | 'a_confirmar' | 'descartada';
+  /** O que foi decidido, numa frase. */
   titulo: string;
+  /** O texto inteiro, para o detalhe (na correção, o que a pessoa escreveu). */
+  texto: string;
+  /** A pergunta, o pedido ou a proposta que levou à decisão. */
+  contexto: string | null;
+  /** A última ação feita pelo painel, que o Desfazer volta; `null` quando não há. */
+  desfazer: 'confirmar' | 'descartar' | 'ajustar' | null;
   /** O que foi descartado ("não: …"). */
   nao: string[];
   decididaPor: 'usuario' | 'agente';

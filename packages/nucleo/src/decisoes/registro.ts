@@ -204,6 +204,22 @@ export async function revertDecision(port: DecisionPort, id: string, now: string
   return setState(port, { ...d, supersedes: null }, 'revertida', now);
 }
 
+/**
+ * Volta a decisão para "a confirmar": o "Desfazer" de um Confirmar ou de um Descartar feito sem
+ * querer. Ela sai da cadeia do assunto, e a anterior volta a valer.
+ */
+export async function reopenDecision(port: DecisionPort, id: string, now: string): Promise<Decision> {
+  const d = await requireDecision(port, id);
+  if (d.state !== 'vigente' && d.state !== 'descartada') throw new DecisionStateError(`só decisão vigente ou descartada volta a confirmar (${d.state})`);
+  return setState(port, { ...d, supersedes: null }, 'a_confirmar', now);
+}
+
+/** Tira das listas o que a captura antiga gravou e não é decisão (pergunta fechada sem resposta, conversa). */
+export async function markNoise(port: DecisionPort, id: string, reason: string, now: string): Promise<Decision> {
+  const d = await requireDecision(port, id);
+  return setState(port, { ...d, metadata: { ...d.metadata, ruido: reason } }, 'descartada', now);
+}
+
 /** A pessoa liberou o texto da decisão para sair da máquina. */
 export async function releaseDecisionText(port: DecisionPort, id: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);

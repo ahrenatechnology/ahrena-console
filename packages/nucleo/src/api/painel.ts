@@ -16,7 +16,7 @@ import { lerInbox, type LeituraDoInbox } from '../estados/leitura.ts';
 import { lerMemoria, principalDe } from '../estados/regras.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
-import type { PlanOwner, SessionPlan } from '../plano/modelo.ts';
+import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
@@ -35,6 +35,7 @@ import type {
   FilhaDoPainel,
   ListaDeDecisoes,
   Painel,
+  PlanoDaSessao,
   PlanoDoPainel,
   PrecisaDeVoce,
   PrecisamDoPainel,
@@ -42,6 +43,7 @@ import type {
   SubagenteDoPainel,
 } from './tipos.ts';
 import type { TrabalhoPorBranch } from './trabalho.ts';
+import { VERSAO_DA_API } from './versao.ts';
 
 export const LIMITE_PADRAO_DE_CONTEXTO = 200_000;
 const LIMITE_LONGO_DE_CONTEXTO = 1_000_000;
@@ -75,6 +77,12 @@ export interface OpcoesDoPainel {
   precisamMs?: number;
   /** Troca o id pedido por outro (a demonstração usa a sessão do cenário). */
   apelido?: (sessionId: string) => string;
+  /** O commit do código que a API carregou ao subir, para o rodapé do painel. */
+  commit?: string | null;
+  /** O commit da pasta agora: diferente do `commit`, a pasta mudou e a API precisa reiniciar. */
+  commitDaPasta?: () => string | null;
+  /** A API abre a sessão no Claude Desktop (`POST /abrir/<local_…>`): no macOS. */
+  abreSessao?: boolean;
 }
 
 type Porta = StoragePort;
@@ -103,13 +111,19 @@ export class MontadorDoPainel {
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
+  private readonly commit: string | null;
+  private readonly commitDaPasta: () => string | null;
+  private readonly abreSessao: boolean;
   private readonly decisoes: DecisoesDaSessao | null;
   readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { em: number; updatedAt: string; custo: CustoDoPainel; tokens: Painel['tokens'] }>();
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false }: OpcoesDoPainel) {
+    this.commit = commit;
+    this.commitDaPasta = commitDaPasta;
+    this.abreSessao = abreSessao;
     this.apelido = apelido;
     this.storage = storage;
     this.contas = contas;
@@ -139,18 +153,21 @@ export class MontadorDoPainel {
       : this.sessaoNova(pedido, desktop, conta, agora);
     const { custo, tokens } = session ? await this.custoDe(session) : { custo: null, tokens: null };
     const memoria = session ? lerMemoria(session) : null;
+    const planos = session ? await this.storage.listPlanRecords(session.id) : [];
     const bg = memoria ? Object.values(memoria.background) : [];
     const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
 
     return {
       versao: 1,
+      api: { versao: VERSAO_DA_API, commit: this.commit, pasta: this.commitDaPasta(), abreSessao: this.abreSessao },
       geradoEm: new Date(agora).toISOString(),
       sessao,
       contexto: session ? contextoDe(session, resumo!) : null,
       custo,
       tokens,
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
-      plano: session ? planoDe(await this.storage.getPlan(session.id), resumo!, agentes) : null,
+      plano: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
+      planos: planos.map(planoDaLista),
       subagentes: subagentesDe(agentes),
       filhas: await this.filhasDe(session, desktop),
       trabalho,
@@ -185,9 +202,15 @@ export class MontadorDoPainel {
   }
 
   /** `POST /api/decisoes/<id>/confirmar|descartar`, em nome da sessão do painel. */
-  async decidir(pedido: PedidoDoPainel, id: string, acao: AcaoNaDecisao): Promise<DecisaoDoPainel | null> {
+  async decidir(pedido: PedidoDoPainel, id: string, acao: AcaoNaDecisao, texto: string | null = null): Promise<DecisaoDoPainel | null> {
     if (!this.decisoes) return null;
-    return this.decisoes.decidir(await this.alvoDoPedido(pedido), id, acao, new Date(this.agora()).toISOString());
+    return this.decisoes.decidir(await this.alvoDoPedido(pedido), id, acao, new Date(this.agora()).toISOString(), texto);
+  }
+
+  /** O plano aberto do histórico (vazio se todos fecharam); sem histórico (antes da #131), o plano gravado. */
+  private async planoAtual(sessionId: string, planos: PlanRecord[]): Promise<PlanoGravado | null> {
+    if (planos.length) return planos.find((p) => p.result === 'current') ?? { steps: [], total: 0, changedAt: planos[0].changedAt, currentStepId: null };
+    return this.storage.getPlan(sessionId);
   }
 
   private doDesktop(sessionId: string, local: string | null): SessaoDoDesktop | null {
@@ -277,19 +300,21 @@ export class MontadorDoPainel {
   }
 
   private async filhasDe(session: Session | null, desktop: SessaoDoDesktop | null): Promise<FilhaDoPainel[]> {
-    const ids = new Map<string, string | null>();
-    for (const f of desktop ? (this.desktop?.filhasDe(desktop.localId) ?? []) : []) if (f.cliSessionId) ids.set(f.cliSessionId, f.titulo);
+    const ids = new Map<string, { titulo: string | null; local: string | null }>();
+    for (const f of desktop ? (this.desktop?.filhasDe(desktop.localId) ?? []) : []) if (f.cliSessionId) ids.set(f.cliSessionId, { titulo: f.titulo, local: f.localId });
     const familia = session?.metadata?.familia as { filhas?: unknown } | undefined;
-    if (Array.isArray(familia?.filhas)) for (const id of familia.filhas) if (typeof id === 'string' && !ids.has(id)) ids.set(id, null);
+    if (Array.isArray(familia?.filhas)) {
+      for (const id of familia.filhas) if (typeof id === 'string' && !ids.has(id)) ids.set(id, { titulo: null, local: this.desktop?.sessaoPorCli(id)?.localId ?? null });
+    }
     const out: FilhaDoPainel[] = [];
-    for (const [id, titulo] of ids) {
+    for (const [id, { titulo, local }] of ids) {
       const s = await this.storage.getSession(id);
       if (!s) {
-        out.push({ id, titulo: titulo ?? id.slice(0, 8), estado: 'desconhecido', motivo: null, desde: null });
+        out.push({ id, local, titulo: titulo ?? id.slice(0, 8), estado: 'desconhecido', motivo: null, desde: null });
         continue;
       }
       const inbox = lerInbox(s, await this.storage.listAgents(id));
-      out.push({ id, titulo: titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : id.slice(0, 8)), estado: inbox.estado, motivo: inbox.motivo, desde: s.awaitingInputSince ?? s.updatedAt });
+      out.push({ id, local, titulo: titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : id.slice(0, 8)), estado: inbox.estado, motivo: inbox.motivo, desde: s.awaitingInputSince ?? s.updatedAt });
     }
     return out;
   }
@@ -338,6 +363,7 @@ export class MontadorDoPainel {
       const { atividade, faixa } = atividadeDe(c.session, c.agentes, c.inbox, r, desde, agora);
       itens.push({
         id: c.session.id,
+        local: c.desktop?.localId ?? null,
         titulo: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
         estado: c.inbox.status === 'error' ? 'error' : 'waiting',
         motivo: c.inbox.motivo,
@@ -383,8 +409,25 @@ function contextoDe(session: Session, r: ResumoDosEventos): ContextoDoPainel | n
   return { usados, limite, pct: Math.min(100, Math.round((usados / limite) * 100)) };
 }
 
+type PlanoGravado = Pick<SessionPlan, 'steps' | 'total' | 'changedAt' | 'currentStepId'>;
+
+const RESULTADO = { current: 'atual', completed: 'concluido', abandoned: 'abandonado' } as const;
+
+function planoDaLista(r: PlanRecord): PlanoDaSessao {
+  return {
+    numero: r.seq,
+    resultado: RESULTADO[r.result],
+    resumo: r.steps[0]?.text ?? '',
+    feitos: r.done,
+    total: r.total,
+    atual: r.result === 'current' ? (r.steps.find((s) => s.id === r.currentStepId)?.text ?? null) : null,
+    inicio: r.startedAt,
+    fim: r.endedAt,
+  };
+}
+
 /** O plano gravado pela porta (item 1.9); sem ele, o último TodoWrite lido dos eventos. */
-function planoDe(plano: SessionPlan | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
+function planoDe(plano: PlanoGravado | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
   if (plano) {
     if (plano.total === 0) return null;
     const passos = plano.steps.map((s) => ({ id: s.id, texto: s.text, textoAtivo: s.activeText, estado: s.status, dono: donoDe(s.owner, agentes) }));

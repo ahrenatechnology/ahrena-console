@@ -4,6 +4,8 @@
 // - TodoWrite e `update_plan` com `items` reescrevem a lista inteira.
 // - TaskCreate acrescenta um passo; TaskUpdate muda estado, texto ou dono (ou apaga, `deleted`).
 // - `update_plan` com `advance`, `done` e `start` anda na lista que já existe.
+// - `wrap_up` (o fechamento do turno no Claude Desktop) marca o que falta da lista do `update_plan`:
+//   o app dá a lista por feita, sem um `update_plan` final.
 // - `/clear` esvazia o plano.
 //
 // A mesma chamada chega duas vezes (PreToolUse e PostToolUse, hook e transcript): vale a primeira,
@@ -19,12 +21,14 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim().le
 
 /** `update_plan` de qualquer plugin que desenhe o plano (`mcp__<servidor>__update_plan`). */
 const UPDATE_PLAN = /(^|__)update_plan$/;
+/** O fechamento do turno que acompanha o `update_plan` (`mcp__<servidor>__wrap_up`). */
+const WRAP_UP = /(^|__)wrap_up$/;
 
 export function ferramentaDoPlano(nome: string | null): PlanSource | null {
   if (!nome) return null;
   if (nome === 'TodoWrite') return 'TodoWrite';
   if (nome === 'TaskCreate' || nome === 'TaskUpdate') return 'Task';
-  if (UPDATE_PLAN.test(nome)) return 'update_plan';
+  if (UPDATE_PLAN.test(nome) || WRAP_UP.test(nome)) return 'update_plan';
   return null;
 }
 
@@ -66,7 +70,8 @@ function lerEvento(e: SessionEvent): Chamada | null {
   switch (e.type) {
     case 'PreToolUse':
     case 'ToolUse':
-      return { ...base, tipo: 'chamada', toolUseId, entrada: obj(d?.tool_input) };
+      // A entrada do `wrap_up` não importa (e o transcript não a guarda): vale a chamada.
+      return { ...base, tipo: 'chamada', toolUseId, entrada: obj(d?.tool_input) ?? (WRAP_UP.test(e.toolName ?? '') ? {} : null) };
     case 'PostToolUse': {
       const r = obj(d?.tool_response);
       const erro = r !== null && (r.is_error === true || r.success === false);
@@ -159,7 +164,7 @@ export function aplicarAoPlano(plano: SessionPlan | null, sessionId: string, e: 
   // A chamada: vale a primeira vez que aparece (PreToolUse, PostToolUse ou o transcript).
   if (!ja && c.entrada && !(c.tipo === 'resultado' && c.erro)) {
     const antes = steps;
-    const r = aplicarChamada(steps, sessionId, c, estado, plano?.changedAt ?? null);
+    const r = aplicarChamada(steps, sessionId, c, estado, plano?.changedAt ?? null, plano?.source ?? null);
     if (r) {
       steps = r;
       source = ferramentaDoPlano(c.ferramenta)!;
@@ -205,10 +210,17 @@ function aplicarChamada(
   c: Chamada,
   estado: Estado,
   mudouEm: string | null,
+  fonte: PlanSource | null,
 ): PlanStep[] | null {
   const entrada = c.entrada!;
   const ferramenta = ferramentaDoPlano(c.ferramenta);
   const principal = ehPrincipal(c.agentId);
+
+  if (WRAP_UP.test(c.ferramenta ?? '')) {
+    // Só a lista do `update_plan` é a que o app dá por feita; TodoWrite e tarefas ficam como estão.
+    if (!principal || fonte !== 'update_plan' || steps.every((s) => s.status === 'completed')) return null;
+    return steps.map((s) => (s.status === 'completed' ? s : { ...s, status: 'completed', updatedAt: c.em }));
+  }
 
   if (ferramenta === 'TodoWrite' || (ferramenta === 'update_plan' && Array.isArray(entrada.items))) {
     // A lista própria de um subagente não é o plano da sessão.

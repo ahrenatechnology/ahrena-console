@@ -17,7 +17,7 @@ import type {
   SessionStatus,
   TokenUsage,
 } from './model.ts';
-import type { SessionPlan } from './plano/modelo.ts';
+import type { PlanRecord, SessionPlan } from './plano/modelo.ts';
 
 export interface Page<T> {
   items: T[];
@@ -78,6 +78,12 @@ export interface StoragePort {
   /** Grava o plano inteiro da sessão (cria ou substitui). Item 1.9. */
   putPlan(plan: SessionPlan): Promise<void>;
   getPlan(sessionId: string): Promise<SessionPlan | null>;
+  /** Grava um plano do histórico da sessão (cria ou substitui pelo `seq`). Issue #131. */
+  putPlanRecord(record: PlanRecord): Promise<void>;
+  /** Os planos da sessão, do mais recente para o mais antigo. Sem paginação: são poucos por sessão. */
+  listPlanRecords(sessionId: string): Promise<PlanRecord[]>;
+  /** Apaga o histórico de planos da sessão, para reconstruí-lo dos eventos. */
+  deletePlanRecords(sessionId: string): Promise<void>;
 
   close(): Promise<void>;
 }

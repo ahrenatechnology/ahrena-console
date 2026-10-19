@@ -137,7 +137,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(decisao.estado, 'vigente');
       assert.equal(decisao.confirmadaEm, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
-      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: SESSAO_DO_PAINEL, conta: EQUIPE, em: T0 });
+      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: SESSAO_DO_PAINEL, conta: EQUIPE, em: T0, antes: 'a_confirmar' });
       assert.equal(gravada?.decidedBy, 'agente', 'quem propôs continua sendo o agente');
       assert.equal((await post(caminho, { sessao: 'qualquer' })).status, 409, 'já confirmada');
 
@@ -179,4 +179,124 @@ describe('API das decisões em 127.0.0.1', () => {
     }
   });
 
+
+  test('#131: Desfazer volta o Confirmar e o Descartar; Ajustar grava a versão da pessoa e o Desfazer a devolve', async () => {
+    const { storage, decisoes, montador } = await cenario();
+    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const post = async (id: string, acao: string, corpo: Record<string, unknown> = {}) => {
+      const r = await fetch(`${api.url}/api/decisoes/${encodeURIComponent(id)}/${acao}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessao: 'qualquer', ...corpo }) });
+      return { status: r.status, decisao: r.ok ? ((await r.json()) as { decisao: DecisaoDoPainel }).decisao : null };
+    };
+    const sugerida = async (n: number, topic: string | null) =>
+      (
+        await registerDecision(
+          decisoes,
+          {
+            sourceKey: `teste:sug-${n}`, sessionId: SESSAO_DO_PAINEL, repo: REPO, branch: BRANCH, topic, context: 'Qual filtro primeiro?',
+            choice: `Filtro ${n} no topo`, alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: new Date(AGORA - 60_000).toISOString(),
+          },
+          T0,
+        )
+      ).decision;
+    try {
+      // Descartar sem querer, e desfazer.
+      const a = await sugerida(1, 'kanban:filtro-a');
+      assert.equal((await post(a.id, 'descartar')).decisao?.desfazer, 'descartar');
+      const volta = await post(a.id, 'desfazer');
+      assert.equal(volta.status, 200);
+      assert.equal(volta.decisao?.estado, 'a_confirmar');
+      assert.equal(volta.decisao?.desfazer, null);
+      assert.equal((await decisoes.getDecision(a.id))?.state, 'a_confirmar');
+      assert.equal((await post(a.id, 'desfazer')).status, 409, 'nada mais a desfazer');
+
+      // Confirmar e desfazer.
+      await post(a.id, 'confirmar');
+      assert.equal((await post(a.id, 'desfazer')).decisao?.estado, 'a_confirmar');
+
+      // Ajustar: "sim, mas com tal ajuste" vira correção sua, que substitui a sugerida.
+      assert.equal((await post(a.id, 'ajustar', { texto: '   ' })).status, 400);
+      const ajuste = 'Sim, filtro por conta no topo. Mas o de status fica na lateral.';
+      const ajustada = await post(a.id, 'ajustar', { texto: ajuste });
+      assert.equal(ajustada.status, 200);
+      assert.equal(ajustada.decisao?.estado, 'substituida');
+      assert.equal(ajustada.decisao?.desfazer, 'ajustar');
+      const nova = (await decisoes.listDecisions({ sessionId: SESSAO_DO_PAINEL, states: ['vigente'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
+      assert.equal(nova.origin, 'correcao');
+      assert.equal(nova.inferred, false);
+      assert.equal(nova.choice, 'Sim, filtro por conta no topo.');
+      assert.equal(nova.metadata.texto, ajuste);
+      assert.deepEqual(nova.alternatives, ['Filtro 1 no topo']);
+      assert.equal(nova.supersedes, a.id);
+      const lista = (await (await fetch(`${api.url}/api/decisoes/qualquer?escopo=sessao`)).json()) as ListaDeDecisoes;
+      const noPainel = lista.itens.find((i) => i.id === nova.id)!;
+      assert.equal(noPainel.texto, ajuste);
+      assert.equal(noPainel.contexto, 'Filtro 1 no topo');
+
+      // Desfazer o ajuste: a correção sai, a sugerida volta a confirmar.
+      const desfeito = await post(a.id, 'desfazer');
+      assert.equal(desfeito.decisao?.estado, 'a_confirmar');
+      assert.equal((await decisoes.getDecision(nova.id))?.state, 'revertida');
+
+      // Ajustar uma vigente sem assunto: as duas ficam no mesmo assunto, a nova vale.
+      const b = await sugerida(2, null);
+      await post(b.id, 'confirmar');
+      const b2 = await post(b.id, 'ajustar', { texto: 'Filtro 2 só no largo' });
+      assert.equal(b2.decisao?.estado, 'substituida');
+      assert.equal((await post(b.id, 'desfazer')).decisao?.estado, 'vigente', 'volta ao estado de antes do ajuste');
+    } finally {
+      await api.close();
+      await storage.close();
+    }
+  });
+
+  test('#131: /abrir/<local_…> redireciona para a conversa no Claude Desktop; outro id, não', async () => {
+    const { storage, montador } = await cenario();
+    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    try {
+      const local = 'local_00000000-0000-4000-8000-0000000000f1';
+      const r = await fetch(`${api.url}/abrir/${local}`, { redirect: 'manual' });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), `claude://claude.ai/epitaxy/${local}`);
+      assert.equal((await fetch(`${api.url}/abrir/javascript:alert(1)`, { redirect: 'manual' })).status, 404);
+      assert.equal((await fetch(`${api.url}/abrir/local_x"><script>`, { redirect: 'manual' })).status, 404);
+    } finally {
+      await api.close();
+      await storage.close();
+    }
+  });
+
+  test('#131: POST /abrir/<local_…> abre a sessão no Claude Desktop pelo `open`, só com id estrito, JSON e 127.0.0.1', async () => {
+    const { storage, montador } = await cenario();
+    const abertos: string[] = [];
+    let falhar = false;
+    const abrirNoDesktop = async (url: string) => {
+      if (falhar) throw new Error('open saiu com 1');
+      abertos.push(url);
+    };
+    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, abrirNoDesktop });
+    const post = (caminho: string, headers: Record<string, string> = { 'content-type': 'application/json' }) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
+    const local = 'local_00000000-0000-4000-8000-0000000000f1';
+    try {
+      assert.equal((await post(`/abrir/${local}`)).status, 200);
+      assert.deepEqual(abertos, [`claude://claude.ai/epitaxy/${local}`]);
+      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'text/plain' })).status, 415);
+      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
+      assert.equal((await post('/abrir/local_curto')).status, 400);
+      assert.equal((await post(`/abrir/${encodeURIComponent(`${local};rm -rf`)}`)).status, 400);
+      falhar = true;
+      assert.equal((await post(`/abrir/${local}`)).status, 502);
+      assert.equal(abertos.length, 1);
+    } finally {
+      await api.close();
+    }
+    // Sem quem abra (fora do macOS): 501, e o painel fica com o link de reserva.
+    const semOpen = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    try {
+      assert.equal((await fetch(`${semOpen.url}/abrir/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
+      assert.equal(((await (await fetch(`${semOpen.url}/api/painel/qualquer`)).json()) as Painel).api.abreSessao, false);
+    } finally {
+      await semOpen.close();
+      await storage.close();
+    }
+  });
 });

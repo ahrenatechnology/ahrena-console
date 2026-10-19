@@ -13,7 +13,7 @@ import type { EngineInterface as Engine, Register } from 'claude-code'
 
 import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PrecisaDeVoce, Vista } from '../types'
 import { desenhar, escopoDasDecisoes, type Elementos } from './desenho'
-import { decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe } from './formato'
+import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe, tokens } from './formato'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
@@ -43,12 +43,24 @@ function normalizarLeitura(v: unknown): Leitura {
   return { ...LEITURA_VAZIA, ...r, painel }
 }
 
+// Em andamento neste módulo: o "compactando…" vale enquanto a chamada não volta.
+let compactando = false
+
+const TELAS: readonly Vista['tela'][] = ['sessao', 'precisam', 'decisoes', 'planos', 'decisao', 'subagentes', 'filhas']
+
 function normalizarVista(v: unknown): Vista {
   const r = (v ?? {}) as Partial<Vista>
+  const decisao = r.decisao && typeof r.decisao === 'object' && typeof r.decisao.id === 'string' ? r.decisao : null
+  const u = r.ultimaAcao
   return {
-    tela: r.tela === 'precisam' || r.tela === 'decisoes' ? r.tela : 'sessao',
+    tela: TELAS.includes(r.tela as Vista['tela']) && (r.tela !== 'decisao' || decisao) ? (r.tela as Vista['tela']) : 'sessao',
     escopo: r.escopo === 'familia' || r.escopo === 'maquina' ? r.escopo : null,
     escopoDecisoes: ESCOPOS_DE_DECISAO.includes(r.escopoDecisoes as EscopoDasDecisoes) ? (r.escopoDecisoes as EscopoDasDecisoes) : null,
+    decisao,
+    ajustando: r.ajustando === true,
+    ultimaAcao: u && typeof u.id === 'string' && typeof u.em === 'number' ? u : null,
+    // "compactando" não sobrevive a um reload: a chamada que o mostrava acabou com o módulo.
+    compactar: r.compactar === 'compactando' && compactando ? 'compactando' : r.compactar === 'confirmar' ? 'confirmar' : null,
   }
 }
 
@@ -86,18 +98,55 @@ async function enderecoDoTick($: Engine): Promise<string> {
 }
 
 // O pedido de todo tick: esta sessão, a conta e quantas precisam de você, nunca a frota.
+/**
+ * O que o painel desenha da resposta: tudo menos a hora em que a API a montou. Duas respostas
+ * iguais a menos disso não pedem redesenho.
+ */
+const assinatura = (p: Painel) => JSON.stringify({ ...p, geradoEm: null })
+
+/** Sem mudança de dados, o painel ainda redesenha a cada minuto, para os "há N min". */
+const REDESENHO_MINIMO_MS = 60_000
+
+// A última leitura boa e quando o atom foi gravado. Ficam fora do atom: o atom só muda quando o
+// desenho muda (ver `consultar`).
+let ultima: { assinatura: string; lidoEm: number; gravadoEm: number; status: string | null } = { assinatura: '', lidoEm: 0, gravadoEm: 0, status: null }
+
+function mostrarStatus($: Engine, texto: string) {
+  if (ultima.status === texto) return
+  ultima.status = texto
+  $.ui.status(texto)
+}
+
+/**
+ * Pede o painel ao núcleo e grava o atom só quando o que o painel desenha mudou (ou a cada minuto,
+ * pelos tempos relativos). Cada gravação redesenha o pane, e um redesenho troca os handles dos
+ * Buttons ("the host holds only a handle, for the drawing's life"): um clique que chega com o handle
+ * do desenho anterior é descartado (`ui_press not handled`). Gravar a cada tick de 5 s, com `lidoEm`
+ * e `geradoEm` sempre novos, fazia o primeiro clique quase sempre cair num desenho já trocado.
+ */
 async function consultar($: Engine) {
   const agora = await $.clock.now()
   try {
     const res = await $.http.fetch(`http://${nucleo}${await enderecoDoTick($)}`)
     const painel = res.ok && res.text ? (JSON.parse(res.text) as Painel) : null
     if (!painel || painel.versao !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
-    await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: agora + A_CADA_MS }))
-    $.ui.status(linhaDeStatus(painel, false))
+    const nova = assinatura(painel)
+    const atual = normalizarLeitura(await read($, leitura))
+    const mudou = nova !== ultima.assinatura || atual.offline || !atual.painel || agora - ultima.gravadoEm >= REDESENHO_MINIMO_MS
+    ultima = { ...ultima, assinatura: nova, lidoEm: agora }
+    if (mudou) {
+      ultima.gravadoEm = agora
+      await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: null }))
+    }
+    mostrarStatus($, linhaDeStatus(painel, false))
   } catch (err) {
-    // Sem núcleo: guarda a última leitura boa e tenta de novo no próximo tick.
-    await update($, leitura, (v) => ({ ...normalizarLeitura(v), offline: true, erro: String(err), proximaEm: agora + A_CADA_MS }))
-    $.ui.status(linhaDeStatus(null, true))
+    // Sem núcleo: guarda a última leitura boa e tenta de novo no próximo tick, sem redesenhar a cada um.
+    const atual = normalizarLeitura(await read($, leitura))
+    if (!atual.offline) {
+      ultima.gravadoEm = agora
+      await update($, leitura, (v) => ({ ...normalizarLeitura(v), lidoEm: ultima.lidoEm || null, offline: true, erro: String(err), proximaEm: null }))
+    }
+    mostrarStatus($, linhaDeStatus(null, true))
   }
 }
 
@@ -128,33 +177,66 @@ function parar($: Engine) {
   if (!relogio) return
   relogio.cancel()
   relogio = undefined
+  ultima.status = null
   $.ui.status(undefined)
 }
 
 /** Confirmar ou Descartar uma sugerida: um POST em nome desta sessão, e a leitura de novo. */
-async function decidir($: Engine, d: DecisaoDoPainel, acao: 'confirmar' | 'descartar') {
+type AcaoNaDecisao = 'confirmar' | 'descartar' | 'ajustar' | 'desfazer'
+
+const FEITO: Record<AcaoNaDecisao, string> = {
+  confirmar: 'confirmada: passa a valer',
+  descartar: 'descartada: fica só no histórico',
+  ajustar: 'ajustada: a sua versão passa a valer',
+  desfazer: 'voltou ao que era',
+}
+
+/**
+ * Confirmar, Descartar, Ajustar (com o texto da pessoa) ou Desfazer, pela API do núcleo. Depois de
+ * uma ação, o "Desfazer" fica à vista por alguns segundos; no detalhe, a decisão aberta é a que voltou.
+ */
+async function decidir($: Engine, id: string, rotulo: string, acao: AcaoNaDecisao, texto: string | null = null) {
   try {
     const base = await endereco($)
     const query = base.includes('?') ? base.slice(base.indexOf('?')) : ''
-    const res = await $.http.fetch(`http://${nucleo}/api/decisoes/${encodeURIComponent(d.id)}/${acao}${query}`, {
+    const res = await $.http.fetch(`http://${nucleo}/api/decisoes/${encodeURIComponent(id)}/${acao}${query}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessao: await $.session.id() }),
+      body: JSON.stringify({ sessao: await $.session.id(), ...(texto === null ? {} : { texto }) }),
     })
+    const corpo = (() => {
+      try {
+        return JSON.parse(res.text ?? '') as { error?: string; decisao?: DecisaoDoPainel }
+      } catch {
+        return {}
+      }
+    })()
     if (!res.ok) {
-      const erro = (() => {
-        try {
-          return (JSON.parse(res.text ?? '') as { error?: string }).error
-        } catch {
-          return undefined
-        }
-      })()
-      $.ui.toast(`Não deu para ${acao} ${d.rotulo}: ${erro ?? `HTTP ${res.status}`}.`)
+      $.ui.toast(`Não deu para ${acao} ${rotulo}: ${corpo.error ?? `HTTP ${res.status}`}.`)
     } else {
-      $.ui.toast(`${d.rotulo} ${acao === 'confirmar' ? 'confirmada: passa a valer' : 'descartada: fica só no histórico'}.`)
+      const agora = await $.clock.now()
+      $.ui.toast(`${rotulo} ${FEITO[acao]}.`)
+      // O "Desfazer" some sozinho: um redesenho só, quando o tempo dele acaba.
+      if (acao !== 'desfazer') {
+        $.clock.after(DESFAZER_MS + 100, () => {
+          void update($, vista, (v) => {
+            const atual = normalizarVista(v)
+            return atual.ultimaAcao?.em === agora ? { ...atual, ultimaAcao: null } : atual
+          })
+        })
+      }
+      await update($, vista, (v) => {
+        const atual = normalizarVista(v)
+        return {
+          ...atual,
+          ajustando: false,
+          ultimaAcao: acao === 'desfazer' ? null : { id, rotulo, acao, em: agora },
+          decisao: atual.decisao?.id === id && corpo.decisao ? corpo.decisao : atual.decisao,
+        }
+      })
     }
   } catch {
-    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${d.rotulo} continua a confirmar.`)
+    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${rotulo} ficou como estava.`)
   }
   await consultar($)
 }
@@ -173,6 +255,55 @@ async function verNaConversa($: Engine, d: DecisaoDoPainel) {
   }
   const r = await $.ui.scroll({ to: { requestId: d.toolUseId }, block: 'center' }).catch((err: unknown) => ({ deny: String(err) }))
   if ('deny' in r && r.deny) $.ui.toast(`A mensagem de ${d.rotulo} não está à vista nesta conversa.`)
+}
+
+/**
+ * Compacta a conversa desta sessão, a mesma chamada do `/compact` (`$.session.compact()`). Só
+ * entre turnos: no meio de um, o engine recusa, e o painel diz o motivo.
+ */
+async function compactar($: Engine) {
+  if (compactando) return
+  compactando = true
+  await mudarVista($, { compactar: 'compactando' })
+  try {
+    const r = await $.session.compact()
+    if (r && 'skip' in r && r.skip) $.ui.toast(`A conversa não foi compactada: ${r.skip}.`)
+    else {
+      const antes = r && 'tokensBefore' in r ? r.tokensBefore : undefined
+      const depois = r && 'tokensAfter' in r ? r.tokensAfter : undefined
+      $.ui.toast(antes && depois ? `Conversa compactada: de ${tokens(antes)} para ${tokens(depois)} tokens.` : 'Conversa compactada.')
+    }
+  } catch (err) {
+    $.ui.toast(`Não deu para compactar agora: ${(err as Error)?.message ?? String(err)}`)
+  } finally {
+    compactando = false
+    await mudarVista($, { compactar: null })
+    await consultar($)
+  }
+}
+
+/** Pede à API local que abra a conversa no Claude Desktop (no macOS, `open claude://…`). */
+async function abrirSessao($: Engine, local: string, titulo: string) {
+  try {
+    const res = await $.http.fetch(`http://${nucleo}/abrir/${encodeURIComponent(local)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    if (res.ok) $.ui.toast(`Abrindo "${titulo}" no Claude Desktop…`)
+    else {
+      const erro = (() => {
+        try {
+          return (JSON.parse(res.text ?? '') as { error?: string }).error
+        } catch {
+          return undefined
+        }
+      })()
+      $.ui.toast(`Não deu para abrir "${titulo}": ${erro ?? `HTTP ${res.status}`}.`)
+    }
+  } catch {
+    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; "${titulo}" não foi aberta.`)
+  }
 }
 
 async function irPara($: Engine, i: PrecisaDeVoce, surface: Parameters<Engine['ui']['copy']>[0]['surface']) {
@@ -256,6 +387,7 @@ export const register: Register = (on, options) => {
       leitura: l,
       vista: v,
       cols: colunas,
+      linhas: (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows,
       agora,
       nucleo,
       acoes: {
@@ -264,15 +396,26 @@ export const register: Register = (on, options) => {
         escopo: (valor) => void mudarVista($, { escopo: valor === 'familia' ? 'familia' : 'maquina' }),
         tentar: () => void consultar($),
         irPara: (i) => void irPara($, i, e.surface),
+        abrirSessao: (local, titulo) => void abrirSessao($, local, titulo),
+        compactar: (passo) =>
+          void (passo === 'pedir' ? mudarVista($, { compactar: 'confirmar' }) : passo === 'cancelar' ? mudarVista($, { compactar: null }) : compactar($)),
         // Abrir as decisões ou trocar o escopo já pede a lista, sem esperar o próximo tick.
         verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)),
         escopoDecisoes: (valor) =>
           void mudarVista($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }).then(() =>
             consultar($),
           ),
-        confirmar: (d) => void decidir($, d, 'confirmar'),
-        descartar: (d) => void decidir($, d, 'descartar'),
+        confirmar: (d) => void decidir($, d.id, d.rotulo, 'confirmar'),
+        descartar: (d) => void decidir($, d.id, d.rotulo, 'descartar'),
         verNaConversa: (d) => void verNaConversa($, d),
+        verPlanos: () => void mudarVista($, { tela: 'planos' }),
+        abrirDecisao: (d) => void mudarVista($, { tela: 'decisao', decisao: d, ajustando: false }),
+        voltarDecisoes: () => void mudarVista($, { tela: 'decisoes', ajustando: false }).then(() => consultar($)),
+        desfazer: (id, rotulo) => void decidir($, id, rotulo, 'desfazer'),
+        ajustar: (abrir) => void mudarVista($, { ajustando: abrir }),
+        enviarAjuste: (d, texto) => void (texto.trim() ? decidir($, d.id, d.rotulo, 'ajustar', texto) : undefined),
+        verSubagentes: () => void mudarVista($, { tela: 'subagentes' }),
+        verFilhas: () => void mudarVista($, { tela: 'filhas' }),
       },
     })
   })

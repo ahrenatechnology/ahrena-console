@@ -8,8 +8,8 @@
 // - correção (determinística): a recusa de um plano com o que a pessoa escreveu;
 // - permissão negada: a recusa de qualquer outra ferramenta (o "permitir" só os hooks enxergam,
 //   porque o transcript não diz quando houve pedido de permissão);
-// - correção (inferida, a confirmar): uma mensagem da pessoa que começa contrariando a proposta
-//   que o agente acabou de fazer. Entra na cadeia do assunto só quando o turno teve uma decisão só.
+// - correção (inferida, a confirmar): uma resposta curta da pessoa que começa contrariando a
+//   pergunta que o agente acabou de fazer. Entra na cadeia do assunto só quando o turno teve uma decisão só.
 
 import { readFile } from 'node:fs/promises';
 import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
@@ -32,6 +32,8 @@ interface ToolCall {
 interface AgentTurn {
   /** Última fala do agente desde o último prompt: a proposta que uma correção contraria. */
   proposal: string | null;
+  /** A última fala terminou numa pergunta: só um "não, …" a ela é correção. */
+  asks: boolean;
   /** Assuntos das decisões do turno. Com um só, a correção entra na cadeia dele; com vários, fica sem. */
   topics: (string | null)[];
 }
@@ -101,7 +103,7 @@ export function extractTranscriptDecisions(lines: Iterable<unknown>, opts: Trans
     const transcriptAgent = str(line.agentId);
     const agentId = transcriptAgent ? subagentId(sessionId, transcriptAgent) : mainAgentId(sessionId);
     const turnKey = agentId;
-    const turn = turns.get(turnKey) ?? { proposal: null, topics: [] };
+    const turn = turns.get(turnKey) ?? { proposal: null, asks: false, topics: [] };
     turns.set(turnKey, turn);
     const base = (toolUseId: string | null): CaptureBase => ({
       sessionId,
@@ -123,7 +125,10 @@ export function extractTranscriptDecisions(lines: Iterable<unknown>, opts: Trans
       for (const b of content) {
         if (!isObj(b)) continue;
         if (b.type === 'tool_use' && str(b.id) && str(b.name)) tools.set(b.id as string, { name: b.name as string, input: b.input });
-        if (b.type === 'text') turn.proposal = cleanText(b.text) ?? turn.proposal;
+        if (b.type === 'text' && cleanText(b.text)) {
+          turn.proposal = cleanText(b.text);
+          turn.asks = typeof b.text === 'string' && /\?\s*$/.test(b.text);
+        }
       }
       continue;
     }
@@ -166,7 +171,8 @@ export function extractTranscriptDecisions(lines: Iterable<unknown>, opts: Trans
     const prompt = promptText(line, content);
     if (!prompt) continue;
     const uuid = str(line.uuid);
-    if (uuid && turn.proposal && looksLikeCorrection(prompt)) {
+    // Conservador: só a resposta "não, …" a uma pergunta que o agente acabou de fazer.
+    if (uuid && turn.proposal && turn.asks && looksLikeCorrection(prompt)) {
       const text = cleanText(prompt);
       if (text) {
         out.push(correctionDraft(base(null), { sourceKey: `prompt:${uuid}`, text, proposal: turn.proposal, topic: turn.topics.length === 1 ? turn.topics[0] : null, inferred: true }));
@@ -174,6 +180,7 @@ export function extractTranscriptDecisions(lines: Iterable<unknown>, opts: Trans
     }
     // Prompt novo: começa outro turno do agente.
     turn.proposal = null;
+    turn.asks = false;
     turn.topics = [];
   }
   return out;
