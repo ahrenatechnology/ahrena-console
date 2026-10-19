@@ -7,14 +7,21 @@
 // | `GET /api/sessao/<sessão>`    | O mesmo, no caminho que o script de carga já usa           |
 // | `GET /api/carga`              | Contadores para a medição de carga                         |
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
+// | `GET /api/decisoes/<sessão>`  | As decisões de um escopo (`?escopo=sessao|familia|branch`)  |
+// | `POST /api/decisoes/<id>/confirmar` e `/descartar` | O Confirmar e o Descartar de uma sugerida |
 //
-// `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão.
-// Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003).
+// `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
+// `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
+// Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A escrita nas
+// decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
+// alcança uma decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
-import type { MontadorDoPainel } from './painel.ts';
+import { ErroDaDecisao, ESCOPOS_DAS_DECISOES } from './decisoes.ts';
+import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
+import type { EscopoDasDecisoes } from './tipos.ts';
 
 export const VERSAO_DA_API = '0.0.1';
 
@@ -38,6 +45,42 @@ export interface ApiLocal {
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CAMINHO = /^\/[^\0\n]{0,1023}$/;
+const MAX_CORPO = 4096;
+
+const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
+
+/** O que o painel manda de si: os mesmos parâmetros do `GET /api/painel`. */
+function pedidoDe(sessionId: string, url: URL): PedidoDoPainel {
+  const p = (k: string) => {
+    const v = url.searchParams.get(k);
+    return v && PARAM.test(v) ? v : null;
+  };
+  const cwd = url.searchParams.get('cwd');
+  return {
+    sessionId,
+    local: p('local'),
+    conta: p('conta'),
+    org: p('org'),
+    modelo: p('modelo'),
+    cwd: cwd && CAMINHO.test(cwd) ? cwd : null,
+    decisoes: escopoDe(url.searchParams.get('decisoes')),
+  };
+}
+
+function lerCorpo(req: IncomingMessage): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    let corpo = '';
+    let grande = false;
+    req.setEncoding('utf8');
+    req.on('data', (parte: string) => {
+      if (grande) return;
+      corpo += parte;
+      if (corpo.length > MAX_CORPO) grande = true;
+    });
+    req.on('end', () => resolve(grande ? null : corpo));
+    req.on('error', reject);
+  });
+}
 
 export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
@@ -47,23 +90,44 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function painel(res: ServerResponse, sessionId: string, url: URL) {
     if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
-    const p = (k: string) => {
-      const v = url.searchParams.get(k);
-      return v && PARAM.test(v) ? v : null;
-    };
     const t0 = performance.now();
-    const cwd = url.searchParams.get('cwd');
-    const corpo = await opts.montador.montar({
-      sessionId,
-      local: p('local'),
-      conta: p('conta'),
-      org: p('org'),
-      modelo: p('modelo'),
-      cwd: cwd && CAMINHO.test(cwd) ? cwd : null,
-    });
+    const corpo = await opts.montador.montar(pedidoDe(sessionId, url));
     contadores.painel++;
     contadores.msPainel += performance.now() - t0;
     send(res, 200, corpo);
+  }
+
+  async function listaDeDecisoes(res: ServerResponse, sessionId: string, url: URL) {
+    if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
+    const escopo = escopoDe(url.searchParams.get('escopo') ?? 'familia');
+    if (!escopo) return send(res, 400, { error: 'escopo: sessao, familia ou branch' });
+    const lista = await opts.montador.listaDeDecisoes(pedidoDe(sessionId, url), escopo);
+    if (!lista) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
+    send(res, 200, lista);
+  }
+
+  // Escrita: só JSON, com a sessão no corpo; a montagem confere se a sessão enxerga a decisão.
+  async function decidir(req: IncomingMessage, res: ServerResponse, id: string, acao: 'confirmar' | 'descartar', url: URL) {
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
+    if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
+    const texto = await lerCorpo(req);
+    if (texto === null) return send(res, 413, { error: 'corpo grande demais' });
+    let sessao: unknown;
+    try {
+      sessao = (JSON.parse(texto) as { sessao?: unknown } | null)?.sessao;
+    } catch {
+      return send(res, 400, { error: 'JSON inválido' });
+    }
+    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "sessao": "<id>" }' });
+    try {
+      const decisao = await opts.montador.decidir(pedidoDe(sessao, url), id, acao);
+      if (!decisao) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
+      log(`decisão ${id}: ${acao} pela sessão ${sessao}`);
+      send(res, 200, { decisao });
+    } catch (err) {
+      if (err instanceof ErroDaDecisao) return send(res, err.status, { error: err.message });
+      throw err;
+    }
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -71,6 +135,11 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (!allowedLocalRequest(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
+    const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar)$/.exec(url.pathname);
+    if (escrita) {
+      if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
+      return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as 'confirmar' | 'descartar', url);
+    }
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API });
     if (url.pathname === '/api/carga') {
@@ -82,6 +151,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     const m = /^\/api\/(?:painel|sessao)\/([^/]+)$/.exec(url.pathname);
     if (m) return painel(res, decodeURIComponent(m[1]), url);
+    const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);
+    if (d) return listaDeDecisoes(res, decodeURIComponent(d[1]), url);
     send(res, 404, { error: 'não encontrado' });
   }
 

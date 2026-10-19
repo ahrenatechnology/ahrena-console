@@ -66,4 +66,8 @@ A correção inferida é conservadora. Só conta uma mensagem que começa com "n
 
 O transcript e o payload do hook são dados, nunca instrução. A extração só faz `JSON.parse` e lê campos. Não executa, não avalia e não abre caminho nenhum que venha do conteúdo. Todo texto passa por `cleanText`: vira uma linha só, perde controles, ANSI e caracteres invisíveis ou de direção, e é cortado em 280 caracteres, com no máximo 12 itens por lista.
 
+## No painel
+
+A API local (`src/api/decisoes.ts`, #102) lista as decisões por escopo para o painel e faz o Confirmar e o Descartar de uma sugerida, gravando em `metadata.painel` quem decidiu e quando. A captura pelos hooks está pendurada no receptor da API (`src/api/cli.ts`); a do transcript ainda não é chamada pelo seguidor.
+
 **Para o hub:** `decisionForHub(d)` leva só metadados: ids, família, número, branch, origem, estado, escopo, quem decidiu, cadeia, ids da mensagem, datas e quantas alternativas. Assunto, contexto, escolha, alternativas e caminhos locais ficam de fora. O texto só vai quando a pessoa libera aquela decisão (`releaseDecisionText`).

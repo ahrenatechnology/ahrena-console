@@ -7,12 +7,21 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
+import { HookDecisionCapture } from '../decisoes/captura-hooks.ts';
+import { SqliteDecisionStore } from '../decisoes/sqlite.ts';
 import { MaquinaDeEstados } from '../estados/maquina.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
-import { CENARIOS_DO_PAINEL, FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../simulador/painel.ts';
+import {
+  CENARIOS_DO_PAINEL,
+  FonteDeTrabalhoDoSimulador,
+  SESSAO_DO_PAINEL,
+  semearCenariosDoPainel,
+  semearDecisoesDoPainel,
+  type CenarioDoPainel,
+} from '../simulador/painel.ts';
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
@@ -32,7 +41,7 @@ const AJUDA = `Uso: npm run api -- [opções]
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
-  --cenario <p1..p7>  O cenário da demonstração (padrão p1), como nos wireframes
+  --cenario <p1..p9>  O cenário da demonstração (padrão p1), como nos wireframes
   --help
 `;
 
@@ -62,6 +71,9 @@ const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? j
 if (banco !== ':memory:') mkdirSync(dirname(banco), { recursive: true });
 
 const storage = openSqliteStorage({ path: banco });
+// As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
+const decisoes = new SqliteDecisionStore(storage.db);
+const captura = new HookDecisionCapture({ decisions: decisoes });
 const maquina = new MaquinaDeEstados({ storage, log, ...(demo ? { sonda: null } : {}) });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
@@ -75,6 +87,7 @@ const montador = new MontadorDoPainel({
   contas: new Contas({ storage, ...(demo ? { arquivo: null } : {}) }),
   desktop,
   trabalho,
+  decisoes,
   ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),
 });
 
@@ -82,6 +95,7 @@ if (demo) {
   const cenario = o.cenario as CenarioDoPainel;
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
+  await semearDecisoesDoPainel(decisoes, cenario);
 }
 
 let historicoPronto = false;
@@ -97,7 +111,14 @@ const follower =
 
 const api = await iniciarApiLocal({
   montador,
-  hooks: { storage, onEvent: maquina.aoReceberHook, log },
+  hooks: {
+    storage,
+    onEvent: async (r) => {
+      await maquina.aoReceberHook(r);
+      await captura.onEvent(r.event);
+    },
+    log,
+  },
   port: porta,
   log,
   carga: () => ({

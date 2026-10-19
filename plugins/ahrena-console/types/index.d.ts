@@ -102,6 +102,48 @@ export type PrecisamDoPainel = {
   maquina: PrecisaDeVoce[]
 }
 
+/** O escopo da lista de decisões (o Select do P9). */
+export type EscopoDasDecisoes = 'sessao' | 'familia' | 'branch'
+
+/** Uma decisão no card 34 × 6 (P9). */
+export type DecisaoDoPainel = {
+  id: string
+  /** "D4": o número na família. */
+  rotulo: string
+  origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida'
+  estado: 'vigente' | 'substituida' | 'a_confirmar'
+  titulo: string
+  /** O que foi descartado ("não: …"). */
+  nao: string[]
+  decididaPor: 'usuario' | 'agente'
+  decididaEm: string
+  confirmadaEm: string | null
+  /** O "D4" da decisão que substituiu esta. */
+  substituidaPor: string | null
+  sessao: 'esta' | 'mae' | 'familia' | 'branch'
+  /** Para o "ver na conversa", quando a mensagem é desta sessão. */
+  toolUseId: string | null
+}
+
+export type ListaDeDecisoes = {
+  escopo: EscopoDasDecisoes
+  vigentes: number
+  aConfirmar: number
+  itens: DecisaoDoPainel[]
+}
+
+/** A faixa do P10, depois de um /clear; vem com a reinjeição (#100). */
+export type RetomadaDoPainel = { n: number; tokens: number | null; de: string | null }
+
+export type DecisoesDoPainel = {
+  /** Vigentes no escopo família: a linha "N decisões vigentes". */
+  vigentes: number
+  aConfirmar: number
+  retomada: RetomadaDoPainel | null
+  /** A lista aberta, só quando o painel pede (`?decisoes=<escopo>`). */
+  lista: ListaDeDecisoes | null
+}
+
 export type Painel = {
   versao: 1
   geradoEm: string
@@ -115,6 +157,8 @@ export type Painel = {
   filhas: FilhaDoPainel[]
   trabalho: TrabalhoDoPainel | null
   precisam: PrecisamDoPainel
+  /** `null`: o núcleo subiu sem as decisões (ou é de antes delas). */
+  decisoes?: DecisoesDoPainel | null
 }
 
 /** A última leitura do núcleo e como ela foi. */
@@ -131,10 +175,12 @@ export type Leitura = {
 
 /** O que a pessoa abriu no painel. */
 export type Vista = {
-  /** `precisam`: a lista de "precisam de você" (P7) no lugar dos cards. */
-  tela: 'sessao' | 'precisam'
+  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9). */
+  tela: 'sessao' | 'precisam' | 'decisoes'
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
   escopo: 'familia' | 'maquina' | null
+  /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */
+  escopoDecisoes?: EscopoDasDecisoes | null
 }
 
 declare module 'claude-code' {

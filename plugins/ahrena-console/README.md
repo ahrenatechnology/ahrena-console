@@ -1,6 +1,6 @@
 # Ahrena Console: painel lateral
 
-Plugin do Claude Code com o painel da sessão (`/console`), construído sobre os [wireframes aprovados](../../docs/wireframes/) (P0 a P8) e as decisões [0004](../../docs/decisoes/0004-painel-da-sessao.md) e [0006](../../docs/decisoes/0006-multiplas-contas.md). Cobre as issues #35 (4.1), #36 (4.2), #37 (4.3) e #116 (4.8).
+Plugin do Claude Code com o painel da sessão (`/console`), construído sobre os [wireframes aprovados](../../docs/wireframes/) (P0 a P10) e as decisões [0004](../../docs/decisoes/0004-painel-da-sessao.md) e [0006](../../docs/decisoes/0006-multiplas-contas.md). Cobre as issues #35 (4.1), #36 (4.2), #37 (4.3), #116 (4.8) e #102 (decisões).
 
 O painel olha a sessão em que está aberto:
 
@@ -8,6 +8,7 @@ O painel olha a sessão em que está aberto:
 - **Contexto e custo:** contexto usado, custo estimado com a curva da sessão, tokens e processos em background;
 - **Trabalho:** a issue e o PR achados pelo branch, com sub-issues, CI e review;
 - **Plano, subagentes e sessões filhas:** o que roda dentro dela (P4);
+- **Decisões, uma linha:** "N decisões vigentes", com quantas estão a confirmar; "Ver" abre os cards de cada decisão (origem, há quanto tempo, o que se decidiu, o que foi descartado, o estado e quem decidiu), com o escopo trocado entre Sessão, Família e Branch. A sugerida tem Confirmar e Descartar; a substituída aparece riscada e aponta a nova (P9). Depois de um `/clear`, uma faixa diz quantas decisões da sessão anterior continuam valendo (P10);
 - **De fora, uma linha:** "N precisam de você", somando todas as contas, com a divisão por conta ao passar o mouse; "Ver" abre a lista, só a família ou a máquina inteira (P7);
 - **Sem o núcleo:** a última leitura, o aviso e uma nova tentativa a cada 5 s (P8).
 
@@ -55,7 +56,7 @@ Para ver o painel com dados de exemplo, sem tocar em nada real, a demonstração
 cd packages/nucleo && npm run api -- --demo --cenario p4
 ```
 
-Os cenários vão de `p1` a `p7` (P8 é o núcleo desligado). São do simulador: projetos sob `/simulacao`, repositório `exemplo/simulacao`, contas `equipe` e `cliente-exemplo`.
+Os cenários vão de `p1` a `p7` (P8 é o núcleo desligado), mais o `p9`, com as decisões da sessão e da sessão mãe. São do simulador: projetos sob `/simulacao`, repositório `exemplo/simulacao`, contas `equipe` e `cliente-exemplo`.
 
 ### Porta
 
@@ -76,7 +77,7 @@ O painel nunca mostra o id. Vale a fonte de menor ordem da decisão 0006 entre a
 Regra da issue #81 e da decisão 0004:
 
 - o painel só consulta com ele aberto e à vista; fechado, atrás de outra aba ou com a sessão encerrada, não pede nada;
-- a cada 5 s, um pedido só: `GET /api/painel/<esta sessão>`. Nunca a frota;
+- a cada 5 s, um pedido só: `GET /api/painel/<esta sessão>`. Nunca a frota. Com as decisões abertas, o mesmo pedido leva `decisoes=<escopo>` e traz a lista; Confirmar e Descartar são um `POST /api/decisoes/<id>/confirmar` (ou `/descartar`) cada, só no clique;
 - o núcleo responde do banco e de caches em memória: lê só os eventos novos da sessão, recalcula o custo no máximo a cada 30 s, conta "precisam de você" por índice uma vez a cada 4 s para todos os painéis, confere o índice do Desktop a cada 30 s e nunca espera o GitHub no caminho do pedido.
 
 Os números medidos estão no PR que trouxe o painel e saem de `node scripts/medir-carga.mjs --rota painel`.
@@ -87,7 +88,8 @@ O que os elementos nativos do mod, ou o que ainda não existe, não deixam ficar
 
 | No wireframe | No painel | Por quê |
 | --- | --- | --- |
-| Linha "N decisões vigentes" (P1 a P8) | Não aparece | As decisões da sessão (P9 e P10) dependem das #99 a #102 |
+| Faixa "N decisões da sessão anterior" (P10) | Só aparece quando o núcleo manda | A reinjeição depois do `/clear` é da #100; a faixa acende com ela, e "desligar a injeção" ainda não age |
+| "ver na conversa" | Rola a conversa até a chamada que originou a decisão; de outra sessão, diz onde ela está | O mod não abre outra sessão no Claude Desktop |
 | `CI ✓ 6/6`, `CI … 3/7` | `CI ✓`, `CI … rodando`, `CI ✕ falhou` | O núcleo lê o estado agregado das checagens (decisão 0001), não a contagem |
 | "Ir para a sessão" abre a outra sessão | Copia o nome e diz que ela está na barra lateral | O mod não troca de sessão no Claude Desktop |
 | "ver a árvore no artefato ›" | Não aparece | O artefato com a árvore (épico #4) ainda não tem link estável |
@@ -111,7 +113,7 @@ cd packages/nucleo && node test/api/gravar-cenarios.ts > ../../plugins/ahrena-co
 | Arquivo | O quê |
 | --- | --- |
 | [hooks/register.tsx](hooks/register.tsx) | `/console`, o polling com o painel aberto, a leitura do ambiente e as ações |
-| [hooks/desenho.tsx](hooks/desenho.tsx) | As telas P1 a P8 com os elementos nativos do mod |
+| [hooks/desenho.tsx](hooks/desenho.tsx) | As telas P1 a P10 com os elementos nativos do mod |
 | [hooks/formato.ts](hooks/formato.ts) | Tempo, modelo, tokens, custo, status e motivos |
 | [hooks/marca.ts](hooks/marca.ts) | Cores da marca, gerado por `packages/marca` |
 | [hooks/forward.mjs](hooks/forward.mjs) | O encaminhador dos hooks para o núcleo |

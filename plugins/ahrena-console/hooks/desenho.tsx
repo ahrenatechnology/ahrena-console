@@ -1,4 +1,4 @@
-// O desenho do painel (wireframes P0 a P8, docs/wireframes): só elementos nativos do mod
+// O desenho do painel (wireframes P0 a P10, docs/wireframes): só elementos nativos do mod
 // (Box, Text, Button, Link, Select, Svg), sem HTML. Recebe a leitura e devolve a árvore; quem
 // pede ao núcleo e guarda o estado é o register.tsx.
 //
@@ -10,22 +10,48 @@ import type { RenderElement } from 'claude-code'
 
 import type {
   ContaDoPainel,
+  DecisaoDoPainel,
+  EscopoDasDecisoes,
   FilhaDoPainel,
   Leitura,
   Painel,
   PrecisaDeVoce,
+  RetomadaDoPainel,
   SessaoDoPainel,
   SubagenteDoPainel,
   TrabalhoDoPainel,
   Vista,
 } from '../types'
-import { MOTIVOS, STATUS, corta, desde, duracao, ha, hora, modelo, plural, precisamTexto, statusDe, tokens, usd } from './formato'
+import {
+  ESCOPOS,
+  ESTADOS_DA_DECISAO,
+  MOTIVOS,
+  ORIGENS,
+  STATUS,
+  corta,
+  decisoesTexto,
+  desde,
+  duracao,
+  ha,
+  hora,
+  modelo,
+  naoTexto,
+  plural,
+  precisamTexto,
+  quando,
+  quemDecidiu,
+  statusDe,
+  tokens,
+  usd,
+} from './formato'
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
 export const CARD_H = 9
 export const GAP = 2
 const KPI_W = 15
+/** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
+const DECISOES_NO_ESTREITO = 3
 const COMO_INICIAR = 'https://github.com/ahrenatechnology/ahrena-console/tree/main/plugins/ahrena-console#subir-o-núcleo'
 
 const LARANJA = paleta.orange['500']
@@ -72,6 +98,11 @@ export type Acoes = {
   escopo: (valor: string) => void
   tentar: () => void
   irPara: (p: PrecisaDeVoce) => void
+  verDecisoes: () => void
+  escopoDecisoes: (valor: string) => void
+  confirmar: (d: DecisaoDoPainel) => void
+  descartar: (d: DecisaoDoPainel) => void
+  verNaConversa: (d: DecisaoDoPainel) => void
 }
 
 export type Contexto = {
@@ -577,6 +608,195 @@ function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolea
   )
 }
 
+// --- Decisões: a linha "N decisões vigentes", a faixa da retomada (P10) e a lista (P9) ---
+
+/** O escopo das decisões na vista, ou o da largura: sessão no estreito, família no largo. */
+export function escopoDasDecisoes(vista: Vista, cols: number): EscopoDasDecisoes {
+  return vista.escopoDecisoes ?? (grade(cols).porLinha === 1 ? 'sessao' : 'familia')
+}
+
+// No estreito, "· N a confirmar" não cabe ao lado do "Ver": desce para a linha de baixo.
+function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolean) {
+  const d = p.decisoes
+  if (!d) return null
+  const { Box, Text, Button } = c.el
+  const nada = d.vigentes === 0 && d.aConfirmar === 0
+  const aConfirmar = d.aConfirmar ? `${d.aConfirmar} a confirmar` : null
+  return (
+    <Box key="decisoes" flexDirection="column" width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text mono weight={nada ? 'regular' : 'bold'} dimColor={nada} wrap="truncate-end">
+            <Text color={LARANJA}>⊸ </Text>
+            {nada ? 'nenhuma decisão vigente' : decisoesTexto(d.vigentes)}
+            {aConfirmar && !estreito ? <Text color={AMARELO}> · {aConfirmar}</Text> : null}
+          </Text>
+        </Box>
+        <Button key="ver-decisoes" label="Ver" variant="secondary" onPress={c.acoes.verDecisoes} />
+      </Box>
+      {aConfirmar && estreito ? (
+        <Text mono size="caption" color={AMARELO} wrap="truncate-end">
+          {aConfirmar}
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
+/** P10: depois de um /clear, quantas decisões da sessão anterior continuam valendo. Só com dado (#100). */
+function faixaRetomada(c: Contexto, r: RetomadaDoPainel | null | undefined, largura: number, estreito: boolean) {
+  if (!r || r.n <= 0) return null
+  const { Box, Text, Button } = c.el
+  const custo = r.tokens ? ` (~${tokens(r.tokens)} tokens)` : ''
+  const de = r.de ? (
+    <Text>
+      Esta sessão continua a <Text weight="bold">{r.de}</Text> depois de um /clear.
+    </Text>
+  ) : (
+    <Text>Esta sessão continua a anterior depois de um /clear.</Text>
+  )
+  return (
+    <Box key="retomada" flexDirection="column" width={largura} borderStyle="round" borderColor={LARANJA} backgroundColor={BADGE.laranja} paddingX={1}>
+      <Text mono weight="bold" wrap="truncate-end">
+        <Text color={LARANJA}>⊸ </Text>
+        {plural(r.n, 'decisão', 'decisões')} da sessão anterior{estreito ? '' : r.n === 1 ? ' continua valendo' : ' continuam valendo'}
+      </Text>
+      <Text mono size="footnote" wrap="wrap">
+        {de}
+        {estreito ? '' : ` As decisões vigentes foram injetadas no início${custo}.`}
+      </Text>
+      <Box flexDirection="row" gap={1} alignItems="center">
+        <Button key="ver-retomada" plain onPress={c.acoes.verDecisoes}>
+          <Text mono size="footnote" color={LARANJA} underline>
+            ver {r.n === 1 ? 'a decisão' : `as ${r.n}`}
+          </Text>
+        </Button>
+        <Text mono size="footnote" dimColor>
+          · desligar a injeção
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+function pilulaDaDecisao(c: Contexto, d: DecisaoDoPainel) {
+  const rotulo = ESTADOS_DA_DECISAO[d.estado]
+  if (d.estado === 'a_confirmar') return pilula(c, 'estado', rotulo, AMARELO, BADGE.amarelo, true)
+  if (d.estado === 'substituida') return pilula(c, 'estado', rotulo, STATUS_COR.abandoned.dark.text, BADGE.cinza)
+  return pilula(c, 'estado', rotulo, VERDE, BADGE.verde)
+}
+
+function cardDecisao(c: Contexto, d: DecisaoDoPainel) {
+  const { Box, Text, Button } = c.el
+  const o = ORIGENS[d.origem]
+  const sugerida = d.estado === 'a_confirmar'
+  const velha = d.estado === 'substituida'
+  let acao: RenderElement
+  if (sugerida) {
+    acao = (
+      <Box flexDirection="row" gap={1}>
+        <Button key={`confirmar-${d.id}`} label="Confirmar" variant="primary" onPress={() => c.acoes.confirmar(d)} />
+        <Button key={`descartar-${d.id}`} label="Descartar" variant="secondary" onPress={() => c.acoes.descartar(d)} />
+      </Box>
+    )
+  } else if (velha) {
+    acao = (
+      <Text mono size="footnote" dimColor wrap="truncate-end">
+        {d.substituidaPor ? `substituída por ${d.substituidaPor}` : 'substituída'}
+      </Text>
+    )
+  } else {
+    acao = (
+      <Box flexDirection="row">
+        <Button key={`ver-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
+          <Text mono size="footnote" color={LARANJA} underline>
+            ver na conversa
+          </Text>
+        </Button>
+      </Box>
+    )
+  }
+  return cartao(
+    c,
+    `decisao-${d.id}`,
+    [
+      cabecalho(c, o.glifo, o.rotulo, quando(d.decididaEm, c.agora)),
+      <Text mono weight="bold" wrap="truncate-end" strikethrough={velha} dimColor={velha}>
+        {d.titulo}
+      </Text>,
+      <Text mono size="footnote" dimColor wrap="truncate-end">
+        {naoTexto(d)}
+      </Text>,
+      <Box flexDirection="row" gap={1} alignItems="center">
+        {pilulaDaDecisao(c, d)}
+        <Text mono size="footnote" dimColor={velha} wrap="truncate-end">
+          {quemDecidiu(d)}
+        </Text>
+      </Box>,
+      acao,
+    ],
+    sugerida ? AMARELO : BORDA,
+    sugerida ? BADGE.amarelo : FUNDO_CARTAO,
+  )
+}
+
+function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean) {
+  const { Box, Text, Button, Select } = c.el
+  const escopo = escopoDasDecisoes(c.vista, c.cols)
+  const lista = p.decisoes?.lista?.escopo === escopo ? p.decisoes.lista : null
+  const select = (
+    <Select
+      key="escopo-decisoes"
+      value={escopo}
+      options={ESCOPOS.map((e) => ({ value: e.valor, label: e.rotulo.toUpperCase() }))}
+      onSelect={(v: string) => c.acoes.escopoDecisoes(v)}
+    />
+  )
+  const vigentes = lista?.vigentes ?? (escopo === 'familia' ? (p.decisoes?.vigentes ?? 0) : null)
+  const titulo = `DECISÕES${vigentes === null ? '' : ` · ${vigentes} ${vigentes === 1 ? 'VIGENTE' : 'VIGENTES'}`}`
+  const itens = lista?.itens ?? []
+  const mostrar = estreito ? itens.slice(0, DECISOES_NO_ESTREITO) : itens
+  const fora = itens.length - mostrar.length
+  let conteudo: RenderElement[]
+  if (!p.decisoes) conteudo = [<Text key="sem" mono dimColor>o núcleo não trouxe as decisões</Text>]
+  else if (!lista) conteudo = [<Text key="lendo" mono dimColor>lendo as decisões…</Text>]
+  else if (!itens.length) conteudo = [<Text key="vazio" mono dimColor>nenhuma decisão {escopo === 'sessao' ? 'nesta sessão' : escopo === 'familia' ? 'na família' : 'neste branch'}</Text>]
+  else conteudo = mostrar.map((d) => cardDecisao(c, d))
+  const fechar = (
+    <Button key="fechar-decisoes" plain onPress={c.acoes.fechar}>
+      <Text color={LARANJA} underline>
+        fechar
+      </Text>
+    </Button>
+  )
+  const rodape = estreito ? (
+    <Text mono wrap="truncate-end">{fora > 0 ? `+${fora} · troque o escopo` : 'mais recentes primeiro'}</Text>
+  ) : (
+    <Text mono wrap="truncate-end">
+      escopo:{' '}
+      {ESCOPOS.map((e, i) => (
+        <Text key={`escopo-${e.valor}`} color={e.valor === escopo ? LARANJA : undefined} weight={e.valor === escopo ? 'bold' : 'regular'}>
+          {i ? ' · ' : ''}
+          {e.rotulo}
+        </Text>
+      ))}
+      {' · mais recentes primeiro'}
+    </Text>
+  )
+  return [
+    rotuloDaSecao(c, g.largura, titulo, select),
+    <Box key="lista-decisoes" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
+      {conteudo}
+    </Box>,
+    <Box key="rodape-decisoes" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      <Box flexDirection="row" flexShrink={1} minWidth={0}>
+        {rodape}
+      </Box>
+      {fechar}
+    </Box>,
+  ]
+}
+
 // --- P7: a lista de quem precisa de você ---
 
 function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
@@ -697,6 +917,8 @@ export function desenhar(c: Contexto): RenderElement {
     ]
   } else if (c.vista.tela === 'precisam') {
     corpo = telaPrecisam(c, p, g, estreito)
+  } else if (c.vista.tela === 'decisoes') {
+    corpo = telaDecisoes(c, p, g, estreito)
   } else {
     const cards = [
       s ? cardSessao(c, s) : null,
@@ -708,10 +930,12 @@ export function desenhar(c: Contexto): RenderElement {
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
       rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', 'auto · 5 s'), s?.conta),
+      faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,
       <Box key="cards" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
         {cards}
       </Box>,
+      linhaDecisoes(c, p, g.largura, estreito),
       linhaPrecisam(c, p, g.largura, estreito),
     ]
   }

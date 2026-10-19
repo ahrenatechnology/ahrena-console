@@ -176,4 +176,64 @@ export interface Painel {
   filhas: FilhaDoPainel[];
   trabalho: TrabalhoDoPainel | null;
   precisam: PrecisamDoPainel;
+  /** `null`: o núcleo subiu sem a porta das decisões. */
+  decisoes: DecisoesDoPainel | null;
+}
+
+/** O escopo da lista de decisões (o Select do P9). */
+export type EscopoDasDecisoes = 'sessao' | 'familia' | 'branch';
+
+/** Uma decisão no card 34 × 6 (P9). */
+export interface DecisaoDoPainel {
+  id: string;
+  /** "D4": o número na família. */
+  rotulo: string;
+  origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida';
+  /** Só estes três entram na lista; descartada e revertida ficam no histórico. */
+  estado: 'vigente' | 'substituida' | 'a_confirmar';
+  /** O que foi decidido. */
+  titulo: string;
+  /** O que foi descartado ("não: …"). */
+  nao: string[];
+  decididaPor: 'usuario' | 'agente';
+  decididaEm: string;
+  /** A sugerida que a pessoa confirmou pelo painel: quando. */
+  confirmadaEm: string | null;
+  /** O "D4" da decisão que substituiu esta. */
+  substituidaPor: string | null;
+  /** De que sessão veio, em relação a esta. */
+  sessao: 'esta' | 'mae' | 'familia' | 'branch';
+  /** O `tool_use_id` da mensagem, para o "ver na conversa" quando ela é desta sessão. */
+  toolUseId: string | null;
+}
+
+export interface ListaDeDecisoes {
+  escopo: EscopoDasDecisoes;
+  /** Vigentes e a confirmar neste escopo. */
+  vigentes: number;
+  aConfirmar: number;
+  /** Mais recentes primeiro: vigentes, a confirmar e substituídas. */
+  itens: DecisaoDoPainel[];
+}
+
+/**
+ * A faixa do P10: as decisões da sessão anterior que valem nesta depois de um /clear. Só vem
+ * quando a reinjeição (#100) gravou o que injetou; até lá, sempre `null`.
+ */
+export interface RetomadaDoPainel {
+  /** Quantas decisões foram injetadas. */
+  n: number;
+  /** Tokens que a injeção custou (estimativa). */
+  tokens: number | null;
+  /** O título da sessão anterior. */
+  de: string | null;
+}
+
+export interface DecisoesDoPainel {
+  /** Vigentes no escopo família: a linha "N decisões vigentes". */
+  vigentes: number;
+  aConfirmar: number;
+  retomada: RetomadaDoPainel | null;
+  /** A lista aberta, só quando o painel pede (`?decisoes=<escopo>`). */
+  lista: ListaDeDecisoes | null;
 }

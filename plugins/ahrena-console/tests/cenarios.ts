@@ -1,10 +1,11 @@
 // Gerado por packages/nucleo/test/api/gravar-cenarios.ts: a resposta de /api/painel em cada cenário
-// do simulador (P1 a P7), com a hora fixa AGORA. Não edite: rode o script de novo.
-import type { Painel } from '../types'
+// do simulador (P1 a P7 e P9), com a hora fixa AGORA, e as listas de decisões do P9 por escopo.
+// Não edite: rode o script de novo.
+import type { EscopoDasDecisoes, ListaDeDecisoes, Painel } from '../types'
 
 export const AGORA = 1793620800000
 
-export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Painel> = {
+export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 'p9', Painel> = {
   "p1": {
     "versao": 1,
     "geradoEm": "2026-11-02T12:00:00.000Z",
@@ -74,7 +75,81 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "total": 6,
       "atual": "Rodar a bateria",
       "proximo": "Abrir o PR",
-      "restantes": 1
+      "restantes": 1,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Ler o artefato",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Montar as raias",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Ligar ao núcleo",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Rodar a bateria",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Abrir o PR",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Pedir review",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
     },
     "subagentes": {
       "ativos": 1,
@@ -181,6 +256,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p2": {
@@ -257,7 +338,59 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "total": 4,
       "atual": "Decidir o banco",
       "proximo": "Escrever os casos de borda",
-      "restantes": 1
+      "restantes": 1,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Ler os testes atuais",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Decidir o banco",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Escrever os casos de borda",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Rodar no CI",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
     },
     "subagentes": {
       "ativos": 0,
@@ -294,6 +427,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "porConta": [],
       "familia": [],
       "maquina": []
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p3": {
@@ -370,7 +509,81 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "total": 6,
       "atual": "Aplicar a migração",
       "proximo": "Atualizar o seed",
-      "restantes": 0
+      "restantes": 0,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Mapear as tabelas",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Escrever a migração",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Testar a volta",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Revisar índices",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Aplicar a migração",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Atualizar o seed",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
     },
     "subagentes": {
       "ativos": 0,
@@ -461,6 +674,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p4": {
@@ -532,7 +751,81 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "total": 6,
       "atual": "Extrair a cobrança",
       "proximo": "Migrar os testes",
-      "restantes": 2
+      "restantes": 2,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Mapear o módulo",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Desenhar os serviços",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Extrair a cobrança",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Migrar os testes",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Ajustar o deploy",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Remover o código velho",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
     },
     "subagentes": {
       "ativos": 3,
@@ -669,6 +962,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p5": {
@@ -745,7 +1044,59 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
       "total": 4,
       "atual": "Reescrever a consulta",
       "proximo": null,
-      "restantes": 0
+      "restantes": 0,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Medir a consulta",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Criar os índices",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Cachear o total",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Reescrever a consulta",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
     },
     "subagentes": {
       "ativos": 0,
@@ -852,6 +1203,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p6": {
@@ -977,6 +1334,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
   },
   "p7": {
@@ -1195,6 +1558,569 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7', Pa
           }
         }
       ]
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
     }
+  },
+  "p9": {
+    "versao": 1,
+    "geradoEm": "2026-11-02T12:00:00.000Z",
+    "sessao": {
+      "id": "sim-painel-esta",
+      "titulo": "Kanban de sessões no artefato",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-11-02T11:15:00.000Z",
+      "status": "active",
+      "estado": "active",
+      "motivo": null,
+      "urgente": false,
+      "desde": "2026-11-02T11:59:57.000Z",
+      "turno": 18,
+      "atividade": {
+        "tipo": "ferramenta",
+        "texto": "rodando Bash · npm test"
+      },
+      "faixa": null,
+      "conta": {
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "rotulo": "equipe",
+        "cor": "#df285d",
+        "fonte": "env"
+      },
+      "branch": null,
+      "cwd": "/simulacao/ahrena-demo"
+    },
+    "contexto": {
+      "usados": 62000,
+      "limite": 200000,
+      "pct": 31
+    },
+    "custo": {
+      "usd": 1.8309456,
+      "serie": [
+        0,
+        0.1062826,
+        0.21372760000000002,
+        0.32233520000000004,
+        0.4321052000000001,
+        0.5430378000000001,
+        0.6551328000000001,
+        0.7683904,
+        0.8828104,
+        0.998393,
+        1.115138,
+        1.2330456,
+        1.3521156,
+        1.4723482,
+        1.5937432,
+        1.7163008,
+        1.8309456
+      ],
+      "estimativa": true
+    },
+    "tokens": {
+      "entrada": 897128,
+      "saida": 78016
+    },
+    "background": {
+      "total": 2,
+      "primeiro": "npm run dev"
+    },
+    "plano": {
+      "feitos": 3,
+      "total": 6,
+      "atual": "Rodar a bateria",
+      "proximo": "Abrir o PR",
+      "restantes": 1,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": null
+      },
+      "mudouEm": null,
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Ler o artefato",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Montar as raias",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Ligar ao núcleo",
+          "textoAtivo": null,
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Rodar a bateria",
+          "textoAtivo": null,
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Abrir o PR",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Pedir review",
+          "textoAtivo": null,
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": null
+          }
+        }
+      ]
+    },
+    "subagentes": {
+      "ativos": 1,
+      "itens": [
+        {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore",
+          "tarefa": "mapear usos",
+          "status": "working",
+          "desde": "2026-11-02T11:59:18.000Z",
+          "ate": null
+        },
+        {
+          "id": "sim-painel-esta:a1",
+          "nome": "Plan",
+          "tarefa": "plano",
+          "status": "completed",
+          "desde": "2026-11-02T11:49:00.000Z",
+          "ate": "2026-11-02T11:51:00.000Z"
+        }
+      ]
+    },
+    "filhas": [],
+    "trabalho": {
+      "branch": "feat/42-kanban-de-sessoes",
+      "repo": "exemplo/simulacao",
+      "issue": {
+        "numero": 42,
+        "titulo": "Kanban de sessões",
+        "url": "https://github.com/exemplo/simulacao/issues/42",
+        "subIssues": {
+          "feitas": 2,
+          "total": 4
+        }
+      },
+      "pr": {
+        "numero": 78,
+        "url": "https://github.com/exemplo/simulacao/pull/78",
+        "estado": "rascunho",
+        "ci": "ok",
+        "review": "pendente"
+      },
+      "semPush": false,
+      "erro": null
+    },
+    "precisam": {
+      "total": 2,
+      "porConta": [
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          },
+          "n": 1
+        },
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          },
+          "n": 1
+        }
+      ],
+      "familia": [],
+      "maquina": [
+        {
+          "id": "sim-painel-motor-de-regras",
+          "titulo": "motor-de-regras",
+          "estado": "waiting",
+          "motivo": "notification",
+          "urgente": true,
+          "desde": "2026-11-02T11:58:00.000Z",
+          "texto": "Bash: npm run migrate",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        },
+        {
+          "id": "sim-painel-app-receitas",
+          "titulo": "app-receitas",
+          "estado": "waiting",
+          "motivo": "interrupted",
+          "urgente": true,
+          "desde": "2026-11-02T11:54:00.000Z",
+          "texto": "Esc no meio do turno",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          }
+        }
+      ]
+    },
+    "decisoes": {
+      "vigentes": 4,
+      "aConfirmar": 1,
+      "retomada": null,
+      "lista": null
+    }
+  }
+}
+
+export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
+  "sessao": {
+    "escopo": "sessao",
+    "vigentes": 3,
+    "aConfirmar": 1,
+    "itens": [
+      {
+        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "rotulo": "D6",
+        "origem": "sugerida",
+        "estado": "a_confirmar",
+        "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "nao": [
+          "20 por coluna",
+          "rolagem infinita"
+        ],
+        "decididaPor": "agente",
+        "decididaEm": "2026-11-02T11:54:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-6"
+      },
+      {
+        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "rotulo": "D4",
+        "origem": "correcao",
+        "estado": "vigente",
+        "titulo": "SQLite em memória nos testes",
+        "nao": [
+          "Postgres no Docker"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:46:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-4"
+      },
+      {
+        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "rotulo": "D5",
+        "origem": "permissao",
+        "estado": "vigente",
+        "titulo": "Permitir npm test sem perguntar",
+        "nao": [
+          "perguntar a cada vez"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:39:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-5"
+      },
+      {
+        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "rotulo": "D3",
+        "origem": "pergunta",
+        "estado": "substituida",
+        "titulo": "Postgres no Docker nos testes",
+        "nao": [
+          "SQLite em memória"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:27:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": "D4",
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-3"
+      },
+      {
+        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "rotulo": "D2",
+        "origem": "plano",
+        "estado": "vigente",
+        "titulo": "Plano de 5 passos aprovado",
+        "nao": [
+          "plano com drag-and-drop"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:20:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-2"
+      }
+    ]
+  },
+  "familia": {
+    "escopo": "familia",
+    "vigentes": 4,
+    "aConfirmar": 1,
+    "itens": [
+      {
+        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "rotulo": "D6",
+        "origem": "sugerida",
+        "estado": "a_confirmar",
+        "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "nao": [
+          "20 por coluna",
+          "rolagem infinita"
+        ],
+        "decididaPor": "agente",
+        "decididaEm": "2026-11-02T11:54:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-6"
+      },
+      {
+        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "rotulo": "D4",
+        "origem": "correcao",
+        "estado": "vigente",
+        "titulo": "SQLite em memória nos testes",
+        "nao": [
+          "Postgres no Docker"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:46:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-4"
+      },
+      {
+        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "rotulo": "D5",
+        "origem": "permissao",
+        "estado": "vigente",
+        "titulo": "Permitir npm test sem perguntar",
+        "nao": [
+          "perguntar a cada vez"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:39:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-5"
+      },
+      {
+        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "rotulo": "D3",
+        "origem": "pergunta",
+        "estado": "substituida",
+        "titulo": "Postgres no Docker nos testes",
+        "nao": [
+          "SQLite em memória"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:27:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": "D4",
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-3"
+      },
+      {
+        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "rotulo": "D2",
+        "origem": "plano",
+        "estado": "vigente",
+        "titulo": "Plano de 5 passos aprovado",
+        "nao": [
+          "plano com drag-and-drop"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:20:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-2"
+      },
+      {
+        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "rotulo": "D1",
+        "origem": "pergunta",
+        "estado": "vigente",
+        "titulo": "Kanban só leitura, sem arrastar",
+        "nao": [
+          "arrastar muda o status"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-01T16:00:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "mae",
+        "toolUseId": null
+      }
+    ]
+  },
+  "branch": {
+    "escopo": "branch",
+    "vigentes": 4,
+    "aConfirmar": 1,
+    "itens": [
+      {
+        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "rotulo": "D6",
+        "origem": "sugerida",
+        "estado": "a_confirmar",
+        "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "nao": [
+          "20 por coluna",
+          "rolagem infinita"
+        ],
+        "decididaPor": "agente",
+        "decididaEm": "2026-11-02T11:54:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-6"
+      },
+      {
+        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "rotulo": "D4",
+        "origem": "correcao",
+        "estado": "vigente",
+        "titulo": "SQLite em memória nos testes",
+        "nao": [
+          "Postgres no Docker"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:46:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-4"
+      },
+      {
+        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "rotulo": "D5",
+        "origem": "permissao",
+        "estado": "vigente",
+        "titulo": "Permitir npm test sem perguntar",
+        "nao": [
+          "perguntar a cada vez"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:39:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-5"
+      },
+      {
+        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "rotulo": "D3",
+        "origem": "pergunta",
+        "estado": "substituida",
+        "titulo": "Postgres no Docker nos testes",
+        "nao": [
+          "SQLite em memória"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:27:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": "D4",
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-3"
+      },
+      {
+        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "rotulo": "D2",
+        "origem": "plano",
+        "estado": "vigente",
+        "titulo": "Plano de 5 passos aprovado",
+        "nao": [
+          "plano com drag-and-drop"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-02T11:20:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-2"
+      },
+      {
+        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "rotulo": "D1",
+        "origem": "pergunta",
+        "estado": "vigente",
+        "titulo": "Kanban só leitura, sem arrastar",
+        "nao": [
+          "arrastar muda o status"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-11-01T16:00:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "mae",
+        "toolUseId": null
+      }
+    ]
   }
 }
