@@ -458,7 +458,8 @@ test('altura: pouca altura deixa a sessão inteira e o resto no resumo ou na fai
     if (base === PANE) {
       // No estreito, o que não coube na grade fica na faixa de resumos; a lista abre a tela própria.
       expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
-      expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(3)
+      // O Contexto (P1) fica inteiro, com os quatro tiles: logo depois da sessão (0.0.13).
+      expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
       await ui.press({ key: 'resumo-subagentes' })
       expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
       await ui.press({ key: 'voltar-sessao' })
@@ -627,7 +628,8 @@ test('#131: as sessões filhas aparecem direto na tela principal, as mais recent
   f.estado.painel = { ...p4, filhas }
   await f.relogio.advance(5_000)
   for (const base of [PANE, LARGO]) {
-    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 60) })
+    // Com a sessão e os tiles do Contexto inteiros, a lista das filhas precisa de mais altura no estreito: 80 linhas.
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 80) })
     const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))
     expect(linhas.length).toBeGreaterThanOrEqual(2)
     // A mais recente primeiro.
@@ -810,7 +812,8 @@ test('"Compactar agora" não esmaga a telemetria: no cabeçalho do card inteiro,
   expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
   await ui.unmount()
   // Resumo (pouca altura): o texto inteiro numa linha, sem truncar, e o botão na linha de baixo.
-  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 45) })
+  // Abaixo de 41 linhas no estreito, a sessão e os tiles não cabem juntos: o Contexto vai para o resumo.
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 36) })
   const card = await ui.find({ key: 'card-contexto' })
   const resumo = await ui.find({ type: 'Text', text: /86% · ~US\$ 155,32/ })
   expect(resumo).toBeDefined()
@@ -926,4 +929,16 @@ test('#140: o AskUserQuestion aparece no topo com as perguntas e as opções int
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
   expect(await ui.find({ key: 'pergunta' })).toBeUndefined()
   await ui.unmount()
+})
+
+
+test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, a partir de 41 linhas no estreito e 32 no largo', async ($, on) => {
+  await abrir($, on, { cenario: 'p1' })
+  for (const [base, linhas] of [[PANE, 41], [LARGO, 32]] as const) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+    expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
+    for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
+    await ui.unmount()
+  }
 })

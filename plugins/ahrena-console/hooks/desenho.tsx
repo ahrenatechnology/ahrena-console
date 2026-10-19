@@ -61,7 +61,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.12'
+export const VERSAO_DO_PLUGIN = '0.0.13'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -1649,20 +1649,25 @@ function voltar(c: Contexto, largura: number, para: () => void = c.acoes.fechar,
 }
 
 /** A ordem em que os cards recebem altura (pedido do dono): o que importa mais fica inteiro. */
-export const PRIORIDADE_DA_ALTURA = ['sessao', 'plano', 'contexto', 'trabalho', 'subagentes', 'filhas'] as const
+/**
+ * A ordem em que os cards recebem altura: o que importa mais fica inteiro. O Contexto vem logo
+ * depois da sessão (0.0.13): os quatro tiles do P1 nas duas larguras, nunca o resumo de uma linha
+ * enquanto a sessão e ele couberem.
+ */
+export const PRIORIDADE_DA_ALTURA = ['sessao', 'contexto', 'plano', 'trabalho', 'subagentes', 'filhas'] as const
 
 /**
  * As etapas da distribuição: a prioridade do dono, com as listas aparecendo na tela principal
  * (pedido do Fernando): depois do Plano, cada lista recebe o cabeçalho, alguns itens e o "ver
- * todas"; Contexto e Trabalho vêm em seguida; a sobra volta para as listas.
+ * todas"; o Trabalho vem em seguida; a sobra volta para as listas.
  */
 const ITENS_CEDO = 2
 const ETAPAS_DA_ALTURA: Etapa[] = [
   'sessao',
+  'contexto',
   'plano',
   { id: 'subagentes', ate: 2 + ITENS_CEDO + 1 },
   { id: 'filhas', ate: 1 + ITENS_CEDO + 1 },
-  'contexto',
   'trabalho',
   'subagentes',
   'filhas',
@@ -1762,8 +1767,10 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
     const sessao = pecas.find((x) => x.id === 'sessao')
     const cabe = alturaDaGrade(pecas.map((x) => linhas.get(x.id)!), g.porLinha) <= disponivel
     const sessaoOk = !sessao || linhas.get('sessao')! >= sessao.minimo
-    const proximo = [...PRIORIDADE_DA_ALTURA].reverse().find((id) => id !== 'sessao' && pecas.some((x) => x.id === id))
-    if ((cabe && sessaoOk) || !proximo) {
+    // Os tiles do Contexto (P1) também ficam inteiros: antes deles, os de menor prioridade vão para a faixa.
+    const contextoOk = !pecas.some((x) => x.id === 'contexto') || linhas.get('contexto')! >= LINHAS_DO_CONTEXTO
+    const proximo = [...PRIORIDADE_DA_ALTURA].reverse().find((id) => id !== 'sessao' && id !== 'contexto' && pecas.some((x) => x.id === id))
+    if ((cabe && sessaoOk && contextoOk) || !proximo) {
       // Só a sessão sobrou e ainda não cabe: ela aparece mesmo assim, o mínimo dela.
       if (sessao && !sessaoOk) linhas.set('sessao', sessao.minimo)
       return { linhas, fora: PRIORIDADE_DA_ALTURA.filter((id) => fora.includes(id)) }
