@@ -41,8 +41,13 @@ export async function atenderPorStdio({ atender, entrada = process.stdin, saida 
   await Promise.all(pendentes);
 }
 
-/** Ponte para o `/mcp` do núcleo: o mesmo servidor, pelo HTTP local. */
-export function ponteHttp(url: string, fetcher: typeof fetch = fetch): Atender {
+/**
+ * Ponte para o `/mcp` do núcleo: o mesmo servidor, pelo HTTP local. Com o núcleo fora do ar,
+ * `semNucleo` responde no lugar dele (`initialize`, `ping` e `tools/list` funcionam; `tools/call`
+ * volta com `isError` dizendo como subir o núcleo), para o cliente não marcar o servidor como
+ * quebrado só porque o núcleo ainda não subiu. Cada pedido tenta o HTTP de novo.
+ */
+export function ponteHttp(url: string, { semNucleo, fetcher = fetch }: { semNucleo: Atender; fetcher?: typeof fetch }): Atender {
   return async (mensagem) => {
     let res: Response;
     try {
@@ -52,22 +57,27 @@ export function ponteHttp(url: string, fetcher: typeof fetch = fetch): Atender {
         body: JSON.stringify(mensagem),
       });
     } catch {
-      return semNucleo(mensagem, `o núcleo do Ahrena Console não respondeu em ${url}: suba com \`npm run api\` em packages/nucleo`);
+      return semNucleo(mensagem);
     }
     if (res.status === 202) return null;
     const texto = await res.text();
+    let corpo: RespostaJsonRpc | RespostaJsonRpc[];
     try {
-      return JSON.parse(texto) as RespostaJsonRpc | RespostaJsonRpc[];
+      corpo = JSON.parse(texto) as RespostaJsonRpc | RespostaJsonRpc[];
     } catch {
-      return semNucleo(mensagem, `resposta inesperada do núcleo (HTTP ${res.status})`);
+      return erroComId(mensagem, `resposta inesperada do núcleo (HTTP ${res.status})`);
     }
+    // O 4xx do HTTP não sabe o id (o corpo nem foi lido, ou não era JSON-RPC): no stdio, o cliente
+    // casa a resposta pelo id, então ela leva o do pedido.
+    if (!Array.isArray(corpo) && corpo.id === null && corpo.error) return erroComId(mensagem, corpo.error.message, corpo.error.code);
+    return corpo;
   };
 }
 
-function semNucleo(mensagem: unknown, motivo: string): RespostaJsonRpc | RespostaJsonRpc[] | null {
+function erroComId(mensagem: unknown, motivo: string, codigo: number = ERROS.interno): RespostaJsonRpc | RespostaJsonRpc[] | null {
   const um = (m: unknown): RespostaJsonRpc | null => {
     const id = (m as { id?: unknown } | null)?.id;
-    return typeof id === 'string' || typeof id === 'number' ? erro(id, ERROS.interno, motivo) : null;
+    return typeof id === 'string' || typeof id === 'number' ? erro(id, codigo, motivo) : null;
   };
   if (Array.isArray(mensagem)) {
     const r = mensagem.map(um).filter((x): x is RespostaJsonRpc => x !== null);

@@ -252,5 +252,6 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 ## Testes
 
 ```bash
+npm install   # só a devDependency do teste de contrato do MCP (o cliente oficial)
 npm test
 ```

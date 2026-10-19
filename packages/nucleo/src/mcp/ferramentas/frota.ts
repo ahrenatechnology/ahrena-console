@@ -6,7 +6,7 @@ import type { EstadoDoInbox } from '../../estados/leitura.ts';
 import type { ContaDoPainel } from '../../api/tipos.ts';
 import type { Ferramenta, ObjetoJson } from '../protocolo.ts';
 import { casaConta, ESTADOS_VIVOS, minutosDesde, projetoDe, type LeituraDaFrota } from '../frota.ts';
-import { ARGS_COMUNS, esquema, haQuanto, lerComuns, paginar } from '../saida.ts';
+import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../saida.ts';
 import { precisamDeVoce } from './atencao.ts';
 import { contaDeSaida, dolares, linhaDeConta, type ContaDeSaida } from './comum.ts';
 
@@ -38,6 +38,29 @@ interface SessaoAtiva {
 
 const PERMITIDOS = ['account', 'limit', 'cursor'] as const;
 
+const CONTAGEM = objeto({ total: T.inteiro, blocking: T.inteiro, yourTurn: T.inteiro });
+const CAMPOS_DOS_TOTAIS = {
+  live: T.inteiro,
+  byState: objeto({ active: T.inteiro, waiting: T.inteiro, delegating: T.inteiro, background: T.inteiro, error: T.inteiro }),
+  completedToday: T.inteiro,
+  abandonedToday: T.inteiro,
+  needingAttention: CONTAGEM,
+  costTodayUsd: ouNulo(T.numero),
+};
+const ESQUEMA_DA_SESSAO_ATIVA = objeto({
+  sessionId: T.texto,
+  title: T.texto,
+  project: ouNulo(T.texto),
+  account: ESQUEMA_DA_CONTA,
+  model: ouNulo(T.texto),
+  state: { type: 'string', enum: ['active', 'waiting', 'delegating', 'background', 'error', 'completed', 'abandoned'] },
+  needsYou: T.booleano,
+  lastActivity: T.texto,
+  minutesSinceActivity: T.inteiro,
+  activeSubagents: T.inteiro,
+  backgroundProcesses: T.inteiro,
+});
+
 function totaisVazios(): Totais {
   return {
     live: 0,
@@ -58,13 +81,14 @@ export function fleetOverview(frota: LeituraDaFrota): Ferramenta {
       'e completed/abandoned de hoje) e por conta, quantas precisam de você, o custo estimado de hoje e as sessões vivas, ' +
       'paginadas. Filtro opcional account. Não devolve texto das conversas.',
     entrada: esquema({ ...ARGS_COMUNS }),
-    saida: esquema({
-      generatedAt: { type: 'string' },
-      day: { type: 'string' },
-      timeZone: { type: 'string' },
-      totals: { type: 'object' },
-      byAccount: { type: 'array' },
-      activeSessions: { type: 'object' },
+    saida: objeto({
+      generatedAt: T.texto,
+      day: T.texto,
+      timeZone: T.texto,
+      accountFilter: ouNulo(lista(T.texto)),
+      totals: objeto({ ...CAMPOS_DOS_TOTAIS, costEstimate: T.booleano, unpricedModels: lista(T.texto) }),
+      byAccount: lista(objeto({ account: ESQUEMA_DA_CONTA, ...CAMPOS_DOS_TOTAIS })),
+      activeSessions: objeto({ total: T.inteiro, items: lista(ESQUEMA_DA_SESSAO_ATIVA), nextCursor: ouNulo(T.texto) }),
     }),
     async executar(args: ObjetoJson) {
       const comuns = lerComuns(args, PERMITIDOS);

@@ -4,7 +4,7 @@ import { VERSAO_DA_API } from '../api/versao.ts';
 import { fleetOverview } from './ferramentas/frota.ts';
 import { sessionsNeedingAttention } from './ferramentas/atencao.ts';
 import { LeituraDaFrota, type OpcoesDaFrota } from './frota.ts';
-import { ServidorMcp, type Ferramenta } from './protocolo.ts';
+import { ErroDaFerramenta, ServidorMcp, type Ferramenta } from './protocolo.ts';
 
 export * from './protocolo.ts';
 export { CAMINHO_DO_MCP, criarRotaMcp, type RotaMcp } from './http.ts';
@@ -32,4 +32,23 @@ export function criarServidorMcp(opts: OpcoesDoMcp): { servidor: ServidorMcp; fr
   servidor.registrar(sessionsNeedingAttention(frota)).registrar(fleetOverview(frota));
   for (const f of opts.extras ?? []) servidor.registrar(f);
   return { servidor, frota };
+}
+
+/**
+ * O servidor que a ponte stdio usa quando o núcleo não responde: as mesmas ferramentas padrão,
+ * com o mesmo esquema, e cada chamada volta com `isError` e `motivo`.
+ */
+export function servidorSemNucleo(motivo: string): ServidorMcp {
+  const servidor = new ServidorMcp({ versao: VERSAO_DA_API, instrucoes: INSTRUCOES_DO_MCP });
+  // As fábricas só guardam a leitura; nada é lido antes de `executar`, que aqui é trocado.
+  const nenhuma = null as unknown as LeituraDaFrota;
+  for (const f of [sessionsNeedingAttention(nenhuma), fleetOverview(nenhuma)]) {
+    servidor.registrar({
+      ...f,
+      executar: async () => {
+        throw new ErroDaFerramenta(motivo);
+      },
+    });
+  }
+  return servidor;
 }

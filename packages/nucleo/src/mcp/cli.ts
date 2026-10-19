@@ -5,6 +5,7 @@
 
 import { parseArgs } from 'node:util';
 import { CAMINHO_DO_MCP } from './http.ts';
+import { servidorSemNucleo } from './index.ts';
 import { atenderPorStdio, ponteHttp } from './stdio.ts';
 
 const AJUDA = `Uso: npm run mcp -- [opções]
@@ -12,7 +13,8 @@ const AJUDA = `Uso: npm run mcp -- [opções]
   --porta <n>   Porta do núcleo em 127.0.0.1. Padrão AHRENA_CONSOLE_PORT ou 4720
   --help
 
-Lê JSON-RPC do stdin e responde no stdout, uma mensagem por linha. O núcleo precisa estar no ar.
+Lê JSON-RPC do stdin e responde no stdout, uma mensagem por linha. Sem o núcleo no ar, a lista de
+ferramentas responde e cada chamada diz como subi-lo.
 `;
 
 const { values: o } = parseArgs({ options: { porta: { type: 'string' }, help: { type: 'boolean', default: false } } });
@@ -25,7 +27,9 @@ if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
   process.stderr.write(`--porta inválida: ${o.porta}\n`);
   process.exit(2);
 }
+const url = `http://127.0.0.1:${porta}${CAMINHO_DO_MCP}`;
+const semNucleo = servidorSemNucleo(`O núcleo do Ahrena Console não respondeu em ${url}. Suba com \`npm run api\` em packages/nucleo e chame de novo.`);
 await atenderPorStdio({
-  atender: ponteHttp(`http://127.0.0.1:${porta}${CAMINHO_DO_MCP}`),
+  atender: ponteHttp(url, { semNucleo: (m) => semNucleo.atender(m) }),
   log: (m) => process.stderr.write(`[ahrena-console mcp] ${m}\n`),
 });

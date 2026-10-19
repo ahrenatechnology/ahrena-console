@@ -19,5 +19,8 @@
     "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.20.2"
   }
 }

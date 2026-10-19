@@ -47,8 +47,16 @@ export interface Ferramenta {
   executar(args: ObjetoJson, ctx: ContextoDaChamada): Promise<ResultadoDaFerramenta>;
 }
 
-/** Erro de argumento: volta como resultado com `isError`, para o modelo corrigir e tentar de novo. */
-export class ErroDeArgumento extends Error {
+/** Erro que a ferramenta quer mostrar ao modelo: volta como resultado com `isError`, não como erro de protocolo. */
+export class ErroDaFerramenta extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ErroDaFerramenta';
+  }
+}
+
+/** Erro de argumento: volta com `isError`, para o modelo corrigir e tentar de novo. */
+export class ErroDeArgumento extends ErroDaFerramenta {
   constructor(message: string) {
     super(message);
     this.name = 'ErroDeArgumento';
@@ -176,7 +184,7 @@ export class ServidorMcp {
       const r = await f.executar(args as ObjetoJson, ctx);
       return { content: [{ type: 'text', text: r.texto }], structuredContent: r.dados, isError: false };
     } catch (e) {
-      if (e instanceof ErroDeArgumento) return { content: [{ type: 'text', text: e.message }], isError: true };
+      if (e instanceof ErroDaFerramenta) return { content: [{ type: 'text', text: e.message }], isError: true };
       throw e;
     }
   }

@@ -8,7 +8,8 @@
 
 import { ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../protocolo.ts';
 import { casaConta, minutosDesde, projetoDe, type Atencao, type Grupo, type LeituraDaFrota, type Motivo, type SessaoDaFrota } from '../frota.ts';
-import { ARGS_COMUNS, esquema, haQuanto, lerComuns, paginar } from '../saida.ts';
+import { LOCAL_DO_DESKTOP } from '../../api/servidor.ts';
+import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../saida.ts';
 import { contaDeSaida, linhaDeConta, type ContaDeSaida } from './comum.ts';
 
 export interface ItemDeAtencao {
@@ -26,8 +27,29 @@ export interface ItemDeAtencao {
   errorCode: string | null;
   waitingSince: string;
   waitingMinutes: number;
-  open: { resume: string; cwd: string | null; desktopSessionId: string | null };
+  /** `desktopLink` abre a conversa no Claude Desktop (`claude://claude.ai/epitaxy/<local_…>`), quando ele conhece a sessão. */
+  open: { resume: string; cwd: string | null; desktopSessionId: string | null; desktopLink: string | null };
 }
+
+const GRUPOS = ['blocking', 'your_turn'] as const;
+const MOTIVOS = ['permission', 'question', 'plan', 'interrupted', 'error', 'turn_ended', 'first_prompt'] as const;
+
+export const ESQUEMA_DO_ITEM = objeto({
+  sessionId: T.texto,
+  title: T.texto,
+  project: ouNulo(T.texto),
+  account: ESQUEMA_DA_CONTA,
+  model: ouNulo(T.texto),
+  group: { type: 'string', enum: [...GRUPOS] },
+  reason: { type: 'string', enum: [...MOTIVOS] },
+  reasonText: T.texto,
+  tool: ouNulo(T.texto),
+  questionOptions: ouNulo(T.inteiro),
+  errorCode: ouNulo(T.texto),
+  waitingSince: T.texto,
+  waitingMinutes: T.inteiro,
+  open: objeto({ resume: T.texto, cwd: ouNulo(T.texto), desktopSessionId: ouNulo(T.texto), desktopLink: ouNulo(T.texto) }),
+});
 
 const PERMITIDOS = ['group', 'account', 'limit', 'cursor'] as const;
 
@@ -64,6 +86,7 @@ export async function precisamDeVoce(frota: LeituraDaFrota, contas: readonly str
 
 function item(s: SessaoDaFrota, a: Atencao, agora: number): ItemDeAtencao {
   const desde = s.session.awaitingInputSince ?? s.session.updatedAt;
+  const local = s.desktop?.localId ?? null;
   return {
     sessionId: s.session.id,
     title: s.titulo,
@@ -78,7 +101,7 @@ function item(s: SessaoDaFrota, a: Atencao, agora: number): ItemDeAtencao {
     errorCode: a.codigoDoErro,
     waitingSince: desde,
     waitingMinutes: minutosDesde(desde, agora),
-    open: { resume: `claude --resume ${s.session.id}`, cwd: s.session.cwd, desktopSessionId: s.desktop?.localId ?? null },
+    open: { resume: `claude --resume ${s.session.id}`, cwd: s.session.cwd, desktopSessionId: local, desktopLink: local && LOCAL_DO_DESKTOP.test(local) ? `claude://claude.ai/epitaxy/${local}` : null },
   };
 }
 
@@ -95,14 +118,15 @@ export function sessionsNeedingAttention(frota: LeituraDaFrota): Ferramenta {
       group: { type: 'string', enum: ['all', 'blocking', 'your_turn'], default: 'all', description: 'Só um dos grupos.' },
       ...ARGS_COMUNS,
     }),
-    saida: esquema({
-      generatedAt: { type: 'string' },
-      total: { type: 'integer' },
-      blocking: { type: 'integer' },
-      yourTurn: { type: 'integer' },
-      byAccount: { type: 'array' },
-      items: { type: 'array' },
-      nextCursor: { type: ['string', 'null'] },
+    saida: objeto({
+      generatedAt: T.texto,
+      total: T.inteiro,
+      blocking: T.inteiro,
+      yourTurn: T.inteiro,
+      byAccount: lista(objeto({ account: ESQUEMA_DA_CONTA, total: T.inteiro, blocking: T.inteiro, yourTurn: T.inteiro })),
+      group: { type: 'string', enum: ['all', ...GRUPOS] },
+      items: lista(ESQUEMA_DO_ITEM),
+      nextCursor: ouNulo(T.texto),
     }),
     async executar(args: ObjetoJson) {
       const comuns = lerComuns(args, PERMITIDOS);

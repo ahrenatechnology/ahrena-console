@@ -9,7 +9,7 @@
 // texto de conversa (prompts, respostas, perguntas, comandos). O que sai das sessões é o título,
 // curto e sem caractere de controle, e nomes de ferramenta que passam por um padrão estrito.
 
-import { ErroDeArgumento, type Esquema, type ObjetoJson } from './protocolo.ts';
+import { ErroDeArgumento, type Esquema, type Json, type ObjetoJson } from './protocolo.ts';
 
 export const LIMITE_PADRAO = 10;
 export const LIMITE_MAXIMO = 50;
@@ -31,6 +31,22 @@ export const ARGS_COMUNS: ObjetoJson = {
 export function esquema(propriedades: ObjetoJson): Esquema {
   return { type: 'object', properties: propriedades, additionalProperties: false };
 }
+
+/**
+ * Objeto da saída: todos os campos obrigatórios e nenhum a mais. O cliente oficial valida o
+ * `structuredContent` contra o `outputSchema`; campo que sai sem estar aqui derruba a chamada.
+ */
+export function objeto(propriedades: ObjetoJson): Esquema {
+  return { ...esquema(propriedades), required: Object.keys(propriedades) };
+}
+
+export const lista = (items: Json): ObjetoJson => ({ type: 'array', items });
+/** O mesmo esquema, aceitando também `null`. */
+export const ouNulo = (e: ObjetoJson): ObjetoJson => ({ anyOf: [e, { type: 'null' }] });
+export const T = { texto: { type: 'string' }, inteiro: { type: 'integer', minimum: 0 }, numero: { type: 'number' }, booleano: { type: 'boolean' } } satisfies Record<string, ObjetoJson>;
+
+/** A conta como sai (ferramentas/comum.ts), ou `null` para "Sem conta". */
+export const ESQUEMA_DA_CONTA = ouNulo(objeto({ label: T.texto, color: T.texto, source: T.texto }));
 
 export interface Comuns {
   contas: string[] | null;
