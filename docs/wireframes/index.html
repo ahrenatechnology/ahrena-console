@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wireframes do painel e do app</title>
+<!-- As cores vêm só do que packages/marca gera de docs/brand/tokens.json. Nenhum hex é escrito aqui. -->
+<link rel="stylesheet" href="../../packages/marca/gerado/marca.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: var(--text-md); line-height: 1.5; }
+  a { color: var(--accent-text); }
+  code { font-family: var(--font-mono); font-size: 0.92em; }
+  .topo { display: flex; align-items: center; gap: 14px; padding: 20px 32px; border-bottom: 2px solid var(--rose); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+  .topo h1 { font-size: var(--text-xl); margin: 0; font-weight: 600; }
+  .topo p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+  .topo .tema { margin-left: auto; display: flex; gap: 6px; }
+  .topo button { font: inherit; font-size: var(--text-sm); padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--raised); color: var(--text); cursor: pointer; }
+  .topo button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+  nav.indice { position: sticky; top: 77px; align-self: start; padding: 20px 16px; font-size: var(--text-sm); height: calc(100vh - 77px); overflow: auto; border-right: 1px solid var(--border); }
+  nav.indice h3 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+  nav.indice a { display: block; color: var(--text); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.indice a:hover { background: var(--raised); }
+  main { padding: 24px 32px 80px; min-width: 0; }
+  section.tela { margin: 0 0 56px; }
+  section.tela > h2 { font-size: var(--text-lg); font-weight: 600; margin: 0 0 4px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  section.tela > h2 .id { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); font-weight: 400; }
+  section.tela > .sub { color: var(--muted); margin: 0 0 16px; font-size: var(--text-sm); }
+  .quadros { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
+  .nota { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: var(--text-sm); }
+  .nota h4 { margin: 0 0 6px; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .nota.ccam h4 { color: var(--accent-text); }
+  .nota ul { margin: 0; padding-left: 18px; }
+  .nota li { margin: 2px 0; }
+  .intro { max-width: 980px; }
+  .intro p, .intro li { color: var(--text); }
+  table.leg { border-collapse: collapse; font-size: var(--text-sm); margin: 8px 0 0; }
+  table.leg th, table.leg td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--border); }
+  table.leg th { color: var(--muted); font-weight: 500; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em; }
+  table.leg td.hex { font-family: var(--font-mono); color: var(--muted); }
+
+  /* ---------- Painel: grade de caracteres ---------- */
+  .painel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .painel .aba { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--raised); font-size: var(--text-xs); color: var(--muted); }
+  .painel .aba b { color: var(--text); font-weight: 500; }
+  .painel .aba .x { margin-left: auto; }
+  .grade { font-family: var(--font-mono); font-size: 13px; line-height: 1.1; padding: 6px 0; white-space: pre; background: var(--surface); }
+  .grade .ln { height: 1.1em; }
+  .painel .status { font-family: var(--font-mono); font-size: 13px; padding: 4px 10px; border-top: 1px solid var(--border); background: var(--bg); color: var(--muted); white-space: pre; overflow: hidden; }
+  .painel .medida { font-size: var(--text-xs); color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+  .medida .ok { color: var(--status-completed-text); }
+  .medida .ruim { color: var(--status-error-text); font-weight: 600; }
+  .t { color: var(--text); } .m { color: var(--muted); } .b { font-weight: 600; }
+  .a { color: var(--accent-text); } .rose { color: var(--rose); } .dim { color: var(--border); }
+  .sa { color: var(--status-active-text); } .sw { color: var(--status-waiting-text); } .sc { color: var(--status-completed-text); }
+  .se { color: var(--status-error-text); } .sx { color: var(--status-abandoned-text); }
+  .bar { color: var(--accent); } .bar-e { color: var(--status-error-dot); }
+  .bd { color: var(--muted); }
+  .bd-active { color: var(--status-active-dot); } .bd-waiting { color: var(--status-waiting-dot); } .bd-completed { color: var(--status-completed-dot); }
+  .bd-error { color: var(--status-error-dot); } .bd-abandoned { color: var(--status-abandoned-dot); }
+  .chip-active { background: var(--status-active-badge); color: var(--status-active-text); }
+  .chip-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+  .chip-error { background: var(--status-error-badge); color: var(--status-error-text); }
+  .btn { background: var(--accent); color: var(--on-accent); font-weight: 600; border-radius: 3px; }
+  .btn2 { background: var(--raised); color: var(--text); border-radius: 3px; box-shadow: inset 0 0 0 1px var(--border); }
+  .sel { background: var(--raised); color: var(--text); border-radius: 3px; box-shadow: inset 0 0 0 1px var(--border); }
+  .link { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+  .logo { display: inline-block; width: 2ch; height: 1.1em; vertical-align: top; background: url(../brand/logo.svg) center / 1.05em 1.05em no-repeat; }
+  .rotulo { font-size: var(--text-xs); color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ---------- App: macOS ---------- */
+  .mac { position: relative; width: 860px; height: 440px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border);
+         background: radial-gradient(120% 90% at 20% 100%, var(--raised), var(--bg)); font-family: -apple-system, "SF Pro Text", var(--font-sans); }
+  .mac.alto { height: 640px; width: 1100px; }
+  .barra { height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 12px; font-size: 13px; color: var(--text);
+           background: color-mix(in srgb, var(--surface) 82%, transparent); border-bottom: 1px solid var(--border); backdrop-filter: blur(12px); }
+  .barra .app { font-weight: 700; }
+  .barra .dir { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--text); }
+  .barra .ic { width: 16px; height: 10px; border: 1.5px solid currentColor; border-radius: 3px; opacity: .8; }
+  .barra .ic.r { border-radius: 50%; width: 12px; height: 12px; }
+  .bandeja { display: flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 5px; }
+  .bandeja.aberta { background: color-mix(in srgb, var(--text) 18%, transparent); }
+  .bandeja svg { width: 16px; height: 16px; }
+  .bandeja .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .menu { position: absolute; top: 30px; width: 330px; padding: 5px; border-radius: 10px; font-size: 13px; color: var(--text);
+          background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--border);
+          box-shadow: 0 12px 40px color-mix(in srgb, var(--mono-black) 55%, transparent); backdrop-filter: blur(20px); }
+  .menu .it { display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 5px; height: 22px; white-space: nowrap; }
+  .menu .it.off { color: var(--muted); }
+  .menu .it.cab { color: var(--muted); font-size: 12px; font-weight: 600; }
+  .menu .it.foco { background: var(--accent); color: var(--on-accent); }
+  .menu .it.foco .k, .menu .it.foco .mt { color: var(--on-accent); }
+  .menu .it .k { margin-left: auto; color: var(--muted); }
+  .menu .it .mt { color: var(--muted); }
+  .menu .it .ck { width: 12px; display: inline-block; text-align: center; }
+  .menu .sep { height: 1px; background: var(--border); margin: 5px 10px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.active { background: var(--status-active-dot); } .dot.waiting { background: var(--status-waiting-dot); }
+  .dot.error { background: var(--status-error-dot); } .dot.ok { background: var(--ci-success); }
+  .dot.vazio { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .rot { position: absolute; font-size: 11px; color: var(--muted); font-family: var(--font-sans); }
+  .rot b { color: var(--accent-text); }
+  .notif { position: absolute; right: 14px; width: 360px; padding: 12px 14px; border-radius: 16px; display: grid; grid-template-columns: 36px 1fr; gap: 10px;
+           background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); color: var(--text);
+           box-shadow: 0 10px 30px color-mix(in srgb, var(--mono-black) 45%, transparent); font-size: 13px; }
+  .notif img { width: 36px; height: 36px; border-radius: 8px; }
+  .notif .app { font-size: 11px; color: var(--muted); display: flex; }
+  .notif .app span { margin-left: auto; }
+  .notif .tit { font-weight: 600; margin: 1px 0; }
+  .notif .corpo { color: var(--text); }
+  .notif .acoes { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 2px; }
+  .notif .acoes span { flex: 1; text-align: center; padding: 4px; border-radius: 7px; background: var(--raised); font-size: 12px; }
+  .chipw { display: inline-block; white-space: nowrap; padding: 0 7px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+  /* janela */
+  .janela { position: absolute; left: 60px; top: 52px; width: 980px; height: 560px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border);
+            background: var(--bg); box-shadow: 0 20px 60px color-mix(in srgb, var(--mono-black) 55%, transparent); display: grid; grid-template-rows: 30px 1fr; }
+  .janela .tit { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .janela .tit .sem { display: flex; gap: 7px; }
+  .janela .tit .sem i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .janela .tit .sem i:nth-child(1) { background: var(--status-error-dot); } .janela .tit .sem i:nth-child(2) { background: var(--status-waiting-dot); } .janela .tit .sem i:nth-child(3) { background: var(--status-completed-dot); }
+  .janela .tit .nome { flex: 1; text-align: center; color: var(--text); }
+  .ui { display: grid; grid-template-columns: 200px 1fr; font-family: var(--font-sans); min-height: 0; }
+  .ui aside { background: var(--surface); border-right: 1px solid var(--border); padding: 14px 10px; font-size: 13px; }
+  .ui aside .marca { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 14px; }
+  .ui aside .marca img { width: 24px; height: 24px; }
+  .ui aside .marca small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .ui aside a { white-space: nowrap; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; color: var(--text); text-decoration: none; }
+  .ui aside a.on { background: var(--raised); box-shadow: inset 2px 0 0 var(--rose); }
+  .ui aside a .q { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--status-waiting-text); background: var(--status-waiting-badge); border-radius: 99px; padding: 0 7px; }
+  .ui aside .vivo { position: absolute; bottom: 14px; font-size: 11px; color: var(--muted); }
+  .ui .conteudo { padding: 16px 20px; overflow: hidden; }
+  .ui h3 { margin: 0; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .ui .live { font-size: 11px; font-weight: 500; color: var(--status-completed-text); background: var(--status-completed-badge); border-radius: 99px; padding: 1px 8px; }
+  .ui .subt { color: var(--muted); font-size: 12px; margin: 2px 0 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; height: 74px; }
+  .kpi .r { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .kpi .v { font-size: 22px; font-weight: 600; font-family: var(--font-mono); }
+  .kpi .s { font-size: 11px; color: var(--muted); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .scard { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--status-waiting-dot); border-radius: 10px; padding: 10px 12px; height: 132px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .scard .l1 { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .scard .l1 .t0 { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .scard .proj { display: flex; align-items: center; gap: 6px; }
+  .scard .proj .chipw { margin-left: auto; font-family: var(--font-sans); }
+  .scard .proj > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scard q { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scard .proj { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .scard q { font-style: italic; color: var(--text); border-left: 2px solid var(--border); padding-left: 8px; quotes: "“" "”"; }
+  .scard .meta { margin-top: auto; display: flex; gap: 10px; white-space: nowrap; color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+  .scard .meta .ir { margin-left: auto; color: var(--accent-text); font-family: var(--font-sans); font-weight: 500; }
+
+  /* ---------- Modo captura: só a tela pedida ---------- */
+  body.captura .topo, body.captura nav.indice, body.captura .notas, body.captura .intro, body.captura section.tela:not(.alvo) { display: none !important; }
+  body.captura .layout { display: block; }
+  body.captura main { padding: 20px 24px; display: inline-block; }
+  body.captura section.tela { margin: 0; }
+</style>
+</head>
+<body>
+<header class="topo">
+  <img src="../brand/logo.svg" width="36" height="36" alt="">
+  <div>
+    <h1>Wireframes · painel lateral e app desktop</h1>
+    <p>Ahrena Console 0.0.1 · para aprovação antes de construir · dados sintéticos do simulador · referência: Claude Code Agent Monitor (CCAM)</p>
+  </div>
+  <div class="tema" role="group" aria-label="Tema">
+    <button type="button" data-tema="dark" aria-pressed="true">Escuro</button>
+    <button type="button" data-tema="light" aria-pressed="false">Claro</button>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="indice" aria-label="Telas">
+  <a href="#como-ler">Como ler</a>
+  <h3>Painel (mod)</h3>
+  <a href="#painel-estados">P0 · Status e motivos</a>
+  <a href="#painel-ativa">P1 · Sessão ativa</a>
+  <a href="#painel-esperando">P2 · Esperando pergunta</a>
+  <a href="#painel-delegando">P3 · Delegando a subagentes</a>
+  <a href="#painel-erro">P4 · Com erro</a>
+  <a href="#painel-precisam">P5 · "Precisam de você" aberto</a>
+  <h3>App desktop (Tauri)</h3>
+  <a href="#app-bandeja-0">A1 · Bandeja com 0</a>
+  <a href="#app-bandeja-3">A2 · Bandeja com 3</a>
+  <a href="#app-notificacao">A3 · Notificação</a>
+  <a href="#app-janela">A4 · Janela do núcleo</a>
+  <h3>Fechamento</h3>
+  <a href="#perguntas">Perguntas para o dono</a>
+</nav>
+
+<main>
+<section class="intro" id="como-ler">
+  <h2>Como ler</h2>
+  <p>Duas superfícies, cada uma com o recorte das decisões <a href="../decisoes/0004-painel-da-sessao.md">0004</a> (o painel olha a sessão em que está aberto) e <a href="../decisoes/0005-app-desktop.md">0005</a> (o app é uma bandeja que complementa o Claude, sem telas próprias).</p>
+  <ul>
+    <li><b>Painel.</b> Desenhado em grade de caracteres, como o mod desenha: cada caractere é uma coluna. Cada caso aparece nos dois tamanhos do painel do Claude Desktop, <b>estreito (38 colunas)</b> e <b>largo (121)</b>. Os cards têm sempre <b>34 × 6</b> (o <code>CARD_W</code> e o <code>CARD_H</code> do <a href="../../spikes/painel-teste/hooks/register.tsx">painel de teste</a>): a largura muda quantos cabem por linha (1 ou 3), nunca o tamanho. Um verificador embaixo de cada quadro conta as colunas e as linhas de cada card e acusa estouro.</li>
+    <li><b>Elementos.</b> Só os nativos do mod: <code>Box</code> (cards com <code>borderStyle="round"</code>), <code>Text</code>, <code>Button</code>, <code>Select</code>, <code>Svg</code> (logo e barras), <code>Link</code>, <code>Markdown</code> e <code>Client</code>. As barras <code>▓░</code> são <code>Svg</code> na implementação; aqui aparecem como caracteres para mostrar quanto espaço ocupam.</li>
+    <li><b>App.</b> A barra de menus, o menu e a notificação são os nativos do macOS (fonte e materiais do sistema; as cores aqui só aproximam). A janela é uma WebView com a interface que o núcleo serve.</li>
+    <li><b>Cores.</b> Esta página lê <code>packages/marca/gerado/marca.css</code>, gerado de <code>docs/brand/tokens.json</code>. Não há nenhum hex escrito à mão. Laranja <code>#f47720</code> é destaque e o status "Ativa"; rosa é só institucional (réguas, seleção, triângulo do logo).</li>
+  </ul>
+  <table class="leg" id="legenda">
+    <thead><tr><th>Status</th><th>Glifo</th><th>Rótulo</th><th>Cor canônica</th><th>Texto no tema</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ================= PAINEL ================= -->
+<section class="tela" id="painel-estados">
+  <h2>P0 · Os 5 status e os 4 motivos do "Esperando você" <span class="id">painel-estados</span></h2>
+  <p class="sub">O cabeçalho "Esta sessão" em cada status, em cards de 34 × 4 (no painel, o cabeçalho ocupa a largura toda e tem 4 linhas). É o mesmo componente das telas P1 a P4.</p>
+  <div class="quadros" data-painel="estados" data-larguras="121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>Os 5 status de sessão (<code>active</code>, <code>waiting</code>, <code>completed</code>, <code>error</code>, <code>abandoned</code>) e a sobreposição <code>waiting</code> com <code>awaiting_reason</code>, como em <code>StatusBadge.tsx</code>.</li>
+      <li>O chip do motivo dentro do status (<code>REASON_ICONS</code>), como na tabela de Sessions ("At prompt").</li>
+      <li>Urgentes primeiro: <code>notification</code> e <code>interrupted</code>.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li>Cores da nossa paleta, não as do CCAM (lá <code>completed</code> é violeta e <code>active</code> é verde). Aqui ativa é laranja e concluída é verde, como em <a href="../design.md">design.md</a>.</li>
+      <li>Glifo e rótulo sempre juntos, porque o painel nativo só tem texto: o status nunca depende só da cor.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="painel-ativa">
+  <h2>P1 · Sessão ativa <span class="id">painel-ativa</span></h2>
+  <p class="sub">Uma sessão no meio de um turno, com um subagente rodando, processos em background, plano pela metade e um PR em rascunho. Duas outras sessões precisam de você.</p>
+  <div class="quadros" data-painel="ativa" data-larguras="38,121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li><b>Cabeçalho com status:</b> o cabeçalho do Session Detail (título, badge, chips de modelo, duração e custo).</li>
+      <li><b>Card "Esta sessão":</b> a statusline (<code>statusline/</code>): modelo, barra de contexto com %, <code>↑ input ↓ output c cache</code> e custo.</li>
+      <li><b>Card "Plano":</b> o Task Progress (<code>TodoProgressPanel</code>): "3/5", tarefa atual e barra no lugar do anel.</li>
+      <li><b>Card "Subagentes":</b> a árvore de agentes do Session Detail, com tipo, tempo e tarefa.</li>
+      <li><b>Linha de status embaixo:</b> o item da barra de status da extensão VS Code (<code>Claude: Ns | Na</code>), feito com <code>$.ui.status</code>.</li>
+      <li><b>"● ao vivo":</b> a pílula Live do cabeçalho de página.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li><b>Só esta sessão</b>, não a frota: a sidebar do VS Code mostra Live stats e Recent sessions da máquina; a 0004 tira isso do painel (consumo e foco).</li>
+      <li><b>Barra de contexto laranja até 79% e vermelha a partir de 80%.</b> A statusline usa verde, amarelo e vermelho, mas aqui verde é "concluída" e amarelo é "esperando você".</li>
+      <li><b>Custo sem cor de faixa</b> e sempre com "estimativa": cor por limite de gasto é orçamento, fora da 0.0.1.</li>
+      <li><b>Card vazio fica no lugar</b>, com "nenhum": a grade não pula quando algo some.</li>
+    </ul></div>
+    <div class="nota"><h4>Elementos</h4><ul>
+      <li>Cabeçalho: <code>Svg</code> (logo), <code>Text</code> e uma régua rosa (<code>Text</code>).</li>
+      <li>Cards: <code>Box borderStyle="round" width=34 height=6 overflow="hidden"</code> com <code>Text wrap="truncate-end"</code>.</li>
+      <li>Barras: <code>Svg</code>. "abrir": <code>Link</code> para o PR. "Ver": <code>Button</code>.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="painel-esperando">
+  <h2>P2 · Esperando uma pergunta <span class="id">painel-esperando</span></h2>
+  <p class="sub">O Claude fez uma pergunta (AskUserQuestion) e parou. O cabeçalho vira amarelo, com o motivo no chip e a pergunta inteira. Ninguém mais precisa de você.</p>
+  <div class="quadros" data-painel="esperando" data-larguras="38,121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>O <b>banner amarelo</b> do Session Detail quando a sessão espera, com o motivo e a explicação.</li>
+      <li>O chip do motivo no <code>SessionStatusBadge</code>.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li>O banner mostra <b>o que foi perguntado e as opções</b>. A resposta continua na conversa ao lado: responder pelo painel é a 0003, fora deste recorte.</li>
+      <li>O motivo vem do <code>tokens.json</code> (<code>notification</code> = "Pede permissão"), que também cobre pergunta. Ver a pergunta 1 no fim.</li>
+      <li>Com 0, a linha de baixo continua no lugar, em cinza ("ninguém mais precisa de você").</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="painel-delegando">
+  <h2>P3 · Delegando a subagentes e sessões filhas <span class="id">painel-delegando</span></h2>
+  <p class="sub">A sessão abriu 3 subagentes em paralelo e 3 sessões filhas. Uma filha está esperando você e entra na contagem de baixo, que começa pela família.</p>
+  <div class="quadros" data-painel="delegando" data-larguras="38,121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>"N subagents" e a expansão dos subagentes do <code>AgentCard</code>, com o status de agente (<code>working</code>, <code>waiting</code>, <code>completed</code>, <code>error</code>).</li>
+      <li>"ver a árvore": a árvore de agentes (<code>parent_agent_id</code>) do Session Detail, que mora no artefato.</li>
+      <li>"+2 concluídos": o "+3 more tasks in Session Detail" do popover de tarefas.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li><b>Sessões filhas</b> não existem no CCAM: são as sessões que esta abriu (como as side sessions do Claude). Ganharam card próprio, do mesmo tamanho.</li>
+      <li>No máximo 4 linhas por card. O resto vira "+N" ou um <code>Link</code> para o artefato, nunca um card mais alto.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="painel-erro">
+  <h2>P4 · Com erro <span class="id">painel-erro</span></h2>
+  <p class="sub">A sessão parou num erro de API e não se recuperou. O CI do PR também falhou e o review pediu ajustes. Dois tipos de falha, um vermelho só.</p>
+  <div class="quadros" data-painel="erro" data-larguras="38,121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>O status <code>error</code> (erro de API no fim do transcript ou <code>stop_reason = error</code>) e o KPI "Errors" do Session Detail.</li>
+      <li>O subagente com erro na árvore, com a mesma cor do status.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li>Sessão com erro e CI que falhou usam o <b>mesmo vermelho</b> e o glifo <code>✕</code> (regra do design.md). O CCAM tem cores próprias para cada tela.</li>
+      <li>Sem o mascote (Tabby) para avisar do erro: o aviso é o cabeçalho e, fora do Claude, a bandeja.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="painel-precisam">
+  <h2>P5 · "N precisam de você", aberto <span class="id">painel-precisam</span></h2>
+  <p class="sub">Clicar em "Ver" na linha de baixo. Estreito: só a família (quem abriu esta sessão ou foi aberto por ela). Largo: a máquina inteira, trocada no <code>Select</code>. Cada sessão é um card 34 × 6, urgentes primeiro.</p>
+  <div class="quadros" data-painel="precisam" data-larguras="38,121"></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>O card de sessão (<code>SessionCard</code>/<code>AgentCard</code>): borda na cor do status, título, chip do motivo, última mensagem, modelo, custo e idade.</li>
+      <li>A coluna <code>waiting</code> do Kanban de sessões, filtrada.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li>Começa pela <b>família</b> (decisão 0004); a máquina inteira é opção no <code>Select</code>. O CCAM não tem família de sessões.</li>
+      <li>Borda inteira na cor do status, porque a grade de caracteres não desenha só a borda esquerda.</li>
+      <li>"Ir para a sessão" depende de o mod conseguir focar outra sessão; se não conseguir, vira <code>Link</code> para o detalhe no artefato.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ================= APP ================= -->
+<section class="tela" id="app-bandeja-0">
+  <h2>A1 · Bandeja com 0 esperando <span class="id">app-bandeja-0</span></h2>
+  <p class="sub">Ninguém precisa de você: na barra de menus, só o ícone. O menu mostra o núcleo e o resumo, como o do CCAM.</p>
+  <div class="quadros"><div class="mac" data-app="bandeja0"></div></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li><b>Menu da bandeja</b> (<code>desktop/src/tray.ts</code>): título desabilitado, "Listening on :4820" com ponto verde, o resumo (sessões ativas, agentes trabalhando), Open Dashboard ⌘O, Open at Login e Quit ⌘Q.</li>
+      <li><b>Ícone template</b> preto, que o macOS pinta para barra clara ou escura.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li>Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo e não é dono dele (0005). Os diagnósticos ficam em "Sobre", fora do menu principal.</li>
+      <li>Sem "eventos de hoje": o resumo é o que pede ação (precisam de você, com erro).</li>
+      <li>"Notificações" entra no menu (6.8), ligada por padrão.</li>
+    </ul></div>
+    <div class="nota"><h4>Nativo</h4><ul>
+      <li><code>tray-icon</code> do Tauri, <code>Menu</code>, <code>MenuItem</code>, <code>CheckMenuItem</code> e separadores. O ponto de status é um <code>IconMenuItem</code> com a imagem da bolinha na cor do token.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="app-bandeja-3">
+  <h2>A2 · Bandeja com 3 esperando <span class="id">app-bandeja-3</span></h2>
+  <p class="sub">O número aparece ao lado do ícone. O menu lista as 3 sessões esperando, urgentes primeiro; clicar numa delas abre a sessão.</p>
+  <div class="quadros"><div class="mac" data-app="bandeja3"></div></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>A mesma ordem do menu (título, servidor, resumo, ações, sair) e o menu reconstruído a cada clique.</li>
+      <li>O painel do Tabby com Live, <b>Waiting</b> e Errored, que é o mais perto de "quem precisa de você" no CCAM.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li><b>O número vai na barra de menus</b> (<code>tray.set_title</code>), não só dentro do menu: é o ganho real do app, atenção com o Claude minimizado (0005).</li>
+      <li>Cada sessão é um item clicável com motivo e tempo, no lugar de contadores agregados.</li>
+      <li>O número fica sem cor, porque o ícone é template e segue o tema da barra. A cor do status vai na bolinha de cada item.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="app-notificacao">
+  <h2>A3 · Notificação do sistema <span class="id">app-notificacao</span></h2>
+  <p class="sub">Uma notificação quando uma sessão <b>passa</b> a esperar, com o motivo no título. Ações: abrir a sessão ou silenciar só ela.</p>
+  <div class="quadros"><div class="mac" data-app="notificacao"></div></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li><code>useNotifications</code>: notificação para <code>waiting</code>, erro e fim de sessão. Lá é do navegador; aqui é a do sistema.</li>
+      <li>O motivo do waiting como parte da mensagem.</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li><b>Nativa do macOS</b> (plugin <code>notification</code> do Tauri), aparece com o Claude e o navegador fechados.</li>
+      <li><b>Silenciar por sessão</b> (6.8), não um "Mute" global como o do Tabby.</li>
+      <li>Sem aviso de fim de sessão: só o que pede você.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="tela" id="app-janela">
+  <h2>A4 · A janela, com a interface do núcleo <span class="id">app-janela</span></h2>
+  <p class="sub">"Abrir o console" (⌘O) abre uma janela com a WebView em <code>127.0.0.1:4720/ui</code>. A página é a do artefato; o desenho dela é do épico #4 e aparece aqui só para mostrar a moldura e a entrada pelo "Precisam de você".</p>
+  <div class="quadros"><div class="mac alto" data-app="janela"></div></div>
+  <div class="notas">
+    <div class="nota ccam"><h4>Do CCAM</h4><ul>
+      <li>A moldura inteira: barra lateral fixa com logo e navegação, cabeçalho com ícone, título e pílula <b>● Live</b>, linha de <code>StatCard</code> e os cards de agente com a borda esquerda na cor do status.</li>
+      <li>Fechar a janela não sai do app: ele fica na bandeja (<code>main.ts</code>).</li>
+    </ul></div>
+    <div class="nota"><h4>Onde diverge</h4><ul>
+      <li><b>Sem telas próprias:</b> a janela mostra a mesma interface que o núcleo serve ao artefato. O CCAM embute o próprio servidor e as telas dentro do Electron.</li>
+      <li>Abre em "Precisam de você", não no Dashboard.</li>
+      <li>Navegação curta (o que a 0004 levou para o artefato), sem Run Agent, Agent Config nem Settings.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="intro" id="perguntas">
+  <h2>Perguntas para o dono</h2>
+  <ol>
+    <li><b>Motivo de uma pergunta.</b> A 0005 fala em "pergunta, plano e permissão", mas o <code>tokens.json</code> tem 4 motivos e <code>notification</code> se chama "Pede permissão", o que cobre pergunta e plano. Proposta: manter os 4 motivos e detalhar o tipo na segunda linha (como na P2). Ou renomear o rótulo para "Pede você"?</li>
+    <li><b>Clique numa sessão no menu da bandeja.</b> Abre a sessão no Claude Desktop (quando for de lá) ou o detalhe dela na janela do app? O wireframe supõe o Claude, com a janela como reserva para sessões de terminal.</li>
+    <li><b>Erro conta como "precisa de você"?</b> No wireframe, o N conta só quem espera, e quem tem erro aparece à parte ("1 com erro"), como no CCAM. Se o erro entrar no N, ele também entra no menu e na notificação.</li>
+    <li><b>Barra de contexto.</b> Laranja até 79% e vermelha a partir de 80%, sem amarelo nem verde, para não confundir com os status. Serve?</li>
+    <li><b>Som da notificação.</b> Som só para os urgentes (Pede permissão, Interrompida) e silêncio para "Sua vez" e "No prompt"?</li>
+  </ol>
+</section>
+</main>
+</div>
+
+<script>
+// ===================== Grade de caracteres =====================
+// Uma linha é uma lista de segmentos {t: texto, c: classes}. Todo glifo usado ocupa uma coluna.
+const S = (t, c = 't') => ({ t, c })
+const LOGO = { logo: true, t: '  ' }
+const cols = s => [...s.t].length
+const len = l => l.reduce((n, s) => n + cols(s), 0)
+const estouros = []
+
+function fit(line, w, onde) {
+  const out = []
+  let n = 0
+  for (const s of line) {
+    const L = cols(s)
+    if (n + L <= w) { out.push(s); n += L; continue }
+    if (onde) estouros.push(`${onde}: "${line.map(x => x.t).join('')}" (${len(line)} > ${w})`)
+    const room = w - n
+    if (room > 0 && !s.logo) out.push({ ...s, t: [...s.t].slice(0, room - 1).join('') + '…' })
+    n = w
+    break
+  }
+  if (n < w) out.push(S(' '.repeat(w - n)))
+  return out
+}
+// Esquerda e direita na mesma linha; a esquerda é que trunca.
+const lr = (left, right, w, onde) => [...fit(left, w - len(right), onde), ...right]
+const chip = (t, tom, urgente) => S(` ${t} `, `chip-${tom}${urgente ? ' b' : ''}`)
+const btn = t => S(` ${t} `, 'btn')
+const btn2 = t => S(` ${t} `, 'btn2')
+const sel = t => S(` ${t} ▾ `, 'sel')
+const link = t => S(t, 'link')
+function bar(pct, n, cls = 'bar') {
+  const cheio = Math.round((pct / 100) * n)
+  return [S('▓'.repeat(cheio), cls), S('░'.repeat(n - cheio), 'dim')]
+}
+const vazio = () => []
+
+// Card padrão: Box borderStyle="round", w × h contando a borda.
+function card({ title, right, lines = [], tone, w = 34, h = 6 }, onde = 'card') {
+  const bd = tone ? `bd-${tone}` : 'bd'
+  const head = [S('─ ', bd), ...title, S(' ', bd)]
+  const tail = right ? [S(' ', bd), ...right, S(' ─', bd)] : [S('─', bd)]
+  const fill = w - 2 - len(head) - len(tail)
+  if (fill < 1) estouros.push(`${onde}: título "${title.map(x => x.t).join('')}" não cabe em ${w}`)
+  const rows = [[S('╭', bd), ...head, S('─'.repeat(Math.max(fill, 0)), bd), ...tail, S('╮', bd)]]
+  if (lines.length > h - 2) estouros.push(`${onde}: ${lines.length} linhas num card de ${h - 2}`)
+  for (let i = 0; i < h - 2; i++) rows.push([S('│ ', bd), ...fit(lines[i] ?? [], w - 4, onde), S(' │', bd)])
+  rows.push([S('╰' + '─'.repeat(w - 2) + '╯', bd)])
+  return rows
+}
+function fileira(cards, gap = 2) {
+  const h = Math.max(...cards.map(c => c.length))
+  const out = []
+  for (let i = 0; i < h; i++) out.push(cards.flatMap((c, j) => [...(j ? [S(' '.repeat(gap))] : []), ...(c[i] ?? [S(' '.repeat(34))])]))
+  return out
+}
+
+// ===================== Cenários do painel (dados sintéticos) =====================
+const ST = {
+  active: ['●', 'ATIVA', 'sa'], waiting: ['◐', 'ESPERANDO VOCÊ', 'sw'], completed: ['✓', 'CONCLUÍDA', 'sc'],
+  error: ['✕', 'COM ERRO', 'se'], abandoned: ['○', 'ABANDONADA', 'sx'],
+}
+const stTitle = (st, extra) => [S(`${ST[st][0]} ${ST[st][1]}`, `${ST[st][2]} b`), ...(extra ? [S(` · ${extra}`, 'm')] : [])]
+const mt = t => S(t, 'm')
+
+function cardSessao({ modelo = 'Opus 5.5', pct, usado, custo, tokens, cor = 'bar' }) {
+  return { title: [S('ESTA SESSÃO', 'b')], right: [mt(modelo)], lines: [
+    [mt('contexto '), ...bar(pct, 15, cor), S(` ${String(pct).padStart(2)}%`, cor === 'bar' ? 't' : 'se b')],
+    [S(usado, 't'), mt(' de 200k · 0 compactações')],
+    [mt('custo '), S(custo, 't b'), mt(' (estimativa)')],
+    [mt('tokens '), S(tokens, 't')],
+  ] }
+}
+const nenhum = (titulo, texto, right = '0') => ({ title: [S(titulo, 'b')], right: [mt(right)], lines: [[mt(texto)]] })
+
+const CENARIOS = {
+  ativa: {
+    status: 'ahrena-console ● Ativa · 2 precisam de você',
+    hero: {
+      tone: 'active',
+      n: { title: stTitle('active'), right: [mt('12 min')], lines: [
+        [mt('rodando '), S('Bash · npm test')],
+        [S('Opus 5.5'), mt(' · feat/42-kanban')]] },
+      w: { title: stTitle('active', 'há 12 min'), right: [mt('turno 18')], lines: [
+        [mt('rodando '), S('Bash · npm test -- --run src/kanban'), mt(' · última ação há 3 s')],
+        [mt('/simulacao/vitrine-demo · '), S('feat/42-kanban'), mt(' · Opus 5.5')]] },
+    },
+    cards: [
+      cardSessao({ pct: 31, usado: '62k', custo: '~US$ 1,84', tokens: '↑ 1,2M  ↓ 84k  c 3,1M' }),
+      { title: [S('BACKGROUND', 'b')], right: [mt('2 rodando')], lines: [
+        [S('● ', 'sa'), S('npm run dev'), mt(' · 11 min')],
+        [S('● ', 'sa'), S('npm test -- --watch'), mt(' · 3 min')],
+        [S('✓ ', 'sc'), S('npm run build'), mt(' · saiu 0')]] },
+      { title: [S('TRABALHO', 'b')], right: [mt('pelo branch')], lines: [
+        [S('#42 ', 'a b'), S('Kanban de sessões')],
+        [mt('sub-issues '), ...bar(50, 8), S(' 2/4')],
+        [S('PR #78'), mt(' · '), S('CI ✓ 6/6', 'sc b'), mt(' · rascunho')],
+        [mt('review '), S('pendente', 'sw'), mt(' · '), link('abrir')]] },
+      { title: [S('PLANO', 'b')], right: [S('3/5', 'a b')], lines: [
+        [S('✓ 3 feitas', 'sc'), mt(' · Ajustar o parser')],
+        [S('● ', 'sa'), S('Rodar a bateria', 't b')],
+        [mt('○ Abrir o PR')],
+        [...bar(60, 25), S(' 60%')]] },
+      { title: [S('SUBAGENTES', 'b')], right: [mt('1 ativo')], lines: [
+        [S('● ', 'sa'), S('Explore'), mt(' · 40 s · mapear usos')],
+        [S('✓ ', 'sc'), S('Plan'), mt(' · 2 min · plano')]] },
+      nenhum('SESSÕES FILHAS', 'nenhuma aberta por esta'),
+    ],
+    precisam: { n: 2, quem: 'motor-de-regras (Pede permissão), app-receitas (Interrompida)' },
+  },
+  esperando: {
+    status: 'ahrena-console ◐ Esperando você · ninguém mais',
+    hero: {
+      tone: 'waiting',
+      n: { title: stTitle('waiting'), right: [mt('4 min')], lines: [
+        [chip('Pede permissão', 'waiting', true), mt(' · pergunta')],
+        [S('"SQLite ou Postgres no teste?"')]] },
+      w: { title: stTitle('waiting', 'há 4 min'), right: [chip('Pede permissão', 'waiting', true)], lines: [
+        [mt('pergunta '), S('"Nos testes de integração, sigo com SQLite em memória ou subo um Postgres no Docker?"')],
+        [mt('opções '), S('SQLite em memória'), mt(' · '), S('Postgres no Docker'), mt(' · '), S('Os dois'), mt('   →  responda na conversa ao lado')]] },
+    },
+    cards: [
+      cardSessao({ pct: 48, usado: '96k', custo: '~US$ 0,92', tokens: '↑ 610k  ↓ 41k  c 1,8M' }),
+      { title: [S('BACKGROUND', 'b')], right: [mt('1 rodando')], lines: [
+        [S('● ', 'sa'), S('npm run dev'), mt(' · 26 min')]] },
+      { title: [S('TRABALHO', 'b')], right: [mt('pelo branch')], lines: [
+        [S('#51 ', 'a b'), S('Testes de integração')],
+        [mt('sub-issues '), ...bar(0, 8), S(' 0/3')],
+        [mt('sem PR · branch sem push')]] },
+      { title: [S('PLANO', 'b')], right: [S('1/4', 'a b')], lines: [
+        [S('✓ 1 feita', 'sc'), mt(' · Ler os testes')],
+        [S('● ', 'sa'), S('Decidir o banco dos testes', 't b')],
+        [mt('○ Escrever os casos  +1')],
+        [...bar(25, 25), S(' 25%')]] },
+      { title: [S('SUBAGENTES', 'b')], right: [mt('0 ativos')], lines: [
+        [S('✓ ', 'sc'), S('Explore'), mt(' · 1 min · ler testes')]] },
+      nenhum('SESSÕES FILHAS', 'nenhuma aberta por esta'),
+    ],
+    precisam: { n: 0 },
+  },
+  delegando: {
+    status: 'ahrena-console ● Ativa · delegando · 1 precisa de você',
+    hero: {
+      tone: 'active',
+      n: { title: stTitle('active', 'delegando'), right: [mt('28 min')], lines: [
+        [S('3 subagentes', 't b'), mt(' · 3 filhas')],
+        [S('Opus 5.5'), mt(' · refactor/pagamentos')]] },
+      w: { title: stTitle('active', 'delegando · há 28 min'), right: [mt('turno 9')], lines: [
+        [mt('esperando '), S('3 subagentes em paralelo', 't b'), mt(' e '), S('3 sessões filhas', 't b'), mt(' · última ação há 12 s')],
+        [mt('/simulacao/motor-de-regras · '), S('refactor/pagamentos'), mt(' · Opus 5.5')]] },
+    },
+    cards: [
+      cardSessao({ pct: 57, usado: '114k', custo: '~US$ 3,47', tokens: '↑ 2,4M  ↓ 152k  c 6,0M' }),
+      nenhum('BACKGROUND', 'nenhum processo'),
+      { title: [S('TRABALHO', 'b')], right: [mt('pelo branch')], lines: [
+        [S('#63 ', 'a b'), S('Separar pagamentos')],
+        [mt('sub-issues '), ...bar(33, 8), S(' 2/6')],
+        [S('PR #90'), mt(' · '), S('CI … 3/7', 'sw b'), mt(' · aberto')],
+        [mt('review '), S('aprovado', 'sc'), mt(' · '), link('abrir')]] },
+      { title: [S('PLANO', 'b')], right: [S('2/6', 'a b')], lines: [
+        [S('✓ 2 feitas', 'sc'), mt(' · Mapear chamadas')],
+        [S('● ', 'sa'), S('Extrair a cobrança', 't b')],
+        [mt('○ Migrar os testes  +2')],
+        [...bar(33, 25), S(' 33%')]] },
+      { title: [S('SUBAGENTES', 'b')], right: [mt('3 ativos')], lines: [
+        [S('● ', 'sa'), S('Explore'), mt(' · 1 min · achar usos')],
+        [S('● ', 'sa'), S('code-reviewer'), mt(' · 40 s · diff')],
+        [S('● ', 'sa'), S('test-runner'), mt(' · 12 s · bateria')],
+        [S('✓ ', 'sc'), S('Plan'), mt(' · 3 min  +2 concluídos')]] },
+      { title: [S('SESSÕES FILHAS', 'b')], right: [mt('3')], lines: [
+        [S('◐ ', 'sw'), S('fila-de-tarefas'), mt(' · '), S('Sua vez', 'sw')],
+        [S('● ', 'sa'), S('catalogo-exemplo'), mt(' · 6 min')],
+        [S('✓ ', 'sc'), S('blog-estatico'), mt(' · 20 min')],
+        [link('ver a árvore no artefato ›')]] },
+    ],
+    precisam: { n: 1, quem: 'fila-de-tarefas (Sua vez), filha desta sessão' },
+  },
+  erro: {
+    status: 'ahrena-console ✕ Com erro · 2 precisam de você',
+    hero: {
+      tone: 'error',
+      n: { title: stTitle('error'), right: [mt('3 min')], lines: [
+        [S('API 529 · overloaded_error', 'se')],
+        [mt('turno 23 · após 3 tentativas')]] },
+      w: { title: stTitle('error', 'há 3 min'), right: [mt('turno 23')], lines: [
+        [mt('erro '), S('API 529 · overloaded_error · "Overloaded"', 'se b'), mt(' · parou depois de 3 tentativas')],
+        [mt('última ferramenta '), S('Edit src/relatorio/consulta.ts'), mt(' · /simulacao/painel-de-metricas · Opus 5.5')]] },
+    },
+    cards: [
+      cardSessao({ pct: 84, usado: '168k', custo: '~US$ 4,10', tokens: '↑ 3,0M  ↓ 201k  c 7,7M', cor: 'bar-e' }),
+      { title: [S('BACKGROUND', 'b')], right: [mt('0 rodando')], lines: [
+        [S('✕ ', 'se'), S('npm test'), mt(' · '), S('saiu 1', 'se'), mt(' · 2 min')],
+        [S('✓ ', 'sc'), S('npm run lint'), mt(' · saiu 0')]] },
+      { title: [S('TRABALHO', 'b')], right: [mt('pelo branch')], lines: [
+        [S('#47 ', 'a b'), S('Acelerar o relatório')],
+        [mt('sub-issues '), ...bar(75, 8), S(' 3/4')],
+        [S('PR #88'), mt(' · '), S('CI ✕ 2 falhas', 'se b')],
+        [mt('review '), S('ajustes pedidos', 'se'), mt(' · '), link('abrir')]] },
+      { title: [S('PLANO', 'b')], right: [S('3/4', 'a b')], lines: [
+        [S('✓ 3 feitas', 'sc'), mt(' · Criar o índice')],
+        [S('● ', 'sa'), S('Reescrever a consulta', 't b')],
+        [],
+        [...bar(75, 25), S(' 75%')]] },
+      { title: [S('SUBAGENTES', 'b')], right: [mt('1 com erro')], lines: [
+        [S('✕ ', 'se'), S('test-runner'), mt(' · 2 min · testes')],
+        [S('✓ ', 'sc'), S('Explore'), mt(' · 1 min · índices')]] },
+      nenhum('SESSÕES FILHAS', 'nenhuma aberta por esta'),
+    ],
+    precisam: { n: 2, quem: 'motor-de-regras (Pede permissão), app-receitas (Interrompida)' },
+  },
+}
+
+// Sessões que precisam de você (P5). Urgentes primeiro.
+const PRECISAM = [
+  { nome: 'motor-de-regras', tempo: '2 min', motivo: 'Pede permissão', urg: true, l2: [S('Bash: npm run migrate')], l3: [mt('mãe desta · Opus 5.5')], fam: true },
+  { nome: 'app-receitas', tempo: '6 min', motivo: 'Interrompida', urg: true, l2: [S('Esc no meio do turno')], l3: [mt('outro projeto · Sonnet 5.5')], fam: false },
+  { nome: 'fila-de-tarefas', tempo: '1 min', motivo: 'Sua vez', urg: false, l2: [S('"Terminei. Rodo os testes?"')], l3: [mt('filha desta · Sonnet 5.5')], fam: true },
+]
+const cardPrecisa = p => ({ tone: 'waiting', title: [S(`◐ ${p.nome}`, 'sw b')], right: [mt(p.tempo)], lines: [
+  [chip(p.motivo, 'waiting', p.urg), mt(p.urg ? ' · urgente' : '')], p.l2, p.l3, [btn2('Ir para a sessão')]] })
+
+// ===================== Montagem do painel =====================
+function cabecalho(C, onde) {
+  return [
+    lr([LOGO, S(' '), S('AHRENA CONSOLE', 'a b')], [S('● ', 'sc'), mt('ao vivo · 5 s')], C, onde),
+    [S('─'.repeat(C), 'rose')],
+  ]
+}
+function linhaPrecisam(p, C, largo, onde) {
+  if (!p.n) return [[mt('○ ninguém mais precisa de você')]]
+  const txt = p.n === 1 ? '1 precisa de você' : `${p.n} precisam de você`
+  const esq = [S(`▲ ${txt}`, 'sw b'), ...(largo ? [mt(` · ${p.quem}`)] : [])]
+  return [lr(esq, [S(' '), btn('Ver')], C, onde)]
+}
+
+function montarPainel(nome, W) {
+  const largo = W > 60
+  const C = largo ? 106 : 34
+  const M = 2
+  const onde = `${nome} ${W}`
+  let L = [...cabecalho(C, onde), []]
+  if (nome === 'estados') return montarEstados(W)
+  if (nome === 'precisam') {
+    const lista = largo ? PRECISAM : PRECISAM.filter(p => p.fam)
+    L.push(lr([S('PRECISAM DE VOCÊ', 'b'), mt(` · ${lista.length}`)], [sel(largo ? 'Máquina inteira' : 'Família')], C, onde), [])
+    const cards = lista.map(p => card(cardPrecisa(p), onde))
+    if (largo) L.push(...fileira(cards))
+    else cards.forEach((c, i) => { if (i) L.push([]); L.push(...c) })
+    L.push([], [S('─'.repeat(C), 'dim')], lr([mt(largo ? 'urgentes primeiro · o clique leva à sessão' : 'urgentes primeiro')], [link('fechar')], C, onde))
+  } else {
+    const sc = CENARIOS[nome]
+    const h = largo ? sc.hero.w : sc.hero.n
+    L.push(...card({ ...h, tone: sc.hero.tone, w: C, h: 4 }, onde), [])
+    const cards = sc.cards.map(c => card(c, onde))
+    if (largo) { L.push(...fileira(cards.slice(0, 3)), [], ...fileira(cards.slice(3, 6))) }
+    else cards.forEach((c, i) => { if (i) L.push([]); L.push(...c) })
+    L.push([], [S('─'.repeat(C), 'dim')], ...linhaPrecisam(sc.precisam, C, largo, onde))
+  }
+  return L.map(l => { if (len(l) > C) estouros.push(`${onde}: linha com ${len(l)} > ${C}`); return fit([S(' '.repeat(M)), ...l], W) })
+}
+
+function montarEstados(W) {
+  const C = 106
+  const exemplos = [
+    { title: stTitle('active', 'há 12 min'), tone: 'active', lines: [[mt('no meio de um turno')], [mt('rodando '), S('Bash · npm test')]] },
+    { title: stTitle('waiting', 'há 4 min'), tone: 'waiting', lines: [[chip('Sua vez', 'waiting'), mt(' · a vez é sua')], [S('"Pronto. Abro o PR?"')]] },
+    { title: stTitle('completed', 'há 1 h'), tone: 'completed', lines: [[mt('terminou sem erro')], [mt('durou '), S('42 min'), mt(' · ~US$ 2,30')]] },
+    { title: stTitle('error', 'há 3 min'), tone: 'error', lines: [[S('API 529 · overloaded_error', 'se')], [mt('turno 23 · após 3 tentativas')]] },
+    { title: stTitle('abandoned', 'há 4 h'), tone: 'abandoned', lines: [[mt('180 min sem nenhum sinal')], [mt('não pede ação, não é erro')]] },
+    { title: [S('REGRAS', 'b')], lines: [[mt('glifo + rótulo, nunca só cor')], [mt('rosa nunca é status')]] },
+  ]
+  const motivos = [
+    { m: 'Pede permissão', u: true, k: 'notification', ex: 'npm run migrate' },
+    { m: 'Interrompida', u: true, k: 'interrupted', ex: 'Esc no turno' },
+    { m: 'Sua vez', u: false, k: 'stop', ex: 'o turno terminou' },
+    { m: 'No prompt', u: false, k: 'session_start', ex: 'prompt vazio' },
+  ].map(x => ({ title: stTitle('waiting'), tone: 'waiting', lines: [[chip(x.m, 'waiting', x.u), mt(x.u ? ' · urgente' : ' · não urgente')], [mt(`${x.k} · `), S(x.ex)]] }))
+  motivos.push({ title: [S('URGÊNCIA', 'b')], lines: [[mt('urgentes vêm primeiro na')], [mt('lista, no menu e no aviso')]] })
+  const c = x => card({ ...x, w: 34, h: 4 }, `estados ${W}`)
+  const L = [...cabecalho(C, 'estados'), [],
+    [S('STATUS DA SESSÃO', 'b'), mt(' · cabeçalho "Esta sessão" no card de 4 linhas')], [],
+    ...fileira(exemplos.slice(0, 3).map(c)), [], ...fileira(exemplos.slice(3).map(c)), [],
+    [S('MOTIVOS DO "ESPERANDO VOCÊ"', 'b'), mt(' · chip ao lado do status; negrito = urgente')], [],
+    ...fileira(motivos.slice(0, 3).map(c)), [], ...fileira(motivos.slice(3).map(c)),
+  ]
+  return L.map(l => fit([S('  '), ...l], W))
+}
+
+function renderLinhas(L) {
+  return L.map(l => '<div class="ln">' + l.map(s => s.logo ? '<span class="logo"></span>' : `<span class="${s.c}">${s.t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>`).join('') + '</div>').join('')
+}
+
+document.querySelectorAll('[data-painel]').forEach(alvo => {
+  const nome = alvo.dataset.painel
+  alvo.dataset.larguras.split(',').map(Number).forEach(W => {
+    const antes = estouros.length
+    const L = montarPainel(nome, W)
+    const ok = estouros.length === antes && L.every(l => len(l) === W)
+    const status = CENARIOS[nome]?.status ?? (nome === 'precisam' ? 'ahrena-console ● Ativa · 3 precisam de você' : '')
+    const el = document.createElement('div')
+    el.innerHTML = `
+      <p class="rotulo">${W <= 60 ? 'Estreito' : 'Largo'} · ${W} colunas</p>
+      <div class="painel">
+        <div class="aba"><b>Ahrena Console</b><span>painel da sessão</span><span class="x">✕</span></div>
+        <div class="grade" style="width:${W}ch">${renderLinhas(L)}</div>
+        ${status && W > 60 ? `<div class="status" style="width:${W}ch" title="$.ui.status">${status}</div>` : ''}
+        <div class="medida"><span>${W} col × ${L.length} linhas</span><span>${nome === 'estados' ? 'cards 34 × 4' : 'cards 34 × 6'}</span>
+          <span class="${ok ? 'ok' : 'ruim'}">${ok ? '✓ sem estouro' : '✕ estouro: ' + estouros.slice(antes).join('; ')}</span></div>
+      </div>`
+    alvo.appendChild(el)
+  })
+})
+
+// ===================== Legenda lida do CSS gerado =====================
+function legenda() {
+  const css = getComputedStyle(document.documentElement)
+  const rot = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' }
+  document.querySelector('#legenda tbody').innerHTML = Object.keys(rot).map(k => `<tr>
+    <td><code>${k}</code></td><td class="s${k[0] === 'a' && k[1] === 'b' ? 'x' : k[0] === 'a' ? 'a' : k[0] === 'w' ? 'w' : k[0] === 'c' ? 'c' : 'e'}" style="font-size:16px">${ST[k][0]}</td>
+    <td style="color:var(--status-${k}-text)">${rot[k]}</td>
+    <td class="hex"><span class="dot" style="background:var(--status-${k})"></span> ${css.getPropertyValue(`--status-${k}`).trim()}</td>
+    <td class="hex">${css.getPropertyValue(`--status-${k}-text`).trim()}</td></tr>`).join('')
+}
+
+// ===================== App: macOS =====================
+const ICONE = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 13 L8 3 L12.5 13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.4 9 L9.6 9 L8 11.6 Z" fill="currentColor"/></svg>`
+const barra = (n, aberta) => `<div class="barra"><span></span><span class="app">Claude</span><span>Arquivo</span><span>Editar</span><span>Ver</span><span>Janela</span><span>Ajuda</span>
+  <span class="dir"><span class="bandeja${aberta ? ' aberta' : ''}" title="Ahrena Console">${ICONE}${n ? `<span class="n">${n}</span>` : ''}</span>
+  <span class="ic r"></span><span class="ic"></span><span>sáb. 18 out. 23:10</span></span></div>`
+const it = (html, cls = '', k = '') => `<div class="it ${cls}">${html}${k ? `<span class="k">${k}</span>` : ''}</div>`
+const sep = '<div class="sep"></div>'
+const rodapeMenu = it('Abrir o console', '', '⌘O') + it('<span class="ck">✓</span> Notificações') + it('<span class="ck">✓</span> Abrir no login') + sep +
+  it('Ahrena Console 0.0.1', 'off') + it('Sair do Ahrena Console', '', '⌘Q')
+
+const APPS = {
+  bandeja0: () => barra(0, true) + `<div class="menu" style="right:200px">
+    ${it('Ahrena Console', 'cab')}
+    ${it('<span class="dot ok"></span> Núcleo de pé · 127.0.0.1:4720', 'off')}
+    ${sep}
+    ${it('<span class="dot vazio"></span> Ninguém precisa de você', 'off')}
+    ${it('4 sessões ativas · nenhuma com erro', 'off')}
+    ${sep}${rodapeMenu}</div>
+    <div class="rot" style="left:24px;bottom:18px;width:400px">Ícone <b>template</b> sem número: o macOS pinta de preto ou branco conforme a barra.<br>Menu reconstruído a cada clique, como no <code>tray.ts</code> do CCAM.</div>`,
+  bandeja3: () => barra(3, true) + `<div class="menu" style="right:200px">
+    ${it('Ahrena Console', 'cab')}
+    ${it('<span class="dot ok"></span> Núcleo de pé · 127.0.0.1:4720', 'off')}
+    ${sep}
+    ${it('3 precisam de você', 'cab')}
+    ${it('<span class="dot waiting"></span> <b>motor-de-regras</b> <span class="mt">· Pede permissão · 2 min</span>', 'foco')}
+    ${it('<span class="dot waiting"></span> <b>app-receitas</b> <span class="mt">· Interrompida · 6 min</span>')}
+    ${it('<span class="dot waiting"></span> fila-de-tarefas <span class="mt">· Sua vez · 1 min</span>')}
+    ${sep}
+    ${it('<span class="dot active"></span> 4 ativas &nbsp;<span class="dot error"></span> 1 com erro', 'off')}
+    ${sep}${rodapeMenu}</div>
+    <div class="rot" style="left:24px;bottom:18px;width:420px"><b>3</b> ao lado do ícone (<code>tray.set_title</code>).<br>Urgentes primeiro e em negrito. Clicar num item abre a sessão (pergunta 2).</div>`,
+  notificacao: () => barra(2, false) + `
+    <div class="notif" style="top:40px">
+      <img src="../brand/logo.svg" alt="">
+      <div><div class="app">AHRENA CONSOLE<span>agora</span></div>
+        <div class="tit">motor-de-regras pede permissão</div>
+        <div class="corpo">Bash: <code>npm run migrate</code> · <span class="chipw">Pede permissão</span></div></div>
+      <div class="acoes"><span>Abrir a sessão</span><span>Silenciar esta sessão</span></div>
+    </div>
+    <div class="notif" style="top:184px">
+      <img src="../brand/logo.svg" alt="">
+      <div><div class="app">AHRENA CONSOLE<span>há 1 min</span></div>
+        <div class="tit">fila-de-tarefas: sua vez</div>
+        <div class="corpo">“Terminei a migração. Rodo os testes?” · <span class="chipw">Sua vez</span></div></div>
+    </div>
+    <div class="rot" style="left:24px;top:60px;width:380px">Uma notificação por <b>mudança</b> para "Esperando você", nunca a cada leitura.<br><br>
+      Título: sessão + motivo. Corpo: o que ela pede.<br>Ações (ao passar o mouse): <b>Abrir a sessão</b> e <b>Silenciar esta sessão</b> (6.8).<br><br>
+      A segunda já foi para a Central de Notificações: aparece sem as ações.</div>`,
+  janela: () => barra(3, false) + `
+    <div class="janela">
+      <div class="tit"><span class="sem"><i></i><i></i><i></i></span><span class="nome">Ahrena Console</span><span>127.0.0.1:4720/ui</span></div>
+      <div class="ui">
+        <aside style="position:relative">
+          <div class="marca"><img src="../brand/logo.svg" alt=""><span>Ahrena Console<small>núcleo local</small></span></div>
+          <a class="on" href="#">◐ Precisam de você <span class="q">3</span></a>
+          <a href="#">▤ Sessões</a>
+          <a href="#">▥ Kanban de sessões</a>
+          <a href="#">▦ Kanban do projeto</a>
+          <a href="#">$ Custo</a>
+          <div class="vivo"><span class="dot ok"></span> ao vivo · v0.0.1</div>
+        </aside>
+        <div class="conteudo">
+          <h3>Precisam de você <span class="live">● ao vivo</span></h3>
+          <p class="subt">Sessões desta máquina esperando uma resposta, urgentes primeiro</p>
+          <div class="kpis">
+            <div class="kpi"><div class="r">Precisam de você</div><div class="v" style="color:var(--status-waiting-text)">3</div><div class="s">2 urgentes</div></div>
+            <div class="kpi"><div class="r">Ativas</div><div class="v" style="color:var(--status-active-text)">4</div><div class="s">7 subagentes</div></div>
+            <div class="kpi"><div class="r">Com erro</div><div class="v" style="color:var(--status-error-text)">1</div><div class="s">painel-de-metricas</div></div>
+            <div class="kpi"><div class="r">Custo hoje</div><div class="v">~US$ 12,40</div><div class="s">estimativa</div></div>
+          </div>
+          <div class="cards">
+            <div class="scard"><div class="l1"><span class="dot waiting"></span>motor-de-regras<span class="t0">urgente</span></div>
+              <div class="proj"><span>/simulacao/motor-de-regras</span><span class="chipw">Pede permissão</span></div><q>Bash: npm run migrate</q>
+              <div class="meta"><span>Opus 5.5</span><span>~US$ 2,10</span><span>2 min</span><span class="ir">Abrir ›</span></div></div>
+            <div class="scard"><div class="l1"><span class="dot waiting"></span>app-receitas<span class="t0">urgente</span></div>
+              <div class="proj"><span>/simulacao/app-receitas</span><span class="chipw">Interrompida</span></div><q>Esc no meio do turno</q>
+              <div class="meta"><span>Sonnet 5.5</span><span>~US$ 0,88</span><span>6 min</span><span class="ir">Abrir ›</span></div></div>
+            <div class="scard"><div class="l1"><span class="dot waiting"></span>fila-de-tarefas</div>
+              <div class="proj"><span>/simulacao/fila-de-tarefas</span><span class="chipw" style="font-weight:500">Sua vez</span></div><q>Terminei a migração. Rodo os testes?</q>
+              <div class="meta"><span>Sonnet 5.5</span><span>~US$ 0,41</span><span>1 min</span><span class="ir">Abrir ›</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>`,
+}
+document.querySelectorAll('[data-app]').forEach(el => { el.innerHTML = APPS[el.dataset.app]() })
+
+// ===================== Tema e captura =====================
+function tema(t) {
+  document.documentElement.dataset.theme = t
+  document.querySelectorAll('[data-tema]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tema === t)))
+  legenda()
+}
+document.querySelectorAll('[data-tema]').forEach(b => b.addEventListener('click', () => tema(b.dataset.tema)))
+const q = new URLSearchParams(location.search)
+tema(q.get('tema') === 'light' ? 'light' : 'dark')
+if (q.get('captura')) {
+  document.body.classList.add('captura')
+  document.getElementById(q.get('captura'))?.classList.add('alvo')
+}
+window.estouros = estouros
+</script>
+</body>
+</html>
