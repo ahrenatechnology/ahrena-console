@@ -55,6 +55,7 @@ describe('normalização dos hooks', () => {
       source: 'startup',
       transcriptPath: HOOK_PAYLOADS.SessionStart.transcript_path,
       permissionMode: 'default',
+      env: null,
     });
     const obj = { ...HOOK_PAYLOADS.SessionStart, model: { id: 'claude-sonnet-5-5', display_name: 'Sonnet' } };
     assert.equal(normalizeHook(obj, opts).hints.model, 'claude-sonnet-5-5');

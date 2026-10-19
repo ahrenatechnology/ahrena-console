@@ -33,6 +33,23 @@ export interface SessionHints {
   source: string | null;
   transcriptPath: string | null;
   permissionMode: string | null;
+  /** O que o encaminhador leu do ambiente do hook (`ahrena_console.env`); `null` se não veio. */
+  env: HookEnv | null;
+}
+
+/** Campo do corpo em que o encaminhador manda o contexto; não faz parte do payload do Claude Code. */
+export const HOOK_CONTEXT_FIELD = 'ahrena_console';
+
+/** Ambiente do hook, como o encaminhador mandou (decisão 0006). */
+export interface HookEnv {
+  /** `CLAUDE_CONFIG_DIR`. */
+  configDir: string | null;
+  /** `CLAUDE_CODE_ACCOUNT_UUID`. */
+  accountUuid: string | null;
+  /** `CLAUDE_CODE_ORGANIZATION_UUID`. */
+  organizationUuid: string | null;
+  /** O hook rodou numa sessão SSH. */
+  ssh: boolean;
 }
 
 export interface NormalizedHook {
@@ -55,6 +72,8 @@ const MAX_SUMMARY = 200;
 const MAX_DEPTH = 8;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
 const EVENT_NAME = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
+const UUID = /^[0-9a-f-]{8,64}$/i;
+const MAX_PATH = 4096;
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
@@ -76,6 +95,21 @@ export function compactData(value: unknown, depth = 0): unknown {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) out[k] = compactData(v, depth + 1);
   return out;
+}
+
+/** Lê `ahrena_console.env` sem confiar no formato: o que não for o esperado vira `null`. */
+function hookEnv(v: unknown): HookEnv | null {
+  const e = v && typeof v === 'object' ? (v as Record<string, unknown>).env : null;
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
+  const o = e as Record<string, unknown>;
+  const uuid = (x: unknown) => (typeof x === 'string' && UUID.test(x) ? x : null);
+  const dir = str(o.CLAUDE_CONFIG_DIR);
+  return {
+    configDir: dir && dir.length <= MAX_PATH && !dir.includes('\0') ? dir : null,
+    accountUuid: uuid(o.CLAUDE_CODE_ACCOUNT_UUID),
+    organizationUuid: uuid(o.CLAUDE_CODE_ORGANIZATION_UUID),
+    ssh: o.ssh === true,
+  };
 }
 
 /** Resumo de uma linha da entrada de ferramenta: o campo que diz o que ela faz. */
@@ -138,7 +172,7 @@ function eventId(type: string, sessionId: string, p: Record<string, unknown>, de
 /** Valida o mínimo e devolve o evento normalizado. Lança `InvalidHookError` se não der para gravar. */
 export function normalizeHook(raw: unknown, opts: NormalizeOptions): NormalizedHook {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new InvalidHookError('payload precisa ser um objeto JSON');
-  const p = raw as Record<string, unknown>;
+  const { [HOOK_CONTEXT_FIELD]: context, ...p } = raw as Record<string, unknown>;
   const sessionId = str(p.session_id);
   if (!sessionId) throw new InvalidHookError('session_id é obrigatório');
   const type = str(p.hook_event_name);
@@ -167,6 +201,7 @@ export function normalizeHook(raw: unknown, opts: NormalizeOptions): NormalizedH
       source: type === 'SessionStart' ? str(p.source) : null,
       transcriptPath: str(p.transcript_path),
       permissionMode: str(p.permission_mode),
+      env: hookEnv(context),
     },
     known: (HOOK_EVENTS as readonly string[]).includes(type),
   };
