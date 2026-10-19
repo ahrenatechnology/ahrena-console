@@ -218,7 +218,7 @@ async function work() {
 
 // GitHub Projects: os mesmos projetos, abas (views), filtros e colunas de Status que
 // a pessoa vê no GitHub. As organizações vêm de AHRENA_CONSOLE_ORGS (separadas por vírgula).
-const PROJECT_ORGS = (process.env.AHRENA_CONSOLE_ORGS ?? 'ahrenatechnology,barte-ai-services').split(',').map((s) => s.trim()).filter(Boolean);
+const PROJECT_ORGS = (process.env.AHRENA_CONSOLE_ORGS ?? 'ahrenatechnology').split(',').map((s) => s.trim()).filter(Boolean);
 const PROJECTS_TTL_MS = 5 * 60_000;
 let projectsCache = { at: 0, data: null };
 let lastProjectsError = null;
