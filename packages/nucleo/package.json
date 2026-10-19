@@ -6,12 +6,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./simulador": "./src/simulador/index.ts"
   },
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\""
+    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
+    "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts"
   }
 }
