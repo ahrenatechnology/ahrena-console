@@ -12,6 +12,7 @@
 // | `POST /abrir/<local_…>`       | Abre a conversa no Claude Desktop (`open claude://…`, no macOS); JSON, como as outras escritas |
 // | `GET /abrir/<local_…>`        | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
+// | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -26,6 +27,8 @@ import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decis
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
+import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
+import type { ServidorMcp } from '../mcp/protocolo.ts';
 
 export { VERSAO_DA_API };
 
@@ -43,6 +46,8 @@ export interface OpcoesDaApi {
    * `POST /abrir/<local_…>` responde 501 e o painel fica com o link de reserva.
    */
   abrirNoDesktop?: ((url: string) => Promise<void>) | null;
+  /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
+  mcp?: ServidorMcp;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -97,6 +102,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
+  const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
   const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
   let port = 0;
 
@@ -179,6 +185,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
       return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as AcaoNaDecisao, url);
     }
+    if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]);

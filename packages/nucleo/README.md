@@ -20,12 +20,13 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
 | [src/estados/](src/estados/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |
 | [src/decisoes/](src/decisoes/README.md) | Decisões da sessão: modelo, porta, captura pelos hooks e pelo transcript, e a cadeia de substituição (#99) |
-| [src/api/](src/api/) | API local mínima para o painel lateral (começo da #21; seção abaixo) |
+| [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
+| [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 
 ## API local
 
-O começo da #21: um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o receptor de hooks e a máquina de estados, e responde só o que o painel lateral ([plugins/ahrena-console](../../plugins/ahrena-console/)) precisa.
+Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o receptor de hooks e a máquina de estados, e responde só o que o painel lateral ([plugins/ahrena-console](../../plugins/ahrena-console/)) precisa.
 
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
@@ -39,6 +40,7 @@ npm run api -- --help
 | `GET /api/overview` | Saúde |
 | `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
+| `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
 
 `?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003).
 
