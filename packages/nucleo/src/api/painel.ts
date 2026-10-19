@@ -446,11 +446,14 @@ function familiaDe(session: Session | null, desktop: SessaoDoDesktop | null): { 
   return { eu: session?.id ?? null, mae: null };
 }
 
-function contextoDe(session: Session, r: ResumoDosEventos): ContextoDoPainel | null {
+export function contextoDe(session: Pick<Session, 'metadata' | 'model'>, r: Pick<ResumoDosEventos, 'contexto' | 'janelaLonga'>): ContextoDoPainel | null {
   const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown } | undefined;
   let usados = typeof sim?.usados === 'number' ? sim.usados : r.contexto;
   if (usados === null) return null;
-  const limite = typeof sim?.limite === 'number' && sim.limite > 0 ? sim.limite : usados > LIMITE_PADRAO_DE_CONTEXTO ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
+  // A janela longa, uma vez vista (ou pedida no modelo, `[1m]`), continua depois de compactar: o uso
+  // cai abaixo de 200 mil, mas a janela não muda.
+  const longa = r.janelaLonga || usados > LIMITE_PADRAO_DE_CONTEXTO || /\[1m\]/i.test(session.model ?? '');
+  const limite = typeof sim?.limite === 'number' && sim.limite > 0 ? sim.limite : longa ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
   usados = Math.max(0, usados);
   return { usados, limite, pct: Math.min(100, Math.round((usados / limite) * 100)) };
 }

@@ -118,6 +118,21 @@ function mostrarStatus($: Engine, texto: string) {
 }
 
 /**
+ * O contexto desta sessão pelo engine, o mesmo número da barra do Claude Code: ele acompanha a
+ * compactação na hora, o que o núcleo (que lê o uso das respostas) só faz na próxima resposta.
+ * A chamada não custa nada; sem ela (engine antigo, terminal), vale o número do núcleo.
+ */
+async function contextoDoEngine($: Engine): Promise<Leitura['contextoAoVivo']> {
+  try {
+    const { context } = await $.session.usage()
+    if (typeof context?.percent !== 'number' || !(context.window > 0)) return null
+    return { usados: typeof context.tokens === 'number' ? context.tokens : null, limite: context.window, pct: Math.round(context.percent) }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Pede o painel ao núcleo e grava o atom só quando o que o painel desenha mudou (ou a cada minuto,
  * pelos tempos relativos). Cada gravação redesenha o pane, e um redesenho troca os handles dos
  * Buttons ("the host holds only a handle, for the drawing's life"): um clique que chega com o handle
@@ -130,13 +145,14 @@ async function consultar($: Engine) {
     const res = await $.http.fetch(`http://${nucleo}${await enderecoDoTick($)}`)
     const painel = res.ok && res.text ? (JSON.parse(res.text) as Painel) : null
     if (!painel || painel.versao !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
-    const nova = assinatura(painel)
+    const contextoAoVivo = await contextoDoEngine($)
+    const nova = assinatura(painel) + JSON.stringify(contextoAoVivo)
     const atual = normalizarLeitura(await read($, leitura))
     const mudou = nova !== ultima.assinatura || atual.offline || !atual.painel || agora - ultima.gravadoEm >= REDESENHO_MINIMO_MS
     ultima = { ...ultima, assinatura: nova, lidoEm: agora }
     if (mudou) {
       ultima.gravadoEm = agora
-      await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: null }))
+      await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: null, contextoAoVivo }))
     }
     mostrarStatus($, linhaDeStatus(painel, false))
   } catch (err) {

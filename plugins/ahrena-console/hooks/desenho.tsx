@@ -60,7 +60,7 @@ export const GAP = 2
 /** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
 export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.10'
+export const VERSAO_DO_PLUGIN = '0.0.11'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -444,8 +444,14 @@ function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | st
 
 /** A partir daqui, o "Compactar" ganha destaque: "Compactar agora", na cor de atenção. */
 export const CONTEXTO_ALTO = 80
-/** Linhas do card Contexto inteiro: as do desenho mais a do "Compactar". */
-const LINHAS_DO_CONTEXTO = LINHAS_DO_CARD + 1
+/**
+ * O card Contexto inteiro tem as linhas do desenho: o "Compactar" vai no cabeçalho, no lugar de
+ * "estimativa", e não tira linha da telemetria (contexto, custo, tokens e background).
+ */
+const LINHAS_DO_CONTEXTO = LINHAS_DO_CARD
+
+/** O contexto desta sessão: o do engine (acompanha a compactação na hora) ou, sem ele, o do núcleo. */
+const contextoDaSessao = (c: Pick<Contexto, 'leitura'>, p: Painel | null) => c.leitura?.contextoAoVivo ?? p?.contexto ?? null
 
 /** O "Compactar" da sessão em que o painel está aberto: sempre no card; em destaque a partir de 80%. */
 function botaoCompactar(c: Contexto, pct: number) {
@@ -457,55 +463,74 @@ function botaoCompactar(c: Contexto, pct: number) {
       </Text>
     )
   }
-  const alto = pct >= CONTEXTO_ALTO
-  return alto ? (
+  return pct >= CONTEXTO_ALTO ? (
     <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
   ) : (
     <Button key="compactar" plain onPress={() => c.acoes.compactar('pedir')}>
-      <Text mono size="footnote" color={LARANJA} underline>
-        Compactar
+      <Text mono size="caption" color={LARANJA} underline>
+        compactar
       </Text>
     </Button>
   )
 }
 
+/** Linhas do resumo do Contexto: uma; com "Compactar agora", duas (o botão na linha dele). */
+const linhasDoResumoDoContexto = (pct: number) => (pct >= CONTEXTO_ALTO ? 2 : 1)
+
 function cardContexto(c: Contexto, p: Painel | null, linhas = LINHAS_DO_CONTEXTO) {
   const { Box, Svg, Text } = c.el
-  const ctx = p?.contexto ?? null
+  const ctx = contextoDaSessao(c, p)
   const pct = ctx?.pct ?? 0
   const alto = pct >= CONTEXTO_ALTO
-  // Sem altura: só o resumo, numa linha, com o "Compactar" à direita.
+  // Sem altura: o resumo inteiro numa linha, e o "Compactar agora" na linha de baixo, sem cortar nada.
   if (linhas < LINHAS_DO_CONTEXTO) {
-    return cartao(c, 'card-contexto', [
-      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-        <Text mono size="caption" weight="semibold" dimColor={!alto} color={alto ? VERMELHO_TEXTO : undefined} wrap="truncate-end">
-          ◠ {pct}% · {usd(p?.custo?.usd ?? 0)}
-        </Text>
-        {botaoCompactar(c, pct)}
-      </Box>,
-    ], alto ? VERMELHO : BORDA, FUNDO_CARTAO, linhas)
+    const resumo = (
+      <Text mono size="caption" weight="semibold" dimColor={!alto} color={alto ? VERMELHO_TEXTO : undefined}>
+        ◠ {pct}% · {usd(p?.custo?.usd ?? 0)}
+      </Text>
+    )
+    return cartao(
+      c,
+      'card-contexto',
+      alto
+        ? [resumo, <Box flexDirection="row">{botaoCompactar(c, pct)}</Box>]
+        : [
+            <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+              {resumo}
+              {botaoCompactar(c, pct)}
+            </Box>,
+          ],
+      alto ? VERMELHO : BORDA,
+      FUNDO_CARTAO,
+      linhas,
+    )
   }
   const corCtx = alto ? VERMELHO : LARANJA
   const erro = p?.sessao?.status === 'error'
   const bg = p?.background ?? { total: 0, primeiro: null }
   const tk = p?.tokens
-  return cartao(c, 'card-contexto', [
-    cabecalho(c, '◠', 'CONTEXTO E CUSTO', 'estimativa'),
-    <Box flexDirection="row" gap={1}>
-      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
-      {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
-    </Box>,
-    <Box flexDirection="row" gap={1}>
-      {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
-      {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
-    </Box>,
-    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-      <Text mono size="footnote" color={alto ? VERMELHO_TEXTO : undefined} dimColor={!alto} wrap="truncate-end">
-        {alto ? 'contexto alto' : 'resumir a conversa'}
-      </Text>
-      {botaoCompactar(c, pct)}
-    </Box>,
-  ], alto ? VERMELHO : BORDA)
+  return cartao(
+    c,
+    'card-contexto',
+    [
+      // O "Compactar" no cabeçalho: com o destaque, o título encurta para caber sem cortar.
+      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+        <Text mono size="caption" weight="semibold" dimColor>
+          ◠ {alto ? 'CONTEXTO' : 'CONTEXTO E CUSTO'}
+        </Text>
+        {botaoCompactar(c, pct)}
+      </Box>,
+      <Box flexDirection="row" gap={1}>
+        {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
+        {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
+      </Box>,
+      <Box flexDirection="row" gap={1}>
+        {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
+        {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
+      </Box>,
+    ],
+    alto ? VERMELHO : BORDA,
+  )
 }
 
 /** A confirmação do "Compactar", no topo: age só nesta sessão. */
@@ -1582,7 +1607,7 @@ function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abri
   switch (id) {
     case 'contexto':
       // O "Compactar" sempre existe: aqui, o próprio resumo o abre.
-      return { texto: `◠ ${p.contexto?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
+      return { texto: `◠ ${contextoDaSessao(c, p)?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
     case 'trabalho': {
       const t = p.trabalho
       return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'}` }
@@ -1634,7 +1659,7 @@ function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, est
   const comODesenho = (x: Peca): Peca => ({ ...x, desenho: Math.max(LINHAS_DO_CARD, x.inteiro) })
   const todas: Peca[] = [
     ...(p.sessao ? [pecaSessao(p.sessao, c.agora)] : []),
-    { id: 'contexto', minimo: LINHAS_DO_CONTEXTO, inteiro: LINHAS_DO_CONTEXTO, tudoOuNada: true },
+    { id: 'contexto', minimo: LINHAS_DO_CONTEXTO, inteiro: LINHAS_DO_CONTEXTO, tudoOuNada: true, resumo: linhasDoResumoDoContexto(contextoDaSessao(c as Contexto, p)?.pct ?? 0) },
     { id: 'trabalho', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true },
     pecaPlano(p.plano, p.planos ?? [], estreito),
     pecaSubagentes(p.subagentes),

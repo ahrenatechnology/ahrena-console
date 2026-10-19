@@ -210,7 +210,8 @@ async function uso(porta: StoragePort, sessionId: string, model: string, inicio:
   let fixo = 0;
   const leituras: number[] = [];
   for (let i = 0; i < n; i++) {
-    const leitura = Math.round(((i + 1) / n) * contexto * 1.5 + 8_000);
+    // Cresce até o contexto final, sem passar dele: passar de 200 mil mudaria a janela (#140).
+    const leitura = Math.round(((i + 1) / n) * (contexto - 2_000) + 1_000);
     leituras.push(leitura);
     fixo += (input * pin + leitura * pread) / 1e6;
   }

@@ -776,3 +776,47 @@ test('#140: PRs aguardando aprovação num indicador próprio, com a lista de li
   expect(await sem.find({ key: 'prs' })).toBeUndefined()
   await sem.unmount()
 })
+
+// --- 0.0.11: o contexto depois de compactar e o "Compactar" sem esmagar a telemetria ---
+
+test('contexto: vale o do engine (o da barra do Claude Code), que já caiu depois do /compact; o do núcleo é a reserva', async ($, on) => {
+  let percent: number | null = 17
+  on('session.usage', async () => ({ value: { startedAt: AGORA, context: percent === null ? { window: 1_000_000 } : { tokens: percent * 10_000, window: 1_000_000, percent }, rateLimits: [] } }))
+  const f = await abrir($, on, { cenario: 'p1' })
+  // O núcleo ainda diz 89% (o pico de antes da compactação).
+  f.estado.painel = { ...CENARIOS.p1, contexto: { usados: 890_000, limite: 1_000_000, pct: 89 } }
+  await f.relogio.advance(5_000)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ type: 'Text', text: '17%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '89%' })).toBeUndefined()
+  expect((await ui.find({ key: 'compactar' }))?.props.variant).toBeUndefined()
+  await ui.unmount()
+  // Sem o número do engine: o do núcleo.
+  percent = null
+  await f.relogio.advance(5_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  expect(await ui.find({ type: 'Text', text: '89%' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('"Compactar agora" não esmaga a telemetria: no cabeçalho do card inteiro, numa linha própria no resumo', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  f.estado.painel = { ...CENARIOS.p1, contexto: { usados: 172_000, limite: 200_000, pct: 86 }, custo: { usd: 155.32, serie: [0, 155.32], estimativa: true } }
+  await f.relogio.advance(5_000)
+  // Card inteiro: os quatro KPIs ficam, e o botão vai no cabeçalho.
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+  for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
+  expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
+  expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
+  await ui.unmount()
+  // Resumo (pouca altura): o texto inteiro numa linha, sem truncar, e o botão na linha de baixo.
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 45) })
+  const card = await ui.find({ key: 'card-contexto' })
+  const resumo = await ui.find({ type: 'Text', text: /86% · ~US\$ 155,32/ })
+  expect(resumo).toBeDefined()
+  expect(resumo?.props.wrap).toBeUndefined()
+  // Duas linhas: o resumo e, embaixo, o botão.
+  expect(card?.props.minHeight).toBe(4)
+  expect(await ui.find({ key: 'compactar' })).toBeDefined()
+  await ui.unmount()
+})

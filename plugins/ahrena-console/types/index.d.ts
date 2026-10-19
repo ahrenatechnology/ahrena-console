@@ -211,6 +211,11 @@ export type Leitura = {
   erro: string | null
   /** Quando a próxima tentativa sai (ms desde a época). */
   proximaEm: number | null
+  /**
+   * O contexto desta sessão lido do engine (`$.session.usage()`), o mesmo da barra do Claude Code:
+   * acompanha a compactação na hora. Sem ele, vale o do núcleo.
+   */
+  contextoAoVivo?: { usados: number | null; limite: number; pct: number } | null
 }
 
 /** O que a pessoa abriu no painel. */
