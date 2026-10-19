@@ -139,18 +139,20 @@ Estratégia: **por tela**, na ordem do CCAM. Cada tela funciona sozinha. Gráfic
 | 3.7 | User story, frontend | Custo: linha diária, divisão por modelo, por projeto | tela de custo | 3.1, 2.3 |
 | 3.8 | User story, frontend | Histórico: sessões encerradas por dia, com detalhe e ligação depois de `/clear` (Podium) | tela de histórico | 3.3 |
 | 3.9 | User story, frontend | Mural de sessões ao vivo: um card por sessão com status, modelo, esforço, plano, agentes, contexto e custo (Podium) | tela do mural | 3.1, 1.9, 1.7 |
+| 3.10 | User story, frontend | Kanban do projeto no artefato: o GitHub Project por Status, e mover um card muda o Status no GitHub | o projeto inteiro numa tela | 3.1, 5.3 |
 
 ## Épico 4 · Painel lateral (M1)
 
-Estratégia: **o essencial ao lado do trabalho.** O que é pesado fica no artefato.
+Estratégia: **o painel olha a sessão em que está aberto.** O projeto, a frota e o time ficam no artefato ([decisão 0004](decisoes/0004-painel-da-sessao.md)).
 
 | # | Tipo | Título | Produz | Depende de |
 | --- | --- | --- | --- | --- |
-| 4.1 | User story, frontend | Inbox e contadores: quem precisa de você, com motivo e tempo esperando; ativas, esperando, com erro, custo de hoje | coração do painel | 2.1 |
-| 4.2 | User story, frontend | Sessões em resumo: as 10 mais recentes, com status colorido, medidor de contexto e link para o detalhe no artefato | lista curta | 2.2, 1.7 |
-| 4.3 | User story, frontend | Trabalho do GitHub: hierarquia e kanban (o que foi testado no spike) | aba Trabalho | 5.2 |
+| 4.1 | User story, frontend | Esta sessão: estado com motivo e tempo, modelo, contexto, custo e processos em background; e a linha "N precisam de você" | coração do painel | 2.1 |
+| 4.2 | User story, frontend | Subagentes e plano desta sessão, e as sessões que ela abriu, com status colorido e link para o detalhe no artefato | o que roda dentro da sessão | 2.2, 1.7 |
+| 4.3 | User story, frontend | Trabalho desta sessão: a issue e o PR que ela toca (pelo branch), com sub-issues, CI e review | o recorte do GitHub da sessão | 5.2 |
 | 4.4 | Tech task | Layout responsivo validado em larguras de 36 a 160 colunas, e estado salvo compatível entre versões | painel sem estouro | 4.1, 4.2 |
 | 4.5 | Tech task | Status line `ahrena-console ● N ao vivo`, com aviso de versão (Podium) | estado sempre visível | 4.1 |
+| 4.6 | Tech task | Consumo baixo: o painel consulta só enquanto está aberto e só a própria sessão, com medição repetível | painel que não pesa no Mac | — |
 
 ## Épico 5 · Integração com o GitHub (M1)
 
@@ -172,6 +174,7 @@ Decisão do spike 5.1: [consulta rasa, filhas ao expandir, delta e cache](deciso
 | 6.2 | Tech task | Plugin do Claude Code: painel, hooks e `/console`, num marketplace | instalação do painel e dos hooks | 4.4, 1.4 |
 | 6.3 | Tech task | Releases no GitHub com os dois pacotes e guia de instalação | entrega ao time | 6.1, 6.2 |
 | 6.4 | Tech task | Simulador de sessões, com modo caos, para testar e demonstrar sem dados reais (Podium) | demonstração | 1.1 |
+| 6.5 | Spike | Plataforma desktop externa integrada ao Claude, reaproveitando o que já está instalado; referência no app Electron do CCAM, preferência por Tauri (timebox: 1 dia) | decisão | — |
 
 ## Épico 7 · Hub na nuvem, AWS serverless (M2)
 
