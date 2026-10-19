@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
+import type { SessionPlan } from '../src/plano/modelo.ts';
 import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {
@@ -272,6 +273,41 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         await assert.rejects(store.putTokenUsage(bad), InvalidModelError);
         bad.tokens = { ...bad.tokens, output: 1.5 };
         await assert.rejects(store.putTokenUsage(bad), InvalidModelError);
+      });
+    });
+
+    describe('plano da sessão', () => {
+      const plano = (over: Partial<SessionPlan> = {}): SessionPlan => ({
+        sessionId: 's1',
+        source: 'TodoWrite',
+        steps: [
+          { id: '1', text: 'Ler', activeText: 'Lendo', status: 'completed', owner: { kind: 'main', agentId: 's1:main', name: null }, updatedAt: at(1) },
+          { id: '2', text: 'Revisar', activeText: null, status: 'in_progress', owner: { kind: 'session', agentId: null, name: 'filha' }, updatedAt: at(2) },
+        ],
+        done: 1,
+        total: 2,
+        currentStepId: '2',
+        changedAt: at(2),
+        metadata: { extracao: { aplicadas: ['t1'] } },
+        ...over,
+      });
+
+      test('grava, lê e substitui o plano inteiro', async () => {
+        assert.equal(await store.getPlan('s1'), null);
+        await store.putPlan(plano());
+        assert.deepEqual(await store.getPlan('s1'), plano());
+        const vazio = plano({ steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3) });
+        await store.putPlan(vazio);
+        assert.deepEqual(await store.getPlan('s1'), vazio);
+      });
+
+      test('recusa contagem que não bate, passo atual fora da lista e estado inválido', async () => {
+        await assert.rejects(store.putPlan(plano({ done: 2 })), InvalidModelError);
+        await assert.rejects(store.putPlan(plano({ total: 3 })), InvalidModelError);
+        await assert.rejects(store.putPlan(plano({ currentStepId: '9' })), InvalidModelError);
+        const ruim = plano();
+        (ruim.steps[0] as { status: string }).status = 'deleted';
+        await assert.rejects(store.putPlan(ruim), InvalidModelError);
       });
     });
 

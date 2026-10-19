@@ -15,6 +15,7 @@ import {
   type SessionEvent,
   type TokenUsage,
 } from '../../model.ts';
+import { validatePlan, type SessionPlan } from '../../plano/modelo.ts';
 import {
   pageSize,
   type ListEventsQuery,
@@ -141,6 +142,19 @@ function toTokenUsage(r: Row): TokenUsage {
       cacheWrite1h: r.baseline_cache_write_1h_tokens as number,
     },
     updatedAt: r.updated_at as string,
+  };
+}
+
+function toPlan(r: Row): SessionPlan {
+  return {
+    sessionId: r.session_id as string,
+    source: r.source as SessionPlan['source'],
+    steps: JSON.parse(r.steps as string),
+    done: r.done as number,
+    total: r.total as number,
+    currentStepId: r.current_step_id as string | null,
+    changedAt: r.changed_at as string,
+    metadata: JSON.parse(r.metadata as string),
   };
 }
 
@@ -353,6 +367,24 @@ export class SqliteStorage implements StoragePort {
       )
       .all(sessionId)
       .map(toTokenUsage);
+  }
+
+  async putPlan(p: SessionPlan): Promise<void> {
+    validatePlan(p);
+    this.db
+      .prepare(
+        `INSERT INTO session_plans (session_id, source, steps, done, total, current_step_id, changed_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (session_id) DO UPDATE SET
+           source = excluded.source, steps = excluded.steps, done = excluded.done, total = excluded.total,
+           current_step_id = excluded.current_step_id, changed_at = excluded.changed_at, metadata = excluded.metadata`,
+      )
+      .run(p.sessionId, p.source, JSON.stringify(p.steps), p.done, p.total, p.currentStepId, p.changedAt, json(p.metadata));
+  }
+
+  async getPlan(sessionId: string): Promise<SessionPlan | null> {
+    const row = this.db.prepare('SELECT * FROM session_plans WHERE session_id = ?').get(sessionId);
+    return row ? toPlan(row) : null;
   }
 
   async putModelPricing(p: ModelPricing): Promise<void> {

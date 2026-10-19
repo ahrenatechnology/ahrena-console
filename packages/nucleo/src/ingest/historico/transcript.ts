@@ -45,6 +45,8 @@ export interface EventData {
   usage?: MessageUsage;
   /** Entrada da ferramenta, só para as de `INPUT_KEPT`. */
   tool_input?: unknown;
+  /** Id da tarefa criada, no resultado do TaskCreate (plano da sessão, item 1.9). */
+  taskId?: string;
 }
 
 export interface ParsedLine {
@@ -131,8 +133,9 @@ export function parseUsage(message: Json, requestId: string | null): MessageUsag
   };
 }
 
-/** Ferramentas cuja entrada fica no evento: o plano (TodoWrite) e a pergunta (AskUserQuestion). */
-const INPUT_KEPT = new Set(['TodoWrite', 'AskUserQuestion']);
+/** Ferramentas cuja entrada fica no evento: a pergunta (AskUserQuestion) e as do plano da sessão (item 1.9). */
+const INPUT_KEPT = new Set(['AskUserQuestion', 'TodoWrite', 'TaskCreate', 'TaskUpdate']);
+const keepsInput = (name: string) => INPUT_KEPT.has(name) || /(^|__)update_plan$/.test(name);
 const INPUT_STRING_MAX = 500;
 
 function keepInput(v: unknown, depth = 0): unknown {
@@ -140,6 +143,13 @@ function keepInput(v: unknown, depth = 0): unknown {
   if (v === null || typeof v !== 'object' || depth > 4) return typeof v === 'object' ? null : v;
   if (Array.isArray(v)) return v.slice(0, 50).map((x) => keepInput(x, depth + 1));
   return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keepInput(x, depth + 1)]));
+}
+
+/** `toolUseResult.task.id` do TaskCreate. */
+function createdTaskId(o: Json): string | null {
+  const r = isObj(o.toolUseResult) ? o.toolUseResult : null;
+  const id = r && isObj(r.task) ? r.task.id : null;
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : null;
 }
 
 const TITLE_KINDS: Record<string, string> = {
@@ -196,13 +206,15 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
       results.forEach((b, i) => {
         const r = b as Json;
         const toolUseId = str(r.tool_use_id);
+        const toolName = toolUseId ? (toolNames.get(toolUseId) ?? null) : null;
+        const taskId = toolName === 'TaskCreate' && results.length === 1 ? createdTaskId(o) : null;
         out.events.push({
           uuid: results.length > 1 ? `${uuid}#${i}` : uuid,
           type: 'ToolResult',
-          toolName: toolUseId ? (toolNames.get(toolUseId) ?? null) : null,
+          toolName,
           summary: truncate(textOf(r.content), SUMMARY_MAX),
           createdAt: timestamp,
-          data: { ...base, ...(toolUseId ? { toolUseId } : {}), isError: r.is_error === true },
+          data: { ...base, ...(toolUseId ? { toolUseId } : {}), isError: r.is_error === true, ...(taskId ? { taskId } : {}) },
         });
       });
     } else if (o.isMeta !== true) {
@@ -228,7 +240,7 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
       const toolUseId = str(toolUse.id);
       if (name && toolUseId) toolNames.set(toolUseId, name);
       // O plano e a pergunta vivem na entrada da ferramenta: guardada só para estas, curta.
-      const input = name && INPUT_KEPT.has(name) && isObj(toolUse.input) ? { tool_input: keepInput(toolUse.input) } : {};
+      const input = name && keepsInput(name) && isObj(toolUse.input) ? { tool_input: keepInput(toolUse.input) } : {};
       out.events.push({
         uuid,
         type: 'ToolUse',

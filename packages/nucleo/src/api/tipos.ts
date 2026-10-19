@@ -74,6 +74,30 @@ export interface PlanoDoPainel {
   proximo: string | null;
   /** Quantos ainda faltam além do próximo. */
   restantes: number;
+  /** Quem faz o item em andamento. */
+  atualDono: DonoDoPasso | null;
+  /** Hora da última mudança do plano; `null` no plano lido só do TodoWrite (sem plano gravado). */
+  mudouEm: string | null;
+  /** Os passos na ordem do plano (item 1.9). */
+  passos: PassoDoPainel[];
+}
+
+/** O principal, um subagente ou uma sessão filha, quando o passo foi delegado. */
+export interface DonoDoPasso {
+  tipo: 'principal' | 'subagente' | 'sessao';
+  /** Nome do subagente (tipo ou `owner`) ou da sessão filha; `null` no principal. */
+  nome: string | null;
+  /** Id do agente no núcleo, quando se sabe. */
+  agenteId: string | null;
+}
+
+export interface PassoDoPainel {
+  id: string;
+  texto: string;
+  /** O texto no gerúndio, para o passo em andamento. */
+  textoAtivo: string | null;
+  estado: 'pending' | 'in_progress' | 'completed';
+  dono: DonoDoPasso;
 }
 
 export interface SubagenteDoPainel {

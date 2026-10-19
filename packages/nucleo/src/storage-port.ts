@@ -17,6 +17,7 @@ import type {
   SessionStatus,
   TokenUsage,
 } from './model.ts';
+import type { SessionPlan } from './plano/modelo.ts';
 
 export interface Page<T> {
   items: T[];
@@ -73,6 +74,10 @@ export interface StoragePort {
   listModelPricing(): Promise<ModelPricing[]>;
   /** Devolve `false` se o padrão não existia. */
   deleteModelPricing(pattern: string): Promise<boolean>;
+
+  /** Grava o plano inteiro da sessão (cria ou substitui). Item 1.9. */
+  putPlan(plan: SessionPlan): Promise<void>;
+  getPlan(sessionId: string): Promise<SessionPlan | null>;
 
   close(): Promise<void>;
 }

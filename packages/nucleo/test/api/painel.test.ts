@@ -21,6 +21,7 @@ import type { WorkSource } from '../../src/github/source.ts';
 import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../../src/simulador/painel.ts';
 import { parseLine } from '../../src/ingest/historico/transcript.ts';
 import { T0, at, event, session } from '../fixtures.ts';
+import type { SessionPlan } from '../../src/plano/modelo.ts';
 
 const AGORA = Date.parse(T0);
 
@@ -127,7 +128,10 @@ describe('painel por cenário (P1 a P7)', () => {
     assert.ok(p.custo?.usd && Math.abs(p.custo.usd - 1.84) < 0.05, `custo ${p.custo?.usd}`);
     assert.ok((p.custo?.serie.length ?? 0) >= 2);
     assert.deepEqual(p.background, { total: 2, primeiro: 'npm run dev' });
-    assert.deepEqual(p.plano, { feitos: 3, total: 6, atual: 'Rodar a bateria', proximo: 'Abrir o PR', restantes: 1 });
+    // Sem plano gravado (o cenário só tem o TodoWrite nos eventos): vem do resumo, tudo do principal.
+    const { passos, ...plano } = p.plano!;
+    assert.deepEqual(plano, { feitos: 3, total: 6, atual: 'Rodar a bateria', proximo: 'Abrir o PR', restantes: 1, atualDono: { tipo: 'principal', nome: null, agenteId: null }, mudouEm: null });
+    assert.equal(passos.length, 6);
     assert.equal(p.subagentes.ativos, 1);
     assert.equal(p.subagentes.itens[0]?.nome, 'Explore');
     assert.equal(p.trabalho?.issue?.numero, 42);
@@ -334,6 +338,50 @@ describe('contrato com o plugin', () => {
     juntar(painel);
     const faltando = [...chaves].filter((k) => !new RegExp(`\\b${k}\\??:`).test(tipos));
     assert.deepEqual(faltando, []);
+    await storage.close();
+  });
+});
+
+describe('card Plano pelo plano gravado (item 1.9)', () => {
+  test('feitos/total, atual, próximo e o dono de cada passo, com o nome do subagente', async () => {
+    const { storage, montador } = await cenario('p4');
+    const sub = (await storage.listAgents(SESSAO_DO_PAINEL)).find((a) => a.type === 'subagent')!;
+    const passo = (id: string, text: string, status: 'pending' | 'in_progress' | 'completed', owner: SessionPlan['steps'][number]['owner']) =>
+      ({ id, text, activeText: null, status, owner, updatedAt: at(1) });
+    await storage.putPlan({
+      sessionId: SESSAO_DO_PAINEL,
+      source: 'Task',
+      steps: [
+        passo('1', 'Mapear', 'completed', { kind: 'main', agentId: `${SESSAO_DO_PAINEL}:main`, name: null }),
+        passo('2', 'Extrair a cobrança', 'in_progress', { kind: 'subagent', agentId: sub.id, name: null }),
+        passo('3', 'Revisar', 'pending', { kind: 'session', agentId: null, name: 'revisao' }),
+        passo('4', 'Abrir o PR', 'pending', { kind: 'subagent', agentId: null, name: 'revisor' }),
+      ],
+      done: 1,
+      total: 4,
+      currentStepId: '2',
+      changedAt: at(2),
+      metadata: {},
+    });
+    const p = (await montador.montar({ sessionId: 'qualquer' })).plano!;
+    assert.deepEqual([p.feitos, p.total, p.atual, p.proximo, p.restantes, p.mudouEm], [1, 4, 'Extrair a cobrança', 'Revisar', 1, at(2)]);
+    assert.deepEqual(p.atualDono, { tipo: 'subagente', nome: sub.subagentType ?? sub.name, agenteId: sub.id });
+    assert.deepEqual(
+      p.passos.map((x) => [x.texto, x.estado, x.dono.tipo, x.dono.nome]),
+      [
+        ['Mapear', 'completed', 'principal', null],
+        ['Extrair a cobrança', 'in_progress', 'subagente', sub.subagentType ?? sub.name],
+        ['Revisar', 'pending', 'sessao', 'revisao'],
+        ['Abrir o PR', 'pending', 'subagente', 'revisor'],
+      ],
+    );
+    await storage.close();
+  });
+
+  test('plano gravado vazio (depois do /clear) é "sem plano"', async () => {
+    const { storage, montador } = await cenario('p1');
+    await storage.putPlan({ sessionId: SESSAO_DO_PAINEL, source: 'TodoWrite', steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3), metadata: {} });
+    assert.equal((await montador.montar({ sessionId: 'qualquer' })).plano, null);
     await storage.close();
   });
 });
