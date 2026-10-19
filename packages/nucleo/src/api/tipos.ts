@@ -153,7 +153,10 @@ export interface FilhaDoPainel {
   titulo: string;
   estado: EstadoDoInbox | 'desconhecido';
   motivo: AwaitingReason | null;
+  /** Desde quando está no que faz: a atividade atual, se trabalhando; a espera, se parada. */
   desde: string | null;
+  /** #131: o que a filha trabalhando está fazendo ("pensando", "rodando Bash"); `null` parada. */
+  fazendo?: string | null;
 }
 
 export interface TrabalhoDoPainel {
@@ -166,6 +169,8 @@ export interface TrabalhoDoPainel {
     url: string;
     estado: 'rascunho' | 'aberto' | 'mergeado' | 'fechado';
     ci: 'ok' | 'falhou' | 'rodando' | null;
+    /** As checagens do último commit, contadas ("CI ✓ 6/6"); `null` sem a contagem. */
+    checks?: { total: number; ok: number; falhas: number; rodando: number } | null;
     review: 'aprovado' | 'ajustes' | 'pendente' | null;
   } | null;
   /** O branch não tem upstream: nada foi enviado ainda. */

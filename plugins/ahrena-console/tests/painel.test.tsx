@@ -168,13 +168,38 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /esperando 3 subagentes/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /3 ativos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /code-reviewer/ })).toBeDefined()
-  // O card de lista cresce: os quatro aparecem, sem "+N".
-  expect(await ui.find({ type: 'Text', text: /Plan/ })).toBeDefined()
-  expect(await ui.find({ key: 'ver-subagentes' })).toBeUndefined()
-  for (const filha of ['fila-de-tarefas', 'catalogo-exemplo', 'blog-estatico']) expect(await ui.find({ type: 'Text', text: new RegExp(filha) })).toBeDefined()
+  // P1: até 3 linhas, os ativos primeiro; o concluído vai para o "+1 concluído", que abre a lista.
+  expect(await ui.find({ type: 'Text', text: /\+1 concluído ›/ })).toBeDefined()
+  expect(await ui.find({ key: 'ver-subagentes' })).toBeDefined()
+  // Filhas: a que trabalha primeiro, com o que faz; a da sua vez depois; a concluída, resumida.
+  const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).map((b) => b.key)
+  expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas'])
+  expect(await ui.find({ type: 'Text', text: /1 trabalhando · 3/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /· (pensando|rodando \w+)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1 concluída ›/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /CI … rodando/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /aprovado/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('CI com contagem: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7"; sem a contagem, como antes', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const casos: [NonNullable<NonNullable<Painel['trabalho']>['pr']>['ci'], { total: number; ok: number; falhas: number; rodando: number } | null, RegExp][] = [
+    ['ok', { total: 6, ok: 6, falhas: 0, rodando: 0 }, /CI ✓ 6\/6/],
+    ['falhou', { total: 7, ok: 5, falhas: 2, rodando: 0 }, /CI ✕ 2 falhas/],
+    ['falhou', { total: 3, ok: 2, falhas: 1, rodando: 0 }, /CI ✕ 1 falha $/],
+    ['rodando', { total: 7, ok: 3, falhas: 0, rodando: 4 }, /CI … 3\/7/],
+    ['ok', null, /^ CI ✓ $/],
+  ]
+  for (const [ci, checks, re] of casos) {
+    f.estado.painel = { ...p4, trabalho: { ...p4.trabalho!, pr: { ...p4.trabalho!.pr!, ci, checks } } }
+    // Só o texto da pílula muda: aparece no redesenho seguinte ao intervalo mínimo.
+    await f.relogio.advance(15_000)
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
+    expect(await ui.find({ type: 'Text', text: re })).toBeDefined()
+    await ui.unmount()
+  }
 })
 
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
@@ -394,7 +419,9 @@ const ALTURAS = [32, 45, 60, 90, 200]
 function carregado(): Painel {
   const p4 = CENARIOS.p4
   const sub = p4.subagentes.itens[3]!
-  const subagentes = [...p4.subagentes.itens, ...Array.from({ length: 11 }, (_, i) => ({ ...sub, id: `sim-sub-${i}`, nome: `revisor-sintetico-com-nome-longo-${i}`, tarefa: 'uma tarefa sintética de descrição longa' }))]
+  // Os dois primeiros revisores ainda trabalham: os ativos aparecem todos no card, os concluídos no "+N".
+  const revisor = (i: number) => ({ ...sub, id: `sim-sub-${i}`, nome: `revisor-sintetico-com-nome-longo-${i}`, tarefa: 'uma tarefa sintética de descrição longa', ...(i < 2 ? { status: 'working' as const, ate: null } : {}) })
+  const subagentes = [...Array.from({ length: 2 }, (_, i) => revisor(i)), ...p4.subagentes.itens, ...Array.from({ length: 9 }, (_, i) => revisor(i + 2))]
   const filhas = [...p4.filhas, ...p4.filhas].map((f, i) => ({ ...f, id: `${f.id}-${i}`, titulo: `${f.titulo}-${i}` }))
   const ant = (p4.planos ?? []).filter((x) => x.resultado !== 'atual')
   const planos = [...(p4.planos ?? []), ...ant.slice(0, 2).map((x, i) => ({ ...x, numero: -i, resumo: `Plano sintético ${i}` }))]
@@ -409,7 +436,7 @@ function carregado(): Painel {
       turno: 212,
       atividade: { tipo: 'sua-vez', texto: `"Mandei os dois pedidos para a sessão filha, ${'e depois conferi tudo de novo com calma '.repeat(5)}fim"` },
     },
-    subagentes: { ativos: p4.subagentes.ativos, itens: subagentes },
+    subagentes: { ativos: p4.subagentes.ativos + 2, itens: subagentes },
     filhas,
     planos,
   }
@@ -466,11 +493,14 @@ test('altura: pouca altura deixa a sessão inteira e o resto no resumo ou na fai
     }
     await ui.unmount()
 
-    // Muita altura: tudo inteiro, sem "+N" nas listas.
+    // Muita altura: no P1, os subagentes ativos todos e os concluídos no "+N"; as filhas que não
+    // estão paradas todas, e as concluídas numa linha.
     ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
-    expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))).toHaveLength(15)
-    expect(await ui.find({ key: 'ver-subagentes' })).toBeUndefined()
-    expect(await ui.find({ key: 'ver-filhas' })).toBeUndefined()
+    const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
+    expect(subs).toHaveLength(5)
+    expect(await ui.find({ type: 'Text', text: '+10 concluídos ›' })).toBeDefined()
+    expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))).toHaveLength(4)
+    expect(await ui.find({ type: 'Text', text: '2 concluídas ›' })).toBeDefined()
     const longa = (await ui.findAll({ type: 'Text' })).find((x) => (x.text ?? '').startsWith('"Mandei os dois pedidos'))!
     expect(longa.text!.length).toBeLessThanOrEqual(ATIVIDADE_MAX)
     await ui.unmount()
@@ -489,10 +519,15 @@ test('altura: nas listas, o que aparece mais o "+N" é sempre o total, e o "+N" 
   for (const base of [PANE, LARGO]) {
     for (const linhas of ALTURAS) {
       const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+      // O resumo de um card de lista: "+2 ativos · +10 concluídos ›", "+1 na lista · 2 concluídas ›".
+      const resumo = async (re: RegExp) => {
+        const t = (await ui.findAll({ type: 'Text' })).find((x: any) => re.test(x.text ?? ''))
+        return t ? [...t.text!.matchAll(/\d+/g)].reduce((a, m) => a + Number(m[0]), 0) : 0
+      }
       const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-')).length
-      if (subs > 0 && subs < 15) expect(await ui.find({ type: 'Text', text: 'ver todos os 15 subagentes' })).toBeDefined()
+      if (subs > 0) expect(subs + (await resumo(/^\+\d+ (ativos?|concluídos?|com erro).* ›$/))).toBe(15)
       const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).length
-      if (filhas > 0 && filhas < painel.filhas.length) expect(await ui.find({ type: 'Text', text: `ver todas as ${painel.filhas.length} sessões filhas` })).toBeDefined()
+      if (filhas > 0) expect(filhas + (await resumo(/(na lista|concluídas?|paradas?) ›$/))).toBe(painel.filhas.length)
       const planos = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
       const anteriores = (painel.planos ?? []).filter((x) => x.resultado !== 'atual').length
       if (planos > 0) expect(planos + (await n(ui, 'ver-planos', /^\+\d+ planos? anteriores?$/))).toBe(anteriores)
@@ -661,22 +696,34 @@ test('#131 clique duplo: o polling só regrava o atom quando o desenho muda (uso
   await ui.unmount()
 })
 
-test('#131: as sessões filhas aparecem direto na tela principal, as mais recentes, com "ver todas as N sessões filhas"', async ($, on) => {
+test('#131: as filhas que trabalham vêm sempre listadas, com o que fazem; depois as que precisam e as da sua vez; as paradas, resumidas', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const p4 = CENARIOS.p4
-  const filhas = Array.from({ length: 15 }, (_, i) => ({ ...p4.filhas[0]!, id: `sim-filha-${i}`, titulo: `filha-sintetica-${i}`, desde: new Date(AGORA - (15 - i) * 60_000).toISOString() }))
+  const base = p4.filhas[0]!
+  const filha = (i: number, extra: object) => ({ ...base, id: `sim-filha-${i}`, titulo: `filha-sintetica-${i}`, desde: new Date(AGORA - (15 - i) * 60_000).toISOString(), ...extra })
+  const filhas = [
+    ...Array.from({ length: 9 }, (_, i) => filha(i, { estado: 'completed', motivo: null })),
+    filha(9, { estado: 'waiting', motivo: 'stop' }),
+    filha(10, { estado: 'waiting', motivo: 'interrupted' }),
+    filha(11, { estado: 'waiting', motivo: 'notification' }),
+    filha(12, { estado: 'active', motivo: null, fazendo: 'pensando' }),
+    filha(13, { estado: 'waiting', motivo: 'stop' }),
+    filha(14, { estado: 'active', motivo: null, fazendo: 'rodando Bash' }),
+  ]
   f.estado.painel = { ...p4, filhas }
   await f.relogio.advance(5_000)
-  for (const base of [PANE, LARGO]) {
-    // Com a sessão e os tiles do Contexto inteiros, a lista das filhas precisa de mais altura no estreito: 80 linhas.
-    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 80) })
-    const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))
-    expect(linhas.length).toBeGreaterThanOrEqual(2)
-    // A mais recente primeiro.
-    expect(linhas[0]!.key).toBe('filha-sim-filha-14')
-    expect(await ui.find({ type: 'Text', text: /15 sessões/ })).toBeDefined()
-    // Se nem todas couberem, o "ver todas" diz o que são e quantas.
-    if (linhas.length < 15) expect(await ui.find({ type: 'Text', text: 'ver todas as 15 sessões filhas' })).toBeDefined()
+  for (const b of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(b, 90) })
+    const linhas = (await ui.findAll({ type: 'Box' })).filter((x) => x.key?.startsWith('filha-')).map((x) => x.key)
+    // As que trabalham (a mais recente antes), a que precisa, as da sua vez; nenhuma concluída.
+    expect(linhas).toEqual(['filha-sim-filha-14', 'filha-sim-filha-12', 'filha-sim-filha-11', 'filha-sim-filha-13', 'filha-sim-filha-10', 'filha-sim-filha-9'])
+    expect(await ui.find({ type: 'Text', text: /2 trabalhando · 15/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /· rodando Bash/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /· pensando/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /· pede você/ })).toBeDefined()
+    // As concluídas numa linha, que abre a lista.
+    expect(await ui.find({ type: 'Text', text: '9 concluídas ›' })).toBeDefined()
+    expect(await ui.find({ key: 'ver-filhas' })).toBeDefined()
     await ui.unmount()
   }
 })

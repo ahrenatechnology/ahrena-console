@@ -78,7 +78,16 @@ export type SubagenteDoPainel = {
   ate: string | null
 }
 
-export type FilhaDoPainel = { id: string; local?: string | null; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
+export type FilhaDoPainel = {
+  id: string
+  local?: string | null
+  titulo: string
+  estado: EstadoDoInbox | 'desconhecido'
+  motivo: AwaitingReason | null
+  desde: string | null
+  /** #131: o que a filha trabalhando faz ("pensando", "rodando Bash"); ausente no núcleo antigo. */
+  fazendo?: string | null
+}
 
 export type TrabalhoDoPainel = {
   branch: string
@@ -89,6 +98,8 @@ export type TrabalhoDoPainel = {
     url: string
     estado: 'rascunho' | 'aberto' | 'mergeado' | 'fechado'
     ci: 'ok' | 'falhou' | 'rodando' | null
+    /** As checagens do último commit, contadas ("CI ✓ 6/6"); ausente no núcleo antigo. */
+    checks?: { total: number; ok: number; falhas: number; rodando: number } | null
     review: 'aprovado' | 'ajustes' | 'pendente' | null
   } | null
   semPush: boolean

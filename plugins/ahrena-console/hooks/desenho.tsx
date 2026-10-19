@@ -696,9 +696,11 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_D
       </Box>,
     )
     const pilulas: RenderElement[] = []
-    if (pr.ci === 'ok') pilulas.push(pilula(c, 'ci', 'CI ✓', VERDE, BADGE.verde))
-    if (pr.ci === 'falhou') pilulas.push(pilula(c, 'ci', 'CI ✕ falhou', VERMELHO_TEXTO, BADGE.vermelho))
-    if (pr.ci === 'rodando') pilulas.push(pilula(c, 'ci', 'CI … rodando', AMARELO, BADGE.amarelo))
+    // Com a contagem: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7" (as que terminaram).
+    const k = pr.checks
+    if (pr.ci === 'ok') pilulas.push(pilula(c, 'ci', k ? `CI ✓ ${k.ok}/${k.total}` : 'CI ✓', VERDE, BADGE.verde))
+    if (pr.ci === 'falhou') pilulas.push(pilula(c, 'ci', k?.falhas ? `CI ✕ ${k.falhas} ${k.falhas === 1 ? 'falha' : 'falhas'}` : 'CI ✕ falhou', VERMELHO_TEXTO, BADGE.vermelho))
+    if (pr.ci === 'rodando') pilulas.push(pilula(c, 'ci', k ? `CI … ${k.total - k.rodando}/${k.total}` : 'CI … rodando', AMARELO, BADGE.amarelo))
     if (pr.review === 'aprovado') pilulas.push(pilula(c, 'review', 'aprovado', VERDE, BADGE.verde))
     if (pr.review === 'ajustes') pilulas.push(pilula(c, 'review', 'ajustes pedidos', VERMELHO_TEXTO, BADGE.vermelho))
     if (pr.review === 'pendente') pilulas.push(pilula(c, 'review', 'review pendente', AMARELO, BADGE.amarelo, true))
@@ -876,9 +878,12 @@ function maisItens(c: Contexto, key: string, texto: string, abrir: () => void) {
 
 /** Os ativos primeiro; depois os encerrados, mais recentes antes. */
 function subagentesEmOrdem(s: Painel['subagentes']) {
-  const ativos = s.itens.filter((i) => i.status === 'working' || i.status === 'waiting')
-  return [...ativos, ...s.itens.filter((i) => !ativos.includes(i))]
+  const ativos = s.itens.filter(subagenteAtivo)
+  const encerrados = s.itens.filter((i) => !subagenteAtivo(i)).sort((x, y) => (y.ate ?? y.desde).localeCompare(x.ate ?? x.desde))
+  return [...ativos, ...encerrados]
 }
+
+const subagenteAtivo = (i: SubagenteDoPainel) => i.status === 'working' || i.status === 'waiting'
 
 /** Cada subagente ocupa uma linha no card: o texto corta com reticências. */
 const linhasDoSubagente = (_: SubagenteDoPainel) => 1
@@ -896,18 +901,33 @@ function quantosCabem(alturas: number[], linhas: number): number {
   return n
 }
 
+/** No card (P1), até 3 linhas: os ativos sempre, e os encerrados mais recentes até completar. */
+const LINHAS_DE_SUBAGENTES = 3
+const listaveisDeSubagentes = (s: Painel['subagentes']) => Math.min(s.itens.length, Math.max(LINHAS_DE_SUBAGENTES, s.itens.filter(subagenteAtivo).length))
+
 function pecaSubagentes(s: Painel['subagentes']): Peca {
   if (s.itens.length === 0) return { id: 'subagentes', minimo: 2, inteiro: 2 }
-  const alturas = subagentesEmOrdem(s).map(linhasDoSubagente)
-  return { id: 'subagentes', minimo: 3, inteiro: 2 + alturas.reduce((a, b) => a + b, 0) }
+  const n = listaveisDeSubagentes(s)
+  // O cabeçalho, a barra, as linhas e o "+N concluídos".
+  return { id: 'subagentes', minimo: 3, inteiro: 2 + n + (s.itens.length > n ? 1 : 0) }
+}
+
+/** O que ficou fora do card: "+5 concluídos", "+1 ativo · +5 concluídos". */
+function subagentesFora(fora: SubagenteDoPainel[]): string {
+  const ativos = fora.filter(subagenteAtivo).length
+  const concluidos = fora.filter((i) => i.status === 'completed').length
+  const erro = fora.filter((i) => i.status === 'error').length
+  return [ativos && `+${plural(ativos, 'ativo', 'ativos')}`, concluidos && `+${plural(concluidos, 'concluído', 'concluídos')}`, erro && `+${erro} com erro`]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function cardSubagentes(c: Contexto, s: Painel['subagentes'], linhas = LINHAS_DO_CARD) {
   const { Text, Svg } = c.el
-  const direita = plural(s.ativos, 'ativo', 'ativos')
+  const direita = s.itens.length ? `${s.ativos} ${s.ativos === 1 ? 'ativo' : 'ativos'} · ${s.itens.length}` : plural(s.ativos, 'ativo', 'ativos')
   if (s.itens.length === 0 || linhas < 3) {
     return cartao(c, 'card-subagentes', [
-      cabecalhoQueAbre(c, 'ver-subagentes', s.itens.length ? c.acoes.verSubagentes : null, '⑂', 'SUBAGENTES', s.itens.length ? `${direita} · ${s.itens.length}` : direita),
+      cabecalhoQueAbre(c, 'ver-subagentes', s.itens.length ? c.acoes.verSubagentes : null, '⑂', 'SUBAGENTES', direita),
       s.itens.length === 0 && linhas >= 2 && (
         <Text mono size="footnote" dimColor>
           nenhum nesta sessão
@@ -916,14 +936,17 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes'], linhas = LINHAS_DO
     ], BORDA, FUNDO_CARTAO, linhas)
   }
   const todos = subagentesEmOrdem(s)
-  const n = quantosCabem(todos.map(linhasDoSubagente), linhas - 2)
-  const mostrar = todos.slice(0, Math.max(0, n))
-  const fora = todos.length - mostrar.length
+  const espaco = linhas - 2
+  const limite = Math.min(listaveisDeSubagentes(s), espaco)
+  // Sobra linha para o "+N"? Se não, a última linha dá lugar a ele.
+  const n = todos.length <= limite ? todos.length : espaco > limite ? limite : Math.max(0, limite - 1)
+  const mostrar = todos.slice(0, n)
+  const fora = todos.slice(n)
   return cartao(c, 'card-subagentes', [
     cabecalho(c, '⑂', 'SUBAGENTES', direita),
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={200} height={4} />,
     ...mostrar.map((i) => linhaDeSubagente(c, i)),
-    fora > 0 && maisItens(c, 'ver-subagentes', `ver todos os ${todos.length} subagentes`, c.acoes.verSubagentes),
+    fora.length > 0 && maisItens(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes),
   ], BORDA, FUNDO_CARTAO, linhas)
 }
 
@@ -950,10 +973,47 @@ function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | 
   )
 }
 
+/** Onde a filha entra na lista: trabalhando, precisando de você, na sua vez ou parada. */
+export type GrupoDaFilha = 'trabalhando' | 'precisa' | 'sua-vez' | 'parada'
+
+export function grupoDaFilha(f: FilhaDoPainel): GrupoDaFilha {
+  if (f.estado === 'active' || f.estado === 'delegating' || f.estado === 'background') return 'trabalhando'
+  if (f.estado === 'error') return 'precisa'
+  // Uma permissão ou uma pergunta chega como `notification`; o fim do turno e o Esc são a sua vez.
+  if (f.estado === 'waiting') return f.motivo === 'notification' ? 'precisa' : 'sua-vez'
+  return 'parada'
+}
+
+const ORDEM_DAS_FILHAS: GrupoDaFilha[] = ['trabalhando', 'precisa', 'sua-vez', 'parada']
+
+/** O que vem depois do nome: o que a filha faz, ou o que ela pede. */
+function depoisDoNome(f: FilhaDoPainel): { texto: string; cor?: string } | null {
+  switch (grupoDaFilha(f)) {
+    case 'trabalhando':
+      return { texto: f.fazendo ?? 'trabalhando' }
+    case 'precisa':
+      return { texto: f.estado === 'error' ? 'parou num erro' : 'pede você', cor: AMARELO }
+    default:
+      // A sua vez fica neutra, só no ◐ cinza e na ordem: o nome não cede espaço a ela.
+      return null
+  }
+}
+
 function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = false) {
   const { Box, Text } = c.el
+  const grupo = grupoDaFilha(f)
   const st = statusDe(f.estado)
-  const g = st === 'waiting' ? '◐' : st === 'completed' ? '✓' : st === 'error' ? '✕' : st === 'abandoned' ? '○' : '●'
+  const marca =
+    grupo === 'trabalhando'
+      ? { g: '●', cor: LARANJA }
+      : grupo === 'precisa'
+        ? { g: '◐', cor: AMARELO }
+        : grupo === 'sua-vez'
+          ? { g: '◐', cor: CINZA }
+          : { g: st === 'completed' ? '✓' : st === 'error' ? '✕' : '○', cor: COR_STATUS[st].cor }
+  const depois = depoisDoNome(f)
+  // O que vem depois do nome nunca corta: o nome é que cede.
+  const resto = depois ? [...` · ${depois.texto}`].length : 0
   return linhaDeLista(
     c,
     `filha-${f.id}`,
@@ -961,12 +1021,19 @@ function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = fals
     desde(f.desde, c.agora),
     inteiro,
     <Box flexDirection="row" flexShrink={1} minWidth={0}>
-      <Text mono size="footnote" color={COR_STATUS[st].cor}>
-        {g}{' '}
+      <Text mono size="footnote" color={marca.cor}>
+        {marca.g}{' '}
       </Text>
       <Box flexShrink={1} minWidth={0}>
-        {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, max, inteiro)}
+        {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, Math.max(8, max - resto), inteiro)}
       </Box>
+      {depois ? (
+        <Box flexShrink={0}>
+          <Text mono size="footnote" color={depois.cor} dimColor={!depois.cor}>
+            {' '}· {depois.texto}
+          </Text>
+        </Box>
+      ) : null}
     </Box>,
   )
 }
@@ -974,20 +1041,40 @@ function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = fals
 /** Cada sessão filha ocupa uma linha no card: o nome corta com reticências. */
 const linhasDaFilha = (_c: Pick<Contexto, 'nucleo'>, _f: FilhaDoPainel) => 1
 
+/** No card, as trabalhando, as que precisam e as na sua vez, uma por linha; as paradas, numa linha só. */
+const filhasListaveis = (filhas: FilhaDoPainel[]) => filhas.filter((f) => grupoDaFilha(f) !== 'parada')
+
 function pecaFilhas(c: Pick<Contexto, 'nucleo'>, filhas: FilhaDoPainel[]): Peca {
   if (filhas.length === 0) return { id: 'filhas', minimo: 2, inteiro: 2 }
-  return { id: 'filhas', minimo: 2, inteiro: 1 + filhas.reduce((a, f) => a + linhasDaFilha(c, f), 0) }
+  const listaveis = filhasListaveis(filhas)
+  const resumo = listaveis.length < filhas.length ? 1 : 0
+  return { id: 'filhas', minimo: 2, inteiro: 1 + listaveis.reduce((a, f) => a + linhasDaFilha(c, f), 0) + resumo }
 }
 
-/** As filhas mais recentes primeiro (a última atividade de cada uma). */
-const filhasEmOrdem = (filhas: FilhaDoPainel[]) => [...filhas].sort((a, b) => (b.desde ?? '').localeCompare(a.desde ?? ''))
+/** Na ordem do card: as trabalhando, as que precisam, as na sua vez e as paradas; em cada grupo, a mais recente antes. */
+const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
+  [...filhas].sort(
+    (a, b) => ORDEM_DAS_FILHAS.indexOf(grupoDaFilha(a)) - ORDEM_DAS_FILHAS.indexOf(grupoDaFilha(b)) || (b.desde ?? '').localeCompare(a.desde ?? ''),
+  )
+
+/** O que ficou fora do card: "+2 na lista · 9 concluídas · 3 paradas ›". */
+function filhasFora(fora: FilhaDoPainel[]): string {
+  const listaveis = filhasListaveis(fora).length
+  const concluidas = fora.filter((f) => f.estado === 'completed').length
+  const paradas = fora.length - listaveis - concluidas
+  return [listaveis && `+${listaveis} na lista`, concluidas && plural(concluidas, 'concluída', 'concluídas'), paradas && plural(paradas, 'parada', 'paradas')]
+    .filter(Boolean)
+    .join(' · ')
+}
 
 function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[], linhas = LINHAS_DO_CARD) {
   const filhas = filhasEmOrdem(todasAsFilhas)
   const { Text } = c.el
+  const trabalhando = filhas.filter((f) => grupoDaFilha(f) === 'trabalhando').length
+  const direita = trabalhando ? `${trabalhando} trabalhando · ${filhas.length}` : plural(filhas.length, 'sessão', 'sessões')
   if (filhas.length === 0 || linhas < 2) {
     return cartao(c, 'card-filhas', [
-      cabecalhoQueAbre(c, 'ver-filhas', filhas.length ? c.acoes.verFilhas : null, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
+      cabecalhoQueAbre(c, 'ver-filhas', filhas.length ? c.acoes.verFilhas : null, '⑃', 'SESSÕES FILHAS', direita),
       filhas.length === 0 && linhas >= 2 && (
         <Text mono size="footnote" dimColor>
           nenhuma aberta por esta
@@ -995,14 +1082,17 @@ function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[], linhas = LINHAS
       ),
     ], BORDA, FUNDO_CARTAO, linhas)
   }
-  const n = quantosCabem(filhas.map((f) => linhasDaFilha(c, f)), linhas - 1)
-  const mostrar = filhas.slice(0, n)
-  const fora = filhas.length - mostrar.length
+  const listaveis = filhasListaveis(filhas)
+  // Uma linha por filha; se alguma fica de fora (ou há paradas), a última linha é o resumo.
+  const espaco = linhas - 1
+  const n = listaveis.length + (listaveis.length < filhas.length ? 1 : 0) <= espaco ? listaveis.length : Math.max(0, espaco - 1)
+  const mostrar = listaveis.slice(0, n)
+  const fora = filhas.filter((f) => !mostrar.includes(f))
   return cartao(c, 'card-filhas', [
-    cabecalho(c, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
+    cabecalho(c, '⑃', 'SESSÕES FILHAS', direita),
     // O nome no card é cortado só no link (que não quebra linha); o resto quebra.
     ...mostrar.map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3)),
-    fora > 0 && maisItens(c, 'ver-filhas', `ver todas as ${filhas.length} sessões filhas`, c.acoes.verFilhas),
+    fora.length > 0 && maisItens(c, 'ver-filhas', `${filhasFora(fora)} ›`, c.acoes.verFilhas),
   ], BORDA, FUNDO_CARTAO, linhas)
 }
 
@@ -1715,18 +1805,23 @@ const ETAPAS_DA_ALTURA: Etapa[] = [
  * As linhas do painel fora da grade de cards: o respiro, o topo, o rótulo, as faixas, as linhas
  * de decisões e de "precisam de você", o rodapé e o espaço entre eles.
  */
+/** Uma faixa de uma linha com borda e um botão, no desktop. */
+const LINHA_SOLTA = 2
+
 function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boolean, compactar: Vista['compactar'] = null): number {
   const util = g.largura - 4
-  const partes = [4, 1]
+  // No desktop a borda é um traço fino, não uma linha: o topo (logo e duas linhas de texto) ocupa
+  // 3, e cada faixa de uma linha com borda (decisões, precisam, PRs) ocupa 2, com o botão.
+  const partes = [3, 1]
   if (compactar === 'confirmar') partes.push(4)
   const r = p.decisoes?.retomada
   if (r && r.n > 0) partes.push(2 + 1 + (estreito ? 3 : 2) + 1)
   const f = p.sessao?.faixa
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
-  if (p.decisoes) partes.push(3)
-  partes.push(3)
-  if ((p.prs?.total ?? 0) > 0) partes.push(3)
+  if (p.decisoes) partes.push(LINHA_SOLTA)
+  partes.push(LINHA_SOLTA)
+  if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA)
   partes.push(linhasDoRodape(p))
   return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
 }
@@ -1754,30 +1849,49 @@ function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abri
 function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura: number) {
   if (!ids.length) return null
   const { Box, Button, Text } = c.el
+  const n = ids.length
+  // Um card como os outros, da largura da grade: a borda, o cabeçalho e os resumos, que quebram linha.
   return (
-    <Box key="resumos" flexDirection="row" flexWrap="wrap" columnGap={2} width={largura}>
-      {ids.map((id) => {
-        const r = resumoDoCard(c, p, id)
-        const texto = (
-          <Text mono size="footnote" color={r.abrir ? LARANJA : undefined} dimColor={!r.abrir} underline={!!r.abrir}>
-            {r.texto}
-          </Text>
-        )
-        return r.abrir ? (
-          <Button key={`resumo-${id}`} plain onPress={r.abrir}>
-            {texto}
-          </Button>
-        ) : (
-          <Box key={`resumo-${id}`}>{texto}</Box>
-        )
-      })}
+    <Box
+      key="resumos"
+      flexDirection="column"
+      width={largura}
+      minHeight={BORDA_DO_CARD + linhasInternasDosResumos(c, p, ids, largura)}
+      flexShrink={0}
+      borderStyle="round"
+      borderColor={BORDA}
+      backgroundColor={FUNDO_CARTAO}
+      paddingX={1}
+    >
+      {cabecalho(c, '☷', 'EM RESUMO', `${n} ${n === 1 ? 'card' : 'cards'} sem altura`)}
+      <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+        {ids.map((id) => {
+          const r = resumoDoCard(c, p, id)
+          const texto = (
+            <Text mono size="footnote" color={r.abrir ? LARANJA : undefined} dimColor={!r.abrir} underline={!!r.abrir}>
+              {r.texto}
+            </Text>
+          )
+          return r.abrir ? (
+            <Button key={`resumo-${id}`} plain onPress={r.abrir}>
+              {texto}
+            </Button>
+          ) : (
+            <Box key={`resumo-${id}`}>{texto}</Box>
+          )
+        })}
+      </Box>
     </Box>
   )
 }
 
-/** Linhas da faixa de resumos (com o espaço antes dela). */
+/** Linhas dentro do card de resumos: o cabeçalho e os resumos, quebrando na largura útil. */
+const linhasInternasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
+  1 + linhasDoTexto(ids.map((id) => resumoDoCard(c, p, id).texto.replace(/\s/g, '\u00a0')).join('  '), largura - 4)
+
+/** Linhas do card de resumos, com o espaço antes dele. */
 const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  ids.length ? 1 + linhasDoTexto(ids.map((id) => resumoDoCard(c, p, id).texto.replace(/\s/g, '\u00a0')).join('  '), largura) : 0
+  ids.length ? 1 + BORDA_DO_CARD + linhasInternasDosResumos(c, p, ids, largura) : 0
 
 /**
  * Quantas linhas internas cada card recebe, pela altura do painel e pela prioridade. Quando nem o
