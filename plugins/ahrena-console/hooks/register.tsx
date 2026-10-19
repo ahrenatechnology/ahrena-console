@@ -5,13 +5,15 @@
 // Consumo (issue #81, decisão 0004): o painel só consulta o núcleo enquanto está aberto e à
 // vista. Abre com /console (ou desenhado de novo depois de um reload) e para quando fecha,
 // sai de cena ou a sessão termina; sessão sem painel aberto não faz nenhum pedido. A cada
-// 5 s pede só GET /api/painel/<esta sessão>: um pedido, só a própria sessão.
+// 5 s pede só GET /api/painel/<esta sessão>: um pedido, só a própria sessão. Com as decisões
+// abertas (P9), o mesmo pedido leva `decisoes=<escopo>` e traz a lista; Confirmar e Descartar são
+// um POST cada, só quando a pessoa aperta.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register } from 'claude-code'
 
-import type { Leitura, Painel, PrecisaDeVoce, Vista } from '../types'
-import { desenhar, type Elementos } from './desenho'
-import { linhaDeStatus, modelo, precisamTexto, STATUS, statusDe } from './formato'
+import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PrecisaDeVoce, Vista } from '../types'
+import { desenhar, escopoDasDecisoes, type Elementos } from './desenho'
+import { decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe } from './formato'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
@@ -21,7 +23,8 @@ const A_CADA_MS = 5000
 let nucleo = '127.0.0.1:4720'
 
 const LEITURA_VAZIA: Leitura = { painel: null, lidoEm: null, offline: false, erro: null, proximaEm: null }
-const VISTA_VAZIA: Vista = { tela: 'sessao', escopo: null }
+const VISTA_VAZIA: Vista = { tela: 'sessao', escopo: null, escopoDecisoes: null }
+const ESCOPOS_DE_DECISAO: readonly EscopoDasDecisoes[] = ['sessao', 'familia', 'branch']
 
 const leitura = atom({ plugin: 'ahrena-console', key: 'leitura' } as const, LEITURA_VAZIA)
 const vista = atom({ plugin: 'ahrena-console', key: 'vista' } as const, VISTA_VAZIA)
@@ -30,6 +33,8 @@ const vista = atom({ plugin: 'ahrena-console', key: 'vista' } as const, VISTA_VA
 let relogio: { cancel: () => void } | undefined
 // O que o painel manda junto com o id, lido uma vez por carga do módulo.
 let consulta: string | undefined
+// A largura do último desenho: decide o escopo padrão das decisões no pedido.
+let colunas = 38
 
 // Estado salvo por outra versão do painel pode vir com outro formato: vale só o que reconhecemos.
 function normalizarLeitura(v: unknown): Leitura {
@@ -41,8 +46,9 @@ function normalizarLeitura(v: unknown): Leitura {
 function normalizarVista(v: unknown): Vista {
   const r = (v ?? {}) as Partial<Vista>
   return {
-    tela: r.tela === 'precisam' ? 'precisam' : 'sessao',
+    tela: r.tela === 'precisam' || r.tela === 'decisoes' ? r.tela : 'sessao',
     escopo: r.escopo === 'familia' || r.escopo === 'maquina' ? r.escopo : null,
+    escopoDecisoes: ESCOPOS_DE_DECISAO.includes(r.escopoDecisoes as EscopoDasDecisoes) ? (r.escopoDecisoes as EscopoDasDecisoes) : null,
   }
 }
 
@@ -71,11 +77,19 @@ async function endereco($: Engine): Promise<string> {
   return consulta
 }
 
+/** O pedido do tick: com as decisões abertas, leva o escopo para a lista vir junto. */
+async function enderecoDoTick($: Engine): Promise<string> {
+  const base = await endereco($)
+  const v = normalizarVista(await read($, vista))
+  if (v.tela !== 'decisoes') return base
+  return `${base}${base.includes('?') ? '&' : '?'}decisoes=${escopoDasDecisoes(v, colunas)}`
+}
+
 // O pedido de todo tick: esta sessão, a conta e quantas precisam de você, nunca a frota.
 async function consultar($: Engine) {
   const agora = await $.clock.now()
   try {
-    const res = await $.http.fetch(`http://${nucleo}${await endereco($)}`)
+    const res = await $.http.fetch(`http://${nucleo}${await enderecoDoTick($)}`)
     const painel = res.ok && res.text ? (JSON.parse(res.text) as Painel) : null
     if (!painel || painel.versao !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
     await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: agora + A_CADA_MS }))
@@ -115,6 +129,50 @@ function parar($: Engine) {
   relogio.cancel()
   relogio = undefined
   $.ui.status(undefined)
+}
+
+/** Confirmar ou Descartar uma sugerida: um POST em nome desta sessão, e a leitura de novo. */
+async function decidir($: Engine, d: DecisaoDoPainel, acao: 'confirmar' | 'descartar') {
+  try {
+    const base = await endereco($)
+    const query = base.includes('?') ? base.slice(base.indexOf('?')) : ''
+    const res = await $.http.fetch(`http://${nucleo}/api/decisoes/${encodeURIComponent(d.id)}/${acao}${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessao: await $.session.id() }),
+    })
+    if (!res.ok) {
+      const erro = (() => {
+        try {
+          return (JSON.parse(res.text ?? '') as { error?: string }).error
+        } catch {
+          return undefined
+        }
+      })()
+      $.ui.toast(`Não deu para ${acao} ${d.rotulo}: ${erro ?? `HTTP ${res.status}`}.`)
+    } else {
+      $.ui.toast(`${d.rotulo} ${acao === 'confirmar' ? 'confirmada: passa a valer' : 'descartada: fica só no histórico'}.`)
+    }
+  } catch {
+    $.ui.toast(`Sem conexão com o núcleo em ${nucleo}; ${d.rotulo} continua a confirmar.`)
+  }
+  await consultar($)
+}
+
+/**
+ * "ver na conversa": rola a conversa até a chamada que originou a decisão (o `tool_use_id`),
+ * quando ela é desta sessão; o engine só rola a conversa em resposta a um clique da pessoa.
+ * Quando não dá (de outra sessão, ou a linha não está mais na conversa), diz onde ela está.
+ */
+async function verNaConversa($: Engine, d: DecisaoDoPainel) {
+  const longe =
+    d.sessao === 'mae' ? 'na sessão mãe' : d.sessao === 'familia' ? 'em outra sessão da família' : d.sessao === 'branch' ? 'em outra sessão do branch' : null
+  if (longe || !d.toolUseId) {
+    $.ui.toast(`${d.rotulo} foi decidida ${longe ?? 'numa mensagem que esta conversa não mostra'}.`)
+    return
+  }
+  const r = await $.ui.scroll({ to: { requestId: d.toolUseId }, block: 'center' }).catch((err: unknown) => ({ deny: String(err) }))
+  if ('deny' in r && r.deny) $.ui.toast(`A mensagem de ${d.rotulo} não está à vista nesta conversa.`)
 }
 
 async function irPara($: Engine, i: PrecisaDeVoce, surface: Parameters<Engine['ui']['copy']>[0]['surface']) {
@@ -183,6 +241,7 @@ export const register: Register = (on, options) => {
                 {s ? `${STATUS[statusDe(s.estado)].glifo} ${s.titulo} · ${modelo(s.modelo)} · turno ${s.turno}` : 'Sessão nova'}
               </Text>
               <Text dimColor>{s ? s.atividade.texto : ''}</Text>
+              {l.painel.decisoes?.vigentes ? <Text>⊸ {decisoesTexto(l.painel.decisoes.vigentes)}</Text> : null}
               <Text>{l.painel.precisam.total ? `⚠ ${precisamTexto(l.painel.precisam.total)}` : 'ninguém mais precisa de você'}</Text>
             </Box>
           )}
@@ -191,11 +250,12 @@ export const register: Register = (on, options) => {
     }
     const el = $.ui.resolve(e) as unknown as Elementos
     const v = normalizarVista(await read($, vista))
+    colunas = e.props.bodyColumns ?? 38
     return desenhar({
       el,
       leitura: l,
       vista: v,
-      cols: e.props.bodyColumns ?? 38,
+      cols: colunas,
       agora,
       nucleo,
       acoes: {
@@ -204,6 +264,15 @@ export const register: Register = (on, options) => {
         escopo: (valor) => void mudarVista($, { escopo: valor === 'familia' ? 'familia' : 'maquina' }),
         tentar: () => void consultar($),
         irPara: (i) => void irPara($, i, e.surface),
+        // Abrir as decisões ou trocar o escopo já pede a lista, sem esperar o próximo tick.
+        verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)),
+        escopoDecisoes: (valor) =>
+          void mudarVista($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }).then(() =>
+            consultar($),
+          ),
+        confirmar: (d) => void decidir($, d, 'confirmar'),
+        descartar: (d) => void decidir($, d, 'descartar'),
+        verNaConversa: (d) => void verNaConversa($, d),
       },
     })
   })

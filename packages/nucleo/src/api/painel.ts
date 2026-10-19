@@ -18,7 +18,9 @@ import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
 import type { PlanOwner, SessionPlan } from '../plano/modelo.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
+import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
+import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from './resumo.ts';
 import type {
@@ -27,8 +29,11 @@ import type {
   ContextoDoPainel,
   DonoDoPasso,
   CustoDoPainel,
+  DecisaoDoPainel,
+  EscopoDasDecisoes,
   FaixaDaSessao,
   FilhaDoPainel,
+  ListaDeDecisoes,
   Painel,
   PlanoDoPainel,
   PrecisaDeVoce,
@@ -54,6 +59,8 @@ export interface PedidoDoPainel {
   cwd?: string | null;
   /** O modelo da sessão, para a sessão que o núcleo ainda não viu. */
   modelo?: string | null;
+  /** A lista de decisões aberta no painel, neste escopo (P9). */
+  decisoes?: EscopoDasDecisoes | null;
 }
 
 export interface OpcoesDoPainel {
@@ -61,6 +68,8 @@ export interface OpcoesDoPainel {
   contas: Contas;
   desktop: IndiceDoDesktop | null;
   trabalho: TrabalhoPorBranch | null;
+  /** A porta das decisões (#99); sem ela, o painel não traz decisões. */
+  decisoes?: DecisionPort | null;
   agora?: () => number;
   custoMs?: number;
   precisamMs?: number;
@@ -94,12 +103,13 @@ export class MontadorDoPainel {
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
+  private readonly decisoes: DecisoesDaSessao | null;
   readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { em: number; updatedAt: string; custo: CustoDoPainel; tokens: Painel['tokens'] }>();
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id }: OpcoesDoPainel) {
     this.apelido = apelido;
     this.storage = storage;
     this.contas = contas;
@@ -109,6 +119,7 @@ export class MontadorDoPainel {
     this.custoMs = custoMs;
     this.precisamMs = precisamMs;
     this.resumos = new ResumosDeSessao(storage, { agora });
+    this.decisoes = decisoes ? new DecisoesDaSessao({ decisions: decisoes, storage }) : null;
   }
 
   async montar(pedidoOriginal: PedidoDoPainel): Promise<Painel> {
@@ -129,6 +140,7 @@ export class MontadorDoPainel {
     const { custo, tokens } = session ? await this.custoDe(session) : { custo: null, tokens: null };
     const memoria = session ? lerMemoria(session) : null;
     const bg = memoria ? Object.values(memoria.background) : [];
+    const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
 
     return {
       versao: 1,
@@ -141,9 +153,41 @@ export class MontadorDoPainel {
       plano: session ? planoDe(await this.storage.getPlan(session.id), resumo!, agentes) : null,
       subagentes: subagentesDe(agentes),
       filhas: await this.filhasDe(session, desktop),
-      trabalho: this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null,
+      trabalho,
       precisam: await this.precisamDe(pedido.sessionId, session, desktop),
+      decisoes: this.decisoes
+        ? await this.decisoes.doPainel(this.alvo(pedido.sessionId, sessao.cwd ?? pedido.cwd ?? null, sessao.branch ?? trabalho?.branch ?? null, conta), pedido.decisoes ?? null)
+        : null,
     };
+  }
+
+  /** A sessão das decisões: o branch e a pasta que o painel conhece, e a conta dela. */
+  private alvo(sessionId: string, pasta: string | null, branch: string | null, conta: ContaDoPainel | null): AlvoDasDecisoes {
+    return { sessionId, branch, repo: pasta, contaId: conta?.id ?? null };
+  }
+
+  private async alvoDoPedido(pedidoOriginal: PedidoDoPainel): Promise<AlvoDasDecisoes> {
+    const pedido = { ...pedidoOriginal, sessionId: this.apelido(pedidoOriginal.sessionId) };
+    this.contas.informar(pedido.sessionId, pedido.conta ?? null, pedido.org ?? null);
+    await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
+    const session = await this.storage.getSession(pedido.sessionId);
+    const desktop = this.doDesktop(pedido.sessionId, pedido.local ?? null);
+    const conta = this.contas.daSessao(session ?? { id: pedido.sessionId, accountId: null, accountSource: null }, desktop);
+    const pasta = session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null;
+    const branch = desktop?.branch ?? (session?.metadata?.branch as string | undefined) ?? this.trabalho?.ler(pasta, null)?.branch ?? null;
+    return this.alvo(pedido.sessionId, pasta, branch, conta);
+  }
+
+  /** `GET /api/decisoes/<sessão>`: a lista de um escopo; `null` sem a porta das decisões. */
+  async listaDeDecisoes(pedido: PedidoDoPainel, escopo: EscopoDasDecisoes): Promise<ListaDeDecisoes | null> {
+    if (!this.decisoes) return null;
+    return this.decisoes.lista(await this.alvoDoPedido(pedido), escopo);
+  }
+
+  /** `POST /api/decisoes/<id>/confirmar|descartar`, em nome da sessão do painel. */
+  async decidir(pedido: PedidoDoPainel, id: string, acao: AcaoNaDecisao): Promise<DecisaoDoPainel | null> {
+    if (!this.decisoes) return null;
+    return this.decisoes.decidir(await this.alvoDoPedido(pedido), id, acao, new Date(this.agora()).toISOString());
   }
 
   private doDesktop(sessionId: string, local: string | null): SessaoDoDesktop | null {

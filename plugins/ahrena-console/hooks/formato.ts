@@ -1,6 +1,6 @@
 // Formatação do painel: tempo, modelo, tokens, custo e os glifos de status. Funções puras.
 
-import type { AwaitingReason, DisplayStatus, EstadoDoInbox, Painel, SessaoDoPainel } from '../types'
+import type { AwaitingReason, DecisaoDoPainel, DisplayStatus, EscopoDasDecisoes, EstadoDoInbox, Painel, SessaoDoPainel } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
 export function duracao(ms: number): string {
@@ -47,6 +47,16 @@ export const plural = (n: number, um: string, varios: string) => `${n} ${n === 1
 
 export const corta = (s: string, max: number) => (s.length > max ? `${s.slice(0, Math.max(1, max - 1))}…` : s)
 
+/** "há 6 min"; de outro dia, "ontem" ou "há 3 d". */
+export function quando(iso: string, agora: number): string {
+  const ms = agora - Date.parse(iso)
+  if (ms < 12 * 3600_000) return ha(iso, agora)
+  const dia = (t: number) => new Date(t).toDateString()
+  if (dia(Date.parse(iso)) === dia(agora)) return ha(iso, agora)
+  if (dia(Date.parse(iso)) === dia(agora - 24 * 3600_000)) return 'ontem'
+  return ha(iso, agora)
+}
+
 /** "22:41", no fuso de quem olha. */
 export function hora(ms: number): string {
   const d = new Date(ms)
@@ -84,9 +94,55 @@ export function linhaDeStatus(p: Painel | null, offline: boolean): string {
   const s: SessaoDoPainel | null = p.sessao
   const n = p.precisam.total
   const fora = n ? precisamTexto(n) : 'ninguém mais'
-  if (!s) return `ahrena-console ◐ No prompt · ${fora}`
+  const d = p.decisoes
+  const dec = d?.retomada ? ` · ${d.retomada.n} decisões herdadas` : d?.vigentes ? ` · ${d.vigentes === 1 ? '1 decisão' : `${d.vigentes} decisões`}` : ''
+  if (!s) return `ahrena-console ◐ No prompt${dec} · ${fora}`
   const st = STATUS[statusDe(s.estado)]
   const rotulo = s.status === 'waiting' && s.motivo === 'session_start' ? 'No prompt' : st.rotulo
   const extra = s.estado === 'delegating' ? ' · delegando' : ''
-  return `ahrena-console ${st.glifo} ${rotulo}${extra} · ${fora}`
+  return `ahrena-console ${st.glifo} ${rotulo}${extra}${dec} · ${fora}`
 }
+
+/** A origem de uma decisão: o glifo e o rótulo do card (P9). */
+export const ORIGENS: Record<DecisaoDoPainel['origem'], { glifo: string; rotulo: string }> = {
+  sugerida: { glifo: '✲', rotulo: 'SUGERIDA' },
+  correcao: { glifo: '↳', rotulo: 'CORREÇÃO SUA' },
+  permissao: { glifo: '⛉', rotulo: 'PERMISSÃO' },
+  pergunta: { glifo: '?', rotulo: 'PERGUNTA' },
+  plano: { glifo: '☰', rotulo: 'PLANO' },
+}
+
+export const ESTADOS_DA_DECISAO: Record<DecisaoDoPainel['estado'], string> = {
+  vigente: 'Vigente',
+  substituida: 'Substituída',
+  a_confirmar: 'A confirmar',
+}
+
+export const ESCOPOS: { valor: EscopoDasDecisoes; rotulo: string }[] = [
+  { valor: 'sessao', rotulo: 'Sessão' },
+  { valor: 'familia', rotulo: 'Família' },
+  { valor: 'branch', rotulo: 'Branch' },
+]
+
+/** Quem decidiu: "você corrigiu", "agente propôs", "você · sessão mãe". */
+export function quemDecidiu(d: DecisaoDoPainel): string {
+  const quem =
+    d.estado === 'a_confirmar'
+      ? 'agente propôs'
+      : d.origem === 'sugerida'
+        ? d.confirmadaEm ? 'você confirmou' : 'agente'
+        : d.decididaPor === 'agente'
+          ? 'agente'
+          : d.origem === 'correcao'
+            ? 'você corrigiu'
+            : d.origem === 'plano'
+              ? 'você aprovou'
+              : 'você'
+  const de = d.sessao === 'mae' ? ' · sessão mãe' : d.sessao === 'familia' ? ' · outra sessão' : d.sessao === 'branch' ? ' · pelo branch' : ''
+  return quem + de
+}
+
+/** "não: 20 por coluna; rolagem infinita". */
+export const naoTexto = (d: DecisaoDoPainel) => `não: ${d.nao.length ? d.nao.join('; ') : '—'}`
+
+export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão vigente' : `${n} decisões vigentes`)

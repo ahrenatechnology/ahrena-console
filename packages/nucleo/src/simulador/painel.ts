@@ -1,4 +1,4 @@
-// Cenários do painel lateral (P1 a P7 dos wireframes, docs/wireframes), para demonstrar e
+// Cenários do painel lateral (P1 a P7 e P9 dos wireframes, docs/wireframes), para demonstrar e
 // capturar o painel sem dados reais: `npm run api -- --demo p1`. Tudo é sintético, com o
 // vocabulário do simulador: projetos sob /simulacao, repositório `exemplo/simulacao` e duas
 // contas sintéticas (UUIDs de zeros). A sessão do painel, seja qual for o id que ele mande, vira `sim-painel-esta`.
@@ -7,12 +7,14 @@ import type { AccountSource, Agent, AwaitingReason, Session, SessionStatus, Toke
 import { claudeAccountId, emptyTokenCounts } from '../model.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 import type { StoragePort } from '../storage-port.ts';
+import type { DecisionPort } from '../decisoes/porta.ts';
+import { linkSession, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
 import { RAIZ } from './vocabulario.ts';
 
-export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] as const;
+export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9'] as const;
 export type CenarioDoPainel = (typeof CENARIOS_DO_PAINEL)[number];
 export const SESSAO_DO_PAINEL = 'sim-painel-esta';
 export const REPO_DO_SIMULADOR = 'exemplo/simulacao';
@@ -87,7 +89,7 @@ const SUA_VEZ: Outra = {
   texto: 'Terminei a migração. Rodo os testes?',
 };
 
-const ESTA: Record<CenarioDoPainel, Esta> = {
+const ESTA: Record<Exclude<CenarioDoPainel, 'p9'>, Esta> = {
   p1: {
     titulo: 'Kanban de sessões no artefato', projeto: 'ahrena-demo', modelo: OPUS, inicioMin: 12, status: 'active', turno: 18,
     contexto: 62_000, custo: 1.84, ferramenta: { nome: 'Bash', resumo: 'npm test' }, background: ['npm run dev', 'npm run watch'],
@@ -143,6 +145,9 @@ const ESTA: Record<CenarioDoPainel, Esta> = {
   },
 };
 
+// P9: a sessão do P1, aberta há mais tempo, com as decisões dela e da sessão mãe (semearDecisoesDoPainel).
+const estaDo = (c: CenarioDoPainel): Esta => (c === 'p9' ? { ...ESTA.p1, inicioMin: 45 } : ESTA[c]);
+
 const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
   p1: [PERMISSAO, INTERROMPIDA],
   p2: [],
@@ -151,6 +156,7 @@ const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
   p5: [PERMISSAO, INTERROMPIDA],
   p6: [PERMISSAO, INTERROMPIDA, COM_ERRO],
   p7: [{ ...PERMISSAO, relacao: 'mae' }, COM_ERRO, { ...SUA_VEZ, relacao: 'filha' }],
+  p9: [PERMISSAO, INTERROMPIDA],
 };
 
 /** O que o git e o GitHub falsos respondem no cenário em uso. */
@@ -287,7 +293,7 @@ async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
 
 /** Grava o cenário pela porta. A mãe de "esta sessão" (relação `mae`) é ligada pelos metadados. */
 export async function semearCenariosDoPainel(porta: StoragePort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
-  const e = ESTA[cenario];
+  const e = estaDo(cenario);
   const outras = OUTRAS[cenario];
   for (const c of Object.values(CONTAS)) {
     await porta.putAccount({
@@ -347,4 +353,39 @@ export class FonteDeTrabalhoDoSimulador implements WorkSource {
       : [];
     return { key, state: 'OPEN', pullRequests: prs, stage: stageOf('OPEN', prs) };
   }
+}
+
+/** A sessão mãe do P9: a de ontem, antes do /clear. Só existe na porta das decisões. */
+export const MAE_DO_P9 = 'sim-painel-kanban-ontem';
+
+/**
+ * As decisões do P9, pela porta das decisões e pelas regras de lá (número, cadeia, família):
+ * a sessão mãe decidiu ontem; esta, ligada a ela por /clear, decidiu o resto. Textos sintéticos.
+ * Nos outros cenários, nada.
+ */
+export async function semearDecisoesDoPainel(porta: DecisionPort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
+  if (cenario !== 'p9') return;
+  const repo = `${RAIZ}/${ESTA.p1.projeto}`;
+  const branch = ESTA.p1.branch;
+  const agoraIso = iso(agora, 0);
+  let n = 0;
+  const decidir = (sessionId: string, haMin: number, d: Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft>) =>
+    registerDecision(
+      porta,
+      {
+        sourceKey: `sim:p9:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
+        message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(agora, haMin), metadata: { simulado: true }, ...d,
+      },
+      agoraIso,
+    );
+  await decidir(MAE_DO_P9, 20 * 60, { origin: 'pergunta', topic: 'pergunta:kanban arrasta', choice: 'Kanban só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await linkSession(porta, { sessionId: SESSAO_DO_PAINEL, parentSessionId: MAE_DO_P9, reason: 'clear', linkedAt: iso(agora, 45) }, agoraIso);
+  await decidir(SESSAO_DO_PAINEL, 40, { origin: 'plano', topic: 'plano', choice: 'Plano de 5 passos aprovado', alternatives: ['plano com drag-and-drop'] });
+  await decidir(SESSAO_DO_PAINEL, 33, { origin: 'pergunta', topic: 'pergunta:banco nos testes', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'] });
+  await decidir(SESSAO_DO_PAINEL, 14, { origin: 'correcao', topic: 'pergunta:banco nos testes', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'] });
+  await decidir(SESSAO_DO_PAINEL, 21, { origin: 'permissao', topic: 'permissao:Bash npm test', choice: 'Permitir npm test sem perguntar', alternatives: ['perguntar a cada vez'] });
+  await decidir(SESSAO_DO_PAINEL, 6, {
+    origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:cards por coluna',
+    choice: '10 cards por coluna, com "mostrar mais"', alternatives: ['20 por coluna', 'rolagem infinita'],
+  });
 }
