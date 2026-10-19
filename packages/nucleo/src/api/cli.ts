@@ -12,6 +12,7 @@ import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisoes/captura-hooks.ts';
 import { SqliteDecisionStore } from '../decisoes/sqlite.ts';
 import { MaquinaDeEstados } from '../estados/maquina.ts';
+import { criarServidorMcp } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
@@ -118,12 +119,14 @@ const abrirNoDesktop =
         new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
     : null;
 
+// A mesma `Contas` no painel e no MCP: o rótulo "conta 1" é o mesmo nas duas superfícies.
+const contas = new Contas({ storage, ...(demo ? { arquivo: null } : {}) });
 const montador = new MontadorDoPainel({
   commit: commitDoCheckout(),
   commitDaPasta,
   abreSessao: abrirNoDesktop !== null,
   storage,
-  contas: new Contas({ storage, ...(demo ? { arquivo: null } : {}) }),
+  contas,
   desktop,
   trabalho,
   decisoes,
@@ -148,6 +151,9 @@ const sincronizarPerfis = () =>
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
+
+// Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
+const mcp = criarServidorMcp({ storage, contas, desktop, log });
 
 let historicoPronto = false;
 const follower =
@@ -175,6 +181,7 @@ const api = await iniciarApiLocal({
   port: porta,
   log,
   abrirNoDesktop,
+  mcp: mcp.servidor,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -182,7 +189,7 @@ const api = await iniciarApiLocal({
     trabalho: trabalho.chamadas,
   }),
 });
-log(`API local em ${api.url}${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
+log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
