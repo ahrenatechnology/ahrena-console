@@ -48,6 +48,8 @@ export interface OpcoesDaApi {
   abrirNoDesktop?: ((url: string) => Promise<void>) | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: ServidorMcp;
+  /** O commit do código no ar, em `/api/overview`: quem sobe outro núcleo compara (src/dono). */
+  commit?: string | null;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -189,7 +191,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]);
-    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API });
+    // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
+    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,

@@ -57,11 +57,15 @@ cd packages/nucleo && npm run api
 
 Ela importa o histórico de `~/.claude/projects`, segue os transcripts, recebe os hooks, roda a máquina de estados e responde ao painel. O banco fica em `~/.ahrena-console/nucleo.sqlite`. O GitHub usa o token do `gh`. `npm run api -- --help` lista as opções (outra porta, sem GitHub, sem histórico).
 
+Um núcleo por máquina: se já há um de pé (subido pelo app, pela extensão ou por outro terminal), `npm run api` não sobe outro. Ele adota o de pé, imprime a porta e a versão, avisa se o código é outro, e sai com 0. `npm run nucleo -- status|subir|parar` mostra, sobe em segundo plano e para ([src/dono](../../packages/nucleo/src/dono/README.md)).
+
 Para ver o painel com dados de exemplo, sem tocar em nada real, a demonstração serve um dos cenários dos wireframes a qualquer sessão que abrir o painel:
 
 ```bash
 cd packages/nucleo && npm run api -- --demo --cenario p4
 ```
+
+Se a porta já tem um núcleo, a demonstração não sobe e não o adota: ela falha e pede outra porta (`--porta 4730`).
 
 Os cenários vão de `p1` a `p7` (P8 é o núcleo desligado), mais o `p9`, com as decisões da sessão e da sessão mãe. São do simulador: projetos sob `/simulacao`, repositório `exemplo/simulacao`, contas `equipe` e `cliente-exemplo`.
 

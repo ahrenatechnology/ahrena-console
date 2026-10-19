@@ -30,7 +30,7 @@ claude mcp add --transport http ahrena-console http://127.0.0.1:4720/mcp
 }
 ```
 
-O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e um só processo lendo o banco. Com o núcleo fora do ar, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta o núcleo de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar. `--porta` (ou `AHRENA_CONSOLE_PORT`) troca a porta.
+O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e um só processo lendo o banco. Com o núcleo fora do ar, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta o núcleo de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar. Sem `--porta`, a ponte usa o dono único ([src/dono](../dono/README.md)): adota o núcleo da trava `~/.ahrena-console/nucleo.json` ou, se não há, sobe um em segundo plano na `AHRENA_CONSOLE_PORT` (ou 4720) com `--pai` nela, e se registra como cliente quando adota. O núcleo sai quando a ponte e todos os clientes registrados saem. `--sem-subir` só adota. `--porta` fala só com aquela porta, sem adotar nem subir.
 
 ## Protocolo
 
