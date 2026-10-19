@@ -137,7 +137,8 @@ export function parseUsage(message: Json, requestId: string | null): MessageUsag
 
 /** Ferramentas cuja entrada fica no evento: a pergunta (AskUserQuestion) e as do plano da sessão (item 1.9). */
 const INPUT_KEPT = new Set(['AskUserQuestion', 'TodoWrite', 'TaskCreate', 'TaskUpdate']);
-const keepsInput = (name: string) => INPUT_KEPT.has(name) || /(^|__)update_plan$/.test(name);
+// O `wrap_up` do Desktop: o `ask` e o `blocked` dizem se o turno acabou pedindo uma decisão (#140).
+const keepsInput = (name: string) => INPUT_KEPT.has(name) || /(^|__)(update_plan|wrap_up)$/.test(name);
 const INPUT_STRING_MAX = 500;
 
 function keepInput(v: unknown, depth = 0): unknown {

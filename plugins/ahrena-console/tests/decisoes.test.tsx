@@ -111,7 +111,7 @@ test('a linha "N decisões vigentes", com as a confirmar, nas duas larguras e na
     expect(await ui.find({ key: 'retomada' })).toBeUndefined()
     await ui.unmount()
   }
-  expect(f.status.at(-1)).toBe('ahrena-console ● Ativa · 4 decisões · 2 precisam de você')
+  expect(f.status.at(-1)).toBe('ahrena-console ● Ativa · 4 decisões · 1 precisa de você')
 })
 
 test('sem decisões, a linha diz que não há', async ($, on) => {
@@ -270,7 +270,7 @@ test('P10: a faixa da retomada só aparece quando o núcleo manda, nas duas larg
   await estreito.press({ key: 'ver-retomada' })
   expect(await estreito.find({ key: 'escopo-decisoes' })).toBeDefined()
   await estreito.unmount()
-  expect(f.status.at(-1)).toBe('ahrena-console ◐ No prompt · 4 decisões herdadas · 3 precisam de você')
+  expect(f.status.at(-1)).toBe('ahrena-console ◐ No prompt · 4 decisões herdadas · 2 precisam de você')
 })
 
 test('#131: clicar no título abre a decisão inteira, com "← voltar" para a lista', async ($, on) => {

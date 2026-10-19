@@ -23,6 +23,8 @@ export interface Peca {
   tudoOuNada?: boolean
   /** A altura do desenho, quando sobra espaço depois de todos inteiros (no fim, a menor prioridade). */
   desenho?: number
+  /** As linhas do resumo, quando não é uma só (o Contexto com o "Compactar agora" embaixo). */
+  resumo?: number
 }
 
 /** Linhas que a grade ocupa: por linha da grade, a borda mais o card mais alto; e o espaço entre elas. */
@@ -44,7 +46,7 @@ export type Etapa = string | { id: string; ate: number }
  * às etapas de `prioridade`. Devolve as linhas internas de cada peça, já com a sobra da fileira.
  */
 export function distribuir(pecas: readonly Peca[], porLinha: number, disponivel: number, prioridade: readonly Etapa[]): Map<string, number> {
-  const linhas = pecas.map(() => 1)
+  const linhas = pecas.map((p) => p.resumo ?? 1)
   const cabe = () => alturaDaGrade(linhas, porLinha) <= disponivel
   const etapas: { id: string; ate: number }[] = prioridade
     .map((e) => (typeof e === 'string' ? { id: e, ate: Number.POSITIVE_INFINITY } : e))
@@ -58,7 +60,7 @@ export function distribuir(pecas: readonly Peca[], porLinha: number, disponivel:
     const opcoes = p.tudoOuNada ? (teto === p.inteiro ? [p.inteiro] : []) : Array.from({ length: Math.max(0, teto - Math.max(p.minimo, linhas[i]! + 1) + 1) }, (_, k) => teto - k)
     const antes = linhas[i]!
     for (const n of opcoes) {
-      if (n <= 1) break
+      if (n <= (p.resumo ?? 1)) break
       linhas[i] = n
       if (cabe()) break
       linhas[i] = antes

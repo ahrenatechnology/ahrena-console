@@ -176,6 +176,12 @@ export interface TrabalhoDoPainel {
 
 export interface PrecisaDeVoce {
   id: string;
+  /**
+   * #140: `precisa`, bloqueada até você agir (permissão, pergunta com opções, plano para aprovar,
+   * decisão pedida, erro), com destaque e na contagem; `sua-vez`, o bate-bola comum, sem destaque.
+   */
+  nivel: 'precisa' | 'sua-vez';
+  porque: 'permissao' | 'pergunta' | 'plano' | 'decisao' | 'erro' | 'sua-vez' | 'interrompida' | 'no-prompt';
   /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
   local: string | null;
   titulo: string;
@@ -194,13 +200,32 @@ export interface PrecisaDeVoce {
 }
 
 export interface PrecisamDoPainel {
+  /** Só as que precisam de você (nível `precisa`). */
   total: number;
+  /** As que só estão na sua vez: fora da contagem, sem destaque. */
+  suaVez: number;
   /** A divisão por conta; "Sem conta" quando não se sabe. Limites nunca entram aqui. */
   porConta: { conta: ContaDoPainel | null; n: number }[];
   /** Só a família desta sessão (quem a abriu e quem ela abriu), urgentes primeiro. */
   familia: PrecisaDeVoce[];
   /** A máquina inteira, urgentes primeiro, até 12. */
   maquina: PrecisaDeVoce[];
+}
+
+/** Um PR aberto por uma sessão que aguarda a sua aprovação (review pendente no GitHub). */
+export interface PrAguardando {
+  numero: number;
+  url: string;
+  repo: string | null;
+  /** A issue do branch, ou o branch. */
+  titulo: string;
+  sessao: { id: string; titulo: string; local: string | null };
+}
+
+export interface PrsDoPainel {
+  total: number;
+  /** Mais novos primeiro. */
+  itens: PrAguardando[];
 }
 
 export interface Painel {
@@ -225,6 +250,8 @@ export interface Painel {
   filhas: FilhaDoPainel[];
   trabalho: TrabalhoDoPainel | null;
   precisam: PrecisamDoPainel;
+  /** #140: os PRs aguardando a sua aprovação, em toda a máquina. */
+  prs: PrsDoPainel;
   /** `null`: o núcleo subiu sem a porta das decisões. */
   decisoes: DecisoesDoPainel | null;
 }

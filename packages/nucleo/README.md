@@ -47,6 +47,7 @@ npm run api -- --help
 | Arquivo | O quê |
 | --- | --- |
 | [painel.ts](src/api/painel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, plano atual e a lista dos planos da sessão (item 1.9 e #131, com o dono de cada passo), família, conta e "precisam de você" |
+| [atencao.ts](src/api/atencao.ts) | Os níveis de atenção (#140): o que bloqueia a sessão até você agir (permissão, pergunta, plano, decisão pedida, erro) e o que é só a sua vez; os PRs aguardando aprovação saem do trabalho por branch |
 | [resumo.ts](src/api/resumo.ts) | Turno, plano (`TodoWrite`, só quando a sessão não tem plano gravado), pergunta, pedido de permissão, erro e contexto, lidos dos eventos de forma incremental |
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`) e conta pela pasta, relido só quando muda |

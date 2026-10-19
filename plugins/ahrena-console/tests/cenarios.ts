@@ -51,31 +51,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 1.8309456,
+      "usd": 1.8387958000000002,
       "serie": [
         0,
-        0.1062826,
-        0.21372760000000002,
-        0.32233520000000004,
-        0.4321052000000001,
-        0.5430378000000001,
-        0.6551328000000001,
-        0.7683904,
-        0.8828104,
-        0.998393,
-        1.115138,
-        1.2330456,
-        1.3521156,
-        1.4723482,
-        1.5937432,
-        1.7163008,
-        1.8309456
+        0.10937,
+        0.21949,
+        0.33036,
+        0.44198,
+        0.55435,
+        0.66747,
+        0.78134,
+        0.8959600000000001,
+        1.01133,
+        1.12745,
+        1.24432,
+        1.3619400000000002,
+        1.4803100000000002,
+        1.5994300000000004,
+        1.7193000000000003,
+        1.8387958000000002
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 897128,
-      "saida": 78016
+      "entrada": 544379,
+      "saida": 81936
     },
     "background": {
       "total": 2,
@@ -239,7 +239,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 2,
+      "total": 1,
+      "suaVez": 1,
       "porConta": [
         {
           "conta": {
@@ -249,21 +250,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "fonte": "env"
           },
           "n": 1
-        },
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
-            "rotulo": "cliente-exemplo",
-            "cor": "#1baf7a",
-            "fonte": "config"
-          },
-          "n": 1
         }
       ],
       "familia": [],
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -283,6 +277,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -301,6 +297,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -359,31 +359,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 0.908154,
+      "usd": 0.9196068000000002,
       "serie": [
         0,
-        0.044,
-        0.08979999999999999,
-        0.1374,
-        0.1868,
-        0.238,
-        0.291,
-        0.3458,
-        0.4024,
-        0.4608,
-        0.521,
-        0.583,
-        0.6467999999999999,
-        0.7123999999999999,
-        0.7797999999999999,
-        0.849,
-        0.908154
+        0.048695,
+        0.098565,
+        0.14961,
+        0.20183,
+        0.25522500000000004,
+        0.30979500000000004,
+        0.36554000000000003,
+        0.42246000000000006,
+        0.48055500000000007,
+        0.5398250000000001,
+        0.6002700000000001,
+        0.6618900000000001,
+        0.7246850000000001,
+        0.7886550000000001,
+        0.8538000000000001,
+        0.9196068000000002
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 1316770,
-      "saida": 27680
+      "entrada": 836434,
+      "saida": 33056
     },
     "background": {
       "total": 1,
@@ -492,9 +492,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     },
     "precisam": {
       "total": 0,
+      "suaVez": 0,
       "porConta": [],
       "familia": [],
       "maquina": []
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -553,31 +558,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 2.0862756,
+      "usd": 2.0986422,
       "serie": [
         0,
-        0.116065,
-        0.234155,
-        0.35427,
-        0.47641,
-        0.600575,
-        0.726765,
-        0.85498,
-        0.98522,
-        1.117485,
-        1.251775,
-        1.38809,
-        1.52643,
-        1.666795,
-        1.809185,
-        1.9536,
-        2.0862756
+        0.121305,
+        0.243935,
+        0.36789,
+        0.49317,
+        0.619775,
+        0.747705,
+        0.87696,
+        1.0075399999999999,
+        1.1394449999999998,
+        1.2726749999999998,
+        1.4072299999999998,
+        1.5431099999999998,
+        1.6803149999999998,
+        1.8188449999999998,
+        1.9586999999999999,
+        2.0986422
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 1460178,
-      "saida": 85152
+      "entrada": 934811,
+      "saida": 91024
     },
     "background": {
       "total": 0,
@@ -713,21 +718,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 1,
-      "porConta": [
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
-            "rotulo": "cliente-exemplo",
-            "cor": "#1baf7a",
-            "fonte": "config"
-          },
-          "n": 1
-        }
-      ],
+      "total": 0,
+      "suaVez": 1,
+      "porConta": [],
       "familia": [
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -749,6 +747,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -764,6 +764,22 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "rotulo": "cliente-exemplo",
             "cor": "#1baf7a",
             "fonte": "config"
+          }
+        }
+      ]
+    },
+    "prs": {
+      "total": 1,
+      "itens": [
+        {
+          "numero": 91,
+          "url": "https://github.com/exemplo/simulacao/pull/91",
+          "repo": "exemplo/simulacao",
+          "titulo": "#58 Esquema de pedidos",
+          "sessao": {
+            "id": "sim-painel-esta",
+            "titulo": "Migração do esquema de pedidos",
+            "local": null
           }
         }
       ]
@@ -820,31 +836,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 3.4546897999999997,
+      "usd": 3.4679922000000003,
       "serie": [
         0,
-        0.2008376,
-        0.40381259999999997,
-        0.6089251999999999,
-        0.8161752,
-        1.0255627999999999,
-        1.2370877999999998,
-        1.4507503999999998,
-        1.6665503999999998,
-        1.8844879999999997,
-        2.1045629999999997,
-        2.3267756,
-        2.5511255999999998,
-        2.7776132,
-        3.0062382,
-        3.2370007999999997,
-        3.4546897999999997
+        0.20638,
+        0.41416,
+        0.62334,
+        0.83392,
+        1.0459,
+        1.25928,
+        1.47406,
+        1.69024,
+        1.90782,
+        2.1268000000000002,
+        2.3471800000000003,
+        2.56896,
+        2.7921400000000003,
+        3.0167200000000003,
+        3.2427,
+        3.4679922000000003
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 1529449,
-      "saida": 152880
+      "entrada": 981561,
+      "saida": 159024
     },
     "background": {
       "total": 0,
@@ -1059,21 +1075,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 1,
-      "porConta": [
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
-            "rotulo": "equipe",
-            "cor": "#df285d",
-            "fonte": "env"
-          },
-          "n": 1
-        }
-      ],
+      "total": 0,
+      "suaVez": 1,
+      "porConta": [],
       "familia": [
         {
           "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
           "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
@@ -1095,6 +1104,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
           "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
@@ -1113,6 +1124,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -1171,31 +1186,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 4.0791612,
+      "usd": 4.0976958,
       "serie": [
         0,
-        0.23263,
-        0.46841,
-        0.70734,
-        0.9494199999999999,
-        1.19465,
-        1.44303,
-        1.69456,
-        1.94924,
-        2.20707,
-        2.46805,
-        2.7321799999999996,
-        2.9994599999999996,
-        3.2698899999999997,
-        3.5434699999999997,
-        3.8202,
-        4.0791612
+        0.240695,
+        0.48346500000000003,
+        0.72831,
+        0.97523,
+        1.2242250000000001,
+        1.475295,
+        1.72844,
+        1.98366,
+        2.240955,
+        2.500325,
+        2.7617700000000003,
+        3.02529,
+        3.2908850000000003,
+        3.558555,
+        3.8283,
+        4.0976958
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 2189406,
-      "saida": 177504
+      "entrada": 1438879,
+      "saida": 185936
     },
     "background": {
       "total": 1,
@@ -1317,7 +1332,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 2,
+      "total": 1,
+      "suaVez": 1,
       "porConta": [
         {
           "conta": {
@@ -1327,21 +1343,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "fonte": "env"
           },
           "n": 1
-        },
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
-            "rotulo": "cliente-exemplo",
-            "cor": "#1baf7a",
-            "fonte": "config"
-          },
-          "n": 1
         }
       ],
       "familia": [],
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -1361,6 +1370,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -1379,6 +1390,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -1439,17 +1454,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 3,
+      "total": 2,
+      "suaVez": 1,
       "porConta": [
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
-            "rotulo": "cliente-exemplo",
-            "cor": "#1baf7a",
-            "fonte": "config"
-          },
-          "n": 2
-        },
         {
           "conta": {
             "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
@@ -1458,12 +1465,23 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "fonte": "env"
           },
           "n": 1
+        },
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          },
+          "n": 1
         }
       ],
       "familia": [],
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -1483,6 +1501,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-painel-de-metricas",
+          "nivel": "precisa",
+          "porque": "erro",
           "local": null,
           "titulo": "painel-de-metricas",
           "estado": "error",
@@ -1502,6 +1522,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -1520,6 +1542,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -1573,31 +1599,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 1.8309456,
+      "usd": 1.8387958000000002,
       "serie": [
         0,
-        0.1062826,
-        0.21372760000000002,
-        0.32233520000000004,
-        0.4321052000000001,
-        0.5430378000000001,
-        0.6551328000000001,
-        0.7683904,
-        0.8828104,
-        0.998393,
-        1.115138,
-        1.2330456,
-        1.3521156,
-        1.4723482,
-        1.5937432,
-        1.7163008,
-        1.8309456
+        0.10937,
+        0.21949,
+        0.33036,
+        0.44198,
+        0.55435,
+        0.66747,
+        0.78134,
+        0.8959600000000001,
+        1.01133,
+        1.12745,
+        1.24432,
+        1.3619400000000002,
+        1.4803100000000002,
+        1.5994300000000004,
+        1.7193000000000003,
+        1.8387958000000002
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 897128,
-      "saida": 78016
+      "entrada": 544379,
+      "saida": 81936
     },
     "background": {
       "total": 2,
@@ -1642,7 +1668,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 3,
+      "total": 2,
+      "suaVez": 1,
       "porConta": [
         {
           "conta": {
@@ -1651,7 +1678,7 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "cor": "#df285d",
             "fonte": "env"
           },
-          "n": 2
+          "n": 1
         },
         {
           "conta": {
@@ -1666,6 +1693,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "familia": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -1685,6 +1714,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
           "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
@@ -1706,6 +1737,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -1725,6 +1758,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-painel-de-metricas",
+          "nivel": "precisa",
+          "porque": "erro",
           "local": null,
           "titulo": "painel-de-metricas",
           "estado": "error",
@@ -1744,6 +1779,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
           "local": null,
           "titulo": "fila-de-tarefas",
           "estado": "waiting",
@@ -1762,6 +1799,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 0,
@@ -1815,31 +1856,31 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "agentes": []
     },
     "custo": {
-      "usd": 1.8309456,
+      "usd": 1.8387958000000002,
       "serie": [
         0,
-        0.1062826,
-        0.21372760000000002,
-        0.32233520000000004,
-        0.4321052000000001,
-        0.5430378000000001,
-        0.6551328000000001,
-        0.7683904,
-        0.8828104,
-        0.998393,
-        1.115138,
-        1.2330456,
-        1.3521156,
-        1.4723482,
-        1.5937432,
-        1.7163008,
-        1.8309456
+        0.10937,
+        0.21949,
+        0.33036,
+        0.44198,
+        0.55435,
+        0.66747,
+        0.78134,
+        0.8959600000000001,
+        1.01133,
+        1.12745,
+        1.24432,
+        1.3619400000000002,
+        1.4803100000000002,
+        1.5994300000000004,
+        1.7193000000000003,
+        1.8387958000000002
       ],
       "estimativa": true
     },
     "tokens": {
-      "entrada": 897128,
-      "saida": 78016
+      "entrada": 544379,
+      "saida": 81936
     },
     "background": {
       "total": 2,
@@ -2003,7 +2044,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
       "erro": null
     },
     "precisam": {
-      "total": 2,
+      "total": 1,
+      "suaVez": 1,
       "porConta": [
         {
           "conta": {
@@ -2013,21 +2055,14 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
             "fonte": "env"
           },
           "n": 1
-        },
-        {
-          "conta": {
-            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
-            "rotulo": "cliente-exemplo",
-            "cor": "#1baf7a",
-            "fonte": "config"
-          },
-          "n": 1
         }
       ],
       "familia": [],
       "maquina": [
         {
           "id": "sim-painel-motor-de-regras",
+          "nivel": "precisa",
+          "porque": "permissao",
           "local": null,
           "titulo": "motor-de-regras",
           "estado": "waiting",
@@ -2047,6 +2082,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         },
         {
           "id": "sim-painel-app-receitas",
+          "nivel": "sua-vez",
+          "porque": "interrompida",
           "local": null,
           "titulo": "app-receitas",
           "estado": "waiting",
@@ -2065,6 +2102,10 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           }
         }
       ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
     },
     "decisoes": {
       "vigentes": 4,
