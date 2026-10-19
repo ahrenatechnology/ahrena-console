@@ -8,6 +8,7 @@ Protótipos descartáveis das validações da 0.0.1. Os resultados estão em [do
 | [painel-teste](painel-teste/) | Plugin do Claude Code com o painel lateral (mod) e os testes de UI |
 | [artefato-teste](artefato-teste/) | Página do artefato que lê o núcleo via `host:ahrena-console` |
 | [extensao-teste](extensao-teste/) | Manifesto e script para empacotar o núcleo como extensão `.mcpb` |
+| [github-consulta](github-consulta/) | Custo das consultas ao GitHub e prova do cache (spike #40) |
 | [resposta-teste](resposta-teste/) | Spike #58: o plugin consulta o núcleo antes de abrir o diálogo de permissão, pergunta ou plano ([decisão 0003](../docs/decisoes/0003-responder-sessao.md)) |
 | [.claude-plugin](.claude-plugin/) | Marketplace local para instalar o painel |
 
