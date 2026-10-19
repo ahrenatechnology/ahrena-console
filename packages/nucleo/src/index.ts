@@ -13,6 +13,8 @@ export {
   type ImportCursor,
 } from './ingest/historico/importer.ts';
 export { defaultProjectsRoot } from './ingest/historico/files.ts';
+export { followTranscripts, type FollowOptions, type FollowerStats, type TranscriptFollower } from './ingest/historico/follower.ts';
 export * from './github/index.ts';
 export * from './ingest/hooks/index.ts';
 export * from './estados/index.ts';
+export * from './custo/index.ts';
