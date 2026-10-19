@@ -16,6 +16,7 @@ import {
   type TokenUsage,
 } from '../../model.ts';
 import { validatePlan, validatePlanRecord, type PlanRecord, type SessionPlan } from '../../plano/modelo.ts';
+import { validateContextMeter, type ContextMeter } from '../../contexto/modelo.ts';
 import {
   pageSize,
   type ListEventsQuery,
@@ -172,6 +173,27 @@ function toPlanRecord(r: Row): PlanRecord {
     currentStepId: r.current_step_id as string | null,
     changedAt: r.changed_at as string,
     metadata: JSON.parse(r.metadata as string),
+  };
+}
+
+function toContextMeter(r: Row): ContextMeter {
+  return {
+    sessionId: r.session_id as string,
+    agentId: r.agent_key === '' ? null : (r.agent_key as string),
+    model: r.model as string | null,
+    usedTokens: r.used_tokens as number,
+    windowTokens: r.window_tokens as number,
+    windowSource: r.window_source as ContextMeter['windowSource'],
+    compactions: r.compactions as number,
+    compactionsTranscript: r.compactions_transcript as number,
+    compactionsHook: r.compactions_hook as number,
+    manualCompactions: r.manual_compactions as number,
+    manualCompactionsTranscript: r.manual_compactions_transcript as number,
+    manualCompactionsHook: r.manual_compactions_hook as number,
+    lastCompactionAt: r.last_compaction_at as string | null,
+    lastCompactionTrigger: r.last_compaction_trigger as ContextMeter['lastCompactionTrigger'],
+    measuredAt: r.measured_at as string | null,
+    updatedAt: r.updated_at as string,
   };
 }
 
@@ -433,6 +455,41 @@ export class SqliteStorage implements StoragePort {
 
   async deletePlanRecords(sessionId: string): Promise<void> {
     this.db.prepare('DELETE FROM session_plan_history WHERE session_id = ?').run(sessionId);
+  }
+
+  async putContextMeter(m: ContextMeter): Promise<void> {
+    validateContextMeter(m);
+    this.db
+      .prepare(
+        `INSERT INTO context_meters (session_id, agent_key, model, used_tokens, window_tokens, window_source, compactions,
+           compactions_transcript, compactions_hook, manual_compactions, manual_compactions_transcript, manual_compactions_hook,
+           last_compaction_at, last_compaction_trigger, measured_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (session_id, agent_key) DO UPDATE SET
+           model = excluded.model, used_tokens = excluded.used_tokens, window_tokens = excluded.window_tokens,
+           window_source = excluded.window_source, compactions = excluded.compactions,
+           compactions_transcript = excluded.compactions_transcript, compactions_hook = excluded.compactions_hook,
+           manual_compactions = excluded.manual_compactions, manual_compactions_transcript = excluded.manual_compactions_transcript,
+           manual_compactions_hook = excluded.manual_compactions_hook,
+           last_compaction_at = excluded.last_compaction_at, last_compaction_trigger = excluded.last_compaction_trigger,
+           measured_at = excluded.measured_at, updated_at = excluded.updated_at`,
+      )
+      .run(
+        m.sessionId, m.agentId ?? '', m.model, m.usedTokens, m.windowTokens, m.windowSource, m.compactions,
+        m.compactionsTranscript, m.compactionsHook, m.manualCompactions, m.manualCompactionsTranscript, m.manualCompactionsHook,
+        m.lastCompactionAt, m.lastCompactionTrigger, m.measuredAt, m.updatedAt,
+      );
+  }
+
+  async listContextMeters(sessionId: string): Promise<ContextMeter[]> {
+    return this.db
+      .prepare('SELECT * FROM context_meters WHERE session_id = ? ORDER BY agent_key')
+      .all(sessionId)
+      .map(toContextMeter);
+  }
+
+  async deleteContextMeters(sessionId: string): Promise<void> {
+    this.db.prepare('DELETE FROM context_meters WHERE session_id = ?').run(sessionId);
   }
 
   async putModelPricing(p: ModelPricing): Promise<void> {

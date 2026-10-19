@@ -53,6 +53,7 @@ describe('decisões: modelo e porta', () => {
   test('a migração das decisões é aditiva', () => {
     const m = MIGRATIONS.find((x) => x.sql.includes('CREATE TABLE decisions'));
     assert.ok(m);
+    assert.equal(m.version, 4);
     assert.equal(ctx.storage.schemaVersion, MIGRATIONS.at(-1)!.version);
     assert.doesNotMatch(m.sql, /\b(DROP|ALTER)\b/);
   });

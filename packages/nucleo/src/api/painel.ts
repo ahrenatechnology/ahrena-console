@@ -17,6 +17,8 @@ import { lerMemoria, principalDe } from '../estados/regras.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
 import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
+import { JANELA_LONGA, JANELA_PADRAO } from '../contexto/janela.ts';
+import { alertaDeContexto, pctDoContexto, rotuloDoContexto, type ContextMeter } from '../contexto/modelo.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
@@ -45,8 +47,8 @@ import type {
 import type { TrabalhoPorBranch } from './trabalho.ts';
 import { VERSAO_DA_API } from './versao.ts';
 
-export const LIMITE_PADRAO_DE_CONTEXTO = 200_000;
-const LIMITE_LONGO_DE_CONTEXTO = 1_000_000;
+export const LIMITE_PADRAO_DE_CONTEXTO = JANELA_PADRAO;
+const LIMITE_LONGO_DE_CONTEXTO = JANELA_LONGA;
 const MAX_MAQUINA = 12;
 const PONTOS_DA_SERIE = 16;
 
@@ -162,7 +164,7 @@ export class MontadorDoPainel {
       api: { versao: VERSAO_DA_API, commit: this.commit, pasta: this.commitDaPasta(), abreSessao: this.abreSessao },
       geradoEm: new Date(agora).toISOString(),
       sessao,
-      contexto: session ? contextoDe(session, resumo!) : null,
+      contexto: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
       custo,
       tokens,
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
@@ -400,13 +402,42 @@ function familiaDe(session: Session | null, desktop: SessaoDoDesktop | null): { 
   return { eu: session?.id ?? null, mae: null };
 }
 
-function contextoDe(session: Session, r: ResumoDosEventos): ContextoDoPainel | null {
-  const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown } | undefined;
+/**
+ * O medidor gravado pela porta (item 1.7). Sem medidor do principal, o contexto do simulador
+ * (`metadata.contexto`) ou o último uso lido dos eventos, sem estouros.
+ */
+function contextoDe(session: Session, r: ResumoDosEventos, medidores: ContextMeter[]): ContextoDoPainel | null {
+  const agentes = medidores
+    .filter((m) => m.agentId !== null && m.measuredAt !== null)
+    .map((m) => ({ agenteId: m.agentId!, usados: m.usedTokens, limite: m.windowTokens, pct: pctDoContexto(m), estouros: m.compactions, alerta: alertaDeContexto(m) }));
+  // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
+  const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
+  const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
+  if (principal && typeof sim?.usados !== 'number') {
+    return {
+      usados: principal.usedTokens,
+      limite: principal.windowTokens,
+      pct: pctDoContexto(principal),
+      estouros: principal.compactions,
+      alerta: alertaDeContexto(principal),
+      compactacoesManuais: principal.manualCompactions,
+      rotulo: rotuloDoContexto(principal),
+      agentes,
+    };
+  }
   let usados = typeof sim?.usados === 'number' ? sim.usados : r.contexto;
   if (usados === null) return null;
   const limite = typeof sim?.limite === 'number' && sim.limite > 0 ? sim.limite : usados > LIMITE_PADRAO_DE_CONTEXTO ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
   usados = Math.max(0, usados);
-  return { usados, limite, pct: Math.min(100, Math.round((usados / limite) * 100)) };
+  const estouros = typeof sim?.estouros === 'number' && Number.isInteger(sim.estouros) && sim.estouros > 0 ? sim.estouros : 0;
+  // Sem medição do principal, os estouros que o medidor já contou (pelo PreCompact) continuam valendo.
+  const contado = medidores.find((x) => x.agentId === null);
+  const total = Math.max(estouros, contado?.compactions ?? 0);
+  const c = { usedTokens: usados, windowTokens: limite, compactions: total };
+  return {
+    usados, limite, pct: pctDoContexto(c), estouros: total, alerta: alertaDeContexto(c),
+    compactacoesManuais: contado?.manualCompactions ?? 0, rotulo: rotuloDoContexto(c), agentes,
+  };
 }
 
 type PlanoGravado = Pick<SessionPlan, 'steps' | 'total' | 'changedAt' | 'currentStepId'>;

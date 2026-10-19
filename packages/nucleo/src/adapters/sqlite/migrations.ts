@@ -2,6 +2,7 @@
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { CONTEXTO_MIGRATION_DESCRIPTION, CONTEXTO_MIGRATION_SQL } from '../../contexto/migracao.ts';
 import { DECISOES_MIGRATION_DESCRIPTION, DECISOES_MIGRATION_SQL } from '../../decisoes/migracao.ts';
 
 export interface Migration {
@@ -176,6 +177,8 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  // O esquema do medidor de contexto fica na pasta dele (src/contexto/migracao.ts).
+  { version: 7, description: CONTEXTO_MIGRATION_DESCRIPTION, sql: CONTEXTO_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

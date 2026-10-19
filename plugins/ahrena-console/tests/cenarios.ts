@@ -43,7 +43,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 62000,
       "limite": 200000,
-      "pct": 31
+      "pct": 31,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "62k / 200k (31%)",
+      "agentes": []
     },
     "custo": {
       "usd": 1.8309456,
@@ -346,7 +351,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 96000,
       "limite": 200000,
-      "pct": 48
+      "pct": 48,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "96k / 200k (48%)",
+      "agentes": []
     },
     "custo": {
       "usd": 0.908154,
@@ -535,7 +545,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 108000,
       "limite": 200000,
-      "pct": 54
+      "pct": 54,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "108k / 200k (54%)",
+      "agentes": []
     },
     "custo": {
       "usd": 2.0862756,
@@ -797,7 +812,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 114000,
       "limite": 200000,
-      "pct": 57
+      "pct": 57,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "114k / 200k (57%)",
+      "agentes": []
     },
     "custo": {
       "usd": 3.4546897999999997,
@@ -1143,7 +1163,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 168000,
       "limite": 200000,
-      "pct": 84
+      "pct": 84,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "168k / 200k (84%)",
+      "agentes": []
     },
     "custo": {
       "usd": 4.0791612,
@@ -1540,7 +1565,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 62000,
       "limite": 200000,
-      "pct": 31
+      "pct": 31,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "62k / 200k (31%)",
+      "agentes": []
     },
     "custo": {
       "usd": 1.8309456,
@@ -1777,7 +1807,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "contexto": {
       "usados": 62000,
       "limite": 200000,
-      "pct": 31
+      "pct": 31,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "62k / 200k (31%)",
+      "agentes": []
     },
     "custo": {
       "usd": 1.8309456,
