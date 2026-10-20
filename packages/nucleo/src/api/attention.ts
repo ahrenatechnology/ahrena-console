@@ -106,11 +106,11 @@ export async function readSessionAttention(
 export function eventAttention(e: Pick<SessionEvent, 'type' | 'data' | 'summary'>): SessionAttention | null {
   const data = e.data && typeof e.data === 'object' && !Array.isArray(e.data) ? (e.data as Record<string, unknown>) : {};
   const waiting = (reason: AwaitingReason) => ({ status: 'waiting' as const, state: 'waiting' as const, reason, needsYou: true });
-  const asked = (tipo: string | null) => ({ pendentes: [], pedidoNoFechamento: null, ultimoPedido: { texto: e.summary, tipo, em: '' } });
+  const asked = (notificationType: string | null) => ({ pendentes: [], pedidoNoFechamento: null, ultimoPedido: { texto: e.summary, tipo: notificationType, em: '' } });
   switch (e.type) {
     case 'Notification': {
-      const tipo = typeof data.notification_type === 'string' ? data.notification_type : null;
-      return sessionAttention(waiting(isBlockingNotification(tipo, e.summary, data) ? 'notification' : 'stop'), asked(tipo));
+      const notificationType = typeof data.notification_type === 'string' ? data.notification_type : null;
+      return sessionAttention(waiting(isBlockingNotification(notificationType, e.summary, data) ? 'notification' : 'stop'), asked(notificationType));
     }
     case 'PermissionRequest':
       return sessionAttention(waiting('notification'), asked('permission_prompt'));

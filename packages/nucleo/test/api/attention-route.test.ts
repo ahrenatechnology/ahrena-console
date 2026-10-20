@@ -173,6 +173,8 @@ describe('#245 GET /api/attention: blocked and idle', () => {
         items: [
           { session: 'r1', title: 't', project: null, account: null, level: 'needs', reason: 'question', since: '2026-11-02T11:00:00.000Z', minutes: 60, attention: { level: 'idle', reason: 'turn_ended' } },
           { session: 'r2', title: 't', project: null, account: null, level: 'your-turn', reason: 'no-prompt', since: '2026-11-02T11:00:00.000Z', minutes: 60 },
+          // A level its reason does not imply is left out: the counts and `attention` never disagree.
+          { session: 'r3', title: 't', project: null, account: null, level: 'needs', reason: 'your-turn', since: '2026-11-02T11:00:00.000Z', minutes: 60 },
         ],
       }),
     };

@@ -166,7 +166,8 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
   },
   // Phase 2b layer 6: the Kanban columns are English in `/api/kanban?column=` (no old path; the old
   // name `coluna` is global). #245 split the old waiting column (`esperando`) into `blocked` and `idle`,
-  // which never had a Portuguese value, so `esperando` is no longer an alias.
+  // which never had a Portuguese value, so `esperando` is no longer an alias; and the sessions' errors went
+  // into `blocked`, so `erro` (→ `error`) is a column of the agents view only (the sessions view answers 400).
   '/api/kanban': {
     column: {
       ativa: 'active',

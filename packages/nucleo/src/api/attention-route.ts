@@ -43,7 +43,7 @@ const MOTIVO: Record<McpAttentionReason, AttentionReason> = {
 /** The panel's reason as the English attention's (#245): the inverse of `MOTIVO`. */
 const SESSION_REASON = Object.fromEntries(Object.entries(MOTIVO).map(([mcp, panel]) => [panel, mcp])) as Record<AttentionReason, McpAttentionReason>;
 
-/** The English attention (#245) of an item from its panel level and reason. */
+/** The English attention (#245) of an item from its panel reason (the level follows from it). */
 function attentionOf(reason: AttentionReason): SessionAttention {
   const r = SESSION_REASON[reason];
   return { level: (BLOCKED_REASONS as readonly string[]).includes(r) ? 'blocked' : 'idle', reason: r };
@@ -117,6 +117,8 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     const since = text(i.since, 40);
     if (!session || !since || !Number.isFinite(Date.parse(since)) || typeof i.reason !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
     if (!Number.isFinite(i.minutes) || (i.minutes as number) < 0) continue;
+    // #245: the level must be the one its reason implies, or the counts and `attention` would disagree.
+    if ((attentionOf(reason).level === 'blocked') !== (level === 'needs')) continue;
     const account =
       isObject(i.account) && typeof i.account.label === 'string' && typeof i.account.color === 'string'
         ? { label: i.account.label.slice(0, 40), color: HEX.test(i.account.color) ? i.account.color : NEUTRAL_ACCOUNT_COLOR }

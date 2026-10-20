@@ -69,7 +69,7 @@ export type ColunaDeSessao = (typeof COLUNAS_DAS_SESSOES)[number]['id'];
 export type ColunaDeAgente = (typeof COLUNAS_DOS_AGENTES)[number]['id'];
 
 /** A coluna da visão sessões: pela atenção (#245), senão pelo status. */
-export function colunaDaSessao(status: DisplayStatus, attention: SessionAttention | null): ColunaDeSessao {
+export function sessionColumnOf(status: DisplayStatus, attention: SessionAttention | null): ColunaDeSessao {
   if (attention) return attention.level;
   if (status === 'completed' || status === 'abandoned') return status;
   return status === 'error' ? 'blocked' : 'active';
@@ -237,7 +237,7 @@ export class QuadroKanban {
         const desktop = this.desktop?.sessionByCli(s.id) ?? null;
         const status = displayStatus(s);
         // #245: only a waiting or errored session has attention; only a waiting one reads its events.
-        const attention = status === 'waiting' || status === 'error' ? await readSessionAttention(s, await this.agentesDe(s), this.resumos) : null;
+        const attention = status === 'waiting' ? await readSessionAttention(s, await this.agentesDe(s), this.resumos) : status === 'error' ? await readSessionAttention(s, [], this.resumos) : null;
         todas.push({ s, status, attention, desktop, titulo: tituloDe(s, desktop) });
       }
       cursor = page.nextCursor;
@@ -254,7 +254,7 @@ export class QuadroKanban {
     const agora = this.agora();
     const colunas: Coluna<CardDeSessao>[] = [];
     for (const c of pedidas) {
-      const daColuna = ordenadas.filter((x) => colunaDaSessao(x.status, x.attention) === c.id);
+      const daColuna = ordenadas.filter((x) => sessionColumnOf(x.status, x.attention) === c.id);
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
       const itens: CardDeSessao[] = [];
       for (const x of fatia) itens.push(await this.cardDeSessao(x, agora, precos));

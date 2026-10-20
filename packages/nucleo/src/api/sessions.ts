@@ -161,13 +161,13 @@ export class ListaDeSessoes {
 
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
-    const buscadas = todas.filter(
+    const searched = todas.filter(
       ({ s, titulo }) =>
         (!pedido.dir || s.cwd === pedido.dir) &&
         (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca)),
     );
-    const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, buscadas.filter((t) => passa(t, f)).length])) as Record<FiltroDeStatus, number>;
-    let filtradas = buscadas.filter((t) => passa(t, pedido.status));
+    const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, searched.filter((t) => passesFilter(t, f)).length])) as Record<FiltroDeStatus, number>;
+    let filtradas = searched.filter((t) => passesFilter(t, pedido.status));
 
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
@@ -222,7 +222,7 @@ export class ListaDeSessoes {
 }
 
 /** Whether a row passes a `status` filter: `all`, its displayed status, or its attention level (#245). */
-function passa(t: { status: DisplayStatus; attention: SessionAttention | null }, filtro: FiltroDeStatus): boolean {
+function passesFilter(t: { status: DisplayStatus; attention: SessionAttention | null }, filtro: FiltroDeStatus): boolean {
   if (filtro === 'all') return true;
   if (ATTENTION_FILTERS.includes(filtro)) return t.attention?.level === filtro;
   return t.status === filtro;

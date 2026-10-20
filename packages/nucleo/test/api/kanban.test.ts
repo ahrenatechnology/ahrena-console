@@ -10,7 +10,7 @@ import { ResumosDeSessao } from '../../src/api/summary.ts';
 import {
   COLUNAS_DOS_AGENTES,
   COLUNAS_DAS_SESSOES,
-  colunaDaSessao,
+  sessionColumnOf,
   colunaDoAgente,
   pedidoDoKanban,
   QuadroKanban,
@@ -106,7 +106,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
 
   test('visão sessões: cada total bate com as sessões daquele status e atenção, e os cards são da coluna', async () => {
     const { corpo } = await get('/api/kanban?view=sessions');
-    const colunaDe = (s: Session) => colunaDaSessao(displayStatus(s), atencao.get(s.id) ?? null);
+    const colunaDe = (s: Session) => sessionColumnOf(displayStatus(s), atencao.get(s.id) ?? null);
     let soma = 0;
     for (const c of corpo.columns) {
       const esperado = sessoes.filter((s) => colunaDe(s) === c.id).length;
@@ -115,7 +115,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
       assert.equal(c.items.length, Math.min(10, esperado), c.id);
       assert.equal(c.hasMore, esperado > 10, c.id);
       for (const card of c.items as CardDeSessao[]) {
-        assert.equal(colunaDaSessao(card.status, card.attention), c.id, card.id);
+        assert.equal(sessionColumnOf(card.status, card.attention), c.id, card.id);
         assert.deepEqual(card.attention, atencao.get(card.id), card.id);
       }
       soma += c.total;
