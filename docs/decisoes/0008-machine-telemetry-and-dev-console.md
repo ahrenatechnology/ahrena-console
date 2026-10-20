@@ -1,6 +1,6 @@
 # 0008 · Telemetria das máquinas e Dev Console no app: o núcleo de cada máquina coleta, o app só mostra
 
-- **Status:** proposta, à espera da aprovação do wireframe (C24 a C27, A6 e A7)
+- **Status:** proposta, a confirmar pelo Fernando (o PM revisou a decisão e os wireframes C24 a C27, A6 e A7)
 - **Data:** 2026-10-20
 - **Issue:** a abrir no épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7) depois da aprovação
 - **Parte de:** [0005](0005-app-desktop.md) (o app é uma bandeja e a janela é a `/ui` do núcleo)
@@ -69,7 +69,7 @@ Tudo é leitura, sem `sudo` e sem dependência nova: módulos do Node e comandos
 - `GET /api/telemetry?machine=<id>&hours=1|12`: a leitura atual e as séries. `local` é esta máquina.
 - `GET /api/dev-console?context=<id>`: o Dev Console (seção 4).
 
-**Telas da `/ui`:** `/ui/telemetry` (esta máquina), `/ui/workstation` (a máquina remota; com mais de uma, `/ui/machines/<id>`) e `/ui/dev-console`.
+**Telas da `/ui`:** `/ui/machines/local` (esta máquina), `/ui/machines/<id>` (cada remota configurada, com o `id` de `machines.json`) e `/ui/dev-console`.
 
 **Nomes.** Seguem a regra do repositório para o que é novo: código, rotas, URLs, arquivos, classes CSS, chaves de JSON e nomes de métrica em inglês (`cpu.usedPct`, `memory.swapUsedBytes`, `disk.volumes[]`, `ports[].state`); o texto de tela em pt-BR.
 
