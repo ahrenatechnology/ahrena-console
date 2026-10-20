@@ -490,6 +490,61 @@ body.captura .topo, body.captura .indice, body.captura .notas, body.captura .cap
 body.captura .pagina { display: block; } body.captura main { padding: 20px 24px; display: inline-block; } body.captura .tela { margin: 0; }
 body.captura .palco { overflow: visible; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* ---------- bothWidths da janela (1100 é a do app, 1440 a de um monitor largo) ---------- */
+.cc.w1100 { width: 1100px; } .cc.w1440 { width: 1440px; }
+.width-col { display: flex; flex-direction: column; gap: 6px; }
+.cc-nav .tm-dot { margin-left: auto; }
+/* ---------- machines (C24 to C26, decision 0008) ---------- */
+.tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; }
+.tm-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tm-card h5 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.tm-card h5 small { font-weight: 400; color: var(--muted); font-size: 11.5px; margin-left: auto; }
+.tm-card .tabela td, .tm-card .tabela th { padding: 8px 10px; }
+.tm-card .tabela td:first-child, .tm-card .tabela th:first-child { padding-left: 0; }
+.tm-meter { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.tm-meter .top { display: flex; justify-content: space-between; gap: 8px; }
+.tm-meter .top span { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.tm-meter .barra-h { height: 8px; }
+.tm-serie { width: 100%; height: 120px; display: block; }
+.tm-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+.tm-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.tm-legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.tm-alerts > div { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tm-alerts > div:last-child { border-bottom: 0; }
+.tm-alerts .ic { font-size: 15px; line-height: 1.2; }
+.tm-alerts .t { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; padding-left: 8px; }
+.tm-alerts small { display: block; color: var(--muted); font-size: 11.5px; }
+.stat.tm-bad { background: color-mix(in srgb, var(--status-error-badge) 80%, var(--surface)); border-color: color-mix(in srgb, var(--status-error-dot) 40%, var(--border)); }
+.tm-faded { opacity: .5; filter: saturate(.3); }
+.tm-config { text-align: left; font-family: var(--font-mono); font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+.tm-states > .cartao { min-width: 0; }
+.tm-stack { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); }
+.tm-stack i { display: block; height: 100%; }
+/* ---------- Dev Console (C27) ---------- */
+.dev-queue { list-style: none; margin: 0; padding: 0; counter-reset: dev; }
+.dev-queue li { counter-increment: dev; display: grid; grid-template-columns: 26px 170px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.dev-queue li:last-child { border-bottom: 0; }
+.dev-queue li::before { content: counter(dev) "º"; font-family: var(--font-mono); color: var(--muted); font-size: 11.5px; }
+.dev-queue .r { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-queue .r b { color: var(--accent-text); font-weight: 500; }
+.dev-queue .x { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.dev-queue .w { min-width: 0; } .dev-queue .w small { display: block; color: var(--muted); font-size: 11px; }
+.dev-more { padding: 9px 14px; font-size: 11.5px; color: var(--muted); border-top: 1px dashed var(--border); display: flex; gap: 8px; align-items: center; }
+.dev-board { display: grid; gap: 10px; align-items: start; }
+.dev-col .crit { font-size: 10.5px; color: var(--muted); padding: 0 4px; margin-top: -6px; line-height: 1.35; }
+.dev-card { padding: 9px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; border-left: 3px solid var(--border); min-width: 0; }
+.dev-card .n { display: flex; justify-content: space-between; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-text); }
+.dev-card .s { font-size: 11px; color: var(--muted); display: flex; gap: 5px; align-items: center; min-width: 0; }
+.dev-card.waiting { border-left-color: var(--status-waiting-dot); }
+.dev-card.blocked { border-left-color: var(--status-error-dot); }
+.dev-card.slim { border-left: 0; padding: 6px 10px; flex-direction: row; gap: 6px; color: var(--muted); }
+.dev-card.slim b { font-family: var(--font-mono); font-size: 11px; color: var(--accent-text); font-weight: 500; }
+.dev-depends { display: grid; gap: 10px; margin-top: 10px; }
+.dev-list { display: flex; flex-direction: column; font-size: 12.5px; }
+.dev-list > div { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.dev-list > div:last-child { border-bottom: 0; }
+.dev-list b { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-text); font-weight: 500; }
+.dev-list .t { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 </style>
 
 <header class="topo">
@@ -559,15 +614,16 @@ const motChip = mot => `<span class="mot${MOT[mot].u ? '' : ' leve'}">${ic(MOT[m
 const ponto = st => `<span class="ponto d-${st}"></span>`
 const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="width:${pct}%;background:${cor}"></i></div>`
 
-function lado(ativo, q = 4) {
+function lado(ativo, q = 4, ws = 'ok') {
   const nav = [
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
-    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'],
+    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['dev', 'gauge', 'Dev Console'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'],
+    ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
   return `<aside class="cc-lado">
     <div class="cc-marca"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>Claude Code</small></div></div>
-    ${nav.map(([k, i, r]) => k === '-' ? `<div class="olhinho" style="padding:12px 10px 4px">${r}</div>` : `<div class="cc-nav${k === ativo ? ' on' : ''}">${ic(i)}${r}${k === 'dashboard' && q ? `<span class="q">${q}</span>` : ''}</div>`).join('')}
+    ${nav.map(([k, i, r]) => k === '-' ? `<div class="olhinho" style="padding:12px 10px 4px">${r}</div>` : `<div class="cc-nav${k === ativo ? ' on' : ''}">${ic(i)}${r}${k === 'dashboard' && q ? `<span class="q">${q}</span>` : ''}${k === 'machine-ws' ? `<span class="ponto tm-dot d-${ws === 'ok' ? 'completed' : 'abandoned'}"></span>` : ''}</div>`).join('')}
     <div class="cc-pe">
       <div class="cartao">${ic('radio')}<b>Ao vivo</b><span style="margin-left:auto" class="mono">v0.0.1</span></div>
       <div class="cartao">${ic('cpu')}<span class="mono">127.0.0.1:4720</span></div>
@@ -1225,6 +1281,197 @@ function telaVazios() {
 }
 
 // =====================================================================
+// MACHINES: telemetry of this machine and the remote one (decision 0008, C24 to C26)
+// =====================================================================
+// Uma janela em duas bothWidths: 1100 (a do app) e 1440. O conteúdo é o mesmo; muda quantas colunas cabem.
+const bothWidths = (fn, ws) => [1100, 1440].map(w => `<div class="width-col"><div class="rotulo">${w} px</div>${fn(w)}</div>`).join('')
+const frameAt = (w, active, body, ws = 'ok') => `<div class="cc w${w}">${lado(active, 3, ws)}<div class="cc-main">${body}</div></div>`
+const wave = (seed, n, base, amp) => Array.from({ length: n }, (_, i) => Math.max(0, base + amp * Math.sin(seed + i * 0.31) * Math.cos(seed * 0.7 + i * 0.09) + amp * 0.35 * Math.sin(i * 1.3 + seed)))
+function tmSeries(series, { max, limit, h = 120 } = {}) {
+  const W = 600, y = v => (h - 4 - v / max * (h - 14)).toFixed(1)
+  const grid = [0.25, 0.5, 0.75, 1].map(f => `<line x1="0" x2="${W}" y1="${y(f * max)}" y2="${y(f * max)}" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('')
+  const limitLine = limit != null ? `<line x1="0" x2="${W}" y1="${y(limit)}" y2="${y(limit)}" stroke="var(--status-error-dot)" stroke-dasharray="5 4" stroke-width="1.2" vector-effect="non-scaling-stroke"/>` : ''
+  const lines = series.map(([v, cor]) => `<polyline points="${v.map((n, i) => `${(i * W / (v.length - 1)).toFixed(1)},${y(n)}`).join(' ')}" fill="none" stroke="${cor}" stroke-width="1.7" vector-effect="non-scaling-stroke"/>`).join('')
+  return `<svg class="tm-serie" viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" aria-hidden="true">${grid}${limitLine}${lines}</svg>`
+}
+const tmAxis = h => `<div class="tm-axis">${h === 12 ? '<span>−12 h</span><span>−9 h</span><span>−6 h</span><span>−3 h</span>' : '<span>−60 min</span><span>−45</span><span>−30</span><span>−15</span>'}<span>agora</span></div>`
+const tmColor = pct => pct >= 90 ? 'var(--status-error-dot)' : pct >= 80 ? 'var(--status-waiting-dot)' : 'var(--accent)'
+const tmMeter = (label, used, total, unit, extra = '') => {
+  const pct = Math.round(used / total * 100)
+  return `<div class="tm-meter"><div class="top"><b class="mono" style="font-weight:500">${label}</b><span>${String(used).replace('.', ',')} de ${total} ${unit} · ${pct}%${extra}</span></div>${barra(pct, tmColor(pct))}</div>`
+}
+const tmAlerts = l => `<div class="tm-alerts">${l.map(([level, t, s, h]) => `<div><span class="ic c-${level}">${ic(level === 'error' ? 'x-circle' : level === 'waiting' ? 'alert-triangle' : level === 'completed' ? 'check-circle-2' : 'info')}</span><div>${t}${s ? `<small>${s}</small>` : ''}</div>${h ? `<span class="t">${h}</span>` : ''}</div>`).join('')}</div>`
+const tmPortStates = { up: ['completed', 'Respondendo'], idle: ['abandoned', 'Ninguém escuta lá'], busy: ['waiting', 'Ocupada no Mac'], down: ['error', 'Fora do túnel'] }
+const tmPort = st => `<span class="badge b-${tmPortStates[st][0]}"><span class="p"></span>${tmPortStates[st][1]}</span>`
+const tmListen = t => t === 'todas' ? '<span class="pill b-waiting">todas as interfaces</span>' : '<span class="pill b-abandoned">só loopback</span>'
+const hourToggle = `<div class="seg"><span class="on">1 h</span><span>12 h</span></div>`
+const statCols = w => `grid-template-columns:repeat(${w === 1100 ? 3 : 6},minmax(0,1fr))`
+const gridCols = w => `grid-template-columns:repeat(${w === 1100 ? 2 : 3},minmax(0,1fr))`
+const spanAt = (w, n1100, n1440) => `grid-column:span ${w === 1100 ? n1100 : n1440}`
+
+function thisMachineScreen(w) {
+  return `${cab('monitor', 'Esta máquina', 'mac-exemplo · macOS 26 · 12 núcleos (8 P + 4 E) · 36 GB · lido há 4 s', hourToggle)}
+  <div class="stats" style="${statCols(w)}">
+    ${stat('CPU', '34%', 'carga 4,1 de 12', 'cpu', 'var(--accent-text)')}
+    ${stat('Memória', '21,4<small>de 36 GB</small>', 'swap 0,8 GB', 'memory-stick', 'var(--accent-text)')}
+    ${stat('Disco', '61%', '380 GB livres', 'hard-drive', 'var(--accent-text)')}
+    ${stat('Rede', '2,4<small>MB/s ↓</small>', '↑ 310 kB/s', 'wifi', 'var(--accent-text)')}
+    ${stat('Claude', '11<small>proc.</small>', '4 CLI · 7 Desktop', 'bot', 'var(--accent-text)')}
+    ${stat('Sessões', '6', '3 precisam de você', 'folder-open', 'var(--status-waiting-text)')}
+  </div>
+  <div class="tm-grid" style="${gridCols(w)}">
+    <div class="cartao tm-card" style="${spanAt(w, 2, 2)}"><h5>${ic('activity')}CPU e memória<small>a cada 30 s · guardado por 12 h</small></h5>
+      ${tmSeries([[wave(1, 120, 32, 14), 'var(--accent)'], [wave(4, 120, 58, 4), 'var(--rose)']], { max: 100 })}${tmAxis(1)}
+      <div class="tm-legend"><span><i style="background:var(--accent)"></i>CPU, %</span><span><i style="background:var(--rose)"></i>Memória usada, %</span></div></div>
+    <div class="cartao tm-card"><h5>${ic('hard-drive')}Volumes</h5>
+      ${tmMeter('/', 232, 612, 'GB')}${tmMeter('/Volumes/Dados', 0.9, 2, 'TB')}
+      <div class="olhinho" style="margin-top:4px">Rede</div><div class="tm-legend"><span>en0 · Wi-Fi · rota padrão</span><span class="mono">↓ 41 GB · ↑ 6 GB desde o boot</span></div></div>
+    <div class="cartao tm-card" style="${spanAt(w, 2, 2)}"><h5>${ic('cable')}Túnel e portas encaminhadas<small>lido dos processos ssh e da sonda de cada porta</small></h5>
+      <div class="tm-legend"><span class="badge b-completed"><span class="p"></span>ws-exemplo · túnel</span><span>no ar há 3 h 12 min · 4 portas</span><span>ws-exemplo · ControlMaster · há 3 h</span></div>
+      <table class="tabela"><thead><tr><th>No Mac</th><th>Lá</th><th>Estado</th><th>O que é, lido do núcleo de lá</th></tr></thead><tbody>
+        <tr><td class="mono">14720</td><td class="mono">4720</td><td>${tmPort('up')}</td><td>Núcleo da Workstation</td></tr>
+        <tr><td class="mono">13000</td><td class="mono">3000</td><td>${tmPort('up')}</td><td>vite · catalogo-exemplo</td></tr>
+        <tr><td class="mono">15173</td><td class="mono">5173</td><td>${tmPort('idle')}</td><td class="c-muted">nada escuta na 5173 de lá</td></tr>
+        <tr><td class="mono">18080</td><td class="mono">8080</td><td>${tmPort('busy')}</td><td>node, deste Mac, segura a 18080</td></tr>
+      </tbody></table></div>
+    <div class="cartao tm-card"><h5>${ic('bell')}O que pede atenção<small>2</small></h5>
+      ${tmAlerts([['waiting', 'A porta 5432 escuta em todas as interfaces', 'postgres · qualquer um na rede alcança', 'há 2 h'], ['waiting', 'A porta 18080 do túnel está ocupada', 'node deste Mac segura a porta; o encaminhamento não chega lá', 'há 20 min']])}</div>
+    <div class="cartao tm-card" style="${spanAt(w, 2, 1)}"><h5>${ic('bot')}Processos do Claude</h5>
+      <table class="tabela"><thead><tr><th>Processo</th><th>Qtde</th><th>CPU</th><th>Memória</th></tr></thead><tbody>
+        <tr><td>claude (CLI)</td><td class="mono">4</td><td class="mono">11,2%</td><td class="mono">1,4 GB</td></tr>
+        <tr><td>Claude Desktop</td><td class="mono">7</td><td class="mono">6,8%</td><td class="mono">1,2 GB</td></tr>
+        <tr><td>Núcleo do console</td><td class="mono">1</td><td class="mono">0,9%</td><td class="mono">140 MB</td></tr>
+      </tbody></table>
+      <div class="olhinho">Os que mais usam CPU</div>
+      <div class="tm-legend"><span class="mono">node 14% · claude 6% · WebKit 4% · Code Helper 3% · ssh 1% · mds 1%</span></div></div>
+    <div class="cartao tm-card" style="${spanAt(w, 2, 2)}"><h5>${ic('radio-tower')}Portas em escuta<small><span class="seg"><span class="on">Todas 7</span><span>Todas as interfaces 1</span><span>Só loopback 6</span></span></small></h5>
+      <table class="tabela"><thead><tr><th>Porta</th><th>Escuta em</th><th>Processo</th><th>De quem</th></tr></thead><tbody>
+        <tr><td class="mono">4720</td><td>${tmListen('lo')}</td><td>node</td><td>Núcleo do console</td></tr>
+        <tr><td class="mono">5432</td><td>${tmListen('todas')}</td><td>postgres</td><td class="c-muted">—</td></tr>
+        <tr><td class="mono">3000</td><td>${tmListen('lo')}</td><td>node</td><td>vitrine-demo</td></tr>
+        <tr><td class="mono">13000, 14720, 15173</td><td>${tmListen('lo')}</td><td>ssh</td><td>túnel para ws-exemplo</td></tr>
+        <tr><td class="mono">18080</td><td>${tmListen('lo')}</td><td>node</td><td class="c-muted">segura a porta do túnel</td></tr>
+      </tbody></table></div>
+  </div>`
+}
+
+function workstationBody(w) {
+  return `<div class="stats" style="${statCols(w)}">
+    <div class="cartao stat tm-bad"><span class="rot">CPU</span><span class="ic" style="color:var(--status-error-text)">${ic('cpu')}</span><span class="v tab">24,6<small>de 16</small></span><span class="s">saturada há 12 min</span></div>
+    ${stat('Memória', '29<small>de 62 GB</small>', 'swap 8,2 de 124', 'memory-stick', 'var(--accent-text)')}
+    ${stat('GPU', '2%', '1,8 de 15 GB VRAM', 'monitor-dot', 'var(--accent-text)')}
+    ${stat('Disco', '86%', '/ · 24 GB livres', 'hard-drive', 'var(--status-waiting-text)')}
+    ${stat('Docker', '106', '4 stacks · 33 GB a liberar', 'container', 'var(--accent-text)')}
+    ${stat('Sessões lá', '12', '2 precisam de você', 'folder-open', 'var(--status-waiting-text)')}
+  </div>
+  <div class="tm-grid" style="${gridCols(w)}">
+    <div class="cartao tm-card" style="${spanAt(w, 2, 2)}"><h5>${ic('activity')}Carga e memória<small>a linha tracejada é o número de vCPUs</small></h5>
+      ${tmSeries([[wave(2, 120, 15, 7).map((v, i) => v + i * 0.08), 'var(--accent)'], [wave(5, 120, 27, 2), 'var(--rose)']], { max: 32, limit: 16 })}${tmAxis(1)}
+      <div class="tm-legend"><span><i style="background:var(--accent)"></i>Carga de 1 min</span><span><i style="background:var(--rose)"></i>Memória usada, GB (de 62)</span><span><i style="background:var(--status-error-dot)"></i>16 vCPUs</span></div></div>
+    <div class="cartao tm-card"><h5>${ic('bell')}O que pede atenção<small>4</small></h5>
+      ${tmAlerts([['error', 'CPU saturada: carga de 24,6 em 16 vCPUs', 'motor-regras-int usa 3,1 núcleos; o resto vem de fora do Docker', 'há 12 min'],
+        ['waiting', 'O volume / passou de 85%', '146 de 170 GB; o build cache tem 9,4 GB recuperáveis', 'há 1 h'],
+        ['waiting', 'A porta 15432 escuta em todas as interfaces', 'postgres da stack loja-validacao', 'há 2 dias'],
+        ['info', 'A stack loja-validacao não tem sessão dona', '15 containers parados há 2 dias, 0,4 núcleo', '']])}</div>
+    <div class="cartao tm-card"><h5>${ic('hard-drive')}Volumes</h5>${tmMeter('/', 146, 170, 'GB')}${tmMeter('/home', 109, 492, 'GB')}${tmMeter('/tmp', 23, 206, 'GB')}</div>
+    <div class="cartao tm-card"><h5>${ic('container')}Docker<small>em GB</small></h5>
+      ${[['Imagens', 25.2, 8.7], ['Volumes', 4.6, 12.6], ['Build cache', 2.3, 9.4], ['Containers', 1.8, 0.7]].map(([r, a, b]) => `<div class="tm-meter"><div class="top"><span style="font-family:var(--font-sans);color:var(--text);font-size:12.5px">${r}</span><span>${String(a).replace('.', ',')} em uso · ${String(b).replace('.', ',')} recuperável</span></div><div class="tm-stack"><i style="width:${a / 34 * 100}%;background:var(--accent)"></i><i style="width:${b / 34 * 100}%;background:var(--rose)"></i></div></div>`).join('')}
+      <div class="tm-legend"><span><i style="background:var(--accent)"></i>Em uso</span><span><i style="background:var(--rose)"></i>Recuperável</span></div></div>
+    <div class="cartao tm-card"><h5>${ic('folder-open')}Sessões do Claude lá<small>do /api/atencao de lá</small></h5>
+      <table class="tabela"><tbody>
+        <tr><td class="nm"><b>Migração do esquema de pedidos</b><small>motor-de-regras · 2 min</small></td><td style="text-align:right">${badge('waiting')}</td></tr>
+        <tr><td class="nm"><b>Relatório mensal mais rápido</b><small>painel-de-metricas · 3 min</small></td><td style="text-align:right">${badge('error')}</td></tr>
+        <tr><td class="nm"><b>Endpoint de exportação em CSV</b><small>catalogo-exemplo · agora</small></td><td style="text-align:right">${badge('active')}</td></tr>
+        <tr><td class="nm"><b>Separar pagamentos em serviços</b><small>motor-de-regras · agora</small></td><td style="text-align:right">${badge('active')}</td></tr>
+      </tbody></table><span class="c-muted" style="font-size:11.5px">e mais 8 · as que esperam também vão para a bandeja</span></div>
+    <div class="cartao tm-card" style="${spanAt(w, 2, 3)}"><h5>${ic('layers')}Stacks Docker e a sessão dona<small>a dona é a sessão aberta na pasta de onde a stack subiu</small></h5>
+      <table class="tabela"><thead><tr><th>Stack</th><th>Containers</th><th>CPU</th><th>Portas</th><th>Sessão dona</th></tr></thead><tbody>
+        <tr><td class="mono">motor-regras-int</td><td class="mono">12</td><td class="mono">3,1 núcleos</td><td class="mono">18353</td><td>Migração do esquema de pedidos ${badge('waiting')}</td></tr>
+        <tr><td class="mono">painel-metricas</td><td class="mono">9</td><td class="mono">1,2 núcleo</td><td class="mono">14565</td><td>Relatório mensal mais rápido ${badge('error')}</td></tr>
+        <tr><td class="mono">catalogo-local</td><td class="mono">8</td><td class="mono">0,8 núcleo</td><td class="mono">3000</td><td>Endpoint de exportação em CSV ${badge('active')}</td></tr>
+        <tr><td class="mono">loja-validacao</td><td class="mono">15</td><td class="mono">0,4 núcleo</td><td class="mono">15432, 17233</td><td class="c-muted">nenhuma · parada há 2 dias</td></tr>
+      </tbody></table></div>
+    <div class="cartao tm-card" style="${spanAt(w, 2, 3)}"><h5>${ic('radio-tower')}Portas em escuta lá<small><span class="seg"><span class="on">Todas 9</span><span>Todas as interfaces 2</span><span>Só loopback 7</span></span></small></h5>
+      <table class="tabela"><thead><tr><th>Porta</th><th>Escuta em</th><th>Processo</th><th>De quem</th><th>No Mac</th></tr></thead><tbody>
+        <tr><td class="mono">22</td><td>${tmListen('todas')}</td><td>sshd</td><td>sistema</td><td class="c-muted">—</td></tr>
+        <tr><td class="mono">15432</td><td>${tmListen('todas')}</td><td>postgres</td><td>loja-validacao</td><td class="c-muted">—</td></tr>
+        <tr><td class="mono">4720</td><td>${tmListen('lo')}</td><td>node</td><td>Núcleo do console</td><td class="mono">14720 ${tmPort('up')}</td></tr>
+        <tr><td class="mono">3000</td><td>${tmListen('lo')}</td><td>vite</td><td>catalogo-local</td><td class="mono">13000 ${tmPort('up')}</td></tr>
+        <tr><td class="mono">8080</td><td>${tmListen('lo')}</td><td>node</td><td>painel-metricas</td><td class="mono">18080 ${tmPort('busy')}</td></tr>
+        <tr><td class="mono">18353, 14565, 17233</td><td>${tmListen('lo')}</td><td>docker-proxy</td><td>3 stacks</td><td class="c-muted">—</td></tr>
+      </tbody></table></div>
+  </div>`
+}
+const workstationHeader = (state, readAt) => cab('server', 'Workstation', `ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · T4 · porta 14720 do Mac · ${readAt}`,
+  `${state === 'ok' ? '<span class="badge b-completed"><span class="p"></span>Conectada</span>' : '<span class="badge b-error"><span class="p"></span>Sem conexão</span>'}${hourToggle}`)
+const workstationScreen = w => `${workstationHeader('ok', 'lido há 6 s')}${workstationBody(w)}`
+const workstationOfflineScreen = () => `${workstationHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro"><span class="ic">${ic('wifi-off')}</span><div><b>Sem conexão com a Workstation.</b> A porta 14720 deste Mac não aceita conexão: o túnel parece caído. Abaixo, a última leitura, de 22:41 (há 14 min). Tentamos de novo a cada 30 s.</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="tm-faded">${workstationBody(1100)}</div>`
+const machineStatesScreen = () => `${cab('server', 'Workstation', 'Os outros estados de uma máquina remota')}
+  <div class="tm-states" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/dono/cli.ts subir</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
+    <div class="cartao vazio" style="min-height:300px"><span class="ic">${ic('plug')}</span><b>Nenhuma máquina remota</b><span>Sem configuração, só esta máquina aparece. Para acompanhar outra, rode o núcleo nela, encaminhe a 4720 de lá por um túnel e grave:</span><span class="tm-config">~/.ahrena-console/machines.json
+{ "machines": [{ "id": "workstation",
+  "rotulo": "Workstation", "porta": 14720 }] }</span></div>
+    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('git-compare')}</span><b>Versão diferente lá</b><span>O núcleo de lá é a 0.0.1 e este é a 0.0.2. Mostramos o que as duas entendem; os cards que faltam ficam de fora até atualizar lá.</span></div>
+  </div>
+  <div class="faixa"><span class="ic">${ic('info')}</span><div>O app <b>não sobe nem derruba o túnel</b>: só mostra. Subir, parar e encaminhar portas continua com a ferramenta que você já usa (decisão 0008).</div></div>`
+
+// =====================================================================
+// DEV CONSOLE (C27)
+// =====================================================================
+const DEV_COLUMNS = [
+  ['todo', 'A fazer', 'aberta, sem branch nem sessão', 'abandoned', [[64, 'Exportar o catálogo em XLSX'], [66, 'Ordenar categorias pelo uso'], [70, 'Guia de contribuição']]],
+  ['delegated', 'Delegada', 'sessão aberta no branch da issue, sem push', 'waiting', [[68, 'Cupom por categoria', 'Cupom por categoria · ws']]],
+  ['in-progress', 'Em desenvolvimento', 'o branch da issue está no remoto', 'active', [[61, 'Cobrança vira um serviço à parte', 'Separar pagamentos em serviços'], [72, 'Retry com backoff', 'Retry com backoff na fila', 1]]],
+  ['in-review', 'Em revisão', 'tem PR aberto que fecha a issue', 'active', [[31, 'Exportação em CSV', 'Endpoint de exportação em CSV', 0, ['#81', 'ok']], [58, 'Esquema de pedidos', 'Migração do esquema de pedidos', 1, ['#79', 'ok']], [47, 'Relatório mensal', 'Relatório mensal mais rápido', 0, ['#77', 'fal']]]],
+  ['blocked', 'Bloqueada', 'etiqueta blocked na issue', 'error', [[55, 'Pagamento por PIX', '', 0, null, 'espera a conta do provedor']]],
+  ['done', 'Feita', 'fechada nas últimas 24 h', 'completed', [[52, 'Paginação da listagem'], [50, 'Testes do parser de datas'], [49, 'Documentar a autenticação']]],
+]
+function devCard([n, t, s, waiting, pr, note], column) {
+  if (column === 'done') return `<div class="cartao dev-card slim"><b>#${n}</b><span class="trunc">${t}</span></div>`
+  return `<div class="cartao dev-card${waiting ? ' waiting' : ''}${column === 'blocked' ? ' blocked' : ''}"><div class="n"><span>#${n}</span>${waiting ? '<span class="mot">espera você</span>' : ''}</div><div>${t}</div>
+    <div class="s">${s ? `${ic('bot')}<span class="trunc">${s}</span>` : '<span>sem sessão</span>'}</div>${pr ? `<div class="s"><span class="mono c-accent">${pr[0]}</span>${ciPill(pr[1])}</div>` : ''}${note ? `<div class="s">${note}</div>` : ''}</div>`
+}
+function devBoard(w) {
+  const column = c => `<div class="col dev-col"><div class="cab"><span class="ponto d-${c[3]}"></span>${c[1]}<span class="n">${c[4].length}</span></div><div class="crit">${c[2]}</div>${c[4].map(x => devCard(x, c[0])).join('')}</div>`
+  if (w === 1440) return `<div class="dev-board" style="grid-template-columns:repeat(6,minmax(0,1fr))">${DEV_COLUMNS.map(column).join('')}</div>`
+  return `<div class="dev-board" style="grid-template-columns:repeat(4,minmax(0,1fr))">${DEV_COLUMNS.slice(0, 4).map(column).join('')}</div>
+    <div class="dev-board" style="grid-template-columns:repeat(2,minmax(0,1fr))">${DEV_COLUMNS.slice(4).map(column).join('')}</div>`
+}
+function devConsoleScreen(w) {
+  return `${cab('gauge', 'Dev Console', 'PRs, issues e sessões dos repositórios do contexto · GitHub lido há 40 s', atualizar)}
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg"><span>${ic('git-merge')}Fila de merge · 2</span><span class="on">Loja · 3 repos</span><span>Motor de regras</span><span>Painel de métricas</span></div><span class="c-muted" style="font-size:11.5px">contextos de ~/.ahrena-console/dev-console.json</span></div>
+  <div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+    ${stat('Prontos', '2', 'CI verde, sem conflito', 'git-pull-request', 'var(--status-completed-text)')}
+    ${stat('CI rodando', '1', '#83 · há 4 min', 'loader', 'var(--status-waiting-text)')}
+    <div class="cartao stat tm-bad"><span class="rot">CI vermelho</span><span class="ic" style="color:var(--status-error-text)">${ic('x-circle')}</span><span class="v tab">1</span><span class="s">#77 · testes</span></div>
+    ${stat('Trabalhando', '4', '1 na Workstation', 'bot', 'var(--accent-text)')}
+    ${stat('Esperando você', '3', '2 sessões, 1 decisão', 'hand', 'var(--status-waiting-text)')}
+  </div>
+  <div class="cartao inbox"><div class="olhinho" style="color:var(--status-waiting-text)">${ic('hand')}Depende de você · 3</div>
+    <div class="dev-depends" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="cartao mini"><span class="n">Migração do esquema de pedidos</span><span class="x">Pede permissão: Bash npm run migrate · #58</span><div class="pe"><span>motor-de-regras · Workstation</span><b>2 min</b></div></div>
+      <div class="cartao mini"><span class="n">Separar pagamentos em serviços</span><span class="x">Espera a aprovação do plano de 6 passos · #61</span><div class="pe"><span>motor-de-regras</span><b>9 min</b></div></div>
+      <div class="cartao mini"><span class="n">Decisão sugerida: 10 cards por coluna</span><span class="x">Alternativa: 20 por coluna · de Kanban de sessões</span><div class="pe"><span>vitrine-demo</span><b>6 min</b></div></div>
+    </div></div>
+  <div class="cartao"><div class="olhinho" style="padding:12px 14px 4px">${ic('git-merge')}Fila de merge, na ordem · de cima para baixo; o empilhado entra depois da base</div>
+    <ol class="dev-queue">
+      <li><span class="r">catalogo-exemplo <b>#81</b></span><span class="w">Endpoint de exportação em CSV<small>fecha #31 · Endpoint de exportação em CSV</small></span><span class="x">${ciPill('ok')}<span class="pill b-completed">aprovado</span></span></li>
+      <li><span class="r">motor-de-regras <b>#79</b></span><span class="w">Migração do esquema de pedidos<small>fecha #58 · base de #84</small></span><span class="x">${ciPill('ok')}<span class="pill b-abandoned">sem review</span></span></li>
+    </ol>
+    <div class="dev-more">${ic('chevron-right')}Na fila, ainda não prontos · 3 <span class="pill b-waiting">#84 empilhado em #79</span><span class="pill b-waiting">#83 CI rodando</span><span class="pill b-error">#77 CI vermelho</span></div></div>
+  <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('kanban')}Desenvolvimento, por issue · a coluna sai do GitHub e das sessões, sem anotação</div>${devBoard(w)}</div>
+  <div class="duas" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div class="cartao tm-card"><h5>${ic('git-merge')}Mesclados nas últimas 24 h<small>3</small></h5><div class="dev-list">
+      <div><b>#80</b>Paginação da listagem<span class="t">hoje 09:12</span></div><div><b>#78</b>Testes do parser de datas<span class="t">ontem 22:40</span></div><div><b>#76</b>Documentar a autenticação<span class="t">ontem 18:05</span></div></div></div>
+    <div class="cartao tm-card"><h5>${ic('git-commit-horizontal')}Decisões tomadas hoje<small>4 · ver em Decisões ›</small></h5><div class="dev-list">
+      <div><b>D4</b>SQLite em memória nos testes<span class="t">há 14 min</span></div><div><b>D3</b>Cobrança vira um serviço à parte<span class="t">há 25 min</span></div><div><b>D2</b>Review por code-reviewer antes do PR<span class="t">há 27 min</span></div></div></div>
+  </div>`
+}
+
+// =====================================================================
 // PAINEL (mod do Claude Code)
 // =====================================================================
 const P = {
@@ -1574,6 +1821,32 @@ const APP = {
   parado: () => mbar(0, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('error')}Núcleo parado`, 'off')}${mi('<span class="ck"></span><span class="mt">Node não encontrado no PATH do login</span>', 'off')}${msep}
     ${mi('Como instalar o Node 24', 'foco')}${mi('Procurar o núcleo de novo', '')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;bottom:24px;width:460px">O app <b>adota</b> o núcleo que já roda (a extensão ou um terminal). Se ninguém subiu, ele sobe com o <code>node</code> da máquina.<br>Sem Node, avisa e deixa o núcleo para a extensão (decisão 0005).</div>`,
+  machines: () => mbar(3, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('3 precisam de você · abrir na janela', 'cab')}
+    ${mi(`${ponto('waiting')}<b>motor-de-regras</b><span class="mt">· Workstation · Pede permissão · 2 min</span>`)}
+    ${mi(`${ponto('error')}<b>painel-de-metricas</b><span class="mt">· Workstation · Com erro · 3 min</span>`)}
+    ${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`${ponto('completed')}Workstation<span class="mt">· carga 24,6 de 16 · disco 86%</span>`, 'foco')}
+    ${mi(`<span class="ck c-error">${ic('alert-triangle')}</span>CPU saturada há 12 min<span class="mt">· Workstation</span>`)}
+    ${mi(`<span class="ck c-waiting">${ic('alert-triangle')}</span>Volume / em 86%<span class="mt">· Workstation</span>`)}${msep}
+    ${mi(`${ponto('active')}4 ativas · 5 na Workstation`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px">O bloco <b>Máquinas</b>: uma linha por máquina (CPU e o volume mais cheio) e um item por alerta aberto. Clicar abre a janela na tela dela (C24, C25).<br><br>
+      As sessões da Workstation que esperam sobem para a lista de cima, com o rótulo; nelas não há ⌥ "Abrir no Claude Desktop".<br><br>
+      O <b>3</b> da barra é só de sessões. Alerta novo notifica uma vez, sem som.</div>
+    <div class="notif" style="top:412px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 12 min · sem som</span></div><div class="tit">Workstation: CPU saturada</div><div>Carga de 24,6 em 16 vCPUs há 5 min</div></div></div>`,
+  machinesOffline: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`, 'foco')}
+    ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão: o túnel parece caído</span>`, 'off')}${msep}
+    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px">Sem conexão, a Workstation fica em <b>cinza</b> com a idade da última leitura, e uma linha diz o que o núcleo viu (porta fechada, ou porta aberta sem núcleo do outro lado).<br><br>
+      Não há "Subir o túnel": o app só mostra (0005, 0008). Clicar abre a tela da Workstation com a última leitura (C26).<br><br>
+      As sessões de lá saem da lista de cima, porque não dá para saber se ainda esperam.</div>
+    <div class="notif" style="top:330px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 14 min · sem som</span></div><div class="tit">Workstation sem conexão</div><div>A porta 14720 deste Mac parou de responder</div></div></div>`,
   janela: () => mbar(3, false) + `<div class="janela"><div class="tb"><span class="sem"><i></i><i></i><i></i></span><span class="nm">Ahrena Console · motor-de-regras</span><span class="mono">127.0.0.1:4720/ui/sessoes/b91d04aa</span></div>${cc('sessoes', telaConversa())}</div>`,
 }
 
@@ -1629,6 +1902,10 @@ const TELAS = [
   { id: 'app-janela', cod: 'A5', nome: 'A janela', sub: 'Clicar em motor-de-regras no menu abre a janela já no detalhe da sessão (127.0.0.1:4720/ui). O botão "Abrir no Claude Desktop" é o único caminho para o Claude. ⌘O abre no Dashboard.', html: () => `<div class="fila"><div class="mac alto">${APP.janela()}</div></div>`,
     n: N(['A janela do app desktop; fechar esconde e o app fica na bandeja (<code>main.ts</code>).', 'O Session Detail com a faixa de waiting.'], ['Não há uma terceira cópia de telas: é o console servido pelo núcleo.']) },
 
+  { id: 'app-machines', cod: 'A6', nome: 'Bandeja com a Workstation conectada e um alerta', sub: 'O bloco Máquinas: esta máquina e a remota, com o número que mais importa e os alertas abertos. As sessões da Workstation que esperam entram na lista de cima, com o rótulo da máquina.', html: () => `<div class="fila"><div class="mac">${APP.machines()}</div></div>`,
+    n: N(['O menu do A2, igual; o CCAM não tem telemetria de máquina.', 'Do painel de telemetria antigo: a linha do túnel e o alerta de porta.'], ['Telemetria no menu só como resumo: o detalhe é a janela.', 'Alerta de máquina não entra no número da barra, que é de sessões.', 'Sem ações de túnel, login ou portas: o app só mostra (0008).']) },
+  { id: 'app-machines-offline', cod: 'A7', nome: 'Bandeja com a Workstation sem conexão', sub: 'O túnel caiu: a Workstation fica em cinza, com a idade da última leitura e o que o núcleo viu. Uma notificação, sem som, na passagem.', html: () => `<div class="fila"><div class="mac">${APP.machinesOffline()}</div></div>`,
+    n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não, porque mudar o túnel pede uma confirmação que não cabe numa bandeja.']) },
   { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
   { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc('dashboard', telaDashboard())}</div>`,
     n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Custo sempre com "~" e "estimativa".']) },
@@ -1676,6 +1953,14 @@ const TELAS = [
     n: N(['A tabela de Sessions (filtros, pílulas, linha que leva ao detalhe) e os StatCards.'], ['O CCAM não lê o GitHub; aqui o repositório liga as sessões ao trabalho.', 'Lido com a consulta enxuta e o cache da decisão 0001, para não estourar o limite da API.']) },
   { id: 'console-repo', cod: 'C23', nome: 'Repositório · métricas', sub: 'As métricas que a API do GitHub dá: commits por semana, frequência de código (linhas adicionadas e removidas), issues fechadas por tipo, PRs e tempo até o merge e o review, CI, linguagens, contribuidores, tráfego e alertas.', html: () => `<div class="fila">${cc('repos', telaRepo())}</div>`,
     n: N(['O cabeçalho com chips do Session Detail, os 6 KPIs, barras horizontais e a barra empilhada do Token Flow.'], ['"Linhas de código" não vem pronta do GitHub: soma a frequência de código (adições − remoções) desde o primeiro commit; os bytes por linguagem ficam ao lado.', 'Issues por tipo usam os tipos de issue da organização (História, Tarefa técnica, Bug, Spike, Épico).', '"Abertos por agentes" cruza os PRs com as sessões que os abriram.', 'Tráfego, Dependabot e code scanning exigem acesso de escrita; sem ele, o card some.']) },
+  { id: 'console-this-machine', cod: 'C24', nome: 'Esta máquina', sub: 'A telemetria do Mac, medida pelo núcleo daqui: CPU, memória, disco, rede, processos do Claude, sessões, o túnel com o estado de cada porta encaminhada, as portas em escuta e o que pede atenção. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'machine-local', thisMachineScreen(w)))}</div>`,
+    n: N(['Do painel de telemetria antigo: os números da máquina, a lista de conexões ssh com as portas, os quatro estados da porta e os seis processos que mais usam CPU.', 'Do CCAM: o cabeçalho, os StatCards e as tabelas.'], ['Quem mede é o núcleo, não um LaunchAgent em Python nem o app: a telemetria existe para a janela, o artefato e o MCP.', 'GPU, energia, logins de nuvem e as pastas de sessão por organização ficaram de fora: os três últimos dependem de uma infraestrutura específica.', 'A coluna "O que é" de cada porta encaminhada vem do núcleo de lá, que sabe quem escuta.']) },
+  { id: 'console-workstation', cod: 'C25', nome: 'Workstation', sub: 'A mesma tela para a máquina remota, lida do núcleo de lá pela porta que o túnel encaminha: carga contra os vCPUs, volumes, Docker com o recuperável, stacks com a sessão dona, as sessões do Claude de lá e as portas, com a porta do Mac que encaminha cada uma.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'machine-ws', workstationScreen(w)))}</div>`,
+    n: N(['Do console da workstation antigo: volumes, recursos, Docker em uso e recuperável, stacks e a sessão dona, sessões do Claude lá, portas em escuta por interface e "o que pede atenção".'], ['Lido ao vivo do núcleo de lá, a cada 30 s; o antigo era escrito à mão a cada medição.', 'Fora: faturamento e créditos de nuvem (pedem credencial de uma conta), perfis de nuvem e worktrees (ficam para uma issue própria).', 'O nome da máquina e a porta vêm de ~/.ahrena-console/machines.json; nada aponta para uma máquina por padrão.']) },
+  { id: 'console-workstation-offline', cod: 'C26', nome: 'Workstation sem conexão, e os outros estados', sub: 'Túnel caído: a faixa diz o que o núcleo viu e a tela mostra a última leitura, desbotada. Ao lado, o túnel de pé com o núcleo de lá parado, nenhuma máquina configurada e versão diferente.', html: () => `<div class="fila"><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', workstationOfflineScreen(), 'off')}</div><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', machineStatesScreen(), 'off')}</div></div>`,
+    n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o túnel nem o núcleo de lá: o app só mostra.', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
+  { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem espera; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
+    n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
 ]
 
 // =====================================================================
@@ -1698,6 +1983,7 @@ function montar() {
     <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
     <li><b>Decisões da sessão:</b> o escopo tem os três níveis (sessão, família e branch), trocados no mesmo seletor; as decisões vigentes chegam à sessão nova pelos dois caminhos, injetadas no início e pelo MCP quando o agente perguntar (P9, P10, C20 e C21).</li>
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
+    <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
