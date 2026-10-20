@@ -75,7 +75,7 @@ export interface RemoteAttentionSource {
   attention(): unknown;
 }
 
-const NIVEIS: readonly NivelDeAtencao[] = ['precisa', 'sua-vez'];
+const ATTENTION_LEVELS: readonly NivelDeAtencao[] = ['precisa', 'sua-vez'];
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
 /** An account color, as the local ones (src/api/contas.ts): `#rrggbb`. */
@@ -91,25 +91,25 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
   const out: ItemDaAtencao[] = [];
   for (const i of items) {
     if (!isObject(i) || (i.machine !== null && i.machine !== undefined)) continue;
-    const motivo = i.motivo as MotivoDaAtencao;
-    const nivel = i.nivel as NivelDeAtencao;
-    const sessao = text(i.sessao, 128);
+    const reason = i.motivo as MotivoDaAtencao;
+    const level = i.nivel as NivelDeAtencao;
+    const session = text(i.sessao, 128);
     const desde = text(i.desde, 40);
-    if (!sessao || !desde || !Number.isFinite(Date.parse(desde)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, motivo) || !NIVEIS.includes(nivel)) continue;
+    if (!session || !desde || !Number.isFinite(Date.parse(desde)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
     if (!Number.isFinite(i.minutos) || (i.minutos as number) < 0) continue;
     const conta =
       isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string'
         ? { rotulo: i.conta.rotulo.slice(0, 40), cor: HEX.test(i.conta.cor) ? i.conta.cor : NEUTRAL_ACCOUNT_COLOR }
         : null;
     out.push({
-      sessao,
+      sessao: session,
       titulo: text(i.titulo, 200) ?? '',
       projeto: text(i.projeto, 200),
       conta,
-      nivel,
-      motivo,
-      motivoCurto: MOTIVO_CURTO[motivo],
-      motivoLongo: text(i.motivoLongo, 300) ?? MOTIVO_CURTO[motivo],
+      nivel: level,
+      motivo: reason,
+      motivoCurto: MOTIVO_CURTO[reason],
+      motivoLongo: text(i.motivoLongo, 300) ?? MOTIVO_CURTO[reason],
       desde,
       minutos: i.minutos as number,
       local: null,
