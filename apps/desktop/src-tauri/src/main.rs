@@ -187,7 +187,12 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: O
             }
             None => {
                 let parado = outcome.state;
-                mudar(&app, &estado, |e| e.nucleo = parado);
+                // A click on "Abrir o console" waited for this start; it failed, so it is dropped
+                // instead of opening the console by surprise when a core comes up much later.
+                mudar(&app, &estado, |e| {
+                    e.nucleo = parado;
+                    e.open_when_up = false;
+                });
                 // Tenta de novo a cada 30 s, ou já, no "Procurar o núcleo de novo".
                 if let Err(RecvTimeoutError::Disconnected) = sinais.recv_timeout(Duration::from_secs(30)) {
                     return;
@@ -205,7 +210,7 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: O
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || follow_core_port(&handle, port));
         if abrir || asked {
-            eprintln!("[ahrena-console] partida à mão: abre o console");
+            eprintln!("[ahrena-console] {}: abre o console", if asked { "pedido pelo menu" } else { "partida à mão" });
             let handle = app.clone();
             let _ = app.run_on_main_thread(move || abrir_console(&handle));
         }
