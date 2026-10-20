@@ -26,7 +26,7 @@ import {
 } from '../github/project.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import { legacyRequestBody, normalizeLegacyPath, rawPathnameOf } from './legacy-routes.ts';
-import { ciDoPr, reviewDoPr, type CiDoPr, type ReviewDoPr } from './trabalho.ts';
+import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './trabalho.ts';
 
 export const PROJECT_ROUTE = '/api/project';
 export const PROJECT_MOVE_ROUTE = '/api/project/move';
@@ -71,7 +71,7 @@ export interface CardDoProjeto {
   state: string;
   milestone: string | null;
   subIssues: { done: number; total: number } | null;
-  pr: { number: number; url: string; ci: CiDoPr | null; review: ReviewDoPr | null } | null;
+  pr: { number: number; url: string; ci: PrCi | null; review: PrReview | null } | null;
   laneId: string | null;
 }
 
@@ -88,7 +88,7 @@ export interface QuadroDoProjeto {
 
 /** The `code` of an error of the two routes (beside the pt-BR `error`). */
 export const PROJECT_ERROR_CODES = ['invalid', 'no-scope', 'rate-limited', 'unknown-lane', 'unknown-item', 'github-down', 'github-refused', 'off', 'no-project'] as const;
-export type CodigoDoProjeto = (typeof PROJECT_ERROR_CODES)[number];
+export type ProjectErrorCode = (typeof PROJECT_ERROR_CODES)[number];
 
 function cardDe(c: ProjectCard, raia: BoardLane): CardDoProjeto {
   const p = c.pullRequest ?? null;
@@ -138,7 +138,7 @@ export function mesmaOrigemMovendo(req: IncomingMessage, port: number): boolean 
 
 export const ehDoProjeto = (caminho: string) => caminho === PROJECT_ROUTE || caminho === PROJECT_MOVE_ROUTE;
 
-type Erro = { status: number; code: CodigoDoProjeto; error: string; headers?: Record<string, string>; extra?: Record<string, unknown> };
+type Erro = { status: number; code: ProjectErrorCode; error: string; headers?: Record<string, string>; extra?: Record<string, unknown> };
 
 const segundos = (ms: number) => String(Math.max(1, Math.ceil(ms / 1000)));
 

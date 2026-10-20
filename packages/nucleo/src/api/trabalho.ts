@@ -33,16 +33,16 @@ export function repoDoRemote(remote: string): string | null {
 
 type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
 
-export type CiDoPr = NonNullable<PrDoPainel['ci']>;
-export type ReviewDoPr = NonNullable<PrDoPainel['review']>;
+export type PrCi = NonNullable<PrDoPainel['ci']>;
+export type PrReview = NonNullable<PrDoPainel['review']>;
 
 /** CI do último commit, como o painel e o kanban do projeto mostram: `ok`, `failed`, `running` ou `null` sem checagens. */
-export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): CiDoPr | null {
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrCi | null {
   return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'failed' : 'running';
 }
 
 /** Review do PR: `approved`, `changes-requested`, `pending` (aberto sem decisão) ou `null`. */
-export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): ReviewDoPr | null {
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrReview | null {
   return p.review === 'APPROVED' ? 'approved' : p.review === 'CHANGES_REQUESTED' ? 'changes-requested' : p.state === 'OPEN' ? 'pending' : null;
 }
 
