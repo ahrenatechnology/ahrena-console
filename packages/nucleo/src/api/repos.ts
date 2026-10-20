@@ -86,7 +86,7 @@ import {
   type ResumoCru,
 } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulador/github-falso.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
@@ -159,7 +159,7 @@ export interface OpcoesDosRepos {
   fonte: FonteDosRepos | null;
   cache?: GithubCache;
   sessoes?: SessoesPorRepo | null;
-  mudancas?: CursorDeMudancas | null;
+  mudancas?: ChangeCursor | null;
   agora?: () => number;
   /** Validade da resposta montada. Padrão 60 s. */
   validadeMs?: number;
@@ -178,7 +178,7 @@ export class ReposDoGithub {
   private readonly fonte: FonteDosRepos | null;
   private readonly cache: GithubCache;
   private readonly sessoes: SessoesPorRepo | null;
-  private readonly mudancas: CursorDeMudancas | null;
+  private readonly mudancas: ChangeCursor | null;
   private readonly agora: () => number;
   private readonly validadeMs: number;
   private readonly agendar: (fn: () => void, ms: number) => void;
@@ -307,7 +307,7 @@ export class ReposDoGithub {
   private publicar<T>(e: Entrada<T>, valor: T, chave: string): void {
     const antes = e.valor === null ? null : JSON.stringify(e.valor);
     e.valor = valor;
-    if (antes !== JSON.stringify(valor)) this.mudancas?.registrar({ type: 'repos', key: chave, sessionId: null, accountId: null });
+    if (antes !== JSON.stringify(valor)) this.mudancas?.record({ type: 'repos', key: chave, sessionId: null, accountId: null });
   }
 
   private async contagens(): Promise<Map<string, SessoesDoRepo> | null> {
@@ -591,7 +591,7 @@ export interface OpcoesDosReposDoNucleo {
    */
   cache: GithubCache;
   frota: LeituraDaFrota;
-  mudancas: CursorDeMudancas;
+  mudancas: ChangeCursor;
   /** As falhas fora do previsto das montagens. */
   log?: (mensagem: string) => void;
 }
@@ -606,7 +606,7 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
       : new GithubReposSource();
   const sessoes = new SessoesPorRepo({
     frota,
-    aoDescobrir: () => mudancas.registrar({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
+    aoDescobrir: () => mudancas.record({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
     ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
   });
   const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });

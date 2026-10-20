@@ -3,7 +3,7 @@
 // of the machine list.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { publishAlertChanges, TelemetrySampler, type SamplerTimers } from '../../src/telemetry/sampler.ts';
 import { localMachine, TelemetryService } from '../../src/telemetry/service.ts';
@@ -70,19 +70,19 @@ describe('#175/AC-2 sampler', () => {
 
 describe('#175/AC-3 alerts on /api/changes', () => {
   test('an alert entering and exiting become `alert` changes, once each', async () => {
-    const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
-    const start = cursor.atual;
+    const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
+    const start = cursor.current;
     const collector = new ScriptedCollector([exposed(T0), exposed(T0 + 30_000), reading({}, T0 + 60_000)]);
     const s = new TelemetrySampler({ machineId: 'local', collector, store: new MemoryTelemetryStore(), tracker: new AlertTracker(), onAlertChange: publishAlertChanges(cursor) });
     await s.sampleOnce();
-    const r1 = await cursor.aguardar(start, { timeoutMs: 0 });
+    const r1 = await cursor.wait(start, { timeoutMs: 0 });
     assert.deepEqual(r1.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['alert', 'local:port-exposed:5432', null, null]]);
     await s.sampleOnce(); // continues: nothing new
-    assert.equal((await cursor.aguardar(r1.cursor, { timeoutMs: 0 })).changes.length, 0);
+    assert.equal((await cursor.wait(r1.cursor, { timeoutMs: 0 })).changes.length, 0);
     await s.sampleOnce(); // exited
-    const r3 = await cursor.aguardar(r1.cursor, { timeoutMs: 0 });
+    const r3 = await cursor.wait(r1.cursor, { timeoutMs: 0 });
     assert.deepEqual(r3.changes.map((m) => m.key), ['local:port-exposed:5432']);
-    assert.deepEqual((await cursor.aguardar(r1.cursor, { timeoutMs: 0, filtros: { tipos: ['alert'] } })).changes.length, 1);
+    assert.deepEqual((await cursor.wait(r1.cursor, { timeoutMs: 0, filters: { types: ['alert'] } })).changes.length, 1);
   });
 
   test('load above the cores for 5 min, over the recorded samples', async () => {

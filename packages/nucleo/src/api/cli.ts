@@ -28,9 +28,9 @@ import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, defaultDir, prepareDir } from '../owner/lock.ts';
-import { CursorDeMudancas } from '../mudancas/cursor.ts';
-import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
-import { waitForChanges } from '../mudancas/mcp.ts';
+import { ChangeCursor } from '../changes/cursor.ts';
+import { onMachineChange, withChanges, SessionAccounts, decisionsWithChanges } from '../changes/sources.ts';
+import { waitForChanges } from '../changes/mcp.ts';
 import {
   apelidoDaDemo,
   CENARIOS_DO_PAINEL,
@@ -208,17 +208,17 @@ if (banco !== ':memory:') {
 }
 
 // Toda gravação passa pelo cursor de mudanças (item 2.4): é dele que sai o long polling.
-const mudancas = new CursorDeMudancas();
+const mudancas = new ChangeCursor();
 const sqlite = openSqliteStorage({ path: banco });
-const contasDasSessoes = new ContasDasSessoes(sqlite);
-const storage = comMudancas(sqlite, mudancas, contasDasSessoes);
+const contasDasSessoes = new SessionAccounts(sqlite);
+const storage = withChanges(sqlite, mudancas, contasDasSessoes);
 // As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
-const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
+const decisoes = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
 const captura = new HookDecisionCapture({ decisions: decisoes });
 const maquina = new SessionStateMachine({
   storage,
   log,
-  onChange: aoMudarDaMaquina(mudancas, contasDasSessoes),
+  onChange: onMachineChange(mudancas, contasDasSessoes),
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
@@ -334,7 +334,7 @@ relerPerfis?.unref();
 
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
-mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
+mcp.servidor.registrar(waitForChanges({ changes: mudancas, accounts: contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
@@ -430,7 +430,7 @@ const api: ApiLocal = await iniciarApiLocal({
   eventos: new FeedDeEventos({ storage }),
   frota: mcp.frota,
   remoteAttention: remoteMachines,
-  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.current }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),

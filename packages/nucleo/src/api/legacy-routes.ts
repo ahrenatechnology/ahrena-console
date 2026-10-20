@@ -128,7 +128,7 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   // Phase 2b layer 7: the repository period is English in `/api/repos/<owner>/<repo>?period=` (no old
   // path; the old name `periodo` is global), and the year is `1y`.
   period: { '1a': '1y' },
-  // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
+  // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/changes/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
 };
 
@@ -604,7 +604,7 @@ const DECISION_WRITE: LegacyRouteSpec = {
 //   permissao → permission, pergunta → question, plano → plan, decisao → decision, erro → error,
 //   interrompida → interrupted; no-prompt stays).
 //
-// `GET /api/changes` (RespostaDaEspera, src/mudancas/cursor.ts), keys old → new: mudancas → changes,
+// `GET /api/changes` (WaitResult, src/changes/cursor.ts), keys old → new: mudancas → changes,
 // reiniciar → reset, expirou → timedOut (cursor stays); each change: tipo → type, chave → key
 // (sessionId, accountId, seq stay). The type values: sessao → session, estado → state,
 // precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert stay);

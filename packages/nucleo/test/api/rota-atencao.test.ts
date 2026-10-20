@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
 import { AGORA, semear } from '../mcp/helpers.ts';
 
@@ -102,10 +102,10 @@ describe('montarAtencao', () => {
 
 describe('GET /api/attention', () => {
   let api: ApiLocal;
-  let mudancas: CursorDeMudancas;
+  let mudancas: ChangeCursor;
   beforeEach(async () => {
     await semearCenariosDoPainel(storage, 'p3', AGORA);
-    mudancas = new CursorDeMudancas();
+    mudancas = new ChangeCursor();
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => AGORA });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, frota, mudancas });
   });
@@ -115,7 +115,7 @@ describe('GET /api/attention', () => {
     const res = await fetch(`${api.url}/api/attention`);
     assert.equal(res.status, 200);
     const r = (await res.json()) as RespostaDaAtencao;
-    assert.equal(r.cursor, mudancas.atual);
+    assert.equal(r.cursor, mudancas.current);
     assert.equal(r.total, r.items.length);
     // O cursor serve para esperar a próxima mudança: sem mudança, volta vazio quando a espera acaba.
     const m = (await (await fetch(`${api.url}/api/changes?since=${encodeURIComponent(r.cursor!)}&wait=0`)).json()) as { reset: boolean; changes: unknown[] };
