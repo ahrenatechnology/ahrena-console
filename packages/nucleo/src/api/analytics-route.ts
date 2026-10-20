@@ -93,7 +93,8 @@ export interface DeliveryOptions {
   /** The repository (`owner/name`) of a session's cwd: `null` with none, `undefined` while unknown (src/api/repos-sessions.ts). */
   repoOfCwd: (cwd: string) => string | null | undefined;
   /** The GitHub Projects the console reads, each with the repositories that have items in it (key `owner/number`). */
-  projects?: () => Promise<{ projects: DeliveryGroup[]; error: string | null }>;
+  /** `pending`: the first read has not landed yet, so no Projects is not yet known to mean none. */
+  projects?: () => Promise<{ projects: DeliveryGroup[]; error: string | null; pending?: boolean }>;
   /** The account's repositories (the Repositories screen's list), so a repository with no session shows too. */
   accountRepos?: () => Promise<{ fullName: string; lastPush: string | null }[]>;
 }
@@ -525,7 +526,7 @@ export class RotaAnalytics {
     const calendar = diasEntre(since, today);
     const head = { generatedAt, timeZone, days, today, since, until: today, calendar, groupBy, key };
     const sources = this.deliverySources;
-    const disconnected = (projectsError: string | null = null) => ({
+    const disconnected = (projectsError: string | null = null, projectsPending = false) => ({
       ...head,
       github: { status: 'disconnected' as const, readAt: null, error: null, pending: 0, truncated: [] as string[] },
       totals: emptyDeliveryTotals(),
@@ -535,6 +536,7 @@ export class RotaAnalytics {
       openItemsTruncated: false,
       options: { repos: [], projects: [] },
       projectsError,
+      projectsPending,
     });
     if (!sources) return disconnected();
 
@@ -560,6 +562,7 @@ export class RotaAnalytics {
       ? await sources.projects().catch((err: unknown) => ({ projects: [] as DeliveryGroup[], error: err instanceof Error ? err.message : String(err) }))
       : { projects: [] as DeliveryGroup[], error: null };
     projectsError = projects.error;
+    const projectsPending = 'pending' in projects && projects.pending === true;
     const projectGroups = projects.projects.map((p) => ({ key: p.key, label: p.label, repos: [...new Set(p.repos.map(chaveDoRepo))] }));
     const hours = new Map<string, number>();
     for (const e of efforts) hours.set(e.repo, (hours.get(e.repo) ?? 0) + e.hoursPerDay.reduce((s, h) => s + h, 0));
@@ -576,7 +579,7 @@ export class RotaAnalytics {
     const repos = unique.slice(0, DELIVERY_MAX_REPOS);
     const github = await sources.github.read(repos);
     if (unique.length > repos.length) github.truncated.push(`${unique.length - repos.length} repositórios de fora: o teto é ${DELIVERY_MAX_REPOS}`);
-    if (github.status === 'disconnected') return disconnected(projectsError);
+    if (github.status === 'disconnected') return disconnected(projectsError, projectsPending);
 
     const now = this.agora();
     const activities = new Map<string, RepoActivity>();
@@ -615,6 +618,7 @@ export class RotaAnalytics {
       openItemsTruncated: open.total > open.items.length,
       options: { repos: repoGroups.map((g) => ({ key: g.key, label: g.label })), projects: shownProjects.map((p) => ({ key: p.key, label: p.label, repos: p.repos })) },
       projectsError,
+      projectsPending,
     };
   }
 }

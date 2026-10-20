@@ -209,6 +209,7 @@ function answer({ days = 7, groupBy = 'repo', key = null as string | null, statu
       projects: [{ key: 'sim-org/1', label: 'Loja de exemplo', repos: ['sim-org/vitrine-demo', 'sim-org/catalogo-exemplo'] }],
     },
     projectsError: null as string | null,
+    projectsPending: false,
     ...extra,
   };
 }
@@ -574,6 +575,16 @@ describe('Delivery: states', () => {
     try {
       assert.match(visible(area), /Lendo o GitHub…/);
       assert.equal(byTag(area, 'select').length, 1);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('by project, the Projects not read yet show "Lendo os GitHub Projects…", not the empty state (#266/AC-8)', async () => {
+    const { area, cleanup } = await mountTab({ search: '?groupBy=project', read: async () => answer({ groupBy: 'project', rows: [], extra: { projectsPending: true, openItems: [] } }) });
+    try {
+      assert.match(visible(area), /Lendo os GitHub Projects…/);
+      assert.doesNotMatch(visible(area), /Nenhum GitHub Project com atividade/);
     } finally {
       cleanup();
     }

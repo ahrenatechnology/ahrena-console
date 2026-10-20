@@ -8,7 +8,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, type DeliveryOptions } from '../../src/api/analytics-route.ts';
 import { activeHoursPerDay, GROUP_BY_ERROR, KEY_ERROR, openItemState, OPEN_ITEM_STATES, type DeliveryGithubRead } from '../../src/api/delivery.ts';
-import { createCoreDelivery, DeliveryGithub, latestProjects, projectGroupOf, RETRY_AFTER_FAILURE_MS } from '../../src/api/delivery-github.ts';
+import { createCoreDelivery, DELIVERY_TTL_MS, DeliveryGithub, latestProjects, projectGroupOf, RETRY_AFTER_FAILURE_MS } from '../../src/api/delivery-github.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubCache, MemoryCacheStore, RateLimitedError } from '../../src/github/cache.ts';
 import { DELIVERY_QUERIES, GithubDeliverySource, type DeliveryOpenRaw, type DeliveryRaw, type DeliverySource } from '../../src/github/delivery-source.ts';
@@ -240,6 +240,13 @@ describe('GET /api/analytics/delivery', () => {
     assert.deepEqual(v.options.projects.map((p: Json) => p.key), ['exemplo-labs/1', 'exemplo-labs/2']);
   });
 
+  test('#266/AC-8: by project, the Projects not read yet say so (projectsPending), so the screen does not show "no Projects"', async () => {
+    const pending = await body(route(storage, { projects: async () => ({ projects: [], error: null, pending: true }) }), `/api/analytics/delivery?days=30&tz=${TZ}&groupBy=project`);
+    assert.equal(pending.projectsPending, true);
+    assert.deepEqual(pending.rows, []);
+    assert.equal((await body(route(storage), `/api/analytics/delivery?days=30&tz=${TZ}&groupBy=project`)).projectsPending, false);
+  });
+
   test('#266/AC-6: the period and the repository or project filter apply to the whole tab', async () => {
     const r = route(storage);
     const week = await body(r, `/api/analytics/delivery?days=7&tz=${TZ}`);
@@ -352,7 +359,7 @@ describe('#266 DeliveryGithub: never waits for GitHub', () => {
     const g = new DeliveryGithub({ source, cache, now: () => now });
     await g.read(['exemplo-labs/alpha']);
     await g.settle();
-    now += 10 * 60_000;
+    now += DELIVERY_TTL_MS + 60_000;
     fail = new RateLimitedError('GitHub limitou as chamadas: API rate limit exceeded', 60_000);
     await g.read(['exemplo-labs/alpha']);
     await g.settle();
@@ -418,7 +425,7 @@ describe('#266 DeliveryGithub: the screen learns of every outcome', () => {
     const g = new DeliveryGithub({ source: { delivery: async () => answer }, cache: new GithubCache({ store: new MemoryCacheStore(), now: () => now }), now: () => now });
     await g.read(['exemplo-labs/alpha']);
     await g.settle();
-    now += 10 * 60_000;
+    now += DELIVERY_TTL_MS + 60_000;
     answer = { ...full, prs: full.prs.slice(0, 1), truncated: [note], incomplete: note };
     await g.read(['exemplo-labs/alpha']);
     await g.settle();
@@ -453,17 +460,19 @@ describe('#266 DeliveryGithub: the screen learns of every outcome', () => {
     assert.match(d.incomplete ?? '', /amostra de PRs incompleta: 1 lidos.*502/);
   });
 
-  test('#266/AC-5: the Projects never wait for GitHub: the last read answers while the next one runs', async () => {
+  test('#266/AC-5/AC-8: the Projects never wait for GitHub: pending until the first read lands, then the last read answers while the next one runs', async () => {
     let release: () => void = () => {};
     const recorded: string[] = [];
     const projects = latestProjects(
       () => new Promise((resolve) => (release = () => resolve([{ owner: 'exemplo-labs', number: 1, title: 'Quadro', lanes: [{ id: null, name: 'x', color: null, items: [{ repo: 'exemplo-labs/a' } as never] }] }]))),
       { record: (c) => void recorded.push(c.key) },
     );
-    assert.deepEqual(await projects(), { projects: [], error: null });
+    assert.deepEqual(await projects(), { projects: [], error: null, pending: true });
     release();
     await new Promise((r) => setImmediate(r));
-    assert.deepEqual((await projects()).projects, [{ key: 'exemplo-labs/1', label: 'Quadro', repos: ['exemplo-labs/a'] }]);
+    const read = await projects();
+    assert.deepEqual(read.projects, [{ key: 'exemplo-labs/1', label: 'Quadro', repos: ['exemplo-labs/a'] }]);
+    assert.equal(read.pending, false);
     assert.deepEqual(recorded, ['delivery']);
   });
 });

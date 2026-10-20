@@ -20,7 +20,12 @@ import type { DeliveryOptions } from './analytics-route.ts';
 import type { DeliveryGithubRead, DeliveryGroup } from './delivery.ts';
 import type { SessoesPorRepo } from './repos-sessions.ts';
 
-export const DELIVERY_TTL_MS = 5 * 60_000;
+/**
+ * How long one repository's read holds before it is read again. 15 min, not the 5 of the other
+ * repository reads: each refresh re-reads 90 days (see the cost in src/github/delivery-source.ts), and
+ * the Claude side does not sit behind this cache, so it stays live.
+ */
+export const DELIVERY_TTL_MS = 15 * 60_000;
 /** After a failed read, the next one waits this long (the cache's last read is served meanwhile). */
 export const RETRY_AFTER_FAILURE_MS = 60_000;
 /** The key of the change recorded when a read lands. */
@@ -181,6 +186,8 @@ export interface CoreDeliveryOptions {
  */
 export function latestProjects(boards: CoreDeliveryOptions['boards'], changes: ChangeRecorder | null): NonNullable<DeliveryOptions['projects']> {
   let latest: { projects: DeliveryGroup[]; error: string | null } = { projects: [], error: null };
+  // Until the first read lands, "no Projects" is unknown, not none (#266 AC-8): the screen shows it loading.
+  let pending = true;
   let running: Promise<void> | null = null;
   return async () => {
     running ??= boards()
@@ -188,10 +195,11 @@ export function latestProjects(boards: CoreDeliveryOptions['boards'], changes: C
       .then((next) => {
         const changed = JSON.stringify(next) !== JSON.stringify(latest);
         latest = next;
+        pending = false;
         if (changed) changes?.record({ type: 'repos', key: DELIVERY_CHANGE_KEY, sessionId: null, accountId: null });
       })
       .finally(() => (running = null));
-    return latest;
+    return { ...latest, pending };
   };
 }
 
