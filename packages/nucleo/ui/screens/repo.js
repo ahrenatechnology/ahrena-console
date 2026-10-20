@@ -1,14 +1,14 @@
 // Repositório (C23, issue 105): as métricas que a API do GitHub dá, num período (30 dias, 90 dias, 1
 // ano) que vale para a tela inteira. Lê `GET /api/repos/<dono>/<repo>?period=` (src/api/repos-tipos.ts).
 //
-// - O período mora em `?periodo=` (padrão 90d): trocar reescreve a URL sem histórico novo e relê.
+// - The period lives in `?period=` (default 90d; `1y` is the year): switching rewrites the URL without a new history entry and re-reads.
 // - Campo `null` vira "—"; se o GitHub ainda calcula (`calculando`) ou o núcleo ainda monta
 //   (`carregando`), "calculando…" (`valorOuPendente`). Número nenhum é inventado.
 // - Com escrita no repositório, o último card é "Tráfego e segurança"; sem, "Comunidade".
 // - `carregando` ou `calculando`: relê a cada 5 s, além da mudança `repos` do Ao vivo.
 
 import { el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 import {
   barras,
   cardDeTrafego,
@@ -24,6 +24,7 @@ import {
   linguagens,
   mil,
   mudancaInteressa,
+  periodInUrl,
   periodoDe,
   PERIODOS,
   porcentagem,
@@ -34,7 +35,7 @@ import {
   TRACO,
   urlDoGithub,
   valorOuPendente,
-} from '../repos-formato.js';
+} from '../repos-format.js';
 import { carregarEstilo, pilulaDeCi } from './repos.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -101,7 +102,7 @@ function graficoFrequencia(f) {
 
 export async function montar(area, ctx) {
   carregarEstilo();
-  const { dono, repo: nome } = ctx.params;
+  const { owner: dono, repo: nome } = ctx.params;
   let periodo = periodoDe(location.search);
   let dados = null;
   let falha = null;
@@ -141,7 +142,7 @@ export async function montar(area, ctx) {
     if (v === periodo) return;
     periodo = v;
     for (const [i, b] of botoesPeriodo.entries()) b.setAttribute('aria-pressed', String(PERIODOS[i][0] === v));
-    history.replaceState(history.state, '', `${location.pathname}?periodo=${v}`);
+    history.replaceState(history.state, '', `${location.pathname}?period=${periodInUrl(v)}`);
     dados = null;
     falha = null;
     conteudo.replaceChildren(carregando({ rotulo: `Lendo ${rotuloDoPeriodo(v)}…` }));
@@ -203,7 +204,7 @@ export async function montar(area, ctx) {
       fora('pulls', 'git-pull-request', `PRs (${inteiro(dados.abas.prs)})`),
       fora('actions', 'ci', 'CI'),
       // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
-      el('a', { href: `/ui/sessoes?busca=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icone('sessoes'), `Sessões (${inteiro(dados.abas.sessoes)})`),
+      el('a', { href: `/ui/sessions?search=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icone('sessoes'), `Sessões (${inteiro(dados.abas.sessoes)})`),
       el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icone('decisao'), 'Decisões'),
     );
   }

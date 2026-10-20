@@ -11,9 +11,9 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 import { simular } from '../../src/simulador/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUNAS, custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/telas/sessoes.js';
+import { COLUNAS, custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
-import { acharTela } from '../../ui/telas.js';
+import { findScreen } from '../../ui/screens.js';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
 const PADRAO: PedidoDeSessoes = { status: 'todas', busca: null, dir: null, ordem: 'atividade', sentido: 'desc', pagina: 1 };
@@ -189,25 +189,25 @@ describe('#28 GET /api/sessoes com o simulador', () => {
 });
 
 describe('#28 a tela Sessões', () => {
-  test('está registrada em /ui/sessoes, e o arquivo existe', () => {
-    const { tela } = acharTela('/ui/sessoes');
-    assert.equal(tela.arquivo, '/ui/telas/sessoes.js');
-    assert.ok(existsSync(`${PASTA_DA_UI}telas/sessoes.js`));
-    assert.ok(existsSync(`${PASTA_DA_UI}sessoes.css`));
+  test('está registrada em /ui/sessions, e o arquivo existe', () => {
+    const { screen: tela } = findScreen('/ui/sessions');
+    assert.equal(tela.file, '/ui/screens/sessions.js');
+    assert.ok(existsSync(`${PASTA_DA_UI}screens/sessions.js`));
+    assert.ok(existsSync(`${PASTA_DA_UI}sessions.css`));
     // A linha leva ao Detalhe, que casa o id do simulador.
-    assert.equal(acharTela(`/ui/sessoes/${encodeURIComponent(SESSAO_DO_PAINEL)}`).tela.id, 'detalhe');
+    assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(SESSAO_DO_PAINEL)}`).screen.id, 'session-detail');
   });
 
   test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = estadoDaQuery('?status=esperando&busca=oi&dir=/simulacao/x&ordem=custo&sentido=asc&pagina=2');
-    assert.deepEqual(e, { status: 'esperando', busca: 'oi', dir: '/simulacao/x', ordem: 'custo', sentido: 'asc', pagina: 2 });
+    const e = estadoDaQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2');
+    assert.deepEqual(e, { status: 'esperando', search: 'oi', dir: '/simulacao/x', order: 'custo', direction: 'asc', page: 2 });
     assert.deepEqual(estadoDaQuery(queryDoEstado(e)), e);
     assert.equal(queryDoEstado(estadoDaQuery('')), '');
-    assert.deepEqual(estadoDaQuery('?status=x&ordem=y&sentido=z&pagina=-1&dir=rel'), estadoDaQuery(''));
+    assert.deepEqual(estadoDaQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), estadoDaQuery(''));
   });
 
   test('a rota da API leva os filtros que o servidor entende', () => {
-    const rota = rotaDaLista({ status: 'erro', busca: ' a b ', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
+    const rota = rotaDaLista({ status: 'erro', search: ' a b ', dir: '/d', order: 'duracao', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
     assert.deepEqual(pedidoDeSessoes(url), { status: 'erro', busca: 'a b', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
@@ -239,7 +239,7 @@ describe('#28 a tela Sessões', () => {
   // a tabela tem 830 px; abaixo de 900 px de janela, 610 px e sem o Diretório. Cada coluna precisa
   // do mínimo que o texto mais largo dela pede (medido no navegador), senão corta ou rola.
   test('a tabela cabe em 1100 px sem rolagem horizontal, e abaixo de 900 px sem o Diretório', () => {
-    const css = readFileSync(`${PASTA_DA_UI}sessoes.css`, 'utf8');
+    const css = readFileSync(`${PASTA_DA_UI}sessions.css`, 'utf8');
     const corte = css.indexOf('@media (max-width: 900px)');
     assert.ok(corte > 0, 'falta a faixa de 900 px');
     const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.tabela \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
@@ -267,23 +267,23 @@ describe('#28 a tela Sessões', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     // As da moldura (`.icone`, `.btn`) são de todas as telas.
-    const daMoldura = classes('moldura.css');
-    const minhas = new Set([...classes('sessoes.css')].filter((c) => !daMoldura.has(c)));
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessoes.css', 'moldura.css', 'marca.css'].includes(a));
+    const daMoldura = classes('shell.css');
+    const minhas = new Set([...classes('sessions.css')].filter((c) => !daMoldura.has(c)));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessions.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
-      assert.deepEqual(comuns, [], `sessoes.css e ${outra} estilizam as mesmas classes`);
+      assert.deepEqual(comuns, [], `sessions.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   // A mesma regra para a tela Workflows (#96) e a aba Workflow do detalhe (#97), contra todo CSS da
-  // /ui (também os de ui/telas/), e toda classe própria delas com o prefixo da tela.
+  // /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
   test('o CSS de Workflows e da aba Workflow só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-    const daMoldura = classes('moldura.css');
-    const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => a.endsWith('.css') && !['moldura.css', 'marca.css'].includes(a));
-    for (const [arquivo, prefixo] of [['telas/workflows.css', 'wf-'], ['telas/detalhe-workflow.css', 'wfd-']] as const) {
+    const daMoldura = classes('shell.css');
+    const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

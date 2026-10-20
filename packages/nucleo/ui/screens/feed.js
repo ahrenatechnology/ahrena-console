@@ -1,6 +1,6 @@
 // O Feed de atividade (C8, #94): todos os eventos das sessões, ao vivo, com filtros, pausa e uma
 // linha aberta com o detalhe. Lê `GET /api/events`; o estado (lista, cursor, pausa) está em
-// `feed-estado.js`, e esta tela só desenha.
+// `feed-state.js`, e esta tela só desenha.
 //
 // - Primeira leitura (ou filtro novo, ou "Atualizar", ou o núcleo reiniciado): a página do topo.
 // - Ao vivo: a cada mudança do long polling, pede `depois=<cursor>` e põe os novos no topo. Um pedido
@@ -9,7 +9,7 @@
 // - "Mostrar mais": pede `antes=<anteriores>` e põe os mais velhos no fim.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 import {
   alternar,
   carregar,
@@ -28,7 +28,7 @@ import {
   tempoRelativo,
   temFiltro,
   trilha,
-} from './feed-estado.js';
+} from './feed-state.js';
 
 const CSS = '/ui/feed.css';
 const RELOGIO_MS = 5000;

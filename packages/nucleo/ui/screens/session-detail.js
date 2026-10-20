@@ -6,10 +6,10 @@
 // `textContent` (`el()`), nunca como HTML.
 
 import { el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
-import { abrirNoDesktop } from '../ler.js';
-import { criar as abaWorkflow } from './detalhe-workflow.js';
-import { criar as abaDecisoes } from './detalhe-decisoes.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { abrirNoDesktop } from '../api.js';
+import { criar as abaWorkflow } from './session-detail-workflow.js';
+import { criar as abaDecisoes } from './session-detail-decisions.js';
 
 // ---------- Formatos ----------
 
@@ -108,24 +108,24 @@ function pilula(icon, ...filhos) {
 // ---------- A tela ----------
 
 // O registro das abas, na ordem da barra. Uma aba nova é uma linha aqui e um módulo em
-// `ui/telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` e devolve
+// `ui/screens/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` e devolve
 // `{ mostrar(corpo), esconder(), atualizar() }`:
 // - `base` é `/api/sessions/<id>`; `cabeca()` é o topo já lido (`GET /api/sessions/<id>`);
 // - `rotular(texto)` põe o "(…)" ao lado do nome da aba; `null` tira.
 // A aba carrega o próprio CSS, se tiver.
 const ABAS = [
-  { id: 'agentes', rotulo: 'Agentes', icone: 'robo', criar: abaAgentes },
-  { id: 'conversa', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
-  { id: 'tempo', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
+  { id: 'agents', rotulo: 'Agentes', icone: 'robo', criar: abaAgentes },
+  { id: 'conversation', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
+  { id: 'timeline', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
   { id: 'workflow', rotulo: 'Workflow', icone: 'grafo', criar: abaWorkflow },
-  { id: 'decisoes', rotulo: 'Decisões', icone: 'decisao', criar: abaDecisoes },
+  { id: 'decisions', rotulo: 'Decisões', icone: 'decisao', criar: abaDecisoes },
 ];
 
 let cssCarregado = false;
 function carregarCss() {
   if (cssCarregado || document.querySelector('link[data-tela="detalhe"]')) return;
   cssCarregado = true;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/telas/detalhe.css', 'data-tela': 'detalhe' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail.css', 'data-tela': 'detalhe' }));
 }
 
 export async function montar(area, ctx) {
@@ -148,7 +148,7 @@ export async function montar(area, ctx) {
     abas.replaceChildren(
       ...ABAS.map((a) => {
         // Até a aba dizer o dela, Agentes e Linha do tempo usam as contagens do topo.
-        const padrao = { agentes: cabeca?.contagens.agentes, tempo: cabeca ? num(cabeca.contagens.eventos) : null }[a.id];
+        const padrao = { agents: cabeca?.contagens.agentes, timeline: cabeca ? num(cabeca.contagens.eventos) : null }[a.id];
         const rotulo = rotulos[a.id] ?? padrao;
         const sufixo = rotulo === undefined || rotulo === null ? '' : ` (${rotulo})`;
         const b = el('button', { type: 'button', role: 'tab', class: `det-aba${a.id === aba ? ' on' : ''}`, 'aria-selected': a.id === aba ? 'true' : 'false', 'data-aba': a.id }, icone(a.icone), `${a.rotulo}${sufixo}`);
@@ -180,7 +180,7 @@ export async function montar(area, ctx) {
       if (!cabeca) {
         area.replaceChildren(
           e.status === 404
-            ? vazio({ titulo: 'Sessão não encontrada', texto: `O núcleo não conhece a sessão ${id}.`, acao: { rotulo: 'Voltar para Sessões', icone: 'voltar', aoClicar: () => ctx.navegar('/ui/sessoes') } })
+            ? vazio({ titulo: 'Sessão não encontrada', texto: `O núcleo não conhece a sessão ${id}.`, acao: { rotulo: 'Voltar para Sessões', icone: 'voltar', aoClicar: () => ctx.navegar('/ui/sessions') } })
             : erro({ texto: e.message, tentar: () => primeira() }),
         );
       } else {
@@ -194,7 +194,7 @@ export async function montar(area, ctx) {
   async function primeira() {
     area.replaceChildren(carregando({ rotulo: 'Carregando a sessão' }));
     if (!(await lerCabeca())) return;
-    aba ??= cabeca.sessao.status === 'waiting' ? 'conversa' : 'agentes';
+    aba ??= cabeca.sessao.status === 'waiting' ? 'conversation' : 'agents';
     area.replaceChildren(topo, abas, corpo);
     desenharAbas();
     corpo.replaceChildren(carregando({ rotulo: 'Carregando', blocos: 2 }));
@@ -230,7 +230,7 @@ function desenharTopo(c, atualizar) {
   const linha1 = el(
     'div',
     { class: 'det-linha' },
-    el('a', { class: 'det-voltar', href: '/ui/sessoes', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icone('voltar')),
+    el('a', { class: 'det-voltar', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icone('voltar')),
     el('h1', {}, s.titulo),
     pilulaDeStatus(s.status),
     motivo && s.status === 'waiting' ? el('span', { class: `det-motivo${s.urgente ? ' det-urgente' : ''}` }, s.faixa?.tipo === 'permissao' ? icone('escudo') : null, motivo) : null,

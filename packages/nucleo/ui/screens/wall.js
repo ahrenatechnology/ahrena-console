@@ -7,9 +7,9 @@
 // As funções sem DOM (formatação e o que cada card mostra) saem exportadas para o teste.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
-const ESTILO = '/ui/mural.css';
+const ESTILO = '/ui/wall.css';
 export const ROTA_DO_MURAL = '/api/wall';
 /** Releitura depois de uma rajada de mudanças. */
 export const ESPERA_MS = 400;
@@ -69,7 +69,7 @@ export function oQueOCardMostra(c) {
   else linha = { tipo: 'fazendo', texto: c.atividade?.texto ?? '' };
   return {
     id: c.id,
-    href: `/ui/sessoes/${encodeURIComponent(c.id)}`,
+    href: `/ui/sessions/${encodeURIComponent(c.id)}`,
     status: c.status,
     titulo: c.titulo,
     origem: [c.projeto, c.branch].filter(Boolean).join(' · ') || '—',

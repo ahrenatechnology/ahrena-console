@@ -1,10 +1,10 @@
 // A tela Sessões (C3, #28): a tabela das sessões com busca, filtro por diretório, ordenação, as
 // pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessions`,
 // src/api/sessoes.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
-// A linha leva ao Detalhe, `/ui/sessoes/<id>`.
+// A linha leva ao Detalhe, `/ui/sessions/<id>`.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 export const PILULAS = [
   ['todas', 'Todas'],
@@ -38,19 +38,19 @@ export const MOTIVOS = {
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 
-const PADRAO = { status: 'todas', busca: '', dir: '', ordem: 'atividade', sentido: 'desc', pagina: 1 };
+const PADRAO = { status: 'todas', search: '', dir: '', order: 'atividade', direction: 'desc', page: 1 };
 
-/** O estado da tela a partir da query (`?status=esperando&pagina=2`); o que não vale cai no padrão. */
+/** The screen state from the query (`?status=esperando&page=2`); what is not valid falls back to the default. */
 export function estadoDaQuery(query) {
   const p = new URLSearchParams(query);
-  const pagina = Number(p.get('pagina'));
+  const pagina = Number(p.get('page'));
   return {
     status: PILULAS.some(([v]) => v === p.get('status')) ? p.get('status') : PADRAO.status,
-    busca: (p.get('busca') ?? '').slice(0, 200),
+    search: (p.get('search') ?? '').slice(0, 200),
     dir: (p.get('dir') ?? '').startsWith('/') ? p.get('dir') : '',
-    ordem: p.get('ordem') in ORDENS ? p.get('ordem') : PADRAO.ordem,
-    sentido: p.get('sentido') === 'asc' ? 'asc' : 'desc',
-    pagina: Number.isInteger(pagina) && pagina > 1 ? pagina : 1,
+    order: p.get('order') in ORDENS ? p.get('order') : PADRAO.order,
+    direction: p.get('direction') === 'asc' ? 'asc' : 'desc',
+    page: Number.isInteger(pagina) && pagina > 1 ? pagina : 1,
   };
 }
 
@@ -64,8 +64,8 @@ export function queryDoEstado(estado) {
 
 /** A rota da API para o estado: sempre com status, ordem, sentido e página. */
 export function rotaDaLista(estado) {
-  const p = new URLSearchParams({ status: estado.status, order: estado.ordem, direction: estado.sentido, page: String(estado.pagina) });
-  if (estado.busca.trim()) p.set('search', estado.busca.trim());
+  const p = new URLSearchParams({ status: estado.status, order: estado.order, direction: estado.direction, page: String(estado.page) });
+  if (estado.search.trim()) p.set('search', estado.search.trim());
   if (estado.dir) p.set('dir', estado.dir);
   return `/api/sessions?${p}`;
 }
@@ -107,7 +107,7 @@ export function idCurto(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) ? id.slice(0, 8) : id;
 }
 
-// As colunas, na ordem; a classe dá a largura de cada uma (sessoes.css).
+// As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
 export const COLUNAS = [
   ['c-sessao', 'Sessão'],
   ['c-status', 'Status'],
@@ -147,7 +147,7 @@ function conta(c) {
 export async function montar(area, ctx) {
   // O estilo da tela, uma vez por página.
   if (!document.querySelector('link[data-tela="sessoes"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessoes.css', 'data-tela': 'sessoes' }));
+    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-tela': 'sessoes' }));
   }
 
   let estado = estadoDaQuery(location.search);
@@ -163,18 +163,18 @@ export async function montar(area, ctx) {
   const sub = cab.querySelector('.sub');
 
   // ---------- filtros ----------
-  const busca = el('input', { type: 'search', placeholder: 'Buscar sessões…', 'aria-label': 'Buscar sessões', value: estado.busca, maxlength: 200 });
+  const busca = el('input', { type: 'search', placeholder: 'Buscar sessões…', 'aria-label': 'Buscar sessões', value: estado.search, maxlength: 200 });
   let esperaDaBusca = null;
   busca.addEventListener('input', () => {
     clearTimeout(esperaDaBusca);
-    esperaDaBusca = setTimeout(() => mudar({ busca: busca.value, pagina: 1 }), 250);
+    esperaDaBusca = setTimeout(() => mudar({ search: busca.value, page: 1 }), 250);
   });
   const campoBusca = el('label', { class: 'campo busca' }, icone('buscar'), busca);
   const lugarDoDir = el('span', { class: 'lugar-dir' });
   const lugarDaOrdem = el('span', { class: 'lugar-ordem' });
-  const inverter = el('button', { type: 'button', class: 'campo quadrado', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', aoClicar: () => mudar({ sentido: estado.sentido === 'desc' ? 'asc' : 'desc', pagina: 1 }) }, icone('inverter'));
+  const inverter = el('button', { type: 'button', class: 'campo quadrado', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', aoClicar: () => mudar({ direction: estado.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icone('inverter'));
   const pilulas = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
-  for (const [v, rotulo] of PILULAS) pilulas.append(el('button', { type: 'button', 'data-status': v, aoClicar: () => mudar({ status: v, pagina: 1 }) }, rotulo));
+  for (const [v, rotulo] of PILULAS) pilulas.append(el('button', { type: 'button', 'data-status': v, aoClicar: () => mudar({ status: v, page: 1 }) }, rotulo));
   const filtros = el('div', { class: 'cartao filtros' }, campoBusca, lugarDoDir, lugarDaOrdem, inverter, pilulas);
 
   const corpo = el('div', { class: 'corpo-sessoes' }, carregando({ rotulo: 'Carregando as sessões' }));
@@ -182,8 +182,8 @@ export async function montar(area, ctx) {
 
   function desenharFiltros(diretorios) {
     const dirs = estado.dir && !diretorios.includes(estado.dir) ? [...diretorios, estado.dir] : diretorios;
-    lugarDoDir.replaceChildren(seletor('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, ultimoPedaco(d)])], estado.dir, (dir) => mudar({ dir, pagina: 1 })));
-    lugarDaOrdem.replaceChildren(seletor('Ordenar por', Object.entries(ORDENS).map(([v, r]) => [v, r[estado.sentido]]), estado.ordem, (ordem) => mudar({ ordem, pagina: 1 })));
+    lugarDoDir.replaceChildren(seletor('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, ultimoPedaco(d)])], estado.dir, (dir) => mudar({ dir, page: 1 })));
+    lugarDaOrdem.replaceChildren(seletor('Ordenar por', Object.entries(ORDENS).map(([v, r]) => [v, r[estado.direction]]), estado.order, (ordem) => mudar({ order: ordem, page: 1 })));
     for (const b of pilulas.children) b.setAttribute('aria-pressed', String(b.dataset.status === estado.status));
   }
 
@@ -195,7 +195,7 @@ export async function montar(area, ctx) {
 
   // ---------- tabela ----------
   function linha(s) {
-    const destino = `/ui/sessoes/${encodeURIComponent(s.id)}`;
+    const destino = `/ui/sessions/${encodeURIComponent(s.id)}`;
     const tr = el(
       'tr',
       { class: 'linha-sessao' },
@@ -233,8 +233,8 @@ export async function montar(area, ctx) {
       el(
         'span',
         { class: 'paginas' },
-        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina <= 1, aoClicar: () => mudar({ pagina: lista.pagina - 1 }) }, 'Anterior'),
-        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina >= lista.paginas, aoClicar: () => mudar({ pagina: lista.pagina + 1 }) }, 'Próxima'),
+        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina <= 1, aoClicar: () => mudar({ page: lista.pagina - 1 }) }, 'Anterior'),
+        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina >= lista.paginas, aoClicar: () => mudar({ page: lista.pagina + 1 }) }, 'Próxima'),
       ),
     );
   }
@@ -242,16 +242,16 @@ export async function montar(area, ctx) {
   function desenhar(lista) {
     sub.textContent = lista.registradas === 1 ? '1 sessão registrada' : `${lista.registradas} sessões registradas`;
     // A página pedida pode ter sumido (a lista encolheu): fica a que o núcleo devolveu.
-    if (lista.pagina !== estado.pagina) {
-      estado = { ...estado, pagina: lista.pagina };
+    if (lista.pagina !== estado.page) {
+      estado = { ...estado, page: lista.pagina };
       history.replaceState(null, '', `${location.pathname}${queryDoEstado(estado)}`);
     }
     desenharFiltros(lista.diretorios);
     if (lista.itens.length) return corpo.replaceChildren(tabela(lista), rodape(lista));
-    const filtrando = estado.status !== 'todas' || estado.busca.trim() || estado.dir;
+    const filtrando = estado.status !== 'todas' || estado.search.trim() || estado.dir;
     corpo.replaceChildren(
       filtrando
-        ? vazio({ titulo: 'Nenhuma sessão com esses filtros', texto: 'Mude a busca, o diretório ou o status.', acao: { rotulo: 'Limpar os filtros', aoClicar: () => ((busca.value = ''), mudar({ status: 'todas', busca: '', dir: '', pagina: 1 })) } })
+        ? vazio({ titulo: 'Nenhuma sessão com esses filtros', texto: 'Mude a busca, o diretório ou o status.', acao: { rotulo: 'Limpar os filtros', aoClicar: () => ((busca.value = ''), mudar({ status: 'todas', search: '', dir: '', page: 1 })) } })
         : vazio({ icone: 'sessoes', titulo: 'Nenhuma sessão ainda', texto: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
     );
   }

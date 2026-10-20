@@ -1,5 +1,5 @@
 // A tela Analytics (#95 e #32, C12 e C13): a Visão geral em /ui/analytics e o Custo em
-// /ui/analytics/custo. As duas abas são a mesma tela; a aba vem de `ctx.params.aba`.
+// /ui/analytics/cost. The two tabs are the same screen; the tab comes from `ctx.params.tab`.
 //
 // - Lê `GET /api/analytics?tz=` (Visão geral) e `GET /api/analytics/cost?days=&tz=` (Custo),
 //   sempre por `ctx.ler`, com o fuso do navegador.
@@ -10,7 +10,7 @@
 // - Com mais de uma conta, o custo leva a divisão por conta ao lado (decisão 0006).
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 export const ROTA_DA_VISAO = '/api/analytics';
 export const ROTA_DO_CUSTO = '/api/analytics/cost';
@@ -342,7 +342,7 @@ function lista(linhas, vazioTexto) {
 
 function abas(atual) {
   const aba = (id, rotulo, href) => el('a', { href, class: atual === id ? 'an-on' : null, 'aria-current': atual === id ? 'page' : null }, rotulo);
-  return el('nav', { class: 'an-seg an-abas', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/custo'));
+  return el('nav', { class: 'an-seg an-abas', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/cost'));
 }
 
 function rodape(esquerda, direita) {
@@ -520,8 +520,8 @@ const rotuloDoDia = (dia) => (dia === 'sab' ? 'sáb' : dia);
 
 export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   carregarEstilo();
-  const pedida = ctx.params?.aba;
-  const aba = pedida === undefined ? 'visao' : pedida === 'custo' ? 'custo' : null;
+  const pedida = ctx.params?.tab;
+  const aba = pedida === undefined ? 'visao' : pedida === 'cost' ? 'custo' : null;
   const sub = aba === 'custo' ? SUB_CUSTO : SUB_VISAO;
   const fuso = fusoDoNavegador();
   let dias = 30;

@@ -1,4 +1,4 @@
-// Um DOM mínimo para montar as telas da /ui no node, sem dependência: só o que `dom.js`, `estados.js`
+// Um DOM mínimo para montar as telas da /ui no node, sem dependência: só o que `dom.js`, `states.js`
 // e as telas usam (criar nós, atributos, classes, eventos com bolha e um `querySelector` de seletores
 // simples: tag, `.classe`, `[atributo]`, `[atributo="valor"]` e descendente). Também `closest`,
 // `contains`, `firstChild`, `style.setProperty` (variável CSS por CSSOM) e um `document.head`.

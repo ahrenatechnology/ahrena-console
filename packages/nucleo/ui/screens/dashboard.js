@@ -5,7 +5,7 @@
 // As funções sem DOM (formatação e o que cada parte mostra) saem exportadas para o teste.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 const ESTILO = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ROTA_DA_ATENCAO` de src/api/rota-atencao.ts (#87):
@@ -105,7 +105,7 @@ export function cartoesDaInbox(atencao, agentes) {
       nome: i.projeto ?? i.titulo,
       texto: (i.motivo === 'permissao' && a?.tarefa) || i.motivoLongo,
       pe: nomeDoModelo(a?.modelo) ?? i.conta?.rotulo ?? '',
-      href: `/ui/sessoes/${encodeURIComponent(i.sessao)}`,
+      href: `/ui/sessions/${encodeURIComponent(i.sessao)}`,
     };
   });
 }
@@ -139,7 +139,7 @@ function inbox(atencao, agentes) {
     { class: 'ttl' },
     icone('sino'),
     el('span', { class: total ? 'c-esperando' : 'c-apagada' }, tituloDaInbox(total)),
-    el('a', { class: 'r', href: '/ui/sessoes' }, 'esperando e com erro · urgentes primeiro', icone('chevron-direita')),
+    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icone('chevron-direita')),
   );
   if (!total) return el('section', { class: 'cartao inbox calma', 'aria-label': 'Precisam de você' }, titulo);
   const mini = cartoesDaInbox(atencao, agentes).map((c) =>
@@ -182,7 +182,7 @@ function cardDoAgente(a, abertos, alternar) {
   const mensagens = a.mensagens.length ? a.mensagens : ['(sem mensagens)'];
   const card = el(
     'a',
-    { class: `cartao ac st-${a.status}`, href: `/ui/sessoes/${encodeURIComponent(a.sessao)}`, 'data-sessao': a.sessao },
+    { class: `cartao ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.sessao)}`, 'data-sessao': a.sessao },
     el(
       'div',
       { class: 'l1' },
@@ -214,7 +214,7 @@ function agentesAtivos(agentes, abertos, alternar) {
 }
 
 function atividadeRecente(atividade) {
-  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessoes' }, 'Ver tudo', icone('seta-direita')));
+  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessions' }, 'Ver tudo', icone('seta-direita')));
   if (!atividade.length) return el('div', { class: 'coluna' }, titulo, vazio({ icone: 'atividade', titulo: 'Nada ainda', texto: 'Os eventos das sessões aparecem aqui assim que chegam.' }));
   return el(
     'div',
@@ -226,7 +226,7 @@ function atividadeRecente(atividade) {
       ...atividade.map((l) =>
         el(
           'a',
-          { class: 'linha', href: `/ui/sessoes/${encodeURIComponent(l.sessao)}`, 'data-sessao': l.sessao },
+          { class: 'linha', href: `/ui/sessions/${encodeURIComponent(l.sessao)}`, 'data-sessao': l.sessao },
           badge(l.status),
           el('span', { class: 'trunc' }, l.texto),
           l.projeto ? el('span', { class: 'o mono trunc' }, l.projeto) : null,

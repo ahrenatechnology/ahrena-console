@@ -21,9 +21,9 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
 import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from '../../src/simulador/detalhe.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { abridorHttp } from '../../ui/ler.js';
+import { abridorHttp } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { nomeDoModelo } from '../../ui/telas/detalhe.js';
+import { nomeDoModelo } from '../../ui/screens/session-detail.js';
 
 const AGORA = Date.now();
 
@@ -149,7 +149,7 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     const c = await ler<ConversaDoDetalhe>(`/api/sessoes/${id}/conversa`);
     assert.equal(c.mensagens[0]!.texto, veneno);
     // A tela só põe dado no DOM por `textContent` (el()); nunca por innerHTML.
-    const tela = readFileSync(`${PASTA_DA_UI}telas/detalhe.js`, 'utf8');
+    const tela = readFileSync(`${PASTA_DA_UI}screens/session-detail.js`, 'utf8');
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   });
 
@@ -221,17 +221,17 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   test('o CSS do Detalhe só estiliza classes `det-` e não toca as classes de outra tela', () => {
     const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const classes = (arquivo: string) => new Set([...semComentario(arquivo).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((m) => m[1]!));
-    const daMoldura = classes('moldura.css');
-    const minhas = [...classes('telas/detalhe.css')].filter((c) => !daMoldura.has(c));
+    const daMoldura = classes('shell.css');
+    const minhas = [...classes('screens/session-detail.css')].filter((c) => !daMoldura.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('det-')), [], 'classe sem o prefixo det-');
     // Nenhum seletor de elemento solto (`code`, `pre`): eles pegariam as outras telas.
-    const soltos = semComentario('telas/detalhe.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
+    const soltos = semComentario('screens/session-detail.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
     assert.deepEqual(soltos.filter((l) => !/^select\.det-/.test(l)), [], 'seletor de elemento fora do Detalhe');
-    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => a.endsWith('.css') && !['telas/detalhe.css', 'moldura.css', 'marca.css'].includes(a));
+    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['screens/session-detail.css', 'shell.css', 'brand.css'].includes(a));
     assert.ok(outras.length > 0);
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
-      assert.deepEqual(comuns, [], `detalhe.css e ${outra} estilizam as mesmas classes`);
+      assert.deepEqual(comuns, [], `session-detail.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
