@@ -76,17 +76,18 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.equal(p4.local, null, 'sessão sem Desktop: sem local');
     assert.equal(p4.session.banner, null);
     assert.equal(p4.command, null);
-    // The old route answers the same top with the old keys and values.
-    const antigo = await read<any>(`/api/sessoes/${DETAIL_SESSION}`);
-    assert.deepEqual([antigo.sessao.faixa.tipo, antigo.comando, antigo.contagens.agentes], ['permissao', 'npm run migrate', 2]);
+    // The old Portuguese route is gone (#173 phase 6).
+    const antigo = await fetch(`${api.url}/api/sessoes/${DETAIL_SESSION}`);
+    assert.equal(antigo.status, 404);
+    assert.deepEqual(await antigo.json(), { error: 'não encontrado' });
   });
 
   test('id inválido dá 400; sessão desconhecida, 404; a lista sem id não é desta rota', async () => {
-    assert.equal((await fetch(`${api.url}/api/sessoes/${encodeURIComponent('a b')}`)).status, 400);
-    assert.equal((await fetch(`${api.url}/api/sessoes/nao-existe`)).status, 404);
-    assert.equal((await fetch(`${api.url}/api/sessoes/nao-existe/conversa`)).status, 404);
-    assert.equal((await fetch(`${api.url}/api/sessoes/${DETAIL_SESSION}/outra`)).status, 404);
-    assert.equal((await fetch(`${api.url}/api/sessoes`)).status, 404);
+    assert.equal((await fetch(`${api.url}/api/sessions/${encodeURIComponent('a b')}`)).status, 400);
+    assert.equal((await fetch(`${api.url}/api/sessions/nao-existe`)).status, 404);
+    assert.equal((await fetch(`${api.url}/api/sessions/nao-existe/conversation`)).status, 404);
+    assert.equal((await fetch(`${api.url}/api/sessions/${DETAIL_SESSION}/outra`)).status, 404);
+    assert.equal((await fetch(`${api.url}/api/sessions`)).status, 404);
   });
 
   test('Agentes (C4): números, ferramentas contadas uma vez por chamada, tarefas, tokens e custo por nó', async () => {
@@ -143,9 +144,8 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.deepEqual(ultimas.messages.map((m) => m.text), ['pode seguir', 'Vou aplicar a migração no banco local.']);
     const outro = await read<ConversaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}/conversation?agent=qualquer`);
     assert.equal(outro.agent, c.agent, 'agente que não é da sessão: o principal');
-    // The old route and parameters answer the same conversation with the old keys and values.
-    const antiga = await read<any>(`/api/sessoes/${DETAIL_SESSION}/conversa?limite=2`);
-    assert.deepEqual(antiga.mensagens.map((m: any) => [m.papel, m.texto]), [['voce', 'pode seguir'], ['assistente', 'Vou aplicar a migração no banco local.']]);
+    // The old Portuguese route is gone (#173 phase 6).
+    assert.equal((await fetch(`${api.url}/api/sessoes/${DETAIL_SESSION}/conversa?limite=2`)).status, 404);
   });
 
   test('Conversa: o texto do transcript volta como texto, sem virar HTML', async () => {
@@ -192,30 +192,32 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.ok(recentes.filtered < tudo.total);
     // Filtro malformado é ignorado, não quebra.
     assert.equal((await read<EventosDoDetalhe>(`${base}?from=ontem&status=talvez&type=${encodeURIComponent('<x>')}`)).filtered, tudo.total);
-    // The old route and parameters answer the same page with the old keys.
-    const antiga = await read<any>(`/api/sessoes/${DETAIL_SESSION}/eventos?ferramenta=Bash&tipo=PreToolUse`);
-    assert.deepEqual(antiga.itens.map((e: any) => e.resumo), ['npm run migrate', 'npm test -- pedidos']);
-    assert.equal(antiga.filtrados, bash.filtered);
+    // The old parameter names are no longer read: the filter is ignored and the whole timeline comes back.
+    assert.equal((await read<EventosDoDetalhe>(`${base}?ferramenta=Bash&tipo=PreToolUse`)).filtered, tudo.total);
+    // The old Portuguese route is gone (#173 phase 6).
+    assert.equal((await fetch(`${api.url}/api/sessoes/${DETAIL_SESSION}/eventos?ferramenta=Bash&tipo=PreToolUse`)).status, 404);
   });
 
-  test('"Abrir no Claude Desktop": o POST /abrir da própria página passa; outro Origin, não (decisão 0003)', async () => {
+  test('"Abrir no Claude Desktop": o POST /open da própria página passa; outro Origin, não (decisão 0003)', async () => {
     const local = DETAIL_LOCAL;
     const post = (caminho: string, headers: Record<string, string>) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
     const json = { 'content-type': 'application/json' };
-    assert.equal((await post(`/abrir/${local}`, { ...json, origin: `http://${host}` })).status, 200);
+    assert.equal((await post(`/open/${local}`, { ...json, origin: `http://${host}` })).status, 200);
     assert.deepEqual(abertos, [`claude://claude.ai/epitaxy/${local}`]);
     for (const origin of ['https://exemplo.com', 'null', 'http://localhost:1', `https://${host}`, `http://${host}.exemplo.com`]) {
-      assert.equal((await post(`/abrir/${local}`, { ...json, origin })).status, 403, origin);
+      assert.equal((await post(`/open/${local}`, { ...json, origin })).status, 403, origin);
     }
     // Mesma origem, mas sem JSON: o resto da defesa continua.
-    assert.equal((await post(`/abrir/${local}`, { 'content-type': 'text/plain', origin: `http://${host}` })).status, 415);
-    // A exceção é só do /abrir com id estrito: as outras escritas com Origin continuam recusadas.
-    assert.equal((await post('/abrir/local_curto', { ...json, origin: `http://${host}` })).status, 403);
-    assert.equal((await post(`/abrir/${local}?x=1`, { ...json, origin: `http://${host}` })).status, 403);
+    assert.equal((await post(`/open/${local}`, { 'content-type': 'text/plain', origin: `http://${host}` })).status, 415);
+    // A exceção é só do /open com id estrito: as outras escritas com Origin continuam recusadas.
+    assert.equal((await post('/open/local_curto', { ...json, origin: `http://${host}` })).status, 403);
+    assert.equal((await post(`/open/${local}?x=1`, { ...json, origin: `http://${host}` })).status, 403);
     const hook = JSON.stringify({ session_id: 'x', hook_event_name: 'SessionStart' });
     assert.equal((await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { ...json, origin: `http://${host}` }, body: hook })).status, 403);
     // As decisões têm a exceção própria (#103), mas só com o caminho exato: query continua 403.
-    assert.equal((await post('/api/decisoes/d1/confirmar?x=1', { ...json, origin: `http://${host}` })).status, 403);
+    assert.equal((await post('/api/decisions/d1/confirm?x=1', { ...json, origin: `http://${host}` })).status, 403);
+    // The old Portuguese /abrir is gone (#173 phase 6): it has no Origin exception and opens nothing.
+    assert.equal((await post(`/abrir/${local}`, { ...json, origin: `http://${host}` })).status, 403);
     assert.equal(abertos.length, 1);
   });
 

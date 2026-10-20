@@ -2,14 +2,12 @@
 //
 //   GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id>&type=<type>
 //
-// (The old `/api/mudancas?desde=&espera=&sessao=&conta=&tipo=` is an alias: src/api/legacy-routes.ts.)
-//
 // - An empty `since` comes back at once with the current cursor and `reset: true`.
 // - The answer: `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`
-//   (#173 phase 2b; the old route answers `{ cursor, mudancas: [{ tipo, chave, … }], reiniciar, expirou }`).
+//   (English since #173 phase 2b).
 // - `wait` in seconds (default 25, max 110; 0 does not wait).
 // - `session`, `account` and `type` take commas or repetition; `account=no-account` asks for "Sem conta"
-//   (no account; the old `sem-conta` still works, src/api/legacy-routes.ts).
+//   (no account).
 // - A client that closes the connection releases the wait at once.
 // - Too many open waits: 503 with `Retry-After`.
 
@@ -18,8 +16,6 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { TooManyWaitersError, DEFAULT_WAIT_MS, CHANGE_TYPES, type ChangeCursor, type ChangeFilters, type ChangeType } from './cursor.ts';
 
 export const CHANGES_ROUTE = '/api/changes';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const LEGACY_CHANGES_ROUTE = '/api/mudancas';
 /** `?account=` for the sessions without an account. */
 export const NO_ACCOUNT = 'no-account';
 

@@ -6,8 +6,7 @@
 // - `days` (optional, default 7, maximum 31): how many days with an ended session per page.
 // - `search` (optional, up to 100 characters): case-insensitive substring of the title, the id and the project.
 // - Invalid parameter: 400 `{ error }`. With no history wired into the API: 404.
-// Response 200: `{ days: [{ day, sessions: HistoryItem[] }], next }` (src/history/reading.ts);
-// the old route `/api/historico` answers it in the old keys (src/api/legacy-routes.ts).
+// Response 200: `{ days: [{ day, sessions: HistoryItem[] }], next }` (src/history/reading.ts).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';

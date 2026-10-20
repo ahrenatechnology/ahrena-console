@@ -6,7 +6,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | --- | --- |
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
-| `screens.js` | **O registro das telas** (`route`, `item`, `file`) e a troca das URLs antigas pelas novas (`legacyUrl`) |
+| `screens.js` | **O registro das telas** (`route`, `item`, `file`) |
 | `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
@@ -141,18 +141,4 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 
 ## As URLs antigas
 
-As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173). As antigas continuam abrindo: antes de rotear, a moldura troca a URL antiga pela nova com `history.replaceState` (`legacyUrl` em `screens.js`), e o núcleo serve `/ui/telas/<arquivo>` como `/ui/screens/<arquivo>`. Os alias saem no PR final da migração.
-
-| Antiga | Nova |
-| --- | --- |
-| `/ui/sessoes`, `/ui/sessoes/<id>` | `/ui/sessions`, `/ui/sessions/<id>` |
-| `/ui/sessoes?busca=&ordem=&sentido=&pagina=`, `?status=esperando&ordem=custo` | `/ui/sessions?search=&order=&direction=&page=`, `?status=blocked&order=cost` |
-| `/ui/sessoes/<id>#agentes`, `#conversa`, `#tempo`, `#decisoes` | `/ui/sessions/<id>#agents`, `#conversation`, `#timeline`, `#decisions` |
-| `/ui/historico` | `/ui/history` |
-| `/ui/mural` | `/ui/wall` |
-| `/ui/projeto` | `/ui/project` |
-| `/ui/decisoes` | `/ui/decisions` |
-| `/ui/analytics/custo` | `/ui/analytics/cost` |
-| `/ui/kanban?visao=agentes` | `/ui/kanban?view=agents` (as colunas do Kanban e os filtros das Decisões não vão na URL da /ui: só a API os recebe, e aceita os valores antigos) |
-| `/ui/repos/<dono>/<repo>?periodo=1a` | `/ui/repos/<owner>/<repo>?period=1y` |
-| `/ui/telas/<arquivo>` | `/ui/screens/<arquivo>` |
+As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173) e ficaram abrindo como alias até a fase 6. Agora uma URL antiga (`/ui/sessoes/<id>`, `/ui/telas/<arquivo>`) é uma URL desconhecida: a moldura mostra "Página não encontrada", e um arquivo antigo dá 404.

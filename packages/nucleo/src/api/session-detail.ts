@@ -9,8 +9,7 @@
 // | `GET /api/sessions/<id>/conversation` | An agent's messages (`?agent=`, `?limit=`)                |
 // | `GET /api/sessions/<id>/events`       | The timeline, filtered and paginated (see `filtroDe`)     |
 //
-// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28). The old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` and parameter names are aliases (src/api/legacy-routes.ts).
+// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -37,8 +36,7 @@ const MAX_FERRAMENTAS = 8;
 
 // ---------- Contrato ----------
 //
-// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5); the old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` answer their old bodies through src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5).
 // Names shown on the screen (`Agente principal`) stay pt-BR.
 
 export interface CabecaDoDetalhe {

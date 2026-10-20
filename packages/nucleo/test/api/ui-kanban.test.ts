@@ -83,7 +83,7 @@ describe('Kanban: funções da tela', () => {
     assert.equal(viewFromUrl('?view=agents'), 'agents');
     assert.equal(viewFromUrl('?view=sessions'), 'sessions');
     assert.equal(viewFromUrl('?view=<x>'), 'sessions');
-    assert.equal(viewFromUrl('?visao=agentes'), 'sessions', 'the old query is the shell router\'s job (legacyUrl)');
+    assert.equal(viewFromUrl('?visao=agentes'), 'sessions', 'the old query is not read (#173, phase 6)');
     assert.equal(viewQuery('agents'), '?view=agents');
     assert.equal(viewQuery('sessions'), '');
     assert.equal(kanbanRoute('sessions'), '/api/kanban?view=sessions');

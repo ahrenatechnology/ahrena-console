@@ -5,7 +5,6 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { FeedDeEventos, statusDoEvento, textoDeUmaLinha, type EventoDoFeed, type RespostaDoFeed } from '../../src/api/events.ts';
 import { seedPanelScenario } from '../../src/simulator/panel.ts';
-import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 
 let storage: SqliteStorage;
@@ -17,9 +16,8 @@ beforeEach(() => {
 });
 afterEach(() => storage.close());
 
-// The handlers read the English parameters; the old ones in these strings pass through the alias map.
 async function pedir(busca = ''): Promise<{ status: number; corpo: RespostaDoFeed & { error?: string } }> {
-  const r = await feed.responder(normalizeLegacyQuery(new URLSearchParams(busca)));
+  const r = await feed.responder(new URLSearchParams(busca));
   return r as { status: number; corpo: RespostaDoFeed & { error?: string } };
 }
 async function ok(busca = ''): Promise<RespostaDoFeed> {
@@ -68,7 +66,7 @@ describe('#94 o texto que sai é uma linha curta', () => {
   });
 });
 
-describe('#94 GET /api/eventos: a montagem', () => {
+describe('#94 GET /api/events: a montagem', () => {
   test('o resumo é a frase do evento, com o turno medido e a permissão dizendo qual ferramenta', async () => {
     await storage.putSession(session({ id: 's1', name: 'x', cwd: '/repo/app' }));
     const t0 = Date.parse(at(1));
@@ -127,7 +125,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
 
   test('as opções só vêm no primeiro pedido', async () => {
     await semear();
-    const r = await ok('limite=2');
+    const r = await ok('limit=2');
     assert.deepEqual(r.options?.types, ['APIError', 'Notification', 'PreToolUse', 'SessionEnd', 'ToolUse', 'UserPromptSubmit']);
     assert.deepEqual(r.options?.tools, ['Bash', 'Read']);
     assert.deepEqual(
@@ -135,16 +133,16 @@ describe('#94 GET /api/eventos: a montagem', () => {
       ['s1', 's2'],
     );
     assert.deepEqual(r.options?.sessions.find((s) => s.id === 's1'), { id: 's1', title: 'ajuste do login', project: 'app' });
-    assert.equal((await ok(`antes=${r.older}`)).options, null);
-    assert.equal((await ok(`depois=${r.cursor}`)).options, null);
+    assert.equal((await ok(`before=${r.older}`)).options, null);
+    assert.equal((await ok(`after=${r.cursor}`)).options, null);
   });
 
   test('paginação por antes, até acabar', async () => {
     await semear();
-    const p1 = await ok('limite=4');
+    const p1 = await ok('limit=4');
     assert.deepEqual(ids(p1), ['e6', 'e5', 'e4', 'e3']);
     assert.ok(p1.older);
-    const p2 = await ok(`limite=4&antes=${p1.older}`);
+    const p2 = await ok(`limit=4&before=${p1.older}`);
     assert.deepEqual(ids(p2), ['e2', 'e1']);
     assert.equal(p2.older, null);
   });
@@ -152,77 +150,77 @@ describe('#94 GET /api/eventos: a montagem', () => {
   test('ao vivo por depois: o novo e o atrasado (createdAt mais velho), e o cursor repete sem nada novo', async () => {
     await semear();
     const p = await ok();
-    const nada = await ok(`depois=${p.cursor}`);
+    const nada = await ok(`after=${p.cursor}`);
     assert.deepEqual(nada.events, []);
     assert.equal(nada.cursor, p.cursor);
     assert.equal(nada.older, null);
 
     await storage.appendEvent(event({ id: 'novo', sessionId: 's1', agentId: null, createdAt: at(10), type: 'Stop', toolName: null, summary: null, data: {} }));
     await storage.appendEvent(event({ id: 'atrasado', sessionId: 's1', agentId: null, createdAt: at(0), type: 'ToolResult', toolName: 'Read', summary: 'ok', data: {} }));
-    const vivo = await ok(`depois=${p.cursor}`);
+    const vivo = await ok(`after=${p.cursor}`);
     assert.deepEqual(ids(vivo), ['novo', 'atrasado']);
-    assert.deepEqual(ids(await ok(`depois=${vivo.cursor}`)), []);
+    assert.deepEqual(ids(await ok(`after=${vivo.cursor}`)), []);
   });
 
   test('cada filtro', async () => {
     await semear();
-    assert.deepEqual(ids(await ok('tipo=PreToolUse')), ['e2']);
-    assert.deepEqual(ids(await ok('sessao=s2')), ['e6', 'e5', 'e2']);
-    assert.deepEqual(ids(await ok('ferramenta=Read')), ['e3']);
+    assert.deepEqual(ids(await ok('type=PreToolUse')), ['e2']);
+    assert.deepEqual(ids(await ok('session=s2')), ['e6', 'e5', 'e2']);
+    assert.deepEqual(ids(await ok('tool=Read')), ['e3']);
     assert.deepEqual(ids(await ok('status=waiting')), ['e4']);
     assert.deepEqual(ids(await ok('status=error')), ['e5']);
     assert.deepEqual(ids(await ok('status=completed')), ['e6']);
     assert.deepEqual(ids(await ok('status=active')), ['e3', 'e2', 'e1']);
-    assert.deepEqual(ids(await ok('status=active&tipo=APIError')), [], 'tipo e status que não casam: nada');
-    assert.deepEqual(ids(await ok('status=error&tipo=APIError')), ['e5']);
-    assert.deepEqual(ids(await ok('busca=NPM')), ['e2']);
-    assert.deepEqual(ids(await ok('busca=read')), ['e3'], 'acha no nome da ferramenta');
-    assert.deepEqual(ids(await ok('busca=%25')), []);
-    assert.deepEqual(ids(await ok(`de=${encodeURIComponent(at(2))}&ate=${encodeURIComponent(at(4))}`)), ['e4', 'e3', 'e2'], 'ate com hora é inclusivo');
-    assert.deepEqual(ids(await ok('de=2026-11-02&ate=2026-11-02')), ['e6', 'e5', 'e4', 'e3', 'e2', 'e1'], 'data sem hora: o dia inteiro (UTC)');
-    assert.deepEqual(ids(await ok('ate=2026-11-01')), []);
-    assert.deepEqual(ids(await ok('sessao=s1&status=active&busca=a.ts')), ['e3']);
+    assert.deepEqual(ids(await ok('status=active&type=APIError')), [], 'tipo e status que não casam: nada');
+    assert.deepEqual(ids(await ok('status=error&type=APIError')), ['e5']);
+    assert.deepEqual(ids(await ok('search=NPM')), ['e2']);
+    assert.deepEqual(ids(await ok('search=read')), ['e3'], 'acha no nome da ferramenta');
+    assert.deepEqual(ids(await ok('search=%25')), []);
+    assert.deepEqual(ids(await ok(`from=${encodeURIComponent(at(2))}&to=${encodeURIComponent(at(4))}`)), ['e4', 'e3', 'e2'], 'ate com hora é inclusivo');
+    assert.deepEqual(ids(await ok('from=2026-11-02&to=2026-11-02')), ['e6', 'e5', 'e4', 'e3', 'e2', 'e1'], 'data sem hora: o dia inteiro (UTC)');
+    assert.deepEqual(ids(await ok('to=2026-11-01')), []);
+    assert.deepEqual(ids(await ok('session=s1&status=active&search=a.ts')), ['e3']);
   });
 
   test('o ao vivo respeita os filtros', async () => {
     await semear();
-    const p = await ok('sessao=s1');
+    const p = await ok('session=s1');
     await storage.appendEvent(event({ id: 'outra', sessionId: 's2', createdAt: at(20) }));
     await storage.appendEvent(event({ id: 'dela', sessionId: 's1', createdAt: at(21) }));
-    assert.deepEqual(ids(await ok(`sessao=s1&depois=${p.cursor}`)), ['dela']);
+    assert.deepEqual(ids(await ok(`session=s1&after=${p.cursor}`)), ['dela']);
   });
 
   test('parâmetros inválidos dão 400 com o erro em pt-BR', async () => {
     await semear();
-    const p = await ok('limite=1');
+    const p = await ok('limit=1');
     const ruins = [
-      'limite=0',
-      'limite=201',
-      'limite=abc',
-      'limite=1.5',
-      `depois=${p.cursor}&antes=${p.older}`,
-      'depois=lixo',
-      'antes=lixo',
-      `depois=${'a'.repeat(600)}`,
-      'tipo=a%20b',
-      `tipo=${'A'.repeat(65)}`,
-      'sessao=id%20com%20espa%C3%A7o',
-      'ferramenta=a%3Bb',
+      'limit=0',
+      'limit=201',
+      'limit=abc',
+      'limit=1.5',
+      `after=${p.cursor}&before=${p.older}`,
+      'after=lixo',
+      'before=lixo',
+      `after=${'a'.repeat(600)}`,
+      'type=a%20b',
+      `type=${'A'.repeat(65)}`,
+      'session=id%20com%20espa%C3%A7o',
+      'tool=a%3Bb',
       'status=working',
-      `busca=${'x'.repeat(101)}`,
-      'busca=a%0Ab',
-      'de=ontem',
-      'ate=2026-13-40',
-      'de=2026-11-02T12:00',
-      `de=${encodeURIComponent(at(5))}&ate=${encodeURIComponent(at(1))}`,
+      `search=${'x'.repeat(101)}`,
+      'search=a%0Ab',
+      'from=ontem',
+      'to=2026-13-40',
+      'from=2026-11-02T12:00',
+      `from=${encodeURIComponent(at(5))}&to=${encodeURIComponent(at(1))}`,
     ];
     for (const q of ruins) {
       const r = await pedir(q);
       assert.equal(r.status, 400, q);
       assert.equal(typeof r.corpo.error, 'string', q);
     }
-    assert.equal((await pedir(`busca=${'x'.repeat(100)}`)).status, 200);
-    assert.equal((await pedir('limite=200')).status, 200);
+    assert.equal((await pedir(`search=${'x'.repeat(100)}`)).status, 200);
+    assert.equal((await pedir('limit=200')).status, 200);
   });
 
   test('corta os campos grandes e não vaza o data', async () => {
@@ -282,7 +280,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
   });
 });
 
-describe('#94 GET /api/eventos: a rota HTTP, ponta a ponta', () => {
+describe('#94 GET /api/events: a rota HTTP, ponta a ponta', () => {
   test('sobe na porta 0 com o cenário do simulador; só GET; Origin de fora dá 403', async () => {
     await seedPanelScenario(storage, 'p4');
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
@@ -301,9 +299,11 @@ describe('#94 GET /api/eventos: a rota HTTP, ponta a ponta', () => {
       assert.ok(mais.events.every((e) => !corpo.events.some((x) => x.id === e.id)));
       assert.deepEqual(await (await fetch(`${api.url}/api/events?limit=0`)).json(), { error: 'limit: um inteiro de 1 a 200' }, 'the error cites the new parameter');
 
-      assert.equal((await fetch(`${api.url}/api/eventos?limite=0`)).status, 400);
-      assert.equal((await fetch(`${api.url}/api/eventos`, { method: 'POST' })).status, 405);
-      assert.equal((await fetch(`${api.url}/api/eventos`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
+      assert.equal((await fetch(`${api.url}/api/events`, { method: 'POST' })).status, 405);
+      assert.equal((await fetch(`${api.url}/api/events`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
+      // The old Portuguese route is gone.
+      const antiga = await fetch(`${api.url}/api/eventos?limit=0`);
+      assert.deepEqual([antiga.status, await antiga.json()], [404, { error: 'não encontrado' }]);
     } finally {
       await api.close();
     }
@@ -313,7 +313,7 @@ describe('#94 GET /api/eventos: a rota HTTP, ponta a ponta', () => {
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
     const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
-      assert.equal((await fetch(`${api.url}/api/eventos`)).status, 404);
+      assert.equal((await fetch(`${api.url}/api/events`)).status, 404);
     } finally {
       await api.close();
     }

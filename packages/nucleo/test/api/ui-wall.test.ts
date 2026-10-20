@@ -1,5 +1,5 @@
 // A tela Mural ao vivo da /ui (#34, C2): a formatação, o que cada card mostra e a montagem da tela
-// num DOM mínimo, com um Mural de exemplo (dados inventados) no lugar de `GET /api/mural`.
+// num DOM mínimo, com um Mural de exemplo (dados inventados) no lugar de `GET /api/wall`.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';

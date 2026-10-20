@@ -172,8 +172,6 @@ describe('#28 GET /api/sessions com o simulador', () => {
     assert.equal(ok.status, 200);
     const corpo = JSON.parse(ok.corpo) as ListaDeSessoesHttp;
     assert.ok(corpo.items.every((s) => s.status === 'waiting'));
-    // The old values are still accepted (ENGLISH_VALUES_BY_PATH), on the new route too.
-    assert.equal((await pedir(api.url, '/api/sessions?status=esperando&order=custo&direction=asc&page=1')).corpo, ok.corpo);
     const erros: Record<string, string> = {
       'status=nenhuma': 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned',
       'order=nome': 'order: um de activity, duration, cost',
@@ -182,24 +180,29 @@ describe('#28 GET /api/sessions com o simulador', () => {
       'page=1.5': 'page: um inteiro a partir de 1',
       'dir=relativo': 'dir: um caminho absoluto',
       [`search=${'x'.repeat(201)}`]: 'search grande demais',
+      // The old Portuguese values are refused (#173, phase 6).
+      'status=esperando': 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned',
+      'order=custo': 'order: um de activity, duration, cost',
     };
     for (const [q, error] of Object.entries(erros)) {
       const r = await pedir(api.url, `/api/sessions?${q}`);
       assert.equal(r.status, 400, q);
       assert.deepEqual(JSON.parse(r.corpo), { error }, q);
     }
-    for (const q of ['status=nenhuma', 'ordem=nome', 'sentido=lado', 'pagina=0', 'pagina=1.5', 'dir=relativo', `busca=${'x'.repeat(201)}`]) {
-      const r = await pedir(api.url, `/api/sessoes?${q}`);
-      assert.equal(r.status, 400, q);
-      assert.ok(JSON.parse(r.corpo).error, q);
+    // The old Portuguese parameter names are ignored: a bad value under them is not even read.
+    const padrao = await pedir(api.url, '/api/sessions');
+    for (const q of ['ordem=nome', 'sentido=lado', 'pagina=0', `busca=${'x'.repeat(201)}`]) {
+      assert.deepEqual(await pedir(api.url, `/api/sessions?${q}`), padrao, q);
     }
+    // The old Portuguese route is gone.
+    assert.deepEqual(await pedir(api.url, '/api/sessoes'), { status: 404, corpo: JSON.stringify({ error: 'não encontrado' }) });
     const host = new URL(api.url).host;
-    assert.equal((await pedir(api.url, '/api/sessoes', { origin: `http://${host}` })).status, 200);
-    assert.equal((await pedir(api.url, '/api/sessoes', { origin: 'https://exemplo.com' })).status, 403);
+    assert.equal((await pedir(api.url, '/api/sessions', { origin: `http://${host}` })).status, 200);
+    assert.equal((await pedir(api.url, '/api/sessions', { origin: 'https://exemplo.com' })).status, 403);
   });
 
   test('pedidoDeSessoes: os padrões', () => {
-    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessoes')), PADRAO);
+    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessions')), PADRAO);
     assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessions?search=%20oi%20&dir=/a/b&page=3')), { ...PADRAO, busca: 'oi', dir: '/a/b', pagina: 3 });
   });
 });
@@ -220,7 +223,8 @@ describe('#28 a tela Sessões', () => {
     assert.deepEqual(stateFromQuery(queryFromState(e)), e);
     assert.equal(queryFromState(e), '?status=blocked&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
     assert.equal(stateFromQuery('?status=waiting').status, 'blocked', 'an old bookmark of the waiting pill opens the ones that need you');
-    // An old bookmark's values (`esperando`, `custo`) are the shell's job (legacyUrl, ui.test.ts).
+    // The old Portuguese values are not read (#173, phase 6): they fall back to the default.
+    assert.deepEqual(stateFromQuery('?status=esperando&order=custo'), stateFromQuery(''));
     assert.equal(queryFromState(stateFromQuery('')), '');
     assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });

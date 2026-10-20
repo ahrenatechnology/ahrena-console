@@ -198,11 +198,13 @@ describe('mural ao vivo (#34)', () => {
       assert.match(r.headers.get('content-type') ?? '', /application\/json/);
       const mural = (await r.json()) as Wall;
       assert.equal(mural.version, 1);
-      // The old route answers the old keys (#173 phase 2b; its golden has the whole body).
-      assert.equal(((await (await fetch(`${api.url}/api/mural`)).json()) as { versao: number }).versao, 1);
       assert.equal(mural.cards.length, 7);
-      assert.equal((await fetch(`${api.url}/api/mural`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
-      assert.equal((await fetch(`${api.url}/api/mural`, { method: 'POST' })).status, 405);
+      assert.equal((await fetch(`${api.url}/api/wall`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
+      assert.equal((await fetch(`${api.url}/api/wall`, { method: 'POST' })).status, 405);
+      // The old Portuguese route is gone (#173 phase 6).
+      const antiga = await fetch(`${api.url}/api/mural`);
+      assert.equal(antiga.status, 404);
+      assert.deepEqual(await antiga.json(), { error: 'não encontrado' });
     } finally {
       await api.close();
       await storage.close();

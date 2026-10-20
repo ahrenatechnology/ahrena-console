@@ -415,14 +415,14 @@ describe('ownership and code', { timeout: 60_000 }, () => {
     assert.equal(a.proc.exitCode, null, 'and so is the real core');
   });
 
-  test('--demo and --sem-trava fail if the port already has a core', async () => {
+  test('--demo and --no-lock fail if the port already has a core', async () => {
     const port = await freePort();
     api(port);
     await liveLock();
     for (const option of ['--demo', '--sem-trava']) {
       const r = await run(API_CLI, ['--porta', String(port), ...HOOKS_ONLY, option]).done;
       assert.equal(r.code, 1, option);
-      assert.match(r.stderr, /já tem um núcleo \(pid \d+\); a --(demo|sem-trava) precisa de uma porta livre/);
+      assert.match(r.stderr, /já tem um núcleo \(pid \d+\); a --(demo|no-lock) precisa de uma porta livre/);
       assert.equal(r.stdout, '');
     }
   });

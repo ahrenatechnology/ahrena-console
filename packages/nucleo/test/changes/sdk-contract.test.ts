@@ -68,8 +68,7 @@ describe('wait_for_changes with the official client', () => {
       const r = await pending;
       assert.deepEqual(r.changes.map((m) => [m.type, m.sessionId, m.account?.label]), [['session', `nova-${k}-a`, 'equipe']]);
 
-      // The old type name (`sessao`) is still accepted (#173 phase 2b), the answer is English.
-      const filtered = call({ cursor: r.cursor, timeout: 20, account: ['cliente', 'none'], types: ['sessao'], sessions: [`nova-${k}-b`, `nova-${k}-c`] });
+      const filtered = call({ cursor: r.cursor, timeout: 20, account: ['cliente', 'none'], types: ['session'], sessions: [`nova-${k}-b`, `nova-${k}-c`] });
       while (changes.openWaits === 0) await new Promise((r) => setImmediate(r));
       await storage.putSession(session({ id: `nova-${k}-x`, accountId: c2.id, accountSource: 'env' }));
       await storage.putSession(session({ id: `nova-${k}-b`, accountId: c1.id, accountSource: 'env' }));
@@ -82,6 +81,9 @@ describe('wait_for_changes with the official client', () => {
 
       const wrong = await client.callTool({ name: WAIT_FOR_CHANGES, arguments: { types: ['outro'] } });
       assert.equal(wrong.isError, true);
+      // The old Portuguese type name is refused since #173 phase 6.
+      const old = await client.callTool({ name: WAIT_FOR_CHANGES, arguments: { types: ['sessao'] } });
+      assert.equal(old.isError, true);
     } finally {
       await client.close();
     }
@@ -93,7 +95,7 @@ describe('wait_for_changes with the official client', () => {
     exercise(
       new StdioClientTransport({
         command: process.execPath,
-        args: ['--disable-warning=ExperimentalWarning', CLI, '--porta', new URL(api.url).port],
+        args: ['--disable-warning=ExperimentalWarning', CLI, '--port', new URL(api.url).port],
         stderr: 'ignore',
       }),
     ));

@@ -272,7 +272,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     }
   });
 
-  test('sem a /api/atencao, o resto fica no ar e a inbox vira a faixa de erro', async () => {
+  test('sem a /api/attention, o resto fica no ar e a inbox vira a faixa de erro', async () => {
     const { area, sair } = await montarTela(async (rota) => {
       if (rota === tela.ATTENTION_ROUTE) throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
       return (await fetch(`${api.url}${rota}`)).json();

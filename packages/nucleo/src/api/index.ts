@@ -21,21 +21,6 @@ export { MontadorDoMural, ehAberta, muralDoPainel, responderMural, RECENTE_DO_MU
 export { ResumosDeSessao, aplicarEvento, iniciosDosTurnos, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './summary.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './work.ts';
 export { startLocalApi, API_VERSION, PANEL_ROUTE, OPEN_ROUTE, LOAD_ROUTE, DECISIONS_ROUTE, type LocalApi, type ApiOptions } from './server.ts';
-export {
-  LEGACY_BODIES,
-  LEGACY_PARAMS,
-  legacyRequestBody,
-  legacyResponseFor,
-  legacyRouteOf,
-  normalizeLegacyPath,
-  normalizeLegacyQuery,
-  normalizeLegacyUrl,
-  rawPathnameOf,
-  translateBody,
-  type LegacyBodySpec,
-  type LegacyRoute,
-  type LegacyRouteSpec,
-} from './legacy-routes.ts';
 export * from './workflows.ts';
 export { criarRotaDoProjeto, quadroDe, mesmaOrigemMovendo, PROJECT_ROUTE, PROJECT_MOVE_ROUTE, type CardDoProjeto, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from './project.ts';
 export { LeiturasDoDetalhe, DETAIL_ROUTE, filtroDe, type CabecaDoDetalhe, type AgentesDoDetalhe, type ConversaDoDetalhe, type EventosDoDetalhe, type OpcoesDoDetalhe } from './session-detail.ts';

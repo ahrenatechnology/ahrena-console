@@ -15,7 +15,6 @@ import { linkSession, markPromoted, registerDecision, type DecisionDraft } from 
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
-import { currentDemoId } from './legacy-ids.ts';
 import { ROOT } from './vocabulary.ts';
 
 /** The CI checks as in P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
@@ -524,9 +523,9 @@ export function demoRecordFolders(base: string): (repo: string) => string | null
 /**
  * The panel's alias in the --demo: the side panel (which sends the session's real id) sees the
  * scenario's; the simulator's sessions (`sim-…`), which the /ui sends when deciding on behalf of the
- * owning session, stay as they came, with an old id read as its new one (legacy-ids.ts).
+ * owning session, stay as they came.
  */
-export const demoAlias = (sessionId: string): string => (sessionId.startsWith('sim-') ? currentDemoId(sessionId) : PANEL_SESSION);
+export const demoAlias = (sessionId: string): string => (sessionId.startsWith('sim-') ? sessionId : PANEL_SESSION);
 
 /** The vitrine's parent session: yesterday's, before /clear. It only exists in the decisions port. */
 export const VITRINE_PARENT = 'sim-panel-vitrine-yesterday';
