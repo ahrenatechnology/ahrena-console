@@ -507,7 +507,7 @@ function abaConversa(ctx, base) {
     const cabeca = el(
       'button',
       { type: 'button', class: 'det-ferramenta-cab', 'aria-expanded': aberta ? 'true' : 'false' },
-      icone(aberta ? 'seta-baixo' : 'seta-direita'),
+      icone(aberta ? 'chevron-baixo' : 'chevron-direita'),
       el('b', { class: 'mono nome' }, f.nome),
       el('span', { class: 'mono resumo' }, f.resumo ?? ''),
       est ? el('span', { class: `mono situacao e-${f.estado}` }, icone(est.icone), est.rotulo) : null,
@@ -516,7 +516,7 @@ function abaConversa(ctx, base) {
       const abrir = detalhe.hidden;
       detalhe.hidden = !abrir;
       cabeca.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cabeca.firstChild.replaceWith(icone(abrir ? 'seta-baixo' : 'seta-direita'));
+      cabeca.firstChild.replaceWith(icone(abrir ? 'chevron-baixo' : 'chevron-direita'));
       (abrir ? abertas : fechadas).add(f.id);
       (abrir ? fechadas : abertas).delete(f.id);
     });
@@ -619,7 +619,7 @@ function abaTempo(ctx, base, { rotular }) {
     const cab = el(
       'button',
       { type: 'button', class: 'det-evento-cab', 'aria-expanded': aberto ? 'true' : 'false' },
-      icone(aberto ? 'seta-baixo' : 'seta-direita'),
+      icone(aberto ? 'chevron-baixo' : 'chevron-direita'),
       el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ha(e.em)),
       pilulaDeStatus(e.status),
       el('span', { class: 'mono tipo' }, e.tipo),
@@ -630,7 +630,7 @@ function abaTempo(ctx, base, { rotular }) {
       const abrir = dados.hidden;
       dados.hidden = !abrir;
       cab.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cab.firstChild.replaceWith(icone(abrir ? 'seta-baixo' : 'seta-direita'));
+      cab.firstChild.replaceWith(icone(abrir ? 'chevron-baixo' : 'chevron-direita'));
       if (abrir) abertos.add(e.id);
       else abertos.delete(e.id);
     });
