@@ -26,7 +26,7 @@
     ],
     "itens": [
       {
-        "id": "sim-detalhe-pedidos",
+        "id": "sim-detail-orders",
         "titulo": "Migração do esquema de pedidos",
         "status": "waiting",
         "motivo": "notification",
@@ -40,7 +40,7 @@
         "conta": null
       },
       {
-        "id": "sim-wf-erros",
+        "id": "sim-wf-errors",
         "titulo": "Tratamento de erros da API",
         "status": "completed",
         "motivo": null,
@@ -57,7 +57,7 @@
         }
       },
       {
-        "id": "sim-painel-esta",
+        "id": "sim-panel-current",
         "titulo": "Separar pagamentos em serviços",
         "status": "active",
         "motivo": null,
@@ -74,7 +74,7 @@
         }
       },
       {
-        "id": "sim-wf-pagamentos",
+        "id": "sim-wf-payments",
         "titulo": "Separar pagamentos em serviços",
         "status": "active",
         "motivo": null,
@@ -125,7 +125,7 @@
         }
       },
       {
-        "id": "sim-painel-blog-estatico",
+        "id": "sim-panel-blog-estatico",
         "titulo": "blog-estatico",
         "status": "completed",
         "motivo": null,
@@ -142,7 +142,7 @@
         }
       },
       {
-        "id": "sim-historico-busca-de-receitas",
+        "id": "sim-history-recipe-search",
         "titulo": "Busca de receitas",
         "status": "completed",
         "motivo": null,
@@ -156,7 +156,7 @@
         "conta": null
       },
       {
-        "id": "sim-wf-retomada",
+        "id": "sim-wf-resume",
         "titulo": "Rotas do gateway",
         "status": "active",
         "motivo": null,
@@ -173,7 +173,7 @@
         }
       },
       {
-        "id": "sim-historico-notas-em-markdown",
+        "id": "sim-history-markdown-notes",
         "titulo": "Notas em Markdown",
         "status": "completed",
         "motivo": null,

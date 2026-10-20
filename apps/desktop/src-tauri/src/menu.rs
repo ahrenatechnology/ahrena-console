@@ -12,7 +12,7 @@ use crate::machines;
 
 /// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts). As chaves em inglês
 /// (#173 fase 2b); o `alias` lê também as de um núcleo mais antigo, que o app pode adotar (o
-/// `/api/overview` dele ainda responde pelo `nome`, nucleo.rs), e `do_json` passa os valores dele
+/// `/api/overview` dele ainda responde pelo `nome`, core.rs), e `do_json` passa os valores dele
 /// para os novos.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ItemDaAtencao {

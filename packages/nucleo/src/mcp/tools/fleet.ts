@@ -3,7 +3,7 @@
 // Cost and counts add up across accounts; usage limits never come in here.
 
 import type { InboxState } from '../../states/inbox.ts';
-import type { ContaDoPainel } from '../../api/tipos.ts';
+import type { ContaDoPainel } from '../../api/types.ts';
 import type { Tool, JsonObject } from '../protocol.ts';
 import { matchesAccountFilter, LIVE_STATES, minutesSince, projectOf, type FleetReader } from '../fleet.ts';
 import { COMMON_ARGS, ACCOUNT_SCHEMA, objectSchema, timeAgo, parseCommonArgs, arrayOf, strictObject, nullable, paginate, T } from '../output.ts';

@@ -19,7 +19,7 @@
     },
     "grupos": [
       {
-        "chave": "f.c2ltLXBhaW5lbC1rYW5iYW4tb250ZW0",
+        "chave": "f.c2ltLXBhbmVsLWthbmJhbi15ZXN0ZXJkYXk",
         "tipo": "familia",
         "titulo": "Separar pagamentos em serviços",
         "repo": "/simulacao/ahrena-demo",
@@ -29,7 +29,7 @@
         "total": 1,
         "itens": [
           {
-            "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+            "id": "dec:7555fc23396627a5f58dd96044d1df1b",
             "rotulo": "D6",
             "origem": "sugerida",
             "estado": "a_confirmar",
@@ -47,13 +47,13 @@
             "substituidaPor": null,
             "sessao": "esta",
             "toolUseId": "sim-toolu-p9-6",
-            "sessionId": "sim-painel-esta",
+            "sessionId": "sim-panel-current",
             "escopo": "familia",
             "substitui": null,
             "promovidaPara": null,
             "branch": "feat/42-kanban-de-sessoes",
             "repo": "/simulacao/ahrena-demo",
-            "conversa": "/ui/sessions/sim-painel-esta"
+            "conversa": "/ui/sessions/sim-panel-current"
           }
         ],
         "mais": 0

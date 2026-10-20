@@ -14,7 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from './helpers.ts';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '../../src/mcp/cli.ts');
@@ -57,7 +57,7 @@ async function exercise(transport: Transport) {
 
 for (const [name, seedWith] of [
   ['synthetic cases', seed],
-  ['simulator scenario p2', (s: SqliteStorage) => semearCenariosDoPainel(s, 'p2', NOW)],
+  ['simulator scenario p2', (s: SqliteStorage) => seedPanelScenario(s, 'p2', NOW)],
   ['empty database', async () => {}],
 ] as const) {
   describe(`contract with the official client: ${name}`, () => {
@@ -105,7 +105,7 @@ test('stdio without the core: the official client connects, lists the tools and 
     assert.equal(tools.length, 2);
     const r = await client.callTool({ name: 'sessions_needing_attention', arguments: {} });
     assert.equal(r.isError, true);
-    assert.match((r.content as { text: string }[])[0].text, /npm run api/);
+    assert.match((r.content as { text: string }[])[0].text, /npm run api -- --porta/);
   } finally {
     await client.close();
   }

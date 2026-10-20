@@ -317,6 +317,11 @@ export class GithubReposSource implements FonteDosRepos {
     return { estado: 'ok', valor: (json ?? []) as T, etag: res.headers.get('etag') };
   }
 
+  /** Uma consulta GraphQL com o token e o teto deste adaptador (a leitura dos arquivos do repositório, repo-files-source.ts). */
+  async query<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
+    return this.graphql<T>(operation, query, variables, true);
+  }
+
   private async token(): Promise<string> {
     if (this.tokenValue) return this.tokenValue;
     const t = this.opts.token ?? (() => ghCliToken());

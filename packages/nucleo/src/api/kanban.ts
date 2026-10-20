@@ -31,10 +31,10 @@ import { currentPrices } from '../cost/table.ts';
 import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from './contas.ts';
-import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
-import { ResumosDeSessao } from './resumo.ts';
-import { custoDaSessao, duracaoDe, tituloDe } from './sessoes.ts';
+import type { Contas } from './accounts.ts';
+import type { IndiceDoDesktop, SessaoDoDesktop } from './desktop-index.ts';
+import { ResumosDeSessao } from './summary.ts';
+import { custoDaSessao, duracaoDe, tituloDe } from './sessions.ts';
 
 export const ROTA_DO_KANBAN = '/api/kanban';
 export const POR_PAGINA = 10;

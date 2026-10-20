@@ -6,10 +6,10 @@ import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/rota-analytics.ts';
+import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/analytics-route.ts';
 import type { TokenCounts } from '../../src/model.ts';
-import { semearHistorico } from '../../src/simulador/historico.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { seedHistory } from '../../src/simulator/history.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { account, agent, event, session } from '../fixtures.ts';
 
 // Terça-feira, 12h em São Paulo.
@@ -323,23 +323,23 @@ describe('histórico simulado da --demo', () => {
   let storage: SqliteStorage;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
-    await semearHistorico(storage, { agora: AGORA });
+    await seedPanelScenario(storage, 'p4', AGORA);
+    await seedHistory(storage, { now: AGORA });
   });
   after(() => storage.close());
 
   test('é determinístico, fica no passado e encerrado, sem nada para o painel', async () => {
     const outro = openSqliteStorage({ path: ':memory:' });
     try {
-      const a = await semearHistorico(outro, { agora: AGORA });
+      const a = await seedHistory(outro, { now: AGORA });
       const terceiro = openSqliteStorage({ path: ':memory:' });
-      const b = await semearHistorico(terceiro, { agora: AGORA });
+      const b = await seedHistory(terceiro, { now: AGORA });
       await terceiro.close();
       assert.deepEqual(a, b);
-      assert.ok(a.sessoes > 50, `${a.sessoes} sessões`);
+      assert.ok(a.sessions > 50, `${a.sessions} sessões`);
       const inicioDeHoje = new Date(AGORA).toISOString().slice(0, 10);
       const page = await outro.listSessions({ limit: 500 });
-      assert.equal(page.items.length, a.sessoes);
+      assert.equal(page.items.length, a.sessions);
       for (const s of page.items) {
         assert.equal(s.status, 'completed', s.id);
         assert.equal(s.awaitingInputSince, null, s.id);

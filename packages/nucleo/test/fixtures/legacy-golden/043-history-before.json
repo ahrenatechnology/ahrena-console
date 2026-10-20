@@ -12,7 +12,7 @@
         "dia": "2026-10-18",
         "sessoes": [
           {
-            "id": "sim-historico-relatorio-mensal",
+            "id": "sim-history-monthly-report",
             "titulo": "Relatório mensal mais rápido",
             "projeto": "painel-de-metricas",
             "modelo": "Opus 5.5",
@@ -25,7 +25,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-wf-bibliotecas",
+            "id": "sim-wf-libraries",
             "titulo": "Comparar clientes HTTP",
             "projeto": "gateway-sandbox",
             "modelo": "Opus 5.5",
@@ -43,7 +43,7 @@
         "dia": "2026-10-17",
         "sessoes": [
           {
-            "id": "sim-historico-busca-de-receitas",
+            "id": "sim-history-recipe-search",
             "titulo": "Busca de receitas",
             "projeto": "app-receitas",
             "modelo": "Sonnet 5.5",

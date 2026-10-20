@@ -26,7 +26,7 @@
     ],
     "itens": [
       {
-        "id": "sim-painel-esta",
+        "id": "sim-panel-current",
         "titulo": "Separar pagamentos em serviços",
         "status": "active",
         "motivo": null,
@@ -43,7 +43,7 @@
         }
       },
       {
-        "id": "sim-wf-retomada",
+        "id": "sim-wf-resume",
         "titulo": "Rotas do gateway",
         "status": "active",
         "motivo": null,
@@ -60,7 +60,7 @@
         }
       },
       {
-        "id": "sim-wf-pagamentos",
+        "id": "sim-wf-payments",
         "titulo": "Separar pagamentos em serviços",
         "status": "active",
         "motivo": null,
@@ -77,7 +77,7 @@
         }
       },
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "titulo": "fila-de-tarefas",
         "status": "waiting",
         "motivo": "stop",
@@ -94,7 +94,7 @@
         }
       },
       {
-        "id": "sim-detalhe-pedidos",
+        "id": "sim-detail-orders",
         "titulo": "Migração do esquema de pedidos",
         "status": "waiting",
         "motivo": "notification",
@@ -108,7 +108,7 @@
         "conta": null
       },
       {
-        "id": "sim-painel-catalogo-exemplo",
+        "id": "sim-panel-catalogo-exemplo",
         "titulo": "catalogo-exemplo",
         "status": "active",
         "motivo": null,
@@ -125,7 +125,7 @@
         }
       },
       {
-        "id": "sim-painel-blog-estatico",
+        "id": "sim-panel-blog-estatico",
         "titulo": "blog-estatico",
         "status": "completed",
         "motivo": null,
@@ -159,7 +159,7 @@
         }
       },
       {
-        "id": "sim-wf-cadastro",
+        "id": "sim-wf-signup",
         "titulo": "Ajustar o layout do cadastro",
         "status": "completed",
         "motivo": null,
@@ -176,7 +176,7 @@
         }
       },
       {
-        "id": "sim-wf-categoria",
+        "id": "sim-wf-category",
         "titulo": "Filtro por categoria",
         "status": "completed",
         "motivo": null,

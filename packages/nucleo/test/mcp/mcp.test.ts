@@ -19,7 +19,7 @@ import {
   type Tool,
   type JsonRpcResponse,
 } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 import { NOW, c2, MESSAGE, QUESTION, SECRET, seed } from './helpers.ts';
 
@@ -265,7 +265,7 @@ describe('fleet_overview', () => {
 
   test('simulator scenario: the synthetic accounts and who needs you match the panel', async () => {
     const sim = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(sim, 'p3', NOW);
+    await seedPanelScenario(sim, 'p3', NOW);
     const accounts = new Contas({ storage: sim, arquivo: null });
     const { server: s } = createMcpServer({ storage: sim, accounts, now: () => NOW, timeZone: 'UTC' });
     const builder = new MontadorDoPainel({ storage: sim, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });

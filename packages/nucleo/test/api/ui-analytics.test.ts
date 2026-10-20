@@ -528,7 +528,7 @@ test('the registry: Analytics in the sidebar; /ui/analytics/cost opens the same 
 });
 
 test('as rotas e os períodos da tela são os do núcleo', async () => {
-  const { ROTA_DO_ANALYTICS, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/rota-analytics.ts');
+  const { ROTA_DO_ANALYTICS, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/analytics-route.ts');
   assert.equal(tela.OVERVIEW_ROUTE, ROTA_DO_ANALYTICS);
   assert.equal(tela.COST_ROUTE, COST_ROUTE);
   assert.deepEqual(tela.PERIODS, [...DIAS_DO_CUSTO]);

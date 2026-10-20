@@ -1,17 +1,19 @@
 // `start` as a function, for the command (cli.ts) and for whoever talks to the core from another
 // process (the MCP stdio bridge, the extension): adopts the live core or starts one in the
-// background and waits for it to answer.
+// background and waits for it to answer. Each installation (decision 0010) has its own data folder,
+// and adoption only happens within it: `dir` is that folder.
 
 import { spawn } from 'node:child_process';
-import { openSync } from 'node:fs';
+import { closeSync, openSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VERSAO_DA_API } from '../api/versao.ts';
+import { VERSAO_DA_API } from '../api/version.ts';
 import { registerClient } from './clients.ts';
 import { codeCommit, isOlderCommit } from './commit.ts';
 import { codeWarning, examine, planStart } from './owner.ts';
 import { sleep, probeCore } from './probe.ts';
-import { defaultDir, prepareDir, type Lock } from './lock.ts';
+import { prepareDir, type Lock } from './lock.ts';
+import { DEFAULT_INSTALLATION, resolveDataDir, type Installation } from './installation.ts';
 
 /**
  * The `--json` line of `start` and `status`. Its keys and values stay in Portuguese on purpose: the
@@ -30,11 +32,17 @@ export interface StartOutput {
   subiu?: boolean;
   aviso?: string;
   motivo?: string;
+  /** Since #221: the installation (`app`, `dev`, `mcpb`) and its data folder. New keys, in English. */
+  installation?: Installation;
+  dataDir?: string;
 }
 
 export interface StartOptions {
+  /** The installation (default `dev`). Adoption only happens within its data folder. */
+  installation?: Installation;
+  /** The data folder. Default: `resolveDataDir({ installation })` (installation.ts). */
   dir?: string;
-  /** The port to start on, if nobody is up. If there is a core, its port wins. */
+  /** The port to start on, if nobody is up; 0 lets the system pick one. If there is a core, its port wins. */
   port: number;
   parent?: number | null;
   replace?: boolean;
@@ -57,13 +65,15 @@ export const runningOutput = (t: Lock, extra: Partial<StartOutput> = {}): StartO
 });
 
 export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
-  const dir = o.dir ?? defaultDir();
+  const installation = o.installation ?? DEFAULT_INSTALLATION;
+  const dir = o.dir ?? resolveDataDir({ installation });
   const parent = o.parent ?? null;
   const code = { version: VERSAO_DA_API, commit: codeCommit(), isOlderCommit };
+  const where = { installation, dataDir: dir };
   const adopted = (s: StartOutput): StartOutput => {
     if (parent !== null) registerClient(parent, dir);
     if (s.aviso) o.log?.(`warning: ${s.aviso}`);
-    return s;
+    return { ...s, ...where };
   };
 
   const plan = await planStart({ dir, ...code, replace: o.replace, log: o.log });
@@ -76,11 +86,24 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
   const logFile = join(dir, 'nucleo.log');
   const out = openSync(logFile, 'a', 0o600);
   const api = join(dirname(fileURLToPath(import.meta.url)), '..', 'api', 'cli.ts');
-  const args = ['--disable-warning=ExperimentalWarning', api, '--porta', String(o.port), ...(parent !== null ? ['--pai', String(parent)] : []), ...(o.apiArgs ?? [])];
+  const args = [
+    '--disable-warning=ExperimentalWarning',
+    api,
+    '--port',
+    String(o.port),
+    '--installation',
+    installation,
+    '--data-dir',
+    dir,
+    ...(parent !== null ? ['--parent', String(parent)] : []),
+    ...(o.apiArgs ?? []),
+  ];
   const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', out, out] });
   let exitCode: number | null = null;
   child.on('exit', (c) => (exitCode = c ?? 1));
   child.unref();
+  // The child has its own copy of the log's descriptor.
+  closeSync(out);
 
   const end = Date.now() + (o.timeoutMs ?? 60_000);
   while (Date.now() < end) {
@@ -89,13 +112,14 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
       const started = ex.lock.pid === child.pid;
       const extra = { subiu: started, commit: ex.view.commit };
       // Another one started at the same time and won the port: this call adopts, as the child did.
-      if (started) return runningOutput(ex.lock, extra);
+      if (started) return runningOutput(ex.lock, { ...extra, ...where });
       const warning = codeWarning({ version: ex.lock.version, commit: ex.view.commit, pid: ex.lock.pid }, code);
       return adopted(runningOutput(ex.lock, { ...extra, ...(warning ? { aviso: warning } : {}) }));
     }
     if (exitCode !== null && exitCode !== 0) return { estado: 'parado', motivo: `o núcleo saiu com código ${exitCode}; veja ${logFile}` };
     // The child adopted a core without a lock (a --demo or --sem-trava, or one from before #86).
-    if (exitCode === 0) {
+    // With port 0 there is no port to look at: the child adopted through the lock, seen above.
+    if (exitCode === 0 && o.port !== 0) {
       const v = await probeCore(o.port);
       if (v) {
         const warning = [

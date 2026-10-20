@@ -26,7 +26,7 @@ const LEGACY_FILE = join(HERE, 'english-internals.legacy.json')
 // its JSON keys, query parameters and state keys.
 const SKIPPED_TREES = ['docs/']
 // Where routes and /ui URLs are written.
-const ROUTE_SOURCES = ['packages/nucleo/src/', 'packages/nucleo/ui/', 'apps/desktop/src-tauri/src/', 'apps/desktop/pagina/', 'plugins/ahrena-console/hooks/']
+const ROUTE_SOURCES = ['packages/nucleo/src/', 'packages/nucleo/ui/', 'apps/desktop/src-tauri/src/', 'apps/desktop/page/', 'plugins/ahrena-console/hooks/']
 const CSS_SOURCES = /\.(css|html)$/
 const CODE = /\.(ts|js|mjs|cjs|rs|json|ya?ml|sh|toml)$/
 

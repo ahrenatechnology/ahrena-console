@@ -2,13 +2,17 @@
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
 //
-// One core per machine (#86, src/owner/): if one is already up, this process adopts it (prints the
-// port and version and exits 0) instead of starting another.
+// One core per installation (#221, decision 0010, src/owner/): if this installation's core is
+// already up (the lock in its data folder), this process adopts it (prints the port and version and
+// exits 0) instead of starting another. A core of another installation is never adopted. By default
+// the port is 0: the system picks a free one, and the core announces it in the log, in the lock and
+// in the instance registry (~/.ahrena-console/instances/).
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
@@ -19,6 +23,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { GithubCallQueue } from '../github/call-queue.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
@@ -27,34 +32,38 @@ import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
-import { readLock, releaseLock, defaultDir, prepareDir } from '../owner/lock.ts';
+import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
+import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
+import { instanceId, listInstances, removeInstance, writeInstance } from '../owner/registry.ts';
+import { acquireStartGuard, type StartGuard } from '../owner/start-guard.ts';
 import { ChangeCursor } from '../changes/cursor.ts';
 import { onMachineChange, withChanges, SessionAccounts, decisionsWithChanges } from '../changes/sources.ts';
 import { waitForChanges } from '../changes/mcp.ts';
 import {
-  apelidoDaDemo,
-  CENARIOS_DO_PAINEL,
-  FonteDeTrabalhoDoSimulador,
-  pastasDosRegistrosDaDemo,
-  semearCenariosDoPainel,
-  semearDecisoesDoPainel,
-  type CenarioDoPainel,
-} from '../simulador/painel.ts';
-import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
-import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
+  demoAlias,
+  PANEL_SCENARIOS,
+  SimulatorWorkSource,
+  demoRecordFolders,
+  seedPanelScenario,
+  seedPanelDecisions,
+  type PanelScenario,
+} from '../simulator/panel.ts';
+import { seedDemoWorkflows } from '../simulator/workflows.ts';
+import { seedPanelHistory } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
-import { semearHistorico } from '../simulador/historico.ts';
-import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
+import { seedHistory } from '../simulator/history.ts';
+import { demoLocal, seedDetail } from '../simulator/detail.ts';
+import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
-import { Contas } from './contas.ts';
-import { DecisoesDaUi } from './decisoes-ui.ts';
+import { Contas } from './accounts.ts';
+import { DecisoesDaUi } from './decisions-ui.ts';
 import { QuadroKanban } from './kanban.ts';
-import { LeiturasDoDetalhe } from './detalhe.ts';
-import { IndiceDoDesktop } from './indice-desktop.ts';
-import { RotaAnalytics } from './rota-analytics.ts';
-import { MontadorDoPainel } from './painel.ts';
+import { LeiturasDoDetalhe } from './session-detail.ts';
+import { IndiceDoDesktop } from './desktop-index.ts';
+import { RotaAnalytics } from './analytics-route.ts';
+import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
   LIMPEZA_DAS_DECISOES,
@@ -63,14 +72,15 @@ import {
   REPROCESSAMENTO_DO_CONTEXTO,
   reprocessarContexto,
   reprocessarHistorico,
-} from './reprocessamento.ts';
+} from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
-import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
-import { ListaDeSessoes } from './sessoes.ts';
-import { FeedDeEventos } from './eventos.ts';
-import { TrabalhoPorBranch } from './trabalho.ts';
+import { createCoreAgentInstructions } from './agent-instructions.ts';
+import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './server.ts';
+import { ListaDeSessoes } from './sessions.ts';
+import { FeedDeEventos } from './events.ts';
+import { TrabalhoPorBranch } from './work.ts';
 import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
-import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
 import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
@@ -80,20 +90,27 @@ import { loadMachinesConfig } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
-import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
+import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 
-  --porta <n>         Porta em 127.0.0.1. Padrão AHRENA_CONSOLE_PORT ou 4720
-  --banco <arquivo>   SQLite do núcleo. Padrão AHRENA_CONSOLE_DB ou ~/.ahrena-console/nucleo.sqlite
+  --port <n>          Porta em 127.0.0.1. Padrão AHRENA_CONSOLE_CORE_PORT, AHRENA_CONSOLE_PORT ou 0:
+                      o sistema escolhe uma livre, e o núcleo a anuncia no log, na trava e no
+                      registro de instâncias (~/.ahrena-console/instances/)
+  --installation <i>  app, dev ou mcpb (padrão dev). Cada instalação tem o próprio núcleo, a própria
+                      pasta de dados e nunca adota o núcleo de outra
+  --data-dir <pasta>  Banco, log, clientes e trava. Padrão AHRENA_CONSOLE_DATA_DIR ou a pasta da
+                      instalação: dev ~/.ahrena-console, app ~/Library/Application Support/
+                      dev.ahrena.console, mcpb ~/.ahrena-console/installations/mcpb
+  --db <arquivo>      SQLite do núcleo. Padrão AHRENA_CONSOLE_DB ou <data-dir>/nucleo.sqlite
   --projetos <pasta>  Transcripts a seguir. Padrão ~/.claude/projects
   --sem-historico     Não importa nem segue transcripts (só hooks)
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
-                      projeto (/api/project) responde 503 e os repositórios (/api/repos)
-                      respondem "sem-github"
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos) e as
+                      instruções dos agentes (/api/agent-instructions) respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
@@ -102,13 +119,14 @@ const AJUDA = `Uso: npm run api -- [opções]
                       num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
-                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
-  --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
+                      (/ui/sessions/sim-detail-orders) e as ferramentas da sessão do cenário
+  --parent <pid>      Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
-  --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
+  --replace           Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
                       deste), para ele e sobe este. De outro código, só avisa
-  --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
-                      parte). A --demo já é sem trava. As duas falham se a porta tem dono
+  --no-lock           Não lê nem grava <data-dir>/nucleo.json nem o registro de instâncias
+                      (medições numa porta à parte). A --demo já é sem trava. As duas falham se
+                      a porta tem dono
   --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
                       Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
   --machines <arq>    As máquinas remotas (padrão ~/.ahrena-console/machines.json, #176):
@@ -120,13 +138,23 @@ Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
-Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
+Se já há um núcleo de pé nesta instalação, este não sobe outro: adota o de pé (imprime a porta e a
 versão, avisa se o código é outro) e sai com 0. Ver src/owner/README.md.
+Os nomes antigos (--porta, --banco, --pai, --substituir, --sem-trava) continuam aceitos; se vierem
+os dois, vale o novo.
   --help
 `;
 
 const { values: o } = parseArgs({
   options: {
+    port: { type: 'string' },
+    installation: { type: 'string' },
+    'data-dir': { type: 'string' },
+    db: { type: 'string' },
+    parent: { type: 'string' },
+    replace: { type: 'boolean', default: false },
+    'no-lock': { type: 'boolean', default: false },
+    // Old names, accepted until phase 6 of #173 (the new one wins if both are given).
     porta: { type: 'string' },
     banco: { type: 'string' },
     projetos: { type: 'string' },
@@ -150,27 +178,56 @@ if (o.help) {
 }
 
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
-const porta = Number(o.porta ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
+// The port asked for; 0 (the default) lets the system pick. `boundPort`, below, is the one it got.
+const porta = resolvePort(o.port ?? o.porta);
+const installation = parseInstallation(o.installation);
+const dataDir = resolveDataDir({ installation, dataDir: o['data-dir'] });
 const demo = o.demo;
-const pai = o.pai === undefined ? null : Number(o.pai);
-if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--pai: um pid');
-if (pai !== null && !isPidAlive(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
-const comTrava = !demo && !o['sem-trava'];
+const parentOption = o.parent ?? o.pai;
+const pai = parentOption === undefined ? null : Number(parentOption);
+if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--parent: um pid');
+if (pai !== null && !isPidAlive(pai)) throw new Error(`--parent: o pid ${pai} não existe`);
+const comTrava = !demo && !o['no-lock'] && !o['sem-trava'];
+const replace = o.replace || o.substituir;
 const commit = commitDoCheckout();
 const codigo = { version: VERSAO_DA_API, commit, isOlderCommit };
+/** The start guard of the data folder, held from before the database opens until the lock is written. */
+let startGuard: StartGuard | null = null;
+// Until the shutdown below is ready, a signal still exits through `exit`, whose handlers release the
+// start guard and the registry entry.
+const exitOnSignal = (signal: NodeJS.Signals) => process.exit(signal === 'SIGINT' ? 130 : 143);
+process.on('SIGINT', exitOnSignal);
+process.on('SIGTERM', exitOnSignal);
 
 function adotar(p: number, versao: string, aviso: string | null = null): never {
   if (aviso) log(`atenção: ${aviso}`);
-  if (pai !== null && comTrava) registerClient(pai);
+  if (pai !== null && comTrava) registerClient(pai, dataDir);
+  startGuard?.release();
   process.stdout.write(`núcleo de pé em http://127.0.0.1:${p} · versão ${versao} (adotado)\n`);
   process.exit(0);
 }
 
-// Antes de abrir o banco: adota o núcleo vivo da trava, ou a recupera se for órfã.
-if (comTrava) {
-  const plano = await planStart({ ...codigo, replace: o.substituir, log });
+// Antes de abrir o banco: adota o núcleo vivo da trava desta instalação, ou a recupera se for órfã.
+async function planOrAdopt(): Promise<void> {
+  const plano = await planStart({ ...codigo, dir: dataDir, replace, log });
   if (plano.action === 'adopt') adotar(plano.lock.port, plano.lock.version, plano.warning);
   if (plano.recovered) log(`trava órfã recuperada: ${plano.recovered}`);
+}
+if (comTrava) await planOrAdopt();
+// With port 0 two starts of this installation get different ports, and a port-0 start and a
+// forced-port start of the same folder do too: the port no longer decides who opens the database.
+// The start guard of the data folder does. Whoever holds it looks at the lock again (another start
+// may have finished between the first look and the guard), and adopts the core it finds.
+if (comTrava) {
+  process.once('exit', () => startGuard?.release());
+  try {
+    startGuard = await acquireStartGuard(dataDir);
+  } catch (e) {
+    await planOrAdopt();
+    throw e;
+  }
+  await planOrAdopt();
+  log(`start guard taken for ${dataDir}`);
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
@@ -188,6 +245,11 @@ async function adotarQuemTemAPorta(): Promise<never> {
       if (i === 20) semTrava = true;
       else await new Promise((r) => setTimeout(r, 100));
     }
+    // A core of another installation is never adopted (decision 0010): it has its own database.
+    if (semTrava && isOtherInstallation(v.pid)) {
+      log(`port ${porta} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
+      process.exit(1);
+    }
     const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, codigo)];
     adotar(porta, v.version, aviso.filter(Boolean).join('; ') || null);
   }
@@ -195,15 +257,40 @@ async function adotarQuemTemAPorta(): Promise<never> {
   process.exit(1);
 }
 function travaDaPorta(): number | null {
-  const t = readLock();
+  const t = readLock(dataDir);
   return t && t !== 'invalid' && t.port === porta ? t.pid : null;
 }
-const reserva = await reservePort(porta);
-if (reserva === 'in-use') await adotarQuemTemAPorta();
-const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
+/** The same folder, even through a symbolic link (/tmp and /private/tmp on macOS). */
+function sameDir(a: string, b: string): boolean {
+  const real = (d: string) => {
+    try {
+      return realpathSync(d);
+    } catch {
+      return resolve(d);
+    }
+  };
+  return real(a) === real(b);
+}
+/** The pid is the core of another data folder: in the registry, or holding the `dev` folder's lock. */
+function isOtherInstallation(pid: number | null): boolean {
+  if (pid === null) return false;
+  const registered = listInstances().find((i) => i.pid === pid);
+  if (registered) return !sameDir(registered.dataDir, dataDir);
+  const devDir = defaultDataDir('dev');
+  if (sameDir(devDir, dataDir)) return false;
+  const t = readLock(devDir);
+  return t !== null && t !== 'invalid' && t.pid === pid;
+}
+const reserved = await reservePort(porta);
+const reserva = reserved === 'in-use' ? await adotarQuemTemAPorta() : reserved;
+const boundPort = (reserva.address() as AddressInfo).port;
+const banco = demo ? ':memory:' : resolve(o.db ?? o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(dataDir, 'nucleo.sqlite'));
+// AHRENA_CONSOLE_DB applies to any installation: two installations with it exported would share a
+// database under two locks. Say so.
+if (banco !== ':memory:' && !sameDir(dirname(banco), dataDir)) log(`warning: the database ${banco} is outside the data folder ${dataDir} (--db or AHRENA_CONSOLE_DB); another installation must not use the same file`);
 if (banco !== ':memory:') {
-  // A pasta do núcleo fecha em 0700 (o banco mora nela); outra pasta dada em --banco fica como está.
-  if (dirname(banco) === defaultDir()) prepareDir();
+  // A pasta de dados fecha em 0700 (o banco mora nela); outra pasta dada em --db fica como está.
+  if (sameDir(dirname(banco), dataDir)) prepareDir(dataDir);
   else mkdirSync(dirname(banco), { recursive: true });
 }
 
@@ -222,13 +309,13 @@ const maquina = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
-const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+const fonte = demo ? new SimulatorWorkSource() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
 // Um cache do GitHub só, no banco, para o trabalho e os repositórios: a pausa por limite vale para os dois.
 const cacheDoGithub = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const trabalho = new TrabalhoPorBranch({
   fonte,
   cache: cacheDoGithub,
-  ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
+  ...(demo ? { git: SimulatorWorkSource.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
 // Sem a variável não há Project padrão: a tela explica como escolher um.
@@ -241,7 +328,7 @@ function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? ''): Pr
 const projetoEscolhido = demo || o['sem-github'] ? null : projetoDoAmbiente();
 const cacheDoProjeto = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const kanban = demo
-  ? new GithubProject({ source: new ProjetoDoSimulador(), cache: cacheDoProjeto, project: PROJECT_DO_SIMULADOR })
+  ? new GithubProject({ source: new SimulatorProject(), cache: cacheDoProjeto, project: SIMULATOR_PROJECT })
   : projetoEscolhido
     ? createGithubProject({ project: projetoEscolhido, cache: cacheDoProjeto, token: () => ghCliToken() })
     : null;
@@ -280,7 +367,7 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: apelidoDaDemo } : {}),
+  ...(demo ? { apelido: demoAlias } : {}),
 });
 
 // A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
@@ -291,7 +378,7 @@ const decisoesUi = new DecisoesDaUi({
   storage,
   // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
   alvoDe: (id) => montador.alvoDaSessao(id),
-  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  ...(pastaDaDemo ? { raiz: demoRecordFolders(pastaDaDemo) } : {}),
   localDe: async (id) => {
     await desktop?.atualizar();
     return desktop?.sessaoPorCli(id)?.localId ?? null;
@@ -299,17 +386,17 @@ const decisoesUi = new DecisoesDaUi({
 });
 
 if (demo) {
-  const cenario = o.cenario as CenarioDoPainel;
-  if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
-  await semearCenariosDoPainel(storage, cenario);
-  await semearDecisoesDoPainel(decisoes, cenario);
-  if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
+  const cenario = o.cenario as PanelScenario;
+  if (!PANEL_SCENARIOS.includes(cenario)) throw new Error(`--cenario: um de ${PANEL_SCENARIOS.join(', ')}`);
+  await seedPanelScenario(storage, cenario);
+  await seedPanelDecisions(decisoes, cenario);
+  if (cenario === 'p4') await seedDemoWorkflows(storage); // #96 e #97: as sessões das telas Workflows
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
-  await semearHistorico(storage);
-  await semearDetalhe(storage);
-  await semearHistoricoDoPainel(storage, decisoes, cenario);
+  await seedHistory(storage);
+  await seedDetail(storage);
+  await seedPanelHistory(storage, decisoes, cenario);
 }
-const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: demoLocal } : {}) });
 
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
 const historico = new SessionHistory({ storage, decisions: decisoes, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
@@ -335,7 +422,11 @@ relerPerfis?.unref();
 // New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
 const mcp = createMcpServer({ storage, accounts: contas, desktop, log });
 mcp.server.register(waitForChanges({ changes: mudancas, accounts: contas }));
-const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log });
+// Uma fila só para as chamadas ao GitHub por trás das telas (decisão 0001, item 6): repositórios e instruções.
+const githubQueue = new GithubCallQueue();
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log, queue: githubQueue });
+// The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o['sem-github'], cache: cacheDoGithub, changes: mudancas, queue: githubQueue, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -372,7 +463,7 @@ if (demo) {
   const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
   for (const config of machinesConfig.machines) {
-    if (config.port === porta) {
+    if (config.port === boundPort) {
       log(`machines: ${config.id} uses port ${config.port}, this núcleo's own; skipped`);
       continue;
     }
@@ -405,8 +496,10 @@ const follower =
         onError: (e) => log(`seguidor: ${(e as Error).message}`),
       });
 
-if (reserva !== 'in-use') await releasePort(reserva);
+// The API takes over the socket reserved above: the port is never free in between (with port 0,
+// the one the system assigned stays this core's).
 const api: ApiLocal = await iniciarApiLocal({
+  listenOn: reserva,
   montador,
   hooks: {
     storage,
@@ -418,7 +511,7 @@ const api: ApiLocal = await iniciarApiLocal({
     },
     log,
   },
-  port: porta,
+  port: boundPort,
   log,
   abrirNoDesktop,
   mcp: mcp.server,
@@ -435,6 +528,9 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  agentInstructions: agentInstructions.route,
+  // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
+  ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
   agentConfig,
   telemetry: telemetryService,
@@ -444,18 +540,42 @@ const api: ApiLocal = await iniciarApiLocal({
     desktopRead: desktop?.lidos ?? 0,
     work: trabalho.chamadas,
   }),
-}).catch(async (e: NodeJS.ErrnoException) => {
-  if (e.code !== 'EADDRINUSE') throw e;
-  await storage.close();
-  return adotarQuemTemAPorta();
+}).catch(async (e: unknown) => {
+  await releasePort(reserva).catch(() => undefined);
+  throw e;
 });
+const apiPort = (api.server.address() as AddressInfo).port;
 
-const trava = comTrava ? await claimLock({ port: porta, version: VERSAO_DA_API, parent: pai }) : null;
+const trava = comTrava ? await claimLock({ dir: dataDir, port: apiPort, version: VERSAO_DA_API, parent: pai }) : null;
 if (trava && 'conflict' in trava) {
   await api.close().catch(() => undefined);
   await storage.close();
   adotar(trava.conflict.port, trava.conflict.version);
 }
+startGuard?.release();
+// The instance registry (decision 0010, item 3): only cores with a lock. A --demo or a --no-lock
+// core is not this installation's core, so nobody should find it there.
+const instance = trava
+  ? { id: instanceId(installation), installation, pid: process.pid, port: apiPort, version: VERSAO_DA_API, commit, dataDir, startedAt: trava.startedAt }
+  : null;
+const unregister = () => {
+  if (!instance) return;
+  try {
+    removeInstance(instance.id, { pid: process.pid });
+  } catch (e) {
+    log(`registry: ${(e as Error).message}`);
+  }
+};
+if (instance) {
+  process.once('exit', unregister);
+  // The registry is only for finding the core: a failure here is logged, it does not stop the core.
+  try {
+    writeInstance(instance);
+  } catch (e) {
+    log(`registry: could not write ${instance.id}: ${(e as Error).message}`);
+  }
+}
+log(`listening on port ${apiPort} · installation ${installation} · data ${demo ? '(demo, in memory)' : dataDir}${instance ? ` · instance ${instance.id}` : ''}`);
 log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
 
 const pararDeVigiarPai =
@@ -463,6 +583,7 @@ const pararDeVigiarPai =
     ? () => {}
     : watchParent({
         parent: pai,
+        dir: dataDir,
         onGone: (motivo) => {
           log(`${motivo}; saindo`);
           void desligar();
@@ -510,7 +631,8 @@ async function desligar() {
   pararVigia();
   if (relerPerfis) clearInterval(relerPerfis);
   pararDeVigiarPai();
-  if (trava && !('conflict' in trava)) releaseLock(trava.token);
+  unregister();
+  if (trava && !('conflict' in trava)) releaseLock(trava.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);
@@ -518,5 +640,7 @@ async function desligar() {
   if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
+process.off('SIGINT', exitOnSignal);
+process.off('SIGTERM', exitOnSignal);
 process.on('SIGINT', () => void desligar());
 process.on('SIGTERM', () => void desligar());

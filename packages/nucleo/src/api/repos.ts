@@ -1,6 +1,6 @@
 // Repositórios da conta do GitHub (C22, #104) e as métricas de um repositório (C23, #105).
 //
-// | Rota                                          | Resposta (src/api/repos-tipos.ts) |
+// | Rota                                          | Resposta (src/api/repos-types.ts) |
 // | --------------------------------------------- | --------------------------------- |
 // | `GET /api/repos`                              | `ListaDeRepos`                    |
 // | `GET /api/repos/<dono>/<repo>?period=90d`     | `MetricasDoRepo`                  |
@@ -47,10 +47,11 @@
 // de 7 dias do resumo soma os workflow runs concluídos dos repositórios com push nos 7 dias.
 // Métricas: `RepoDetalhe` (GraphQL: o repositório e as releases, PRs, issues fechadas e abertas do
 // período, e os totais pelo `issueCount`) e o REST listado em src/github/repos-source.ts. As
-// sessões vêm do próprio núcleo (repos-sessoes.ts).
+// sessões vêm do próprio núcleo (repos-sessions.ts).
 
 import type { ServerResponse } from 'node:http';
 import { GithubCache, MemoryCacheStore } from '../github/cache.ts';
+import { GithubCallQueue } from '../github/call-queue.ts';
 import {
   ciDosRuns,
   commits12,
@@ -88,11 +89,11 @@ import {
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulador/github-falso.ts';
-import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
-import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS } from '../simulator/fake-github.ts';
+import { chaveDoRepo, SessoesPorRepo } from './repos-sessions.ts';
+import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-types.ts';
 
-export * from './repos-tipos.ts';
+export * from './repos-types.ts';
 export { NOME_DO_DONO, NOME_DO_REPO };
 
 /** TTLs das chaves do cache, além da tabela da decisão 0001. */
@@ -168,6 +169,8 @@ export interface OpcoesDosRepos {
   maximoPorRepo?: number;
   /** Falhas fora do previsto numa montagem (no núcleo, o `log` do cli). Padrão: nada. */
   log?: (mensagem: string) => void;
+  /** A fila das chamadas ao GitHub; no núcleo, a mesma das instruções dos agentes. Padrão: uma só deste serviço. */
+  queue?: GithubCallQueue;
 }
 
 const agendarDoSistema = (fn: () => void, ms: number) => {
@@ -185,14 +188,15 @@ export class ReposDoGithub {
   private readonly maximoPorRepo: number;
   private readonly log: (mensagem: string) => void;
   /** A fila global das chamadas à fonte: cada uma começa quando a anterior terminou. */
-  private fila: Promise<unknown> = Promise.resolve();
+  private readonly fila: GithubCallQueue;
   private readonly entradaDaLista = entrada<ListaDeRepos>();
   private readonly entradas = new Map<string, Entrada<MetricasDoRepo>>();
   private semToken: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   chamadas = { fonte: 0 };
 
-  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO, log = () => {} }: OpcoesDosRepos) {
+  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO, log = () => {}, queue = new GithubCallQueue() }: OpcoesDosRepos) {
+    this.fila = queue;
     this.fonte = fonte;
     this.cache = cache ?? new GithubCache({ store: new MemoryCacheStore(), now: agora });
     this.sessoes = sessoes;
@@ -334,7 +338,7 @@ export class ReposDoGithub {
    */
   private chamar<T>(fn: (fonte: FonteDosRepos) => Promise<T>): Promise<T> {
     this.chamadas.fonte++;
-    const vez = this.fila.then(async () => {
+    return this.fila.run(async () => {
       try {
         const v = await fn(this.fonte!);
         this.semToken = null;
@@ -344,8 +348,6 @@ export class ReposDoGithub {
         throw err;
       }
     });
-    this.fila = vez.catch(() => undefined);
-    return vez;
   }
 
   private async graphql<T>(chave: string, ttl: number, forcar: boolean, fn: (fonte: FonteDosRepos) => Promise<T>) {
@@ -581,7 +583,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
 }
 
 export interface OpcoesDosReposDoNucleo {
-  /** Demonstração: o GitHub falso (src/simulador/github-falso.ts), nunca a API real. */
+  /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
   /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
   semGithub: boolean;
@@ -594,21 +596,23 @@ export interface OpcoesDosReposDoNucleo {
   mudancas: ChangeCursor;
   /** As falhas fora do previsto das montagens. */
   log?: (mensagem: string) => void;
+  /** A fila das chamadas ao GitHub, dividida com as instruções dos agentes. */
+  queue?: GithubCallQueue;
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
-    ? new GithubReposSource({ token: 'demo', fetch: criarGithubFalso(DADOS_DA_DEMO, { atrasoMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
+    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
     : semGithub
       ? null
       : new GithubReposSource();
   const sessoes = new SessoesPorRepo({
     frota,
     aoDescobrir: () => mudancas.record({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
-    ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
+    ...(demo ? { git: demoGit(), extras: DEMO_EXTRA_SESSIONS } : {}),
   });
-  const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });
+  const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log, ...(queue ? { queue } : {}) });
   return { repos, rota: criarRotaDosRepos(repos) };
 }

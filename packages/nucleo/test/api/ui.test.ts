@@ -11,7 +11,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { withChanges, ChangeCursor } from '../../src/changes/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
+import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: idem
@@ -58,7 +58,7 @@ describe('/ui no núcleo', () => {
     cursor = new ChangeCursor({ batchMs: 0, minIntervalMs: 0 });
     sqlite = openSqliteStorage({ path: ':memory:' });
     const storage = withChanges(sqlite, cursor);
-    await semearCenariosDoPainel(storage, 'p1');
+    await seedPanelScenario(storage, 'p1');
     const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
@@ -71,7 +71,7 @@ describe('/ui no núcleo', () => {
 
   test('/ui, /ui/sessions and /ui/sessions/<id> (and the old /ui/sessoes/<id>) return the same page, with the content policy', async () => {
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
-    for (const caminho of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${SESSAO_DO_PAINEL}`, '/ui/sessoes', `/ui/sessoes/${SESSAO_DO_PAINEL}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
+    for (const caminho of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${PANEL_SESSION}`, '/ui/sessoes', `/ui/sessoes/${PANEL_SESSION}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
       const r = await pedir(api.url, caminho);
       assert.equal(r.status, 200, caminho);
       assert.match(String(r.headers['content-type']), /^text\/html/);
@@ -121,6 +121,20 @@ describe('/ui no núcleo', () => {
     assert.equal((await pedir(api.url, '/api/hooks', { method: 'POST', headers: { origin: `http://${host}`, 'content-type': 'application/json' }, corpo: hook })).status, 403);
   });
 
+  // Endereços que só viram `href` de link aberto pela pessoa (nova aba, `noopener`), nunca chamada:
+  // a aba Instruções (#183) aponta para o arquivo no GitHub e para a documentação do CLAUDE.md.
+  // Cada um é o trecho exato que a busca de URL pega e aparece exatamente uma vez no arquivo: o
+  // template de `blobUrl` não abre a porta para outro endereço do github.com.
+  const LINK_TARGETS: Record<string, string[]> = {
+    'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
+    'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
+  };
+  const externalUrls = (file: string, text: string) => {
+    const allowed = LINK_TARGETS[file] ?? [];
+    const found = text.match(/https?:\/\/[^\s"'`)]+/g) ?? [];
+    for (const l of allowed) assert.equal(found.filter((u) => u === l).length, 1, `${file}: ${l} deve aparecer exatamente uma vez`);
+    return found.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.includes(u));
+  };
   test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
     // A pasta e as telas (`screens/`): as regras valem para todo arquivo servido.
     const arquivos = readdirSync(PASTA_DA_UI, { recursive: true })
@@ -129,7 +143,7 @@ describe('/ui no núcleo', () => {
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('screens/repos.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
-      const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      const urls = externalUrls(a, texto);
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
       assert.doesNotMatch(texto, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
@@ -141,7 +155,7 @@ describe('/ui no núcleo', () => {
     const telas = readdirSync(`${PASTA_DA_UI}screens`).filter((a) => /\.(js|css)$/.test(a));
     for (const a of telas) {
       const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
-      const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      const urls = externalUrls(`screens/${a}`, texto);
       assert.deepEqual(urls, [], `screens/${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `screens/${a} escreve cor à mão`);
       if (a.endsWith('.js')) {
@@ -161,8 +175,8 @@ describe('/ui no núcleo', () => {
     assert.equal(overview.name, 'ahrena-console');
     // `nome` stays beside `name` until phase 6 of #173: the installed app reads it.
     assert.equal(overview.nome, 'ahrena-console');
-    const painel = await read(`/api/painel/${SESSAO_DO_PAINEL}`);
-    assert.ok(JSON.stringify(painel).includes(SESSAO_DO_PAINEL), 'o painel da sessão do simulador');
+    const painel = await read(`/api/painel/${PANEL_SESSION}`);
+    assert.ok(JSON.stringify(painel).includes(PANEL_SESSION), 'o painel da sessão do simulador');
 
     await assert.rejects(read('/api/nao-existe'), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 404);
     await assert.rejects(read('/ui'), /rota fora da API/);
@@ -376,9 +390,17 @@ describe('registro das telas', () => {
   });
 
   test('#105: caminho de repositório estranho não casa nada', () => {
-    for (const caminho of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c', '/ui/sessions/..']) {
+    for (const caminho of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c/d', '/ui/repos/a/b/..', '/ui/sessions/..']) {
       assert.equal(findScreen(caminho), null, caminho);
     }
+  });
+
+  test('#183: a aba Instruções tem URL própria, na mesma tela do repositório', () => {
+    const found = findScreen('/ui/repos/exemplo-labs/vitrine-demo/instructions');
+    assert.equal(found?.screen.id, 'repo-tab');
+    assert.equal(found?.screen.file, '/ui/screens/repo.js');
+    assert.deepEqual(found?.params, { owner: 'exemplo-labs', repo: 'vitrine-demo', tab: 'instructions' });
+    assert.equal(litItem(found!.screen, found!.params), 'repos');
   });
 
   test('toda tela com arquivo aponta para um arquivo que existe em ui/screens/', () => {

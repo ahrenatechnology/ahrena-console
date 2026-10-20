@@ -172,7 +172,7 @@ test('P4: parallel subagents and the child sessions', async ($, on) => {
   expect((await ui.find({ key: 'show-subagents' }))?.props.label).toBe('+1 · grafo ›')
   // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; "Sua vez" em âmbar à direita; "ver todas".
   const children = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('child-')).map((b) => b.key)
-  expect(children).toEqual(['child-sim-painel-catalogo-exemplo', 'child-sim-painel-fila-de-tarefas', 'child-sim-painel-blog-estatico'])
+  expect(children).toEqual(['child-sim-panel-catalogo-exemplo', 'child-sim-panel-fila-de-tarefas', 'child-sim-panel-blog-estatico'])
   const yourTurn = await ui.find({ type: 'Text', text: 'Sua vez' })
   expect(yourTurn?.props.color).toBe(paleta.yellow['500'])
   // Com as 3 à vista, sem "ver todas": o link seria redundante.
@@ -469,14 +469,14 @@ test('P7: "Ver" opens who needs you; family when narrow, the whole machine in th
   // Na família: a mãe pede permissão (precisa); a filha só está na sua vez, num grupo à parte.
   expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 1/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /SUA VEZ · 1/ })).toBeDefined()
-  expect(await ui.find({ key: 'needs-sim-painel-motor-de-regras' })).toBeDefined()
-  expect(await ui.find({ key: 'needs-sim-painel-fila-de-tarefas' })).toBeDefined()
-  expect(await ui.find({ key: 'needs-sim-painel-painel-de-metricas' })).toBeUndefined()
+  expect(await ui.find({ key: 'needs-sim-panel-motor-de-regras' })).toBeDefined()
+  expect(await ui.find({ key: 'needs-sim-panel-fila-de-tarefas' })).toBeDefined()
+  expect(await ui.find({ key: 'needs-sim-panel-painel-de-metricas' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /mãe desta · Opus 5\.5/ })).toBeDefined()
   await ui.select({ key: 'scope', value: 'machine' })
   expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 2/ })).toBeDefined()
-  expect(await ui.find({ key: 'needs-sim-painel-painel-de-metricas' })).toBeDefined()
-  await ui.press({ key: 'go-sim-painel-motor-de-regras' })
+  expect(await ui.find({ key: 'needs-sim-panel-painel-de-metricas' })).toBeDefined()
+  await ui.press({ key: 'go-sim-panel-motor-de-regras' })
   await ui.press({ key: 'close-need-you' })
   expect(await ui.find({ key: 'card-session' })).toBeDefined()
   await ui.unmount()

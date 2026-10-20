@@ -64,8 +64,8 @@ describe('MCP CLI options', () => {
   for (const flag of ['--no-start', '--sem-subir']) {
     test(`${flag} only adopts: the hint says how to start the core`, async () => {
       const r = await bridge([flag]);
+      // No live core in the registry and no start: no port to name (#221), just how to start one.
       assert.match(r.text ?? '', /npm run nucleo -- subir/);
-      assert.match(r.text ?? '', new RegExp(`127\\.0\\.0\\.1:${port}/mcp`));
     });
   }
 

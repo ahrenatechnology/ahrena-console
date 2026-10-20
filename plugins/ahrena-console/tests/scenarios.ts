@@ -16,7 +16,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Kanban de sessões no artefato",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:48:00.000Z",
@@ -90,7 +90,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:59:30.000Z",
       "steps": [
@@ -102,7 +102,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -113,7 +113,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -124,7 +124,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -135,7 +135,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -146,7 +146,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -157,7 +157,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -198,7 +198,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 1,
       "items": [
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "mapear usos",
           "status": "working",
@@ -208,7 +208,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 18
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "Plan",
           "task": "plano",
           "status": "completed",
@@ -265,7 +265,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "family": [],
       "machine": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -286,7 +286,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -329,7 +329,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Testes de integração da API",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:34:00.000Z",
@@ -408,7 +408,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:55:48.000Z",
       "steps": [
@@ -420,7 +420,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -431,7 +431,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -442,7 +442,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -453,7 +453,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -474,7 +474,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 0,
       "items": [
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "ler testes",
           "status": "completed",
@@ -530,7 +530,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Migração do esquema de pedidos",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:26:00.000Z",
@@ -609,7 +609,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:57:48.000Z",
       "steps": [
@@ -621,7 +621,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -632,7 +632,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -643,7 +643,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -654,7 +654,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -665,7 +665,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -676,7 +676,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -697,7 +697,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 0,
       "items": [
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "esquema atual",
           "status": "completed",
@@ -743,7 +743,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "byAccount": [],
       "family": [
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -766,7 +766,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       ],
       "machine": [
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -797,7 +797,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "repo": "exemplo/simulacao",
           "title": "#58 Esquema de pedidos",
           "session": {
-            "id": "sim-painel-esta",
+            "id": "sim-panel-current",
             "title": "Migração do esquema de pedidos",
             "local": null
           }
@@ -821,7 +821,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Separar pagamentos em serviços",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:32:00.000Z",
@@ -895,7 +895,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:59:30.000Z",
       "steps": [
@@ -907,7 +907,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -918,7 +918,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -929,7 +929,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -940,7 +940,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -951,7 +951,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -962,7 +962,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -1013,7 +1013,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 3,
       "items": [
         {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "name": "test-runner",
           "task": "bateria",
           "status": "working",
@@ -1023,7 +1023,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 9
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "code-reviewer",
           "task": "diff",
           "status": "working",
@@ -1033,7 +1033,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 9
         },
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "achar usos",
           "status": "working",
@@ -1043,7 +1043,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 9
         },
         {
-          "id": "sim-painel-esta:a3",
+          "id": "sim-panel-current:a3",
           "name": "Plan",
           "task": "plano",
           "status": "completed",
@@ -1056,7 +1056,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "children": [
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "local": null,
         "title": "fila-de-tarefas",
         "state": "waiting",
@@ -1066,7 +1066,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
         "archived": false
       },
       {
-        "id": "sim-painel-catalogo-exemplo",
+        "id": "sim-panel-catalogo-exemplo",
         "local": null,
         "title": "catalogo-exemplo",
         "state": "active",
@@ -1076,7 +1076,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
         "archived": false
       },
       {
-        "id": "sim-painel-blog-estatico",
+        "id": "sim-panel-blog-estatico",
         "local": null,
         "title": "blog-estatico",
         "state": "completed",
@@ -1120,7 +1120,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "byAccount": [],
       "family": [
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -1143,7 +1143,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       ],
       "machine": [
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -1186,7 +1186,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Relatório mensal mais rápido",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:02:00.000Z",
@@ -1265,7 +1265,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:59:30.000Z",
       "steps": [
@@ -1277,7 +1277,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1288,7 +1288,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1299,7 +1299,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1310,7 +1310,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -1331,7 +1331,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 0,
       "items": [
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "test-runner",
           "task": "bateria",
           "status": "error",
@@ -1341,7 +1341,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 22
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "Explore",
           "task": "índices",
           "status": "completed",
@@ -1398,7 +1398,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "family": [],
       "machine": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -1419,7 +1419,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -1462,7 +1462,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Sessão nova, sem transcript",
       "model": "claude-sonnet-5-5",
       "startedAt": "2026-11-02T12:00:00.000Z",
@@ -1529,7 +1529,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "family": [],
       "machine": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -1550,7 +1550,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-painel-de-metricas",
+          "id": "sim-panel-painel-de-metricas",
           "level": "needs",
           "why": "error",
           "local": null,
@@ -1571,7 +1571,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -1614,7 +1614,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Kanban de sessões no artefato",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:48:00.000Z",
@@ -1687,7 +1687,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "children": [
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "local": null,
         "title": "fila-de-tarefas",
         "state": "waiting",
@@ -1750,7 +1750,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       ],
       "family": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -1771,7 +1771,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -1794,7 +1794,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       ],
       "machine": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -1815,7 +1815,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-painel-de-metricas",
+          "id": "sim-panel-painel-de-metricas",
           "level": "needs",
           "why": "error",
           "local": null,
@@ -1836,7 +1836,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -1879,7 +1879,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Kanban de sessões no artefato",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:15:00.000Z",
@@ -1953,7 +1953,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "currentOwner": {
         "type": "main",
         "name": null,
-        "agentId": "sim-painel-esta:main"
+        "agentId": "sim-panel-current:main"
       },
       "changedAt": "2026-11-02T11:59:30.000Z",
       "steps": [
@@ -1965,7 +1965,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1976,7 +1976,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1987,7 +1987,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -1998,7 +1998,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -2009,7 +2009,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         },
         {
@@ -2020,7 +2020,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "owner": {
             "type": "main",
             "name": null,
-            "agentId": "sim-painel-esta:main"
+            "agentId": "sim-panel-current:main"
           }
         }
       ]
@@ -2061,7 +2061,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 1,
       "items": [
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "mapear usos",
           "status": "working",
@@ -2071,7 +2071,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 18
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "Plan",
           "task": "plano",
           "status": "completed",
@@ -2128,7 +2128,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "family": [],
       "machine": [
         {
-          "id": "sim-painel-motor-de-regras",
+          "id": "sim-panel-motor-de-regras",
           "level": "needs",
           "why": "permission",
           "local": null,
@@ -2149,7 +2149,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           }
         },
         {
-          "id": "sim-painel-app-receitas",
+          "id": "sim-panel-app-receitas",
           "level": "your-turn",
           "why": "interrupted",
           "local": null,
@@ -2192,7 +2192,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Separar pagamentos em serviços",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:46:00.000Z",
@@ -2263,7 +2263,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 1,
       "items": [
         {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "name": "test-runner",
           "task": "bateria",
           "status": "working",
@@ -2273,7 +2273,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "Explore",
           "task": "achar usos",
           "status": "completed",
@@ -2283,7 +2283,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Plan",
           "task": "plano da extração",
           "status": "completed",
@@ -2296,7 +2296,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "children": [
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "local": null,
         "title": "fila-de-tarefas",
         "state": "waiting",
@@ -2340,7 +2340,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "byAccount": [],
       "family": [
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -2363,7 +2363,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       ],
       "machine": [
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "level": "your-turn",
           "why": "your-turn",
           "local": null,
@@ -2406,7 +2406,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
     },
     "generatedAt": "2026-11-02T12:00:00.000Z",
     "session": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "title": "Separar pagamentos em serviços",
       "model": "claude-opus-5-5",
       "startedAt": "2026-11-02T11:08:00.000Z",
@@ -2477,17 +2477,17 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "active": 4,
       "items": [
         {
-          "id": "sim-painel-esta:a19",
+          "id": "sim-panel-current:a19",
           "name": "test-runner",
           "task": "api de cobrança",
           "status": "working",
           "since": "2026-11-02T11:55:00.000Z",
           "until": null,
-          "parent": "sim-painel-esta:a13",
+          "parent": "sim-panel-current:a13",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a21",
+          "id": "sim-panel-current:a21",
           "name": "test-runner",
           "task": "e2e",
           "status": "working",
@@ -2497,7 +2497,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a20",
+          "id": "sim-panel-current:a20",
           "name": "code-reviewer",
           "task": "diff do serviço",
           "status": "working",
@@ -2507,7 +2507,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a13",
+          "id": "sim-panel-current:a13",
           "name": "general-purpose",
           "task": "migrar a cobrança",
           "status": "working",
@@ -2517,7 +2517,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a7",
+          "id": "sim-panel-current:a7",
           "name": "test-runner",
           "task": "lint e tipos",
           "status": "error",
@@ -2527,7 +2527,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a24",
+          "id": "sim-panel-current:a24",
           "name": "Explore",
           "task": "métricas",
           "status": "completed",
@@ -2537,7 +2537,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 5
         },
         {
-          "id": "sim-painel-esta:a23",
+          "id": "sim-panel-current:a23",
           "name": "Explore",
           "task": "logs",
           "status": "completed",
@@ -2547,37 +2547,37 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 5
         },
         {
-          "id": "sim-painel-esta:a18",
+          "id": "sim-panel-current:a18",
           "name": "Explore",
           "task": "clientes",
           "status": "completed",
           "since": "2026-11-02T11:49:00.000Z",
           "until": "2026-11-02T11:52:00.000Z",
-          "parent": "sim-painel-esta:a16",
+          "parent": "sim-panel-current:a16",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a17",
+          "id": "sim-panel-current:a17",
           "name": "Explore",
           "task": "esquemas",
           "status": "completed",
           "since": "2026-11-02T11:47:00.000Z",
           "until": "2026-11-02T11:49:00.000Z",
-          "parent": "sim-painel-esta:a16",
+          "parent": "sim-panel-current:a16",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a16",
+          "id": "sim-panel-current:a16",
           "name": "general-purpose",
           "task": "contratos",
           "status": "completed",
           "since": "2026-11-02T11:46:00.000Z",
           "until": "2026-11-02T11:54:00.000Z",
-          "parent": "sim-painel-esta:a13",
+          "parent": "sim-panel-current:a13",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a22",
+          "id": "sim-panel-current:a22",
           "name": "docs-writer",
           "task": "README do serviço",
           "status": "completed",
@@ -2587,27 +2587,27 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a14",
+          "id": "sim-panel-current:a14",
           "name": "Explore",
           "task": "rotas de cobrança",
           "status": "completed",
           "since": "2026-11-02T11:42:00.000Z",
           "until": "2026-11-02T11:44:00.000Z",
-          "parent": "sim-painel-esta:a13",
+          "parent": "sim-panel-current:a13",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a15",
+          "id": "sim-panel-current:a15",
           "name": "Explore",
           "task": "webhooks",
           "status": "completed",
           "since": "2026-11-02T11:42:00.000Z",
           "until": "2026-11-02T11:45:00.000Z",
-          "parent": "sim-painel-esta:a13",
+          "parent": "sim-panel-current:a13",
           "wave": 4
         },
         {
-          "id": "sim-painel-esta:a12",
+          "id": "sim-panel-current:a12",
           "name": "Plan",
           "task": "plano da migração",
           "status": "completed",
@@ -2617,7 +2617,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 3
         },
         {
-          "id": "sim-painel-esta:a10",
+          "id": "sim-panel-current:a10",
           "name": "Explore",
           "task": "mocks",
           "status": "completed",
@@ -2627,7 +2627,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a9",
+          "id": "sim-panel-current:a9",
           "name": "Explore",
           "task": "fixtures",
           "status": "completed",
@@ -2637,7 +2637,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a11",
+          "id": "sim-panel-current:a11",
           "name": "Plan",
           "task": "fatias",
           "status": "completed",
@@ -2647,7 +2647,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a6",
+          "id": "sim-panel-current:a6",
           "name": "code-reviewer",
           "task": "diff inicial",
           "status": "completed",
@@ -2657,7 +2657,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a8",
+          "id": "sim-panel-current:a8",
           "name": "Explore",
           "task": "testes",
           "status": "completed",
@@ -2667,7 +2667,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 2
         },
         {
-          "id": "sim-painel-esta:a5",
+          "id": "sim-panel-current:a5",
           "name": "Explore",
           "task": "configuração",
           "status": "completed",
@@ -2677,7 +2677,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 1
         },
         {
-          "id": "sim-painel-esta:a4",
+          "id": "sim-panel-current:a4",
           "name": "Explore",
           "task": "filas",
           "status": "completed",
@@ -2687,7 +2687,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 1
         },
         {
-          "id": "sim-painel-esta:a3",
+          "id": "sim-panel-current:a3",
           "name": "Explore",
           "task": "eventos",
           "status": "completed",
@@ -2697,7 +2697,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 1
         },
         {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "name": "Explore",
           "task": "modelos",
           "status": "completed",
@@ -2707,7 +2707,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 1
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "name": "Explore",
           "task": "rotas",
           "status": "completed",
@@ -2717,7 +2717,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "wave": 1
         },
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "name": "Explore",
           "task": "mapear módulos",
           "status": "completed",
@@ -2774,7 +2774,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "family": [],
       "machine": [
         {
-          "id": "sim-painel-painel-de-metricas",
+          "id": "sim-panel-painel-de-metricas",
           "level": "needs",
           "why": "error",
           "local": null,
@@ -2816,7 +2816,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
     "toConfirm": 1,
     "items": [
       {
-        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "id": "dec:7555fc23396627a5f58dd96044d1df1b",
         "label": "D6",
         "origin": "suggested",
         "state": "to_confirm",
@@ -2836,7 +2836,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-6"
       },
       {
-        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "id": "dec:351173aa6d7ef78de44261bf91a9a171",
         "label": "D4",
         "origin": "correction",
         "state": "current",
@@ -2855,7 +2855,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-4"
       },
       {
-        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "id": "dec:e6f1aba616931c76fd3a139c8f61daa6",
         "label": "D5",
         "origin": "permission",
         "state": "current",
@@ -2874,7 +2874,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-5"
       },
       {
-        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "id": "dec:d5ee4bed66ced719990de9176451ddf4",
         "label": "D3",
         "origin": "question",
         "state": "superseded",
@@ -2893,7 +2893,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-3"
       },
       {
-        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "id": "dec:634f28df18d1aa230e4c3c171df8b7cd",
         "label": "D2",
         "origin": "plan",
         "state": "current",
@@ -2924,7 +2924,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
     "toConfirm": 1,
     "items": [
       {
-        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "id": "dec:7555fc23396627a5f58dd96044d1df1b",
         "label": "D6",
         "origin": "suggested",
         "state": "to_confirm",
@@ -2944,7 +2944,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-6"
       },
       {
-        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "id": "dec:351173aa6d7ef78de44261bf91a9a171",
         "label": "D4",
         "origin": "correction",
         "state": "current",
@@ -2963,7 +2963,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-4"
       },
       {
-        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "id": "dec:e6f1aba616931c76fd3a139c8f61daa6",
         "label": "D5",
         "origin": "permission",
         "state": "current",
@@ -2982,7 +2982,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-5"
       },
       {
-        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "id": "dec:d5ee4bed66ced719990de9176451ddf4",
         "label": "D3",
         "origin": "question",
         "state": "superseded",
@@ -3001,7 +3001,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-3"
       },
       {
-        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "id": "dec:634f28df18d1aa230e4c3c171df8b7cd",
         "label": "D2",
         "origin": "plan",
         "state": "current",
@@ -3020,7 +3020,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-2"
       },
       {
-        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "id": "dec:0194779532443b9794883c3674a86bab",
         "label": "D1",
         "origin": "question",
         "state": "current",
@@ -3051,7 +3051,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
     "toConfirm": 1,
     "items": [
       {
-        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "id": "dec:7555fc23396627a5f58dd96044d1df1b",
         "label": "D6",
         "origin": "suggested",
         "state": "to_confirm",
@@ -3071,7 +3071,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-6"
       },
       {
-        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "id": "dec:351173aa6d7ef78de44261bf91a9a171",
         "label": "D4",
         "origin": "correction",
         "state": "current",
@@ -3090,7 +3090,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-4"
       },
       {
-        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "id": "dec:e6f1aba616931c76fd3a139c8f61daa6",
         "label": "D5",
         "origin": "permission",
         "state": "current",
@@ -3109,7 +3109,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-5"
       },
       {
-        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "id": "dec:d5ee4bed66ced719990de9176451ddf4",
         "label": "D3",
         "origin": "question",
         "state": "superseded",
@@ -3128,7 +3128,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-3"
       },
       {
-        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "id": "dec:634f28df18d1aa230e4c3c171df8b7cd",
         "label": "D2",
         "origin": "plan",
         "state": "current",
@@ -3147,7 +3147,7 @@ export const P9_LISTS: Record<DecisionScope, DecisionList> = {
         "toolUseId": "sim-toolu-p9-2"
       },
       {
-        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "id": "dec:0194779532443b9794883c3674a86bab",
         "label": "D1",
         "origin": "question",
         "state": "current",

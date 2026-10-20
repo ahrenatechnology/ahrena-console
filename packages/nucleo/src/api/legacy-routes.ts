@@ -324,7 +324,7 @@ function merge(...specs: LegacyBodySpec[]): LegacyBodySpec {
 // - the decision scope is `session | family | branch`; a relation between sessions is `parent |
 //   child | sibling`, and a decision's own session `this | parent | family | branch`.
 //
-// `GET /api/panel` (Painel, src/api/tipos.ts), keys old → new:
+// `GET /api/panel` (Painel, src/api/types.ts), keys old → new:
 // - top: versao → version, geradoEm → generatedAt, sessao → session, contexto → context, custo →
 //   cost, plano → plan, planos → plans, subagentes → subagents, filhas → children, trabalho → work,
 //   precisam → needYou, decisoes → decisions (api, tokens, background, prs stay);
@@ -592,9 +592,9 @@ const DECISION_WRITE: LegacyRouteSpec = {
 // The installed app and the live group (phase 2b layer 3): `GET /api/attention` (old `/api/atencao`)
 // and `GET /api/changes` (old `/api/mudancas`), what the installed app reads; `GET /api/wall` (old
 // `/api/mural`) and `GET /api/load` (old `/api/carga`). `/api/dashboard` and `/api/overview` have no
-// old alias (the overview keeps `nome`/`versao` beside `name`/`version` until phase 6: servidor.ts).
+// old alias (the overview keeps `nome`/`versao` beside `name`/`version` until phase 6: server.ts).
 //
-// `GET /api/attention` (RespostaDaAtencao, src/api/rota-atencao.ts), keys old → new:
+// `GET /api/attention` (RespostaDaAtencao, src/api/attention-route.ts), keys old → new:
 // - top: geradoEm → generatedAt, precisam → needs, suaVez → yourTurn, ativas → active, comErro →
 //   withError, itens → items (cursor, total stay);
 // - items: sessao → session, titulo → title, projeto → project, conta → account (rotulo → label,
@@ -607,11 +607,12 @@ const DECISION_WRITE: LegacyRouteSpec = {
 // `GET /api/changes` (WaitResult, src/changes/cursor.ts), keys old → new: mudancas → changes,
 // reiniciar → reset, expirou → timedOut (cursor stays); each change: tipo → type, chave → key
 // (sessionId, accountId, seq stay). The type values: sessao → session, estado → state,
-// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert stay);
+// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert and
+// agent-instructions stay);
 // `?type=` takes both (ENGLISH_VALUES). The errors cite the new parameter: `wait inválida`, `type: um
 // de …`, `session inválida`, `account inválida`.
 //
-// `GET /api/wall` (Mural, src/api/tipos.ts), keys old → new: versao → version, geradoEm →
+// `GET /api/wall` (Mural, src/api/types.ts), keys old → new: versao → version, geradoEm →
 // generatedAt, contagem → count (todas → all, esperando → waiting, ativas → active); each card:
 // titulo → title, projeto → project, estado → state, motivo → reason, urgente → urgent, desde →
 // since, atividade → activity, modelo → model, esforco → effort, agentes → agents (ativos → active),
@@ -619,7 +620,7 @@ const DECISION_WRITE: LegacyRouteSpec = {
 // context (usados → used, limite → limit, rotulo → label). The values were English already, but the
 // activity types (the panel's).
 //
-// `GET /api/load` (servidor.ts and the extras of cli.ts), keys old → new: pedidos → requests, painel →
+// `GET /api/load` (server.ts and the extras of cli.ts), keys old → new: pedidos → requests, painel →
 // panel, msPainel → panelMs, eventosLidos → eventsRead, esperasAbertas → openWaits, historico →
 // history (pronto → ready, importando → importing, desligado → off), seguidor → follower, desktopLidos
 // → desktopRead, trabalho → work.
@@ -669,7 +670,7 @@ const CHANGES: LegacyBodySpec = {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      'type: um de session, state, needs-you, plan, decision, account, repos, alert': 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert',
+      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions': 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions',
     },
   },
 };
@@ -725,7 +726,7 @@ const LOAD: LegacyBodySpec = {
 // The activity feed, the Sessions list and the History (phase 2b layer 4): `GET /api/events` (old
 // `/api/eventos`), `GET /api/sessions` (old `/api/sessoes`) and `GET /api/history` (old `/api/historico`).
 //
-// `GET /api/events` (RespostaDoFeed, src/api/eventos.ts), keys old → new:
+// `GET /api/events` (RespostaDoFeed, src/api/events.ts), keys old → new:
 // - top: eventos → events, anteriores → older, opcoes → options (cursor stays); options: tipos →
 //   types, ferramentas → tools, sessoes → sessions;
 // - each event: criadoEm → createdAt, tipo → type, ferramenta → tool, resumo → summary, sessao →
@@ -736,7 +737,7 @@ const LOAD: LegacyBodySpec = {
 // - errors cite the new parameter: `limit:`, `after:`, `before:`, `type:`, `session:`, `tool:`,
 //   `search:`, `from:`, `to:` (`after e before não se combinam`, `from: depois do to`).
 //
-// `GET /api/sessions` (ListaDeSessoesHttp, src/api/sessoes.ts), keys old → new:
+// `GET /api/sessions` (ListaDeSessoesHttp, src/api/sessions.ts), keys old → new:
 // - top: registradas → registered, pagina → page, porPagina → perPage, paginas → pages, diretorios →
 //   directories, itens → items (total stays);
 // - items: titulo → title, motivo → reason, ultimaAtividade → lastActivity, inicio → start, rodando
@@ -849,7 +850,7 @@ const HISTORY: LegacyBodySpec = {
 // ---------------------------------------------------------------------------------------------
 // The session Detail and the workflows (phase 2b layer 5): `GET /api/sessions/<id>` (old
 // `/api/sessoes/<id>`), its tabs `/agents`, `/conversation`, `/events` (old `/agentes`, `/conversa`,
-// `/eventos`; src/api/detalhe.ts) and `/workflow`, and `GET /api/workflows` (no old path;
+// `/eventos`; src/api/session-detail.ts) and `/workflow`, and `GET /api/workflows` (no old path;
 // src/api/workflows.ts). The decisions tab is layer 6's.
 //
 // `GET /api/sessions/<id>` (CabecaDoDetalhe), keys old → new: versao → version, geradoEm →
@@ -1030,8 +1031,8 @@ const SESSION_WORKFLOW: LegacyBodySpec = {
 // ---------------------------------------------------------------------------------------------
 // The Decisions of the /ui and the GitHub Project kanban (phase 2b layer 6): `GET /api/decisions` (old
 // `/api/decisoes`), `GET /api/sessions/<id>/decisions` (old `/api/sessoes/<id>/decisoes`), `POST
-// /api/decisions/<id>/promote` (old `/promover`; src/api/decisoes-ui.ts), `GET /api/project` and `POST
-// /api/project/move` (old `/api/projeto` and `/api/projeto/mover`; src/api/projeto.ts). `GET /api/kanban`
+// /api/decisions/<id>/promote` (old `/promover`; src/api/decisions-ui.ts), `GET /api/project` and `POST
+// /api/project/move` (old `/api/projeto` and `/api/projeto/mover`; src/api/project.ts). `GET /api/kanban`
 // (src/api/kanban.ts) has no old path: its body simply turned English (only its old query values map).
 //
 // `GET /api/decisions` (DecisoesDaPagina), keys old → new: agrupar → groupBy, estado → state, contagens
@@ -1233,7 +1234,7 @@ const ANALYTICS_COST: LegacyBodySpec = {
   },
   values: {
     '.error': {
-      // `DAYS_ERROR` and `TZ_ERROR` of src/api/rota-analytics.ts (a test derives them from `DIAS_DO_CUSTO`).
+      // `DAYS_ERROR` and `TZ_ERROR` of src/api/analytics-route.ts (a test derives them from `DIAS_DO_CUSTO`).
       'days: 7, 30 ou 90': 'dias: 7, 30 ou 90',
       'tz: um fuso IANA, como America/Sao_Paulo': 'fuso: um fuso IANA, como America/Sao_Paulo',
     },

@@ -3,7 +3,7 @@
 // src/api/telemetry.ts and src/telemetry/model.ts).
 //
 // Kept apart from Tauri so it is tested without opening the app: this module only parses the core's
-// JSON and derives the short texts the menu (menu.rs) and the notifications (notificacoes.rs) show.
+// JSON and derives the short texts the menu (menu.rs) and the notifications (notifications.rs) show.
 // Only the fields the tray needs are read; extra fields are ignored.
 
 use serde::Deserialize;

@@ -2,7 +2,7 @@
   "name": "session-decisions-invalid-scope",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/decisoes?escopo=nada"
+    "path": "/api/sessoes/sim-panel-current/decisoes?escopo=nada"
   },
   "status": 400,
   "contentType": "application/json; charset=utf-8",
