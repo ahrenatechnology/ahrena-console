@@ -8,8 +8,8 @@
 // Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
 // `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
-import { Aleatorio, hash32 } from './random.ts';
-import { RAIZ } from './vocabulary.ts';
+import { SeededRandom, hash32 } from './random.ts';
+import { ROOT } from './vocabulary.ts';
 
 export interface RepoFalso {
   dono: string;
@@ -85,8 +85,8 @@ const domingo = (ms: number) => {
 };
 const iso = (ms: number) => new Date(ms).toISOString();
 
-function pesado<T extends { peso: number }>(r: Aleatorio, itens: readonly T[]): T {
-  let x = r.proximo() * itens.reduce((s, i) => s + i.peso, 0);
+function pesado<T extends { peso: number }>(r: SeededRandom, itens: readonly T[]): T {
+  let x = r.next() * itens.reduce((s, i) => s + i.peso, 0);
   for (const i of itens) if ((x -= i.peso) < 0) return i;
   return itens[itens.length - 1];
 }
@@ -102,7 +102,7 @@ interface Series {
 
 /** As séries de um repositório, de 3 anos até a semana de `agora`. */
 function gerarSeries(repo: RepoFalso, agora: number): Series {
-  const r = new Aleatorio(`${repo.dono}/${repo.nome}`);
+  const r = new SeededRandom(`${repo.dono}/${repo.nome}`);
   const fim = domingo(agora);
   const semanas: Series['semanas'] = [];
   const pesos = [0.55, 0.22, 0.15, 0.08];
@@ -113,13 +113,13 @@ function gerarSeries(repo: RepoFalso, agora: number): Series {
     peso: pesos[i],
   }));
   // Uma onda lenta mais ruído: a sparkline não sai reta nem repetida entre repositórios.
-  const fase = r.proximo() * Math.PI * 2;
+  const fase = r.next() * Math.PI * 2;
   for (let i = 155; i >= 0; i--) {
     const week = fim - i * SEMANA;
     const onda = 1 + 0.6 * Math.sin(fase + i / 2.3) + 0.3 * Math.sin(fase * 2 + i / 0.9);
-    const total = Math.max(0, Math.round(repo.ritmo * onda * (0.6 + r.proximo() * 0.8)));
-    const adicionadas = total * r.inteiro(30, 140);
-    const removidas = Math.round(adicionadas * (0.25 + r.proximo() * 0.35));
+    const total = Math.max(0, Math.round(repo.ritmo * onda * (0.6 + r.next() * 0.8)));
+    const adicionadas = total * r.int(30, 140);
+    const removidas = Math.round(adicionadas * (0.25 + r.next() * 0.35));
     semanas.push({ week: week / 1000, total, adicionadas, removidas });
     let restoC = total;
     let restoA = adicionadas;
@@ -142,31 +142,31 @@ function gerarSeries(repo: RepoFalso, agora: number): Series {
   const porSemana = Math.max(1, Math.round(repo.ritmo / 3));
   for (let s = 0; s < 52; s++) {
     for (let k = 0; k < porSemana; k++) {
-      const criado = agora - s * SEMANA - r.inteiro(1, 6 * 24) * 3_600_000;
+      const criado = agora - s * SEMANA - r.int(1, 6 * 24) * 3_600_000;
       const autor = pesado(r, AUTORES);
-      const reviewEm = criado + r.inteiro(1, 9) * 3_600_000 + r.inteiro(0, 59) * 60_000;
-      const fechado = criado + r.inteiro(3, 70) * 3_600_000;
+      const reviewEm = criado + r.int(1, 9) * 3_600_000 + r.int(0, 59) * 60_000;
+      const fechado = criado + r.int(3, 70) * 3_600_000;
       const merge = r.chance(0.88);
-      const reviews = autor.__typename === 'Bot' && r.chance(0.5) ? 0 : r.inteiro(1, 3);
+      const reviews = autor.__typename === 'Bot' && r.chance(0.5) ? 0 : r.int(1, 3);
       prs.push({
         createdAt: iso(criado),
         mergedAt: merge ? iso(fechado) : null,
         closedAt: iso(fechado),
         state: merge ? 'MERGED' : 'CLOSED',
-        additions: r.inteiro(8, 420),
-        deletions: r.inteiro(0, 160),
+        additions: r.int(8, 420),
+        deletions: r.int(0, 160),
         headRefName: 'claude' in autor ? `claude/tarefa-${s}-${k}` : autor.__typename === 'Bot' ? `dependabot/npm/pacote-${s}` : `feat/${100 + s}-${k}`,
         author: { login: autor.login, __typename: autor.__typename },
         reviews: { totalCount: reviews, nodes: reviews ? [{ createdAt: iso(Math.min(reviewEm, fechado - 60_000)) }] : [] },
-        pedidosDeMudanca: { totalCount: reviews > 1 ? r.inteiro(0, reviews - 1) : 0 },
+        pedidosDeMudanca: { totalCount: reviews > 1 ? r.int(0, reviews - 1) : 0 },
         _atualizado: fechado,
       });
     }
   }
   for (let k = 0; k < repo.prs; k++) {
-    const criado = agora - r.inteiro(1, 9 * 24) * 3_600_000;
+    const criado = agora - r.int(1, 9 * 24) * 3_600_000;
     prs.push({
-      createdAt: iso(criado), mergedAt: null, closedAt: null, state: 'OPEN', additions: r.inteiro(10, 300), deletions: r.inteiro(0, 90),
+      createdAt: iso(criado), mergedAt: null, closedAt: null, state: 'OPEN', additions: r.int(10, 300), deletions: r.int(0, 90),
       headRefName: k % 2 ? `claude/aberto-${k}` : `feat/${300 + k}-aberto`, author: { login: 'dev-sintetico', __typename: 'User' },
       reviews: { totalCount: 0, nodes: [] }, pedidosDeMudanca: { totalCount: 0 }, _atualizado: criado,
     });
@@ -176,8 +176,8 @@ function gerarSeries(repo: RepoFalso, agora: number): Series {
   const fechadas: Record<string, unknown>[] = [];
   for (let s = 0; s < 52; s++) {
     for (let k = 0; k < Math.max(1, Math.round(repo.ritmo / 4)); k++) {
-      const fechou = agora - s * SEMANA - r.inteiro(0, 6 * 24) * 3_600_000;
-      fechadas.push({ createdAt: iso(fechou - r.inteiro(4, 24 * 9) * 3_600_000), closedAt: iso(fechou), issueType: tipo() });
+      const fechou = agora - s * SEMANA - r.int(0, 6 * 24) * 3_600_000;
+      fechadas.push({ createdAt: iso(fechou - r.int(4, 24 * 9) * 3_600_000), closedAt: iso(fechou), issueType: tipo() });
     }
   }
   const abertas = Array.from({ length: repo.issues }, () => ({ issueType: tipo() }));
@@ -186,9 +186,9 @@ function gerarSeries(repo: RepoFalso, agora: number): Series {
   const verde = repo.ci === 'FAILURE' ? 0.78 : repo.ci === 'PENDING' ? 0.9 : 0.95;
   const runs: Series['runs'] = [];
   for (let dia = 0; dia < 365; dia++) {
-    for (let k = 0; k < r.inteiro(0, Math.max(1, Math.round(repo.ritmo / 5))); k++) {
-      const inicio = agora - dia * DIA - r.inteiro(1, 23) * 3_600_000;
-      const dur = r.inteiro(2, 11) * 60_000 + r.inteiro(0, 59) * 1000;
+    for (let k = 0; k < r.int(0, Math.max(1, Math.round(repo.ritmo / 5))); k++) {
+      const inicio = agora - dia * DIA - r.int(1, 23) * 3_600_000;
+      const dur = r.int(2, 11) * 60_000 + r.int(0, 59) * 1000;
       runs.push({ status: 'completed', conclusion: r.chance(verde) ? 'success' : r.chance(0.85) ? 'failure' : 'cancelled', created_at: iso(inicio), run_started_at: iso(inicio + 5_000), updated_at: iso(inicio + dur) });
     }
   }
@@ -379,8 +379,8 @@ export const DADOS_DA_DEMO: DadosDoGithubFalso = {
 /** git falso da demonstração: `/simulacao/<projeto>` é clone do repositório de mesmo nome, se houver. */
 export function gitDaDemo(dados: DadosDoGithubFalso = DADOS_DA_DEMO) {
   return async (cwd: string, args: string[]): Promise<string | null> => {
-    if (args[0] !== 'remote' || !cwd.startsWith(`${RAIZ}/`)) return null;
-    const repo = dados.repos.find((r) => r.nome === cwd.slice(RAIZ.length + 1));
+    if (args[0] !== 'remote' || !cwd.startsWith(`${ROOT}/`)) return null;
+    const repo = dados.repos.find((r) => r.nome === cwd.slice(ROOT.length + 1));
     return repo ? `https://github.com/${repo.dono}/${repo.nome}.git` : null;
   };
 }

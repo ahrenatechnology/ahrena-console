@@ -11,7 +11,7 @@
 import type { Agent, AgentStatus, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { CONTAS } from './panel.ts';
-import { RAIZ } from './vocabulary.ts';
+import { ROOT } from './vocabulary.ts';
 
 const MIN = 60_000;
 const OPUS = 'claude-opus-5-5';
@@ -165,7 +165,7 @@ async function gravar(porta: StoragePort, d: Demo, agora: number) {
   const fimDaSessao = d.duracaoMin === null ? null : em(d.duracaoMin);
   const conta = CONTAS[d.conta];
   const session: Session = {
-    id: d.id, name: d.titulo, status: d.status, cwd: `${RAIZ}/${d.projeto}`, model: d.modelo, source: d.source, startedAt: em(0), endedAt: fimDaSessao,
+    id: d.id, name: d.titulo, status: d.status, cwd: `${ROOT}/${d.projeto}`, model: d.modelo, source: d.source, startedAt: em(0), endedAt: fimDaSessao,
     awaitingInputSince: null, awaitingReason: null, updatedAt: fimDaSessao ?? new Date(agora - 0.1 * MIN).toISOString(),
     accountId: conta.id, accountSource: conta.source,
     metadata: {

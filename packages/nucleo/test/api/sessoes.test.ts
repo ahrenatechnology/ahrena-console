@@ -9,7 +9,7 @@ import { Contas, iniciarApiLocal, ListaDeSessoes, MontadorDoPainel, pedidoDeSess
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
-import { simular } from '../../src/simulator/index.ts';
+import { simulate } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
@@ -48,7 +48,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
 
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await simular(storage, { semente: 28, sessoes: 16, caos: true, precos: true, agora: () => AGORA });
+    await simulate(storage, { seed: 28, sessions: 16, chaos: true, prices: true, now: () => AGORA });
     await semearCenariosDoPainel(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     const contas = new Contas({ storage, arquivo: null });

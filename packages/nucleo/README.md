@@ -334,7 +334,7 @@ Os nomes antigos (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`
 
 **Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `--speed` vezes mais rápido; as datas gravadas acompanham o relógio.
 
-O **modo caos** garante pelo menos uma sessão de cada falha:
+O **modo caos** garante pelo menos uma sessão de cada falha (o valor gravado em `metadata.roteiro`; no código, `stuck`, `error`, `abandonment`, `overflow` e `swarm`):
 
 | Roteiro | O que fica gravado |
 | --- | --- |
@@ -351,12 +351,12 @@ Tudo é sintético: projetos inventados sob `/simulacao/`, nenhum nome de pessoa
 Pelo código:
 
 ```ts
-import { simular } from '@ahrena-console/nucleo/simulator';
+import { simulate } from '@ahrena-console/nucleo/simulator';
 
-const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
+const summary = await simulate(storage, { seed: 42, chaos: true, mode: 'batch' });
 ```
 
-`gerarCenario()` devolve só o roteiro, sem gravar; `agora` e `esperar` são injetáveis para testes.
+`generateScenario()` devolve só o roteiro, sem gravar; `now` e `wait` são injetáveis para testes.
 
 ## Telemetria das máquinas
 

@@ -7,7 +7,7 @@ import type { StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import { linkSession } from '../decisions/registry.ts';
 import type { CenarioDoPainel } from './panel.ts';
-import { RAIZ } from './vocabulary.ts';
+import { ROOT } from './vocabulary.ts';
 
 const MIN = 60_000;
 const DIA = 24 * 60;
@@ -56,7 +56,7 @@ export async function semearHistoricoDoPainel(porta: StoragePort, decisoes: Deci
     const id = `sim-historico-${e.slug}`;
     const fim = iso(e.fimMin);
     const s: Session = {
-      id, name: e.titulo, status: e.status, cwd: `${RAIZ}/${e.projeto}`, model: e.modelo, source: 'startup',
+      id, name: e.titulo, status: e.status, cwd: `${ROOT}/${e.projeto}`, model: e.modelo, source: 'startup',
       startedAt: iso(e.fimMin + e.duracaoMin), endedAt: fim, awaitingInputSince: null, awaitingReason: null, updatedAt: fim,
       accountId: null, accountSource: null, metadata: { simulado: true },
     };

@@ -6,7 +6,7 @@
 
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
-import { simular } from './simulator.ts';
+import { simulate } from './simulator.ts';
 
 const HELP = `Usage: npm run simulate -- [options]
 
@@ -73,7 +73,6 @@ const prices = args.prices || args.precos;
 const realTime = args['real-time'] || args['tempo-real'];
 
 const seed = args.seed ?? String(Math.floor(Math.random() * 1_000_000));
-const modo = realTime ? 'tempo-real' : 'lote';
 const storage = openSqliteStorage({ path: db });
 const stop = new AbortController();
 process.once('SIGINT', () => stop.abort());
@@ -82,28 +81,28 @@ console.log(`simulating into ${db} · seed ${seed} · ${realTime ? 'real time' :
 if (realTime) console.log('Ctrl+C to stop; what was already written stays.');
 
 try {
-  const resumo = await simular(storage, {
-    semente: seed,
-    sessoes: sessions,
-    duracaoMin: duration,
-    caos: chaos,
-    intensidadeDoCaos: intensity,
-    modo,
-    velocidade: speed,
-    precos: prices,
+  const summary = await simulate(storage, {
+    seed,
+    sessions,
+    durationMin: duration,
+    chaos,
+    chaosIntensity: intensity,
+    mode: realTime ? 'real-time' : 'batch',
+    speed,
+    prices,
     signal: stop.signal,
-    aoGravar: realTime
+    onWrite: realTime
       ? (op) => {
-          if (op.tipo === 'evento') console.log(`${op.registro.createdAt}  ${op.registro.sessionId}  ${op.registro.type}  ${op.registro.summary ?? ''}`);
+          if (op.kind === 'event') console.log(`${op.record.createdAt}  ${op.record.sessionId}  ${op.record.type}  ${op.record.summary ?? ''}`);
         }
       : undefined,
   });
-  const scripts = Object.entries(resumo.roteiros)
+  const scripts = Object.entries(summary.scripts)
     .filter(([, n]) => n > 0)
     .map(([r, n]) => `${r} ${n}`)
     .join(', ');
-  const g = resumo.gravados;
-  console.log(`${resumo.interrompido ? 'interrupted' : 'done'}: ${g.contas} accounts, ${g.sessoes} sessions, ${g.agentes} agents, ${g.eventos} new events, ${g.usos} usage writes, ${g.precos} prices`);
+  const w = summary.written;
+  console.log(`${summary.interrupted ? 'interrupted' : 'done'}: ${w.accounts} accounts, ${w.sessions} sessions, ${w.agents} agents, ${w.events} new events, ${w.usages} usage writes, ${w.prices} prices`);
   console.log(`scripts: ${scripts}`);
   console.log(`to repeat: npm run simulate -- --seed ${seed}${chaos ? ' --chaos' : ''}`);
 } finally {

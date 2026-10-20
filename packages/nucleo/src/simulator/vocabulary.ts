@@ -1,7 +1,7 @@
 // Synthetic vocabulary. Everything here is made up: no person's name, client project or real
 // machine path. Paths live under /simulacao to make that obvious.
 
-export const PROJETOS = [
+export const PROJECTS = [
   'vitrine-demo',
   'motor-de-regras',
   'app-receitas',
@@ -14,13 +14,13 @@ export const PROJETOS = [
   'painel-de-metricas',
 ] as const;
 
-export const RAIZ = '/simulacao';
+export const ROOT = '/simulacao';
 
 /**
- * Duas contas sintéticas, para o filtro e o agrupamento por conta aparecerem (decisão 0006).
- * Os UUIDs são do bloco de exemplo `00000000-…`: não existem no Claude.
+ * Two synthetic accounts, so the account filter and grouping show up (decision 0006).
+ * The UUIDs come from the example block `00000000-…`: they do not exist in Claude.
  */
-export const CONTAS = [
+export const ACCOUNTS = [
   {
     accountUuid: '00000000-0000-4000-8000-00000000c0a1',
     organizationUuid: '00000000-0000-4000-8000-00000000c0b1',
@@ -28,7 +28,7 @@ export const CONTAS = [
     organizationType: 'claude_max',
     label: 'Pessoal (simulada)',
     color: '#5b8def',
-    configDir: `${RAIZ}/.claude`,
+    configDir: `${ROOT}/.claude`,
     source: 'env',
   },
   {
@@ -38,12 +38,12 @@ export const CONTAS = [
     organizationType: 'claude_team',
     label: 'Equipe (simulada)',
     color: '#e0803c',
-    configDir: `${RAIZ}/.claude-equipe`,
+    configDir: `${ROOT}/.claude-equipe`,
     source: 'config',
   },
 ] as const;
 
-export const TAREFAS = [
+export const TASKS = [
   'corrigir a paginação da listagem',
   'adicionar testes ao parser de datas',
   'migrar a configuração para variáveis de ambiente',
@@ -60,7 +60,7 @@ export const TAREFAS = [
   'ajustar o layout da tela de cadastro',
 ] as const;
 
-export const PEDIDOS_DE_SEGUIMENTO = [
+export const FOLLOW_UP_PROMPTS = [
   'pode seguir',
   'agora roda os testes',
   'faz o commit',
@@ -70,14 +70,14 @@ export const PEDIDOS_DE_SEGUIMENTO = [
   'abre o PR',
 ] as const;
 
-export const MODELOS = {
-  principal: ['claude-opus-5-5', 'claude-sonnet-5-5'],
-  subagente: ['claude-sonnet-5-5', 'claude-haiku-5-5'],
+export const MODELS = {
+  main: ['claude-opus-5-5', 'claude-sonnet-5-5'],
+  subagent: ['claude-sonnet-5-5', 'claude-haiku-5-5'],
 } as const;
 
-export const TIPOS_DE_SUBAGENTE = ['Explore', 'general-purpose', 'Plan', 'code-reviewer', 'test-runner'] as const;
+export const SUBAGENT_TYPES = ['Explore', 'general-purpose', 'Plan', 'code-reviewer', 'test-runner'] as const;
 
-export const TAREFAS_DE_SUBAGENTE = [
+export const SUBAGENT_TASKS = [
   'mapear onde a função é chamada',
   'ler os testes existentes do módulo',
   'propor um plano de migração',
@@ -88,7 +88,7 @@ export const TAREFAS_DE_SUBAGENTE = [
   'checar a cobertura do pacote',
 ] as const;
 
-export const ARQUIVOS = [
+export const FILES = [
   'src/index.ts',
   'src/api/rotas.ts',
   'src/servicos/pedidos.ts',
@@ -100,7 +100,7 @@ export const ARQUIVOS = [
   'package.json',
 ] as const;
 
-export const COMANDOS = [
+export const COMMANDS = [
   'npm test',
   'npm run lint',
   'git status',
@@ -109,10 +109,10 @@ export const COMANDOS = [
   'node --test test/datas.test.ts',
 ] as const;
 
-export const BUSCAS = ['TODO', 'formatarData', 'class Pedido', 'export function', 'process.env'] as const;
+export const SEARCHES = ['TODO', 'formatarData', 'class Pedido', 'export function', 'process.env'] as const;
 
-/** Ferramentas com o peso relativo com que aparecem numa sessão típica. */
-export const FERRAMENTAS: readonly (readonly [string, number])[] = [
+/** Tools with the relative weight they show up with in a typical session. */
+export const TOOLS: readonly (readonly [string, number])[] = [
   ['Read', 30],
   ['Edit', 18],
   ['Bash', 20],
@@ -123,7 +123,7 @@ export const FERRAMENTAS: readonly (readonly [string, number])[] = [
   ['WebFetch', 4],
 ];
 
-export const ERROS = [
+export const ERRORS = [
   'Command failed with exit code 1: 3 testes falharam',
   'API Error: 529 overloaded',
   'ENOENT: arquivo não encontrado',

@@ -14,7 +14,7 @@ import type { Agent, SessionEvent, TokenCounts, TokenUsage } from '../model.ts';
 import { emptyTokenCounts } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { SESSAO_DO_PAINEL } from './panel.ts';
-import { RAIZ } from './vocabulary.ts';
+import { ROOT } from './vocabulary.ts';
 
 export const SESSAO_DO_DETALHE = 'sim-detalhe-pedidos';
 /** O `local_…` sintético da sessão do Detalhe: a demonstração mostra o "Abrir no Claude Desktop". */
@@ -68,7 +68,7 @@ async function gravarSessaoQuePedePermissao(porta: StoragePort, agora: number) {
   const explore = `${id}:a7f3e2d1c0b9a8f70`;
   const inicio = iso(agora, 34);
   await porta.putSession({
-    id, name: 'Migração do esquema de pedidos', status: 'active', cwd: `${RAIZ}/motor-de-regras`, model: OPUS, source: 'startup',
+    id, name: 'Migração do esquema de pedidos', status: 'active', cwd: `${ROOT}/motor-de-regras`, model: OPUS, source: 'startup',
     startedAt: inicio, endedAt: null, awaitingInputSince: iso(agora, 2), awaitingReason: 'notification', updatedAt: iso(agora, 2),
     accountId: null, accountSource: null,
     metadata: { simulado: true, branch: 'feat/58-pedidos', estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: null, delegacoes: {}, background: {} } },
@@ -101,7 +101,7 @@ async function gravarSessaoQuePedePermissao(porta: StoragePort, agora: number) {
   await ev(null, iso(agora, 33.5), 'UserPromptSubmit', null, primeiro, { prompt: primeiro });
   await ev(main, iso(agora, 33.5), 'UserPrompt', null, primeiro);
   await msg(main, 33, 'Vou ler o repositório de pedidos e pedir a um subagente o mapa do esquema.', { input: 3_200, output: 410, cacheRead: 18_000, cacheWrite5m: 2_100 });
-  await ferramenta(main, 32, 'Read', 'src/pedidos/repositorio.ts', { file_path: `${RAIZ}/motor-de-regras/src/pedidos/repositorio.ts` }, 'export class RepositorioDePedidos { … }');
+  await ferramenta(main, 32, 'Read', 'src/pedidos/repositorio.ts', { file_path: `${ROOT}/motor-de-regras/src/pedidos/repositorio.ts` }, 'export class RepositorioDePedidos { … }');
   await ferramenta(main, 31, 'Grep', 'status_pagamento', { pattern: 'status_pagamento', path: 'src' }, '3 arquivos');
   await ferramenta(main, 30, 'Agent', 'mapear o esquema atual', { subagent_type: 'Explore', description: 'mapear o esquema atual' }, 'O esquema tem 4 tabelas; pedidos não tem índice por cliente.');
   await ferramenta(explore, 29.8, 'Read', 'migrations/0006_clientes.sql', { file_path: 'migrations/0006_clientes.sql' }, 'create table clientes (…)');

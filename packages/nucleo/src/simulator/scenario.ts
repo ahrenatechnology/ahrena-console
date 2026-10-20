@@ -17,77 +17,91 @@ import {
   type TokenCounts,
   type TokenUsage,
 } from '../model.ts';
-import { Aleatorio, hash32 } from './random.ts';
+import { SeededRandom, hash32 } from './random.ts';
 import * as V from './vocabulary.ts';
 
-export const TIPOS_DE_CAOS = ['travada', 'erro', 'abandono', 'estouro', 'enxame'] as const;
+export const CHAOS_KINDS = ['stuck', 'error', 'abandonment', 'overflow', 'swarm'] as const;
 /**
- * Falhas que o modo caos injeta:
- * - `travada`: para esperando input (permissão ou turno interrompido) e não sai mais disso;
- * - `erro`: uma ferramenta falha e a sessão termina em `error`;
- * - `abandono`: para de responder e, 180 min depois, vira `abandoned`;
- * - `estouro`: picos de tokens que estouram o contexto mais de uma vez;
- * - `enxame`: muitos subagentes em paralelo no mesmo turno.
+ * Failures chaos mode injects:
+ * - `stuck`: stops waiting for input (permission or interrupted turn) and never leaves it;
+ * - `error`: a tool fails and the session ends in `error`;
+ * - `abandonment`: stops answering and, 180 min later, becomes `abandoned`;
+ * - `overflow`: token spikes that overflow the context more than once;
+ * - `swarm`: many subagents in parallel in the same turn.
  */
-export type TipoDeCaos = (typeof TIPOS_DE_CAOS)[number];
-export type Roteiro = 'normal' | TipoDeCaos;
+export type ChaosKind = (typeof CHAOS_KINDS)[number];
+export type Script = 'normal' | ChaosKind;
 
-export const LIMITE_DE_CONTEXTO = 200_000;
-export const MINUTOS_ATE_ABANDONO = 180;
+/**
+ * The value each script is stored with in `metadata.roteiro` of a simulated session: persisted, so it
+ * keeps the old Portuguese value (phase 5 renames stored values).
+ */
+export const STORED_SCRIPT: Readonly<Record<Script, string>> = {
+  normal: 'normal',
+  stuck: 'travada',
+  error: 'erro',
+  abandonment: 'abandono',
+  overflow: 'estouro',
+  swarm: 'enxame',
+};
 
-export interface OpcoesDoCenario {
-  /** Semente: a mesma semente com as mesmas opções gera exatamente o mesmo roteiro. */
-  semente: string | number;
-  /** Número de sessões. Padrão 12. */
-  sessoes?: number;
-  /** Janela simulada, em minutos. Padrão 360 (o abandono precisa de pelo menos ~240). */
-  duracaoMin?: number;
-  /** Liga o modo caos. */
-  caos?: boolean;
-  /** Fração das sessões que recebe uma falha no modo caos, além da garantia de uma de cada. Padrão 0.4. */
-  intensidadeDoCaos?: number;
-  /** Converte o deslocamento simulado (ms desde o início) em data ISO. */
-  relogio: (deslocamentoMs: number) => string;
+export const CONTEXT_LIMIT = 200_000;
+export const MINUTES_UNTIL_ABANDONED = 180;
+
+export interface ScenarioOptions {
+  /** Seed: the same seed with the same options generates exactly the same script. */
+  seed: string | number;
+  /** Number of sessions. Default 12. */
+  sessions?: number;
+  /** Simulated window, in minutes. Default 360 (abandonment needs at least ~240). */
+  durationMin?: number;
+  /** Turns chaos mode on. */
+  chaos?: boolean;
+  /** Fraction of the sessions that gets a failure in chaos mode, besides the guaranteed one of each. Default 0.4. */
+  chaosIntensity?: number;
+  /** Turns the simulated offset (ms since the start) into an ISO date. */
+  clock: (offsetMs: number) => string;
 }
 
-export type Gravacao =
-  | { tipo: 'sessao'; registro: Session }
-  | { tipo: 'agente'; registro: Agent }
-  | { tipo: 'evento'; registro: SessionEvent }
-  | { tipo: 'uso'; registro: TokenUsage };
+export type StorageWrite =
+  | { kind: 'session'; record: Session }
+  | { kind: 'agent'; record: Agent }
+  | { kind: 'event'; record: SessionEvent }
+  | { kind: 'usage'; record: TokenUsage };
 
-export type Operacao = Gravacao & {
-  /** Deslocamento simulado em ms desde o início; o executor usa para o ritmo. */
-  deslocamentoMs: number;
-  /** Índice da sessão no cenário. */
-  sessao: number;
-  /** Ordem dentro da sessão; desempata operações no mesmo instante. */
+export type Operation = StorageWrite & {
+  /** Simulated offset in ms since the start; the runner uses it for the pace. */
+  offsetMs: number;
+  /** Index of the session in the scenario. */
+  sessionIndex: number;
+  /** Order inside the session; breaks ties between operations at the same instant. */
   seq: number;
 };
 
-export interface Cenario {
-  /** Prefixo dos ids desta semente (`sim-<hash>`); reaplicar a mesma semente sobrescreve, não duplica. */
-  prefixo: string;
-  roteiros: Roteiro[];
-  /** As duas contas sintéticas; as sessões se alternam entre elas. */
-  contas: ClaudeAccount[];
-  operacoes: Operacao[];
+export interface Scenario {
+  /** Prefix of this seed's ids (`sim-<hash>`); applying the same seed again overwrites, it does not duplicate. */
+  prefix: string;
+  scripts: Script[];
+  /** The two synthetic accounts; the sessions alternate between them. */
+  accounts: ClaudeAccount[];
+  operations: Operation[];
 }
 
-const SEGUNDO = 1000;
-const MINUTO = 60 * SEGUNDO;
+const SECOND = 1000;
+const MINUTE = 60 * SECOND;
 
-export function gerarCenario(opcoes: OpcoesDoCenario): Cenario {
-  const total = opcoes.sessoes ?? 12;
-  const duracaoMs = (opcoes.duracaoMin ?? 360) * MINUTO;
-  if (!Number.isInteger(total) || total < 1) throw new RangeError(`sessoes inválido: ${total}`);
-  if (!(duracaoMs > 0)) throw new RangeError(`duracaoMin inválido: ${opcoes.duracaoMin}`);
+export function generateScenario(options: ScenarioOptions): Scenario {
+  const total = options.sessions ?? 12;
+  const durationMs = (options.durationMin ?? 360) * MINUTE;
+  if (!Number.isInteger(total) || total < 1) throw new RangeError(`invalid sessions: ${total}`);
+  if (!(durationMs > 0)) throw new RangeError(`invalid durationMin: ${options.durationMin}`);
 
-  const prefixo = `sim-${hash32(String(opcoes.semente)).toString(36)}`;
-  const mestre = new Aleatorio(`${opcoes.semente}:mestre`);
-  const roteiros = distribuirRoteiros(mestre, total, opcoes.caos ?? false, opcoes.intensidadeDoCaos ?? 0.4);
+  const prefix = `sim-${hash32(String(options.seed)).toString(36)}`;
+  // The seed strings (`:mestre`, `:sessao:`) stay as they were: they decide the generated data.
+  const master = new SeededRandom(`${options.seed}:mestre`);
+  const scripts = assignScripts(master, total, options.chaos ?? false, options.chaosIntensity ?? 0.4);
 
-  const contas: ClaudeAccount[] = V.CONTAS.map((c) => ({
+  const accounts: ClaudeAccount[] = V.ACCOUNTS.map((c) => ({
     id: claudeAccountId(c.accountUuid, c.organizationUuid),
     accountUuid: c.accountUuid,
     organizationUuid: c.organizationUuid,
@@ -96,43 +110,43 @@ export function gerarCenario(opcoes: OpcoesDoCenario): Cenario {
     label: c.label,
     color: c.color,
     configDirs: [c.configDir],
-    firstSeenAt: opcoes.relogio(0),
-    lastSeenAt: opcoes.relogio(0),
+    firstSeenAt: options.clock(0),
+    lastSeenAt: options.clock(0),
     metadata: { simulado: true },
   }));
 
-  const operacoes: Operacao[] = [];
-  roteiros.forEach((roteiro, i) => {
-    const rng = new Aleatorio(`${opcoes.semente}:sessao:${i}`);
-    // Abandono começa cedo para que os 180 min caibam na janela; as outras falhas, antes do
-    // último terço, para chegarem ao ponto da falha; as normais, a qualquer hora (as tardias ficam em andamento).
-    const fracao = roteiro === 'abandono' ? 0.15 : roteiro === 'normal' ? 0.85 : 0.6;
-    const inicio = rng.inteiro(0, Math.floor(duracaoMs * fracao));
-    // Alterna as contas pelo índice, sem consumir o sorteio: as duas sempre têm sessões (a partir de 2).
-    const k = i % contas.length;
-    const conta = { id: contas[k].id, source: V.CONTAS[k].source };
-    const sessao = new SessaoSimulada(rng, opcoes.relogio, `${prefixo}-s${String(i + 1).padStart(3, '0')}`, i, roteiro, conta);
-    sessao.encenar(inicio);
-    for (const op of sessao.operacoes) if (op.deslocamentoMs <= duracaoMs) operacoes.push(op);
+  const operations: Operation[] = [];
+  scripts.forEach((script, i) => {
+    const rng = new SeededRandom(`${options.seed}:sessao:${i}`);
+    // Abandonment starts early so the 180 min fit in the window; the other failures, before the last
+    // third, so they reach the failure point; the normal ones, at any time (the late ones stay running).
+    const fraction = script === 'abandonment' ? 0.15 : script === 'normal' ? 0.85 : 0.6;
+    const start = rng.int(0, Math.floor(durationMs * fraction));
+    // Alternates the accounts by index, without consuming the draw: both always have sessions (from 2 on).
+    const k = i % accounts.length;
+    const account = { id: accounts[k].id, source: V.ACCOUNTS[k].source };
+    const session = new SimulatedSession(rng, options.clock, `${prefix}-s${String(i + 1).padStart(3, '0')}`, i, script, account);
+    session.stage(start);
+    for (const op of session.operations) if (op.offsetMs <= durationMs) operations.push(op);
   });
 
-  operacoes.sort((a, b) => a.deslocamentoMs - b.deslocamentoMs || a.sessao - b.sessao || a.seq - b.seq);
-  return { prefixo, roteiros, contas, operacoes };
+  operations.sort((a, b) => a.offsetMs - b.offsetMs || a.sessionIndex - b.sessionIndex || a.seq - b.seq);
+  return { prefix, scripts, accounts, operations };
 }
 
-/** Sem caos, tudo normal. Com caos, garante uma sessão de cada falha e sorteia mais pela intensidade. */
-function distribuirRoteiros(rng: Aleatorio, total: number, caos: boolean, intensidade: number): Roteiro[] {
-  const roteiros: Roteiro[] = Array.from({ length: total }, () => 'normal');
-  if (!caos) return roteiros;
-  const ordem = rng.embaralhar(roteiros.map((_, i) => i));
-  ordem.forEach((indice, k) => {
-    if (k < TIPOS_DE_CAOS.length) roteiros[indice] = TIPOS_DE_CAOS[k];
-    else if (rng.chance(intensidade)) roteiros[indice] = rng.escolher(TIPOS_DE_CAOS);
+/** Without chaos, everything normal. With chaos, guarantees one session of each failure and draws more by the intensity. */
+function assignScripts(rng: SeededRandom, total: number, chaos: boolean, intensity: number): Script[] {
+  const scripts: Script[] = Array.from({ length: total }, () => 'normal');
+  if (!chaos) return scripts;
+  const order = rng.shuffle(scripts.map((_, i) => i));
+  order.forEach((index, k) => {
+    if (k < CHAOS_KINDS.length) scripts[index] = CHAOS_KINDS[k];
+    else if (rng.chance(intensity)) scripts[index] = rng.pick(CHAOS_KINDS);
   });
-  return roteiros;
+  return scripts;
 }
 
-function somar(a: TokenCounts, b: TokenCounts): TokenCounts {
+function addCounts(a: TokenCounts, b: TokenCounts): TokenCounts {
   return {
     input: a.input + b.input,
     output: a.output + b.output,
@@ -142,74 +156,74 @@ function somar(a: TokenCounts, b: TokenCounts): TokenCounts {
   };
 }
 
-function escolherPonderado(rng: Aleatorio, itens: readonly (readonly [string, number])[]): string {
-  const soma = itens.reduce((s, [, p]) => s + p, 0);
-  let alvo = rng.proximo() * soma;
-  for (const [item, peso] of itens) {
-    alvo -= peso;
-    if (alvo < 0) return item;
+function pickWeighted(rng: SeededRandom, items: readonly (readonly [string, number])[]): string {
+  const sum = items.reduce((s, [, w]) => s + w, 0);
+  let target = rng.next() * sum;
+  for (const [item, weight] of items) {
+    target -= weight;
+    if (target < 0) return item;
   }
-  return itens[itens.length - 1][0];
+  return items[items.length - 1][0];
 }
 
-/** Uma sessão encenada do começo ao fim, acumulando as operações com o próprio cursor de tempo. */
-class SessaoSimulada {
-  readonly operacoes: Operacao[] = [];
+/** One session staged from start to end, collecting the operations with its own time cursor. */
+class SimulatedSession {
+  readonly operations: Operation[] = [];
   private seq = 0;
-  private eventos = 0;
-  private readonly sessao: Session;
-  private readonly principal: Agent;
-  private readonly usos = new Map<string, TokenUsage>();
-  private contexto = 0;
-  private estouros = 0;
-  private subagentes = 0;
-  private readonly projeto: string;
-  private readonly rng: Aleatorio;
-  private readonly relogio: (ms: number) => string;
+  private eventCount = 0;
+  private readonly session: Session;
+  private readonly main: Agent;
+  private readonly usages = new Map<string, TokenUsage>();
+  private context = 0;
+  private overflows = 0;
+  private subagentCount = 0;
+  private readonly project: string;
+  private readonly rng: SeededRandom;
+  private readonly clock: (ms: number) => string;
   private readonly id: string;
-  private readonly indice: number;
-  private readonly roteiro: Roteiro;
+  private readonly index: number;
+  private readonly script: Script;
 
   constructor(
-    rng: Aleatorio,
-    relogio: (ms: number) => string,
+    rng: SeededRandom,
+    clock: (ms: number) => string,
     id: string,
-    indice: number,
-    roteiro: Roteiro,
-    conta: { id: string; source: AccountSource },
+    index: number,
+    script: Script,
+    account: { id: string; source: AccountSource },
   ) {
     this.rng = rng;
-    this.relogio = relogio;
+    this.clock = clock;
     this.id = id;
-    this.indice = indice;
-    this.roteiro = roteiro;
-    this.projeto = rng.escolher(V.PROJETOS);
-    const modelo = rng.escolher(V.MODELOS.principal);
-    const t = relogio(0);
-    this.sessao = {
+    this.index = index;
+    this.script = script;
+    this.project = rng.pick(V.PROJECTS);
+    const model = rng.pick(V.MODELS.main);
+    const t = clock(0);
+    this.session = {
       id,
-      name: rng.escolher(V.TAREFAS),
+      name: rng.pick(V.TASKS),
       status: 'active',
-      cwd: `${V.RAIZ}/${this.projeto}`,
-      model: modelo,
+      cwd: `${V.ROOT}/${this.project}`,
+      model,
       source: 'startup',
       startedAt: t,
       endedAt: null,
       awaitingInputSince: null,
       awaitingReason: null,
       updatedAt: t,
-      accountId: conta.id,
-      accountSource: conta.source,
+      accountId: account.id,
+      accountSource: account.source,
       metadata: {},
     };
-    this.principal = {
+    this.main = {
       id: `${id}-a0`,
       sessionId: id,
       name: 'principal',
       type: 'main',
       subagentType: null,
       status: 'waiting',
-      task: this.sessao.name,
+      task: this.session.name,
       currentTool: null,
       parentAgentId: null,
       startedAt: t,
@@ -219,239 +233,239 @@ class SessaoSimulada {
     };
   }
 
-  encenar(inicio: number): void {
-    let t = inicio;
-    this.sessao.startedAt = this.principal.startedAt = this.relogio(t);
-    this.esperar(t, 'session_start');
-    this.evento(t, null, 'SessionStart', null, 'sessão iniciada', { source: 'startup' });
-    this.gravarAgente(t, this.principal);
+  stage(start: number): void {
+    let t = start;
+    this.session.startedAt = this.main.startedAt = this.clock(t);
+    this.waitFor(t, 'session_start');
+    this.event(t, null, 'SessionStart', null, 'sessão iniciada', { source: 'startup' });
+    this.writeAgent(t, this.main);
 
-    const turnos = this.rng.inteiro(3, 8);
-    // Ponto do roteiro em que a falha acontece (turno, passo).
-    const turnoDaFalha = this.rng.inteiro(1, Math.max(1, turnos - 2));
-    const passoDaFalha = this.rng.inteiro(1, 3);
-    t += this.rng.inteiro(5, 60) * SEGUNDO;
+    const turns = this.rng.int(3, 8);
+    // Point of the script where the failure happens (turn, step).
+    const failureTurn = this.rng.int(1, Math.max(1, turns - 2));
+    const failureStep = this.rng.int(1, 3);
+    t += this.rng.int(5, 60) * SECOND;
 
-    for (let turno = 0; turno < turnos; turno++) {
-      if (this.roteiro === 'abandono' && turno === turnoDaFalha) {
-        this.abandonar(t);
+    for (let turn = 0; turn < turns; turn++) {
+      if (this.script === 'abandonment' && turn === failureTurn) {
+        this.abandon(t);
         return;
       }
-      const prompt = turno === 0 ? this.sessao.name! : this.rng.escolher(V.PEDIDOS_DE_SEGUIMENTO);
-      this.limparEspera();
-      this.principal.status = 'working';
-      this.evento(t, this.principal.id, 'UserPromptSubmit', null, prompt, { prompt });
-      this.gravarAgente(t, this.principal);
+      const prompt = turn === 0 ? this.session.name! : this.rng.pick(V.FOLLOW_UP_PROMPTS);
+      this.clearWait();
+      this.main.status = 'working';
+      this.event(t, this.main.id, 'UserPromptSubmit', null, prompt, { prompt });
+      this.writeAgent(t, this.main);
 
-      const passos = this.rng.inteiro(2, 7);
-      for (let passo = 0; passo < passos; passo++) {
-        t += this.rng.inteiro(2, 25) * SEGUNDO;
-        const naFalha = turno === turnoDaFalha && passo === Math.min(passoDaFalha, passos - 1);
+      const steps = this.rng.int(2, 7);
+      for (let step = 0; step < steps; step++) {
+        t += this.rng.int(2, 25) * SECOND;
+        const atFailure = turn === failureTurn && step === Math.min(failureStep, steps - 1);
 
-        if (naFalha && this.roteiro === 'enxame') t = this.delegar(t, this.rng.inteiro(8, 14));
-        else if (passo === 1 && this.rng.chance(0.2)) t = this.delegar(t, this.rng.inteiro(1, 3));
+        if (atFailure && this.script === 'swarm') t = this.delegate(t, this.rng.int(8, 14));
+        else if (step === 1 && this.rng.chance(0.2)) t = this.delegate(t, this.rng.int(1, 3));
 
-        if (naFalha && this.roteiro === 'travada') {
-          this.travar(t);
+        if (atFailure && this.script === 'stuck') {
+          this.getStuck(t);
           return;
         }
-        if (naFalha && this.roteiro === 'erro') {
-          this.falhar(t);
+        if (atFailure && this.script === 'error') {
+          this.fail(t);
           return;
         }
-        if (naFalha && this.roteiro === 'estouro') t = this.estourar(t);
+        if (atFailure && this.script === 'overflow') t = this.overflow(t);
 
-        t = this.ferramenta(t, this.principal);
-        this.consumir(t, this.sessao.model!, this.rng.inteiro(1500, 9000), true);
+        t = this.runTool(t, this.main);
+        this.consume(t, this.session.model!, this.rng.int(1500, 9000), true);
       }
 
-      t += this.rng.inteiro(3, 20) * SEGUNDO;
-      this.principal.status = 'waiting';
-      this.principal.currentTool = null;
-      this.esperar(t, 'stop');
-      this.evento(t, this.principal.id, 'Stop', null, 'turno concluído', null);
-      this.gravarAgente(t, this.principal);
-      // A vez é do usuário: alguns segundos ou alguns minutos até o próximo pedido.
-      t += this.rng.inteiro(20, 6 * 60) * SEGUNDO;
+      t += this.rng.int(3, 20) * SECOND;
+      this.main.status = 'waiting';
+      this.main.currentTool = null;
+      this.waitFor(t, 'stop');
+      this.event(t, this.main.id, 'Stop', null, 'turno concluído', null);
+      this.writeAgent(t, this.main);
+      // The user's turn: a few seconds or a few minutes until the next prompt.
+      t += this.rng.int(20, 6 * 60) * SECOND;
     }
 
-    // Parte das sessões normais fica aberta, esperando o usuário; o resto termina.
-    if (this.roteiro !== 'normal' || this.rng.chance(0.7)) this.encerrar(t);
+    // Some of the normal sessions stay open, waiting for the user; the rest end.
+    if (this.script !== 'normal' || this.rng.chance(0.7)) this.end(t);
   }
 
-  // --- trechos do roteiro -------------------------------------------------------------
+  // --- script pieces ------------------------------------------------------------------
 
-  private ferramenta(t: number, agente: Agent): number {
-    const nome = escolherPonderado(this.rng, V.FERRAMENTAS);
-    const { resumo, dados } = this.argumentos(nome);
-    agente.currentTool = nome;
-    this.evento(t, agente.id, 'PreToolUse', nome, resumo, dados);
-    this.gravarAgente(t, agente);
-    t += this.rng.inteiro(1, nome === 'Bash' ? 45 : 8) * SEGUNDO;
-    agente.currentTool = null;
-    this.evento(t, agente.id, 'PostToolUse', nome, resumo, { ok: true });
-    this.gravarAgente(t, agente);
+  private runTool(t: number, agent: Agent): number {
+    const name = pickWeighted(this.rng, V.TOOLS);
+    const { summary, data } = this.toolArgs(name);
+    agent.currentTool = name;
+    this.event(t, agent.id, 'PreToolUse', name, summary, data);
+    this.writeAgent(t, agent);
+    t += this.rng.int(1, name === 'Bash' ? 45 : 8) * SECOND;
+    agent.currentTool = null;
+    this.event(t, agent.id, 'PostToolUse', name, summary, { ok: true });
+    this.writeAgent(t, agent);
     return t;
   }
 
-  private argumentos(nome: string): { resumo: string; dados: unknown } {
-    switch (nome) {
+  private toolArgs(name: string): { summary: string; data: unknown } {
+    switch (name) {
       case 'Bash': {
-        const command = this.rng.escolher(V.COMANDOS);
-        return { resumo: command, dados: { command } };
+        const command = this.rng.pick(V.COMMANDS);
+        return { summary: command, data: { command } };
       }
       case 'Grep': {
-        const pattern = this.rng.escolher(V.BUSCAS);
-        return { resumo: pattern, dados: { pattern } };
+        const pattern = this.rng.pick(V.SEARCHES);
+        return { summary: pattern, data: { pattern } };
       }
       case 'Glob':
-        return { resumo: 'src/**/*.ts', dados: { pattern: 'src/**/*.ts' } };
+        return { summary: 'src/**/*.ts', data: { pattern: 'src/**/*.ts' } };
       case 'WebFetch':
-        return { resumo: 'https://example.com/docs', dados: { url: 'https://example.com/docs' } };
+        return { summary: 'https://example.com/docs', data: { url: 'https://example.com/docs' } };
       case 'TodoWrite':
-        return { resumo: 'plano atualizado', dados: { todos: this.rng.inteiro(2, 6) } };
+        return { summary: 'plano atualizado', data: { todos: this.rng.int(2, 6) } };
       default: {
-        const file_path = `${this.sessao.cwd}/${this.rng.escolher(V.ARQUIVOS)}`;
-        return { resumo: file_path, dados: { file_path } };
+        const file_path = `${this.session.cwd}/${this.rng.pick(V.FILES)}`;
+        return { summary: file_path, data: { file_path } };
       }
     }
   }
 
-  /** O principal chama a ferramenta Agent e `n` subagentes trabalham em paralelo. Devolve quando o último termina. */
-  private delegar(t: number, n: number): number {
-    this.principal.currentTool = 'Agent';
-    this.evento(t, this.principal.id, 'PreToolUse', 'Agent', `${n} subagente(s) em paralelo`, { subagentes: n });
-    this.gravarAgente(t, this.principal);
+  /** The main agent calls the Agent tool and `n` subagents work in parallel. Returns when the last one ends. */
+  private delegate(t: number, n: number): number {
+    this.main.currentTool = 'Agent';
+    this.event(t, this.main.id, 'PreToolUse', 'Agent', `${n} subagente(s) em paralelo`, { subagentes: n });
+    this.writeAgent(t, this.main);
 
-    let fim = t;
+    let end = t;
     for (let k = 0; k < n; k++) {
-      const inicio = t + this.rng.inteiro(0, 4) * SEGUNDO;
+      const start = t + this.rng.int(0, 4) * SECOND;
       const sub: Agent = {
-        id: `${this.id}-a${++this.subagentes}`,
+        id: `${this.id}-a${++this.subagentCount}`,
         sessionId: this.id,
-        name: `subagente ${this.subagentes}`,
+        name: `subagente ${this.subagentCount}`,
         type: 'subagent',
-        subagentType: this.rng.escolher(V.TIPOS_DE_SUBAGENTE),
+        subagentType: this.rng.pick(V.SUBAGENT_TYPES),
         status: 'working',
-        task: this.rng.escolher(V.TAREFAS_DE_SUBAGENTE),
+        task: this.rng.pick(V.SUBAGENT_TASKS),
         currentTool: null,
-        parentAgentId: this.principal.id,
-        startedAt: this.relogio(inicio),
+        parentAgentId: this.main.id,
+        startedAt: this.clock(start),
         endedAt: null,
-        updatedAt: this.relogio(inicio),
+        updatedAt: this.clock(start),
         metadata: { simulado: true },
       };
-      this.gravarAgente(inicio, sub);
-      const modelo = this.rng.escolher(V.MODELOS.subagente);
-      let ts = inicio;
-      for (let p = this.rng.inteiro(2, 6); p > 0; p--) {
-        ts = this.ferramenta(ts + this.rng.inteiro(2, 15) * SEGUNDO, sub);
-        this.consumir(ts, modelo, this.rng.inteiro(1000, 6000), false);
+      this.writeAgent(start, sub);
+      const model = this.rng.pick(V.MODELS.subagent);
+      let ts = start;
+      for (let p = this.rng.int(2, 6); p > 0; p--) {
+        ts = this.runTool(ts + this.rng.int(2, 15) * SECOND, sub);
+        this.consume(ts, model, this.rng.int(1000, 6000), false);
       }
-      ts += this.rng.inteiro(2, 10) * SEGUNDO;
+      ts += this.rng.int(2, 10) * SECOND;
       sub.status = 'completed';
-      sub.endedAt = this.relogio(ts);
-      this.evento(ts, sub.id, 'SubagentStop', null, `${sub.subagentType}: ${sub.task}`, null);
-      this.gravarAgente(ts, sub);
-      fim = Math.max(fim, ts);
+      sub.endedAt = this.clock(ts);
+      this.event(ts, sub.id, 'SubagentStop', null, `${sub.subagentType}: ${sub.task}`, null);
+      this.writeAgent(ts, sub);
+      end = Math.max(end, ts);
     }
 
-    fim += SEGUNDO;
-    // O uso dos subagentes é gravado uma vez, no fim: gravar no meio daria fotos fora de ordem
-    // quando dois subagentes paralelos somam no mesmo bucket.
-    for (const uso of this.usos.values()) {
-      uso.updatedAt = this.relogio(fim);
-      this.emitir(fim, { tipo: 'uso', registro: structuredClone(uso) });
+    end += SECOND;
+    // The subagents' usage is written once, at the end: writing it midway would give out-of-order
+    // snapshots when two parallel subagents add to the same bucket.
+    for (const usage of this.usages.values()) {
+      usage.updatedAt = this.clock(end);
+      this.emit(end, { kind: 'usage', record: structuredClone(usage) });
     }
-    this.principal.currentTool = null;
-    this.evento(fim, this.principal.id, 'PostToolUse', 'Agent', `${n} subagente(s) concluídos`, { ok: true });
-    this.gravarAgente(fim, this.principal);
-    return fim;
+    this.main.currentTool = null;
+    this.event(end, this.main.id, 'PostToolUse', 'Agent', `${n} subagente(s) concluídos`, { ok: true });
+    this.writeAgent(end, this.main);
+    return end;
   }
 
-  /** Para esperando alguém e não sai mais: pedido de permissão (o mais comum) ou turno interrompido. */
-  private travar(t: number): void {
-    const motivo: AwaitingReason = this.rng.chance(0.75) ? 'notification' : 'interrupted';
-    const ferramenta = this.rng.escolher(['Bash', 'Edit', 'Write'] as const);
-    this.principal.status = 'waiting';
-    this.principal.currentTool = motivo === 'notification' ? ferramenta : null;
-    this.esperar(t, motivo);
-    if (motivo === 'notification') {
-      this.evento(t, this.principal.id, 'Notification', ferramenta, `Claude precisa da sua permissão para usar ${ferramenta}`, {
+  /** Stops waiting for someone and never leaves: a permission request (the most common) or an interrupted turn. */
+  private getStuck(t: number): void {
+    const reason: AwaitingReason = this.rng.chance(0.75) ? 'notification' : 'interrupted';
+    const tool = this.rng.pick(['Bash', 'Edit', 'Write'] as const);
+    this.main.status = 'waiting';
+    this.main.currentTool = reason === 'notification' ? tool : null;
+    this.waitFor(t, reason);
+    if (reason === 'notification') {
+      this.event(t, this.main.id, 'Notification', tool, `Claude precisa da sua permissão para usar ${tool}`, {
         notification_type: 'permission_prompt',
       });
     } else {
-      this.evento(t, this.principal.id, 'Interrupted', null, 'turno interrompido sem resposta', null);
+      this.event(t, this.main.id, 'Interrupted', null, 'turno interrompido sem resposta', null);
     }
-    this.gravarAgente(t, this.principal);
+    this.writeAgent(t, this.main);
   }
 
-  private falhar(t: number): void {
-    const ferramenta = this.rng.escolher(['Bash', 'WebFetch', 'Edit'] as const);
-    const erro = this.rng.escolher(V.ERROS);
-    this.principal.currentTool = ferramenta;
-    this.evento(t, this.principal.id, 'PreToolUse', ferramenta, ferramenta, null);
-    t += this.rng.inteiro(2, 30) * SEGUNDO;
-    this.evento(t, this.principal.id, 'PostToolUseFailure', ferramenta, erro, { error: erro });
-    this.principal.status = 'error';
-    this.principal.currentTool = null;
-    this.gravarAgente(t, this.principal);
-    this.limparEspera();
-    this.sessao.status = 'error';
-    this.gravarSessao(t);
+  private fail(t: number): void {
+    const tool = this.rng.pick(['Bash', 'WebFetch', 'Edit'] as const);
+    const error = this.rng.pick(V.ERRORS);
+    this.main.currentTool = tool;
+    this.event(t, this.main.id, 'PreToolUse', tool, tool, null);
+    t += this.rng.int(2, 30) * SECOND;
+    this.event(t, this.main.id, 'PostToolUseFailure', tool, error, { error });
+    this.main.status = 'error';
+    this.main.currentTool = null;
+    this.writeAgent(t, this.main);
+    this.clearWait();
+    this.session.status = 'error';
+    this.writeSession(t);
   }
 
-  /** Para de responder no meio do turno; 180 min depois a sessão é gravada como `abandoned`. */
-  private abandonar(t: number): void {
-    this.limparEspera();
-    this.principal.status = 'working';
-    this.evento(t, this.principal.id, 'UserPromptSubmit', null, this.rng.escolher(V.PEDIDOS_DE_SEGUIMENTO), null);
-    t = this.ferramenta(t + 5 * SEGUNDO, this.principal);
-    this.principal.currentTool = 'Bash';
-    this.evento(t, this.principal.id, 'PreToolUse', 'Bash', 'npm run dev', { command: 'npm run dev' });
-    this.gravarAgente(t, this.principal);
+  /** Stops answering mid-turn; 180 min later the session is written as `abandoned`. */
+  private abandon(t: number): void {
+    this.clearWait();
+    this.main.status = 'working';
+    this.event(t, this.main.id, 'UserPromptSubmit', null, this.rng.pick(V.FOLLOW_UP_PROMPTS), null);
+    t = this.runTool(t + 5 * SECOND, this.main);
+    this.main.currentTool = 'Bash';
+    this.event(t, this.main.id, 'PreToolUse', 'Bash', 'npm run dev', { command: 'npm run dev' });
+    this.writeAgent(t, this.main);
 
-    const fim = t + MINUTOS_ATE_ABANDONO * MINUTO + this.rng.inteiro(1, 15) * MINUTO;
-    this.sessao.status = 'abandoned';
-    this.sessao.endedAt = this.relogio(fim);
-    this.gravarSessao(fim);
+    const end = t + MINUTES_UNTIL_ABANDONED * MINUTE + this.rng.int(1, 15) * MINUTE;
+    this.session.status = 'abandoned';
+    this.session.endedAt = this.clock(end);
+    this.writeSession(end);
   }
 
-  /** Dois picos de tokens seguidos, cada um estourando o contexto e forçando uma compactação. */
-  private estourar(t: number): number {
+  /** Two token spikes in a row, each one overflowing the context and forcing a compaction. */
+  private overflow(t: number): number {
     for (let i = 0; i < 2; i++) {
-      t += this.rng.inteiro(5, 30) * SEGUNDO;
-      const file_path = `${this.sessao.cwd}/logs/saida-completa.log`;
-      this.evento(t, this.principal.id, 'PreToolUse', 'Read', file_path, { file_path });
-      t += this.rng.inteiro(1, 5) * SEGUNDO;
-      this.evento(t, this.principal.id, 'PostToolUse', 'Read', file_path, { ok: true });
-      this.consumir(t, this.sessao.model!, LIMITE_DE_CONTEXTO - this.contexto + this.rng.inteiro(5_000, 40_000), true);
+      t += this.rng.int(5, 30) * SECOND;
+      const file_path = `${this.session.cwd}/logs/saida-completa.log`;
+      this.event(t, this.main.id, 'PreToolUse', 'Read', file_path, { file_path });
+      t += this.rng.int(1, 5) * SECOND;
+      this.event(t, this.main.id, 'PostToolUse', 'Read', file_path, { ok: true });
+      this.consume(t, this.session.model!, CONTEXT_LIMIT - this.context + this.rng.int(5_000, 40_000), true);
     }
     return t;
   }
 
-  private encerrar(t: number): void {
-    t += this.rng.inteiro(5, 60) * SEGUNDO;
-    this.limparEspera();
-    this.sessao.status = 'completed';
-    this.sessao.endedAt = this.relogio(t);
-    this.principal.status = 'completed';
-    this.principal.endedAt = this.relogio(t);
-    this.principal.currentTool = null;
-    this.evento(t, null, 'SessionEnd', null, 'sessão encerrada', { reason: 'other' });
-    this.gravarAgente(t, this.principal);
+  private end(t: number): void {
+    t += this.rng.int(5, 60) * SECOND;
+    this.clearWait();
+    this.session.status = 'completed';
+    this.session.endedAt = this.clock(t);
+    this.main.status = 'completed';
+    this.main.endedAt = this.clock(t);
+    this.main.currentTool = null;
+    this.event(t, null, 'SessionEnd', null, 'sessão encerrada', { reason: 'other' });
+    this.writeAgent(t, this.main);
   }
 
   // --- tokens -------------------------------------------------------------------------
 
   /**
-   * Uma resposta do modelo: lê o contexto do cache, escreve o que cresceu. Estoura e compacta quando passa do limite.
-   * Só o principal conta contexto e grava na hora; o uso dos subagentes sai no fim da delegação.
+   * One model answer: reads the context from the cache, writes what grew. Overflows and compacts when it passes the limit.
+   * Only the main agent counts context and writes right away; the subagents' usage goes out at the end of the delegation.
    */
-  private consumir(t: number, modelo: string, crescimento: number, contaContexto: boolean): void {
-    const uso = this.usos.get(modelo) ?? {
+  private consume(t: number, model: string, growth: number, countsContext: boolean): void {
+    const usage = this.usages.get(model) ?? {
       sessionId: this.id,
-      model: modelo,
+      model,
       speed: 'standard',
       inferenceGeo: '',
       serviceTier: 'standard',
@@ -461,87 +475,88 @@ class SessaoSimulada {
       webFetchRequests: 0,
       codeExecutionRequests: 0,
       baseline: emptyTokenCounts(),
-      updatedAt: this.relogio(t),
+      updatedAt: this.clock(t),
     };
-    this.usos.set(modelo, uso);
+    this.usages.set(model, usage);
 
-    const output = this.rng.inteiro(80, 1800);
-    const lido = contaContexto ? this.contexto : this.rng.inteiro(8_000, 30_000);
-    uso.tokens = somar(uso.tokens, {
-      input: this.rng.inteiro(20, 2500),
+    const output = this.rng.int(80, 1800);
+    const read = countsContext ? this.context : this.rng.int(8_000, 30_000);
+    usage.tokens = addCounts(usage.tokens, {
+      input: this.rng.int(20, 2500),
       output,
-      cacheRead: lido,
-      cacheWrite5m: Math.round(crescimento * 0.8),
-      cacheWrite1h: Math.round(crescimento * 0.2),
+      cacheRead: read,
+      cacheWrite5m: Math.round(growth * 0.8),
+      cacheWrite1h: Math.round(growth * 0.2),
     });
-    uso.updatedAt = this.relogio(t);
+    usage.updatedAt = this.clock(t);
 
-    if (contaContexto) {
-      this.contexto += crescimento + output;
-      if (this.contexto > LIMITE_DE_CONTEXTO) {
-        // Compactação: o que o transcript contava vira piso, e o contexto recomeça resumido.
-        this.estouros++;
-        uso.baseline = somar(uso.baseline, uso.tokens);
-        uso.tokens = emptyTokenCounts();
-        this.evento(t, this.principal.id, 'PreCompact', null, `contexto estourou (${this.estouros}x): compactação automática`, {
+    if (countsContext) {
+      this.context += growth + output;
+      if (this.context > CONTEXT_LIMIT) {
+        // Compaction: what the transcript counted becomes the floor, and the context restarts summarized.
+        this.overflows++;
+        usage.baseline = addCounts(usage.baseline, usage.tokens);
+        usage.tokens = emptyTokenCounts();
+        this.event(t, this.main.id, 'PreCompact', null, `contexto estourou (${this.overflows}x): compactação automática`, {
           trigger: 'auto',
-          contexto: this.contexto,
-          limite: LIMITE_DE_CONTEXTO,
+          contexto: this.context,
+          limite: CONTEXT_LIMIT,
         });
-        this.contexto = this.rng.inteiro(18_000, 40_000);
+        this.context = this.rng.int(18_000, 40_000);
       }
     }
-    if (!contaContexto) return;
-    this.emitir(t, { tipo: 'uso', registro: structuredClone(uso) });
-    this.gravarSessao(t);
+    if (!countsContext) return;
+    this.emit(t, { kind: 'usage', record: structuredClone(usage) });
+    this.writeSession(t);
   }
 
-  // --- gravação -----------------------------------------------------------------------
+  // --- writes -------------------------------------------------------------------------
 
-  private esperar(t: number, motivo: AwaitingReason): void {
-    this.sessao.awaitingInputSince = this.relogio(t);
-    this.sessao.awaitingReason = motivo;
+  private waitFor(t: number, reason: AwaitingReason): void {
+    this.session.awaitingInputSince = this.clock(t);
+    this.session.awaitingReason = reason;
   }
 
-  private limparEspera(): void {
-    this.sessao.awaitingInputSince = null;
-    this.sessao.awaitingReason = null;
+  private clearWait(): void {
+    this.session.awaitingInputSince = null;
+    this.session.awaitingReason = null;
   }
 
-  private evento(t: number, agentId: string | null, type: string, toolName: string | null, summary: string | null, data: unknown): void {
-    this.emitir(t, {
-      tipo: 'evento',
-      registro: {
-        id: `${this.id}-e${String(++this.eventos).padStart(4, '0')}`,
+  private event(t: number, agentId: string | null, type: string, toolName: string | null, summary: string | null, data: unknown): void {
+    this.emit(t, {
+      kind: 'event',
+      record: {
+        id: `${this.id}-e${String(++this.eventCount).padStart(4, '0')}`,
         sessionId: this.id,
         agentId,
         type,
         toolName,
         summary,
         data: data ?? null,
-        createdAt: this.relogio(t),
+        createdAt: this.clock(t),
       },
     });
-    this.gravarSessao(t);
+    this.writeSession(t);
   }
 
-  private gravarSessao(t: number): void {
-    this.sessao.updatedAt = this.relogio(t);
-    this.sessao.metadata = {
+  private writeSession(t: number): void {
+    this.session.updatedAt = this.clock(t);
+    // Persisted metadata keys stay as they are (phase 5).
+    this.session.metadata = {
       simulado: true,
-      roteiro: this.roteiro,
-      projeto: this.projeto,
-      contexto: { usados: this.contexto, limite: LIMITE_DE_CONTEXTO, estouros: this.estouros },
+      roteiro: STORED_SCRIPT[this.script],
+      projeto: this.project,
+      contexto: { usados: this.context, limite: CONTEXT_LIMIT, estouros: this.overflows },
     };
-    this.emitir(t, { tipo: 'sessao', registro: structuredClone(this.sessao) });
+    this.emit(t, { kind: 'session', record: structuredClone(this.session) });
   }
 
-  private gravarAgente(t: number, agente: Agent): void {
-    agente.updatedAt = this.relogio(t);
-    this.emitir(t, { tipo: 'agente', registro: structuredClone(agente) });
+  private writeAgent(t: number, agent: Agent): void {
+    agent.updatedAt = this.clock(t);
+    this.emit(t, { kind: 'agent', record: structuredClone(agent) });
   }
 
-  private emitir(t: number, gravacao: Gravacao): void {
-    this.operacoes.push({ ...gravacao, deslocamentoMs: t, sessao: this.indice, seq: this.seq++ });
+  private emit(t: number, write: StorageWrite): void {
+    this.operations.push({ ...write, offsetMs: t, sessionIndex: this.index, seq: this.seq++ });
   }
 }
