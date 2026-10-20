@@ -200,11 +200,12 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem só Dashboard e Sessões; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'sessoes']);
+  test('a barra tem Dashboard, Sessões e Histórico; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'sessoes', 'historico']);
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');
+    assert.equal(acharTela('/ui/historico').tela.id, 'historico');
     const d = acharTela('/ui/sessoes/b91d04aa-4e1');
     assert.equal(d.tela.id, 'detalhe');
     assert.equal(d.tela.acende, 'sessoes');

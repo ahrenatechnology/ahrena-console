@@ -26,6 +26,15 @@ export const TELAS = [
     arquivo: null, // #28
   },
   {
+    id: 'historico',
+    rota: '/ui/historico',
+    item: { rotulo: 'Histórico', icone: 'historico' },
+    titulo: 'Histórico',
+    sub: 'Sessões encerradas, por dia',
+    icone: 'historico',
+    arquivo: '/ui/telas/historico.js', // #33
+  },
+  {
     id: 'detalhe',
     rota: '/ui/sessoes/:id',
     acende: 'sessoes',

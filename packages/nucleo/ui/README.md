@@ -13,7 +13,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
-| `telas/` | As telas, uma por arquivo |
+| `telas/` | As telas, uma por arquivo: `historico.js` (C15, [#33](https://github.com/ahrenatechnology/ahrena-console/issues/33)) |
 
 ## Registrar uma tela
 

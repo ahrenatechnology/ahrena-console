@@ -58,6 +58,31 @@ button { font: inherit; cursor: pointer; }
 .btn.contorno { border-color: var(--border); background: var(--surface); }
 .btn.contorno:hover { background: var(--raised); }
 .btn.cheio { background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); }
+.trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.c-muted { color: var(--muted); }
+.c-accent { color: var(--accent-text); }
+
+/* Badge de status: ponto e rótulo, na cor do status. */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+/* Campo (busca, filtro): ícone e entrada sem borda própria. */
+.campo { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.campo:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.campo input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.campo input::placeholder { color: var(--muted); opacity: 1; }
+
+/* Lista em linhas dentro de um cartão. */
+.linhas { display: flex; flex-direction: column; overflow: hidden; }
+.linha { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; min-width: 0; }
+.linha:last-child { border-bottom: 0; }
+.linha .o { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.linha code { font-family: var(--font-mono); }
 
 /* ---------- estados (C19) ---------- */
 .estado { padding: 20px; min-height: 240px; }
@@ -79,6 +104,32 @@ button { font: inherit; cursor: pointer; }
 .faixa-erro p { margin: 0; flex: 1; }
 .faixa-erro b { color: var(--status-error-text); font-weight: var(--weight-semibold); }
 
+/* ---------- histórico (C15) ---------- */
+.hist-busca { width: 220px; }
+.hist-corpo { display: flex; flex-direction: column; gap: 16px; }
+.hist-grupo { display: flex; flex-direction: column; gap: 8px; }
+.hist-regiao { display: flex; flex-direction: column; gap: 16px; }
+.hist-dia { display: flex; align-items: center; gap: 6px; margin: 0; line-height: normal; }
+.hist-dia .n { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: var(--weight-regular); }
+/* A linha inteira leva à sessão: o ::after do link do título cobre a linha (sem link dentro de link). */
+.hist-linha { position: relative; }
+.hist-linha:hover { background: var(--raised); }
+.hist-bloco { flex: 1; }
+.hist-titulo { font-weight: var(--weight-medium); }
+.hist-alvo::after { content: ""; position: absolute; inset: 0; }
+.hist-alvo:focus-visible { outline: 0; }
+.hist-alvo:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hist-continuou .icone { vertical-align: -0.14em; }
+.hist-anterior { position: relative; z-index: 1; }
+.hist-anterior:hover { text-decoration: underline; }
+.hist-anterior:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.hist-projeto { width: 140px; flex: none; }
+.hist-modelo { width: 80px; flex: none; }
+.hist-duracao { width: 60px; flex: none; }
+.hist-custo { width: 80px; flex: none; text-align: right; white-space: nowrap; }
+.hist-seta { display: inline-flex; flex: none; }
+.hist-sentinela { height: 1px; }
+
 /* Janela estreita: a barra vira uma faixa no topo. */
 @media (max-width: 640px) {
   .cc { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
@@ -87,4 +138,6 @@ button { font: inherit; cursor: pointer; }
   #nav { flex-direction: row; }
   .cc-pe { margin: 0 0 0 auto; padding: 0; flex-direction: row; }
   .cc-main { padding: 16px; }
+  .hist-busca { width: 140px; }
+  .hist-projeto, .hist-modelo, .hist-duracao { display: none; }
 }
