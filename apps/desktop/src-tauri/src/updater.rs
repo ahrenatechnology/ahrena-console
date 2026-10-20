@@ -1,7 +1,7 @@
 // The updater (issue #90): on opening and every 6 h, asks the `latest.json` of the `app-updates`
 // release (the update channel, see .github/workflows/app-updates.yml) whether there is a new
-// version. If there is, it keeps the `Update` and tells `main.rs`, which puts "Atualizar para a versão X" in the menu; the click downloads, checks the signature,
-// installs and relaunches.
+// version. If there is, it keeps the `Update` and tells `main.rs`, which puts "Atualizar para a
+// versão X" in the menu; the click downloads, checks the signature, installs and relaunches.
 //
 // It only turns on with the public key in `plugins.updater.pubkey` of tauri.conf.json. Empty (the
 // default until the project has the key, and in every local build), the plugin is not even
