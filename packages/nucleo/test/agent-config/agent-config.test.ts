@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, createAgentConfigRoute, iniciarApiLocal, MAX_SKILL_BODY, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type AgentConfigRoute } from '../../src/api/index.ts';
-import { AgentConfigError, chooseProject, readAgentConfig, readFrontmatter, MAX_CONTENT, mountDemoAgentConfig, autoMemoryDir, knownProjects, skillRoot, versionOf } from '../../src/agent-config/index.ts';
+import { AgentConfigError, chooseProject, readAgentConfig, readFrontmatter, MAX_CONTENT, mountDemoAgentConfig, autoMemoryDir, knownProjects, rootIdFor, rootsFor, skillRoot, versionOf } from '../../src/agent-config/index.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { pastaDeConfiguracao } from '../../src/perfis/descoberta.ts';
@@ -104,6 +104,7 @@ describe('#63 GET /api/agent-config: reading', () => {
     const folder = mountHome(home, project);
     mountProject(project);
     const r = await readAgentConfig({ folders: [folder], projects: [project] });
+    const [U0, C0, P, R] = await Promise.all([rootIdFor('u', folder.dir), rootIdFor('c', folder.claudeJson), rootIdFor('p', join(project, '.claude')), rootIdFor('r', project)]);
 
     assert.equal(r.project, project);
     assert.deepEqual(r.projects, [project]);
@@ -111,22 +112,22 @@ describe('#63 GET /api/agent-config: reading', () => {
     assert.deepEqual(
       r.roots.map((x) => [x.id, x.kind, x.scope, x.label]),
       [
-        ['u0', 'home', 'user', 'Claude home'],
-        ['c0', 'claude-json', 'user', '.claude.json'],
-        ['p', 'project-claude', 'project', '.claude do projeto'],
-        ['r', 'project', 'project', 'Projeto · proj'],
+        [U0, 'home', 'user', 'Claude home'],
+        [C0, 'claude-json', 'user', '.claude.json'],
+        [P, 'project-claude', 'project', '.claude do projeto'],
+        [R, 'project', 'project', 'Projeto · proj'],
       ],
     );
     const review = r.skills.find((s) => s.name === 'revisar-pr')!;
     assert.equal(review.description, 'Revisa um PR contra o guia');
-    assert.equal(review.root, 'u0');
+    assert.equal(review.root, U0);
     assert.equal(review.scope, 'user');
     assert.equal(review.editable, true);
     assert.ok(review.editedAt > 0);
     const uppercase = r.skills.find((s) => s.name === 'Maiuscula')!;
     assert.equal(uppercase.editable, false);
     assert.equal(uppercase.declaredName, 'Outra Coisa');
-    assert.deepEqual(r.skills.map((s) => [s.name, s.root]).sort(), [['Maiuscula', 'u0'], ['abrir-issue', 'p'], ['revisar-pr', 'u0']]);
+    assert.deepEqual(r.skills.map((s) => [s.name, s.root]).sort(), [['Maiuscula', U0], ['abrir-issue', P], ['revisar-pr', U0]]);
 
     assert.deepEqual(r.subagents.map((s) => [s.name, s.description, s.scope]), [['revisor', 'Revisa código', 'user'], ['sem-frontmatter', null, 'user'], ['regras', null, 'project']]);
     assert.deepEqual(r.commands.map((c) => [c.name, c.scope]), [['git:limpar', 'user'], ['resumo', 'user'], ['publicar', 'project']]);
@@ -165,17 +166,18 @@ describe('#63 GET /api/agent-config: reading', () => {
     write(join(b.dir, 'skills', 'do-cliente', 'SKILL.md'), '---\ndescription: só do cliente\n---\n');
     write(b.claudeJson, JSON.stringify({ mcpServers: { cliente: {} } }));
     const r = await readAgentConfig({ folders: [a, b], projects: [] });
+    const [U0, C0, U1, C1] = await Promise.all([rootIdFor('u', a.dir), rootIdFor('c', a.claudeJson), rootIdFor('u', b.dir), rootIdFor('c', b.claudeJson)]);
     assert.equal(r.project, null);
     assert.deepEqual(
       r.roots.map((x) => [x.id, x.label, x.path]),
       [
-        ['u0', 'Claude home · .claude', a.dir],
-        ['c0', '.claude.json · .claude', a.claudeJson],
-        ['u1', 'Claude home · .claude-cliente', b.dir],
-        ['c1', '.claude.json · .claude-cliente', b.claudeJson],
+        [U0, 'Claude home · .claude', a.dir],
+        [C0, '.claude.json · .claude', a.claudeJson],
+        [U1, 'Claude home · .claude-cliente', b.dir],
+        [C1, '.claude.json · .claude-cliente', b.claudeJson],
       ],
     );
-    assert.equal(r.skills.find((s) => s.name === 'do-cliente')?.root, 'u1');
+    assert.equal(r.skills.find((s) => s.name === 'do-cliente')?.root, U1);
     assert.ok(r.mcp.some((m) => m.name === 'cliente' && m.scope === 'user'));
     assert.equal(r.summary.skills.project, 0);
   });
@@ -228,15 +230,17 @@ describe('#63 GET /api/agent-config: reading', () => {
     const t = tmp();
     const folder = mountHome(t, t);
     const r = await readAgentConfig({ folders: [folder], projects: [t] });
+    const [U0, C0, R] = await Promise.all([rootIdFor('u', folder.dir), rootIdFor('c', folder.claudeJson), rootIdFor('r', t)]);
     assert.equal(r.project, t);
-    assert.deepEqual(r.roots.map((x) => x.id), ['u0', 'c0', 'r']);
-    assert.deepEqual(r.skills.map((s) => [s.name, s.root]).sort(), [['Maiuscula', 'u0'], ['revisar-pr', 'u0']]);
+    assert.deepEqual(r.roots.map((x) => x.id), [U0, C0, R]);
+    assert.deepEqual(r.skills.map((s) => [s.name, s.root]).sort(), [['Maiuscula', U0], ['revisar-pr', U0]]);
     assert.ok(r.subagents.every((s) => s.scope === 'user'));
     assert.equal(r.summary.skills.project, 0);
     assert.equal(r.summary.hooks.project, 0);
     assert.deepEqual(r.memory.filter((m) => m.name.endsWith('CLAUDE.md')).map((m) => [m.name, m.scope]), [['CLAUDE.md', 'user']]);
-    // The `p` root does not exist: writing to it is 400 (never lands in the home).
-    assert.throws(() => skillRoot('p', r.roots), (e) => e instanceof AgentConfigError && e.status === 400);
+    // The project's `.claude` root does not exist: writing to it is 400 (never lands in the home).
+    const projectClaudeId = await rootIdFor('p', join(t, '.claude'));
+    assert.throws(() => skillRoot(projectClaudeId, r.roots), (e) => e instanceof AgentConfigError && e.status === 400);
   });
 });
 
@@ -346,6 +350,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   let project: string;
   let backups: string;
   let home: ReturnType<typeof pastaDeConfiguracao>;
+  let U0: string, C0: string, P: string, R: string;
   const json = { 'content-type': 'application/json' };
   const post = (body: unknown, headers: Record<string, string> = json) => get(api.url, '/api/agent-config/skill', { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
@@ -377,6 +382,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
     const agentConfig = createAgentConfigRoute({ folders: async () => [home], projects: async () => [project], backups, now: () => new Date('2026-10-20T12:34:56.789Z') });
     api = await iniciarApiLocal({ montador: builder, hooks: { storage: sqlite }, port: 0, log: () => {}, agentConfig });
     host = new URL(api.url).host;
+    [U0, C0, P, R] = await Promise.all([rootIdFor('u', home.dir), rootIdFor('c', home.claudeJson), rootIdFor('p', join(project, '.claude')), rootIdFor('r', project)]);
   });
   after(async () => {
     await api.close();
@@ -401,49 +407,49 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   });
 
   test('skill GET: content and version; 404 if missing; 400 with an invalid name or root', async () => {
-    const r = await get(api.url, '/api/agent-config/skill?root=u0&name=revisar-pr');
+    const r = await get(api.url, `/api/agent-config/skill?root=${U0}&name=revisar-pr`);
     assert.equal(r.status, 200);
     assert.equal(r.json.content, '---\nname: revisar-pr\ndescription: Revisa\n---\nversão antiga\n');
     assert.equal(r.json.version, versionOf(r.json.content as string));
     assert.equal(r.json.scope, 'user');
-    assert.equal(r.json.root, 'u0');
+    assert.equal(r.json.root, U0);
     assert.equal(r.json.name, 'revisar-pr');
     assert.ok((r.json.editedAt as number) > 0);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=u0&name=nao-existe')).status, 404);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=p&name=nao-existe')).status, 404);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=u0&name=..')).status, 400);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=c0&name=revisar-pr')).status, 400);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${U0}&name=nao-existe`)).status, 404);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${P}&name=nao-existe`)).status, 404);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${U0}&name=..`)).status, 400);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${C0}&name=revisar-pr`)).status, 400);
     assert.equal((await get(api.url, `/api/agent-config/skill?root=${encodeURIComponent(home.dir)}&name=revisar-pr`)).status, 400);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=u0&name=link-pasta')).status, 403);
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=u0&name=link-arquivo')).status, 403);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${U0}&name=link-pasta`)).status, 403);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${U0}&name=link-arquivo`)).status, 403);
   });
 
   test('GET of a skill whose SKILL.md is a symlink inside the root (the .credentials.json): 403, without the secret', async () => {
-    const r = await get(api.url, '/api/agent-config/skill?root=u0&name=seg');
+    const r = await get(api.url, `/api/agent-config/skill?root=${U0}&name=seg`);
     assert.equal(r.status, 403, r.body);
     assert.ok(!r.body.includes('segredo-ficticio-abc'));
     const list = await get(api.url, '/api/agent-config');
     assert.ok(!list.body.includes('segredo-ficticio-abc'));
     assert.equal((list.json.skills as { name: string; editable: boolean }[]).find((s) => s.name === 'seg')?.editable, false);
-    assert.equal((await post({ root: 'u0', name: 'seg', content: 'invadiu' })).status, 403);
+    assert.equal((await post({ root: U0, name: 'seg', content: 'invadiu' })).status, 403);
     assert.equal(readFileSync(join(home.dir, '.credentials.json'), 'utf8'), '{"token":"segredo-ficticio-abc"}');
   });
 
   test('GET, listing and POST of a SKILL.md that is a hardlink to .credentials.json: 403, without the secret', async () => {
-    const r = await get(api.url, '/api/agent-config/skill?root=u0&name=duro');
+    const r = await get(api.url, `/api/agent-config/skill?root=${U0}&name=duro`);
     assert.equal(r.status, 403, r.body);
     assert.match(String(r.json.error), /hardlink/);
     assert.ok(!r.body.includes('segredo-ficticio-abc'));
     const list = await get(api.url, '/api/agent-config');
     assert.ok(!list.body.includes('segredo-ficticio-abc'));
     assert.equal((list.json.skills as { name: string; editable: boolean }[]).find((s) => s.name === 'duro')?.editable, false);
-    assert.equal((await post({ root: 'u0', name: 'duro', content: 'invadiu' })).status, 403);
+    assert.equal((await post({ root: U0, name: 'duro', content: 'invadiu' })).status, 403);
     assert.equal(readFileSync(join(home.dir, '.credentials.json'), 'utf8'), '{"token":"segredo-ficticio-abc"}');
   });
 
   test('POST replaces the skill: backup with the old content first, atomic write, new version', async () => {
-    const before = await get(api.url, '/api/agent-config/skill?root=u0&name=revisar-pr');
-    const r = await post({ root: 'u0', name: 'revisar-pr', content: 'versão nova\n', version: before.json.version });
+    const before = await get(api.url, `/api/agent-config/skill?root=${U0}&name=revisar-pr`);
+    const r = await post({ root: U0, name: 'revisar-pr', content: 'versão nova\n', version: before.json.version });
     assert.equal(r.status, 200, r.body);
     assert.equal(r.json.ok, true);
     assert.equal(r.json.path, join(home.dir, 'skills', 'revisar-pr', 'SKILL.md'));
@@ -458,38 +464,38 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   });
 
   test('POST with a version that does not match gives 409 and does not write', async () => {
-    const r = await post({ root: 'u0', name: 'revisar-pr', content: 'por cima', version: versionOf('outra coisa') });
+    const r = await post({ root: U0, name: 'revisar-pr', content: 'por cima', version: versionOf('outra coisa') });
     assert.equal(r.status, 409);
     assert.notEqual(readFileSync(join(home.dir, 'skills', 'revisar-pr', 'SKILL.md'), 'utf8'), 'por cima');
-    assert.equal((await post({ root: 'u0', name: 'nao-existe-ainda', content: 'x', version: versionOf('x') })).status, 409);
+    assert.equal((await post({ root: U0, name: 'nao-existe-ainda', content: 'x', version: versionOf('x') })).status, 409);
     assert.ok(!existsSync(join(home.dir, 'skills', 'nao-existe-ainda', 'SKILL.md')));
   });
 
   test('POST of a new skill creates skills/<name>/SKILL.md, without backup; in the project, creates .claude', async () => {
-    const r = await post({ root: 'u0', name: 'nova-skill', content: '---\nname: nova-skill\n---\n' });
+    const r = await post({ root: U0, name: 'nova-skill', content: '---\nname: nova-skill\n---\n' });
     assert.equal(r.status, 200, r.body);
     assert.equal(r.json.backup, null);
     assert.equal(readFileSync(join(home.dir, 'skills', 'nova-skill', 'SKILL.md'), 'utf8'), '---\nname: nova-skill\n---\n');
-    const p = await post({ root: 'p', name: 'do-projeto', content: 'oi', project });
+    const p = await post({ root: P, name: 'do-projeto', content: 'oi', project });
     assert.equal(p.status, 200, p.body);
     assert.equal(readFileSync(join(project, '.claude', 'skills', 'do-projeto', 'SKILL.md'), 'utf8'), 'oi');
     const list = await get(api.url, '/api/agent-config');
-    assert.ok((list.json.skills as { name: string; root: string }[]).some((s) => s.name === 'do-projeto' && s.root === 'p'));
+    assert.ok((list.json.skills as { name: string; root: string }[]).some((s) => s.name === 'do-projeto' && s.root === P));
   });
 
   test("POST with create: true only creates; if the skill exists, 409 and nothing changes (the screen's \"Nova\")", async () => {
-    const created = await post({ root: 'u0', name: 'so-cria', content: 'um', create: true });
+    const created = await post({ root: U0, name: 'so-cria', content: 'um', create: true });
     assert.equal(created.status, 200, created.body);
     assert.equal(created.json.backup, null);
-    const again = await post({ root: 'u0', name: 'so-cria', content: 'dois', create: true });
+    const again = await post({ root: U0, name: 'so-cria', content: 'dois', create: true });
     assert.equal(again.status, 409, again.body);
     assert.equal(readFileSync(join(home.dir, 'skills', 'so-cria', 'SKILL.md'), 'utf8'), 'um');
   });
 
   test('two concurrent "Nova" with the same name: one creates, the other gives 409; the file is the winner\'s', async () => {
     const [a, b] = await Promise.all([
-      post({ root: 'u0', name: 'corrida', content: 'aba A', create: true }),
-      post({ root: 'u0', name: 'corrida', content: 'aba B', create: true }),
+      post({ root: U0, name: 'corrida', content: 'aba A', create: true }),
+      post({ root: U0, name: 'corrida', content: 'aba B', create: true }),
     ]);
     assert.deepEqual([a.status, b.status].sort(), [200, 409]);
     const winner = a.status === 200 ? 'aba A' : 'aba B';
@@ -499,61 +505,61 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   });
 
   test('/ui itself writes (Origin equal to http://<Host>); another site\'s Origin and a foreign Host give 403', async () => {
-    const ok = await post({ root: 'u0', name: 'pela-ui', content: 'x' }, { ...json, origin: `http://${host}` });
+    const ok = await post({ root: U0, name: 'pela-ui', content: 'x' }, { ...json, origin: `http://${host}` });
     assert.equal(ok.status, 200, ok.body);
     for (const origin of ['https://exemplo.com', 'null', `https://${host}`, 'http://localhost:1']) {
-      assert.equal((await post({ root: 'u0', name: 'de-fora', content: 'x' }, { ...json, origin })).status, 403, origin);
+      assert.equal((await post({ root: U0, name: 'de-fora', content: 'x' }, { ...json, origin })).status, 403, origin);
     }
     const port = new URL(api.url).port;
-    assert.equal((await post({ root: 'u0', name: 'de-fora', content: 'x' }, { ...json, host: `exemplo.com:${port}` })).status, 403);
-    assert.equal((await post({ root: 'u0', name: 'de-fora', content: 'x' }, { ...json, host: `exemplo.com:${port}`, origin: `http://exemplo.com:${port}` })).status, 403);
+    assert.equal((await post({ root: U0, name: 'de-fora', content: 'x' }, { ...json, host: `exemplo.com:${port}` })).status, 403);
+    assert.equal((await post({ root: U0, name: 'de-fora', content: 'x' }, { ...json, host: `exemplo.com:${port}`, origin: `http://exemplo.com:${port}` })).status, 403);
     assert.ok(!existsSync(join(home.dir, 'skills', 'de-fora')));
     // `localhost` is our Host too: with it, only the Origin `http://localhost:<port>` passes.
-    const local = await post({ root: 'u0', name: 'pelo-localhost', content: 'x' }, { ...json, host: `localhost:${port}`, origin: `http://localhost:${port}` });
+    const local = await post({ root: U0, name: 'pelo-localhost', content: 'x' }, { ...json, host: `localhost:${port}`, origin: `http://localhost:${port}` });
     assert.equal(local.status, 200, local.body);
-    assert.equal((await post({ root: 'u0', name: 'de-fora', content: 'x' }, { ...json, host: `localhost:${port}`, origin: `http://127.0.0.1:${port}` })).status, 403);
+    assert.equal((await post({ root: U0, name: 'de-fora', content: 'x' }, { ...json, host: `localhost:${port}`, origin: `http://127.0.0.1:${port}` })).status, 403);
     assert.ok(!existsSync(join(home.dir, 'skills', 'de-fora')));
     // The exception is only for this route: another write with Origin is still refused.
     assert.equal((await get(api.url, '/api/hooks', { method: 'POST', headers: { ...json, origin: `http://${host}` }, body: '{}' })).status, 403);
   });
 
   test('write defenses: JSON required, name, root, symlink, size', async () => {
-    assert.equal((await post({ root: 'u0', name: 'x', content: 'x' }, { 'content-type': 'text/plain' })).status, 415);
-    assert.equal((await post({ root: 'u0', name: 'x', content: 'x' }, {})).status, 415);
+    assert.equal((await post({ root: U0, name: 'x', content: 'x' }, { 'content-type': 'text/plain' })).status, 415);
+    assert.equal((await post({ root: U0, name: 'x', content: 'x' }, {})).status, 415);
     assert.equal((await post('não é json')).status, 400);
     assert.equal((await post('[]')).status, 400);
     for (const name of ['..', 'a..b', 'x/../../evil', '../evil', 'SKILL.md/x', 'Maiuscula', '', '-comeca-com-hifen', 'a'.repeat(65), 7]) {
-      assert.equal((await post({ root: 'u0', name, content: 'x' })).status, 400, String(name));
+      assert.equal((await post({ root: U0, name, content: 'x' })).status, 400, String(name));
     }
     assert.ok(!existsSync(join(t, 'evil')) && !existsSync(join(home.dir, 'evil')));
-    for (const root of ['zz', 'c0', 'r', home.dir, '/tmp', null]) {
+    for (const root of ['zz', 'u0', C0, R, home.dir, '/tmp', null]) {
       assert.equal((await post({ root, name: 'ok', content: 'x' })).status, 400, String(root));
     }
-    assert.equal((await post({ root: 'p', name: 'ok', content: 'x', project: '/etc' })).status, 400);
+    assert.equal((await post({ root: P, name: 'ok', content: 'x', project: '/etc' })).status, 400);
     // Symlink out: the skill folder and SKILL.md itself.
-    const folder = await post({ root: 'u0', name: 'link-pasta', content: 'invadiu' });
+    const folder = await post({ root: U0, name: 'link-pasta', content: 'invadiu' });
     assert.equal(folder.status, 403);
     assert.match(String(folder.json.error), /fora da raiz/);
-    const file = await post({ root: 'u0', name: 'link-arquivo', content: 'invadiu' });
+    const file = await post({ root: U0, name: 'link-arquivo', content: 'invadiu' });
     assert.equal(file.status, 403);
     assert.match(String(file.json.error), /symlink/);
     assert.equal(readFileSync(join(outside, 'alvo', 'SKILL.md'), 'utf8'), 'de fora');
     // Content: text, up to MAX_CONTENT.
-    assert.equal((await post({ root: 'u0', name: 'ok', content: 42 })).status, 400);
-    assert.equal((await post({ root: 'u0', name: 'grande', content: 'a'.repeat(MAX_CONTENT + 1) })).status, 413);
-    assert.equal((await post({ root: 'u0', name: 'no-limite', content: 'a'.repeat(MAX_CONTENT) })).status, 200);
+    assert.equal((await post({ root: U0, name: 'ok', content: 42 })).status, 400);
+    assert.equal((await post({ root: U0, name: 'grande', content: 'a'.repeat(MAX_CONTENT + 1) })).status, 413);
+    assert.equal((await post({ root: U0, name: 'no-limite', content: 'a'.repeat(MAX_CONTENT) })).status, 200);
   });
 
   test('POST body above MAX_SKILL_BODY: 413 without reading the rest', async () => {
     // The content fits in MAX_CONTENT; what exceeds the limit is the body (one extra field).
-    const body = JSON.stringify({ root: 'u0', name: 'corpo-grande', content: 'x', extra: 'a'.repeat(MAX_SKILL_BODY) });
+    const body = JSON.stringify({ root: U0, name: 'corpo-grande', content: 'x', extra: 'a'.repeat(MAX_SKILL_BODY) });
     assert.equal((await post(body)).status, 413, 'with Content-Length');
     // Without Content-Length (chunked) and never finishing the body: the 413 arrives anyway.
     const chunk = Buffer.alloc(64 * 1024, 'a');
     assert.equal(await postWithoutEnd(api.url, chunk, Math.ceil(MAX_SKILL_BODY / chunk.length) + 2), 413);
     assert.ok(!existsSync(join(home.dir, 'skills', 'corpo-grande')));
     // The server stays up.
-    assert.equal((await get(api.url, '/api/agent-config/skill?root=u0&name=revisar-pr')).status, 200);
+    assert.equal((await get(api.url, `/api/agent-config/skill?root=${U0}&name=revisar-pr`)).status, 200);
   });
 
   test("project = the home's parent folder: POST to root p gives 400 and nothing lands in the home", async () => {
@@ -562,11 +568,11 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
       const h4 = pastaDeConfiguracao(join(t4, '.claude'), 'padrao', t4);
       mkdirSync(h4.dir);
       await withApi(createAgentConfigRoute({ folders: async () => [h4], projects: async () => [t4], backups: join(t4, 'b') }), async (url) => {
-        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: 'p', name: 'nova', content: 'x', create: true }) });
+        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: await rootIdFor('p', join(t4, '.claude')), name: 'nova', content: 'x', create: true }) });
         assert.equal(r.status, 400, r.body);
         assert.ok(!existsSync(join(h4.dir, 'skills', 'nova')));
         const list = await get(url, '/api/agent-config');
-        assert.ok(!(list.json.roots as { id: string }[]).some((x) => x.id === 'p'));
+        assert.ok(!(list.json.roots as { kind: string }[]).some((x) => x.kind === 'project-claude'));
       });
     } finally {
       rmSync(t4, { recursive: true, force: true });
@@ -574,14 +580,50 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   });
 
   test('two concurrent writes with the same version: one passes, the other gives 409', async () => {
-    const read = await get(api.url, '/api/agent-config/skill?root=u0&name=nova-skill');
+    const read = await get(api.url, `/api/agent-config/skill?root=${U0}&name=nova-skill`);
     const [a, b] = await Promise.all([
-      post({ root: 'u0', name: 'nova-skill', content: 'aba A', version: read.json.version }),
-      post({ root: 'u0', name: 'nova-skill', content: 'aba B', version: read.json.version }),
+      post({ root: U0, name: 'nova-skill', content: 'aba A', version: read.json.version }),
+      post({ root: U0, name: 'nova-skill', content: 'aba B', version: read.json.version }),
     ]);
     assert.deepEqual([a.status, b.status].sort(), [200, 409]);
     const winner = a.status === 200 ? 'aba A' : 'aba B';
     assert.equal(readFileSync(join(home.dir, 'skills', 'nova-skill', 'SKILL.md'), 'utf8'), winner);
+  });
+
+  test('root ids come from the real path: the discovery order changes nothing, and an id that left never lands in another folder', async () => {
+    const t5 = mkdtempSync(join(tmpdir(), 'agent-config-ids-'));
+    try {
+      const a = pastaDeConfiguracao(join(t5, '.claude'), 'padrao', t5);
+      const b = pastaDeConfiguracao(join(t5, '.claude-cliente'), 'nome', t5);
+      mkdirSync(a.dir);
+      mkdirSync(b.dir);
+      const idOf = (roots: { id: string; path: string }[], dir: string) => roots.find((x) => x.path === dir)!.id;
+      const ab = await rootsFor([a, b], null);
+      const ba = await rootsFor([b, a], null);
+      assert.equal(idOf(ab, a.dir), idOf(ba, a.dir));
+      assert.equal(idOf(ab, b.dir), idOf(ba, b.dir));
+      assert.notEqual(idOf(ab, a.dir), idOf(ab, b.dir));
+      assert.match(idOf(ab, b.dir), /^u-[0-9a-f]{12}$/);
+      // The screen read [a, b] and picked b. If b leaves discovery, its id is refused (400) and
+      // nothing lands in a.
+      let folders = [a, b];
+      await withApi(createAgentConfigRoute({ folders: async () => folders, projects: async () => [], backups: join(t5, 'bk') }), async (url) => {
+        const seen = await get(url, '/api/agent-config');
+        const bId = (seen.json.roots as { id: string; path: string }[]).find((x) => x.path === b.dir)!.id;
+        folders = [a];
+        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: bId, name: 'nova', content: 'x', create: true }) });
+        assert.equal(r.status, 400, r.body);
+        assert.ok(!existsSync(join(a.dir, 'skills', 'nova')));
+        // With b back in another position, the id still names b (a positional `u1` would name a).
+        folders = [b, a];
+        const ok = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: bId, name: 'nova', content: 'x', create: true }) });
+        assert.equal(ok.status, 200, ok.body);
+        assert.ok(existsSync(join(b.dir, 'skills', 'nova', 'SKILL.md')));
+        assert.ok(!existsSync(join(a.dir, 'skills', 'nova')));
+      });
+    } finally {
+      rmSync(t5, { recursive: true, force: true });
+    }
   });
 
   test("the project's .claude as a symlink out of the project is refused", async () => {
@@ -592,7 +634,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
       mkdirSync(join(t3, 'outra'));
       symlinkSync(join(t3, 'outra'), join(proj, '.claude'));
       await withApi(createAgentConfigRoute({ folders: async () => [], projects: async () => [proj], backups: join(t3, 'b') }), async (url) => {
-        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: 'p', name: 'nova', content: 'x' }) });
+        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: await rootIdFor('p', join(proj, '.claude')), name: 'nova', content: 'x' }) });
         assert.equal(r.status, 403, r.body);
         assert.ok(!existsSync(join(t3, 'outra', 'skills')));
       });
@@ -608,7 +650,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
       mkdirSync(h2.dir);
       symlinkSync(outside, join(h2.dir, 'skills'));
       await withApi(createAgentConfigRoute({ folders: async () => [h2], projects: async () => [], backups: join(t2, 'b') }), async (url) => {
-        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: 'u0', name: 'nova', content: 'x' }) });
+        const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: await rootIdFor('u', h2.dir), name: 'nova', content: 'x' }) });
         assert.equal(r.status, 403, r.body);
         assert.match(String(r.json.error), /fora da raiz/);
         assert.ok(!existsSync(join(outside, 'nova')));

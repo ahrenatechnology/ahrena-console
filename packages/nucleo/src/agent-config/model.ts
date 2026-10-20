@@ -11,7 +11,7 @@ export type AgentConfigScope = 'user' | 'project';
  * `project-claude` take skills (their `id` is the `root` of the skill routes).
  */
 export interface AgentConfigRoot {
-  /** Opaque and stable while the folders do not change: `u0`, `u1`… (home), `c0`… (`.claude.json`), `p`, `r`. */
+  /** Opaque and stable: the kind's letter and a short hash of the real path (`rootIdFor`), e.g. `u-3fa2c91b0d4e`. */
   id: string;
   scope: AgentConfigScope;
   kind: 'home' | 'project-claude' | 'project' | 'claude-json';

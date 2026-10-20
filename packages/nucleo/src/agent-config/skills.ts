@@ -246,8 +246,8 @@ async function writeNow(p: WriteRequest, name: string, folder: string, file: str
 
 /**
  * A folder name for a root's backups: the last two parts of the path, readable, and a piece of the
- * hash of the whole path (two roots with the same name do not mix). The id `u0` does not work: it
- * changes when discovery changes.
+ * hash of the whole path (two roots with the same name do not mix). The id is short and opaque; the
+ * readable part says which folder it is.
  */
 function safeFolderFor(root: AgentConfigRoot): string {
   const readable = `${basename(dirname(root.path))}_${basename(root.path)}`.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^\.+/, '');

@@ -6,6 +6,7 @@
 // unreadable file or broken JSON drops only that part of the response. The frontmatter of a `.md`
 // that is a symlink out of its own folder is not read: the `description` would carry the target's text.
 
+import { createHash } from 'node:crypto';
 import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import type { PastaDeConfiguracao } from '../perfis/descoberta.ts';
@@ -56,20 +57,43 @@ export function chooseProject(requested: string | null | undefined, projects: re
  * (the project opened at `$HOME` itself) does not get the `p` root: `<project>/.claude` would be the
  * home again, everything would show up twice as Project and "New → Project" would write to the user.
  */
+/**
+ * A root's id: the kind's letter (`u` home, `c` `.claude.json`, `p` the project's `.claude`, `r` the
+ * project) and a short hash of the real path. It does not depend on the discovery order: the id the
+ * screen got still names the same folder on the POST, and a folder that is gone takes its id with
+ * it (400), instead of the next one in the list taking its place.
+ */
+export async function rootIdFor(letter: 'u' | 'c' | 'p' | 'r', path: string): Promise<string> {
+  return `${letter}-${createHash('sha256').update(await stablePath(resolve(path))).digest('hex').slice(0, 12)}`;
+}
+
+/**
+ * The real path, also for a path that does not exist yet (the project's `.claude` before the first
+ * "New"): the real path of the nearest existing parent plus the rest. Creating the folder keeps the id.
+ */
+async function stablePath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(await stablePath(parent), basename(path));
+  }
+}
+
 export async function rootsFor(folders: AgentConfigRequest['folders'], project: string | null): Promise<AgentConfigRoot[]> {
   const several = folders.length > 1;
   const roots: AgentConfigRoot[] = [];
-  for (const [i, f] of folders.entries()) {
+  for (const f of folders) {
     const suffix = several ? ` · ${basename(f.dir)}` : '';
-    roots.push({ id: `u${i}`, scope: 'user', kind: 'home', label: `Claude home${suffix}`, path: f.dir });
-    if (await isFile(f.claudeJson)) roots.push({ id: `c${i}`, scope: 'user', kind: 'claude-json', label: `.claude.json${suffix}`, path: f.claudeJson });
+    roots.push({ id: await rootIdFor('u', f.dir), scope: 'user', kind: 'home', label: `Claude home${suffix}`, path: f.dir });
+    if (await isFile(f.claudeJson)) roots.push({ id: await rootIdFor('c', f.claudeJson), scope: 'user', kind: 'claude-json', label: `.claude.json${suffix}`, path: f.claudeJson });
   }
   if (project) {
     const projectClaude = join(project, '.claude');
     const real = await realPath(projectClaude);
     const isHome = (await Promise.all(folders.map((f) => realPath(f.dir)))).includes(real);
-    if (!isHome) roots.push({ id: 'p', scope: 'project', kind: 'project-claude', label: '.claude do projeto', path: projectClaude });
-    roots.push({ id: 'r', scope: 'project', kind: 'project', label: `Projeto · ${basename(project)}`, path: project });
+    if (!isHome) roots.push({ id: await rootIdFor('p', projectClaude), scope: 'project', kind: 'project-claude', label: '.claude do projeto', path: projectClaude });
+    roots.push({ id: await rootIdFor('r', project), scope: 'project', kind: 'project', label: `Projeto · ${basename(project)}`, path: project });
   }
   return roots;
 }
@@ -134,7 +158,7 @@ export async function readAgentConfig(request: AgentConfigRequest): Promise<Agen
 
   if (project) {
     // Without the `p` root (the project's `.claude` is a home), `.claude/CLAUDE.md` already came in as the user's.
-    const hasProjectClaude = roots.some((x) => x.id === 'p');
+    const hasProjectClaude = roots.some((x) => x.kind === 'project-claude');
     for (const path of [join(project, 'CLAUDE.md'), join(project, 'CLAUDE.local.md'), ...(hasProjectClaude ? [join(project, '.claude', 'CLAUDE.md')] : [])]) {
       if (await isFile(path)) r.memory.push({ name: relative(project, path), scope: 'project', path, kind: 'instructions' });
     }
