@@ -10,8 +10,8 @@
 //   request always carries the `project`.
 // - Deleting a skill is out of scope (owner's decision): there is no button.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 // ---------- Pure functions (tested in test/api/ui.test.ts) ----------
 
@@ -158,9 +158,9 @@ globalThis.addEventListener?.('beforeunload', (ev) => {
   if (dirty(state.editor)) ev.preventDefault();
 });
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   let url = readUrl(location.search);
-  const signal = ctx.sinal;
+  const signal = ctx.signal;
   await ensureCss();
   if (signal.aborted) return;
   /** The `data-focus` to focus after the next draw (New's Cancel goes back to the New button…). */
@@ -171,13 +171,13 @@ export async function montar(area, ctx) {
   // ---------- Header ----------
   const projectSlot = el('span', { class: 'ac-project' });
   const seg = el('div', { class: 'ac-seg', role: 'group', 'aria-label': 'Escopo' });
-  const refreshButton = el('button', { type: 'button', class: 'btn', aoClicar: () => load({ quiet: true, withSkill: true }) }, icone('refresh'), 'Atualizar');
-  const header = cabecalho({ icone: 'bot', titulo: 'Agent Config', sub: SUB, acoes: [projectSlot, seg, refreshButton] });
+  const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => load({ quiet: true, withSkill: true }) }, icon('refresh'), 'Atualizar');
+  const pageHeader = header({ icon: 'bot', title: 'Agent Config', sub: SUB, actions: [projectSlot, seg, refreshButton] });
 
   function drawSeg() {
     seg.replaceChildren(
       ...SCOPES.map(([id, label]) =>
-        el('button', { type: 'button', 'data-focus': `scope:${id}`, 'aria-pressed': String(state.scope === id), aoClicar: () => ((state.scope = id), draw()) }, label),
+        el('button', { type: 'button', 'data-focus': `scope:${id}`, 'aria-pressed': String(state.scope === id), onClick: () => ((state.scope = id), draw()) }, label),
       ),
     );
   }
@@ -197,7 +197,7 @@ export async function montar(area, ctx) {
       goTo({ tab: url.tab, project: select.value });
       load();
     });
-    projectSlot.replaceChildren(el('label', { class: 'ac-project-label' }, icone('folder'), select));
+    projectSlot.replaceChildren(el('label', { class: 'ac-project-label' }, icon('folder'), select));
   }
 
   // ---------- Navigation inside the screen ----------
@@ -217,7 +217,7 @@ export async function montar(area, ctx) {
         const link = el(
           'a',
           { href: urlFor({ tab: t.id, project: url.project }), 'data-focus': `tab:${t.id}`, class: t.id === url.tab ? 'on' : null, 'aria-current': t.id === url.tab ? 'page' : null },
-          icone(t.icon),
+          icon(t.icon),
           t.label,
           n === null ? null : el('span', { class: 'ac-chip' }, String(n)),
         );
@@ -239,9 +239,9 @@ export async function montar(area, ctx) {
     const requested = url.project;
     const mine = ++readSeq;
     const stillValid = () => !signal.aborted && mine === readSeq && requested === url.project;
-    if (!quiet || !state.data) area.replaceChildren(header, carregando({ rotulo: 'Lendo as pastas de configuração' }));
+    if (!quiet || !state.data) area.replaceChildren(pageHeader, loading({ label: 'Lendo as pastas de configuração' }));
     try {
-      const data = await ctx.ler(`/api/agent-config${requested ? `?project=${encodeURIComponent(requested)}` : ''}`);
+      const data = await ctx.read(`/api/agent-config${requested ? `?project=${encodeURIComponent(requested)}` : ''}`);
       if (!stillValid()) return;
       state.data = data;
       state.requested = requested;
@@ -252,22 +252,22 @@ export async function montar(area, ctx) {
       if (e?.name === 'AbortError' || !stillValid()) return;
       if (e?.status === 400 && requested) {
         area.replaceChildren(
-          header,
-          vazio({
-            icone: 'folder',
-            titulo: 'Projeto desconhecido',
-            texto: `${requested} não está entre os projetos das sessões desta máquina.`,
-            acao: { rotulo: 'Abrir o projeto mais recente', aoClicar: () => (goTo({ tab: url.tab }), load()) },
+          pageHeader,
+          empty({
+            icon: 'folder',
+            title: 'Projeto desconhecido',
+            text: `${requested} não está entre os projetos das sessões desta máquina.`,
+            action: { label: 'Abrir o projeto mais recente', onClick: () => (goTo({ tab: url.tab }), load()) },
           }),
         );
         return;
       }
       if (quiet && state.data) {
-        readBanner = faixaDeErro({ titulo: 'Não releu.', texto: e?.message ?? String(e), acao: { rotulo: 'Tentar de novo', aoClicar: () => load({ quiet: true }) } });
+        readBanner = errorBand({ title: 'Não releu.', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: () => load({ quiet: true }) } });
         draw();
         return;
       }
-      area.replaceChildren(header, erro({ texto: e?.message ?? String(e), tentar: () => load() }));
+      area.replaceChildren(pageHeader, error({ text: e?.message ?? String(e), retry: () => load() }));
     }
   }
 
@@ -283,10 +283,10 @@ export async function montar(area, ctx) {
     const selection = !pendingFocus && active && 'selectionStart' in active && area.contains(active) ? { from: active.selectionStart, to: active.selectionEnd, scroll: active.scrollTop } : null;
     pendingFocus = null;
     const tab = TABS.find((t) => t.id === url.tab);
-    ctx.titulo(url.tab === 'overview' ? 'Agent Config' : `Agent Config · ${tab.label}`);
+    ctx.title(url.tab === 'overview' ? 'Agent Config' : `Agent Config · ${tab.label}`);
     drawSeg();
     drawProject();
-    const parts = [header, readBanner];
+    const parts = [pageHeader, readBanner];
     if (url.tab === 'overview') parts.push(...overview(d));
     else parts.push(tabs(), url.tab === 'skills' ? skills(d) : simpleList(d, url.tab));
     area.replaceChildren(...parts.filter(Boolean));
@@ -308,14 +308,14 @@ export async function montar(area, ctx) {
     const backupsButton = el(
       'button',
       { type: 'button', class: 'btn outline', 'data-focus': 'backups', 'aria-expanded': String(state.backupsOpen), 'aria-controls': state.backupsOpen ? 'ac-backups' : null },
-      icone('history'),
+      icon('history'),
       'Backups',
     );
     backupsButton.addEventListener('click', () => ((state.backupsOpen = !state.backupsOpen), draw()));
     const banner = el(
       'div',
       { class: 'ac-banner' },
-      el('span', { class: 'ac-banner-icon' }, icone('shield-check')),
+      el('span', { class: 'ac-banner-icon' }, icon('shield-check')),
       el(
         'p',
         {},
@@ -354,7 +354,7 @@ export async function montar(area, ctx) {
             el(
               'div',
               { class: 'ac-stat' },
-              el('div', { class: 'eyebrow' }, el('span', { class: 'ac-accent' }, icone(ic)), label),
+              el('div', { class: 'eyebrow' }, el('span', { class: 'ac-accent' }, icon(ic)), label),
               el('div', { class: 'ac-stat-line' }, el('span', { class: 'mono ac-big' }, String(countFor(d.summary[key], state.scope))), el('span', { class: 'ac-muted' }, captionFor(d.summary[key], state.scope))),
             ),
           ),
@@ -365,12 +365,12 @@ export async function montar(area, ctx) {
 
   function pathCard(label, path, ic) {
     const text = el('div', { class: 'mono ac-trunc ac-path ac-clip-start', title: path }, el('bdi', { dir: 'ltr' }, path));
-    const copy = el('button', { type: 'button', class: 'ac-copy', title: `Copiar ${path}`, 'aria-label': `Copiar o caminho de ${label}` }, icone('copy'));
+    const copy = el('button', { type: 'button', class: 'ac-copy', title: `Copiar ${path}`, 'aria-label': `Copiar o caminho de ${label}` }, icon('copy'));
     copy.addEventListener('click', () => copyText(path, copy, text));
     return el(
       'div',
       { class: 'ac-root' },
-      el('span', { class: 'ac-accent' }, icone(ic)),
+      el('span', { class: 'ac-accent' }, icon(ic)),
       el('div', { class: 'ac-trunc ac-grow' }, el('div', { class: 'eyebrow ac-eyebrow-sm' }, label), text),
       copy,
     );
@@ -389,17 +389,17 @@ export async function montar(area, ctx) {
         ...(found.length
           ? found.map(skillCard)
           : [
-              vazio({
-                icone: 'suggested',
-                titulo: state.search ? 'Nenhuma skill com essa busca' : 'Nenhuma skill neste escopo',
-                texto: state.search ? `Nada em ${d.skills.length} skill(s) bate com “${state.search}”.` : `Há ${d.summary.skills.total} skill(s) em todos os escopos.`,
+              empty({
+                icon: 'suggested',
+                title: state.search ? 'Nenhuma skill com essa busca' : 'Nenhuma skill neste escopo',
+                text: state.search ? `Nada em ${d.skills.length} skill(s) bate com “${state.search}”.` : `Há ${d.summary.skills.total} skill(s) em todos os escopos.`,
               }),
             ]),
       );
     };
     const search = el('input', { type: 'search', 'data-focus': 'search', class: 'ac-input', placeholder: 'Buscar skills…', 'aria-label': 'Buscar skills', value: state.search, autocomplete: 'off', spellcheck: 'false' });
     search.addEventListener('input', () => ((state.search = search.value), drawList()));
-    const newButton = el('button', { type: 'button', class: 'btn filled ac-action', 'data-focus': 'new', 'aria-expanded': String(!!state.creating) }, icone('plus'), 'Nova');
+    const newButton = el('button', { type: 'button', class: 'btn filled ac-action', 'data-focus': 'new', 'aria-expanded': String(!!state.creating) }, icon('plus'), 'Nova');
     newButton.addEventListener('click', () => {
       const first = skillRoots(d)[0];
       state.creating = state.creating ? null : { name: '', root: first?.id ?? null, error: null };
@@ -410,7 +410,7 @@ export async function montar(area, ctx) {
     return el(
       'div',
       { class: 'ac-skills' },
-      el('div', { class: 'ac-column' }, el('div', { class: 'ac-search-row' }, el('label', { class: 'ac-field' }, icone('search'), search), newButton), state.creating ? newForm(d) : null, list),
+      el('div', { class: 'ac-column' }, el('div', { class: 'ac-search-row' }, el('label', { class: 'ac-field' }, icon('search'), search), newButton), state.creating ? newForm(d) : null, list),
       editor(),
     );
   }
@@ -424,7 +424,7 @@ export async function montar(area, ctx) {
       el(
         'div',
         { class: 'ac-item-row' },
-        el('span', { class: 'ac-accent' }, icone('suggested')),
+        el('span', { class: 'ac-accent' }, icon('suggested')),
         el('b', { class: 'ac-trunc' }, s.name),
         el('span', { class: 'ac-chip' }, SCOPE_LABEL[s.scope] ?? s.scope),
         s.declaredName && s.declaredName !== s.name ? el('span', { class: 'mono ac-muted ac-trunc', title: 'O name do frontmatter' }, `name: ${s.declaredName}`) : null,
@@ -434,8 +434,8 @@ export async function montar(area, ctx) {
         'div',
         { class: 'ac-item-row ac-item-foot' },
         pathEl(s.path, 'ac-grow'),
-        el('button', { type: 'button', class: 'ac-link', 'data-focus': `view:${s.root}/${s.name}`, 'aria-label': `Ver ${s.name}`, aoClicar: () => switchTo(s, 'view') }, 'Ver'),
-        s.editable ? el('button', { type: 'button', class: 'ac-link', 'data-focus': `edit:${s.root}/${s.name}`, 'aria-label': `Editar ${s.name}`, aoClicar: () => switchTo(s, 'edit') }, 'Editar') : null,
+        el('button', { type: 'button', class: 'ac-link', 'data-focus': `view:${s.root}/${s.name}`, 'aria-label': `Ver ${s.name}`, onClick: () => switchTo(s, 'view') }, 'Ver'),
+        s.editable ? el('button', { type: 'button', class: 'ac-link', 'data-focus': `edit:${s.root}/${s.name}`, 'aria-label': `Editar ${s.name}`, onClick: () => switchTo(s, 'edit') }, 'Editar') : null,
       ),
     );
   }
@@ -464,13 +464,13 @@ export async function montar(area, ctx) {
     const q = new URLSearchParams({ root: s.root, name: s.name });
     if (d.project) q.set('project', d.project);
     try {
-      const r = await ctx.ler(`/api/agent-config/skill?${q}`);
+      const r = await ctx.read(`/api/agent-config/skill?${q}`);
       if (signal.aborted || state.editor !== ed) return;
       Object.assign(ed, { content: r.content, text: r.content, version: r.version, editedAt: r.editedAt, path: r.path, loading: false });
     } catch (e) {
       if (e?.name === 'AbortError' || signal.aborted || state.editor !== ed) return;
       // Without the read there is no `version`: it stays read-only, without Save (a POST without version would replace the file).
-      Object.assign(ed, { loading: false, mode: 'view', error: { titulo: 'Não abriu.', texto: e?.message ?? String(e), acao: { rotulo: 'Tentar de novo', aoClicar: () => openSkill(ed, mode) } } });
+      Object.assign(ed, { loading: false, mode: 'view', error: { title: 'Não abriu.', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: () => openSkill(ed, mode) } } });
     }
     if (mode === 'edit' && !ed.error) pendingFocus = 'text';
     draw();
@@ -497,7 +497,7 @@ export async function montar(area, ctx) {
       ...options.map((r) =>
         el(
           'button',
-          { type: 'button', 'data-focus': `new-root:${r.id}`, 'aria-pressed': String(creating.root === r.id), title: r.path, aoClicar: () => ((creating.root = r.id), (creating.error = creating.name ? validateSkillName(creating.name, existing()) : null), draw()) },
+          { type: 'button', 'data-focus': `new-root:${r.id}`, 'aria-pressed': String(creating.root === r.id), title: r.path, onClick: () => ((creating.root = r.id), (creating.error = creating.name ? validateSkillName(creating.name, existing()) : null), draw()) },
           r.kind === 'home' ? (severalProfiles ? `Usuário · ${r.label}` : 'Usuário') : 'Projeto',
         ),
       ),
@@ -513,8 +513,8 @@ export async function montar(area, ctx) {
       el(
         'div',
         { class: 'ac-foot' },
-        el('button', { type: 'button', class: 'btn outline ac-push', aoClicar: () => ((state.creating = null), (pendingFocus = 'new'), draw()) }, 'Cancelar'),
-        el('button', { type: 'submit', class: 'btn filled ac-action', disabled: !options.length }, icone('plus'), 'Criar'),
+        el('button', { type: 'button', class: 'btn outline ac-push', onClick: () => ((state.creating = null), (pendingFocus = 'new'), draw()) }, 'Cancelar'),
+        el('button', { type: 'submit', class: 'btn filled ac-action', disabled: !options.length }, icon('plus'), 'Criar'),
       ),
     );
     form.addEventListener('submit', (ev) => {
@@ -558,7 +558,7 @@ export async function montar(area, ctx) {
       return el(
         'section',
         { class: 'card ac-editor ac-editor-empty' },
-        el('div', { class: 'seal' }, icone('file-text')),
+        el('div', { class: 'seal' }, icon('file-text')),
         el('p', { class: 'ac-muted' }, 'Escolha uma skill para ver ou editar o SKILL.md, ou crie uma com Nova.'),
       );
     }
@@ -573,15 +573,15 @@ export async function montar(area, ctx) {
     });
     textarea.value = ed.text;
     const footStatus = el('span', { class: 'ac-muted ac-foot-status', 'aria-live': 'polite' });
-    const save = el('button', { type: 'button', class: 'btn filled ac-action' }, icone('save'), ed.saving ? 'Salvando…' : 'Salvar com backup');
+    const save = el('button', { type: 'button', class: 'btn filled ac-action' }, icon('save'), ed.saving ? 'Salvando…' : 'Salvar com backup');
     const updateFoot = () => {
       save.disabled = !canSave(ed);
       footStatus.replaceChildren(
         ...(ed.mode === 'view'
-          ? [icone('lock'), ' Só leitura']
+          ? [icon('lock'), ' Só leitura']
           : dirty(ed) && ed.mode !== 'new'
             ? ['Alterações não salvas']
-            : [icone('shield-check'), ed.mode === 'new' ? ' Cria a pasta e o SKILL.md' : ' Toda gravação faz backup antes']),
+            : [icon('shield-check'), ed.mode === 'new' ? ' Cria a pasta e o SKILL.md' : ' Toda gravação faz backup antes']),
       );
     };
     textarea.addEventListener('input', () => {
@@ -610,10 +610,10 @@ export async function montar(area, ctx) {
     return el(
       'section',
       { class: 'card ac-editor', 'aria-label': `Editor de ${ed.name}` },
-      el('div', { class: 'ac-ttl' }, icone('file-text'), el('span', { class: 'ac-trunc' }, `${ed.name} / SKILL.md`), el('span', { class: 'ac-ttl-r' }, `${SCOPE_LABEL[ed.scope] ?? ed.scope} · ${when}`)),
+      el('div', { class: 'ac-ttl' }, icon('file-text'), el('span', { class: 'ac-trunc' }, `${ed.name} / SKILL.md`), el('span', { class: 'ac-ttl-r' }, `${SCOPE_LABEL[ed.scope] ?? ed.scope} · ${when}`)),
       pathEl(ed.path),
-      ed.error ? faixaDeErro(ed.error) : null,
-      ed.notice ? el('div', { class: 'ac-ok', role: 'status' }, icone('done'), el('p', {}, ed.notice)) : null,
+      ed.error ? errorBand(ed.error) : null,
+      ed.notice ? el('div', { class: 'ac-ok', role: 'status' }, icon('done'), el('p', {}, ed.notice)) : null,
       textarea,
       el(
         'div',
@@ -622,7 +622,7 @@ export async function montar(area, ctx) {
         close,
         ed.mode === 'view'
           ? editable
-            ? el('button', { type: 'button', class: 'btn filled ac-action', 'data-focus': 'edit', disabled: ed.loading || !ed.version, aoClicar: () => switchTo(ed, 'edit') }, icone('pencil'), 'Editar')
+            ? el('button', { type: 'button', class: 'btn filled ac-action', 'data-focus': 'edit', disabled: ed.loading || !ed.version, onClick: () => switchTo(ed, 'edit') }, icon('pencil'), 'Editar')
             : null
           : save,
       ),
@@ -643,7 +643,7 @@ export async function montar(area, ctx) {
     try {
       // Without the screen's `signal`: leaving midway does not undo the write, and the response still
       // updates the editor (which lives in the module and reappears when the person comes back).
-      const r = await ctx.escrever('/api/agent-config/skill', body, { signal: undefined });
+      const r = await ctx.write('/api/agent-config/skill', body, { signal: undefined });
       const created = ed.mode === 'new';
       Object.assign(ed, { content: body.content, version: r.version, editedAt: r.editedAt, path: r.path, mode: 'edit', saving: false });
       ed.notice = r.backup ? `Salvo. O anterior ficou em ${r.backup}` : created ? `Criada em ${r.path}` : `Salvo em ${r.path}`;
@@ -660,7 +660,7 @@ export async function montar(area, ctx) {
           ? {
               titulo: 'A skill mudou por fora.',
               texto: 'Recarregue para ver a versão do disco. O seu texto continua aqui até você recarregar: copie o que quiser guardar.',
-              acao: { rotulo: 'Recarregar', aoClicar: () => openSkill(ed, 'edit') },
+              acao: { rotulo: 'Recarregar', onClick: () => openSkill(ed, 'edit') },
             }
           : { titulo: 'Não salvou.', texto: e?.message ?? String(e) };
       if (signal.aborted) return;
@@ -683,10 +683,10 @@ export async function montar(area, ctx) {
     const items = inScope(d[t.key] ?? [], state.scope);
     if (!items.length) {
       const total = d.summary?.[t.key]?.total ?? 0;
-      return vazio({
-        icone: t.ic,
-        titulo: `${t.none}${state.scope === 'all' ? '' : state.scope === 'user' ? ' do usuário' : ' do projeto'}`,
-        texto: total ? `Há ${total} em todos os escopos.` : 'Nada configurado nas pastas lidas.',
+      return empty({
+        icon: t.ic,
+        title: `${t.none}${state.scope === 'all' ? '' : state.scope === 'user' ? ' do usuário' : ' do projeto'}`,
+        text: total ? `Há ${total} em todos os escopos.` : 'Nada configurado nas pastas lidas.',
       });
     }
     return el(
@@ -699,7 +699,7 @@ export async function montar(area, ctx) {
           el(
             'div',
             { class: 'ac-item-row' },
-            el('span', { class: 'ac-accent' }, icone(t.ic)),
+            el('span', { class: 'ac-accent' }, icon(t.ic)),
             el('b', { class: 'ac-trunc' }, t.title(i)),
             el('span', { class: 'ac-chip' }, SCOPE_LABEL[i.scope] ?? i.scope),
             t.extra ? el('span', { class: 'ac-chip' }, t.extra(i)) : null,
@@ -712,7 +712,7 @@ export async function montar(area, ctx) {
   }
 
   // ---------- Start ----------
-  ctx.aoReiniciar(() => load({ quiet: true }));
+  ctx.onRestart(() => load({ quiet: true }));
   // A skill read cut short by leaving the screen starts over (the write is not cut: see `write`).
   const resume = () => state.editor?.loading && state.data && openSkill(state.editor, state.editor.mode);
   if (state.data && state.requested === url.project) {
@@ -744,12 +744,12 @@ function copyText(text, button, target) {
   const restore = () => {
     button.classList.remove('ok');
     button.setAttribute('aria-label', originalLabel);
-    button.replaceChildren(icone('copy'));
+    button.replaceChildren(icon('copy'));
   };
   const show = (label, ok) => {
     button.setAttribute('aria-label', label);
     button.classList.toggle('ok', ok);
-    button.replaceChildren(icone(ok ? 'done' : 'copy'), el('span', {}, label));
+    button.replaceChildren(icon(ok ? 'done' : 'copy'), el('span', {}, label));
     setTimeout(restore, 1600);
   };
   const select = () => {

@@ -95,7 +95,7 @@ Object.assign(globalThis, {
 const tela = await import('../../ui/screens/wall.js');
 // @ts-expect-error: idem
 const { findScreen } = await import('../../ui/screens.js');
-const { custo, esforco, montar, nomeDoModelo, oQueOCardMostra } = tela;
+const { custo, esforco, mount, nomeDoModelo, oQueOCardMostra } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
 const ate = async (cond: () => boolean, ms = 3000) => {
@@ -143,23 +143,23 @@ const MURAL = {
   ],
 };
 
-async function montarTela(ler: (rota: string) => Promise<unknown>) {
+async function montarTela(read: (rota: string) => Promise<unknown>) {
   const area = new Elemento('main');
   const sair = new AbortController();
   const ouvintes = { mudar: [] as ((m: unknown[]) => void)[], reiniciar: [] as (() => void)[] };
   const rotas: string[] = [];
   const ctx = {
     params: {},
-    sinal: sair.signal,
-    ler: (rota: string) => (rotas.push(rota), ler(rota)),
-    aoMudar: (f: (m: unknown[]) => void) => ouvintes.mudar.push(f),
-    aoReiniciar: (f: () => void) => ouvintes.reiniciar.push(f),
-    contador: () => {},
+    signal: sair.signal,
+    read: (rota: string) => (rotas.push(rota), read(rota)),
+    onChange: (f: (m: unknown[]) => void) => ouvintes.mudar.push(f),
+    onRestart: (f: () => void) => ouvintes.reiniciar.push(f),
+    counter: () => {},
     titulo: () => {},
-    navegar: () => {},
-    aoVivo: () => 'ao-vivo',
+    navigate: () => {},
+    liveState: () => 'live',
   };
-  const pronta = montar(area, ctx);
+  const pronta = mount(area, ctx);
   return { area, rotas, ouvintes, pronta, sair: async () => (sair.abort(), (await pronta)()) };
 }
 

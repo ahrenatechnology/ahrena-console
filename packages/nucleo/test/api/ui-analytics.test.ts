@@ -84,7 +84,7 @@ Object.assign(globalThis, {
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 const tela = await import('../../ui/screens/analytics.js');
-const { montar, quantidade, usd, dataCurta, nomeDoModelo, milhoes, porcento, topoDoEixo, fatiasPorModelo, classeDaConta, nomeDoArquivo } = tela;
+const { mount, quantidade, usd, dataCurta, nomeDoModelo, milhoes, porcento, topoDoEixo, fatiasPorModelo, classeDaConta, nomeDoArquivo } = tela;
 
 const comClasse = (r: No, c: string) => r.todos((e) => e.classes.includes(c));
 const porTag = (r: No, t: string) => r.todos((e) => e.tag === t);
@@ -137,7 +137,7 @@ function visao({ contas = [CONTA_A], sessoes = 412 } = {}) {
   };
 }
 
-function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = false } = {}) {
+function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio: empty = false } = {}) {
   const lista = diasAte('2026-10-18', dias);
   const porDia = lista.map((dia, i) => ({ dia, usd: semPrecoNoDia && i === 3 ? null : 5 + (i % 7) }));
   return {
@@ -151,12 +151,12 @@ function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = f
     contas,
     hoje: '2026-10-18',
     resumoDeHoje: { usd: 12.4 as number | null, sessoes: 9, porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 9.3 : (null as number | null), semPreco: i === 0 ? [] : ['modelo-novo'] })) },
-    periodo: { usd: vazio ? null : 341.2, mediaPorDia: vazio ? null : 11.4 },
+    periodo: { usd: empty ? null : 341.2, mediaPorDia: empty ? null : 11.4 },
     cache: { pct: 71 },
     semPreco: { modelos: ['modelo-novo'], totalDeTokens: 1000 },
-    porDia: vazio ? [] : porDia,
-    pico: vazio ? null : { dia: lista.at(-2), usd: 18.4 },
-    porModelo: vazio
+    porDia: empty ? [] : porDia,
+    pico: empty ? null : { dia: lista.at(-2), usd: 18.4 },
+    porModelo: empty
       ? []
       : [
           { modelo: 'claude-opus-5-5', usd: 211.5, pct: 62, totalDeTokens: 1 },
@@ -164,7 +164,7 @@ function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = f
           { modelo: 'claude-haiku-5-5', usd: 23.9, pct: 7, totalDeTokens: 1 },
           { modelo: 'modelo-novo', usd: null, pct: null, totalDeTokens: 1000 },
         ],
-    porProjeto: vazio
+    porProjeto: empty
       ? []
       : [
           { projeto: 'motor-de-regras', usd: 128.4 },
@@ -175,7 +175,7 @@ function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = f
   };
 }
 
-async function montarTela({ aba, ler }: { aba?: string; ler: (rota: string) => Promise<unknown> }) {
+async function montarTela({ aba, read }: { aba?: string; read: (rota: string) => Promise<unknown> }) {
   const area = new Elemento('main');
   const rotas: string[] = [];
   const mudar: (() => void)[] = [];
@@ -183,16 +183,16 @@ async function montarTela({ aba, ler }: { aba?: string; ler: (rota: string) => P
   const navegou: string[] = [];
   const ctx = {
     params: aba === undefined ? {} : { tab: aba },
-    sinal: new AbortController().signal,
-    ler: async (rota: string) => (rotas.push(rota), ler(rota)),
-    aoMudar: (f: () => void) => mudar.push(f),
-    aoReiniciar: (f: () => void) => reiniciar.push(f),
-    contador: () => {},
+    signal: new AbortController().signal,
+    read: async (rota: string) => (rotas.push(rota), read(rota)),
+    onChange: (f: () => void) => mudar.push(f),
+    onRestart: (f: () => void) => reiniciar.push(f),
+    counter: () => {},
     titulo: () => {},
-    navegar: (r: string) => navegou.push(r),
-    aoVivo: () => 'ao-vivo',
+    navigate: (r: string) => navegou.push(r),
+    liveState: () => 'live',
   };
-  const limpar = await montar(area, ctx, { releituraMs: 5 });
+  const limpar = await mount(area, ctx, { releituraMs: 5 });
   return { area, rotas, mudar, reiniciar, navegou, limpar };
 }
 
@@ -276,7 +276,7 @@ describe('Analytics: formatação', () => {
 
 describe('Analytics: Visão geral', () => {
   test('cabeçalho, os cinco números, as duas abas e os gráficos', async () => {
-    const { area, rotas, limpar } = await montarTela({ ler: async () => visao() });
+    const { area, rotas, limpar } = await montarTela({ read: async () => visao() });
     try {
       assert.match(rotas[0]!, /^\/api\/analytics\?tz=[^&]+$/);
       const texto = area.textContent;
@@ -325,7 +325,7 @@ describe('Analytics: Visão geral', () => {
   });
 
   test('com duas contas, o custo leva a divisão por conta', async () => {
-    const { area, limpar } = await montarTela({ ler: async () => visao({ contas: [CONTA_A, CONTA_B] }) });
+    const { area, limpar } = await montarTela({ read: async () => visao({ contas: [CONTA_A, CONTA_B] }) });
     try {
       const custoCard = comClasse(area, 'an-stat').find((s) => s.getAttribute('data-card') === 'custo')!;
       const linhas = porTag(comClasse(custoCard, 'an-accounts')[0]!, 'li');
@@ -342,7 +342,7 @@ describe('Analytics: Visão geral', () => {
     const d = visao({ contas: [CONTA_A, { id: null, rotulo: 'Sem conta', cor: null }] as never });
     d.numeros.custo.porConta = [{ conta: CONTA_A.id, usd: 300, semPreco: [] }, { conta: null as never, usd: null as never, semPreco: ['modelo-novo'] }];
     d.atividade.dias = d.atividade.dias.slice(6); // 358 dias, de uma segunda até hoje
-    const { area, limpar } = await montarTela({ ler: async () => d });
+    const { area, limpar } = await montarTela({ read: async () => d });
     try {
       const linhas = porTag(comClasse(area, 'an-accounts')[0]!, 'li');
       assert.deepEqual(linhas.map((l) => [l.getAttribute('data-account'), l.textContent]), [[CONTA_A.id, 'pessoal~US$ 300,00'], ['sem-conta', 'Sem contasem preço']]);
@@ -353,7 +353,7 @@ describe('Analytics: Visão geral', () => {
   });
 
   test('sem sessão nenhuma, o estado vazio', async () => {
-    const { area, limpar } = await montarTela({ ler: async () => visao({ sessoes: 0 }) });
+    const { area, limpar } = await montarTela({ read: async () => visao({ sessoes: 0 }) });
     try {
       assert.match(area.textContent, /Nenhuma sessão ainda/);
       assert.equal(comClasse(area, 'an-stat').length, 0);
@@ -365,7 +365,7 @@ describe('Analytics: Visão geral', () => {
   test('sem o núcleo, o erro com "Tentar de novo", que relê', async () => {
     let falha = true;
     const { area, rotas, limpar } = await montarTela({
-      ler: async () => {
+      read: async () => {
         if (falha) throw Object.assign(new Error('O núcleo não respondeu'), { status: 0 });
         return visao();
       },
@@ -384,7 +384,7 @@ describe('Analytics: Visão geral', () => {
   test('ao vivo: uma rajada de mudanças relê uma vez; reiniciar relê; uma falha mantém os números', async () => {
     let falha = false;
     const { area, rotas, mudar, reiniciar, limpar } = await montarTela({
-      ler: async () => {
+      read: async () => {
         if (falha) throw new Error('caiu');
         return visao();
       },
@@ -408,7 +408,7 @@ describe('Analytics: Visão geral', () => {
 
 describe('Analytics: Custo', () => {
   test('seletor 7/30/90, quatro números, linha, rosca e por projeto; trocar o período relê com ?days=', async () => {
-    const { area, rotas, limpar } = await montarTela({ aba: 'cost', ler: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
+    const { area, rotas, limpar } = await montarTela({ aba: 'cost', read: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
     try {
       assert.match(rotas[0]!, /^\/api\/analytics\/cost\?days=30&tz=[^&]+$/);
       const texto = area.textContent;
@@ -448,7 +448,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('com duas contas, hoje e o período levam a divisão por conta (parcial quando falta preço); com uma, não', async () => {
-    const duas = await montarTela({ aba: 'cost', ler: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
+    const duas = await montarTela({ aba: 'cost', read: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
     try {
       const card = (id: string) => comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === id)!;
       const periodo = porTag(comClasse(card('periodo'), 'an-accounts')[0]!, 'li');
@@ -460,7 +460,7 @@ describe('Analytics: Custo', () => {
     } finally {
       duas.limpar();
     }
-    const uma = await montarTela({ aba: 'cost', ler: async () => custo(30) });
+    const uma = await montarTela({ aba: 'cost', read: async () => custo(30) });
     try {
       assert.equal(comClasse(uma.area, 'an-accounts').length, 0);
     } finally {
@@ -472,7 +472,7 @@ describe('Analytics: Custo', () => {
     const d = custo(30);
     d.periodo = { usd: null, mediaPorDia: null };
     d.resumoDeHoje = { usd: null, sessoes: 2, porConta: [] };
-    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => d });
+    const { area, limpar } = await montarTela({ aba: 'cost', read: async () => d });
     try {
       const textos = comClasse(area, 'an-stat').map((s) => s.textContent);
       assert.equal(textos[0], 'Hojesem preço2 sessões');
@@ -483,7 +483,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('período sem custo: o estado vazio, com o seletor no ar', async () => {
-    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => custo(7, { vazio: true }) });
+    const { area, limpar } = await montarTela({ aba: 'cost', read: async () => custo(7, { vazio: true }) });
     try {
       assert.match(area.textContent, /Nenhum custo nos últimos 30 dias/);
       assert.equal(porTag(area, 'button').filter((b) => b.getAttribute('data-days')).length, 3);
@@ -493,7 +493,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('erro na leitura do custo', async () => {
-    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => Promise.reject(new Error('O núcleo respondeu 500')) });
+    const { area, limpar } = await montarTela({ aba: 'cost', read: async () => Promise.reject(new Error('O núcleo respondeu 500')) });
     try {
       assert.match(area.textContent, /Sem conexão com o núcleo.*O núcleo respondeu 500.*Tentar de novo/);
     } finally {
@@ -502,7 +502,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('aba que não existe: não lê nada e oferece a Visão geral', async () => {
-    const { area, rotas, navegou, limpar } = await montarTela({ aba: 'tokens', ler: async () => visao() });
+    const { area, rotas, navegou, limpar } = await montarTela({ aba: 'tokens', read: async () => visao() });
     try {
       assert.equal(rotas.length, 0);
       assert.match(area.textContent, /Aba não encontrada/);

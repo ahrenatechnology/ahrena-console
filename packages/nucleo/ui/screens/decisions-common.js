@@ -5,8 +5,8 @@
 // Tudo o que vem do núcleo é conteúdo não confiável: entra por `textContent` (`el()`), nunca como HTML.
 // As escritas passam por `escrever()` (api.js); nada aqui chama `fetch`.
 
-import { el, icone } from '../dom.js';
-import { escrever } from '../api.js';
+import { el, icon } from '../dom.js';
+import { write } from '../api.js';
 
 // ---------- Estilo ----------
 
@@ -108,7 +108,7 @@ export function alternador({ rotulo, opcoes, atual, aoTrocar }) {
   const desenhar = (valor) => {
     grupo.replaceChildren(
       ...opcoes.map(([v, r]) =>
-        el('button', { type: 'button', class: v === valor ? 'dec-on' : null, 'aria-pressed': v === valor ? 'true' : 'false', aoClicar: () => v !== valor && (desenhar(v), aoTrocar(v)) }, r),
+        el('button', { type: 'button', class: v === valor ? 'dec-on' : null, 'aria-pressed': v === valor ? 'true' : 'false', onClick: () => v !== valor && (desenhar(v), aoTrocar(v)) }, r),
       ),
     );
   };
@@ -124,7 +124,7 @@ export function campoDeBusca({ placeholder, aoBuscar, espera = 250 }) {
     clearTimeout(t);
     t = setTimeout(() => aoBuscar(campo.value.trim()), espera);
   });
-  return el('label', { class: 'dec-search' }, icone('search'), campo);
+  return el('label', { class: 'dec-search' }, icon('search'), campo);
 }
 
 /**
@@ -147,7 +147,7 @@ export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, a
       aviso.textContent = '';
       try {
         const { rota, corpo } = pedidoDaAcao(d.id, acao, { sessao });
-        await escrever(rota, corpo);
+        await write(rota, corpo);
         aoMudar();
       } catch (e) {
         aviso.textContent = e.message;
@@ -161,15 +161,15 @@ export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, a
     const conversa = linkDaConversa(d);
     if (conversa) acoes.append(el('a', { class: 'dec-link', href: conversa }, 'Ver na conversa'));
     if (d.estado === 'vigente') {
-      if (d.promovidaPara) acoes.append(el('span', { class: 'dec-promoted mono', title: d.promovidaPara }, icone('promote'), 'Promovida'));
-      else acoes.append(el('button', { type: 'button', class: 'dec-link', aoClicar: () => abrirPromover(d, sessao, { aoGravar: aoMudar }) }, 'Promover a registro'));
+      if (d.promovidaPara) acoes.append(el('span', { class: 'dec-promoted mono', title: d.promovidaPara }, icon('promote'), 'Promovida'));
+      else acoes.append(el('button', { type: 'button', class: 'dec-link', onClick: () => abrirPromover(d, sessao, { aoGravar: aoMudar }) }, 'Promover a registro'));
     }
   }
 
   return el(
     'article',
     { class: `card dec-card ${stateClass(d.estado)}`, 'data-decision': d.id },
-    el('span', { class: 'dec-ico' }, icone(iconeDoTipo(d.origem))),
+    el('span', { class: 'dec-ico' }, icon(iconeDoTipo(d.origem))),
     el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-label' }, d.rotulo), el('b', { class: 'dec-title', title: d.titulo }, d.titulo), pilulaDeEstado(d.estado)),
     el('time', { class: 'dec-when', datetime: d.decididaEm, title: new Date(d.decididaEm).toLocaleString('pt-BR') }, haQuanto(d.decididaEm, agora)),
     el('div', { class: 'dec-l2' }, ...rastro.flatMap((r, i) => (i ? [' · ', r] : [r]))),
@@ -190,7 +190,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
   const dialogo = el(
     'dialog',
     { class: 'dec-dlg', 'aria-label': `Promover ${d.rotulo} a registro` },
-    el('header', {}, icone('promote'), el('h2', {}, `Promover ${d.rotulo} a registro de decisão`)),
+    el('header', {}, icon('promote'), el('h2', {}, `Promover ${d.rotulo} a registro de decisão`)),
     corpo,
     el('footer', {}, fechar),
   );
@@ -203,13 +203,13 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
     let rascunho;
     try {
       const { rota, corpo: pedido } = pedidoDePromover(d.id, sessao);
-      rascunho = (await escrever(rota, pedido)).rascunho;
+      rascunho = (await write(rota, pedido)).rascunho;
     } catch (e) {
       corpo.replaceChildren(el('p', { class: 'dec-error', role: 'alert' }, `Não deu para gerar o rascunho: ${e.message}`));
       return;
     }
     const aviso = el('p', { class: 'dec-dlg-note', role: 'status' });
-    const copiar = el('button', { type: 'button', class: 'btn outline' }, icone('copy'), 'Copiar');
+    const copiar = el('button', { type: 'button', class: 'btn outline' }, icon('copy'), 'Copiar');
     copiar.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(rascunho.markdown);
@@ -228,7 +228,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
       aviso.textContent = 'Gravando…';
       try {
         const { rota, corpo: pedido } = pedidoDePromover(d.id, sessao, { caminho: rascunho.caminho, hash: rascunho.hash });
-        const r = await escrever(rota, pedido);
+        const r = await write(rota, pedido);
         aviso.textContent = `Gravado em ${r.caminho ?? rascunho.caminho}.`;
         gravar.hidden = true;
         aoGravar(r);

@@ -7,8 +7,8 @@
 // - Com escrita no repositório, o último card é "Tráfego e segurança"; sem, "Comunidade".
 // - `carregando` ou `calculando`: relê a cada 5 s, além da mudança `repos` do Ao vivo.
 
-import { el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 import {
   barras,
   cardDeTrafego,
@@ -100,7 +100,7 @@ function graficoFrequencia(f) {
   return g;
 }
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   carregarEstilo();
   const { owner: dono, repo: nome } = ctx.params;
   let periodo = periodoDe(location.search);
@@ -118,7 +118,7 @@ export async function montar(area, ctx) {
     b.addEventListener('click', () => trocarPeriodo(v));
     return b;
   });
-  const abrirNoGithub = el('a', { class: 'btn outline', target: '_blank', rel: 'noopener noreferrer', hidden: true }, icone('external'), 'Abrir no GitHub');
+  const abrirNoGithub = el('a', { class: 'btn outline', target: '_blank', rel: 'noopener noreferrer', hidden: true }, icon('external'), 'Abrir no GitHub');
   const chips = el('div', { class: 'repo-chips' });
   const cab = el(
     'header',
@@ -126,7 +126,7 @@ export async function montar(area, ctx) {
     el(
       'div',
       { class: 'repo-head-l1' },
-      el('a', { class: 'repo-back', href: '/ui/repos', 'aria-label': 'Voltar para Repositórios' }, icone('back')),
+      el('a', { class: 'repo-back', href: '/ui/repos', 'aria-label': 'Voltar para Repositórios' }, icon('back')),
       titulo,
       ciLugar,
       visLugar,
@@ -145,8 +145,8 @@ export async function montar(area, ctx) {
     history.replaceState(history.state, '', `${location.pathname}?period=${periodInUrl(v)}`);
     dados = null;
     falha = null;
-    conteudo.replaceChildren(carregando({ rotulo: `Lendo ${rotuloDoPeriodo(v)}…` }));
-    ler();
+    conteudo.replaceChildren(loading({ label: `Lendo ${rotuloDoPeriodo(v)}…` }));
+    read();
   }
 
   // ---------- os valores ----------
@@ -159,20 +159,20 @@ export async function montar(area, ctx) {
       'section',
       { class: 'card repo-stat' },
       el('span', { class: 'repo-stat-label' }, rotulo),
-      el('span', { class: `repo-stat-ic ${cor}` }, icone(nomeIcone)),
+      el('span', { class: `repo-stat-ic ${cor}` }, icon(nomeIcone)),
       el('span', { class: tem ? 'repo-stat-v' : 'repo-stat-v repo-pending' }, r.texto),
       el('span', { class: 'repo-stat-s' }, tem ? sub : ''),
     );
   }
 
   function chip(nomeIcone, titulo, visivel, leitor = null) {
-    return el('span', { class: 'repo-chip', title: titulo }, icone(nomeIcone), visivel, leitor ? soLeitor(leitor) : null);
+    return el('span', { class: 'repo-chip', title: titulo }, icon(nomeIcone), visivel, leitor ? soLeitor(leitor) : null);
   }
 
   function desenharCabecalho() {
     const r = dados?.repo;
     titulo.textContent = r?.completo ?? `${dono}/${nome}`;
-    ctx.titulo(titulo.textContent);
+    ctx.title(titulo.textContent);
     ciLugar.replaceChildren(...(r?.ci ? [pilulaDeCi(r.ci)] : []));
     visLugar.replaceChildren(...(r ? [el('span', { class: 'repo-chip repo-chip-sans' }, r.visibilidade === 'publico' ? 'público' : 'privado')] : []));
     const url = r ? urlDoGithub(r.url) : null;
@@ -195,17 +195,17 @@ export async function montar(area, ctx) {
 
   function abas(url) {
     const fora = (caminho, nomeIcone, rotulo) =>
-      url ? el('a', { href: `${url}/${caminho}`, target: '_blank', rel: 'noopener noreferrer' }, icone(nomeIcone), rotulo) : el('span', {}, icone(nomeIcone), rotulo);
+      url ? el('a', { href: `${url}/${caminho}`, target: '_blank', rel: 'noopener noreferrer' }, icon(nomeIcone), rotulo) : el('span', {}, icon(nomeIcone), rotulo);
     return el(
       'nav',
       { class: 'repo-tabs', 'aria-label': 'Seções do repositório' },
-      el('span', { 'aria-current': 'page' }, icone('analytics'), 'Métricas'),
+      el('span', { 'aria-current': 'page' }, icon('analytics'), 'Métricas'),
       fora('issues', 'dot', `Issues (${inteiro(dados.abas.issues)})`),
       fora('pulls', 'git-pull-request', `PRs (${inteiro(dados.abas.prs)})`),
       fora('actions', 'ci', 'CI'),
       // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
-      el('a', { href: `/ui/sessions?search=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icone('sessions'), `Sessões (${inteiro(dados.abas.sessoes)})`),
-      el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icone('decision'), 'Decisões'),
+      el('a', { href: `/ui/sessions?search=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icon('sessions'), `Sessões (${inteiro(dados.abas.sessoes)})`),
+      el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icon('decision'), 'Decisões'),
     );
   }
 
@@ -407,32 +407,32 @@ export async function montar(area, ctx) {
   }
 
   // ---------- os estados ----------
-  const tentar = () => (conteudo.replaceChildren(carregando()), ler());
+  const tentar = () => (conteudo.replaceChildren(loading()), read());
   const naoEncontrado = () =>
-    vazio({ icone: 'repos', titulo: 'Repositório não encontrado', texto: `${dono}/${nome} não existe ou a conta do GitHub não tem acesso a ele.`, acao: { rotulo: 'Voltar para Repositórios', icone: 'back', aoClicar: () => ctx.navegar('/ui/repos') } });
+    empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${dono}/${nome} não existe ou a conta do GitHub não tem acesso a ele.`, action: { label: 'Voltar para Repositórios', icon: 'back', onClick: () => ctx.navigate('/ui/repos') } });
 
   function desenhar() {
     clearTimeout(timer);
     timer = null;
     desenharCabecalho();
     const e = estadoDaTela({ dados, falha, temDado: temRepo(dados) });
-    if (e.reler) timer = setTimeout(ler, RELER_MS);
+    if (e.reler) timer = setTimeout(read, RELER_MS);
 
     const quando = dados?.atualizadoEm ? new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
-    if (e.faixa === 'conexao') faixa.replaceChildren(faixaDeErro({ titulo: 'Sem conexão com o núcleo.', texto: `${falha.message}. Mostrando a última leitura${quando ? `, de ${quando}` : ''}.`, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }));
-    else if (e.faixa === 'github') faixa.replaceChildren(faixaDeErro({ titulo: 'GitHub com problema.', texto: `${dados.erro}. Mostrando as métricas${quando ? ` de ${quando}` : ' da última leitura'}.` }));
+    if (e.faixa === 'conexao') faixa.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${falha.message}. Mostrando a última leitura${quando ? `, de ${quando}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
+    else if (e.faixa === 'github') faixa.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${dados.erro}. Mostrando as métricas${quando ? ` de ${quando}` : ' da última leitura'}.` }));
     else faixa.replaceChildren();
     faixa.hidden = !faixa.firstChild;
 
-    if (e.tela === 'erro') return conteudo.replaceChildren(falha ? erro({ texto: falha.message, tentar }) : erro({ titulo: 'O GitHub não respondeu', texto: dados.erro ?? 'A leitura do repositório falhou.', tentar }));
-    if (e.tela === 'carregando') return conteudo.replaceChildren(carregando());
-    if (e.tela === 'lendo') return conteudo.replaceChildren(carregando({ rotulo: 'Lendo o GitHub…' }));
-    if (e.tela === 'sem-github') return conteudo.replaceChildren(vazio({ icone: 'github', ...SEM_GITHUB }));
+    if (e.tela === 'erro') return conteudo.replaceChildren(falha ? error({ text: falha.message, retry: tentar }) : error({ title: 'O GitHub não respondeu', text: dados.erro ?? 'A leitura do repositório falhou.', retry: tentar }));
+    if (e.tela === 'carregando') return conteudo.replaceChildren(loading());
+    if (e.tela === 'lendo') return conteudo.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
+    if (e.tela === 'sem-github') return conteudo.replaceChildren(empty({ icon: 'github', ...SEM_GITHUB }));
     if (e.tela !== 'dados') return conteudo.replaceChildren(naoEncontrado());
     conteudo.replaceChildren(...metricas());
   }
 
-  async function ler() {
+  async function read() {
     clearTimeout(timer);
     timer = null;
     const n = ++pedido;
@@ -440,7 +440,7 @@ export async function montar(area, ctx) {
     // Resposta de um pedido velho ou de um período que a pessoa já trocou: descartada.
     const vale = () => respostaAtual({ pedido: n, ultimo: pedido, periodo: p, periodoAtual: periodo });
     try {
-      const d = await ctx.ler(`/api/repos/${encodeURIComponent(dono)}/${encodeURIComponent(nome)}?period=${p === '1a' ? '1y' : p}`);
+      const d = await ctx.read(`/api/repos/${encodeURIComponent(dono)}/${encodeURIComponent(nome)}?period=${p === '1a' ? '1y' : p}`);
       if (!vale()) return;
       dados = d;
       falha = null;
@@ -451,13 +451,13 @@ export async function montar(area, ctx) {
     desenhar();
   }
 
-  ctx.aoMudar((mudancas) => {
-    if (mudancaInteressa(mudancas, `${dono}/${nome}`)) ler();
+  ctx.onChange((mudancas) => {
+    if (mudancaInteressa(mudancas, `${dono}/${nome}`)) read();
   });
-  ctx.aoReiniciar(() => ler());
+  ctx.onRestart(() => read());
 
-  conteudo.replaceChildren(carregando());
-  await ler();
+  conteudo.replaceChildren(loading());
+  await read();
   return () => {
     clearTimeout(timer);
     timer = null;

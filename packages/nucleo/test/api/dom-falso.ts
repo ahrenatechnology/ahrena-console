@@ -84,22 +84,22 @@ export class ElementoFalso extends NoFalso {
     this.atributos.delete(k);
   }
   get classList() {
-    const ler = () => new Set((this.getAttribute('class') ?? '').split(/\s+/).filter(Boolean));
+    const read = () => new Set((this.getAttribute('class') ?? '').split(/\s+/).filter(Boolean));
     const gravar = (s: Set<string>) => this.setAttribute('class', [...s].join(' '));
     return {
-      contains: (c: string) => ler().has(c),
+      contains: (c: string) => read().has(c),
       add: (...cs: string[]) => {
-        const s = ler();
+        const s = read();
         for (const c of cs) s.add(c);
         gravar(s);
       },
       remove: (...cs: string[]) => {
-        const s = ler();
+        const s = read();
         for (const c of cs) s.delete(c);
         gravar(s);
       },
       toggle: (c: string, forca?: boolean) => {
-        const s = ler();
+        const s = read();
         const ligar = forca ?? !s.has(c);
         if (ligar) s.add(c);
         else s.delete(c);

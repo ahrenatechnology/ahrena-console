@@ -8,8 +8,8 @@
 //
 // Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 import { decimal, duracao, nomeDoModelo, num, porcento, quando, tokens } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -161,7 +161,7 @@ function kpis(k) {
         'div',
         { class: `card wf-kpi wf-kpi-${c.id}` },
         el('span', { class: 'wf-kpi-label' }, c.rotulo),
-        el('span', { class: `wf-kpi-ic wf-color-${c.cor}` }, icone(c.icone)),
+        el('span', { class: `wf-kpi-ic wf-color-${c.cor}` }, icon(c.icone)),
         el('span', { class: 'wf-kpi-v mono' }, c.valor),
         el('span', { class: 'wf-kpi-s' }, c.sub ?? ''),
       ),
@@ -180,21 +180,21 @@ function chip(texto, extra = '') {
 function linhaDoRun(run, aberto, alternar, ctx) {
   const [rotulo, cor] = ESTADO_DO_RUN[run.estado] ?? ESTADO_DO_RUN.concluida;
   const destino = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
-  const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icone('external'));
+  const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icon('external'));
   // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
   link.addEventListener('click', (ev) => {
     if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     ev.preventDefault();
     history.pushState(null, '', `${destino}#workflow`);
-    ctx.navegar(destino);
+    ctx.navigate(destino);
   });
   const cab = el(
     'div',
     { class: 'wf-run-head' },
     el(
       'button',
-      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', aoClicar: alternar },
-      el('span', { class: 'wf-mute' }, icone(aberto ? 'chevron-down' : 'chevron-right')),
+      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', onClick: alternar },
+      el('span', { class: 'wf-mute' }, icon(aberto ? 'chevron-down' : 'chevron-right')),
       el('b', {}, run.nome),
       selo(rotulo, cor),
       aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' wf-chip-model mono') : null,
@@ -208,8 +208,8 @@ function linhaDoRun(run, aberto, alternar, ctx) {
     ? el(
         'div',
         { class: 'wf-phases' },
-        el('span', { class: 'wf-mute' }, icone('layers')),
-        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icone('arrow-right')) : null, chip(f.nome)]),
+        el('span', { class: 'wf-mute' }, icon('layers')),
+        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icon('arrow-right')) : null, chip(f.nome)]),
         run.volta ? el('span', { class: 'wf-back' }, run.volta) : null,
       )
     : null;
@@ -269,7 +269,7 @@ function grafoSvg(grafo, largura, selecionado, escolher) {
 
 // ---------- A tela ----------
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   carregarCss();
   let filtro = 'todas';
   let no = null;
@@ -287,20 +287,20 @@ export async function montar(area, ctx) {
       if (filtro === f.id) return;
       filtro = f.id;
       marcarFiltro();
-      ler();
+      read();
     });
     return b;
   });
   const marcarFiltro = () => FILTROS.forEach((f, i) => botoes[i].setAttribute('aria-pressed', f.id === filtro ? 'true' : 'false'));
   const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...botoes);
-  const cab = cabecalho({ icone: 'workflows', titulo: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', acoes: [seg] });
+  const cab = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
 
-  area.replaceChildren(cab, carregando({ rotulo: 'Carregando os workflows' }));
+  area.replaceChildren(cab, loading({ label: 'Carregando os workflows' }));
 
   function escolherNo(id) {
     no = no === id ? null : id;
     foco = id;
-    ler();
+    read();
   }
 
   const caixaDoGrafo = el('div', { class: 'wf-orch-box' });
@@ -321,8 +321,8 @@ export async function montar(area, ctx) {
     // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
     if (!d.sessoes && d.filtro === 'todas' && !d.no) {
       area.replaceChildren(
-        ...[cab, falha ? faixaDeErro({ titulo: 'Não deu para atualizar.', texto: falha, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null].filter(Boolean),
-        vazio({ icone: 'workflows', titulo: 'Nenhuma sessão ainda', texto: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
+        ...[cab, falha ? errorBand({ title: 'Não deu para atualizar.', text: falha, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
+        empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
       );
       return;
     }
@@ -348,14 +348,14 @@ export async function montar(area, ctx) {
           'div',
           { class: 'wf-none' },
           el('p', {}, 'Nenhuma sessão para desenhar.'),
-          no ? el('button', { type: 'button', class: 'btn outline', aoClicar: () => escolherNo(no) }, 'Limpar o filtro do nó') : null,
+          no ? el('button', { type: 'button', class: 'btn outline', onClick: () => escolherNo(no) }, 'Limpar o filtro do nó') : null,
         );
 
     const partes = [
       cab,
-      falha ? faixaDeErro({ titulo: 'Não deu para atualizar.', texto: falha, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null,
+      falha ? errorBand({ title: 'Não deu para atualizar.', text: falha, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
       kpis(d.kpis),
-      painel([icone('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
+      painel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
       painel(
         ['Grafo de orquestração'],
         no ? `${resumo} · passando por ${rotuloDoNo} · clique de novo para limpar` : `${resumo} · clique num nó para filtrar`,
@@ -370,34 +370,34 @@ export async function montar(area, ctx) {
     }
   }
 
-  async function ler() {
+  async function read() {
     const meu = ++seq;
     clearTimeout(timer);
     try {
-      const d = await ctx.ler(rotaDosWorkflows(filtro, no));
+      const d = await ctx.read(rotaDosWorkflows(filtro, no));
       if (meu !== seq) return;
       dados = d;
       falha = null;
       desenhar();
     } catch (e) {
       if (e?.name === 'AbortError' || meu !== seq) return;
-      if (!dados) area.replaceChildren(cab, erro({ texto: e.message, tentar: () => (area.replaceChildren(cab, carregando({ rotulo: 'Carregando os workflows' })), ler()) }));
+      if (!dados) area.replaceChildren(cab, error({ text: e.message, retry: () => (area.replaceChildren(cab, loading({ label: 'Carregando os workflows' })), read()) }));
       else {
         falha = e.message;
         desenhar();
       }
     }
-    if (meu === seq && !ctx.sinal.aborted && dados && temAtivo(dados)) timer = setTimeout(ler, RELER_ATIVO_MS);
+    if (meu === seq && !ctx.signal.aborted && dados && temAtivo(dados)) timer = setTimeout(read, RELER_ATIVO_MS);
   }
 
-  ctx.aoMudar((mudancas) => {
+  ctx.onChange((mudancas) => {
     if (!mudancas.some((m) => m.tipo === 'sessao' || m.tipo === 'estado')) return;
     clearTimeout(espera);
-    espera = setTimeout(ler, 400);
+    espera = setTimeout(read, 400);
   });
-  ctx.aoReiniciar(() => ler());
+  ctx.onRestart(() => read());
 
-  await ler();
+  await read();
   return () => {
     clearTimeout(timer);
     clearTimeout(espera);

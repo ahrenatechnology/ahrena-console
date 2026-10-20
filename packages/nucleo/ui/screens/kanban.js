@@ -8,8 +8,8 @@
 //   reiniciar relê. A releitura volta cada coluna à página 1.
 // - O estilo está em `ui/kanban.css`, que a tela põe no <head> ao montar e tira ao sair.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 // ---------- Funções puras (testadas em test/api/ui-kanban.test.ts) ----------
 
@@ -131,8 +131,8 @@ const SUB = {
 };
 
 const VAZIO = {
-  sessoes: { titulo: 'Nenhuma sessão ainda', texto: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
-  agentes: { titulo: 'Nenhum agente ainda', texto: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
+  sessoes: { title: 'Nenhuma sessão ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
+  agentes: { title: 'Nenhum agente ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
 };
 
 const hrefDaSessao = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
@@ -144,16 +144,16 @@ function selos(st, mot) {
     'div',
     { class: 'kb-badges' },
     el('span', { class: `kb-badge-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo),
-    m ? el('span', { class: `kb-badge-reason${m.urgente ? '' : ' kb-soft'}` }, icone(m.icone), m.rotulo) : null,
+    m ? el('span', { class: `kb-badge-reason${m.urgente ? '' : ' kb-soft'}` }, icon(m.icone), m.rotulo) : null,
   );
 }
 
 function avatar(nome) {
-  return el('span', { class: 'kb-av' }, icone(nome));
+  return el('span', { class: 'kb-av' }, icon(nome));
 }
 
 function info(nomeDoIcone, texto, classe = null) {
-  return el('span', { class: classe }, icone(nomeDoIcone), el('span', { class: 'kb-t' }, texto));
+  return el('span', { class: classe }, icon(nomeDoIcone), el('span', { class: 'kb-t' }, texto));
 }
 
 function cardDeSessao(s) {
@@ -188,19 +188,19 @@ function cardDeAgente(a) {
 
 // ---------- A tela ----------
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   const folha = ligarFolha();
-  ctx.titulo('Kanban');
+  ctx.title('Kanban');
   let visao = visaoDaUrl(location.search);
   let leitura = 0; // descarta resposta de leitura velha
   let quadroNoAr = false;
 
   const botoes = Object.fromEntries(
-    VISOES.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === visao), aoClicar: () => trocar(v) }, v === 'agentes' ? 'Agentes' : 'Sessões')]),
+    VISOES.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === visao), onClick: () => trocar(v) }, v === 'agentes' ? 'Agentes' : 'Sessões')]),
   );
   const alternador = el('div', { class: 'kb-seg', role: 'group', 'aria-label': 'Visão do Kanban' }, botoes.agentes, botoes.sessoes);
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
-  const cab = cabecalho({ icone: 'kanban', titulo: 'Kanban', sub: SUB[visao], acoes: [alternador, atualizar] });
+  const atualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar() }, icon('refresh'), 'Atualizar');
+  const cab = header({ icon: 'kanban', title: 'Kanban', sub: SUB[visao], actions: [alternador, atualizar] });
   const sub = cab.querySelector('.sub');
 
   function trocar(v) {
@@ -216,15 +216,15 @@ export async function montar(area, ctx) {
   async function desenhar() {
     const minha = ++leitura;
     const v = visao;
-    if (!quadroNoAr) area.replaceChildren(cab, carregando({ rotulo: 'Carregando o quadro', blocos: 2 }));
+    if (!quadroNoAr) area.replaceChildren(cab, loading({ label: 'Carregando o quadro', blocks: 2 }));
     atualizar.disabled = true;
     try {
-      const dados = await ctx.ler(rotaDoKanban(v));
+      const dados = await ctx.read(rotaDoKanban(v));
       if (minha !== leitura) return;
       const colunas = Array.isArray(dados?.colunas) ? dados.colunas : [];
       if (!colunas.some((c) => c.total > 0)) {
         quadroNoAr = false;
-        area.replaceChildren(cab, vazio(VAZIO[v]));
+        area.replaceChildren(cab, empty(VAZIO[v]));
       } else {
         // A releitura ao vivo não joga a rolagem horizontal para o começo.
         const rolagem = quadroNoAr ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;
@@ -239,9 +239,9 @@ export async function montar(area, ctx) {
       if (quadroNoAr) {
         // O quadro de antes fica; a faixa diz que esta leitura falhou.
         area.querySelector('.error-band')?.remove();
-        cab.after(faixaDeErro({ titulo: 'O quadro não atualizou.', texto, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar() } }));
+        cab.after(errorBand({ title: 'O quadro não atualizou.', text: texto, action: { label: 'Tentar de novo', onClick: () => desenhar() } }));
       } else {
-        area.replaceChildren(cab, erro({ texto, tentar: () => desenhar() }));
+        area.replaceChildren(cab, error({ text: texto, retry: () => desenhar() }));
       }
     } finally {
       if (minha === leitura) atualizar.disabled = false;
@@ -276,7 +276,7 @@ export async function montar(area, ctx) {
       mais.disabled = true;
       rotular('carregando…');
       try {
-        const r = await ctx.ler(rotaDoKanban(v, c.id, pagina + 1));
+        const r = await ctx.read(rotaDoKanban(v, c.id, pagina + 1));
         if (desta !== leitura) return; // o quadro foi relido nesse meio-tempo
         const col = r?.colunas?.find((x) => x.id === c.id);
         if (!col) throw new Error('a coluna não veio');
@@ -308,15 +308,15 @@ export async function montar(area, ctx) {
 
   // Ao vivo: junta as mudanças de sessão numa releitura só.
   let espera = null;
-  ctx.aoMudar((mudancas) => {
+  ctx.onChange((mudancas) => {
     if (!mexeNoQuadro(mudancas)) return;
     clearTimeout(espera);
     espera = setTimeout(() => desenhar(), 400);
   });
-  ctx.aoReiniciar(() => desenhar());
+  ctx.onRestart(() => desenhar());
 
   // A limpeza vale mesmo se a pessoa sair antes da primeira leitura voltar.
-  ctx.sinal.addEventListener('abort', () => {
+  ctx.signal.addEventListener('abort', () => {
     clearTimeout(espera);
     folha.remove();
   });

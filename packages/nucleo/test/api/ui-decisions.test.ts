@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { ErroDeLeitura, escritorHttp } from '../../ui/api.js';
+import { ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
 import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo, stateClass } from '../../ui/screens/decisions-common.js';
 // @ts-expect-error: idem
@@ -35,8 +35,8 @@ function fetchFalso(status = 200, corpo: unknown = { ok: true }) {
 describe('escrever (api.js)', () => {
   test('POST em JSON na própria origem, sem credenciais', async () => {
     const { f, pedidos } = fetchFalso(200, { decisao: { id: 'd1' } });
-    const escrever = escritorHttp({ base: 'http://127.0.0.1:4791', fetch: f });
-    const r = await escrever('/api/decisoes/d1/confirmar', { sessao: 's1' });
+    const write = httpWriter({ base: 'http://127.0.0.1:4791', fetch: f });
+    const r = await write('/api/decisoes/d1/confirmar', { sessao: 's1' });
     assert.deepEqual(r, { decisao: { id: 'd1' } });
     assert.equal(pedidos.length, 1);
     const [p] = pedidos;
@@ -48,21 +48,21 @@ describe('escrever (api.js)', () => {
   });
 
   test('recusa host de fora, https e rota fora da API, antes de sair (quem restringe às decisões é o servidor)', async () => {
-    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
-    assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
+    assert.throws(() => httpWriter({ base: 'http://exemplo.com:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
+    assert.throws(() => httpWriter({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
     const { f, pedidos } = fetchFalso();
-    const escrever = escritorHttp({ base: 'http://localhost:4791', fetch: f });
+    const write = httpWriter({ base: 'http://localhost:4791', fetch: f });
     for (const rota of ['/api/decisoes/../../hooks', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisions', '/abrir/x']) {
-      await assert.rejects(escrever(rota, { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura, rota);
+      await assert.rejects(write(rota, { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e instanceof ReadError, rota);
     }
     assert.equal(pedidos.length, 0, 'nada saiu');
   });
 
   test('a recusa do núcleo vira ErroDeLeitura com o status e a mensagem dele', async () => {
-    const escrever = escritorHttp({ base: 'http://127.0.0.1:4791', fetch: fetchFalso(409, { error: 'a decisão já não está a confirmar' }).f });
-    await assert.rejects(escrever('/api/decisoes/d1/descartar', { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e.status === 409 && /já não está/.test(e.message));
-    const caido = escritorHttp({ base: 'http://127.0.0.1:1' });
-    await assert.rejects(caido('/api/decisoes/d1/confirmar', { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e.status === 0 && /não respondeu/.test(e.message));
+    const write = httpWriter({ base: 'http://127.0.0.1:4791', fetch: fetchFalso(409, { error: 'a decisão já não está a confirmar' }).f });
+    await assert.rejects(write('/api/decisoes/d1/descartar', { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 409 && /já não está/.test(e.message));
+    const caido = httpWriter({ base: 'http://127.0.0.1:1' });
+    await assert.rejects(caido('/api/decisoes/d1/confirmar', { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 });
 
@@ -150,8 +150,8 @@ describe('a página (C21) e a aba (C20)', () => {
     const rotulos: (string | null)[] = [];
     const ouvintes: ((m: { tipo: string }[]) => void)[] = [];
     const ctx = {
-      ler: async (rota: string) => (lidas.push(rota), { sessao: 's1', total: 4, itens: [], porEscopo: { sessao: 4, familia: 5, branch: 6 }, injecao: {}, mcp: {} }),
-      aoMudar: (f: (m: { tipo: string }[]) => void) => ouvintes.push(f),
+      read: async (rota: string) => (lidas.push(rota), { sessao: 's1', total: 4, itens: [], porEscopo: { sessao: 4, familia: 5, branch: 6 }, injecao: {}, mcp: {} }),
+      onChange: (f: (m: { tipo: string }[]) => void) => ouvintes.push(f),
     };
     const aba = criar(ctx, '/api/sessions/s1', { cabeca: () => null, rotular: (t: string | null) => rotulos.push(t) });
     assert.equal(typeof aba.mostrar, 'function');

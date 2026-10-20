@@ -6,8 +6,8 @@
 // As barras são `<progress>`: a largura sai do `value`, sem estilo inline (a CSP bloqueia).
 // As funções sem DOM (formatação e o que cada card mostra) saem exportadas para o teste.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 const ESTILO = '/ui/wall.css';
 export const ROTA_DO_MURAL = '/api/wall';
@@ -97,13 +97,13 @@ const badge = (status) => el('span', { class: `wall-badge wall-b-${status}` }, e
 
 function linhaDoCard(l) {
   if (l.tipo === 'pede') {
-    const chip = l.motivo ? el('span', { class: `wall-reason${l.motivo.urgente ? '' : ' soft'}` }, icone(l.motivo.icone), l.motivo.rotulo) : null;
+    const chip = l.motivo ? el('span', { class: `wall-reason${l.motivo.urgente ? '' : ' soft'}` }, icon(l.motivo.icone), l.motivo.rotulo) : null;
     return el('div', { class: 'wall-row' }, chip, el('span', { class: 'wall-trunc wall-muted' }, l.texto));
   }
-  if (l.tipo === 'erro') return el('div', { class: 'wall-row wall-error' }, icone('error'), el('span', { class: 'wall-trunc' }, l.texto));
-  if (l.tipo === 'concluida') return el('div', { class: 'wall-row wall-completed' }, icone('wall-check'), el('span', { class: 'wall-trunc' }, l.texto));
+  if (l.tipo === 'erro') return el('div', { class: 'wall-row wall-error' }, icon('error'), el('span', { class: 'wall-trunc' }, l.texto));
+  if (l.tipo === 'concluida') return el('div', { class: 'wall-row wall-completed' }, icon('wall-check'), el('span', { class: 'wall-trunc' }, l.texto));
   if (l.tipo === 'parada') return el('div', { class: 'wall-row wall-muted' }, el('span', { class: 'wall-trunc' }, l.texto));
-  return el('div', { class: 'wall-row wall-muted' }, icone('wall-loader'), el('span', { class: 'wall-trunc' }, l.texto));
+  return el('div', { class: 'wall-row wall-muted' }, icon('wall-loader'), el('span', { class: 'wall-trunc' }, l.texto));
 }
 
 /** A barra: `<progress>` estilizado, a largura vem do `value`. */
@@ -138,7 +138,7 @@ function card(c) {
 
 // ---------- A tela ----------
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   usarEstilo();
   let filtro = 'todas';
   let mural = null;
@@ -152,13 +152,13 @@ export async function montar(area, ctx) {
     'div',
     { class: 'wall-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
     ...FILTROS.map((f) => {
-      const b = el('button', { type: 'button', 'data-filter': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', aoClicar: () => escolher(f.id) }, f.rotulo);
+      const b = el('button', { type: 'button', 'data-filter': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', onClick: () => escolher(f.id) }, f.rotulo);
       botoes.set(f.id, b);
       return b;
     }),
   );
-  const atualizar = el('button', { type: 'button', class: 'btn', 'data-action': 'atualizar', aoClicar: () => ler() }, icone('refresh'), 'Atualizar');
-  const cab = cabecalho({ icone: 'wall', titulo: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', acoes: [seletor, atualizar] });
+  const atualizar = el('button', { type: 'button', class: 'btn', 'data-action': 'atualizar', onClick: () => read() }, icon('refresh'), 'Atualizar');
+  const cab = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [seletor, atualizar] });
 
   function escolher(id) {
     filtro = id;
@@ -168,26 +168,26 @@ export async function montar(area, ctx) {
 
   function desenhar() {
     if (!mural) {
-      area.replaceChildren(cab, falha ? erro({ texto: falha.message, tentar: () => ler() }) : carregando({ rotulo: 'Lendo o mural' }));
+      area.replaceChildren(cab, falha ? error({ text: falha.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
       return;
     }
     const f = FILTROS.find((x) => x.id === filtro);
     const cards = (mural.cards ?? []).filter(f.passa);
-    const faixa = falha ? faixaDeErro({ titulo: 'O mural não atualizou.', texto: falha.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null;
+    const faixa = falha ? errorBand({ title: 'O mural não atualizou.', text: falha.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
     const nos = cards.map(card);
     const corpo = cards.length
       ? el('div', { class: 'wall-grid' }, ...nos)
-      : vazio({ icone: 'wall', titulo: f.vazio, texto: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+      : empty({ icon: 'wall', title: f.vazio, text: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     const focado = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
     area.replaceChildren(...[cab, faixa, corpo].filter(Boolean));
     if (focado) nos.find((n) => n.getAttribute('data-session') === focado)?.focus();
   }
 
-  async function ler() {
+  async function read() {
     const meu = ++pedido;
     try {
-      const novo = await ctx.ler(ROTA_DO_MURAL);
+      const novo = await ctx.read(ROTA_DO_MURAL);
       if (meu !== pedido) return;
       mural = novo;
       falha = null;
@@ -198,16 +198,16 @@ export async function montar(area, ctx) {
     desenhar();
   }
 
-  ctx.aoReiniciar(() => ler());
+  ctx.onRestart(() => read());
   // Junta a rajada, mas com teto: com atividade contínua, relê no máximo a cada ESPERA_MS.
-  ctx.aoMudar(() => {
+  ctx.onChange(() => {
     espera ??= setTimeout(() => {
       espera = null;
-      ler();
+      read();
     }, ESPERA_MS);
   });
 
   desenhar();
-  await ler();
+  await read();
   return () => clearTimeout(espera);
 }

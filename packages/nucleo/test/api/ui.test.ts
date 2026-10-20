@@ -13,9 +13,9 @@ import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { comMudancas, CursorDeMudancas } from '../../src/mudancas/index.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { ErroDeLeitura, escritorHttp, leitorHttp } from '../../ui/api.js';
+import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { iniciarAoVivo } from '../../ui/live.js';
+import { startLive } from '../../ui/live.js';
 // @ts-expect-error: idem
 import { findScreen, legacyUrl, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
@@ -91,7 +91,7 @@ describe('/ui no núcleo', () => {
     const screen = await pedir(api.url, '/ui/screens/agent-config.js');
     assert.equal(screen.status, 200);
     assert.match(String(screen.headers['content-type']), /^text\/javascript/);
-    assert.match(screen.corpo, /export async function montar/);
+    assert.match(screen.corpo, /export async function mount/);
     // The old folder (`/ui/telas/`) serves the same file until the aliases leave (#173).
     const legacy = await pedir(api.url, '/ui/telas/agent-config.js');
     assert.equal(legacy.status, 200);
@@ -156,36 +156,36 @@ describe('/ui no núcleo', () => {
   });
 
   test('ler(rota) lê a API por HTTP e só a API do núcleo local', async () => {
-    const ler = leitorHttp({ base: api.url });
-    const overview = await ler('/api/overview');
+    const read = httpReader({ base: api.url });
+    const overview = await read('/api/overview');
     assert.equal(overview.nome, 'ahrena-console');
-    const painel = await ler(`/api/painel/${SESSAO_DO_PAINEL}`);
+    const painel = await read(`/api/painel/${SESSAO_DO_PAINEL}`);
     assert.ok(JSON.stringify(painel).includes(SESSAO_DO_PAINEL), 'o painel da sessão do simulador');
 
-    await assert.rejects(ler('/api/nao-existe'), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura && e.status === 404);
-    await assert.rejects(ler('/ui'), /rota fora da API/);
-    await assert.rejects(ler('https://exemplo.com/api/overview'), /rota fora da API/);
-    await assert.rejects(ler('/api/../../ui'), /rota fora do núcleo/);
-    assert.throws(() => leitorHttp({ base: 'http://exemplo.com:4720' }), /só lê o núcleo local/);
-    assert.throws(() => leitorHttp({ base: 'https://127.0.0.1:4720' }), /só lê o núcleo local/);
+    await assert.rejects(read('/api/nao-existe'), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 404);
+    await assert.rejects(read('/ui'), /rota fora da API/);
+    await assert.rejects(read('https://exemplo.com/api/overview'), /rota fora da API/);
+    await assert.rejects(read('/api/../../ui'), /rota fora do núcleo/);
+    assert.throws(() => httpReader({ base: 'http://exemplo.com:4720' }), /só lê o núcleo local/);
+    assert.throws(() => httpReader({ base: 'https://127.0.0.1:4720' }), /só lê o núcleo local/);
 
-    const fechado = leitorHttp({ base: 'http://127.0.0.1:1' });
-    await assert.rejects(fechado('/api/overview'), (e: InstanceType<typeof ErroDeLeitura>) => e.status === 0 && /não respondeu/.test(e.message));
+    const fechado = httpReader({ base: 'http://127.0.0.1:1' });
+    await assert.rejects(fechado('/api/overview'), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 
   test('Ao vivo: conecta com reiniciar, entrega a mudança de um hook e para', async () => {
     const estados: string[] = [];
     const mudancas: { tipo: string; chave: string }[][] = [];
     let reiniciou = 0;
-    const vivo = iniciarAoVivo({
-      ler: leitorHttp({ base: api.url }),
-      espera: 5,
-      aoEstado: ({ estado }: { estado: string }) => estados.push(estado),
-      aoReiniciar: () => reiniciou++,
-      aoMudar: (m: { tipo: string; chave: string }[]) => mudancas.push(m),
+    const vivo = startLive({
+      read: httpReader({ base: api.url }),
+      wait: 5,
+      onState: ({ state }: { state: string }) => estados.push(state),
+      onRestart: () => reiniciou++,
+      onChange: (m: { tipo: string; chave: string }[]) => mudancas.push(m),
     });
     await ate(() => reiniciou === 1 && cursor.abertas === 1);
-    assert.deepEqual(estados, ['ao-vivo']);
+    assert.deepEqual(estados, ['live']);
 
     const hook = { session_id: 'sess-ui', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
     const h = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
@@ -193,7 +193,7 @@ describe('/ui no núcleo', () => {
     await ate(() => mudancas.flat().some((m) => m.tipo === 'sessao' && m.chave === 'sess-ui'));
     assert.equal(reiniciou, 1, 'mudança comum não pede releitura');
 
-    await vivo.parar();
+    await vivo.stop();
     await ate(() => cursor.abertas === 0);
   });
 
@@ -202,37 +202,37 @@ describe('/ui no núcleo', () => {
     const esperas: number[] = [];
     let reiniciou = 0;
     let fora = 3;
-    const real = leitorHttp({ base: api.url });
-    const vivo = iniciarAoVivo({
-      ler: (rota: string, o: unknown) => (fora-- > 0 ? leitorHttp({ base: 'http://127.0.0.1:1' })(rota, o) : real(rota, o)),
-      espera: 5,
-      atrasos: [10, 20],
-      dormir: (ms: number) => (esperas.push(ms), Promise.resolve()),
-      aoEstado: ({ estado }: { estado: string }) => estados.push(estado),
-      aoReiniciar: () => reiniciou++,
+    const real = httpReader({ base: api.url });
+    const vivo = startLive({
+      read: (rota: string, o: unknown) => (fora-- > 0 ? httpReader({ base: 'http://127.0.0.1:1' })(rota, o) : real(rota, o)),
+      wait: 5,
+      delays: [10, 20],
+      sleep: (ms: number) => (esperas.push(ms), Promise.resolve()),
+      onState: ({ state }: { state: string }) => estados.push(state),
+      onRestart: () => reiniciou++,
     });
     await ate(() => reiniciou === 1);
     assert.deepEqual(esperas, [10, 20, 20]);
-    assert.equal(estados[0], 'sem-conexao');
-    assert.equal(estados.at(-1), 'ao-vivo');
-    assert.ok(vivo.estado === 'ao-vivo');
-    await vivo.parar();
+    assert.equal(estados[0], 'offline');
+    assert.equal(estados.at(-1), 'live');
+    assert.ok(vivo.state === 'live');
+    await vivo.stop();
   });
 
   test('Ao vivo: 503 com Retry-After espera o que o núcleo pediu', async () => {
     const esperas: number[] = [];
     let n = 0;
-    const vivo = iniciarAoVivo({
-      ler: async () => {
-        if (n++ === 0) throw new ErroDeLeitura('lotado', { status: 503, tentarEm: 5000 });
+    const vivo = startLive({
+      read: async () => {
+        if (n++ === 0) throw new ReadError('lotado', { status: 503, retryIn: 5000 });
         await new Promise((r) => setTimeout(r, 5));
         return { cursor: 'c', mudancas: [], reiniciar: true, expirou: false };
       },
-      dormir: (ms: number) => (esperas.push(ms), Promise.resolve()),
+      sleep: (ms: number) => (esperas.push(ms), Promise.resolve()),
     });
     await ate(() => n >= 2);
     assert.deepEqual(esperas, [5000]);
-    await vivo.parar();
+    await vivo.stop();
   });
 });
 
@@ -365,7 +365,7 @@ describe('registro das telas', () => {
 
   test('the shell swaps an old URL for the new one with replaceState before routing', () => {
     const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
-    assert.match(app, /const nova = legacyUrl\(location\);\n\s+if \(nova\) history\.replaceState\(history\.state, '', nova\);\n\s+const achada = findScreen\(location\.pathname\);/);
+    assert.match(app, /const next = legacyUrl\(location\);\n\s+if \(next\) history\.replaceState\(history\.state, '', next\);\n\s+const found = findScreen\(location\.pathname\);/);
   });
 });
 
@@ -373,17 +373,17 @@ describe('escrever(rota, corpo): the /ui write (#63)', () => {
   test('POSTs JSON to its own origin; an error becomes ErroDeLeitura with the status; only the local core API', async () => {
     const requests: { url: string; init: RequestInit }[] = [];
     const responses = [new Response(JSON.stringify({ ok: true, backup: '/b/x' }), { status: 200 }), new Response(JSON.stringify({ error: 'a skill mudou desde a leitura' }), { status: 409 })];
-    const write = escritorHttp({ base: 'http://127.0.0.1:4720', fetch: async (url: URL, init: RequestInit) => (requests.push({ url: String(url), init }), responses.shift()!) });
+    const write = httpWriter({ base: 'http://127.0.0.1:4720', fetch: async (url: URL, init: RequestInit) => (requests.push({ url: String(url), init }), responses.shift()!) });
     assert.deepEqual(await write('/api/agent-config/skill', { root: 'u0', name: 'x', content: 'oi' }), { ok: true, backup: '/b/x' });
     assert.equal(requests[0]!.url, 'http://127.0.0.1:4720/api/agent-config/skill');
     assert.equal(requests[0]!.init.method, 'POST');
     assert.equal((requests[0]!.init.headers as Record<string, string>)['content-type'], 'application/json');
     assert.deepEqual(JSON.parse(String(requests[0]!.init.body)), { root: 'u0', name: 'x', content: 'oi' });
     assert.equal(requests[0]!.init.credentials, 'omit');
-    await assert.rejects(write('/api/agent-config/skill', {}), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura && e.status === 409 && /mudou/.test(e.message));
+    await assert.rejects(write('/api/agent-config/skill', {}), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 409 && /mudou/.test(e.message));
     await assert.rejects(write('/ui', {}), /rota fora da API/);
     await assert.rejects(write('/api/../../ui', {}), /rota fora do núcleo/);
-    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720' }), /só escreve no núcleo local/);
+    assert.throws(() => httpWriter({ base: 'http://exemplo.com:4720' }), /só escreve no núcleo local/);
     assert.equal(requests.length, 2);
   });
 });

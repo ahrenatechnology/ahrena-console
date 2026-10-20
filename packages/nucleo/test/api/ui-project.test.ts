@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFalso } from './dom-falso.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { ErroDeEscrita, ErroDeLeitura, escritorHttp } from '../../ui/api.js';
+import { WriteError, ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { filtrar, montar, tipoDoCard } from '../../ui/screens/project.js';
+import { filtrar, mount, tipoDoCard } from '../../ui/screens/project.js';
 // @ts-expect-error: idem
 import { findScreen, SCREENS } from '../../ui/screens.js';
 
@@ -85,7 +85,7 @@ function moverNoQuadro(q: Quadro, itemId: string, para: string) {
   return { quadro: copia, movido: { itemId, de, para } };
 }
 
-const erroDoNucleo = (Classe: typeof ErroDeLeitura, status: number, corpo: Record<string, unknown>) => new Classe(String(corpo.error), { status, rota: '/api/projeto', corpo });
+const erroDoNucleo = (Classe: typeof ReadError, status: number, corpo: Record<string, unknown>) => new Classe(String(corpo.error), { status, route: '/api/projeto', body: corpo });
 
 interface Montada {
   area: ElementoFalso;
@@ -99,11 +99,11 @@ interface Montada {
 }
 
 async function montarTela({
-  ler,
-  escrever,
+  read,
+  write,
 }: {
-  ler: (rota: string) => Promise<unknown>;
-  escrever?: (rota: string, corpo: { itemId: string; optionId: string }) => Promise<unknown>;
+  read: (rota: string) => Promise<unknown>;
+  write?: (rota: string, corpo: { itemId: string; optionId: string }) => Promise<unknown>;
 }): Promise<Montada> {
   const area = new ElementoFalso('main');
   const leituras: string[] = [];
@@ -113,24 +113,24 @@ async function montarTela({
   const sair = new AbortController();
   const ctx = {
     params: {},
-    sinal: sair.signal,
-    ler: (rota: string) => (leituras.push(rota), ler(rota)),
-    escrever: (rota: string, corpo: { itemId: string; optionId: string }) => (escritas.push({ rota, corpo }), (escrever ?? (() => Promise.reject(new Error('sem escritor'))))(rota, corpo)),
-    aoMudar: (f: () => void) => aoMudar.add(f),
-    aoReiniciar: (f: () => void) => aoReiniciar.add(f),
-    aoVivo: () => 'ao-vivo',
-    contador: () => {},
+    signal: sair.signal,
+    read: (rota: string) => (leituras.push(rota), read(rota)),
+    write: (rota: string, corpo: { itemId: string; optionId: string }) => (escritas.push({ rota, corpo }), (write ?? (() => Promise.reject(new Error('sem escritor'))))(rota, corpo)),
+    onChange: (f: () => void) => aoMudar.add(f),
+    onRestart: (f: () => void) => aoReiniciar.add(f),
+    liveState: () => 'live',
+    counter: () => {},
     titulo: () => {},
-    navegar: () => {},
+    navigate: () => {},
   };
-  const limpar = await montar(area, ctx);
+  const limpar = await mount(area, ctx);
   const raia = (nome: string) => area.querySelectorAll('section.prj-col').find((s) => texto(s.querySelector('.name')) === nome)!;
   return {
     area,
     leituras,
     escritas,
-    aoMudar,
-    aoReiniciar,
+    onChange: aoMudar,
+    onRestart: aoReiniciar,
     limpar: () => (sair.abort(), limpar()),
     raia,
     nomesNaRaia: (nome) => raia(nome).querySelectorAll('article.prj-card').map((c) => c.getAttribute('data-item')!),
@@ -156,7 +156,7 @@ describe('Kanban do projeto (C11)', () => {
   afterEach(() => tela?.limpar());
 
   test('desenha o cabeçalho, as raias com contagem e os cards com tipo, número, sub-issues, PR, CI e review', async () => {
-    tela = await montarTela({ ler: async () => quadroFalso() });
+    tela = await montarTela({ read: async () => quadroFalso() });
     const { area } = tela;
     assert.deepEqual(tela.leituras, ['/api/project']);
     const cab = area.querySelector('header.cc-head')!;
@@ -192,7 +192,7 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('o filtro Marco mostra só os cards do marco, e "Todos os marcos" volta tudo', async () => {
-    tela = await montarTela({ ler: async () => quadroFalso() });
+    tela = await montarTela({ read: async () => quadroFalso() });
     const sel = tela.area.querySelector('select.prj-sel')!;
     sel.value = 'M2 · Artefato';
     sel.dispatchEvent({ type: 'change' });
@@ -204,10 +204,10 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('Atualizar lê com ?refresh=1; o "Ao vivo" relê sem forçar', async () => {
-    tela = await montarTela({ ler: async () => quadroFalso() });
+    tela = await montarTela({ read: async () => quadroFalso() });
     tela.area.querySelectorAll('header button').find((b) => texto(b) === 'Atualizar')!.click();
     await esperar();
-    for (const f of tela.aoReiniciar) f();
+    for (const f of tela.onRestart) f();
     await esperar();
     assert.deepEqual(tela.leituras, ['/api/project', '/api/project?refresh=1', '/api/project']);
   });
@@ -216,8 +216,8 @@ describe('Kanban do projeto (C11)', () => {
     let quadro = quadroFalso();
     let soltar!: () => void;
     tela = await montarTela({
-      ler: async () => quadro,
-      escrever: async (_rota, { itemId, optionId }) => {
+      read: async () => quadro,
+      write: async (_rota, { itemId, optionId }) => {
         await new Promise<void>((r) => (soltar = r));
         const r = moverNoQuadro(quadro, itemId, optionId);
         quadro = r.quadro;
@@ -247,9 +247,9 @@ describe('Kanban do projeto (C11)', () => {
 
   test('o GitHub recusa: o card volta para a raia de antes e a faixa diz por quê', async () => {
     tela = await montarTela({
-      ler: async () => quadroFalso(),
-      escrever: async () => {
-        throw erroDoNucleo(ErroDeEscrita, 502, { error: 'O GitHub recusou a mudança.', codigo: 'github-recusou' });
+      read: async () => quadroFalso(),
+      write: async () => {
+        throw erroDoNucleo(WriteError, 502, { error: 'O GitHub recusou a mudança.', codigo: 'github-recusou' });
       },
     });
     arrastar(tela, 'I-92', 'Done');
@@ -263,9 +263,9 @@ describe('Kanban do projeto (C11)', () => {
 
   test('a recusa por falta de escopo mostra o comando do gh', async () => {
     tela = await montarTela({
-      ler: async () => quadroFalso(),
-      escrever: async () => {
-        throw erroDoNucleo(ErroDeEscrita, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
+      read: async () => quadroFalso(),
+      write: async () => {
+        throw erroDoNucleo(WriteError, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
       },
     });
     arrastar(tela, 'I-35', 'In Progress');
@@ -275,7 +275,7 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('a raia "Sem status" não aceita card, e soltar na mesma raia não escreve', async () => {
-    tela = await montarTela({ ler: async () => quadroFalso() });
+    tela = await montarTela({ read: async () => quadroFalso() });
     const sobre = arrastar(tela, 'I-80', 'Sem status');
     assert.notEqual(sobre.defaultPrevented, true);
     arrastar(tela, 'I-80', 'Backlog');
@@ -286,8 +286,8 @@ describe('Kanban do projeto (C11)', () => {
   test('Alt+→ no card focado move para a próxima raia; nada entra em "Sem status"', async () => {
     let quadro = quadroFalso();
     tela = await montarTela({
-      ler: async () => quadro,
-      escrever: async (_r, { itemId, optionId }) => {
+      read: async () => quadro,
+      write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
         quadro = r.quadro;
         return r;
@@ -311,8 +311,8 @@ describe('Kanban do projeto (C11)', () => {
 
   test('401 sem escopo: o estado de erro mostra o comando gh auth refresh -s project', async () => {
     tela = await montarTela({
-      ler: async () => {
-        throw erroDoNucleo(ErroDeLeitura, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
+      read: async () => {
+        throw erroDoNucleo(ReadError, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -324,8 +324,8 @@ describe('Kanban do projeto (C11)', () => {
 
   test('503 desligado: estado vazio explicando que o núcleo subiu sem GitHub', async () => {
     tela = await montarTela({
-      ler: async () => {
-        throw erroDoNucleo(ErroDeLeitura, 503, { error: 'Sem GitHub.', codigo: 'desligado' });
+      read: async () => {
+        throw erroDoNucleo(ReadError, 503, { error: 'Sem GitHub.', codigo: 'desligado' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -335,8 +335,8 @@ describe('Kanban do projeto (C11)', () => {
 
   test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
     tela = await montarTela({
-      ler: async () => {
-        throw erroDoNucleo(ErroDeLeitura, 503, { error: 'Nenhum Project.', codigo: 'sem-projeto' });
+      read: async () => {
+        throw erroDoNucleo(ReadError, 503, { error: 'Nenhum Project.', codigo: 'sem-projeto' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -348,8 +348,8 @@ describe('Kanban do projeto (C11)', () => {
   test('502 sem cache: estado de erro com Tentar de novo, que lê de novo', async () => {
     let n = 0;
     tela = await montarTela({
-      ler: async () => {
-        if (n++ === 0) throw erroDoNucleo(ErroDeLeitura, 502, { error: 'O GitHub não respondeu.', codigo: 'github-fora' });
+      read: async () => {
+        if (n++ === 0) throw erroDoNucleo(ReadError, 502, { error: 'O GitHub não respondeu.', codigo: 'github-fora' });
         return quadroFalso();
       },
     });
@@ -360,7 +360,7 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('desatualizado: o quadro fica na tela com a faixa e o motivo', async () => {
-    tela = await montarTela({ ler: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'O GitHub limitou as consultas.' }) });
+    tela = await montarTela({ read: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'O GitHub limitou as consultas.' }) });
     assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
     assert.match(texto(tela.area.querySelector('.error-band')), /GitHub indisponível\. Mostrando o quadro em cache, de .*\. O GitHub limitou as consultas\./);
   });
@@ -368,12 +368,12 @@ describe('Kanban do projeto (C11)', () => {
   test('releitura que falha com o quadro na tela vira faixa, sem apagar o quadro', async () => {
     let n = 0;
     tela = await montarTela({
-      ler: async () => {
+      read: async () => {
         if (n++ === 0) return quadroFalso();
-        throw new ErroDeLeitura('O núcleo em 127.0.0.1 não respondeu', { rota: '/api/projeto' });
+        throw new ReadError('O núcleo em 127.0.0.1 não respondeu', { route: '/api/projeto' });
       },
     });
-    for (const f of tela.aoReiniciar) f();
+    for (const f of tela.onRestart) f();
     await esperar();
     assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
     assert.match(texto(tela.area.querySelector('.error-band')), /Não deu para reler o quadro\./);
@@ -384,19 +384,19 @@ describe('Kanban do projeto (C11)', () => {
     const pendentes: (() => void)[] = [];
     let n = 0;
     tela = await montarTela({
-      ler: async () => {
+      read: async () => {
         if (n++ === 0) return quadro;
         const velho = JSON.parse(JSON.stringify(quadro));
         await new Promise<void>((r) => pendentes.push(r));
         return velho;
       },
-      escrever: async (_r, { itemId, optionId }) => {
+      write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
         quadro = r.quadro;
         return r;
       },
     });
-    for (const f of tela.aoReiniciar) f(); // GET sai com o quadro de antes
+    for (const f of tela.onRestart) f(); // GET sai com o quadro de antes
     arrastar(tela, 'I-80', 'Ready'); // o POST responde antes do GET
     await esperar();
     pendentes.shift()!(); // o GET velho chega
@@ -412,8 +412,8 @@ describe('Kanban do projeto (C11)', () => {
     let quadro = quadroFalso();
     const respostas: (() => void)[] = [];
     tela = await montarTela({
-      ler: async () => quadro,
-      escrever: async (_r, { itemId, optionId }) => {
+      read: async () => quadro,
+      write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
         quadro = r.quadro;
         await new Promise<void>((ok) => respostas.push(ok));
@@ -434,9 +434,9 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('a releitura durante um arrasto espera o card cair', async () => {
-    tela = await montarTela({ ler: async () => quadroFalso() });
+    tela = await montarTela({ read: async () => quadroFalso() });
     tela.area.querySelector('[data-item="I-80"]')!.dispatchEvent({ type: 'dragstart' });
-    for (const f of tela.aoReiniciar) f();
+    for (const f of tela.onRestart) f();
     await esperar();
     assert.equal(tela.leituras.length, 1);
     tela.area.querySelector('[data-item="I-80"]')!.dispatchEvent({ type: 'dragend' });
@@ -448,8 +448,8 @@ describe('Kanban do projeto (C11)', () => {
     let quadro = quadroFalso();
     let responder: () => void = () => {};
     tela = await montarTela({
-      ler: async () => quadro,
-      escrever: async (_r, { itemId, optionId }) => {
+      read: async () => quadro,
+      write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
         quadro = r.quadro;
         await new Promise<void>((ok) => (responder = ok));
@@ -470,10 +470,10 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('o foco fica no card numa releitura, e a faixa de aviso não é refeita sem mudar', async () => {
-    tela = await montarTela({ ler: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
+    tela = await montarTela({ read: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
     const faixa = tela.area.querySelector('.error-band');
     tela.area.querySelector('[data-item="I-92"]')!.focus();
-    for (const f of tela.aoReiniciar) f();
+    for (const f of tela.onRestart) f();
     await esperar();
     assert.equal(tela.area.querySelector('.error-band'), faixa, 'o mesmo nó: o alerta não é anunciado de novo');
     assert.equal(documentoFalso.activeElement?.getAttribute('data-item'), 'I-92');
@@ -486,8 +486,8 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('sair da tela cancela a releitura do "Ao vivo" que estava marcada', async () => {
-    const t = await montarTela({ ler: async () => quadroFalso() });
-    for (const f of t.aoMudar) f();
+    const t = await montarTela({ read: async () => quadroFalso() });
+    for (const f of t.onChange) f();
     t.limpar();
     await new Promise((r) => setTimeout(r, 1100));
     assert.equal(t.leituras.length, 1);
@@ -524,11 +524,11 @@ describe('Kanban do projeto (C11)', () => {
 describe('a camada de escrita', () => {
   test('manda POST com JSON, sem credenciais, e devolve o JSON', async () => {
     const pedidos: { url: string; init: RequestInit }[] = [];
-    const escrever = escritorHttp({
+    const write = httpWriter({
       base: 'http://127.0.0.1:4720',
       fetch: async (url: URL, init: RequestInit) => (pedidos.push({ url: String(url), init }), new Response(JSON.stringify({ ok: true }), { status: 200 })),
     });
-    assert.deepEqual(await escrever('/api/projeto/mover', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
+    assert.deepEqual(await write('/api/projeto/mover', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
     const [p] = pedidos;
     assert.equal(p!.url, 'http://127.0.0.1:4720/api/projeto/mover');
     assert.equal(p!.init.method, 'POST');
@@ -540,30 +540,30 @@ describe('a camada de escrita', () => {
   test('recusa rota fora de /api/ e origem que não é local, sem chamar o fetch', async () => {
     let chamou = 0;
     const fetch = async () => (chamou++, new Response('{}'));
-    const escrever = escritorHttp({ base: 'http://127.0.0.1:4720', fetch });
-    await assert.rejects(escrever('/ui', {}), (e: Error) => e instanceof ErroDeEscrita && /rota fora da API/.test(e.message));
-    await assert.rejects(escrever('https://exemplo.com/api/projeto/mover', {}), /rota fora da API/);
-    await assert.rejects(escrever('/api/../../ui', {}), /rota fora do núcleo/);
-    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720', fetch }), /só escreve no núcleo local/);
-    assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch }), /só escreve no núcleo local/);
+    const write = httpWriter({ base: 'http://127.0.0.1:4720', fetch });
+    await assert.rejects(write('/ui', {}), (e: Error) => e instanceof WriteError && /rota fora da API/.test(e.message));
+    await assert.rejects(write('https://exemplo.com/api/projeto/mover', {}), /rota fora da API/);
+    await assert.rejects(write('/api/../../ui', {}), /rota fora do núcleo/);
+    assert.throws(() => httpWriter({ base: 'http://exemplo.com:4720', fetch }), /só escreve no núcleo local/);
+    assert.throws(() => httpWriter({ base: 'https://127.0.0.1:4720', fetch }), /só escreve no núcleo local/);
     assert.equal(chamou, 0);
   });
 
-  test('erro do núcleo vira ErroDeEscrita com status, corpo e Retry-After', async () => {
-    const escrever = escritorHttp({
+  test('erro do núcleo vira WriteError com status, body e Retry-After', async () => {
+    const write = httpWriter({
       base: 'http://localhost:4720',
       fetch: async () => new Response(JSON.stringify({ error: 'Calma.', codigo: 'limitado' }), { status: 429, headers: { 'retry-after': '7' } }),
     });
-    await assert.rejects(escrever('/api/projeto/mover', {}), (e: InstanceType<typeof ErroDeEscrita>) => {
-      assert.ok(e instanceof ErroDeLeitura, 'é também um ErroDeLeitura');
-      assert.equal(e.name, 'ErroDeEscrita');
+    await assert.rejects(write('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => {
+      assert.ok(e instanceof ReadError, 'é também um ReadError');
+      assert.equal(e.name, 'WriteError');
       assert.equal(e.status, 429);
-      assert.equal(e.tentarEm, 7000);
-      assert.deepEqual(e.corpo, { error: 'Calma.', codigo: 'limitado' });
+      assert.equal(e.retryIn, 7000);
+      assert.deepEqual(e.body, { error: 'Calma.', codigo: 'limitado' });
       assert.equal(e.message, 'Calma.');
       return true;
     });
-    const fora = escritorHttp({ base: 'http://127.0.0.1:1', fetch: async () => Promise.reject(new TypeError('fetch failed')) });
-    await assert.rejects(fora('/api/projeto/mover', {}), (e: InstanceType<typeof ErroDeEscrita>) => e.status === 0 && /não respondeu/.test(e.message));
+    const fora = httpWriter({ base: 'http://127.0.0.1:1', fetch: async () => Promise.reject(new TypeError('fetch failed')) });
+    await assert.rejects(fora('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 });

@@ -4,8 +4,8 @@
 //
 // As funções sem DOM (formatação e o que cada parte mostra) saem exportadas para o teste.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 const ESTILO = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ROTA_DA_ATENCAO` de src/api/rota-atencao.ts (#87):
@@ -118,7 +118,7 @@ const badge = (status) => el('span', { class: `badge b-${status}` }, el('span', 
 
 function chipDoMotivo(c) {
   if (c.motivo === 'erro') return badge('error');
-  return el('span', { class: `reason${c.urgente ? '' : ' soft'}` }, icone(ICONE_DO_MOTIVO[c.motivo] ?? 'your-turn'), c.motivoCurto);
+  return el('span', { class: `reason${c.urgente ? '' : ' soft'}` }, icon(ICONE_DO_MOTIVO[c.motivo] ?? 'your-turn'), c.motivoCurto);
 }
 
 function cardDeNumero(c) {
@@ -126,7 +126,7 @@ function cardDeNumero(c) {
     'div',
     { class: 'card stat', 'data-card': c.id },
     el('span', { class: 'label' }, c.rotulo),
-    el('span', { class: `ic color-${c.cor}` }, icone(c.icone)),
+    el('span', { class: `ic color-${c.cor}` }, icon(c.icone)),
     el('span', { class: 'v' }, c.valor, c.extra ? el('small', {}, c.extra) : null),
     el('span', { class: 's' }, c.sub),
   );
@@ -137,9 +137,9 @@ function inbox(atencao, agentes) {
   const titulo = el(
     'div',
     { class: 'ttl' },
-    icone('bell'),
+    icon('bell'),
     el('span', { class: total ? 'c-waiting' : 'c-dim' }, tituloDaInbox(total)),
-    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icone('chevron-right')),
+    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icon('chevron-right')),
   );
   if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, titulo);
   const mini = cartoesDaInbox(atencao, agentes).map((c) =>
@@ -163,7 +163,7 @@ function arvore(a) {
       el(
         'li',
         { class: 'card child', 'data-subagent': s.id },
-        el('span', { class: 'av' }, icone('subagent')),
+        el('span', { class: 'av' }, icon('subagent')),
         el('div', { class: 'trunc' }, el('b', {}, s.tipo ?? 'Subagente'), s.tarefa ? el('span', { class: 'meta' }, ` · ${s.tarefa}`) : null),
         el('span', { class: 'age' }, idade(s.ate ?? s.desde)),
         badge(STATUS_DO_SUBAGENTE[s.status] ?? 'active'),
@@ -177,8 +177,8 @@ function cardDoAgente(a, abertos, alternar) {
   const aberto = n > 0 && abertos.has(a.sessao);
   const ativos = a.subagentes.filter((s) => s.status === 'working').length;
   const exp = n
-    ? el('button', { type: 'button', class: `exp${aberto ? ' open' : ''}`, 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, 'aria-label': aberto ? 'Esconder os subagentes' : 'Mostrar os subagentes', aoClicar: () => alternar(a.sessao) }, icone('chevron-right'))
-    : el('span', { class: 'exp' }, icone('dot'));
+    ? el('button', { type: 'button', class: `exp${aberto ? ' open' : ''}`, 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, 'aria-label': aberto ? 'Esconder os subagentes' : 'Mostrar os subagentes', onClick: () => alternar(a.sessao) }, icon('chevron-right'))
+    : el('span', { class: 'exp' }, icon('dot'));
   const mensagens = a.mensagens.length ? a.mensagens : ['(sem mensagens)'];
   const card = el(
     'a',
@@ -186,7 +186,7 @@ function cardDoAgente(a, abertos, alternar) {
     el(
       'div',
       { class: 'l1' },
-      el('span', { class: 'av' }, icone('bot')),
+      el('span', { class: 'av' }, icon('bot')),
       el('div', { class: 'trunc' }, el('div', { class: 'tt trunc' }, `Agente principal · ${a.titulo}`), el('div', { class: 'meta trunc' }, [a.projeto, plural(n, 'subagente', 'subagentes'), plural(a.turnos, 'turno', 'turnos')].filter(Boolean).join(' · '))),
       badge(a.status),
     ),
@@ -194,28 +194,28 @@ function cardDoAgente(a, abertos, alternar) {
     el(
       'div',
       { class: 'footer' },
-      a.modelo ? el('span', {}, icone('model'), nomeDoModelo(a.modelo)) : null,
-      el('span', {}, icone('coins'), custo(a.custoUsd)),
-      el('span', {}, icone('clock'), idade(a.ultimaAtividade)),
+      a.modelo ? el('span', {}, icon('model'), nomeDoModelo(a.modelo)) : null,
+      el('span', {}, icon('coins'), custo(a.custoUsd)),
+      el('span', {}, icon('clock'), idade(a.ultimaAtividade)),
       a.tarefa ? el('span', { class: 'trunc task' }, a.tarefa) : null,
       el('span', { class: 'id' }, a.sessao.slice(0, 8)),
     ),
   );
   const subs = n
-    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, aoClicar: () => alternar(a.sessao) }, icone('subagent'), plural(n, 'subagente', 'subagentes'), ativos && ativos < n ? ` · ${ativos} ${ativos === 1 ? 'ativo' : 'ativos'}` : null)
+    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, onClick: () => alternar(a.sessao) }, icon('subagent'), plural(n, 'subagente', 'subagentes'), ativos && ativos < n ? ` · ${ativos} ${ativos === 1 ? 'ativo' : 'ativos'}` : null)
     : null;
   return el('div', { class: 'agent' }, exp, el('div', { class: 'column' }, card, subs, aberto ? arvore(a) : null));
 }
 
 function agentesAtivos(agentes, abertos, alternar) {
   const titulo = el('div', { class: 'ttl' }, 'Agentes ativos');
-  if (!agentes.length) return el('div', { class: 'column' }, titulo, vazio({ icone: 'bot', titulo: 'Nenhum agente ativo', texto: 'Quando uma sessão estiver aberta, o agente dela aparece aqui.' }));
+  if (!agentes.length) return el('div', { class: 'column' }, titulo, empty({ icon: 'bot', title: 'Nenhum agente ativo', text: 'Quando uma sessão estiver aberta, o agente dela aparece aqui.' }));
   return el('div', { class: 'column' }, titulo, ...agentes.map((a) => cardDoAgente(a, abertos, alternar)));
 }
 
 function atividadeRecente(atividade) {
-  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessions' }, 'Ver tudo', icone('arrow-right')));
-  if (!atividade.length) return el('div', { class: 'column' }, titulo, vazio({ icone: 'activity', titulo: 'Nada ainda', texto: 'Os eventos das sessões aparecem aqui assim que chegam.' }));
+  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessions' }, 'Ver tudo', icon('arrow-right')));
+  if (!atividade.length) return el('div', { class: 'column' }, titulo, empty({ icon: 'activity', title: 'Nada ainda', text: 'Os eventos das sessões aparecem aqui assim que chegam.' }));
   return el(
     'div',
     { class: 'column' },
@@ -244,11 +244,11 @@ function usarEstilo() {
 
 // ---------- A tela ----------
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   usarEstilo();
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
-  const cab = cabecalho({ icone: 'dashboard', titulo: 'Dashboard', sub: 'O agora das suas sessões', acoes: [atualizar] });
-  area.replaceChildren(cab, carregando({ rotulo: 'Lendo as sessões' }));
+  const atualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar() }, icon('refresh'), 'Atualizar');
+  const cab = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [atualizar] });
+  area.replaceChildren(cab, loading({ label: 'Lendo as sessões' }));
 
   const abertos = new Set();
   let ultimo = null;
@@ -263,24 +263,24 @@ export async function montar(area, ctx) {
   function pintar({ dashboard, atencao }) {
     const partes = [cab, el('div', { class: 'stats' }, ...cards(dashboard.numeros).map(cardDeNumero))];
     if (atencao.ok) partes.push(inbox(atencao.valor, dashboard.agentes));
-    else partes.push(faixaDeErro({ titulo: 'Não deu para ler quem precisa de você.', texto: atencao.erro.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar() } }));
+    else partes.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: atencao.erro.message, action: { label: 'Tentar de novo', onClick: () => desenhar() } }));
     partes.push(el('div', { class: 'two' }, agentesAtivos(dashboard.agentes, abertos, alternar), atividadeRecente(dashboard.atividade)));
     area.replaceChildren(...partes);
   }
 
   async function desenhar() {
     const meu = ++pedido;
-    const [d, a] = await Promise.allSettled([ctx.ler(ROTA_DO_DASHBOARD), ctx.ler(ROTA_DA_ATENCAO)]);
-    if (meu !== pedido || ctx.sinal.aborted) return;
+    const [d, a] = await Promise.allSettled([ctx.read(ROTA_DO_DASHBOARD), ctx.read(ROTA_DA_ATENCAO)]);
+    if (meu !== pedido || ctx.signal.aborted) return;
     if (d.status === 'rejected') {
       if (d.reason?.name === 'AbortError') return;
       ultimo = null;
-      area.replaceChildren(cab, erro({ texto: d.reason?.message, tentar: () => desenhar() }));
+      area.replaceChildren(cab, error({ text: d.reason?.message, retry: () => desenhar() }));
       return;
     }
     if (a.status === 'rejected' && a.reason?.name === 'AbortError') return;
     const atencao = a.status === 'fulfilled' ? { ok: true, valor: a.value } : { ok: false, erro: a.reason };
-    ctx.contador('dashboard', atencao.ok ? atencao.valor.total : 0);
+    ctx.counter('dashboard', atencao.ok ? atencao.valor.total : 0);
     ultimo = { dashboard: d.value, atencao };
     pintar(ultimo);
   }
@@ -291,8 +291,8 @@ export async function montar(area, ctx) {
     clearTimeout(espera);
     espera = setTimeout(() => desenhar(), ESPERA_MS);
   };
-  ctx.aoMudar(relerLogo);
-  ctx.aoReiniciar(() => desenhar());
+  ctx.onChange(relerLogo);
+  ctx.onRestart(() => desenhar());
   const fundo = setInterval(() => desenhar(), FUNDO_MS);
 
   await desenhar();

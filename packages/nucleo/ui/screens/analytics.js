@@ -9,8 +9,8 @@
 // - Custo é estimativa: `usd: null` quer dizer "sem preço" (modelo fora da tabela), nunca US$ 0.
 // - Com mais de uma conta, o custo leva a divisão por conta ao lado (decisão 0006).
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 export const ROTA_DA_VISAO = '/api/analytics';
 export const ROTA_DO_CUSTO = '/api/analytics/cost';
@@ -319,7 +319,7 @@ function stat({ id, rotulo, valor, sub, icone: nome, cor, contas = null, dica: t
     'div',
     { class: 'card an-stat', 'data-card': id, title: titulo },
     el('span', { class: 'an-label' }, rotulo),
-    el('span', { class: `an-ic an-color-${cor}` }, icone(nome)),
+    el('span', { class: `an-ic an-color-${cor}` }, icon(nome)),
     el('span', { class: 'an-v' }, valor),
     el('span', { class: 'an-s' }, sub),
     contas ? divisaoPorConta(contas) : null,
@@ -518,7 +518,7 @@ function horaDe(iso, fuso) {
 /** O dia da semana como a tela escreve: a API manda `sab`, a tela mostra `sáb`. */
 const rotuloDoDia = (dia) => (dia === 'sab' ? 'sáb' : dia);
 
-export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
+export async function mount(area, ctx, { releituraMs = RELER_MS } = {}) {
   carregarEstilo();
   const pedida = ctx.params?.tab;
   const aba = pedida === undefined ? 'visao' : pedida === 'cost' ? 'custo' : null;
@@ -531,27 +531,27 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   let espera = null;
 
   const cab = (acoes = []) => {
-    const c = cabecalho({ icone: 'analytics', titulo: 'Analytics', sub, acoes });
+    const c = header({ icon: 'analytics', title: 'Analytics', sub, actions: acoes });
     c.setAttribute('class', 'cc-head an-head'); // an-cab: as ações descem numa janela estreita
     return c;
   };
 
   if (!aba) {
-    ctx.titulo?.('Analytics');
-    area.replaceChildren(cab(), vazio({ titulo: 'Aba não encontrada', texto: `O Analytics não tem a aba "${pedida}".`, acao: { rotulo: 'Ir para a Visão geral', aoClicar: () => ctx.navegar('/ui/analytics') } }));
+    ctx.title?.('Analytics');
+    area.replaceChildren(cab(), empty({ title: 'Aba não encontrada', text: `O Analytics não tem a aba "${pedida}".`, action: { label: 'Ir para a Visão geral', onClick: () => ctx.navigate('/ui/analytics') } }));
     return () => {};
   }
-  ctx.titulo?.(aba === 'custo' ? 'Analytics · Custo' : 'Analytics');
+  ctx.title?.(aba === 'custo' ? 'Analytics · Custo' : 'Analytics');
 
   const botaoExportar = () =>
-    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', aoClicar: () => ultimo && baixar(nomeDoArquivo(aba, ultimo, dias), ultimo) }, icone('an-download'), 'Exportar');
+    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', onClick: () => ultimo && baixar(nomeDoArquivo(aba, ultimo, dias), ultimo) }, icon('an-download'), 'Exportar');
 
   function seletor() {
     return el(
       'div',
       { class: 'an-seg', role: 'group', 'aria-label': 'Período' },
       ...PERIODOS.map((p) =>
-        el('button', { type: 'button', 'aria-pressed': p === dias ? 'true' : 'false', 'data-days': p, aoClicar: () => p !== dias && ((dias = p), desenhar()) }, `${p} dias`),
+        el('button', { type: 'button', 'aria-pressed': p === dias ? 'true' : 'false', 'data-days': p, onClick: () => p !== dias && ((dias = p), desenhar()) }, `${p} dias`),
       ),
     );
   }
@@ -559,7 +559,7 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   function acoes(dados) {
     if (aba === 'custo') return [seletor(), botaoExportar()];
     const hora = horaDe(dados?.geradoEm, fuso);
-    return [hora ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icone('an-clock'), hora) : null, botaoExportar()].filter(Boolean);
+    return [hora ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icon('an-clock'), hora) : null, botaoExportar()].filter(Boolean);
   }
 
   function semNada(dados) {
@@ -569,39 +569,39 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
 
   async function desenhar({ silencioso = false } = {}) {
     const minha = ++vez;
-    if (!silencioso) area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), ...(aba === 'custo' ? [abas('custo')] : []), carregando());
+    if (!silencioso) area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), ...(aba === 'custo' ? [abas('custo')] : []), loading());
     const z = encodeURIComponent(fuso);
     const rota = aba === 'custo' ? `${ROTA_DO_CUSTO}?days=${dias}&tz=${z}` : `${ROTA_DA_VISAO}?tz=${z}`;
     try {
-      const dados = await ctx.ler(rota);
+      const dados = await ctx.read(rota);
       if (minha !== vez) return;
       ultimo = dados;
       if (semNada(dados)) {
         nos =
           aba === 'visao'
-            ? [cab(), vazio({ titulo: 'Nenhuma sessão ainda', texto: 'Os números aparecem quando o console registrar a primeira sessão do Claude Code.' })]
-            : [cab([seletor()]), abas('custo'), vazio({ titulo: `Nenhum custo nos últimos ${dias} dias`, texto: 'Escolha um período maior ou volte depois de usar o Claude Code.' })];
+            ? [cab(), empty({ title: 'Nenhuma sessão ainda', text: 'Os números aparecem quando o console registrar a primeira sessão do Claude Code.' })]
+            : [cab([seletor()]), abas('custo'), empty({ title: `Nenhum custo nos últimos ${dias} dias`, text: 'Escolha um período maior ou volte depois de usar o Claude Code.' })];
       } else nos = [cab(acoes(dados)), ...(aba === 'custo' ? telaDoCusto(dados) : telaDaVisao(dados))];
       area.replaceChildren(...nos);
     } catch (e) {
       if (e?.name === 'AbortError' || minha !== vez) return;
       if (silencioso && nos) {
-        area.replaceChildren(nos[0], faixaDeErro({ titulo: 'Não deu para atualizar.', texto: `${e?.message ?? e}. Os números abaixo são da última leitura.`, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar({ silencioso: true }) } }), ...nos.slice(1));
+        area.replaceChildren(nos[0], errorBand({ title: 'Não deu para atualizar.', text: `${e?.message ?? e}. Os números abaixo são da última leitura.`, action: { label: 'Tentar de novo', onClick: () => desenhar({ silencioso: true }) } }), ...nos.slice(1));
         return;
       }
       nos = null;
-      area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), erro({ texto: e?.message ?? String(e), tentar: () => desenhar() }));
+      area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), error({ text: e?.message ?? String(e), retry: () => desenhar() }));
     }
   }
 
-  ctx.aoMudar(() => {
+  ctx.onChange(() => {
     if (espera) return;
     espera = setTimeout(() => {
       espera = null;
       desenhar({ silencioso: true });
     }, releituraMs);
   });
-  ctx.aoReiniciar(() => desenhar({ silencioso: true }));
+  ctx.onRestart(() => desenhar({ silencioso: true }));
   await desenhar();
   return () => {
     clearTimeout(espera);
