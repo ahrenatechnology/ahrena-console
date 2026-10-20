@@ -1,0 +1,113 @@
+/* As Decisões (issue 103): a página (C21) e a aba do Detalhe (C20). Toda cor vem de marca.css. */
+
+/* ---------- alternador, busca e barra ---------- */
+.dec-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.dec-seg button { height: 26px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12.5px; }
+.dec-seg button:hover { color: var(--text); }
+.dec-seg button.on { background: var(--raised); color: var(--text); }
+.dec-seg button:focus-visible, .dec-link:focus-visible, .dec-busca input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dec-barra { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dec-busca { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); }
+.dec-busca input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; }
+.dec-busca input::placeholder { color: var(--muted); }
+.dec-busca input:focus { outline: none; }
+.dec-busca:focus-within { border-color: var(--accent); }
+
+/* ---------- os quatro números (C21) ---------- */
+.dec-numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dec-numero { position: relative; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.dec-numero b { font-size: 22px; font-weight: var(--weight-semibold); }
+.dec-numero small { color: var(--muted); font-size: 12px; }
+.dec-numero-ico { position: absolute; top: 12px; right: 14px; font-size: 16px; }
+.c-completed { color: var(--status-completed-text); }
+.c-waiting { color: var(--status-waiting-text); }
+.c-muted { color: var(--muted); }
+.c-accent { color: var(--accent-text); }
+
+/* ---------- grupos (C21) ---------- */
+.dec-grupos { display: flex; flex-direction: column; gap: 16px; }
+.dec-grupo { display: flex; flex-direction: column; gap: 8px; }
+.dec-grupo-cab { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); min-width: 0; }
+.dec-grupo-cab .nome { color: var(--text); font-size: 12.5px; font-weight: var(--weight-semibold); }
+.dec-grupo-cab .resumo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dec-grupo-cab .dec-link { margin-left: auto; font-weight: var(--weight-medium); }
+
+/* ---------- o card de uma decisão ---------- */
+.dec-card { padding: 11px 14px; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.dec-card.e-a_confirmar { border-color: color-mix(in srgb, var(--status-waiting-dot) 55%, var(--border)); }
+.dec-card.e-substituida { opacity: .6; }
+.dec-card.e-substituida .dec-titulo { text-decoration: line-through; }
+.dec-ico { grid-row: span 3; width: 30px; height: 30px; border-radius: 9px; background: var(--raised); display: grid; place-items: center; color: var(--accent-text); font-size: 15px; }
+.dec-l1 { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.dec-rot { font-size: 11px; color: var(--muted); flex: none; }
+.dec-titulo { font-size: 13.5px; font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dec-quando { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.dec-l2 { grid-column: 2 / 4; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; min-height: 1em; }
+.dec-l2 b { color: var(--accent-text); font-weight: var(--weight-semibold); }
+.dec-l3 { display: flex; gap: 12px; align-items: center; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; min-width: 0; }
+.dec-tipo { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10.5px; }
+.dec-aviso { color: var(--status-error-text); overflow: hidden; text-overflow: ellipsis; }
+.dec-acoes { display: flex; gap: 10px; align-items: center; justify-content: flex-end; font-size: 11.5px; white-space: nowrap; }
+.dec-acoes .btn { height: 26px; }
+.dec-link { color: var(--accent-text); background: none; border: 0; padding: 0; font: inherit; font-size: 11.5px; cursor: pointer; }
+.dec-link:hover { text-decoration: underline; }
+.dec-promovida { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+
+.dec-pilula { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.dec-pilula.e-vigente { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.dec-pilula.e-a_confirmar { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.dec-pilula.e-substituida, .dec-pilula.e-descartada { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+/* ---------- a aba do Detalhe (C20) ---------- */
+.dec-grade { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 12px; }
+.dec-lista, .dec-lados { display: flex; flex-direction: column; gap: 8px; }
+.dec-lados { gap: 12px; }
+.dec-lado { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.dec-lado p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.dec-lado code { font-size: 11.5px; color: var(--text); }
+.dec-lado-ttl { display: flex; align-items: center; gap: 8px; }
+.dec-lado-ttl h3 { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); }
+.dec-lado-ttl .dec-pilula, .dec-lado-ttl .dec-r { margin-left: auto; }
+.dec-r { color: var(--muted); font-size: 11.5px; }
+.dec-leg { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.dec-leg b { color: var(--text); font-family: var(--font-mono); font-weight: var(--weight-regular); }
+.dec-injecao, .dec-md { margin: 0; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.dec-chamada { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 11.5px; }
+.dec-chamada .n { color: var(--accent-text); font-weight: var(--weight-semibold); flex: none; }
+.dec-chamada .cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dec-lado p.dec-nota { color: var(--status-waiting-text); }
+.dec-nada { padding: 16px; }
+.dec-nada b { font-size: 13px; }
+.dec-nada p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+
+/* ---------- o diálogo do Promover ---------- */
+.dec-dlg { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.dec-dlg::backdrop { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+.dec-dlg header, .dec-dlg footer { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+.dec-dlg header { border-bottom: 1px solid var(--border); color: var(--accent-text); }
+.dec-dlg header h2 { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); color: var(--text); }
+.dec-dlg footer { justify-content: flex-end; border-top: 1px solid var(--border); }
+.dec-dlg-corpo { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.dec-dlg-caminho { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.dec-dlg-caminho .dec-repo { color: var(--muted); font-size: 11.5px; }
+.dec-md { max-height: 46vh; overflow: auto; color: var(--text); font-size: 11.5px; }
+.dec-dlg-acoes { display: flex; gap: 8px; }
+.dec-dlg-gravar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border); }
+.dec-dlg-gravar label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 12.5px; }
+.dec-dlg-gravar label.off { color: var(--muted); }
+.dec-dlg-gravar .btn:disabled { opacity: .45; cursor: not-allowed; }
+.dec-dlg-nota { margin: 0; color: var(--muted); font-size: 12px; min-height: 1em; }
+.dec-erro { margin: 0; color: var(--status-error-text); font-size: 12.5px; }
+
+/* Janela estreita: os números em duas colunas e a aba numa coluna só. */
+@media (max-width: 900px) {
+  .dec-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dec-grade { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .dec-card { grid-template-columns: 30px minmax(0, 1fr); }
+  .dec-quando { grid-column: 2; }
+  .dec-acoes { grid-column: 2; justify-content: flex-start; }
+  .dec-l2 { grid-column: 2; }
+}

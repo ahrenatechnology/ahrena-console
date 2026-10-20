@@ -7,13 +7,13 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `telas.js` | **O registro das telas** (rota, item da barra, arquivo) |
-| `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()` |
+| `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()`. E as escritas das Decisões, `escrever(rota, corpo)` (`usarEscritor()`) |
 | `ao-vivo.js` | Long polling em `GET /api/mudancas?desde=<cursor>&espera=25` |
 | `estados.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
-| `telas/` | As telas, uma por arquivo |
+| `telas/` | As telas, uma por arquivo. Uma tela com estilo próprio põe o `<link>` do seu `telas/<nome>.css` no `<head>` ao montar (as Decisões: `decisoes.css`, de `decisoes-comum.js`) |
 
 ## Registrar uma tela
 
