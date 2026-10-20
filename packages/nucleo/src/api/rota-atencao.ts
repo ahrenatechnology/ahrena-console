@@ -2,7 +2,8 @@
 //
 // A lista é a do `sessions_needing_attention` do MCP (`precisamDeVoce`, src/mcp): as que esperam
 // você ou pararam num erro, com a divisão do painel (#140) entre o que trava a sessão ("precisa")
-// e o que é só a sua vez ("sua-vez"). As que travam vêm primeiro; dentro do nível, quem espera há
+// e o que é só a sua vez ("sua-vez"). A ordem é a do wireframe A2, urgentes primeiro: permissão,
+// pergunta, plano e decisão; depois erro; depois a sua vez. Dentro de cada grupo, quem espera há
 // mais tempo. A conta sai só com rótulo e cor, nunca o id. Sem texto da conversa.
 //
 // Para acompanhar, o cliente lê esta rota e depois espera em
@@ -87,6 +88,9 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
       local: i.open.desktopSessionId,
     };
   });
+  // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
+  const grupo = (i: ItemDaAtencao) => (i.nivel === 'sua-vez' ? 2 : i.motivo === 'erro' ? 1 : 0);
+  itens.sort((a, b) => grupo(a) - grupo(b) || a.desde.localeCompare(b.desde) || a.sessao.localeCompare(b.sessao));
   let ativas = 0;
   let comErro = 0;
   for (const s of await frota.vivas()) {

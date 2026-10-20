@@ -34,6 +34,7 @@ use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
 
 const BANDEJA: &str = "ahrena";
 const ICONE: &[u8] = include_bytes!("../icons/bandeja.png");
+const ICONE_2X: &[u8] = include_bytes!("../icons/bandeja@2x.png");
 
 /// O que a bandeja mostra; o menu é refeito quando muda.
 struct Estado {
@@ -90,6 +91,14 @@ fn main() {
                 .tooltip("Ahrena Console")
                 .on_menu_event(|app, ev| clique(app, ev.id().as_ref()))
                 .build(app)?;
+            #[cfg(target_os = "macos")]
+            if let Some(b) = app.tray_by_id(BANDEJA) {
+                let _ = b.with_inner_tray_icon(|t| {
+                    if let Some(item) = t.ns_status_item() {
+                        nativo::icone_template(&item, &[ICONE, ICONE_2X]);
+                    }
+                });
+            }
             redesenhar(app.handle(), &estado);
 
             let recursos = app.path().resource_dir().ok();

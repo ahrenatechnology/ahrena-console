@@ -18,8 +18,8 @@ serde_json = "1"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSMenu", "NSMenuItem", "NSEvent"] }
-objc2-foundation = { version = "0.3", features = ["block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSError", "NSNotification", "NSObject", "NSOperation", "NSString"] }
+objc2-app-kit = { version = "0.3", features = ["NSBitmapImageRep", "NSButton", "NSControl", "NSEvent", "NSImage", "NSImageRep", "NSMenu", "NSMenuItem", "NSResponder", "NSStatusItem", "NSView"] }
+objc2-foundation = { version = "0.3", features = ["block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSObject", "NSOperation", "NSString"] }
 objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
 
 [profile.release]
