@@ -12,7 +12,7 @@
 // Codex: só o `AGENTS.md` (decisão 2 de 20/10); `.codex/config.toml` fica a confirmar e nada é escrito.
 
 import { createHash } from 'node:crypto';
-import { claudeBlock, enablesFramework, hasBlock, mergeClaudeSettings, upsertBlock } from './merge.ts';
+import { blockMarkersPaired, claudeBlock, enablesFramework, hasBlock, mergeClaudeSettings, UNPAIRED_MARKERS, upsertBlock } from './merge.ts';
 import { DEFAULT_FRAMEWORK_REPO, MARKETPLACE, type Catalog, type Choice, type PlanFile } from './model.ts';
 
 export interface PlanOptions {
@@ -41,6 +41,12 @@ export function plan(files: Readonly<Record<string, string>>, catalog: Catalog, 
     const before = current(path);
     out.push({ path, before, after, why, action: before === null ? 'create' : before === after ? 'unchanged' : 'merge' });
   };
+  // Um arquivo de texto com os marcadores desemparelhados é recusado, nunca acrescentado.
+  const putBlock = (path: string, body: (text: string | null) => string, why: string) => {
+    const before = current(path);
+    if (!blockMarkersPaired(before)) out.push({ path, action: 'refused', before, after: null, why: UNPAIRED_MARKERS });
+    else put(path, upsertBlock(before, body(before)), why);
+  };
   const index = rulesIndex(catalog, choice.plugins, { frameworkRepo });
   const agentsBody = [
     '## Ahrena Framework',
@@ -53,11 +59,11 @@ export function plan(files: Readonly<Record<string, string>>, catalog: Catalog, 
     ...(choice.agency ? ['', 'Build work enters through the `athena` agent, who plans, routes and delegates; do not implement it directly.'] : []),
   ].join('\n');
   if (choice.platforms.includes('codex') || choice.platforms.includes('claude')) {
-    put('AGENTS.md', upsertBlock(current('AGENTS.md'), agentsBody), 'índice das regras, lido pelo Codex e importado pelo CLAUDE.md');
+    putBlock('AGENTS.md', () => agentsBody, 'índice das regras, lido pelo Codex e importado pelo CLAUDE.md');
   }
   if (choice.platforms.includes('claude')) {
     // O import que conta é o da pessoa, fora do nosso bloco; o de dentro é nosso e volta igual.
-    put('CLAUDE.md', upsertBlock(current('CLAUDE.md'), claudeBlock(current('CLAUDE.md'))), 'o Claude Code carrega o AGENTS.md por import');
+    putBlock('CLAUDE.md', claudeBlock, 'o Claude Code carrega o AGENTS.md por import');
     const before = current('.claude/settings.json');
     const s = mergeClaudeSettings(before, choice.plugins, frameworkRepo);
     if ('refused' in s) out.push({ path: '.claude/settings.json', action: 'refused', before, after: null, why: s.refused });

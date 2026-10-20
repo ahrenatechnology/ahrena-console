@@ -19,6 +19,7 @@ import {
   pullRequestBody,
   rulesIndex,
   unifiedDiff,
+  UNPAIRED_MARKERS,
   upsertBlock,
   type Choice,
   type InstallPullRequestPort,
@@ -106,6 +107,32 @@ describe('#184 the plan (ported from the spike)', () => {
     const p = plan({ ...REPO, '.claude/settings.json': '{ quebrado' }, catalog, CHOICE);
     const s = p.find((f) => f.path === '.claude/settings.json')!;
     assert.deepEqual([s.action, s.after, s.before], ['refused', null, '{ quebrado']);
+  });
+
+  test('settings.json that already has everything comes back untouched, even compact', () => {
+    const compact = '{"extraKnownMarketplaces":{"ahrena":{"source":{"source":"github","repo":"x/y"}}},"enabledPlugins":{"ahrena-foundation@ahrena":true,"ahrena-contributing@ahrena":false}}';
+    assert.deepEqual(mergeClaudeSettings(compact, ['ahrena-foundation', 'ahrena-contributing']), { text: compact });
+    const p = plan({ ...REPO, '.claude/settings.json': compact }, catalog, { ...CHOICE, plugins: ['ahrena-foundation', 'ahrena-contributing'] });
+    assert.equal(p.find((f) => f.path === '.claude/settings.json')!.action, 'unchanged');
+  });
+
+  test('settings.json with an integer beyond the safe range is refused when it would be rewritten', () => {
+    const big = '{ "permissions": { "allow": [] }, "id": 12345678901234567890 }';
+    const r = mergeClaudeSettings(big, ['ahrena-foundation']);
+    assert.ok('refused' in r && /precisão/.test(r.refused), JSON.stringify(r));
+    const s = plan({ ...REPO, '.claude/settings.json': big }, catalog, CHOICE).find((f) => f.path === '.claude/settings.json')!;
+    assert.deepEqual([s.action, s.after], ['refused', null]);
+  });
+
+  test('unpaired framework markers: the file is refused, not appended to', () => {
+    const { start, end } = { start: '<!-- ahrena:framework:start -->', end: '<!-- ahrena:framework:end -->' };
+    for (const text of [`a\n${start}\nx\n${end}\n${start}\ny\n${end}\n`, `a\n${start}\nx\n`, `a\n${end}\n`, `a\n${end}\n${start}\n`]) {
+      const p = plan({ ...REPO, 'CLAUDE.md': text }, catalog, CHOICE).find((f) => f.path === 'CLAUDE.md')!;
+      assert.deepEqual([p.action, p.after, p.why], ['refused', null, UNPAIRED_MARKERS], JSON.stringify(text));
+      assert.throws(() => upsertBlock(text, 'novo'), /desemparelhados/);
+    }
+    const agents = plan({ ...REPO, 'AGENTS.md': `${start}\n` }, catalog, CHOICE).find((f) => f.path === 'AGENTS.md')!;
+    assert.equal(agents.action, 'refused');
   });
 
   test('settings.json keeps its indentation, so the merge does not reformat the file', () => {

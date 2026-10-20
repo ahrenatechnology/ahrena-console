@@ -204,6 +204,10 @@ interface Entry {
   askedAt: number;
   /** As instalações deste repositório, uma de cada vez. */
   lock: Promise<unknown>;
+  /** Instalações na fila ou em andamento: o despejo não larga a entrada (nem a trava) enquanto houver alguma. */
+  installing: number;
+  /** Sobe a cada publicação da instalação: a leitura de fundo que começou antes descarta o que leu. */
+  generation: number;
 }
 
 interface StoredBlob {
@@ -447,7 +451,10 @@ export class FrameworkInstallService {
   /** Abre o PR (o `POST`). Relê o repositório agora, recalcula o plano e só escreve se nada mudou desde a prévia. */
   async install(owner: string, repo: string, request: InstallRequest): Promise<InstallAnswer> {
     const e = this.touch(owner, repo);
-    const turn = e.lock.then(() => this.installNow(e, request));
+    e.installing++;
+    const turn = e.lock.then(() => this.installNow(e, request)).finally(() => {
+      e.installing--;
+    });
     e.lock = turn.catch(() => undefined);
     return turn;
   }
@@ -495,6 +502,7 @@ export class FrameworkInstallService {
     // Relê agora (TTL zero), por cima de qualquer leitura em andamento.
     if (e.running) await e.running;
     const loaded = await this.load(owner, repo, { fresh: true });
+    e.generation++;
     this.publish(e, loaded);
     e.at = this.now();
     if (loaded.state === 'not-found') return { status: 404, body: { error: 'repositório não encontrado', code: 'not-found' } };
@@ -505,11 +513,15 @@ export class FrameworkInstallService {
     if ('error' in choice) return { status: 400, body: { error: choice.error, code: 'bad-request' } };
     const view = planView(inputs, choice, this.frameworkRepo);
     if (!inputs.target.canWrite) return { status: 403, body: { error: NO_WRITE, code: 'no-write' } };
-    if (view.blocked?.kind === 'invalid-json') return { status: 422, body: { error: view.blocked.message, code: 'invalid-json' } };
-    if (view.planHash !== request.planHash) return { status: 409, body: { error: 'o repositório mudou desde a prévia: confira o plano de novo', code: 'plan-changed', planHash: view.planHash! } };
+    // Com o PR aberto, ele volta como está, mesmo que o plano tenha mudado desde a prévia.
     const open = inputs.target.openPullRequest;
     if (open) return { status: 200, body: { status: 'already-open', pullRequest: open } };
+    if (view.blocked?.kind === 'invalid-json') return { status: 422, body: { error: view.blocked.message, code: 'invalid-json' } };
+    const changed = { status: 409 as const, body: { error: 'o repositório mudou desde a prévia: confira o plano de novo', code: 'plan-changed', planHash: view.planHash! } };
+    if (view.planHash !== request.planHash) return changed;
     if (view.blocked?.kind === 'empty-repository') return { status: 422, body: { error: view.blocked.message, code: 'empty-repository' } };
+    // O branch nasce do HEAD lido no alvo; se o padrão andou entre a descoberta e o alvo, o plano é de outro commit.
+    if (inputs.commit !== inputs.target.defaultBranch?.oid) return changed;
     if (view.blocked?.kind === 'nothing-to-do') return { status: 422, body: { error: view.blocked.message, code: 'nothing-to-do' } };
 
     const files = plan(planFilesOf(inputs.files), inputs.catalog, choice, { frameworkRepo: this.frameworkRepo });
@@ -527,6 +539,7 @@ export class FrameworkInstallService {
     // O console acabou de escrever: o PR entra no que está guardado na hora, sem reler.
     const target: InstallTarget = { ...inputs.target, branchHead: outcome.commit, openPullRequest: outcome.pullRequest, latestPullRequest: outcome.pullRequest };
     await this.cache.patch<InstallTarget | null>(`framework-install:target:${repoKey(owner, repo)}`, () => target);
+    e.generation++;
     this.publish(e, { ...loaded, inputs: { ...inputs, target } });
     return { status: 201, body: { status: 'opened', pullRequest: outcome.pullRequest } };
   }
@@ -535,12 +548,13 @@ export class FrameworkInstallService {
     const key = repoKey(owner, repo);
     let e = this.entries.get(key);
     if (e) this.entries.delete(key);
-    else e = { owner, repo, loaded: null, at: -Infinity, running: null, force: false, askedAt: 0, lock: Promise.resolve() };
+    else e = { owner, repo, loaded: null, at: -Infinity, running: null, force: false, askedAt: 0, lock: Promise.resolve(), installing: 0, generation: 0 };
     e.askedAt = this.now();
     this.entries.set(key, e);
     if (this.entries.size > MAX_FRAMEWORK_INSTALL_ENTRIES) {
-      const [old] = [...this.entries].find(([, x]) => !x.running) ?? [...this.entries][0];
-      this.entries.delete(old);
+      // Uma entrada com instalação na fila não sai: largá-la soltaria a trava e deixaria duas instalações correrem juntas.
+      const idle = [...this.entries].find(([, x]) => x !== e && !x.installing && !x.running) ?? [...this.entries].find(([, x]) => x !== e && !x.installing);
+      if (idle) this.entries.delete(idle[0]);
     }
     return e;
   }
@@ -548,11 +562,16 @@ export class FrameworkInstallService {
   private trigger(e: Entry): void {
     if (e.running || this.now() - e.at < this.validityMs) return;
     const force = e.force;
+    const generation = e.generation;
     e.running = this.load(e.owner, e.repo, { force })
-      .then((loaded) => this.publish(e, loaded))
+      .then((loaded) => {
+        // Uma instalação publicou no meio: o que esta leitura trouxe é mais velho (apagaria o PR recém-aberto).
+        if (e.generation === generation) this.publish(e, loaded);
+      })
       .catch((err: unknown) => {
         const msg = reason(err);
         this.log(`framework-install: a leitura de ${e.owner}/${e.repo} falhou: ${msg}`);
+        if (e.generation !== generation) return;
         this.publish(e, e.loaded?.inputs ? { ...e.loaded, error: msg } : { state: 'error', error: msg, inputs: null });
       })
       .finally(() => {

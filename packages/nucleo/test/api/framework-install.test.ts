@@ -61,6 +61,26 @@ interface Setup {
   /** Troca os dados do GitHub falso (um push), sem as escritas de antes. */
   push: (py: Record<string, string>) => void;
   store: MemoryCacheStore;
+  /** Segura a próxima chamada GraphQL que `when` aceita, dentro da fila do GitHub, até `release()`. */
+  holdCall: (when: (op: string, variables: Record<string, unknown>) => boolean) => Hold;
+  /** Segura a próxima leitura desta chave no cache (fora da fila do GitHub), até `release()`. */
+  holdStore: (key: string) => Hold;
+  /** Troca a resposta GraphQL de uma operação (o JSON inteiro, `{ data }` ou `{ errors }`). */
+  tamper: { fn: ((op: string, json: { data?: unknown; errors?: unknown }) => unknown) | null };
+  logs: string[];
+}
+
+interface Hold {
+  reached: Promise<void>;
+  release: () => void;
+}
+
+function deferredHold(): Hold & { arrive: () => Promise<void> } {
+  let arrived!: () => void;
+  let released!: () => void;
+  const reached = new Promise<void>((r) => (arrived = r));
+  const gate = new Promise<void>((r) => (released = r));
+  return { reached, release: () => released(), arrive: () => (arrived(), gate) };
 }
 
 function setup({ frameworkRepo, timeline }: { frameworkRepo?: string; timeline?: PullRequestTimeline } = {}): Setup {
@@ -68,17 +88,48 @@ function setup({ frameworkRepo, timeline }: { frameworkRepo?: string; timeline?:
   const now = () => clock.now;
   let gh = createFakeGithub(data(PY, frameworkRepo), { now, pullRequestTimeline: timeline });
   const all: string[] = [];
+  const holds: { when: (op: string, v: Record<string, unknown>) => boolean; hold: ReturnType<typeof deferredHold> }[] = [];
+  const tamper: Setup['tamper'] = { fn: null };
+  const logs: string[] = [];
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request = typeof init?.body === 'string' ? (JSON.parse(init.body) as { query?: string; variables?: Record<string, unknown> }) : null;
+    const op = /(?:query|mutation) (\w+)/.exec(request?.query ?? '')?.[1] ?? null;
+    if (op) {
+      const i = holds.findIndex((h) => h.when(op, request?.variables ?? {}));
+      if (i >= 0) await holds.splice(i, 1)[0].hold.arrive();
+    }
     const before = gh.calls.length;
     const r = await gh.fetch(input, init);
     all.push(...gh.calls.slice(before));
+    if (op && tamper.fn) {
+      const changed = tamper.fn(op, (await r.json()) as { data?: unknown });
+      return new Response(JSON.stringify(changed), { status: r.status, headers: r.headers });
+    }
     return r;
   }) as typeof globalThis.fetch;
   const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid' });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
   const store = new MemoryCacheStore();
-  const service = new FrameworkInstallService({ transport, cache: new GithubCache({ store, now }), changes: cursor, now, pullRequestPollMs: 0, ...(frameworkRepo ? { frameworkRepo } : {}) });
+  const storeHolds = new Map<string, ReturnType<typeof deferredHold>>();
+  const get = store.get.bind(store);
+  store.get = async (key: string) => {
+    const h = storeHolds.get(key);
+    if (h) {
+      storeHolds.delete(key);
+      await h.arrive();
+    }
+    return get(key);
+  };
+  const service = new FrameworkInstallService({
+    transport,
+    cache: new GithubCache({ store, now }),
+    changes: cursor,
+    now,
+    pullRequestPollMs: 0,
+    log: (m) => logs.push(m),
+    ...(frameworkRepo ? { frameworkRepo } : {}),
+  });
   return {
     service,
     gh: () => gh,
@@ -93,6 +144,18 @@ function setup({ frameworkRepo, timeline }: { frameworkRepo?: string; timeline?:
       gh = createFakeGithub(data(py, frameworkRepo), { now, pullRequestTimeline: timeline });
     },
     store,
+    holdCall: (when) => {
+      const hold = deferredHold();
+      holds.push({ when, hold });
+      return hold;
+    },
+    holdStore: (key) => {
+      const hold = deferredHold();
+      storeHolds.set(key, hold);
+      return hold;
+    },
+    tamper,
+    logs,
   };
 }
 
@@ -358,6 +421,70 @@ describe('#184 opening the pull request, through the service', () => {
     const other = setup();
     const op = await ready(other);
     assert.equal((await other.service.install('org-a', 'py-app', { platforms: ['codex'], plugins: op.choice.plugins, planHash: op.planHash })).status, 409);
+  });
+
+  test('the default branch moved between the discovery and the target: 409 plan-changed, nothing written', async () => {
+    const s = setup();
+    const p = await ready(s);
+    // A descoberta lê um HEAD; o alvo, lido logo depois, já vê outro: o branch nasceria de um commit que o plano não leu.
+    s.tamper.fn = (op, json) => {
+      if (op !== 'FrameworkInstallTarget') return json;
+      const data = json.data as { repository: { defaultBranchRef: { target: { oid: string } } } };
+      data.repository.defaultBranchRef.target.oid = 'f'.repeat(40);
+      return json;
+    };
+    const a = await install(s, p);
+    assert.equal(a.status, 409, JSON.stringify(a.body));
+    const body = a.body as { code: string; planHash: string };
+    assert.equal(body.code, 'plan-changed');
+    assert.match(body.planHash, /^[0-9a-f]{64}$/);
+    assert.deepEqual(s.gh().writes, []);
+  });
+
+  test('a PR already open wins over a changed plan: already-open, not 409', async () => {
+    const s = setup();
+    const p = await ready(s);
+    const opened = await install(s, p);
+    assert.equal(opened.status, 201);
+    const writes = s.gh().writes.length;
+    // Outra escolha com o hash da prévia: antes era 409; com o PR aberto, ele volta.
+    const a = await s.service.install('org-a', 'py-app', { platforms: ['codex'], plugins: p.choice.plugins, planHash: p.planHash });
+    assert.equal(a.status, 200, JSON.stringify(a.body));
+    assert.equal((a.body as { status: string }).status, 'already-open');
+    assert.equal((a.body as { pullRequest: { number: number } }).pullRequest.number, (opened.body as { pullRequest: { number: number } }).pullRequest.number);
+    assert.equal(s.gh().writes.length, writes);
+  });
+
+  test('a background read that started before the PR opened does not erase it', async () => {
+    const s = setup();
+    const p = await ready(s);
+    const writing = s.holdCall((op) => op === 'OpenInstallPullRequest');
+    const inst = install(s, p);
+    await writing.reached;
+    // A leitura de fundo pega o alvo de antes do PR (do cache) e para antes de terminar.
+    const reading = s.holdStore('framework-install:tree:org-a/py-app');
+    await s.service.plan('org-a', 'py-app', { refresh: true });
+    await reading.reached;
+    writing.release();
+    const a = await inst;
+    assert.equal(a.status, 201, JSON.stringify(a.body));
+    reading.release();
+    await s.service.wait();
+    const pr = (await s.service.pullRequest('org-a', 'py-app')).pullRequest;
+    assert.equal(pr?.number, (a.body as { pullRequest: { number: number } }).pullRequest.number);
+  });
+
+  test('GitHub refuses a write: 502 github-error, and neither the body nor the log carries the token', async () => {
+    const s = setup();
+    const p = await ready(s);
+    s.tamper.fn = (op, json) => (op === 'CommitInstallFiles' ? { data: null, errors: [{ message: 'Resource not accessible by integration' }] } : json);
+    const a = await install(s, p);
+    assert.equal(a.status, 502, JSON.stringify(a.body));
+    assert.equal((a.body as { code: string }).code, 'github-error');
+    assert.match((a.body as { error: string }).error, /Resource not accessible/);
+    assert.ok(s.logs.some((m) => /falhou/.test(m)), JSON.stringify(s.logs));
+    assert.ok(!JSON.stringify(a.body).includes(TOKEN));
+    assert.ok(!s.logs.join('\n').includes(TOKEN));
   });
 
   test('without write permission: 403, nothing written', async () => {

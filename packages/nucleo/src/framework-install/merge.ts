@@ -5,10 +5,29 @@
 
 import { BLOCK, DEFAULT_FRAMEWORK_REPO, MARKETPLACE } from './model.ts';
 
+/** O motivo da recusa quando os marcadores do framework estão desemparelhados. */
+export const UNPAIRED_MARKERS = 'marcadores do Ahrena Framework desemparelhados: corrija o arquivo antes de instalar';
+
+const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+/**
+ * Os marcadores estão em ordem: nenhum, ou um início seguido de um fim. Mais de um início, início
+ * sem fim depois ou fim sem início: o arquivo é recusado, não acrescentado.
+ */
+export function blockMarkersPaired(text: string | null | undefined, marks: { start: string; end: string } = BLOCK): boolean {
+  if (!text) return true;
+  const starts = count(text, marks.start);
+  const ends = count(text, marks.end);
+  if (starts === 0 && ends === 0) return true;
+  if (starts !== 1 || ends !== 1) return false;
+  return text.indexOf(marks.end) > text.indexOf(marks.start);
+}
+
 /** Troca só o que está entre os marcadores; sem marcadores, acrescenta o bloco no fim. Nunca apaga o resto. */
 export function upsertBlock(text: string | null | undefined, body: string, marks: { start: string; end: string } = BLOCK): string {
   const block = `${marks.start}\n${body.trimEnd()}\n${marks.end}`;
   if (text == null || text === '') return `${block}\n`;
+  if (!blockMarkersPaired(text, marks)) throw new Error(UNPAIRED_MARKERS);
   const i = text.indexOf(marks.start);
   const j = text.indexOf(marks.end, i + marks.start.length);
   if (i >= 0 && j > i) return text.slice(0, i) + block + text.slice(j + marks.end.length);
@@ -36,10 +55,18 @@ export function importsAgents(claudeMd: string | null | undefined): boolean {
 
 /** O bloco do `CLAUDE.md`: sempre o `@AGENTS.md`, salvo quando a pessoa já o importa (decisão 5 de 20/10). */
 export function claudeBlock(claudeMd: string | null | undefined): string {
-  return importsAgents(claudeMd) ? 'The Ahrena Framework index lives in AGENTS.md, imported above.' : '@AGENTS.md';
+  return importsAgents(claudeMd) ? 'The Ahrena Framework index lives in AGENTS.md, imported elsewhere in this file.' : '@AGENTS.md';
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Um número que o `JSON.parse` já arredondou (inteiro fora de `Number.isSafeInteger`, ou infinito): reescrever mudaria o valor. */
+function hasUnsafeNumber(v: unknown): boolean {
+  if (typeof v === 'number') return !Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v));
+  if (Array.isArray(v)) return v.some(hasUnsafeNumber);
+  if (isPlainObject(v)) return Object.values(v).some(hasUnsafeNumber);
+  return false;
+}
 
 /** O recuo do JSON de hoje (2 espaços, 4 ou tab), para o arquivo mesclado não mudar de forma. */
 function indentOf(text: string): string | number {
@@ -68,6 +95,12 @@ export function mergeClaudeSettings(text: string | null | undefined, plugins: re
   for (const k of ['extraKnownMarketplaces', 'enabledPlugins'] as const) {
     if (k in cur && !isPlainObject(cur[k])) return { refused: `"${k}" não é um objeto: corrija o arquivo antes de instalar` };
   }
+  const marketplaces = cur.extraKnownMarketplaces as Record<string, unknown> | undefined;
+  const enabled = cur.enabledPlugins as Record<string, unknown> | undefined;
+  const complete = marketplaces !== undefined && Object.hasOwn(marketplaces, MARKETPLACE) && plugins.every((p) => enabled !== undefined && Object.hasOwn(enabled, `${p}@${MARKETPLACE}`));
+  // Já tem tudo: o texto volta intacto (a forma da pessoa fica, e o plano diz `unchanged`).
+  if (complete && text != null) return { text };
+  if (hasUnsafeNumber(cur)) return { refused: 'um número grande demais perderia precisão ao reescrever o arquivo: corrija-o antes de instalar' };
   const next = structuredClone(cur) as Record<string, unknown> & { extraKnownMarketplaces?: Record<string, unknown>; enabledPlugins?: Record<string, unknown> };
   next.extraKnownMarketplaces = { ...next.extraKnownMarketplaces };
   next.extraKnownMarketplaces[MARKETPLACE] ??= { source: { source: 'github', repo: frameworkRepo } };
