@@ -156,7 +156,7 @@ pub fn node_version_works(v: &str) -> bool {
 }
 
 /// An environment variable by its new name, else by its old one (decision 0009: the new one wins).
-fn env_var(new: &str, old: &str) -> Option<String> {
+pub fn env_var(new: &str, old: &str) -> Option<String> {
     std::env::var(new).or_else(|_| std::env::var(old)).ok()
 }
 
