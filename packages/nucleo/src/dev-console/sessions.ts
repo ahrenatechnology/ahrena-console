@@ -1,7 +1,7 @@
-// As sessões do Dev Console (decisão 0008, seção 4): de que repositório e branch é cada sessão,
-// quais são do contexto, quem trabalha, quem espera você (pergunta, plano, decisão: a mesma regra
-// do `/api/atencao`) e as decisões sugeridas ainda sem resposta. Tudo derivado: o repositório sai
-// do remote do git da pasta, o branch do índice do Claude Desktop ou do git.
+// The Dev Console sessions (decision 0008, section 4): which repository and branch each session is
+// on, which belong to the context, who is working, who needs you (the `/api/atencao` rule) and the
+// suggested decisions still unanswered. All derived: the repository comes from the folder's git
+// remote, the branch from the Claude Desktop index or from git.
 
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
@@ -17,10 +17,10 @@ export interface SessionLocation {
   branch: string | null;
 }
 
-/** Onde está uma pasta: repositório (`owner/repo`) e branch. */
+/** Where a folder is: repository (`owner/repo`) and branch. */
 export type LocateFolder = (cwd: string) => Promise<SessionLocation>;
 
-/** Pelo git da pasta, guardado por `ttlMs` (60 s): o Dev Console relê sem rodar git a cada pedido. */
+/** From the folder's git, kept for `ttlMs` (60 s): the Dev Console re-reads without running git on every request. */
 export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now }: { git?: Git; ttlMs?: number; now?: () => number } = {}): LocateFolder {
   const memo = new Map<string, { at: number; value: Promise<SessionLocation> }>();
   return (cwd) => {
@@ -36,9 +36,9 @@ export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now 
 }
 
 /**
- * Os motivos do "depende de você": todos os do `/api/atencao` em que a sessão precisa de você
- * (permissão, pergunta, plano, decisão, erro, interrompida), menos a sua vez no bate-bola
- * (`turn_ended`) e a sessão nova no prompt (`first_prompt`).
+ * The depends-on-you reasons: every `/api/atencao` reason where the session needs you
+ * (permission, question, plan, decision, error, interrupted), except your turn in the back and
+ * forth (`turn_ended`) and a new session at its first prompt (`first_prompt`).
  */
 export const DEPENDS_ON_YOU_REASONS = ['permission', 'question', 'plan', 'decision', 'error', 'interrupted'] as const satisfies readonly Motivo[];
 export type DependsOnYouReason = (typeof DEPENDS_ON_YOU_REASONS)[number];
@@ -51,7 +51,7 @@ export interface WaitingSessionItem {
   repo: string;
   issue: number | null;
   reason: DependsOnYouReason;
-  /** A frase do `/api/atencao` ("pede permissão para usar Bash"); nunca texto da conversa. */
+  /** The pt-BR phrase `/api/atencao` builds ("pede permissão para usar Bash"); never conversation text. */
   reasonText: string;
   since: string;
   minutes: number;
@@ -60,7 +60,7 @@ export interface WaitingSessionItem {
 export interface SuggestedDecisionItem {
   kind: 'suggested-decision';
   decisionId: string;
-  /** O "D4" da interface. */
+  /** The UI's "D4". */
   label: string;
   choice: string;
   alternatives: string[];
@@ -75,9 +75,9 @@ export interface SuggestedDecisionItem {
 export type DependsOnYouItem = WaitingSessionItem | SuggestedDecisionItem;
 
 export interface SessionsOfContexts {
-  /** As vivas de cada repositório. */
+  /** The live sessions of each repository. */
   byRepo: Map<string, ContextSession[]>;
-  /** O "depende de você" de cada repositório. */
+  /** The depends-on-you items of each repository. */
   dependsOnYou: Map<string, DependsOnYouItem[]>;
 }
 
@@ -100,14 +100,14 @@ export class DevConsoleSessions {
     this.locate = locate;
   }
 
-  /** O repositório (em minúsculas, `repoKey`) e o branch de uma sessão: o branch do Desktop vence o do git. */
+  /** A session's repository (lower case, `repoKey`) and branch: the Desktop branch wins over git's. */
   async where(session: Pick<Session, 'cwd'>, desktopBranch: string | null = null): Promise<SessionLocation> {
     if (!session.cwd) return { repo: null, branch: desktopBranch };
     const l = await this.locate(session.cwd);
     return { repo: l.repo ? repoKey(l.repo) : null, branch: desktopBranch ?? l.branch };
   }
 
-  /** As sessões vivas dos repositórios pedidos, e o que delas depende de você. */
+  /** The live sessions of the requested repositories, and what of theirs depends on you. */
   async read(repos: ReadonlySet<string>): Promise<SessionsOfContexts> {
     const now = this.frota.agora();
     const byRepo = new Map<string, ContextSession[]>();
@@ -157,7 +157,7 @@ export class DevConsoleSessions {
   }
 }
 
-/** Os repositórios com sessão nos últimos `days` dias (7), a mais recente primeiro. */
+/** The repositories with a session in the last `days` days (7), most recent first. */
 export async function recentRepos(
   storage: Pick<StoragePort, 'listSessions'>,
   where: (s: Session) => Promise<SessionLocation>,
@@ -170,7 +170,7 @@ export async function recentRepos(
   do {
     const page = await storage.listSessions({ limit: 500, cursor });
     for (const s of page.items) {
-      // Mais recentes primeiro: a primeira de antes da janela encerra a busca.
+      // Most recent first: the first one older than the window ends the scan.
       if (s.updatedAt < since) return [...seen];
       if (!s.cwd || cwds.has(s.cwd)) continue;
       cwds.add(s.cwd);

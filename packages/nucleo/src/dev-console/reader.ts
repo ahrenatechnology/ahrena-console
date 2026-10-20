@@ -1,7 +1,7 @@
-// As leituras do GitHub do Dev Console pelo cache da decisão 0001: uma chave por consulta e por
-// repositório, com o TTL dos PRs (60 s) para PRs e branches e o das issues (5 min) para as
-// issues. Sem GitHub, serve o que está guardado com `stale: true`; sem nada guardado, o
-// repositório vem vazio, também `stale`, para a tela dizer por quê.
+// The Dev Console's GitHub reads through the decision 0001 cache: one key per query and per
+// repository, with the PR TTL (60 s) for PRs and branches and the issue TTL (5 min) for issues.
+// With no GitHub it serves what is cached with `stale: true`; with nothing cached, the
+// repository comes back empty, also `stale`, so the screen can say why.
 
 import { GITHUB_TTL, GithubCache, type CacheResult } from '../github/cache.ts';
 import { DONE_WINDOW_MS, type IssueFact, type MergedPullRequestFact, type PullRequestFact } from './model.ts';
@@ -22,9 +22,9 @@ export interface RepoSnapshot {
   openIssues: IssueFact[];
   closedIssues: IssueFact[];
   branches: string[];
-  /** Alguma das listas veio parcial (mais do que a página do GitHub). */
+  /** One of the lists came back partial (more than GitHub's page). */
   truncated: boolean;
-  /** A leitura mais velha das três (ms desde a época); `null` quando nenhuma veio. */
+  /** The oldest of the three reads (ms since the epoch); `null` when none came back. */
   readAt: number | null;
   stale: boolean;
   staleReason: string | null;
@@ -82,7 +82,7 @@ export class DevConsoleGithub {
       const r: CacheResult<T> = await this.cache.get(key, ttl, async () => ({ value: await fetch() }));
       return { value: r.value, readAt: r.fetchedAt, stale: r.stale, staleReason: r.staleReason };
     } catch (err) {
-      // `NoDataError`: nada guardado e o GitHub falhou.
+      // `NoDataError`: nothing cached and GitHub failed.
       return { value: empty, readAt: null, stale: true, staleReason: err instanceof Error ? err.message : String(err) };
     }
   }

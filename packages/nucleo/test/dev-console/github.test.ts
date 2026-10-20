@@ -1,5 +1,5 @@
-// As leituras do GitHub do Dev Console (#177/AC-5): o adaptador GraphQL sobre respostas sintéticas
-// (um `fetch` falso, sem rede) e o cache da 0001 por cima, com TTL e o fallback sem GitHub.
+// The Dev Console's GitHub reads (#177/AC-5): the GraphQL adapter over synthetic responses (a fake
+// `fetch`, no network) and the 0001 cache on top, with the TTL and the no-GitHub fallback.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
@@ -22,8 +22,8 @@ function fakeFetch(bodies: Record<string, unknown>) {
   return { f, calls };
 }
 
-describe('adaptador GraphQL', () => {
-  test('#177/AC-5 PRs abertos com rascunho, mergeable, base, CI e review, e os mesclados desde a janela', async () => {
+describe('GraphQL adapter', () => {
+  test('#177/AC-5 open PRs with draft, mergeable, base, fork, CI and review, and those merged since the window', async () => {
     const { f, calls } = fakeFetch({
       DevConsolePullRequests: {
         repository: {
@@ -55,7 +55,7 @@ describe('adaptador GraphQL', () => {
     assert.deepEqual(r.merged, [{ repo: REPO, number: 80, title: 'Paginação', url: 'u80', mergedAt: '2026-11-02T09:00:00Z' }]);
   });
 
-  test('#177/AC-5 issues abertas com etiquetas, as fechadas como concluídas desde a janela, e os branches do remoto', async () => {
+  test('#177/AC-5 open issues with labels, those closed as completed since the window, and the remote branches', async () => {
     const { f, calls } = fakeFetch({
       DevConsoleIssues: {
         repository: { issues: { nodes: [{ number: 55, title: 'PIX', url: 'u55', state: 'OPEN', labels: { nodes: [{ name: 'blocked' }] } }] } },
@@ -71,7 +71,7 @@ describe('adaptador GraphQL', () => {
     assert.deepEqual(await source.branches(REPO), { names: ['main', 'feat/61-cobranca'], truncated: false });
   });
 
-  test('#177/AC-5 com mais do que a página, a leitura vem truncated', async () => {
+  test('#177/AC-5 with more than one page, the read is truncated', async () => {
     const page = { pageInfo: { hasNextPage: true }, nodes: [] };
     const empty = { pageInfo: { hasNextPage: false }, nodes: [] };
     const { f } = fakeFetch({
@@ -87,7 +87,7 @@ describe('adaptador GraphQL', () => {
     for (const q of Object.values(DEV_CONSOLE_QUERIES)) assert.match(q, /pageInfo \{ hasNextPage \}/);
   });
 
-  test('#177/AC-5 um 401 esquece o token guardado, e a próxima leitura pede de novo ao gh', async () => {
+  test('#177/AC-5 a 401 forgets the cached token, and the next read asks gh again', async () => {
     let asked = 0;
     let status = 401;
     const f = (async () =>
@@ -99,10 +99,10 @@ describe('adaptador GraphQL', () => {
     status = 200;
     assert.deepEqual((await source.branches(REPO)).names, ['main']);
     await source.branches(REPO);
-    assert.equal(asked, 2, 'pediu o token de novo só depois do 401');
+    assert.equal(asked, 2, 'asked for the token again only after the 401');
   });
 
-  test('searchDate tira os milissegundos', () => {
+  test('searchDate drops the milliseconds', () => {
     assert.equal(searchDate('2026-11-01T12:00:00.999Z'), '2026-11-01T12:00:00Z');
   });
 });
@@ -113,25 +113,25 @@ function countingSource(): DevConsoleSource & { calls: string[]; offline: boolea
     offline: false,
     async pullRequests(repo: string) {
       s.calls.push(`pullRequests:${repo}`);
-      if (s.offline) throw new Error('rede caiu');
+      if (s.offline) throw new Error('network down');
       return { open: [pr(81)], merged: [] };
     },
     async issues(repo: string) {
       s.calls.push(`issues:${repo}`);
-      if (s.offline) throw new Error('rede caiu');
+      if (s.offline) throw new Error('network down');
       return { open: [issue(31)], closed: [] };
     },
     async branches(repo: string) {
       s.calls.push(`branches:${repo}`);
-      if (s.offline) throw new Error('rede caiu');
+      if (s.offline) throw new Error('network down');
       return { names: ['main'] };
     },
   };
   return s;
 }
 
-describe('pelo cache da 0001', () => {
-  test('#177/AC-5 dentro do TTL não chama o GitHub; PRs e branches com o TTL dos PRs, issues com o das issues', async () => {
+describe('through the 0001 cache', () => {
+  test('#177/AC-5 within the TTL it does not call GitHub; PRs and branches use the PR TTL, issues the issue TTL', async () => {
     const now = clock();
     const store = new MemoryCacheStore();
     const source = countingSource();
@@ -168,7 +168,7 @@ describe('pelo cache da 0001', () => {
     assert.deepEqual((await queue()).ready.map((q) => q.number), [81]);
   });
 
-  test('#177/AC-5 sem GitHub, devolve o cache com readAt e stale: true', async () => {
+  test('#177/AC-5 with no GitHub, returns the cache with readAt and stale: true', async () => {
     const now = clock();
     const source = countingSource();
     const github = new DevConsoleGithub({ source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), now });
@@ -179,13 +179,13 @@ describe('pelo cache da 0001', () => {
     source.offline = true;
     const r = await github.read(REPO);
     assert.equal(r.stale, true);
-    assert.match(r.staleReason ?? '', /rede caiu/);
+    assert.match(r.staleReason ?? '', /network down/);
     assert.equal(r.readAt, readAt);
     assert.deepEqual(r.openPullRequests.map((p) => p.number), [81]);
     assert.deepEqual(r.openIssues.map((i) => i.number), [31]);
   });
 
-  test('#177/AC-5 sem GitHub e sem cache: vazio, stale e sem readAt', async () => {
+  test('#177/AC-5 with no GitHub and no cache: empty, stale and no readAt', async () => {
     const github = new DevConsoleGithub({ source: disabledDevConsoleSource(), cache: new GithubCache({ store: new MemoryCacheStore() }) });
     const r = await github.read(REPO);
     assert.deepEqual([r.openPullRequests, r.openIssues, r.branches, r.readAt, r.stale, r.truncated], [[], [], [], null, true, false]);

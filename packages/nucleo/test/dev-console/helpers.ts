@@ -1,5 +1,5 @@
-// Fatos sintéticos do Dev Console: repositórios, PRs, issues e sessões inventados.
-// Nenhum nome de organização, repositório, host ou pessoa real.
+// Synthetic Dev Console facts: made-up repositories, PRs, issues and sessions.
+// No real organization, repository, host or person names.
 
 import type { ContextSession, IssueFact, MergedPullRequestFact, PullRequestFact } from '../../src/dev-console/model.ts';
 

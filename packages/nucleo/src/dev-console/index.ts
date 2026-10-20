@@ -1,5 +1,5 @@
-// Dev Console no núcleo (#177, decisão 0008 seção 4): contextos, fila de merge, quadro das issues
-// e "depende de você", derivados do GitHub (cache da 0001) e das sessões.
+// Dev Console in the núcleo (#177, decision 0008 section 4): contexts, merge queue, issue board
+// and depends-on-you, derived from GitHub (the 0001 cache) and from the sessions.
 
 import type { Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
@@ -25,15 +25,15 @@ export interface CreateDevConsoleOptions {
   source: DevConsoleSource;
   cache: GithubCache;
   decisions?: Pick<DecisionPort, 'listDecisions'> | null;
-  /** O `dev-console.json`; `null` desliga o arquivo. Padrão `~/.ahrena-console/dev-console.json`. */
+  /** The `dev-console.json`; `null` turns the file off. Defaults to `~/.ahrena-console/dev-console.json`. */
   file?: string | null;
-  /** Contextos dados de antemão (o simulador), no lugar do arquivo. */
+  /** Contexts given up front (the simulator), instead of the file. */
   contexts?: readonly DevConsoleContext[] | null;
   git?: Git;
   now?: () => number;
 }
 
-/** Monta o Dev Console com as peças do núcleo. */
+/** Builds the Dev Console from the núcleo's parts. */
 export function createDevConsole({ storage, frota, source, cache, decisions = null, file = defaultDevConsoleFile(), contexts: fixed = null, git, now = frota.agora }: CreateDevConsoleOptions): DevConsole {
   const sessions = new DevConsoleSessions({ frota, decisions, locate: gitLocator({ git, now }) });
   const contexts = new DevConsoleContexts({

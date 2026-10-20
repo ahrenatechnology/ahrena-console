@@ -1,13 +1,13 @@
-// Dev Console (decisão 0008, seção 4): o domínio, sem GitHub, sem sessões lidas e sem HTTP.
-// Tudo aqui é derivado de fatos já lidos (PRs, issues, branches no remoto e as sessões do
-// contexto); nada é anotado à mão. Funções puras: quem lê e quem serve ficam fora.
+// Dev Console (decision 0008, section 4): the domain, with no GitHub, no session reads and no HTTP.
+// Everything here is derived from facts already read (PRs, issues, remote branches and the
+// context's sessions); nothing is annotated by hand. Pure functions: reading and serving live outside.
 
 import { issueDoBranch } from '../api/trabalho.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
 
-// ---------- fatos lidos do GitHub ----------
+// ---------- facts read from GitHub ----------
 
-/** `mergeable` do GitHub: `UNKNOWN` enquanto ele ainda calcula. */
+/** GitHub's `mergeable`: `UNKNOWN` while GitHub is still computing it. */
 export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
 
 export interface PullRequestFact {
@@ -17,17 +17,17 @@ export interface PullRequestFact {
   url: string;
   isDraft: boolean;
   mergeable: Mergeable;
-  /** `mergeStateStatus`: `BEHIND` quando a base andou e a proteção pede o branch em dia. */
+  /** `mergeStateStatus`: `BEHIND` when the base moved on and branch protection requires an up-to-date branch. */
   mergeStateStatus: string | null;
   baseRefName: string;
   headRefName: string;
-  /** O branch vem de um fork: o `headRefName` é do fork, e nada se empilha nele. */
+  /** The branch comes from a fork: `headRefName` belongs to the fork, so nothing stacks on it. */
   isCrossRepository: boolean;
   createdAt: string;
-  /** `statusCheckRollup.state` do último commit; `null` sem checagens. */
+  /** `statusCheckRollup.state` of the last commit; `null` when there are no checks. */
   ci: CiState | null;
   review: ReviewDecision | null;
-  /** Issues que o PR fecha (`closingIssuesReferences`), do mesmo repositório. */
+  /** Issues the PR closes (`closingIssuesReferences`), same repository only. */
   closes: number[];
 }
 
@@ -46,28 +46,32 @@ export interface IssueFact {
   url: string;
   state: 'OPEN' | 'CLOSED';
   labels: string[];
-  /** Só nas fechadas. */
+  /** Closed issues only. */
   closedAt: string | null;
 }
 
-// ---------- fatos lidos das sessões ----------
+// ---------- facts read from the sessions ----------
 
-/** Uma sessão viva de um repositório do contexto. */
+/** A live session in one of the context's repositories. */
 export interface ContextSession {
   id: string;
   title: string;
   repo: string;
   branch: string | null;
-  /** Trabalhando agora (não espera você nem parou num erro). */
+  /** Working now (not waiting on you and not stopped on an error). */
   working: boolean;
-  /** Precisa de você: um dos motivos do "depende de você" (permissão, pergunta, plano, decisão, erro, interrompida). */
+  /** Needs you: one of the depends-on-you reasons (permission, question, plan, decision, error, interrupted). */
   waitingOnYou: boolean;
 }
 
-// ---------- o que o Dev Console mostra ----------
+// ---------- what the Dev Console shows ----------
 
 export const NOT_READY_REASONS = ['draft', 'conflict', 'checking', 'ci-failing', 'changes-requested', 'behind', 'ci-running', 'no-ci', 'stacked'] as const;
-/** Por que um PR aberto não está na fila. A ordem é a de prioridade: o primeiro motivo é o que a tela mostra. */
+/**
+ * Why an open PR is not in the queue, in priority order: the first reason is the one the screen
+ * shows. `checking` (mergeable still `UNKNOWN`) sits right after `conflict`: both are about
+ * mergeability, and a draft or a conflict says more than "GitHub is still computing".
+ */
 export type NotReadyReason = (typeof NOT_READY_REASONS)[number];
 
 export type CiSummary = 'ok' | 'failing' | 'running' | null;
@@ -81,13 +85,13 @@ export interface QueueItem {
   ci: CiSummary;
   review: ReviewDecision | null;
   closes: number[];
-  /** O PR aberto em cujo branch este se apoia (empilhado), ou `null`. */
+  /** The open PR whose branch this one is based on (stacked), or `null`. */
   stackedOn: number | null;
 }
 
 export interface NotReadyItem extends QueueItem {
   reason: NotReadyReason;
-  /** Todos os motivos, na ordem de prioridade. */
+  /** Every reason, in priority order. */
   reasons: NotReadyReason[];
 }
 
@@ -119,10 +123,10 @@ export interface Scoreboard {
   waitingOnYou: number;
 }
 
-/** As etiquetas da coluna "Bloqueada" (decisão 0008, seção 4), configuráveis no `dev-console.json`. */
+/** The labels of the `blocked` column (decision 0008, section 4), configurable in `dev-console.json`. */
 export const DEFAULT_BLOCKED_LABELS: readonly string[] = ['blocked', 'bloqueada'];
 
-/** A chave de um repositório: `owner/repo` em minúsculas, como o GitHub compara. */
+/** A repository key: `owner/repo` in lower case, the way GitHub compares them. */
 export const repoKey = (repo: string): string => repo.toLowerCase();
 export const DONE_WINDOW_MS = 24 * 60 * 60_000;
 
@@ -136,9 +140,9 @@ export function ciSummary(ci: CiState | null): CiSummary {
 const prKey = (repo: string, number: number) => `${repo}#${number}`;
 
 /**
- * O PR aberto do mesmo repositório cujo branch é a base deste: este está empilhado nele. Só PRs
- * de branch do próprio repositório entram no índice: o `headRefName` de um fork (às vezes `main`)
- * não é um branch daqui.
+ * The open PR in the same repository whose branch is this PR's base: this one is stacked on it.
+ * Only PRs from branches of the repository itself are indexed: a fork's `headRefName` (sometimes
+ * `main`) is not a branch here.
  */
 function stackBases(prs: readonly PullRequestFact[]): Map<string, PullRequestFact> {
   const byHead = new Map(prs.filter((p) => !p.isCrossRepository).map((p) => [`${p.repo}\0${p.headRefName}`, p]));
@@ -150,7 +154,7 @@ function stackBases(prs: readonly PullRequestFact[]): Map<string, PullRequestFac
   return out;
 }
 
-/** Os motivos próprios do PR, sem olhar a pilha. Vazio: pronto por si. */
+/** The PR's own reasons, ignoring the stack. Empty: ready on its own. */
 export function ownReasons(p: PullRequestFact): NotReadyReason[] {
   const r: NotReadyReason[] = [];
   const ci = ciSummary(p.ci);
@@ -169,23 +173,23 @@ const byAge = (a: { createdAt: string; repo: string; number: number }, b: { crea
   a.createdAt.localeCompare(b.createdAt) || a.repo.localeCompare(b.repo) || a.number - b.number;
 
 /**
- * A fila de merge: prontos (CI verde, sem conflito, fora de rascunho, sem pedido de mudança, em
- * dia com a base), o mais antigo primeiro, e o empilhado logo depois da base. Um empilhado só
- * entra se a base entrou; senão fica fora com `stacked`.
+ * The merge queue: ready PRs (CI green, no conflict, not draft, no changes requested, up to date
+ * with the base), oldest first, with a stacked PR right after its base. A stacked PR only joins
+ * if its base did; otherwise it stays out with `stacked`.
  *
- * `mergeable: 'UNKNOWN'` (o GitHub ainda calcula) não é pronto: fica fora com `checking`. O GitHub
- * calcula sob demanda, então a próxima leitura (o TTL dos PRs, 60 s) já traz o valor.
+ * `mergeable: 'UNKNOWN'` (GitHub still computing) is not ready: it stays out with `checking`.
+ * GitHub computes it lazily, so the next read (the PR TTL, 60 s) brings the value.
  */
 export function buildMergeQueue(prs: readonly PullRequestFact[]): MergeQueue {
   const bases = stackBases(prs);
   const own = new Map(prs.map((p) => [prKey(p.repo, p.number), ownReasons(p)]));
-  // Pronto: sem motivo próprio e, se empilhado, com a base pronta (subindo a pilha inteira).
+  // Ready: no reason of its own and, when stacked, a ready base (walking up the whole stack).
   const readyMemo = new Map<string, boolean>();
   const isReady = (p: PullRequestFact, seen = new Set<string>()): boolean => {
     const k = prKey(p.repo, p.number);
     const memo = readyMemo.get(k);
     if (memo !== undefined) return memo;
-    if (seen.has(k)) return false; // ciclo de branches: ninguém entra
+    if (seen.has(k)) return false; // branch cycle: nobody joins
     seen.add(k);
     const base = bases.get(k);
     const ok = own.get(k)!.length === 0 && (!base || isReady(base, seen));
@@ -205,7 +209,7 @@ export function buildMergeQueue(prs: readonly PullRequestFact[]): MergeQueue {
     stackedOn: bases.get(prKey(p.repo, p.number))?.number ?? null,
   });
 
-  // Ordem: as raízes prontas pelo mais antigo; cada uma seguida dos empilhados nela, também pelo mais antigo.
+  // Order: ready roots oldest first; each followed by the PRs stacked on it, also oldest first.
   const ready = prs.filter((p) => isReady(p));
   const children = new Map<string, PullRequestFact[]>();
   const roots: PullRequestFact[] = [];
@@ -238,7 +242,7 @@ export interface BoardInput {
   openIssues: readonly IssueFact[];
   closedIssues: readonly IssueFact[];
   openPullRequests: readonly PullRequestFact[];
-  /** Branches no remoto, por repositório. */
+  /** Remote branches, per repository. */
   remoteBranches: ReadonlyMap<string, readonly string[]>;
   sessions: readonly ContextSession[];
   blockedLabels?: readonly string[];
@@ -246,9 +250,9 @@ export interface BoardInput {
 }
 
 /**
- * A coluna de uma issue aberta, na ordem de quem vence: `blocked` (a etiqueta), `in-review` (PR
- * aberto que a fecha), `in-progress` (branch com o número dela no remoto), `delegated` (sessão
- * aberta num branch com o número dela, ainda sem push), senão `todo`.
+ * The column of an open issue, in the order that wins: `blocked` (the label), `in-review` (an
+ * open PR that closes it), `in-progress` (a remote branch with its number), `delegated` (an open
+ * session on a branch with its number, not pushed yet), otherwise `todo`.
  */
 export function columnOf(
   issue: IssueFact,
@@ -267,7 +271,7 @@ const branchHasIssue = (branch: string | null, number: number) => branch !== nul
 
 export function buildBoard(input: BoardInput): Board {
   const board: Board = { todo: [], delegated: [], 'in-progress': [], 'in-review': [], blocked: [], done: [] };
-  // Várias sessões no branch da issue: a que espera você, senão a que trabalha, senão a de menor id.
+  // Several sessions on the issue's branch: the one waiting on you, else the working one, else the lowest id.
   const sessionFor = (i: IssueFact) =>
     input.sessions
       .filter((s) => s.repo === i.repo && branchHasIssue(s.branch, i.number))
@@ -289,7 +293,7 @@ export function buildBoard(input: BoardInput): Board {
     const branches = input.remoteBranches.get(i.repo) ?? [];
     const pr = prFor(i);
     const remoteBranch = branches.some((b) => branchHasIssue(b, i.number));
-    // Delegada é a sessão no branch da issue que ainda não subiu: com o branch no remoto, a coluna já é outra.
+    // Delegated is a session on the issue's branch that has not been pushed: once the branch is on the remote, the column is another one.
     const s = sessionFor(i);
     const delegatedSession = s && s.branch && !branches.includes(s.branch) ? s : null;
     const column = columnOf(i, { pullRequest: pr, remoteBranch, session: delegatedSession }, input.blockedLabels);
@@ -307,7 +311,7 @@ export function buildBoard(input: BoardInput): Board {
   return board;
 }
 
-/** Os mesclados nas últimas 24 h, o mais recente primeiro. */
+/** PRs merged in the last 24 h, most recent first. */
 export function mergedSince(merged: readonly MergedPullRequestFact[], now: number): MergedPullRequestFact[] {
   const since = now - DONE_WINDOW_MS;
   return merged.filter((m) => Date.parse(m.mergedAt) >= since).sort((a, b) => b.mergedAt.localeCompare(a.mergedAt) || a.repo.localeCompare(b.repo));

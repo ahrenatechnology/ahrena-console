@@ -122,7 +122,7 @@ export interface OpcoesDaApi {
   decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
-  /** O Dev Console (#177); liga `GET /api/dev-console`. */
+  /** The Dev Console (#177); turns on `GET /api/dev-console`. */
   devConsole?: DevConsole;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;

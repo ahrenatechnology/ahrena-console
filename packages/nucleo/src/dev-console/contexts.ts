@@ -1,11 +1,12 @@
-// Os contextos do Dev Console (decisão 0008, seção 4): conjuntos de repositórios. Vêm de
+// The Dev Console contexts (decision 0008, section 4): sets of repositories. They come from
 // `~/.ahrena-console/dev-console.json`:
 //
 //   { "contexts": [{ "id": "loja", "name": "Loja", "repos": ["owner/repo"] }], "blockedLabels": ["blocked"] }
 //
-// `blockedLabels` (opcional, no topo ou por contexto) é a etiqueta da coluna "Bloqueada"; o
-// padrão é `blocked`. Sem arquivo (ou sem um contexto válido nele), um contexto por repositório
-// que teve sessão nos últimos 7 dias. O arquivo é relido quando muda, como o `contas.json`.
+// `blockedLabels` (optional, at the top or per context) are the labels of the `blocked` column;
+// the default is `blocked` and `bloqueada`. `owner/repo` is case-insensitive (stored in lower
+// case). With no file (or no valid context in it), one context per repository that had a session
+// in the last 7 days. The file is re-read when it changes, like `contas.json`.
 
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -17,7 +18,7 @@ export interface DevConsoleContext {
   name: string;
   repos: string[];
   blockedLabels: string[];
-  /** `file`: do `dev-console.json`; `sessions`: um por repositório com sessão recente. */
+  /** `file`: from `dev-console.json`; `sessions`: one per repository with a recent session. */
   source: 'file' | 'sessions';
 }
 
@@ -37,7 +38,7 @@ const labelsOf = (v: unknown): string[] | null => {
   return out.length > 0 ? out.slice(0, MAX_LABELS) : null;
 };
 
-/** Os contextos válidos do arquivo; o inválido fica de fora, sem derrubar os outros. */
+/** The file's valid contexts; an invalid one is left out without dropping the others. */
 export function parseContexts(json: unknown): DevConsoleContext[] {
   const root = json as { contexts?: unknown; blockedLabels?: unknown } | null;
   if (!root || !Array.isArray(root.contexts)) return [];
@@ -55,7 +56,7 @@ export function parseContexts(json: unknown): DevConsoleContext[] {
   return out;
 }
 
-/** Um contexto por repositório, com o próprio `owner/repo` de id e o nome do repositório. */
+/** One context per repository, with its `owner/repo` as id and the repository name as name. */
 export function contextsFromRepos(repos: readonly string[]): DevConsoleContext[] {
   return [...new Set(repos.filter((r) => REPO_NAME.test(r)).map(repoKey))]
     .slice(0, MAX_CONTEXTS)
@@ -63,13 +64,13 @@ export function contextsFromRepos(repos: readonly string[]): DevConsoleContext[]
 }
 
 export interface DevConsoleContextsOptions {
-  /** `null` desliga o arquivo (a demo e os testes). */
+  /** `null` turns the file off (the demo and the tests). */
   file?: string | null;
-  /** Contextos dados de antemão (o simulador): valem no lugar do arquivo e das sessões. */
+  /** Contexts given up front (the simulator): they replace the file and the sessions. */
   fixed?: readonly DevConsoleContext[] | null;
-  /** Os repositórios com sessão nos últimos 7 dias, para quando não há arquivo. */
+  /** The repositories with a session in the last 7 days, for when there is no file. */
   recentRepos: () => Promise<string[]>;
-  /** De quanto em quanto tempo o arquivo e as sessões são conferidos de novo. Padrão 30 s. */
+  /** How often the file and the sessions are checked again. Defaults to 30 s. */
   intervalMs?: number;
   now?: () => number;
 }
@@ -115,7 +116,7 @@ export class DevConsoleContexts {
       this.mtimeMs = mtimeMs;
       this.fromFile = parseContexts(JSON.parse(await readFile(this.file, 'utf8')));
     } catch {
-      // Sem arquivo, ou inválido: os contextos saem das sessões.
+      // No file, or an invalid one: the contexts come from the sessions.
       this.mtimeMs = -1;
       this.fromFile = [];
     }

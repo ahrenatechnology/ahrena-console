@@ -1,15 +1,15 @@
-// Porta das leituras do GitHub do Dev Console e o adaptador GraphQL dela (decisão 0008, seção 4;
-// cache e orçamento da decisão 0001). Três consultas rasas por repositório, cada uma numa chave
-// do cache:
+// The port for the Dev Console's GitHub reads and its GraphQL adapter (decision 0008, section 4;
+// cache and budget from decision 0001). Three shallow queries per repository, each in its own
+// cache key:
 //
-// | Consulta                | O que traz                                                        | Custo |
-// | ----------------------- | ----------------------------------------------------------------- | ----: |
-// | DevConsolePullRequests  | até 50 PRs abertos (rascunho, `mergeable`, base, CI, review, issues que fecham) e os mesclados desde a janela | 1 |
-// | DevConsoleIssues        | até 100 issues abertas com as etiquetas e as fechadas como concluídas desde a janela | 1 |
-// | DevConsoleBranches      | os 100 branches do remoto com o commit mais recente                | 1     |
+// | Query                   | What it brings                                                     | Cost |
+// | ----------------------- | ------------------------------------------------------------------ | ---: |
+// | DevConsolePullRequests  | up to 50 open PRs (draft, `mergeable`, base, fork, CI, review, issues they close) and those merged since the window | 1 |
+// | DevConsoleIssues        | up to 100 open issues with labels and those closed as completed since the window | 1 |
+// | DevConsoleBranches      | the 100 remote branches with the most recent commit                | 1    |
 //
-// O GraphQL não tem ETag (decisão 0001): a chave guarda `etag: null`, e o TTL faz o trabalho.
-// Cada conexão lê `pageInfo.hasNextPage`: com mais do que a página, a leitura vem `truncated`.
+// GraphQL has no ETag (decision 0001): the key stores `etag: null` and the TTL does the work.
+// Every connection reads `pageInfo.hasNextPage`: with more than one page, the read is `truncated`.
 
 import { ghCliToken, githubGraphql, type GithubGraphqlSourceOptions } from '../github/github-source.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
@@ -18,29 +18,29 @@ import type { IssueFact, Mergeable, MergedPullRequestFact, PullRequestFact } fro
 export interface RepoPullRequests {
   open: PullRequestFact[];
   merged: MergedPullRequestFact[];
-  /** O GitHub tinha mais do que a página (50 abertos ou 50 mesclados): a lista é parcial. */
+  /** GitHub had more than one page (50 open or 50 merged): the list is partial. */
   truncated?: boolean;
 }
 
 export interface RepoIssues {
   open: IssueFact[];
   closed: IssueFact[];
-  /** Mais de 100 abertas ou de 50 fechadas na janela: a lista é parcial. */
+  /** More than 100 open or 50 closed in the window: the list is partial. */
   truncated?: boolean;
 }
 
 export interface RepoBranches {
   names: string[];
-  /** Mais de 100 branches: só os 100 com o commit mais recente. */
+  /** More than 100 branches: only the 100 with the most recent commit. */
   truncated?: boolean;
 }
 
 export interface DevConsoleSource {
-  /** PRs abertos e os mesclados desde `mergedSince` (ISO). */
+  /** Open PRs and those merged since `mergedSince` (ISO). */
   pullRequests(repo: string, mergedSince: string): Promise<RepoPullRequests>;
-  /** Issues abertas e as fechadas desde `closedSince` (ISO). */
+  /** Open issues and those closed since `closedSince` (ISO). */
   issues(repo: string, closedSince: string): Promise<RepoIssues>;
-  /** Nomes dos branches no remoto. */
+  /** Names of the remote branches. */
   branches(repo: string): Promise<RepoBranches>;
 }
 
@@ -62,7 +62,7 @@ export const DEV_CONSOLE_QUERIES = {
   repository(owner: $o, name: $r) { refs(refPrefix: "refs/heads/", first: 100, orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) { ${MORE} nodes { name } } } }`,
 } as const;
 
-/** A data na sintaxe da busca do GitHub, sem milissegundos. */
+/** The date in GitHub search syntax, without milliseconds. */
 export const searchDate = (iso: string): string => new Date(iso).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 interface RawPullRequest {
@@ -156,7 +156,7 @@ export class GithubDevConsoleSource implements DevConsoleSource {
     });
     return {
       open: (data.repository?.issues.nodes ?? []).map((i) => toIssueFact(repo, i)),
-      // Um PR na busca vem como objeto vazio (`... on Issue`).
+      // A PR in the search comes back as an empty object (`... on Issue`).
       closed: data.closed.nodes.filter((i): i is RawIssue => typeof i.number === 'number').map((i) => toIssueFact(repo, i)),
       truncated: more(data.repository?.issues) || more(data.closed),
     };
@@ -173,7 +173,7 @@ export class GithubDevConsoleSource implements DevConsoleSource {
       const t = this.opts.token;
       this.tokenValue = typeof t === 'string' ? t : await t();
     }
-    // Um 401 é token vencido ou trocado: esquece o guardado, e a próxima leitura pede de novo ao `gh`.
+    // A 401 means an expired or replaced token: forget the cached one, and the next read asks `gh` again.
     const doFetch = this.opts.fetch ?? fetch;
     let unauthorized = false;
     const watching: typeof fetch = async (input, init) => {
@@ -190,7 +190,7 @@ export class GithubDevConsoleSource implements DevConsoleSource {
   }
 }
 
-/** Fonte do `--sem-github`: toda leitura falha, e o Dev Console serve o cache com `stale: true`. */
+/** The `--sem-github` source: every read fails and the Dev Console serves the cache with `stale: true`. The reason stays pt-BR: the screen shows it. */
 export const disabledDevConsoleSource = (reason = 'GitHub desligado (--sem-github)'): DevConsoleSource => {
   const fail = () => Promise.reject(new Error(reason));
   return { pullRequests: fail, issues: fail, branches: fail };

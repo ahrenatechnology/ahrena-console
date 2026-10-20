@@ -1,10 +1,11 @@
-// `GET /api/dev-console` (#177, decisão 0008 seção 4): o Dev Console, só leitura.
+// `GET /api/dev-console` (#177, decision 0008 section 4): the Dev Console, read only.
 //
-// - sem `context`: os contextos e a fila de merge de todos eles;
-// - `?context=<id>`: o placar, "depende de você", a fila e os não prontos, o quadro das issues em
-//   seis colunas e os mesclados nas últimas 24 h, com `readAt` e `stale` do GitHub.
+// - without `context`: the contexts and the merge queue of all of them;
+// - `?context=<id>`: the scoreboard, depends-on-you, the queue and the not-ready PRs, the issue
+//   board in six columns and the PRs merged in the last 24 h, with GitHub's `readAt` and `stale`.
 //
-// Só `GET`, atrás das mesmas defesas de Origin e Host das outras rotas (servidor.ts, decisão 0003).
+// `GET` only, behind the same Origin and Host defenses as the other routes (servidor.ts, decision 0003).
+// Error messages stay pt-BR, like the other routes'.
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';

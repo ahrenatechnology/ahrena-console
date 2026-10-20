@@ -1,5 +1,5 @@
-// O Dev Console montado (decisão 0008, seção 4): junta os contextos, as leituras do GitHub pelo
-// cache e as sessões, e entrega o que a tela C27 desenha. Só leitura; nada é anotado à mão.
+// The assembled Dev Console (decision 0008, section 4): joins the contexts, the cached GitHub reads
+// and the sessions, and hands over what screen C27 draws. Read only; nothing is annotated by hand.
 
 import type { DevConsoleContext, DevConsoleContexts } from './contexts.ts';
 import {
@@ -25,9 +25,9 @@ export interface ContextSummary {
 }
 
 export interface GithubFreshness {
-  /** A leitura mais velha do GitHub entre os repositórios (ISO); `null` quando nada veio. */
+  /** The oldest GitHub read across the repositories (ISO); `null` when nothing came back. */
   readAt: string | null;
-  /** `true` quando parte do que se vê é o cache, porque o GitHub falhou. */
+  /** `true` when part of what is shown is the cache, because GitHub failed. */
   stale: boolean;
   staleReason: string | null;
 }
@@ -41,14 +41,14 @@ export interface DevConsoleView extends GithubFreshness {
   notReady: NotReadyItem[];
   board: Board;
   mergedLast24h: MergedPullRequestFact[];
-  /** Por repositório do contexto: `true` quando alguma lista do GitHub veio parcial (mais do que a página). */
+  /** Per context repository: `true` when a GitHub list came back partial (more than one page). */
   truncated: Record<string, boolean>;
 }
 
 export interface DevConsoleOverview extends GithubFreshness {
   generatedAt: string;
   contexts: (ContextSummary & { ready: number; notReady: number })[];
-  /** A fila de todos os contextos juntos, cada PR uma vez. */
+  /** The queue of all contexts together, each PR once. */
   mergeQueue: QueueItem[];
 }
 
@@ -83,7 +83,7 @@ export class DevConsole {
     this.now = now;
   }
 
-  /** O Dev Console de um contexto; `null` se o contexto não existe. */
+  /** The Dev Console of one context; `null` when the context does not exist. */
   async view(contextId: string): Promise<DevConsoleView | null> {
     const context = await this.contexts.get(contextId);
     if (!context) return null;
@@ -118,7 +118,7 @@ export class DevConsole {
     };
   }
 
-  /** Os contextos e a fila de merge de todos eles; um repositório em dois contextos é lido uma vez. */
+  /** The contexts and the merge queue of all of them; a repository in two contexts is read once. */
   async overview(): Promise<DevConsoleOverview> {
     const contexts = await this.contexts.list();
     const repos = [...new Set(contexts.flatMap((c) => c.repos))];

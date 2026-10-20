@@ -1,9 +1,10 @@
-// O Dev Console do simulador (#177): um contexto sintético de dois repositórios inventados, com
-// os PRs, as issues e os branches do wireframe C27, num GitHub falso. Nenhum dado real.
+// The simulator's Dev Console (#177): a synthetic context of two made-up repositories, with the
+// PRs, issues and branches of wireframe C27, on a fake GitHub. No real data. Titles stay pt-BR:
+// the screen shows them.
 //
-// As sessões do cenário da demo caem nos repositórios pela pasta (`git` falso): a de
-// `motor-de-regras` no branch do #58 (no remoto), a de `vitrine-demo` no do #61 (no remoto) e a
-// de `ahrena-demo` no do #68, ainda sem push, que deixa a issue em "Delegada".
+// The demo scenario's sessions land in the repositories by folder (fake `git`): `motor-de-regras`
+// on #58's branch (on the remote), `vitrine-demo` on #61's (on the remote) and `ahrena-demo` on
+// #68's, not pushed yet, which puts that issue in `delegated`.
 
 import { basename } from 'node:path';
 import type { Git } from '../api/trabalho.ts';
@@ -18,14 +19,14 @@ export const DEV_CONSOLE_SIMULATOR_CONTEXTS: DevConsoleContext[] = [
   { id: 'loja', name: 'Loja', repos: [DEV_CONSOLE_SIMULATOR_CATALOG, DEV_CONSOLE_SIMULATOR_RULES], blockedLabels: ['blocked'], source: 'file' },
 ];
 
-/** Pasta da sessão da demo → repositório e branch. */
+/** Demo session folder → repository and branch. */
 const FOLDERS: Record<string, { repo: string; branch: string }> = {
   'motor-de-regras': { repo: DEV_CONSOLE_SIMULATOR_RULES, branch: 'feat/58-esquema-pedidos' },
   'vitrine-demo': { repo: DEV_CONSOLE_SIMULATOR_CATALOG, branch: 'feat/61-pagamentos' },
   'ahrena-demo': { repo: DEV_CONSOLE_SIMULATOR_CATALOG, branch: 'feat/68-cupom' },
 };
 
-/** `git` falso das sessões da demo: o remote e o branch pela pasta. */
+/** Fake `git` for the demo sessions: the remote and the branch by folder. */
 export const devConsoleSimulatorGit: Git = async (cwd, args) => {
   const f = FOLDERS[basename(cwd)];
   if (!f) return null;
@@ -37,7 +38,7 @@ export const devConsoleSimulatorGit: Git = async (cwd, args) => {
 const url = (repo: string, kind: 'pull' | 'issues', n: number) => `https://github.com/${repo}/${kind}/${n}`;
 
 export class SimulatedDevConsoleSource implements DevConsoleSource {
-  /** Liga para simular o GitHub fora do ar: as leituras falham e o cache responde. */
+  /** Turn on to simulate GitHub being down: reads fail and the cache answers. */
   offline = false;
   readonly calls: string[] = [];
   private readonly now: () => number;

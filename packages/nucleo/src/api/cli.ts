@@ -319,7 +319,7 @@ const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
-// O Dev Console (#177): o contexto sintético e o GitHub falso na --demo; senão o GitHub pelo cache da 0001.
+// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
   storage,
   frota: mcp.frota,

@@ -1,5 +1,5 @@
-// Os contextos do Dev Console (#177/AC-1): do `dev-console.json`, com o caminho injetado, e sem
-// arquivo um por repositório com sessão nos últimos 7 dias. Arquivos numa pasta temporária.
+// The Dev Console contexts (#177/AC-1): from `dev-console.json`, with the path injected, and with
+// no file one per repository with a session in the last 7 days. Files in a temporary folder.
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,16 +20,16 @@ const write = (name: string, json: unknown) => {
   return file;
 };
 
-describe('contextos do arquivo', () => {
-  test('#177/AC-1 lê os contextos de dev-console.json, no caminho injetado', async () => {
+describe('contexts from the file', () => {
+  test('#177/AC-1 reads the contexts from dev-console.json at the injected path', async () => {
     const file = write('ok.json', { contexts: [{ id: 'loja', name: 'Loja', repos: [REPO, OTHER_REPO] }] });
-    const contexts = new DevConsoleContexts({ file, recentRepos: async () => assert.fail('com arquivo, as sessões não contam') });
+    const contexts = new DevConsoleContexts({ file, recentRepos: async () => assert.fail('with a file, the sessions do not count') });
     assert.deepEqual(await contexts.list(), [{ id: 'loja', name: 'Loja', repos: [REPO, OTHER_REPO], blockedLabels: ['blocked', 'bloqueada'], source: 'file' }]);
     assert.equal((await contexts.get('loja'))?.name, 'Loja');
     assert.equal(await contexts.get('outro'), null);
   });
 
-  test('#177/AC-1 contexto inválido fica de fora sem derrubar os outros; etiqueta de bloqueio configurável', () => {
+  test('#177/AC-1 an invalid context is left out without dropping the others; configurable blocked label', () => {
     const parsed = parseContexts({
       blockedLabels: ['bloqueada'],
       contexts: [
@@ -51,27 +51,27 @@ describe('contextos do arquivo', () => {
     assert.deepEqual(parseContexts({ contexts: 'x' }), []);
   });
 
-  test('#177/AC-1 owner/repo em qualquer caixa vira uma chave só, em minúsculas', () => {
+  test('#177/AC-1 owner/repo in any case becomes a single lower-case key', () => {
     const [c] = parseContexts({ contexts: [{ id: 'loja', repos: ['Dev-Sintetico/Catalogo-Exemplo', REPO] }] });
     assert.deepEqual(c.repos, [REPO]);
     assert.deepEqual(contextsFromRepos(['DEV-SINTETICO/catalogo-exemplo', REPO]).map((x) => x.id), [REPO]);
   });
 
-  test('#177/AC-1 relê o arquivo quando ele muda', async () => {
+  test('#177/AC-1 re-reads the file when it changes', async () => {
     let t = NOW;
     const file = write('muda.json', { contexts: [{ id: 'um', repos: [REPO] }] });
     const contexts = new DevConsoleContexts({ file, recentRepos: async () => [], intervalMs: 1000, now: () => t });
     assert.deepEqual((await contexts.list()).map((c) => c.id), ['um']);
     writeFileSync(file, JSON.stringify({ contexts: [{ id: 'dois', repos: [REPO] }] }));
     utimesSync(file, new Date(NOW + 5000), new Date(NOW + 5000));
-    assert.deepEqual((await contexts.list()).map((c) => c.id), ['um'], 'dentro do intervalo, não relê');
+    assert.deepEqual((await contexts.list()).map((c) => c.id), ['um'], 'within the interval it does not re-read');
     t += 1000;
     assert.deepEqual((await contexts.list()).map((c) => c.id), ['dois']);
   });
 });
 
-describe('contextos sem arquivo', () => {
-  test('#177/AC-1 sem arquivo, um contexto por repositório que teve sessão nos últimos 7 dias', async () => {
+describe('contexts without a file', () => {
+  test('#177/AC-1 with no file, one context per repository that had a session in the last 7 days', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     try {
       await storage.putSession(session({ id: 'a', cwd: '/w/catalogo', updatedAt: hoursAgo(2) }));
@@ -88,20 +88,20 @@ describe('contextos sem arquivo', () => {
       const contexts = new DevConsoleContexts({ file: join(dir, 'nao-existe.json'), recentRepos: () => recentRepos(storage, where, { now: NOW }) });
       assert.deepEqual(await contexts.list(), contextsFromRepos([REPO, OTHER_REPO]));
       assert.deepEqual((await contexts.list())[0], { id: REPO, name: 'catalogo-exemplo', repos: [REPO], blockedLabels: ['blocked', 'bloqueada'], source: 'sessions' });
-      // Cada pasta uma vez; a de 8 dias atrás nem é lida.
+      // Each folder once; the one from 8 days ago is not even read.
       assert.deepEqual(seen.sort(), ['/w/catalogo', '/w/motor', '/w/sem-remote']);
     } finally {
       await storage.close();
     }
   });
 
-  test('#177/AC-1 arquivo inválido cai nas sessões', async () => {
+  test('#177/AC-1 an invalid file falls back to the sessions', async () => {
     const file = write('quebrado.json', '{ isto não é json');
     const contexts = new DevConsoleContexts({ file, recentRepos: async () => [REPO] });
     assert.deepEqual((await contexts.list()).map((c) => [c.id, c.source]), [[REPO, 'sessions']]);
   });
 
-  test('#177/AC-6 contextos dados de antemão (o simulador) valem no lugar do arquivo', async () => {
+  test('#177/AC-6 contexts given up front (the simulator) replace the file', async () => {
     const fixed = contextsFromRepos([OTHER_REPO]);
     const contexts = new DevConsoleContexts({ file: write('ignorado.json', { contexts: [{ id: 'x', repos: [REPO] }] }), fixed, recentRepos: async () => [] });
     assert.deepEqual(await contexts.list(), fixed);
