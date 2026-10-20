@@ -88,7 +88,8 @@ function cardDe(c: ProjectCard, raia: BoardLane): CardDoProjeto {
     estado: c.state,
     marco: c.milestone ?? null,
     subIssues: c.subIssues ? { feitas: c.subIssues.completed, total: c.subIssues.total } : null,
-    pr: p ? { numero: p.number, url: p.url, ci: ciDoPr(p), review: reviewDoPr(p) } : null,
+    // PR em rascunho ainda não espera review: sem a pílula, como no C11 (In Progress).
+    pr: p ? { numero: p.number, url: p.url, ci: ciDoPr(p), review: p.isDraft ? null : reviewDoPr(p) } : null,
     // A raia onde o card aparece: um Status que sumiu do campo cai em "Sem status" (id null).
     raiaId: raia.id,
   };

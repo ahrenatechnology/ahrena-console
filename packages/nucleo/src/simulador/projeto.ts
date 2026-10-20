@@ -28,7 +28,7 @@ interface CardDoC11 {
   titulo: string;
   marco: string;
   sub?: [number, number];
-  pr?: { numero: number; ci: CiState; review?: ReviewDecision; mergeado?: boolean };
+  pr?: { numero: number; ci: CiState; review?: ReviewDecision; mergeado?: boolean; rascunho?: boolean };
 }
 
 const CARDS: CardDoC11[] = [
@@ -37,8 +37,8 @@ const CARDS: CardDoC11[] = [
   { raia: 'Backlog', tipo: 'Tech Task', numero: 89, titulo: 'Abrir no login com SMAppService', marco: M2 },
   { raia: 'Ready', tipo: 'Story', numero: 35, titulo: 'Esta sessão: estado, contexto e custo', marco: M1 },
   { raia: 'Ready', tipo: 'Story', numero: 36, titulo: 'Subagentes, plano e sessões filhas', marco: M1 },
-  { raia: 'In Progress', tipo: 'Story', numero: 42, titulo: 'Kanban de sessões', marco: M1, sub: [2, 4], pr: { numero: 78, ci: 'PENDING' } },
-  { raia: 'In Progress', tipo: 'Tech Task', numero: 81, titulo: 'Consumo baixo do painel', marco: M1, sub: [1, 2], pr: { numero: 85, ci: 'SUCCESS' } },
+  { raia: 'In Progress', tipo: 'Story', numero: 42, titulo: 'Kanban de sessões', marco: M1, sub: [2, 4], pr: { numero: 78, ci: 'PENDING', rascunho: true } },
+  { raia: 'In Progress', tipo: 'Tech Task', numero: 81, titulo: 'Consumo baixo do painel', marco: M1, sub: [1, 2], pr: { numero: 85, ci: 'SUCCESS', rascunho: true } },
   { raia: 'In Review', tipo: 'Tech Task', numero: 92, titulo: 'Wireframes do painel e da bandeja', marco: M2, pr: { numero: 93, ci: 'SUCCESS', review: 'REVIEW_REQUIRED' } },
   { raia: 'In Review', tipo: 'Bug', numero: 64, titulo: 'Paleta: cor de erro', marco: M1, pr: { numero: 69, ci: 'FAILURE', review: 'CHANGES_REQUESTED' } },
   { raia: 'Done', tipo: 'Spike', numero: 40, titulo: 'Spike: consulta ao GitHub', marco: M1, pr: { numero: 67, ci: 'SUCCESS', review: 'APPROVED', mergeado: true } },
@@ -66,7 +66,7 @@ function card(c: CardDoC11, agora: number, i: number): ProjectCard {
     milestone: c.marco,
     subIssues: c.sub ? { completed: c.sub[0], total: c.sub[1] } : null,
     pullRequest: c.pr
-      ? { number: c.pr.numero, url: `${url}/pull/${c.pr.numero}`, state: c.pr.mergeado ? 'MERGED' : 'OPEN', isDraft: false, review: c.pr.review ?? null, ci: c.pr.ci, checks: null }
+      ? { number: c.pr.numero, url: `${url}/pull/${c.pr.numero}`, state: c.pr.mergeado ? 'MERGED' : 'OPEN', isDraft: c.pr.rascunho ?? false, review: c.pr.review ?? null, ci: c.pr.ci, checks: null }
       : null,
   };
 }

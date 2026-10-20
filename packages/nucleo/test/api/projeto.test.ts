@@ -171,7 +171,7 @@ describe('GET /api/projeto', () => {
       assert.deepEqual(Object.keys(card).sort(), ['estado', 'itemId', 'marco', 'numero', 'pr', 'raiaId', 'repo', 'subIssues', 'tipo', 'tipoDaIssue', 'titulo', 'url'].sort());
       assert.deepEqual([card.tipo, card.tipoDaIssue, card.titulo, card.subIssues, card.pr?.numero, card.pr?.ci, card.raiaId], ['Issue', 'Story', 'Kanban de sessões', { feitas: 2, total: 4 }, 78, 'rodando', q.raias[2].id]);
       const pills = q.raias.flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.numero, c.pr!.ci, c.pr!.review]);
-      assert.deepEqual(pills, [[42, 'rodando', 'pendente'], [81, 'ok', 'pendente'], [92, 'ok', 'pendente'], [64, 'falhou', 'ajustes'], [40, 'ok', 'aprovado'], [82, 'ok', 'aprovado']]);
+      assert.deepEqual(pills, [[42, 'rodando', null], [81, 'ok', null], [92, 'ok', 'pendente'], [64, 'falhou', 'ajustes'], [40, 'ok', 'aprovado'], [82, 'ok', 'aprovado']]);
       assert.deepEqual([...new Set(q.raias.flatMap((l) => l.cards.map((c) => c.tipoDaIssue)))].sort(), ['Bug', 'Spike', 'Story', 'Tech Task']);
     } finally {
       await s.fechar();
