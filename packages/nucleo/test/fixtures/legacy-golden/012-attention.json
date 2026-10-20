@@ -26,7 +26,8 @@
         "motivoLongo": "pede permissão para usar Bash",
         "desde": "2026-10-20T14:58:00.000Z",
         "minutos": 2,
-        "local": null
+        "local": null,
+        "machine": null
       },
       {
         "sessao": "sim-historico-relatorio-mensal",
@@ -39,7 +40,8 @@
         "motivoLongo": "parou num erro",
         "desde": "2026-10-18T15:00:00.000Z",
         "minutos": 2880,
-        "local": null
+        "local": null,
+        "machine": null
       },
       {
         "sessao": "sim-wf-cache",
@@ -55,7 +57,8 @@
         "motivoLongo": "parou num erro",
         "desde": "2026-10-20T13:51:00.000Z",
         "minutos": 69,
-        "local": null
+        "local": null,
+        "machine": null
       },
       {
         "sessao": "sim-painel-fila-de-tarefas",
@@ -71,7 +74,8 @@
         "motivoLongo": "terminou o turno, sua vez",
         "desde": "2026-10-20T14:59:00.000Z",
         "minutos": 1,
-        "local": null
+        "local": null,
+        "machine": null
       }
     ]
   }

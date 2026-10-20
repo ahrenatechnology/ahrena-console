@@ -14,7 +14,7 @@ import { hash32 } from './aleatorio.ts';
 export type SimulatedProfile = 'local' | 'workstation';
 
 /** The synthetic remote machine, with the `id` that `machines.json` would give it (#176). */
-export const SIMULATED_WORKSTATION = { id: 'workstation', label: 'Workstation' } as const;
+export const SIMULATED_WORKSTATION = { id: 'workstation', label: 'Workstation', port: 14720 } as const;
 
 const GB = 1e9;
 const GiB = 1024 ** 3;

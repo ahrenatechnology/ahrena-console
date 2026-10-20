@@ -1,8 +1,9 @@
 // What the routes return (#175): the list of machines and the telemetry of one of them.
 //
-// Today only `local` (this machine) is really measured. The shape is already #176's: each machine
-// comes from a `MachineEntry` with its own `state()`; a remote machine will come in with the state
-// of the tunnel and of its núcleo, and its samples in the same `TelemetryStore`, under its id.
+// Each machine comes from a `MachineEntry` with its own `state()`: `local` (this machine), the
+// simulator's workstation in `--demo`, and each remote machine of `machines.json` (#176, remote.ts),
+// whose samples are in the same `TelemetryStore`, under its id. The telemetry of a remote that is
+// down is still served: its newest stored reading, with its age in `lastReadAt`.
 
 import type { AlertTracker } from './alerts.ts';
 import {
@@ -13,16 +14,28 @@ import {
   type MachineSummary,
   type TelemetryReading,
   type TelemetrySeries,
+  type UnreachableReason,
   type WindowHours,
 } from './model.ts';
 import type { TelemetryStore } from './ports.ts';
 import { buildSeries } from './series.ts';
+
+/** A machine's state with what explains it (#176). */
+export interface MachineStatus {
+  state: MachineState;
+  reason: UnreachableReason | null;
+  version: number | null;
+}
 
 export interface MachineEntry {
   id: string;
   /** The name in the sidebar and the tray. */
   label: string;
   state(): MachineState;
+  /** The reason and version behind `state()`; without it, no reason and this núcleo's version. */
+  status?(): MachineStatus;
+  /** The local port the tunnel forwards, for a remote machine. */
+  port?: number;
 }
 
 /** This machine: the núcleo answering is its own, so it is always connected. */
@@ -58,7 +71,17 @@ export class TelemetryService {
 
   private async summary(m: MachineEntry, latest?: TelemetryReading | null): Promise<MachineSummary> {
     const r = latest === undefined ? await this.o.store.latest(m.id) : latest;
-    return { id: m.id, label: m.label, state: m.state(), lastReadAt: r?.takenAt ?? null, alerts: this.o.tracker.active(m.id).length };
+    const s = m.status?.() ?? { state: m.state(), reason: null, version: TELEMETRY_VERSION };
+    return {
+      id: m.id,
+      label: m.label,
+      state: s.state,
+      reason: s.reason,
+      version: s.version,
+      port: m.port ?? null,
+      lastReadAt: r?.takenAt ?? null,
+      alerts: this.o.tracker.active(m.id).length,
+    };
   }
 
   /** This machine first, then the remote ones in configuration order. */

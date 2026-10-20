@@ -5,8 +5,10 @@
 //   the `node:os` facts and the port probe, so tests never call the system.
 // - `TelemetryStore`: keeps the samples (adapters/sqlite.ts), with the same rules as the storage
 //   port (everything async, whole-record writes, queries by access pattern).
+// - `RemoteGet` (#176): one `GET` to a remote núcleo through the local port the user's tunnel
+//   forwards (adapters/loopback-http.ts); tests point it at a fake núcleo on loopback.
 
-import type { SamplePoint, TelemetryReading } from './model.ts';
+import type { SamplePoint, TelemetryReading, UnreachableReason } from './model.ts';
 
 export interface TelemetryCollector {
   /** A reading now. Never rejects because a command is missing: that group comes out `null`. */
@@ -24,6 +26,15 @@ export interface TelemetryStore {
   /** The machine's newest reading; `null` when there is none. */
   latest(machineId: string): Promise<TelemetryReading | null>;
 }
+
+/**
+ * What a `GET` to a remote núcleo gave: an HTTP answer (`body` is the parsed JSON, `undefined` when
+ * the body was not JSON), or why there was none.
+ */
+export type RemoteGetResult = { kind: 'response'; status: number; body: unknown } | { kind: 'unreachable'; reason: UnreachableReason };
+
+/** `GET http://127.0.0.1:<port><path>`. Never rejects: a failure is an `unreachable` result. */
+export type RemoteGet = (port: number, path: string) => Promise<RemoteGetResult>;
 
 // ---------------------------------------------------------------------------------------------
 // What the collectors receive from outside

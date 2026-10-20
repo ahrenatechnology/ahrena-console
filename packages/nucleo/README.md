@@ -60,10 +60,10 @@ As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>
 | `GET /api/changes?since=<cursor>&wait=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
 | `GET /api/history?before=<AAAA-MM-DD>&days=<N>&search=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?before=` na próxima página. `days` padrão 7, máximo 31; `search` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
-| `GET /api/machines` | As máquinas (#175): `[{ id, label, state, lastReadAt, alerts }]`, esta máquina (`local`) primeiro. `state` é `connected`, `unreachable`, `not-configured` ou `incompatible-version` (as remotas são a #176). Seção [Telemetria](#telemetria-das-máquinas) |
+| `GET /api/machines` | As máquinas (#175, #176): `[{ id, label, state, reason, version, port, lastReadAt, alerts }]`, esta máquina (`local`) primeiro, depois as remotas do `machines.json`. `state` é `connected`, `unreachable` (com `reason` `port-closed` ou `no-response`) ou `incompatible-version`. Seção [Telemetria](#telemetria-das-máquinas) |
 | `GET /api/telemetry?machine=<id>&hours=1\|12` | A telemetria de uma máquina (#175): `{ version, machine, hours, current, series, alerts }`. `machine` padrão `local`, `hours` padrão 1; inválido dá 400, máquina que não existe 404 |
 | `GET /api/kanban?view=sessions\|agents&column=<id>&page=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `column`, todas na página 1; com ela, só aquela, na `page` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
-| `GET /api/dev-console?context=<id>` | O Dev Console (#177, decisão 0008 seção 4), derivado do GitHub (cache da 0001) e das sessões: placar, "depende de você" (as sessões que pedem permissão, perguntam, esperam um plano ou uma decisão, pararam num erro ou foram interrompidas, com a frase do `/api/atencao`, e as decisões sugeridas sem resposta), fila de merge e não prontos com o motivo (`reason`, o de maior prioridade, e `reasons`, todos, nesta ordem: `draft`, `conflict`, `checking`, `ci-failing`, `changes-requested`, `behind`, `ci-running`, `no-ci`, `stacked`; `checking` é `mergeable` ainda `UNKNOWN`, relido no TTL dos PRs), quadro das issues em seis colunas (`todo`, `delegated`, `in-progress`, `in-review`, `blocked` pelas etiquetas `blocked` ou `bloqueada`, configuráveis, e `done`, fechada como concluída em 24 h) e mesclados nas últimas 24 h, com `readAt`, `stale` e `truncated` por repositório (lista do GitHub maior que a página). Sem `context`, os contextos e a fila de todos. Contextos em `~/.ahrena-console/dev-console.json` (`owner/repo` sem diferença de caixa); sem ele, um por repositório com sessão nos últimos 7 dias ([src/dev-console/](src/dev-console/index.ts)) |
+| `GET /api/dev-console?context=<id>` | O Dev Console (#177, decisão 0008 seção 4), derivado do GitHub (cache da 0001) e das sessões: placar, "depende de você" (as sessões que pedem permissão, perguntam, esperam um plano ou uma decisão, pararam num erro ou foram interrompidas, com a frase do `/api/atencao`, e as decisões sugeridas sem resposta), fila de merge e não prontos com o motivo (`reason`, o de maior prioridade, e `reasons`, todos, nesta ordem: `draft`, `conflict`, `checking`, `ci-failing`, `changes-requested`, `behind`, `ci-running`, `no-ci`, `stacked`; `checking` é `mergeable` ainda `UNKNOWN`, relido no TTL dos PRs), quadro das issues em seis colunas (`todo`, `delegated`, `in-progress`, `in-review`, `blocked` pelas etiquetas `blocked` ou `bloqueada`, configuráveis, e `done`, fechada como concluída em 24 h) e mesclados nas últimas 24 h, e `decisionsToday` (as decisões vigentes tomadas hoje nas sessões do contexto, vivas ou encerradas hoje, #179), com `readAt`, `stale` e `truncated` por repositório (lista do GitHub maior que a página). Sem `context`, os contextos e a fila de todos. Contextos em `~/.ahrena-console/dev-console.json` (`owner/repo` sem diferença de caixa); sem ele, um por repositório com sessão nos últimos 7 dias ([src/dev-console/](src/dev-console/index.ts)) |
 | `GET /api/agent-config?project=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
 | `GET /api/agent-config/skill?root=<id>&name=<nome>` | O `SKILL.md` de uma skill, com a `version` |
 | `POST /api/agent-config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `create: true`, só cria (409 se já existe) |
@@ -334,7 +334,7 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 
 ## Telemetria das máquinas
 
-#175, [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). O núcleo mede a própria máquina a cada 30 s enquanto está de pé e guarda 12 h no SQLite. É a base das telas "Esta máquina" e "Workstation" (C24 e C25) e do bloco Máquinas da bandeja (A6); a leitura da máquina remota pelo túnel é a #176. Código, rotas e chaves de JSON em inglês; o texto dos alertas, que a tela mostra, em pt-BR.
+#175, [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). O núcleo mede a própria máquina a cada 30 s enquanto está de pé e guarda 12 h no SQLite. É a base das telas "Esta máquina" e "Workstation" (C24 e C25) e do bloco Máquinas da bandeja (A6); a leitura da máquina remota pelo túnel é a #176 ([Máquinas remotas](#máquinas-remotas), abaixo). Código, rotas e chaves de JSON em inglês; o texto dos alertas, que a tela mostra, em pt-BR.
 
 | Arquivo | O quê |
 | --- | --- |
@@ -346,6 +346,9 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 | [adapters/darwin.ts](src/telemetry/adapters/darwin.ts), [adapters/linux.ts](src/telemetry/adapters/linux.ts) | Os coletores, um por plataforma, com a base comum em [adapters/common.ts](src/telemetry/adapters/common.ts) |
 | [adapters/sqlite.ts](src/telemetry/adapters/sqlite.ts) | As amostras na tabela `telemetry_samples` (migração 9, [migration.ts](src/telemetry/migration.ts)) |
 | [adapters/system.ts](src/telemetry/adapters/system.ts) | O executor de comandos, a sonda de porta e o `collectorFor(plataforma)` do núcleo no ar |
+| [machines-config.ts](src/telemetry/machines-config.ts) | O `~/.ahrena-console/machines.json` das máquinas remotas (#176) |
+| [remote.ts](src/telemetry/remote.ts) | A `RemoteMachine`: lê o núcleo de lá a cada 30 s, guarda a última leitura, o estado, os alertas e as sessões que precisam de você (#176) |
+| [adapters/loopback-http.ts](src/telemetry/adapters/loopback-http.ts) | O `GET` em `127.0.0.1:<porta>` com `Host: 127.0.0.1:4720` e 3 s de prazo (#176) |
 
 **De onde vem cada número.** Tudo é leitura, sem `sudo` e sem dependência nova: o `node:os` e os comandos que já vêm no sistema.
 
@@ -367,6 +370,22 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 - **Túnel.** A sonda conecta em `127.0.0.1:<porta>` e não escreve nada: a conexão que fica aberta 1 s é `up` (o outro lado responde), a que fecha antes é `idle` (o `ssh` aceitou e lá não há ninguém), a recusada é `down`; outro processo escutando a porta é `busy`.
 - **No ar.** O `cli.ts` liga o amostrador na subida e o para no desligamento; sem coletor para a plataforma, ou com `--no-telemetry`, as duas rotas dão 404. Na `--demo`, as leituras são do simulador ([src/simulador/telemetry.ts](src/simulador/telemetry.ts)): esta máquina (`mac-exemplo`) e a máquina remota sintética `workstation` (`ws-exemplo`), com 12 h já semeadas e os alertas dos wireframes; a carga da workstation passa dos núcleos por uns 15 min a cada 40, então o alerta entra e sai sozinho.
 - **Testes.** Os coletores rodam sobre saídas escritas à mão em [test/fixtures/telemetry](test/fixtures/telemetry/) (Mac e Linux), nunca sobre o sistema.
+
+### Máquinas remotas
+
+#176, seções 2 e 3 da [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). A máquina remota roda o próprio núcleo; o deste Mac o lê pela porta que o **seu** túnel já encaminha. O núcleo não abre SSH, não guarda chave, não conhece o host e não sobe nem derruba túnel.
+
+```json
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720 } ] }
+```
+
+- **Configuração.** `~/.ahrena-console/machines.json` (ou `--machines <arquivo>`), lido ao subir. `port` é a porta deste Mac encaminhada para a `4720` de lá (`LocalForward 14720 127.0.0.1:4720`). Sem arquivo, só esta máquina; arquivo inválido (qualquer entrada errada, `id` repetido ou `local`) vai para o log e também fica só esta máquina. A `--demo` não lê o arquivo: a workstation dela continua sintética.
+- **Leitura.** A cada 30 s, e uma vez na subida: `GET http://127.0.0.1:<port>/api/telemetry` e, se respondeu, `GET /api/attention`, com `Host: 127.0.0.1:4720` (a defesa da [0003](../../docs/decisoes/0003-responder-sessao.md) recusa outro Host) e 3 s de prazo. Só `GET`: nada deste Mac escreve na remota.
+- **Estado.** `connected`; `unreachable` com `reason` `port-closed` (a porta recusa: o túnel caiu) ou `no-response` (aceita e não responde HTTP em 3 s, fecha na hora ou responde um erro HTTP que não seja 404); `incompatible-version` quando o `version` da telemetria de lá é outro, falta, ou lá não há a rota (404). Antes da primeira leitura, `unreachable` sem `reason`. `not-configured` não aparece: sem arquivo não há remota para mostrar.
+- **Última leitura.** Vai para `telemetry_samples` com o `id` da remota, só com os campos da leitura, até 256 kB e com o `takenAt` da hora em que este Mac leu (o relógio de lá não decide a poda); `/api/telemetry?machine=<id>` a devolve, com `lastReadAt`, também com a remota fora do ar.
+- **Alertas.** Os que o núcleo de lá calculou, mais `machine-unreachable` ("Workstation sem conexão", com o `label`) enquanto não dá para ler. A queda e a volta saem em `/api/changes` como `alert`, chave `<id>:machine-unreachable`.
+- **Sessões.** As que precisam de você lá entram em `/api/attention` com `machine: { id, label }` e `local: null` (sem "Abrir no Claude Desktop"); as daqui têm `machine: null`. Uma que entra ou sai da lista lá vira `precisa-de-voce` em `/api/changes`, chave `<id>:<sessão>`.
+- **Testes.** Um núcleo remoto FALSO em loopback, numa porta livre ([test/telemetry/fake-remote.ts](test/telemetry/fake-remote.ts)): nenhuma rede externa.
 
 ## Testes
 
