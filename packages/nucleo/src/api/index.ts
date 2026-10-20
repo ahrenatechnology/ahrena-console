@@ -7,3 +7,4 @@ export { MontadorDoPainel, atividadeDe, LIMITE_PADRAO_DE_CONTEXTO, type OpcoesDo
 export { ResumosDeSessao, aplicarEvento, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './resumo.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './trabalho.ts';
 export { iniciarApiLocal, VERSAO_DA_API, type ApiLocal, type OpcoesDaApi } from './servidor.ts';
+export { ListaDeSessoes, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessoes.ts';
