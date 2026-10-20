@@ -11,7 +11,7 @@
 // - Deleting a skill is out of scope (owner's decision): there is no button.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 // ---------- Pure functions (tested in test/api/ui.test.ts) ----------
 

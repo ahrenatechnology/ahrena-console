@@ -10,8 +10,8 @@
 // Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
 
 import { el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro } from '../estados.js';
-import { duracao, nomeDoModelo, num } from './workflow-formato.js';
+import { carregando, erro, faixaDeErro } from '../states.js';
+import { duracao, nomeDoModelo, num } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const RELER_ATIVO_MS = 10_000;
@@ -160,7 +160,7 @@ const curto = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
 function carregarCss() {
   if (document.querySelector('link[data-tela="detalhe-workflow"]')) return;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/telas/detalhe-workflow.css', 'data-tela': 'detalhe-workflow' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail-workflow.css', 'data-tela': 'detalhe-workflow' }));
 }
 
 // As medidas do C7 (6 colunas em ~980 px): o SVG encolhe para caber no painel, o texto junto.

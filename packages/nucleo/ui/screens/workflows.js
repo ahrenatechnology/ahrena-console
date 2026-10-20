@@ -9,8 +9,8 @@
 // Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
-import { decimal, duracao, nomeDoModelo, num, porcento, quando, tokens } from './workflow-formato.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { decimal, duracao, nomeDoModelo, num, porcento, quando, tokens } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const RELER_ATIVO_MS = 10_000;
@@ -145,7 +145,7 @@ function svg(tag, atributos = {}, ...filhos) {
 
 function carregarCss() {
   if (document.querySelector('link[data-tela="workflows"]')) return;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/telas/workflows.css', 'data-tela': 'workflows' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-tela': 'workflows' }));
 }
 
 function selo(texto, cor) {
@@ -179,7 +179,7 @@ function chip(texto, extra = '') {
 
 function linhaDoRun(run, aberto, alternar, ctx) {
   const [rotulo, cor] = ESTADO_DO_RUN[run.estado] ?? ESTADO_DO_RUN.concluida;
-  const destino = `/ui/sessoes/${encodeURIComponent(run.sessaoId)}`;
+  const destino = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
   const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icone('externo'));
   // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
   link.addEventListener('click', (ev) => {

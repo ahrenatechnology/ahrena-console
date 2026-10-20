@@ -4,11 +4,11 @@
 // - Os filtros ficam montados entre as releituras: só a lista e os cards são redesenhados, e a busca
 //   não perde o foco enquanto a pessoa digita.
 // - `carregando` do núcleo (o GitHub ainda não respondeu): relê a cada 5 s, além da mudança
-//   `repos`/`lista` do Ao vivo. O que a tela desenha sai de `estadoDaTela` (repos-formato.js).
+//   `repos`/`lista` do Ao vivo. O que a tela desenha sai de `estadoDaTela` (repos-format.js).
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
-import { estadoDaTela, filtrarRepos, inteiro, mudancaInteressa, ORDENACOES, porcentagem, relativo, SEM_GITHUB, sparkline, temLista, TRACO, VISIBILIDADES } from '../repos-formato.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { estadoDaTela, filtrarRepos, inteiro, mudancaInteressa, ORDENACOES, porcentagem, relativo, SEM_GITHUB, sparkline, temLista, TRACO, VISIBILIDADES } from '../repos-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const RELER_MS = 5000;

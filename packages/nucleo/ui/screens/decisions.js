@@ -1,10 +1,10 @@
 // A página Decisões (C21, issue 103): todas as decisões, agrupadas por branch, família ou sessão, com
 // busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma. Lê `GET /api/decisions`
-// (src/api/decisoes-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (ler.js).
+// (src/api/decisoes-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (api.js).
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
-import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisoes-comum.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisions-common.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);

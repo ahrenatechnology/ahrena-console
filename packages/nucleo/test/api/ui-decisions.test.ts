@@ -1,4 +1,4 @@
-// As Decisões na /ui (issue 103), do lado do navegador: o transporte das escritas (ler.js), os rótulos do
+// As Decisões na /ui (issue 103), do lado do navegador: o transporte das escritas (api.js), os rótulos do
 // card e as rotas que a página (C21) e a aba (C20) leem. O DOM fica para o navegador; aqui vão as
 // funções puras e as travas.
 import assert from 'node:assert/strict';
@@ -8,15 +8,15 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { ErroDeLeitura, escritorHttp } from '../../ui/ler.js';
+import { ErroDeLeitura, escritorHttp } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo } from '../../ui/telas/decisoes-comum.js';
+import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo } from '../../ui/screens/decisions-common.js';
 // @ts-expect-error: idem
-import { resumoDoGrupo, rotaDasDecisoes } from '../../ui/telas/decisoes.js';
+import { resumoDoGrupo, rotaDasDecisoes } from '../../ui/screens/decisions.js';
 // @ts-expect-error: idem
-import { criar, partesDaChamada, rotaDaAba } from '../../ui/telas/detalhe-decisoes.js';
+import { criar, partesDaChamada, rotaDaAba } from '../../ui/screens/session-detail-decisions.js';
 // @ts-expect-error: idem
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { findScreen, SCREENS } from '../../ui/screens.js';
 
 interface Pedido {
   url: string;
@@ -32,7 +32,7 @@ function fetchFalso(status = 200, corpo: unknown = { ok: true }) {
   return { f, pedidos };
 }
 
-describe('escrever (ler.js)', () => {
+describe('escrever (api.js)', () => {
   test('POST em JSON na própria origem, sem credenciais', async () => {
     const { f, pedidos } = fetchFalso(200, { decisao: { id: 'd1' } });
     const escrever = escritorHttp({ base: 'http://127.0.0.1:4791', fetch: f });
@@ -52,7 +52,7 @@ describe('escrever (ler.js)', () => {
     assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
     const { f, pedidos } = fetchFalso();
     const escrever = escritorHttp({ base: 'http://localhost:4791', fetch: f });
-    for (const rota of ['/api/decisoes/../../hooks', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisoes', '/abrir/x']) {
+    for (const rota of ['/api/decisoes/../../hooks', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisions', '/abrir/x']) {
       await assert.rejects(escrever(rota, { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura, rota);
     }
     assert.equal(pedidos.length, 0, 'nada saiu');
@@ -95,8 +95,8 @@ describe('o card de uma decisão', () => {
   });
 
   test('Ver na conversa só com rota da própria interface', () => {
-    assert.equal(linkDaConversa({ conversa: '/ui/sessoes/sess-1' }), '/ui/sessoes/sess-1');
-    for (const conversa of ['https://exemplo.com/ui/sessoes/x', 'javascript:alert(1)', '/ui/sessoes/x/../../api', null]) assert.equal(linkDaConversa({ conversa }), null, String(conversa));
+    assert.equal(linkDaConversa({ conversa: '/ui/sessions/sess-1' }), '/ui/sessions/sess-1');
+    for (const conversa of ['https://exemplo.com/ui/sessions/x', 'javascript:alert(1)', '/ui/sessions/x/../../api', null]) assert.equal(linkDaConversa({ conversa }), null, String(conversa));
   });
 
   test('os pedidos de escrita: Confirmar, Descartar e as duas fases do Promover', () => {
@@ -120,13 +120,13 @@ describe('o card de uma decisão', () => {
 
 describe('a página (C21) e a aba (C20)', () => {
   test('a página está registrada na barra, depois de Analytics', () => {
-    const ids = TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
-    assert.ok(ids.indexOf('decisoes') > ids.indexOf('analytics'));
-    const { tela } = acharTela('/ui/decisoes');
-    assert.equal(tela.item.rotulo, 'Decisões');
+    const ids = SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
+    assert.ok(ids.indexOf('decisions') > ids.indexOf('analytics'));
+    const { screen: tela } = findScreen('/ui/decisions');
+    assert.equal(tela.item.label, 'Decisões');
     assert.equal(tela.item.section, 'main', 'nas telas do dia a dia, antes de Máquinas e Controle');
-    assert.equal(tela.item.icone, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
-    assert.equal(tela.icone, 'decisao');
+    assert.equal(tela.item.icon, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
+    assert.equal(tela.icon, 'decisao');
   });
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {
@@ -165,24 +165,24 @@ describe('a página (C21) e a aba (C20)', () => {
 
 // O estilo das Decisões, lido como texto: o navegador fica com o dono; aqui vão as travas que um
 // arquivo .css e o JS que o usa conseguem provar sozinhos.
-const TELA = 'decisoes.css';
+const TELA = 'decisions.css';
 const PREFIXO = 'dec-';
-const JS_DA_TELA = ['telas/decisoes.js', 'telas/detalhe-decisoes.js', 'telas/decisoes-comum.js'];
+const JS_DA_TELA = ['screens/decisions.js', 'screens/session-detail-decisions.js', 'screens/decisions-common.js'];
 // Igual ao `classes()` e ao `SELOS` de test/api/sessoes.test.ts (no main), para os dois testes andarem juntos.
 const classesDoCss = (caminho: string) => new Set([...readFileSync(caminho, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const classes = (arquivo: string) => classesDoCss(`${PASTA_DA_UI}${arquivo}`);
 const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 const permitida = (c: string, daMoldura: Set<string>) => c.startsWith(PREFIXO) || daMoldura.has(c) || SELOS.has(c);
 
-/** Os css das outras telas: `ui/*.css` e `ui/telas/*.css`, fora a moldura, a marca e o desta tela. */
+/** Os css das outras telas: `ui/*.css` e `ui/screens/*.css`, fora a moldura, a marca e o desta tela. */
 function outrosCss(): string[] {
-  const fora = new Set([TELA, 'moldura.css', 'marca.css']);
-  return ['', 'telas/'].flatMap((sub) => readdirSync(`${PASTA_DA_UI}${sub}`).filter((a) => a.endsWith('.css') && !fora.has(a)).map((a) => `${PASTA_DA_UI}${sub}${a}`));
+  const fora = new Set([TELA, 'shell.css', 'brand.css']);
+  return ['', 'screens/'].flatMap((sub) => readdirSync(`${PASTA_DA_UI}${sub}`).filter((a) => a.endsWith('.css') && !fora.has(a)).map((a) => `${PASTA_DA_UI}${sub}${a}`));
 }
 
 /** As classes que `tela` e cada css de `outras` estilizam em comum, fora a moldura e os selos. */
 function repetidas(tela: string, outras: string[]): Record<string, string[]> {
-  const daMoldura = classes('moldura.css');
+  const daMoldura = classes('shell.css');
   const minhas = new Set([...classesDoCss(tela)].filter((c) => !daMoldura.has(c)));
   const out: Record<string, string[]> = {};
   for (const outra of outras) {
@@ -231,22 +231,22 @@ describe('sem padrão interno', () => {
   // A pasta dos registros, o repositório e o host vêm do núcleo (o rascunho traz o caminho); a tela não
   // aponta para recurso nenhum da Ahrena nem supõe a pasta de um projeto.
   test('o front das Decisões não cita org, repositório, host, caminho de máquina nem pasta de registros', () => {
-    for (const arquivo of [...JS_DA_TELA, TELA, 'ler.js']) {
+    for (const arquivo of [...JS_DA_TELA, TELA, 'api.js']) {
       const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
       for (const proibido of [/ahrena/i, /github|gitlab/i, /\/Users\/|\/home\//, /docs\/decisoes/, /\b[a-z0-9-]+\.(com|io|dev|ai)\b/i]) assert.doesNotMatch(texto, proibido, `${arquivo}: ${proibido}`);
     }
   });
 });
 
-describe('o estilo das Decisões (ui/decisoes.css)', () => {
+describe('o estilo das Decisões (ui/decisions.css)', () => {
   test('o CSS fica na raiz de ui/, como o das outras telas, e as duas telas carregam de lá', () => {
     assert.ok(readdirSync(PASTA_DA_UI).includes(TELA));
-    assert.ok(!readdirSync(`${PASTA_DA_UI}telas`).includes(TELA), 'nada de cópia em telas/');
-    assert.match(readFileSync(`${PASTA_DA_UI}telas/decisoes-comum.js`, 'utf8'), /href: '\/ui\/decisoes\.css'/);
+    assert.ok(!readdirSync(`${PASTA_DA_UI}screens`).includes(TELA), 'nada de cópia em screens/');
+    assert.match(readFileSync(`${PASTA_DA_UI}screens/decisions-common.js`, 'utf8'), /href: '\/ui\/decisions\.css'/);
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
-  // telas desmonta a outra. Mesmo teste do sessoes.test.ts do main, para o decisoes.css.
+  // telas desmonta a outra. Mesmo teste do sessoes.test.ts do main, para o decisions.css.
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', (t) => {
     const outras = outrosCss();
     if (outras.length === 0) return t.skip('sem outro css até o rebase');
@@ -265,7 +265,7 @@ describe('o estilo das Decisões (ui/decisoes.css)', () => {
   });
 
   test('toda classe do CSS e do JS das Decisões é dec-*, da moldura ou dos selos', () => {
-    const daMoldura = classes('moldura.css');
+    const daMoldura = classes('shell.css');
     assert.deepEqual([...classes(TELA)].filter((c) => !permitida(c, daMoldura)), [], `${TELA} tem classe sem o prefixo ${PREFIXO}`);
     for (const js of JS_DA_TELA) {
       const usadas = classesDoJs(readFileSync(`${PASTA_DA_UI}${js}`, 'utf8'));

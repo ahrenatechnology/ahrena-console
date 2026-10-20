@@ -1,11 +1,11 @@
 // A moldura do console (#26): barra lateral, roteamento no cliente, "Ao vivo" e a área da tela.
-// As telas se registram em telas.js; o contrato de uma tela está no README.md.
+// As telas se registram em screens.js; o contrato de uma tela está no README.md.
 
-import { escrever, ler } from './ler.js';
-import { iniciarAoVivo } from './ao-vivo.js';
+import { escrever, ler } from './api.js';
+import { iniciarAoVivo } from './live.js';
 import { cabecalho, el, icone } from './dom.js';
-import { erro, vazio } from './estados.js';
-import { acharTela, sidebarSections } from './telas.js';
+import { erro, vazio } from './states.js';
+import { findScreen, legacyUrl, sidebarSections } from './screens.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('conteudo');
@@ -27,7 +27,7 @@ for (const section of sidebarSections()) {
   );
   for (const tela of section.items) {
     const q = el('span', { class: 'q', hidden: true });
-    const a = el('a', { class: 'cc-nav', href: tela.rota, 'data-tela': tela.id }, icone(tela.item.icone), el('span', {}, tela.item.rotulo), q);
+    const a = el('a', { class: 'cc-nav', href: tela.route, 'data-tela': tela.id }, icone(tela.item.icon), el('span', {}, tela.item.label), q);
     itens.set(tela.id, { a, q });
     group.append(a);
   }
@@ -120,19 +120,22 @@ async function abrir() {
   const sair = new AbortController();
   saida = sair;
   telaComErro = false;
-  const achada = acharTela(location.pathname);
+  // An old URL (`/ui/sessoes/<id>`) becomes the new one, in place, before routing.
+  const nova = legacyUrl(location);
+  if (nova) history.replaceState(history.state, '', nova);
+  const achada = findScreen(location.pathname);
   if (!achada) {
     acender(null);
     document.title = 'Ahrena Console';
     area.replaceChildren(vazio({ titulo: 'Página não encontrada', texto: `Nada em ${location.pathname}.`, acao: { rotulo: 'Ir para o Dashboard', aoClicar: () => navegar('/ui') } }));
     return;
   }
-  const { tela, params } = achada;
-  acender(tela.item ? tela.id : tela.acende);
-  document.title = `Ahrena Console · ${tela.titulo}`;
-  if (!tela.arquivo) {
+  const { screen: tela, params } = achada;
+  acender(tela.item ? tela.id : tela.highlights);
+  document.title = `Ahrena Console · ${tela.title}`;
+  if (!tela.file) {
     area.replaceChildren(
-      cabecalho({ icone: tela.icone, titulo: tela.titulo, sub: tela.sub ?? params.id ?? null }),
+      cabecalho({ icone: tela.icon, titulo: tela.title, sub: tela.sub ?? params.id ?? null }),
       vazio({ titulo: 'Esta tela ainda não existe', texto: 'Ela chega na próxima versão do console.' }),
     );
     desenharAoVivo();
@@ -151,7 +154,7 @@ async function abrir() {
     aoVivo: () => estadoAoVivo.estado,
   };
   try {
-    const modulo = await import(tela.arquivo);
+    const modulo = await import(tela.file);
     if (sair.signal.aborted) return;
     area.replaceChildren();
     const limpar = await modulo.montar(area, ctx);

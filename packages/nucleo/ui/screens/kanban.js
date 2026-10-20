@@ -1,15 +1,15 @@
 // Kanban (#31, C9 e C10 do wireframe): as sessões, ou os agentes, em colunas por status. Só leitura.
 //
-// - A visão vem da query (`/ui/kanban?visao=agentes`; sem ela, sessões). Trocar a visão troca a URL
-//   com `history.replaceState`, sem recarregar, e relê.
-// - `GET /api/kanban?visao=<v>` traz todas as colunas na página 1; "mostrar mais" pede
-//   `&coluna=<id>&pagina=<n>` e acrescenta os itens no fim da coluna.
+// - The view comes from the query (`/ui/kanban?view=agents`; without it, sessions). Switching the
+//   view rewrites the URL with `history.replaceState`, without reloading, and re-reads.
+// - `GET /api/kanban?view=<v>` brings every column on page 1; "mostrar mais" asks for
+//   `&column=<id>&page=<n>` and appends the items at the end of the column.
 // - Ao vivo: uma mudança de sessão relê o quadro (com um respiro de 400 ms, para juntar rajadas);
 //   reiniciar relê. A releitura volta cada coluna à página 1.
 // - O estilo está em `ui/kanban.css`, que a tela põe no <head> ao montar e tira ao sair.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 // ---------- Funções puras (testadas em test/api/ui-kanban.test.ts) ----------
 
@@ -17,13 +17,13 @@ export const VISOES = ['sessoes', 'agentes'];
 
 /** A visão pedida na query; qualquer outra coisa é `sessoes`. */
 export function visaoDaUrl(search) {
-  const v = new URLSearchParams(search ?? '').get('visao');
+  const v = { sessions: 'sessoes', agents: 'agentes' }[new URLSearchParams(search ?? '').get('view')];
   return VISOES.includes(v) ? v : 'sessoes';
 }
 
 /** A query da URL do navegador para uma visão: sessões é o padrão e não aparece. */
 export function queryDaVisao(visao) {
-  return visao === 'agentes' ? '?visao=agentes' : '';
+  return visao === 'agentes' ? '?view=agents' : '';
 }
 
 /** A rota da API: o quadro todo, ou uma página de uma coluna. */
@@ -135,7 +135,7 @@ const VAZIO = {
   agentes: { titulo: 'Nenhum agente ainda', texto: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
 };
 
-const hrefDaSessao = (id) => `/ui/sessoes/${encodeURIComponent(id)}`;
+const hrefDaSessao = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
 function selos(st, mot) {
   const s = status(st);

@@ -12,13 +12,13 @@ import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/si
 import { semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
 import { T0 } from '../fixtures.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { decimal, duracao, nomeDoModelo, porcento, quando, tokens } from '../../ui/telas/workflow-formato.js';
+import { decimal, duracao, nomeDoModelo, porcento, quando, tokens } from '../../ui/screens/workflow-format.js';
 // @ts-expect-error: idem
-import { espessura, estadoDoAgente, kpisEscritas, layoutDaOrquestracao, metaDoRun, rotaDosWorkflows, temAtivo } from '../../ui/telas/workflows.js';
+import { espessura, estadoDoAgente, kpisEscritas, layoutDaOrquestracao, metaDoRun, rotaDosWorkflows, temAtivo } from '../../ui/screens/workflows.js';
 // @ts-expect-error: idem
-import { criar, detalheDoNo, escalaDaLinha, layoutDoGrafo, nomeDoNo, trechosDaFaixa } from '../../ui/telas/detalhe-workflow.js';
+import { criar, detalheDoNo, escalaDaLinha, layoutDoGrafo, nomeDoNo, trechosDaFaixa } from '../../ui/screens/session-detail-workflow.js';
 // @ts-expect-error: idem
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { findScreen, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
 import { NOMES_DOS_ICONES } from '../../ui/dom.js';
 
@@ -216,22 +216,22 @@ describe('formatos e registro', () => {
   });
 
   test('Workflows está na barra depois de Analytics, como no wireframe, e todo ícone usado existe', () => {
-    const t = TELAS.find((x: any) => x.id === 'workflows');
+    const t = SCREENS.find((x: any) => x.id === 'workflows');
     assert.deepEqual(t, {
       id: 'workflows',
-      rota: '/ui/workflows',
-      item: { rotulo: 'Workflows', icone: 'workflows', section: 'main' },
-      titulo: 'Workflows',
+      route: '/ui/workflows',
+      item: { label: 'Workflows', icon: 'workflows', section: 'main' },
+      title: 'Workflows',
       sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
-      icone: 'workflows',
-      arquivo: '/ui/telas/workflows.js',
+      icon: 'workflows',
+      file: '/ui/screens/workflows.js',
     });
-    const ids = TELAS.map((x: any) => x.id);
-    assert.equal(ids.indexOf('workflows'), ids.indexOf('analytics-aba') + 1);
-    assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
+    const ids = SCREENS.map((x: any) => x.id);
+    assert.equal(ids.indexOf('workflows'), ids.indexOf('analytics-tab') + 1);
+    assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');
     const usados = new Set<string>(['workflows', 'grafo']);
-    for (const a of ['workflows.js', 'detalhe-workflow.js']) {
-      const texto = readFileSync(`${PASTA_DA_UI}telas/${a}`, 'utf8');
+    for (const a of ['workflows.js', 'session-detail-workflow.js']) {
+      const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
       for (const [, nome] of texto.matchAll(/icone\('([a-z-]+)'\)/g)) usados.add(nome!);
       for (const [, nome] of texto.matchAll(/icone: '([a-z-]+)'/g)) usados.add(nome!);
     }
