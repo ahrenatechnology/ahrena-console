@@ -1,6 +1,6 @@
-// O armazenamento das amostras (#175/AC-2): a mesma bateria no adaptador SQLite (banco de verdade,
-// em memória, com as migrações) e no dublê em memória dos testes dos casos de uso. A poda na escrita,
-// a ordem, a janela, a leitura mais nova e a migração aditiva sobre um banco da versão 8.
+// The samples store (#175/AC-2): the same battery on the SQLite adapter (a real database, in
+// memory, with the migrations) and on the in-memory double of the use case tests. Pruning on write,
+// order, the window, the newest reading and the additive migration over a version 8 database.
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
@@ -15,8 +15,8 @@ import { reading, T0 } from './reading.ts';
 const H = 3_600_000;
 
 function contract(name: string, openStore: () => { store: TelemetryStore; close: () => Promise<void> }) {
-  describe(`#175/AC-2 armazenamento das amostras: ${name}`, () => {
-    test('poda na escrita: só as últimas 12 h da máquina; a outra máquina fica', async () => {
+  describe(`#175/AC-2 sample store: ${name}`, () => {
+    test('pruning on write: only the last 12 h of the machine; the other machine stays', async () => {
       const { store, close } = openStore();
       try {
         await store.putSample('workstation', reading({}, T0 - 20 * H), RETENTION_MS);
@@ -29,7 +29,7 @@ function contract(name: string, openStore: () => { store: TelemetryStore; close:
       }
     });
 
-    test('a janela pedida, do mais velho ao mais novo, com as colunas da série', async () => {
+    test('the requested window, oldest to newest, with the series columns', async () => {
       const { store, close } = openStore();
       try {
         await store.putSample('local', reading({ cpu: { cores: 8, model: null, usedPct: null, load: { one: 9.5, five: 1, fifteen: 1 } } }, T0), RETENTION_MS);
@@ -45,7 +45,7 @@ function contract(name: string, openStore: () => { store: TelemetryStore; close:
       }
     });
 
-    test('a leitura mais nova, inteira; a mesma hora substitui; sem amostra é null', async () => {
+    test('the newest reading, whole; the same hour replaces; no sample is null', async () => {
       const { store, close } = openStore();
       try {
         assert.equal(await store.latest('local'), null);
@@ -65,13 +65,13 @@ contract('SQLite', () => {
   const storage = openSqliteStorage({ path: ':memory:' });
   return { store: new SqliteTelemetryStore(storage.db), close: () => storage.close() };
 });
-contract('dublê em memória', () => ({ store: new MemoryTelemetryStore(), close: async () => {} }));
+contract('in-memory double', () => ({ store: new MemoryTelemetryStore(), close: async () => {} }));
 
-describe('#175/AC-2 migração da tabela de amostras', () => {
-  test('aditiva sobre um banco da versão 8; sem ela, o adaptador recusa o banco', () => {
+describe('#175/AC-2 samples table migration', () => {
+  test('additive over a version 8 database; without it, the adapter refuses the database', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, MIGRATIONS.filter((m) => m.version <= 8));
-    assert.throws(() => new SqliteTelemetryStore(db), /sem a tabela de telemetria/);
+    assert.throws(() => new SqliteTelemetryStore(db), /without the telemetry table/);
     assert.deepEqual(migrate(db), [9]);
     assert.equal(schemaVersion(db), 9);
     const cols = (db.prepare('PRAGMA table_info(telemetry_samples)').all() as { name: string }[]).map((c) => c.name);

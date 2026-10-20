@@ -1,34 +1,34 @@
-// Telemetria da máquina (#175, decisão 0008): o que o núcleo mede de si mesmo a cada 30 s.
+// Machine telemetry (#175, decision 0008): what the núcleo measures about its own machine every 30 s.
 //
-// Uma leitura (`TelemetryReading`) é o retrato da máquina numa hora. Todo grupo que depende de um
-// comando pode faltar: o comando que não existe, falha ou estoura o tempo vira `null` no grupo (ou no
-// campo), nunca um erro da rota. Chaves em inglês (regra do repositório para o que é novo); o texto
-// que a tela mostra (as mensagens dos alertas) é em pt-BR.
+// A reading (`TelemetryReading`) is a snapshot of the machine at one moment. Any group that depends
+// on a command may be missing: a command that does not exist, fails or times out becomes `null` in
+// the group (or the field), never a route error. Keys are in English (the repository rule for new
+// code); the text the screen shows (the alert messages) is in pt-BR.
 
-/** Muda quando a forma da leitura muda de um jeito que quem lê precisa saber (#176 compara). */
+/** Changes when the shape of the reading changes in a way readers need to know about (#176 compares it). */
 export const TELEMETRY_VERSION = 1;
 
-/** Uma amostra a cada 30 s enquanto o núcleo está de pé. */
+/** One sample every 30 s while the núcleo is up. */
 export const SAMPLE_INTERVAL_MS = 30_000;
-/** 12 h de amostras no SQLite, podadas na escrita. */
+/** 12 h of samples in SQLite, pruned on write. */
 export const RETENTION_MS = 12 * 60 * 60 * 1000;
-/** As janelas que a tela pede: 1 h por padrão, 12 h a pedido. */
+/** The windows the screen asks for: 1 h by default, 12 h on request. */
 export const WINDOW_HOURS = [1, 12] as const;
 export type WindowHours = (typeof WINDOW_HOURS)[number];
 
-/** O estado de uma máquina para a barra lateral e a bandeja. A remota é a #176. */
+/** A machine's state for the sidebar and the tray. Remote machines are #176. */
 export const MACHINE_STATES = ['connected', 'unreachable', 'not-configured', 'incompatible-version'] as const;
 export type MachineState = (typeof MACHINE_STATES)[number];
 
-/** Esta máquina. As remotas usam o `id` de `~/.ahrena-console/machines.json` (#176). */
+/** This machine. Remote machines use the `id` from `~/.ahrena-console/machines.json` (#176). */
 export const LOCAL_MACHINE_ID = 'local';
-/** Id de máquina na URL e no banco. */
+/** Machine id in the URL and in the database. */
 export const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 export interface HostInfo {
   hostname: string;
   platform: 'darwin' | 'linux' | 'simulated';
-  /** "macOS 26.1", "Ubuntu 24.04.1 LTS"; `null` quando não deu para ler. */
+  /** "macOS 26.1", "Ubuntu 24.04.1 LTS"; `null` when it could not be read. */
   os: string | null;
   arch: string;
   uptimeSec: number;
@@ -37,9 +37,9 @@ export interface HostInfo {
 export interface CpuReading {
   cores: number;
   model: string | null;
-  /** Uso de todos os núcleos desde a amostra anterior, 0 a 100. */
+  /** Usage across all cores since the previous sample, 0 to 100. */
   usedPct: number | null;
-  /** Carga média de 1, 5 e 15 min, para comparar com `cores`. */
+  /** 1, 5 and 15 min load averages, to compare against `cores`. */
   load: { one: number; five: number; fifteen: number };
 }
 
@@ -50,7 +50,7 @@ export interface MemoryReading {
   usedBytes: number;
   swapTotalBytes: number | null;
   swapUsedBytes: number | null;
-  /** Só no Mac (`kern.memorystatus_vm_pressure_level`). */
+  /** Mac only (`kern.memorystatus_vm_pressure_level`). */
   pressure: MemoryPressure | null;
 }
 
@@ -70,12 +70,12 @@ export interface VolumeReading {
 }
 
 export interface NetworkReading {
-  /** A interface da rota padrão. */
+  /** The interface of the default route. */
   interface: string;
-  /** Entre esta amostra e a anterior; `null` na primeira ou quando o contador voltou. */
+  /** Between this sample and the previous one; `null` on the first one or when the counter went back. */
   rxBytesPerSec: number | null;
   txBytesPerSec: number | null;
-  /** Desde o boot. */
+  /** Since boot. */
   rxBytesTotal: number;
   txBytesTotal: number;
 }
@@ -87,7 +87,7 @@ export interface ProcessGroup {
 }
 
 export interface ClaudeProcesses {
-  /** CLI e Claude Desktop somados. */
+  /** CLI and Claude Desktop added together. */
   processes: ProcessGroup;
   cli: ProcessGroup;
   desktop: ProcessGroup;
@@ -101,16 +101,16 @@ export interface TopProcess {
 }
 
 export interface DockerStack {
-  /** O rótulo `com.docker.compose.project`. */
+  /** The `com.docker.compose.project` label. */
   name: string;
   running: number;
   stopped: number;
-  /** Portas publicadas no host, em ordem. */
+  /** Ports published on the host, sorted. */
   ports: number[];
 }
 
 export interface DockerSpace {
-  /** `Images`, `Containers`, `Local Volumes`, `Build Cache`, como o `docker system df` diz. */
+  /** `Images`, `Containers`, `Local Volumes`, `Build Cache`, as `docker system df` names them. */
   type: string;
   totalCount: number;
   active: number;
@@ -122,27 +122,27 @@ export interface DockerReading {
   running: number;
   stopped: number;
   stacks: DockerStack[];
-  /** `null` quando o `docker system df` não respondeu a tempo. */
+  /** `null` when `docker system df` did not answer in time. */
   space: DockerSpace[] | null;
 }
 
-/** `all`: todas as interfaces (`*`, `0.0.0.0`, `[::]`); `loopback`: só esta máquina; `address`: um endereço dado. */
+/** `all`: every interface (`*`, `0.0.0.0`, `[::]`); `loopback`: this machine only; `address`: one given address. */
 export type ListenInterface = 'all' | 'loopback' | 'address';
 
 export interface ListeningPort {
   port: number;
   interface: ListenInterface;
-  /** O endereço quando `interface` é `address`. */
+  /** The address when `interface` is `address`. */
   address: string | null;
   process: string | null;
   pid: number | null;
 }
 
 /**
- * - `up`: o túnel encaminha e o outro lado responde (a conexão fica aberta);
- * - `idle`: encaminhada, mas a conexão abre e fecha na hora (ninguém escuta lá);
- * - `busy`: outro processo deste Mac segura a porta;
- * - `down`: nada escuta a porta aqui.
+ * - `up`: the tunnel forwards and the other side answers (the connection stays open);
+ * - `idle`: forwarded, but the connection opens and closes at once (nothing listens over there);
+ * - `busy`: another process on this Mac holds the port;
+ * - `down`: nothing listens on the port here.
  */
 export type TunnelPortState = 'up' | 'idle' | 'busy' | 'down';
 
@@ -151,15 +151,15 @@ export interface TunnelPort {
   remoteHost: string;
   remotePort: number;
   state: TunnelPortState;
-  /** Quem segura a porta quando `busy`. */
+  /** Who holds the port when `busy`. */
   heldBy: string | null;
 }
 
 export interface TunnelReading {
   pid: number;
-  /** O destino do `ssh`, como está na linha de comando (o apelido do `~/.ssh/config`). */
+  /** The `ssh` destination as written on the command line (the `~/.ssh/config` alias). */
   destination: string;
-  /** Hora em que o processo começou; `null` quando o `ps` não disse. */
+  /** When the process started; `null` when `ps` did not say. */
   since: string | null;
   ports: TunnelPort[];
 }
@@ -173,44 +173,44 @@ export interface TelemetryReading {
   disk: { volumes: VolumeReading[] };
   network: NetworkReading | null;
   claude: ClaudeProcesses | null;
-  /** Os seis que mais usam CPU. */
+  /** The six using the most CPU. */
   topProcesses: TopProcess[] | null;
-  /** `null` sem o `docker` no PATH ou sem o daemon. */
+  /** `null` without `docker` on the PATH or without the daemon. */
   docker: DockerReading | null;
   ports: ListeningPort[] | null;
-  /** Só no Mac; `null` onde não se aplica. */
+  /** Mac only; `null` where it does not apply. */
   tunnels: TunnelReading[] | null;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Alertas
+// Alerts
 
 export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy';
 export type AlertLevel = 'error' | 'warning';
 
 export interface Alert {
-  /** Estável enquanto a condição dura: `volume-full:/`, `port-exposed:5432`, `tunnel-busy:18080`. */
+  /** Stable while the condition lasts: `volume-full:/`, `port-exposed:5432`, `tunnel-busy:18080`. */
   id: string;
   kind: AlertKind;
   level: AlertLevel;
-  /** Texto da tela, em pt-BR. */
+  /** Screen text, in pt-BR. */
   message: string;
   detail: string | null;
-  /** Desde quando a condição vale. */
+  /** Since when the condition holds. */
   since: string;
 }
 
-/** Carga acima dos núcleos por este tempo vira alerta. */
+/** Load above the core count for this long becomes an alert. */
 export const LOAD_HIGH_FOR_MS = 5 * 60 * 1000;
-/** Volume acima disto vira alerta. */
+/** A volume above this becomes an alert. */
 export const VOLUME_FULL_PCT = 85;
 
 // ---------------------------------------------------------------------------------------------
-// Amostras e séries
+// Samples and series
 
-/** O que a série e os alertas precisam de cada amostra, sem abrir a leitura inteira. */
+/** What the series and the alerts need from each sample, without opening the whole reading. */
 export interface SamplePoint {
-  /** ms desde a época. */
+  /** ms since the epoch. */
   takenAt: number;
   cpuUsedPct: number | null;
   load1: number;
@@ -236,9 +236,9 @@ export function samplePointOf(r: TelemetryReading): SamplePoint {
   };
 }
 
-/** As séries da tela, colunas paralelas a `at`. */
+/** The screen's series, columns parallel to `at`. */
 export interface TelemetrySeries {
-  /** Amostras (ou a média de cada balde, em 12 h), da mais velha para a mais nova. */
+  /** Samples (or the mean of each bucket, at 12 h), oldest to newest. */
   at: string[];
   cpuUsedPct: (number | null)[];
   load1: (number | null)[];
@@ -249,11 +249,11 @@ export interface TelemetrySeries {
   gpuUsedPct: (number | null)[];
 }
 
-/** O teto de pontos por série: 1 h cabe inteira (120); 12 h vira baldes de 2 min. */
+/** The cap on points per series: 1 h fits whole (120); 12 h becomes 2 min buckets. */
 export const MAX_SERIES_POINTS = 360;
 
 // ---------------------------------------------------------------------------------------------
-// Máquinas
+// Machines
 
 export interface MachineSummary {
   id: string;

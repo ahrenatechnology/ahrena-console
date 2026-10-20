@@ -1,6 +1,6 @@
-// Os coletores do Mac e do Linux (#175/AC-1) sobre saídas gravadas (test/fixtures/telemetry): cada
-// grupo, o comando que falta virando campo ausente, o tempo curto de cada comando e nenhum `sudo`.
-// Nada aqui chama o sistema.
+// The Mac and Linux collectors (#175/AC-1) over recorded outputs (test/fixtures/telemetry): each
+// group, a missing command becoming an absent field, each command's short timeout and no `sudo`.
+// Nothing here calls the system.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
@@ -29,30 +29,30 @@ function darwin(over: Partial<Parameters<typeof fixtureDeps>[0]> = {}) {
   });
 }
 
-describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
-  test('host, CPU (uso pela diferença, carga contra os núcleos) e memória com swap e pressão', async () => {
+describe('#175/AC-1 Mac collector, over recorded outputs', () => {
+  test('host, CPU (usage by difference, load against the cores) and memory with swap and pressure', async () => {
     const { deps } = darwin();
     const r = await new DarwinCollector(deps).collect();
     assert.equal(r.takenAt, new Date(T0).toISOString());
     assert.deepEqual(r.host, { hostname: 'mac-exemplo', platform: 'darwin', os: 'macOS 26.1', arch: 'arm64', uptimeSec: 3600 });
     assert.deepEqual(r.cpu, { cores: 12, model: 'CPU Exemplo', usedPct: 50, load: { one: 4.11, five: 3.8, fifteen: 3.2 } });
-    // (anônimas − purgáveis + fixas + comprimidas) × página
+    // (anonymous − purgeable + wired + compressed) × page
     assert.deepEqual(r.memory, { totalBytes: 38_654_705_664, usedBytes: (900_000 - 20_000 + 250_000 + 150_000) * 16_384, swapTotalBytes: 2048 * MiB, swapUsedBytes: 819.25 * MiB, pressure: 'normal' });
   });
 
-  test('GPU pelo ioreg, volumes pelo statfs (sem os de sistema do APFS) e rede da rota padrão em bytes/s', async () => {
+  test('GPU from ioreg, volumes from statfs (without the APFS system ones) and default-route network in bytes/s', async () => {
     const { deps } = darwin();
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.gpu, { name: 'Apple M-exemplo', usedPct: 12, memoryUsedBytes: 1_932_735_283, memoryTotalBytes: null });
     assert.deepEqual(r.disk.volumes, [
       { mount: '/', totalBytes: 612e9, usedBytes: 232e9, freeBytes: 380e9, usedPct: 37.9 },
-      // Sem statfs, os números do próprio df (blocos de 512).
+      // Without statfs, df's own numbers (512 blocks).
       { mount: '/Volumes/Dados Externos', totalBytes: 2e12, usedBytes: 0.9e12, freeBytes: 1.1e12, usedPct: 45 },
     ]);
     assert.deepEqual(r.network, { interface: 'en0', rxBytesPerSec: 2_400_000, txBytesPerSec: 310_000, rxBytesTotal: 41_002_400_000, txBytesTotal: 6_000_310_000 });
   });
 
-  test('processos do Claude (CLI, o CLI do Desktop e o Desktop com os helpers) e os seis que mais usam CPU', async () => {
+  test('Claude processes (CLI, the Desktop CLI and the Desktop with its helpers) and the six using the most CPU', async () => {
     const { deps } = darwin();
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.claude, {
@@ -70,7 +70,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     ]);
   });
 
-  test('Docker: rodando e parados, stacks pelo rótulo do Compose com as portas, e o espaço do system df', async () => {
+  test('Docker: running and stopped, stacks by Compose label with their ports, and the space from system df', async () => {
     const { deps } = darwin();
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.docker, {
@@ -89,7 +89,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     });
   });
 
-  test('portas em escuta: interface, processo, IPv4 e IPv6 numa linha só', async () => {
+  test('listening ports: interface, process, IPv4 and IPv6 on one line', async () => {
     const { deps } = darwin();
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.ports?.map((p) => [p.port, p.interface, p.process, p.pid]), [
@@ -103,7 +103,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     ]);
   });
 
-  test('túnel: o ssh com -L, o estado de cada porta (up, idle, busy) e o ssh sem -L que não ganhou a porta fica de fora', async () => {
+  test('tunnel: ssh with -L, the state of each port (up, idle, busy) and the ssh without -L that did not get the port is left out', async () => {
     const probed: number[] = [];
     const { deps, calls } = darwin({ probe: async (p) => (probed.push(p), ({ 14720: 'open', 13000: 'open', 15173: 'closed' }) as Record<number, 'open' | 'closed'>)[p] ?? 'refused' });
     const r = await new DarwinCollector(deps).collect();
@@ -121,12 +121,12 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
       },
     ]);
     assert.deepEqual(probed.sort(), [13000, 14720, 15173]);
-    // O `ssh ws-exemplo` sem -L leu o LocalForward pelo `ssh -G`; o mestre do ControlMaster não, e o
-    // `ssh -F …` de outra conta (uid 502) também não.
+    // The `ssh ws-exemplo` without -L read the LocalForward through `ssh -G`; the ControlMaster master did not, and
+    // neither did the `ssh -F …` of another account (uid 502).
     assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-G', '--', 'ws-exemplo']]);
   });
 
-  test('túnel: o ssh de outra conta nunca vira `ssh -G`, nem com -F, nem sem ele', async () => {
+  test('tunnel: the ssh of another account never becomes `ssh -G`, neither with -F nor without it', async () => {
     const ps = [
       '  480   502    00:10:00 ssh -F /Users/outra/.ssh/config-dela ws-dela',
       '  481   502    00:10:00 ssh ws-dela',
@@ -134,7 +134,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     ].join('\n');
     const { deps, calls } = darwin({
       commands: { ...DARWIN_COMMANDS, 'ps -axo pid=,uid=,etime=,args=': ps },
-      // Mesmo que o arquivo parecesse nosso, o processo não é.
+      // Even if the file looked like ours, the process is not.
       fileOwner: async () => ({ uid: 501, mode: 0o100600 }),
     });
     const r = await new DarwinCollector(deps).collect();
@@ -142,7 +142,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     assert.deepEqual(calls.filter((c) => c.command === 'ssh'), []);
   });
 
-  test('túnel: o -F só vai ao `ssh -G` quando é caminho absoluto do usuário que só ele escreve', async () => {
+  test('tunnel: -F only reaches `ssh -G` when it is an absolute path of the user that only they can write', async () => {
     const ps = [
       '  480   501    00:10:00 ssh -F /Users/dev/.ssh/meu ws-a',
       '  481   501    00:10:00 ssh -F /tmp/de-outro ws-b',
@@ -162,7 +162,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-F', '/Users/dev/.ssh/meu', '-G', '--', 'ws-a']]);
   });
 
-  test('túnel: dois ssh para o mesmo destino e arquivo dão um `ssh -G` só', async () => {
+  test('tunnel: two ssh to the same destination and file give a single `ssh -G`', async () => {
     const ps = [
       '  480   501    00:10:00 ssh ws-exemplo',
       '  481   501    00:05:00 ssh ws-exemplo',
@@ -176,13 +176,13 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
     ]);
   });
 
-  test('porta do túnel que ninguém escuta é `down`', async () => {
+  test('a tunnel port nobody listens on is `down`', async () => {
     const { deps } = darwin({ commands: { ...DARWIN_COMMANDS, 'lsof -nP -iTCP -sTCP:LISTEN': 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n' }, probe: async () => 'refused' });
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.tunnels?.[0].ports.map((p) => p.state), ['down', 'down', 'down', 'down']);
   });
 
-  test('cada comando com tempo curto, nenhum sudo, nenhum shell', async () => {
+  test('each command with a short timeout, no sudo, no shell', async () => {
     const { deps, calls } = darwin();
     await new DarwinCollector(deps).collect();
     assert.ok(calls.length > 10);
@@ -194,10 +194,10 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
   });
 });
 
-describe('#175/AC-1 coletor do Linux, sobre saídas gravadas', () => {
+describe('#175/AC-1 Linux collector, over recorded outputs', () => {
   const linux = () => fixtureDeps({ commands: LINUX_COMMANDS, files: LINUX_FILES, hostname: 'ws-exemplo', cores: 16 });
 
-  test('host, memória pelo /proc/meminfo, GPU pelo nvidia-smi, sem túnel', async () => {
+  test('host, memory from /proc/meminfo, GPU from nvidia-smi, no tunnel', async () => {
     const r = await new LinuxCollector(linux().deps).collect();
     assert.deepEqual(r.host, { hostname: 'ws-exemplo', platform: 'linux', os: 'Ubuntu 24.04.1 LTS', arch: 'arm64', uptimeSec: 3600 });
     assert.equal(r.cpu.cores, 16);
@@ -212,7 +212,7 @@ describe('#175/AC-1 coletor do Linux, sobre saídas gravadas', () => {
     assert.equal(r.tunnels, null);
   });
 
-  test('volumes reais (sem tmpfs, snap e EFI), rede da rota padrão e portas pelo ss', async () => {
+  test('real volumes (without tmpfs, snap and EFI), default-route network and ports from ss', async () => {
     const r = await new LinuxCollector(linux().deps).collect();
     assert.deepEqual(r.disk.volumes.map((v) => [v.mount, v.usedPct]), [['/', 85.9], ['/home', 22.2], ['/tmp', 11.2]]);
     assert.deepEqual(r.network, { interface: 'ens5', rxBytesPerSec: 5_000_000, txBytesPerSec: 1_000_000, rxBytesTotal: 805_000_000, txBytesTotal: 121_000_000 });
@@ -225,7 +225,7 @@ describe('#175/AC-1 coletor do Linux, sobre saídas gravadas', () => {
     ]);
   });
 
-  test('processos do Claude (o binário e o pacote npm pelo título) e o Docker ausente sem o comando', async () => {
+  test('Claude processes (the binary and the npm package by title) and Docker absent without the command', async () => {
     const r = await new LinuxCollector(linux().deps).collect();
     assert.deepEqual(r.claude?.cli, { count: 2, cpuPct: 20.5, memoryBytes: 900_000 * KB });
     assert.deepEqual(r.claude?.desktop, { count: 0, cpuPct: 0, memoryBytes: 0 });
@@ -234,8 +234,8 @@ describe('#175/AC-1 coletor do Linux, sobre saídas gravadas', () => {
   });
 });
 
-describe('#175/AC-1 comando que falta é campo ausente, nunca erro', () => {
-  test('nada responde: a leitura sai, com o que o node:os dá e o resto nulo', async () => {
+describe('#175/AC-1 a missing command is an absent field, never an error', () => {
+  test('nothing answers: the reading comes out, with what node:os gives and the rest null', async () => {
     for (const C of [DarwinCollector, LinuxCollector]) {
       const { deps } = fixtureDeps({});
       const r = await new C(deps).collect();
@@ -247,7 +247,7 @@ describe('#175/AC-1 comando que falta é campo ausente, nunca erro', () => {
     }
   });
 
-  test('o executor que lança e o statfs que lança também viram ausência', async () => {
+  test('an executor that throws and a statfs that throws also become absence', async () => {
     const { deps } = fixtureDeps({});
     deps.run = async () => {
       throw new Error('ENOENT');
@@ -259,7 +259,7 @@ describe('#175/AC-1 comando que falta é campo ausente, nunca erro', () => {
     assert.equal(r.ports, null);
   });
 
-  test('docker ps responde e o system df estoura o tempo: o espaço sai nulo, o resto fica', async () => {
+  test('docker ps answers and system df times out: the space is null, the rest stays', async () => {
     const commands = { ...DARWIN_COMMANDS };
     for (const k of Object.keys(commands)) if (k.startsWith('docker system df')) commands[k] = null;
     const r = await new DarwinCollector(darwin({ commands }).deps).collect();
@@ -267,13 +267,13 @@ describe('#175/AC-1 comando que falta é campo ausente, nunca erro', () => {
     assert.equal(r.docker?.space, null);
   });
 
-  test('sem coletor fora do Mac e do Linux', () => {
+  test('no collector outside Mac and Linux', () => {
     assert.equal(collectorFor('win32'), null);
   });
 });
 
-describe('#175/AC-1 leituras de saída', () => {
-  test('linha de comando do ssh: grupos de opções, -o, --, e o que não é cliente', () => {
+describe('#175/AC-1 output parsing', () => {
+  test('ssh command line: option groups, -o, --, and what is not a client', () => {
     assert.deepEqual(parseSshArgs('/usr/bin/ssh -NL14720:127.0.0.1:4720 -p 2222 -F /Users/dev/.ssh/outro dev@ws-exemplo uptime'), {
       destination: 'dev@ws-exemplo',
       forwards: [{ localPort: 14720, remoteHost: '127.0.0.1', remotePort: 4720 }],
@@ -283,29 +283,29 @@ describe('#175/AC-1 leituras de saída', () => {
     assert.equal(parseSshArgs('sshd: dev@pts/0'), null);
     assert.equal(parseSshArgs('ssh -L'), null);
     assert.equal(parseSshArgs('ssh -- ws-exemplo')?.destination, 'ws-exemplo');
-    // Depois do `--`, um destino que começa com `-` seria opção do `ssh -G`.
+    // After `--`, a destination starting with `-` would be an option to `ssh -G`.
     assert.equal(parseSshArgs('ssh -- -oProxyCommand=x'), null);
   });
 
-  test('linha de comando do ssh: -o LocalForward, com `=`, com espaço (o ps perde as aspas) e colado', () => {
+  test('ssh command line: -o LocalForward, with `=`, with a space (ps loses the quotes) and attached', () => {
     const f = [{ localPort: 14720, remoteHost: '127.0.0.1', remotePort: 4720 }];
     assert.deepEqual(parseSshArgs('ssh -o LocalForward=14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
     assert.deepEqual(parseSshArgs('ssh -o LocalForward 14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
     assert.deepEqual(parseSshArgs('ssh -oLocalForward=14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
     assert.deepEqual(parseSshArgs('ssh -o localforward = 14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
     assert.deepEqual(parseSshArgs('ssh -o LocalForward=localhost:15432 [::1]:5432 ws-exemplo')?.forwards, [{ localPort: 15432, remoteHost: '::1', remotePort: 5432 }]);
-    // Outra opção com -o não consome palavra nenhuma além do valor.
+    // Another -o option consumes no word beyond its value.
     assert.deepEqual(parseSshArgs('ssh -o ExitOnForwardFailure=no ws-exemplo'), { destination: 'ws-exemplo', forwards: [], configFile: null });
   });
 
-  test('especificação de -L: com bind, IPv6 e socket Unix (fora)', () => {
+  test('-L specification: with bind, IPv6 and Unix socket (left out)', () => {
     assert.deepEqual(parseForwardSpec('127.0.0.1:15432:[::1]:5432'), { localPort: 15432, remoteHost: '::1', remotePort: 5432 });
     assert.deepEqual(parseForwardSpec('*:8080:db:80'), { localPort: 8080, remoteHost: 'db', remotePort: 80 });
     assert.equal(parseForwardSpec('/tmp/sock:/var/run/x.sock'), null);
     assert.deepEqual(parseSshG('localforward [localhost]:13000 [localhost]:3000\n'), [{ localPort: 13000, remoteHost: 'localhost', remotePort: 3000 }]);
   });
 
-  test('etime, tamanhos do Docker, portas publicadas e interface de escuta', () => {
+  test('etime, Docker sizes, published ports and listening interface', () => {
     assert.equal(parseEtime('2-01:00:00'), 2 * 86_400 + 3600);
     assert.equal(parseEtime('05:00'), 300);
     assert.equal(parseEtime('agora'), null);
@@ -317,7 +317,7 @@ describe('#175/AC-1 leituras de saída', () => {
     assert.deepEqual(listenInterfaceOf('192.0.2.10'), { interface: 'address', address: '192.0.2.10' });
   });
 
-  test('CPU sem diferença e contador de rede que voltou dão nulo', () => {
+  test('CPU without a difference and a network counter that went back give null', () => {
     const t = { user: 1, nice: 0, sys: 1, idle: 1, irq: 0 };
     assert.equal(cpuUsedPct([{ times: t }], [{ times: t }]), null);
     assert.equal(cpuUsedPct([], []), null);

@@ -327,9 +327,9 @@ const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
-// Telemetria das máquinas (#175, decisão 0008): uma amostra a cada 30 s, 12 h no banco, e o alerta
-// que entra ou sai em /api/changes. Na --demo, as leituras sintéticas do simulador, já com 12 h
-// semeadas, e a "workstation" que a #176 vai ler de verdade pelo túnel.
+// Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
+// alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
+// 12 h already seeded, plus the "workstation" that #176 will read for real through the tunnel.
 const sampleStore = new SqliteTelemetryStore(sqlite.db);
 const alertTracker = new AlertTracker();
 const machineEntries: MachineEntry[] = [localMachine()];
@@ -346,7 +346,7 @@ if (demo) {
 } else if (!o['no-telemetry']) {
   const platformCollector = collectorFor();
   if (platformCollector) addSampler('local', platformCollector);
-  else log(`telemetria: sem coletor para ${process.platform}`);
+  else log(`telemetry: no collector for ${process.platform}`);
 }
 const telemetryService = samplers.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 

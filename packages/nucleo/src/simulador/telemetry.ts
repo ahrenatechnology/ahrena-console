@@ -1,11 +1,11 @@
-// Telemetria sintética (#175): esta máquina (um Mac de exemplo) e uma máquina remota "workstation"
-// (um Linux de exemplo), para a `--demo`, para as telas C24 e C25 e para a #176 ler uma remota sem
-// ter uma. Os números saem só da hora (ondas e um ruído pelo hash do instante): a mesma hora dá a
-// mesma leitura, em qualquer máquina, e uma janela de 12 h pode ser semeada de uma vez.
+// Synthetic telemetry (#175): this machine (an example Mac) and a remote "workstation" (an example
+// Linux), for `--demo`, for screens C24 and C25 and for #176 to read a remote machine without having
+// one. The numbers come only from the time (waves plus noise from the instant's hash): the same time
+// gives the same reading on any machine, and a 12 h window can be seeded in one go.
 //
-// Os dois perfis seguem os wireframes: no Mac, a porta 5432 em todas as interfaces e a 18080 do
-// túnel ocupada; na workstation, o volume / acima de 85%, duas portas em todas as interfaces e a
-// carga que passa dos 16 núcleos por uns 15 min a cada 40 min (o alerta entra e sai sozinho).
+// Both profiles follow the wireframes: on the Mac, port 5432 on all interfaces and tunnel port
+// 18080 busy; on the workstation, volume / above 85%, two ports on all interfaces and a load that
+// goes above the 16 cores for about 15 min every 40 min (the alert enters and exits on its own).
 
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, type TelemetryReading } from '../telemetry/model.ts';
 import type { TelemetryCollector, TelemetryStore } from '../telemetry/ports.ts';
@@ -13,14 +13,14 @@ import { hash32 } from './aleatorio.ts';
 
 export type SimulatedProfile = 'local' | 'workstation';
 
-/** A remota sintética, com o `id` que o `machines.json` daria a ela (#176). */
+/** The synthetic remote machine, with the `id` that `machines.json` would give it (#176). */
 export const SIMULATED_WORKSTATION = { id: 'workstation', label: 'Workstation' } as const;
 
 const GB = 1e9;
 const GiB = 1024 ** 3;
 const MIN = 60_000;
 
-/** Ruído em [0, 1) pelo instante (a cada 30 s) e pelo nome da métrica. */
+/** Noise in [0, 1) from the instant (every 30 s) and the metric's name. */
 const noise = (name: string, at: number) => hash32(`${name}:${Math.floor(at / SAMPLE_INTERVAL_MS)}`) / 2 ** 32;
 const wave = (at: number, periodMin: number, phase = 0) => Math.sin((2 * Math.PI * at) / (periodMin * MIN) + phase);
 const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -87,7 +87,7 @@ function localReading(at: number): TelemetryReading {
 }
 
 function workstationReading(at: number): TelemetryReading {
-  // Período de 40 min: acima de 16 quando a onda passa de 1/3, uns 15 min seguidos.
+  // 40 min period: above 16 when the wave passes 1/3, about 15 min in a row.
   const load = 14 + 6 * wave(at, 40) + 0.6 * noise('load', at);
   const cpu = Math.min(100, Math.max(5, (load / 16) * 70 + 10 * noise('cpu', at)));
   const sinceBoot = (at % (30 * 86_400_000)) / 1000;
@@ -145,12 +145,12 @@ function workstationReading(at: number): TelemetryReading {
   };
 }
 
-/** A leitura sintética do perfil na hora dada. */
+/** The profile's synthetic reading at the given time. */
 export function simulatedReading(profile: SimulatedProfile, atMs: number): TelemetryReading {
   return profile === 'local' ? localReading(atMs) : workstationReading(atMs);
 }
 
-/** O coletor da `--demo`: a leitura sintética da hora do relógio. */
+/** The `--demo` collector: the synthetic reading for the clock's time. */
 export class SimulatedCollector implements TelemetryCollector {
   private readonly profile: SimulatedProfile;
   private readonly now: () => number;
@@ -166,8 +166,8 @@ export class SimulatedCollector implements TelemetryCollector {
 }
 
 /**
- * Semeia as últimas `hours` horas de amostras (uma a cada 30 s, alinhadas ao relógio) da máquina,
- * para os gráficos de 1 h e 12 h já abrirem cheios. Devolve quantas gravou.
+ * Seeds the machine's last `hours` hours of samples (one every 30 s, aligned to the clock), so the
+ * 1 h and 12 h charts open already full. Returns how many it wrote.
  */
 export async function seedTelemetry(store: TelemetryStore, machineId: string, profile: SimulatedProfile, now = Date.now(), hours = 12): Promise<number> {
   const end = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;

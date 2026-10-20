@@ -1,9 +1,10 @@
-// Esquema SQLite das amostras da telemetria (#175). Entra na lista de migrações do adaptador
-// (adapters/sqlite/migrations.ts) como uma migração própria, aditiva: tabela nova.
+// SQLite schema for the telemetry samples (#175). It goes into the adapter's migration list
+// (adapters/sqlite/migrations.ts) as a migration of its own, additive: a new table.
 //
-// Uma linha por amostra e máquina. As colunas são o que as séries e o alerta de carga leem sem abrir
-// a leitura; `reading` é a leitura inteira em JSON, para a "leitura atual" e para o que a tela
-// mostra além das séries. 12 h a cada 30 s são 1440 linhas por máquina, podadas a cada gravação.
+// One row per sample and machine. The columns are what the series and the load alert read without
+// opening the reading; `reading` is the whole reading as JSON, for the "current reading" and for
+// what the screen shows beyond the series. 12 h every 30 s is 1440 rows per machine, pruned on each
+// write.
 
 export const TELEMETRY_MIGRATION_DESCRIPTION = 'amostras da telemetria das máquinas (#175)';
 

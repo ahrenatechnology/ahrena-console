@@ -1,11 +1,12 @@
-// O que os coletores usam do sistema de verdade (#175): o executor de comandos, a leitura de
-// arquivo, o `fs.statfs`, o dono de um arquivo (`fs.stat`), a sonda de porta e o `node:os`. Só o
-// núcleo no ar usa isto; os testes passam os dublês com as saídas gravadas.
+// What the collectors use from the real system (#175): the command runner, the file reader,
+// `fs.statfs`, a file's owner (`fs.stat`), the port probe and `node:os`. Only the running núcleo
+// uses this; tests pass doubles with the recorded outputs.
 //
-// - Comando sem shell (`execFile`), com tempo curto e `LC_ALL=C` (o ponto decimal do `ps` e do
-//   `df` não muda com a língua da máquina). Falhou, não existe ou estourou o tempo: `null`. O que
-//   sai com erro mas escreveu algo vale (o `lsof` sai com 1 quando um processo some no meio).
-// - A sonda só conecta em 127.0.0.1 e fecha; não escreve nada na conexão.
+// - Commands without a shell (`execFile`), with a short timeout and `LC_ALL=C` (the decimal point
+//   of `ps` and `df` does not change with the machine's language). Failed, missing or timed out:
+//   `null`. Output from a command that exits with an error still counts (`lsof` exits with 1 when
+//   a process disappears midway).
+// - The probe only connects to 127.0.0.1 and closes; it writes nothing on the connection.
 
 import { execFile } from 'node:child_process';
 import { readFile, stat, statfs } from 'node:fs/promises';
@@ -51,7 +52,7 @@ export const systemFileOwner: FileOwner = async (path) => {
   }
 };
 
-/** Quanto a conexão precisa ficar aberta para contar como `open`: o `ssh` fecha a de um encaminhamento sem ninguém lá em menos que isso. */
+/** How long the connection must stay open to count as `open`: `ssh` closes a forward with nobody on the other side faster than this. */
 export const PROBE_HOLD_MS = 1_000;
 
 export const systemProbe: PortProbe = (port) =>
@@ -90,7 +91,7 @@ export function systemDeps(): CollectorDeps {
   return { run: systemRunner, readFile: systemReadFile, statfs: systemStatfs, fileOwner: systemFileOwner, probe: systemProbe, os: systemOs };
 }
 
-/** O coletor da plataforma; `null` onde não há um (Windows): o núcleo sobe sem telemetria. */
+/** The platform's collector; `null` where there is none (Windows): the núcleo starts without telemetry. */
 export function collectorFor(platform: NodeJS.Platform = process.platform, deps: CollectorDeps = systemDeps()): TelemetryCollector | null {
   if (platform === 'darwin') return new DarwinCollector(deps);
   if (platform === 'linux') return new LinuxCollector(deps);

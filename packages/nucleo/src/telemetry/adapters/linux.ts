@@ -1,28 +1,28 @@
-// Coletor do Linux (#175, decisão 0008): a máquina remota que roda o próprio núcleo. Só leitura, sem
-// `sudo`, com o `/proc` e os comandos que já vêm no sistema:
+// Linux collector (#175, decision 0008): the remote machine running its own núcleo. Read-only, no
+// `sudo`, with `/proc` and the commands that already ship with the system:
 //
-// | Grupo    | De onde                                                                  |
-// | -------- | ------------------------------------------------------------------------ |
-// | Memória  | `/proc/meminfo` (usada = total − disponível; swap)                       |
-// | GPU      | `nvidia-smi --query-gpu=…` quando existe; senão ausente                  |
-// | Rede     | `/proc/net/route` (a interface da rota padrão) e `/proc/net/dev`         |
-// | Processos| `ps -eo pid=,pcpu=,rss=,comm=` e `ps -eo pid=,etime=,args=`              |
-// | Portas   | `ss -ltnp` (o processo só aparece para os do próprio usuário)            |
-// | Túnel    | não se aplica: `tunnels` sai `null`                                      |
+// | Group     | Source                                                                   |
+// | --------- | ------------------------------------------------------------------------ |
+// | Memory    | `/proc/meminfo` (used = total − available; swap)                         |
+// | GPU       | `nvidia-smi --query-gpu=…` when present; otherwise absent                |
+// | Network   | `/proc/net/route` (the default route's interface) and `/proc/net/dev`    |
+// | Processes | `ps -eo pid=,pcpu=,rss=,comm=` and `ps -eo pid=,etime=,args=`            |
+// | Ports     | `ss -ltnp` (the process only shows for the user's own)                   |
+// | Tunnel    | does not apply: `tunnels` comes out `null`                               |
 //
-// O sistema sai do `PRETTY_NAME` de `/etc/os-release`, uma vez.
+// The OS name comes from `PRETTY_NAME` in `/etc/os-release`, once.
 
 import type { GpuReading, ListeningPort, MemoryReading, TunnelReading } from '../model.ts';
 import { listenInterfaceOf, mergePorts, parsePsArgs, parsePsStats, PlatformCollector, type NetCounters, type ProcessSnapshot } from './common.ts';
 
-/** `/proc/meminfo` → os campos em bytes (o arquivo diz kB). */
+/** `/proc/meminfo` → the fields in bytes (the file says kB). */
 export function parseMeminfo(out: string): Record<string, number> {
   const fields: Record<string, number> = {};
   for (const m of out.matchAll(/^(\w+(?:\(\w+\))?):\s+(\d+)(?:\s+kB)?\s*$/gm)) fields[m[1]] = Number(m[2]) * 1024;
   return fields;
 }
 
-/** `nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits`, a primeira placa. */
+/** `nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits`, the first card. */
 export function parseNvidiaSmi(out: string): GpuReading | null {
   const line = out.split('\n').find((l) => l.trim());
   if (!line) return null;
@@ -35,7 +35,7 @@ export function parseNvidiaSmi(out: string): GpuReading | null {
   return { name: name || null, usedPct: toNumber(utilization), memoryUsedBytes: mib(used), memoryTotalBytes: mib(total) };
 }
 
-/** `/proc/net/route`: a interface da rota padrão (destino e máscara zero), a de menor métrica. */
+/** `/proc/net/route`: the default route's interface (zero destination and mask), the one with the lowest metric. */
 export function parseProcNetRoute(out: string): string | null {
   let best: { iface: string; metric: number } | null = null;
   for (const l of out.split('\n').slice(1)) {
@@ -47,7 +47,7 @@ export function parseProcNetRoute(out: string): string | null {
   return best?.iface ?? null;
 }
 
-/** `/proc/net/dev`: bytes recebidos (1ª coluna) e enviados (9ª) da interface. */
+/** `/proc/net/dev`: the interface's received (1st column) and sent (9th) bytes. */
 export function parseProcNetDev(out: string, iface: string): { rxBytes: number; txBytes: number } | null {
   for (const l of out.split('\n')) {
     const m = /^\s*([^:\s]+):\s*(.*)$/.exec(l);

@@ -1,6 +1,6 @@
-// Adaptador SQLite da porta das amostras (#175). Usa o mesmo banco do adaptador de armazenamento
-// (`SqliteStorage.db`), que já aplicou a migração da telemetria. A gravação e a poda vão na mesma
-// transação: a tabela nunca passa das 12 h, nem por um instante.
+// SQLite adapter for the samples port (#175). Uses the same database as the storage adapter
+// (`SqliteStorage.db`), which has already applied the telemetry migration. The write and the
+// pruning go in the same transaction: the table never holds more than 12 h, not even for a moment.
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import { samplePointOf, type SamplePoint, type TelemetryReading } from '../model.ts';
@@ -20,7 +20,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
   constructor(db: DatabaseSync) {
     this.db = db;
     const ok = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'telemetry_samples'").get();
-    if (!ok) throw new Error('banco sem a tabela de telemetria: abra-o com o SqliteStorage, que aplica as migrações');
+    if (!ok) throw new Error('database without the telemetry table: open it with SqliteStorage, which applies the migrations');
     this.insert = db.prepare(`
       INSERT OR REPLACE INTO telemetry_samples
         (machine_id, taken_at, cpu_used_pct, load1, cores, memory_used_bytes, swap_used_bytes, rx_bytes_per_sec, tx_bytes_per_sec, gpu_used_pct, reading)
@@ -34,7 +34,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
 
   async putSample(machineId: string, reading: TelemetryReading, retentionMs: number): Promise<void> {
     const p = samplePointOf(reading);
-    if (!Number.isFinite(p.takenAt)) throw new RangeError(`takenAt inválido: ${reading.takenAt}`);
+    if (!Number.isFinite(p.takenAt)) throw new RangeError(`invalid takenAt: ${reading.takenAt}`);
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.insert.run(
@@ -77,7 +77,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
     return r ? (JSON.parse(r.reading as string) as TelemetryReading) : null;
   }
 
-  /** Quantas amostras a máquina tem (testes e `/api/carga`). */
+  /** How many samples the machine has (tests and `/api/load`). */
   count(machineId: string): number {
     const r = this.db.prepare('SELECT COUNT(*) AS n FROM telemetry_samples WHERE machine_id = ?').get(machineId) as { n: number };
     return r.n;

@@ -1,8 +1,8 @@
-// As leituras que as rotas devolvem (#175): a lista de máquinas e a telemetria de uma delas.
+// What the routes return (#175): the list of machines and the telemetry of one of them.
 //
-// Hoje só `local` (esta máquina) mede de verdade. A forma já é a da #176: cada máquina vem de um
-// `MachineEntry` com o próprio `state()`; a remota vai entrar com o estado do túnel e do núcleo de lá,
-// e as amostras dela no mesmo `TelemetryStore`, pelo id dela.
+// Today only `local` (this machine) is really measured. The shape is already #176's: each machine
+// comes from a `MachineEntry` with its own `state()`; a remote machine will come in with the state
+// of the tunnel and of its núcleo, and its samples in the same `TelemetryStore`, under its id.
 
 import type { AlertTracker } from './alerts.ts';
 import {
@@ -20,19 +20,19 @@ import { buildSeries } from './series.ts';
 
 export interface MachineEntry {
   id: string;
-  /** O nome na barra lateral e na bandeja. */
+  /** The name in the sidebar and the tray. */
   label: string;
   state(): MachineState;
 }
 
-/** Esta máquina: o núcleo que responde é o dela, então está sempre conectada. */
+/** This machine: the núcleo answering is its own, so it is always connected. */
 export const localMachine = (label = 'Esta máquina'): MachineEntry => ({ id: LOCAL_MACHINE_ID, label, state: () => 'connected' });
 
 export interface TelemetryResponse {
   version: number;
   machine: MachineSummary;
   hours: WindowHours;
-  /** A leitura mais nova; `null` antes da primeira amostra. */
+  /** The newest reading; `null` before the first sample. */
   current: TelemetryReading | null;
   series: TelemetrySeries;
   alerts: Alert[];
@@ -61,12 +61,12 @@ export class TelemetryService {
     return { id: m.id, label: m.label, state: m.state(), lastReadAt: r?.takenAt ?? null, alerts: this.o.tracker.active(m.id).length };
   }
 
-  /** Esta máquina primeiro, depois as remotas na ordem da configuração. */
+  /** This machine first, then the remote ones in configuration order. */
   async machines(): Promise<MachineSummary[]> {
     return Promise.all(this.o.machines.map((m) => this.summary(m)));
   }
 
-  /** `null` quando a máquina não existe. */
+  /** `null` when the machine does not exist. */
   async telemetry(machineId: string, hours: WindowHours): Promise<TelemetryResponse | null> {
     const m = this.o.machines.find((x) => x.id === machineId);
     if (!m) return null;

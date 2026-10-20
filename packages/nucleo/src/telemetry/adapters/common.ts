@@ -1,10 +1,11 @@
-// O que os coletores do Mac e do Linux têm em comum (#175): a leitura das saídas de `df -P`, `ps`
-// e `docker`, o uso de CPU e a taxa da rede pela diferença entre duas amostras, e a classe base que
-// monta a leitura. Cada função de leitura é pura e recebe a saída do comando como texto: os testes
-// rodam sobre saídas gravadas (test/fixtures/telemetry), nunca sobre o sistema.
+// What the Mac and Linux collectors have in common (#175): parsing the output of `df -P`, `ps` and
+// `docker`, CPU usage and network rate from the difference between two samples, and the base class
+// that assembles the reading. Every parsing function is pure and takes the command output as text:
+// tests run over recorded outputs (test/fixtures/telemetry), never over the system.
 //
-// Regra de todos os grupos: comando que falta, falha ou estoura o tempo devolve `null` no runner, e
-// o grupo (ou o campo) sai `null`. Um grupo que lança é pego aqui e também sai `null`.
+// Rule for every group: a command that is missing, fails or times out returns `null` from the
+// runner, and the group (or the field) comes out `null`. A group that throws is caught here and also
+// comes out `null`.
 
 import { ehClaude } from '../../estados/sonda.ts';
 import type {
@@ -27,11 +28,11 @@ import type {
 } from '../model.ts';
 import type { CollectorDeps, CpuTimes, TelemetryCollector } from '../ports.ts';
 
-/** O tempo de cada comando: curto, para uma amostra nunca passar dos 30 s. */
+/** Each command's timeout: short, so a sample never takes more than the 30 s. */
 export const COMMAND_TIMEOUT_MS = 2_500;
-/** O `docker system df` soma tamanhos e costuma ser o mais lento. */
+/** `docker system df` adds up sizes and tends to be the slowest. */
 export const DOCKER_DF_TIMEOUT_MS = 3_000;
-/** A espera da primeira leitura: CPU e rede precisam de duas medidas. */
+/** The wait before the first reading: CPU and network need two measurements. */
 export const PRIME_MS = 1_000;
 export const TOP_PROCESSES = 6;
 
@@ -39,7 +40,7 @@ const n = (s: string | undefined) => (s === undefined ? NaN : Number(s));
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-/** Roda o grupo; o que lançar vira `null` (o campo fica ausente, a leitura continua). */
+/** Runs the group; whatever it throws becomes `null` (the field is absent, the reading goes on). */
 export async function orNull<T>(f: () => Promise<T | null>): Promise<T | null> {
   try {
     return await f();
@@ -49,7 +50,7 @@ export async function orNull<T>(f: () => Promise<T | null>): Promise<T | null> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// df -P: só para listar os pontos de montagem. O tamanho vem do `fs.statfs`.
+// df -P: only to list the mount points. The size comes from `fs.statfs`.
 
 export interface DfRow {
   filesystem: string;
@@ -59,7 +60,7 @@ export interface DfRow {
   availableBytes: number;
 }
 
-/** `df -P` no Mac (blocos de 512) e no Linux (de 1024): o tamanho do bloco vem do cabeçalho. */
+/** `df -P` on the Mac (512-byte blocks) and on Linux (1024): the block size comes from the header. */
 export function parseDfP(out: string): DfRow[] {
   const lines = out.split('\n');
   const blockSize = Number(/(\d+)-blocks/.exec(lines[0] ?? '')?.[1] ?? 1024);
@@ -75,14 +76,14 @@ export function parseDfP(out: string): DfRow[] {
 const PSEUDO_FS = /^(?:tmpfs|devtmpfs|devfs|udev|overlay|none|shm|efivarfs|map\s.*|\/dev\/loop\d+)$/;
 const PSEUDO_MOUNT = /^\/(?:dev|proc|sys|run|snap|boot\/efi|private\/var\/vm|System\/Volumes)(?:\/|$)/;
 
-/** Fora: os sistemas de arquivos de mentira, os snaps e, no Mac, os volumes de sistema do APFS. */
+/** Left out: pseudo file systems, snaps and, on the Mac, the APFS system volumes. */
 export function isRealVolume(r: DfRow): boolean {
   return r.totalBytes > 0 && !PSEUDO_FS.test(r.filesystem) && !PSEUDO_MOUNT.test(r.mount);
 }
 
 /**
- * Os volumes pelo `fs.statfs` de cada ponto (usado = total − disponível, o que no APFS dá o
- * contêiner inteiro, como o Finder). Sem o `statfs`, os números do próprio `df`.
+ * The volumes from each mount point's `fs.statfs` (used = total − available, which on APFS gives the
+ * whole container, like Finder). Without `statfs`, the numbers from `df` itself.
  */
 export async function volumesOf(rows: DfRow[], deps: CollectorDeps): Promise<VolumeReading[]> {
   const out: VolumeReading[] = [];
@@ -104,11 +105,11 @@ export interface PsRow {
   pid: number;
   cpuPct: number;
   rssBytes: number;
-  /** O executável (`comm`): o caminho inteiro no Mac, o nome curto no Linux. */
+  /** The executable (`comm`): the full path on the Mac, the short name on Linux. */
   comm: string;
 }
 
-/** Saída de `ps … -o pid=,pcpu=,rss=,comm=`. */
+/** Output of `ps … -o pid=,pcpu=,rss=,comm=`. */
 export function parsePsStats(out: string): PsRow[] {
   const rows: PsRow[] = [];
   for (const l of out.split('\n')) {
@@ -120,21 +121,21 @@ export function parsePsStats(out: string): PsRow[] {
 
 export interface PsArgsRow {
   pid: number;
-  /** Há quantos segundos o processo roda; `null` quando o `etime` não fez sentido. */
+  /** How many seconds the process has been running; `null` when `etime` made no sense. */
   elapsedSec: number | null;
   args: string;
-  /** O uid dono do processo, quando o `ps` o trouxe (`parsePsUidArgs`). */
+  /** The uid owning the process, when `ps` provided it (`parsePsUidArgs`). */
   uid?: number;
 }
 
-/** `etime` do ps: `[[dd-]hh:]mm:ss`. */
+/** `ps` `etime`: `[[dd-]hh:]mm:ss`. */
 export function parseEtime(s: string): number | null {
   const m = /^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$/.exec(s.trim());
   if (!m) return null;
   return n(m[1] ?? '0') * 86_400 + n(m[2] ?? '0') * 3_600 + n(m[3]) * 60 + n(m[4]);
 }
 
-/** Saída de `ps … -o pid=,etime=,args=`. */
+/** Output of `ps … -o pid=,etime=,args=`. */
 export function parsePsArgs(out: string): PsArgsRow[] {
   const rows: PsArgsRow[] = [];
   for (const l of out.split('\n')) {
@@ -144,7 +145,7 @@ export function parsePsArgs(out: string): PsArgsRow[] {
   return rows;
 }
 
-/** Saída de `ps … -o pid=,uid=,etime=,args=`: a mesma, com o dono de cada processo. */
+/** Output of `ps … -o pid=,uid=,etime=,args=`: the same, with each process's owner. */
 export function parsePsUidArgs(out: string): PsArgsRow[] {
   const rows: PsArgsRow[] = [];
   for (const l of out.split('\n')) {
@@ -156,7 +157,7 @@ export function parsePsUidArgs(out: string): PsArgsRow[] {
 
 export const baseName = (comm: string) => comm.slice(comm.lastIndexOf('/') + 1);
 
-/** Processo do Claude Desktop: o app e os helpers dele, todos dentro de `Claude.app`. */
+/** A Claude Desktop process: the app and its helpers, all inside `Claude.app`. */
 export const isClaudeDesktop = (comm: string) => comm.includes('/Claude.app/');
 
 const group = (rows: PsRow[]): ProcessGroup => ({
@@ -165,11 +166,11 @@ const group = (rows: PsRow[]): ProcessGroup => ({
   memoryBytes: rows.reduce((a, r) => a + r.rssBytes, 0),
 });
 
-/** CLI (`claude`, pela linha de comando) e Claude Desktop, somados e em separado. */
+/** CLI (`claude`, by its command line) and Claude Desktop, added together and separately. */
 export function claudeOf(stats: PsRow[], args: PsArgsRow[]): ClaudeProcesses {
   const line = new Map(args.map((a) => [a.pid, a.args]));
   const desktop = stats.filter((r) => isClaudeDesktop(r.comm));
-  // O pacote npm roda no node com `process.title = 'claude'`: o `comm` diz o que a linha de comando não diz.
+  // The npm package runs on node with `process.title = 'claude'`: `comm` says what the command line does not.
   const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || ehClaude(line.get(r.pid) ?? r.comm)));
   return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
 }
@@ -189,7 +190,7 @@ export const DOCKER_DF_ARGS = ['system', 'df', '--format', '{{.Type}}\t{{.TotalC
 
 const RUNNING_STATES = new Set(['running', 'restarting']);
 
-/** As portas publicadas no host de `{{.Ports}}` (`0.0.0.0:15432->5432/tcp, :::15432->5432/tcp`). */
+/** The host ports published in `{{.Ports}}` (`0.0.0.0:15432->5432/tcp, :::15432->5432/tcp`). */
 export function publishedPorts(ports: string): number[] {
   const out = new Set<number>();
   for (const m of ports.matchAll(/:(\d+)(?:-(\d+))?->/g)) {
@@ -200,7 +201,7 @@ export function publishedPorts(ports: string): number[] {
   return [...out].sort((a, b) => a - b);
 }
 
-/** Saída de `docker ps -a` com `DOCKER_PS_ARGS`: os contadores e as stacks do Compose. */
+/** Output of `docker ps -a` with `DOCKER_PS_ARGS`: the counters and the Compose stacks. */
 export function parseDockerPs(out: string): Omit<DockerReading, 'space'> {
   let running = 0;
   let stopped = 0;
@@ -224,7 +225,7 @@ export function parseDockerPs(out: string): Omit<DockerReading, 'space'> {
 
 const UNIT_FACTORS: Record<string, number> = { b: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, pb: 1e15 };
 
-/** `25.2GB`, `0B`, `8.7GB (34%)`: o Docker escreve em unidades de 1000. */
+/** `25.2GB`, `0B`, `8.7GB (34%)`: Docker writes units of 1000. */
 export function parseDockerSize(s: string): number | null {
   const m = /^\s*([\d.]+)\s*([kKmMgGtTpP]?B)\b/.exec(s);
   if (!m) return null;
@@ -249,9 +250,9 @@ export function parseDockerDf(out: string): DockerSpace[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Portas em escuta
+// Listening ports
 
-/** `*`, `0.0.0.0`, `[::]`: todas; `127.0.0.1`, `[::1]`, `localhost`: só esta máquina. */
+/** `*`, `0.0.0.0`, `[::]`: all; `127.0.0.1`, `[::1]`, `localhost`: this machine only. */
 export function listenInterfaceOf(host: string): { interface: ListenInterface; address: string | null } {
   const h = host.replace(/^\[|\]$/g, '').replace(/%.*$/, '');
   if (h === '*' || h === '0.0.0.0' || h === '::' || h === '') return { interface: 'all', address: null };
@@ -259,7 +260,7 @@ export function listenInterfaceOf(host: string): { interface: ListenInterface; a
   return { interface: 'address', address: h };
 }
 
-/** Uma linha por porta e processo, a interface mais aberta quando o mesmo processo escuta em IPv4 e IPv6. */
+/** One row per port and process, with the most open interface when the same process listens on IPv4 and IPv6. */
 export function mergePorts(ports: ListeningPort[]): ListeningPort[] {
   const rank: Record<ListenInterface, number> = { all: 0, address: 1, loopback: 2 };
   const byKey = new Map<string, ListeningPort>();
@@ -272,12 +273,12 @@ export function mergePorts(ports: ListeningPort[]): ListeningPort[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// CPU e rede: pela diferença entre duas medidas
+// CPU and network: from the difference between two measurements
 
 const busyTime = (t: CpuTimes) => t.user + t.nice + t.sys + t.irq;
 const total = (t: CpuTimes) => busyTime(t) + t.idle;
 
-/** Uso de todos os núcleos entre duas medidas de `os.cpus()`, 0 a 100; `null` sem diferença. */
+/** Usage of all cores between two `os.cpus()` measurements, 0 to 100; `null` without a difference. */
 export function cpuUsedPct(before: { times: CpuTimes }[], after: { times: CpuTimes }[]): number | null {
   if (before.length === 0 || before.length !== after.length) return null;
   let o = 0;
@@ -297,7 +298,7 @@ export interface NetCounters {
   atMs: number;
 }
 
-/** A taxa entre duas medidas da mesma interface; `null` quando mudou de interface ou o contador voltou. */
+/** The rate between two measurements of the same interface; `null` when the interface changed or the counter went back. */
 export function networkOf(current: NetCounters, previous: NetCounters | null): NetworkReading {
   const dt = previous ? (current.atMs - previous.atMs) / 1000 : 0;
   const ok = previous !== null && previous.interface === current.interface && dt > 0 && current.rxBytes >= previous.rxBytes && current.txBytes >= previous.txBytes;
@@ -311,9 +312,9 @@ export function networkOf(current: NetCounters, previous: NetCounters | null): N
 }
 
 // ---------------------------------------------------------------------------------------------
-// A classe base
+// The base class
 
-/** Os processos, lidos uma vez por amostra e repartidos entre os grupos. */
+/** The processes, read once per sample and shared between the groups. */
 export interface ProcessSnapshot {
   stats: PsRow[];
   args: PsArgsRow[];
@@ -354,7 +355,7 @@ export abstract class PlatformCollector implements TelemetryCollector {
   async collect(): Promise<TelemetryReading> {
     const os = this.deps.os;
     if (this.prevCpus === null) {
-      // A primeira: uma medida, a espera e a segunda, para CPU e rede saírem já na primeira amostra.
+      // The first one: one measurement, the wait and a second one, so CPU and network are filled from the first sample.
       this.prevCpus = os.cpus();
       this.prevNet = await this.netSample();
       await (this.deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(PRIME_MS);
@@ -401,7 +402,7 @@ export abstract class PlatformCollector implements TelemetryCollector {
     };
   }
 
-  /** `null` sem o `docker` no PATH ou sem o daemon (o `docker ps` falha). */
+  /** `null` without `docker` on the PATH or without the daemon (`docker ps` fails). */
   protected async docker(): Promise<DockerReading | null> {
     const ps = await this.run('docker', DOCKER_PS_ARGS);
     if (ps === null) return null;

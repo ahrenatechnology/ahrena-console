@@ -1,5 +1,5 @@
-// Os alertas da máquina (#175/AC-3): carga acima dos núcleos por 5 min, volume acima de 85%, porta
-// em todas as interfaces, porta do túnel ocupada; e a passagem (entra, sai) que vai para /api/changes.
+// The machine's alerts (#175/AC-3): load above the core count for 5 min, a volume above 85%, a port
+// on all interfaces, a busy tunnel port; and the transition (enter, exit) that goes to /api/changes.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { AlertTracker, computeAlerts, formatBytes, loadHighSince } from '../../src/telemetry/alerts.ts';
@@ -8,18 +8,18 @@ import { iso, point, reading, T0 } from './reading.ts';
 const MIN = 60_000;
 const highPoints = (n: number, load1 = 20) => Array.from({ length: n }, (_, i) => point(T0 - i * 30_000, { load1 }));
 
-describe('#175/AC-3 alertas sobre as amostras', () => {
-  test('carga acima dos núcleos há 5 min entra; há 4,5 min ainda não', () => {
+describe('#175/AC-3 alerts over the samples', () => {
+  test('load above the cores for 5 min enters; for 4.5 min not yet', () => {
     const r = reading({ cpu: { cores: 12, model: null, usedPct: 99, load: { one: 20, five: 18, fifteen: 10 } } });
-    assert.deepEqual(computeAlerts(r, highPoints(10)).map((a) => a.id), []); // 0 a 4,5 min
-    const [a] = computeAlerts(r, highPoints(11)); // 0 a 5 min
+    assert.deepEqual(computeAlerts(r, highPoints(10)).map((a) => a.id), []); // 0 to 4.5 min
+    const [a] = computeAlerts(r, highPoints(11)); // 0 to 5 min
     assert.equal(a.id, 'load-high');
     assert.equal(a.level, 'error');
     assert.equal(a.message, 'CPU saturada: carga de 20 em 12 núcleos');
     assert.equal(a.since, iso(T0 - 5 * MIN));
   });
 
-  test('uma amostra abaixo no meio zera a contagem', () => {
+  test('one sample below in the middle resets the count', () => {
     const pts = highPoints(14);
     pts[3] = point(T0 - 3 * 30_000, { load1: 4 });
     assert.equal(loadHighSince(pts), T0 - 2 * 30_000);
@@ -27,7 +27,7 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
     assert.equal(computeAlerts(r, pts).length, 0);
   });
 
-  test('volume acima de 85% e o texto em pt-BR', () => {
+  test('volume above 85% and the pt-BR text', () => {
     const r = reading({
       disk: {
         volumes: [
@@ -43,7 +43,7 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
     assert.equal(as[0].detail, '146 GB de 170 GB usados (86%) · 24 GB livres');
   });
 
-  test('porta em todas as interfaces, uma vez por porta (IPv4 e IPv6); loopback não', () => {
+  test('port on all interfaces, once per port (IPv4 and IPv6); loopback does not', () => {
     const r = reading({
       ports: [
         { port: 5432, interface: 'all', address: null, process: 'postgres', pid: 10 },
@@ -58,7 +58,7 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
     assert.equal(as[1].detail, 'postgres · qualquer um na rede alcança');
   });
 
-  test('porta do túnel ocupada', () => {
+  test('busy tunnel port', () => {
     const r = reading({
       tunnels: [
         {
@@ -78,11 +78,11 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
     assert.match(as[0].detail ?? '', /^node deste Mac segura a porta/);
   });
 
-  test('grupo ausente não gera alerta nem erro', () => {
+  test('an absent group produces no alert and no error', () => {
     assert.deepEqual(computeAlerts(reading({ ports: null, tunnels: null, disk: { volumes: [] } }), []), []);
   });
 
-  test('o tracker diz o que entrou e o que saiu e mantém o `since` de quem continua', () => {
+  test('the tracker says what entered and what exited and keeps the `since` of what continues', () => {
     const t = new AlertTracker();
     const r1 = reading({ ports: [{ port: 5432, interface: 'all', address: null, process: 'postgres', pid: 1 }] }, T0);
     const u1 = t.update('local', computeAlerts(r1, []));
@@ -100,7 +100,7 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
     assert.deepEqual(t.active('workstation'), []);
   });
 
-  test('formatBytes em unidades de 1000, com vírgula', () => {
+  test('formatBytes in units of 1000, with a comma', () => {
     assert.equal(formatBytes(512), '512 B');
     assert.equal(formatBytes(1.85e12), '1,9 TB');
     assert.equal(formatBytes(146e9), '146 GB');

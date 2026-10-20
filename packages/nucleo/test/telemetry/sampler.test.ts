@@ -1,6 +1,6 @@
-// O amostrador e a leitura das rotas (#175/AC-2, AC-3, AC-4), sobre dublês das portas: a amostra a
-// cada intervalo, sem sobreposição, a poda, os alertas publicados no cursor de mudanças e a forma
-// da lista de máquinas.
+// The sampler and the routes' reading (#175/AC-2, AC-3, AC-4), over port doubles: a sample at
+// each interval, with no overlap, the pruning, the alerts published on the changes cursor and the shape
+// of the machine list.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
@@ -22,8 +22,8 @@ function fakeTimers() {
   return { timers, fire: () => fns.forEach((f) => f()), get count() { return fns.length; }, get cleared() { return cleared; } };
 }
 
-describe('#175/AC-2 amostrador', () => {
-  test('lê na hora, depois a cada intervalo; start duas vezes não liga outro timer; stop para', async () => {
+describe('#175/AC-2 sampler', () => {
+  test('reads at once, then every interval; start twice does not set another timer; stop stops', async () => {
     const store = new MemoryTelemetryStore();
     const collector = new ScriptedCollector([reading({}, T0), reading({}, T0 + 30_000)]);
     const t = fakeTimers();
@@ -38,7 +38,7 @@ describe('#175/AC-2 amostrador', () => {
     assert.equal((await store.latest('local'))?.takenAt, reading({}, T0).takenAt);
   });
 
-  test('sem sobreposição: o tique durante uma leitura lenta é pulado', async () => {
+  test('no overlap: a tick during a slow reading is skipped', async () => {
     let release!: () => void;
     const slow = { calls: 0, collect: () => (slow.calls++, new Promise<ReturnType<typeof reading>>((r) => (release = () => r(reading()))) ) };
     const t = fakeTimers();
@@ -51,7 +51,7 @@ describe('#175/AC-2 amostrador', () => {
     await s.stop();
   });
 
-  test('a poda de 12 h na escrita, pelo armazenamento', async () => {
+  test('the 12 h pruning on write, by the store', async () => {
     const store = new MemoryTelemetryStore();
     const H = 3_600_000;
     const collector = new ScriptedCollector([reading({}, T0 - 13 * H), reading({}, T0 - 11 * H), reading({}, T0)]);
@@ -60,16 +60,16 @@ describe('#175/AC-2 amostrador', () => {
     assert.equal(store.rows.get('local')?.length, 2);
   });
 
-  test('leitura que falha vai para o log e não para o amostrador', async () => {
+  test('a reading that fails goes to the log and does not stop the sampler', async () => {
     const logs: string[] = [];
     const s = new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([new Error('ps sumiu')]), store: new MemoryTelemetryStore(), tracker: new AlertTracker(), log: (m) => logs.push(m) });
     assert.equal(await s.sampleOnce(), null);
-    assert.deepEqual(logs, ['telemetria (local): ps sumiu']);
+    assert.deepEqual(logs, ['telemetry (local): ps sumiu']);
   });
 });
 
-describe('#175/AC-3 alertas em /api/changes', () => {
-  test('a entrada e a saída de um alerta viram mudanças `alert`, uma vez cada', async () => {
+describe('#175/AC-3 alerts on /api/changes', () => {
+  test('an alert entering and exiting become `alert` changes, once each', async () => {
     const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
     const start = cursor.atual;
     const collector = new ScriptedCollector([exposed(T0), exposed(T0 + 30_000), reading({}, T0 + 60_000)]);
@@ -77,15 +77,15 @@ describe('#175/AC-3 alertas em /api/changes', () => {
     await s.sampleOnce();
     const r1 = await cursor.aguardar(start, { timeoutMs: 0 });
     assert.deepEqual(r1.mudancas.map((m) => [m.tipo, m.chave, m.sessionId, m.accountId]), [['alert', 'local:port-exposed:5432', null, null]]);
-    await s.sampleOnce(); // continua: nada novo
+    await s.sampleOnce(); // continues: nothing new
     assert.equal((await cursor.aguardar(r1.cursor, { timeoutMs: 0 })).mudancas.length, 0);
-    await s.sampleOnce(); // saiu
+    await s.sampleOnce(); // exited
     const r3 = await cursor.aguardar(r1.cursor, { timeoutMs: 0 });
     assert.deepEqual(r3.mudancas.map((m) => m.chave), ['local:port-exposed:5432']);
     assert.deepEqual((await cursor.aguardar(r1.cursor, { timeoutMs: 0, filtros: { tipos: ['alert'] } })).mudancas.length, 1);
   });
 
-  test('carga acima dos núcleos por 5 min, sobre as amostras gravadas', async () => {
+  test('load above the cores for 5 min, over the recorded samples', async () => {
     const high = (i: number) => reading({ cpu: { cores: 4, model: null, usedPct: 100, load: { one: 9, five: 7, fifteen: 5 } } }, T0 + i * 30_000);
     const collector = new ScriptedCollector(Array.from({ length: 11 }, (_, i) => high(i)));
     const tracker = new AlertTracker();
@@ -97,8 +97,8 @@ describe('#175/AC-3 alertas em /api/changes', () => {
   });
 });
 
-describe('#175/AC-4 e AC-5 a leitura das rotas', () => {
-  test('máquinas: local conectada, a hora da última leitura e o número de alertas', async () => {
+describe('#175/AC-4 and AC-5 the routes reading', () => {
+  test('machines: local connected, the time of the last reading and the number of alerts', async () => {
     const store = new MemoryTelemetryStore();
     const tracker = new AlertTracker();
     const service = new TelemetryService({ store, tracker, machines: [localMachine()], now: () => T0 });
@@ -107,7 +107,7 @@ describe('#175/AC-4 e AC-5 a leitura das rotas', () => {
     assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 1 }]);
   });
 
-  test('telemetria: versão, leitura atual, série da janela e alertas; máquina desconhecida é null', async () => {
+  test('telemetry: version, current reading, window series and alerts; an unknown machine is null', async () => {
     const store = new MemoryTelemetryStore();
     const tracker = new AlertTracker();
     const s = new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposed(T0 - 2 * 3_600_000), exposed(T0 - 60_000), exposed(T0)]), store, tracker });

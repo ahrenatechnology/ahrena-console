@@ -200,7 +200,7 @@ export const MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
-  // O esquema das amostras da telemetria fica na pasta dela (src/telemetry/migration.ts).
+  // The telemetry samples schema lives in its own folder (src/telemetry/migration.ts).
   { version: 9, description: TELEMETRY_MIGRATION_DESCRIPTION, sql: TELEMETRY_MIGRATION_SQL },
 ];
 

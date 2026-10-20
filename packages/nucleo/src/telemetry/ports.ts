@@ -1,56 +1,56 @@
-// As portas da telemetria (#175). O resto do núcleo depende só destas interfaces:
+// The telemetry ports (#175). The rest of the núcleo depends only on these interfaces:
 //
-// - `TelemetryCollector`: mede a máquina. Um adaptador por plataforma (adapters/darwin.ts,
-//   adapters/linux.ts) e o do simulador; cada um recebe o executor de comandos, a leitura de arquivo,
-//   os dados do `node:os` e a sonda de porta, para os testes nunca chamarem o sistema.
-// - `TelemetryStore`: guarda as amostras (adapters/sqlite.ts), com as mesmas regras da porta de
-//   armazenamento (tudo assíncrono, gravação do registro inteiro, consulta por padrão de acesso).
+// - `TelemetryCollector`: measures the machine. One adapter per platform (adapters/darwin.ts,
+//   adapters/linux.ts) plus the simulator's; each receives the command runner, the file reader,
+//   the `node:os` facts and the port probe, so tests never call the system.
+// - `TelemetryStore`: keeps the samples (adapters/sqlite.ts), with the same rules as the storage
+//   port (everything async, whole-record writes, queries by access pattern).
 
 import type { SamplePoint, TelemetryReading } from './model.ts';
 
 export interface TelemetryCollector {
-  /** Uma leitura agora. Nunca rejeita por um comando que falta: o grupo sai `null`. */
+  /** A reading now. Never rejects because a command is missing: that group comes out `null`. */
   collect(): Promise<TelemetryReading>;
 }
 
 export interface TelemetryStore {
   /**
-   * Grava a amostra (cria ou substitui pela hora) e apaga as da máquina com `retentionMs` ou mais
-   * de idade em relação a ela (12 h são 1440 amostras, não 1441).
+   * Writes the sample (creates or replaces it by time) and deletes the machine's samples that are
+   * `retentionMs` or more older than it (12 h is 1440 samples, not 1441).
    */
   putSample(machineId: string, reading: TelemetryReading, retentionMs: number): Promise<void>;
-  /** Os pontos da máquina desde `sinceMs` (inclusive), do mais velho ao mais novo. */
+  /** The machine's points since `sinceMs` (inclusive), oldest to newest. */
   listPoints(machineId: string, sinceMs: number): Promise<SamplePoint[]>;
-  /** A leitura mais nova da máquina; `null` sem nenhuma. */
+  /** The machine's newest reading; `null` when there is none. */
   latest(machineId: string): Promise<TelemetryReading | null>;
 }
 
 // ---------------------------------------------------------------------------------------------
-// O que os coletores recebem de fora
+// What the collectors receive from outside
 
 /**
- * Roda um comando sem shell e devolve a saída. `null` quando o comando não existe, falha, ou passa
- * de `timeoutMs`: o campo que dependia dele fica ausente.
+ * Runs a command without a shell and returns its output. `null` when the command does not exist,
+ * fails or exceeds `timeoutMs`: the field that depended on it is left absent.
  */
 export type CommandRunner = (command: string, args: readonly string[], options?: { timeoutMs?: number }) => Promise<string | null>;
 
-/** Lê um arquivo de texto (o `/proc` do Linux); `null` quando não existe ou não dá para ler. */
+/** Reads a text file (the Linux `/proc`); `null` when it does not exist or cannot be read. */
 export type FileReader = (path: string) => Promise<string | null>;
 
-/** O tamanho de um sistema de arquivos montado, pelo `fs.statfs`. `null` quando falha. */
+/** The size of a mounted file system, from `fs.statfs`. `null` when it fails. */
 export type StatFs = (mount: string) => Promise<{ totalBytes: number; freeBytes: number; availableBytes: number } | null>;
 
 /**
- * Dono e modo de um arquivo, pelo `fs.stat` (segue o link). `null` quando não existe ou não dá
- * para ler. Serve para o `-F` de um `ssh`: só se repassa ao `ssh -G` o arquivo do próprio usuário.
+ * Owner and mode of a file, from `fs.stat` (follows links). `null` when it does not exist or cannot
+ * be read. Used for an `ssh -F`: only a file of the user's own is passed on to `ssh -G`.
  */
 export type FileOwner = (path: string) => Promise<{ uid: number; mode: number } | null>;
 
 /**
- * Sonda de uma porta local, para o estado do túnel:
- * - `open`: conectou e a conexão ficou aberta;
- * - `closed`: conectou e fechou logo (o `ssh` aceitou e o outro lado não tinha ninguém);
- * - `refused`: ninguém escuta aqui.
+ * Probe of a local port, for the tunnel state:
+ * - `open`: connected and the connection stayed open;
+ * - `closed`: connected and closed right away (`ssh` accepted and nobody was on the other side);
+ * - `refused`: nothing listens here.
  */
 export type PortProbe = (port: number) => Promise<'open' | 'closed' | 'refused'>;
 
@@ -62,7 +62,7 @@ export interface CpuTimes {
   irq: number;
 }
 
-/** O que o `node:os` dá, injetável. */
+/** What `node:os` provides, injectable. */
 export interface OsFacts {
   hostname(): string;
   arch(): string;
@@ -71,7 +71,7 @@ export interface OsFacts {
   freemem(): number;
   loadavg(): number[];
   cpus(): { model: string; times: CpuTimes }[];
-  /** O uid de quem roda o núcleo (`process.getuid`); `null` onde não há (Windows). */
+  /** The uid running the núcleo (`process.getuid`); `null` where there is none (Windows). */
   uid(): number | null;
 }
 
@@ -82,8 +82,8 @@ export interface CollectorDeps {
   fileOwner: FileOwner;
   probe: PortProbe;
   os: OsFacts;
-  /** Relógio, para `takenAt` e as taxas. */
+  /** Clock, for `takenAt` and the rates. */
   now?: () => number;
-  /** A espera da primeira leitura (CPU e rede precisam de duas medidas). Nos testes, nada. */
+  /** The wait before the first reading (CPU and network need two measurements). Nothing in tests. */
   sleep?: (ms: number) => Promise<void>;
 }

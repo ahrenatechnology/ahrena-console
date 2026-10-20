@@ -1,6 +1,6 @@
-// As dependências dos coletores nos testes: o executor devolve as saídas gravadas em
-// test/fixtures/telemetry, a leitura de arquivo idem, o relógio anda só pela espera, e cada chamada
-// fica registrada. Nada chama o sistema.
+// The collectors' dependencies in tests: the runner returns the outputs recorded in
+// test/fixtures/telemetry, the file reader likewise, the clock only moves through the wait, and
+// every call is recorded. Nothing calls the system.
 import { readFileSync } from 'node:fs';
 import { DOCKER_DF_ARGS, DOCKER_PS_ARGS } from '../../src/telemetry/adapters/common.ts';
 import type { CollectorDeps, CpuTimes, FileOwner, PortProbe, StatFs } from '../../src/telemetry/ports.ts';
@@ -8,7 +8,7 @@ import type { CollectorDeps, CpuTimes, FileOwner, PortProbe, StatFs } from '../.
 const DIR = new URL('../fixtures/telemetry/', import.meta.url);
 export const fixture = (name: string) => readFileSync(new URL(name, DIR), 'utf8');
 
-/** Saída por chamada (`comando args…`); uma lista vale em sequência, repetindo a última. */
+/** Output per call (`command args…`); a list is used in sequence, repeating the last one. */
 export type Recorded = Record<string, string | string[] | null>;
 
 export const DARWIN_COMMANDS: Recorded = {
@@ -57,10 +57,10 @@ export function fixtureDeps(opts: {
   commands?: Recorded;
   files?: Recorded;
   statfs?: StatFs;
-  /** Sem ele, nenhum arquivo tem dono conhecido (um `-F` nunca vai ao `ssh -G`). */
+  /** Without it, no file has a known owner (a `-F` never reaches `ssh -G`). */
   fileOwner?: FileOwner;
   probe?: PortProbe;
-  /** O uid de quem roda; o padrão é o dono dos processos do usuário em ps-args.txt (501). */
+  /** The uid running the núcleo; defaults to the owner of the user's processes in ps-args.txt (501). */
   uid?: number | null;
   cores?: number;
   hostname?: string;
@@ -94,7 +94,7 @@ export function fixtureDeps(opts: {
       totalmem: () => 38_654_705_664,
       freemem: () => 1_000_000_000,
       loadavg: () => [4.111, 3.8, 3.2],
-      // A primeira medida e as seguintes: metade do tempo ocupado entre elas (50%).
+      // The first measurement and the following ones: half the time busy between them (50%).
       uid: () => (opts.uid === undefined ? 501 : opts.uid),
       cpus: () => Array.from({ length: cores }, () => ({ model: 'CPU Exemplo', times: cpuCalls++ < cores ? cpuTimesOf(1000, 500, 8500) : cpuTimesOf(1200, 600, 8800) })),
     },

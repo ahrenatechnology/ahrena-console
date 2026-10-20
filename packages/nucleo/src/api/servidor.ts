@@ -29,8 +29,8 @@
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` e `POST /api/decisions/<id>/promote` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 // | `GET /api/repos` e `/api/repos/<owner>/<repo>` | Repositórios do GitHub e métricas (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
-// | `GET /api/machines`           | As máquinas: esta e as remotas, com estado e alertas (api/telemetry.ts, #175) |
-// | `GET /api/telemetry`          | A telemetria de uma máquina: leitura atual, séries e alertas (`?machine=`, `?hours=1|12`; #175) |
+// | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
+// | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 //
 // The old Portuguese routes and query parameters (`/api/painel/<id>`, `/api/sessao/<id>`, `/abrir/<id>`,
 // `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
@@ -127,7 +127,7 @@ export interface OpcoesDaApi {
   repos?: RotaDosRepos;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
-  /** A telemetria das máquinas (#175); sem ela, `/api/machines` e `/api/telemetry` dão 404. */
+  /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
   telemetry?: TelemetryService | null;
 }
 

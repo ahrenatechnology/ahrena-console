@@ -1,13 +1,13 @@
-// Os alertas da máquina, calculados sobre as amostras (#175, decisão 0008):
+// The machine's alerts, computed over the samples (#175, decision 0008):
 //
-// - `load-high`: a carga de 1 min acima do número de núcleos em todas as amostras dos últimos 5 min;
-// - `volume-full`: um volume acima de 85%;
-// - `port-exposed`: uma porta em escuta em todas as interfaces;
-// - `tunnel-busy`: uma porta do túnel que outro processo deste Mac segura.
+// - `load-high`: the 1 min load above the core count in every sample of the last 5 min;
+// - `volume-full`: a volume above 85%;
+// - `port-exposed`: a port listening on all interfaces;
+// - `tunnel-busy`: a tunnel port that another process on this Mac holds.
 //
-// `computeAlerts` é puro: a leitura de agora e as amostras recentes dão os alertas que valem agora.
-// `AlertTracker` guarda os abertos de cada máquina, mantém o `since` de quando cada um entrou e diz
-// o que entrou e o que saiu; quem publica em `/api/changes` é o caso de uso (sampler.ts).
+// `computeAlerts` is pure: the current reading and the recent samples give the alerts that hold now.
+// `AlertTracker` keeps each machine's open alerts, keeps the `since` of when each one entered and
+// says what entered and what exited; publishing to `/api/changes` is the use case's job (sampler.ts).
 
 import {
   LOAD_HIGH_FOR_MS,
@@ -20,7 +20,7 @@ import {
 
 const formatNumber = (n: number, digits = 1) => n.toLocaleString('pt-BR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 
-/** "146 GB", "1,8 TB", "512 MB": unidades de 1000, como o Finder e o `df -H`. */
+/** "146 GB", "1,8 TB", "512 MB": units of 1000, like Finder and `df -H`. */
 export function formatBytes(bytes: number): string {
   const units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
   let v = bytes;
@@ -33,8 +33,8 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * Desde quando a carga está acima dos núcleos, sem interrupção, contando para trás a partir da
- * amostra mais nova. `null` quando a mais nova já não está acima.
+ * Since when the load has been above the core count without a break, counting back from the newest
+ * sample. `null` when the newest one is no longer above.
  */
 export function loadHighSince(points: readonly SamplePoint[]): number | null {
   const sorted = [...points].sort((a, b) => b.takenAt - a.takenAt);
@@ -47,8 +47,8 @@ export function loadHighSince(points: readonly SamplePoint[]): number | null {
 }
 
 /**
- * Os alertas que valem agora. `points` são as amostras recentes da máquina (as dos últimos minutos
- * bastam; a leitura de agora pode estar entre elas ou não).
+ * The alerts that hold now. `points` are the machine's recent samples (the last few minutes are
+ * enough; the current reading may or may not be among them).
  */
 export function computeAlerts(reading: TelemetryReading, points: readonly SamplePoint[]): Alert[] {
   const now = Date.parse(reading.takenAt);
@@ -126,11 +126,11 @@ export interface AlertUpdate {
   active: Alert[];
 }
 
-/** Os alertas abertos de cada máquina, em memória: a passagem (entra, sai) é o que se publica. */
+/** Each machine's open alerts, in memory: the transition (enter, exit) is what gets published. */
 export class AlertTracker {
   private readonly open = new Map<string, Map<string, Alert>>();
 
-  /** Troca os abertos da máquina pelos de agora; o `since` de quem já estava aberto fica o mais antigo. */
+  /** Replaces the machine's open alerts with the current ones; an alert already open keeps the oldest `since`. */
   update(machineId: string, now: readonly Alert[]): AlertUpdate {
     const before = this.open.get(machineId) ?? new Map<string, Alert>();
     const after = new Map<string, Alert>();

@@ -1,7 +1,7 @@
-// GET /api/machines e GET /api/telemetry (#175) em 127.0.0.1, sobre o SQLite em memória com a
-// telemetria sintética do simulador: a forma das duas respostas, a janela de 1 h e de 12 h, o 400 e o
-// 404 de cada parâmetro, o núcleo sem telemetria, as defesas de Origin e Host (decisão 0003), o
-// alerta que entra chegando por /api/changes, e o simulador (esta máquina e a "workstation").
+// GET /api/machines and GET /api/telemetry (#175) on 127.0.0.1, over in-memory SQLite with the
+// simulator's synthetic telemetry: the shape of both responses, the 1 h and 12 h windows, the 400 and
+// 404 of each parameter, the núcleo without telemetry, the Origin and Host defenses (decision 0003),
+// an alert that enters arriving through /api/changes, and the simulator (this machine and the "workstation").
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { describe, test } from 'node:test';
@@ -28,7 +28,7 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
   await seedTelemetry(store, SIMULATED_WORKSTATION.id, 'workstation', NOW);
   const machines = [localMachine(), { ...SIMULATED_WORKSTATION, state: () => 'connected' as const }];
   for (const m of machines) {
-    // A primeira amostra do amostrador calcula os alertas abertos sobre o que foi semeado.
+    // The sampler's first sample computes the open alerts over what was seeded.
     await new TelemetrySampler({ machineId: m.id, collector: new SimulatedCollector(m.id === 'local' ? 'local' : 'workstation', () => NOW), store, tracker }).sampleOnce();
   }
   const telemetry = opts.withTelemetry === false ? undefined : new TelemetryService({ store, tracker, machines, now: () => NOW });
@@ -47,7 +47,7 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
   };
 }
 
-/** Pedido com o Host que se quiser (o fetch não deixa trocar o Host). */
+/** A request with whatever Host is wanted (fetch does not let the Host be changed). */
 function withHost(url: string, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const r = request(url, { headers: { host } }, (res) => {
@@ -60,7 +60,7 @@ function withHost(url: string, host: string): Promise<number> {
 }
 
 describe('#175/AC-4 GET /api/machines', () => {
-  test('esta máquina primeiro, a workstation sintética, cada uma com estado, última leitura e alertas', async () => {
+  test('this machine first, then the synthetic workstation, each with state, last reading and alerts', async () => {
     const { get, close } = await boot();
     try {
       const r = await get('/api/machines');
@@ -78,7 +78,7 @@ describe('#175/AC-4 GET /api/machines', () => {
 });
 
 describe('#175/AC-5 GET /api/telemetry', () => {
-  test('padrão: local, 1 h; a versão, a leitura atual com as chaves em inglês, a série e os alertas', async () => {
+  test('default: local, 1 h; the version, the current reading with English keys, the series and the alerts', async () => {
     const { get, close } = await boot();
     try {
       const r = await get('/api/telemetry');
@@ -108,7 +108,7 @@ describe('#175/AC-5 GET /api/telemetry', () => {
     }
   });
 
-  test('12 h em baldes, e a workstation com Docker, GPU e o volume cheio', async () => {
+  test('12 h in buckets, and the workstation with Docker, GPU and the full volume', async () => {
     const { get, close } = await boot();
     try {
       const t = (await (await get('/api/telemetry?machine=workstation&hours=12')).json()) as TelemetryResponse;
@@ -124,10 +124,10 @@ describe('#175/AC-5 GET /api/telemetry', () => {
     }
   });
 
-  test('parâmetro inválido dá 400; máquina que não existe, 404; sem telemetria, 404 nas duas', async () => {
+  test('invalid parameter gives 400; a machine that does not exist, 404; without telemetry, 404 on both', async () => {
     const { get, close } = await boot();
     try {
-      // Vazio vale o padrão, como ausente.
+      // Empty means the default, as if absent.
       const empty = await get('/api/telemetry?hours=');
       assert.equal(empty.status, 200);
       assert.equal(((await empty.json()) as TelemetryResponse).hours, 1);
@@ -151,7 +151,7 @@ describe('#175/AC-5 GET /api/telemetry', () => {
     }
   });
 
-  test('só GET, e as defesas da 0003: Origin de fora e Host estranho dão 403; a própria /ui lê', async () => {
+  test('GET only, and the 0003 defenses: a foreign Origin and a strange Host give 403; the own /ui can read', async () => {
     const { api, get, close } = await boot();
     try {
       const host = new URL(api.url).host;
@@ -166,7 +166,7 @@ describe('#175/AC-5 GET /api/telemetry', () => {
 });
 
 describe('#175/AC-3 o alerta chega por /api/changes', () => {
-  test('a amostra que abre um alerta acorda quem espera `type=alert`', async () => {
+  test('the sample that opens an alert wakes whoever waits on `type=alert`', async () => {
     const { get, store, tracker, cursor, close } = await boot();
     try {
       const start = (await (await get('/api/changes?wait=0')).json()) as { cursor: string };
@@ -182,7 +182,7 @@ describe('#175/AC-3 o alerta chega por /api/changes', () => {
 });
 
 describe('#175/AC-6 simulador', () => {
-  test('12 h semeadas, uma amostra a cada 30 s, a poda mantém a janela', async () => {
+  test('12 h seeded, one sample every 30 s, pruning keeps the window', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     try {
       const store = new SqliteTelemetryStore(storage.db);
@@ -194,7 +194,7 @@ describe('#175/AC-6 simulador', () => {
     }
   });
 
-  test('a mesma hora dá a mesma leitura; a carga da workstation passa dos núcleos e volta', async () => {
+  test('the same hour gives the same reading; the workstation load goes above the cores and back', async () => {
     assert.deepEqual(simulatedReading('workstation', NOW), simulatedReading('workstation', NOW));
     const tracker = new AlertTracker();
     const storage = openSqliteStorage({ path: ':memory:' });

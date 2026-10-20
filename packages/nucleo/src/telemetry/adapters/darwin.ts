@@ -1,15 +1,15 @@
-// Coletor do Mac (#175, decisão 0008). Só leitura, sem `sudo`, com os comandos que já vêm no macOS:
+// Mac collector (#175, decision 0008). Read-only, no `sudo`, with the commands that ship with macOS:
 //
-// | Grupo    | De onde                                                                      |
-// | -------- | ---------------------------------------------------------------------------- |
-// | Memória  | `vm_stat` (usada), `sysctl vm.swapusage`, `sysctl kern.memorystatus_vm_pressure_level` |
-// | GPU      | `ioreg -r -d 1 -w 0 -c IOAccelerator` (uso e memória em uso)                 |
-// | Rede     | `route -n get default` (a interface) e `netstat -ibn` (os bytes)             |
-// | Processos| `ps -axo pid=,pcpu=,rss=,comm=` e `ps -axo pid=,uid=,etime=,args=`           |
-// | Portas   | `lsof -nP -iTCP -sTCP:LISTEN` (só os processos do usuário, sem `sudo`)       |
-// | Túnel    | os `ssh` do usuário com `-L` (ou `-o LocalForward`) na linha de comando ou `LocalForward` no `ssh -G <destino>`, e a sonda de cada porta |
+// | Group     | Source                                                                       |
+// | --------- | ---------------------------------------------------------------------------- |
+// | Memory    | `vm_stat` (used), `sysctl vm.swapusage`, `sysctl kern.memorystatus_vm_pressure_level` |
+// | GPU       | `ioreg -r -d 1 -w 0 -c IOAccelerator` (utilization and memory in use)        |
+// | Network   | `route -n get default` (the interface) and `netstat -ibn` (the bytes)        |
+// | Processes | `ps -axo pid=,pcpu=,rss=,comm=` and `ps -axo pid=,uid=,etime=,args=`         |
+// | Ports     | `lsof -nP -iTCP -sTCP:LISTEN` (only the user's processes, no `sudo`)         |
+// | Tunnel    | the user's `ssh` processes with `-L` (or `-o LocalForward`) on the command line or `LocalForward` from `ssh -G <destination>`, and each port's probe |
 //
-// O sistema e a versão saem de `sw_vers -productVersion`, uma vez.
+// The OS name and version come from `sw_vers -productVersion`, once.
 
 import type { GpuReading, ListeningPort, MemoryPressure, MemoryReading, TunnelPort, TunnelReading } from '../model.ts';
 import {
@@ -25,7 +25,7 @@ import {
 } from './common.ts';
 
 // ---------------------------------------------------------------------------------------------
-// Memória
+// Memory
 
 export function parseVmStat(out: string): { pageSize: number; pages: Record<string, number> } | null {
   const pageSize = Number(/page size of (\d+) bytes/.exec(out)?.[1]);
@@ -36,8 +36,8 @@ export function parseVmStat(out: string): { pageSize: number; pages: Record<stri
 }
 
 /**
- * Memória usada como o Monitor de Atividade conta: memória de apps (anônimas menos as purgáveis),
- * fixa (wired) e comprimida. Sem as anônimas (macOS antigo), as ativas.
+ * Used memory as Activity Monitor counts it: app memory (anonymous minus purgeable), wired and
+ * compressed. Without the anonymous pages (older macOS), the active ones.
  */
 export function usedFromVmStat(vm: { pageSize: number; pages: Record<string, number> }): number | null {
   const p = vm.pages;
@@ -61,7 +61,7 @@ export function parseSwapUsage(out: string): { totalBytes: number; usedBytes: nu
   return totalBytes === null || usedBytes === null ? null : { totalBytes, usedBytes };
 }
 
-/** `kern.memorystatus_vm_pressure_level`: 1 normal, 2 aviso, 4 crítica. */
+/** `kern.memorystatus_vm_pressure_level`: 1 normal, 2 warning, 4 critical. */
 export function parsePressureLevel(out: string): MemoryPressure | null {
   return ({ '1': 'normal', '2': 'warning', '4': 'critical' } as const)[out.trim() as '1' | '2' | '4'] ?? null;
 }
@@ -69,7 +69,7 @@ export function parsePressureLevel(out: string): MemoryPressure | null {
 // ---------------------------------------------------------------------------------------------
 // GPU
 
-/** O primeiro acelerador de `ioreg -c IOAccelerator`: nome, uso e a memória que ele usa. */
+/** The first accelerator from `ioreg -c IOAccelerator`: name, utilization and the memory it uses. */
 export function parseIoregGpu(out: string): GpuReading | null {
   const utilization = /"Device Utilization %"\s*=\s*(\d+)/.exec(out);
   if (!utilization) return null;
@@ -78,22 +78,22 @@ export function parseIoregGpu(out: string): GpuReading | null {
     name: /"model"\s*=\s*"([^"]+)"/.exec(out)?.[1] ?? null,
     usedPct: Number(utilization[1]),
     memoryUsedBytes: inUse ? Number(inUse[1]) : null,
-    // Memória unificada: não há um total da GPU separado do da máquina.
+    // Unified memory: there is no GPU total separate from the machine's.
     memoryTotalBytes: null,
   };
 }
 
 // ---------------------------------------------------------------------------------------------
-// Rede
+// Network
 
-/** `route -n get default` → a interface da rota padrão. */
+/** `route -n get default` → the default route's interface. */
 export function parseRouteDefault(out: string): string | null {
   return /^\s*interface:\s*(\S+)\s*$/m.exec(out)?.[1] ?? null;
 }
 
 /**
- * `netstat -ibn`, a linha `<Link#n>` da interface: as últimas sete colunas são Ipkts Ierrs Ibytes
- * Opkts Oerrs Obytes Coll (o endereço pode faltar, então conta-se do fim).
+ * `netstat -ibn`, the interface's `<Link#n>` row: the last seven columns are Ipkts Ierrs Ibytes
+ * Opkts Oerrs Obytes Coll (the address may be missing, so count from the end).
  */
 export function parseNetstatIbn(out: string, iface: string): { rxBytes: number; txBytes: number } | null {
   for (const l of out.split('\n')) {
@@ -107,7 +107,7 @@ export function parseNetstatIbn(out: string, iface: string): { rxBytes: number; 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Portas em escuta
+// Listening ports
 
 /** `lsof -nP -iTCP -sTCP:LISTEN`: `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME (LISTEN)`. */
 export function parseLsofListen(out: string): ListeningPort[] {
@@ -126,7 +126,7 @@ export function parseLsofListen(out: string): ListeningPort[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Túnel
+// Tunnel
 
 export interface Forward {
   localPort: number;
@@ -134,10 +134,10 @@ export interface Forward {
   remotePort: number;
 }
 
-/** As opções do `ssh` que levam argumento (man ssh). */
+/** The `ssh` options that take an argument (man ssh). */
 const OPTIONS_WITH_ARGUMENT = new Set('BbcDEeFIiJLlmOoPpQRSWw');
 
-/** `[bind:]porta:host:porta`, com IPv6 entre colchetes. Socket Unix fica de fora. */
+/** `[bind:]port:host:port`, with IPv6 in brackets. Unix sockets are left out. */
 export function parseForwardSpec(spec: string): Forward | null {
   const m = /^(?:(?:\[[^\]]+\]|[^:[\]]*):)?(\d+):(\[[^\]]+\]|[^:[\]]+):(\d+)$/.exec(spec.trim());
   if (!m) return null;
@@ -145,17 +145,17 @@ export function parseForwardSpec(spec: string): Forward | null {
 }
 
 /**
- * O `-o LocalForward` da linha de comando, em `[bind:]porta:host:porta`. O `ps` perde as aspas, então
- * `-o "LocalForward 14720 127.0.0.1:4720"` chega em três palavras: `value` é a primeira e `rest` dá
- * as seguintes. Devolve a especificação e quantas palavras de `rest` ela consumiu; `null` quando
- * `value` não é um `LocalForward`.
+ * The command line's `-o LocalForward`, as `[bind:]port:host:port`. `ps` loses the quotes, so
+ * `-o "LocalForward 14720 127.0.0.1:4720"` arrives as three words: `value` is the first and `rest`
+ * holds the following ones. Returns the spec and how many words of `rest` it consumed; `null` when
+ * `value` is not a `LocalForward`.
  */
 export function localForwardOption(value: string, rest: readonly string[]): { spec: string | null; consumed: number } | null {
   const m = /^localforward(?:\s*=\s*|\s+|$)(.*)$/i.exec(value);
   if (!m) return null;
   const parts = m[1].trim() ? m[1].trim().split(/\s+/) : [];
   let consumed = 0;
-  // `LocalForward = 14720 …`: o `=` solto também vem como palavra.
+  // `LocalForward = 14720 …`: a lone `=` also arrives as a word.
   if (parts.length === 0 && rest[0] === '=') consumed++;
   while (parts.length < 2 && consumed < rest.length) parts.push(rest[consumed++]);
   return { spec: parts.length === 2 ? `${parts[0]}:${parts[1]}` : null, consumed };
@@ -164,13 +164,13 @@ export function localForwardOption(value: string, rest: readonly string[]): { sp
 export interface SshCommand {
   destination: string;
   forwards: Forward[];
-  /** O `-F` da linha de comando, para o `ssh -G` ler o mesmo arquivo. */
+  /** The command line's `-F`, so `ssh -G` reads the same file. */
   configFile: string | null;
 }
 
 /**
- * A linha de comando de um `ssh` (do `ps`): o destino, os `-L` e o `-F`. `null` quando não é um
- * `ssh` cliente (o mestre do ControlMaster aparece como `ssh: <socket> [mux]`).
+ * An `ssh` command line (from `ps`): the destination, the `-L`s and the `-F`. `null` when it is not
+ * an `ssh` client (the ControlMaster master shows up as `ssh: <socket> [mux]`).
  */
 export function parseSshArgs(args: string): SshCommand | null {
   const t = args.trim().split(/\s+/);
@@ -179,7 +179,7 @@ export function parseSshArgs(args: string): SshCommand | null {
   let configFile: string | null = null;
   for (let i = 1; i < t.length; i++) {
     const tok = t[i];
-    // Depois do `--`, um destino que começa com `-` viraria opção no `ssh -G`: fica de fora.
+    // After `--`, a destination starting with `-` would become an option to `ssh -G`: it is left out.
     if (tok === '--') return t[i + 1] && !t[i + 1].startsWith('-') ? { destination: t[i + 1], forwards, configFile } : null;
     if (!tok.startsWith('-') || tok === '-') return { destination: tok, forwards, configFile };
     for (let j = 1; j < tok.length; j++) {
@@ -206,7 +206,7 @@ export function parseSshArgs(args: string): SshCommand | null {
   return null;
 }
 
-/** `ssh -G <destino>`: as linhas `localforward 14720 [127.0.0.1]:4720` (ou `[localhost]:14720 …`). */
+/** `ssh -G <destination>`: the `localforward 14720 [127.0.0.1]:4720` lines (or `[localhost]:14720 …`). */
 export function parseSshG(out: string): Forward[] {
   const fs: Forward[] = [];
   for (const m of out.matchAll(/^localforward\s+(?:\[[^\]]*\]:)?(\d+)\s+\[?([^\]\s]+?)\]?:(\d+)\s*$/gim)) {
@@ -273,16 +273,16 @@ export class DarwinCollector extends PlatformCollector {
   }
 
   /**
-   * Cada `ssh` cliente do próprio usuário com encaminhamento: os `-L` da linha de comando ou, sem
-   * eles, os `LocalForward` do `ssh -G`. Só os do usuário: o `ps -ax` lista os de todas as contas, e
-   * o `ssh -G` roda como nós o `Match exec` do arquivo que lê, então o `-F` de outra conta (ou um
-   * arquivo que outra conta possa escrever) seria código dela rodando como nós. Um `-F` que não passa
-   * nessa conferência deixa o `ssh` sem o `ssh -G`. Um `ssh -G` por arquivo e destino, todos
-   * juntos. A porta fica com o `ssh` que a escuta (dois `ssh` para o mesmo destino pegam a mesma
-   * configuração, e só o primeiro consegue a porta); o estado:
-   * - escutada por um `ssh` (este, ou o mestre do ControlMaster): a sonda diz `up` ou `idle`;
-   * - escutada por outro processo: `busy`;
-   * - ninguém escuta: `down`.
+   * Every `ssh` client of the user's own with forwarding: the command line's `-L`s or, without
+   * them, the `LocalForward`s from `ssh -G`. Only the user's: `ps -ax` lists every account's, and
+   * `ssh -G` runs, as us, the `Match exec` of the file it reads, so another account's `-F` (or a file
+   * another account can write) would be that account's code running as us. An `-F` that fails this
+   * check leaves the `ssh` without `ssh -G`. One `ssh -G` per file and destination, all at once. A
+   * port belongs to the `ssh` that listens on it (two `ssh` to the same destination pick up the same
+   * configuration, and only the first gets the port); the state:
+   * - listened on by an `ssh` (this one, or the ControlMaster master): the probe says `up` or `idle`;
+   * - listened on by another process: `busy`;
+   * - nobody listens: `down`.
    */
   protected async tunnels(ps: ProcessSnapshot | null, ports: ListeningPort[] | null): Promise<TunnelReading[] | null> {
     if (!ps) return null;
@@ -311,7 +311,7 @@ export class DarwinCollector extends PlatformCollector {
     const owner = new Map<number, number>();
     for (const { row, cmd } of candidates) {
       for (const f of cmd.forwards) {
-        // Quem escuta a porta fica com ela; senão, o primeiro que a pede.
+        // Whoever listens on the port keeps it; otherwise, the first one asking for it.
         if (listeners.get(f.localPort)?.pid === row.pid) owner.set(f.localPort, row.pid);
         else if (!owner.has(f.localPort)) owner.set(f.localPort, row.pid);
       }
@@ -327,7 +327,7 @@ export class DarwinCollector extends PlatformCollector {
     return tunnels;
   }
 
-  /** Os `LocalForward` do `ssh -G`; o `-F` só vai quando é um caminho absoluto do usuário que só ele escreve. */
+  /** The `LocalForward`s from `ssh -G`; `-F` is only passed when it is an absolute path of the user's that only they can write. */
   private async sshG(cmd: SshCommand, uid: number): Promise<Forward[]> {
     if (cmd.configFile !== null) {
       if (!cmd.configFile.startsWith('/')) return [];
@@ -340,7 +340,7 @@ export class DarwinCollector extends PlatformCollector {
 
   private async tunnelPort(f: Forward, holder: ListeningPort | null): Promise<TunnelPort> {
     const base = { localPort: f.localPort, remoteHost: f.remoteHost, remotePort: f.remotePort };
-    // Sem a lista de portas (lsof falhou), a sonda decide sozinha.
+    // Without the port list (lsof failed), the probe decides on its own.
     if (holder && holder.process !== 'ssh') return { ...base, state: 'busy', heldBy: holder.process };
     const r = await this.deps.probe(f.localPort).catch(() => 'refused' as const);
     return { ...base, state: r === 'open' ? 'up' : r === 'closed' ? 'idle' : 'down', heldBy: null };

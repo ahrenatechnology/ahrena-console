@@ -1,5 +1,5 @@
-// Dublês das portas da telemetria para os testes dos casos de uso: um armazenamento em memória e um
-// coletor que devolve as leituras dadas, na ordem.
+// Doubles of the telemetry ports for the use case tests: an in-memory store and a collector that
+// returns the given readings, in order.
 import { samplePointOf, type SamplePoint, type TelemetryReading } from '../../src/telemetry/model.ts';
 import type { TelemetryCollector, TelemetryStore } from '../../src/telemetry/ports.ts';
 

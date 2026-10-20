@@ -1,5 +1,5 @@
-// Telemetria das máquinas (#175, decisão 0008): modelo, alertas, portas, amostrador, leitura das
-// rotas, coletores do Mac e do Linux e o adaptador SQLite das amostras.
+// Machine telemetry (#175, decision 0008): model, alerts, ports, sampler, the routes' reads, the Mac
+// and Linux collectors and the SQLite adapter for the samples.
 export * from './model.ts';
 export * from './ports.ts';
 export { AlertTracker, computeAlerts, formatBytes, loadHighSince, type AlertChange, type AlertUpdate } from './alerts.ts';

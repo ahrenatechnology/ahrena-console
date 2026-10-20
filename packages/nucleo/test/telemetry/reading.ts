@@ -1,4 +1,4 @@
-// Uma leitura sintética para os testes da telemetria: nomes de exemplo, nada de máquina real.
+// A synthetic reading for the telemetry tests: example names, no real machine.
 import type { SamplePoint, TelemetryReading } from '../../src/telemetry/model.ts';
 
 export const T0 = Date.parse('2026-11-02T12:00:00.000Z');

@@ -1,12 +1,13 @@
-// As rotas da telemetria (#175, decisão 0008), só `GET`, com as defesas de Origin e Host do servidor
-// (decisão 0003) como as outras:
+// The telemetry routes (#175, decision 0008), `GET` only, behind the server's Origin and Host
+// defenses (decision 0003) like the others:
 //
-// - `GET /api/machines`: `[{ id, label, state, lastReadAt, alerts }]`, esta máquina primeiro. `state`
-//   é `connected`, `unreachable`, `not-configured` ou `incompatible-version` (as remotas são a #176).
+// - `GET /api/machines`: `[{ id, label, state, lastReadAt, alerts }]`, this machine first. `state`
+//   is `connected`, `unreachable`, `not-configured` or `incompatible-version` (remote machines are
+//   #176).
 // - `GET /api/telemetry?machine=<id>&hours=1|12`: `{ version, machine, hours, current, series, alerts }`
-//   (src/telemetry/service.ts). `machine` padrão `local`, `hours` padrão 1. Parâmetro inválido dá 400;
-//   máquina que não existe, 404.
-// - Sem a telemetria ligada na API (plataforma sem coletor): 404 nas duas.
+//   (src/telemetry/service.ts). `machine` defaults to `local`, `hours` to 1. An invalid parameter
+//   gives 400; a machine that does not exist, 404.
+// - Without telemetry wired into the API (a platform with no collector): 404 on both.
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -22,11 +23,11 @@ export function isTelemetryRoute(pathname: string): boolean {
   return pathname === MACHINES_ROUTE || pathname === TELEMETRY_ROUTE;
 }
 
-/** Lê `machine` e `hours`; devolve a mensagem de erro quando algum é inválido. */
+/** Reads `machine` and `hours`; returns the error message when one is invalid. */
 export function readTelemetryRequest(params: URLSearchParams): { machine: string; hours: WindowHours } | string {
   const machine = params.get('machine') ?? LOCAL_MACHINE_ID;
   if (!MACHINE_ID.test(machine)) return 'machine inválida: letras minúsculas, números e hífen';
-  // Ausente ou vazio vale o padrão; fora isso, só `1` ou `12` escritos assim (`012` e `1.0` não).
+  // Absent or empty means the default; otherwise only `1` or `12` written exactly so (not `012` or `1.0`).
   const raw = params.get('hours') || '1';
   if (!/^(1|12)$/.test(raw)) return 'hours: 1 ou 12';
   const hours = Number(raw) as WindowHours;
