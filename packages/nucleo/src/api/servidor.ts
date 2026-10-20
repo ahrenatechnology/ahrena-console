@@ -80,6 +80,7 @@ import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
 import { normalizeLegacyPath, normalizeLegacyUrl } from './legacy-routes.ts';
 import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
+import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 
@@ -127,6 +128,8 @@ export interface OpcoesDaApi {
   decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
+  /** The Dev Console (#177); turns on `GET /api/dev-console`. */
+  devConsole?: DevConsole;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
@@ -335,6 +338,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === HISTORY_ROUTE) return responderHistorico(res, url, opts.historico);
     if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
+    if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {

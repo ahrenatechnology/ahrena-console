@@ -69,6 +69,8 @@ import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
+import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
 import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
@@ -335,6 +337,16 @@ const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
+// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const devConsole = createDevConsole({
+  storage,
+  frota: mcp.frota,
+  decisions: decisoes,
+  cache: cacheDoGithub,
+  source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
+  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+});
+
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
 // 12 h already seeded, plus a synthetic "workstation". Outside the demo, each remote machine of
@@ -423,6 +435,7 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  devConsole,
   agentConfig,
   telemetry: telemetryService,
   carga: () => ({
