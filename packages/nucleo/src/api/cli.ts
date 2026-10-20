@@ -39,6 +39,7 @@ import {
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
 import { Contas } from './contas.ts';
+import { QuadroKanban } from './kanban.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
@@ -275,6 +276,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   frota: mcp.frota,
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
+  kanban: new QuadroKanban({ storage, contas, desktop, resumos: montador.resumos }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

@@ -18,6 +18,7 @@
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -39,6 +40,7 @@ import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
+import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
@@ -70,6 +72,8 @@ export interface OpcoesDaApi {
   frota?: LeituraDaFrota;
   /** A lista da tela Sessões; liga `GET /api/sessoes`. */
   sessoes?: ListaDeSessoes;
+  /** O Kanban (#31); liga `GET /api/kanban`. */
+  kanban?: QuadroKanban;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -227,6 +231,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
+    if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,
