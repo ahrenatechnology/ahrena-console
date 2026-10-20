@@ -24,7 +24,7 @@ import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
-import { ResumosDeSessao, type ResumoDosEventos } from './resumo.ts';
+import { ResumosDeSessao, iniciosDosTurnos, type ResumoDosEventos } from './resumo.ts';
 import { atencaoDe } from './atencao.ts';
 import type {
   AtividadeDaSessao,
@@ -175,7 +175,7 @@ export class MontadorDoPainel {
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
       plano: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
       planos: planos.map(planoDaLista),
-      subagentes: subagentesDe(agentes),
+      subagentes: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
       filhas: await this.filhasDe(session, desktop),
       trabalho,
       precisam: await this.precisamDe(pedido.sessionId, session, desktop),
@@ -561,8 +561,32 @@ function donoDe(o: PlanOwner, agentes: Agent[]): DonoDoPasso {
   return { tipo: 'subagente', nome: o.name ?? a?.subagentType ?? a?.name ?? null, agenteId: o.agentId };
 }
 
-function subagentesDe(agentes: Agent[]): { ativos: number; itens: SubagenteDoPainel[] } {
+/**
+ * Os subagentes da sessão, com quem disparou cada um e a onda (#146). O pai é o subagente dono da
+ * chamada que o abriu; a sessão principal não conta como pai. A onda é o turno da sessão em que o
+ * subagente de cima foi disparado: quantos turnos tinham começado até ele começar.
+ */
+export function subagentesDe(agentes: Agent[], inicios: readonly string[] = []): { ativos: number; itens: SubagenteDoPainel[] } {
   const subs = agentes.filter((a) => a.type === 'subagent');
+  const porId = new Map(subs.map((a) => [a.id, a]));
+  const pai = (a: Agent) => (a.parentAgentId && porId.has(a.parentAgentId) ? a.parentAgentId : null);
+  // O de cima da cadeia (com um limite, contra um ciclo nos dados).
+  const raiz = (a: Agent) => {
+    let r = a;
+    for (let i = 0; i < 32; i++) {
+      const p = pai(r);
+      if (!p) break;
+      r = porId.get(p)!;
+    }
+    return r;
+  };
+  const ordenados = [...inicios].sort();
+  const ondaDe = (a: Agent) => {
+    if (ordenados.length === 0) return null;
+    const desde = raiz(a).startedAt;
+    const n = ordenados.filter((t) => t <= desde).length;
+    return n > 0 ? n : null;
+  };
   const ordem = { working: 0, waiting: 1, error: 2, completed: 3 } as const;
   const itens = subs
     .map((a) => ({
@@ -572,6 +596,8 @@ function subagentesDe(agentes: Agent[]): { ativos: number; itens: SubagenteDoPai
       status: a.status,
       desde: a.startedAt,
       ate: a.endedAt,
+      pai: pai(a),
+      onda: ondaDe(a),
     }))
     .sort((a, b) => ordem[a.status] - ordem[b.status] || b.desde.localeCompare(a.desde));
   return { ativos: subs.filter((a) => a.status === 'working').length, itens };

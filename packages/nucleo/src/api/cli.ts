@@ -66,7 +66,7 @@ const AJUDA = `Uso: npm run api -- [opções]
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
-  --cenario <p1..p9>  O cenário da demonstração (padrão p1), como nos wireframes
+  --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
