@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
 import { SessoesPorRepo } from '../../src/api/repos-sessions.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
@@ -91,7 +91,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   const storage = openSqliteStorage({ path: ':memory:' });
   // P1: motor-de-regras pede permissão (precisa de você), app-receitas foi interrompida (sua vez).
   await seedPanelScenario(storage, 'p1', T0);
-  const frota = new FleetReader({ storage, accounts: new Contas({ storage, arquivo: null }), now: agora, timeZone: 'UTC' });
+  const frota = new FleetReader({ storage, accounts: new Accounts({ storage, file: null }), now: agora, timeZone: 'UTC' });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const inicio = cursor.current;
   const sessoes = new SessoesPorRepo({ frota, git: demoGit(base), cacheMs: 0, aoDescobrir: () => cursor.record({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
@@ -530,7 +530,7 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
   before(async () => {
     m = await montar();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
   });
   after(() => api.close());
@@ -601,7 +601,7 @@ describe('#104 e #105: o serviço como o núcleo monta', () => {
     try {
       const storage = openSqliteStorage({ path: ':memory:' });
       await seedPanelScenario(storage, 'p1', T0);
-      const frota = new FleetReader({ storage, accounts: new Contas({ storage, arquivo: null }) });
+      const frota = new FleetReader({ storage, accounts: new Accounts({ storage, file: null }) });
       const logs: string[] = [];
       const { repos } = criarReposDoNucleo({
         demo: true,

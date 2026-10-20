@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { AGENT_INSTRUCTIONS_TTL, AgentInstructionsService, createAgentInstructionsRoute, createCoreAgentInstructions } from '../../src/api/agent-instructions.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import type { AgentInstructions, InstructionFileView } from '../../src/agent-instructions/model.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
@@ -363,7 +363,7 @@ describe('#183 the /api/agent-instructions route', () => {
   before(async () => {
     s = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, agentInstructions: createAgentInstructionsRoute(s.service) });
   });
   after(() => api.close());

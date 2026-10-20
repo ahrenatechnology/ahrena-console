@@ -6,7 +6,7 @@
 //   concurrent calls wait for the same read.
 // - Ended today: `completed` and `abandoned` with the last activity today, in the machine's time zone.
 // - Today's cost: the day's `aggregateCost` (1.6), recomputed at most every `costMs`.
-// - Account: `Contas.daSessao` (decision 0006), the same instance as the panel when the core passes
+// - Account: `Accounts.ofSession` (decision 0006), the same instance as the panel when the core passes
 //   it, so that the "conta 1" label is the same on both surfaces.
 
 import { basename } from 'node:path';
@@ -14,11 +14,11 @@ import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import { readInbox, type InboxState, type InboxReading } from '../states/inbox.ts';
 import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from '../api/accounts.ts';
-import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/desktop-index.ts';
+import type { Accounts } from '../api/accounts.ts';
+import type { DesktopIndex, DesktopSession } from '../api/desktop-index.ts';
 import { atencaoDe, type MotivoDaAtencao } from '../api/attention.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from '../api/summary.ts';
-import type { ContaDoPainel } from '../api/types.ts';
+import type { PanelAccount } from '../api/types.ts';
 import { safeToolName, safeTitle } from './output.ts';
 
 /**
@@ -44,8 +44,8 @@ const REASON_FROM_PANEL: Record<MotivoDaAtencao, McpAttentionReason> = {
 export interface FleetSession {
   session: Session;
   inbox: InboxReading;
-  desktop: SessaoDoDesktop | null;
-  account: ContaDoPainel | null;
+  desktop: DesktopSession | null;
+  account: PanelAccount | null;
   /** Already cleaned (output.ts). */
   title: string;
 }
@@ -64,13 +64,13 @@ export interface Attention {
 export interface EndedToday {
   id: string;
   status: SessionStatus;
-  account: ContaDoPainel | null;
+  account: PanelAccount | null;
 }
 
 export interface FleetOptions {
   storage: StoragePort;
-  accounts: Contas;
-  desktop?: IndiceDoDesktop | null;
+  accounts: Accounts;
+  desktop?: DesktopIndex | null;
   now?: () => number;
   /** IANA time zone of the days (today's cost, ended today). Default: the machine's. */
   timeZone?: string;
@@ -80,8 +80,8 @@ export interface FleetOptions {
 
 export class FleetReader {
   readonly storage: StoragePort;
-  private readonly accounts: Contas;
-  private readonly desktop: IndiceDoDesktop | null;
+  private readonly accounts: Accounts;
+  private readonly desktop: DesktopIndex | null;
   readonly now: () => number;
   readonly timeZone: string;
   private readonly cacheMs: number;
@@ -110,12 +110,12 @@ export class FleetReader {
   async live(): Promise<FleetSession[]> {
     if (this.liveCache && this.now() - this.liveCache.at < this.cacheMs) return this.liveCache.items;
     this.liveLoading ??= (async () => {
-      await Promise.all([this.accounts.atualizar(), this.desktop?.atualizar()]);
+      await Promise.all([this.accounts.refresh(), this.desktop?.refresh()]);
       const items: FleetSession[] = [];
       for await (const session of this.all({ status: ['active', 'error'] })) {
         const agents: Agent[] = await this.storage.listAgents(session.id);
-        const desktop = this.desktop?.sessaoPorCli(session.id) ?? null;
-        items.push({ session, inbox: readInbox(session, agents), desktop, account: this.accounts.daSessao(session, desktop), title: titleOf(session, desktop) });
+        const desktop = this.desktop?.sessionByCli(session.id) ?? null;
+        items.push({ session, inbox: readInbox(session, agents), desktop, account: this.accounts.ofSession(session, desktop), title: titleOf(session, desktop) });
       }
       this.liveCache = { at: this.now(), items };
       return items;
@@ -130,8 +130,8 @@ export class FleetReader {
     const today = this.today();
     const out: EndedToday[] = [];
     for await (const s of this.all({ status: ['completed', 'abandoned'] }, today)) {
-      const desktop = this.desktop?.sessaoPorCli(s.id) ?? null;
-      out.push({ id: s.id, status: s.status, account: this.accounts.daSessao(s, desktop) });
+      const desktop = this.desktop?.sessionByCli(s.id) ?? null;
+      out.push({ id: s.id, status: s.status, account: this.accounts.ofSession(s, desktop) });
     }
     return out;
   }
@@ -146,10 +146,10 @@ export class FleetReader {
   }
 
   /** The account of any session (for the cost of one that is not among the live ones). */
-  async accountOf(sessionId: string): Promise<ContaDoPainel | null> {
+  async accountOf(sessionId: string): Promise<PanelAccount | null> {
     const s = await this.storage.getSession(sessionId);
     if (!s) return null;
-    return this.accounts.daSessao(s, this.desktop?.sessaoPorCli(s.id) ?? null);
+    return this.accounts.ofSession(s, this.desktop?.sessionByCli(s.id) ?? null);
   }
 
   /** Why a session that needs you is waiting, without conversation text. */
@@ -195,8 +195,8 @@ function errorCodeOf(text: string | null): string | null {
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
-function titleOf(s: Session, d: SessaoDoDesktop | null): string {
-  return safeTitle(d?.titulo) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
+function titleOf(s: Session, d: DesktopSession | null): string {
+  return safeTitle(d?.title) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
 export function projectOf(s: Session): string | null {
@@ -210,7 +210,7 @@ export const LIVE_STATES: readonly InboxState[] = ['active', 'waiting', 'delegat
  * Matches the session's account against the `account` filter: label (case-insensitive), id, or
  * "none" for "Sem conta". Without a filter, everything passes.
  */
-export function matchesAccountFilter(account: ContaDoPainel | null, filter: readonly string[] | null): boolean {
+export function matchesAccountFilter(account: PanelAccount | null, filter: readonly string[] | null): boolean {
   if (!filter) return true;
   return filter.some((f) => (f.toLowerCase() === 'none' ? account === null : account !== null && (account.id === f || account.label.toLowerCase() === f.toLowerCase())));
 }

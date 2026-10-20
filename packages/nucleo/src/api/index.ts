@@ -1,7 +1,7 @@
 // The core's local API for the side panel (4.1, 4.2, 4.3 and 4.8; start of #21).
 export * from './types.ts';
-export { Contas, arquivoPadraoDeContas, type OpcoesDasContas } from './accounts.ts';
-export { IndiceDoDesktop, raizPadraoDoDesktop, type OpcoesDoIndice, type SessaoDoDesktop } from './desktop-index.ts';
+export { Accounts, defaultAccountsFile, type AccountsOptions } from './accounts.ts';
+export { DesktopIndex, defaultDesktopRoot, type DesktopIndexOptions, type DesktopSession } from './desktop-index.ts';
 export {
   DecisoesDaUi,
   responderDecisoesDaUi,

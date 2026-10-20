@@ -3,18 +3,18 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type LocalApi } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { at, event } from '../fixtures.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
-let contas: Contas;
+let contas: Accounts;
 
 beforeEach(() => {
   storage = openSqliteStorage({ path: ':memory:' });
-  contas = new Contas({ storage, arquivo: null });
+  contas = new Accounts({ storage, file: null });
 });
 afterEach(() => storage.close());
 

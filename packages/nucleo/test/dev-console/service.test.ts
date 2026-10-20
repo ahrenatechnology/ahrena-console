@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { createDevConsole, DEV_CONSOLE_TTL, parseContexts, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
@@ -39,7 +39,7 @@ beforeEach(async () => {
   decisions = new SqliteDecisionStore(storage.db);
   now = clock(Date.parse(T0));
   source = new SimulatedDevConsoleSource({ now });
-  const contas = new Contas({ storage, arquivo: null });
+  const contas = new Accounts({ storage, file: null });
   const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
   devConsole = createDevConsole({
     storage,
@@ -165,7 +165,7 @@ describe('Dev Console of one context', () => {
         return repo === DEV_CONSOLE_SIMULATOR_RULES ? { ...r, truncated: true } : r;
       }
     }
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
     const partial = createDevConsole({ storage, frota, source: new Partial({ now }), cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     v = (await partial.view('loja'))!;
@@ -173,7 +173,7 @@ describe('Dev Console of one context', () => {
   });
 
   test('#177/AC-1 #177/AC-3 mixed-case owner/repo in the file and in the session remote match', async () => {
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
     const git: typeof devConsoleSimulatorGit = async (cwd, args) =>
       cwd !== '/sim/ahrena-demo' ? null : args[0] === 'remote' ? 'git@github.com:Dev-Sintetico/Catalogo-Exemplo.git' : args[0] === 'branch' ? 'feat/68-cupom' : null;
@@ -224,7 +224,7 @@ describe('Dev Console of one context', () => {
   });
 
   test('#179/AC-2 a session that completes while the live list is cached is counted once', async () => {
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 60_000 });
     const cached = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     await registerDecision(
@@ -249,7 +249,7 @@ describe('Dev Console of one context', () => {
     // T0 is 12:00 UTC, 09:00 in São Paulo: 04:00 UTC is 01:00 there (today), 01:00 UTC is 22:00 there (yesterday).
     await decide('sp1', 'Hoje em São Paulo', 8 * 60);
     await decide('sp2', 'Ontem em São Paulo', 11 * 60);
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'America/Sao_Paulo', cacheMs: 0 });
     const sp = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     assert.deepEqual((await sp.view('loja'))!.decisionsToday.map((d) => d.choice), ['Hoje em São Paulo']);
@@ -273,7 +273,7 @@ describe('Dev Console without a context', () => {
 describe('GET /api/dev-console', () => {
   let api: LocalApi;
   beforeEach(async () => {
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: now });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, devConsole });
   });
@@ -306,7 +306,7 @@ describe('GET /api/dev-console', () => {
   });
 
   test('without the Dev Console, the route does not exist', async () => {
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
     const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/dev-console`)).status, 404);

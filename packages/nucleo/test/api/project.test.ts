@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { PROJECT_ERROR_CODES, quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/project.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { createGithubProject, GithubProject, toProjectCard, type RawProjectItem } from '../../src/github/project.ts';
@@ -79,7 +79,7 @@ const mover = (api: LocalApi, corpo: unknown, headers: Record<string, string> = 
 
 async function subir(projeto?: OpcoesDoProjeto) {
   const storage = openSqliteStorage({ path: ':memory:' });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA });
+  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => AGORA });
   const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {

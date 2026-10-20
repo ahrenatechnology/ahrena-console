@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
@@ -151,7 +151,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
   before(async () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
     await seedPanelScenario(sqlite, 'p1');
-    const contas = new Contas({ storage: sqlite, arquivo: null });
+    const contas = new Accounts({ storage: sqlite, file: null });
     const frota = new FleetReader({ storage: sqlite, accounts: contas, cacheMs: 0, costMs: 0 });
     api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, fleet: frota });
   });
