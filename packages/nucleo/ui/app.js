@@ -5,7 +5,7 @@ import { write, read } from './api.js';
 import { startLive } from './live.js';
 import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
-import { findScreen, legacyUrl, sidebarSections } from './screens.js';
+import { findScreen, legacyUrl, litItem, machineItems, MACHINES_ROUTE, SCREENS, sidebarSections } from './screens.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
@@ -17,24 +17,59 @@ port.textContent = location.host;
 // ---------- Sidebar ----------
 
 // One block per section (C1, C24): the everyday screens without a title, then Machines and Control.
+// The remote machines (issue 178) are not in the registry: `GET /api/machines` gives them, and the
+// sidebar is drawn again with `machineItems(list)` added, keeping the counters and the lit item.
 const items = new Map();
-for (const section of sidebarSections()) {
-  const titleId = section.label ? `cc-nav-title-${section.id}` : null;
-  const group = el(
-    'div',
-    { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
-    titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
-  );
-  for (const screen of section.items) {
-    const q = el('span', { class: 'q', hidden: true });
-    const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', {}, screen.item.label), q);
-    items.set(screen.id, { a, q });
-    group.append(a);
+const counts = new Map();
+let lit = null;
+let remoteItems = [];
+
+function drawNav() {
+  items.clear();
+  const groups = [];
+  for (const section of sidebarSections([...SCREENS, ...remoteItems])) {
+    const titleId = section.label ? `cc-nav-title-${section.id}` : null;
+    const group = el(
+      'div',
+      { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
+      titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
+    );
+    for (const screen of section.items) {
+      const q = el('span', { class: 'q', hidden: true });
+      const dot = screen.state ? el('span', { class: 'cc-nav-dot', 'data-state': screen.state, title: MACHINE_STATE_LABELS[screen.state] ?? '' }) : null;
+      const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', { class: 'cc-nav-label' }, screen.item.label), dot, q);
+      items.set(screen.id, { a, q });
+      group.append(a);
+    }
+    groups.push(group);
   }
-  nav.append(group);
+  nav.replaceChildren(...groups);
+  for (const [id, n] of counts) counter(id, n);
+  highlight(lit);
 }
 
+const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração' };
+
+async function readMachines() {
+  let list = [];
+  try {
+    list = await read(MACHINES_ROUTE);
+  } catch {
+    // Without telemetry (404) or offline: the remote items stay as they were.
+    return;
+  }
+  const next = machineItems(list);
+  if (JSON.stringify(next) === JSON.stringify(remoteItems)) return;
+  remoteItems = next;
+  drawNav();
+}
+
+drawNav();
+// A remote's state also changes without an alert (another version over there): re-read now and then.
+setInterval(readMachines, 60_000);
+
 function highlight(id) {
+  lit = id;
   for (const [k, { a }] of items) {
     a.classList.toggle('on', k === id);
     if (k === id) a.setAttribute('aria-current', 'page');
@@ -43,6 +78,7 @@ function highlight(id) {
 }
 
 function counter(id, n) {
+  counts.set(id, n);
   const item = items.get(id);
   if (!item) return;
   item.q.hidden = !n;
@@ -60,6 +96,7 @@ const listeners = { change: new Set(), restart: new Set() };
 let connected = false;
 function restart() {
   readVersion();
+  readMachines();
   if (!connected) return void (connected = true);
   if (screenFailed) return open();
   for (const f of listeners.restart) f();
@@ -100,6 +137,8 @@ startLive({
   },
   onRestart: restart,
   onChange(changes) {
+    // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
+    if (changes.some((c) => c.tipo === 'alert')) readMachines();
     for (const f of listeners.change) f(changes);
   },
 });
@@ -131,7 +170,7 @@ async function open() {
     return;
   }
   const { screen, params } = found;
-  highlight(screen.item ? screen.id : screen.highlights);
+  highlight(litItem(screen, params));
   document.title = `Ahrena Console · ${screen.title}`;
   if (!screen.file) {
     area.replaceChildren(
