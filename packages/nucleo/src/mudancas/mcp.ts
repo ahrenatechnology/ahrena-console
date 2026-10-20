@@ -63,7 +63,7 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
     nome: WAIT_FOR_CHANGES,
     titulo: 'Esperar mudanças',
     descricao:
-      'Long polling: responde assim que algo muda no Ahrena Console (sessão, estado, precisa de você, plano, decisão, conta) ' +
+      'Long polling: responde assim que algo muda no Ahrena Console (sessão, estado, precisa de você, plano, decisão, conta, alerta de máquina) ' +
       `ou depois de timeout segundos (padrão ${ESPERA_PADRAO_MS / 1000}, máximo ${ESPERA_MAXIMA_MS / 1000}). ` +
       'Chame sem cursor para receber o atual; depois passe sempre o cursor da última resposta. Com reset=true, releia tudo ' +
       '(sessions_needing_attention, fleet_overview) antes de continuar. O cursor devolvido pula as mudanças que os filtros deixaram de fora. ' +

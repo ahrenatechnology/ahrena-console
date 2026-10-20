@@ -14,15 +14,17 @@
 //   outra geração, ou mais velho que a fila, volta na hora com `reiniciar: true` (releia tudo).
 // - Relógio injetável, para os testes serem determinísticos.
 
-export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta'] as const;
+// `alert`: um alerta de máquina que entra ou sai (#175, src/telemetry); a chave é `<máquina>:<alerta>`,
+// sem sessão nem conta.
+export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta', 'alert'] as const;
 export type TipoDeMudanca = (typeof TIPOS_DE_MUDANCA)[number];
 
 export interface MudancaRegistrada {
   seq: number;
   tipo: TipoDeMudanca;
-  /** O que mudou: o id da sessão, da decisão ou da conta. */
+  /** O que mudou: o id da sessão, da decisão ou da conta, ou `<máquina>:<alerta>`. */
   chave: string;
-  /** A sessão a que a mudança pertence; `null` em mudança de conta. */
+  /** A sessão a que a mudança pertence; `null` em mudança de conta e de alerta. */
   sessionId: string | null;
   /** A conta da sessão; `null` é "Sem conta". */
   accountId: string | null;
