@@ -77,7 +77,7 @@ export class CoreResolver {
   private readonly o: ResolverOptions;
   private starting: Promise<void> | null = null;
   /** Rule 2: the core of this installation that `start` started or adopted (port and pid). */
-  private lockCore: { port: number; pid: number | null; verified: boolean } | null = null;
+  private lockCore: LockCore | null = null;
   /** When the last start failed: no new start before `retryAfterMs` (a start that keeps failing spawns nothing per request). */
   private failedAt = 0;
   /** Ids already verified (pid and port match). */
@@ -97,9 +97,12 @@ export class CoreResolver {
       if (!this.o.noStart && shouldStartOwn(installation, live)) this.startOwn();
       const { instance, own } = chooseInstance(live, installation, exclude);
       // Rule 2 comes before another installation's core.
-      if ((!instance || !own) && this.lockCore !== null && !exclude.has(lockKey(this.lockCore.port))) {
-        if (await this.lockCoreIsItself()) return { key: lockKey(this.lockCore.port), port: this.lockCore.port, installation };
-        this.lockCore = null;
+      // A snapshot: other requests may replace or clear `lockCore` during the await.
+      const c = this.lockCore;
+      if ((!instance || !own) && c !== null && !exclude.has(lockKey(c.port))) {
+        if (await isItself(c)) return { key: lockKey(c.port), port: c.port, installation };
+        if (this.lockCore === c) this.lockCore = null;
+        exclude.add(lockKey(c.port));
         continue;
       }
       if (!instance) return null;
@@ -122,14 +125,9 @@ export class CoreResolver {
     if (t.key === lockKey(t.port) && this.lockCore?.port === t.port) this.lockCore = null;
   }
 
-  /** Rule 2's core is still the one `start` gave: its pid lives and its port answers with that pid. */
-  private async lockCoreIsItself(): Promise<boolean> {
-    const c = this.lockCore!;
-    if (c.pid === null || !isPidAlive(c.pid)) return false;
-    if (c.verified) return true;
-    const v = await probeCore(c.port);
-    c.verified = v !== null && v.pid === c.pid;
-    return c.verified;
+  /** Whether a start is under way (the message to the model says so only then). */
+  isStarting(): boolean {
+    return this.starting !== null;
   }
 
   /** Waits for a start already under way (tests and the first request). */
@@ -174,6 +172,21 @@ export class CoreResolver {
       this.o.log?.(`could not register as a client of ${i.id}: ${(e as Error).message}`);
     }
   }
+}
+
+interface LockCore {
+  port: number;
+  pid: number | null;
+  verified: boolean;
+}
+
+/** Rule 2's core is still the one `start` gave: its pid lives and its port answers with that pid. */
+async function isItself(c: LockCore): Promise<boolean> {
+  if (c.pid === null || !isPidAlive(c.pid)) return false;
+  if (c.verified) return true;
+  const v = await probeCore(c.port);
+  c.verified = v !== null && v.pid === c.pid;
+  return c.verified;
 }
 
 export const lockKey = (port: number) => `lock:${port}`;

@@ -96,12 +96,12 @@ const resolver =
 void resolver?.target().catch((e) => log(`registry: ${(e as Error).message}`));
 
 // Shown to the model in the tool error: pt-BR, with the commands as they are on screen.
-const howToStart =
+const howToStart = (): string =>
   fixedPort !== null
     ? `O núcleo não respondeu em ${url(fixedPort)}. Suba com \`npm run core -- start --port ${fixedPort}\` em packages/nucleo e chame de novo.`
-    : noStart
-      ? 'Nenhum núcleo do Ahrena Console está de pé. Suba com `npm run core -- start` em packages/nucleo e chame de novo.'
-      : 'Nenhum núcleo do Ahrena Console respondeu ainda; a ponte está subindo um. Chame de novo em alguns segundos.';
+    : resolver?.isStarting()
+      ? 'Nenhum núcleo do Ahrena Console respondeu ainda; a ponte está subindo um. Chame de novo em alguns segundos.'
+      : 'Nenhum núcleo do Ahrena Console respondeu. Suba com `npm run core -- start` em packages/nucleo e chame de novo.';
 
 /** Thrown by the bridge's `withoutCore`: the core did not answer, try the next one. */
 class Unreachable extends Error {}
@@ -120,7 +120,7 @@ await serveStdio({
         return await send(fixedPort, m);
       } catch (e) {
         if (!(e instanceof Unreachable)) throw e;
-        return serverWithoutCore(howToStart).handle(m);
+        return serverWithoutCore(howToStart()).handle(m);
       }
     }
     const tried = new Set<string>();
@@ -139,7 +139,7 @@ await serveStdio({
     }
     // Nobody answered: the next request tries again, and a core may be starting meanwhile (target()
     // decides that, by the rule; a live core that does not answer does not start another one).
-    return serverWithoutCore(howToStart).handle(m);
+    return serverWithoutCore(howToStart()).handle(m);
   },
   log,
 });
