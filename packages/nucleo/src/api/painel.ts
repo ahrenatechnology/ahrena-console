@@ -159,12 +159,12 @@ export class MontadorDoPainel {
     this.decisoes = decisoes ? new DecisoesDaSessao({ decisions: decisoes, storage }) : null;
   }
 
-  /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
   /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
   desktopDaSessao(sessionId: string): SessaoDoDesktop | null {
     return this.desktop?.sessaoPorCli(sessionId) ?? null;
   }
 
+  /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
   async atualizarFontes(): Promise<void> {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
   }
@@ -197,8 +197,9 @@ export class MontadorDoPainel {
     };
   }
 
-  async montar(pedidoOriginal: PedidoDoPainel): Promise<Painel> {
-    const pedido = { ...pedidoOriginal, sessionId: this.apelido(pedidoOriginal.sessionId) };
+  /** `literal`: o id pedido, sem o apelido da demonstração (o Detalhe da /ui lê qualquer sessão). */
+  async montar(pedidoOriginal: PedidoDoPainel, { literal = false }: { literal?: boolean } = {}): Promise<Painel> {
+    const pedido = { ...pedidoOriginal, sessionId: literal ? pedidoOriginal.sessionId : this.apelido(pedidoOriginal.sessionId) };
     const agora = this.agora();
     this.contas.informar(pedido.sessionId, pedido.conta ?? null, pedido.org ?? null);
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
@@ -273,6 +274,11 @@ export class MontadorDoPainel {
   private async planoAtual(sessionId: string, planos: PlanRecord[]): Promise<PlanoGravado | null> {
     if (planos.length) return planos.find((p) => p.result === 'current') ?? { steps: [], total: 0, changedAt: planos[0].changedAt, currentStepId: null };
     return this.storage.getPlan(sessionId);
+  }
+
+  /** O `local_…` da sessão no índice do Claude Desktop, para o "Abrir no Claude Desktop". */
+  localDe(sessionId: string): string | null {
+    return this.desktop?.sessaoPorCli(sessionId)?.localId ?? null;
   }
 
   private doDesktop(sessionId: string, local: string | null): SessaoDoDesktop | null {

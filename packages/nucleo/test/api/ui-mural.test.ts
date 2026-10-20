@@ -436,7 +436,8 @@ test('o mural.css não estiliza classe de outra tela: as próprias levam mural-'
   const daMoldura = classes('moldura.css');
   const minhas = [...classes('mural.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
   assert.deepEqual(minhas.filter((c) => !c.startsWith('mural-')), [], 'classe própria sem o prefixo mural-');
-  for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['mural.css', 'moldura.css', 'marca.css'].includes(a))) {
+  const css = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)];
+  for (const outra of css.filter((a) => a.endsWith('.css') && !['mural.css', 'moldura.css', 'marca.css'].includes(a))) {
     assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `mural.css e ${outra} estilizam as mesmas classes`);
   }
 });

@@ -7,7 +7,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `telas.js` | **O registro das telas** (rota, item da barra, arquivo) |
-| `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()` |
+| `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()`. E a única escrita, `abrirNoDesktop(local)` (`usarAbridor()`) |
 | `ao-vivo.js` | Long polling em `GET /api/mudancas?desde=<cursor>&espera=25` |
 | `estados.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
@@ -16,7 +16,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
-| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes` |
+| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`), carregado pela própria tela |
+| `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
 
 ## Registrar uma tela
 
@@ -69,6 +70,7 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
 - **Toda leitura passa por `ler()`**, nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
+- **A única escrita é o "Abrir no Claude Desktop"** (`abrirNoDesktop()` de `ler.js`): `POST /abrir/<local_…>`, o único POST que o núcleo aceita com o `Origin` da página.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.

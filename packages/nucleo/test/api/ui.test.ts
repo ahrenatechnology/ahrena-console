@@ -106,7 +106,7 @@ describe('/ui no núcleo', () => {
   });
 
   test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
-    const arquivos = readdirSync(PASTA_DA_UI).filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
+    const arquivos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
