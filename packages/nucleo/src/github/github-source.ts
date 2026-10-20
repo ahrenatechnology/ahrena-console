@@ -17,6 +17,7 @@ import {
   workKey,
   type CiState,
   type IssueState,
+  type CiCounts,
   type LinkedPullRequest,
   type PullRequestState,
   type ReviewDecision,
@@ -29,8 +30,10 @@ export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
 
 const LEAN = `number title url state updatedAt repository { nameWithOwner } issueType { name }
   subIssuesSummary { total completed percentCompleted } parent { number repository { nameWithOwner } }`;
+// A contagem por estado custa o mesmo que o estado: nenhuma checagem é listada.
+const CHECKS = 'contexts(first: 1) { totalCount checkRunCountsByState { state count } statusContextCountsByState { state count } }';
 const PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } }`;
+  commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
 const RATE = 'rateLimit { cost remaining resetAt }';
 
 export const QUERIES = {
@@ -66,7 +69,27 @@ interface RawPr {
   state: PullRequestState;
   isDraft: boolean;
   reviewDecision: ReviewDecision | null;
-  commits?: { nodes: { commit: { statusCheckRollup: { state: CiState } | null } }[] };
+  commits?: { nodes: { commit: { statusCheckRollup: { state: CiState; contexts?: RawChecks } | null } }[] };
+}
+interface RawChecks {
+  totalCount: number;
+  checkRunCountsByState?: { state: string; count: number }[];
+  statusContextCountsByState?: { state: string; count: number }[];
+}
+
+// Os estados de um check run e de um status: o que passou, o que falhou; o resto ainda roda.
+const CHECK_OK = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
+const CHECK_FALHOU = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'STARTUP_FAILURE', 'ACTION_REQUIRED', 'STALE']);
+
+export function contarChecks(raw: RawChecks | null | undefined): CiCounts | null {
+  if (!raw || !(raw.totalCount > 0)) return null;
+  let ok = 0;
+  let falhas = 0;
+  for (const { state, count } of [...(raw.checkRunCountsByState ?? []), ...(raw.statusContextCountsByState ?? [])]) {
+    if (CHECK_OK.has(state)) ok += count;
+    else if (CHECK_FALHOU.has(state)) falhas += count;
+  }
+  return { total: raw.totalCount, ok, falhas, rodando: Math.max(0, raw.totalCount - ok - falhas) };
 }
 export interface RawIssue {
   number: number;
@@ -106,6 +129,7 @@ export function toPullRequests(raw: Pick<RawIssue, 'closedByPullRequestsReferenc
     isDraft: p.isDraft,
     review: p.reviewDecision ?? null,
     ci: p.commits?.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+    checks: contarChecks(p.commits?.nodes[0]?.commit.statusCheckRollup?.contexts),
   }));
 }
 

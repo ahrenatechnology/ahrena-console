@@ -11,9 +11,16 @@ import type { StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { linkSession, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
-import type { LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
+import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
 import { RAIZ } from './vocabulario.ts';
+
+/** As checagens do CI como no P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
+const CHECKS_DO_P1: Record<string, CiCounts> = {
+  SUCCESS: { total: 6, ok: 6, falhas: 0, rodando: 0 },
+  PENDING: { total: 7, ok: 3, falhas: 0, rodando: 4 },
+  FAILURE: { total: 7, ok: 5, falhas: 2, rodando: 0 },
+};
 
 export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9'] as const;
 export type CenarioDoPainel = (typeof CENARIOS_DO_PAINEL)[number];
@@ -375,7 +382,7 @@ export class FonteDeTrabalhoDoSimulador implements WorkSource {
   async detail(key: string): Promise<WorkDetail> {
     const pr = estado.esta?.issue?.pr;
     const prs: LinkedPullRequest[] = pr
-      ? [{ number: pr.numero, url: `https://github.com/${REPO_DO_SIMULADOR}/pull/${pr.numero}`, state: 'OPEN', isDraft: !!pr.rascunho, review: pr.review, ci: pr.ci }]
+      ? [{ number: pr.numero, url: `https://github.com/${REPO_DO_SIMULADOR}/pull/${pr.numero}`, state: 'OPEN', isDraft: !!pr.rascunho, review: pr.review, ci: pr.ci, checks: CHECKS_DO_P1[pr.ci ?? ''] ?? null }]
       : [];
     return { key, state: 'OPEN', pullRequests: prs, stage: stageOf('OPEN', prs) };
   }

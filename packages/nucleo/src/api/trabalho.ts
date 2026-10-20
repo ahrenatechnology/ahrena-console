@@ -37,7 +37,7 @@ function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const estado = p.state === 'MERGED' ? 'mergeado' : p.state === 'CLOSED' ? 'fechado' : p.isDraft ? 'rascunho' : 'aberto';
   const ci = !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
   const review = p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
-  return { numero: p.number, url: p.url, estado, ci, review };
+  return { numero: p.number, url: p.url, estado, ci, checks: p.checks ?? null, review };
 }
 
 interface Entrada {

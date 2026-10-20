@@ -275,10 +275,12 @@ describe('conta da sessão (decisão 0006)', () => {
     local(a, 'local_mae', { cliSessionId: 'cli-mae', title: 'Mãe', branch: 'feat/1-x' });
     local(a, 'local_filha', { cliSessionId: 'cli-filha', title: 'Filha', spawnedFrom: { sessionId: 'local_mae' } });
     local(b, 'local_filha', { cliSessionId: 'cli-filha', title: 'Filha', spawnedFrom: { sessionId: 'local_mae' } });
+    local(a, 'local_velha', { cliSessionId: 'cli-velha', title: 'Velha', isArchived: true, spawnedFrom: { sessionId: 'local_mae' } });
     const indice = new IndiceDoDesktop({ raiz: dir, intervaloMs: 0 });
     await indice.atualizar();
     assert.equal(indice.sessaoPorCli('cli-mae')?.branch, 'feat/1-x');
-    assert.deepEqual(indice.filhasDe('local_mae').map((f) => f.titulo), ['Filha']);
+    // #145: a arquivada vem junto, marcada.
+    assert.deepEqual(indice.filhasDe('local_mae').map((f) => [f.titulo, f.arquivada]).sort(), [['Filha', false], ['Velha', true]]);
     assert.equal(indice.sessaoPorCli('cli-filha')?.contas.length, 2);
     const lidos = indice.lidos;
     await indice.atualizar(true);

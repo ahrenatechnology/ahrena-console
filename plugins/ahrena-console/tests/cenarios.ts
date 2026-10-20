@@ -233,6 +233,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -712,6 +718,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/91",
         "estado": "aberto",
         "ci": "ok",
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -1033,7 +1045,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "titulo": "fila-de-tarefas",
         "estado": "waiting",
         "motivo": "stop",
-        "desde": "2026-11-02T11:59:00.000Z"
+        "desde": "2026-11-02T11:59:00.000Z",
+        "fazendo": null,
+        "arquivada": false
       },
       {
         "id": "sim-painel-catalogo-exemplo",
@@ -1041,7 +1055,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "titulo": "catalogo-exemplo",
         "estado": "active",
         "motivo": null,
-        "desde": "2026-11-02T11:54:00.000Z"
+        "desde": "2026-11-02T11:20:00.000Z",
+        "fazendo": "pensando",
+        "arquivada": false
       },
       {
         "id": "sim-painel-blog-estatico",
@@ -1049,7 +1065,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "titulo": "blog-estatico",
         "estado": "completed",
         "motivo": null,
-        "desde": "2026-11-02T11:40:00.000Z"
+        "desde": "2026-11-02T11:40:00.000Z",
+        "fazendo": null,
+        "arquivada": false
       }
     ],
     "trabalho": {
@@ -1069,6 +1087,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/90",
         "estado": "aberto",
         "ci": "rodando",
+        "checks": {
+          "total": 7,
+          "ok": 3,
+          "falhas": 0,
+          "rodando": 4
+        },
         "review": "aprovado"
       },
       "semPush": false,
@@ -1326,6 +1350,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/88",
         "estado": "aberto",
         "ci": "falhou",
+        "checks": {
+          "total": 7,
+          "ok": 5,
+          "falhas": 2,
+          "rodando": 0
+        },
         "review": "ajustes"
       },
       "semPush": false,
@@ -1642,7 +1672,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "titulo": "fila-de-tarefas",
         "estado": "waiting",
         "motivo": "stop",
-        "desde": "2026-11-02T11:59:00.000Z"
+        "desde": "2026-11-02T11:59:00.000Z",
+        "fazendo": null,
+        "arquivada": false
       }
     ],
     "trabalho": {
@@ -1662,6 +1694,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -2038,6 +2076,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -2218,7 +2262,12 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "esta",
         "toolUseId": "sim-toolu-p9-2"
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   },
   "familia": {
     "escopo": "familia",
@@ -2340,7 +2389,12 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "mae",
         "toolUseId": null
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   },
   "branch": {
     "escopo": "branch",
@@ -2462,6 +2516,11 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "mae",
         "toolUseId": null
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   }
 }

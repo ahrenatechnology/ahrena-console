@@ -89,9 +89,9 @@ export class IndiceDoDesktop {
     return this.porLocal.get(localId) ?? null;
   }
 
-  /** As sessões abertas por esta, sem as arquivadas. */
+  /** As sessões abertas por esta; as arquivadas vêm junto, com `arquivada` (#145). */
   filhasDe(localId: string): SessaoDoDesktop[] {
-    return (this.filhas.get(localId) ?? []).filter((s) => !s.arquivada);
+    return this.filhas.get(localId) ?? [];
   }
 
   private async conferir(): Promise<void> {

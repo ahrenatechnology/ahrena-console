@@ -3,10 +3,13 @@
 import type { AwaitingReason, DecisaoDoPainel, DisplayStatus, EscopoDasDecisoes, EstadoDoInbox, Painel, SessaoDoPainel } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
+/**
+ * Sem segundos: um contador que anda a cada tick redesenha o painel a cada tick, e cada redesenho
+ * troca os handles dos botões (o clique duplo). O tempo muda no máximo uma vez por minuto.
+ */
 export function duracao(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
-  if (s < 10) return 'agora'
-  if (s < 60) return `${s} s`
+  if (s < 60) return '< 1 min'
   const m = Math.round(s / 60)
   if (m < 60) return `${m} min`
   const h = Math.round(m / 60)
@@ -16,10 +19,10 @@ export function duracao(ms: number): string {
 
 export const desde = (iso: string | null, agora: number) => (iso ? duracao(agora - Date.parse(iso)) : '')
 
-/** "há 4 min"; "agora" fica "agora". */
+/** "há 4 min"; menos de um minuto fica "agora". */
 export function ha(iso: string, agora: number): string {
   const d = desde(iso, agora)
-  return d === 'agora' ? d : `há ${d}`
+  return d === '< 1 min' ? 'agora' : `há ${d}`
 }
 
 /** `claude-opus-5-5` → "Opus 5.5"; `claude-sonnet-4-6[1m]` → "Sonnet 4.6 1M". */
@@ -146,7 +149,8 @@ export function quemDecidiu(d: DecisaoDoPainel): string {
 /** "não: 20 por coluna; rolagem infinita". */
 export const naoTexto = (d: DecisaoDoPainel) => `não: ${d.nao.length ? d.nao.join('; ') : '—'}`
 
-export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão vigente' : `${n} decisões vigentes`)
+/** As decisões são registro do que já se decidiu, não pendência (0.0.13): "10 decisões registradas". */
+export const decisoesTexto = (n: number) => (n === 1 ? '1 decisão registrada' : `${n} decisões registradas`)
 
 /** O que o "Desfazer" volta, dito para a pessoa. */
 export const DESFAZER: Record<'confirmar' | 'descartar' | 'ajustar', { feito: string; volta: string }> = {
@@ -163,3 +167,28 @@ export function dataEHora(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${hora(d.getTime())}`
 }
+
+/**
+ * O rótulo da conta, sem e-mail (decisão 0006): a org pessoal do Claude ("<e-mail>'s Organization")
+ * vira "conta pessoal", e um rótulo com e-mail vira "conta". O núcleo já manda assim; isto cobre o
+ * núcleo antigo.
+ */
+export function rotuloDaConta(rotulo: string): string {
+  if (/^\S+@\S+'s Organization$/i.test(rotulo.trim())) return 'conta pessoal'
+  return rotulo.includes('@') ? 'conta' : rotulo
+}
+
+/**
+ * A mensagem do agente como texto, sem o markdown cru: o link vira só o texto (também o que veio
+ * cortado no meio, "[#131](#local_…"), e saem os `**`, `__`, as crases e o "#" de título.
+ */
+export function semMarkdown(texto: string): string {
+  return texto
+    .replace(/\[([^\]\n]*)\]\([^)\s]*\)?/g, '$1')
+    .replace(/\*\*|__/g, '')
+    .replace(/`/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+}
+
+/** #145: o que o painel manda à sessão para desarquivar uma filha (ela chama `unarchive_session`). */
+export const pedidoDeDesarquivar = (f: { titulo: string; local?: string | null }) => `Desarquive a sessão ${f.titulo} (${f.local}) com unarchive_session.`

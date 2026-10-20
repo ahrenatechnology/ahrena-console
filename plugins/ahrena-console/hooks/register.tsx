@@ -9,11 +9,11 @@
 // abertas (P9), o mesmo pedido leva `decisoes=<escopo>` e traz a lista; Confirmar e Descartar são
 // um POST cada, só quando a pessoa aperta.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface as Engine, Register } from 'claude-code'
+import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-code'
 
 import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PerguntaDaSessao, PrecisaDeVoce, Vista } from '../types'
-import { desenhar, escopoDasDecisoes, type Elementos } from './desenho'
-import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe, tokens } from './formato'
+import { desenhar, escopoDasDecisoes, type Acoes, type Elementos } from './desenho'
+import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, pedidoDeDesarquivar, precisamTexto, STATUS, statusDe, tokens } from './formato'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
@@ -37,6 +37,8 @@ let relogio: { cancel: () => void } | undefined
 let consulta: string | undefined
 // A largura do último desenho: decide o escopo padrão das decisões no pedido.
 let colunas = 38
+/** As linhas do corpo no último desenho (`scroll.bodyRows`), para o polling saber o que a tela mostra. */
+let linhasDoCorpo: number | undefined
 
 // Estado salvo por outra versão do painel pode vir com outro formato: vale só o que reconhecemos.
 function normalizarLeitura(v: unknown): Leitura {
@@ -61,6 +63,7 @@ function normalizarVista(v: unknown): Vista {
     decisao,
     ajustando: r.ajustando === true,
     ultimaAcao: u && typeof u.id === 'string' && typeof u.em === 'number' ? u : null,
+    alcancaveis: Array.isArray(r.alcancaveis) ? r.alcancaveis.filter((x): x is string => typeof x === 'string') : [],
     // "compactando" não sobrevive a um reload: a chamada que o mostrava acabou com o módulo.
     compactar: r.compactar === 'compactando' && compactando ? 'compactando' : r.compactar === 'confirmar' ? 'confirmar' : null,
   }
@@ -91,27 +94,69 @@ async function endereco($: Engine): Promise<string> {
   return consulta
 }
 
+/**
+ * O prompt é da própria pessoa? Digitado (no terminal ou no Desktop, que é um host do SDK), pelo
+ * celular (bridge) ou mandado por um plugin em nome dela (`asUser`, como os botões do painel). Sem
+ * `origin` (engine antigo), conta como dela.
+ */
+function daPessoa(origin: PromptOrigin | undefined): boolean {
+  if (!origin) return true
+  if (origin.kind === 'plugin') return origin.asUser === true
+  return origin.kind === 'composer' || origin.kind === 'bridge' || origin.kind === 'sdk'
+}
+
 /** O pedido do tick: com as decisões abertas, leva o escopo para a lista vir junto. */
-async function enderecoDoTick($: Engine): Promise<string> {
+async function enderecoDoTick($: Engine, v: Vista): Promise<string> {
   const base = await endereco($)
-  const v = normalizarVista(await read($, vista))
   if (v.tela !== 'decisoes') return base
   return `${base}${base.includes('?') ? '&' : '?'}decisoes=${escopoDasDecisoes(v, colunas)}`
 }
 
 // O pedido de todo tick: esta sessão, a conta e quantas precisam de você, nunca a frota.
-/**
- * O que o painel desenha da resposta: tudo menos a hora em que a API a montou. Duas respostas
- * iguais a menos disso não pedem redesenho.
- */
-const assinatura = (p: Painel) => JSON.stringify({ ...p, geradoEm: null })
 
-/** Sem mudança de dados, o painel ainda redesenha a cada minuto, para os "há N min". */
-const REDESENHO_MINIMO_MS = 60_000
+/** Os elementos de mentira: o desenho vira dados puros, sem os onPress, para comparar o que a tela mostra. */
+const SOMBRA = Object.fromEntries(
+  ['Box', 'Text', 'Button', 'Link', 'Select', 'Svg', 'Input'].map((t) => [t, (p: Record<string, unknown>) => ({ t, ...p })]),
+) as unknown as Elementos
+const SEM_ACOES = new Proxy({}, { get: () => () => undefined }) as Acoes
+
+/** O que se clica numa árvore (os botões, pela key e o rótulo; os links, pelo href): o que a pessoa pode estar prestes a clicar. */
+function botoesDe(no: unknown, saida: string[] = []): string[] {
+  if (Array.isArray(no)) for (const n of no) botoesDe(n, saida)
+  else if (no && typeof no === 'object') {
+    const o = no as { t?: string; key?: unknown; children?: unknown; label?: unknown; href?: unknown }
+    if (o.t === 'Button') saida.push(`${String(o.key)}=${JSON.stringify(o.label ?? o.children)}`)
+    if (o.t === 'Link') saida.push(`link=${String(o.href)}`)
+    botoesDe(o.children, saida)
+  }
+  return saida
+}
+
+/**
+ * O que a tela mostra com esta leitura: o desenho inteiro, e só os botões. O que muda nos dados
+ * sem mudar o desenho (geradoEm, tokens que o rótulo arredonda, o `desde` de um card que não o
+ * mostra) não regrava o atom.
+ */
+async function oQueSeVe($: Engine, l: Leitura, v: Vista, agora: number): Promise<{ tela: string; botoes: string }> {
+  try {
+    const q = ((await read($, pergunta)) ?? null) as PerguntaDaSessao | null
+    const arvore = desenhar({ el: SOMBRA, leitura: l, vista: v, pergunta: q, cols: colunas, linhas: linhasDoCorpo, agora, nucleo, acoes: SEM_ACOES })
+    return { tela: JSON.stringify(arvore), botoes: botoesDe(arvore).join('\n') }
+  } catch {
+    // sem o desenho, cada leitura conta como mudança
+    return { tela: String(agora), botoes: String(agora) }
+  }
+}
+
+/**
+ * Uma mudança que só troca números ou textos (o contexto subindo, a atividade da sessão) espera
+ * isso desde a última gravação; a que troca os botões (uma pergunta, um card novo) grava na hora.
+ */
+const REDESENHO_MINIMO_MS = 15_000
 
 // A última leitura boa e quando o atom foi gravado. Ficam fora do atom: o atom só muda quando o
 // desenho muda (ver `consultar`).
-let ultima: { assinatura: string; lidoEm: number; gravadoEm: number; status: string | null } = { assinatura: '', lidoEm: 0, gravadoEm: 0, status: null }
+let ultima: { tela: string; botoes: string; lidoEm: number; gravadoEm: number; status: string | null } = { tela: '', botoes: '', lidoEm: 0, gravadoEm: 0, status: null }
 
 function mostrarStatus($: Engine, texto: string) {
   if (ultima.status === texto) return
@@ -135,29 +180,38 @@ async function contextoDoEngine($: Engine): Promise<Leitura['contextoAoVivo']> {
 }
 
 /**
- * Pede o painel ao núcleo e grava o atom só quando o que o painel desenha mudou (ou a cada minuto,
- * pelos tempos relativos). Cada gravação redesenha o pane, e um redesenho troca os handles dos
+ * Pede o painel ao núcleo e grava o atom só quando o desenho muda: na hora, se mudam os botões; no
+ * máximo a cada REDESENHO_MINIMO_MS, se mudam só números e textos. Cada gravação redesenha o pane, e um redesenho troca os handles dos
  * Buttons ("the host holds only a handle, for the drawing's life"): um clique que chega com o handle
  * do desenho anterior é descartado (`ui_press not handled`). Gravar a cada tick de 5 s, com `lidoEm`
  * e `geradoEm` sempre novos, fazia o primeiro clique quase sempre cair num desenho já trocado.
  */
-async function consultar($: Engine) {
+async function consultar($: Engine, proxima?: Partial<Vista>) {
   const agora = await $.clock.now()
+  const v = { ...normalizarVista(await read($, vista)), ...proxima }
   try {
-    const res = await $.http.fetch(`http://${nucleo}${await enderecoDoTick($)}`)
+    const res = await $.http.fetch(`http://${nucleo}${await enderecoDoTick($, v)}`)
     const painel = res.ok && res.text ? (JSON.parse(res.text) as Painel) : null
     if (!painel || painel.versao !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
     const contextoAoVivo = await contextoDoEngine($)
-    const nova = assinatura(painel) + JSON.stringify(contextoAoVivo)
     const atual = normalizarLeitura(await read($, leitura))
-    const mudou = nova !== ultima.assinatura || atual.offline || !atual.painel || agora - ultima.gravadoEm >= REDESENHO_MINIMO_MS
-    ultima = { ...ultima, assinatura: nova, lidoEm: agora }
+    const nova: Leitura = { painel, lidoEm: agora, offline: false, erro: null, proximaEm: null, contextoAoVivo }
+    // Um clique: a tela nova, a leitura e as decisões que a conversa ainda tem vão juntas, uma
+    // gravação atrás da outra, e o engine as desenha numa vez só.
+    const alcancaveis = proxima && (v.tela === 'decisoes' || v.tela === 'decisao') ? await alcanceDe($, nova, v) : undefined
+    const vNova = alcancaveis ? { ...v, alcancaveis } : v
+    const ve = await oQueSeVe($, nova, vNova, agora)
+    const primeira = atual.offline || !atual.painel
+    const mudou = primeira || ve.botoes !== ultima.botoes || (ve.tela !== ultima.tela && (proxima !== undefined || agora - ultima.gravadoEm >= REDESENHO_MINIMO_MS))
+    ultima = { ...ultima, lidoEm: agora }
+    if (proxima) await update($, vista, (x) => ({ ...normalizarVista(x), ...proxima, ...(alcancaveis ? { alcancaveis } : {}) }))
     if (mudou) {
-      ultima.gravadoEm = agora
-      await update($, leitura, () => ({ painel, lidoEm: agora, offline: false, erro: null, proximaEm: null, contextoAoVivo }))
+      ultima = { ...ultima, ...ve, gravadoEm: agora }
+      await update($, leitura, () => nova)
     }
     mostrarStatus($, linhaDeStatus(painel, false))
   } catch (err) {
+    if (proxima) await mudarVista($, proxima)
     // Sem núcleo: guarda a última leitura boa e tenta de novo no próximo tick, sem redesenhar a cada um.
     const atual = normalizarLeitura(await read($, leitura))
     if (!atual.offline) {
@@ -260,6 +314,25 @@ async function decidir($: Engine, id: string, rotulo: string, acao: AcaoNaDecisa
 }
 
 /**
+ * Quais decisões abertas ainda têm a mensagem na conversa: a compactação tira as antigas, e o
+ * engine só rola até o que está nela. Só elas ganham "ver na conversa".
+ */
+async function alcanceDe($: Engine, l: Leitura, v: Vista): Promise<string[] | undefined> {
+  try {
+    const ids = new Set<string>()
+    for (const d of [...(l.painel?.decisoes?.lista?.itens ?? []), ...(v.decisao ? [v.decisao] : [])]) if (d.toolUseId) ids.add(d.toolUseId)
+    if (!ids.size) return undefined
+    const naConversa = new Set<string>()
+    for (const m of await $.session.messages()) for (const t of m.toolUses ?? []) if (ids.has(t.tool_use_id)) naConversa.add(t.tool_use_id)
+    const alcancaveis = [...naConversa].sort()
+    return JSON.stringify(alcancaveis) === JSON.stringify(v.alcancaveis ?? []) ? undefined : alcancaveis
+  } catch {
+    // sem a leitura da conversa, nenhuma decisão ganha "ver na conversa": o detalhe traz o trecho
+    return undefined
+  }
+}
+
+/**
  * "ver na conversa": rola a conversa até a chamada que originou a decisão (o `tool_use_id`),
  * quando ela é desta sessão; o engine só rola a conversa em resposta a um clique da pessoa.
  * Quando não dá (de outra sessão, ou a linha não está mais na conversa), diz onde ela está.
@@ -344,6 +417,21 @@ async function responder($: Engine, mensagem: string) {
     await $.prompt.submit({ text: mensagem, asUser: true })
   } catch (err) {
     $.ui.toast(`Não deu para mandar a resposta: ${(err as Error)?.message ?? String(err)}. Responda no chat.`)
+  }
+}
+
+/**
+ * #145: pede à sessão do painel para desarquivar uma filha. O plugin não tem como desarquivar (o
+ * app só expõe `unarchive_session` às sessões de Claude); a sessão chama a ferramenta, e a pessoa
+ * aprova. Roda quando a sessão estiver ociosa; o painel só oferece o botão nessa hora.
+ */
+async function desarquivar($: Engine, f: { titulo: string; local?: string | null }) {
+  if (!f.local) return
+  try {
+    await $.prompt.submit({ text: pedidoDeDesarquivar(f), asUser: true })
+    $.ui.toast(`Pedi para desarquivar "${f.titulo}": aprove no chat.`)
+  } catch (err) {
+    $.ui.toast(`Não deu para pedir o desarquivar: ${(err as Error)?.message ?? String(err)}.`)
   }
 }
 
@@ -441,9 +529,10 @@ export const register: Register = (on, options) => {
     return r
   })
 
-  // A pessoa escreveu no chat: a pergunta do fechamento foi respondida (ou deixada de lado).
+  // A pessoa escreveu no chat: a pergunta do fechamento foi respondida (ou deixada de lado). Uma
+  // mensagem que chega sozinha (outra sessão, uma notificação, um plugin) não a tira do painel.
   on('prompt.submit', async ($, e, next) => {
-    await update($, pergunta, () => null).catch(() => undefined)
+    if (daPessoa((e as { origin?: PromptOrigin }).origin)) await update($, pergunta, () => null).catch(() => undefined)
     return next(e)
   })
 
@@ -484,6 +573,7 @@ export const register: Register = (on, options) => {
     const v = normalizarVista(await read($, vista))
     const q = ((await read($, pergunta)) ?? null) as PerguntaDaSessao | null
     colunas = e.props.bodyColumns ?? 38
+    linhasDoCorpo = (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows
     return desenhar({
       el,
       leitura: l,
@@ -503,17 +593,15 @@ export const register: Register = (on, options) => {
         compactar: (passo) =>
           void (passo === 'pedir' ? mudarVista($, { compactar: 'confirmar' }) : passo === 'cancelar' ? mudarVista($, { compactar: null }) : compactar($)),
         // Abrir as decisões ou trocar o escopo já pede a lista, sem esperar o próximo tick.
-        verDecisoes: () => void mudarVista($, { tela: 'decisoes' }).then(() => consultar($)),
+        verDecisoes: () => void consultar($, { tela: 'decisoes' }),
         escopoDecisoes: (valor) =>
-          void mudarVista($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }).then(() =>
-            consultar($),
-          ),
+          void consultar($, { escopoDecisoes: ESCOPOS_DE_DECISAO.includes(valor as EscopoDasDecisoes) ? (valor as EscopoDasDecisoes) : null }),
         confirmar: (d) => void decidir($, d.id, d.rotulo, 'confirmar'),
         descartar: (d) => void decidir($, d.id, d.rotulo, 'descartar'),
         verNaConversa: (d) => void verNaConversa($, d),
         verPlanos: () => void mudarVista($, { tela: 'planos' }),
-        abrirDecisao: (d) => void mudarVista($, { tela: 'decisao', decisao: d, ajustando: false }),
-        voltarDecisoes: () => void mudarVista($, { tela: 'decisoes', ajustando: false }).then(() => consultar($)),
+        abrirDecisao: (d) => void consultar($, { tela: 'decisao', decisao: d, ajustando: false }),
+        voltarDecisoes: () => void consultar($, { tela: 'decisoes', ajustando: false }),
         desfazer: (id, rotulo) => void decidir($, id, rotulo, 'desfazer'),
         ajustar: (abrir) => void mudarVista($, { ajustando: abrir }),
         enviarAjuste: (d, texto) => void (texto.trim() ? decidir($, d.id, d.rotulo, 'ajustar', texto) : undefined),
@@ -521,6 +609,7 @@ export const register: Register = (on, options) => {
         verFilhas: () => void mudarVista($, { tela: 'filhas' }),
         verPrs: () => void mudarVista($, { tela: 'prs' }),
         responder: (mensagem) => void responder($, mensagem),
+        desarquivar: (f) => void desarquivar($, f),
       },
     })
   })

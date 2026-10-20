@@ -55,6 +55,14 @@ export type PullRequestState = 'OPEN' | 'CLOSED' | 'MERGED';
 export type CiState = 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED';
 export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED';
 
+/** As checagens do último commit, contadas: as que passaram, as que falharam e as que ainda rodam. */
+export interface CiCounts {
+  total: number;
+  ok: number;
+  falhas: number;
+  rodando: number;
+}
+
 export interface LinkedPullRequest {
   number: number;
   url: string;
@@ -62,6 +70,8 @@ export interface LinkedPullRequest {
   isDraft: boolean;
   review: ReviewDecision | null;
   ci: CiState | null;
+  /** `null` quando não há checagens (ou a resposta veio sem a contagem). */
+  checks?: CiCounts | null;
 }
 
 export const WORK_STAGES = [

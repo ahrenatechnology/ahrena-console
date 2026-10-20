@@ -2,10 +2,10 @@
 // (Box, Text, Button, Link, Select, Svg), sem HTML. Recebe a leitura e devolve a árvore; quem
 // pede ao núcleo e guarda o estado é o register.tsx.
 //
-// Grade: cards de CARD_W colunas e no mínimo CARD_H linhas. A largura do painel decide quantos
-// cabem por linha (1 no estreito de 38 colunas, 3 no largo de 121), nunca a largura do card.
-// Nenhum texto é cortado na vertical: o card cresce até caber, e na mesma linha da grade os cards
-// acompanham o mais alto.
+// Grade (P1, `.pc`): todo card tem CARD_W colunas e CARD_H linhas, fixas e iguais. A largura do
+// painel decide quantos cabem por linha (1 no estreito de 38 colunas, 3 no largo de 121). Dentro do
+// card, cada linha é uma só, com reticências, como no P1; o inteiro fica no detalhe. Os seis cards
+// aparecem sempre; a altura que sobra fica vazia embaixo, e a que falta o corpo do pane rola.
 // Cabeçalho, faixa e linhas de baixo ocupam a largura da grade.
 
 import type { RenderElement } from 'claude-code'
@@ -18,6 +18,7 @@ import type {
   Leitura,
   Painel,
   PerguntaDaSessao,
+  PassoDoPainel,
   PlanoDaSessao,
   PrAguardando,
   PrecisaDeVoce,
@@ -48,20 +49,21 @@ import {
   precisamTexto,
   quando,
   quemDecidiu,
+  rotuloDaConta,
+  semMarkdown,
   statusDe,
   tokens,
   usd,
 } from './formato'
-import { alturaDaGrade, BORDA_DO_CARD, distribuir, LINHAS_DO_CARD, linhasDoTexto, type Etapa, type Peca } from './altura'
+import { alturaDaGrade, BORDA_DO_CARD, ESPACO, LINHAS_DO_CARD, linhasDoTexto } from './altura'
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
-export const CARD_H = 9
+/** Todo card tem a mesma altura, ~190 px no Desktop (ver LINHAS_DO_CARD): a borda e as linhas de conteúdo. */
+export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
-/** A atividade da sessão em até duas linhas do card (30 colunas úteis, menos o glifo). */
-export const ATIVIDADE_MAX = 2 * (CARD_W - 4) - 4
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.12'
+export const VERSAO_DO_PLUGIN = '0.0.28'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -134,6 +136,8 @@ export type Acoes = {
   verPrs: () => void
   /** #140: manda ao chat a resposta de um botão da caixa de próximo passo. */
   responder: (mensagem: string) => void
+  /** #145: pede à sessão do painel para desarquivar a filha (`unarchive_session`, a pessoa aprova). */
+  desarquivar: (f: FilhaDoPainel) => void
 }
 
 export type Contexto = {
@@ -172,11 +176,23 @@ function linhaSvg(serie: number[]) {
   return svg(100, 10, `<polyline points="${xy}" fill="none" stroke="${LARANJA}" stroke-width="1.2" stroke-linejoin="round"/>`)
 }
 
-/** A barra do plano atual, na largura da barra dos subagentes. */
-function progressoSvg(pct: number) {
-  const w = (Math.max(0, Math.min(100, pct)) / 100) * 200
-  return svg(200, 5, `<clipPath id="p"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#p)"><rect width="200" height="5" fill="${BORDA}"/>${w ? `<rect width="${w.toFixed(1)}" height="5" fill="${LARANJA}"/>` : ''}</g>`)
+/** O anel do plano (P1): o feito em laranja sobre o trilho, e o % no meio. */
+function anelSvg(pct: number) {
+  const r = 20
+  const volta = 2 * Math.PI * r
+  const arco = (Math.max(0, Math.min(100, pct)) / 100) * volta
+  return svg(
+    50,
+    50,
+    `<circle cx="25" cy="25" r="${r}" fill="none" stroke="${BORDA}" stroke-width="6"/>` +
+      (arco ? `<circle cx="25" cy="25" r="${r}" fill="none" stroke="${LARANJA}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${arco.toFixed(1)} ${volta.toFixed(1)}" transform="rotate(-90 25 25)"/>` : '') +
+      `<text x="25" y="28.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="${paleta.gray['100']}">${pct}%</text>`,
+  )
 }
+
+/** A barra dos Subagentes, em px: a largura útil do card (30 colunas × ~7,9 px) e uma linha fina. */
+const BARRA_W = 236
+const BARRA_H = 5
 
 function subagentesSvg(itens: SubagenteDoPainel[]) {
   const total = Math.max(1, itens.length)
@@ -195,7 +211,8 @@ function subagentesSvg(itens: SubagenteDoPainel[]) {
       return r
     })
     .join('')
-  return svg(200, 5, `<clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g>`)
+  // Esticada sem manter a proporção, no tamanho que o Svg dá (BARRA_W × BARRA_H).
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 5" preserveAspectRatio="none"><clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g></svg>`
 }
 
 function semConexaoSvg() {
@@ -229,46 +246,127 @@ function pilulaDeMotivo(c: Contexto, key: string, motivo: NonNullable<SessaoDoPa
   return pilula(c, key, `${m.glifo} ${m.rotulo}`, AMARELO, BADGE.amarelo, m.urgente)
 }
 
-/** Cabeçalho de card: ícone e título em versalete à esquerda, um valor à direita. */
-function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, corDireita?: string) {
+/**
+ * Cabeçalho de card (`.pc .t` do P1): ícone e título em versalete à esquerda; à direita um valor
+ * pequeno, em cor neutra e sem caixa alta (`.pc .t .r`). Não é clicável: no Desktop, todo Button é
+ * o botão nativo, no tamanho do corpo, e quebraria o cabeçalho.
+ */
+function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, opcoes: { cor?: string } = {}) {
   const { Box, Text } = c.el
   return (
-    <Box flexDirection="row" justifyContent="space-between" alignItems="center">
-      <Text mono size="caption" weight="semibold" dimColor wrap="truncate-end">
-        {icone} {titulo}
-      </Text>
-      <Text mono size="caption" tabular color={corDireita} dimColor={!corDireita}>
+    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+      {/* O título nunca corta: quem cede é o valor da direita. */}
+      <Box flexShrink={0}>
+        <Text mono size="caption" weight="semibold" dimColor>
+          {icone} {titulo}
+        </Text>
+      </Box>
+      <Text mono size="caption" tabular color={opcoes.cor} dimColor={!opcoes.cor} wrap="truncate-end">
         {direita}
       </Text>
     </Box>
   )
 }
 
-/** No resumo de um card de lista, o valor do cabeçalho abre a lista: o "+N" não tem linha. */
-function cabecalhoQueAbre(c: Contexto, key: string, abrir: (() => void) | null, icone: string, titulo: string, direita: string, corDireita?: string) {
-  if (!abrir) return cabecalho(c, icone, titulo, direita, corDireita)
-  const { Box, Button, Text } = c.el
+/**
+ * O respiro de todo card, num lugar só: dos lados, uma coluna (o que já estava bom); embaixo, dois
+ * espaços (~20 px no Desktop), para o pé nunca encostar na borda de baixo. Em cima, o respiro que o
+ * Desktop já dá ao Box com borda.
+ */
+export const RESPIRO_DO_CARD = { paddingX: 1, paddingBottom: 2 } as const
+
+/**
+ * Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda, o mesmo raio e o mesmo
+ * respiro. Com `pe`, um espaçador empurra o pé para o fundo do card, logo acima do respiro de baixo,
+ * na mesma altura em todos os cards.
+ */
+function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO, pe: RenderElement | null = null) {
+  const { Box } = c.el
   return (
-    <Box flexDirection="row" justifyContent="space-between" alignItems="center">
-      <Text mono size="caption" weight="semibold" dimColor wrap="truncate-end">
-        {icone} {titulo}
-      </Text>
-      <Button key={key} plain onPress={abrir}>
-        <Text mono size="caption" tabular color={LARANJA} underline>
-          {direita} ›
-        </Text>
-      </Button>
+    <Box key={key} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} {...RESPIRO_DO_CARD} gap="xs">
+      {filhos.filter(Boolean)}
+      {pe ? <Box key="espaco-do-pe" flexGrow={1} /> : null}
+      {pe}
     </Box>
   )
 }
 
-function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO, linhas = LINHAS_DO_CARD) {
+/**
+ * O pé do card: uma linha só, ancorada no fundo (ver `cartao`), à esquerda (os "ver mais": "93
+ * planos anteriores ›") ou à direita (o "Compactar agora" do Contexto).
+ */
+function peDoCard(c: Contexto, conteudo: RenderElement, alinhamento: 'esquerda' | 'direita' = 'esquerda') {
   const { Box } = c.el
   return (
-    <Box key={key} flexDirection="column" width={CARD_W} minHeight={BORDA_DO_CARD + linhas} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} paddingX={1} gap="xs">
-      {filhos.filter(Boolean)}
+    <Box key="pe-do-card" flexDirection="row" flexShrink={0} justifyContent={alinhamento === 'direita' ? 'flex-end' : 'flex-start'}>
+      {conteudo}
     </Box>
   )
+}
+
+/** "1 plano anterior", "93 planos anteriores": o número primeiro, por extenso, com a concordância. */
+const contagem = (n: number, umSingular: string, varios: string) => `${n} ${n === 1 ? umSingular : varios}`
+
+/** O link do P1 (`pn-link`): laranja e sublinhado. */
+function link(c: Contexto, key: string, href: string, texto: string) {
+  const { Link, Text } = c.el
+  return (
+    <Link key={key} href={href}>
+      <Text mono size="footnote" color={LARANJA} underline>
+        {texto}
+      </Text>
+    </Link>
+  )
+}
+
+/** Uma referência a PR no texto: "#139" ou "PR #139". */
+const REF_DE_PR = /#(\d+)\b/g
+
+/**
+ * O texto com cada "#N" como link laranja para o PR no GitHub, no repositório da sessão (o do card
+ * Trabalho). Sem "#N", o texto puro, que a linha corta. Com `max`, o texto cabe em `max` colunas
+ * cortando o que vem antes do número, nunca o "#N" ("Revisar… #139"), com ou sem repositório.
+ */
+export function textoComPrs(c: Contexto, texto: string, max?: number): (string | RenderElement)[] {
+  const repo = c.leitura.painel?.trabalho?.repo ?? null
+  const refs = [...texto.matchAll(REF_DE_PR)]
+  // Sem "#N" a proteger, o texto inteiro: a linha corta com reticências, no Desktop.
+  if (refs.length === 0) return [texto]
+  let t = texto
+  if (max !== undefined && [...t].length > max) {
+    // Corta o que vem antes da primeira referência; o número e o que vem depois ficam.
+    const primeira = refs[0]!
+    const depois = t.slice(primeira.index!)
+    const sobra = max - [...depois].length - 2
+    t = sobra >= 1 ? `${corta(t.slice(0, primeira.index!).trimEnd(), sobra + 1)} ${depois}` : depois
+  }
+  // Sem repositório conhecido, texto puro (com o número inteiro).
+  if (!repo) return [t]
+  const { Link, Text } = c.el
+  const partes: (string | RenderElement)[] = []
+  let ultimo = 0
+  for (const m of t.matchAll(REF_DE_PR)) {
+    if (m.index! > ultimo) partes.push(t.slice(ultimo, m.index!))
+    partes.push(
+      <Link key={`pr-${m[1]}-${m.index}`} href={`https://github.com/${repo}/pull/${m[1]}`}>
+        <Text color={LARANJA} underline>
+          {m[0]}
+        </Text>
+      </Link>,
+    )
+    ultimo = m.index! + m[0].length
+  }
+  if (ultimo < t.length) partes.push(t.slice(ultimo))
+  return partes
+}
+
+/**
+ * Um texto que abre algo, numa linha própria do card. No Desktop todo Button é nativo e ignora o
+ * estilo do Text de dentro: o rótulo vai em `label`, sem moldura (`plain`), e neutro com `dimColor`.
+ */
+function abre(c: Contexto, key: string, texto: string, acao: () => void, neutro = false) {
+  const { Button } = c.el
+  return <Button key={key} plain dimColor={neutro} label={texto} onPress={acao} />
 }
 
 /** Colunas de texto dentro de um card: a largura menos a borda e o respiro. */
@@ -316,17 +414,19 @@ function topo(c: Contexto, largura: number) {
   )
 }
 
-function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: RenderElement, conta?: ContaDoPainel | null) {
+function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: RenderElement | null, conta?: ContaDoPainel | null) {
   const { Box, Text } = c.el
   return (
     <Box key={`secao-${titulo}`} flexDirection="row" justifyContent="space-between" alignItems="center" width={largura}>
       <Box flexDirection="row" gap={1} flexShrink={1} minWidth={0}>
-        <Text mono size="caption" weight="semibold" dimColor>
-          {titulo}
-        </Text>
+        <Box flexShrink={0}>
+          <Text mono size="caption" weight="semibold" dimColor>
+            {titulo}
+          </Text>
+        </Box>
         {conta && (
           <Text mono size="caption" color={corDaConta(conta)} wrap="truncate-end">
-            ◆ {conta.rotulo}
+            ◆ {rotuloDaConta(conta.rotulo)}
           </Text>
         )}
       </Box>
@@ -335,14 +435,28 @@ function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: Re
   )
 }
 
+/**
+ * O "auto · 5 s" ao lado de "ESTA SESSÃO" e da conta. O nome da conta nunca corta: no estreito, o
+ * chip encurta para "5 s" e, se ainda não couber, sai.
+ */
+function chipDaSecao(c: Contexto, largura: number, estreito: boolean, conta: ContaDoPainel | null | undefined): RenderElement | null {
+  if (!estreito) return chip(c, 'chip', 'auto · 5 s')
+  // O título, o espaço e "◆ rótulo"; antes do chip, um espaço.
+  const daConta = conta ? 1 + 2 + [...rotuloDaConta(conta.rotulo)].length : 0
+  const usadas = [...'ESTA SESSÃO'].length + daConta
+  return usadas + 1 + [...'5 s'].length <= largura ? chip(c, 'chip', '5 s') : null
+}
+
+/**
+ * O chip do P1 (`.pn-sec .r`): no Desktop, um Box com borda ganha respiro vertical e o chip ficava
+ * com duas linhas de altura. Sem borda: só o texto pequeno e neutro, numa linha.
+ */
 function chip(c: Contexto, key: string, texto: string) {
-  const { Box, Text } = c.el
+  const { Text } = c.el
   return (
-    <Box key={key} borderStyle="round" borderColor={BORDA} paddingX={1} flexShrink={0}>
-      <Text mono size="caption" dimColor>
-        {texto}
-      </Text>
-    </Box>
+    <Text key={key} mono size="caption" dimColor>
+      {texto}
+    </Text>
   )
 }
 
@@ -366,7 +480,7 @@ function faixa(c: Contexto, s: SessaoDoPainel, largura: number, estreito: boolea
         )}
       </Box>
       <Text mono weight="semibold" wrap={estreito ? 'wrap' : 'truncate-end'}>
-        {estreito ? corta(f.texto, 64) : f.texto}
+        {estreito ? corta(semMarkdown(f.texto), 64) : semMarkdown(f.texto)}
       </Text>
       <Text mono size="caption" wrap="truncate-end">
         {f.rodape}
@@ -380,58 +494,54 @@ function faixa(c: Contexto, s: SessaoDoPainel, largura: number, estreito: boolea
 const GLIFO_DA_ATIVIDADE: Record<string, string> = {
   ferramenta: '↻', delegando: '⋔', pergunta: '?', permissao: '⛉', erro: '⊗', prompt: '›_', 'sua-vez': '↵', interrompida: '⏸', concluida: '', abandonada: '', ociosa: '',
 }
-const textoDaAtividade = (s: SessaoDoPainel) => (s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
+/** A atividade da sessão como texto: a do erro, a primeira frase; a última mensagem, sem o markdown cru. */
+const textoDaAtividade = (s: SessaoDoPainel) => semMarkdown(s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
 const linhaDoModelo = (s: SessaoDoPainel, agora: number) => `${modelo(s.modelo)} · ${desde(s.iniciadaEm, agora)} · turno ${s.turno}`
-/** A atividade numa linha só, quando falta altura. */
-const ATIVIDADE_UMA_LINHA = UTIL - 4
-
-/** O card "Esta sessão": o título e o modelo sempre inteiros; a atividade em 2 linhas, ou 1 quando falta altura. */
-function pecaSessao(s: SessaoDoPainel, agora: number): Peca {
-  const fixas = 2 + linhasDoTexto(s.titulo, UTIL) + linhasDoTexto(linhaDoModelo(s, agora), UTIL)
-  const atividade = Math.min(2, linhasDoTexto(`${GLIFO_DA_ATIVIDADE[s.atividade.tipo] ?? ''} ${corta(textoDaAtividade(s), ATIVIDADE_MAX)}`, UTIL))
-  return { id: 'sessao', minimo: fixas + 1, inteiro: fixas + atividade }
-}
-
-function cardSessao(c: Contexto, s: SessaoDoPainel, linhas: number) {
+/**
+ * O card "Esta sessão" (pnEstado do P1): a duração à direita do cabeçalho, as pills, o título, o
+ * modelo e o que ela faz agora, cada um numa linha. No card de altura fixa, o título e a atividade
+ * cortam com reticências, como no P1; inteiros, ficam na conversa.
+ */
+function cardSessao(c: Contexto, s: SessaoDoPainel) {
   const { Box, Text } = c.el
   const st = statusDe(s.estado)
   const cor = COR_STATUS[st]
   const tinta = st === 'waiting' || st === 'error'
-  const dur = desde(s.iniciadaEm, c.agora)
   const a = s.atividade
   const corAtividade =
     a.tipo === 'erro' ? VERMELHO_TEXTO : a.tipo === 'ferramenta' || a.tipo === 'delegando' ? LARANJA : a.tipo === 'concluida' || a.tipo === 'abandonada' ? undefined : AMARELO
   const glifo = GLIFO_DA_ATIVIDADE[a.tipo]
-  const peca = pecaSessao(s, c.agora)
-  const max = linhas >= peca.inteiro ? ATIVIDADE_MAX : ATIVIDADE_UMA_LINHA
   return cartao(
     c,
     'card-sessao',
     [
-      cabecalho(c, '∿', 'ESTA SESSÃO', dur),
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
+      cabecalho(c, '∿', 'ESTA SESSÃO', desde(s.iniciadaEm, c.agora)),
+      <Box flexDirection="row" gap={1}>
         {pilulaDeStatus(c, 'status', s.estado)}
         {st === 'waiting' && s.motivo && pilulaDeMotivo(c, 'motivo', s.motivo)}
       </Box>,
-      // Título, modelo, idade e turno sempre inteiros: quebram linha, e o card cresce.
-      <Text mono weight="bold" wrap="wrap">
+      <Text mono weight="bold" wrap="truncate-end">
         {s.titulo}
       </Text>,
-      <Text mono size="footnote" dimColor wrap="wrap">
+      <Text mono size="footnote" dimColor wrap="truncate-end">
         {linhaDoModelo(s, c.agora)}
       </Text>,
-      // O que ela faz agora: duas linhas, ou uma quando falta altura, com reticências.
-      <Text mono size="footnote" wrap="wrap" color={corAtividade} dimColor={!corAtividade}>
+      <Text mono size="footnote" wrap="truncate-end">
         {glifo ? <Text color={corAtividade ?? CINZA}>{glifo} </Text> : null}
-        <Text color={a.tipo === 'erro' ? VERMELHO_TEXTO : undefined}>{corta(textoDaAtividade(s), max)}</Text>
+        <Text color={a.tipo === 'erro' ? VERMELHO_TEXTO : undefined} dimColor={!corAtividade && a.tipo !== 'erro'}>
+          {textoDaAtividade(s)}
+        </Text>
       </Text>,
     ],
     cor.borda,
     tinta ? cor.fundo : FUNDO_CARTAO,
-    linhas,
   )
 }
 
+/**
+ * Um tile do P1 (`.tile`), com borda: o rótulo pequeno, o valor e, embaixo, a barra ou a linha. O
+ * card tem a altura que as duas fileiras pedem no Desktop (ver LINHAS_DO_CARD).
+ */
 function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | string, rodape?: RenderElement | null, corValor?: string) {
   const { Box, Text } = c.el
   return (
@@ -447,95 +557,53 @@ function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | st
   )
 }
 
-/** A partir daqui, o "Compactar" ganha destaque: "Compactar agora", na cor de atenção. */
+/** A partir daqui, o "Compactar agora" aparece no pé do card Contexto. */
 export const CONTEXTO_ALTO = 80
-/**
- * O card Contexto inteiro tem as linhas do desenho: o "Compactar" vai no cabeçalho, no lugar de
- * "estimativa", e não tira linha da telemetria (contexto, custo, tokens e background).
- */
-const LINHAS_DO_CONTEXTO = LINHAS_DO_CARD
 
 /** O contexto desta sessão: o do engine (acompanha a compactação na hora) ou, sem ele, o do núcleo. */
 const contextoDaSessao = (c: Pick<Contexto, 'leitura'>, p: Painel | null) => c.leitura?.contextoAoVivo ?? p?.contexto ?? null
 
-/** O "Compactar" da sessão em que o painel está aberto: sempre no card; em destaque a partir de 80%. */
-function botaoCompactar(c: Contexto, pct: number) {
-  const { Button, Text } = c.el
-  if (c.vista.compactar === 'compactando') {
-    return (
-      <Text key="compactando" mono size="footnote" color={AMARELO}>
-        compactando…
-      </Text>
-    )
-  }
-  return pct >= CONTEXTO_ALTO ? (
-    <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
+/**
+ * O "Compactar agora" do pé do card Contexto (a partir de 80%): a mesma linha de pé dos outros
+ * cards, à direita, sem moldura. O botão primário nativo do Desktop (~28 px, branco) não cabia
+ * acima do respiro e destoava dos outros pés. Enquanto o engine compacta, "compactando…".
+ */
+function botaoCompactar(c: Contexto) {
+  const { Text } = c.el
+  return c.vista.compactar === 'compactando' ? (
+    <Text key="compactando" mono size="footnote" color={AMARELO}>
+      compactando…
+    </Text>
   ) : (
-    <Button key="compactar" plain onPress={() => c.acoes.compactar('pedir')}>
-      <Text mono size="caption" color={LARANJA} underline>
-        compactar
-      </Text>
-    </Button>
+    abre(c, 'compactar', 'Compactar agora ›', () => c.acoes.compactar('pedir'))
   )
 }
 
-/** Linhas do resumo do Contexto: uma; com "Compactar agora", duas (o botão na linha dele). */
-const linhasDoResumoDoContexto = (pct: number) => (pct >= CONTEXTO_ALTO ? 2 : 1)
-
-function cardContexto(c: Contexto, p: Painel | null, linhas = LINHAS_DO_CONTEXTO) {
-  const { Box, Svg, Text } = c.el
+/**
+ * O card Contexto e custo (pnMetricas do P1): "estimativa" à direita do cabeçalho e os quatro
+ * tiles em 2×2. Até 79%, como no P1, sem Compactar; a partir de 80%, o "Compactar agora" no pé do
+ * card, à direita: o card se basta sozinho.
+ */
+function cardContexto(c: Contexto, p: Painel | null) {
+  const { Box, Svg } = c.el
   const ctx = contextoDaSessao(c, p)
   const pct = ctx?.pct ?? 0
   const alto = pct >= CONTEXTO_ALTO
-  // Sem altura: o resumo inteiro numa linha, e o "Compactar agora" na linha de baixo, sem cortar nada.
-  if (linhas < LINHAS_DO_CONTEXTO) {
-    const resumo = (
-      <Text mono size="caption" weight="semibold" dimColor={!alto} color={alto ? VERMELHO_TEXTO : undefined}>
-        ◠ {pct}% · {usd(p?.custo?.usd ?? 0)}
-      </Text>
-    )
-    return cartao(
-      c,
-      'card-contexto',
-      alto
-        ? [resumo, <Box flexDirection="row">{botaoCompactar(c, pct)}</Box>]
-        : [
-            <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-              {resumo}
-              {botaoCompactar(c, pct)}
-            </Box>,
-          ],
-      alto ? VERMELHO : BORDA,
-      FUNDO_CARTAO,
-      linhas,
-    )
-  }
   const corCtx = alto ? VERMELHO : LARANJA
   const erro = p?.sessao?.status === 'error'
   const bg = p?.background ?? { total: 0, primeiro: null }
   const tk = p?.tokens
-  return cartao(
-    c,
-    'card-contexto',
-    [
-      // O "Compactar" no cabeçalho: com o destaque, o título encurta para caber sem cortar.
-      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-        <Text mono size="caption" weight="semibold" dimColor>
-          ◠ {alto ? 'CONTEXTO' : 'CONTEXTO E CUSTO'}
-        </Text>
-        {botaoCompactar(c, pct)}
-      </Box>,
-      <Box flexDirection="row" gap={1}>
-        {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
-        {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
-      </Box>,
-      <Box flexDirection="row" gap={1}>
-        {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
-        {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
-      </Box>,
-    ],
-    alto ? VERMELHO : BORDA,
-  )
+  return cartao(c, 'card-contexto', [
+    cabecalho(c, '◠', 'CONTEXTO E CUSTO', 'estimativa'),
+    <Box flexDirection="row" gap={1} flexShrink={0}>
+      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
+      {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
+    </Box>,
+    <Box flexDirection="row" gap={1} flexShrink={0}>
+      {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
+      {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
+    </Box>,
+  ], BORDA, FUNDO_CARTAO, alto ? peDoCard(c, botaoCompactar(c), 'direita') : null)
 }
 
 /**
@@ -561,7 +629,7 @@ function faixaPergunta(c: Contexto, largura: number) {
           ? ESTA SESSÃO PERGUNTA
         </Text>
         <Text mono weight="bold" wrap="wrap">
-          {q.texto}
+          {semMarkdown(q.texto)}
         </Text>
         <Box flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
           {respostas.map((a, i) => (
@@ -636,12 +704,13 @@ function faixaCompactar(c: Contexto, largura: number) {
   )
 }
 
-function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_DO_CARD) {
-  const { Box, Text, Link, Svg } = c.el
-  if (linhas < LINHAS_DO_CARD) {
-    const resumo = t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'
-    return cartao(c, 'card-trabalho', [cabecalho(c, '⎇', 'TRABALHO', resumo)], BORDA, FUNDO_CARTAO, linhas)
-  }
+/**
+ * O card Trabalho (pnTrabalho do P1): com issue, "#N título", as sub-issues com a barra, o PR com o
+ * estado e "abrir", e as pills de CI e review. Sem issue, o branch numa linha com reticências (como
+ * no P1: o nome inteiro fica no GitHub) e "ligar uma issue".
+ */
+function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null) {
+  const { Box, Text, Svg } = c.el
   const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⎇', 'TRABALHO', 'pelo branch')]
   if (!t) {
     corpo.push(
@@ -653,14 +722,13 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_D
   }
   if (!t.issue) {
     corpo.push(
-      <Text mono size="footnote">
-        <Text dimColor>⎇ </Text>
-        {t.branch}
+      <Text mono size="footnote" dimColor wrap="truncate-end">
+        ⎇ {t.branch}
       </Text>,
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {t.erro ? `GitHub: ${t.erro}` : 'sem issue ligada a este branch'}
       </Text>,
-      t.repo ? <Link href={`https://github.com/${t.repo}/issues`} label="ligar uma issue" /> : null,
+      t.repo ? link(c, 'ligar-issue', `https://github.com/${t.repo}/issues`, 'ligar uma issue') : null,
     )
     return cartao(c, 'card-trabalho', corpo)
   }
@@ -670,8 +738,6 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_D
     <Text mono size="footnote" weight="semibold" wrap="truncate-end">
       <Text color={LARANJA}>#{i.numero}</Text> {i.titulo}
     </Text>,
-  )
-  corpo.push(
     <Box flexDirection="row" gap={1} alignItems="center">
       <Text mono size="footnote" dimColor>
         {sub ? `sub-issues ${sub.feitas}/${sub.total}` : 'sem sub-issues'}
@@ -685,25 +751,27 @@ function cardTrabalho(c: Contexto, t: TrabalhoDoPainel | null, linhas = LINHAS_D
         sem PR{t.semPush ? ' · branch sem push' : ''}
       </Text>,
     )
-  } else {
-    const pr = t.pr
-    corpo.push(
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text mono size="footnote">
-          <Text dimColor>⇄ </Text>PR #{pr.numero} <Text dimColor>· {pr.estado}</Text>
-        </Text>
-        <Link href={pr.url} label="abrir" />
-      </Box>,
-    )
-    const pilulas: RenderElement[] = []
-    if (pr.ci === 'ok') pilulas.push(pilula(c, 'ci', 'CI ✓', VERDE, BADGE.verde))
-    if (pr.ci === 'falhou') pilulas.push(pilula(c, 'ci', 'CI ✕ falhou', VERMELHO_TEXTO, BADGE.vermelho))
-    if (pr.ci === 'rodando') pilulas.push(pilula(c, 'ci', 'CI … rodando', AMARELO, BADGE.amarelo))
-    if (pr.review === 'aprovado') pilulas.push(pilula(c, 'review', 'aprovado', VERDE, BADGE.verde))
-    if (pr.review === 'ajustes') pilulas.push(pilula(c, 'review', 'ajustes pedidos', VERMELHO_TEXTO, BADGE.vermelho))
-    if (pr.review === 'pendente') pilulas.push(pilula(c, 'review', 'review pendente', AMARELO, BADGE.amarelo, true))
-    if (pilulas.length) corpo.push(<Box flexDirection="row" gap={1}>{pilulas}</Box>)
+    return cartao(c, 'card-trabalho', corpo)
   }
+  const pr = t.pr
+  corpo.push(
+    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+      <Text mono size="footnote" wrap="truncate-end">
+        <Text dimColor>⇄ </Text>PR #{pr.numero} <Text dimColor>· {pr.estado}</Text>
+      </Text>
+      {link(c, 'abrir-pr', pr.url, 'abrir')}
+    </Box>,
+  )
+  const pilulas: RenderElement[] = []
+  // Com a contagem: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7" (as que terminaram).
+  const k = pr.checks
+  if (pr.ci === 'ok') pilulas.push(pilula(c, 'ci', k ? `CI ✓ ${k.ok}/${k.total}` : 'CI ✓', VERDE, BADGE.verde))
+  if (pr.ci === 'falhou') pilulas.push(pilula(c, 'ci', k?.falhas ? `CI ✕ ${k.falhas} ${k.falhas === 1 ? 'falha' : 'falhas'}` : 'CI ✕ falhou', VERMELHO_TEXTO, BADGE.vermelho))
+  if (pr.ci === 'rodando') pilulas.push(pilula(c, 'ci', k ? `CI … ${k.total - k.rodando}/${k.total}` : 'CI … rodando', AMARELO, BADGE.amarelo))
+  if (pr.review === 'aprovado') pilulas.push(pilula(c, 'review', 'aprovado', VERDE, BADGE.verde))
+  if (pr.review === 'ajustes') pilulas.push(pilula(c, 'review', 'ajustes pedidos', VERMELHO_TEXTO, BADGE.vermelho))
+  if (pr.review === 'pendente') pilulas.push(pilula(c, 'review', 'review pendente', AMARELO, BADGE.amarelo, true))
+  if (pilulas.length) corpo.push(<Box flexDirection="row" gap={1}>{pilulas}</Box>)
   return cartao(c, 'card-trabalho', corpo)
 }
 
@@ -715,7 +783,7 @@ const TEMPO_W = 7
  * e o tempo numa coluna de largura fixa à direita, que nunca divide espaço com o texto. Na tela
  * "+N" (`inteiro`), o texto quebra e aparece inteiro.
  */
-function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string | null)[], tempo: string, inteiro = false, esquerda?: RenderElement) {
+function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string | null)[], tempo: string, inteiro = false, esquerda?: RenderElement, corTempo?: string) {
   const { Box, Text } = c.el
   return (
     <Box key={key} flexDirection="row" gap={1}>
@@ -727,15 +795,14 @@ function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string |
         )}
       </Box>
       <Box width={TEMPO_W} flexShrink={0} flexDirection="row" justifyContent="flex-end">
-        <Text mono size="footnote" dimColor tabular>
-          {tempo === 'agora' ? '< 10 s' : tempo}
+        <Text mono size="footnote" dimColor={!corTempo} color={corTempo} tabular>
+          {tempo}
         </Text>
       </Box>
     </Box>
   )
 }
 
-const planosAnteriores = (n: number) => `+${n} ${n === 1 ? 'plano anterior' : 'planos anteriores'}`
 
 /** Quanto o plano durou; o atual, até agora. */
 const duracaoDoPlano = (p: PlanoDaSessao, agora: number) => duracao((p.fim ? Date.parse(p.fim) : agora) - Date.parse(p.inicio))
@@ -749,7 +816,7 @@ function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
     `plano-${p.numero}`,
     [
       <Text color={marca.cor}>{marca.g} </Text>,
-      <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{p.resumo}</Text>,
+      <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{textoComPrs(c, p.resumo)}</Text>,
       p.resultado === 'concluido' && !detalhe ? null : <Text dimColor> · {p.feitos}/{p.total}</Text>,
       detalhe && p.atual ? <Text dimColor> · {p.atual}</Text> : null,
     ],
@@ -758,130 +825,134 @@ function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
   )
 }
 
-function botaoPlanos(c: Contexto, n: number) {
-  const { Button, Text } = c.el
-  return (
-    <Button key="ver-planos" plain onPress={c.acoes.verPlanos}>
-      <Text mono size="footnote" color={LARANJA} underline>
-        {planosAnteriores(n)}
-      </Text>
-    </Button>
-  )
+/** Colunas do texto de um passo no card do Plano: a largura útil menos o anel (~7) e o glifo. */
+const PASSO_NO_CARD = UTIL - 9 - 2
+
+/** Quantos passos o card do Plano destaca ao lado do anel. */
+const PASSOS_NO_CARD = 3
+
+/**
+ * Os passos que o card destaca: em volta do atual (o último feito, o atual e os próximos); sem
+ * atual, os primeiros pendentes; tudo feito, os últimos.
+ */
+export function passosEmDestaque(passos: readonly PassoDoPainel[]): PassoDoPainel[] {
+  if (passos.length <= PASSOS_NO_CARD) return [...passos]
+  const atual = passos.findIndex((x) => x.estado === 'in_progress')
+  const pendente = passos.findIndex((x) => x.estado === 'pending')
+  const foco = atual >= 0 ? atual : pendente >= 0 ? pendente : passos.length - 1
+  const inicio = Math.max(0, Math.min(foco - 1, passos.length - PASSOS_NO_CARD))
+  return passos.slice(inicio, inicio + PASSOS_NO_CARD)
 }
 
-// O plano atual em destaque (barra e passo em andamento) e os anteriores (issue #131). As linhas
-// vêm do orçamento da altura: o cabeçalho, a barra e o atual; depois o próximo e os anteriores que
-// couberem, e "+N planos anteriores" com o resto. No estreito, os anteriores ficam atrás do "+N".
-function pecaPlano(p: Painel['plano'], planos: PlanoDaSessao[], estreito: boolean): Peca {
-  const anteriores = planos.filter((x) => x.resultado !== 'atual').length
-  if (!p && anteriores === 0) return { id: 'plano', minimo: 2, inteiro: 2 }
-  const base = p ? 3 : 2
-  const proximo = p?.atual && p.proximo ? 1 : 0
-  // Com anteriores, o mínimo já tem a linha do "+N": a lista deles nunca fica inalcançável.
-  return { id: 'plano', minimo: base + (anteriores ? 1 : 0), inteiro: base + proximo + (anteriores ? (estreito ? 1 : anteriores) : 0) }
-}
-
-function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[], estreito: boolean, linhas = LINHAS_DO_CARD) {
-  const { Text, Svg } = c.el
+/**
+ * O card Plano (pnPlano do P1, com a área útil): o anel com o % à esquerda e, à direita, três
+ * passos do plano em destaque (✓ feito, ● o atual em negrito, ○ pendente). Os outros passos e os
+ * planos anteriores ficam no detalhe, que a última linha abre.
+ */
+function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
+  const { Box, Text, Svg } = c.el
   const anteriores = planos.filter((x) => x.resultado !== 'atual')
   const valor = p ? `${p.feitos}/${p.total}` : '0/0'
-  if (!p && anteriores.length === 0) {
-    return cartao(c, 'card-plano', [
-      cabecalho(c, '☰', 'PLANO', '0/0', LARANJA),
-      linhas >= 2 && (
-        <Text mono size="footnote" dimColor>
-          sem plano nesta sessão
-        </Text>
-      ),
-    ], BORDA, FUNDO_CARTAO, linhas)
-  }
-  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '☰', 'PLANO', valor, LARANJA)]
-  const base = p ? 3 : 2
-  if (linhas < base + (anteriores.length ? 1 : 0)) {
-    return cartao(c, 'card-plano', [cabecalhoQueAbre(c, 'ver-planos', anteriores.length ? c.acoes.verPlanos : null, '☰', 'PLANO', valor, LARANJA)], BORDA, FUNDO_CARTAO, linhas)
-  }
-  if (p) {
-    const pct = p.total ? (p.feitos / p.total) * 100 : 0
-    const atual = planos.find((x) => x.resultado === 'atual')
-    corpo.push(
-      <Svg source={progressoSvg(pct)} alt={`plano ${Math.round(pct)}% feito, ${p.feitos} de ${p.total}`} width={200} height={4} />,
-      // O passo em andamento; sem ele, o próximo pendente; sem pendente, concluído. Uma linha só,
-      // com a idade do plano na coluna de tempo.
-      linhaDeLista(
-        c,
-        'passo-atual',
-        p.atual
-          ? [<Text color={LARANJA}>● </Text>, <Text weight="semibold">{p.atual}</Text>]
-          : p.proximo
-            ? [<Text dimColor>○ </Text>, <Text weight="semibold">Próximo: {p.proximo}</Text>]
-            : [<Text color={VERDE} weight="semibold">concluído ✓</Text>],
-        atual ? duracaoDoPlano(atual, c.agora) : '',
-      ),
-    )
-  } else {
-    corpo.push(
-      <Text mono size="footnote" dimColor>
-        nenhum plano em andamento
-      </Text>,
-    )
-  }
-  let resto = linhas - base
-  // O próximo passo, se sobrar linha depois do "+N" que os anteriores pedem.
-  if (p?.atual && p.proximo && resto >= 1 + (anteriores.length ? 1 : 0)) {
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '☰', 'PLANO', valor, { cor: LARANJA })]
+  if (!p) {
     corpo.push(
       <Text mono size="footnote" dimColor wrap="truncate-end">
-        ○ {corta(p.proximo, 20)}
-        {p.restantes ? ` · +${p.restantes}` : ''}
+        {anteriores.length ? 'nenhum plano em andamento' : 'sem plano nesta sessão'}
       </Text>,
     )
-    resto--
+    const pe = anteriores.length ? peDoCard(c, abre(c, 'ver-planos', `${contagem(anteriores.length, 'plano anterior', 'planos anteriores')} ›`, c.acoes.verPlanos, true)) : null
+    return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, pe)
   }
-  if (anteriores.length === 0 || resto < 1) return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, linhas)
-  if (estreito) {
-    corpo.push(botaoPlanos(c, anteriores.length))
-    return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, linhas)
+  const pct = p.total ? Math.round((p.feitos / p.total) * 100) : 0
+  const passos = p.passos ?? []
+  const destaque = passosEmDestaque(passos)
+  const linha = (x: PassoDoPainel) => {
+    const feito = x.estado === 'completed'
+    const atual = x.estado === 'in_progress'
+    return (
+      <Text key={`passo-${x.id}`} mono size="footnote" wrap="truncate-end" dimColor={!feito && !atual}>
+        <Text color={feito ? VERDE : atual ? LARANJA : undefined}>{feito ? '✓' : atual ? '●' : '○'} </Text>
+        <Text weight={atual ? 'bold' : undefined}>{textoComPrs(c, atual ? (x.textoAtivo ?? x.texto) : x.texto, PASSO_NO_CARD)}</Text>
+      </Text>
+    )
   }
-  const cabem = anteriores.length <= resto ? anteriores.length : resto - 1
-  corpo.push(...anteriores.slice(0, cabem).map((x) => linhaDePlano(c, x)))
-  if (cabem < anteriores.length) corpo.push(botaoPlanos(c, anteriores.length - cabem))
-  return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, linhas)
+  // Sem os passos (núcleo antigo): o resumo do P1, "✓ N feitas", o atual e o próximo.
+  const resumo = [
+    <Text key="feitas" mono size="footnote" color={VERDE} wrap="truncate-end">
+      ✓ {p.feitos} {p.feitos === 1 ? 'feita' : 'feitas'}
+    </Text>,
+    <Text key="atual" mono size="footnote" wrap="truncate-end">
+      {p.atual ? (
+        <Text>
+          <Text color={LARANJA}>● </Text>
+          <Text weight="bold">{p.atual}</Text>
+        </Text>
+      ) : (
+        <Text color={VERDE} weight="semibold">
+          concluído ✓
+        </Text>
+      )}
+    </Text>,
+    p.atual && p.proximo ? (
+      <Text key="proximo" mono size="footnote" dimColor wrap="truncate-end">
+        ○ {p.proximo}
+        {p.restantes ? ` · +${p.restantes}` : ''}
+      </Text>
+    ) : null,
+  ]
+  corpo.push(
+    <Box flexDirection="row" gap={2} alignItems="center">
+      <Svg source={anelSvg(pct)} alt={`plano ${pct}% feito, ${p.feitos} de ${p.total}`} width={50} height={50} />
+      <Box flexDirection="column" flexShrink={1} minWidth={0}>
+        {destaque.length ? destaque.map(linha) : resumo}
+      </Box>
+    </Box>,
+  )
+  // O plano inteiro (os passos) e os anteriores, no detalhe: "6 passos · 2 planos anteriores ›".
+  const partes = [passos.length ? contagem(passos.length, 'passo', 'passos') : null, anteriores.length ? contagem(anteriores.length, 'plano anterior', 'planos anteriores') : null].filter(Boolean)
+  const pe = peDoCard(c, abre(c, 'ver-planos', partes.length ? `${partes.join(' · ')} ›` : 'ver o plano ›', c.acoes.verPlanos, true))
+  return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, pe)
 }
+
+/** Colunas do texto de uma linha de lista no card: a largura útil menos a coluna de tempo e o espaço. */
+const TEXTO_DA_LINHA = CARD_W - 4 - TEMPO_W - 1
+/** Na linha do subagente, quantos caracteres da descrição ficam à vista antes de o tipo encurtar. */
+const DESCRICAO_MIN = 8
+/** O tipo nunca encurta abaixo disso ("gener…"). */
+const TIPO_MIN = 6
 
 function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
   const { Text } = c.el
   const marca =
     s.status === 'completed' ? { g: '✓', cor: VERDE } : s.status === 'error' ? { g: '✕', cor: VERMELHO_TEXTO } : { g: '●', cor: LARANJA }
   const tempo = s.ate ? duracao(Date.parse(s.ate) - Date.parse(s.desde)) : desde(s.desde, c.agora)
+  // O que distingue um subagente é a descrição: no card, se ela não couber com pelo menos
+  // DESCRICAO_MIN caracteres, é o tipo que encurta ("general…").
+  const nome = inteiro || !s.tarefa ? s.nome : corta(s.nome, Math.max(TIPO_MIN, TEXTO_DA_LINHA - 2 - 3 - Math.min([...s.tarefa].length, DESCRICAO_MIN)))
   return linhaDeLista(
     c,
     `sub-${s.id}`,
-    [<Text color={marca.cor}>{marca.g} </Text>, <Text weight="semibold">{s.nome}</Text>, s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null],
+    [
+      <Text color={marca.cor}>{marca.g} </Text>,
+      <Text weight="bold">{nome}</Text>,
+      // O "#N" da descrição é link para o PR; no card, o texto cabe na linha sem cortar o número.
+      s.tarefa ? <Text dimColor> · {textoComPrs(c, s.tarefa, inteiro ? undefined : Math.max(1, TEXTO_DA_LINHA - 2 - [...nome].length - 3))}</Text> : null,
+    ],
     tempo,
     inteiro,
   )
 }
 
-/** "+N", que abre a lista completa. */
-/** "ver todas as 15 sessões filhas": abre a lista completa, dizendo do que é e quantas são. */
-function maisItens(c: Contexto, key: string, texto: string, abrir: () => void) {
-  const { Button, Text } = c.el
-  return (
-    <Button key={key} plain onPress={abrir}>
-      <Text mono size="footnote" color={LARANJA} underline wrap="truncate-end">
-        {texto}
-      </Text>
-    </Button>
-  )
-}
 
 /** Os ativos primeiro; depois os encerrados, mais recentes antes. */
 function subagentesEmOrdem(s: Painel['subagentes']) {
-  const ativos = s.itens.filter((i) => i.status === 'working' || i.status === 'waiting')
-  return [...ativos, ...s.itens.filter((i) => !ativos.includes(i))]
+  const ativos = s.itens.filter(subagenteAtivo)
+  const encerrados = s.itens.filter((i) => !subagenteAtivo(i)).sort((x, y) => (y.ate ?? y.desde).localeCompare(x.ate ?? x.desde))
+  return [...ativos, ...encerrados]
 }
 
-/** Cada subagente ocupa uma linha no card: o texto corta com reticências. */
-const linhasDoSubagente = (_: SubagenteDoPainel) => 1
+const subagenteAtivo = (i: SubagenteDoPainel) => i.status === 'working' || i.status === 'waiting'
+
 
 /** Quantos itens cabem em `linhas`; quando nem todos cabem, uma linha fica para o "+N". */
 function quantosCabem(alturas: number[], linhas: number): number {
@@ -896,114 +967,196 @@ function quantosCabem(alturas: number[], linhas: number): number {
   return n
 }
 
-function pecaSubagentes(s: Painel['subagentes']): Peca {
-  if (s.itens.length === 0) return { id: 'subagentes', minimo: 2, inteiro: 2 }
-  const alturas = subagentesEmOrdem(s).map(linhasDoSubagente)
-  return { id: 'subagentes', minimo: 3, inteiro: 2 + alturas.reduce((a, b) => a + b, 0) }
+/** No card (P1), até 3 linhas: os ativos primeiro, e os encerrados mais recentes até completar. */
+const LINHAS_DA_LISTA = 3
+
+/**
+ * O que ficou fora do card, no padrão dos pés ("N coisa estado"): "17 subagentes concluídos",
+ * "1 subagente concluído", "2 subagentes ativos · 10 concluídos". O substantivo vai só na primeira parte.
+ */
+function subagentesFora(fora: SubagenteDoPainel[]): string {
+  const partes: [number, string, string][] = [
+    [fora.filter(subagenteAtivo).length, 'ativo', 'ativos'],
+    [fora.filter((i) => i.status === 'completed').length, 'concluído', 'concluídos'],
+    [fora.filter((i) => i.status === 'error').length, 'com erro', 'com erro'],
+  ]
+  return partes
+    .filter(([n]) => n > 0)
+    .map(([n, um, varios], i) => (i === 0 ? `${contagem(n, 'subagente', 'subagentes')} ${n === 1 ? um : varios}` : `${n} ${n === 1 ? um : varios}`))
+    .join(' · ')
 }
 
-function cardSubagentes(c: Contexto, s: Painel['subagentes'], linhas = LINHAS_DO_CARD) {
+/**
+ * O card Subagentes (pnSubs do P1): "N ativos" à direita do cabeçalho, a barra por estado (ativo
+ * laranja, concluído verde, erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
+ * concluídos também; o resto em "+N concluídos", que abre a lista. Nunca só o cabeçalho.
+ */
+function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const { Text, Svg } = c.el
-  const direita = plural(s.ativos, 'ativo', 'ativos')
-  if (s.itens.length === 0 || linhas < 3) {
-    return cartao(c, 'card-subagentes', [
-      cabecalhoQueAbre(c, 'ver-subagentes', s.itens.length ? c.acoes.verSubagentes : null, '⑂', 'SUBAGENTES', s.itens.length ? `${direita} · ${s.itens.length}` : direita),
-      s.itens.length === 0 && linhas >= 2 && (
-        <Text mono size="footnote" dimColor>
-          nenhum nesta sessão
-        </Text>
-      ),
-    ], BORDA, FUNDO_CARTAO, linhas)
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑂', 'SUBAGENTES', plural(s.ativos, 'ativo', 'ativos'))]
+  if (s.itens.length === 0) {
+    corpo.push(
+      <Text mono size="footnote" dimColor>
+        nenhum nesta sessão
+      </Text>,
+    )
+    return cartao(c, 'card-subagentes', corpo)
   }
   const todos = subagentesEmOrdem(s)
-  const n = quantosCabem(todos.map(linhasDoSubagente), linhas - 2)
-  const mostrar = todos.slice(0, Math.max(0, n))
-  const fora = todos.length - mostrar.length
-  return cartao(c, 'card-subagentes', [
-    cabecalho(c, '⑂', 'SUBAGENTES', direita),
-    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={200} height={4} />,
-    ...mostrar.map((i) => linhaDeSubagente(c, i)),
-    fora > 0 && maisItens(c, 'ver-subagentes', `ver todos os ${todos.length} subagentes`, c.acoes.verSubagentes),
-  ], BORDA, FUNDO_CARTAO, linhas)
+  const fora = todos.slice(LINHAS_DA_LISTA)
+  corpo.push(
+    // Largura e altura explícitas: sem elas, o Desktop dá ao Svg a altura do próprio desenho na
+    // largura que sobra, e a barra virava um bloco do tamanho do card. BARRA_W é a largura útil do
+    // card no Desktop (~7,9 px por coluna), de borda a borda.
+    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={BARRA_W} height={BARRA_H} />,
+    ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
+  )
+  const pe = fora.length > 0 ? peDoCard(c, abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true)) : null
+  return cartao(c, 'card-subagentes', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
 /** O nome da sessão: um link que abre a conversa no Claude Desktop, quando ela está no índice dele. */
-function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | null | undefined, max: number, inteiro = false) {
+function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | null | undefined, max: number, inteiro = false, comoNoCard = false) {
   const { Button, Link, Text } = c.el
   const rotulo = inteiro ? titulo : corta(titulo, max)
+  // No card (P1), o nome em negrito na cor do texto; na lista, o link em laranja.
+  const texto = (
+    <Text mono size="footnote" weight={comoNoCard ? 'bold' : 'semibold'} color={comoNoCard ? undefined : LARANJA} underline={!comoNoCard} wrap={inteiro ? 'wrap' : 'truncate-end'}>
+      {rotulo}
+    </Text>
+  )
   // No macOS, a API abre a conversa direto; fora dele, o link de reserva passa pelo navegador.
-  if (abreDireto(c, local)) {
-    return (
-      <Button key={key} plain onPress={() => c.acoes.abrirSessao(local!, titulo)}>
-        <Text mono size="footnote" weight="semibold" color={LARANJA} underline wrap={inteiro ? 'wrap' : 'truncate-end'}>
-          {rotulo}
-        </Text>
-      </Button>
-    )
-  }
+  // No Desktop o Button é nativo e ignora o Text de dentro: o nome vai no `label`.
+  if (abreDireto(c, local)) return <Button key={key} plain label={rotulo} onPress={() => c.acoes.abrirSessao(local!, titulo)} />
   const href = enderecoDaSessao(c, local)
-  if (href) return <Link key={key} href={href} label={rotulo} />
+  if (href) return comoNoCard ? <Link key={key} href={href}>{texto}</Link> : <Link key={key} href={href} label={rotulo} />
   return (
-    <Text key={key} mono size="footnote" weight="semibold" wrap={inteiro ? 'wrap' : 'truncate-end'}>
+    <Text key={key} mono size="footnote" weight={comoNoCard ? 'bold' : 'semibold'} wrap={inteiro ? 'wrap' : 'truncate-end'}>
       {titulo}
     </Text>
   )
 }
 
-function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = false) {
+/** Onde a filha entra na lista: trabalhando, precisando de você, na sua vez ou parada. */
+export type GrupoDaFilha = 'trabalhando' | 'precisa' | 'sua-vez' | 'parada' | 'arquivada'
+
+export function grupoDaFilha(f: FilhaDoPainel): GrupoDaFilha {
+  // #145: a arquivada no Desktop vem por último, seja qual for o estado em que parou.
+  if (f.arquivada) return 'arquivada'
+  if (f.estado === 'active' || f.estado === 'delegating' || f.estado === 'background') return 'trabalhando'
+  if (f.estado === 'error') return 'precisa'
+  // Uma permissão ou uma pergunta chega como `notification`; o fim do turno e o Esc são a sua vez.
+  if (f.estado === 'waiting') return f.motivo === 'notification' ? 'precisa' : 'sua-vez'
+  return 'parada'
+}
+
+const ORDEM_DAS_FILHAS: GrupoDaFilha[] = ['trabalhando', 'precisa', 'sua-vez', 'parada', 'arquivada']
+
+/** O que vem depois do nome, em cor neutra: o que a filha que trabalha está fazendo. */
+const fazendoDaFilha = (f: FilhaDoPainel) => (grupoDaFilha(f) === 'trabalhando' ? (f.fazendo ?? null) : null)
+
+/** A coluna da direita (P1): o tempo, ou o estado que pede você, em âmbar ("Sua vez", "Precisa"). */
+function direitaDaFilha(f: FilhaDoPainel, agora: number): { texto: string; cor?: string } {
+  const grupo = grupoDaFilha(f)
+  if (grupo === 'sua-vez') return { texto: 'Sua vez', cor: AMARELO }
+  if (grupo === 'precisa') return { texto: f.estado === 'error' ? 'Erro' : 'Precisa', cor: f.estado === 'error' ? VERMELHO_TEXTO : AMARELO }
+  // Na coluna de 7: "arquiv." (na lista completa, "· arquivada" vai depois do nome).
+  if (grupo === 'arquivada') return { texto: 'arquiv.' }
+  return { texto: desde(f.desde, agora) }
+}
+
+/** Uma filha (P1): "glifo nome … estado ou tempo"; na lista completa, a que trabalha com o que faz depois do nome. */
+function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = false, comFazendo = true) {
   const { Box, Text } = c.el
   const st = statusDe(f.estado)
   const g = st === 'waiting' ? '◐' : st === 'completed' ? '✓' : st === 'error' ? '✕' : st === 'abandoned' ? '○' : '●'
+  // No card (P1) é "nome … tempo"; o que ela está fazendo aparece na lista completa.
+  const fazendo = comFazendo ? fazendoDaFilha(f) : null
+  const direita = direitaDaFilha(f, c.agora)
   return linhaDeLista(
     c,
     `filha-${f.id}`,
     [],
-    desde(f.desde, c.agora),
+    direita.texto,
     inteiro,
     <Box flexDirection="row" flexShrink={1} minWidth={0}>
       <Text mono size="footnote" color={COR_STATUS[st].cor}>
         {g}{' '}
       </Text>
       <Box flexShrink={1} minWidth={0}>
-        {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, max, inteiro)}
+        {nomeDaSessao(c, `nome-filha-${f.id}`, f.titulo, f.local, max, inteiro, !comFazendo)}
       </Box>
+      {fazendo ? (
+        <Box flexShrink={2} minWidth={0}>
+          <Text mono size="footnote" dimColor wrap="truncate-end">
+            {' '}· {textoComPrs(c, fazendo)}
+          </Text>
+        </Box>
+      ) : null}
     </Box>,
+    direita.cor,
   )
 }
 
-/** Cada sessão filha ocupa uma linha no card: o nome corta com reticências. */
-const linhasDaFilha = (_c: Pick<Contexto, 'nucleo'>, _f: FilhaDoPainel) => 1
+/** A sessão do painel está no meio de um turno? O `prompt.submit` de um plugin só roda com ela ociosa. */
+const emTurno = (s: SessaoDoPainel | null | undefined) => !!s && (s.estado === 'active' || s.estado === 'delegating')
 
-function pecaFilhas(c: Pick<Contexto, 'nucleo'>, filhas: FilhaDoPainel[]): Peca {
-  if (filhas.length === 0) return { id: 'filhas', minimo: 2, inteiro: 2 }
-  return { id: 'filhas', minimo: 2, inteiro: 1 + filhas.reduce((a, f) => a + linhasDaFilha(c, f), 0) }
+/**
+ * Uma filha arquivada na lista completa (#145): o nome e "· arquivada" em cor neutra e, à direita,
+ * "Desarquivar", que pede à sessão do painel para chamar `unarchive_session` (a pessoa aprova). Com a
+ * sessão no meio de um turno, o pedido só rodaria depois: "aguarde o turno" no lugar do botão.
+ */
+function linhaDeArquivada(c: Contexto, f: FilhaDoPainel, sessao: SessaoDoPainel | null | undefined) {
+  const { Box, Button, Text } = c.el
+  return (
+    <Box key={`filha-${f.id}`} flexDirection="row" alignItems="center" gap={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text mono size="footnote" dimColor wrap="wrap">
+          ○ {f.titulo} · arquivada
+        </Text>
+      </Box>
+      {!f.local ? null : emTurno(sessao) ? (
+        <Text key={`aguarde-${f.id}`} mono size="footnote" dimColor>
+          aguarde o turno
+        </Text>
+      ) : (
+        <Button key={`desarquivar-${f.id}`} label="Desarquivar" variant="secondary" onPress={() => c.acoes.desarquivar(f)} />
+      )}
+    </Box>
+  )
 }
 
-/** As filhas mais recentes primeiro (a última atividade de cada uma). */
-const filhasEmOrdem = (filhas: FilhaDoPainel[]) => [...filhas].sort((a, b) => (b.desde ?? '').localeCompare(a.desde ?? ''))
+/** Na ordem do card: as trabalhando, as que precisam, as na sua vez e as paradas; em cada grupo, a mais recente antes. */
+const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
+  [...filhas].sort(
+    (a, b) => ORDEM_DAS_FILHAS.indexOf(grupoDaFilha(a)) - ORDEM_DAS_FILHAS.indexOf(grupoDaFilha(b)) || (b.desde ?? '').localeCompare(a.desde ?? ''),
+  )
 
-function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[], linhas = LINHAS_DO_CARD) {
+/**
+ * O card Sessões filhas (pnFilhas do P1): a contagem à direita do cabeçalho, até 3 linhas, as que
+ * trabalham primeiro, e "ver todas as N ›" na última quando há mais do que cabe. Nunca só o cabeçalho.
+ */
+function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   const filhas = filhasEmOrdem(todasAsFilhas)
   const { Text } = c.el
-  if (filhas.length === 0 || linhas < 2) {
-    return cartao(c, 'card-filhas', [
-      cabecalhoQueAbre(c, 'ver-filhas', filhas.length ? c.acoes.verFilhas : null, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
-      filhas.length === 0 && linhas >= 2 && (
-        <Text mono size="footnote" dimColor>
-          nenhuma aberta por esta
-        </Text>
-      ),
-    ], BORDA, FUNDO_CARTAO, linhas)
+  // O total com as arquivadas, e quantas são (#145): "15 · 9 arquivadas".
+  const arquivadas = filhas.filter((f) => f.arquivada).length
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑃', 'SESSÕES FILHAS', `${filhas.length}${arquivadas ? ` · ${contagem(arquivadas, 'arquivada', 'arquivadas')}` : ''}`)]
+  if (filhas.length === 0) {
+    corpo.push(
+      <Text mono size="footnote" dimColor>
+        nenhuma aberta por esta
+      </Text>,
+    )
+    return cartao(c, 'card-filhas', corpo)
   }
-  const n = quantosCabem(filhas.map((f) => linhasDaFilha(c, f)), linhas - 1)
-  const mostrar = filhas.slice(0, n)
-  const fora = filhas.length - mostrar.length
-  return cartao(c, 'card-filhas', [
-    cabecalho(c, '⑃', 'SESSÕES FILHAS', plural(filhas.length, 'sessão', 'sessões')),
-    // O nome no card é cortado só no link (que não quebra linha); o resto quebra.
-    ...mostrar.map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3)),
-    fora > 0 && maisItens(c, 'ver-filhas', `ver todas as ${filhas.length} sessões filhas`, c.acoes.verFilhas),
-  ], BORDA, FUNDO_CARTAO, linhas)
+  corpo.push(
+    // O nome no card é cortado só no link (que não quebra linha); o resto corta com reticências.
+    ...filhas.slice(0, LINHAS_DA_LISTA).map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3, false, false)),
+  )
+  // O pé ("N sessões filhas ›") só quando há mais filhas do que as linhas do card.
+  const pe = filhas.length > LINHAS_DA_LISTA ? peDoCard(c, abre(c, 'ver-filhas', `${contagem(filhas.length, 'sessão filha', 'sessões filhas')} ›`, c.acoes.verFilhas, true)) : null
+  return cartao(c, 'card-filhas', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
 /**
@@ -1042,7 +1195,7 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
   const itens =
     qual === 'subagentes'
       ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x, true))
-      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => linhaDeFilha(c, f, g.largura, true))
+      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => (f.arquivada ? linhaDeArquivada(c, f, p.sessao) : linhaDeFilha(c, f, g.largura, true)))
   const titulo = qual === 'subagentes' ? `SUBAGENTES · ${p.subagentes.itens.length}` : `SESSÕES FILHAS · ${p.filhas.length}`
   return [
     rotuloDaSecao(c, g.largura, titulo, chip(c, `chip-${qual}`, qual === 'subagentes' ? plural(p.subagentes.ativos, 'ativo', 'ativos') : 'desta sessão')),
@@ -1082,36 +1235,53 @@ const porqueDe = (i: PrecisaDeVoce) => (i.porque ? PORQUE[i.porque] : i.estado =
  * pergunta, plano, decisão pedida, erro). A sua vez no bate-bola aparece em cor neutra, ao lado,
  * sem somar na contagem.
  */
-function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolean) {
-  const { Box, Text, Button } = c.el
-  const n = p.precisam.total
-  const vez = p.precisam.suaVez ?? 0
-  const naVez = vez ? `${vez} na sua vez` : ''
-  if (n === 0) {
-    return (
-      <Box key="precisam" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
-        <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono dimColor wrap="truncate-end">
-            ○ ninguém mais precisa de você{naVez ? ` · ${naVez}` : ''}
-          </Text>
-        </Box>
-        {vez ? <Button key="ver-precisam" label="Ver" variant="secondary" onPress={c.acoes.verPrecisam} /> : null}
-      </Box>
-    )
-  }
-  const nomes = p.precisam.maquina
+/** Quem precisa de você, pelo nome e pelo motivo: as duas primeiras, no largo. */
+const nomesQuePrecisam = (p: Painel) =>
+  p.precisam.maquina
     .filter(precisa)
     .slice(0, 2)
     .map((i) => `${i.titulo} (${porqueDe(i)})`)
     .join(', ')
-  const divisao = p.precisam.porConta.map((d) => `${d.conta?.rotulo ?? 'sem conta'} ${d.n}`).join(' · ')
+
+/** As partes da linha de quem precisa de você: o que desenha e o que a estimativa da altura mede. */
+function partesDePrecisam(p: Painel, estreito: boolean) {
+  const n = p.precisam.total
+  const vez = p.precisam.suaVez ?? 0
+  const naVez = vez ? `${vez} na sua vez` : ''
+  const nomes = !estreito && n > 0 ? nomesQuePrecisam(p) : ''
+  const principal = n === 0 ? '○ ninguém mais precisa de você' : `🔔 ${precisamTexto(n)}`
+  return { n, vez, naVez, nomes, texto: `${principal}${nomes ? ` · ${nomes}` : ''}${naVez ? ` · ${naVez}` : ''}`, principal }
+}
+
+/** O botão "Ver" ao lado e o espaço antes dele, em colunas. */
+const BOTAO_VER = 7
+
+/** Linhas da faixa de quem precisa de você: o texto quebra linha, nunca corta; com zero, sem botão (P1). */
+const linhasDePrecisam = (p: Painel, util: number, estreito: boolean) =>
+  LINHA_SOLTA - 1 + linhasDoTexto(partesDePrecisam(p, estreito).texto, util - (p.precisam.total ? BOTAO_VER : 0))
+
+function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolean) {
+  const { Box, Text, Button } = c.el
+  const { n, naVez, nomes, principal } = partesDePrecisam(p, estreito)
+  if (n === 0) {
+    // P1: com zero, em cor neutra e sem o "Ver"; a sua vez ao lado, também neutra.
+    return (
+      <Box key="precisam" flexDirection="row" alignItems="center" width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+        <Text mono dimColor wrap="wrap">
+          {principal}
+          {naVez ? ` · ${naVez}` : ''}
+        </Text>
+      </Box>
+    )
+  }
+  const divisao = p.precisam.porConta.map((d) => `${d.conta ? rotuloDaConta(d.conta.rotulo) : 'sem conta'} ${d.n}`).join(' · ')
   return (
     <Box key="precisam" flexDirection="column" width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1} hover={{ borderColor: LARANJA }}>
       <Box flexDirection="row" alignItems="center" gap={1}>
         <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono weight="bold" color={AMARELO} wrap="truncate-end">
-            🔔 {precisamTexto(n)}
-            {!estreito && nomes ? <Text weight="regular" color={paleta.gray['100']}> · {nomes}</Text> : null}
+          <Text mono weight="bold" color={AMARELO} wrap="wrap">
+            {principal}
+            {nomes ? <Text weight="regular" color={paleta.gray['100']}> · {nomes}</Text> : null}
             {naVez ? <Text weight="regular" color={CINZA}> · {naVez}</Text> : null}
           </Text>
         </Box>
@@ -1127,16 +1297,32 @@ function linhaPrecisam(c: Contexto, p: Painel, largura: number, estreito: boolea
 }
 
 /** #140: o indicador próprio dos PRs que aguardam a sua aprovação, com a lista de links. */
+/**
+ * "⇄ 1 PR aguardando sua aprovação"; no estreito, "⇄ 1 PR p/ aprovar", que cabe sem cortar. Em
+ * laranja, o destaque: vermelho, no P1, é erro.
+ */
+const textoDePrs = (n: number, estreito: boolean) => `⇄ ${n === 1 ? '1 PR' : `${n} PRs`} ${estreito ? 'p/ aprovar' : 'aguardando sua aprovação'}`
+
 function linhaPrs(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const n = p.prs?.total ?? 0
   if (n === 0) return null
-  const { Box, Text, Button } = c.el
+  const { Box, Text, Button, Link } = c.el
+  const um = n === 1 ? (p.prs?.itens[0] ?? null) : null
   return (
-    <Box key="prs" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={ROSA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+    <Box key="prs" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={LARANJA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text mono weight="bold" color={ROSA} wrap="truncate-end">
-          ⇄ {n === 1 ? '1 PR aguardando' : `${n} PRs aguardando`} {estreito ? 'aprovação' : 'sua aprovação'}
-        </Text>
+        {/* Com um PR só, o texto já é o link para ele no GitHub; com mais, "Ver" abre a lista, um link por PR. */}
+        {um ? (
+          <Link key="abrir-o-pr" href={um.url}>
+            <Text mono weight="bold" color={LARANJA} underline wrap="wrap">
+              {textoDePrs(n, estreito)}
+            </Text>
+          </Link>
+        ) : (
+          <Text mono weight="bold" color={LARANJA} wrap="wrap">
+            {textoDePrs(n, estreito)}
+          </Text>
+        )}
       </Box>
       <Button key="ver-prs" label="Ver" variant="secondary" onPress={c.acoes.verPrs} />
     </Box>
@@ -1152,7 +1338,7 @@ function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   const linha = (pr: PrAguardando) => (
     <Box key={`pr-${pr.url}`} flexDirection="row" gap={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-        <Link href={pr.url} label={corta(`PR #${pr.numero} · ${pr.titulo}`, Math.max(20, g.largura - 24))} />
+        {link(c, `link-pr-${pr.url}`, pr.url, corta(`PR #${pr.numero} · ${pr.titulo}`, Math.max(20, g.largura - 24)))}
       </Box>
       <Box width={18} flexShrink={0} flexDirection="row" justifyContent="flex-end">
         <Text mono size="footnote" dimColor wrap="truncate-end">
@@ -1163,7 +1349,7 @@ function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   )
   return [
     rotuloDaSecao(c, g.largura, `PRS AGUARDANDO SUA APROVAÇÃO · ${itens.length}`, chip(c, 'chip-prs', 'review pendente')),
-    <Box key="lista-prs" flexDirection="column" width={g.largura} borderStyle="round" borderColor={ROSA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
+    <Box key="lista-prs" flexDirection="column" width={g.largura} borderStyle="round" borderColor={LARANJA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
       {itens.length ? [...itens.slice(0, cabem).map(linha), naoCouberam(c, 'nao-couberam', itens.length - cabem)] : [<Text key="vazio" mono dimColor>nenhum PR aguardando</Text>]}
     </Box>,
     <Box key="rodape-prs" flexDirection="row" justifyContent="flex-end" width={g.largura}>
@@ -1176,7 +1362,7 @@ function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   ]
 }
 
-// --- Decisões: a linha "N decisões vigentes", a faixa da retomada (P10) e a lista (P9) ---
+// --- Decisões: a linha "N decisões registradas", a faixa da retomada (P10) e a lista (P9) ---
 
 /** O escopo das decisões na vista, ou o da largura: sessão no estreito, família no largo. */
 export function escopoDasDecisoes(vista: Vista, cols: number): EscopoDasDecisoes {
@@ -1184,29 +1370,56 @@ export function escopoDasDecisoes(vista: Vista, cols: number): EscopoDasDecisoes
 }
 
 // No estreito, "· N a confirmar" não cabe ao lado do "Ver": desce para a linha de baixo.
+/**
+ * As decisões (pnDec do P1), com o rótulo de registro: "⊸ N decisões registradas" e "Ver", neutra,
+ * depois dos cards. As a confirmar ficam numa faixa própria no topo. Sem nenhuma, "nenhuma decisão
+ * registrada ainda", sem botão.
+ */
 function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const d = p.decisoes
   if (!d) return null
   const { Box, Text, Button } = c.el
-  const nada = d.vigentes === 0 && d.aConfirmar === 0
-  const aConfirmar = d.aConfirmar ? `${d.aConfirmar} a confirmar` : null
+  const nada = d.vigentes === 0
   return (
-    <Box key="decisoes" flexDirection="column" width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
-      <Box flexDirection="row" alignItems="center" gap={1}>
-        <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-          <Text mono weight={nada ? 'regular' : 'bold'} dimColor={nada} wrap="truncate-end">
-            <Text color={LARANJA}>⊸ </Text>
-            {nada ? 'nenhuma decisão vigente' : decisoesTexto(d.vigentes)}
-            {aConfirmar && !estreito ? <Text color={AMARELO}> · {aConfirmar}</Text> : null}
+    <Box key="decisoes" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        {nada ? (
+          <Text mono dimColor wrap="wrap">
+            ⊸ nenhuma decisão registrada ainda
           </Text>
-        </Box>
-        <Button key="ver-decisoes" label="Ver" variant="secondary" onPress={c.acoes.verDecisoes} />
+        ) : (
+          <Text mono wrap="wrap">
+            <Text color={LARANJA}>⊸ </Text>
+            <Text weight="bold">{decisoesTexto(d.vigentes)}</Text>
+            {estreito ? '' : ' nesta sessão'}
+          </Text>
+        )}
       </Box>
-      {aConfirmar && estreito ? (
-        <Text mono size="caption" color={AMARELO} wrap="truncate-end">
-          {aConfirmar}
+      {nada ? null : <Button key="ver-decisoes" label="Ver" variant="secondary" onPress={c.acoes.verDecisoes} />}
+    </Box>
+  )
+}
+
+/** O texto da faixa de decisões, para a estimativa da altura. */
+const textoDeDecisoes = (p: Painel, estreito: boolean) => {
+  const d = p.decisoes
+  if (!d || d.vigentes === 0) return '⊸ nenhuma decisão registrada ainda'
+  return `⊸ ${decisoesTexto(d.vigentes)}${estreito ? '' : ' nesta sessão'}`
+}
+
+/** As decisões a confirmar, no topo (pedem a atenção da pessoa): "⊸ N a confirmar" e "Ver". */
+function faixaAConfirmar(c: Contexto, p: Painel, largura: number) {
+  const n = p.decisoes?.aConfirmar ?? 0
+  if (!n) return null
+  const { Box, Text, Button } = c.el
+  return (
+    <Box key="a-confirmar" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text mono weight="bold" color={AMARELO} wrap="wrap">
+          ⊸ {n === 1 ? '1 decisão a confirmar' : `${n} decisões a confirmar`}
         </Text>
-      ) : null}
+      </Box>
+      <Button key="ver-a-confirmar" label="Ver" variant="primary" onPress={c.acoes.verDecisoes} />
     </Box>
   )
 }
@@ -1274,13 +1487,22 @@ function cardDecisao(c: Contexto, d: DecisaoDoPainel) {
       </Text>
     )
   } else {
+    // "ver na conversa" só quando a mensagem ainda está na conversa; senão, o detalhe traz o trecho.
     acao = (
       <Box flexDirection="row">
-        <Button key={`ver-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
-          <Text mono size="footnote" color={LARANJA} underline>
-            ver na conversa
-          </Text>
-        </Button>
+        {alcancavel(c, d) ? (
+          <Button key={`ver-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
+            <Text mono size="footnote" color={LARANJA} underline>
+              ver na conversa
+            </Text>
+          </Button>
+        ) : (
+          <Button key={`detalhe-${d.id}`} plain onPress={() => c.acoes.abrirDecisao(d)}>
+            <Text mono size="footnote" color={LARANJA} underline>
+              ver o trecho
+            </Text>
+          </Button>
+        )}
       </Box>
     )
   }
@@ -1315,11 +1537,15 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const { Box, Text, Button, Select } = c.el
   const escopo = escopoDasDecisoes(c.vista, c.cols)
   const lista = p.decisoes?.lista?.escopo === escopo ? p.decisoes.lista : null
+  const porEscopo = lista?.porEscopo ?? null
+  // Os três escopos com as mesmas decisões (todas desta sessão): a troca funciona, mas não muda nada.
+  const iguais = !!porEscopo && porEscopo.sessao === porEscopo.familia && porEscopo.familia === porEscopo.branch
   const select = (
     <Select
       key="escopo-decisoes"
       value={escopo}
-      options={ESCOPOS.map((e) => ({ value: e.valor, label: e.rotulo.toUpperCase() }))}
+      // Grafia normal, com a contagem de cada escopo quando o núcleo a manda: "Sessão 10".
+      options={ESCOPOS.map((e) => ({ value: e.valor, label: porEscopo ? `${e.rotulo} ${porEscopo[e.valor]}` : e.rotulo }))}
       onSelect={(v: string) => c.acoes.escopoDecisoes(v)}
     />
   )
@@ -1328,7 +1554,7 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const itens = lista?.itens ?? []
   // Em volta: respiro, topo, voltar, rótulo, a barra do Desfazer, o rodapé com borda, versão e os espaços.
   const barra = c.vista.ultimaAcao && c.agora - c.vista.ultimaAcao.em <= DESFAZER_MS ? 4 : 0
-  const cabem = fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + barra + 3 + 1 + 5)) * g.porLinha
+  const cabem = fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + barra + 3 + 1 + 5 + (iguais ? 2 : 0))) * g.porLinha
   const mostrar = itens.slice(0, Math.min(cabem, estreito ? DECISOES_NO_ESTREITO : itens.length))
   const fora = itens.length - mostrar.length
   let conteudo: RenderElement[]
@@ -1359,6 +1585,11 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   )
   return [
     rotuloDaSecao(c, g.largura, titulo, select),
+    iguais ? (
+      <Text key="escopos-iguais" mono size="footnote" dimColor wrap="wrap">
+        mesmo resultado em Sessão, Família e Branch: as decisões são todas desta sessão
+      </Text>
+    ) : null,
     barraDesfazer(c, g.largura),
     <Box key="lista-decisoes" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
       {conteudo}
@@ -1403,6 +1634,30 @@ function blocoDoDetalhe(c: Contexto, key: string, rotulo: string, texto: string,
   )
 }
 
+/** A mensagem da decisão ainda está na conversa desta sessão? (Sai dela numa compactação.) */
+const alcancavel = (c: Contexto, d: DecisaoDoPainel) => d.sessao === 'esta' && !!d.toolUseId && (c.vista.alcancaveis ?? []).includes(d.toolUseId)
+
+/**
+ * O trecho original da decisão, quando a mensagem não está mais na conversa (antes de uma
+ * compactação, ou de outra sessão): quem disse, quando e o texto. Sem aviso de erro.
+ */
+function trechoOriginal(c: Contexto, d: DecisaoDoPainel) {
+  const { Box, Text } = c.el
+  const quem = d.decididaPor === 'agente' ? 'o agente' : 'você'
+  const onde = d.sessao === 'esta' ? 'nesta sessão, antes de uma compactação' : d.sessao === 'mae' ? 'na sessão mãe' : 'em outra sessão'
+  return (
+    <Box key="trecho" flexDirection="column">
+      <Text mono size="caption" weight="semibold" dimColor>
+        TRECHO ORIGINAL
+      </Text>
+      <Text mono size="footnote" dimColor wrap="wrap">
+        {quem}, {dataEHora(d.decididaEm)}, {onde}:
+      </Text>
+      <Text mono wrap="wrap">“{d.texto ?? d.titulo}”</Text>
+    </Box>
+  )
+}
+
 /** A decisão inteira: escolha, o que foi descartado, contexto, quem, quando, origem e as ações. */
 function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
   const { Box, Text, Button, Input } = c.el
@@ -1423,13 +1678,15 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
   if (d.desfazer) {
     acoes.push(<Button key={`desfazer-${d.id}`} label={`Desfazer: ${DESFAZER[d.desfazer].volta}`} variant="secondary" onPress={() => c.acoes.desfazer(d.id, d.rotulo)} />)
   }
-  acoes.push(
-    <Button key={`conversa-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
-      <Text mono size="footnote" color={LARANJA} underline>
-        ver na conversa
-      </Text>
-    </Button>,
-  )
+  if (alcancavel(c, d)) {
+    acoes.push(
+      <Button key={`conversa-${d.id}`} plain onPress={() => c.acoes.verNaConversa(d)}>
+        <Text mono size="footnote" color={LARANJA} underline>
+          ver na conversa
+        </Text>
+      </Button>,
+    )
+  }
   return [
     rotuloDaSecao(c, g.largura, `DECISÃO ${d.rotulo}`, pilulaDaDecisao(c, d)),
     barraDesfazer(c, g.largura),
@@ -1441,6 +1698,7 @@ function telaDecisao(c: Contexto, g: ReturnType<typeof grade>) {
       {d.contexto ? blocoDoDetalhe(c, 'contexto', 'CONTEXTO', d.contexto) : null}
       {d.nao.length ? blocoDoDetalhe(c, 'nao', 'NÃO', d.nao.join('\n')) : null}
       {d.substituidaPor ? blocoDoDetalhe(c, 'substituida', 'SUBSTITUÍDA POR', d.substituidaPor) : null}
+      {alcancavel(c, d) ? null : trechoOriginal(c, d)}
       {c.vista.ajustando ? (
         <Box key="ajuste" flexDirection="column" gap="xs">
           <Input key="ajuste-texto" autoFocus placeholder="a versão certa, ou um comentário" submitLabel="gravar" onSubmit={(v: string) => c.acoes.enviarAjuste(d, v)} />
@@ -1511,11 +1769,11 @@ function cardPrecisa(c: Contexto, i: PrecisaDeVoce) {
         )}
       </Box>,
       <Text mono size="footnote" wrap="truncate-end" color={erro ? VERMELHO_TEXTO : undefined}>
-        {i.texto}
+        {semMarkdown(i.texto)}
       </Text>,
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {relacao} · {modelo(i.modelo)}
-        {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {i.conta.rotulo}</Text> : null}
+        {i.conta ? <Text color={corDaConta(i.conta)}> · ◆ {rotuloDaConta(i.conta.rotulo)}</Text> : null}
       </Text>,
       <Box flexDirection="row">
         {abreDireto(c, i.local) ? (
@@ -1549,8 +1807,8 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
       key="escopo"
       value={escopo}
       options={[
-        { value: 'familia', label: 'FAMÍLIA' },
-        { value: 'maquina', label: 'MÁQUINA INTEIRA' },
+        { value: 'familia', label: 'Família' },
+        { value: 'maquina', label: 'Máquina inteira' },
       ]}
       onSelect={(v: string) => c.acoes.escopo(v)}
     />
@@ -1590,8 +1848,23 @@ function telaPlanos(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreit
   const conta = (r: PlanoDaSessao['resultado']) => planos.filter((x) => x.resultado === r).length
   // Em volta: respiro, topo, voltar, rótulo, borda da caixa, rodapé com borda, versão e os espaços.
   const util = g.largura - 4 - TEMPO_W - 1
-  const cabem = quantosCabem(planos.map((x) => (estreito ? 1 : linhasDoTexto(`● ${x.resumo} · ${x.feitos}/${x.total}${x.atual ? ` · ${x.atual}` : ''}`, util))), livres(c, 2 + 4 + 1 + 1 + 2 + 3 + 1 + 5))
+  // O plano atual, passo a passo, em cima: o que o card do P1 resume no anel e nas três linhas.
+  const passos = p.plano?.passos ?? []
+  const emVoltaDosPassos = passos.length ? 1 + 2 + 1 + passos.length : 0
+  const cabem = quantosCabem(planos.map((x) => (estreito ? 1 : linhasDoTexto(`● ${x.resumo} · ${x.feitos}/${x.total}${x.atual ? ` · ${x.atual}` : ''}`, util))), livres(c, 2 + 4 + 1 + 1 + 2 + 3 + 1 + 5 + emVoltaDosPassos))
+  const marca = (e: PassoDoPainel['estado']) => (e === 'completed' ? { g: '✓', cor: VERDE } : e === 'in_progress' ? { g: '●', cor: LARANJA } : { g: '○', cor: undefined })
   return [
+    passos.length ? (
+      <Box key="passos-do-plano" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+        {cabecalho(c, '☰', 'PLANO ATUAL', `${p.plano!.feitos}/${p.plano!.total}`, { cor: LARANJA })}
+        {passos.map((x) => (
+          <Text key={`passo-${x.id}`} mono size="footnote" wrap="wrap" dimColor={x.estado === 'pending'}>
+            <Text color={marca(x.estado).cor}>{marca(x.estado).g} </Text>
+            <Text weight={x.estado === 'in_progress' ? 'bold' : undefined}>{textoComPrs(c, x.estado === 'in_progress' ? (x.textoAtivo ?? x.texto) : x.texto)}</Text>
+          </Text>
+        ))}
+      </Box>
+    ) : null,
     rotuloDaSecao(c, g.largura, `PLANOS DA SESSÃO · ${planos.length}`, chip(c, 'chip-planos', `${conta('concluido')} ✓ · ${conta('abandonado')} ◐`)),
     <Box key="lista-planos" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
       {planos.length ? [...planos.slice(0, cabem).map((x) => linhaDePlano(c, x, !estreito)), naoCouberam(c, 'nao-couberam', planos.length - cabem)] : [<Text key="vazio" mono dimColor>sem plano nesta sessão</Text>]}
@@ -1648,137 +1921,45 @@ function voltar(c: Contexto, largura: number, para: () => void = c.acoes.fechar,
   )
 }
 
-/** A ordem em que os cards recebem altura (pedido do dono): o que importa mais fica inteiro. */
-export const PRIORIDADE_DA_ALTURA = ['sessao', 'plano', 'contexto', 'trabalho', 'subagentes', 'filhas'] as const
-
-/**
- * As etapas da distribuição: a prioridade do dono, com as listas aparecendo na tela principal
- * (pedido do Fernando): depois do Plano, cada lista recebe o cabeçalho, alguns itens e o "ver
- * todas"; Contexto e Trabalho vêm em seguida; a sobra volta para as listas.
- */
-const ITENS_CEDO = 2
-const ETAPAS_DA_ALTURA: Etapa[] = [
-  'sessao',
-  'plano',
-  { id: 'subagentes', ate: 2 + ITENS_CEDO + 1 },
-  { id: 'filhas', ate: 1 + ITENS_CEDO + 1 },
-  'contexto',
-  'trabalho',
-  'subagentes',
-  'filhas',
-]
-
 /**
  * As linhas do painel fora da grade de cards: o respiro, o topo, o rótulo, as faixas, as linhas
  * de decisões e de "precisam de você", o rodapé e o espaço entre eles.
  */
+/** Uma faixa de uma linha com borda e um botão, no desktop. */
+const LINHA_SOLTA = 2
+
 function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boolean, compactar: Vista['compactar'] = null): number {
   const util = g.largura - 4
-  const partes = [4, 1]
+  // No desktop a borda é um traço fino, não uma linha: o topo (logo e duas linhas de texto) ocupa
+  // 3, e cada faixa de uma linha com borda (decisões, precisam, PRs) ocupa 2, com o botão.
+  // O topo ocupa 3; o rótulo da seção, 1 (o chip não tem borda).
+  const partes = [3, 1]
   if (compactar === 'confirmar') partes.push(4)
   const r = p.decisoes?.retomada
   if (r && r.n > 0) partes.push(2 + 1 + (estreito ? 3 : 2) + 1)
   const f = p.sessao?.faixa
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
-  if (p.decisoes) partes.push(3)
-  partes.push(3)
-  if ((p.prs?.total ?? 0) > 0) partes.push(3)
+  if (p.decisoes) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDeDecisoes(p, estreito), util - BOTAO_VER))
+  if (p.decisoes?.aConfirmar) partes.push(LINHA_SOLTA)
+  partes.push(linhasDePrecisam(p, util, estreito))
+  if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDePrs(p.prs!.total, estreito), util - BOTAO_VER))
   partes.push(linhasDoRodape(p))
-  return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
+  return 2 * ESPACO + partes.reduce((a, b) => a + b, 0) + (partes.length - 1) * ESPACO
 }
 
-/** O resumo de um card que não coube na grade, para a faixa de resumos. */
-function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abrir?: () => void } {
-  switch (id) {
-    case 'contexto':
-      // O "Compactar" sempre existe: aqui, o próprio resumo o abre.
-      return { texto: `◠ ${contextoDaSessao(c, p)?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
-    case 'trabalho': {
-      const t = p.trabalho
-      return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? corta(t.branch, 16) : '…'}` }
-    }
-    case 'plano':
-      return { texto: `☰ ${p.plano ? `${p.plano.feitos}/${p.plano.total}` : '0/0'}`, abrir: (p.planos ?? []).length ? c.acoes.verPlanos : undefined }
-    case 'subagentes':
-      return { texto: `⑂ ${plural(p.subagentes.ativos, 'ativo', 'ativos')}`, abrir: p.subagentes.itens.length ? c.acoes.verSubagentes : undefined }
-    default:
-      return { texto: `⑃ ${plural(p.filhas.length, 'filha', 'filhas')}`, abrir: p.filhas.length ? c.acoes.verFilhas : undefined }
-  }
-}
-
-/** Os cards fora da grade, numa faixa: o resumo de cada um; os de lista abrem a tela própria. */
-function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura: number) {
-  if (!ids.length) return null
-  const { Box, Button, Text } = c.el
-  return (
-    <Box key="resumos" flexDirection="row" flexWrap="wrap" columnGap={2} width={largura}>
-      {ids.map((id) => {
-        const r = resumoDoCard(c, p, id)
-        const texto = (
-          <Text mono size="footnote" color={r.abrir ? LARANJA : undefined} dimColor={!r.abrir} underline={!!r.abrir}>
-            {r.texto}
-          </Text>
-        )
-        return r.abrir ? (
-          <Button key={`resumo-${id}`} plain onPress={r.abrir}>
-            {texto}
-          </Button>
-        ) : (
-          <Box key={`resumo-${id}`}>{texto}</Box>
-        )
-      })}
-    </Box>
-  )
-}
-
-/** Linhas da faixa de resumos (com o espaço antes dela). */
-const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  ids.length ? 1 + linhasDoTexto(ids.map((id) => resumoDoCard(c, p, id).texto.replace(/\s/g, '\u00a0')).join('  '), largura) : 0
+/** Os cards da grade, na ordem do P1. */
+const CARDS_DA_GRADE = ['sessao', 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'] as const
 
 /**
- * Quantas linhas internas cada card recebe, pela altura do painel e pela prioridade. Quando nem o
- * resumo dos cards cabe, os de menor prioridade saem da grade e vão para a faixa de resumos.
+ * A altura estimada da visão da sessão, em linhas: o que fica fora da grade e a grade, com os seis
+ * cards sempre inteiros (P1). Quando o pane é mais baixo que isso, o corpo dele rola. Para os testes.
  */
-function alturaDosCards(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean): { linhas: Map<string, number>; fora: string[] } {
-  // Inteiro, o card tem pelo menos as 9 linhas do desenho; o resumo, só o que desenha.
-  const comODesenho = (x: Peca): Peca => ({ ...x, desenho: Math.max(LINHAS_DO_CARD, x.inteiro) })
-  const todas: Peca[] = [
-    ...(p.sessao ? [pecaSessao(p.sessao, c.agora)] : []),
-    { id: 'contexto', minimo: LINHAS_DO_CONTEXTO, inteiro: LINHAS_DO_CONTEXTO, tudoOuNada: true, resumo: linhasDoResumoDoContexto(contextoDaSessao(c as Contexto, p)?.pct ?? 0) },
-    { id: 'trabalho', minimo: LINHAS_DO_CARD, inteiro: LINHAS_DO_CARD, tudoOuNada: true },
-    pecaPlano(p.plano, p.planos ?? [], estreito),
-    pecaSubagentes(p.subagentes),
-    pecaFilhas(c, p.filhas),
-  ].map(comODesenho)
-  // Sem a altura do painel, cada card aparece inteiro.
-  if (c.linhas === undefined) return { linhas: distribuir(todas, g.porLinha, Number.POSITIVE_INFINITY, ETAPAS_DA_ALTURA), fora: [] }
-  const base = c.linhas - linhasForaDaGrade(p, g, estreito, c.vista?.compactar) - linhasDaPergunta(c, g.largura) - FOLGA
-  const fora: string[] = []
-  for (;;) {
-    const pecas = todas.filter((x) => !fora.includes(x.id))
-    const disponivel = base - linhasDosResumos(c, p, fora, g.largura)
-    const linhas = distribuir(pecas, g.porLinha, disponivel, ETAPAS_DA_ALTURA)
-    const sessao = pecas.find((x) => x.id === 'sessao')
-    const cabe = alturaDaGrade(pecas.map((x) => linhas.get(x.id)!), g.porLinha) <= disponivel
-    const sessaoOk = !sessao || linhas.get('sessao')! >= sessao.minimo
-    const proximo = [...PRIORIDADE_DA_ALTURA].reverse().find((id) => id !== 'sessao' && pecas.some((x) => x.id === id))
-    if ((cabe && sessaoOk) || !proximo) {
-      // Só a sessão sobrou e ainda não cabe: ela aparece mesmo assim, o mínimo dela.
-      if (sessao && !sessaoOk) linhas.set('sessao', sessao.minimo)
-      return { linhas, fora: PRIORIDADE_DA_ALTURA.filter((id) => fora.includes(id)) }
-    }
-    fora.push(proximo)
-  }
-}
-
-/** A altura estimada da visão da sessão, em linhas: o que fica fora da grade, a grade e a faixa de resumos. Para os testes. */
 export function linhasDaVisao(c: Contexto, p: Painel): number {
   const g = grade(c.cols)
   const estreito = g.porLinha === 1
-  const { linhas, fora } = alturaDosCards(c, p, g, estreito)
-  const ids = [...(p.sessao ? ['sessao'] : []), 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'].filter((id) => !fora.includes(id))
-  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + linhasDaPergunta(c, g.largura) + alturaDaGrade(ids.map((id) => linhas.get(id)!), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
+  const dentro = CARDS_DA_GRADE.filter((id) => id !== 'sessao' || p.sessao)
+  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + linhasDaPergunta(c, g.largura) + alturaDaGrade(dentro.map(() => LINHAS_DO_CARD), g.porLinha)
 }
 
 /** O painel inteiro, no desktop. */
@@ -1809,29 +1990,33 @@ export function desenhar(c: Contexto): RenderElement {
   } else if (c.vista.tela === 'subagentes' || c.vista.tela === 'filhas') {
     corpo = [voltar(c, g.largura), ...telaLista(c, p, g, c.vista.tela)]
   } else {
-    const { linhas: l, fora } = alturaDosCards(c, p, g, estreito)
-    const na = (id: string) => !fora.includes(id)
+    // Os seis cards do P1, sempre inteiros e no lugar deles.
     const cards = [
-      s ? cardSessao(c, s, l.get('sessao')!) : null,
-      na('contexto') ? cardContexto(c, p, l.get('contexto')) : null,
-      na('trabalho') ? cardTrabalho(c, p.trabalho, l.get('trabalho')) : null,
-      na('plano') ? cardPlano(c, p.plano, p.planos ?? [], estreito, l.get('plano')) : null,
-      na('subagentes') ? cardSubagentes(c, p.subagentes, l.get('subagentes')) : null,
-      na('filhas') ? cardFilhas(c, p.filhas, l.get('filhas')) : null,
+      s ? cardSessao(c, s) : null,
+      cardContexto(c, p),
+      cardTrabalho(c, p.trabalho),
+      cardPlano(c, p.plano, p.planos ?? []),
+      cardSubagentes(c, p.subagentes),
+      cardFilhas(c, p.filhas),
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
-      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', 'auto · 5 s'), s?.conta),
+      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chipDaSecao(c, g.largura, estreito, s?.conta), s?.conta),
+      // Decisão do Fernando (desvio aprovado do P1): o que pede a atenção dele sobe para o topo,
+      // antes dos cards: a pergunta, quem precisa de você, os PRs e as decisões a confirmar. Com a
+      // rolagem, no fim do painel, elas saíam de vista.
       faixaPergunta(c, g.largura),
+      p.precisam.total > 0 ? linhaPrecisam(c, p, g.largura, estreito) : null,
+      linhaPrs(c, p, g.largura, estreito),
+      faixaAConfirmar(c, p, g.largura),
       faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,
       faixaCompactar(c, g.largura),
       <Box key="cards" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
         {cards}
       </Box>,
-      faixaDeResumos(c, p, fora, g.largura),
+      // Embaixo, só o que é informativo e neutro.
       linhaDecisoes(c, p, g.largura, estreito),
-      linhaPrecisam(c, p, g.largura, estreito),
-      linhaPrs(c, p, g.largura, estreito),
+      p.precisam.total > 0 ? null : linhaPrecisam(c, p, g.largura, estreito),
     ]
   }
 

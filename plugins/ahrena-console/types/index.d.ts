@@ -78,7 +78,18 @@ export type SubagenteDoPainel = {
   ate: string | null
 }
 
-export type FilhaDoPainel = { id: string; local?: string | null; titulo: string; estado: EstadoDoInbox | 'desconhecido'; motivo: AwaitingReason | null; desde: string | null }
+export type FilhaDoPainel = {
+  id: string
+  local?: string | null
+  titulo: string
+  estado: EstadoDoInbox | 'desconhecido'
+  motivo: AwaitingReason | null
+  desde: string | null
+  /** #131: o que a filha trabalhando faz ("pensando", "rodando Bash"); ausente no núcleo antigo. */
+  fazendo?: string | null
+  /** #145: arquivada no Claude Desktop; ausente no núcleo antigo. */
+  arquivada?: boolean
+}
 
 export type TrabalhoDoPainel = {
   branch: string
@@ -89,6 +100,8 @@ export type TrabalhoDoPainel = {
     url: string
     estado: 'rascunho' | 'aberto' | 'mergeado' | 'fechado'
     ci: 'ok' | 'falhou' | 'rodando' | null
+    /** As checagens do último commit, contadas ("CI ✓ 6/6"); ausente no núcleo antigo. */
+    checks?: { total: number; ok: number; falhas: number; rodando: number } | null
     review: 'aprovado' | 'ajustes' | 'pendente' | null
   } | null
   semPush: boolean
@@ -158,6 +171,8 @@ export type ListaDeDecisoes = {
   vigentes: number
   aConfirmar: number
   itens: DecisaoDoPainel[]
+  /** Vigentes e a confirmar em cada escopo, para o seletor; ausente no núcleo antigo. */
+  porEscopo?: Record<EscopoDasDecisoes, number>
 }
 
 /** A faixa do P10, depois de um /clear; vem com a reinjeição (#100). */
@@ -240,6 +255,11 @@ export type Vista = {
   ajustando?: boolean
   /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
   ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
+  /**
+   * Os `tool_use_id` das decisões abertas cuja mensagem ainda está na conversa (`$.session.messages()`):
+   * só elas têm "ver na conversa". As de antes de uma compactação mostram o trecho original no detalhe.
+   */
+  alcancaveis?: string[]
   /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
   compactar?: 'confirmar' | 'compactando' | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */

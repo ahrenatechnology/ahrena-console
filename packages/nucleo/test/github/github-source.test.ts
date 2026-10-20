@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubGraphqlSource, MAX_SHALLOW_PAGES, RateLimitedError, type QueryCost } from '../../src/index.ts';
+import { contarChecks, QUERIES } from '../../src/github/github-source.ts';
 import { FILTER, k, recorded, replayFetch, REPO, type Recorded } from './helpers.ts';
 
 const source = (fetch = replayFetch(), onCost?: (c: QueryCost) => void) => new GithubGraphqlSource({ token: 'token-de-teste', fetch, onCost });
@@ -115,5 +116,22 @@ describe('adaptador GraphQL: paginação e erros', () => {
     await s.detail(k(6));
     await s.detail(k(6));
     assert.equal(asked, 1);
+  });
+});
+
+describe('CI com contagem (#131)', () => {
+  test('conta as checagens do último commit: passaram, falharam e rodando; sem checagem, null', () => {
+    const runs = (xs: Record<string, number>) => Object.entries(xs).map(([state, count]) => ({ state, count }));
+    assert.deepEqual(contarChecks({ totalCount: 6, checkRunCountsByState: runs({ SUCCESS: 5, SKIPPED: 1, FAILURE: 0 }), statusContextCountsByState: [] }), { total: 6, ok: 6, falhas: 0, rodando: 0 });
+    assert.deepEqual(
+      contarChecks({ totalCount: 7, checkRunCountsByState: runs({ SUCCESS: 2, FAILURE: 1, IN_PROGRESS: 3 }), statusContextCountsByState: runs({ ERROR: 1 }) }),
+      { total: 7, ok: 2, falhas: 2, rodando: 3 },
+    );
+    assert.equal(contarChecks({ totalCount: 0 }), null);
+    assert.equal(contarChecks(null), null);
+  });
+
+  test('a consulta dos PRs pede a contagem por estado, sem listar as checagens', () => {
+    assert.match(QUERIES.detail, /statusCheckRollup \{ state contexts\(first: 1\) \{ totalCount checkRunCountsByState/);
   });
 });

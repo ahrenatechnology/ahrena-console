@@ -18,7 +18,7 @@ const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presen
 
 const copia = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
-function falsos(on: any, base: Painel = CENARIOS.p9) {
+function falsos(on: any, base: Painel = CENARIOS.p9, conversa: 'inteira' | 'compactada' = 'inteira') {
   const pedidos: Pedido[] = []
   const toasts: string[] = []
   const rolagens: unknown[] = []
@@ -78,6 +78,11 @@ function falsos(on: any, base: Painel = CENARIOS.p9) {
     rolagens.push(e)
     return { value: {} }
   })
+  // A conversa como o engine a tem: inteira (as mensagens das decisões estão nela) ou compactada (não estão).
+  const ids = Object.values(LISTAS_DO_P9).flatMap((l) => l.itens.map((d) => d.toolUseId)).filter((x): x is string => !!x)
+  on('session.messages', async () => ({
+    value: conversa === 'inteira' ? [{ role: 'assistant', text: '', toolUses: ids.map((tool_use_id) => ({ tool_use_id, tool: 'AskUserQuestion', input: {} })) }] : [{ role: 'user', text: 'resumo da compactação', toolUses: [] }],
+  }))
   on('session.id', async () => ({ value: 'sessao-teste' }))
   on('session.model', async () => ({ value: 'claude-opus-5-5' }))
   on('session.cwd', async () => ({ value: '/simulacao/ahrena-demo' }))
@@ -85,11 +90,11 @@ function falsos(on: any, base: Painel = CENARIOS.p9) {
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('command.register', async () => ({ value: undefined }))
   on('session.start', async (_$: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
-  return { pedidos, toasts, rolagens, status, relogio, painel }
+  return { pedidos, toasts, rolagens, status, relogio, painel, listas }
 }
 
-async function abrir($: any, on: any, base?: Painel) {
-  const f = falsos(on, base)
+async function abrir($: any, on: any, base?: Painel, conversa: 'inteira' | 'compactada' = 'inteira') {
+  const f = falsos(on, base, conversa)
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   await $.command.run(CONSOLE)
   await f.relogio.advance(5_000)
@@ -99,14 +104,19 @@ async function abrir($: any, on: any, base?: Painel) {
 const porRotulo = (escopo: EscopoDasDecisoes, rotulo: string) => LISTAS_DO_P9[escopo].itens.find((i) => i.rotulo === rotulo) as DecisaoDoPainel
 const card = (d: DecisaoDoPainel) => `decisao-${d.id}`
 
-test('a linha "N decisões vigentes", com as a confirmar, nas duas larguras e na linha de status', async ($, on) => {
+test('a linha "N decisões registradas", neutra, e as a confirmar no topo, nas duas larguras e na linha de status', async ($, on) => {
   const f = await abrir($, on)
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
     expect(await ui.find({ key: 'decisoes' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: alvo === LARGO ? /4 decisões vigentes · 1 a confirmar/ : /^1 a confirmar$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /4 decisões vigentes/ })).toBeDefined()
+    // pnDec do P1: "⊸ N decisões registradas" e "Ver", neutra; as a confirmar, numa faixa própria no topo.
+    expect((await ui.find({ key: 'decisoes' }))?.text).toMatch(alvo === LARGO ? /4 decisões registradas nesta sessão/ : /4 decisões registradas/)
+    expect((await ui.find({ key: 'decisoes' }))?.text).not.toMatch(/a confirmar/)
+    expect((await ui.find({ key: 'a-confirmar' }))?.text).toMatch(/1 decisão a confirmar/)
+    expect(await ui.find({ type: 'Text', text: /4 decisões registradas/ })).toBeDefined()
+    // Registro, não pendência: sem cara de ação.
+    expect((await ui.find({ key: 'decisoes' }))?.text).not.toMatch(/vigentes/)
     expect(await ui.find({ key: 'ver-decisoes' })).toBeDefined()
     expect(await ui.find({ key: 'retomada' })).toBeUndefined()
     await ui.unmount()
@@ -117,7 +127,7 @@ test('a linha "N decisões vigentes", com as a confirmar, nas duas larguras e na
 test('sem decisões, a linha diz que não há', async ($, on) => {
   await abrir($, on, CENARIOS.p1)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /nenhuma decisão vigente/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /nenhuma decisão registrada/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -144,7 +154,8 @@ test('P9 no estreito: Sessão, 3 cards 34 × 6 e "+2 · troque o escopo"', async
   expect(cards).toHaveLength(3)
   for (const c of cards) {
     expect(c.props.width).toBe(34)
-    expect(c.props.minHeight).toBe(9)
+    // Todo card do P1 tem a mesma altura fixa: a borda e 7 linhas.
+    expect(c.props.height).toBe(10)
     expect(c.props.overflow).toBe('hidden')
   }
 
@@ -187,7 +198,7 @@ test('P9 no largo: Família, os 6 cards, a substituída riscada apontando D4 e o
   expect((await ui.find({ key: 'escopo-decisoes' }))?.props.value).toBe('familia')
   const cards = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('decisao-'))
   expect(cards).toHaveLength(6)
-  expect(cards.every((c) => c.props.width === 34 && c.props.minHeight === 9)).toBe(true)
+  expect(cards.every((c) => c.props.width === 34 && c.props.height === 10)).toBe(true)
 
   const velha = await ui.find({ key: card(porRotulo('familia', 'D3')) })
   expect(velha?.text).toMatch(/Substituída/)
@@ -243,15 +254,18 @@ test('Descartar tira a sugerida da lista', async ($, on) => {
   await ui.unmount()
 })
 
-test('"ver na conversa" pede a rolagem até a mensagem desta sessão; a da sessão mãe diz onde está', async ($, on) => {
+test('"ver na conversa" pede a rolagem até a mensagem desta sessão; a da sessão mãe mostra o trecho', async ($, on) => {
   const f = await abrir($, on)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
   await ui.press({ key: 'ver-decisoes' })
   await ui.press({ key: `ver-${porRotulo('familia', 'D4').id}` })
   // O kit de testes não tem a conversa: o pedido de rolagem é recusado e o painel diz isso.
   expect(f.rolagens.length ? JSON.stringify(f.rolagens.at(-1)) : f.toasts.at(-1)).toMatch(/sim-toolu-p9-4|D4 não está à vista/)
-  await ui.press({ key: `ver-${porRotulo('familia', 'D1').id}` })
-  expect(f.toasts.at(-1)).toMatch(/D1 foi decidida na sessão mãe/)
+  // A da sessão mãe não está nesta conversa: sem "ver na conversa", o trecho original no detalhe.
+  const d1 = porRotulo('familia', 'D1')
+  expect(await ui.find({ key: `ver-${d1.id}` })).toBeUndefined()
+  await ui.press({ key: `detalhe-${d1.id}` })
+  expect((await ui.find({ key: 'detalhe-decisao' }))?.text).toMatch(/TRECHO ORIGINAL.*na sessão mãe:/s)
   await ui.unmount()
 })
 
@@ -263,7 +277,7 @@ test('P10: a faixa da retomada só aparece quando o núcleo manda, nas duas larg
   expect(await largo.find({ key: 'retomada' })).toBeDefined()
   expect(await largo.find({ type: 'Text', text: /4 decisões da sessão anterior continuam valendo/ })).toBeDefined()
   expect(await largo.find({ type: 'Text', text: /~620 tokens/ })).toBeDefined()
-  expect(await largo.find({ type: 'Text', text: /4 decisões vigentes/ })).toBeDefined()
+  expect(await largo.find({ type: 'Text', text: /4 decisões registradas/ })).toBeDefined()
   await largo.unmount()
   const estreito = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await estreito.find({ type: 'Text', text: /4 decisões da sessão anterior$/ })).toBeDefined()
@@ -328,4 +342,46 @@ test('#131: Ajustar abre um campo; o texto da pessoa vai ao núcleo e o detalhe 
   expect(await ui.find({ key: `desfazer-${sugerida.id}` })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /D6 ajustada/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('0.0.13: decisão de antes da compactação não tem "ver na conversa"; o detalhe mostra o trecho original, sem erro', async ($, on) => {
+  await abrir($, on, undefined, 'compactada')
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'ver-decisoes' })
+  const d = porRotulo('sessao', 'D4')
+  expect(await ui.find({ key: `ver-${d.id}` })).toBeUndefined()
+  expect((await ui.find({ key: card(d) }))?.text).toMatch(/ver o trecho/)
+  await ui.press({ key: `detalhe-${d.id}` })
+  const detalhe = await ui.find({ key: 'detalhe-decisao' })
+  expect(detalhe?.text).toMatch(/TRECHO ORIGINAL/)
+  expect(detalhe?.text).toMatch(/você, \d\d\/\d\d \d\d:\d\d, nesta sessão, antes de uma compactação:/)
+  expect(detalhe?.text).toMatch(/SQLite em memória nos testes/)
+  expect(detalhe?.text).not.toMatch(/não está à vista|não está visível/)
+  expect(await ui.find({ key: `conversa-${d.id}` })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('0.0.23: o seletor de escopo em grafia normal, com a contagem de cada escopo; com os três iguais, o aviso', async ($, on) => {
+  const f = await abrir($, on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui.press({ key: 'ver-decisoes' })
+  const select = await ui.find({ key: 'escopo-decisoes' })
+  const p9 = LISTAS_DO_P9.familia.porEscopo!
+  expect(select?.props.options.map((o: { label: string }) => o.label)).toEqual([`Sessão ${p9.sessao}`, `Família ${p9.familia}`, `Branch ${p9.branch}`])
+  // Nos dados do P9 os escopos diferem: sem aviso.
+  expect(await ui.find({ type: 'Text', text: /mesmo resultado em Sessão/ })).toBeUndefined()
+  await ui.unmount()
+
+  // Todas as decisões desta sessão: os três escopos dão o mesmo, e o painel diz isso.
+  const iguais = { sessao: 10, familia: 10, branch: 10 }
+  f.listas.familia = { ...f.listas.familia, porEscopo: iguais }
+  f.listas.sessao = { ...f.listas.sessao, porEscopo: iguais }
+  f.listas.branch = { ...f.listas.branch, porEscopo: iguais }
+  const ui2 = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui2.select({ key: 'escopo-decisoes', value: 'sessao' })
+  const aviso = () => ui2.find({ type: 'Text', text: /mesmo resultado em Sessão, Família e Branch/ })
+  for (let i = 0; i < 20 && !(await aviso()); i++) await f.relogio.advance(10)
+  expect(await aviso()).toBeDefined()
+  expect((await ui2.find({ key: 'escopo-decisoes' }))?.props.options.map((o: { label: string }) => o.label)).toEqual(['Sessão 10', 'Família 10', 'Branch 10'])
+  await ui2.unmount()
 })

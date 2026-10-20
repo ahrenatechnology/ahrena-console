@@ -137,11 +137,16 @@ export class DecisoesDaSessao {
       }
       itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, substituidaPor));
     }
+    const porEscopo = {} as Record<EscopoDasDecisoes, number>;
+    for (const e of ['sessao', 'familia', 'branch'] as const) {
+      porEscopo[e] = e === escopo ? todasDoEscopo.filter((d) => d.state === 'vigente' || d.state === 'a_confirmar').length : (await this.doEscopo(alvo, e, ['vigente', 'a_confirmar'])).length;
+    }
     return {
       escopo,
       vigentes: todasDoEscopo.filter((d) => d.state === 'vigente').length,
       aConfirmar: todasDoEscopo.filter((d) => d.state === 'a_confirmar').length,
       itens,
+      porEscopo,
     };
   }
 
