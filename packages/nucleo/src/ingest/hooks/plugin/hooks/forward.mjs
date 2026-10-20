@@ -17,6 +17,10 @@
 //   hook of every session would add one).
 // The hook only reads the registry. Entries of dead cores are skipped here and deleted by the cores,
 // which clean the folder when they list it; a hook stays free of side effects.
+// An entry is trusted on "pid alive" alone: the file of a core killed with SIGKILL whose pid was reused
+// makes the hook POST to whatever listens on that 127.0.0.1 port (or log ECONNREFUSED) until a core
+// lists the folder and cleans it. Same exposure as the old fixed 4720; checking that the port answers
+// with that pid (verifyInstance) would cost a round trip per hook, so it is left out.
 //
 // The payload carries an `ahrena_console.env` field with the environment's config folder, account and
 // org (decision 0006): only `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_ACCOUNT_UUID` and

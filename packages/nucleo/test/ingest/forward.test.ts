@@ -191,6 +191,11 @@ describe('forwarder with the core away', () => {
       assert.equal(r.stdout, '', url);
       assert.match(r.log, /SessionStart não enviado: AHRENA_CONSOLE_URL precisa ser 127\.0\.0\.1, localhost ou ::1/, url);
     }
+    // A port that smuggles a host: http://127.0.0.1:80@192.0.2.10 points at 192.0.2.10.
+    const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_PORT: '80@192.0.2.10' });
+    assert.equal(r.code, 0);
+    assert.equal(r.stdout, '');
+    assert.match(r.log, /SessionStart não enviado: AHRENA_CONSOLE_URL precisa ser 127\.0\.0\.1, localhost ou ::1/);
   });
 
   test('::1 counts as a local core', async () => {
@@ -340,12 +345,19 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
     writeFileSync(join(home, 'instances', file), JSON.stringify(entry));
   }
 
-  /** The pid of a process that has already exited. */
+  /** The pid of a process that has already exited and that no other process has taken since. */
   async function deadPid(): Promise<number> {
-    const child = spawn(process.execPath, ['-e', '']);
-    await new Promise((r) => child.on('exit', r));
-    assert.ok(child.pid);
-    return child.pid;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const child = spawn(process.execPath, ['-e', '']);
+      await new Promise((r) => child.on('exit', r));
+      assert.ok(child.pid);
+      try {
+        process.kill(child.pid, 0);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ESRCH') return child.pid;
+      }
+    }
+    throw new Error('no dead pid after 20 tries: every one was reused');
   }
 
   const live = process.pid;
@@ -406,6 +418,9 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
       register(home, 'dev', live, decoy.port, `app-${live}.json`); // its id says dev
       register(home, 'dev', live, decoy.port, '.dev-1.json.tmp');
       mkdirSync(join(instances, 'dev-9.json'));
+      // A port past 65535 that would wrap onto the decoy, and a pid that is not an integer.
+      register(home, 'mcpb', live, decoy.port + 65536);
+      writeFileSync(join(instances, 'dev-12.json'), JSON.stringify({ id: 'dev-12', installation: 'dev', pid: 12.5, port: decoy.port }));
       const before = readdirSync(instances).sort();
 
       const r = await runHook('PostToolUse', HOOK_PAYLOADS.PostToolUse, { AHRENA_CONSOLE_HOME: home });
@@ -418,6 +433,21 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
     } finally {
       await core.close();
       await decoy.close();
+    }
+  });
+
+  test('two live entries on the same port get one request', async () => {
+    const core = await fakeCore();
+    try {
+      const home = newHome();
+      register(home, 'dev', live, core.port);
+      register(home, 'app', live, core.port);
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home });
+      assert.equal(r.code, 0);
+      assert.equal(r.log, '');
+      assert.equal(core.hits.length, 1);
+    } finally {
+      await core.close();
     }
   });
 
@@ -447,7 +477,7 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
     try {
       const home = newHome();
       register(home, 'dev', await deadPid(), decoy.port);
-      for (const env of [{ AHRENA_CONSOLE_HOME: home }, {}, { AHRENA_CONSOLE_HOME: join(dir, 'no-such-home') }]) {
+      for (const env of [{ AHRENA_CONSOLE_HOME: home }, { AHRENA_CONSOLE_HOME: newHome() }, { AHRENA_CONSOLE_HOME: join(dir, 'no-such-home') }]) {
         const started = Date.now();
         const r = await runHook('UserPromptSubmit', HOOK_PAYLOADS.UserPromptSubmit, env);
         assert.equal(r.code, 0);
@@ -485,7 +515,7 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
       register(home, 'dev', live, hung.port);
       register(home, 'app', live, ok.port);
       const started = Date.now();
-      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '1000' });
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '3000' });
       assert.equal(r.code, 0);
       assert.equal(r.stdout, '');
       assert.ok(Date.now() - started < SLACK_MS / 3, `took ${Date.now() - started} ms`);
