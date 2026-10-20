@@ -5,9 +5,9 @@
 // | Memória  | `vm_stat` (usada), `sysctl vm.swapusage`, `sysctl kern.memorystatus_vm_pressure_level` |
 // | GPU      | `ioreg -r -d 1 -w 0 -c IOAccelerator` (uso e memória em uso)                 |
 // | Rede     | `route -n get default` (a interface) e `netstat -ibn` (os bytes)             |
-// | Processos| `ps -axo pid=,pcpu=,rss=,comm=` e `ps -axo pid=,etime=,args=`                |
+// | Processos| `ps -axo pid=,pcpu=,rss=,comm=` e `ps -axo pid=,uid=,etime=,args=`           |
 // | Portas   | `lsof -nP -iTCP -sTCP:LISTEN` (só os processos do usuário, sem `sudo`)       |
-// | Túnel    | os `ssh` com `-L` na linha de comando ou `LocalForward` no `ssh -G <destino>`, e a sonda de cada porta |
+// | Túnel    | os `ssh` do usuário com `-L` (ou `-o LocalForward`) na linha de comando ou `LocalForward` no `ssh -G <destino>`, e a sonda de cada porta |
 //
 // O sistema e a versão saem de `sw_vers -productVersion`, uma vez.
 
@@ -16,8 +16,8 @@ import {
   baseName,
   listenInterfaceOf,
   mergePorts,
-  parsePsArgs,
   parsePsStats,
+  parsePsUidArgs,
   PlatformCollector,
   type NetCounters,
   type ProcessSnapshot,
@@ -144,6 +144,23 @@ export function parseForwardSpec(spec: string): Forward | null {
   return { localPort: Number(m[1]), remoteHost: m[2].replace(/^\[|\]$/g, ''), remotePort: Number(m[3]) };
 }
 
+/**
+ * O `-o LocalForward` da linha de comando, em `[bind:]porta:host:porta`. O `ps` perde as aspas, então
+ * `-o "LocalForward 14720 127.0.0.1:4720"` chega em três palavras: `valor` é a primeira e `resto` dá
+ * as seguintes. Devolve a especificação e quantas palavras de `resto` ela consumiu; `null` quando
+ * `valor` não é um `LocalForward`.
+ */
+export function localForwardOption(valor: string, resto: readonly string[]): { spec: string | null; consumed: number } | null {
+  const m = /^localforward(?:\s*=\s*|\s+|$)(.*)$/i.exec(valor);
+  if (!m) return null;
+  const partes = m[1].trim() ? m[1].trim().split(/\s+/) : [];
+  let consumed = 0;
+  // `LocalForward = 14720 …`: o `=` solto também vem como palavra.
+  if (partes.length === 0 && resto[0] === '=') consumed++;
+  while (partes.length < 2 && consumed < resto.length) partes.push(resto[consumed++]);
+  return { spec: partes.length === 2 ? `${partes[0]}:${partes[1]}` : null, consumed };
+}
+
 export interface SshCommand {
   destination: string;
   forwards: Forward[];
@@ -162,7 +179,8 @@ export function parseSshArgs(args: string): SshCommand | null {
   let configFile: string | null = null;
   for (let i = 1; i < t.length; i++) {
     const tok = t[i];
-    if (tok === '--') return t[i + 1] ? { destination: t[i + 1], forwards, configFile } : null;
+    // Depois do `--`, um destino que começa com `-` viraria opção no `ssh -G`: fica de fora.
+    if (tok === '--') return t[i + 1] && !t[i + 1].startsWith('-') ? { destination: t[i + 1], forwards, configFile } : null;
     if (!tok.startsWith('-') || tok === '-') return { destination: tok, forwards, configFile };
     for (let j = 1; j < tok.length; j++) {
       const op = tok[j];
@@ -172,6 +190,14 @@ export function parseSshArgs(args: string): SshCommand | null {
       if (op === 'L') {
         const f = parseForwardSpec(valor);
         if (f) forwards.push(f);
+      }
+      if (op === 'o') {
+        const lf = localForwardOption(valor, t.slice(i + 1));
+        if (lf) {
+          i += lf.consumed;
+          const f = lf.spec ? parseForwardSpec(lf.spec) : null;
+          if (f) forwards.push(f);
+        }
       }
       if (op === 'F') configFile = valor;
       break;
@@ -236,9 +262,9 @@ export class DarwinCollector extends PlatformCollector {
   }
 
   protected async processes(): Promise<ProcessSnapshot | null> {
-    const [stats, args] = await Promise.all([this.run('ps', ['-axo', 'pid=,pcpu=,rss=,comm=']), this.run('ps', ['-axo', 'pid=,etime=,args='])]);
+    const [stats, args] = await Promise.all([this.run('ps', ['-axo', 'pid=,pcpu=,rss=,comm=']), this.run('ps', ['-axo', 'pid=,uid=,etime=,args='])]);
     if (stats === null) return null;
-    return { stats: parsePsStats(stats), args: args ? parsePsArgs(args) : [] };
+    return { stats: parsePsStats(stats), args: args ? parsePsUidArgs(args) : [] };
   }
 
   protected async listeningPorts(): Promise<ListeningPort[] | null> {
@@ -247,8 +273,11 @@ export class DarwinCollector extends PlatformCollector {
   }
 
   /**
-   * Cada `ssh` cliente com encaminhamento: os `-L` da linha de comando ou, sem eles, os
-   * `LocalForward` do `ssh -G`. A porta fica com o `ssh` que a escuta (dois `ssh` para o mesmo
+   * Cada `ssh` cliente do próprio usuário com encaminhamento: os `-L` da linha de comando ou, sem
+   * eles, os `LocalForward` do `ssh -G`. Só os do usuário: o `ps -ax` lista os de todas as contas, e
+   * o `ssh -G` roda como nós o `Match exec` do arquivo que lê, então o `-F` de outra conta (ou um
+   * arquivo que outra conta possa escrever) seria código dela rodando como nós. Um `-F` que não passa
+   * nessa conferência deixa o `ssh` sem o `ssh -G`. Um `ssh -G` por arquivo e destino, todos juntos. A porta fica com o `ssh` que a escuta (dois `ssh` para o mesmo
    * destino pegam a mesma configuração, e só o primeiro consegue a porta); o estado:
    * - escutada por um `ssh` (este, ou o mestre do ControlMaster): a sonda diz `up` ou `idle`;
    * - escutada por outro processo: `busy`;
@@ -257,14 +286,23 @@ export class DarwinCollector extends PlatformCollector {
   protected async tunnels(ps: ProcessSnapshot | null, ports: ListeningPort[] | null): Promise<TunnelReading[] | null> {
     if (!ps) return null;
     const agora = this.now();
-    const candidatos: { row: PsArgsRow; cmd: SshCommand }[] = [];
+    const uid = this.deps.os.uid();
+    if (uid === null) return null;
+    const meus: { row: PsArgsRow; cmd: SshCommand }[] = [];
     for (const row of ps.args) {
+      if (row.uid !== uid) continue;
       const cmd = parseSshArgs(row.args);
-      if (!cmd) continue;
-      if (cmd.forwards.length === 0) {
-        const g = await this.run('ssh', [...(cmd.configFile ? ['-F', cmd.configFile] : []), '-G', cmd.destination]);
-        cmd.forwards = g ? parseSshG(g) : [];
-      }
+      if (cmd) meus.push({ row, cmd });
+    }
+    const chave = (cmd: SshCommand) => `${cmd.configFile ?? ''}\0${cmd.destination}`;
+    const lidos = new Map<string, Promise<Forward[]>>();
+    for (const { cmd } of meus) {
+      if (cmd.forwards.length > 0 || lidos.has(chave(cmd))) continue;
+      lidos.set(chave(cmd), this.sshG(cmd, uid));
+    }
+    const candidatos: { row: PsArgsRow; cmd: SshCommand }[] = [];
+    for (const { row, cmd } of meus) {
+      if (cmd.forwards.length === 0) cmd.forwards = await (lidos.get(chave(cmd)) ?? Promise.resolve([]));
       if (cmd.forwards.length > 0) candidatos.push({ row, cmd });
     }
     const escuta = new Map<number, ListeningPort>();
@@ -286,6 +324,17 @@ export class DarwinCollector extends PlatformCollector {
       tunnels.push({ pid: row.pid, destination: cmd.destination, since: desde(agora, row), ports: portas });
     }
     return tunnels;
+  }
+
+  /** Os `LocalForward` do `ssh -G`; o `-F` só vai quando é um caminho absoluto do usuário que só ele escreve. */
+  private async sshG(cmd: SshCommand, uid: number): Promise<Forward[]> {
+    if (cmd.configFile !== null) {
+      if (!cmd.configFile.startsWith('/')) return [];
+      const dono = await this.deps.fileOwner(cmd.configFile).catch(() => null);
+      if (!dono || dono.uid !== uid || (dono.mode & 0o022) !== 0) return [];
+    }
+    const g = await this.run('ssh', [...(cmd.configFile !== null ? ['-F', cmd.configFile] : []), '-G', '--', cmd.destination]);
+    return g ? parseSshG(g) : [];
   }
 
   private async tunnelPort(f: Forward, quem: ListeningPort | null): Promise<TunnelPort> {

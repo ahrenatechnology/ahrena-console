@@ -121,8 +121,59 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
       },
     ]);
     assert.deepEqual(sondadas.sort(), [13000, 14720, 15173]);
-    // O `ssh ws-exemplo` sem -L leu o LocalForward pelo `ssh -G`; o mestre do ControlMaster não.
-    assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-G', 'ws-exemplo']]);
+    // O `ssh ws-exemplo` sem -L leu o LocalForward pelo `ssh -G`; o mestre do ControlMaster não, e o
+    // `ssh -F …` de outra conta (uid 502) também não.
+    assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-G', '--', 'ws-exemplo']]);
+  });
+
+  test('túnel: o ssh de outra conta nunca vira `ssh -G`, nem com -F, nem sem ele', async () => {
+    const ps = [
+      '  480   502    00:10:00 ssh -F /Users/outra/.ssh/config-dela ws-dela',
+      '  481   502    00:10:00 ssh ws-dela',
+      '  482   502    00:10:00 ssh -fN -L 19000:127.0.0.1:9000 ws-dela',
+    ].join('\n');
+    const { deps, calls } = darwin({
+      commands: { ...DARWIN_COMMANDS, 'ps -axo pid=,uid=,etime=,args=': ps },
+      // Mesmo que o arquivo parecesse nosso, o processo não é.
+      fileOwner: async () => ({ uid: 501, mode: 0o100600 }),
+    });
+    const r = await new DarwinCollector(deps).collect();
+    assert.deepEqual(r.tunnels, []);
+    assert.deepEqual(calls.filter((c) => c.command === 'ssh'), []);
+  });
+
+  test('túnel: o -F só vai ao `ssh -G` quando é caminho absoluto do usuário que só ele escreve', async () => {
+    const ps = [
+      '  480   501    00:10:00 ssh -F /Users/dev/.ssh/meu ws-a',
+      '  481   501    00:10:00 ssh -F /tmp/de-outro ws-b',
+      '  482   501    00:10:00 ssh -F /Users/dev/.ssh/aberto ws-c',
+      '  483   501    00:10:00 ssh -F relativo ws-d',
+    ].join('\n');
+    const donos: Record<string, { uid: number; mode: number }> = {
+      '/Users/dev/.ssh/meu': { uid: 501, mode: 0o100600 },
+      '/tmp/de-outro': { uid: 502, mode: 0o100644 },
+      '/Users/dev/.ssh/aberto': { uid: 501, mode: 0o100666 },
+    };
+    const { deps, calls } = darwin({
+      commands: { ...DARWIN_COMMANDS, 'ps -axo pid=,uid=,etime=,args=': ps },
+      fileOwner: async (path) => donos[path] ?? null,
+    });
+    await new DarwinCollector(deps).collect();
+    assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-F', '/Users/dev/.ssh/meu', '-G', '--', 'ws-a']]);
+  });
+
+  test('túnel: dois ssh para o mesmo destino e arquivo dão um `ssh -G` só', async () => {
+    const ps = [
+      '  480   501    00:10:00 ssh ws-exemplo',
+      '  481   501    00:05:00 ssh ws-exemplo',
+      '  482   501    00:05:00 ssh ws-outro',
+    ].join('\n');
+    const { deps, calls } = darwin({ commands: { ...DARWIN_COMMANDS, 'ps -axo pid=,uid=,etime=,args=': ps } });
+    await new DarwinCollector(deps).collect();
+    assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [
+      ['-G', '--', 'ws-exemplo'],
+      ['-G', '--', 'ws-outro'],
+    ]);
   });
 
   test('porta do túnel que ninguém escuta é `down`', async () => {
@@ -232,6 +283,19 @@ describe('#175/AC-1 leituras de saída', () => {
     assert.equal(parseSshArgs('sshd: dev@pts/0'), null);
     assert.equal(parseSshArgs('ssh -L'), null);
     assert.equal(parseSshArgs('ssh -- ws-exemplo')?.destination, 'ws-exemplo');
+    // Depois do `--`, um destino que começa com `-` seria opção do `ssh -G`.
+    assert.equal(parseSshArgs('ssh -- -oProxyCommand=x'), null);
+  });
+
+  test('linha de comando do ssh: -o LocalForward, com `=`, com espaço (o ps perde as aspas) e colado', () => {
+    const f = [{ localPort: 14720, remoteHost: '127.0.0.1', remotePort: 4720 }];
+    assert.deepEqual(parseSshArgs('ssh -o LocalForward=14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
+    assert.deepEqual(parseSshArgs('ssh -o LocalForward 14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
+    assert.deepEqual(parseSshArgs('ssh -oLocalForward=14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
+    assert.deepEqual(parseSshArgs('ssh -o localforward = 14720 127.0.0.1:4720 ws-exemplo'), { destination: 'ws-exemplo', forwards: f, configFile: null });
+    assert.deepEqual(parseSshArgs('ssh -o LocalForward=localhost:15432 [::1]:5432 ws-exemplo')?.forwards, [{ localPort: 15432, remoteHost: '::1', remotePort: 5432 }]);
+    // Outra opção com -o não consome palavra nenhuma além do valor.
+    assert.deepEqual(parseSshArgs('ssh -o ExitOnForwardFailure=no ws-exemplo'), { destination: 'ws-exemplo', forwards: [], configFile: null });
   });
 
   test('especificação de -L: com bind, IPv6 e socket Unix (fora)', () => {

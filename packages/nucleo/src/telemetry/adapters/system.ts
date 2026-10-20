@@ -1,6 +1,6 @@
 // O que os coletores usam do sistema de verdade (#175): o executor de comandos, a leitura de
-// arquivo, o `fs.statfs`, a sonda de porta e o `node:os`. Só o núcleo no ar usa isto; os testes
-// passam os dublês com as saídas gravadas.
+// arquivo, o `fs.statfs`, o dono de um arquivo (`fs.stat`), a sonda de porta e o `node:os`. Só o
+// núcleo no ar usa isto; os testes passam os dublês com as saídas gravadas.
 //
 // - Comando sem shell (`execFile`), com tempo curto e `LC_ALL=C` (o ponto decimal do `ps` e do
 //   `df` não muda com a língua da máquina). Falhou, não existe ou estourou o tempo: `null`. O que
@@ -8,10 +8,10 @@
 // - A sonda só conecta em 127.0.0.1 e fecha; não escreve nada na conexão.
 
 import { execFile } from 'node:child_process';
-import { readFile, statfs } from 'node:fs/promises';
+import { readFile, stat, statfs } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as nodeOs from 'node:os';
-import type { CollectorDeps, CommandRunner, FileReader, OsFacts, PortProbe, StatFs } from '../ports.ts';
+import type { CollectorDeps, CommandRunner, FileOwner, FileReader, OsFacts, PortProbe, StatFs } from '../ports.ts';
 import type { TelemetryCollector } from '../ports.ts';
 import { COMMAND_TIMEOUT_MS } from './common.ts';
 import { DarwinCollector } from './darwin.ts';
@@ -37,6 +37,15 @@ export const systemStatfs: StatFs = async (mount) => {
   try {
     const s = await statfs(mount);
     return { totalBytes: s.blocks * s.bsize, freeBytes: s.bfree * s.bsize, availableBytes: s.bavail * s.bsize };
+  } catch {
+    return null;
+  }
+};
+
+export const systemFileOwner: FileOwner = async (path) => {
+  try {
+    const s = await stat(path);
+    return { uid: s.uid, mode: s.mode };
   } catch {
     return null;
   }
@@ -74,10 +83,11 @@ export const systemOs: OsFacts = {
   freemem: () => nodeOs.freemem(),
   loadavg: () => nodeOs.loadavg(),
   cpus: () => nodeOs.cpus(),
+  uid: () => process.getuid?.() ?? null,
 };
 
 export function systemDeps(): CollectorDeps {
-  return { run: systemRunner, readFile: systemReadFile, statfs: systemStatfs, probe: systemProbe, os: systemOs };
+  return { run: systemRunner, readFile: systemReadFile, statfs: systemStatfs, fileOwner: systemFileOwner, probe: systemProbe, os: systemOs };
 }
 
 /** O coletor da plataforma; `null` onde não há um (Windows): o núcleo sobe sem telemetria. */

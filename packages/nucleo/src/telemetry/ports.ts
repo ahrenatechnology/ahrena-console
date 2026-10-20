@@ -46,6 +46,12 @@ export type StatFs = (mount: string) => Promise<{ totalBytes: number; freeBytes:
  * - `closed`: conectou e fechou logo (o `ssh` aceitou e o outro lado não tinha ninguém);
  * - `refused`: ninguém escuta aqui.
  */
+/**
+ * Dono e modo de um arquivo, pelo `fs.stat` (segue o link). `null` quando não existe ou não dá
+ * para ler. Serve para o `-F` de um `ssh`: só se repassa ao `ssh -G` o arquivo do próprio usuário.
+ */
+export type FileOwner = (path: string) => Promise<{ uid: number; mode: number } | null>;
+
 export type PortProbe = (port: number) => Promise<'open' | 'closed' | 'refused'>;
 
 export interface CpuTimes {
@@ -65,12 +71,15 @@ export interface OsFacts {
   freemem(): number;
   loadavg(): number[];
   cpus(): { model: string; times: CpuTimes }[];
+  /** O uid de quem roda o núcleo (`process.getuid`); `null` onde não há (Windows). */
+  uid(): number | null;
 }
 
 export interface CollectorDeps {
   run: CommandRunner;
   readFile: FileReader;
   statfs: StatFs;
+  fileOwner: FileOwner;
   probe: PortProbe;
   os: OsFacts;
   /** Relógio, para `takenAt` e as taxas. */

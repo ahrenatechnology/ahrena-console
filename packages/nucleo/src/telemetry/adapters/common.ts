@@ -123,6 +123,8 @@ export interface PsArgsRow {
   /** Há quantos segundos o processo roda; `null` quando o `etime` não fez sentido. */
   elapsedSec: number | null;
   args: string;
+  /** O uid dono do processo, quando o `ps` o trouxe (`parsePsUidArgs`). */
+  uid?: number;
 }
 
 /** `etime` do ps: `[[dd-]hh:]mm:ss`. */
@@ -138,6 +140,16 @@ export function parsePsArgs(out: string): PsArgsRow[] {
   for (const l of out.split('\n')) {
     const m = /^\s*(\d+)\s+(\S+)\s+(.*?)\s*$/.exec(l);
     if (m) rows.push({ pid: n(m[1]), elapsedSec: parseEtime(m[2]), args: m[3] });
+  }
+  return rows;
+}
+
+/** Saída de `ps … -o pid=,uid=,etime=,args=`: a mesma, com o dono de cada processo. */
+export function parsePsUidArgs(out: string): PsArgsRow[] {
+  const rows: PsArgsRow[] = [];
+  for (const l of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*?)\s*$/.exec(l);
+    if (m) rows.push({ pid: n(m[1]), uid: n(m[2]), elapsedSec: parseEtime(m[3]), args: m[4] });
   }
   return rows;
 }

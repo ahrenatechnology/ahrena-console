@@ -3,7 +3,7 @@
 // fica registrada. Nada chama o sistema.
 import { readFileSync } from 'node:fs';
 import { DOCKER_DF_ARGS, DOCKER_PS_ARGS } from '../../src/telemetry/adapters/common.ts';
-import type { CollectorDeps, CpuTimes, PortProbe, StatFs } from '../../src/telemetry/ports.ts';
+import type { CollectorDeps, CpuTimes, FileOwner, PortProbe, StatFs } from '../../src/telemetry/ports.ts';
 
 const DIR = new URL('../fixtures/telemetry/', import.meta.url);
 export const fixture = (name: string) => readFileSync(new URL(name, DIR), 'utf8');
@@ -21,9 +21,9 @@ export const DARWIN_COMMANDS: Recorded = {
   'netstat -ibn': [fixture('darwin/netstat-ibn-1.txt'), fixture('darwin/netstat-ibn-2.txt')],
   'df -P': fixture('darwin/df-P.txt'),
   'ps -axo pid=,pcpu=,rss=,comm=': fixture('darwin/ps-stats.txt'),
-  'ps -axo pid=,etime=,args=': fixture('darwin/ps-args.txt'),
+  'ps -axo pid=,uid=,etime=,args=': fixture('darwin/ps-args.txt'),
   'lsof -nP -iTCP -sTCP:LISTEN': fixture('darwin/lsof-listen.txt'),
-  'ssh -G ws-exemplo': fixture('darwin/ssh-G-ws-exemplo.txt'),
+  'ssh -G -- ws-exemplo': fixture('darwin/ssh-G-ws-exemplo.txt'),
   [['docker', ...DOCKER_PS_ARGS].join(' ')]: fixture('docker-ps.txt'),
   [['docker', ...DOCKER_DF_ARGS].join(' ')]: fixture('docker-system-df.txt'),
 };
@@ -57,7 +57,11 @@ export function fixtureDeps(opts: {
   commands?: Recorded;
   files?: Recorded;
   statfs?: StatFs;
+  /** Sem ele, nenhum arquivo tem dono conhecido (um `-F` nunca vai ao `ssh -G`). */
+  fileOwner?: FileOwner;
   probe?: PortProbe;
+  /** O uid de quem roda; o padrão é o dono dos processos do usuário em ps-args.txt (501). */
+  uid?: number | null;
   cores?: number;
   hostname?: string;
 }) {
@@ -81,6 +85,7 @@ export function fixtureDeps(opts: {
     },
     readFile: async (path) => pegar(opts.files ?? {}, path),
     statfs: opts.statfs ?? (async () => null),
+    fileOwner: opts.fileOwner ?? (async () => null),
     probe: opts.probe ?? (async () => 'refused'),
     os: {
       hostname: () => opts.hostname ?? 'mac-exemplo',
@@ -90,6 +95,7 @@ export function fixtureDeps(opts: {
       freemem: () => 1_000_000_000,
       loadavg: () => [4.111, 3.8, 3.2],
       // A primeira medida e as seguintes: metade do tempo ocupado entre elas (50%).
+      uid: () => (opts.uid === undefined ? 501 : opts.uid),
       cpus: () => Array.from({ length: cores }, () => ({ model: 'CPU Exemplo', times: cpuCalls++ < cores ? tempos(1000, 500, 8500) : tempos(1200, 600, 8800) })),
     },
     now: () => t,
