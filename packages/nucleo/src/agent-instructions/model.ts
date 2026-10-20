@@ -101,7 +101,7 @@ export interface InstructionsContent {
 /**
  * - `ready`: leitura feita (com `error` quando é o cache servido porque o GitHub falhou);
  * - `loading`: sem leitura ainda; a tela espera a mudança `agent-instructions`;
- * - `no-github`: núcleo sem `gh` ou com `--sem-github`;
+ * - `no-github`: núcleo sem `gh` ou com `--no-github`;
  * - `error`: falhou e não há leitura anterior;
  * - `not-found`: o repositório não existe ou não é visível para o token.
  */

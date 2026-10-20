@@ -331,7 +331,7 @@ describe('Kanban do projeto (C11)', () => {
     });
     const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
-    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--sem-github/);
+    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--no-github/);
   });
 
   test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {

@@ -46,7 +46,7 @@ export interface KanbanDoProjeto {
 export interface OpcoesDoProjeto {
   /** `null` sem GitHub ou sem Project escolhido: as duas rotas respondem 503 (veja `semProjeto`). */
   kanban: KanbanDoProjeto | null;
-  /** Sem kanban porque nenhum Project foi escolhido (`AHRENA_CONSOLE_PROJECT` vazia), e não por `--sem-github`. */
+  /** Sem kanban porque nenhum Project foi escolhido (`AHRENA_CONSOLE_PROJECT` vazia), e não por `--no-github`. */
   semProjeto?: boolean;
   /** `demo` quando o kanban é o GitHub falso do simulador. */
   fonte: 'github' | 'demo';
@@ -156,7 +156,7 @@ function enviarErro(res: ServerResponse, e: Erro): void {
   send(res, e.status, { error: e.error, code: e.code, ...(e.extra ?? {}) });
 }
 
-const DESLIGADO: Erro = { status: 503, code: 'off', error: 'o núcleo subiu sem o GitHub (--sem-github): não há quadro' };
+const DESLIGADO: Erro = { status: 503, code: 'off', error: 'o núcleo subiu sem o GitHub (--no-github): não há quadro' };
 const SEM_PROJETO: Erro = {
   status: 503,
   code: 'no-project',

@@ -26,7 +26,7 @@
 // `MAXIMO_DE_ENTRADAS` combinações de repositório e período, as menos lidas saem primeiro.
 //
 // - `state`: `ready`; `loading` (sem dado ainda, ou a montagem parcial: o cabeçalho do repo já
-//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--sem-github`); `error`
+//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--no-github`); `error`
 //   (falhou e não há dado anterior); `not-found` (só nas métricas).
 // - `error`: o motivo do dado velho, do limite ou da falha (texto da tela); o último dado vem junto.
 // - `computing` (métricas): as estatísticas que o GitHub devolveu 202 (`commits`, `frequency`, `lines`, `contributors`). O campo fica `null`, e o
@@ -585,7 +585,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
 export interface OpcoesDosReposDoNucleo {
   /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
-  /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
+  /** `--no-github`: as respostas vêm com `state: 'no-github'`. */
   semGithub: boolean;
   /**
    * O cache do GitHub do núcleo (no cli, o mesmo `GithubCache` do trabalho, sobre o banco): uma

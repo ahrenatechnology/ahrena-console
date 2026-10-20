@@ -2,7 +2,7 @@
 // Detail, the history, the repos and the project of the demo, every clock fixed at NOW and the change
 // cursor with a fixed generation. `old-routes.test.ts` proves on it that the old Portuguese routes
 // are gone (issue #173, phase 6) and `simulator-demo.test.ts` that the demo's old ids are too.
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -41,12 +41,6 @@ export interface DemoApi {
   host: string;
   /** The `claude://` addresses the server asked the Desktop to open. */
   opened: string[];
-  /**
-   * Creates the `docs/decisoes` folder of the demo repository, in a temp dir of this server: before
-   * it, the repository folder does not exist (the "Promover" draft says so); after it, the promote
-   * writes there.
-   */
-  createRecordsFolder(): void;
   close(): Promise<void>;
 }
 
@@ -55,7 +49,7 @@ export async function startDemoApi(): Promise<DemoApi> {
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
   const repoFolder = join(records, 'ahrena-demo');
-  const changes = new ChangeCursor({ generation: 'golden' });
+  const changes = new ChangeCursor({ generation: 'demo' });
   const sqlite: SqliteStorage = openSqliteStorage({ path: ':memory:' });
   const sessionAccounts = new SessionAccounts(sqlite);
   const storage = withChanges(sqlite, changes, sessionAccounts);
@@ -102,7 +96,6 @@ export async function startDemoApi(): Promise<DemoApi> {
     api,
     host: new URL(api.url).host,
     opened,
-    createRecordsFolder: () => mkdirSync(join(repoFolder, 'docs', 'decisoes'), { recursive: true }),
     close: async () => {
       await api.close();
       sqlite.close();

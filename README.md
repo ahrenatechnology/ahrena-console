@@ -42,7 +42,7 @@ git clone https://github.com/ahrenatechnology/ahrena-console.git
 cd ahrena-console/packages/nucleo && npm run api
 ```
 
-Ele importa o histórico de `~/.claude/projects`, recebe os hooks do plugin e responde ao painel; o banco fica em `~/.ahrena-console/nucleo.sqlite`. Para ver o painel com dados de exemplo, sem tocar em nada real: `npm run api -- --demo --cenario p1`.
+Ele importa o histórico de `~/.claude/projects`, recebe os hooks do plugin e responde ao painel; o banco fica em `~/.ahrena-console/nucleo.sqlite`. Para ver o painel com dados de exemplo, sem tocar em nada real: `npm run api -- --demo --scenario p1`.
 
 Outras opções (porta, sem GitHub, sem histórico) e o que cada tela mostra: [plugins/ahrena-console/README.md](plugins/ahrena-console/README.md).
 

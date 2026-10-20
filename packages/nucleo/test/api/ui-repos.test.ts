@@ -353,7 +353,7 @@ describe('repos na /ui: o que a tela mostra', () => {
 
   test('sem GitHub: um texto só, que diz como configurar', () => {
     assert.match(NO_GITHUB.texto, /gh auth login/);
-    assert.match(NO_GITHUB.texto, /--sem-github/);
+    assert.match(NO_GITHUB.texto, /--no-github/);
     assert.match(NO_GITHUB.titulo, /sem o GitHub/);
   });
 });

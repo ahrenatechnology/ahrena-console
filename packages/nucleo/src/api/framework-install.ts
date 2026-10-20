@@ -827,7 +827,7 @@ export function createFrameworkInstallRoute(service: FrameworkInstallService): F
 export interface CoreFrameworkInstallOptions {
   /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
-  /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
+  /** `--no-github`: as respostas vêm com `state: 'no-github'`. */
   noGithub: boolean;
   cache: GithubCache;
   changes: ChangeCursor;

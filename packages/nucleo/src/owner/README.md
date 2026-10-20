@@ -98,7 +98,7 @@ Ninguém fica sem núcleo por causa da versão. Parar o velho é SIGTERM e, depo
 
 ## A regra do `--parent`
 
-- `--parent <pid>` no núcleo que sobe (na API, `--pai`): ele vigia esse pid a cada segundo.
+- `--parent <pid>` no núcleo que sobe (na API também `--parent`): ele vigia esse pid a cada segundo.
 - `--parent <pid>` em quem adota: o pid vira **cliente registrado** (`<pasta de dados>/clientes/<pid>`).
 - O núcleo **sai** quando o pai morreu **e** nenhum cliente registrado está vivo. Enquanto houver um, fica. Cliente morto é apagado da pasta.
 - Sem `--parent`, ninguém vigia: o núcleo subido no terminal só sai com `stop`, SIGTERM ou Ctrl-C, mesmo que clientes se registrem.
@@ -141,15 +141,15 @@ Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--sub
 
 A ponte do MCP acha o núcleo pelo registro (#221, 5a); o app usa só o próprio núcleo (#221, 4/5).
 
-O `scripts/medir-carga.mjs` sobe com `--sem-trava` numa porta à parte.
+O `scripts/medir-carga.mjs` sobe com `--no-lock` numa porta à parte.
 
 ## Testes
 
 [test/owner/owner.test.ts](../../test/owner/owner.test.ts) sobe núcleos de verdade, cada um com um `HOME` falso numa pasta temporária e numa porta livre:
 - duas e três subidas ao mesmo tempo dão um núcleo só;
 - trava órfã por pid morto, por porta muda e por pid reaproveitado, sem sinalizar o processo estranho;
-- versão mais velha e commit diferente, com e sem `--substituir` (na API) e `replace`;
-- `--demo` e `--sem-trava` com a porta ocupada;
+- versão mais velha e commit diferente, com e sem `--replace` (na API) e `replace`;
+- `--demo` e `--no-lock` com a porta ocupada;
 - a pasta 0700, a trava exclusiva e a liberação que devolve a trava alheia;
 - pai morto com e sem cliente registrado;
 - a ponte do MCP subindo, adotando e saindo.
