@@ -251,6 +251,13 @@ function agente(id: string, sessionId: string, tipo: Agent['type'], inicio: stri
 }
 
 let seq = 0;
+const PROMPTS_DE_EXEMPLO = [
+  'Separe o cálculo de pagamentos num serviço próprio',
+  'Rode os testes e me diga o que quebrou',
+  'Pode seguir com o plano',
+  'Ajuste o nome das variáveis para o padrão do projeto',
+];
+
 async function evento(porta: StoragePort, sessionId: string, agentId: string | null, createdAt: string, type: string, toolName: string | null, summary: string | null, data: unknown = null) {
   const e = { id: `${sessionId}-e${String(++seq).padStart(4, '0')}`, sessionId, agentId, type, toolName, summary, data, createdAt };
   await porta.appendEvent(e);
@@ -329,7 +336,8 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
 
   const t0 = Date.parse(inicio);
   const turnos = e.turnosMin ? e.turnosMin.map((m) => iso(agora, m)) : Array.from({ length: e.turno }, (_, i) => new Date(t0 + (i * (agora - t0)) / (e.turno + 1)).toISOString());
-  for (const t of turnos) await evento(porta, id, null, t, 'UserPromptSubmit', null, 'prompt');
+  // Prompts com cara de prompt: o Feed (#94) mostra o texto, e "prompt" sozinho não diz nada.
+  for (const [i, t] of turnos.entries()) await evento(porta, id, null, t, 'UserPromptSubmit', null, PROMPTS_DE_EXEMPLO[i % PROMPTS_DE_EXEMPLO.length]);
   await uso(porta, id, e.modelo, t0, agora - 0.5 * MIN, e.contexto, e.custo);
   if (e.plano) {
     // Cada plano anterior entra pendente e sai como acabou; o atual começa logo depois do último.

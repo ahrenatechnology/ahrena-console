@@ -44,6 +44,24 @@ export const TELAS = [
     arquivo: '/ui/telas/workflows.js', // #96
   },
   {
+    id: 'feed',
+    rota: '/ui/feed',
+    item: { rotulo: 'Feed de atividade', icone: 'atividade' },
+    titulo: 'Feed de atividade',
+    sub: 'Todos os eventos das sessões, ao vivo',
+    icone: 'atividade',
+    arquivo: '/ui/telas/feed.js', // #94
+  },
+  {
+    id: 'kanban',
+    rota: '/ui/kanban',
+    item: { rotulo: 'Kanban', icone: 'kanban' },
+    titulo: 'Kanban',
+    sub: 'As sessões por status, só leitura',
+    icone: 'kanban',
+    arquivo: '/ui/telas/kanban.js', // #31
+  },
+  {
     id: 'detalhe',
     rota: '/ui/sessoes/:id',
     acende: 'sessoes',
