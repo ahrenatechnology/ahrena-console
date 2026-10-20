@@ -7,7 +7,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `telas.js` | **O registro das telas** (rota, item da barra, arquivo) |
-| `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()` |
+| `ler.js` | A camada de leitura, `ler(rota)`, e de escrita, `escrever(rota, corpo)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()` e `usarEscritor()` |
 | `ao-vivo.js` | Long polling em `GET /api/mudancas?desde=<cursor>&espera=25` |
 | `estados.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
@@ -54,6 +54,7 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
 | `ler(rota)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
+| `escrever(rota, corpo)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards) |
 | `sinal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
 | `aoMudar(f)` | `f(mudancas)` a cada novidade do long polling (`{ tipo, chave, sessionId, accountId }`) |
 | `aoReiniciar(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |

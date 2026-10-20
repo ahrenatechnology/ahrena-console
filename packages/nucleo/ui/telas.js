@@ -34,6 +34,15 @@ export const TELAS = [
     icone: 'sessoes',
     arquivo: null, // #29 e #30
   },
+  {
+    id: 'projeto',
+    rota: '/ui/projeto',
+    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    titulo: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icone: 'github',
+    arquivo: '/ui/telas/projeto.js', // #80 (C11)
+  },
 ];
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
