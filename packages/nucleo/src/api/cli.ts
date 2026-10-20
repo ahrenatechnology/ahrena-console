@@ -74,6 +74,9 @@ import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
 import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
+import { loadMachinesConfig } from '../telemetry/machines-config.ts';
+import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
+import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
 
@@ -106,6 +109,10 @@ const AJUDA = `Uso: npm run api -- [opções]
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
   --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
                       Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
+  --machines <arq>    As máquinas remotas (padrão ~/.ahrena-console/machines.json, #176):
+                      { "machines": [{ "id", "label", "port" }] }, port é a porta deste Mac
+                      que o seu túnel encaminha para a 4720 de lá. Sem arquivo, só esta
+                      máquina. Lido ao subir; a --demo não o lê
 
 Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
@@ -131,6 +138,7 @@ const { values: o } = parseArgs({
     substituir: { type: 'boolean', default: false },
     'sem-trava': { type: 'boolean', default: false },
     'no-telemetry': { type: 'boolean', default: false },
+    machines: { type: 'string' },
     help: { type: 'boolean', default: false },
   },
 });
@@ -329,11 +337,13 @@ const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cach
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
-// 12 h already seeded, plus the "workstation" that #176 will read for real through the tunnel.
+// 12 h already seeded, plus a synthetic "workstation". Outside the demo, each remote machine of
+// machines.json (#176) is read every 30 s through the port the user's tunnel forwards.
 const sampleStore = new SqliteTelemetryStore(sqlite.db);
 const alertTracker = new AlertTracker();
 const machineEntries: MachineEntry[] = [localMachine()];
 const samplers: TelemetrySampler[] = [];
+const remoteMachines: RemoteMachine[] = [];
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(mudancas), log }));
 }
@@ -347,8 +357,24 @@ if (demo) {
   const platformCollector = collectorFor();
   if (platformCollector) addSampler('local', platformCollector);
   else log(`telemetry: no collector for ${process.platform}`);
+  const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
+  const get = loopbackGet();
+  for (const config of machinesConfig.machines) {
+    const remote = new RemoteMachine({
+      config,
+      get,
+      store: sampleStore,
+      tracker: alertTracker,
+      onAlertChange: publishAlertChanges(mudancas),
+      onAttentionChange: publishRemoteAttentionChanges(mudancas),
+      log,
+    });
+    remoteMachines.push(remote);
+    machineEntries.push(remote);
+  }
+  if (remoteMachines.length > 0) log(`telemetry: ${remoteMachines.length} remote machine(s): ${remoteMachines.map((m) => `${m.id} on port ${m.port}`).join(', ')}`);
 }
-const telemetryService = samplers.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+const telemetryService = samplers.length > 0 || remoteMachines.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
 let historicoPronto = false;
 const follower =
@@ -387,6 +413,7 @@ const api: ApiLocal = await iniciarApiLocal({
   detalhe,
   eventos: new FeedDeEventos({ storage }),
   frota: mcp.frota,
+  remoteAttention: remoteMachines,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
@@ -428,6 +455,7 @@ const pararDeVigiarPai =
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
 for (const a of samplers) a.start();
+for (const m of remoteMachines) m.start();
 if (follower) {
   follower
     .start()
@@ -467,7 +495,7 @@ async function desligar() {
   pararDeVigiarPai();
   if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
-  await Promise.all(samplers.map((a) => a.stop()));
+  await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);
   await storage.close();
   if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
