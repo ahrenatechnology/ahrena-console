@@ -23,6 +23,7 @@
 // | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 // | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
+// | `GET /api/workflows` e `/api/sessoes/<id>/workflow` | Workflows e a aba Workflow (api/workflows.ts, #96 e #97) |
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
@@ -49,6 +50,7 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
@@ -291,6 +293,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         ...(opts.carga?.() ?? {}),
       });
     }
+    if (await responderWorkflows(res, url, opts.montador)) return;
     const m = /^\/api\/(?:painel|sessao)\/([^/]+)$/.exec(url.pathname);
     if (m) return painel(res, decodeURIComponent(m[1]), url);
     const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);

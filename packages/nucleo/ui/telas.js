@@ -71,6 +71,24 @@ export const TELAS = [
     arquivo: '/ui/telas/projeto.js', // #80 (C11)
   },
   {
+    id: 'repos',
+    rota: '/ui/repos',
+    item: { rotulo: 'Repositórios', icone: 'repos' },
+    titulo: 'Repositórios',
+    sub: 'Organizações e repositórios da sua conta do GitHub',
+    icone: 'repos',
+    arquivo: '/ui/telas/repos.js', // C22
+  },
+  {
+    id: 'repo',
+    rota: '/ui/repos/:dono/:repo',
+    acende: 'repos',
+    titulo: 'Repositório',
+    sub: null,
+    icone: 'repos',
+    arquivo: '/ui/telas/repo.js', // C23
+  },
+  {
     id: 'analytics',
     rota: '/ui/analytics',
     item: { rotulo: 'Analytics', icone: 'analytics' },
@@ -90,22 +108,13 @@ export const TELAS = [
     arquivo: '/ui/telas/analytics.js',
   },
   {
-    id: 'repos',
-    rota: '/ui/repos',
-    item: { rotulo: 'Repositórios', icone: 'repos' },
-    titulo: 'Repositórios',
-    sub: 'Organizações e repositórios da sua conta do GitHub',
-    icone: 'repos',
-    arquivo: '/ui/telas/repos.js', // C22
-  },
-  {
-    id: 'repo',
-    rota: '/ui/repos/:dono/:repo',
-    acende: 'repos',
-    titulo: 'Repositório',
-    sub: null,
-    icone: 'repos',
-    arquivo: '/ui/telas/repo.js', // C23
+    id: 'workflows',
+    rota: '/ui/workflows',
+    item: { rotulo: 'Workflows', icone: 'workflows' },
+    titulo: 'Workflows',
+    sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
+    icone: 'workflows',
+    arquivo: '/ui/telas/workflows.js', // #96
   },
   {
     id: 'historico',
