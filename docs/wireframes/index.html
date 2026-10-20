@@ -562,7 +562,7 @@ const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="wi
 function lado(ativo, q = 4) {
   const nav = [
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
-    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'],
+    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'], ['adrs', 'scroll-text', 'ADRs'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
   return `<aside class="cc-lado">
@@ -579,6 +579,8 @@ const cab = (i, t, sub, acoes = '') => `<div class="cc-cab"><div class="ico">${i
 const atualizar = `<span class="btn">${ic('refresh-cw')}Atualizar</span>`
 const stat = (rot, v, s, i, cor) => `<div class="cartao stat"><span class="rot">${rot}</span><span class="ic" style="color:${cor}">${ic(i)}</span><span class="v tab">${v}</span><span class="s">${s}</span></div>`
 const cc = (ativo, miolo, q) => `<div class="cc">${lado(ativo, q)}<div class="cc-main">${miolo}</div></div>`
+// A mesma moldura numa largura dada (1100 é a janela do app; 1440, um monitor).
+const ccw = (w, ativo, miolo, q) => `<div class="cc" style="width:${w}px">${lado(ativo, q)}<div class="cc-main">${miolo}</div></div>`
 
 function agentCard(s, aberto) {
   const sub = s.sub ? `<div class="subs">${ic('git-fork')} ${s.sub} subagente${s.sub > 1 ? 's' : ''}</div>` : ''
@@ -1213,6 +1215,135 @@ function telaRepo() {
   </div>`
 }
 
+// ---------- ADRs dos repositórios (issue 174) ----------
+// Dados sintéticos: os mesmos repositórios fictícios de C22. O conteúdo de cada ADR fica na
+// língua do repositório (painel-de-metricas escreve em inglês); só a tela é pt-BR.
+const ADR_ST = { accepted: ['Aceita', 'b-completed'], proposed: ['Proposta', 'b-waiting'], superseded: ['Substituída', 'b-abandoned'], deprecated: ['Obsoleta', 'b-abandoned'], rejected: ['Rejeitada', 'b-error'], unknown: ['Sem status', ''] }
+const adrPill = st => ADR_ST[st][1] ? `<span class="pill ${ADR_ST[st][1]}">${ADR_ST[st][0]}</span>` : `<span class="chip" style="height:20px;font-size:10.5px;font-family:var(--font-sans)">Sem status</span>`
+// [número, título, status, data, ligação, falta]
+const ADRS = [
+  ['exemplo-labs/motor-de-regras', 'docs/adr', 'MADR 4', [
+    ['0009', 'Cobrança vira um serviço à parte', 'proposed', '17/10/2026', '', ''],
+    ['0008', 'Regras em tabela de decisão versionada', 'accepted', '30/09/2026', 'substitui 0007', ''],
+    ['0007', 'Motor de regras em processo', 'superseded', '02/07/2026', 'substituída por 0008', ''],
+    ['0006', 'Fila entre pedidos e cobrança', 'deprecated', '11/05/2026', '', ''],
+    ['0005', 'Avaliar regras no banco', 'superseded', '20/03/2026', 'substituída por 0007', 'sem consequências'],
+  ], 9],
+  ['exemplo-labs/vitrine-demo', 'docs/decisoes', 'livre', [
+    ['0006', 'Kanban só leitura, sem arrastar', 'accepted', '12/10/2026', '', ''],
+    ['0005', 'SQLite em memória nos testes', 'accepted', '09/10/2026', 'substitui 0004', ''],
+    ['0004', 'Postgres no Docker nos testes', 'superseded', '20/09/2026', 'substituída por 0005', 'sem alternativas'],
+    ['0003', 'Cards de altura fixa', 'accepted', '02/09/2026', '', ''],
+  ], 6],
+  ['exemplo-labs/painel-de-metricas', 'doc/adr', 'Nygard', [
+    ['0004', 'Composite index on (month, account)', 'proposed', '15/10/2026', '', 'sem alternativas'],
+    ['0003', 'Materialized views for the report', 'rejected', '28/09/2026', '', 'sem alternativas'],
+    ['0002', 'Use TimescaleDB for metrics', 'accepted', '14/06/2026', '', 'sem alternativas'],
+  ], 3],
+  ['estudio-ficticio/app-receitas', 'docs/decisions', 'Y-statement', [
+    ['0002', 'Cache offline das receitas', 'accepted', '03/08/2026', '', ''],
+    ['0001', 'Kotlin Multiplatform no app', '', '—', '', 'sem status · sem data'],
+  ], 2],
+  ['dev-sintetico/cli-de-notas', 'adr', 'Nygard', [
+    ['0001', 'Record architecture decisions', 'accepted', '05/01/2026', '', 'sem alternativas'],
+  ], 1],
+]
+// Um nó da cadeia de substituição: número e status em cima, título embaixo.
+const adrNo = (n, t, st, rot) => `<div style="display:flex;flex-direction:column;gap:3px;padding:7px 10px;border-radius:9px;border:1px solid ${rot ? 'var(--accent)' : 'var(--border)'};background:var(--bg)"><span style="display:flex;gap:8px;align-items:center"><span class="mono c-muted" style="font-size:11px">${n}</span>${rot ? `<span class="c-muted" style="font-size:11px">${rot}</span>` : ''}<span style="margin-left:auto">${adrPill(st)}</span></span><span class="trunc" style="font-size:12px">${t}</span></div>`
+const adrLinha = ([n, t, st, d, lig, falta], larga) => `<div style="display:grid;grid-template-columns:44px minmax(0,1fr) 96px ${larga ? '240px ' : ''}86px 16px;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12.5px">
+    <span class="mono c-muted" style="font-size:11.5px">${n}</span>
+    <span style="display:flex;flex-direction:column;min-width:0"><b class="trunc" style="font-weight:500;${st === 'superseded' || st === 'deprecated' ? 'color:var(--muted)' : ''}">${t}</b>${!larga && (lig || falta) ? `<small class="trunc c-muted" style="font-size:11px">${[lig, falta].filter(Boolean).join(' · ')}</small>` : ''}</span>
+    <span>${adrPill(st || 'unknown')}</span>
+    ${larga ? `<span class="trunc c-muted" style="font-size:11.5px">${lig ? `<span class="c-accent">${ic('git-compare-arrows')}</span> ${lig}` : ''}${lig && falta ? ' · ' : ''}${falta}</span>` : ''}
+    <span class="mono c-muted" style="font-size:11px;text-align:right">${d}</span><span class="c-muted">${ic('chevron-right')}</span></div>`
+const adrFiltros = `<div class="cartao filtros" style="flex-wrap:wrap"><span class="campo" style="flex:1 1 300px">${ic('search')}Buscar no título e no texto: "fila", "cache", "SQLite"…</span><span class="campo" style="width:190px">Todas as organizações<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo" style="width:190px">Todos os repositórios<span style="margin-left:auto">${ic('chevron-down')}</span></span>
+  <div style="display:flex;gap:10px;align-items:center;flex-basis:100%"><div class="seg"><span class="on">Todas 21</span><span>Aceitas 11</span><span>Propostas 3</span><span>Substituídas 4</span><span>Obsoletas 1</span><span>Rejeitadas 1</span><span>Sem status 1</span></div><span class="c-muted" style="margin-left:auto;font-size:12px;display:inline-flex;gap:6px;align-items:center">Mais recentes primeiro ${ic('chevron-down')}</span></div></div>`
+function telaAdrs(larga) {
+  return `${cab('scroll-text', 'ADRs', 'Os registros de decisão dos repositórios da sua conta, lidos das pastas de cada um', `<span class="chip">${ic('github')}conta: dev-sintetico</span>${atualizar}`)}
+  <div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+    ${stat('ADRs', '21', 'em 5 de 8 repositórios', 'scroll-text', 'var(--accent-text)')}
+    ${stat('Aceitas', '11', 'valem hoje', 'check-circle-2', 'var(--status-completed-text)')}
+    ${stat('Propostas', '3', 'esperando decisão', 'circle-dashed', 'var(--status-waiting-text)')}
+    ${stat('Substituídas', '5', 'substituídas ou obsoletas', 'git-compare-arrows', 'var(--muted)')}
+    ${stat('Incompletas', '6', 'sem status, data ou seção', 'file-warning', 'var(--muted)')}
+  </div>
+  ${adrFiltros}
+  ${ADRS.map(([repo, pasta, fmt, l, tot]) => `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('folder-git-2')}<span style="text-transform:none;letter-spacing:0;color:var(--text);font-size:12.5px" class="mono">${repo}</span><span style="text-transform:none;letter-spacing:0;font-weight:400">${pasta} · ${fmt} · ${tot} ADRs</span>${tot > l.length ? `<span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500" class="c-accent">Ver as ${tot} ›</span>` : ''}</div>
+    <div class="cartao" style="overflow:hidden">${l.map(a => adrLinha(a, larga)).join('')}</div></div>`).join('')}
+  <div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)">${ic('folder-search')}<span class="trunc">Sem ADR em 3 repositórios: <b style="color:var(--text);font-weight:500">gateway-sandbox</b>, <b style="color:var(--text);font-weight:500">catalogo-exemplo</b> e <b style="color:var(--text);font-weight:500">blog-estatico</b>.</span><span class="c-accent" style="margin-left:auto;white-space:nowrap">Pastas procuradas</span></div>`
+}
+
+// Aba ADRs na tela do repositório (C23).
+function telaRepoAdrs() {
+  const l = [...ADRS[0][3], ['0004', 'Regras escritas em YAML', 'accepted', '02/02/2026', '', ''], ['0003', 'Testes de regra por tabela', 'accepted', '15/01/2026', '', ''], ['0002', 'Node 24 no serviço', 'accepted', '10/01/2026', '', ''], ['0001', 'Registrar decisões em MADR', 'accepted', '08/01/2026', '', '']]
+  return `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>exemplo-labs/motor-de-regras</h4><span class="pill b-waiting">CI …</span><span class="chip" style="font-family:var(--font-sans)">privado</span><span style="margin-left:auto"><span class="btn contorno">${ic('external-link')}Abrir no GitHub</span></span></div>
+    <div class="chips"><span class="chip">${ic('git-branch')}main</span><span class="chip">${ic('star')}12</span><span class="chip">${ic('tag')}v1.8.0 · há 3 dias</span></div></div>
+  <div class="abas"><span>${ic('bar-chart-3')}Métricas</span><span>${ic('circle-dot')}Issues (9)</span><span>${ic('git-pull-request')}PRs (5)</span><span>${ic('play-circle')}CI</span><span>${ic('folder-open')}Sessões (3)</span><span>${ic('git-commit-horizontal')}Decisões</span><span class="on">${ic('scroll-text')}ADRs (9)</span></div>
+  <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="flex:1">${ic('search')}Buscar nas ADRs deste repositório…</span><div class="seg"><span class="on">Todas</span><span>Aceitas</span><span>Propostas</span><span>Substituídas</span></div></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px;align-items:start">
+    <div class="cartao" style="overflow:hidden">${l.map(a => adrLinha(a, false)).join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('folder-search')}Onde li</div>
+        <div class="leg" style="flex-direction:column;gap:4px"><span>Pasta <b>docs/adr</b></span><span>Arquivos <b>9</b> · formato <b>MADR 4</b></span><span>Lido <b>há 3 min</b> · do cache</span></div>
+        <span class="c-muted" style="font-size:11.5px">Sem ADR nova enquanto o commit da pasta não mudar.</span></div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('git-compare-arrows')}Substituições</div>
+        ${adrNo('0005', 'Avaliar regras no banco', 'superseded')}<span class="c-muted" style="padding-left:14px;font-size:11px">${ic('arrow-down')} substituída por</span>
+        ${adrNo('0007', 'Motor de regras em processo', 'superseded')}<span class="c-muted" style="padding-left:14px;font-size:11px">${ic('arrow-down')} substituída por</span>
+        ${adrNo('0008', 'Regras em tabela de decisão versionada', 'accepted', 'vale hoje')}</div>
+    </div>
+  </div>`
+}
+
+// A ADR aberta: cabeçalho, ligações, seções e metadados, nunca o texto puro.
+function telaAdr(larga) {
+  const sec = (i, t, miolo, extra = '') => `<div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic(i)}${t}${extra ? `<span class="r">${extra}</span>` : ''}</div>${miolo}</div>`
+  const p = t => `<p style="margin:0;font-size:12.5px;line-height:1.6">${t}</p>`
+  const lista = (l, cor) => `<ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${l.map(x => `<li${cor ? ` style="color:${cor}"` : ''}><span style="color:var(--text)">${x}</span></li>`).join('')}</ul>`
+  const opc = [['Tabela de decisão versionada', true, '3 prós · 1 contra'], ['Motor de regras em processo (a de hoje, 0007)', false, '1 pró · 3 contras'], ['Serviço de regras gerenciado', false, '2 prós · 2 contras']]
+  const lig = (rot, n, t, st) => `<span style="display:inline-flex;gap:8px;align-items:center;min-width:0"><span class="c-muted" style="white-space:nowrap">${rot}</span><span class="mono c-accent" style="font-size:11.5px">${n}</span><span class="trunc">${t}</span>${adrPill(st)}</span>`
+  return `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><span class="mono c-muted" style="font-size:15px">0008</span><h4 class="trunc">Regras em tabela de decisão versionada</h4>${adrPill('accepted')}<span style="margin-left:auto;display:flex;gap:8px"><span class="seg"><span class="on">Estruturada</span><span>Markdown</span></span><span class="btn contorno">${ic('external-link')}${larga ? 'Abrir no GitHub' : 'GitHub'}</span></span></div>
+    <div class="chips"><span class="chip">${ic('folder-git-2')}exemplo-labs/motor-de-regras</span><span class="chip">${ic('calendar')}30/09/2026</span><span class="chip">${ic('file-text')}docs/adr/0008-regras-em-tabela.md</span><span class="chip" style="font-family:var(--font-sans)">MADR 4</span>${larga ? `<span class="chip">${ic('git-commit-horizontal')}último commit há 20 dias</span>` : ''}</div></div>
+  <div class="cartao" style="padding:10px 14px;display:flex;gap:10px 24px;flex-wrap:wrap;align-items:center;font-size:12.5px">${ic('git-compare-arrows')}${lig('Substitui', '0007', 'Motor de regras em processo', 'superseded')}${lig('Relacionada', '0009', 'Cobrança vira um serviço à parte', 'proposed')}<span class="c-muted">Substituída por: nenhuma</span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) ${larga ? 300 : 270}px;gap:12px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${sec('file-question', 'Contexto', p('As regras de preço mudam toda semana e hoje moram no código do motor. Cada mudança é um deploy, e o time de produto não consegue revisar o que mudou entre duas versões.'))}
+      ${sec('list-checks', 'Motivadores', lista(['Mudar uma regra sem deploy', 'Ver o que mudou entre duas versões, linha a linha', 'Testar uma regra antes de valer']))}
+      <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-color:color-mix(in srgb, var(--accent) 45%, var(--border))"><div class="ttl">${ic('check-circle-2')}Decisão</div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="c-muted">Opção escolhida</span><b>Tabela de decisão versionada</b></div>
+        ${p('Porque é a única que deixa revisar a mudança no pull request e voltar uma versão sem deploy.')}</div>
+      ${sec('git-fork', 'Alternativas', `<div style="display:flex;flex-direction:column">${opc.map(([n, esc, pc]) => `<div style="display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px"><span class="${esc ? 'c-completed' : 'c-muted'}">${ic(esc ? 'check' : 'x')}</span><span class="trunc" style="${esc ? 'font-weight:500' : 'color:var(--muted)'}">${n}</span><span class="c-muted" style="font-size:11.5px;white-space:nowrap">${pc} ${ic('chevron-down')}</span></div>`).join('')}</div>`, '3 consideradas')}
+      ${sec('scale', 'Consequências', `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px"><div><div class="olhinho c-completed" style="margin-bottom:4px">Boas</div>${lista(['Mudar uma regra vira um PR de uma linha', 'O histórico das regras é o do git'])}</div><div><div class="olhinho c-error" style="margin-bottom:4px">Ruins</div>${lista(['A tabela precisa de validação na CI', 'Regras com laço não cabem numa tabela'])}</div></div>`)}
+      ${sec('shield-check', 'Confirmação', p('O job de CI recusa a tabela se uma linha não tiver teste.'))}
+      <div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted)">${ic('chevron-right')}Outras seções do texto<span class="chip" style="font-family:var(--font-sans)">Mais informações</span></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('info')}Registro</div>
+        <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;font-size:12px"><span class="c-muted">Status</span><span>${adrPill('accepted')} <span class="mono c-muted" style="font-size:11px">accepted</span></span><span class="c-muted">Data</span><span class="mono">30/09/2026</span><span class="c-muted">Decidiram</span><span class="trunc">dev-sintetico, colega-a</span><span class="c-muted">Consultados</span><span class="trunc">colega-b</span><span class="c-muted">Informados</span><span class="trunc">time de produto</span><span class="c-muted">Formato</span><span>MADR 4</span></div></div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('git-compare-arrows')}Cadeia</div>
+        ${[['0005', 'Avaliar regras no banco', 'superseded'], ['0007', 'Motor de regras em processo', 'superseded'], ['0008', 'Regras em tabela de decisão versionada', 'accepted']].map(([n, t, st], i) => `${i ? `<span class="c-muted" style="padding-left:14px;font-size:11px">${ic('arrow-down')} substituída por</span>` : ''}${adrNo(n, t, st, i === 2 ? 'esta' : '')}`).join('')}</div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px"><div class="ttl">${ic('list')}Nesta ADR</div>
+        ${['Contexto', 'Motivadores', 'Decisão', 'Alternativas', 'Consequências', 'Confirmação'].map(s => `<span class="c-muted" style="font-size:12px">${s}</span>`).join('')}</div>
+    </div>
+  </div>`
+}
+
+// Vazio, cache velho e ADR com partes faltando.
+function telaAdrsEstados() {
+  return `${cab('scroll-text', 'ADRs', 'Estados da tela: nenhum repositório com ADR, GitHub fora e uma ADR incompleta')}
+  <div class="faixa"><span class="ic">${ic('clock')}</span><div><b>GitHub limitou as leituras.</b> Mostrando as ADRs em cache, de 14:02. Tentamos de novo em 2 min.</div><span class="btn contorno">Tentar agora</span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+    <div class="cartao vazio"><span class="ic">${ic('folder-search')}</span><b>Nenhuma ADR nos seus repositórios</b><span>Procuramos em <code>docs/adr</code>, <code>docs/decisions</code>, <code>docs/decisoes</code>, <code>doc/adr</code>, <code>adr</code> e mais 9 pastas, nos 8 repositórios da conta. Uma pasta com arquivos <code>0001-titulo.md</code> já aparece aqui.</span><span class="btn contorno">${ic('external-link')}Como escrever uma ADR</span></div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center"><span class="mono c-muted">0001</span><b>Kotlin Multiplatform no app</b>${adrPill('unknown')}</div>
+      <div class="chips" style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">${ic('folder-git-2')}estudio-ficticio/app-receitas</span><span class="chip">${ic('calendar')}sem data</span><span class="chip" style="font-family:var(--font-sans)">livre</span></div>
+      <div class="cartao" style="padding:10px 12px;background:var(--bg)"><div class="ttl" style="font-size:12.5px">${ic('file-question')}Contexto</div><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">O app precisa rodar no iOS e no Android com uma base só…</p></div>
+      <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('scale')}Consequências<span class="r">não estão no texto</span></div></div>
+      <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('git-fork')}Alternativas<span class="r">não estão no texto</span></div></div>
+      <span class="c-muted" style="font-size:11.5px">Sem status e sem data no texto: a lista mostra "Sem status" e ordena pelo número do arquivo.</span>
+    </div>
+  </div>`
+}
+
 function telaVazios() {
   return `${cab('layout-dashboard', 'Dashboard', 'Estados de carregamento, vazio e erro, iguais em todas as telas')}
   <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
@@ -1676,6 +1807,14 @@ const TELAS = [
     n: N(['A tabela de Sessions (filtros, pílulas, linha que leva ao detalhe) e os StatCards.'], ['O CCAM não lê o GitHub; aqui o repositório liga as sessões ao trabalho.', 'Lido com a consulta enxuta e o cache da decisão 0001, para não estourar o limite da API.']) },
   { id: 'console-repo', cod: 'C23', nome: 'Repositório · métricas', sub: 'As métricas que a API do GitHub dá: commits por semana, frequência de código (linhas adicionadas e removidas), issues fechadas por tipo, PRs e tempo até o merge e o review, CI, linguagens, contribuidores, tráfego e alertas.', html: () => `<div class="fila">${cc('repos', telaRepo())}</div>`,
     n: N(['O cabeçalho com chips do Session Detail, os 6 KPIs, barras horizontais e a barra empilhada do Token Flow.'], ['"Linhas de código" não vem pronta do GitHub: soma a frequência de código (adições − remoções) desde o primeiro commit; os bytes por linguagem ficam ao lado.', 'Issues por tipo usam os tipos de issue da organização (História, Tarefa técnica, Bug, Spike, Épico).', '"Abertos por agentes" cruza os PRs com as sessões que os abriram.', 'Tráfego, Dependabot e code scanning exigem acesso de escrita; sem ele, o card some.']) },
+  { id: 'console-adrs', cod: 'C28', nome: 'ADRs', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${ccw(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${ccw(1440, 'adrs', telaAdrs(true))}</div>`,
+    n: N(['A lista agrupada do Histórico e de Decisões (C21), os StatCards e os filtros de Sessões.'], ['O CCAM não lê ADRs. A tela lê as pastas de ADR que a varredura de Repositórios (C22) já conhece, com o cache da decisão 0001.', 'Em 1440 a linha ganha a coluna das ligações e do que falta; em 1100 isso desce para baixo do título.', 'Repositórios sem ADR ficam numa linha só, no fim, com as pastas procuradas.']) },
+  { id: 'console-repo-adrs', cod: 'C29', nome: 'Repositório · ADRs', sub: 'A aba ADRs na tela de um repositório (C23): a lista do repositório, onde foi lida e a cadeia de substituições. Em 1100.', html: () => `<div class="fila">${ccw(1100, 'repos', telaRepoAdrs())}</div>`,
+    n: N(['O cabeçalho e as abas do Session Detail, como em C23.'], ['A aba fica ao lado de Decisões: Decisões são as das sessões (C20 e C21); ADRs são os registros que estão no repositório.', 'A cadeia mostra quem substituiu quem, inclusive quando só um dos lados escreveu a ligação.']) },
+  { id: 'console-adr', cod: 'C30', nome: 'ADR aberta', sub: 'Uma ADR estruturada: cabeçalho com status e data, as ligações, contexto, decisão com a opção escolhida, alternativas, consequências boas e ruins, e os metadados. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${ccw(1100, 'adrs', telaAdr(false))}<div class="rotulo">1440 px</div>${ccw(1440, 'adrs', telaAdr(true))}</div>`,
+    n: N(['O cabeçalho com chips do Session Detail e a coluna lateral de Decisões (C20).'], ['"Markdown" troca para o texto do arquivo, para quando o extrator errar; o padrão é a estruturada.', 'Seções que o extrator não reconhece ficam em "Outras seções do texto", fechadas, e nada do arquivo some.', 'MADR 4 traz decisores, consultados e informados; Nygard e os livres mostram só o que tiverem.']) },
+  { id: 'console-adrs-estados', cod: 'C31', nome: 'ADRs · vazio, cache e incompleta', sub: 'Nenhum repositório com ADR, o GitHub limitando (mostra o cache e a hora dele) e uma ADR sem status, data, alternativas e consequências. Em 1100.', html: () => `<div class="fila">${ccw(1100, 'adrs', telaAdrsEstados())}</div>`,
+    n: N(['EmptyState e a faixa de erro de C19.'], ['O que falta na ADR aparece como seção tracejada "não está no texto", em vez de sumir: quem lê sabe que o autor não escreveu.']) },
 ]
 
 // =====================================================================
