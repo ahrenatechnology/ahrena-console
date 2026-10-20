@@ -330,7 +330,7 @@ describe('history import: running again', () => {
     assert.equal(s1.updatedAt, '2026-11-02T12:30:00.000Z');
     assert.equal(s1.name, 'Ajuste do login');
     assert.deepEqual(s1.metadata.hooks, { ultimo: 'Stop' });
-    assert.ok(s1.metadata.importacao);
+    assert.ok(s1.metadata.import);
     await store.close();
   });
 });

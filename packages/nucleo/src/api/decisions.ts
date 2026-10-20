@@ -21,7 +21,6 @@ export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'f
 
 /** The state of a decision as the API shows it. */
 const apiState = (s: DecisionState): DecisaoDoPainel['state'] => (s === 'reverted' ? 'current' : s);
-const API_ACTION: Readonly<Record<Exclude<AcaoNaDecisao, 'desfazer'>, NonNullable<DecisaoDoPainel['undo']>>> = { confirmar: 'confirm', descartar: 'dismiss', ajustar: 'adjust' };
 /** O que a lista mostra; descartada e revertida ficam no histórico. */
 const NA_LISTA: readonly DecisionState[] = ['current', 'to_confirm', 'superseded'];
 /** Cards na lista: o largo mostra até 4 linhas de 3; o estreito, menos. */
@@ -36,19 +35,19 @@ export interface AlvoDasDecisoes {
   contaId: string | null;
 }
 
-export type AcaoNaDecisao = 'confirmar' | 'descartar' | 'ajustar' | 'desfazer';
+export type AcaoNaDecisao = 'confirm' | 'dismiss' | 'adjust' | 'undo';
 
-/** Quem decidiu pelo painel e quando: fica em `metadata.painel` da decisão. */
+/** Who decided through the panel and when: kept in the decision's `metadata.panel`. */
 export interface RegistroDoPainel {
-  acao: Exclude<AcaoNaDecisao, 'desfazer'>;
-  por: 'usuario';
-  sessao: string;
-  conta: string | null;
-  em: string;
-  /** O estado antes da ação, para o Desfazer voltar a ele. */
-  antes?: Decision['state'];
-  /** No Ajustar: a decisão nova, com o texto da pessoa. */
-  nova?: string;
+  action: Exclude<AcaoNaDecisao, 'undo'>;
+  by: 'user';
+  session: string;
+  account: string | null;
+  at: string;
+  /** The state before the action, for Undo to go back to. */
+  before?: Decision['state'];
+  /** On Adjust: the new decision, with the person's text. */
+  new?: string;
 }
 
 export class ErroDaDecisao extends Error {
@@ -180,7 +179,7 @@ export class DecisoesDaSessao {
 
   /**
    * Confirma, descarta, ajusta ou desfaz, numa decisão que esta sessão enxerga (no escopo branch,
-   * o mais largo), e registra quem decidiu e quando em `metadata.painel`:
+   * o mais largo), e registra quem decidiu e quando em `metadata.panel`:
    * - Confirmar e Descartar: só a sugerida (a confirmar);
    * - Ajustar: a sugerida ou a vigente ganha uma decisão nova, "correção sua", com o texto da pessoa,
    *   que a substitui no mesmo assunto;
@@ -191,13 +190,13 @@ export class DecisoesDaSessao {
     const visivel = d && (await this.doEscopo(alvo, 'branch', ['to_confirm', d.state])).some((x) => x.id === id);
     if (!d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
     let feita: Decision;
-    if (acao === 'desfazer') feita = await this.desfazer(d, agora);
-    else if (acao === 'ajustar') feita = await this.ajustar(alvo, d, texto, agora);
+    if (acao === 'undo') feita = await this.desfazer(d, agora);
+    else if (acao === 'adjust') feita = await this.ajustar(alvo, d, texto, agora);
     else {
       if (d.state !== 'to_confirm') throw new ErroDaDecisao(409, `a decisão já não está a confirmar (${d.state})`);
-      const registro: RegistroDoPainel = { acao, por: 'usuario', sessao: alvo.sessionId, conta: alvo.contaId, em: agora, antes: d.state };
-      await this.port.putDecision({ ...d, metadata: { ...d.metadata, painel: registro }, updatedAt: agora });
-      feita = acao === 'confirmar' ? await confirmDecision(this.port, id, agora) : await discardDecision(this.port, id, agora);
+      const registro: RegistroDoPainel = { action: acao, by: 'user', session: alvo.sessionId, account: alvo.contaId, at: agora, before: d.state };
+      await this.port.putDecision({ ...d, metadata: { ...d.metadata, panel: registro }, updatedAt: agora });
+      feita = acao === 'confirm' ? await confirmDecision(this.port, id, agora) : await discardDecision(this.port, id, agora);
     }
     return this.paraOPainel(alvo, feita);
   }
@@ -215,11 +214,12 @@ export class DecisoesDaSessao {
     if (d.state !== 'to_confirm' && d.state !== 'current') throw new ErroDaDecisao(409, `só a sugerida ou a vigente é ajustada (${d.state})`);
     // A original e o ajuste ficam no mesmo assunto: o ajuste a substitui, e o Desfazer a devolve.
     const topic = d.topic ?? `adjust:${d.id}`;
+    // The `painel:` prefix stays: the source key is hashed into the new decision's id, which the API answers.
     const sourceKey = `painel:${d.id}:${agora}`;
     const registro: RegistroDoPainel = {
-      acao: 'ajustar', por: 'usuario', sessao: alvo.sessionId, conta: alvo.contaId, em: agora, antes: d.state, nova: decisionId(alvo.sessionId, sourceKey),
+      action: 'adjust', by: 'user', session: alvo.sessionId, account: alvo.contaId, at: agora, before: d.state, new: decisionId(alvo.sessionId, sourceKey),
     };
-    await this.port.putDecision({ ...d, topic, metadata: { ...d.metadata, painel: registro }, updatedAt: agora });
+    await this.port.putDecision({ ...d, topic, metadata: { ...d.metadata, panel: registro }, updatedAt: agora });
     await registerDecision(
       this.port,
       {
@@ -238,7 +238,7 @@ export class DecisoesDaSessao {
         scope: d.scope,
         message: { uuid: null, toolUseId: null, transcriptPath: null },
         decidedAt: agora,
-        metadata: { texto: escrito, ajusteDe: d.id },
+        metadata: { text: escrito, adjustedFrom: d.id },
       },
       agora,
     );
@@ -248,20 +248,20 @@ export class DecisoesDaSessao {
   }
 
   private async desfazer(d: Decision, agora: string): Promise<Decision> {
-    const feito = d.metadata?.painel as RegistroDoPainel | undefined;
-    if (!feito?.acao) throw new ErroDaDecisao(409, 'nada a desfazer nesta decisão');
-    if (feito.acao === 'ajustar' && feito.nova) {
-      const nova = await this.port.getDecision(feito.nova);
+    const feito = d.metadata?.panel as RegistroDoPainel | undefined;
+    if (!feito?.action) throw new ErroDaDecisao(409, 'nada a desfazer nesta decisão');
+    if (feito.action === 'adjust' && feito.new) {
+      const nova = await this.port.getDecision(feito.new);
       if (nova?.state === 'current') await revertDecision(this.port, nova.id, agora);
     }
     const atual = (await this.port.getDecision(d.id)) ?? d;
-    if (feito.antes === 'to_confirm' && atual.state !== 'to_confirm') {
+    if (feito.before === 'to_confirm' && atual.state !== 'to_confirm') {
       if (atual.state !== 'current' && atual.state !== 'dismissed') throw new ErroDaDecisao(409, `já não dá para desfazer (${atual.state})`);
       await reopenDecision(this.port, d.id, agora);
     }
     const depois = (await this.port.getDecision(d.id)) ?? atual;
-    const { painel: _, ...metadata } = depois.metadata ?? {};
-    const desfeita = { ...depois, metadata: { ...metadata, painelDesfeito: { ...feito, desfeitoEm: agora } }, updatedAt: agora };
+    const { panel: _, ...metadata } = depois.metadata ?? {};
+    const desfeita = { ...depois, metadata: { ...metadata, panelUndone: { ...feito, undoneAt: agora } }, updatedAt: agora };
     await this.port.putDecision(desfeita);
     return desfeita;
   }
@@ -269,20 +269,20 @@ export class DecisoesDaSessao {
 
 /** A decisão como o card a desenha, relativa à sessão `sessionId` (a aba e a página da /ui também usam). */
 export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): DecisaoDoPainel {
-  const painel = d.metadata?.painel as Partial<RegistroDoPainel> | undefined;
+  const painel = d.metadata?.panel as Partial<RegistroDoPainel> | undefined;
   return {
     id: d.id,
     label: decisionLabel(d),
     origin: d.origin,
     state: apiState(d.state),
     title: d.choice,
-    text: typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+    text: typeof d.metadata?.text === 'string' ? d.metadata.text : d.choice,
     context: d.context,
-    undo: painel?.acao ? API_ACTION[painel.acao] : null,
+    undo: painel?.action ?? null,
     rejected: d.alternatives,
     decidedBy: d.decidedBy,
     decidedAt: d.decidedAt,
-    confirmedAt: painel?.acao === 'confirmar' && typeof painel.em === 'string' ? painel.em : null,
+    confirmedAt: painel?.action === 'confirm' && typeof painel.at === 'string' ? painel.at : null,
     supersededBy: substituidaPor,
     session: d.sessionId === sessionId ? 'this' : d.sessionId === mae ? 'parent' : d.familyId === familyId ? 'family' : 'branch',
     toolUseId: d.sessionId === sessionId ? d.message.toolUseId : null,

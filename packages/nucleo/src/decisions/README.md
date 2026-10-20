@@ -58,7 +58,7 @@ Determinística, nos dois caminhos. A chave de origem é a mesma (`tool:<tool_us
 | Plano (`ExitPlanMode`) | `PostToolUse` (aprovado) | `tool_result` aprovado; os recusados antes viram alternativas |
 | Permitir | `PreToolUse` → notificação `permission_prompt` → `PostToolUse` da mesma chamada | não aparece: o transcript não diz se houve pedido |
 | Negar | o pedido sem `PostToolUse` até o próximo `Stop` ou prompt, ou `PostToolUseFailure` de recusa | `tool_result` com erro "The user doesn't want to proceed…" |
-| Correção sua | — | recusa de plano com o que a pessoa escreveu (determinística, vigente); resposta curta (até 160 caracteres, sem pergunta nem dúvida, com pelo menos três palavras depois da negação) que começa contrariando uma pergunta que o agente acabou de fazer (inferida, a confirmar). O título é a primeira frase; o texto inteiro fica em `metadata.texto` |
+| Correção sua | — | recusa de plano com o que a pessoa escreveu (determinística, vigente); resposta curta (até 160 caracteres, sem pergunta nem dúvida, com pelo menos três palavras depois da negação) que começa contrariando uma pergunta que o agente acabou de fazer (inferida, a confirmar). O título é a primeira frase; o texto inteiro fica em `metadata.text` |
 | Pergunta fechada sem resposta | — | não é decisão: `[User dismissed…]` não é registrado |
 
 A correção inferida é conservadora. Só conta uma mensagem que começa com "não", "na verdade", "em vez de", "actually", "instead"… logo depois de uma fala do agente. Ela entra na cadeia de um assunto só quando o turno teve uma decisão só.
@@ -71,6 +71,6 @@ O transcript e o payload do hook são dados, nunca instrução. A extração só
 
 ## No painel
 
-A API local (`src/api/decisions.ts`, #102) lista as decisões por escopo para o painel e faz o Confirmar e o Descartar de uma sugerida, gravando em `metadata.painel` quem decidiu e quando. A captura pelos hooks está pendurada no receptor da API (`src/api/cli.ts`); a do transcript ainda não é chamada pelo seguidor.
+A API local (`src/api/decisions.ts`, #102) lista as decisões por escopo para o painel e faz o Confirmar e o Descartar de uma sugerida, gravando em `metadata.panel` quem decidiu e quando. A captura pelos hooks está pendurada no receptor da API (`src/api/cli.ts`); a do transcript ainda não é chamada pelo seguidor.
 
 **Para o hub:** `decisionForHub(d)` leva só metadados: ids, família, número, branch, origem, estado, escopo, quem decidiu, cadeia, ids da mensagem, datas e quantas alternativas. Assunto, contexto, escolha, alternativas e caminhos locais ficam de fora. O texto só vai quando a pessoa libera aquela decisão (`releaseDecisionText`).

@@ -41,6 +41,82 @@ export const ADJUSTED_ID = decisionId(INFERRED_SESSION, ADJUSTED_KEY);
 
 const keys = <O extends object>(o: O) => Object.keys(o) as (keyof O & string)[];
 
+/** The JSON the old code wrote in `metadata`/`data`, by row, and what it becomes. */
+export const OLD_SYNTHETIC_ID = 'estado:0123456789abcdef0123456789abcdef';
+export const NEW_SYNTHETIC_ID = 'state:0123456789abcdef0123456789abcdef';
+
+export const JSON_CASES = {
+  /** A real session: the state machine's memory and the import cursor. */
+  sessionReal: {
+    old: {
+      transcriptPath: '/home/dev/.claude/projects/-repo-app/s1.jsonl',
+      estados: {
+        ultimoEvento: T,
+        idsNoUltimoInstante: [OLD_SYNTHETIC_ID, 'e1'],
+        erroEm: null,
+        delegacoes: { 'tu-1': { desde: T, descricao: 'mapear o código' } },
+        background: { 'bg-1': { desde: T, comando: 'npm run dev' } },
+      },
+      importacao: { file: '-repo-app/s1.jsonl', offset: 10, size: 10, mtimeMs: 1 },
+    },
+    new: {
+      transcriptPath: '/home/dev/.claude/projects/-repo-app/s1.jsonl',
+      states: {
+        lastEvent: T,
+        idsAtLastInstant: [NEW_SYNTHETIC_ID, 'e1'],
+        errorAt: null,
+        delegations: { 'tu-1': { since: T, description: 'mapear o código' } },
+        background: { 'bg-1': { since: T, command: 'npm run dev' } },
+      },
+      import: { file: '-repo-app/s1.jsonl', offset: 10, size: 10, mtimeMs: 1 },
+    },
+  },
+  /** A simulated session: script, project, context, effort and family. */
+  sessionSimulated: {
+    old: { simulado: true, roteiro: 'travada', projeto: 'loja', contexto: { usados: 82000, limite: 200000, estouros: 1 }, esforco: 'high', familia: { mae: 's1', filhas: ['child-0'] }, branch: 'feat/x' },
+    new: { simulated: true, script: 'stuck', project: 'loja', context: { used: 82000, limit: 200000, overflows: 1 }, effort: 'high', family: { parent: 's1', children: ['child-0'] }, branch: 'feat/x' },
+  },
+  /** The other scripts, one session each. */
+  scripts: { travada: 'stuck', erro: 'error', abandono: 'abandonment', estouro: 'overflow', enxame: 'swarm', normal: 'normal' },
+  agentReal: {
+    old: { importacao: { file: '-repo-app/s1/subagents/agent-a.jsonl', offset: 5, size: 5, mtimeMs: 1 }, toolUseId: 'toolu_1', tokens: { input: 1 } },
+    new: { import: { file: '-repo-app/s1/subagents/agent-a.jsonl', offset: 5, size: 5, mtimeMs: 1 }, toolUseId: 'toolu_1', tokens: { input: 1 } },
+  },
+  agentSimulated: {
+    old: { simulado: true, papel: 'review', ajustes: 2, workflow: { run: 'toolu_wf', fase: 'Revisar', rotulo: 'review', papel: 'review', ajustes: 3, nome: 'dev-review' } },
+    new: { simulated: true, role: 'review', adjustments: 2, workflow: { run: 'toolu_wf', phase: 'Revisar', label: 'review', role: 'review', adjustments: 3, name: 'dev-review' } },
+  },
+  account: { old: { simulado: true }, new: { simulated: true } },
+  plan: {
+    old: {
+      extracao: { aplicadas: ['toolu_1'], ultima: { toolUseId: 'toolu_1', antes: [], source: 'TodoWrite' }, provisorias: { toolu_2: '3' }, proximaTarefa: 4 },
+      historico: { seq: 1, aberto: true, inicio: T, herdados: ['1\u0000passo'] },
+    },
+    new: {
+      extraction: { applied: ['toolu_1'], last: { toolUseId: 'toolu_1', before: [], source: 'TodoWrite' }, provisional: { toolu_2: '3' }, nextTask: 4 },
+      history: { seq: 1, open: true, start: T, inherited: ['1\u0000passo'] },
+    },
+  },
+  /** The panel's Confirm on a decision. */
+  decisionConfirmed: {
+    old: { texto: 'o texto inteiro', painel: { acao: 'confirmar', por: 'usuario', sessao: 's1', conta: 'acc/org', em: T, antes: 'a_confirmar' } },
+    new: { text: 'o texto inteiro', panel: { action: 'confirm', by: 'user', session: 's1', account: 'acc/org', at: T, before: 'to_confirm' } },
+  },
+  /** A Dismiss that was undone, and the cleanup's noise. */
+  decisionUndone: {
+    old: { ruido: 'pergunta fechada sem resposta', painelDesfeito: { acao: 'descartar', por: 'usuario', sessao: 's1', conta: null, em: T, antes: 'a_confirmar', desfeitoEm: T } },
+    new: { noise: 'pergunta fechada sem resposta', panelUndone: { action: 'dismiss', by: 'user', session: 's1', account: null, at: T, before: 'to_confirm', undoneAt: T } },
+  },
+  eventSynthetic: { old: { sintetico: true, reason: 'processo_encerrado' }, new: { synthetic: true, reason: 'process_ended' } },
+  eventCompaction: { old: { trigger: 'auto', contexto: 210000, limite: 200000 }, new: { trigger: 'auto', context: 210000, limit: 200000 } },
+  eventWorkflow: {
+    old: { tool_use_id: 'toolu_wf', tool_input: { name: 'dev-review', fases: ['Implementar', 'Revisar'], volta: 'volta para Corrigir' } },
+    new: { tool_use_id: 'toolu_wf', tool_input: { name: 'dev-review', phases: ['Implementar', 'Revisar'], loop: 'volta para Corrigir' } },
+  },
+  /** Real Claude Code data with no key of ours: it stays as it is. */
+  eventHook: { old: { command: 'npm test', reason: 'processo_encerrado' }, new: { command: 'npm test', reason: 'processo_encerrado' } },
+} as const;
+
 export interface LegacyDecision {
   id: string;
   sessionId: string;
@@ -75,7 +151,7 @@ export function legacyDecisions(): LegacyDecision[] {
       topic: topics[i % topics.length]!,
       supersedes: null,
       supersededBy: state === 'substituida' ? 'dec:old-0' : null,
-      metadata: {},
+      metadata: state === 'vigente' ? { ...JSON_CASES.decisionConfirmed.old } : state === 'descartada' ? { ...JSON_CASES.decisionUndone.old } : {},
     };
   });
   out.push({
@@ -128,21 +204,38 @@ export function writeLegacyDatabase(path: string): void {
   const run = (sql: string, ...params: (string | number | null)[]) => db.prepare(sql).run(...params);
 
   run(`INSERT INTO accounts (id, account_uuid, organization_uuid, organization_name, organization_type, label, color, config_dirs, first_seen_at, last_seen_at, metadata)
-       VALUES ('acc/org', 'acc', 'org', 'Org', 'team', 'equipe', '#336699', '[]', ?, ?, '{}')`, T, T);
-  for (const id of ['s1', 's2', INFERRED_SESSION]) {
+       VALUES ('acc/org', 'acc', 'org', 'Org', 'team', 'equipe', '#336699', '[]', ?, ?, ?)`, T, T, JSON.stringify(JSON_CASES.account.old));
+  const sessions: [string, unknown][] = [
+    ['s1', JSON_CASES.sessionReal.old],
+    ['s2', JSON_CASES.sessionSimulated.old],
+    [INFERRED_SESSION, {}],
+    ...keys(JSON_CASES.scripts).map((script): [string, unknown] => [`sim-${script}`, { simulado: true, roteiro: script }]),
+  ];
+  for (const [id, metadata] of sessions) {
     run(`INSERT INTO sessions (id, name, status, cwd, model, source, started_at, updated_at, account_id, account_source, metadata)
-         VALUES (?, 'sessão', 'active', '/repo/app', 'claude-opus-5-5', 'startup', ?, ?, 'acc/org', 'transcript', '{}')`, id, T, T);
-    run(`INSERT INTO agents (id, session_id, name, type, status, started_at, updated_at, metadata)
-         VALUES (?, ?, 'principal', 'main', 'working', ?, ?, '{}')`, `${id}:main`, id, T, T);
+         VALUES (?, 'sessão', 'active', '/repo/app', 'claude-opus-5-5', 'startup', ?, ?, 'acc/org', 'transcript', ?)`, id, T, T, JSON.stringify(metadata));
   }
-  for (let i = 0; i < 4; i++) {
+  for (const [id, sessionId, metadata] of [
+    ['s1:main', 's1', JSON_CASES.agentReal.old],
+    ['s2:main', 's2', JSON_CASES.agentSimulated.old],
+    [`${INFERRED_SESSION}:main`, INFERRED_SESSION, {}],
+  ] as const) {
+    run(`INSERT INTO agents (id, session_id, name, type, status, started_at, updated_at, metadata)
+         VALUES (?, ?, 'principal', 'main', 'working', ?, ?, ?)`, id, sessionId, T, T, JSON.stringify(metadata));
+  }
+  for (const [id, type, tool, data] of [
+    [OLD_SYNTHETIC_ID, 'SessionEnd', null, JSON_CASES.eventSynthetic.old],
+    ['e1', 'PreCompact', null, JSON_CASES.eventCompaction.old],
+    ['e2', 'PreToolUse', 'Workflow', JSON_CASES.eventWorkflow.old],
+    ['e3', 'PreToolUse', 'Bash', JSON_CASES.eventHook.old],
+  ] as const) {
     run(`INSERT INTO events (id, session_id, agent_id, type, tool_name, summary, data, created_at)
-         VALUES (?, 's1', 's1:main', 'PreToolUse', 'Bash', 'npm test', '{"command":"npm test"}', ?)`, `e${i}`, T);
+         VALUES (?, 's1', 's1:main', ?, ?, 'resumo', ?, ?)`, id, type, tool, JSON.stringify(data), T);
   }
   run(`INSERT INTO token_usage VALUES ('s1', 'claude-opus-5-5', 'standard', 'global', 'standard', '200k', 10, 20, 30, 0, 0, 0, 0, 0, 10, 20, 30, 0, 0, ?)`, T);
   run(`INSERT INTO model_pricing VALUES ('claude-opus-5-5*', 5, 25, 0.5, 6.25, 10, ?)`, T);
   run(`INSERT INTO session_plans (session_id, source, steps, done, total, current_step_id, changed_at, metadata)
-       VALUES ('s1', 'TodoWrite', '[{"id":"1","text":"passo","status":"pending"}]', 0, 1, '1', ?, '{}')`, T);
+       VALUES ('s1', 'TodoWrite', '[{"id":"1","text":"passo","status":"pending"}]', 0, 1, '1', ?, ?)`, T, JSON.stringify(JSON_CASES.plan.old));
   run(`INSERT INTO session_plan_history (session_id, seq, source, started_at, ended_at, result, steps, done, total, current_step_id, changed_at, metadata)
        VALUES ('s1', 1, 'TodoWrite', ?, NULL, 'current', '[]', 0, 1, NULL, ?, '{}')`, T, T);
   for (const name of keys(REPROCESSINGS)) run('INSERT INTO reprocessamentos (nome, feito_em) VALUES (?, ?)', name, T);

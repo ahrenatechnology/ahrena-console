@@ -84,7 +84,7 @@ describe('machine with SQLite', () => {
     assert.equal(s.metadata.transcriptPath, HOOK_PAYLOADS.SessionStart.transcript_path);
     assert.equal(s.cwd, '/repo/app');
     assert.equal(s.model, 'claude-opus-5-5');
-    assert.ok(readMemory(s).ultimoEvento);
+    assert.ok(readMemory(s).lastEvent);
   });
 
   test('watcher: a dead turn becomes waiting interrupted and leaves an Interrupted event', async () => {
@@ -125,7 +125,7 @@ describe('machine with SQLite', () => {
     assert.equal((await session()).status, 'completed');
     const last = (await store.listEvents(SID)).items.at(-1);
     assert.equal(last?.type, 'SessionEnd');
-    assert.deepEqual(last?.data, { sintetico: true, reason: 'processo_encerrado' });
+    assert.deepEqual(last?.data, { synthetic: true, reason: 'process_ended' });
 
     // It was a mistake (a different cwd, for example): the next hook reopens it.
     await hook(HOOK_PAYLOADS.UserPromptSubmit, seconds(50));

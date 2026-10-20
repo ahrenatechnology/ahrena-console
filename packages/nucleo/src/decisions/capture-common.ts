@@ -124,6 +124,6 @@ export function correctionDraft(
     origin: 'correction',
     inferred: opts.inferred,
     state: opts.inferred ? 'to_confirm' : 'current',
-    metadata: { texto: opts.text },
+    metadata: { text: opts.text },
   };
 }

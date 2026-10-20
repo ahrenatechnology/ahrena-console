@@ -26,7 +26,7 @@
 // requests wait for the same build, like the panel's "precisam de você".
 //
 // Effort: the `effort` of the Claude Desktop index (`local_*.json`, already read by IndiceDoDesktop) and,
-// without it, `metadata.esforco` (the simulator writes it; the terminal ingestion does not know the effort yet).
+// without it, `metadata.effort` (the simulator writes it; the terminal ingestion does not know the effort yet).
 // A terminal-only session: `null`.
 //
 // Branch: the Desktop's or `metadata.branch`; without them, what the work-by-branch already knows and,

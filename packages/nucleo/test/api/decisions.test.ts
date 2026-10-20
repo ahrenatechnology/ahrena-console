@@ -164,7 +164,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(decisao.state, 'current');
       assert.equal(decisao.confirmedAt, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
-      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: PANEL_SESSION, conta: EQUIPE, em: T0, antes: 'to_confirm' });
+      assert.deepEqual(gravada?.metadata.panel, { action: 'confirm', by: 'user', session: PANEL_SESSION, account: EQUIPE, at: T0, before: 'to_confirm' });
       assert.equal(gravada?.decidedBy, 'agent', 'quem propôs continua sendo o agente');
       assert.equal((await post(caminho, { session: 'qualquer' })).status, 409, 'já confirmada');
 
@@ -183,7 +183,7 @@ describe('API das decisões em 127.0.0.1', () => {
       );
       assert.equal((await post(`/api/decisions/${encodeURIComponent(outra.id)}/dismiss`, { session: 'qualquer' })).status, 200);
       assert.equal((await decisoes.getDecision(outra.id))?.state, 'dismissed');
-      assert.equal(((await decisoes.getDecision(outra.id))?.metadata.painel as { acao: string }).acao, 'descartar');
+      assert.equal(((await decisoes.getDecision(outra.id))?.metadata.panel as { action: string }).action, 'dismiss');
       const semEla = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
       assert.ok(!semEla.items.some((i) => i.id === outra.id));
 
@@ -249,11 +249,11 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(ajustada.status, 200);
       assert.equal(ajustada.decisao?.state, 'superseded');
       assert.equal(ajustada.decisao?.undo, 'adjust');
-      const nova = (await decisoes.listDecisions({ sessionId: PANEL_SESSION, states: ['current'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
+      const nova = (await decisoes.listDecisions({ sessionId: PANEL_SESSION, states: ['current'] })).items.find((d) => d.metadata.adjustedFrom === a.id)!;
       assert.equal(nova.origin, 'correction');
       assert.equal(nova.inferred, false);
       assert.equal(nova.choice, 'Sim, filtro por conta no topo.');
-      assert.equal(nova.metadata.texto, ajuste);
+      assert.equal(nova.metadata.text, ajuste);
       assert.deepEqual(nova.alternatives, ['Filtro 1 no topo']);
       assert.equal(nova.supersedes, a.id);
       const lista = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;

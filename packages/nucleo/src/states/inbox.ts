@@ -31,7 +31,7 @@ export function readInbox(session: Session, agents: readonly Agent[]): InboxRead
   const memory = readMemory(session);
   const background = Object.keys(memory.background).length;
   const main = mainAgentOf(state);
-  const delegating = Object.keys(memory.delegacoes).length > 0 || (main?.currentTool != null && DELEGATION_TOOLS.includes(main.currentTool));
+  const delegating = Object.keys(memory.delegations).length > 0 || (main?.currentTool != null && DELEGATION_TOOLS.includes(main.currentTool));
 
   let inbox: InboxState = status;
   if (status === 'waiting' && session.awaitingReason === 'stop') {

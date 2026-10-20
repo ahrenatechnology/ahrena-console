@@ -217,7 +217,7 @@ export async function reopenDecision(port: DecisionPort, id: string, now: string
 /** Tira das listas o que a captura antiga gravou e não é decisão (pergunta fechada sem resposta, conversa). */
 export async function markNoise(port: DecisionPort, id: string, reason: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  return setState(port, { ...d, metadata: { ...d.metadata, ruido: reason } }, 'dismissed', now);
+  return setState(port, { ...d, metadata: { ...d.metadata, noise: reason } }, 'dismissed', now);
 }
 
 /** A pessoa liberou o texto da decisão para sair da máquina. */

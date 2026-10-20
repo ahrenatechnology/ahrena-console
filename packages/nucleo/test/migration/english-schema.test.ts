@@ -156,7 +156,7 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
   });
 
   test('the rest of the core reads what it read before', async () => {
-    assert.deepEqual((await store.listSessions({ limit: 10 })).items.map((s) => s.id).sort(), ['s-inf', 's1', 's2']);
+    assert.equal((await store.listSessions({ limit: 100 })).items.length, countsBefore.sessions);
     assert.equal((await store.listAgents('s1')).length, 1);
     assert.equal((await store.listEvents('s1')).items.length, 4);
     assert.equal((await store.listTokenUsage('s1')).length, 1);

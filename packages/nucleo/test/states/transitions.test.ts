@@ -112,7 +112,7 @@ const TABLE: Row[] = [
       displayed: 'active',
       inbox: 'delegating',
       needsYou: false,
-      check: (e) => assert.deepEqual(readMemory(e.session).delegacoes['tu-a'], { desde: at(1), descricao: 'mapear o código' }),
+      check: (e) => assert.deepEqual(readMemory(e.session).delegations['tu-a'], { since: at(1), description: 'mapear o código' }),
     },
   },
   {
@@ -122,7 +122,7 @@ const TABLE: Row[] = [
       ev('PreToolUse', 1, { toolName: 'Agent', data: { tool_use_id: 'tu-a', tool_input: {} } }),
       ev('PostToolUse', 3, { toolName: 'Agent', data: { tool_use_id: 'tu-a' } }),
     ],
-    expect: { inbox: 'active', tool: null, check: (e) => assert.deepEqual(readMemory(e.session).delegacoes, {}) },
+    expect: { inbox: 'active', tool: null, check: (e) => assert.deepEqual(readMemory(e.session).delegations, {}) },
   },
   {
     name: 'a working subagent with the main agent idle is delegating',
@@ -215,7 +215,7 @@ const TABLE: Row[] = [
       inbox: 'background',
       needsYou: false,
       check: (e) => {
-        assert.deepEqual(readMemory(e.session).background, { 'bg-1': { desde: at(1), comando: 'npm run dev' } });
+        assert.deepEqual(readMemory(e.session).background, { 'bg-1': { since: at(1), command: 'npm run dev' } });
         assert.equal(readInbox(e.session, e.agents).backgroundProcesses, 1);
       },
     },
@@ -252,7 +252,7 @@ const TABLE: Row[] = [
     name: 'Stop ends foreground delegations',
     before: state(),
     events: [ev('PreToolUse', 1, { toolName: 'Agent', data: { tool_use_id: 'tu-a' } }), ev('Stop', 2)],
-    expect: { inbox: 'waiting', check: (e) => assert.deepEqual(readMemory(e.session).delegacoes, {}) },
+    expect: { inbox: 'waiting', check: (e) => assert.deepEqual(readMemory(e.session).delegations, {}) },
   },
   // SubagentStop
   {
@@ -306,13 +306,13 @@ const TABLE: Row[] = [
     name: 'APIError from the transcript goes to error',
     before: state(),
     events: [ev('APIError', 1, { id: 'jsonl:u1' })],
-    expect: { displayed: 'error', main: 'error', check: (e) => assert.equal(readMemory(e.session).erroEm, at(1)) },
+    expect: { displayed: 'error', main: 'error', check: (e) => assert.equal(readMemory(e.session).errorAt, at(1)) },
   },
   {
     name: 'error healing: progress after the error goes back to active',
     before: state(),
     events: [ev('APIError', 1, { id: 'jsonl:u1' }), ev('AssistantMessage', 2, { id: 'jsonl:u2' })],
-    expect: { displayed: 'active', persisted: 'active', main: 'working', check: (e) => assert.equal(readMemory(e.session).erroEm, null) },
+    expect: { displayed: 'active', persisted: 'active', main: 'working', check: (e) => assert.equal(readMemory(e.session).errorAt, null) },
   },
   {
     name: 'error healing: a new prompt also heals',
@@ -368,7 +368,7 @@ const TABLE: Row[] = [
   {
     name: 'Abandoned ends as abandoned',
     before: state({}, [mainAgent({ currentTool: 'Bash' })]),
-    events: [ev('Abandoned', 200, { data: { sintetico: true } })],
+    events: [ev('Abandoned', 200, { data: { synthetic: true } })],
     expect: {
       displayed: 'abandoned',
       main: 'completed',
@@ -433,7 +433,7 @@ describe('transition properties', () => {
     const post = ev('PostToolUse', 1, { toolName: 'Read' });
     const after = [pre, post].reduce(transition, state());
     assert.equal(main(after).currentTool, null);
-    assert.deepEqual(readMemory(after.session).idsNoUltimoInstante, [pre.id, post.id]);
+    assert.deepEqual(readMemory(after.session).idsAtLastInstant, [pre.id, post.id]);
   });
 
   test('the wait keeps since when, and repeating the reason does not restart the count', () => {
@@ -450,8 +450,8 @@ describe('transition properties', () => {
   });
 
   test("keeps the metadata that is not the machine's", () => {
-    const after = transition(state({ metadata: { importacao: { bytes: 10 }, transcriptPath: '/x' } }), ev('Stop', 1));
-    assert.deepEqual(after.session.metadata.importacao, { bytes: 10 });
+    const after = transition(state({ metadata: { import: { bytes: 10 }, transcriptPath: '/x' } }), ev('Stop', 1));
+    assert.deepEqual(after.session.metadata.import, { bytes: 10 });
     assert.equal(after.session.metadata.transcriptPath, '/x');
   });
 });

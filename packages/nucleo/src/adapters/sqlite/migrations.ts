@@ -10,6 +10,7 @@ import {
   rekeyDecisions,
 } from '../../decisions/migration.ts';
 import { deleteLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
+import { migrateJsonToEnglish } from './english-json.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
 export interface Migration {
@@ -252,6 +253,14 @@ export const MIGRATIONS: readonly Migration[] = [
       rekeyDecisions(db);
       deleteLegacyGithubCacheKeys(db);
     },
+  },
+  {
+    version: 11,
+    description: 'English keys and values in the stored JSON (#173)',
+    // `metadata` and `data`: the state machine's memory, the import cursor, the plan's extraction and
+    // history, the panel's record on a decision, the synthetic events and the simulator's keys.
+    sql: '',
+    up: migrateJsonToEnglish,
   },
 ];
 
