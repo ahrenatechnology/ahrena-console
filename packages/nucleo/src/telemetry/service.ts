@@ -12,6 +12,7 @@ import {
   type Alert,
   type MachineState,
   type MachineSummary,
+  type ReconnectStatus,
   type TelemetryReading,
   type TelemetrySeries,
   type UnreachableReason,
@@ -36,6 +37,8 @@ export interface MachineEntry {
   status?(): MachineStatus;
   /** The local port the tunnel forwards, for a remote machine. */
   port?: number;
+  /** A remote machine's reconnect (#244); without it, `null`. */
+  reconnect?(): ReconnectStatus | null;
 }
 
 /** This machine: the núcleo answering is its own, so it is always connected. */
@@ -54,7 +57,8 @@ export interface TelemetryResponse {
 export interface TelemetryServiceOptions {
   store: TelemetryStore;
   tracker: AlertTracker;
-  machines: readonly MachineEntry[];
+  /** A list, or a function for the list that follows machines.json live (#244). */
+  machines: readonly MachineEntry[] | (() => readonly MachineEntry[]);
   now?: () => number;
 }
 
@@ -65,8 +69,13 @@ export class TelemetryService {
     this.o = options;
   }
 
+  private list(): readonly MachineEntry[] {
+    const m = this.o.machines;
+    return typeof m === 'function' ? m() : m;
+  }
+
   has(machineId: string): boolean {
-    return this.o.machines.some((m) => m.id === machineId);
+    return this.list().some((m) => m.id === machineId);
   }
 
   private async summary(m: MachineEntry, latest?: TelemetryReading | null): Promise<MachineSummary> {
@@ -81,17 +90,18 @@ export class TelemetryService {
       port: m.port ?? null,
       lastReadAt: r?.takenAt ?? null,
       alerts: this.o.tracker.active(m.id).length,
+      reconnect: m.reconnect?.() ?? null,
     };
   }
 
   /** This machine first, then the remote ones in configuration order. */
   async machines(): Promise<MachineSummary[]> {
-    return Promise.all(this.o.machines.map((m) => this.summary(m)));
+    return Promise.all(this.list().map((m) => this.summary(m)));
   }
 
   /** `null` when the machine does not exist. */
   async telemetry(machineId: string, hours: WindowHours): Promise<TelemetryResponse | null> {
-    const m = this.o.machines.find((x) => x.id === machineId);
+    const m = this.list().find((x) => x.id === machineId);
     if (!m) return null;
     const now = (this.o.now ?? Date.now)();
     const from = now - hours * 3_600_000;

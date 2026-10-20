@@ -5,7 +5,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { defaultMachinesFile, loadMachinesConfig, parseMachinesConfig } from '../../src/telemetry/machines-config.ts';
+import {
+  DEFAULT_RECONNECT_TIMEOUT_SECONDS,
+  defaultMachinesFile,
+  loadMachinesConfig,
+  parseMachinesConfig,
+  parseReconnect,
+  type RemoteMachineConfig,
+} from '../../src/telemetry/machines-config.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-machines-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -71,5 +78,79 @@ describe('#176/AC-1 the remote machines come from machines.json', () => {
 
   test('#176/AC-1 the default path is ~/.ahrena-console/machines.json, like contas.json', () => {
     assert.match(defaultMachinesFile(), /[\\/]\.ahrena-console[\\/]machines\.json$/);
+  });
+});
+
+describe('#244 the optional reconnect command of a remote machine', () => {
+  const withReconnect = (reconnect: unknown) => JSON.stringify({ machines: [{ id: 'ws-exemplo', label: 'Workstation', port: 14720, reconnect }] });
+
+  test('#244 a valid reconnect keeps the command list as written and the timeout given', () => {
+    const logs: string[] = [];
+    assert.deepEqual(parseMachinesConfig(withReconnect({ command: ['/opt/example/connect.sh', 'tunnel', 'restart'], timeoutSeconds: 60 }), (m) => logs.push(m)), [
+      { id: 'ws-exemplo', label: 'Workstation', port: 14720, reconnect: { command: ['/opt/example/connect.sh', 'tunnel', 'restart'], timeoutSeconds: 60 } },
+    ]);
+    assert.deepEqual(logs, []);
+  });
+
+  test('#244 without timeoutSeconds the timeout is 180 s', () => {
+    assert.deepEqual(parseMachinesConfig(withReconnect({ command: ['example-connect'] })), [
+      { id: 'ws-exemplo', label: 'Workstation', port: 14720, reconnect: { command: ['example-connect'], timeoutSeconds: DEFAULT_RECONNECT_TIMEOUT_SECONDS } },
+    ]);
+    assert.equal(DEFAULT_RECONNECT_TIMEOUT_SECONDS, 180);
+  });
+
+  test('#244 the timeout bounds 10 and 900 are accepted', () => {
+    for (const t of [10, 900]) {
+      const [m] = parseMachinesConfig(withReconnect({ command: ['x'], timeoutSeconds: t })) as RemoteMachineConfig[];
+      assert.equal(m!.reconnect?.timeoutSeconds, t);
+    }
+  });
+
+  test('#244 an invalid reconnect drops only that field, logs why, and keeps the machine and the rest of the file', () => {
+    const cases: [string, unknown][] = [
+      ['not an object', 'example-connect tunnel'],
+      ['a list at the top', ['example-connect']],
+      ['no command', { timeoutSeconds: 60 }],
+      ['command as text', { command: 'example-connect tunnel restart' }],
+      ['empty command', { command: [] }],
+      ['an item that is not text', { command: ['example-connect', 3] }],
+      ['an empty item', { command: ['example-connect', ''] }],
+      ['an empty executable', { command: [''] }],
+      ['an item with NUL', { command: ['example-connect', 'a\u0000b'] }],
+      ['an item too long', { command: ['example-connect', 'a'.repeat(1025)] }],
+      ['too many items', { command: Array.from({ length: 33 }, () => 'a') }],
+      ['timeout below 10', { command: ['x'], timeoutSeconds: 9 }],
+      ['timeout above 900', { command: ['x'], timeoutSeconds: 901 }],
+      ['timeout not an integer', { command: ['x'], timeoutSeconds: 30.5 }],
+      ['timeout as text', { command: ['x'], timeoutSeconds: '60' }],
+      ['null', null],
+    ];
+    for (const [name, reconnect] of cases) {
+      const logs: string[] = [];
+      const text = JSON.stringify({ machines: [{ id: 'ws-exemplo', label: 'Workstation', port: 14720, reconnect }, { id: 'ws-dois', label: 'Outra', port: 14721 }] });
+      assert.deepEqual(
+        parseMachinesConfig(text, (m) => logs.push(m)),
+        [
+          { id: 'ws-exemplo', label: 'Workstation', port: 14720 },
+          { id: 'ws-dois', label: 'Outra', port: 14721 },
+        ],
+        name,
+      );
+      assert.equal(logs.length, 1, name);
+      assert.match(logs[0]!, /^machines\[0\]\.reconnect(\.[a-zA-Z]+)?: .+; ignored$/, name);
+    }
+  });
+
+  test('#244 loadMachinesConfig logs an invalid reconnect with the file name and still returns ok', async () => {
+    const p = file('bad-reconnect.json', withReconnect({ command: [] }));
+    const logs: string[] = [];
+    assert.deepEqual(await loadMachinesConfig({ file: p, log: (m) => logs.push(m) }), { status: 'ok', machines: [{ id: 'ws-exemplo', label: 'Workstation', port: 14720 }] });
+    assert.equal(logs.length, 1);
+    assert.match(logs[0]!, /^machines: .*bad-reconnect\.json: machines\[0\]\.reconnect.*; ignored$/);
+  });
+
+  test('#244 parseReconnect says why a reconnect is invalid', () => {
+    assert.deepEqual(parseReconnect({ command: ['x', 'y'] }), { command: ['x', 'y'], timeoutSeconds: 180 });
+    assert.equal(typeof parseReconnect({ command: [] }), 'string');
   });
 });

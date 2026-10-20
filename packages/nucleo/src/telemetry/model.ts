@@ -266,6 +266,27 @@ export const MAX_SERIES_POINTS = 360;
 // ---------------------------------------------------------------------------------------------
 // Machines
 
+/** Where a remote machine's reconnect is (#244, decision 0012 section 4). */
+export const RECONNECT_STATES = ['idle', 'running', 'succeeded', 'failed', 'timed-out', 'canceled'] as const;
+export type ReconnectState = (typeof RECONNECT_STATES)[number];
+/** `ui` = the same-origin /ui; `local` = a no-Origin loopback client (the tray). */
+export type ReconnectStarter = 'ui' | 'local';
+
+/** A remote machine's reconnect, as `GET /api/machines` serves it. Never any command output. */
+export interface ReconnectStatus {
+  configured: boolean;
+  /** The list from machines.json, for the screen to show what runs; `null` without a command. */
+  command: string[] | null;
+  timeoutSeconds: number | null;
+  state: ReconnectState;
+  startedAt: string | null;
+  endedAt: string | null;
+  exitCode: number | null;
+  startedBy: ReconnectStarter | null;
+  /** Where the output went (`reconnect.log` in the installation's data folder). */
+  logFile: string | null;
+}
+
 export interface MachineSummary {
   id: string;
   label: string;
@@ -279,6 +300,8 @@ export interface MachineSummary {
   /** The `takenAt` of the newest stored reading: its age, also while the machine is down. */
   lastReadAt: string | null;
   alerts: number;
+  /** The reconnect of a remote machine (#244); `null` for this machine and the demo's simulated one. */
+  reconnect: ReconnectStatus | null;
 }
 
 export function isWindowHours(n: number): n is WindowHours {
