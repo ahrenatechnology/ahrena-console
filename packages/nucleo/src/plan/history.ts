@@ -56,12 +56,12 @@ export function splitPlan(previous: readonly PlanStep[], next: readonly PlanStep
 
 /** History state, kept in `metadata.historico` of the stored plan. The fields are persisted: they keep their names. */
 export interface PlanHistoryState {
-  /** Número do último plano aberto na sessão (0: nenhum ainda). */
+  /** Number of the last plan opened in the session (0: none yet). */
   seq: number;
   aberto: boolean;
-  /** Início do plano aberto. */
+  /** Start of the open plan. */
   inicio: string | null;
-  /** Passos que o plano aberto herdou feitos do anterior (`<id>\0<texto>`): não são dele. */
+  /** Steps the open plan inherited, already done, from the previous one (`<id>\0<text>`): they are not its own. */
   herdados: string[];
 }
 

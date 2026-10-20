@@ -104,11 +104,11 @@ function taskIdOf(response: Json | null, text: string | null): string | null {
 interface ExtractionState {
   /** `tool_use_id` of the calls already applied (the last `MAX_APPLIED`). */
   aplicadas: string[];
-  /** A última chamada aplicada e o plano antes dela, para desfazer se o resultado vier com erro. */
+  /** The last applied call and the plan before it, to undo if the result comes with an error. */
   ultima: { toolUseId: string; antes: PlanStep[]; source: PlanSource } | null;
-  /** Tarefa criada com id provisório, à espera do id do resultado. */
+  /** Task created with a provisional id, waiting for the result's id. */
   provisorias: Record<string, string>;
-  /** Próximo id de tarefa, se o resultado do TaskCreate não chegar. */
+  /** Next task id, if the TaskCreate result does not arrive. */
   proximaTarefa: number;
 }
 
