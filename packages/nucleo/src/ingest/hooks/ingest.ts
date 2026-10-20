@@ -9,7 +9,7 @@
 import { applySessionAccount, type Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
-import { atualizarContexto } from '../../contexto/gravacao.ts';
+import { updateContextMeters } from '../../context/recording.ts';
 import { Perfis } from '../../perfis/perfis.ts';
 import { resolverConta, type PerfisDoHook } from './conta.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
@@ -79,7 +79,7 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   // Plano da sessão (item 1.9): TodoWrite, TaskCreate, TaskUpdate, update_plan e /clear.
   if (appended) await atualizarPlano(storage, event.sessionId, [event]);
   // Medidor de contexto (item 1.7): o hook PreCompact conta um estouro.
-  if (appended) await atualizarContexto(storage, event.sessionId, [event]);
+  if (appended) await updateContextMeters(storage, event.sessionId, [event]);
   return { ...normalized, appended, sessionCreated };
 }
 

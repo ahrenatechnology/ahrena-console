@@ -1,11 +1,11 @@
-// Medidor de contexto (item 1.7): quanto da janela a sessão, ou um subagente, ocupa agora, e
-// quantas vezes a janela estourou (cada compactação automática; a manual fica à parte). Como no
-// Podium, a partir de 2 estouros a sessão ganha um alerta.
+// Context meter (item 1.7): how much of the window the session, or a subagent, takes up now, and
+// how many times the window overflowed (each automatic compaction; the manual one stays apart). As in
+// Podium, from 2 overflows on the session gets an alert.
 
 import { InvalidModelError } from '../model.ts';
 
-/** A partir de quantos estouros a sessão (ou o agente) ganha o alerta. */
-export const ALERTA_A_PARTIR_DE = 2;
+/** From how many overflows the session (or the agent) gets the alert. */
+export const ALERT_THRESHOLD = 2;
 
 export const COMPACTION_TRIGGERS = ['auto', 'manual'] as const;
 export type CompactionTrigger = (typeof COMPACTION_TRIGGERS)[number];
@@ -51,22 +51,22 @@ export interface ContextMeter {
   updatedAt: string;
 }
 
-/** 0 a 100, arredondado. */
-export function pctDoContexto(m: Pick<ContextMeter, 'usedTokens' | 'windowTokens'>): number {
+/** 0 to 100, rounded. */
+export function contextPct(m: Pick<ContextMeter, 'usedTokens' | 'windowTokens'>): number {
   if (m.windowTokens <= 0) return 0;
   return Math.min(100, Math.round((Math.max(0, m.usedTokens) / m.windowTokens) * 100));
 }
 
-export function alertaDeContexto(m: Pick<ContextMeter, 'compactions'>): boolean {
-  return m.compactions >= ALERTA_A_PARTIR_DE;
+export function contextAlert(m: Pick<ContextMeter, 'compactions'>): boolean {
+  return m.compactions >= ALERT_THRESHOLD;
 }
 
 /** "62.6k / 200k (31%)". */
-export function rotuloDoContexto(m: Pick<ContextMeter, 'usedTokens' | 'windowTokens'>): string {
-  return `${tokensCurtos(m.usedTokens)} / ${tokensCurtos(m.windowTokens)} (${pctDoContexto(m)}%)`;
+export function contextLabel(m: Pick<ContextMeter, 'usedTokens' | 'windowTokens'>): string {
+  return `${shortTokens(m.usedTokens)} / ${shortTokens(m.windowTokens)} (${contextPct(m)}%)`;
 }
 
-function tokensCurtos(n: number): string {
+function shortTokens(n: number): string {
   if (n >= 1_000_000) return `${trim(n / 1_000_000)}M`;
   if (n >= 1_000) return `${trim(n / 1_000)}k`;
   return String(n);

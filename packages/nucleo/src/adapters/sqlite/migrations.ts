@@ -2,7 +2,7 @@
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { CONTEXTO_MIGRATION_DESCRIPTION, CONTEXTO_MIGRATION_SQL } from '../../contexto/migracao.ts';
+import { CONTEXT_MIGRATION_DESCRIPTION, CONTEXT_MIGRATION_SQL } from '../../context/migration.ts';
 import { DECISOES_MIGRATION_DESCRIPTION, DECISOES_MIGRATION_SQL } from '../../decisoes/migracao.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
@@ -178,8 +178,8 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
-  // O esquema do medidor de contexto fica na pasta dele (src/contexto/migracao.ts).
-  { version: 7, description: CONTEXTO_MIGRATION_DESCRIPTION, sql: CONTEXTO_MIGRATION_SQL },
+  // The context meter schema lives in its own folder (src/context/migration.ts).
+  { version: 7, description: CONTEXT_MIGRATION_DESCRIPTION, sql: CONTEXT_MIGRATION_SQL },
   {
     version: 8,
     description: 'ordem de gravação dos eventos e índices do feed (#94)',

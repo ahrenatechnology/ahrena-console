@@ -18,7 +18,7 @@ import type {
   TokenUsage,
 } from './model.ts';
 import type { PlanRecord, SessionPlan } from './plano/modelo.ts';
-import type { ContextMeter } from './contexto/modelo.ts';
+import type { ContextMeter } from './context/model.ts';
 
 export interface Page<T> {
   items: T[];

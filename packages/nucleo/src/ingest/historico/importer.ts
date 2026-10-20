@@ -28,7 +28,7 @@ import { parseLine, truncate, TASK_MAX, type EventData } from './transcript.ts';
 import { aggregateUsage, bucketKey, type UsageSample } from './usage.ts';
 import { aplicarPiso } from '../../custo/piso.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
-import { atualizarContexto } from '../../contexto/gravacao.ts';
+import { updateContextMeters } from '../../context/recording.ts';
 
 export interface ImportOptions {
   storage: StoragePort;
@@ -302,7 +302,7 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
   // Só os eventos novos: o que já estava gravado já passou pelo plano (relidos não reaplicam).
   await atualizarPlano(storage, sessionId, run.added);
   // Medidor de contexto (item 1.7): uso da última mensagem e marcas de compactação.
-  await atualizarContexto(storage, sessionId, run.added);
+  await updateContextMeters(storage, sessionId, run.added);
   if (onSession && run.added.length > 0) await onSession({ sessionId, transcriptPath: work.main?.path ?? null, added: run.added });
   const tokens = (id: string) => tokensByAgent.get(id) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 };
 
