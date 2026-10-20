@@ -109,7 +109,7 @@ describe('#176/AC-2 how the remote núcleo is read', () => {
 });
 
 describe('#176/AC-3 the remote state', () => {
-  test('#176/AC-3 connected: the remote núcleo answers with the same telemetry version', async () => {
+  test('#176/AC-3 #176/AC-7 connected: the remote núcleo answers with the same telemetry version', async () => {
     const f = await fake({ current: remoteReading() });
     const { remote, service } = setup(f.port);
     assert.deepEqual(remote.status(), { state: 'unreachable', reason: null, version: null }, 'before the first read');
@@ -117,13 +117,13 @@ describe('#176/AC-3 the remote state', () => {
     assert.equal((await service.machines())[0]!.state, 'connected');
   });
 
-  test('#176/AC-3 port closed: the local port refuses the connection (the tunnel is down)', async () => {
+  test('#176/AC-3 #176/AC-7 port closed: the local port refuses the connection (the tunnel is down)', async () => {
     const { remote, logs } = setup(await closedPort());
     assert.deepEqual(await remote.pollOnce(), { state: 'unreachable', reason: 'port-closed', version: null });
     assert.deepEqual(logs, ['telemetry (ws-exemplo): unreachable (port-closed)']);
   });
 
-  test('#176/AC-3 open port without response: accepts and does not answer HTTP within the deadline', async () => {
+  test('#176/AC-3 #176/AC-7 open port without response: accepts and does not answer HTTP within the deadline', async () => {
     const mute = await startMuteServer('never');
     cleanup.push(() => mute.close());
     const { remote } = setup(mute.port, { get: loopbackGet({ timeoutMs: MUTE_TIMEOUT_MS }) });

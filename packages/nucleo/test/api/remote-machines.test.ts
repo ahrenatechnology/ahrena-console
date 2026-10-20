@@ -159,4 +159,28 @@ describe('#176/AC-6 remote attention items are untrusted', () => {
     const body = attentionBody([remoteItem('ok'), remoteItem('array', { motivo: ['erro'] }), remoteItem('infinito', { minutos: Infinity })]);
     assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.sessao), ['ok']);
   });
+
+  test('#176/AC-6 an account color that is not #rrggbb is not passed through', () => {
+    const machine = { id: 'ws-exemplo', label: 'Workstation' };
+    const body = attentionBody([remoteItem('hex'), remoteItem('url', { conta: { rotulo: 'equipe', cor: 'url(//x.y/a)' } })]);
+    const [hex, url] = remoteAttentionItems(body, machine);
+    assert.equal(hex.conta?.cor, '#3366ff');
+    assert.match(url.conta?.cor ?? '', /^#[0-9a-f]{6}$/i);
+    assert.notEqual(url.conta?.cor, 'url(//x.y/a)');
+  });
+
+  test('#176/AC-6 an item whose desde is not a date or whose minutos is negative is left out', () => {
+    const machine = { id: 'ws-exemplo', label: 'Workstation' };
+    const body = attentionBody([remoteItem('ok'), remoteItem('sem-data', { desde: 'not a date' }), remoteItem('negativo', { minutos: -5 })]);
+    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.sessao), ['ok']);
+  });
+
+  test('#176/AC-6 a remote adds at most 10000 to ativas and to comErro', async () => {
+    const { frota } = await boot();
+    const local = await montarAtencao(frota, null, []);
+    const huge = { id: 'ws-exemplo', label: 'Workstation', attention: () => attentionBody([], { ativas: 1e15, comErro: 1e15 }) };
+    const r = await montarAtencao(frota, null, [huge]);
+    assert.equal(r.ativas, local.ativas + 10_000);
+    assert.equal(r.comErro, local.comErro + 10_000);
+  });
 });

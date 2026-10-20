@@ -19,6 +19,7 @@
 import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
 import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
 import type { MotivoDaAtencao, NivelDeAtencao } from './atencao.ts';
+import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
 /** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
@@ -77,6 +78,12 @@ export interface RemoteAttentionSource {
 const NIVEIS: readonly NivelDeAtencao[] = ['precisa', 'sua-vez'];
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
+/** An account color, as the local ones (src/api/contas.ts): `#rrggbb`. */
+const HEX = /^#[0-9a-f]{6}$/i;
+/** The neutral account color (the gray of `CORES_DAS_CONTAS`), for a remote color that is not hex. */
+const NEUTRAL_ACCOUNT_COLOR = paleta.gray['200'];
+/** The most a remote may add to `ativas` or `comErro`. */
+const MAX_REMOTE_COUNT = 10_000;
 
 /** The remote's items that have this route's shape, marked with the machine; at most 200. */
 export function remoteAttentionItems(body: unknown, machine: { id: string; label: string }): ItemDaAtencao[] {
@@ -88,8 +95,12 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     const nivel = i.nivel as NivelDeAtencao;
     const sessao = text(i.sessao, 128);
     const desde = text(i.desde, 40);
-    if (!sessao || !desde || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, motivo) || !NIVEIS.includes(nivel) || !Number.isFinite(i.minutos)) continue;
-    const conta = isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string' ? { rotulo: i.conta.rotulo.slice(0, 40), cor: i.conta.cor.slice(0, 16) } : null;
+    if (!sessao || !desde || !Number.isFinite(Date.parse(desde)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, motivo) || !NIVEIS.includes(nivel)) continue;
+    if (!Number.isFinite(i.minutos) || (i.minutos as number) < 0) continue;
+    const conta =
+      isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string'
+        ? { rotulo: i.conta.rotulo.slice(0, 40), cor: HEX.test(i.conta.cor) ? i.conta.cor : NEUTRAL_ACCOUNT_COLOR }
+        : null;
     out.push({
       sessao,
       titulo: text(i.titulo, 200) ?? '',
@@ -147,8 +158,8 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
     const body = r.attention();
     itens.push(...remoteAttentionItems(body, r));
     if (isObject(body)) {
-      if (Number.isInteger(body.ativas) && (body.ativas as number) >= 0) ativas += body.ativas as number;
-      if (Number.isInteger(body.comErro) && (body.comErro as number) >= 0) comErro += body.comErro as number;
+      if (Number.isInteger(body.ativas) && (body.ativas as number) >= 0) ativas += Math.min(body.ativas as number, MAX_REMOTE_COUNT);
+      if (Number.isInteger(body.comErro) && (body.comErro as number) >= 0) comErro += Math.min(body.comErro as number, MAX_REMOTE_COUNT);
     }
   }
   // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
