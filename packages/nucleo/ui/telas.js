@@ -43,6 +43,25 @@ export const TELAS = [
     icone: 'atividade',
     arquivo: '/ui/telas/feed.js', // #94
   },
+  {
+    id: 'analytics',
+    rota: '/ui/analytics',
+    item: { rotulo: 'Analytics', icone: 'analytics' },
+    titulo: 'Analytics',
+    sub: 'Uso, custo e produtividade das sessões',
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js', // #95 e #32
+  },
+  {
+    // A aba Custo (/ui/analytics/custo): a mesma tela, que lê a aba de `params.aba`.
+    id: 'analytics-aba',
+    rota: '/ui/analytics/:aba',
+    acende: 'analytics',
+    titulo: 'Analytics',
+    sub: null,
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js',
+  },
 ];
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
