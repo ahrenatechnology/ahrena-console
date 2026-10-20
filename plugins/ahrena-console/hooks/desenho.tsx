@@ -59,7 +59,7 @@ import { alturaDaGrade, BORDA_DO_CARD, LINHAS_DO_CARD, linhasDoTexto } from './a
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
-/** Todo card tem a mesma altura (P1): a borda e as 6 linhas de conteúdo. O que sobra fica vazio embaixo. */
+/** Todo card tem a mesma altura (P1): a borda e as linhas de conteúdo. O que sobra fica vazio embaixo. */
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
@@ -205,7 +205,8 @@ function subagentesSvg(itens: SubagenteDoPainel[]) {
       return r
     })
     .join('')
-  return svg(200, 5, `<clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g>`)
+  // Largura de 100%, esticada sem manter a proporção: a barra vai de borda a borda do card.
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 5" width="100%" height="5" preserveAspectRatio="none"><clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g></svg>`
 }
 
 function semConexaoSvg() {
@@ -346,7 +347,7 @@ function topo(c: Contexto, largura: number) {
   )
 }
 
-function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: RenderElement, conta?: ContaDoPainel | null) {
+function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: RenderElement | null, conta?: ContaDoPainel | null) {
   const { Box, Text } = c.el
   return (
     <Box key={`secao-${titulo}`} flexDirection="row" justifyContent="space-between" alignItems="center" width={largura}>
@@ -365,6 +366,18 @@ function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: Re
       {direita}
     </Box>
   )
+}
+
+/**
+ * O "auto · 5 s" ao lado de "ESTA SESSÃO" e da conta. O nome da conta nunca corta: no estreito, o
+ * chip encurta para "5 s" e, se ainda não couber, sai.
+ */
+function chipDaSecao(c: Contexto, largura: number, estreito: boolean, conta: ContaDoPainel | null | undefined): RenderElement | null {
+  if (!estreito) return chip(c, 'chip', 'auto · 5 s')
+  // O título, o espaço e "◆ rótulo"; o chip tem a borda e o respiro dos dois lados (4).
+  const daConta = conta ? 1 + 2 + [...rotuloDaConta(conta.rotulo)].length : 0
+  const usadas = [...'ESTA SESSÃO'].length + daConta
+  return usadas + [...'5 s'].length + 4 <= largura ? chip(c, 'chip', '5 s') : null
 }
 
 function chip(c: Contexto, key: string, texto: string) {
@@ -779,7 +792,7 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
   // O que vem depois do atual: o próximo e quantos ainda faltam depois dele.
   const depois = p.atual ? p.proximo : null
   corpo.push(
-    <Box flexDirection="row" gap={2} alignItems="center" flexGrow={1}>
+    <Box flexDirection="row" gap={2} alignItems="center">
       <Svg source={anelSvg(pct)} alt={`plano ${pct}% feito, ${p.feitos} de ${p.total}`} width={50} height={50} />
       <Box flexDirection="column" flexShrink={1} minWidth={0}>
         <Text mono size="footnote" color={VERDE} wrap="truncate-end">
@@ -814,15 +827,25 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
   return cartao(c, 'card-plano', corpo)
 }
 
+/** Colunas do texto de uma linha de lista no card: a largura útil menos a coluna de tempo e o espaço. */
+const TEXTO_DA_LINHA = CARD_W - 4 - TEMPO_W - 1
+/** Na linha do subagente, quantos caracteres da descrição ficam à vista antes de o tipo encurtar. */
+const DESCRICAO_MIN = 8
+/** O tipo nunca encurta abaixo disso ("gener…"). */
+const TIPO_MIN = 6
+
 function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
   const { Text } = c.el
   const marca =
     s.status === 'completed' ? { g: '✓', cor: VERDE } : s.status === 'error' ? { g: '✕', cor: VERMELHO_TEXTO } : { g: '●', cor: LARANJA }
   const tempo = s.ate ? duracao(Date.parse(s.ate) - Date.parse(s.desde)) : desde(s.desde, c.agora)
+  // O que distingue um subagente é a descrição: no card, se ela não couber com pelo menos
+  // DESCRICAO_MIN caracteres, é o tipo que encurta ("general…").
+  const nome = inteiro || !s.tarefa ? s.nome : corta(s.nome, Math.max(TIPO_MIN, TEXTO_DA_LINHA - 2 - 3 - Math.min([...s.tarefa].length, DESCRICAO_MIN)))
   return linhaDeLista(
     c,
     `sub-${s.id}`,
-    [<Text color={marca.cor}>{marca.g} </Text>, <Text weight="semibold">{s.nome}</Text>, s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null],
+    [<Text color={marca.cor}>{marca.g} </Text>, <Text weight="bold">{nome}</Text>, s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null],
     tempo,
     inteiro,
   )
@@ -897,7 +920,8 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const todos = subagentesEmOrdem(s)
   const fora = todos.slice(LINHAS_DA_LISTA)
   corpo.push(
-    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={200} height={4} />,
+    // Sem `width`, a barra ocupa a largura do card, de borda a borda (P1).
+    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} />,
     ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
     fora.length > 0 && abre(c, 'mais-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true),
   )
@@ -1915,7 +1939,7 @@ export function desenhar(c: Contexto): RenderElement {
       na('filhas') ? cardFilhas(c, p.filhas) : null,
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
-      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chip(c, 'chip', 'auto · 5 s'), s?.conta),
+      rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chipDaSecao(c, g.largura, estreito, s?.conta), s?.conta),
       faixaPergunta(c, g.largura),
       faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,

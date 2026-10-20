@@ -4,8 +4,11 @@
 
 /** Borda de cima e de baixo de um card. */
 export const BORDA_DO_CARD = 2
-/** Linhas internas de todo card (o `.pc` do P1): 6 de conteúdo; a altura é fixa e igual em todos. */
-export const LINHAS_DO_CARD = 6
+/**
+ * Linhas internas de todo card (o `.pc` do P1, 10,2em): o cabeçalho e mais 5. A borda do desktop é
+ * um traço fino, então o card inteiro fica com a altura do P1; a altura é fixa e igual em todos.
+ */
+export const LINHAS_DO_CARD = 5
 
 /** Linhas que a grade ocupa: por linha da grade, a borda mais o card mais alto; e o espaço entre elas. */
 export function alturaDaGrade(linhas: readonly number[], porLinha: number): number {

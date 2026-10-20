@@ -234,6 +234,27 @@ test('0.0.14: nada cortado nem em markdown cru; o e-mail da org nunca aparece', 
   }
 })
 
+test('0.0.15: o nome da conta nunca corta ao lado de "ESTA SESSÃO"; no estreito o chip encurta para "5 s" ou sai', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const comConta = (rotulo: string): Painel => ({ ...p1, sessao: { ...p1.sessao!, conta: { id: 'c', rotulo, cor: '#1baf7a', fonte: 'config' } } })
+  const casos: [string, string | null][] = [['conta pessoal', '5 s'], ['cliente sintético longo!', null]]
+  for (const [rotulo, chip] of casos) {
+    f.estado.painel = comConta(rotulo)
+    await f.relogio.advance(15_000)
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+    const secao = await ui.find({ key: 'secao-ESTA SESSÃO' })
+    expect(secao?.text).toMatch(new RegExp(`◆ ${rotulo}`))
+    if (chip) expect(secao?.text).toMatch(/5 s$/)
+    else expect(secao?.text).not.toMatch(/5 s/)
+    await ui.unmount()
+  }
+  // No largo, o chip inteiro.
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  expect((await ui.find({ key: 'secao-ESTA SESSÃO' }))?.text).toMatch(/auto · 5 s/)
+  await ui.unmount()
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
@@ -308,7 +329,7 @@ test('P1: o card Plano tem o anel com o %, "✓ N feitas", o passo atual e "○ 
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     const card = await ui.find({ key: 'card-plano' })
-    expect(card?.props.height).toBe(8)
+    expect(card?.props.height).toBe(7)
     expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
     expect(card?.text).toMatch(/✓ 3 feitas/)
     expect(card?.text).toMatch(/● Rodar a bateria/)
@@ -503,7 +524,7 @@ test('altura: todo card tem a mesma altura (P1); sem altura, os de menor priorid
   for (const base of [PANE, LARGO]) {
     // Pouca altura: a sessão e o Contexto ficam, inteiros; o resto, no card de resumos.
     let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, base === PANE ? 45 : 30) })
-    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(8)
+    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(7)
     // No card de altura fixa, o título e a atividade cortam com reticências, como no P1.
     expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
     expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
@@ -516,7 +537,7 @@ test('altura: todo card tem a mesma altura (P1); sem altura, os de menor priorid
     ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
     for (const key of CARDS) {
       const card = await ui.find({ key })
-      expect([card?.props.width, card?.props.height]).toEqual([34, 8])
+      expect([card?.props.width, card?.props.height]).toEqual([34, 7])
     }
     expect(await ui.find({ key: 'resumos' })).toBeUndefined()
     await ui.unmount()
@@ -604,7 +625,9 @@ test('#131: nas listas dos cards, cada item é uma linha com reticências e o te
       const itens = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith(prefixo))
       expect(itens.length).toBeGreaterThan(0)
     }
-    const textos = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
+    // O tipo longo encurta para a descrição aparecer: "revisor-… · uma tarefa…".
+    const textos = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-\S*… · uma tarefa/.test(t.text ?? ''))
+    expect((await ui.find({ type: 'Text', text: /revisor-sintetico-com-nome-longo-0/ }))).toBeUndefined()
     expect(textos.some((t) => t.props.wrap === 'truncate-end')).toBe(true)
     expect(textos.some((t) => t.props.wrap === 'wrap')).toBe(false)
     // A coluna de tempo tem largura fixa e não encolhe.
@@ -913,7 +936,7 @@ test('"Compactar agora" não quebra a grade 2×2: toma o lugar do tile Backgroun
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-compactar']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
     const card = await ui.find({ key: 'card-contexto' })
-    expect(card?.props.height).toBe(8)
+    expect(card?.props.height).toBe(7)
     // O cabeçalho continua o do P1.
     expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
     await ui.unmount()
@@ -1067,7 +1090,7 @@ test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, mesmo c
   await abrir($, on, { cenario: 'p1' })
   for (const [base, linhas] of [[PANE, 45], [LARGO, 30]] as const) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(8)
+    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(7)
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
     await ui.unmount()
