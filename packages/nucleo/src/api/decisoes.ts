@@ -1,22 +1,22 @@
 // As decisões da sessão no painel (issue #102, wireframes P9 e P10): a contagem da linha
 // "N decisões vigentes", a lista por escopo, o Confirmar e o Descartar de uma sugerida, e (#131)
 // o Ajustar (a versão certa, escrita pela pessoa) e o Desfazer de qualquer um dos três.
-// Lê e escreve só pela porta das decisões (src/decisoes); as regras de estado e da cadeia são de lá.
+// Reads and writes only through the decisions port (src/decisions); the state and chain rules live there.
 //
 // Conta (decisão 0006): uma decisão de outra sessão só entra quando a conta dela é a desta,
 // ou quando uma das duas não tem conta conhecida. A família quase sempre é de uma conta só;
 // o branch não, e é ele que este filtro protege.
 
 import type { Page, StoragePort } from '../storage-port.ts';
-import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from '../decisoes/modelo.ts';
-import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
-import { confirmDecision, decisionId, decisionLabel, discardDecision, familyOf, registerDecision, reopenDecision, revertDecision } from '../decisoes/registro.ts';
-import { cleanText, shortChoice } from '../decisoes/texto.ts';
+import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from '../decisions/model.ts';
+import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
+import { confirmDecision, decisionId, decisionLabel, discardDecision, familyOf, registerDecision, reopenDecision, revertDecision } from '../decisions/registry.ts';
+import { cleanText, shortChoice } from '../decisions/text.ts';
 import type { DecisaoDoPainel, DecisoesDoPainel, EscopoDasDecisoes, ListaDeDecisoes } from './tipos.ts';
 
 export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'family', 'branch'];
 
-// The decision model (src/decisoes) and its database keep the Portuguese values; the API answers
+// The decision model (src/decisions) and its database keep the Portuguese values; the API answers
 // English ones since #173 phase 2b. These tables are the only crossing.
 
 /** The scope of a decision in the model → the API's (the item's `scope`, the list's, the counts). */

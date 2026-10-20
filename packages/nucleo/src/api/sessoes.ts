@@ -15,15 +15,15 @@
 //
 // Tudo pela porta e por caches em memória (decisão 0004). O custo de uma sessão é refeito só quando
 // o `updatedAt` dela muda, e só para as sessões da página, a não ser que a ordem seja por custo.
-// A conta sai com rótulo e cor, nunca o id (decisão 0006). O título passa por `tituloSeguro`, como
+// A conta sai com rótulo e cor, nunca o id (decisão 0006). O título passa por `safeTitle`, como
 // no MCP.
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
-import { tituloSeguro } from '../mcp/saida.ts';
+import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
+import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
@@ -193,7 +193,7 @@ export class ListaDeSessoes {
   private async custoDe(s: Session): Promise<number | null> {
     const c = this.custos.get(s.id);
     if (c && c.updatedAt === s.updatedAt) return c.usd;
-    const usd = await custoDaSessao(this.storage, s.id, await precosVigentes(this.storage));
+    const usd = await custoDaSessao(this.storage, s.id, await currentPrices(this.storage));
     this.custos.set(s.id, { updatedAt: s.updatedAt, usd });
     return usd;
   }
@@ -201,8 +201,8 @@ export class ListaDeSessoes {
 
 /** O custo da sessão em US$: `null` quando há tokens de modelo sem preço; 0 sem tokens. O Kanban (#31) também usa. */
 export async function custoDaSessao(storage: StoragePort, sessionId: string, precos: ModelPricing[]): Promise<number | null> {
-  const { total } = relatorioDeCusto(await parcelasDaSessao(storage, sessionId, precos));
-  return total.custoUsd ?? (total.totalDeTokens === 0 ? 0 : null);
+  const { total } = costReport(await sessionCostSlices(storage, sessionId, precos));
+  return total.costUsd ?? (total.totalTokens === 0 ? 0 : null);
 }
 
 /** Do início até agora (ativa) ou até o fim. O Kanban (#31) também usa. */
@@ -213,7 +213,7 @@ export function duracaoDe(s: Session, agora: number): number {
 
 /** O título: o do Desktop, o nome da sessão, a pasta ou o começo do id. O Kanban (#31) também usa. */
 export function tituloDe(s: Session, d: SessaoDoDesktop | null): string {
-  return tituloSeguro(d?.titulo) ?? tituloSeguro(s.name) ?? (s.cwd ? tituloSeguro(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
+  return safeTitle(d?.titulo) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
 /** `GET /api/sessions`: 400 com a explicação quando um parâmetro não vale. */

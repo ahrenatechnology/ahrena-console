@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { seedTelemetry, SimulatedCollector } from '../../src/simulador/telemetry.ts';
+import { seedTelemetry, SimulatedCollector } from '../../src/simulator/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { TELEMETRY_VERSION, type MachineState, type UnreachableReason } from '../../src/telemetry/model.ts';
@@ -327,6 +327,7 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     await m.ready;
     const state = texto(m.area.querySelector('.tm-state'));
     assert.match(state, /O túnel está de pé, mas o núcleo de lá não respondeu A porta 14720 aceita a conexão e ninguém responde em 3 s\. Suba o núcleo na Workstation:/);
+    assert.equal(texto(m.area.querySelector('.tm-state .tm-config')), 'node packages/nucleo/src/dono/cli.ts subir');
     assert.match(texto(m.area), /não sobe nem derruba o túnel/);
   });
 

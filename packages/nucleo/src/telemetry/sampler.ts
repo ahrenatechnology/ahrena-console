@@ -7,7 +7,7 @@
 //   one tries again.
 // - Injectable timers; in tests, `sampleOnce()` directly, without a clock.
 
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
 import { AlertTracker, computeAlerts, type AlertChange } from './alerts.ts';
 import { LOAD_HIGH_FOR_MS, RETENTION_MS, SAMPLE_INTERVAL_MS, type TelemetryReading } from './model.ts';
 import type { TelemetryCollector, TelemetryStore } from './ports.ts';
@@ -98,8 +98,8 @@ export class TelemetrySampler {
 }
 
 /** Publishes each alert transition on the change cursor, as `alert` with the key `<machine>:<alert>`. */
-export function publishAlertChanges(cursor: CursorDeMudancas): (change: AlertChange) => void {
+export function publishAlertChanges(cursor: ChangeCursor): (change: AlertChange) => void {
   return ({ machineId, alert }) => {
-    cursor.registrar({ type: 'alert', key: `${machineId}:${alert.id}`, sessionId: null, accountId: null });
+    cursor.record({ type: 'alert', key: `${machineId}:${alert.id}`, sessionId: null, accountId: null });
   };
 }

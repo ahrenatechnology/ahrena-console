@@ -47,7 +47,7 @@
 //   reais; segue o que o importer grava para qualquer ferramenta.
 //   Tokens de um agente: `Agent.metadata.tokens` (já deduplicado pelo importer), input + output + escrita
 //   de cache; sem ele, das mensagens do agente, uma por `usage.messageId` (o streaming repete a mesma
-//   mensagem; vale a de mais saída, como em ingest/historico/usage.ts). A leitura de cache fica de fora,
+//   mensagem; vale a de mais saída, como em ingest/history/usage.ts). A leitura de cache fica de fora,
 //   para não contar o mesmo contexto várias vezes. Ferramentas: as chamadas dele (o maior entre hooks
 //   `PreToolUse` e transcript `ToolUse`).
 // - Compactação de uma sessão: algum medidor de contexto com compactação (automática ou manual), ou o
@@ -64,8 +64,8 @@
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
-import { dedupeByMessage, type UsageSample } from '../ingest/historico/usage.ts';
-import type { MessageUsage } from '../ingest/historico/transcript.ts';
+import { dedupeByMessage, type UsageSample } from '../ingest/history/usage.ts';
+import type { MessageUsage } from '../ingest/history/transcript.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';

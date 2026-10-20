@@ -18,8 +18,8 @@ import {
   type EventosDoDetalhe,
 } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
-import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from '../../src/simulador/detalhe.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from '../../src/simulator/detail.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { httpOpener } from '../../ui/api.js';
 // @ts-expect-error: idem

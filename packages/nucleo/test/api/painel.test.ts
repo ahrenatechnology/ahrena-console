@@ -20,11 +20,11 @@ import {
   type Painel,
 } from '../../src/api/index.ts';
 import type { WorkSource } from '../../src/github/source.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../../src/simulador/painel.ts';
-import { parseLine } from '../../src/ingest/historico/transcript.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../../src/simulator/panel.ts';
+import { parseLine } from '../../src/ingest/history/transcript.ts';
 import { ingestHook } from '../../src/ingest/hooks/index.ts';
 import { T0, at, event, session } from '../fixtures.ts';
-import type { SessionPlan } from '../../src/plano/modelo.ts';
+import type { SessionPlan } from '../../src/plan/model.ts';
 
 const AGORA = Date.parse(T0);
 

@@ -3,12 +3,12 @@
 // suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
-import { diaDe } from '../custo/agregacao.ts';
+import { dayOf } from '../cost/aggregation.ts';
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { decisionLabel } from '../decisoes/registro.ts';
-import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
-import { ESTADOS_VIVOS, minutosDesde, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { decisionLabel } from '../decisions/registry.ts';
+import { needingYou } from '../mcp/tools/attention.ts';
+import { LIVE_STATES, minutesSince, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { repoKey, type ContextSession } from './model.ts';
@@ -41,9 +41,9 @@ export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now 
  * (permission, question, plan, decision, error, interrupted), except your turn in the back and
  * forth (`turn_ended`) and a new session at its first prompt (`first_prompt`).
  */
-export const DEPENDS_ON_YOU_REASONS = ['permission', 'question', 'plan', 'decision', 'error', 'interrupted'] as const satisfies readonly Motivo[];
+export const DEPENDS_ON_YOU_REASONS = ['permission', 'question', 'plan', 'decision', 'error', 'interrupted'] as const satisfies readonly McpAttentionReason[];
 export type DependsOnYouReason = (typeof DEPENDS_ON_YOU_REASONS)[number];
-const isDependsOnYouReason = (m: Motivo): m is DependsOnYouReason => (DEPENDS_ON_YOU_REASONS as readonly Motivo[]).includes(m);
+const isDependsOnYouReason = (m: McpAttentionReason): m is DependsOnYouReason => (DEPENDS_ON_YOU_REASONS as readonly McpAttentionReason[]).includes(m);
 
 export interface WaitingSessionItem {
   kind: 'session';
@@ -97,7 +97,7 @@ export interface SessionsOfContexts {
 }
 
 export interface DevConsoleSessionsOptions {
-  frota: LeituraDaFrota;
+  frota: FleetReader;
   decisions?: Pick<DecisionPort, 'listDecisions'> | null;
   locate?: LocateFolder;
 }
@@ -105,11 +105,11 @@ export interface DevConsoleSessionsOptions {
 const MAX_CHOICE = 200;
 
 export class DevConsoleSessions {
-  private readonly frota: LeituraDaFrota;
+  private readonly frota: FleetReader;
   private readonly decisions: Pick<DecisionPort, 'listDecisions'> | null;
   private readonly locate: LocateFolder;
 
-  constructor({ frota, decisions = null, locate = gitLocator({ now: frota.agora }) }: DevConsoleSessionsOptions) {
+  constructor({ frota, decisions = null, locate = gitLocator({ now: frota.now }) }: DevConsoleSessionsOptions) {
     this.frota = frota;
     this.decisions = decisions;
     this.locate = locate;
@@ -124,34 +124,34 @@ export class DevConsoleSessions {
 
   /** The live sessions of the requested repositories, and what of theirs depends on you. */
   async read(repos: ReadonlySet<string>): Promise<SessionsOfContexts> {
-    const now = this.frota.agora();
+    const now = this.frota.now();
     const byRepo = new Map<string, ContextSession[]>();
     const dependsOnYou = new Map<string, DependsOnYouItem[]>();
     const decisionsToday = new Map<string, DecisionTodayItem[]>();
-    const today = this.frota.hoje();
+    const today = this.frota.today();
     const push = <T>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
 
-    const waiting = new Map((await precisamDeVoce(this.frota, null)).map((i) => [i.sessionId, i]));
+    const waiting = new Map((await needingYou(this.frota, null)).map((i) => [i.sessionId, i]));
     // The live list is cached (`frota.cacheMs`) and the ended-today one is not: a session that completes
     // inside that window is in both, and is scanned once.
     const scanned = new Set<string>();
-    for (const s of await this.frota.vivas()) {
+    for (const s of await this.frota.live()) {
       const { repo, branch } = await this.where(s.session, s.desktop?.branch ?? null);
       if (!repo || !repos.has(repo)) continue;
       const w = waiting.get(s.session.id);
       const reason = w && isDependsOnYouReason(w.reason) ? w.reason : null;
-      const estado = s.inbox.estado;
+      const estado = s.inbox.state;
       push(byRepo, repo, {
         id: s.session.id,
-        title: s.titulo,
+        title: s.title,
         repo,
         branch,
-        working: ESTADOS_VIVOS.includes(estado) && estado !== 'waiting' && estado !== 'error',
+        working: LIVE_STATES.includes(estado) && estado !== 'waiting' && estado !== 'error',
         waitingOnYou: reason !== null,
       });
       const issue = branch ? issueDoBranch(branch) : null;
       if (w && reason) {
-        push(dependsOnYou, repo, { kind: 'session', sessionId: s.session.id, title: s.titulo, repo, issue, reason, reasonText: w.reasonText, since: w.waitingSince, minutes: w.waitingMinutes });
+        push(dependsOnYou, repo, { kind: 'session', sessionId: s.session.id, title: s.title, repo, issue, reason, reasonText: w.reasonText, since: w.waitingSince, minutes: w.waitingMinutes });
       }
       if (!this.decisions) continue;
       const page = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['a_confirmar'], limit: 50 });
@@ -164,11 +164,11 @@ export class DevConsoleSessions {
           choice: d.choice.slice(0, MAX_CHOICE),
           alternatives: d.alternatives.map((a) => a.slice(0, MAX_CHOICE)),
           sessionId: s.session.id,
-          title: s.titulo,
+          title: s.title,
           repo,
           issue,
           since: d.decidedAt,
-          minutes: minutosDesde(d.decidedAt, now),
+          minutes: minutesSince(d.decidedAt, now),
         });
       }
       scanned.add(s.session.id);
@@ -176,7 +176,7 @@ export class DevConsoleSessions {
     }
     // Sessions that ended today count too: a decision taken at 09:00 stays "taken today" after its session completes at 09:30.
     if (this.decisions) {
-      const ended = (await this.frota.encerradasHoje()).filter((e) => !scanned.has(e.id));
+      const ended = (await this.frota.endedToday()).filter((e) => !scanned.has(e.id));
       const found = await Promise.all(
         ended.map(async (e) => {
           const session = await this.frota.storage.getSession(e.id);
@@ -195,7 +195,7 @@ export class DevConsoleSessions {
   }
 
   /**
-   * The decisions in force a session took today (the machine's day, `frota.fusoHorario`). The port
+   * The decisions in force a session took today (the machine's day, `frota.timeZone`). The port
    * lists most recent first, so the first decision from another day ends the scan; the 50 cap is
    * deliberate (more than 50 decisions in force in one session in one day is not a footer).
    */
@@ -203,8 +203,8 @@ export class DevConsoleSessions {
     if (!this.decisions) return;
     const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
     for (const d of page.items) {
-      if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
-      push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutosDesde(d.decidedAt, now) });
+      if (dayOf(d.decidedAt, this.frota.timeZone) !== today) break;
+      push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutesSince(d.decidedAt, now) });
     }
   }
 }

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
 import { FeedDeEventos, statusDoEvento, textoDeUmaLinha, type EventoDoFeed, type RespostaDoFeed } from '../../src/api/eventos.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 

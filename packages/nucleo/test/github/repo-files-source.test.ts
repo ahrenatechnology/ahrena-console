@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { BLOB_BATCH, blobsQuery, RepoFilesSource, validPath } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
-import { criarGithubFalso, blobOid, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
+import { criarGithubFalso, blobOid, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
 
 const base: Omit<RepoFalso, 'dono' | 'nome'> = { privado: false, linguagem: 'TypeScript', permissao: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, ritmo: 1 };
 

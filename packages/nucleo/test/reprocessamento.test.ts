@@ -11,11 +11,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate } from '../src/adapters/sqlite/migrations.ts';
 import { capturarDoTranscript, limparDecisoes, reprocessarHistorico } from '../src/api/reprocessamento.ts';
-import { registerDecision } from '../src/decisoes/registro.ts';
-import { SqliteDecisionStore } from '../src/decisoes/sqlite.ts';
-import { importHistory } from '../src/ingest/historico/importer.ts';
+import { registerDecision } from '../src/decisions/registry.ts';
+import { SqliteDecisionStore } from '../src/decisions/sqlite.ts';
+import { importHistory } from '../src/ingest/history/importer.ts';
 import { ingestHook } from '../src/ingest/hooks/index.ts';
-import { ASK_ANSWERS, ASK_INPUT, at, jsonl, tx } from './decisoes/helpers.ts';
+import { ASK_ANSWERS, ASK_INPUT, at, jsonl, tx } from './decisions/helpers.ts';
 
 const S = '00000000-0000-4000-8000-0000000000c1';
 let store: SqliteStorage;

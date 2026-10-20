@@ -6,8 +6,8 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { LeituraDaFrota } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
+import { FleetReader } from '../../src/mcp/index.ts';
+import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
 
 // ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
@@ -152,7 +152,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
     await semearCenariosDoPainel(sqlite, 'p1');
     const contas = new Contas({ storage: sqlite, arquivo: null });
-    const frota = new LeituraDaFrota({ storage: sqlite, contas, cacheMs: 0, custoMs: 0 });
+    const frota = new FleetReader({ storage: sqlite, accounts: contas, cacheMs: 0, costMs: 0 });
     api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, frota });
   });
   after(async () => {

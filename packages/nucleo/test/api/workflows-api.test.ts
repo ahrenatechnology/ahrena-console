@@ -1,12 +1,12 @@
-// #96 e #97 pela API, contra a demonstração `--demo --cenario p4` (simulador/workflows.ts).
+// #96 e #97 pela API, contra a demonstração `--demo --cenario p4` (simulator/workflows.ts).
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
-import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
-import { SESSOES_DOS_WORKFLOWS, semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
+import { SESSOES_DOS_WORKFLOWS, semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);

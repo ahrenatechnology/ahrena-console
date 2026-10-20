@@ -11,19 +11,19 @@ import { Contas, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPai
 import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
 import { DecisoesDaUi } from '../../src/api/decisoes-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { GithubProject } from '../../src/github/project.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
-import { HistoricoDeSessoes } from '../../src/historico/leitura.ts';
-import { criarServidorMcp } from '../../src/mcp/index.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
-import { comMudancas, ContasDasSessoes, decisoesComMudancas } from '../../src/mudancas/fontes.ts';
-import { localDaDemo, semearDetalhe } from '../../src/simulador/detalhe.ts';
-import { semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulador/projeto.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
+import { SessionHistory } from '../../src/history/reading.ts';
+import { createMcpServer } from '../../src/mcp/index.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
+import { withChanges, SessionAccounts, decisionsWithChanges } from '../../src/changes/sources.ts';
+import { localDaDemo, semearDetalhe } from '../../src/simulator/detail.ts';
+import { semearHistoricoDoPainel } from '../../src/simulator/history-ended.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulator/project.ts';
+import { semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
@@ -54,11 +54,11 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-legacy-demo-'));
   const repoFolder = join(records, 'ahrena-demo');
-  const changes = new CursorDeMudancas({ geracao: 'golden' });
+  const changes = new ChangeCursor({ generation: 'golden' });
   const sqlite: SqliteStorage = openSqliteStorage({ path: ':memory:' });
-  const sessionAccounts = new ContasDasSessoes(sqlite);
-  const storage = comMudancas(sqlite, changes, sessionAccounts);
-  const decisions = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
+  const sessionAccounts = new SessionAccounts(sqlite);
+  const storage = withChanges(sqlite, changes, sessionAccounts);
+  const decisions = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
   const work = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: clock });
   const accounts = new Contas({ storage, arquivo: null });
   const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id) });
@@ -68,8 +68,8 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   await semearWorkflowsDoDemo(storage, NOW);
   await semearDetalhe(storage, NOW);
   await semearHistoricoDoPainel(storage, decisions, 'p4', NOW);
-  const mcp = criarServidorMcp({ storage, contas: accounts, desktop: null, agora: clock, fusoHorario: 'UTC', log: () => {} });
-  const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), frota: mcp.frota, mudancas: changes, log: () => {} });
+  const mcp = createMcpServer({ storage, accounts, desktop: null, now: clock, timeZone: 'UTC', log: () => {} });
+  const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), frota: mcp.fleet, mudancas: changes, log: () => {} });
   const decisionsUi = new DecisoesDaUi({
     decisions,
     storage,
@@ -89,10 +89,10 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     projeto: { kanban: project, fonte: 'demo', log: () => {} },
     detalhe: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: localDaDemo }),
     eventos: new FeedDeEventos({ storage }),
-    frota: mcp.frota,
+    frota: mcp.fleet,
     analytics: new RotaAnalytics({ storage, contas: accounts, agora: clock }),
     sessoes: new ListaDeSessoes({ storage, contas: accounts, agora: clock }),
-    historico: new HistoricoDeSessoes({ storage, decisoes: decisions, fusoHorario: 'UTC' }),
+    historico: new SessionHistory({ storage, decisions, timeZone: 'UTC' }),
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
     decisoesUi: decisionsUi,
     repos: repos.rota,

@@ -8,7 +8,7 @@
 //   `endedAt` (o vigia da máquina de estados leva a `abandoned` a que fica 180 min parada, e a
 //   listagem só busca os erros dentro dessa janela); ou
 // - está `completed` (ou em `error` já encerrada) com a última atividade (`updatedAt`) dentro de
-//   `recenteMs`, que é o `abandonoMs` do vigia (180 min): o card "Terminou sem erro" do wireframe
+//   `recenteMs`, que é o `abandonMs` do vigia (180 min): o card "Terminou sem erro" do wireframe
 //   fica no mural pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada.
 // - `abandoned` nunca entra.
 //
@@ -35,7 +35,7 @@
 import { basename } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { LIMITES_PADRAO } from '../estados/vigia.ts';
+import { DEFAULT_LIMITS } from '../states/watcher.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { SessaoDoDesktop } from './indice-desktop.ts';
@@ -46,7 +46,7 @@ export const WALL_ROUTE = '/api/wall';
 /** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_MURAL = '/api/mural';
 /** Quanto tempo a sessão encerrada continua no mural depois da última atividade: o abandono do vigia. */
-export const RECENTE_DO_MURAL_MS = LIMITES_PADRAO.abandonoMs;
+export const RECENTE_DO_MURAL_MS = DEFAULT_LIMITS.abandonMs;
 const PAGINA = 200;
 
 export interface OpcoesDoMural {
@@ -55,7 +55,7 @@ export interface OpcoesDoMural {
   agora?: () => number;
   /** A resposta inteira fica guardada por este tempo. Padrão 2 s. */
   cacheMs?: number;
-  /** A encerrada fica no mural até este tempo depois da última atividade. Padrão: `abandonoMs` do vigia (180 min). */
+  /** An ended session stays on the wall this long after its last activity. Default: the watcher's `abandonMs` (180 min). */
   recenteMs?: number;
 }
 
@@ -105,7 +105,7 @@ export class MontadorDoMural {
       if (!ehAberta(session, this.painel.desktopDaSessao(session.id), agora, this.recenteMs)) continue;
       lidas.push({ leitura: await this.painel.leituraDaSessao(session), updatedAt: session.updatedAt });
     }
-    const precisa = (l: LeituraDaSessao) => PRECISA.has(l.inbox.estado);
+    const precisa = (l: LeituraDaSessao) => PRECISA.has(l.inbox.state);
     lidas.sort((a, b) => {
       const [x, y] = [a.leitura, b.leitura];
       if (precisa(x) !== precisa(y)) return precisa(x) ? -1 : 1;
@@ -152,7 +152,7 @@ export class MontadorDoMural {
 }
 
 /** Urgente: a espera `notification` ou `interrupted`, e o erro (como o `PrecisaDeVoce` do painel). */
-const urgenteDe = (l: LeituraDaSessao) => l.inbox.urgente || l.inbox.estado === 'error';
+const urgenteDe = (l: LeituraDaSessao) => l.inbox.urgent || l.inbox.state === 'error';
 
 /** O agente principal conta como um dos agentes da sessão (o wireframe mostra "1" na sessão sem subagentes). */
 const principalRodando = (estado: CardDoMural['state']) => estado === 'active' || estado === 'delegating' || estado === 'background';

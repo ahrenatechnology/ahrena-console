@@ -1,5 +1,5 @@
 // As instruções dos agentes de um repositório (#183) pelo serviço e pela rota, contra o GitHub falso
-// (src/simulador/github-falso.ts): nenhuma chamada à API real e nenhum token na resposta.
+// (src/simulator/fake-github.ts): nenhuma chamada à API real e nenhum token na resposta.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -10,8 +10,8 @@ import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { RepoFilesSource } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
-import { blobOid, criarGithubFalso, DADOS_DA_DEMO, DEMO_INSTRUCTION_FILES, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
+import { blobOid, criarGithubFalso, DADOS_DA_DEMO, DEMO_INSTRUCTION_FILES, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
 
 const T0 = Date.parse('2026-10-20T12:00:00Z');
 const TOKEN = 'token-that-must-not-leak';
@@ -67,8 +67,8 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
     return r;
   }) as typeof globalThis.fetch;
   const transport = new GithubReposSource({ token, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid' });
-  const cursor = new CursorDeMudancas({ geracao: 'g', agruparMs: 0, intervaloMinimoMs: 0 });
-  const start = cursor.atual;
+  const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
+  const start = cursor.current;
   const store = new MemoryCacheStore();
   const service = new AgentInstructionsService({
     source: noSource ? null : new RepoFilesSource(transport),
@@ -82,7 +82,7 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
     statuses,
     clock,
     mode,
-    changes: async () => (await cursor.aguardar(start, { timeoutMs: 0 })).changes,
+    changes: async () => (await cursor.wait(start, { timeoutMs: 0 })).changes,
     push: (files) => {
       gh = criarGithubFalso(data(files), { agora: now });
     },
@@ -431,7 +431,7 @@ describe('#183 the service as the core mounts it', () => {
       throw new Error('real fetch in the demo');
     }) as typeof fetch;
     try {
-      const { service } = createCoreAgentInstructions({ demo: true, noGithub: false, cache: new GithubCache({ store: new MemoryCacheStore() }), changes: new CursorDeMudancas(), queue: new GithubCallQueue() });
+      const { service } = createCoreAgentInstructions({ demo: true, noGithub: false, cache: new GithubCache({ store: new MemoryCacheStore() }), changes: new ChangeCursor(), queue: new GithubCallQueue() });
       const read = async (full: string) => {
         const [o, r] = full.split('/');
         await service.overview(o, r);
@@ -452,7 +452,7 @@ describe('#183 the service as the core mounts it', () => {
   });
 
   test('createCoreAgentInstructions({ noGithub: true }) answers no-github', async () => {
-    const { service } = createCoreAgentInstructions({ demo: false, noGithub: true, cache: new GithubCache({ store: new MemoryCacheStore() }), changes: new CursorDeMudancas(), queue: new GithubCallQueue() });
+    const { service } = createCoreAgentInstructions({ demo: false, noGithub: true, cache: new GithubCache({ store: new MemoryCacheStore() }), changes: new ChangeCursor(), queue: new GithubCallQueue() });
     assert.equal((await service.overview('org-a', 'full')).state, 'no-github');
   });
 });

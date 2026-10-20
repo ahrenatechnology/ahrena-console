@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet, REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from '../../src/telemetry/adapters/loopback-http.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
@@ -36,7 +36,7 @@ function setup(port: number, over: Partial<RemoteMachineOptions> = {}) {
   storage = openSqliteStorage({ path: ':memory:' });
   const store = new SqliteTelemetryStore(storage.db);
   const tracker = new AlertTracker();
-  const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
+  const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   const logs: string[] = [];
   const remote = new RemoteMachine({
     config: { id: 'ws-exemplo', label: 'Workstation', port },
@@ -224,7 +224,7 @@ describe('#176/AC-5 a remote going down and coming back', () => {
     const { remote, tracker, cursor } = setup(port);
     await remote.pollOnce();
     assert.deepEqual(tracker.active('ws-exemplo').map((a) => a.id), ['volume-full:/'], "the remote's own alerts while connected");
-    const start = cursor.atual;
+    const start = cursor.current;
 
     await f.close();
     cleanup.length = 0;
@@ -238,7 +238,7 @@ describe('#176/AC-5 a remote going down and coming back', () => {
       detail: `A porta ${port} deste Mac não aceita conexão: o túnel está caído`,
       since: '2026-11-02T12:00:00.000Z',
     });
-    const wentDown = await cursor.aguardar(start, { timeoutMs: 0 });
+    const wentDown = await cursor.wait(start, { timeoutMs: 0 });
     assert.deepEqual(wentDown.changes.map((m) => [m.type, m.key]).sort(), [
       ['alert', 'ws-exemplo:machine-unreachable'],
       ['alert', 'ws-exemplo:volume-full:/'],
@@ -247,7 +247,7 @@ describe('#176/AC-5 a remote going down and coming back', () => {
     await fake({ current: remoteReading(), alerts: [] }, port);
     await remote.pollOnce();
     assert.deepEqual(tracker.active('ws-exemplo'), []);
-    const cameBack = await cursor.aguardar(wentDown.cursor, { timeoutMs: 0 });
+    const cameBack = await cursor.wait(wentDown.cursor, { timeoutMs: 0 });
     assert.deepEqual(cameBack.changes.map((m) => [m.type, m.key, m.sessionId]), [['alert', 'ws-exemplo:machine-unreachable', null]]);
   });
 
@@ -283,10 +283,10 @@ describe('#176/AC-5 the remote alerts are untrusted', () => {
     const base = loopbackGet({ timeoutMs: MUTE_TIMEOUT_MS });
     const { remote, cursor, tracker } = setup(closed, { get: (_p, path) => base(port, path) });
     await remote.pollOnce();
-    const after = cursor.atual;
+    const after = cursor.current;
     port = mute.port;
     await remote.pollOnce();
-    const r = await cursor.aguardar(after, { timeoutMs: 0 });
+    const r = await cursor.wait(after, { timeoutMs: 0 });
     assert.deepEqual(r.changes.map((m) => [m.type, m.key]), [['alert', 'ws-exemplo:machine-unreachable']]);
     assert.match(tracker.active('ws-exemplo')[0]!.detail!, /núcleo de lá não respondeu/);
   });
@@ -296,17 +296,17 @@ describe('#176/AC-6 the remote sessions that need you', () => {
   test('#176/AC-6 kept while connected, dropped when the remote goes down, and each change published', async () => {
     const f = await fake({ current: remoteReading(), attention: attentionBody([remoteItem('s1')]) });
     const { remote, cursor } = setup(f.port);
-    const start = cursor.atual;
+    const start = cursor.current;
     await remote.pollOnce();
     assert.equal((remote.attention() as { items: unknown[] }).items.length, 1);
-    const entered = await cursor.aguardar(start, { timeoutMs: 0 });
+    const entered = await cursor.wait(start, { timeoutMs: 0 });
     assert.deepEqual(entered.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['needs-you', 'ws-exemplo:s1', null, null]]);
 
     await f.close();
     cleanup.length = 0;
     await remote.pollOnce();
     assert.equal(remote.attention(), null);
-    const left = await cursor.aguardar(entered.cursor, { timeoutMs: 0 });
+    const left = await cursor.wait(entered.cursor, { timeoutMs: 0 });
     assert.ok(left.changes.some((m) => m.type === 'needs-you' && m.key === 'ws-exemplo:s1'));
   });
 });
@@ -315,7 +315,7 @@ describe('#173 phase 2b: a remote núcleo from before the English keys', () => {
   test('its Portuguese attention answer is kept as the English one, and its changes are published', async () => {
     const f = await fake({ current: remoteReading(), attention: oldAttentionBody([oldRemoteItem('s1')], { ativas: 3, comErro: 1 }) });
     const { remote, cursor } = setup(f.port);
-    const start = cursor.atual;
+    const start = cursor.current;
     await remote.pollOnce();
     assert.deepEqual(remote.attention(), {
       active: 3,
@@ -336,7 +336,7 @@ describe('#173 phase 2b: a remote núcleo from before the English keys', () => {
         },
       ],
     });
-    const entered = await cursor.aguardar(start, { timeoutMs: 0 });
+    const entered = await cursor.wait(start, { timeoutMs: 0 });
     assert.deepEqual(entered.changes.map((m) => [m.type, m.key]), [['needs-you', 'ws-exemplo:s1']]);
   });
 

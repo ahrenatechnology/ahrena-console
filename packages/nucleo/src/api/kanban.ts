@@ -22,13 +22,13 @@
 // Tudo pela porta e por caches em memória (decisão 0004): os agentes de uma sessão encerrada são
 // relidos só quando o `updatedAt` dela muda; o custo e o último prompt, só para os cards das páginas
 // devolvidas. A conta sai com rótulo e cor, nunca o id (decisão 0006). O título passa por
-// `tituloSeguro`, como no MCP. Os itens vêm pela atividade mais recente, desempate pelo id.
+// `safeTitle`, como no MCP. Os itens vêm pela atividade mais recente, desempate pelo id.
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { PRECOS_PADRAO } from '../custo/precos-padrao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
-import { tituloSeguro } from '../mcp/saida.ts';
+import { DEFAULT_PRICES } from '../cost/default-prices.ts';
+import { currentPrices } from '../cost/table.ts';
+import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
@@ -168,7 +168,7 @@ export function pedidoDoKanban(url: URL): PedidoDoKanban {
 export function rotuloDoModelo(modelo: string | null | undefined): string | null {
   if (!modelo) return null;
   const id = modelo.replace(/\[[^\]]*\]$/, '').replace(/-\d{8}$/, '');
-  const nome = PRECOS_PADRAO.find((p) => p.pattern === id)?.nome;
+  const nome = DEFAULT_PRICES.find((p) => p.pattern === id)?.name;
   return nome ? nome.replace(/^Claude /, '') : modelo;
 }
 
@@ -220,7 +220,7 @@ export class QuadroKanban {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
     const sessoes = await this.lerSessoes();
     const colunas =
-      pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await precosVigentes(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
+      pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await currentPrices(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
     return { view: pedido.visao, perPage: POR_PAGINA, columns: colunas };
   }
 
@@ -339,7 +339,7 @@ function subagenteDe(a: Agent, s: Session, agora: number): CardDeAgente {
     id: a.id.startsWith(`${s.id}:`) ? a.id : `${s.id}:${a.id}`,
     sessionId: s.id,
     main: false,
-    name: tituloSeguro(a.subagentType) ?? tituloSeguro(a.name) ?? 'Subagente',
+    name: safeTitle(a.subagentType) ?? safeTitle(a.name) ?? 'Subagente',
     description: umaLinha(a.task, TEXTO_MAXIMO) ?? '',
     status,
     reason: null,

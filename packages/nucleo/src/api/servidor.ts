@@ -13,7 +13,7 @@
 // | `POST /open/<local_…>`        | Abre a conversa no Claude Desktop (`open claude://…`, no macOS); JSON, como as outras escritas |
 // | `GET /open/<local_…>`         | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
-// | `GET /api/changes`            | Long polling das mudanças (`?since=`, `?wait=`; src/mudancas, item 2.4) |
+// | `GET /api/changes`            | Long polling das mudanças (`?since=`, `?wait=`; src/changes, item 2.4) |
 // | `GET /api/events`             | O feed de atividade, todas as sessões (api/eventos.ts, #94) |
 // | `GET /api/attention`          | Quem precisa de você, em todas as contas (a bandeja, #87)  |
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
@@ -58,29 +58,29 @@
 // decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { AddressInfo, Server as NetServer } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
-import { CHANGES_ROUTE, responderMudancas } from '../mudancas/http.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
+import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
 import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
-import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
+import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './mural.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { HISTORY_ROUTE, responderHistorico } from './historico.ts';
-import type { HistoricoDeSessoes } from '../historico/leitura.ts';
+import type { SessionHistory } from '../history/reading.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './eventos.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
-import type { ServidorMcp } from '../mcp/protocolo.ts';
+import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './detalhe.ts';
-import type { LeituraDaFrota } from '../mcp/frota.ts';
+import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
@@ -99,6 +99,12 @@ export interface OpcoesDaApi {
   host?: string;
   /** 0 escolhe uma porta livre (testes). Padrão 4720. */
   port?: number;
+  /**
+   * A socket already listening (the port the owner reserved before opening the database, issue
+   * #221): the API takes it over instead of binding `port`, so no other process can grab the port
+   * in between. With port 0, that is the only way to keep the port the system assigned.
+   */
+  listenOn?: NetServer;
   log?: (mensagem: string) => void;
   /** Contadores extras para `/api/load` (seguidor, índice do Desktop). */
   carga?: () => Record<string, unknown>;
@@ -108,11 +114,11 @@ export interface OpcoesDaApi {
    */
   abrirNoDesktop?: ((url: string) => Promise<void>) | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
-  mcp?: ServidorMcp;
-  /** O commit do código no ar, em `/api/overview`: quem sobe outro núcleo compara (src/dono). */
+  mcp?: McpServer;
+  /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/changes`. */
-  mudancas?: CursorDeMudancas;
+  mudancas?: ChangeCursor;
   /** O kanban do GitHub Project (#80). Sem ele, `/api/project` responde 503. */
   projeto?: OpcoesDoProjeto;
   /** As leituras do Detalhe da sessão (`/api/sessions/<id>…`); sem elas, 404. */
@@ -120,7 +126,7 @@ export interface OpcoesDaApi {
   /** O feed de atividade; liga `GET /api/events` (#94). */
   eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/attention`. */
-  frota?: LeituraDaFrota;
+  frota?: FleetReader;
   /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
   remoteAttention?: readonly RemoteAttentionSource[];
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
@@ -128,7 +134,7 @@ export interface OpcoesDaApi {
   /** A lista da tela Sessões; liga `GET /api/sessions`. */
   sessoes?: ListaDeSessoes;
   /** As sessões encerradas por dia; liga `GET /api/history` (#33). */
-  historico?: HistoricoDeSessoes;
+  historico?: SessionHistory;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
   /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */
@@ -238,7 +244,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
-  const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
   const mural = muralDoPainel(opts.montador);
   const contadores = { requests: 0, panel: 0, panelMs: 0 };
@@ -332,21 +338,21 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
       return decidir(req, res, decodeURIComponent(escrita[1]!), DECISION_ACTIONS[escrita[2]!]!, url);
     }
-    if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
+    if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = OPEN_IN_DESKTOP.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]!);
-    // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
+    // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
     // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: VERSAO_DA_API });
-    if (url.pathname === CHANGES_ROUTE && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === CHANGES_ROUTE && opts.mudancas) return serveChanges(res, url, opts.mudancas);
     if (url.pathname === WALL_ROUTE) return responderMural(res, mural);
     if (url.pathname === EVENTS_ROUTE && opts.eventos) return responderEventos(res, url, opts.eventos);
-    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null, opts.remoteAttention));
+    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.current ?? null, opts.remoteAttention));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
@@ -363,7 +369,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return send(res, 200, {
         ...contadores,
         eventsRead: opts.montador.resumos.eventosLidos,
-        ...(opts.mudancas ? { openWaits: opts.mudancas.abertas } : {}),
+        ...(opts.mudancas ? { openWaits: opts.mudancas.openWaits } : {}),
         ...(opts.carga?.() ?? {}),
       });
     }
@@ -386,7 +392,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(opts.port ?? 4720, opts.host ?? '127.0.0.1', () => {
+    const listening = () => {
       server.off('error', reject);
       const { address, port: bound } = server.address() as AddressInfo;
       port = bound;
@@ -395,11 +401,13 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         url: `http://${address}:${bound}`,
         close: () =>
           new Promise<void>((done, fail) => {
-            opts.mudancas?.encerrar();
+            opts.mudancas?.close();
             server.close((err) => (err ? fail(err) : done()));
             server.closeAllConnections();
           }),
       });
-    });
+    };
+    if (opts.listenOn) server.listen(opts.listenOn, listening);
+    else server.listen(opts.port ?? 4720, opts.host ?? '127.0.0.1', listening);
   });
 }

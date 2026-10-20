@@ -1,5 +1,5 @@
-// O encaminhador e o hooks.json do plugin, rodados como o Claude Code rodaria: um processo por hook,
-// payload no stdin, `${CLAUDE_PLUGIN_ROOT}` apontando para a pasta do plugin.
+// The plugin's forwarder and hooks.json, run as Claude Code would: one process per hook, the payload
+// on stdin, `${CLAUDE_PLUGIN_ROOT}` pointing at the plugin folder.
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -20,14 +20,14 @@ const hooksJson = JSON.parse(readFileSync(join(PLUGIN_ROOT, 'hooks', 'hooks.json
 };
 
 /**
- * Prazo do encaminhador nos testes que não são sobre o prazo. O padrão de 800 ms conta do carregamento
- * do script no relógio real, e numa máquina carregada o boot do `fetch` e a ida ao núcleo passam disso:
- * o hook desistia com TimeoutError e o teste falhava sem ter nada a ver com o prazo (#165). Com um prazo
- * folgado, o resultado desses testes não depende mais do relógio.
+ * The forwarder's deadline in the tests that are not about the deadline. The 800 ms default counts from
+ * the script's load on the real clock, and on a loaded machine booting `fetch` and reaching the core take
+ * longer: the hook gave up with TimeoutError and the test failed for reasons unrelated to the deadline
+ * (#165). With a generous deadline, these tests no longer depend on the clock.
  */
-const FOLGA_MS = 30_000;
-/** Rede de segurança: um hook que não sai nem com a folga é bug, e o teste falha em vez de travar. */
-const LIMITE_MS = 2 * FOLGA_MS;
+const SLACK_MS = 30_000;
+/** Safety net: a hook that does not exit even with the slack is a bug, and the test fails instead of hanging. */
+const GUARD_MS = 2 * SLACK_MS;
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-hooks-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -56,14 +56,14 @@ function runHook(event: string, payload: unknown, env: Record<string, string>, o
         ...cleanEnv,
         CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
         AHRENA_CONSOLE_HOOK_LOG: logPath,
-        AHRENA_CONSOLE_HOOK_TIMEOUT_MS: String(FOLGA_MS),
+        AHRENA_CONSOLE_HOOK_TIMEOUT_MS: String(SLACK_MS),
         ...env,
       },
     });
     const guard = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error(`${event}: o hook não saiu em ${LIMITE_MS} ms`));
-    }, LIMITE_MS);
+      reject(new Error(`${event}: the hook did not exit in ${GUARD_MS} ms`));
+    }, GUARD_MS);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (c) => (stdout += c));
@@ -88,8 +88,8 @@ function listen(server: Server): Promise<number> {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port)));
 }
 
-describe('hooks.json do plugin', () => {
-  test('registra o encaminhador em todos os eventos, com timeout curto', () => {
+describe("the plugin's hooks.json", () => {
+  test('registers the forwarder on every event, with a short timeout', () => {
     assert.deepEqual(Object.keys(hooksJson.hooks).sort(), [...HOOK_EVENTS].sort());
     for (const [event, groups] of Object.entries(hooksJson.hooks)) {
       const [hook] = groups[0].hooks;
@@ -101,7 +101,7 @@ describe('hooks.json do plugin', () => {
   });
 });
 
-describe('encaminhador com o núcleo no ar', () => {
+describe('forwarder with the core up', () => {
   let store: SqliteStorage;
   let receiver: HookReceiver;
   beforeEach(async () => {
@@ -113,7 +113,7 @@ describe('encaminhador com o núcleo no ar', () => {
     await store.close();
   });
 
-  test('cada evento chega ao núcleo, sem nada no stdout', async () => {
+  test('each event reaches the core, with nothing on stdout', async () => {
     for (const name of HOOK_NAMES) {
       const r = await runHook(name, HOOK_PAYLOADS[name], { AHRENA_CONSOLE_URL: receiver.url });
       assert.equal(r.code, 0, name);
@@ -126,8 +126,8 @@ describe('encaminhador com o núcleo no ar', () => {
   });
 });
 
-describe('encaminhador com o núcleo fora', () => {
-  test('núcleo desligado: sai 0 sem esperar o prazo e registra', async () => {
+describe('forwarder with the core away', () => {
+  test('core down: exits 0 without waiting for the deadline and logs', async () => {
     const probe = createServer();
     const port = await listen(probe);
     await new Promise((r) => probe.close(r));
@@ -135,11 +135,11 @@ describe('encaminhador com o núcleo fora', () => {
     const r = await runHook('PreToolUse', HOOK_PAYLOADS.PreToolUse, { AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}` });
     assert.equal(r.code, 0);
     assert.equal(r.stdout, '');
-    // ECONNREFUSED, e não TimeoutError, prova que desistiu na recusa, sem esperar os FOLGA_MS.
+    // ECONNREFUSED, not TimeoutError, proves it gave up on the refusal, without waiting SLACK_MS.
     assert.match(r.log, /PreToolUse não enviado a http:\/\/127\.0\.0\.1:\d+: ECONNREFUSED/);
   });
 
-  test('núcleo travado: desiste no timeout e sai 0', async () => {
+  test('core hung: gives up on the timeout and exits 0', async () => {
     let arrived = 0;
     const hung = createServer(() => {
       arrived++; // aceita e nunca responde
@@ -152,8 +152,8 @@ describe('encaminhador com o núcleo fora', () => {
         AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}`,
         AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '1000',
       });
-      // Sair com o servidor ainda calado já é a prova de que desistiu: sem prazo, o fetch esperaria
-      // para sempre e o runHook cairia no LIMITE_MS.
+      // Exiting while the server is still silent already proves it gave up: without a deadline, fetch
+      // would wait forever and runHook would hit GUARD_MS.
       assert.equal(r.code, 0);
       assert.equal(arrived, 1, `o pedido não chegou ao núcleo: ${r.log}`);
       assert.match(r.log, /Stop não enviado .*TimeoutError/);
@@ -163,7 +163,7 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
-  test('núcleo recusando: sai 0 e registra o status', async () => {
+  test('core refusing: exits 0 and logs the status', async () => {
     const angry = createServer((_req, res) => {
       res.writeHead(500);
       res.end('quebrado');
@@ -178,7 +178,7 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
-  test('núcleo fora da máquina: recusa sem enviar nada', async () => {
+  test('core off the machine: refuses without sending anything', async () => {
     for (const url of ['http://192.0.2.10:4720', 'http://127.0.0.1.example.test:4720', 'file:///tmp/x', 'não é url']) {
       const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: url });
       assert.equal(r.code, 0, url);
@@ -187,7 +187,7 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
-  test('::1 vale como núcleo local', async () => {
+  test('::1 counts as a local core', async () => {
     let hits = 0;
     const v6 = createServer((_req, res) => {
       hits++;
@@ -204,7 +204,7 @@ describe('encaminhador com o núcleo fora', () => {
     }
   });
 
-  test('stdin que não fecha não prende o hook', async () => {
+  test('stdin that never closes does not hold the hook', async () => {
     // Com o stdin aberto, só o prazo encerra a leitura; sair já prova que ele valeu.
     const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' }, { keepStdinOpen: true });
     assert.equal(r.code, 0);
@@ -212,8 +212,8 @@ describe('encaminhador com o núcleo fora', () => {
   });
 });
 
-describe('encaminhador manda a pasta e a conta do ambiente', () => {
-  const CONTA = '00000000-0000-4000-8000-00000000000a';
+describe("forwarder sends the environment's folder and account", () => {
+  const ACCOUNT = '00000000-0000-4000-8000-00000000000a';
   const ORG = '00000000-0000-4000-8000-000000000001';
 
   async function capture(env: Record<string, string>): Promise<Record<string, unknown>> {
@@ -236,10 +236,10 @@ describe('encaminhador manda a pasta e a conta do ambiente', () => {
     return JSON.parse(received) as Record<string, unknown>;
   }
 
-  test('só as três variáveis, num campo próprio, e o payload intacto', async () => {
+  test('only the three variables, in their own field, and the payload intact', async () => {
     const body = await capture({
       CLAUDE_CONFIG_DIR: '/cfg/sintetica',
-      CLAUDE_CODE_ACCOUNT_UUID: CONTA,
+      CLAUDE_CODE_ACCOUNT_UUID: ACCOUNT,
       CLAUDE_CODE_ORGANIZATION_UUID: ORG,
       CLAUDE_CODE_USER_EMAIL: 'pessoa@example.test',
       CLAUDE_CODE_OAUTH_TOKEN: 'token-sintetico',
@@ -248,29 +248,29 @@ describe('encaminhador manda a pasta e a conta do ambiente', () => {
     const { ahrena_console: context, ...payload } = body;
     assert.deepEqual(payload, HOOK_PAYLOADS.SessionStart);
     assert.deepEqual(context, {
-      env: { CLAUDE_CONFIG_DIR: '/cfg/sintetica', CLAUDE_CODE_ACCOUNT_UUID: CONTA, CLAUDE_CODE_ORGANIZATION_UUID: ORG },
+      env: { CLAUDE_CONFIG_DIR: '/cfg/sintetica', CLAUDE_CODE_ACCOUNT_UUID: ACCOUNT, CLAUDE_CODE_ORGANIZATION_UUID: ORG },
     });
     assert.doesNotMatch(JSON.stringify(body), /chave-sintetica|token-sintetico|example\.test/);
   });
 
-  test('em SSH, só a marca ssh, nunca o valor de SSH_CONNECTION', async () => {
+  test('over SSH, only the ssh mark, never the value of SSH_CONNECTION', async () => {
     const body = await capture({ SSH_CONNECTION: '192.0.2.1 50000 192.0.2.2 22' });
     assert.deepEqual(body.ahrena_console, { env: { ssh: true } });
     assert.doesNotMatch(JSON.stringify(body), /192\.0\.2/);
   });
 
-  test('de ponta a ponta, a sessão chega ao núcleo com a conta', async () => {
+  test('end to end, the session reaches the core with the account', async () => {
     const store = openSqliteStorage({ path: ':memory:' });
     const receiver = await startHookReceiver({ storage: store, port: 0, log: () => {} });
     try {
       const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, {
         AHRENA_CONSOLE_URL: receiver.url,
-        CLAUDE_CODE_ACCOUNT_UUID: CONTA,
+        CLAUDE_CODE_ACCOUNT_UUID: ACCOUNT,
         CLAUDE_CODE_ORGANIZATION_UUID: ORG,
       });
       assert.equal(r.log, '');
       const s = await store.getSession('sess-hooks-1');
-      assert.equal(s?.accountId, `${CONTA}/${ORG}`);
+      assert.equal(s?.accountId, `${ACCOUNT}/${ORG}`);
       assert.equal(s?.accountSource, 'env');
     } finally {
       await receiver.close();

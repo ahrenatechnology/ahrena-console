@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
-import { HistoricoDeSessoes, type RespostaDoHistorico } from '../../src/historico/leitura.ts';
-import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
-import { SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
+import { SessionHistory, type HistoryResponse } from '../../src/history/reading.ts';
+import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulator/history-ended.ts';
+import { SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -19,7 +19,7 @@ async function subir(comHistorico = true) {
   await semearDecisoesDoPainel(decisoes, 'p4', AGORA);
   await semearHistoricoDoPainel(storage, decisoes, 'p4', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
-  const historico = comHistorico ? new HistoricoDeSessoes({ storage, decisoes, fusoHorario: 'UTC' }) : undefined;
+  const historico = comHistorico ? new SessionHistory({ storage, decisions: decisoes, timeZone: 'UTC' }) : undefined;
   const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, historico });
   return {
     get: (q = '') => fetch(`${api.url}/api/history${q}`),
@@ -36,7 +36,7 @@ describe('GET /api/history', () => {
     try {
       const r = await get();
       assert.equal(r.status, 200);
-      const corpo = (await r.json()) as RespostaDoHistorico;
+      const corpo = (await r.json()) as HistoryResponse;
       assert.deepEqual(Object.keys(corpo).sort(), ['days', 'next']);
       assert.equal(corpo.days.length, 7);
       assert.equal(corpo.days[0].day, '2026-11-02');
@@ -57,7 +57,7 @@ describe('GET /api/history', () => {
       const vistos: string[] = [];
       let antes: string | null = null;
       for (let i = 0; i < 10; i++) {
-        const corpo = (await (await get(`?days=3${antes ? `&before=${antes}` : ''}`)).json()) as RespostaDoHistorico;
+        const corpo = (await (await get(`?days=3${antes ? `&before=${antes}` : ''}`)).json()) as HistoryResponse;
         assert.ok(corpo.days.length <= 3);
         vistos.push(...corpo.days.map((d) => d.day));
         antes = corpo.next;
@@ -72,7 +72,7 @@ describe('GET /api/history', () => {
   test('a busca, sem diferenciar maiúsculas', async () => {
     const { get, fechar } = await subir();
     try {
-      const corpo = (await (await get('?search=Gateway')).json()) as RespostaDoHistorico;
+      const corpo = (await (await get('?search=Gateway')).json()) as HistoryResponse;
       assert.deepEqual(corpo.days.map((d) => [d.day, d.sessions.map((s) => s.id)]), [['2026-10-24', ['sim-historico-limites-do-gateway']]]);
       assert.equal(corpo.next, null);
     } finally {

@@ -49,8 +49,8 @@ import { GithubCallQueue } from '../github/call-queue.ts';
 import { isInterestingPath, MAX_TREE_PATHS, RepoFilesSource, validPath, type BlobRequest, type RepoBlob, type RepoFilesDiscovery, type RepoTreeSummary } from '../github/repo-files-source.ts';
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
-import { criarGithubFalso, DADOS_DA_DEMO } from '../simulador/github-falso.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
+import { criarGithubFalso, DADOS_DA_DEMO } from '../simulator/fake-github.ts';
 
 export const AGENT_INSTRUCTIONS_ROUTE = '/api/agent-instructions';
 
@@ -120,7 +120,7 @@ export interface AgentInstructionsOptions {
   /** `null`: núcleo sem GitHub; as respostas vêm com `state: 'no-github'`. */
   source: RepoFilesSource | null;
   cache?: GithubCache;
-  changes?: CursorDeMudancas | null;
+  changes?: ChangeCursor | null;
   now?: () => number;
   /** Validade da resposta montada. Padrão 60 s. */
   validityMs?: number;
@@ -134,7 +134,7 @@ export type FileAnswer = { status: 200; body: InstructionFileView } | { status: 
 export class AgentInstructionsService {
   private readonly source: RepoFilesSource | null;
   private readonly cache: GithubCache;
-  private readonly changes: CursorDeMudancas | null;
+  private readonly changes: ChangeCursor | null;
   private readonly now: () => number;
   private readonly validityMs: number;
   private readonly queue: GithubCallQueue;
@@ -230,7 +230,7 @@ export class AgentInstructionsService {
     const before = e.value === null ? null : JSON.stringify(e.value);
     e.value = value;
     e.texts = texts;
-    if (before !== JSON.stringify(value)) this.changes?.registrar({ type: 'agent-instructions', key, sessionId: null, accountId: null });
+    if (before !== JSON.stringify(value)) this.changes?.record({ type: 'agent-instructions', key, sessionId: null, accountId: null });
   }
 
   /** Uma chamada à fonte, contada e posta na fila do GitHub. O token que falta vira `no-github`. */
@@ -427,13 +427,13 @@ export function createAgentInstructionsRoute(service: AgentInstructionsService):
 }
 
 export interface CoreAgentInstructionsOptions {
-  /** Demonstração: o GitHub falso (src/simulador/github-falso.ts), nunca a API real. */
+  /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
   /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
   noGithub: boolean;
   /** O cache do GitHub do núcleo, o mesmo dos repositórios e do trabalho. */
   cache: GithubCache;
-  changes: CursorDeMudancas;
+  changes: ChangeCursor;
   /** A fila das chamadas ao GitHub, a mesma dos repositórios. */
   queue: GithubCallQueue;
   log?: (message: string) => void;

@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type ApiLocal } from '../../src/api/index.ts';
-import { LeituraDaFrota } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
+import { FleetReader } from '../../src/mcp/index.ts';
+import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
 import { at, event } from '../fixtures.ts';
-import { AGORA, semear } from '../mcp/helpers.ts';
+import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
 let contas: Contas;
@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => storage.close());
 
-const frotaEm = (agora: () => number, fusoHorario = 'UTC') => new LeituraDaFrota({ storage, contas, agora, fusoHorario, cacheMs: 0, custoMs: 0 });
+const frotaEm = (agora: () => number, fusoHorario = 'UTC') => new FleetReader({ storage, accounts: contas, now: agora, timeZone: fusoHorario, cacheMs: 0, costMs: 0 });
 
 describe('montarDashboard com o cenário p1 do simulador', () => {
   test('os seis números', async () => {
@@ -83,8 +83,8 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
 
 describe('MontadorDoDashboard', () => {
   test('com as sessões dos testes do MCP: estados, erro e nada da mensagem do erro', async () => {
-    await semear(storage);
-    const d = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA) }).montar();
+    await seed(storage);
+    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW) }).montar();
     assert.equal(d.numbers.sessions.withError, 1);
     assert.equal(d.numbers.subagents.active, 1);
     const erro = d.activity.find((l) => l.session === 'erro');
@@ -94,8 +94,8 @@ describe('MontadorDoDashboard', () => {
   });
 
   test('lê só o que é novo: um turno concluído entra, com a duração, e conta nos eventos', async () => {
-    let agora = AGORA;
-    await semear(storage);
+    let agora = NOW;
+    await seed(storage);
     const m = new MontadorDoDashboard({ frota: frotaEm(() => agora), cacheMs: 0 });
     const antes = await m.montar();
     const s = (await storage.getSession('trabalhando'))!;
@@ -119,14 +119,14 @@ describe('MontadorDoDashboard', () => {
     for (const [id, min] of [['a', -600], ['b', -120], ['c', -30], ['d', -5]] as const) {
       await storage.appendEvent(event({ id, sessionId: 's-dia', agentId: null, type: 'PreToolUse', createdAt: at(min) }));
     }
-    const utc = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA, 'UTC') }).montar();
+    const utc = await new MontadorDoDashboard({ frota: frotaEm(() => NOW, 'UTC') }).montar();
     assert.deepEqual(utc.numbers.events, { today: 4, lastHour: 2, total: 4 });
-    const sp = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA, 'America/Sao_Paulo') }).montar();
+    const sp = await new MontadorDoDashboard({ frota: frotaEm(() => NOW, 'America/Sao_Paulo') }).montar();
     assert.deepEqual(sp.numbers.events, { today: 3, lastHour: 2, total: 4 });
   });
 
   test('banco vazio: tudo zero, listas vazias', async () => {
-    const d = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA) }).montar();
+    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW) }).montar();
     assert.deepEqual(d.numbers.sessions, { total: 0, active: 0, waiting: 0, withError: 0 });
     assert.deepEqual(d.numbers.events, { today: 0, lastHour: 0, total: 0 });
     assert.equal(d.numbers.cost.usd, 0);
@@ -141,7 +141,7 @@ describe('GET /api/dashboard', () => {
     api = null;
   });
 
-  const subir = (frota?: LeituraDaFrota) =>
+  const subir = (frota?: FleetReader) =>
     iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { frota } : {}) });
 
   test('responde o dashboard quando o núcleo tem a frota', async () => {
