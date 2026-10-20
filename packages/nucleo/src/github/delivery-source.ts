@@ -121,6 +121,9 @@ export function deliverySearches(fullName: string, since: string) {
   };
 }
 
+const isDeliveryPr = (n: Partial<DeliveryPrRaw>): n is DeliveryPrRaw => typeof n.createdAt === 'string';
+const isDeliveryIssue = (n: Partial<DeliveryIssueRaw>): n is DeliveryIssueRaw => typeof n.createdAt === 'string';
+
 interface SearchPage<T> {
   issueCount: number;
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -161,8 +164,8 @@ export class GithubDeliverySource implements DeliverySource {
       since,
       openPrs: data.repository.pullRequests.totalCount,
       openIssues: data.repository.issues.totalCount,
-      prs: prs as DeliveryPrRaw[],
-      issues: issues as DeliveryIssueRaw[],
+      prs: prs.filter(isDeliveryPr),
+      issues: issues.filter(isDeliveryIssue),
       open: data.open.nodes.filter((n): n is DeliveryOpenRaw => n?.__typename === 'PullRequest' || n?.__typename === 'Issue'),
       truncated,
       ...(failed.length > 0 ? { incomplete: failed.join('; ') } : {}),
