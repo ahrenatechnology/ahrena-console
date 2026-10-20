@@ -19,4 +19,23 @@ describe('#245/AC-2 "Esperando você" is gone from the núcleo', () => {
     }
     assert.deepEqual(found, []);
   });
+
+  // The screens say "Precisa de você" and "Ociosa" too: the /ui of the núcleo and the desktop app's Rust.
+  for (const [name, folder] of [
+    ['the /ui screens (packages/nucleo/ui)', '../../ui/'],
+    ['the desktop app (apps/desktop/src-tauri/src)', '../../../../apps/desktop/src-tauri/src/'],
+  ] as const) {
+    test(`no file of ${name} says "Esperando você"`, () => {
+      const root = fileURLToPath(new URL(folder, import.meta.url));
+      const found: string[] = [];
+      for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const path = join(entry.parentPath, entry.name);
+        readFileSync(path, 'utf8')
+          .split('\n')
+          .forEach((line, i) => /esperando você/i.test(line) && found.push(`${path.slice(root.length)}:${i + 1}`));
+      }
+      assert.deepEqual(found, []);
+    });
+  }
 });

@@ -10,6 +10,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionPill } from '../attention.js';
 import {
   toggleOne,
   load,
@@ -25,6 +26,7 @@ import {
   resume,
   sessionRoute,
   STATUS,
+  rowPill,
   relativeTime,
   hasFilter,
   trail,
@@ -72,7 +74,7 @@ export async function mount(area, ctx) {
     el(
       'div',
       { class: 'feed-about-body' },
-      el('p', {}, 'Cada linha é um evento gravado pelo núcleo, do mais novo para o mais velho. A pílula diz em que estado a sessão ficou depois dele: Ativa, Esperando você, Concluída ou Com erro.'),
+      el('p', {}, 'Cada linha é um evento gravado pelo núcleo, do mais novo para o mais velho. A pílula diz em que estado a sessão ficou depois dele: Ativa, Precisa de você (travada até você agir), Ociosa (o turno acabou e nada trava), Concluída ou Com erro.'),
       el('p', {}, 'Uma sessão nasce, roda turnos, chama ferramentas e subagentes, e termina. O caminho projeto › sessão › agente diz de onde o evento veio; "Sessão" abre o detalhe dela.'),
       el('p', {}, 'Os filtros se somam. A busca olha o resumo e a ferramenta. Com a pausa, a lista para de mexer e os eventos novos esperam no aviso "novos".'),
     ),
@@ -156,7 +158,7 @@ export async function mount(area, ctx) {
   function row(ev) {
     const isOpen = state.aberto === ev.id;
     const route = sessionRoute(ev.session?.id);
-    const status = STATUS[ev.status] ? ev.status : 'completed';
+    const pill = rowPill(ev);
     const arrow = el(
       'button',
       { type: 'button', class: 'feed-arrow', 'aria-expanded': isOpen ? 'true' : 'false', 'aria-label': isOpen ? 'Fechar o detalhe' : 'Abrir o detalhe' },
@@ -172,7 +174,7 @@ export async function mount(area, ctx) {
       { class: `feed-row${isOpen ? ' feed-open' : ''}` },
       arrow,
       el('span', { class: 'feed-o mono feed-time' }, shortTime(ev.createdAt)),
-      el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
+      pill.attention ? attentionPill(pill.attention) : el('span', { class: `badge b-${pill.status}` }, el('span', { class: 'p' }), STATUS[pill.status]),
       el('span', { class: 'feed-o feed-trunc feed-trail', title: path }, path),
       el('span', { class: 'feed-trunc feed-summary', title: ev.summary ?? ev.type ?? '' }, ev.summary ?? ev.type ?? ''),
       ev.tool ? el('span', { class: 'feed-chip' }, ev.tool) : null,

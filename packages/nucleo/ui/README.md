@@ -12,11 +12,12 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |
+| `attention.js` | O vocabulário da atenção (#245), o mesmo em toda tela: "Precisa de você" (`attention.level` `blocked`, amarelo, com o motivo em chip forte: Pede permissão, Pergunta, Plano para aprovar, Decisão pedida; a de erro mantém a pílula vermelha "Com erro") e "Ociosa" (`idle`, neutra, ponto vazado, motivo em chip leve: Sua vez, Interrompida, No prompt). As classes `attention-*` ficam no `shell.css` |
 | `brand.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `shell.css` |
 | `wall.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `wall-`), para não disputar `shell.css` |
 | `sessions.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `shell.css` |
-| `screens/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `wall.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas/Esperando/Ativas no cliente; `sessions.js` (C3, #28) lê `GET /api/sessions`, com o filtro e a ordem na query da URL (`?status=waiting&order=cost`; um favorito antigo com `esperando` ou `custo` ainda abre); `history.js` (C15, #33) lê `GET /api/history`; `workflows.js` (C14, #96) lê `GET /api/workflows?filter=&node=`, com o filtro e o nó no estado da tela; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`screens/session-detail.css`) ou em `ui/` (`dashboard.css`, `wall.css`, `sessions.css`, `history.css`, `repos.css`), carregado pela própria tela |
+| `screens/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `wall.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas / Precisam de você / Ociosas / Ativas no cliente (#245); `sessions.js` (C3, #28) lê `GET /api/sessions`, com o filtro e a ordem na query da URL (`?status=blocked&order=cost`; `blocked` e `idle` são as pílulas "Precisam de você" e "Ociosas", #245; um favorito antigo com `waiting`, `esperando` ou `custo` ainda abre, `waiting` e `esperando` em `blocked`); `history.js` (C15, #33) lê `GET /api/history`; `workflows.js` (C14, #96) lê `GET /api/workflows?filter=&node=`, com o filtro e o nó no estado da tela; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`screens/session-detail.css`) ou em `ui/` (`dashboard.css`, `wall.css`, `sessions.css`, `history.css`, `repos.css`), carregado pela própria tela |
 | `screens/session-detail.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessions/<id>…` (`src/api/session-detail.ts`). Uma aba nova é uma linha no registro `TABS_LIST` e um módulo `screens/session-detail-<tab>.js` que exporta `create(ctx, base, { head, setLabel })` (o contrato está no começo do `TABS_LIST`) |
 | `screens/kanban.js` | O Kanban ([#31](https://github.com/ahrenatechnology/ahrena-console/issues/31)): sessões ou agentes em colunas por status, só leitura, em `/ui/kanban` (`?view=agents` para os agentes) |
 | `kanban.css` | O estilo do Kanban, carregado pela tela só enquanto ela está aberta |
@@ -144,7 +145,7 @@ As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173). As antigas contin
 | Antiga | Nova |
 | --- | --- |
 | `/ui/sessoes`, `/ui/sessoes/<id>` | `/ui/sessions`, `/ui/sessions/<id>` |
-| `/ui/sessoes?busca=&ordem=&sentido=&pagina=`, `?status=esperando&ordem=custo` | `/ui/sessions?search=&order=&direction=&page=`, `?status=waiting&order=cost` |
+| `/ui/sessoes?busca=&ordem=&sentido=&pagina=`, `?status=esperando&ordem=custo` | `/ui/sessions?search=&order=&direction=&page=`, `?status=blocked&order=cost` |
 | `/ui/sessoes/<id>#agentes`, `#conversa`, `#tempo`, `#decisoes` | `/ui/sessions/<id>#agents`, `#conversation`, `#timeline`, `#decisions` |
 | `/ui/historico` | `/ui/history` |
 | `/ui/mural` | `/ui/wall` |

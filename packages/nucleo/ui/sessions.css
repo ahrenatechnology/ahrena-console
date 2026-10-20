@@ -26,6 +26,8 @@
 .seg button:hover { color: var(--text); }
 .seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sessions-pill-count { font-weight: var(--weight-medium); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-left: 5px; }
+.sessions-pill-count:empty { display: none; }
 
 /* ---------- tabela ---------- */
 .sessions-body { display: flex; flex-direction: column; gap: 12px; }
@@ -43,13 +45,13 @@
  * title. Abaixo de 900 px o Diretório sai.
  */
 .table { table-layout: fixed; }
-.table .c-session { width: 24%; }
-.table .c-status { width: 17%; }
+.table .c-session { width: 22%; }
+.table .c-status { width: 20%; }
 .table .c-activity { width: 11%; }
 .table .c-duration { width: 11%; }
 .table .c-agents { width: 9%; }
 .table .c-cost { width: 11%; }
-.table .c-dir { width: 14%; }
+.table .c-dir { width: 13%; }
 .table .c-arrow { width: 3%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
 .table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
@@ -95,7 +97,7 @@
   background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
 .reason.soft { font-weight: var(--weight-medium); }
 .table .badge, .table .reason { vertical-align: middle; }
-.table .reason { margin-left: 4px; }
+.table .reason, .table .attention-chip { margin-left: 4px; }
 
 .sessions-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
 .sessions-footer .pages { display: flex; gap: 6px; }

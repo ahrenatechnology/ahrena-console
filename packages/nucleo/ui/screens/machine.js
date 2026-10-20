@@ -15,6 +15,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, empty, errorBand } from '../states.js';
+import { attentionPill } from '../attention.js';
 import {
   ATTENTION_ROUTE,
   DASH,
@@ -54,7 +55,7 @@ import {
   remoteCorePort,
   remotePortOwner,
   sessionMeta,
-  sessionPill,
+  sessionAttention,
   sessionsOf,
   stackContainers,
   statCards,
@@ -242,7 +243,7 @@ function dockerCard(docker) {
 }
 
 function sessionsCard(items) {
-  if (!items.length) return card('Sessões do Claude lá', 'sessions', 'do /api/attention de lá', el('p', { class: 'tm-muted' }, 'Nenhuma sessão de lá precisa de você agora.'));
+  if (!items.length) return card('Sessões do Claude lá', 'sessions', 'do /api/attention de lá', el('p', { class: 'tm-muted' }, 'Nenhuma sessão de lá precisa de você nem está ociosa agora.'));
   const shown = items.slice(0, SESSIONS_SHOWN);
   const rest = items.length - shown.length;
   return card(
@@ -252,7 +253,7 @@ function sessionsCard(items) {
     el(
       'ul',
       { class: 'tm-sessions' },
-      ...shown.map((i) => el('li', { 'data-session': String(i.session ?? '') }, el('div', { class: 'tm-session-name' }, el('b', {}, String(i.title || i.project || i.session || '')), el('small', { class: 'mono' }, sessionMeta(i))), pill(sessionPill(i)))),
+      ...shown.map((i) => el('li', { 'data-session': String(i.session ?? '') }, el('div', { class: 'tm-session-name' }, el('b', {}, String(i.title || i.project || i.session || '')), el('small', { class: 'mono' }, sessionMeta(i))), attentionPill(sessionAttention(i)))),
     ),
     rest > 0 ? el('p', { class: 'tm-muted tm-small' }, `e mais ${rest} · as que esperam também vão para a bandeja`) : null,
   );

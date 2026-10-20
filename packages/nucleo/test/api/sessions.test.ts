@@ -214,11 +214,12 @@ describe('#28 a tela Sessões', () => {
     assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(PANEL_SESSION)}`).screen.id, 'session-detail');
   });
 
-  test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = stateFromQuery('?status=waiting&search=oi&dir=/simulacao/x&order=cost&direction=asc&page=2');
-    assert.deepEqual(e, { status: 'waiting', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
+  test('the state goes and comes back through the URL query; what is not valid falls back to the default; waiting opens blocked (issue 245)', () => {
+    const e = stateFromQuery('?status=blocked&search=oi&dir=/simulacao/x&order=cost&direction=asc&page=2');
+    assert.deepEqual(e, { status: 'blocked', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
     assert.deepEqual(stateFromQuery(queryFromState(e)), e);
-    assert.equal(queryFromState(e), '?status=waiting&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
+    assert.equal(queryFromState(e), '?status=blocked&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
+    assert.equal(stateFromQuery('?status=waiting').status, 'blocked', 'an old bookmark of the waiting pill opens the ones that need you');
     // An old bookmark's values (`esperando`, `custo`) are the shell's job (legacyUrl, ui.test.ts).
     assert.equal(queryFromState(stateFromQuery('')), '');
     assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));

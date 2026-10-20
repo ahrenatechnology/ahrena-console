@@ -10,6 +10,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionBadges, attentionOf, attentionTone, statusWithoutAttention } from '../attention.js';
 
 // ---------- Funções puras (testadas em test/api/ui-kanban.test.ts) ----------
 
@@ -67,41 +68,33 @@ export function agentsLabel(n) {
   return `${k} agente${k === 1 ? '' : 's'}`;
 }
 
-/** O motivo da espera: rótulo, ícone e se é urgente (peso maior no selo). */
-const REASONS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
-  session_start: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
-};
-
-export function reason(m) {
-  return REASONS[m] ?? null;
-}
-
-export function reasonLabel(m) {
-  return REASONS[m]?.rotulo ?? null;
-}
-
-/** Status da sessão ou do agente → a cor (classe) e o rótulo do selo. O agente "working" é ativo. */
+/**
+ * Status da sessão ou do agente → a cor (classe) e o rótulo do selo. O agente "working" é ativo. The
+ * waiting ones are drawn by their `attention` (issue 245): "Precisa de você" or "Ociosa".
+ */
 const STATUS = {
   active: { cor: 'active', rotulo: 'Ativa' },
   working: { cor: 'active', rotulo: 'Ativa' },
-  waiting: { cor: 'waiting', rotulo: 'Esperando você' },
   completed: { cor: 'completed', rotulo: 'Concluída' },
   error: { cor: 'error', rotulo: 'Com erro' },
   abandoned: { cor: 'abandoned', rotulo: 'Abandonada' },
 };
 
 export function status(st) {
-  return STATUS[st] ?? { cor: 'abandoned', rotulo: String(st ?? '—') };
+  return STATUS[st] ?? { cor: 'abandoned', rotulo: '—' };
+}
+
+/** The card's tone: the attention (blocked, idle, error) first, then the status; waiting without attention is active. */
+export function cardTone(item) {
+  return attentionTone(item?.attention) ?? status(statusWithoutAttention(item?.status)).cor;
 }
 
 /** A cor da coluna, pelo id dela (as duas visões; os ids são os da API, em inglês desde a issue 173). */
 const COLUMN_COLOR = {
   active: 'active',
   working: 'active',
-  waiting: 'waiting',
+  blocked: 'blocked',
+  idle: 'idle',
   completed: 'completed',
   done: 'completed',
   error: 'error',
@@ -137,15 +130,10 @@ const EMPTY = {
 
 const sessionHref = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
-function badges(st, reasonKey) {
-  const s = status(st);
-  const m = reason(reasonKey);
-  return el(
-    'div',
-    { class: 'kb-badges' },
-    el('span', { class: `kb-badge-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo),
-    m ? el('span', { class: `kb-badge-reason${m.urgente ? '' : ' kb-soft'}` }, icon(m.icone), m.rotulo) : null,
-  );
+function badges(item) {
+  if (attentionOf(item.attention)) return el('div', { class: 'kb-badges' }, ...attentionBadges(item.attention));
+  const s = status(statusWithoutAttention(item.status));
+  return el('div', { class: 'kb-badges' }, el('span', { class: `kb-badge-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo));
 }
 
 function avatar(name) {
@@ -160,9 +148,9 @@ function sessionCard(s) {
   const cost = formatCost(s.costUsd);
   return el(
     'a',
-    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: sessionHref(s.id), title: s.title || null },
+    { class: `card kb-kc kb-st-${cardTone(s)}`, href: sessionHref(s.id), title: s.title || null },
     el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.title || '(sem título)'), el('small', {}, shortId(s.id)))),
-    badges(s.status, s.reason),
+    badges(s),
     s.lastPrompt ? el('blockquote', {}, s.lastPrompt) : null,
     s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
     el(
@@ -179,9 +167,9 @@ function sessionCard(s) {
 function agentCard(a) {
   return el(
     'a',
-    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: sessionHref(a.sessionId), title: a.description || a.name || null },
+    { class: `card kb-kc kb-agent kb-st-${cardTone(a)}`, href: sessionHref(a.sessionId), title: a.description || a.name || null },
     el('div', { class: 'kb-l1' }, avatar(a.main ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.name || '(sem nome)'), a.description ? el('small', {}, a.description) : null)),
-    badges(a.status, a.reason),
+    badges(a),
     el('div', { class: 'kb-foot' }, a.model ? info('model', a.model) : null, info('duration', formatDuration(a.durationMs), a.running ? 'kb-dur kb-running' : 'kb-dur')),
   );
 }
@@ -299,7 +287,7 @@ export async function mount(area, ctx) {
 
     return el(
       'section',
-      { class: 'kb-col', 'aria-label': `${c.label}: ${c.total}` },
+      { class: `kb-col${color === 'idle' ? ' kb-col-idle' : ''}`, 'aria-label': `${c.label}: ${c.total}` },
       el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${color}` }), el('span', { class: `kb-c-${color}`, title: c.label }, c.label), counter),
       list,
       more,
