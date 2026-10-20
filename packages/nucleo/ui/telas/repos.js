@@ -144,7 +144,7 @@ export async function montar(area, ctx) {
     if (filtro.dono && !donos.includes(filtro.dono)) filtro.dono = '';
     orgs.replaceChildren(
       el('option', { value: '' }, 'Todas as organizações'),
-      ...dados.grupos.map((g) => el('option', { value: g.dono }, g.tipo === 'pessoal' ? `${g.dono} (pessoal)` : g.dono)),
+      ...dados.grupos.map((g) => el('option', { value: g.dono }, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono)),
     );
     orgs.value = filtro.dono;
   }
@@ -190,7 +190,7 @@ export async function montar(area, ctx) {
     return el(
       'section',
       { class: 'repo-grupo' },
-      el('div', { class: 'repo-grupo-cab' }, icone(g.tipo === 'pessoal' ? 'pessoa' : 'organizacao'), el('h2', {}, g.tipo === 'pessoal' ? `${g.dono} (pessoal)` : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
+      el('div', { class: 'repo-grupo-cab' }, icone(g.tipo === 'pessoal' ? 'pessoa' : 'organizacao'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
       el(
         'div',
         { class: 'cartao' },
