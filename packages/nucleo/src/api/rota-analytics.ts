@@ -1,9 +1,9 @@
-// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral, C12) e `GET /api/analytics/custo` (Custo, C13).
+// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral, C12) e `GET /api/analytics/cost` (Custo, C13).
 //
 // Tudo sai da porta de armazenamento, só leitura:
 // - custo e tokens pelas parcelas e pelo relatório de custo (src/custo/agregacao.ts), com a tabela
 //   vigente; o que não tem preço fica `null` e a lista dos modelos sem preço vai junto;
-// - dias pelo `diaDe` no fuso pedido (`?fuso=<IANA>`, padrão UTC);
+// - dias pelo `diaDe` no fuso pedido (`?tz=<IANA>`, padrão UTC);
 // - somar só o que soma (decisão 0006): custo e contagens somam, sempre com a divisão por conta ao lado.
 //
 // Definições:
@@ -28,6 +28,8 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 
 export const ROTA_DO_ANALYTICS = '/api/analytics';
+export const COST_ROUTE = '/api/analytics/cost';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_CUSTO = '/api/analytics/custo';
 export const DIAS_DO_CUSTO = [7, 30, 90] as const;
 /** Janela dos números da Visão geral. */
@@ -35,8 +37,13 @@ export const DIAS_DA_VISAO = 30;
 export const SEMANAS_DO_HEATMAP = 52;
 const SEM_CONTA = 'Sem conta';
 const SEM_PASTA = '(sem pasta)';
-const DIAS_DA_SEMANA = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] as const;
+/** The weekday keys of `weekday[].day`, Monday first; the /ui writes them in pt-BR. */
+const DIAS_DA_SEMANA = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const FUSO = /^[A-Za-z0-9_+\-/]{1,64}$/;
+/** The 400 of a bad `?tz=` (the old route answers it with `fuso:`, src/api/legacy-routes.ts). */
+export const TZ_ERROR = 'tz: um fuso IANA, como America/Sao_Paulo';
+/** The 400 of a bad `?days=` (the old route answers it with `dias:`). */
+export const DAYS_ERROR = `days: ${DIAS_DO_CUSTO.slice(0, -1).join(', ')} ou ${DIAS_DO_CUSTO.at(-1)}`;
 
 type Porta = Pick<StoragePort, 'listSessions' | 'listAgents' | 'listEvents' | 'listTokenUsage' | 'listModelPricing'>;
 
@@ -60,8 +67,8 @@ const LEITURAS_EM_PARALELO = 6;
 
 export interface ContaDoAnalytics {
   id: string | null;
-  rotulo: string;
-  cor: string | null;
+  label: string;
+  color: string | null;
 }
 
 export interface RespostaDoAnalytics {
@@ -85,12 +92,12 @@ function diasEntre(desde: string, ate: string): string[] {
 
 export function validarFuso(v: string | null): string {
   if (v === null || v === '') return 'UTC';
-  if (!FUSO.test(v)) throw new ParametroInvalido('fuso: um fuso IANA, como America/Sao_Paulo');
+  if (!FUSO.test(v)) throw new ParametroInvalido(TZ_ERROR);
   try {
     // A forma canônica: `america/sao_paulo` vira `America/Sao_Paulo`.
     return new Intl.DateTimeFormat('en-CA', { timeZone: v }).resolvedOptions().timeZone;
   } catch {
-    throw new ParametroInvalido('fuso: um fuso IANA, como America/Sao_Paulo');
+    throw new ParametroInvalido(TZ_ERROR);
   }
 }
 
@@ -100,7 +107,7 @@ const entradaDe = (l: LinhaDeCusto) => l.tokens.input + l.tokens.cacheRead + l.t
 const cachePctDe = (l: LinhaDeCusto) => pct(l.tokens.cacheRead, entradaDe(l));
 const projetoDe = (cwd: string | null): string => (cwd ? cwd.replace(/\/+$/, '').split('/').pop() || SEM_PASTA : SEM_PASTA);
 
-function pico<T extends { dia: string }>(dias: readonly T[], valor: (d: T) => number | null): T | null {
+function pico<T extends { day: string }>(dias: readonly T[], valor: (d: T) => number | null): T | null {
   let melhor: T | null = null;
   for (const d of dias) if ((valor(d) ?? 0) > 0 && (!melhor || (valor(d) ?? 0) > (valor(melhor) ?? 0))) melhor = d;
   return melhor;
@@ -199,12 +206,12 @@ export class RotaAnalytics {
 
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
-      const fuso = validarFuso(url.searchParams.get('fuso'));
+      const fuso = validarFuso(url.searchParams.get('tz'));
       const hoje = diaDe(new Date(this.agora()).toISOString(), fuso);
       if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
-      if (url.pathname === ROTA_DO_CUSTO) {
-        const dias = Number(url.searchParams.get('dias') ?? 30);
-        if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido('dias: 7, 30 ou 90');
+      if (url.pathname === COST_ROUTE) {
+        const dias = Number(url.searchParams.get('days') ?? 30);
+        if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);
         return { status: 200, corpo: await this.emCache(`custo?${dias}&${fuso}&${hoje}`, this.cacheMs.custo, () => this.custo(dias, fuso)) };
       }
       return { status: 404, corpo: { error: 'não encontrado' } };
@@ -230,9 +237,9 @@ export class RotaAnalytics {
   }
 
   private contaDe(s: Session): ContaDoAnalytics {
-    if (!this.contas) return s.accountId ? { id: s.accountId, rotulo: s.accountId, cor: null } : { id: null, rotulo: SEM_CONTA, cor: null };
+    if (!this.contas) return s.accountId ? { id: s.accountId, label: s.accountId, color: null } : { id: null, label: SEM_CONTA, color: null };
     const c = this.contas.daSessao(s, null);
-    return c ? { id: c.id, rotulo: c.rotulo, cor: c.cor } : { id: null, rotulo: SEM_CONTA, cor: null };
+    return c ? { id: c.id, label: c.label, color: c.color } : { id: null, label: SEM_CONTA, color: null };
   }
 
   /**
@@ -336,47 +343,47 @@ export class RotaAnalytics {
     const porConta = contas.map((c) => {
       const ps = todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id);
       const total = relatorioDeCusto(ps, fuso).total;
-      return { conta: c.id, usd: arredondar(total.custoUsd), semPreco: total.semPreco.modelos };
+      return { account: c.id, usd: arredondar(total.custoUsd), unpriced: total.semPreco.modelos };
     });
 
-    const ultimos = diasEntre(desde, hoje).map((dia) => ({ dia, sessoes: sessoesPorDia.get(dia)?.size ?? 0 }));
-    const porDiaDaSemana = DIAS_DA_SEMANA.map((dia) => ({ dia, sessoes: 0 }));
-    for (const d of ultimos) porDiaDaSemana[indiceDaSemana(d.dia)].sessoes += d.sessoes;
-    const picoDosDias = pico(ultimos, (d) => d.sessoes);
+    const ultimos = diasEntre(desde, hoje).map((day) => ({ day, sessions: sessoesPorDia.get(day)?.size ?? 0 }));
+    const porDiaDaSemana = DIAS_DA_SEMANA.map((day) => ({ day, sessions: 0 }));
+    for (const d of ultimos) porDiaDaSemana[indiceDaSemana(d.day)].sessions += d.sessions;
+    const picoDosDias = pico(ultimos, (d) => d.sessions);
 
     return {
-      geradoEm,
-      fusoHorario: fuso,
-      hoje,
-      desde,
-      ate: hoje,
-      contas,
-      numeros: {
-        sessoes: { total: comAtividade.length, ativas: comAtividade.filter((s) => s.status === 'active').length },
-        agentes: { total: agentes, ativos: agentesAtivos },
+      generatedAt: geradoEm,
+      timeZone: fuso,
+      today: hoje,
+      since: desde,
+      until: hoje,
+      accounts: contas,
+      numbers: {
+        sessions: { total: comAtividade.length, active: comAtividade.filter((s) => s.status === 'active').length },
+        agents: { total: agentes, active: agentesAtivos },
         tokens: { total: relatorio.total.totalDeTokens, cachePct: cachePctDe(relatorio.total) },
-        custo: { usd: arredondar(relatorio.total.custoUsd), dias: DIAS_DA_VISAO, semPreco: relatorio.total.semPreco.modelos, porConta },
-        eventos: { total: eventosNaJanela, porSessao: comAtividade.length ? arredondar(eventosNaJanela / comAtividade.length, 1) : null },
+        cost: { usd: arredondar(relatorio.total.custoUsd), days: DIAS_DA_VISAO, unpriced: relatorio.total.semPreco.modelos, byAccount: porConta },
+        events: { total: eventosNaJanela, perSession: comAtividade.length ? arredondar(eventosNaJanela / comAtividade.length, 1) : null },
       },
-      atividade: {
-        semanas: SEMANAS_DO_HEATMAP,
-        desde: desdeHeatmap,
-        dias: diasEntre(desdeHeatmap, hoje).map((dia) => ({ dia, eventos: eventosPorDia.get(dia) ?? 0 })),
+      activity: {
+        weeks: SEMANAS_DO_HEATMAP,
+        since: desdeHeatmap,
+        days: diasEntre(desdeHeatmap, hoje).map((day) => ({ day, events: eventosPorDia.get(day) ?? 0 })),
       },
-      ultimos30: {
-        dias: ultimos,
-        pico: picoDosDias ? { dia: picoDosDias.dia, sessoes: picoDosDias.sessoes } : null,
-        total: ultimos.reduce((s, d) => s + d.sessoes, 0),
+      last30: {
+        days: ultimos,
+        peak: picoDosDias ? { day: picoDosDias.day, sessions: picoDosDias.sessions } : null,
+        total: ultimos.reduce((s, d) => s + d.sessions, 0),
       },
-      tokensPorModelo: relatorio.porModelo
-        .map((l) => ({ modelo: l.chave, tokens: l.totalDeTokens }))
+      tokensByModel: relatorio.porModelo
+        .map((l) => ({ model: l.chave, tokens: l.totalDeTokens }))
         .filter((l) => l.tokens > 0)
-        .sort((a, b) => b.tokens - a.tokens || a.modelo.localeCompare(b.modelo)),
-      ferramentas: [...ferramentas]
-        .map(([nome, usos]) => ({ nome, usos }))
-        .sort((a, b) => b.usos - a.usos || a.nome.localeCompare(b.nome))
+        .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model)),
+      tools: [...ferramentas]
+        .map(([name, uses]) => ({ name, uses }))
+        .sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name))
         .slice(0, 5),
-      diaDaSemana: porDiaDaSemana,
+      weekday: porDiaDaSemana,
     };
   }
 
@@ -393,7 +400,7 @@ export class RotaAnalytics {
 
     const porDiaDe = (r: ReturnType<typeof relatorioDeCusto>) => {
       const m = new Map(r.porDia.map((l) => [l.chave, l.custoUsd]));
-      return calendario.map((dia) => ({ dia, usd: m.has(dia) ? arredondar(m.get(dia)!) : 0 }));
+      return calendario.map((day) => ({ day, usd: m.has(day) ? arredondar(m.get(day)!) : 0 }));
     };
     const porDia = porDiaDe(relatorio);
     const linhaDeHoje = relatorio.porDia.find((l) => l.chave === hoje);
@@ -414,48 +421,48 @@ export class RotaAnalytics {
     const porConta = contas.map((c) => ({ c, r: relatorioDeCusto(todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id), fuso) }));
 
     return {
-      geradoEm,
-      fusoHorario: fuso,
-      dias,
-      hoje,
-      desde,
-      ate: hoje,
-      estimativa: true as const,
-      moeda: 'USD' as const,
-      contas,
-      resumoDeHoje: {
+      generatedAt: geradoEm,
+      timeZone: fuso,
+      days: dias,
+      today: hoje,
+      since: desde,
+      until: hoje,
+      estimate: true as const,
+      currency: 'USD' as const,
+      accounts: contas,
+      todaySummary: {
         usd: linhaDeHoje ? arredondar(linhaDeHoje.custoUsd) : 0,
-        sessoes: new Set(todas.filter((p) => p.dia === hoje).map((p) => p.sessionId)).size,
+        sessions: new Set(todas.filter((p) => p.dia === hoje).map((p) => p.sessionId)).size,
         // A divisão por conta (decisão 0006), do dia de hoje de cada uma; conta sem uso hoje vale 0.
-        porConta: porConta.map(({ c, r }) => {
+        byAccount: porConta.map(({ c, r }) => {
           const l = r.porDia.find((d) => d.chave === hoje);
-          return { conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: l ? arredondar(l.custoUsd) : 0, semPreco: l?.semPreco.modelos ?? [] };
+          return { account: c.id, label: c.label, color: c.color, usd: l ? arredondar(l.custoUsd) : 0, unpriced: l?.semPreco.modelos ?? [] };
         }),
       },
-      periodo: {
+      period: {
         usd: arredondar(relatorio.total.custoUsd),
-        mediaPorDia: relatorio.total.custoUsd === null ? null : arredondar(relatorio.total.custoUsd / dias),
+        dailyAverage: relatorio.total.custoUsd === null ? null : arredondar(relatorio.total.custoUsd / dias),
       },
       cache: { pct: cachePctDe(relatorio.total) },
-      semPreco: relatorio.total.semPreco,
-      porDia,
-      pico: picoDoCusto ? { dia: picoDoCusto.dia, usd: picoDoCusto.usd } : null,
-      porModelo: relatorio.porModelo.map((l) => ({
-        modelo: l.chave,
+      unpriced: { models: relatorio.total.semPreco.modelos, totalTokens: relatorio.total.semPreco.totalDeTokens },
+      byDay: porDia,
+      peak: picoDoCusto ? { day: picoDoCusto.day, usd: picoDoCusto.usd } : null,
+      byModel: relatorio.porModelo.map((l) => ({
+        model: l.chave,
         usd: arredondar(l.custoUsd),
         pct: l.custoUsd === null ? null : pct(l.custoUsd, somaComPreco),
-        totalDeTokens: l.totalDeTokens,
+        totalTokens: l.totalDeTokens,
       })),
-      porProjeto: [...projetos]
-        .map(([projeto, ps]) => ({ projeto, usd: arredondar(relatorioDeCusto(ps, fuso).total.custoUsd) }))
-        .sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1) || a.projeto.localeCompare(b.projeto)),
-      porConta: porConta.map(({ c, r }) => ({
-        conta: c.id,
-        rotulo: c.rotulo,
-        cor: c.cor,
+      byProject: [...projetos]
+        .map(([project, ps]) => ({ project, usd: arredondar(relatorioDeCusto(ps, fuso).total.custoUsd) }))
+        .sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1) || a.project.localeCompare(b.project)),
+      byAccount: porConta.map(({ c, r }) => ({
+        account: c.id,
+        label: c.label,
+        color: c.color,
         usd: arredondar(r.total.custoUsd),
-        semPreco: r.total.semPreco.modelos,
-        porDia: porDiaDe(r),
+        unpriced: r.total.semPreco.modelos,
+        byDay: porDiaDe(r),
       })),
     };
   }

@@ -3,12 +3,16 @@
 //
 // | Parâmetro | Valores                                                  | Padrão    |
 // | --------- | -------------------------------------------------------- | --------- |
-// | `visao`   | `sessoes` ou `agentes`                                   | `sessoes` |
-// | `coluna`  | uma coluna da visão; sem ela, vêm todas, na página 1     | —         |
-// | `pagina`  | a partir de 1, com `POR_PAGINA` itens; só com `coluna`   | 1         |
+// | `view`     | `sessions` ou `agents`                                   | `sessions` |
+// | `column`   | uma coluna da visão; sem ela, vêm todas, na página 1     | —          |
+// | `page`     | a partir de 1, com `POR_PAGINA` itens; só com `column`   | 1          |
 //
-// Visão sessões: `ativa`, `esperando`, `concluida`, `erro`, `abandonada` (o `DisplayStatus`).
-// Visão agentes: `trabalhando`, `esperando`, `concluidos`, `erro`; o principal de cada sessão (o
+// The JSON keys and the view and column values are English since #173 phase 2b; the route never had an
+// old path, so its body simply turned English. The old parameter names (`visao`, `coluna`, `pagina`)
+// and values (`sessoes`, `agentes`, `ativa`, `trabalhando`…) are still read: src/api/legacy-routes.ts.
+//
+// Visão sessões: `active`, `waiting`, `completed`, `error`, `abandoned` (o `DisplayStatus`).
+// Visão agentes: `working`, `waiting`, `done`, `error`; o principal de cada sessão (o
 // id é o da sessão) e cada subagente (`<sessão>:<agente>`). O principal herda o status da sessão.
 // O subagente que terminou é `completed`, o que falhou é `error`; o que não terminou roda
 // (`active`) enquanto a sessão está viva, mesmo esperando você (o principal espera, ele não), e
@@ -30,48 +34,48 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao } from './resumo.ts';
-import { custoDaSessao, duracaoDe, tituloDe, type LinhaDeSessao } from './sessoes.ts';
+import { custoDaSessao, duracaoDe, tituloDe } from './sessoes.ts';
 
 export const ROTA_DO_KANBAN = '/api/kanban';
 export const POR_PAGINA = 10;
 /** O último prompt e a descrição do subagente, numa linha, até aqui. */
 export const TEXTO_MAXIMO = 120;
 
-export const VISOES = ['sessoes', 'agentes'] as const;
+export const VISOES = ['sessions', 'agents'] as const;
 export type Visao = (typeof VISOES)[number];
 
 export const COLUNAS_DAS_SESSOES = [
-  { id: 'ativa', rotulo: 'Ativa', status: 'active' },
-  { id: 'esperando', rotulo: 'Esperando você', status: 'waiting' },
-  { id: 'concluida', rotulo: 'Concluída', status: 'completed' },
-  { id: 'erro', rotulo: 'Com erro', status: 'error' },
-  { id: 'abandonada', rotulo: 'Abandonada', status: 'abandoned' },
-] as const satisfies readonly { id: string; rotulo: string; status: DisplayStatus }[];
+  { id: 'active', label: 'Ativa', status: 'active' },
+  { id: 'waiting', label: 'Esperando você', status: 'waiting' },
+  { id: 'completed', label: 'Concluída', status: 'completed' },
+  { id: 'error', label: 'Com erro', status: 'error' },
+  { id: 'abandoned', label: 'Abandonada', status: 'abandoned' },
+] as const satisfies readonly { id: string; label: string; status: DisplayStatus }[];
 
 export const COLUNAS_DOS_AGENTES = [
-  { id: 'trabalhando', rotulo: 'Trabalhando' },
-  { id: 'esperando', rotulo: 'Esperando' },
-  { id: 'concluidos', rotulo: 'Concluídos' },
-  { id: 'erro', rotulo: 'Erro' },
+  { id: 'working', label: 'Trabalhando' },
+  { id: 'waiting', label: 'Esperando' },
+  { id: 'done', label: 'Concluídos' },
+  { id: 'error', label: 'Erro' },
 ] as const;
 
 export type ColunaDeSessao = (typeof COLUNAS_DAS_SESSOES)[number]['id'];
 export type ColunaDeAgente = (typeof COLUNAS_DOS_AGENTES)[number]['id'];
 
 const DA_SESSAO: Record<DisplayStatus, ColunaDeSessao> = {
-  active: 'ativa',
-  waiting: 'esperando',
-  completed: 'concluida',
-  error: 'erro',
-  abandoned: 'abandonada',
+  active: 'active',
+  waiting: 'waiting',
+  completed: 'completed',
+  error: 'error',
+  abandoned: 'abandoned',
 };
 
 const DO_AGENTE: Record<DisplayStatus, ColunaDeAgente> = {
-  active: 'trabalhando',
-  waiting: 'esperando',
-  completed: 'concluidos',
-  error: 'erro',
-  abandoned: 'concluidos',
+  active: 'working',
+  waiting: 'waiting',
+  completed: 'done',
+  error: 'error',
+  abandoned: 'done',
 };
 
 /** A coluna da visão agentes para o status do card. */
@@ -79,45 +83,57 @@ export function colunaDoAgente(status: DisplayStatus): ColunaDeAgente {
   return DO_AGENTE[status];
 }
 
-/** A linha da tela Sessões (`GET /api/sessoes`, #28) com o último prompt e o modelo. */
-export interface CardDeSessao extends LinhaDeSessao {
+/** The session card of the Kanban: the Sessions list row (`GET /api/sessions`), with the last prompt and the model. */
+export interface CardDeSessao {
+  id: string;
+  title: string;
+  status: DisplayStatus;
+  reason: AwaitingReason | null;
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
-  ultimoPrompt: string | null;
+  lastPrompt: string | null;
+  lastActivity: string;
+  start: string;
+  running: boolean;
+  durationMs: number;
+  agents: number;
   /** Rótulo legível ("Opus 5.5"); o id cru quando a tabela não conhece o modelo. */
-  modelo: string | null;
+  model: string | null;
+  costUsd: number | null;
+  cwd: string | null;
+  account: { label: string; color: string } | null;
 }
 
 export interface CardDeAgente {
   /** O id da sessão para o principal; `<sessão>:<agente>` para o subagente. */
   id: string;
-  sessaoId: string;
-  principal: boolean;
+  sessionId: string;
+  main: boolean;
   /** "Agente principal" ou o tipo do subagente ("Explore"). */
-  nome: string;
+  name: string;
   /** A tarefa do subagente; para o principal, o título da sessão. */
-  descricao: string;
+  description: string;
   status: DisplayStatus;
-  motivo: AwaitingReason | null;
-  modelo: string | null;
-  inicio: string;
-  ultimaAtividade: string;
-  rodando: boolean;
-  duracaoMs: number;
+  reason: AwaitingReason | null;
+  model: string | null;
+  start: string;
+  lastActivity: string;
+  running: boolean;
+  durationMs: number;
 }
 
 export interface Coluna<T = CardDeSessao | CardDeAgente> {
   id: string;
-  rotulo: string;
+  label: string;
   total: number;
-  pagina: number;
-  temMais: boolean;
-  itens: T[];
+  page: number;
+  hasMore: boolean;
+  items: T[];
 }
 
 export interface KanbanHttp {
-  visao: Visao;
-  porPagina: number;
-  colunas: Coluna[];
+  view: Visao;
+  perPage: number;
+  columns: Coluna[];
 }
 
 export interface PedidoDoKanban {
@@ -132,18 +148,18 @@ export class ErroDoPedidoDoKanban extends Error {}
 /** Os parâmetros da URL, validados; parâmetro inválido lança `ErroDoPedidoDoKanban` (400). */
 export function pedidoDoKanban(url: URL): PedidoDoKanban {
   const p = url.searchParams;
-  const visao = p.get('visao') || 'sessoes';
-  if (!VISOES.includes(visao as Visao)) throw new ErroDoPedidoDoKanban(`visao: um de ${VISOES.join(', ')}`);
-  const colunas: readonly { id: string }[] = visao === 'sessoes' ? COLUNAS_DAS_SESSOES : COLUNAS_DOS_AGENTES;
-  const coluna = p.get('coluna') || null;
+  const visao = p.get('view') || 'sessions';
+  if (!VISOES.includes(visao as Visao)) throw new ErroDoPedidoDoKanban(`view: um de ${VISOES.join(', ')}`);
+  const colunas: readonly { id: string }[] = visao === 'sessions' ? COLUNAS_DAS_SESSOES : COLUNAS_DOS_AGENTES;
+  const coluna = p.get('column') || null;
   if (coluna !== null && !colunas.some((c) => c.id === coluna)) {
-    throw new ErroDoPedidoDoKanban(`coluna: uma de ${colunas.map((c) => c.id).join(', ')}`);
+    throw new ErroDoPedidoDoKanban(`column: uma de ${colunas.map((c) => c.id).join(', ')}`);
   }
-  const textoDaPagina = p.get('pagina');
-  if (textoDaPagina !== null && coluna === null) throw new ErroDoPedidoDoKanban('pagina: só com coluna');
+  const textoDaPagina = p.get('page');
+  if (textoDaPagina !== null && coluna === null) throw new ErroDoPedidoDoKanban('page: só com column');
   const pagina = textoDaPagina === null ? 1 : Number(textoDaPagina);
   if (!/^\d+$/.test(textoDaPagina ?? '1') || !Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) {
-    throw new ErroDoPedidoDoKanban('pagina: um inteiro a partir de 1');
+    throw new ErroDoPedidoDoKanban('page: um inteiro a partir de 1');
   }
   return { visao: visao as Visao, coluna, pagina };
 }
@@ -204,8 +220,8 @@ export class QuadroKanban {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
     const sessoes = await this.lerSessoes();
     const colunas =
-      pedido.visao === 'sessoes' ? await this.colunasDeSessoes(sessoes, pedido, await precosVigentes(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
-    return { visao: pedido.visao, porPagina: POR_PAGINA, colunas };
+      pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await precosVigentes(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
+    return { view: pedido.visao, perPage: POR_PAGINA, columns: colunas };
   }
 
   private async lerSessoes(): Promise<SessaoLida[]> {
@@ -235,7 +251,7 @@ export class QuadroKanban {
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
       const itens: CardDeSessao[] = [];
       for (const x of fatia) itens.push(await this.cardDeSessao(x, agora, precos));
-      colunas.push({ id: c.id, rotulo: c.rotulo, total: daColuna.length, pagina, temMais, itens });
+      colunas.push({ id: c.id, label: c.label, total: daColuna.length, page: pagina, hasMore: temMais, items: itens });
     }
     return colunas;
   }
@@ -245,19 +261,19 @@ export class QuadroKanban {
     const resumo = await this.resumos.ler(s.id, s.updatedAt);
     return {
       id: s.id,
-      titulo,
+      title: titulo,
       status,
-      motivo: status === 'waiting' ? s.awaitingReason : null,
-      ultimoPrompt: umaLinha(resumo.ultimoPrompt, TEXTO_MAXIMO),
-      ultimaAtividade: s.updatedAt,
-      inicio: s.startedAt,
-      rodando: status === 'active' || status === 'waiting',
-      duracaoMs: duracaoDe(s, agora),
-      agentes: (await this.agentesDe(s)).length,
-      modelo: rotuloDoModelo(s.model),
-      custoUsd: await this.custoDe(s, precos),
+      reason: status === 'waiting' ? s.awaitingReason : null,
+      lastPrompt: umaLinha(resumo.ultimoPrompt, TEXTO_MAXIMO),
+      lastActivity: s.updatedAt,
+      start: s.startedAt,
+      running: status === 'active' || status === 'waiting',
+      durationMs: duracaoDe(s, agora),
+      agents: (await this.agentesDe(s)).length,
+      model: rotuloDoModelo(s.model),
+      costUsd: await this.custoDe(s, precos),
       cwd: s.cwd,
-      conta: conta ? { rotulo: conta.rotulo, cor: conta.cor } : null,
+      account: conta ? { label: conta.label, color: conta.color } : null,
     };
   }
 
@@ -268,12 +284,12 @@ export class QuadroKanban {
       cards.push(principalDe(x, agora));
       for (const a of await this.agentesDe(x.s)) if (a.type === 'subagent') cards.push(subagenteDe(a, x.s, agora));
     }
-    cards.sort((a, b) => maisRecente(a.ultimaAtividade, a.id, b.ultimaAtividade, b.id));
+    cards.sort((a, b) => maisRecente(a.lastActivity, a.id, b.lastActivity, b.id));
     const pedidas = COLUNAS_DOS_AGENTES.filter((c) => pedido.coluna === null || c.id === pedido.coluna);
     return pedidas.map((c) => {
       const daColuna = cards.filter((a) => DO_AGENTE[a.status] === c.id);
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
-      return { id: c.id, rotulo: c.rotulo, total: daColuna.length, pagina, temMais, itens: fatia };
+      return { id: c.id, label: c.label, total: daColuna.length, page: pagina, hasMore: temMais, items: fatia };
     });
   }
 
@@ -300,17 +316,17 @@ export class QuadroKanban {
 function principalDe({ s, status, titulo }: SessaoLida, agora: number): CardDeAgente {
   return {
     id: s.id,
-    sessaoId: s.id,
-    principal: true,
-    nome: 'Agente principal',
-    descricao: titulo,
+    sessionId: s.id,
+    main: true,
+    name: 'Agente principal',
+    description: titulo,
     status,
-    motivo: status === 'waiting' ? s.awaitingReason : null,
-    modelo: rotuloDoModelo(s.model),
-    inicio: s.startedAt,
-    ultimaAtividade: s.updatedAt,
-    rodando: status === 'active' || status === 'waiting',
-    duracaoMs: duracaoDe(s, agora),
+    reason: status === 'waiting' ? s.awaitingReason : null,
+    model: rotuloDoModelo(s.model),
+    start: s.startedAt,
+    lastActivity: s.updatedAt,
+    running: status === 'active' || status === 'waiting',
+    durationMs: duracaoDe(s, agora),
   };
 }
 
@@ -321,17 +337,17 @@ function subagenteDe(a: Agent, s: Session, agora: number): CardDeAgente {
   const modelo = typeof a.metadata?.model === 'string' ? a.metadata.model : null;
   return {
     id: a.id.startsWith(`${s.id}:`) ? a.id : `${s.id}:${a.id}`,
-    sessaoId: s.id,
-    principal: false,
-    nome: tituloSeguro(a.subagentType) ?? tituloSeguro(a.name) ?? 'Subagente',
-    descricao: umaLinha(a.task, TEXTO_MAXIMO) ?? '',
+    sessionId: s.id,
+    main: false,
+    name: tituloSeguro(a.subagentType) ?? tituloSeguro(a.name) ?? 'Subagente',
+    description: umaLinha(a.task, TEXTO_MAXIMO) ?? '',
     status,
-    motivo: null,
-    modelo: rotuloDoModelo(modelo),
-    inicio: a.startedAt,
-    ultimaAtividade: a.updatedAt,
-    rodando,
-    duracaoMs: Math.max(0, fim - Date.parse(a.startedAt)),
+    reason: null,
+    model: rotuloDoModelo(modelo),
+    start: a.startedAt,
+    lastActivity: a.updatedAt,
+    running: rodando,
+    durationMs: Math.max(0, fim - Date.parse(a.startedAt)),
   };
 }
 

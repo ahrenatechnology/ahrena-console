@@ -11,20 +11,24 @@
 //   não voltam num pedido seguinte com outros filtros.
 // - No máximo `maximoDeEsperas` abertas (padrão 256); acima disso, `ErroDeLotacao`.
 // - O cursor é opaco (`<geração>.<seq>`). A geração muda a cada vez que o núcleo sobe; cursor de
-//   outra geração, ou mais velho que a fila, volta na hora com `reiniciar: true` (releia tudo).
+//   outra geração, ou mais velho que a fila, volta na hora com `reset: true` (releia tudo).
 // - Relógio injetável, para os testes serem determinísticos.
 
-// `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave `lista` ou `<dono>/<repo>`
+// `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave (`key`) `lista` ou `<dono>/<repo>`
 // em minúsculas. Só a rota HTTP o expõe; o `wait_for_changes` do MCP o filtra (mcp.ts).
-export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta', 'repos'] as const;
+// `alert` (#175, src/telemetry): a machine alert that enters or exits; the key is `<machine>:<alert>`,
+// with no session and no account.
+// The values are English since #173 phase 2b; the old ones (`sessao`, `estado`, `precisa-de-voce`, `plano`,
+// `decisao`, `conta`) are still accepted in `?type=` and answered on the old route (src/api/legacy-routes.ts).
+export const TIPOS_DE_MUDANCA = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert'] as const;
 export type TipoDeMudanca = (typeof TIPOS_DE_MUDANCA)[number];
 
 export interface MudancaRegistrada {
   seq: number;
-  tipo: TipoDeMudanca;
-  /** O que mudou: o id da sessão, da decisão ou da conta; em `repos`, `lista` ou `<dono>/<repo>`. */
-  chave: string;
-  /** A sessão a que a mudança pertence; `null` em mudança de conta e de repositórios. */
+  type: TipoDeMudanca;
+  /** O que mudou: o id da sessão, da decisão ou da conta; em `repos`, `lista` ou `<dono>/<repo>`. For `alert`: `<machine>:<alert>`. */
+  key: string;
+  /** A sessão a que a mudança pertence; `null` em mudança de conta e de repositórios (and for `alert`). */
   sessionId: string | null;
   /** A conta da sessão; `null` é "Sem conta". */
   accountId: string | null;
@@ -52,12 +56,12 @@ export interface OpcoesDaEspera {
 export interface RespostaDaEspera {
   /** Cursor para o próximo pedido: o de agora, que pula também as mudanças que os filtros deixaram de fora. */
   cursor: string;
-  /** O que mudou e passa nos filtros, uma vez por (tipo, chave), na ordem da última mudança. */
-  mudancas: MudancaRegistrada[];
+  /** O que mudou e passa nos filtros, uma vez por (type, key), na ordem da última mudança. */
+  changes: MudancaRegistrada[];
   /** O cursor não serve (vazio, de outra geração ou velho demais): releia tudo e siga com `cursor`. */
-  reiniciar: boolean;
+  reset: boolean;
   /** Voltou pelo timeout, sem novidade. */
-  expirou: boolean;
+  timedOut: boolean;
 }
 
 export interface Relogio {
@@ -85,7 +89,7 @@ export const AGRUPAR_PADRAO_MS = 50;
 /** Intervalo mínimo entre o começo de uma espera e a resposta, para o laço de long polling não girar a cada hook. */
 export const INTERVALO_MINIMO_PADRAO_MS = 1000;
 export const MAXIMO_DE_ESPERAS_PADRAO = 256;
-/** Teto de mudanças por resposta; acima disso a resposta pede `reiniciar`. */
+/** Teto de mudanças por resposta; acima disso a resposta pede `reset`. */
 export const MAXIMO_POR_RESPOSTA = 200;
 
 export interface OpcoesDoCursor {
@@ -170,10 +174,10 @@ export class CursorDeMudancas {
   aguardar(cursor: string | null | undefined, opcoes: OpcoesDaEspera = {}): Promise<RespostaDaEspera> {
     const filtros = opcoes.filtros ?? {};
     const desde = this.seqDe(cursor);
-    if (desde === null) return Promise.resolve({ cursor: this.atual, mudancas: [], reiniciar: true, expirou: false });
+    if (desde === null) return Promise.resolve({ cursor: this.atual, changes: [], reset: true, timedOut: false });
     const ja = this.ler(desde, filtros);
     const timeoutMs = limitarEspera(opcoes.timeoutMs);
-    if (ja.reiniciar || timeoutMs === 0 || opcoes.signal?.aborted) return Promise.resolve(ja);
+    if (ja.reset || timeoutMs === 0 || opcoes.signal?.aborted) return Promise.resolve(ja);
     if (this.esperas.size >= this.maximoDeEsperas) return Promise.reject(new ErroDeLotacao(this.maximoDeEsperas));
 
     return new Promise((resolve) => {
@@ -189,12 +193,12 @@ export class CursorDeMudancas {
           this.relogio.clearTimeout(espera.timer);
           opcoes.signal?.removeEventListener('abort', aoAbortar);
           const r = this.ler(desde, filtros);
-          resolve({ ...r, expirou: expirou && r.mudancas.length === 0 && !r.reiniciar });
+          resolve({ ...r, timedOut: expirou && r.changes.length === 0 && !r.reset });
         },
       };
       this.esperas.add(espera);
       opcoes.signal?.addEventListener('abort', aoAbortar, { once: true });
-      if (ja.mudancas.length > 0) this.agendar(espera);
+      if (ja.changes.length > 0) this.agendar(espera);
       else espera.timer = this.relogio.setTimeout(() => espera.responder(true), timeoutMs);
     });
   }
@@ -215,17 +219,17 @@ export class CursorDeMudancas {
     const cursor = this.atual;
     const primeira = this.fila[0]?.seq ?? this.seq + 1;
     // A fila já descartou mudanças que este cursor não viu.
-    if (desde < primeira - 1) return { cursor, mudancas: [], reiniciar: true, expirou: false };
+    if (desde < primeira - 1) return { cursor, changes: [], reset: true, timedOut: false };
     const porChave = new Map<string, MudancaRegistrada>();
     for (let i = this.fila.length - 1; i >= 0 && this.fila[i].seq > desde; i--) {
       const m = this.fila[i];
       if (!passa(m, filtros)) continue;
-      const k = `${m.tipo}\0${m.chave}`;
+      const k = `${m.type}\0${m.key}`;
       if (!porChave.has(k)) porChave.set(k, m);
     }
-    if (porChave.size > MAXIMO_POR_RESPOSTA) return { cursor, mudancas: [], reiniciar: true, expirou: false };
-    const mudancas = [...porChave.values()].sort((a, b) => a.seq - b.seq);
-    return { cursor, mudancas, reiniciar: false, expirou: false };
+    if (porChave.size > MAXIMO_POR_RESPOSTA) return { cursor, changes: [], reset: true, timedOut: false };
+    const changes = [...porChave.values()].sort((a, b) => a.seq - b.seq);
+    return { cursor, changes, reset: false, timedOut: false };
   }
 }
 
@@ -235,7 +239,7 @@ export function limitarEspera(timeoutMs: number | undefined): number {
 }
 
 function passa(m: MudancaRegistrada, f: FiltrosDeMudanca): boolean {
-  if (f.tipos && !f.tipos.includes(m.tipo)) return false;
+  if (f.tipos && !f.tipos.includes(m.type)) return false;
   if (f.sessionIds && (m.sessionId === null || !f.sessionIds.includes(m.sessionId))) return false;
   if (f.accountIds && !f.accountIds.includes(m.accountId)) return false;
   if (f.casaConta && !f.casaConta(m.accountId)) return false;

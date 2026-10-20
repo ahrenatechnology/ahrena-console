@@ -1,5 +1,5 @@
 // `GET /api/dashboard`: o que o Dashboard (C1, #27) desenha além do "precisam de você", que vem
-// de `GET /api/atencao` (#87). Os seis números, os agentes ativos com os subagentes e a atividade
+// de `GET /api/attention` (#87). Os seis números, os agentes ativos com os subagentes e a atividade
 // recente, num pedido.
 //
 // Tudo pela porta e por caches em memória (decisão 0004): nenhum transcript é lido.
@@ -24,59 +24,60 @@ export const ROTA_DO_DASHBOARD = '/api/dashboard';
 /** O status que o badge mostra (os cinco do wireframe). */
 export type StatusDoBadge = 'active' | 'waiting' | 'completed' | 'error' | 'abandoned';
 
+// The JSON is English since #173 phase 2b (layer 3); the route never had a Portuguese alias.
 export interface NumerosDoDashboard {
   /** Todas as sessões do banco; as vivas por estado. */
-  sessoes: { total: number; ativas: number; esperando: number; comErro: number };
+  sessions: { total: number; active: number; waiting: number; withError: number };
   /** Agentes principais trabalhando, e em quantas sessões. */
-  agentes: { ativos: number; sessoes: number };
-  subagentes: { ativos: number; sessoes: number };
-  eventos: { hoje: number; ultimaHora: number; total: number };
+  agents: { active: number; sessions: number };
+  subagents: { active: number; sessions: number };
+  events: { today: number; lastHour: number; total: number };
   /** Estimativa: `null` quando houve uso e nada dele tem preço na tabela. */
-  custo: { usd: number | null; dias: number; semPreco: string[] };
+  cost: { usd: number | null; days: number; unpriced: string[] };
 }
 
 export interface SubagenteDoDashboard {
   id: string;
-  tipo: string | null;
-  tarefa: string | null;
+  type: string | null;
+  task: string | null;
   status: AgentStatus;
-  desde: string;
-  ate: string | null;
+  since: string;
+  until: string | null;
 }
 
 export interface AgenteDoDashboard {
-  sessao: string;
-  titulo: string;
-  projeto: string | null;
+  session: string;
+  title: string;
+  project: string | null;
   status: StatusDoBadge;
-  estado: EstadoDoInbox;
-  modelo: string | null;
-  custoUsd: number | null;
-  ultimaAtividade: string;
-  minutos: number;
-  turnos: number;
+  state: EstadoDoInbox;
+  model: string | null;
+  costUsd: number | null;
+  lastActivity: string;
+  minutes: number;
+  turns: number;
   /** As duas últimas mensagens da pessoa, já cortadas. */
-  mensagens: string[];
+  messages: string[];
   /** O que o agente faz agora: o passo do plano, o pedido ou a última ferramenta. */
-  tarefa: string | null;
-  subagentes: SubagenteDoDashboard[];
+  task: string | null;
+  subagents: SubagenteDoDashboard[];
 }
 
 export interface AtividadeDoDashboard {
-  sessao: string;
-  projeto: string | null;
+  session: string;
+  project: string | null;
   status: StatusDoBadge;
-  texto: string;
-  em: string;
+  text: string;
+  at: string;
 }
 
 export interface RespostaDoDashboard {
-  geradoEm: string;
-  dia: string;
-  fusoHorario: string;
-  numeros: NumerosDoDashboard;
-  agentes: AgenteDoDashboard[];
-  atividade: AtividadeDoDashboard[];
+  generatedAt: string;
+  day: string;
+  timeZone: string;
+  numbers: NumerosDoDashboard;
+  agents: AgenteDoDashboard[];
+  activity: AtividadeDoDashboard[];
 }
 
 export interface OpcoesDoDashboard {
@@ -185,70 +186,70 @@ export class MontadorDoDashboard {
     for (const id of this.leituras.keys()) if (!vistas.has(id)) this.leituras.delete(id);
 
     const inicioDoDia = inicioDoDiaEm(hoje, agora, fuso);
-    const eventos = { hoje: 0, ultimaHora: 0, total: 0 };
+    const eventos = { today: 0, lastHour: 0, total: 0 };
     for (const l of this.leituras.values()) {
       eventos.total += l.total;
       for (const t of l.recentes) {
-        if (t >= inicioDoDia) eventos.hoje++;
-        if (t > agora - HORA) eventos.ultimaHora++;
+        if (t >= inicioDoDia) eventos.today++;
+        if (t > agora - HORA) eventos.lastHour++;
       }
     }
 
     const { mes, vivas: custoDasVivas } = await this.custos(vivas.map((v) => v.session.id), hoje);
     const custoPorSessao = new Map(custoDasVivas.porSessao.map((l) => [l.chave, l.custoUsd]));
 
-    const sessoes = { total: totalDeSessoes, ativas: 0, esperando: 0, comErro: 0 };
-    const agentes = { ativos: 0, sessoes: 0 };
-    const subagentes = { ativos: 0, sessoes: 0 };
+    const sessoes = { total: totalDeSessoes, active: 0, waiting: 0, withError: 0 };
+    const agentes = { active: 0, sessions: 0 };
+    const subagentes = { active: 0, sessions: 0 };
     const cards: AgenteDoDashboard[] = [];
     for (const v of vivas) {
       const estado = v.inbox.estado;
-      if (estado === 'waiting') sessoes.esperando++;
-      else if (estado === 'error') sessoes.comErro++;
-      else sessoes.ativas++;
+      if (estado === 'waiting') sessoes.waiting++;
+      else if (estado === 'error') sessoes.withError++;
+      else sessoes.active++;
       const lista = await this.storage.listAgents(v.session.id);
       const principais = lista.filter((a) => a.type === 'main' && a.status === 'working').length;
       if (principais > 0 && estado !== 'waiting' && estado !== 'error') {
-        agentes.ativos += principais;
-        agentes.sessoes++;
+        agentes.active += principais;
+        agentes.sessions++;
       }
       if (v.inbox.subagentesAtivos > 0) {
-        subagentes.ativos += v.inbox.subagentesAtivos;
-        subagentes.sessoes++;
+        subagentes.active += v.inbox.subagentesAtivos;
+        subagentes.sessions++;
       }
       cards.push(await this.card(v, lista, custoPorSessao.has(v.session.id) ? (custoPorSessao.get(v.session.id) ?? null) : 0, agora));
     }
     // Trabalhando primeiro, depois quem espera, depois os erros; dentro, a atividade mais recente.
     const ordem: Record<StatusDoBadge, number> = { active: 0, waiting: 1, error: 2, completed: 3, abandoned: 4 };
-    cards.sort((a, b) => ordem[a.status] - ordem[b.status] || b.ultimaAtividade.localeCompare(a.ultimaAtividade));
+    cards.sort((a, b) => ordem[a.status] - ordem[b.status] || b.lastActivity.localeCompare(a.lastActivity));
 
     const atividade: AtividadeDoDashboard[] = [];
     for (const r of recentes) {
       const l = this.leituras.get(r.id);
-      for (const a of l?.atividade ?? []) atividade.push({ sessao: r.id, projeto: r.projeto, status: a.status, texto: a.texto, em: a.em });
+      for (const a of l?.atividade ?? []) atividade.push({ session: r.id, project: r.projeto, status: a.status, text: a.texto, at: a.em });
     }
     // A interrupção (Esc) não deixa evento: ela vem do estado da sessão viva.
     for (const v of vivas) {
       if (v.session.awaitingReason === 'interrupted' && v.session.awaitingInputSince) {
-        atividade.push({ sessao: v.session.id, projeto: projetoDe(v.session), status: 'waiting', texto: 'Interrompida (Esc)', em: v.session.awaitingInputSince });
+        atividade.push({ session: v.session.id, project: projetoDe(v.session), status: 'waiting', text: 'Interrompida (Esc)', at: v.session.awaitingInputSince });
       }
     }
-    atividade.sort((a, b) => b.em.localeCompare(a.em));
+    atividade.sort((a, b) => b.at.localeCompare(a.at));
 
     const custoDoMes = mes.total.custoUsd;
     return {
-      geradoEm: new Date(agora).toISOString(),
-      dia: hoje,
-      fusoHorario: fuso,
-      numeros: {
-        sessoes,
-        agentes,
-        subagentes,
-        eventos,
-        custo: { usd: custoDoMes === null ? null : Math.round(custoDoMes * 100) / 100, dias: DIAS_DO_CUSTO, semPreco: [...mes.total.semPreco.modelos].sort() },
+      generatedAt: new Date(agora).toISOString(),
+      day: hoje,
+      timeZone: fuso,
+      numbers: {
+        sessions: sessoes,
+        agents: agentes,
+        subagents: subagentes,
+        events: eventos,
+        cost: { usd: custoDoMes === null ? null : Math.round(custoDoMes * 100) / 100, days: DIAS_DO_CUSTO, unpriced: [...mes.total.semPreco.modelos].sort() },
       },
-      agentes: cards,
-      atividade: atividade.slice(0, this.linhas),
+      agents: cards,
+      activity: atividade.slice(0, this.linhas),
     };
   }
 
@@ -260,21 +261,21 @@ export class MontadorDoDashboard {
       .filter((a) => a.type === 'subagent')
       .sort((a, b) => Number(b.status === 'working') - Number(a.status === 'working') || b.startedAt.localeCompare(a.startedAt))
       .slice(0, MAX_SUBAGENTES)
-      .map((a): SubagenteDoDashboard => ({ id: a.id, tipo: a.subagentType, tarefa: cortar(a.name ?? a.task, MAX_TEXTO), status: a.status, desde: a.startedAt, ate: a.endedAt }));
+      .map((a): SubagenteDoDashboard => ({ id: a.id, type: a.subagentType, task: cortar(a.name ?? a.task, MAX_TEXTO), status: a.status, since: a.startedAt, until: a.endedAt }));
     return {
-      sessao: s.id,
-      titulo: v.titulo,
-      projeto: projetoDe(s),
+      session: s.id,
+      title: v.titulo,
+      project: projetoDe(s),
       status,
-      estado: v.inbox.estado,
-      modelo: s.model,
-      custoUsd: custoUsd === null ? null : Math.round(custoUsd * 100) / 100,
-      ultimaAtividade: s.updatedAt,
-      minutos: minutosDesde(s.updatedAt, agora),
-      turnos: l ? Math.max(l.promptsHook, l.promptsTranscript) : 0,
-      mensagens: l?.mensagens ?? [],
-      tarefa: await this.tarefa(v, l),
-      subagentes: subs,
+      state: v.inbox.estado,
+      model: s.model,
+      costUsd: custoUsd === null ? null : Math.round(custoUsd * 100) / 100,
+      lastActivity: s.updatedAt,
+      minutes: minutosDesde(s.updatedAt, agora),
+      turns: l ? Math.max(l.promptsHook, l.promptsTranscript) : 0,
+      messages: l?.mensagens ?? [],
+      task: await this.tarefa(v, l),
+      subagents: subs,
     };
   }
 

@@ -1,0 +1,255 @@
+{
+  "name": "wall",
+  "request": {
+    "method": "GET",
+    "path": "/api/mural"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "versao": 1,
+    "geradoEm": "2026-10-20T15:00:00.000Z",
+    "contagem": {
+      "todas": 8,
+      "esperando": 3,
+      "ativas": 4
+    },
+    "cards": [
+      {
+        "id": "sim-detalhe-pedidos",
+        "titulo": "Migração do esquema de pedidos",
+        "projeto": "motor-de-regras",
+        "branch": "feat/58-pedidos",
+        "status": "waiting",
+        "estado": "waiting",
+        "motivo": "notification",
+        "urgente": true,
+        "desde": "2026-10-20T14:58:00.000Z",
+        "atividade": {
+          "tipo": "permissao",
+          "texto": "Bash: npm run migrate"
+        },
+        "modelo": "claude-opus-5-5",
+        "esforco": null,
+        "agentes": {
+          "ativos": 0,
+          "total": 2
+        },
+        "custo": {
+          "usd": 1.7983000000000005,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": {
+          "pct": 33,
+          "usados": 327000,
+          "limite": 1000000,
+          "rotulo": "327k / 1M (33%)"
+        }
+      },
+      {
+        "id": "sim-wf-cache",
+        "titulo": "Migração do cache de sessões",
+        "projeto": "gateway-sandbox",
+        "branch": "feat/63-separar-pagamentos",
+        "status": "error",
+        "estado": "error",
+        "motivo": null,
+        "urgente": true,
+        "desde": "2026-10-20T13:51:00.000Z",
+        "atividade": {
+          "tipo": "erro",
+          "texto": "a sessão parou num erro"
+        },
+        "modelo": "claude-sonnet-5-5",
+        "esforco": null,
+        "agentes": {
+          "ativos": 0,
+          "total": 3
+        },
+        "custo": {
+          "usd": 0.20479999999999998,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": {
+          "pct": 41,
+          "usados": 82000,
+          "limite": 200000,
+          "rotulo": "82k / 200k (41%)"
+        }
+      },
+      {
+        "id": "sim-painel-fila-de-tarefas",
+        "titulo": "fila-de-tarefas",
+        "projeto": "fila-de-tarefas",
+        "branch": "feat/9-retry",
+        "status": "waiting",
+        "estado": "waiting",
+        "motivo": "stop",
+        "urgente": false,
+        "desde": "2026-10-20T14:59:00.000Z",
+        "atividade": {
+          "tipo": "sua-vez",
+          "texto": "\"Terminei a migração. Rodo os testes?\""
+        },
+        "modelo": "claude-sonnet-5-5",
+        "esforco": "medium",
+        "agentes": {
+          "ativos": 0,
+          "total": 1
+        },
+        "custo": {
+          "usd": 0,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": null
+      },
+      {
+        "id": "sim-painel-esta",
+        "titulo": "Separar pagamentos em serviços",
+        "projeto": "vitrine-demo",
+        "branch": "feat/63-separar-pagamentos",
+        "status": "active",
+        "estado": "delegating",
+        "motivo": null,
+        "urgente": false,
+        "desde": "2026-10-20T14:59:57.000Z",
+        "atividade": {
+          "tipo": "delegando",
+          "texto": "esperando 3 subagentes"
+        },
+        "modelo": "claude-opus-5-5",
+        "esforco": "high",
+        "agentes": {
+          "ativos": 4,
+          "total": 5
+        },
+        "custo": {
+          "usd": 3.7559921999999997,
+          "estimativa": true
+        },
+        "plano": {
+          "feitos": 2,
+          "total": 6,
+          "atual": "Extrair a cobrança"
+        },
+        "contexto": {
+          "pct": 57,
+          "usados": 114000,
+          "limite": 200000,
+          "rotulo": "114k / 200k (57%)"
+        }
+      },
+      {
+        "id": "sim-wf-retomada",
+        "titulo": "Rotas do gateway",
+        "projeto": "gateway-sandbox",
+        "branch": "feat/63-separar-pagamentos",
+        "status": "active",
+        "estado": "delegating",
+        "motivo": null,
+        "urgente": false,
+        "desde": "2026-10-20T14:59:54.000Z",
+        "atividade": {
+          "tipo": "delegando",
+          "texto": "esperando 1 subagente"
+        },
+        "modelo": "claude-opus-5-5",
+        "esforco": null,
+        "agentes": {
+          "ativos": 2,
+          "total": 3
+        },
+        "custo": {
+          "usd": 0.028800000000000003,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": null
+      },
+      {
+        "id": "sim-wf-pagamentos",
+        "titulo": "Separar pagamentos em serviços",
+        "projeto": "motor-de-regras",
+        "branch": "feat/63-separar-pagamentos",
+        "status": "active",
+        "estado": "delegating",
+        "motivo": null,
+        "urgente": false,
+        "desde": "2026-10-20T14:59:54.000Z",
+        "atividade": {
+          "tipo": "delegando",
+          "texto": "esperando 3 subagentes"
+        },
+        "modelo": "claude-opus-5-5",
+        "esforco": null,
+        "agentes": {
+          "ativos": 4,
+          "total": 9
+        },
+        "custo": {
+          "usd": 0.7968000000000002,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": null
+      },
+      {
+        "id": "sim-painel-catalogo-exemplo",
+        "titulo": "catalogo-exemplo",
+        "projeto": "catalogo-exemplo",
+        "branch": "feat/31-csv",
+        "status": "active",
+        "estado": "active",
+        "motivo": null,
+        "urgente": false,
+        "desde": "2026-10-20T14:54:00.000Z",
+        "atividade": {
+          "tipo": "ferramenta",
+          "texto": "pensando"
+        },
+        "modelo": "claude-sonnet-5-5",
+        "esforco": "medium",
+        "agentes": {
+          "ativos": 1,
+          "total": 1
+        },
+        "custo": {
+          "usd": 0,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": null
+      },
+      {
+        "id": "sim-painel-blog-estatico",
+        "titulo": "blog-estatico",
+        "projeto": "blog-estatico",
+        "branch": "fix/5-paginacao",
+        "status": "completed",
+        "estado": "completed",
+        "motivo": null,
+        "urgente": false,
+        "desde": "2026-10-20T14:40:00.000Z",
+        "atividade": {
+          "tipo": "concluida",
+          "texto": "terminou sem erro"
+        },
+        "modelo": "claude-sonnet-5-5",
+        "esforco": "medium",
+        "agentes": {
+          "ativos": 0,
+          "total": 1
+        },
+        "custo": {
+          "usd": 0,
+          "estimativa": true
+        },
+        "plano": null,
+        "contexto": null
+      }
+    ]
+  }
+}

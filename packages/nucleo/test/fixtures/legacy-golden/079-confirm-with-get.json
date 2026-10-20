@@ -1,0 +1,12 @@
+{
+  "name": "confirm-with-get",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisoes/{decision}/confirmar"
+  },
+  "status": 405,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "use POST"
+  }
+}

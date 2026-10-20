@@ -1,0 +1,408 @@
+{
+  "name": "panel",
+  "request": {
+    "method": "GET",
+    "path": "/api/painel/sim-painel-esta"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
+    },
+    "geradoEm": "2026-10-20T15:00:00.000Z",
+    "sessao": {
+      "id": "sim-painel-esta",
+      "titulo": "Separar pagamentos em serviços",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-10-20T14:32:00.000Z",
+      "status": "active",
+      "estado": "delegating",
+      "motivo": null,
+      "urgente": false,
+      "desde": "2026-10-20T14:59:57.000Z",
+      "turno": 9,
+      "atividade": {
+        "tipo": "delegando",
+        "texto": "esperando 3 subagentes"
+      },
+      "faixa": null,
+      "conta": {
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "rotulo": "equipe",
+        "cor": "#df285d",
+        "fonte": "env"
+      },
+      "branch": "feat/63-separar-pagamentos",
+      "cwd": "/simulacao/vitrine-demo"
+    },
+    "contexto": {
+      "usados": 114000,
+      "limite": 200000,
+      "pct": 57,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "114k / 200k (57%)",
+      "agentes": []
+    },
+    "custo": {
+      "usd": 3.7559921999999997,
+      "serie": [
+        0,
+        0.41416,
+        0.66534,
+        1.0879,
+        1.51606,
+        1.9498199999999999,
+        2.38918,
+        2.83414,
+        3.2847,
+        3.5719922,
+        3.7559921999999997
+      ],
+      "estimativa": true
+    },
+    "tokens": {
+      "entrada": 981561,
+      "saida": 159024
+    },
+    "background": {
+      "total": 0,
+      "primeiro": null
+    },
+    "plano": {
+      "feitos": 2,
+      "total": 6,
+      "atual": "Extrair a cobrança",
+      "proximo": "Migrar os testes",
+      "restantes": 2,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": "sim-painel-esta:main"
+      },
+      "mudouEm": "2026-10-20T14:59:30.000Z",
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Mapear o módulo",
+          "textoAtivo": "Mapear o módulo",
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Desenhar os serviços",
+          "textoAtivo": "Desenhar os serviços",
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Extrair a cobrança",
+          "textoAtivo": "Extrair a cobrança",
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Migrar os testes",
+          "textoAtivo": "Migrar os testes",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Ajustar o deploy",
+          "textoAtivo": "Ajustar o deploy",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Remover o código velho",
+          "textoAtivo": "Remover o código velho",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        }
+      ]
+    },
+    "planos": [
+      {
+        "numero": 4,
+        "resultado": "atual",
+        "resumo": "Mapear o módulo",
+        "feitos": 2,
+        "total": 6,
+        "atual": "Extrair a cobrança",
+        "inicio": "2026-10-20T14:50:30.000Z",
+        "fim": null
+      },
+      {
+        "numero": 3,
+        "resultado": "concluido",
+        "resumo": "Escrever a decisão de serviços",
+        "feitos": 2,
+        "total": 2,
+        "atual": null,
+        "inicio": "2026-10-20T14:45:00.000Z",
+        "fim": "2026-10-20T14:50:30.000Z"
+      },
+      {
+        "numero": 2,
+        "resultado": "abandonado",
+        "resumo": "Separar por camadas",
+        "feitos": 1,
+        "total": 3,
+        "atual": null,
+        "inicio": "2026-10-20T14:38:00.000Z",
+        "fim": "2026-10-20T14:45:00.000Z"
+      },
+      {
+        "numero": 1,
+        "resultado": "concluido",
+        "resumo": "Ler o módulo de pagamentos",
+        "feitos": 2,
+        "total": 2,
+        "atual": null,
+        "inicio": "2026-10-20T14:33:00.000Z",
+        "fim": "2026-10-20T14:38:00.000Z"
+      }
+    ],
+    "subagentes": {
+      "ativos": 3,
+      "itens": [
+        {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner",
+          "tarefa": "bateria",
+          "status": "working",
+          "desde": "2026-10-20T14:59:48.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 9
+        },
+        {
+          "id": "sim-painel-esta:a1",
+          "nome": "code-reviewer",
+          "tarefa": "diff",
+          "status": "working",
+          "desde": "2026-10-20T14:59:18.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 9
+        },
+        {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore",
+          "tarefa": "achar usos",
+          "status": "working",
+          "desde": "2026-10-20T14:59:00.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 9
+        },
+        {
+          "id": "sim-painel-esta:a3",
+          "nome": "Plan",
+          "tarefa": "plano",
+          "status": "completed",
+          "desde": "2026-10-20T14:37:00.000Z",
+          "ate": "2026-10-20T14:40:00.000Z",
+          "pai": null,
+          "onda": 2
+        }
+      ]
+    },
+    "filhas": [
+      {
+        "id": "sim-painel-fila-de-tarefas",
+        "local": null,
+        "titulo": "fila-de-tarefas",
+        "estado": "waiting",
+        "motivo": "stop",
+        "desde": "2026-10-20T14:59:00.000Z",
+        "fazendo": null,
+        "arquivada": false
+      },
+      {
+        "id": "sim-painel-catalogo-exemplo",
+        "local": null,
+        "titulo": "catalogo-exemplo",
+        "estado": "active",
+        "motivo": null,
+        "desde": "2026-10-20T14:20:00.000Z",
+        "fazendo": "pensando",
+        "arquivada": false
+      },
+      {
+        "id": "sim-painel-blog-estatico",
+        "local": null,
+        "titulo": "blog-estatico",
+        "estado": "completed",
+        "motivo": null,
+        "desde": "2026-10-20T14:40:00.000Z",
+        "fazendo": null,
+        "arquivada": false
+      }
+    ],
+    "trabalho": null,
+    "precisam": {
+      "total": 3,
+      "suaVez": 1,
+      "porConta": [
+        {
+          "conta": null,
+          "n": 2
+        },
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          },
+          "n": 1
+        }
+      ],
+      "familia": [
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
+          "local": null,
+          "titulo": "fila-de-tarefas",
+          "estado": "waiting",
+          "motivo": "stop",
+          "urgente": false,
+          "desde": "2026-10-20T14:59:00.000Z",
+          "texto": "\"Terminei a migração. Rodo os testes?\"",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": "filha",
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        }
+      ],
+      "maquina": [
+        {
+          "id": "sim-detalhe-pedidos",
+          "nivel": "precisa",
+          "porque": "permissao",
+          "local": null,
+          "titulo": "Migração do esquema de pedidos",
+          "estado": "waiting",
+          "motivo": "notification",
+          "urgente": true,
+          "desde": "2026-10-20T14:58:00.000Z",
+          "texto": "Bash: npm run migrate",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": null
+        },
+        {
+          "id": "sim-wf-cache",
+          "nivel": "precisa",
+          "porque": "erro",
+          "local": null,
+          "titulo": "Migração do cache de sessões",
+          "estado": "error",
+          "motivo": null,
+          "urgente": true,
+          "desde": "2026-10-20T13:51:00.000Z",
+          "texto": "a sessão parou num erro",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          }
+        },
+        {
+          "id": "sim-historico-relatorio-mensal",
+          "nivel": "precisa",
+          "porque": "erro",
+          "local": null,
+          "titulo": "Relatório mensal mais rápido",
+          "estado": "error",
+          "motivo": null,
+          "urgente": true,
+          "desde": "2026-10-18T15:00:00.000Z",
+          "texto": "a sessão parou num erro",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": null
+        },
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
+          "local": null,
+          "titulo": "fila-de-tarefas",
+          "estado": "waiting",
+          "motivo": "stop",
+          "urgente": false,
+          "desde": "2026-10-20T14:59:00.000Z",
+          "texto": "\"Terminei a migração. Rodo os testes?\"",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": "filha",
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        }
+      ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
+    },
+    "decisoes": {
+      "vigentes": 4,
+      "aConfirmar": 1,
+      "retomada": null,
+      "lista": null
+    }
+  }
+}

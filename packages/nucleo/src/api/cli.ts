@@ -46,6 +46,8 @@ import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
+import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
 import { DecisoesDaUi } from './decisoes-ui.ts';
 import { QuadroKanban } from './kanban.ts';
@@ -67,6 +69,18 @@ import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
+import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
+import { AlertTracker } from '../telemetry/alerts.ts';
+import { collectorFor } from '../telemetry/adapters/system.ts';
+import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
+import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
+import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
+import { loadMachinesConfig } from '../telemetry/machines-config.ts';
+import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
+import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
+import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 
@@ -78,12 +92,14 @@ const AJUDA = `Uso: npm run api -- [opções]
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
-                      projeto (/api/projeto) responde 503 e os repositórios (/api/repos)
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos)
                       respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
-                      wireframe C11, num GitHub falso (mover vale em memória)
+                      wireframe C11, num GitHub falso (mover vale em memória). A tela
+                      Agent Config lê uma pasta de configuração e um projeto fictícios
+                      num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
                       (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
@@ -93,8 +109,14 @@ const AJUDA = `Uso: npm run api -- [opções]
                       deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
+  --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
+                      Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
+  --machines <arq>    As máquinas remotas (padrão ~/.ahrena-console/machines.json, #176):
+                      { "machines": [{ "id", "label", "port" }] }, port é a porta deste Mac
+                      que o seu túnel encaminha para a 4720 de lá. Sem arquivo, só esta
+                      máquina. Lido ao subir; a --demo não o lê
 
-Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
+Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
@@ -117,6 +139,8 @@ const { values: o } = parseArgs({
     pai: { type: 'string' },
     substituir: { type: 'boolean', default: false },
     'sem-trava': { type: 'boolean', default: false },
+    'no-telemetry': { type: 'boolean', default: false },
+    machines: { type: 'string' },
     help: { type: 'boolean', default: false },
   },
 });
@@ -299,6 +323,12 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+// The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
+const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
+if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
+const agentConfig = demoAgentConfig
+  ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
+  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
@@ -306,6 +336,61 @@ relerPerfis?.unref();
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
+
+// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const devConsole = createDevConsole({
+  storage,
+  frota: mcp.frota,
+  decisions: decisoes,
+  cache: cacheDoGithub,
+  source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
+  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+});
+
+// Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
+// alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
+// 12 h already seeded, plus a synthetic "workstation". Outside the demo, each remote machine of
+// machines.json (#176) is read every 30 s through the port the user's tunnel forwards.
+const sampleStore = new SqliteTelemetryStore(sqlite.db);
+const alertTracker = new AlertTracker();
+const machineEntries: MachineEntry[] = [localMachine()];
+const samplers: TelemetrySampler[] = [];
+const remoteMachines: RemoteMachine[] = [];
+function addSampler(machineId: string, collector: TelemetryCollector) {
+  samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(mudancas), log }));
+}
+if (demo) {
+  machineEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  await seedTelemetry(sampleStore, 'local', 'local');
+  await seedTelemetry(sampleStore, SIMULATED_WORKSTATION.id, 'workstation');
+  addSampler('local', new SimulatedCollector('local'));
+  addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
+} else if (!o['no-telemetry']) {
+  const platformCollector = collectorFor();
+  if (platformCollector) addSampler('local', platformCollector);
+  else log(`telemetry: no collector for ${process.platform}`);
+  const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
+  const get = loopbackGet();
+  for (const config of machinesConfig.machines) {
+    if (config.port === porta) {
+      log(`machines: ${config.id} uses port ${config.port}, this núcleo's own; skipped`);
+      continue;
+    }
+    const remote = new RemoteMachine({
+      config,
+      get,
+      store: sampleStore,
+      tracker: alertTracker,
+      onAlertChange: publishAlertChanges(mudancas),
+      onAttentionChange: publishRemoteAttentionChanges(mudancas),
+      log,
+    });
+    remoteMachines.push(remote);
+    machineEntries.push(remote);
+  }
+  if (remoteMachines.length > 0) log(`telemetry: ${remoteMachines.length} remote machine(s): ${remoteMachines.map((m) => `${m.id} on port ${m.port}`).join(', ')}`);
+}
+const telemetryService = samplers.length > 0 || remoteMachines.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
 let historicoPronto = false;
 const follower =
@@ -344,16 +429,20 @@ const api: ApiLocal = await iniciarApiLocal({
   detalhe,
   eventos: new FeedDeEventos({ storage }),
   frota: mcp.frota,
+  remoteAttention: remoteMachines,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  devConsole,
+  agentConfig,
+  telemetry: telemetryService,
   carga: () => ({
-    historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
-    seguidor: follower?.stats() ?? null,
-    desktopLidos: desktop?.lidos ?? 0,
-    trabalho: trabalho.chamadas,
+    history: follower ? (historicoPronto ? 'ready' : 'importing') : 'off',
+    follower: follower?.stats() ?? null,
+    desktopRead: desktop?.lidos ?? 0,
+    work: trabalho.chamadas,
   }),
 }).catch(async (e: NodeJS.ErrnoException) => {
   if (e.code !== 'EADDRINUSE') throw e;
@@ -382,6 +471,8 @@ const pararDeVigiarPai =
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
+for (const a of samplers) a.start();
+for (const m of remoteMachines) m.start();
 if (follower) {
   follower
     .start()
@@ -421,6 +512,7 @@ async function desligar() {
   pararDeVigiarPai();
   if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
+  await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);
   await storage.close();
   if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });

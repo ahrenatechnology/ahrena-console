@@ -109,15 +109,15 @@ export class SessoesPorRepo {
     const de = (repo: string) => {
       const k = chaveDoRepo(repo);
       let c = mapa.get(k);
-      if (!c) mapa.set(k, (c = { ativas: 0, precisam: 0, noMes: 0 }));
+      if (!c) mapa.set(k, (c = { active: 0, needYou: 0, thisMonth: 0 }));
       return c;
     };
     for (const s of await this.frota.vivas()) {
       const repo = s.session.cwd ? this.repoDe(s.session.cwd) : null;
       if (!repo) continue;
       const c = de(repo);
-      c.ativas++;
-      if (s.inbox.precisaDeVoce && (await this.frota.atencao(s)).grupo === 'blocking') c.precisam++;
+      c.active++;
+      if (s.inbox.precisaDeVoce && (await this.frota.atencao(s)).grupo === 'blocking') c.needYou++;
     }
     // Do mês corrente, no fuso da máquina: a porta lista da mais recente para a mais antiga.
     const inicioDoMes = `${this.frota.hoje().slice(0, 8)}01`;
@@ -127,15 +127,15 @@ export class SessoesPorRepo {
       for (const s of page.items) {
         if (diaDe(s.updatedAt, this.frota.fusoHorario) < inicioDoMes) break pagina;
         const repo = s.cwd ? this.repoDe(s.cwd) : null;
-        if (repo) de(repo).noMes++;
+        if (repo) de(repo).thisMonth++;
       }
       cursor = page.nextCursor;
     } while (cursor);
     for (const [repo, extra] of Object.entries(this.extras)) {
       const c = de(repo);
-      c.ativas += extra.ativas ?? 0;
-      c.precisam += extra.precisam ?? 0;
-      c.noMes += extra.noMes ?? 0;
+      c.active += extra.active ?? 0;
+      c.needYou += extra.needYou ?? 0;
+      c.thisMonth += extra.thisMonth ?? 0;
     }
     this.cache = { em: this.frota.agora(), mapa };
     return mapa;

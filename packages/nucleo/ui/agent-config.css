@@ -1,0 +1,124 @@
+/* The Agent Config screen (#63, C16 and C17). Loaded by the screen itself (link data-screen="agent-config").
+   Every color comes from marca.css; every class starts with ac- so it does not compete with moldura.css. */
+
+.ac-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ac-grow { flex: 1; min-width: 0; }
+.ac-muted { color: var(--muted); }
+.ac-italic { font-style: italic; }
+.ac-small { font-size: 11px; }
+.ac-accent { color: var(--accent-text); display: inline-flex; }
+.ac-push { margin-left: auto; }
+
+/* ---------- header: project, scope and Refresh ---------- */
+.cc-head:has(.ac-seg) .actions { flex-wrap: wrap; justify-content: flex-end; }
+.ac-project:empty { display: none; }
+.ac-project-label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--text-xs); }
+.ac-select { font: inherit; font-size: var(--text-xs); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; height: 30px; padding: 0 8px; max-width: 220px; }
+
+.ac-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.ac-new .ac-seg { flex-wrap: wrap; }
+.ac-seg button { font: inherit; font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
+.ac-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.ac-seg button:hover { color: var(--text); }
+
+.ac-seg button:focus-visible, .ac-tabs a:focus-visible, .ac-copy:focus-visible, .ac-link:focus-visible,
+.ac-select:focus-visible, .ac-input:focus-visible, .ac-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- notice banner (Editing on) ---------- */
+.ac-banner { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.5;
+  background: color-mix(in srgb, var(--status-waiting-badge) 70%, var(--surface)); border: 1px solid color-mix(in srgb, var(--status-waiting-dot) 50%, var(--border)); }
+.ac-banner p { margin: 0; flex: 1; }
+.ac-banner b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.ac-banner-icon { color: var(--status-waiting-text); font-size: 18px; display: inline-flex; }
+
+/* ---------- tabs ---------- */
+.ac-tabs { flex: none; display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: thin; }
+.ac-tabs a { white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; padding: 9px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
+.ac-tabs a:hover { color: var(--text); }
+.ac-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+.ac-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 7px; font-size: 10.5px; background: var(--raised); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; font-family: var(--font-mono); flex: none; }
+.ac-tabs .ac-chip { height: 18px; padding: 0 6px; }
+
+/* ---------- C16: roots and summary ---------- */
+.ac-panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ac-panel > p { margin: 0; font-size: 12.5px; }
+.ac-roots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ac-root { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--bg); min-width: 0; }
+.ac-eyebrow-sm { font-size: 10px; }
+.ac-path { font-size: 11.5px; }
+/* A long path is clipped at the start: the end (the folder) is what tells them apart. The text goes in a <bdi dir="ltr">. */
+.ac-clip-start { direction: rtl; text-align: left; }
+.ac-copy { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 28px; min-width: 28px; justify-content: center; padding: 0 6px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--muted); font-size: 11.5px; }
+.ac-copy:hover { color: var(--text); background: var(--raised); }
+.ac-copy.ok { color: var(--status-completed-text); }
+.ac-backups { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); word-break: break-all; }
+
+.ac-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ac-stat { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; min-height: 82px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); }
+.ac-stat .eyebrow { display: flex; align-items: center; gap: 6px; }
+.ac-stat-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ac-stat-line .ac-muted { font-size: 11px; }
+.ac-big { font-size: 20px; font-weight: var(--weight-semibold); }
+
+/* ---------- C17: list and editor ---------- */
+.ac-skills { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 12px; align-items: start; }
+.ac-column { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ac-search-row { display: flex; gap: 8px; }
+.ac-field { flex: 1; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); min-width: 0; }
+.ac-field:focus-within { border-color: var(--accent); }
+.ac-field .ac-input { border: 0; background: none; padding: 0; height: 100%; outline: none; }
+.ac-input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; height: 32px; padding: 0 10px; }
+.ac-input::placeholder { color: var(--muted); }
+.ac-input[aria-invalid="true"] { border-color: var(--status-error-dot); }
+.ac-search-row .btn { height: 34px; }
+
+.ac-list { display: flex; flex-direction: column; gap: 10px; }
+.ac-list-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.ac-item { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; }
+.ac-item.sel { border-color: var(--accent); }
+.ac-item b { font-size: 13px; font-weight: var(--weight-semibold); }
+.ac-item-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.ac-item-foot { gap: 10px; }
+.ac-link { font: inherit; font-size: 11.5px; color: var(--accent-text); background: none; border: 0; padding: 2px 0; flex: none; }
+.ac-link:hover { text-decoration: underline; }
+
+.ac-new { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ac-new .ac-input { flex: none; }
+.ac-new-msg { margin: 0; font-size: 11.5px; color: var(--muted); }
+.ac-new-msg.error { color: var(--status-error-text); }
+
+.ac-editor { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; position: sticky; top: 0; }
+.ac-editor-empty { align-items: center; justify-content: center; text-align: center; min-height: 240px; }
+.ac-editor-empty .seal { width: 44px; height: 44px; border-radius: 10px; background: var(--raised); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+.ac-editor-empty p { margin: 0; max-width: 36ch; font-size: 12.5px; line-height: 1.6; }
+.ac-ttl { font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ac-ttl-r { margin-left: auto; font-size: 12px; font-weight: var(--weight-medium); color: var(--muted); white-space: nowrap; }
+.ac-text { width: 100%; min-height: 320px; height: 52vh; resize: vertical; margin: 0; padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; tab-size: 2; }
+.ac-text[readonly] { color: var(--muted); }
+.ac-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ac-foot-status { font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; margin-right: auto; }
+.ac-action:disabled { opacity: .45; cursor: not-allowed; }
+.ac-ok { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--status-completed-dot); background: var(--status-completed-badge); font-size: 12.5px; }
+.ac-ok > .icon { color: var(--status-completed-text); font-size: 16px; margin-top: 2px; }
+.ac-ok p { margin: 0; flex: 1; word-break: break-all; }
+
+/* ---------- narrow windows ---------- */
+/* The app window opens at 1100: the eight tabs fit without scrolling, with less padding; if short of room, they wrap. */
+@media (max-width: 1100px) {
+  .ac-tabs { gap: 0; flex-wrap: wrap; overflow-x: visible; }
+  .ac-tabs a { padding: 9px 6px; gap: 5px; }
+}
+@media (max-width: 900px) {
+  .ac-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-skills { grid-template-columns: minmax(0, 1fr); }
+  .ac-editor { position: static; }
+  .ac-roots { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .cc-head:has(.ac-seg) { flex-wrap: wrap; }
+  .cc-head:has(.ac-seg) .actions { margin-left: 0; width: 100%; justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .ac-summary { grid-template-columns: minmax(0, 1fr); }
+  .ac-banner { flex-wrap: wrap; }
+}

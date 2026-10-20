@@ -1,10 +1,14 @@
 // A rota do long polling na API local, para o app de bandeja e o painel:
 //
-//   GET /api/mudancas?desde=<cursor>&espera=<s>&sessao=<id>&conta=<id>&tipo=<tipo>
+//   GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id>&type=<type>
 //
-// - `desde` vazio volta na hora com o cursor de agora e `reiniciar: true`.
-// - `espera` em segundos (padrão 25, máximo 110; 0 não espera).
-// - `sessao`, `conta` e `tipo` aceitam vírgula ou repetição; `conta=sem-conta` pede "Sem conta".
+// (The old `/api/mudancas?desde=&espera=&sessao=&conta=&tipo=` is an alias: src/api/legacy-routes.ts.)
+//
+// - `since` vazio volta na hora com o cursor de agora e `reset: true`.
+// - A resposta: `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`
+//   (#173 phase 2b; the old route answers `{ cursor, mudancas: [{ tipo, chave, … }], reiniciar, expirou }`).
+// - `wait` em segundos (padrão 25, máximo 110; 0 não espera).
+// - `session`, `account` e `type` aceitam vírgula ou repetição; `account=no-account` pede "Sem conta" (o antigo `sem-conta` ainda vale, src/api/legacy-routes.ts).
 // - O cliente que fecha a conexão libera a espera na hora.
 // - Esperas abertas demais: 503 com `Retry-After`.
 
@@ -12,8 +16,11 @@ import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import { ErroDeLotacao, ESPERA_PADRAO_MS, TIPOS_DE_MUDANCA, type CursorDeMudancas, type FiltrosDeMudanca, type TipoDeMudanca } from './cursor.ts';
 
+export const CHANGES_ROUTE = '/api/changes';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DAS_MUDANCAS = '/api/mudancas';
-export const SEM_CONTA = 'sem-conta';
+/** `?account=` for the sessions without an account. */
+export const NO_ACCOUNT = 'no-account';
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
@@ -25,27 +32,27 @@ function lista(url: URL, nome: string): string[] | undefined {
 /** Lê os parâmetros; devolve a mensagem de erro quando algum é inválido. */
 export function lerPedidoDeMudancas(url: URL): { cursor: string | null; timeoutMs: number; filtros: FiltrosDeMudanca } | string {
   const filtros: FiltrosDeMudanca = {};
-  const sessoes = lista(url, 'sessao');
+  const sessoes = lista(url, 'session');
   if (sessoes) {
-    if (!sessoes.every((s) => ID.test(s))) return 'sessao inválida';
+    if (!sessoes.every((s) => ID.test(s))) return 'session inválida';
     filtros.sessionIds = sessoes;
   }
-  const contas = lista(url, 'conta');
+  const contas = lista(url, 'account');
   if (contas) {
-    if (!contas.every((c) => ID.test(c))) return 'conta inválida';
-    filtros.accountIds = contas.map((c) => (c === SEM_CONTA ? null : c));
+    if (!contas.every((c) => ID.test(c))) return 'account inválida';
+    filtros.accountIds = contas.map((c) => (c === NO_ACCOUNT ? null : c));
   }
-  const tipos = lista(url, 'tipo');
+  const tipos = lista(url, 'type');
   if (tipos) {
     if (!tipos.every((t): t is TipoDeMudanca => (TIPOS_DE_MUDANCA as readonly string[]).includes(t))) {
-      return `tipo: um de ${TIPOS_DE_MUDANCA.join(', ')}`;
+      return `type: um de ${TIPOS_DE_MUDANCA.join(', ')}`;
     }
     filtros.tipos = tipos as TipoDeMudanca[];
   }
-  const espera = url.searchParams.get('espera');
+  const espera = url.searchParams.get('wait');
   const segundos = espera === null || espera === '' ? ESPERA_PADRAO_MS / 1000 : Number(espera);
-  if (!Number.isFinite(segundos) || segundos < 0) return 'espera inválida';
-  return { cursor: url.searchParams.get('desde'), timeoutMs: segundos * 1000, filtros };
+  if (!Number.isFinite(segundos) || segundos < 0) return 'wait inválida';
+  return { cursor: url.searchParams.get('since'), timeoutMs: segundos * 1000, filtros };
 }
 
 export async function responderMudancas(

@@ -7,6 +7,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import {
   Contas,
   IndiceDoDesktop,
+  LEGACY_BODIES,
   MontadorDoPainel,
   ResumosDeSessao,
   TrabalhoPorBranch,
@@ -15,6 +16,7 @@ import {
   issueDoBranch,
   repoDoRemote,
   resumoVazio,
+  translateBody,
   type Painel,
 } from '../../src/api/index.ts';
 import type { WorkSource } from '../../src/github/source.ts';
@@ -106,13 +108,13 @@ describe('trabalho pelo branch', () => {
     assert.equal(t.ler('/simulacao/x', null), null, 'a primeira leitura não espera');
     await t.esperar();
     const lido = t.ler('/simulacao/x', null);
-    assert.equal(lido?.issue?.numero, 47);
-    assert.deepEqual(lido?.pr && { estado: lido.pr.estado, ci: lido.pr.ci, review: lido.pr.review }, { estado: 'aberto', ci: 'falhou', review: 'ajustes' });
+    assert.equal(lido?.issue?.number, 47);
+    assert.deepEqual(lido?.pr && { state: lido.pr.state, ci: lido.pr.ci, review: lido.pr.review }, { state: 'open', ci: 'failed', review: 'changes-requested' });
     falhar = true;
     agora += 10 * 60_000;
     t.ler('/simulacao/x', null);
     await t.esperar();
-    assert.equal(t.ler('/simulacao/x', null)?.issue?.numero, 47, 'o último dado bom continua');
+    assert.equal(t.ler('/simulacao/x', null)?.issue?.number, 47, 'o último dado bom continua');
     await storage.close();
   });
 });
@@ -120,104 +122,104 @@ describe('trabalho pelo branch', () => {
 describe('painel por cenário (P1 a P7)', () => {
   test('P1: sessão ativa, plano, subagentes, trabalho e duas que precisam de você', async () => {
     const { painel: p, storage } = await cenario('p1');
-    assert.equal(p.versao, 1);
-    assert.equal(p.sessao?.titulo, 'Kanban de sessões no artefato');
-    assert.equal(p.sessao?.estado, 'active');
-    assert.equal(p.sessao?.atividade.texto, 'rodando Bash · npm test');
-    assert.equal(p.sessao?.turno, 18);
-    assert.equal(p.contexto?.pct, 31);
-    assert.ok(p.custo?.usd && Math.abs(p.custo.usd - 1.84) < 0.05, `custo ${p.custo?.usd}`);
-    assert.ok((p.custo?.serie.length ?? 0) >= 2);
-    assert.deepEqual(p.background, { total: 2, primeiro: 'npm run dev' });
+    assert.equal(p.version, 1);
+    assert.equal(p.session?.title, 'Kanban de sessões no artefato');
+    assert.equal(p.session?.state, 'active');
+    assert.equal(p.session?.activity.text, 'rodando Bash · npm test');
+    assert.equal(p.session?.turn, 18);
+    assert.equal(p.context?.pct, 31);
+    assert.ok(p.cost?.usd && Math.abs(p.cost.usd - 1.84) < 0.05, `custo ${p.cost?.usd}`);
+    assert.ok((p.cost?.series.length ?? 0) >= 2);
+    assert.deepEqual(p.background, { total: 2, first: 'npm run dev' });
     // O plano atual do histórico (#131): dois anteriores, um concluído e um abandonado.
-    const { passos, ...plano } = p.plano!;
-    assert.deepEqual(plano, { feitos: 3, total: 6, atual: 'Rodar a bateria', proximo: 'Abrir o PR', restantes: 1, atualDono: { tipo: 'principal', nome: null, agenteId: `${SESSAO_DO_PAINEL}:main` }, mudouEm: at(-0.5) });
+    const { steps, ...plano } = p.plan!;
+    assert.deepEqual(plano, { done: 3, total: 6, current: 'Rodar a bateria', next: 'Abrir o PR', remaining: 1, currentOwner: { type: 'main', name: null, agentId: `${SESSAO_DO_PAINEL}:main` }, changedAt: at(-0.5) });
     assert.deepEqual(
-      p.planos.map((x) => [x.numero, x.resultado, x.resumo, `${x.feitos}/${x.total}`, x.atual, x.fim === null]),
+      p.plans.map((x) => [x.number, x.outcome, x.summary, `${x.done}/${x.total}`, x.current, x.end === null]),
       [
-        [3, 'atual', 'Ler o artefato', '3/6', 'Rodar a bateria', true],
-        [2, 'abandonado', 'Prototipar o arrastar', '1/4', null, false],
-        [1, 'concluido', 'Ler o wireframe do kanban', '3/3', null, false],
+        [3, 'current', 'Ler o artefato', '3/6', 'Rodar a bateria', true],
+        [2, 'abandoned', 'Prototipar o arrastar', '1/4', null, false],
+        [1, 'completed', 'Ler o wireframe do kanban', '3/3', null, false],
       ],
     );
-    assert.equal(passos.length, 6);
-    assert.equal(p.subagentes.ativos, 1);
-    assert.equal(p.subagentes.itens[0]?.nome, 'Explore');
-    assert.equal(p.trabalho?.issue?.numero, 42);
-    assert.equal(p.trabalho?.pr?.estado, 'rascunho');
+    assert.equal(steps.length, 6);
+    assert.equal(p.subagents.active, 1);
+    assert.equal(p.subagents.items[0]?.name, 'Explore');
+    assert.equal(p.work?.issue?.number, 42);
+    assert.equal(p.work?.pr?.state, 'draft');
     // #140: a permissão precisa de você; a interrompida (Esc) é só a sua vez, fora da contagem.
-    assert.equal(p.precisam.total, 1);
-    assert.equal(p.precisam.suaVez, 1);
-    assert.deepEqual(p.precisam.maquina.map((i) => [i.titulo, i.nivel, i.porque]), [['motor-de-regras', 'precisa', 'permissao'], ['app-receitas', 'sua-vez', 'interrompida']]);
+    assert.equal(p.needYou.total, 1);
+    assert.equal(p.needYou.yourTurn, 1);
+    assert.deepEqual(p.needYou.machine.map((i) => [i.title, i.level, i.why]), [['motor-de-regras', 'needs', 'permission'], ['app-receitas', 'your-turn', 'interrupted']]);
     await storage.close();
   });
 
   test('P2 e P3: a faixa mostra a pergunta inteira ou o pedido de permissão', async () => {
     const p2 = await cenario('p2');
-    assert.equal(p2.painel.sessao?.faixa?.tipo, 'pergunta');
-    assert.match(p2.painel.sessao?.faixa?.texto ?? '', /SQLite em memória/);
-    assert.equal(p2.painel.sessao?.faixa?.rodape, '3 opções · responda na conversa ao lado');
-    assert.equal(p2.painel.trabalho?.semPush, true);
-    assert.equal(p2.painel.trabalho?.pr, null);
-    assert.equal(p2.painel.precisam.total, 0);
+    assert.equal(p2.painel.session?.banner?.type, 'question');
+    assert.match(p2.painel.session?.banner?.text ?? '', /SQLite em memória/);
+    assert.equal(p2.painel.session?.banner?.footer, '3 opções · responda na conversa ao lado');
+    assert.equal(p2.painel.work?.notPushed, true);
+    assert.equal(p2.painel.work?.pr, null);
+    assert.equal(p2.painel.needYou.total, 0);
     const p3 = await cenario('p3');
-    assert.equal(p3.painel.sessao?.faixa?.texto, 'Bash quer rodar npm run migrate em /simulacao/motor-de-regras');
-    assert.equal(p3.painel.sessao?.atividade.texto, 'Bash: npm run migrate');
-    assert.equal(p3.painel.sessao?.urgente, true);
+    assert.equal(p3.painel.session?.banner?.text, 'Bash quer rodar npm run migrate em /simulacao/motor-de-regras');
+    assert.equal(p3.painel.session?.activity.text, 'Bash: npm run migrate');
+    assert.equal(p3.painel.session?.urgent, true);
     await p2.storage.close();
     await p3.storage.close();
   });
 
   test('P4: delegando a três subagentes, com três sessões filhas e uma que espera você', async () => {
     const { painel: p, storage } = await cenario('p4');
-    assert.equal(p.sessao?.estado, 'delegating');
-    assert.equal(p.sessao?.atividade.texto, 'esperando 3 subagentes');
-    assert.equal(p.subagentes.ativos, 3);
-    assert.deepEqual(p.filhas.map((f) => [f.titulo, f.estado]), [
+    assert.equal(p.session?.state, 'delegating');
+    assert.equal(p.session?.activity.text, 'esperando 3 subagentes');
+    assert.equal(p.subagents.active, 3);
+    assert.deepEqual(p.children.map((f) => [f.title, f.state]), [
       ['fila-de-tarefas', 'waiting'],
       ['catalogo-exemplo', 'active'],
       ['blog-estatico', 'completed'],
     ]);
-    assert.deepEqual(p.precisam.familia.map((i) => [i.titulo, i.relacao]), [['fila-de-tarefas', 'filha']]);
+    assert.deepEqual(p.needYou.family.map((i) => [i.title, i.relation]), [['fila-de-tarefas', 'child']]);
     await storage.close();
   });
 
   test('P5: com erro, a faixa traz o erro e o CI falhou', async () => {
     const { painel: p, storage } = await cenario('p5');
-    assert.equal(p.sessao?.status, 'error');
-    assert.equal(p.sessao?.faixa?.tipo, 'erro');
-    assert.match(p.sessao?.faixa?.texto ?? '', /^API 529/);
-    assert.equal(p.contexto?.pct, 84);
-    assert.equal(p.trabalho?.pr?.ci, 'falhou');
-    assert.equal(p.subagentes.itens.find((s) => s.status === 'error')?.nome, 'test-runner');
+    assert.equal(p.session?.status, 'error');
+    assert.equal(p.session?.banner?.type, 'error');
+    assert.match(p.session?.banner?.text ?? '', /^API 529/);
+    assert.equal(p.context?.pct, 84);
+    assert.equal(p.work?.pr?.ci, 'failed');
+    assert.equal(p.subagents.items.find((s) => s.status === 'error')?.name, 'test-runner');
     await storage.close();
   });
 
   test('P6: a sessão que o núcleo ainda não viu espera o primeiro prompt, com o modelo e a pasta do painel', async () => {
     const { painel: p, storage } = await cenario('p6', { modelo: 'claude-sonnet-5-5', cwd: '/simulacao/cli-de-notas' });
-    assert.equal(p.sessao?.motivo, 'session_start');
-    assert.equal(p.sessao?.modelo, 'claude-sonnet-5-5');
-    assert.equal(p.sessao?.turno, 0);
-    assert.equal(p.plano, null);
-    assert.equal(p.subagentes.itens.length, 0);
-    assert.equal(p.trabalho?.branch, 'main');
-    assert.equal(p.trabalho?.issue, null);
+    assert.equal(p.session?.reason, 'session_start');
+    assert.equal(p.session?.model, 'claude-sonnet-5-5');
+    assert.equal(p.session?.turn, 0);
+    assert.equal(p.plan, null);
+    assert.equal(p.subagents.items.length, 0);
+    assert.equal(p.work?.branch, 'main');
+    assert.equal(p.work?.issue, null);
     // Permissão e erro precisam de você; a interrompida é a sua vez.
-    assert.equal(p.precisam.total, 2);
-    assert.equal(p.precisam.suaVez, 1);
+    assert.equal(p.needYou.total, 2);
+    assert.equal(p.needYou.yourTurn, 1);
     await storage.close();
   });
 
   test('P7: família e máquina inteira, urgentes primeiro; a divisão por conta nunca mistura contas', async () => {
     const { painel: p, storage } = await cenario('p7');
-    assert.deepEqual(p.precisam.familia.map((i) => [i.titulo, i.relacao]), [
-      ['motor-de-regras', 'mae'],
-      ['fila-de-tarefas', 'filha'],
+    assert.deepEqual(p.needYou.family.map((i) => [i.title, i.relation]), [
+      ['motor-de-regras', 'parent'],
+      ['fila-de-tarefas', 'child'],
     ]);
-    assert.deepEqual(p.precisam.maquina.map((i) => [i.titulo, i.nivel]), [['motor-de-regras', 'precisa'], ['painel-de-metricas', 'precisa'], ['fila-de-tarefas', 'sua-vez']]);
+    assert.deepEqual(p.needYou.machine.map((i) => [i.title, i.level]), [['motor-de-regras', 'needs'], ['painel-de-metricas', 'needs'], ['fila-de-tarefas', 'your-turn']]);
     // A divisão por conta conta só as que precisam de você: a sua vez (fila-de-tarefas) não soma.
     assert.deepEqual(
-      p.precisam.porConta.map((d) => [d.conta?.rotulo, d.n]),
+      p.needYou.byAccount.map((d) => [d.account?.label, d.n]),
       [
         ['equipe', 1],
         ['cliente-exemplo', 1],
@@ -252,12 +254,12 @@ describe('conta da sessão (decisão 0006)', () => {
     const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
     const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: escopos });
     assert.equal(contas.daSessao(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.deepEqual(contas.daSessao(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, rotulo: 'cliente', cor: '#1baf7a', fonte: 'desktop' });
+    assert.deepEqual(contas.daSessao(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop' });
     const daPorta = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
-    assert.deepEqual(daPorta && [daPorta.rotulo, daPorta.cor, daPorta.fonte], ['equipe', '#df285d', 'config'], 'config vence desktop');
+    assert.deepEqual(daPorta && [daPorta.label, daPorta.color, daPorta.source], ['equipe', '#df285d', 'config'], 'config vence desktop');
     contas.informar('s1', UUID_B, ORG_B);
     const env = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), null);
-    assert.deepEqual(env && [env.rotulo, env.fonte], ['cliente', 'env'], 'o ambiente vence a porta gravada com fonte pior');
+    assert.deepEqual(env && [env.label, env.source], ['cliente', 'env'], 'o ambiente vence a porta gravada com fonte pior');
     contas.informar('s2', 'não é uuid', ORG_A);
     assert.equal(contas.daSessao({ id: 's2', accountId: null, accountSource: null }, null), null);
     await storage.close();
@@ -306,16 +308,16 @@ describe('servidor da API local', () => {
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
-      assert.equal((await fetch(`${api.url}/api/painel/${encodeURIComponent('id com espaço')}`)).status, 400);
+      assert.equal((await fetch(`${api.url}/api/panel/${encodeURIComponent('id com espaço')}`)).status, 400);
 
-      const antes = (await (await fetch(`${api.url}/api/painel/sess-api-1?modelo=claude-opus-5-5`)).json()) as Painel;
-      assert.equal(antes.sessao?.motivo, 'session_start', 'ainda não visto: sessão nova');
+      const antes = (await (await fetch(`${api.url}/api/panel/sess-api-1?model=claude-opus-5-5`)).json()) as Painel;
+      assert.equal(antes.session?.reason, 'session_start', 'ainda não visto: sessão nova');
 
       const hook = { session_id: 'sess-api-1', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
       const r = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
       assert.equal(r.status, 202);
-      const depois = (await (await fetch(`${api.url}/api/painel/sess-api-1`)).json()) as Painel;
-      assert.equal(depois.sessao?.cwd, '/repo/app');
+      const depois = (await (await fetch(`${api.url}/api/panel/sess-api-1`)).json()) as Painel;
+      assert.equal(depois.session?.cwd, '/repo/app');
       const carga = (await (await fetch(`${api.url}/api/carga`)).json()) as { painel: number };
       assert.equal(carga.painel, 2);
     } finally {
@@ -351,8 +353,11 @@ describe('contrato com o plugin', () => {
     assert.equal(doMarketplace, versao);
   });
 
+  // #173 phase 2b: the published mod reads the old route (`/api/painel/<id>`), so what its types must
+  // cover is the panel as the old route answers it, through the back-translator.
   test('todo campo da resposta está nos tipos do plugin', async () => {
-    const { painel, storage } = await cenario('p4');
+    const { painel: novo, storage } = await cenario('p4');
+    const painel = translateBody(LEGACY_BODIES.panel.response, novo);
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');
     const chaves = new Set<string>();
     const juntar = (v: unknown) => {
@@ -389,16 +394,16 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
       changedAt: at(2),
       metadata: {},
     });
-    const p = (await montador.montar({ sessionId: 'qualquer' })).plano!;
-    assert.deepEqual([p.feitos, p.total, p.atual, p.proximo, p.restantes, p.mudouEm], [1, 4, 'Extrair a cobrança', 'Revisar', 1, at(2)]);
-    assert.deepEqual(p.atualDono, { tipo: 'subagente', nome: sub.subagentType ?? sub.name, agenteId: sub.id });
+    const p = (await montador.montar({ sessionId: 'qualquer' })).plan!;
+    assert.deepEqual([p.done, p.total, p.current, p.next, p.remaining, p.changedAt], [1, 4, 'Extrair a cobrança', 'Revisar', 1, at(2)]);
+    assert.deepEqual(p.currentOwner, { type: 'subagent', name: sub.subagentType ?? sub.name, agentId: sub.id });
     assert.deepEqual(
-      p.passos.map((x) => [x.texto, x.estado, x.dono.tipo, x.dono.nome]),
+      p.steps.map((x) => [x.text, x.state, x.owner.type, x.owner.name]),
       [
-        ['Mapear', 'completed', 'principal', null],
-        ['Extrair a cobrança', 'in_progress', 'subagente', sub.subagentType ?? sub.name],
-        ['Revisar', 'pending', 'sessao', 'revisao'],
-        ['Abrir o PR', 'pending', 'subagente', 'revisor'],
+        ['Mapear', 'completed', 'main', null],
+        ['Extrair a cobrança', 'in_progress', 'subagent', sub.subagentType ?? sub.name],
+        ['Revisar', 'pending', 'session', 'revisao'],
+        ['Abrir o PR', 'pending', 'subagent', 'revisor'],
       ],
     );
     await storage.close();
@@ -408,7 +413,7 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
     const { storage, montador } = await cenario('p1');
     storage.db.exec('DELETE FROM session_plan_history');
     await storage.putPlan({ sessionId: SESSAO_DO_PAINEL, source: 'TodoWrite', steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3), metadata: {} });
-    assert.equal((await montador.montar({ sessionId: 'qualquer' })).plano, null);
+    assert.equal((await montador.montar({ sessionId: 'qualquer' })).plan, null);
     await storage.close();
   });
 });
@@ -418,14 +423,14 @@ describe('histórico dos planos no painel (#131)', () => {
     const { storage, montador } = await cenario('p1');
     await ingestHook(storage, { session_id: SESSAO_DO_PAINEL, hook_event_name: 'SessionStart', source: 'clear' }, { receivedAt: new Date(T0).toISOString() });
     const p = await montador.montar({ sessionId: 'qualquer' });
-    assert.equal(p.plano, null);
-    assert.deepEqual(p.planos.map((x) => [x.numero, x.resultado, `${x.feitos}/${x.total}`]), [[3, 'abandonado', '3/6'], [2, 'abandonado', '1/4'], [1, 'concluido', '3/3']]);
+    assert.equal(p.plan, null);
+    assert.deepEqual(p.plans.map((x) => [x.number, x.outcome, `${x.done}/${x.total}`]), [[3, 'abandoned', '3/6'], [2, 'abandoned', '1/4'], [1, 'completed', '3/3']]);
     await storage.close();
   });
 
   test('sessão sem plano nenhum: lista vazia', async () => {
     const { storage, montador } = await cenario('p7');
-    assert.deepEqual((await montador.montar({ sessionId: 'qualquer' })).planos, []);
+    assert.deepEqual((await montador.montar({ sessionId: 'qualquer' })).plans, []);
     await storage.close();
   });
 });

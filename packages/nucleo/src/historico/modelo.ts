@@ -4,8 +4,10 @@
 //   injetável para teste).
 // - A página conta dias com sessão (dias vazios não aparecem), do mais recente ao mais antigo; no
 //   dia, as sessões do fim mais recente ao mais antigo.
-// - O cursor é um dia: `antes` devolve os dias estritamente anteriores a ele, e `proximo` é o último
+// - O cursor é um dia: `before` devolve os dias estritamente anteriores a ele, e `next` é o último
 //   dia da página enquanto houver mais.
+// - The shapes that reach the API (`SessaoEncerrada`, `DiaDoHistorico`, `PaginaDoHistorico`) have
+//   English keys since phase 2b of #173; the old route answers in the old ones (src/api/legacy-routes.ts).
 // - A busca é substring sem diferenciar maiúsculas no título, no id e no projeto, antes de paginar.
 
 import { basename } from 'node:path';
@@ -21,14 +23,14 @@ export const BUSCA_MAXIMA = 100;
 /** O que o histórico precisa de uma sessão encerrada, antes do custo e das ligações. */
 export interface SessaoEncerrada {
   id: string;
-  titulo: string | null;
+  title: string | null;
   /** A pasta da sessão (`basename` do `cwd`). */
-  projeto: string | null;
+  project: string | null;
   /** O nome legível do modelo (`nomeDoModelo`). */
-  modelo: string | null;
+  model: string | null;
   status: SessionStatus;
-  inicio: string;
-  fim: string;
+  start: string;
+  end: string;
 }
 
 export interface PedidoDoHistorico {
@@ -41,14 +43,14 @@ export interface PedidoDoHistorico {
 }
 
 export interface DiaDoHistorico<T> {
-  dia: string;
-  sessoes: T[];
+  day: string;
+  sessions: T[];
 }
 
 export interface PaginaDoHistorico<T> {
-  dias: DiaDoHistorico<T>[];
-  /** Passe como `antes` para a próxima página; `null` quando acabou. */
-  proximo: string | null;
+  days: DiaDoHistorico<T>[];
+  /** Passe como `before` para a próxima página; `null` quando acabou. */
+  next: string | null;
 }
 
 /**
@@ -68,28 +70,28 @@ export function encerradaDe(s: Session, titulo?: string | null): SessaoEncerrada
   if (!s.endedAt) return null;
   return {
     id: s.id,
-    titulo: titulo ?? s.name ?? null,
-    projeto: s.cwd ? basename(s.cwd) || null : null,
-    modelo: nomeDoModelo(s.model),
+    title: titulo ?? s.name ?? null,
+    project: s.cwd ? basename(s.cwd) || null : null,
+    model: nomeDoModelo(s.model),
     status: s.status,
-    inicio: s.startedAt,
-    fim: s.endedAt,
+    start: s.startedAt,
+    end: s.endedAt,
   };
 }
 
 function casa(s: SessaoEncerrada, busca: string): boolean {
   const alvo = busca.toLowerCase();
-  return [s.titulo, s.id, s.projeto].some((v) => v !== null && v.toLowerCase().includes(alvo));
+  return [s.title, s.id, s.project].some((v) => v !== null && v.toLowerCase().includes(alvo));
 }
 
 // Fim mais recente primeiro; no empate, o id maior, para a ordem não depender da leitura.
-const doMaisRecente = (a: SessaoEncerrada, b: SessaoEncerrada) => (a.fim === b.fim ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.fim < b.fim ? 1 : -1);
+const doMaisRecente = (a: SessaoEncerrada, b: SessaoEncerrada) => (a.end === b.end ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.end < b.end ? 1 : -1);
 
 export function paginaDoHistorico<T extends SessaoEncerrada>(sessoes: readonly T[], pedido: PedidoDoHistorico, fusoHorario: string): PaginaDoHistorico<T> {
   const porDia = new Map<string, T[]>();
   for (const s of sessoes) {
     if (pedido.busca && !casa(s, pedido.busca)) continue;
-    const dia = diaDe(s.fim, fusoHorario);
+    const dia = diaDe(s.end, fusoHorario);
     if (pedido.antes && dia >= pedido.antes) continue;
     const lista = porDia.get(dia);
     if (lista) lista.push(s);
@@ -98,8 +100,8 @@ export function paginaDoHistorico<T extends SessaoEncerrada>(sessoes: readonly T
   const todos = [...porDia.keys()].sort().reverse();
   const pagina = todos.slice(0, pedido.dias);
   return {
-    dias: pagina.map((dia) => ({ dia, sessoes: porDia.get(dia)!.sort(doMaisRecente) })),
-    proximo: todos.length > pagina.length ? pagina.at(-1)! : null,
+    days: pagina.map((dia) => ({ day: dia, sessions: porDia.get(dia)!.sort(doMaisRecente) })),
+    next: todos.length > pagina.length ? pagina.at(-1)! : null,
   };
 }
 
@@ -111,17 +113,17 @@ function diaValido(v: string): boolean {
 
 export type LeituraDoPedido = { ok: true; pedido: PedidoDoHistorico } | { ok: false; erro: string };
 
-/** Lê `antes`, `dias` e `busca` da query; o erro diz qual parâmetro e por quê. */
+/** Lê `before`, `days` e `search` da query; o erro diz qual parâmetro (pelo nome novo) e por quê. */
 export function lerPedidoDoHistorico(q: URLSearchParams): LeituraDoPedido {
-  const antes = q.get('antes');
-  if (antes !== null && !diaValido(antes)) return { ok: false, erro: 'antes: um dia AAAA-MM-DD' };
-  const dias = q.get('dias');
+  const antes = q.get('before');
+  if (antes !== null && !diaValido(antes)) return { ok: false, erro: 'before: um dia AAAA-MM-DD' };
+  const dias = q.get('days');
   let n = DIAS_PADRAO;
   if (dias !== null) {
     n = /^\d{1,2}$/.test(dias) ? Number(dias) : NaN;
-    if (!(n >= 1 && n <= DIAS_MAXIMO)) return { ok: false, erro: `dias: um inteiro de 1 a ${DIAS_MAXIMO}` };
+    if (!(n >= 1 && n <= DIAS_MAXIMO)) return { ok: false, erro: `days: um inteiro de 1 a ${DIAS_MAXIMO}` };
   }
-  const busca = q.get('busca');
-  if (busca !== null && busca.length > BUSCA_MAXIMA) return { ok: false, erro: `busca: até ${BUSCA_MAXIMA} caracteres` };
+  const busca = q.get('search');
+  if (busca !== null && busca.length > BUSCA_MAXIMA) return { ok: false, erro: `search: até ${BUSCA_MAXIMA} caracteres` };
   return { ok: true, pedido: { antes, dias: n, busca: busca?.trim() || null } };
 }

@@ -1,0 +1,63 @@
+{
+  "name": "history-before",
+  "request": {
+    "method": "GET",
+    "path": "/api/historico?antes=2026-10-19&dias=2"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "dias": [
+      {
+        "dia": "2026-10-18",
+        "sessoes": [
+          {
+            "id": "sim-historico-relatorio-mensal",
+            "titulo": "Relatório mensal mais rápido",
+            "projeto": "painel-de-metricas",
+            "modelo": "Opus 5.5",
+            "status": "error",
+            "inicio": "2026-10-18T14:25:00.000Z",
+            "fim": "2026-10-18T15:00:00.000Z",
+            "duracaoMs": 2100000,
+            "custoUsd": 0.8,
+            "anterior": null,
+            "seguinte": null
+          },
+          {
+            "id": "sim-wf-bibliotecas",
+            "titulo": "Comparar clientes HTTP",
+            "projeto": "gateway-sandbox",
+            "modelo": "Opus 5.5",
+            "status": "completed",
+            "inicio": "2026-10-18T13:30:00.000Z",
+            "fim": "2026-10-18T13:39:00.000Z",
+            "duracaoMs": 540000,
+            "custoUsd": 0.30720000000000003,
+            "anterior": null,
+            "seguinte": null
+          }
+        ]
+      },
+      {
+        "dia": "2026-10-17",
+        "sessoes": [
+          {
+            "id": "sim-historico-busca-de-receitas",
+            "titulo": "Busca de receitas",
+            "projeto": "app-receitas",
+            "modelo": "Sonnet 5.5",
+            "status": "completed",
+            "inicio": "2026-10-17T14:10:00.000Z",
+            "fim": "2026-10-17T14:30:00.000Z",
+            "duracaoMs": 1200000,
+            "custoUsd": null,
+            "anterior": null,
+            "seguinte": null
+          }
+        ]
+      }
+    ],
+    "proximo": "2026-10-17"
+  }
+}

@@ -7,7 +7,7 @@
 // processo (`ps`) em quatro janelas:
 //
 //   1. parado, sem esperas (a linha de base);
-//   2. parado, com `--esperas` pedidos GET /api/mudancas que ninguém acorda;
+//   2. parado, com `--esperas` pedidos GET /api/changes que ninguém acorda;
 //   3. com `--hooks-por-min` hooks das `--sessoes`, sem esperas;
 //   4. com os hooks e as esperas.
 //
@@ -88,14 +88,14 @@ try {
     let ligado = true;
     let respostas = 0;
     let comMudanca = 0;
-    const { cursor } = await (await fetch(`${base}/api/mudancas`)).json();
+    const { cursor } = await (await fetch(`${base}/api/changes`)).json();
     async function laco() {
       let c = cursor;
       while (ligado) {
-        const r = await (await fetch(`${base}/api/mudancas?desde=${c}&espera=${espera}`)).json();
+        const r = await (await fetch(`${base}/api/changes?since=${c}&wait=${espera}`)).json();
         if (!ligado) break;
         respostas++;
-        if (r.mudancas.length) comMudanca++;
+        if (r.changes.length) comMudanca++;
         c = r.cursor;
       }
     }
@@ -103,7 +103,7 @@ try {
     const h0 = hooks;
     const timer = comHooks ? setInterval(enviar, 60_000 / hooksPorMin) : null;
     await dormir(1000);
-    const abertas = (await (await fetch(`${base}/api/carga`)).json()).esperasAbertas;
+    const abertas = (await (await fetch(`${base}/api/load`)).json()).openWaits;
     const r0 = respostas;
     const m0 = comMudanca;
     const a = amostra(filho.pid);

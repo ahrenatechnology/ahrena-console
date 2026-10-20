@@ -36,7 +36,7 @@ function pedir(url: string, caminho: string): Promise<{ status: number; corpo: s
   });
 }
 
-const COLUNA_DA_SESSAO = { active: 'ativa', waiting: 'esperando', completed: 'concluida', error: 'erro', abandoned: 'abandonada' } as const;
+const COLUNA_DA_SESSAO = { active: 'active', waiting: 'waiting', completed: 'completed', error: 'error', abandoned: 'abandoned' } as const;
 
 describe('#31 GET /api/kanban com o simulador', () => {
   let storage: SqliteStorage;
@@ -52,9 +52,9 @@ describe('#31 GET /api/kanban com o simulador', () => {
   const colunaInteira = async (visao: string, coluna: string) => {
     const itens: unknown[] = [];
     for (let pagina = 1; ; pagina++) {
-      const { corpo } = await get(`/api/kanban?visao=${visao}&coluna=${coluna}&pagina=${pagina}`);
-      itens.push(...corpo.colunas[0].itens);
-      if (!corpo.colunas[0].temMais) return { itens, total: corpo.colunas[0].total };
+      const { corpo } = await get(`/api/kanban?view=${visao}&column=${coluna}&page=${pagina}`);
+      itens.push(...corpo.columns[0].items);
+      if (!corpo.columns[0].hasMore) return { itens, total: corpo.columns[0].total };
     }
   };
 
@@ -83,31 +83,31 @@ describe('#31 GET /api/kanban com o simulador', () => {
   test('sem visão é a de sessões: as cinco colunas, na ordem, com rótulos', async () => {
     const { status, corpo } = await get('/api/kanban');
     assert.equal(status, 200);
-    assert.equal(corpo.visao, 'sessoes');
-    assert.equal(corpo.porPagina, 10);
+    assert.equal(corpo.view, 'sessions');
+    assert.equal(corpo.perPage, 10);
     assert.deepEqual(
-      corpo.colunas.map((c) => [c.id, c.rotulo]),
+      corpo.columns.map((c) => [c.id, c.label]),
       [
-        ['ativa', 'Ativa'],
-        ['esperando', 'Esperando você'],
-        ['concluida', 'Concluída'],
-        ['erro', 'Com erro'],
-        ['abandonada', 'Abandonada'],
+        ['active', 'Ativa'],
+        ['waiting', 'Esperando você'],
+        ['completed', 'Concluída'],
+        ['error', 'Com erro'],
+        ['abandoned', 'Abandonada'],
       ],
     );
-    assert.deepEqual(COLUNAS_DAS_SESSOES.map((c) => c.id), corpo.colunas.map((c) => c.id));
+    assert.deepEqual(COLUNAS_DAS_SESSOES.map((c) => c.id), corpo.columns.map((c) => c.id));
   });
 
   test('visão sessões: cada total bate com as sessões daquele status, e os cards são do status da coluna', async () => {
-    const { corpo } = await get('/api/kanban?visao=sessoes');
+    const { corpo } = await get('/api/kanban?view=sessions');
     let soma = 0;
-    for (const c of corpo.colunas) {
+    for (const c of corpo.columns) {
       const esperado = sessoes.filter((s) => COLUNA_DA_SESSAO[displayStatus(s)] === c.id).length;
       assert.equal(c.total, esperado, c.id);
-      assert.equal(c.pagina, 1);
-      assert.equal(c.itens.length, Math.min(10, esperado), c.id);
-      assert.equal(c.temMais, esperado > 10, c.id);
-      for (const card of c.itens as CardDeSessao[]) assert.equal(COLUNA_DA_SESSAO[card.status], c.id, card.id);
+      assert.equal(c.page, 1);
+      assert.equal(c.items.length, Math.min(10, esperado), c.id);
+      assert.equal(c.hasMore, esperado > 10, c.id);
+      for (const card of c.items as CardDeSessao[]) assert.equal(COLUNA_DA_SESSAO[card.status], c.id, card.id);
       soma += c.total;
     }
     assert.equal(soma, sessoes.length);
@@ -115,24 +115,24 @@ describe('#31 GET /api/kanban com o simulador', () => {
 
   test('o card de sessão: título, motivo só esperando, pedido sem quebra de linha, modelo legível, conta sem id', async () => {
     const { corpo, texto } = await get('/api/kanban');
-    const cards = corpo.colunas.flatMap((c) => c.itens as CardDeSessao[]);
+    const cards = corpo.columns.flatMap((c) => c.items as CardDeSessao[]);
     assert.ok(cards.length > 0);
     for (const c of cards) {
-      assert.ok(c.titulo.length > 0 && c.titulo.length <= 60, c.id);
-      if (c.status === 'waiting') assert.ok(c.motivo !== null, c.id);
-      else assert.equal(c.motivo, null, c.id);
-      assert.equal(c.rodando, c.status === 'active' || c.status === 'waiting');
-      assert.ok(c.duracaoMs >= 0);
-      if (c.ultimoPrompt !== null) {
-        assert.ok(c.ultimoPrompt.length <= 120, c.ultimoPrompt);
-        assert.doesNotMatch(c.ultimoPrompt, /[\n\r]/);
+      assert.ok(c.title.length > 0 && c.title.length <= 60, c.id);
+      if (c.status === 'waiting') assert.ok(c.reason !== null, c.id);
+      else assert.equal(c.reason, null, c.id);
+      assert.equal(c.running, c.status === 'active' || c.status === 'waiting');
+      assert.ok(c.durationMs >= 0);
+      if (c.lastPrompt !== null) {
+        assert.ok(c.lastPrompt.length <= 120, c.lastPrompt);
+        assert.doesNotMatch(c.lastPrompt, /[\n\r]/);
       }
-      assert.ok(c.agentes >= 1, c.id);
-      if (c.modelo !== null) assert.doesNotMatch(c.modelo, /^claude-/, c.modelo);
-      assert.ok(c.custoUsd === null || c.custoUsd >= 0);
-      if (c.conta) assert.deepEqual(Object.keys(c.conta).sort(), ['cor', 'rotulo']);
+      assert.ok(c.agents >= 1, c.id);
+      if (c.model !== null) assert.doesNotMatch(c.model, /^claude-/, c.model);
+      assert.ok(c.costUsd === null || c.costUsd >= 0);
+      if (c.account) assert.deepEqual(Object.keys(c.account).sort(), ['color', 'label']);
     }
-    assert.ok(cards.some((c) => c.ultimoPrompt !== null), 'o simulador grava prompts');
+    assert.ok(cards.some((c) => c.lastPrompt !== null), 'o simulador grava prompts');
     // Nenhum id de conta nem de org, em parte alguma da resposta (decisão 0006).
     for (const s of sessoes) {
       if (!s.accountId) continue;
@@ -142,62 +142,65 @@ describe('#31 GET /api/kanban com o simulador', () => {
 
   test('itens pela atividade mais recente primeiro', async () => {
     const { corpo } = await get('/api/kanban');
-    for (const c of corpo.colunas) {
-      const datas = c.itens.map((i) => i.ultimaAtividade);
+    for (const c of corpo.columns) {
+      const datas = c.items.map((i) => i.lastActivity);
       assert.deepEqual(datas, [...datas].sort().reverse(), c.id);
     }
   });
 
   test('10 por página: a página 2 de uma coluna traz o resto, sem repetir', async () => {
     const { corpo } = await get('/api/kanban');
-    const grande = corpo.colunas.find((c) => c.temMais);
+    const grande = corpo.columns.find((c) => c.hasMore);
     assert.ok(grande, 'alguma coluna com mais de 10');
-    const p2 = await get(`/api/kanban?visao=sessoes&coluna=${grande.id}&pagina=2`);
+    const p2 = await get(`/api/kanban?view=sessions&column=${grande.id}&page=2`);
     assert.equal(p2.status, 200);
-    assert.equal(p2.corpo.colunas.length, 1);
-    const [c2] = p2.corpo.colunas;
+    assert.equal(p2.corpo.columns.length, 1);
+    const [c2] = p2.corpo.columns;
     assert.equal(c2.id, grande.id);
-    assert.equal(c2.pagina, 2);
+    assert.equal(c2.page, 2);
     assert.equal(c2.total, grande.total);
-    assert.equal(c2.itens.length, Math.min(10, grande.total - 10));
-    assert.equal(c2.temMais, grande.total > 20);
-    const ids1 = new Set(grande.itens.map((i) => i.id));
-    for (const i of c2.itens) assert.ok(!ids1.has(i.id), `repetido: ${i.id}`);
-    const { itens, total } = await colunaInteira('sessoes', grande.id);
+    assert.equal(c2.items.length, Math.min(10, grande.total - 10));
+    assert.equal(c2.hasMore, grande.total > 20);
+    const ids1 = new Set(grande.items.map((i) => i.id));
+    for (const i of c2.items) assert.ok(!ids1.has(i.id), `repetido: ${i.id}`);
+    const { itens, total } = await colunaInteira('sessions', grande.id);
     assert.equal(itens.length, total);
   });
 
   test('só a coluna, na página 1 por padrão; página além do fim vem vazia', async () => {
-    const { corpo } = await get('/api/kanban?coluna=erro');
-    assert.equal(corpo.colunas.length, 1);
-    assert.equal(corpo.colunas[0].id, 'erro');
-    assert.equal(corpo.colunas[0].pagina, 1);
-    const alem = await get('/api/kanban?coluna=erro&pagina=999');
+    const { corpo } = await get('/api/kanban?column=error');
+    assert.equal(corpo.columns.length, 1);
+    assert.equal(corpo.columns[0].id, 'error');
+    assert.equal(corpo.columns[0].page, 1);
+    // The old parameter names and values still read the same (src/api/legacy-routes.ts).
+    assert.deepEqual((await get('/api/kanban?coluna=erro')).corpo, corpo);
+    const alem = await get('/api/kanban?column=error&page=999');
     assert.equal(alem.status, 200);
-    assert.deepEqual(alem.corpo.colunas[0].itens, []);
-    assert.equal(alem.corpo.colunas[0].temMais, false);
+    assert.deepEqual(alem.corpo.columns[0].items, []);
+    assert.equal(alem.corpo.columns[0].hasMore, false);
   });
 
   test('visão agentes: as quatro colunas, na ordem, com rótulos', async () => {
-    const { status, corpo } = await get('/api/kanban?visao=agentes');
+    const { status, corpo } = await get('/api/kanban?view=agents');
     assert.equal(status, 200);
-    assert.equal(corpo.visao, 'agentes');
+    assert.equal(corpo.view, 'agents');
     assert.deepEqual(
-      corpo.colunas.map((c) => [c.id, c.rotulo]),
+      corpo.columns.map((c) => [c.id, c.label]),
       [
-        ['trabalhando', 'Trabalhando'],
-        ['esperando', 'Esperando'],
-        ['concluidos', 'Concluídos'],
-        ['erro', 'Erro'],
+        ['working', 'Trabalhando'],
+        ['waiting', 'Esperando'],
+        ['done', 'Concluídos'],
+        ['error', 'Erro'],
       ],
     );
-    assert.deepEqual(COLUNAS_DOS_AGENTES.map((c) => c.id), corpo.colunas.map((c) => c.id));
+    assert.deepEqual((await get('/api/kanban?visao=agentes')).corpo, corpo, 'the old view value');
+    assert.deepEqual(COLUNAS_DOS_AGENTES.map((c) => c.id), corpo.columns.map((c) => c.id));
   });
 
   test('visão agentes: um principal por sessão e cada subagente; os totais somam tudo', async () => {
-    const { corpo } = await get('/api/kanban?visao=agentes');
+    const { corpo } = await get('/api/kanban?view=agents');
     const subagentes = agentes.filter((a) => a.type === 'subagent');
-    const soma = corpo.colunas.reduce((n, c) => n + c.total, 0);
+    const soma = corpo.columns.reduce((n, c) => n + c.total, 0);
     assert.equal(soma, sessoes.length + subagentes.length);
     // Os totais batem com a regra de status, coluna a coluna.
     const porSessao = new Map(sessoes.map((s) => [s.id, s]));
@@ -207,35 +210,35 @@ describe('#31 GET /api/kanban com o simulador', () => {
       const k = colunaDoAgente(QuadroKanban.statusDoSubagente(a, porSessao.get(a.sessionId)!));
       esperado.set(k, (esperado.get(k) ?? 0) + 1);
     }
-    for (const c of corpo.colunas) assert.equal(c.total, esperado.get(c.id) ?? 0, c.id);
-    assert.ok(corpo.colunas.find((c) => c.id === 'concluidos')!.total > 0);
+    for (const c of corpo.columns) assert.equal(c.total, esperado.get(c.id) ?? 0, c.id);
+    assert.ok(corpo.columns.find((c) => c.id === 'done')!.total > 0);
   });
 
   test('o card de agente: id único, principal com o título, subagente com o tipo', async () => {
     const todos: CardDeAgente[] = [];
-    for (const c of COLUNAS_DOS_AGENTES) todos.push(...((await colunaInteira('agentes', c.id)).itens as CardDeAgente[]));
+    for (const c of COLUNAS_DOS_AGENTES) todos.push(...((await colunaInteira('agents', c.id)).itens as CardDeAgente[]));
     assert.equal(new Set(todos.map((a) => a.id)).size, todos.length, 'ids únicos');
-    const principais = todos.filter((a) => a.principal);
+    const principais = todos.filter((a) => a.main);
     assert.equal(principais.length, sessoes.length);
     for (const p of principais) {
-      assert.equal(p.id, p.sessaoId);
-      assert.equal(p.nome, 'Agente principal');
-      assert.ok(p.descricao.length > 0);
+      assert.equal(p.id, p.sessionId);
+      assert.equal(p.name, 'Agente principal');
+      assert.ok(p.description.length > 0);
     }
-    for (const s of todos.filter((a) => !a.principal)) {
-      assert.ok(s.id.startsWith(`${s.sessaoId}:`), s.id);
-      assert.ok(s.nome.length > 0 && s.nome !== 'Agente principal', s.nome);
-      assert.equal(s.rodando, s.status === 'active' || s.status === 'waiting');
-      if (s.status !== 'waiting') assert.equal(s.motivo, null);
+    for (const s of todos.filter((a) => !a.main)) {
+      assert.ok(s.id.startsWith(`${s.sessionId}:`), s.id);
+      assert.ok(s.name.length > 0 && s.name !== 'Agente principal', s.name);
+      assert.equal(s.running, s.status === 'active' || s.status === 'waiting');
+      if (s.status !== 'waiting') assert.equal(s.reason, null);
     }
   });
 
   test('regras de status do agente', () => {
-    assert.equal(colunaDoAgente('active'), 'trabalhando');
-    assert.equal(colunaDoAgente('waiting'), 'esperando');
-    assert.equal(colunaDoAgente('completed'), 'concluidos');
-    assert.equal(colunaDoAgente('abandoned'), 'concluidos');
-    assert.equal(colunaDoAgente('error'), 'erro');
+    assert.equal(colunaDoAgente('active'), 'working');
+    assert.equal(colunaDoAgente('waiting'), 'waiting');
+    assert.equal(colunaDoAgente('completed'), 'done');
+    assert.equal(colunaDoAgente('abandoned'), 'done');
+    assert.equal(colunaDoAgente('error'), 'error');
     const sessao = { status: 'active', awaitingInputSince: null } as Session;
     const sub = (status: Agent['status']) => ({ status }) as Agent;
     assert.equal(QuadroKanban.statusDoSubagente(sub('working'), sessao), 'active');
@@ -257,7 +260,15 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.equal(rotuloDoModelo(null), null);
   });
 
-  test('400 para visão, coluna e página inválidas', async () => {
+  test('400 para visão, coluna e página inválidas, citando o parâmetro novo', async () => {
+    const errors: [string, string][] = [
+      ['view=quadro', 'view: um de sessions, agents'],
+      ['view=agents&column=active', 'column: uma de working, waiting, done, error'],
+      ['column=working', 'column: uma de active, waiting, completed, error, abandoned'],
+      ['page=2', 'page: só com column'],
+      ['column=active&page=0', 'page: um inteiro a partir de 1'],
+    ];
+    for (const [q, error] of errors) assert.deepEqual(await get(`/api/kanban?${q}`), { status: 400, corpo: { error }, texto: JSON.stringify({ error }) }, q);
     for (const q of [
       'visao=quadro',
       'visao=agentes&coluna=ativa',
@@ -272,6 +283,6 @@ describe('#31 GET /api/kanban com o simulador', () => {
       assert.equal(status, 400, q);
       assert.equal(typeof corpo.error, 'string', q);
     }
-    assert.throws(() => pedidoDoKanban(new URL('http://x/api/kanban?pagina=1')));
+    assert.throws(() => pedidoDoKanban(new URL('http://x/api/kanban?page=1')));
   });
 });

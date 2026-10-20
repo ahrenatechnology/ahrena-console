@@ -1,0 +1,154 @@
+{
+  "name": "decisions-page-session",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisoes?agrupar=sessao"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "agrupar": "sessao",
+    "estado": "todas",
+    "q": null,
+    "contagens": {
+      "vigentes": 4,
+      "branches": 1,
+      "aConfirmar": 1,
+      "substituidas30d": 1,
+      "promovidas": 0
+    },
+    "grupos": [
+      {
+        "chave": "s.c2ltLXBhaW5lbC1lc3Rh",
+        "tipo": "sessao",
+        "titulo": "Separar pagamentos em serviços",
+        "repo": "/simulacao/ahrena-demo",
+        "pasta": "ahrena-demo",
+        "vigentes": 3,
+        "aConfirmar": 1,
+        "total": 5,
+        "itens": [
+          {
+            "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+            "rotulo": "D6",
+            "origem": "sugerida",
+            "estado": "a_confirmar",
+            "titulo": "10 cards por coluna, com \"mostrar mais\"",
+            "texto": "10 cards por coluna, com \"mostrar mais\"",
+            "contexto": null,
+            "desfazer": null,
+            "nao": [
+              "20 por coluna",
+              "rolagem infinita"
+            ],
+            "decididaPor": "agente",
+            "decididaEm": "2026-10-20T14:54:00.000Z",
+            "confirmadaEm": null,
+            "substituidaPor": null,
+            "sessao": "esta",
+            "toolUseId": "sim-toolu-p9-6",
+            "sessionId": "sim-painel-esta",
+            "escopo": "familia",
+            "substitui": null,
+            "promovidaPara": null,
+            "branch": "feat/42-kanban-de-sessoes",
+            "repo": "/simulacao/ahrena-demo",
+            "conversa": "/ui/sessions/sim-painel-esta"
+          },
+          {
+            "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+            "rotulo": "D4",
+            "origem": "correcao",
+            "estado": "vigente",
+            "titulo": "SQLite em memória nos testes",
+            "texto": "SQLite em memória nos testes",
+            "contexto": null,
+            "desfazer": null,
+            "nao": [
+              "Postgres no Docker"
+            ],
+            "decididaPor": "usuario",
+            "decididaEm": "2026-10-20T14:46:00.000Z",
+            "confirmadaEm": null,
+            "substituidaPor": null,
+            "sessao": "esta",
+            "toolUseId": "sim-toolu-p9-4",
+            "sessionId": "sim-painel-esta",
+            "escopo": "familia",
+            "substitui": "D3",
+            "promovidaPara": null,
+            "branch": "feat/42-kanban-de-sessoes",
+            "repo": "/simulacao/ahrena-demo",
+            "conversa": "/ui/sessions/sim-painel-esta"
+          },
+          {
+            "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+            "rotulo": "D5",
+            "origem": "permissao",
+            "estado": "vigente",
+            "titulo": "Permitir npm test sem perguntar",
+            "texto": "Permitir npm test sem perguntar",
+            "contexto": null,
+            "desfazer": null,
+            "nao": [
+              "perguntar a cada vez"
+            ],
+            "decididaPor": "usuario",
+            "decididaEm": "2026-10-20T14:39:00.000Z",
+            "confirmadaEm": null,
+            "substituidaPor": null,
+            "sessao": "esta",
+            "toolUseId": "sim-toolu-p9-5",
+            "sessionId": "sim-painel-esta",
+            "escopo": "familia",
+            "substitui": null,
+            "promovidaPara": null,
+            "branch": "feat/42-kanban-de-sessoes",
+            "repo": "/simulacao/ahrena-demo",
+            "conversa": "/ui/sessions/sim-painel-esta"
+          }
+        ],
+        "mais": 2
+      },
+      {
+        "chave": "s.c2ltLXBhaW5lbC1rYW5iYW4tb250ZW0",
+        "tipo": "sessao",
+        "titulo": "sim-painel-kanban-ontem",
+        "repo": "/simulacao/ahrena-demo",
+        "pasta": "ahrena-demo",
+        "vigentes": 1,
+        "aConfirmar": 0,
+        "total": 1,
+        "itens": [
+          {
+            "id": "dec:0768d762322f78a8e1990a0955accbc9",
+            "rotulo": "D1",
+            "origem": "pergunta",
+            "estado": "vigente",
+            "titulo": "Kanban só leitura, sem arrastar",
+            "texto": "Kanban só leitura, sem arrastar",
+            "contexto": null,
+            "desfazer": null,
+            "nao": [
+              "arrastar muda o status"
+            ],
+            "decididaPor": "usuario",
+            "decididaEm": "2026-10-19T19:00:00.000Z",
+            "confirmadaEm": null,
+            "substituidaPor": null,
+            "sessao": "esta",
+            "toolUseId": "sim-toolu-p9-1",
+            "sessionId": "sim-painel-kanban-ontem",
+            "escopo": "familia",
+            "substitui": null,
+            "promovidaPara": null,
+            "branch": "feat/42-kanban-de-sessoes",
+            "repo": "/simulacao/ahrena-demo",
+            "conversa": "/ui/sessions/sim-painel-kanban-ontem"
+          }
+        ],
+        "mais": 0
+      }
+    ]
+  }
+}

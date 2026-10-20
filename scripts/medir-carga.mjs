@@ -13,7 +13,7 @@
 //   --rota painel  a API de produção (packages/nucleo/src/api/cli.ts): importa e segue
 //                  ~/.claude/projects de verdade, num banco temporário, e só começa a
 //                  medir depois da importação inicial. Os `--abertos` painéis pedem
-//                  /api/painel/<sessão> a cada 5 s; a sessão é `--sessao` ou o transcript
+//                  /api/panel/<sessão> a cada 5 s; a sessão é `--sessao` ou o transcript
 //                  mais recente. `--hooks-por-min` soma hooks sintéticos das `--sessoes`
 //                  (POST /api/hooks), como sessões trabalhando ao mesmo tempo.
 //                  `--varredura` passa ao núcleo o intervalo da varredura de reserva.
@@ -101,20 +101,20 @@ try {
     // A importação inicial do histórico é uma vez só; o que se mede é o regime depois dela.
     const t = performance.now();
     for (;;) {
-      const c = await (await fetch(`${base}/api/carga`)).json();
-      if (c.historico !== 'importando') break;
+      const c = await (await fetch(`${base}/api/load`)).json();
+      if (c.history !== 'importing') break;
       if (performance.now() - t > 15 * 60_000) throw new Error('a importação passou de 15 min');
       await dormir(1000);
     }
     importacao = { segundos: Math.round((performance.now() - t) / 1000), ...amostra(nucleo.pid) };
   }
   // Aquecimento: a primeira leitura monta o índice; o que se mede é o regime.
-  await fetch(rota === 'frota' ? `${base}/api/fleet` : rota === 'painel' ? `${base}/api/painel/${sessaoDoPainel}` : `${base}/api/sessao/aquecimento`).then((r) => r.text());
+  await fetch(rota === 'frota' ? `${base}/api/fleet` : rota === 'painel' ? `${base}/api/panel/${sessaoDoPainel}` : `${base}/api/sessao/aquecimento`).then((r) => r.text());
   await dormir(2000);
 
   const lat = [];
   let erros = 0;
-  const caminho = (i) => (rota === 'frota' ? '/api/fleet?cols=121' : rota === 'painel' ? `/api/painel/${sessaoDoPainel}` : `/api/sessao/carga-${i}`);
+  const caminho = (i) => (rota === 'frota' ? '/api/fleet?cols=121' : rota === 'painel' ? `/api/panel/${sessaoDoPainel}` : `/api/sessao/carga-${i}`);
   async function pedir(i) {
     const t = performance.now();
     try {
@@ -126,7 +126,7 @@ try {
   }
 
   const antes = amostra(nucleo.pid);
-  const antesCarga = rota === 'painel' ? await (await fetch(`${base}/api/carga`)).json() : null;
+  const antesCarga = rota === 'painel' ? await (await fetch(`${base}/api/load`)).json() : null;
   const t0 = performance.now();
   const timers = [];
   // Hooks sintéticos das sessões abertas: um PreToolUse por vez, espalhados no minuto.
@@ -147,7 +147,7 @@ try {
   timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
   const depois = amostra(nucleo.pid);
   const janela = (performance.now() - t0) / 1000;
-  const depoisCarga = rota === 'painel' ? await (await fetch(`${base}/api/carga`)).json() : null;
+  const depoisCarga = rota === 'painel' ? await (await fetch(`${base}/api/load`)).json() : null;
 
   lat.sort((a, b) => a - b);
   const q = (x) => (lat.length ? Math.round(lat[Math.min(lat.length - 1, Math.floor(lat.length * x))]) : null);
@@ -162,10 +162,10 @@ try {
     ...(rota === 'painel'
       ? {
           hooksPorMin, hooks, importacao,
-          eventosLidosNaJanela: depoisCarga.eventosLidos - antesCarga.eventosLidos,
-          arquivosDoSeguidor: depoisCarga.seguidor?.filesKnown ?? null,
-          arquivosImportadosNaJanela: (depoisCarga.seguidor?.filesImported ?? 0) - (antesCarga.seguidor?.filesImported ?? 0),
-          desktopLidosNaJanela: depoisCarga.desktopLidos - antesCarga.desktopLidos,
+          eventosLidosNaJanela: depoisCarga.eventsRead - antesCarga.eventsRead,
+          arquivosDoSeguidor: depoisCarga.follower?.filesKnown ?? null,
+          arquivosImportadosNaJanela: (depoisCarga.follower?.filesImported ?? 0) - (antesCarga.follower?.filesImported ?? 0),
+          desktopLidosNaJanela: depoisCarga.desktopRead - antesCarga.desktopRead,
         }
       : {}),
   };

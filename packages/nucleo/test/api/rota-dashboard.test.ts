@@ -25,15 +25,15 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
     const agora = Date.now();
     await semearCenariosDoPainel(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
-    assert.deepEqual(d.numeros.sessoes, { total: 3, ativas: 1, esperando: 2, comErro: 0 });
+    assert.deepEqual(d.numbers.sessions, { total: 3, active: 1, waiting: 2, withError: 0 });
     // Só o principal da sessão que trabalha; os das que esperam você não contam.
-    assert.deepEqual(d.numeros.agentes, { ativos: 1, sessoes: 1 });
-    assert.deepEqual(d.numeros.subagentes, { ativos: 1, sessoes: 1 });
+    assert.deepEqual(d.numbers.agents, { active: 1, sessions: 1 });
+    assert.deepEqual(d.numbers.subagents, { active: 1, sessions: 1 });
     let eventos = 0;
     for (const id of [SESSAO_DO_PAINEL, 'sim-painel-motor-de-regras', 'sim-painel-app-receitas']) eventos += (await storage.listEvents(id, { limit: 500 })).items.length;
-    assert.deepEqual(d.numeros.eventos, { hoje: eventos, ultimaHora: eventos, total: eventos });
-    assert.equal(d.numeros.custo.usd, 1.84);
-    assert.equal(d.numeros.custo.dias, 30);
+    assert.deepEqual(d.numbers.events, { today: eventos, lastHour: eventos, total: eventos });
+    assert.equal(d.numbers.cost.usd, 1.84);
+    assert.equal(d.numbers.cost.days, 30);
   });
 
   test('os agentes: quem trabalha primeiro, com subagentes, turnos, plano e custo', async () => {
@@ -41,30 +41,30 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
     await semearCenariosDoPainel(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
-      d.agentes.map((a) => [a.sessao, a.status]),
+      d.agents.map((a) => [a.session, a.status]),
       [
         [SESSAO_DO_PAINEL, 'active'],
         ['sim-painel-motor-de-regras', 'waiting'],
         ['sim-painel-app-receitas', 'waiting'],
       ],
     );
-    const esta = d.agentes[0]!;
-    assert.equal(esta.titulo, 'Kanban de sessões no artefato');
-    assert.equal(esta.projeto, 'ahrena-demo');
-    assert.equal(esta.modelo, 'claude-opus-5-5');
-    assert.equal(esta.turnos, 18);
-    assert.equal(esta.custoUsd, 1.84);
-    assert.equal(esta.tarefa, 'Rodar a bateria');
+    const esta = d.agents[0]!;
+    assert.equal(esta.title, 'Kanban de sessões no artefato');
+    assert.equal(esta.project, 'ahrena-demo');
+    assert.equal(esta.model, 'claude-opus-5-5');
+    assert.equal(esta.turns, 18);
+    assert.equal(esta.costUsd, 1.84);
+    assert.equal(esta.task, 'Rodar a bateria');
     assert.deepEqual(
-      esta.subagentes.map((s) => [s.tipo, s.status]),
+      esta.subagents.map((s) => [s.type, s.status]),
       [
         ['Explore', 'working'],
         ['Plan', 'completed'],
       ],
     );
     // Quem pede permissão mostra o pedido; sem uso, o custo é zero.
-    assert.equal(d.agentes[1]!.tarefa, 'Bash: npm run migrate');
-    assert.equal(d.agentes[1]!.custoUsd, 0);
+    assert.equal(d.agents[1]!.task, 'Bash: npm run migrate');
+    assert.equal(d.agents[1]!.costUsd, 0);
   });
 
   test('a atividade recente: o pedido de permissão e a interrupção, mais novo primeiro', async () => {
@@ -72,7 +72,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
     await semearCenariosDoPainel(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
-      d.atividade.map((l) => [l.texto, l.projeto, l.status]),
+      d.activity.map((l) => [l.text, l.project, l.status]),
       [
         ['Pede permissão: Bash npm run migrate', 'motor-de-regras', 'waiting'],
         ['Interrompida (Esc)', 'app-receitas', 'waiting'],
@@ -85,12 +85,12 @@ describe('MontadorDoDashboard', () => {
   test('com as sessões dos testes do MCP: estados, erro e nada da mensagem do erro', async () => {
     await semear(storage);
     const d = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA) }).montar();
-    assert.equal(d.numeros.sessoes.comErro, 1);
-    assert.equal(d.numeros.subagentes.ativos, 1);
-    const erro = d.atividade.find((l) => l.sessao === 'erro');
-    assert.deepEqual(erro && [erro.texto, erro.status], ['Erro de API 529 · overloaded_error', 'error']);
+    assert.equal(d.numbers.sessions.withError, 1);
+    assert.equal(d.numbers.subagents.active, 1);
+    const erro = d.activity.find((l) => l.session === 'erro');
+    assert.deepEqual(erro && [erro.text, erro.status], ['Erro de API 529 · overloaded_error', 'error']);
     assert.doesNotMatch(JSON.stringify(d), /hunter2/);
-    assert.equal(d.agentes.at(-1)!.status, 'error');
+    assert.equal(d.agents.at(-1)!.status, 'error');
   });
 
   test('lê só o que é novo: um turno concluído entra, com a duração, e conta nos eventos', async () => {
@@ -104,12 +104,12 @@ describe('MontadorDoDashboard', () => {
     await storage.putSession({ ...s, updatedAt: at(2) });
     agora = Date.parse(at(2));
     const depois = await m.montar();
-    assert.equal(depois.numeros.eventos.total, antes.numeros.eventos.total + 2);
-    assert.equal(depois.atividade[0]!.texto, 'Turno concluído em 38,2 s');
-    assert.equal(depois.atividade[0]!.status, 'active');
-    const card = depois.agentes.find((a) => a.sessao === 'trabalhando')!;
-    assert.deepEqual(card.mensagens, ['agora roda os testes']);
-    assert.equal(card.turnos, 1);
+    assert.equal(depois.numbers.events.total, antes.numbers.events.total + 2);
+    assert.equal(depois.activity[0]!.text, 'Turno concluído em 38,2 s');
+    assert.equal(depois.activity[0]!.status, 'active');
+    const card = depois.agents.find((a) => a.session === 'trabalhando')!;
+    assert.deepEqual(card.messages, ['agora roda os testes']);
+    assert.equal(card.turns, 1);
   });
 
   test('"hoje" começa à meia-noite do fuso; a última hora é a última hora', async () => {
@@ -120,17 +120,17 @@ describe('MontadorDoDashboard', () => {
       await storage.appendEvent(event({ id, sessionId: 's-dia', agentId: null, type: 'PreToolUse', createdAt: at(min) }));
     }
     const utc = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA, 'UTC') }).montar();
-    assert.deepEqual(utc.numeros.eventos, { hoje: 4, ultimaHora: 2, total: 4 });
+    assert.deepEqual(utc.numbers.events, { today: 4, lastHour: 2, total: 4 });
     const sp = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA, 'America/Sao_Paulo') }).montar();
-    assert.deepEqual(sp.numeros.eventos, { hoje: 3, ultimaHora: 2, total: 4 });
+    assert.deepEqual(sp.numbers.events, { today: 3, lastHour: 2, total: 4 });
   });
 
   test('banco vazio: tudo zero, listas vazias', async () => {
     const d = await new MontadorDoDashboard({ frota: frotaEm(() => AGORA) }).montar();
-    assert.deepEqual(d.numeros.sessoes, { total: 0, ativas: 0, esperando: 0, comErro: 0 });
-    assert.deepEqual(d.numeros.eventos, { hoje: 0, ultimaHora: 0, total: 0 });
-    assert.equal(d.numeros.custo.usd, 0);
-    assert.deepEqual([d.agentes, d.atividade], [[], []]);
+    assert.deepEqual(d.numbers.sessions, { total: 0, active: 0, waiting: 0, withError: 0 });
+    assert.deepEqual(d.numbers.events, { today: 0, lastHour: 0, total: 0 });
+    assert.equal(d.numbers.cost.usd, 0);
+    assert.deepEqual([d.agents, d.activity], [[], []]);
   });
 });
 
@@ -151,8 +151,8 @@ describe('GET /api/dashboard', () => {
     const r = await fetch(`${api.url}/api/dashboard`);
     assert.equal(r.status, 200);
     const corpo = await r.json();
-    assert.equal(corpo.numeros.sessoes.total, 3);
-    assert.equal(corpo.agentes.length, 3);
+    assert.equal(corpo.numbers.sessions.total, 3);
+    assert.equal(corpo.agents.length, 3);
   });
 
   test('sem a frota, 404', async () => {

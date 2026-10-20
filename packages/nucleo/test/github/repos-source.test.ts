@@ -148,12 +148,12 @@ describe('#105: o detalhe pelo GraphQL', () => {
     assert.match(pedidos[0].body!.query, /mergeados: search/);
     assert.deepEqual(d.contagens, { fechadas: 999, abertas: 999, prs: 999, mergeados: 999, fechadosSemMerge: 999 });
     const issues = issuesDoPeriodo(d.fechadas, d.abertas, d.contagens);
-    assert.deepEqual([issues.fechadas, issues.abertas], [999, 999]);
-    assert.deepEqual(issues.amostra, { lidos: 10, total: 1998, truncado: true });
-    assert.equal(issues.porTipo.reduce((s, t) => s + t.fechadas + t.abertas, 0), 10);
+    assert.deepEqual([issues.closed, issues.open], [999, 999]);
+    assert.deepEqual(issues.sample, { read: 10, total: 1998, truncated: true });
+    assert.equal(issues.byType.reduce((s, t) => s + t.closed + t.open, 0), 10);
     const prs = prsDoPeriodo(d.prs, 3, desde, d.contagens);
-    assert.deepEqual([prs.mergeados, prs.fechadosSemMerge, prs.abertos], [999, 999, 3]);
-    assert.deepEqual(prs.amostra, { lidos: 5, total: 999, truncado: true });
+    assert.deepEqual([prs.merged, prs.closedUnmerged, prs.open], [999, 999, 3]);
+    assert.deepEqual(prs.sample, { read: 5, total: 999, truncated: true });
     assert.equal(releasesDoPeriodo(d.repo, desde), 1);
   });
 });

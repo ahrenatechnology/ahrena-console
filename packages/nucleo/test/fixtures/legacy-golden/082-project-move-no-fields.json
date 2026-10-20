@@ -1,0 +1,14 @@
+{
+  "name": "project-move-no-fields",
+  "request": {
+    "method": "POST",
+    "path": "/api/projeto/mover",
+    "body": {}
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "itemId inválido: o id do item no Project (PVTI_…)",
+    "codigo": "invalido"
+  }
+}

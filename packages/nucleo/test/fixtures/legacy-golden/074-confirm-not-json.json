@@ -1,0 +1,13 @@
+{
+  "name": "confirm-not-json",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{decision}/confirmar",
+    "body": "{\"sessao\":\"sim-painel-esta\"}"
+  },
+  "status": 415,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "use application/json"
+  }
+}

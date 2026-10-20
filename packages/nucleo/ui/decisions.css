@@ -1,0 +1,130 @@
+/* As Decisões (issue 103): a página (C21) e a aba do Detalhe (C20). Toda cor vem de marca.css.
+   Toda classe daqui é `dec-*`: o CSS de cada tela fica carregado quando se troca de tela, e uma classe
+   com o mesmo nome em duas telas desmonta a outra. Fora o prefixo, só as da moldura (`.btn`, `.card`,
+   `.mono`, `.eyebrow`…).
+   A janela abre com 1100 × 760: a área da tela é a janela menos a barra (220) e o respiro (2 × 24).
+   Nada rola na horizontal: filho de flex e de grid com `min-width: 0`, texto longo quebra. */
+
+/* ---------- alternador, busca e barra ---------- */
+.dec-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); max-width: 100%; }
+.dec-seg button { height: 26px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.dec-seg button:hover { color: var(--text); }
+.dec-seg button.dec-on { background: var(--raised); color: var(--text); }
+.dec-seg button:focus-visible, .dec-link:focus-visible, .dec-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dec-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.dec-search { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); }
+.dec-search input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; }
+.dec-search input::placeholder { color: var(--muted); }
+.dec-search input:focus { outline: none; }
+.dec-search:focus-within { border-color: var(--accent); }
+
+/* ---------- os quatro números (C21) ---------- */
+.dec-numbers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dec-number { position: relative; min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.dec-number b { font-size: 22px; font-weight: var(--weight-semibold); }
+.dec-number small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.dec-number-ico { position: absolute; top: 12px; right: 14px; font-size: 16px; }
+.dec-color-completed { color: var(--status-completed-text); }
+.dec-color-waiting { color: var(--status-waiting-text); }
+.dec-color-muted { color: var(--muted); }
+.dec-color-accent { color: var(--accent-text); }
+
+/* ---------- grupos (C21) ---------- */
+.dec-groups { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dec-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dec-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); min-width: 0; }
+.dec-group-head .dec-name { min-width: 0; color: var(--text); font-size: 12.5px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.dec-group-head .dec-summary { min-width: 0; overflow-wrap: anywhere; }
+.dec-group-head .dec-link { margin-left: auto; font-weight: var(--weight-medium); }
+
+/* ---------- o card de uma decisão ---------- */
+.dec-card { min-width: 0; padding: 11px 14px; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.dec-card.dec-e-to-confirm { border-color: color-mix(in srgb, var(--status-waiting-dot) 55%, var(--border)); }
+.dec-card.dec-e-superseded { opacity: .6; }
+.dec-card.dec-e-superseded .dec-title { text-decoration: line-through; }
+.dec-ico { grid-row: span 3; width: 30px; height: 30px; border-radius: 9px; background: var(--raised); display: grid; place-items: center; color: var(--accent-text); font-size: 15px; }
+.dec-l1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
+.dec-label { font-size: 11px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.dec-title { font-size: 13.5px; font-weight: var(--weight-semibold); min-width: 0; overflow-wrap: anywhere; }
+.dec-when { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.dec-l2 { grid-column: 2 / 4; color: var(--muted); font-size: 12px; min-width: 0; min-height: 1em; overflow-wrap: anywhere; }
+.dec-l2 b { color: var(--accent-text); font-weight: var(--weight-semibold); }
+.dec-l3 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 11.5px; color: var(--muted); min-width: 0; }
+.dec-l3 > * { min-width: 0; overflow-wrap: anywhere; }
+.dec-type { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10.5px; white-space: nowrap; }
+.dec-notice { color: var(--status-error-text); }
+.dec-actions { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: flex-end; font-size: 11.5px; min-width: 0; }
+.dec-actions .btn { height: 26px; }
+.dec-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-text); background: none; border: 0; padding: 0; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.dec-link:hover { text-decoration: underline; }
+.dec-promoted { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+
+.dec-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.dec-pill.dec-e-current { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.dec-pill.dec-e-to-confirm { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.dec-pill.dec-e-superseded, .dec-pill.dec-e-dismissed { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+/* ---------- a aba do Detalhe (C20) ----------
+   Lista e coluna lateral lado a lado enquanto as duas cabem com o mínimo delas (420 + 12 + 280 = 712 px
+   de área, mais 20 px de folga para a barra de rolagem): de 1001 px de janela para cima. Em 1100 a área
+   tem 832 px; em 1440, 1172. Abaixo de 1001, a coluna lateral desce para baixo da lista. */
+.dec-grid { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(280px, 360px); gap: 12px; align-items: start; margin-top: 12px; min-width: 0; }
+.dec-list, .dec-sides { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dec-sides { gap: 12px; }
+.dec-side { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.dec-side p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.dec-side code { font-size: 11.5px; color: var(--text); overflow-wrap: anywhere; }
+.dec-side-ttl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.dec-side-ttl h3 { margin: 0; min-width: 0; font-size: 13.5px; font-weight: var(--weight-semibold); }
+.dec-side-ttl .dec-pill, .dec-side-ttl .dec-r { margin-left: auto; }
+.dec-r { color: var(--muted); font-size: 11.5px; }
+.dec-leg { display: flex; gap: 4px 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.dec-leg b { color: var(--text); font-family: var(--font-mono); font-weight: var(--weight-regular); }
+.dec-injection, .dec-md { margin: 0; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.dec-call { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 11.5px; }
+.dec-call .icon { margin-top: 2px; }
+.dec-call .dec-n { color: var(--accent-text); font-weight: var(--weight-semibold); min-width: 0; overflow-wrap: anywhere; }
+.dec-call .dec-cmd { min-width: 0; overflow-wrap: anywhere; }
+.dec-side p.dec-note { color: var(--status-waiting-text); }
+.dec-none { padding: 16px; }
+.dec-none b { font-size: 13px; }
+.dec-none p { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+
+/* ---------- o diálogo do Promover ---------- */
+.dec-dlg { width: 720px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.dec-dlg::backdrop { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+.dec-dlg header, .dec-dlg footer { display: flex; align-items: center; gap: 10px; padding: 12px 16px; min-width: 0; }
+.dec-dlg header { border-bottom: 1px solid var(--border); color: var(--accent-text); }
+.dec-dlg header h2 { margin: 0; min-width: 0; font-size: 14px; font-weight: var(--weight-semibold); color: var(--text); overflow-wrap: anywhere; }
+.dec-dlg footer { justify-content: flex-end; border-top: 1px solid var(--border); }
+.dec-dlg-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dec-dlg-path { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 12.5px; min-width: 0; }
+.dec-dlg-path .mono { min-width: 0; overflow-wrap: anywhere; }
+.dec-dlg-path .dec-repo { color: var(--muted); font-size: 11.5px; }
+.dec-md { max-height: 46vh; overflow: hidden auto; color: var(--text); font-size: 11.5px; }
+.dec-dlg-actions { display: flex; gap: 8px; }
+.dec-dlg-save { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border); min-width: 0; }
+.dec-dlg-save label { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; font-size: 12.5px; }
+.dec-dlg-save label span { min-width: 0; overflow-wrap: anywhere; }
+.dec-dlg-save label.dec-off { color: var(--muted); }
+.dec-dlg-save .dec-save { height: auto; min-height: 30px; max-width: 100%; padding-block: 6px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.dec-dlg-save .btn:disabled { opacity: .45; cursor: not-allowed; }
+.dec-dlg-note { margin: 0; color: var(--muted); font-size: 12px; min-height: 1em; overflow-wrap: anywhere; }
+.dec-error { margin: 0; color: var(--status-error-text); font-size: 12.5px; overflow-wrap: anywhere; }
+
+/* Abaixo de 1001 px de janela, a coluna lateral da aba desce para baixo da lista. */
+@media (max-width: 1000px) {
+  .dec-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Abaixo de 901, os números em duas colunas. */
+@media (max-width: 900px) {
+  .dec-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Abaixo de 641 (a barra vira faixa no topo), o card numa coluna de texto só. */
+@media (max-width: 640px) {
+  .dec-card { grid-template-columns: 30px minmax(0, 1fr); }
+  .dec-when { grid-column: 2; }
+  .dec-actions { grid-column: 2; justify-content: flex-start; }
+  .dec-l2 { grid-column: 2; }
+}

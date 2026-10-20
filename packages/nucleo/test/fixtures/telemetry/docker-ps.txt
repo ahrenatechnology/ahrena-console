@@ -1,0 +1,6 @@
+running	catalogo-local	127.0.0.1:3000->3000/tcp
+running	catalogo-local	
+exited	loja-validacao	
+exited	loja-validacao	0.0.0.0:15432->5432/tcp, :::15432->5432/tcp
+created	loja-validacao	0.0.0.0:17233-17234->7233-7234/tcp
+running		

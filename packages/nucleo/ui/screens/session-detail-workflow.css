@@ -1,0 +1,53 @@
+/* A aba Workflow do detalhe (C7). Toda cor vem de marca.css: nenhuma é escrita aqui. Toda classe
+   própria tem o prefixo wfd-, porque o CSS fica carregado depois que a aba sai. */
+
+.wfd-panel { flex: none; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wfd-ttl { font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; }
+.wfd-ttl-r { margin-left: auto; font-size: 12px; font-weight: var(--weight-medium); color: var(--muted); text-align: right; }
+.wfd-scroll { overflow-x: auto; min-width: 0; padding: 6px 0; }
+
+/* ---------- grafo de agentes ---------- */
+/* O SVG encolhe para caber; só um grafo largo demais (mais de 720 px) para de encolher e rola. */
+.wfd-graph { display: block; font-family: var(--font-sans); max-width: 100%; height: auto; }
+.wfd-graph.wfd-wide { min-width: 720px; }
+.wfd-edge { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.wfd-edge.wfd-adj { stroke: var(--status-error-dot); stroke-dasharray: 5 4; }
+.wfd-tip { fill: var(--muted); }
+.wfd-tip.wfd-adj { fill: var(--status-error-dot); }
+.wfd-label { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.wfd-label.wfd-adj { fill: var(--status-error-text); }
+
+.wfd-box { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+.wfd-border { fill: var(--status-completed-dot); }
+.wfd-e-active .wfd-border { fill: var(--status-active-dot); }
+.wfd-e-error .wfd-border { fill: var(--status-error-dot); }
+.wfd-node-name { fill: var(--text); font-size: 12.5px; font-weight: var(--weight-semibold); }
+.wfd-node-detail { fill: var(--muted); font-size: 11.5px; }
+.wfd-node-detail.wfd-adj { fill: var(--status-error-text); }
+.wfd-node-state { font-size: 11px; fill: var(--status-completed-text); }
+.wfd-e-active .wfd-node-state { fill: var(--status-active-text); }
+.wfd-e-error .wfd-node-state { fill: var(--status-error-text); }
+.wfd-node-dot { fill: var(--status-active-dot); }
+
+.wfd-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; font-size: 12px; color: var(--muted); }
+.wfd-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.wfd-legend b { color: var(--text); font-weight: var(--weight-semibold); }
+.wfd-ball { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.wfd-ball.wfd-e-active { background: var(--status-active-dot); }
+.wfd-ball.wfd-e-completed { background: var(--status-completed-dot); }
+.wfd-dashed line { stroke: var(--status-error-dot); stroke-width: 2; stroke-dasharray: 4 3; }
+
+/* ---------- linha do tempo ---------- */
+.wfd-band { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 11.5px; }
+.wfd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wfd-lane { display: block; }
+.wfd-bg { fill: var(--bg); }
+.wfd-segment { fill: var(--status-completed-dot); opacity: .6; }
+.wfd-segment.wfd-e-active { fill: var(--status-active-dot); opacity: 1; }
+.wfd-segment.wfd-e-error { fill: var(--status-error-dot); opacity: 1; }
+.wfd-axis { font-size: 10px; color: var(--muted); }
+.wfd-axis > div { display: flex; justify-content: space-between; }
+
+@media (max-width: 640px) {
+  .wfd-band { grid-template-columns: 96px minmax(0, 1fr); }
+}

@@ -1,4 +1,4 @@
-// O Detalhe da sessão na /ui (#29 e #30): as rotas `/api/sessoes/<id>…` sobre os dados do
+// O Detalhe da sessão na /ui (#29 e #30): as rotas `/api/sessions/<id>…` sobre os dados do
 // simulador (a demonstração do P4 mais a sessão que pede permissão), e o "Abrir no Claude Desktop"
 // pela própria página, sem abrir a porta a outro Origin (decisão 0003).
 import assert from 'node:assert/strict';
@@ -21,18 +21,18 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
 import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from '../../src/simulador/detalhe.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { abridorHttp } from '../../ui/ler.js';
+import { httpOpener } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { nomeDoModelo } from '../../ui/telas/detalhe.js';
+import { modelName } from '../../ui/screens/session-detail.js';
 
 const AGORA = Date.now();
 
-describe('Detalhe da sessão: /api/sessoes/<id>', () => {
+describe('Detalhe da sessão: /api/sessions/<id>', () => {
   let storage: SqliteStorage;
   let api: ApiLocal;
   let host: string;
   const abertos: string[] = [];
-  const ler = async <T>(caminho: string): Promise<T> => {
+  const read = async <T>(caminho: string): Promise<T> => {
     const r = await fetch(`${api.url}${caminho}`);
     assert.equal(r.status, 200, `${caminho}: ${r.status}`);
     return (await r.json()) as T;
@@ -55,27 +55,30 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('o topo (A5): a sessão pedida, não a do apelido, com status, motivo, faixa, pílulas e o local', async () => {
-    const c = await ler<CabecaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}`);
-    assert.equal(c.sessao.id, SESSAO_DO_DETALHE);
-    assert.equal(c.sessao.titulo, 'Migração do esquema de pedidos');
-    assert.equal(c.sessao.status, 'waiting');
-    assert.equal(c.sessao.motivo, 'notification');
-    assert.equal(c.sessao.faixa?.tipo, 'permissao');
-    assert.match(c.sessao.faixa!.texto, /npm run migrate/);
-    assert.equal(c.sessao.modelo, 'claude-opus-5-5');
-    assert.equal(c.sessao.cwd, '/simulacao/motor-de-regras');
+    const c = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}`);
+    assert.equal(c.session.id, SESSAO_DO_DETALHE);
+    assert.equal(c.session.title, 'Migração do esquema de pedidos');
+    assert.equal(c.session.status, 'waiting');
+    assert.equal(c.session.reason, 'notification');
+    assert.equal(c.session.banner?.type, 'permission');
+    assert.match(c.session.banner!.text, /npm run migrate/);
+    assert.equal(c.session.model, 'claude-opus-5-5');
+    assert.equal(c.session.cwd, '/simulacao/motor-de-regras');
     assert.equal(c.branch, 'feat/58-pedidos');
     assert.equal(c.local, LOCAL_DO_DETALHE);
-    assert.equal(c.comando, 'npm run migrate', 'a faixa mostra o comando em código');
-    assert.ok(c.custo && c.custo.usd! > 1, 'o custo das mensagens da sessão');
-    assert.equal(c.encerradaEm, null);
-    assert.deepEqual(c.contagens, { agentes: 2, eventos: (await storage.listEvents(SESSAO_DO_DETALHE, { limit: 500 })).items.length });
+    assert.equal(c.command, 'npm run migrate', 'a faixa mostra o comando em código');
+    assert.ok(c.cost && c.cost.usd! > 1, 'o custo das mensagens da sessão');
+    assert.equal(c.endedAt, null);
+    assert.deepEqual(c.counts, { agents: 2, events: (await storage.listEvents(SESSAO_DO_DETALHE, { limit: 500 })).items.length });
 
-    const p4 = await ler<CabecaDoDetalhe>(`/api/sessoes/${SESSAO_DO_PAINEL}`);
-    assert.equal(p4.sessao.titulo, 'Separar pagamentos em serviços');
+    const p4 = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}`);
+    assert.equal(p4.session.title, 'Separar pagamentos em serviços');
     assert.equal(p4.local, null, 'sessão sem Desktop: sem local');
-    assert.equal(p4.sessao.faixa, null);
-    assert.equal(p4.comando, null);
+    assert.equal(p4.session.banner, null);
+    assert.equal(p4.command, null);
+    // The old route answers the same top with the old keys and values.
+    const antigo = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}`);
+    assert.deepEqual([antigo.sessao.faixa.tipo, antigo.comando, antigo.contagens.agentes], ['permissao', 'npm run migrate', 2]);
   });
 
   test('id inválido dá 400; sessão desconhecida, 404; a lista sem id não é desta rota', async () => {
@@ -87,58 +90,62 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('Agentes (C4): números, ferramentas contadas uma vez por chamada, tarefas, tokens e custo por nó', async () => {
-    const a = await ler<AgentesDoDetalhe>(`/api/sessoes/${SESSAO_DO_PAINEL}/agentes`);
-    assert.equal(a.numeros.subagentes, 4);
-    assert.equal(a.numeros.erros, 0);
-    assert.ok(a.numeros.rodando);
-    assert.ok(a.numeros.duracaoMin >= 27 && a.numeros.duracaoMin <= 29);
+    const a = await read<AgentesDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}/agents`);
+    assert.equal(a.numbers.subagents, 4);
+    assert.equal(a.numbers.errors, 0);
+    assert.ok(a.numbers.running);
+    assert.ok(a.numbers.durationMin >= 27 && a.numbers.durationMin <= 29);
     // Pre e Post da mesma chamada contam uma vez: 36 do principal, mais o Read e o Grep de cada subagente.
-    const bash = a.ferramentas.find((f) => f.nome === 'Bash');
+    const bash = a.tools.find((f) => f.name === 'Bash');
     assert.equal(bash?.n, 15);
-    assert.equal(a.ferramentas[0]!.nome, 'Bash', 'da mais usada para a menos usada');
-    assert.equal(a.numeros.ferramentas, a.ferramentas.reduce((s, f) => s + f.n, 0));
-    assert.deepEqual(a.tarefas && { feitos: a.tarefas.feitos, total: a.tarefas.total, atual: a.tarefas.atual }, { feitos: 2, total: 6, atual: 'Extrair a cobrança' });
-    assert.ok(a.tokens && a.tokens.cacheLido > 0 && a.tokens.saida > 0);
-    assert.equal(a.tokens!.total, a.tokens!.cacheLido + a.tokens!.cacheGravado + a.tokens!.entrada + a.tokens!.saida);
+    assert.equal(a.tools[0]!.name, 'Bash', 'da mais usada para a menos usada');
+    assert.equal(a.numbers.tools, a.tools.reduce((s, f) => s + f.n, 0));
+    assert.deepEqual(a.tasks && { done: a.tasks.done, total: a.tasks.total, current: a.tasks.current }, { done: 2, total: 6, current: 'Extrair a cobrança' });
+    assert.ok(a.tokens && a.tokens.cacheRead > 0 && a.tokens.output > 0);
+    assert.equal(a.tokens!.total, a.tokens!.cacheRead + a.tokens!.cacheWrite + a.tokens!.input + a.tokens!.output);
 
-    const [principal, ...subs] = a.agentes;
-    assert.equal(principal!.tipo, 'principal');
-    assert.equal(principal!.turnos, 9);
-    assert.ok(principal!.custoUsd! > 3);
-    assert.deepEqual(subs.map((s) => s.nome).sort(), ['Explore', 'Plan', 'code-reviewer', 'test-runner']);
+    const [principal, ...subs] = a.agents;
+    assert.equal(principal!.type, 'main');
+    assert.equal(principal!.turns, 9);
+    assert.ok(principal!.costUsd! > 3);
+    assert.deepEqual(subs.map((s) => s.name).sort(), ['Explore', 'Plan', 'code-reviewer', 'test-runner']);
     for (const s of subs) {
-      assert.ok(s.custoUsd! > 0, `${s.nome} tem custo próprio`);
-      assert.equal(s.pai, principal!.id);
+      assert.equal(s.type, 'subagent');
+      assert.ok(s.costUsd! > 0, `${s.name} tem custo próprio`);
+      assert.equal(s.parent, principal!.id);
     }
-    assert.equal(subs.find((s) => s.nome === 'Plan')?.status, 'completed');
+    assert.equal(subs.find((s) => s.name === 'Plan')?.status, 'completed');
   });
 
   test('Conversa (C5): mensagens em ordem, o prompt do hook e o do transcript uma vez só, e o Bash aguardando permissão', async () => {
-    const c = await ler<ConversaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa`);
-    assert.equal(c.agente, `${SESSAO_DO_DETALHE}:main`);
-    assert.deepEqual(c.agentes.map((a) => a.nome), ['Agente principal', 'Explore']);
-    assert.deepEqual(c.mensagens.map((m) => m.papel), ['voce', 'assistente', 'voce', 'assistente', 'voce', 'assistente']);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation`);
+    assert.equal(c.agent, `${SESSAO_DO_DETALHE}:main`);
+    assert.deepEqual(c.agents.map((a) => a.name), ['Agente principal', 'Explore']);
+    assert.deepEqual(c.messages.map((m) => m.role), ['you', 'assistant', 'you', 'assistant', 'you', 'assistant']);
     assert.equal(c.total, 6);
-    assert.equal(c.mensagens.filter((m) => m.texto === 'pode seguir').length, 1);
-    const criei = c.mensagens.find((m) => m.texto?.startsWith('Criei'))!;
-    assert.deepEqual(criei.ferramentas.map((f) => [f.nome, f.estado]), [['Edit', 'ok'], ['Bash', 'ok']]);
-    assert.equal(criei.modelo, 'claude-opus-5-5');
-    assert.deepEqual(criei.tokens, { entrada: 4_100, saida: 1_200 });
-    const ultima = c.mensagens.at(-1)!;
-    assert.equal(ultima.ferramentas.length, 1, 'o ToolUse do transcript e o PreToolUse do hook são uma chamada só');
-    assert.deepEqual([ultima.ferramentas[0]!.nome, ultima.ferramentas[0]!.resumo, ultima.ferramentas[0]!.estado], ['Bash', 'npm run migrate', 'permissao']);
-    assert.match(ultima.ferramentas[0]!.entrada!, /npm run migrate/);
+    assert.equal(c.messages.filter((m) => m.text === 'pode seguir').length, 1);
+    const criei = c.messages.find((m) => m.text?.startsWith('Criei'))!;
+    assert.deepEqual(criei.tools.map((f) => [f.name, f.state]), [['Edit', 'ok'], ['Bash', 'ok']]);
+    assert.equal(criei.model, 'claude-opus-5-5');
+    assert.deepEqual(criei.tokens, { input: 4_100, output: 1_200 });
+    const ultima = c.messages.at(-1)!;
+    assert.equal(ultima.tools.length, 1, 'o ToolUse do transcript e o PreToolUse do hook são uma chamada só');
+    assert.deepEqual([ultima.tools[0]!.name, ultima.tools[0]!.summary, ultima.tools[0]!.state], ['Bash', 'npm run migrate', 'permission']);
+    assert.match(ultima.tools[0]!.input!, /npm run migrate/);
 
-    const explore = await ler<ConversaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa?agente=${encodeURIComponent(c.agentes[1]!.id)}`);
-    assert.equal(explore.agente, c.agentes[1]!.id);
-    assert.deepEqual(explore.mensagens.map((m) => m.ferramentas.map((f) => f.nome)), [['Read', 'Grep'], []]);
-    assert.ok(explore.mensagens.every((m) => m.ferramentas.every((f) => f.estado !== 'permissao')), 'só o principal espera a permissão');
+    const explore = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?agent=${encodeURIComponent(c.agents[1]!.id)}`);
+    assert.equal(explore.agent, c.agents[1]!.id);
+    assert.deepEqual(explore.messages.map((m) => m.tools.map((f) => f.name)), [['Read', 'Grep'], []]);
+    assert.ok(explore.messages.every((m) => m.tools.every((f) => f.state !== 'permission')), 'só o principal espera a permissão');
 
-    const ultimas = await ler<ConversaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa?limite=2`);
+    const ultimas = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?limit=2`);
     assert.equal(ultimas.total, 6);
-    assert.deepEqual(ultimas.mensagens.map((m) => m.texto), ['pode seguir', 'Vou aplicar a migração no banco local.']);
-    const outro = await ler<ConversaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa?agente=qualquer`);
-    assert.equal(outro.agente, c.agente, 'agente que não é da sessão: o principal');
+    assert.deepEqual(ultimas.messages.map((m) => m.text), ['pode seguir', 'Vou aplicar a migração no banco local.']);
+    const outro = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?agent=qualquer`);
+    assert.equal(outro.agent, c.agent, 'agente que não é da sessão: o principal');
+    // The old route and parameters answer the same conversation with the old keys and values.
+    const antiga = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa?limite=2`);
+    assert.deepEqual(antiga.mensagens.map((m: any) => [m.papel, m.texto]), [['voce', 'pode seguir'], ['assistente', 'Vou aplicar a migração no banco local.']]);
   });
 
   test('Conversa: o texto do transcript volta como texto, sem virar HTML', async () => {
@@ -146,45 +153,49 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     await storage.putSession({ ...(await storage.getSession(SESSAO_DO_DETALHE))!, id, awaitingInputSince: null, awaitingReason: null });
     const veneno = '<img src=x onerror="alert(1)"> `<b>`';
     await storage.appendEvent({ id: `${id}-e1`, sessionId: id, agentId: null, type: 'UserPrompt', toolName: null, summary: veneno, data: null, createdAt: new Date(AGORA).toISOString() });
-    const c = await ler<ConversaDoDetalhe>(`/api/sessoes/${id}/conversa`);
-    assert.equal(c.mensagens[0]!.texto, veneno);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    assert.equal(c.messages[0]!.text, veneno);
     // A tela só põe dado no DOM por `textContent` (el()); nunca por innerHTML.
-    const tela = readFileSync(`${PASTA_DA_UI}telas/detalhe.js`, 'utf8');
+    const tela = readFileSync(`${PASTA_DA_UI}screens/session-detail.js`, 'utf8');
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   });
 
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {
-    const base = `/api/sessoes/${SESSAO_DO_DETALHE}/eventos`;
-    const tudo = await ler<EventosDoDetalhe>(`${base}?limite=500`);
-    assert.equal(tudo.total, tudo.filtrados);
-    assert.equal(tudo.itens[0]!.tipo, 'Notification');
-    assert.equal(tudo.itens[0]!.status, 'waiting');
-    assert.equal(tudo.itens.at(-1)!.tipo, 'SessionStart');
-    for (let i = 1; i < tudo.itens.length; i++) assert.ok(tudo.itens[i - 1]!.em >= tudo.itens[i]!.em);
-    assert.ok(tudo.opcoes.tipos.includes('PreToolUse') && tudo.opcoes.ferramentas.includes('Bash'));
-    assert.equal(tudo.opcoes.agentes.length, 2);
+    const base = `/api/sessions/${SESSAO_DO_DETALHE}/events`;
+    const tudo = await read<EventosDoDetalhe>(`${base}?limit=500`);
+    assert.equal(tudo.total, tudo.filtered);
+    assert.equal(tudo.items[0]!.type, 'Notification');
+    assert.equal(tudo.items[0]!.status, 'waiting');
+    assert.equal(tudo.items.at(-1)!.type, 'SessionStart');
+    for (let i = 1; i < tudo.items.length; i++) assert.ok(tudo.items[i - 1]!.at >= tudo.items[i]!.at);
+    assert.ok(tudo.options.types.includes('PreToolUse') && tudo.options.tools.includes('Bash'));
+    assert.equal(tudo.options.agents.length, 2);
 
-    const pagina1 = await ler<EventosDoDetalhe>(`${base}?limite=10`);
-    assert.equal(pagina1.itens.length, 10);
-    assert.ok(pagina1.proximo);
-    const pagina2 = await ler<EventosDoDetalhe>(`${base}?limite=10&antes=${encodeURIComponent(pagina1.proximo!)}`);
-    assert.deepEqual(pagina2.itens.map((e) => e.id), tudo.itens.slice(10, 20).map((e) => e.id));
+    const pagina1 = await read<EventosDoDetalhe>(`${base}?limit=10`);
+    assert.equal(pagina1.items.length, 10);
+    assert.ok(pagina1.next);
+    const pagina2 = await read<EventosDoDetalhe>(`${base}?limit=10&before=${encodeURIComponent(pagina1.next!)}`);
+    assert.deepEqual(pagina2.items.map((e) => e.id), tudo.items.slice(10, 20).map((e) => e.id));
 
-    const bash = await ler<EventosDoDetalhe>(`${base}?ferramenta=Bash&tipo=PreToolUse`);
-    assert.deepEqual(bash.itens.map((e) => e.resumo), ['npm run migrate', 'npm test -- pedidos']);
+    const bash = await read<EventosDoDetalhe>(`${base}?tool=Bash&type=PreToolUse`);
+    assert.deepEqual(bash.items.map((e) => e.summary), ['npm run migrate', 'npm test -- pedidos']);
     assert.equal(bash.total, tudo.total);
-    const esperando = await ler<EventosDoDetalhe>(`${base}?status=waiting`);
-    assert.deepEqual(esperando.itens.map((e) => e.tipo), ['Notification', 'Stop']);
-    const busca = await ler<EventosDoDetalhe>(`${base}?q=${encodeURIComponent('MIGRATIONS/0007')}`);
-    assert.ok(busca.filtrados > 0 && busca.itens.every((e) => `${e.resumo} ${e.dados}`.toLowerCase().includes('migrations/0007')));
-    const doExplore = await ler<EventosDoDetalhe>(`${base}?agente=${encodeURIComponent(tudo.opcoes.agentes[1]!.id)}`);
-    assert.ok(doExplore.filtrados > 0 && doExplore.itens.every((e) => e.agente?.nome === 'Explore'));
-    const ultimos = tudo.itens[4]!.em;
-    const recentes = await ler<EventosDoDetalhe>(`${base}?de=${encodeURIComponent(ultimos)}`);
-    assert.ok(recentes.itens.every((e) => e.em >= ultimos));
-    assert.ok(recentes.filtrados < tudo.total);
+    const esperando = await read<EventosDoDetalhe>(`${base}?status=waiting`);
+    assert.deepEqual(esperando.items.map((e) => e.type), ['Notification', 'Stop']);
+    const busca = await read<EventosDoDetalhe>(`${base}?q=${encodeURIComponent('MIGRATIONS/0007')}`);
+    assert.ok(busca.filtered > 0 && busca.items.every((e) => `${e.summary} ${e.data}`.toLowerCase().includes('migrations/0007')));
+    const doExplore = await read<EventosDoDetalhe>(`${base}?agent=${encodeURIComponent(tudo.options.agents[1]!.id)}`);
+    assert.ok(doExplore.filtered > 0 && doExplore.items.every((e) => e.agent?.name === 'Explore'));
+    const ultimos = tudo.items[4]!.at;
+    const recentes = await read<EventosDoDetalhe>(`${base}?from=${encodeURIComponent(ultimos)}`);
+    assert.ok(recentes.items.every((e) => e.at >= ultimos));
+    assert.ok(recentes.filtered < tudo.total);
     // Filtro malformado é ignorado, não quebra.
-    assert.equal((await ler<EventosDoDetalhe>(`${base}?de=ontem&status=talvez&tipo=${encodeURIComponent('<x>')}`)).filtrados, tudo.total);
+    assert.equal((await read<EventosDoDetalhe>(`${base}?from=ontem&status=talvez&type=${encodeURIComponent('<x>')}`)).filtered, tudo.total);
+    // The old route and parameters answer the same page with the old keys.
+    const antiga = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}/eventos?ferramenta=Bash&tipo=PreToolUse`);
+    assert.deepEqual(antiga.itens.map((e: any) => e.resumo), ['npm run migrate', 'npm test -- pedidos']);
+    assert.equal(antiga.filtrados, bash.filtered);
   });
 
   test('"Abrir no Claude Desktop": o POST /abrir da própria página passa; outro Origin, não (decisão 0003)', async () => {
@@ -209,37 +220,37 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('o abridor da página manda o POST em JSON e só com um local_… estrito', async () => {
-    const abrir = abridorHttp({ base: api.url });
+    const abrir = httpOpener({ base: api.url });
     assert.deepEqual(await abrir(LOCAL_DO_DETALHE), { ok: true });
     await assert.rejects(abrir('local_x"><script>'), /inválido/);
     await assert.rejects(abrir('../api/hooks'), /inválido/);
-    assert.throws(() => abridorHttp({ base: 'http://exemplo.com:4720' }), /núcleo local/);
+    assert.throws(() => httpOpener({ base: 'http://exemplo.com:4720' }), /núcleo local/);
   });
 
   // O CSS de cada tela fica carregado depois que ela abre uma vez: uma classe com o mesmo nome em
-  // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `det-` e as da moldura.
-  test('o CSS do Detalhe só estiliza classes `det-` e não toca as classes de outra tela', () => {
+  // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `sd-` e as da moldura.
+  test('o CSS do Detalhe só estiliza classes `sd-` e não toca as classes de outra tela', () => {
     const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const classes = (arquivo: string) => new Set([...semComentario(arquivo).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((m) => m[1]!));
-    const daMoldura = classes('moldura.css');
-    const minhas = [...classes('telas/detalhe.css')].filter((c) => !daMoldura.has(c));
-    assert.deepEqual(minhas.filter((c) => !c.startsWith('det-')), [], 'classe sem o prefixo det-');
+    const daMoldura = classes('shell.css');
+    const minhas = [...classes('screens/session-detail.css')].filter((c) => !daMoldura.has(c));
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('sd-')), [], 'classe sem o prefixo sd-');
     // Nenhum seletor de elemento solto (`code`, `pre`): eles pegariam as outras telas.
-    const soltos = semComentario('telas/detalhe.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
-    assert.deepEqual(soltos.filter((l) => !/^select\.det-/.test(l)), [], 'seletor de elemento fora do Detalhe');
-    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => a.endsWith('.css') && !['telas/detalhe.css', 'moldura.css', 'marca.css'].includes(a));
+    const soltos = semComentario('screens/session-detail.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
+    assert.deepEqual(soltos.filter((l) => !/^select\.sd-/.test(l)), [], 'seletor de elemento fora do Detalhe');
+    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['screens/session-detail.css', 'shell.css', 'brand.css'].includes(a));
     assert.ok(outras.length > 0);
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
-      assert.deepEqual(comuns, [], `detalhe.css e ${outra} estilizam as mesmas classes`);
+      assert.deepEqual(comuns, [], `session-detail.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   test('o nome do modelo nas pílulas', () => {
-    assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus 5.5');
-    assert.equal(nomeDoModelo('claude-sonnet-4-5-20250929'), 'Sonnet 4.5');
-    assert.equal(nomeDoModelo('claude-haiku-4-20250101'), 'Haiku 4');
-    assert.equal(nomeDoModelo('gpt-x'), 'gpt-x');
-    assert.equal(nomeDoModelo(null), null);
+    assert.equal(modelName('claude-opus-5-5'), 'Opus 5.5');
+    assert.equal(modelName('claude-sonnet-4-5-20250929'), 'Sonnet 4.5');
+    assert.equal(modelName('claude-haiku-4-20250101'), 'Haiku 4');
+    assert.equal(modelName('gpt-x'), 'gpt-x');
+    assert.equal(modelName(null), null);
   });
 });

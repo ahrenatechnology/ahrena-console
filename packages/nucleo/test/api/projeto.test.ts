@@ -7,7 +7,7 @@ import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
-import { quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/projeto.ts';
+import { PROJECT_ERROR_CODES, quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/projeto.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { createGithubProject, GithubProject, toProjectCard, type RawProjectItem } from '../../src/github/project.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador, RAIAS_DO_SIMULADOR } from '../../src/simulador/projeto.ts';
@@ -33,6 +33,21 @@ interface Resposta {
   headers: Record<string, string | string[] | undefined>;
   corpo: string;
   json: any;
+}
+
+/** O corpo da rota antiga `/api/projeto`, nas chaves antigas (a rota nova responde `QuadroDoProjeto`). */
+interface CardAntigo {
+  itemId: string;
+  numero: number;
+  raiaId: string;
+  tipoDaIssue: string | null;
+  pr: { numero: number; ci: string; review: string | null } | null;
+}
+interface RaiaAntiga {
+  id: string;
+  nome: string;
+  cor: string;
+  cards: CardAntigo[];
 }
 
 /** `http.request`, para poder mandar `Host` e `Origin` como um navegador mandaria. */
@@ -91,7 +106,9 @@ function doSimulador() {
   return { fonte, kanban };
 }
 
-const raiaDe = (q: QuadroDoProjeto, itemId: string) => q.raias.find((r) => r.cards.some((c) => c.itemId === itemId))?.nome;
+// The tests below go through the old routes (`/api/projeto`, `/api/projeto/mover`), which answer the old
+// body (src/api/legacy-routes.ts); the English one is checked in the test of the new routes.
+const raiaDe = (q: any, itemId: string) => q.raias.find((r: any) => r.cards.some((c: any) => c.itemId === itemId))?.nome;
 
 describe('card do Project: marco, sub-issues e PR', () => {
   test('a leitura gravada continua válida: os campos novos vêm null', () => {
@@ -131,10 +148,10 @@ describe('card do Project: marco, sub-issues e PR', () => {
 
     // E no formato da API: CI e review como o painel mostra.
     const board = { owner: 'exemplo', number: 1, title: 'Q', url: 'u', field: 'Status', count: 2, fetchedAt: 1, stale: false, staleReason: null, lanes: [{ id: TODO, name: 'Todo', color: 'GREEN', items: [card, pr] }] };
-    const [c1, c2] = quadroDe(board, 'github').raias[0].cards;
-    assert.deepEqual([c1.marco, c1.subIssues, c1.pr], ['M1 · Local', { feitas: 2, total: 4 }, { numero: 78, url: 'https://github.com/exemplo/app/pull/78', ci: 'falhou', review: 'ajustes' }]);
-    assert.deepEqual(c2.pr, { numero: 93, url: 'https://github.com/exemplo/app/pull/93', ci: 'rodando', review: 'aprovado' });
-    assert.deepEqual(quadroDe(board, 'github').marcos, ['M1 · Local']);
+    const [c1, c2] = quadroDe(board, 'github').lanes[0].cards;
+    assert.deepEqual([c1.milestone, c1.subIssues, c1.pr], ['M1 · Local', { done: 2, total: 4 }, { number: 78, url: 'https://github.com/exemplo/app/pull/78', ci: 'failed', review: 'changes-requested' }]);
+    assert.deepEqual(c2.pr, { number: 93, url: 'https://github.com/exemplo/app/pull/93', ci: 'running', review: 'approved' });
+    assert.deepEqual(quadroDe(board, 'github').milestones, ['M1 · Local']);
   });
 
   test('a consulta pede marco, sub-issues e um PR por issue, numa leitura só por página', async () => {
@@ -155,10 +172,10 @@ describe('GET /api/projeto', () => {
     try {
       const r = await pedir(s.api, '/api/projeto');
       assert.equal(r.status, 200);
-      const q = r.json as QuadroDoProjeto;
+      const q = r.json;
       assert.deepEqual(Object.keys(q).sort(), ['desatualizado', 'fonte', 'lidoEm', 'marcos', 'motivo', 'projeto', 'raias', 'total'].sort());
       assert.deepEqual(q.projeto, { dono: 'exemplo', numero: 3, titulo: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', campo: 'Status' });
-      assert.deepEqual(q.raias.map((l) => [l.nome, l.cards.map((c) => c.numero)]), [
+      assert.deepEqual(q.raias.map((l: RaiaAntiga) => [l.nome, l.cards.map((c) => c.numero)]), [
         ['Backlog', [80, 87, 89]],
         ['Ready', [35, 36]],
         ['In Progress', [42, 81]],
@@ -170,9 +187,9 @@ describe('GET /api/projeto', () => {
       const card = q.raias[2].cards[0];
       assert.deepEqual(Object.keys(card).sort(), ['estado', 'itemId', 'marco', 'numero', 'pr', 'raiaId', 'repo', 'subIssues', 'tipo', 'tipoDaIssue', 'titulo', 'url'].sort());
       assert.deepEqual([card.tipo, card.tipoDaIssue, card.titulo, card.subIssues, card.pr?.numero, card.pr?.ci, card.raiaId], ['Issue', 'Story', 'Kanban de sessões', { feitas: 2, total: 4 }, 78, 'rodando', q.raias[2].id]);
-      const pills = q.raias.flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.numero, c.pr!.ci, c.pr!.review]);
+      const pills = (q.raias as RaiaAntiga[]).flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.numero, c.pr!.ci, c.pr!.review]);
       assert.deepEqual(pills, [[42, 'rodando', null], [81, 'ok', null], [92, 'ok', 'pendente'], [64, 'falhou', 'ajustes'], [40, 'ok', 'aprovado'], [82, 'ok', 'aprovado']]);
-      assert.deepEqual([...new Set(q.raias.flatMap((l) => l.cards.map((c) => c.tipoDaIssue)))].sort(), ['Bug', 'Spike', 'Story', 'Tech Task']);
+      assert.deepEqual([...new Set((q.raias as RaiaAntiga[]).flatMap((l) => l.cards.map((c) => c.tipoDaIssue)))].sort(), ['Bug', 'Spike', 'Story', 'Tech Task']);
     } finally {
       await s.fechar();
     }
@@ -182,10 +199,10 @@ describe('GET /api/projeto', () => {
     const { now, kanban, fetch } = doGithub();
     const s = await subir({ kanban, fonte: 'github' });
     try {
-      const q = (await pedir(s.api, '/api/projeto')).json as QuadroDoProjeto;
-      assert.deepEqual(q.raias.map((l) => [l.id, l.nome, l.cor, l.cards.length]), [[TODO, 'Todo', 'GREEN', 51], [IN_PROGRESS, 'In Progress', 'YELLOW', 5], ['98236657', 'Done', 'PURPLE', 9]]);
+      const q = (await pedir(s.api, '/api/projeto')).json;
+      assert.deepEqual(q.raias.map((l: RaiaAntiga) => [l.id, l.nome, l.cor, l.cards.length]), [[TODO, 'Todo', 'GREEN', 51], [IN_PROGRESS, 'In Progress', 'YELLOW', 5], ['98236657', 'Done', 'PURPLE', 9]]);
       assert.deepEqual([q.total, q.fonte, q.lidoEm, q.marcos], [65, 'github', AGORA, []]);
-      assert.deepEqual(q.raias[0].cards.find((c) => c.itemId === ITEM), {
+      assert.deepEqual(q.raias[0].cards.find((c: CardAntigo) => c.itemId === ITEM), {
         itemId: ITEM, tipo: 'Issue', tipoDaIssue: 'Initiative', numero: 1, titulo: 'Ahrena Console 0.0.1', url: 'https://github.com/ahrenatechnology/ahrena-console/issues/1',
         repo: 'ahrenatechnology/ahrena-console', estado: 'OPEN', marco: null, subIssues: null, pr: null, raiaId: TODO,
       });
@@ -197,7 +214,7 @@ describe('GET /api/projeto', () => {
       now.add(20_000);
       const r = await pedir(s.api, '/api/projeto?forcar=1');
       assert.equal(fetch.calls.length, 2);
-      assert.equal((r.json as QuadroDoProjeto).lidoEm, AGORA + 30_000);
+      assert.equal(r.json.lidoEm, AGORA + 30_000);
       assert.equal((await pedir(s.api, '/api/projeto', { method: 'DELETE' })).status, 405);
     } finally {
       await s.fechar();
@@ -304,8 +321,8 @@ describe('POST /api/projeto/mover', () => {
     const { fonte, kanban } = doSimulador();
     const s = await subir({ kanban, fonte: 'demo' });
     try {
-      const antes = (await pedir(s.api, '/api/projeto')).json as QuadroDoProjeto;
-      const c92 = antes.raias.flatMap((l) => l.cards).find((c) => c.numero === 92)!;
+      const antes = (await pedir(s.api, '/api/projeto')).json;
+      const c92 = (antes.raias as RaiaAntiga[]).flatMap((l) => l.cards).find((c) => c.numero === 92)!;
       const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
       const r = await mover(s.api, { itemId: c92.itemId, optionId: done });
       assert.equal(r.status, 200);
@@ -484,5 +501,49 @@ describe('o kanban que a API usa', () => {
     const k: KanbanDoProjeto = kanban;
     assert.equal(k.project.owner, PROJECT_DO_SIMULADOR.owner);
     assert.equal(k.pauseLeftMs(), 0);
+  });
+});
+
+// #173 phase 2b layer 6: the new routes answer English keys and codes; the old ones (all the tests
+// above) answer the old body, through the back-translator of src/api/legacy-routes.ts.
+describe('GET /api/project and POST /api/project/move: the English body', () => {
+  test('the board, a card, the PR pills and the move, in English', async () => {
+    const { fonte, kanban } = doSimulador();
+    const s = await subir({ kanban, fonte: 'demo' });
+    try {
+      const q = (await pedir(s.api, '/api/project')).json as QuadroDoProjeto;
+      assert.deepEqual(Object.keys(q), ['project', 'lanes', 'milestones', 'total', 'fetchedAt', 'stale', 'reason', 'source']);
+      assert.deepEqual(q.project, { owner: 'exemplo', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', field: 'Status' });
+      assert.deepEqual(Object.keys(q.lanes[0]!), ['id', 'name', 'color', 'cards']);
+      const card = q.lanes[2]!.cards[0]!;
+      assert.deepEqual(Object.keys(card), ['itemId', 'type', 'issueType', 'number', 'title', 'url', 'repo', 'state', 'milestone', 'subIssues', 'pr', 'laneId']);
+      assert.deepEqual([card.type, card.issueType, card.subIssues, card.pr?.number, card.pr?.ci, card.laneId], ['Issue', 'Story', { done: 2, total: 4 }, 78, 'running', q.lanes[2]!.id]);
+      const pills = q.lanes.flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.number, c.pr!.ci, c.pr!.review]);
+      assert.deepEqual(pills, [[42, 'running', null], [81, 'ok', null], [92, 'ok', 'pending'], [64, 'failed', 'changes-requested'], [40, 'ok', 'approved'], [82, 'ok', 'approved']]);
+
+      const c92 = q.lanes.flatMap((l) => l.cards).find((c) => c.number === 92)!;
+      const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
+      const r = await pedir(s.api, '/api/project/move', { method: 'POST', headers: JSON_CT, corpo: JSON.stringify({ itemId: c92.itemId, optionId: done }) });
+      assert.equal(r.status, 200);
+      assert.deepEqual(Object.keys(r.json), ['board', 'moved']);
+      assert.deepEqual(r.json.moved, { itemId: c92.itemId, from: c92.laneId, to: done });
+      assert.equal((r.json.board as QuadroDoProjeto).lanes.find((l) => l.cards.some((c) => c.itemId === c92.itemId))?.name, 'Done');
+      assert.deepEqual(fonte.chamadas, { board: 1, move: 1 });
+    } finally {
+      await s.fechar();
+    }
+  });
+
+  test('the errors: every `code` value, and `code` and `variable` in English', async () => {
+    assert.deepEqual([...PROJECT_ERROR_CODES], ['invalid', 'no-scope', 'rate-limited', 'unknown-lane', 'unknown-item', 'github-down', 'github-refused', 'off', 'no-project']);
+    const s = await subir({ kanban: null, fonte: 'github', semProjeto: true });
+    try {
+      const r = await pedir(s.api, '/api/project');
+      assert.deepEqual([r.status, r.json.code, r.json.variable], [503, 'no-project', 'AHRENA_CONSOLE_PROJECT']);
+      const m = await pedir(s.api, '/api/project/move', { method: 'POST', headers: JSON_CT, corpo: '{}' });
+      assert.deepEqual([m.status, m.json], [400, { error: 'itemId inválido: o id do item no Project (PVTI_…)', code: 'invalid' }]);
+    } finally {
+      await s.fechar();
+    }
   });
 });

@@ -25,13 +25,13 @@ test('compactar derruba o contexto: sem o pico até a próxima resposta, e depoi
   aplicarEvento(r, resposta(3, 105_000));
   const depois = contextoDe(sessao, r)!;
   // 105 mil na janela de 1M: 11%, e não 53% de uma janela de 200 mil.
-  assert.equal(depois.limite, 1_000_000);
+  assert.equal(depois.limit, 1_000_000);
   assert.equal(depois.pct, 11);
 });
 
 test('sessão que nunca passou de 200 mil continua na janela padrão', () => {
   const r = resumoVazio();
   aplicarEvento(r, resposta(1, 150_000));
-  assert.equal(contextoDe(sessao, r)?.limite, 200_000);
-  assert.equal(contextoDe({ metadata: {}, model: 'claude-sonnet-4-6[1m]' }, r)?.limite, 1_000_000);
+  assert.equal(contextoDe(sessao, r)?.limit, 200_000);
+  assert.equal(contextoDe({ metadata: {}, model: 'claude-sonnet-4-6[1m]' }, r)?.limit, 1_000_000);
 });

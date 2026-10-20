@@ -162,8 +162,8 @@ describe('Perfis na porta', () => {
     const contas = new Contas({ storage, arquivo });
     await contas.atualizar();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    assert.deepEqual(contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, rotulo: 'Equipe Exemplo', cor: CORES_DAS_CONTAS[0], fonte: 'config' });
-    assert.deepEqual(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, rotulo: 'cliente', cor: '#1baf7a', fonte: 'config' });
+    assert.deepEqual(contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: CORES_DAS_CONTAS[0], source: 'config' });
+    assert.deepEqual(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config' });
     await storage.close();
   });
 
@@ -177,7 +177,7 @@ describe('Perfis na porta', () => {
     assert.ok(!JSON.stringify(a).includes('pessoa@exemplo.test'));
     const contas = new Contas({ storage, arquivo: null });
     await contas.atualizar();
-    assert.equal(contas.daSessao({ id: 's', accountId: a.id, accountSource: 'config' }, null)?.rotulo, 'conta 1');
+    assert.equal(contas.daSessao({ id: 's', accountId: a.id, accountSource: 'config' }, null)?.label, 'conta 1');
     await storage.close();
   });
 
@@ -193,10 +193,10 @@ describe('Perfis na porta', () => {
     await contas.atualizar();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
     const a = contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null);
-    assert.equal(a?.rotulo, 'conta pessoal');
+    assert.equal(a?.label, 'conta pessoal');
     assert.ok(!JSON.stringify(a).includes('@'));
     // O contas.json continua por cima.
-    assert.equal(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null)?.rotulo, 'cliente');
+    assert.equal(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null)?.label, 'cliente');
     await storage.close();
   });
 
@@ -210,12 +210,12 @@ describe('Perfis na porta', () => {
     const contas = new Contas({ storage, arquivo: null, intervaloMs: 0 });
     await contas.atualizar();
     const s = { id: 's', accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' as const };
-    assert.equal(contas.daSessao(s, null)?.rotulo, 'Nome Novo');
+    assert.equal(contas.daSessao(s, null)?.label, 'Nome Novo');
     await storage.putAccount({ ...(await storage.getAccount(`${UUID_A}/${ORG_A}`))!, label: 'meu rótulo' });
     writeFileSync(join(dir, '.claude.json'), claudeJson(UUID_A, ORG_A, { organizationName: 'Outro Nome' }));
     await perfis.sincronizar();
     await contas.atualizar();
-    assert.equal(contas.daSessao(s, null)?.rotulo, 'meu rótulo');
+    assert.equal(contas.daSessao(s, null)?.label, 'meu rótulo');
     await storage.close();
   });
 

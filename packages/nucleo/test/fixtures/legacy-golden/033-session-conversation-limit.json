@@ -1,0 +1,112 @@
+{
+  "name": "session-conversation-limit",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta/conversa?limite=2"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "agentes": [
+      {
+        "id": "sim-painel-esta:main",
+        "nome": "Agente principal"
+      },
+      {
+        "id": "sim-painel-esta:a3",
+        "nome": "Plan"
+      },
+      {
+        "id": "sim-painel-esta:a0",
+        "nome": "Explore"
+      },
+      {
+        "id": "sim-painel-esta:a1",
+        "nome": "code-reviewer"
+      },
+      {
+        "id": "sim-painel-esta:a2",
+        "nome": "test-runner"
+      }
+    ],
+    "agente": "sim-painel-esta:main",
+    "total": 18,
+    "mensagens": [
+      {
+        "id": "sim-painel-esta-e0009",
+        "papel": "voce",
+        "em": "2026-10-20T14:54:24.000Z",
+        "texto": "Separe o cálculo de pagamentos num serviço próprio",
+        "modelo": null,
+        "tokens": null,
+        "ferramentas": []
+      },
+      {
+        "id": "sim-painel-esta-d0063",
+        "papel": "assistente",
+        "em": "2026-10-20T14:54:53.333Z",
+        "texto": null,
+        "modelo": null,
+        "tokens": null,
+        "ferramentas": [
+          {
+            "id": "toolu_sim_painel_031",
+            "nome": "Bash",
+            "resumo": "npm run lint",
+            "estado": "ok",
+            "entrada": "{\n  \"command\": \"npm run lint\"\n}",
+            "resultado": "{\n  \"success\": true\n}"
+          },
+          {
+            "id": "toolu_sim_painel_032",
+            "nome": "Edit",
+            "resumo": "test/pagamentos.test.ts",
+            "estado": "ok",
+            "entrada": "{\n  \"command\": \"test/pagamentos.test.ts\"\n}",
+            "resultado": "{\n  \"success\": true\n}"
+          },
+          {
+            "id": "toolu_sim_painel_033",
+            "nome": "Bash",
+            "resumo": "npm test -- pagamentos",
+            "estado": "ok",
+            "entrada": "{\n  \"command\": \"npm test -- pagamentos\"\n}",
+            "resultado": "{\n  \"success\": true\n}"
+          },
+          {
+            "id": "toolu_sim_painel_034",
+            "nome": "Read",
+            "resumo": "docs/servicos.md",
+            "estado": "ok",
+            "entrada": "{\n  \"command\": \"docs/servicos.md\"\n}",
+            "resultado": "{\n  \"success\": true\n}"
+          },
+          {
+            "id": "toolu_sim_painel_035",
+            "nome": "Bash",
+            "resumo": "npm run build",
+            "estado": "ok",
+            "entrada": "{\n  \"command\": \"npm run build\"\n}",
+            "resultado": "{\n  \"success\": true\n}"
+          },
+          {
+            "id": "sim-painel-esta-plano-32",
+            "nome": "TodoWrite",
+            "resumo": "plano",
+            "estado": null,
+            "entrada": "{\n  \"todos\": [\n    {\n      \"content\": \"Mapear o módulo\",\n      \"status\": \"completed\",\n      \"activeForm\": \"Mapear o módulo\"\n    },\n    {\n      \"content\": \"Desenhar os serviços\",\n      \"status\": \"completed\",\n      \"activeForm\": \"Desenhar os serviços\"\n    },\n    {\n      \"content\": \"Extrair a cobrança\",\n      \"status\": \"in_progress\",\n      \"activeForm\": \"Extrair a cobrança\"\n    },\n    {\n      \"content\": \"Migrar os testes\",\n      \"status\": \"pending\",\n      \"activeForm\": \"Migrar os testes\"\n    },\n    {\n      \"content\": \"Ajustar o deploy\",\n      \"status\": \"pending\",\n      \"activeForm\": \"Ajustar o deploy\"\n    },\n    {\n      \"content\": \"Remover o código velho\",\n      \"status\": \"pending\",\n      \"activeForm\": \"Remover o código velho\"\n    }\n  ]\n}",
+            "resultado": null
+          },
+          {
+            "id": "sim-painel-esta-e0034",
+            "nome": "Agent",
+            "resumo": "3 subagentes em paralelo",
+            "estado": "rodando",
+            "entrada": "{\n  \"command\": \"3 subagentes em paralelo\"\n}",
+            "resultado": null
+          }
+        ]
+      }
+    ]
+  }
+}

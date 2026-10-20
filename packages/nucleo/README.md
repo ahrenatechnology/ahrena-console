@@ -22,10 +22,12 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/decisoes/](src/decisoes/README.md) | Decisões da sessão: modelo, porta, captura pelos hooks e pelo transcript, e a cadeia de substituição (#99) |
 | [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
-| [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
+| [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/changes` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 | [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
+| [src/agent-config/](src/agent-config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
+| [src/telemetry/](src/telemetry/) | Telemetria das máquinas: coletores do Mac e do Linux atrás de uma porta, amostras de 12 h no SQLite, alertas e `/api/machines` e `/api/telemetry` (#175, seção abaixo) |
 
 ## API local
 
@@ -36,6 +38,7 @@ npm run api                              # histórico real, banco em ~/.ahrena-c
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
                                          # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
 npm run api -- --help
+npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
 
 **Um núcleo por máquina** ([src/dono/](src/dono/README.md), #86). Se já há um de pé, `npm run api` o adota: imprime a porta e a versão e sai com 0. Para o app, a extensão e o terminal:
@@ -44,20 +47,38 @@ npm run api -- --help
 npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano; --pai <pid>, --substituir, --json
 ```
 
+As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>`, `/abrir/<local_…>`, `/api/atencao`, `/api/mudancas?desde=&espera=`, `/api/sessoes`, `/api/historico?antes=&dias=&busca=`, `/api/decisoes/<sessão>?escopo=`…), continuam respondendo como alias das novas, com a mesma resposta, até o mod publicado e o app instalado migrarem (issue #173, fase 1). O mapa fica num lugar só, [src/api/legacy-routes.ts](src/api/legacy-routes.ts).
+
 | Rota | O quê |
 | --- | --- |
-| `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
-| `GET /api/mural` | O "Mural ao vivo" (#34, wireframe C2): um card por sessão aberta nesta máquina, em todas as contas, e a contagem para o seletor Todas / Esperando / Ativas. Formato e critério na seção [Mural](#mural-ao-vivo) |
+| `GET /api/panel/<session>` (`?account=`, `?model=`, `?decisions=`) | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
+| `GET /api/wall` | O "Mural ao vivo" (#34, wireframe C2): um card por sessão aberta nesta máquina, em todas as contas, e a contagem para o seletor Todas / Esperando / Ativas. Formato e critério na seção [Mural](#mural-ao-vivo) |
 | `GET /api/overview` | Saúde |
-| `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
+| `GET /api/load` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
-| `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
-| `GET /api/historico?antes=<AAAA-MM-DD>&dias=<N>&busca=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?antes=` na próxima página. `dias` padrão 7, máximo 31; `busca` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
+| `GET /api/changes?since=<cursor>&wait=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
+| `GET /api/events?limit=&after=&before=&type=&session=&tool=&status=&search=&from=&to=` | O feed de atividade (#94): `{ events, cursor, older, options }`, cada evento `{ id, createdAt, type, status, tool, summary, session: { id, title, project }, agent: { id, name }, detail: { callId, input } }` (`agent.name` é `main`, o tipo do subagente ou `subagent`); `cursor` vai como `?after=` (ao vivo) e `older` como `?before=`. Inválido dá 400 citando o parâmetro. Contrato em [src/api/eventos.ts](src/api/eventos.ts) |
+| `GET /api/sessions?status=&order=&direction=&page=&search=&dir=` | A tela Sessões (#28): `{ total, registered, page, perPage, pages, directories, items }`, cada item `{ id, title, status, reason, lastActivity, start, running, durationMs, agents, costUsd, cwd, account: { label, color } }`. `status` é `all`, `active`, `waiting`, `completed`, `error` ou `abandoned`; `order` é `activity`, `duration` ou `cost` (os valores antigos, `esperando`, `custo`…, continuam aceitos). Contrato em [src/api/sessoes.ts](src/api/sessoes.ts) |
+| `GET /api/history?before=<AAAA-MM-DD>&days=<N>&search=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo: `{ days: [{ day, sessions }], next }`, cada sessão `{ id, title, project, model, status, start, end, durationMs, costUsd, previous, next }`, com a anterior e a seguinte pelo /clear (`{ id, title }`); o `next` da página vai como `?before=` na próxima. `days` padrão 7, máximo 31; `search` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
-| `GET /api/kanban?visao=sessoes\|agentes&coluna=<id>&pagina=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `coluna`, todas na página 1; com ela, só aquela, na `pagina` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
+| `GET /api/machines` | As máquinas (#175, #176): `[{ id, label, state, reason, version, port, lastReadAt, alerts }]`, esta máquina (`local`) primeiro, depois as remotas do `machines.json`. `state` é `connected`, `unreachable` (com `reason` `port-closed` ou `no-response`) ou `incompatible-version`. Seção [Telemetria](#telemetria-das-máquinas) |
+| `GET /api/telemetry?machine=<id>&hours=1\|12` | A telemetria de uma máquina (#175): `{ version, machine, hours, current, series, alerts }`. `machine` padrão `local`, `hours` padrão 1; inválido dá 400, máquina que não existe 404 |
+| `GET /api/kanban?view=sessions\|agents&column=<id>&page=<n>` | O Kanban só leitura (#31): `{ view, perPage, columns }`, cada coluna `{ id, label, total, page, hasMore, items }`: as sessões (`active`, `waiting`, `completed`, `error`, `abandoned`) ou os agentes (`working`, `waiting`, `done`, `error`), 10 por página, a mais recente primeiro. O card de sessão é a linha da lista de Sessões mais `lastPrompt` e `model`; o de agente, `{ id, sessionId, main, name, description, status, reason, model, start, lastActivity, running, durationMs }`. Sem `column`, todas na página 1; com ela, só aquela, na `page` pedida. Os valores antigos (`sessoes`, `agentes`, `ativa`, `trabalhando`…) continuam aceitos; parâmetro inválido dá 400 citando o nome novo. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
+| `GET /api/decisions?groupBy=&state=&group=&q=` | A página Decisões da /ui (#103): `{ groupBy, state, q, counts: { current, branches, toConfirm, superseded30d, promoted }, groups }`, cada grupo `{ key, type, title, repo, folder, current, toConfirm, total, items, more }` com os cards de decisão. `groupBy` é `branch`, `family` ou `session`; `state` é `all`, `current` ou `to_confirm` (os valores antigos continuam aceitos). Contrato em [src/api/decisoes-ui.ts](src/api/decisoes-ui.ts) |
+| `GET /api/sessions/<id>/decisions?scope=&state=&q=` | A aba Decisões do Detalhe: `{ session, scope, state, q, byScope, total, items, injection: { enabled, scope, decisions, tokens, text }, mcp: { tool, exists, call, response } }` |
+| `POST /api/decisions/<id>/promote` | O "Promover a registro": `{ session }` devolve `{ draft: { path, markdown, hash, repo, canWrite, reason } }`, sem gravar; `{ session, confirm: true, path, hash }` grava e devolve `{ decision, path }` (201). O corpo antigo (`{ sessao, confirmar, caminho }`) continua aceito |
+| `GET /api/project?refresh=1` e `POST /api/project/move` | O kanban do GitHub Project (#80, seção [Kanban de um Project](#kanban-de-um-project)): `{ project: { owner, number, title, url, field }, lanes: [{ id, name, color, cards }], milestones, total, fetchedAt, stale, reason, source }`, cada card `{ itemId, type, issueType, number, title, url, repo, state, milestone, subIssues: { done, total }, pr: { number, url, ci, review }, laneId }` (`ci` `ok \| failed \| running`, `review` `approved \| changes-requested \| pending`). Mover recebe `{ itemId, optionId }` e devolve `{ board, moved: { itemId, from, to } }`. Erros: `{ error, code, command?, variable? }`, com `code` `invalid`, `no-scope`, `rate-limited`, `unknown-lane`, `unknown-item`, `github-down`, `github-refused`, `off` ou `no-project` |
+| `GET /api/analytics?tz=<IANA>` | A Visão geral do Analytics (#95, C12): `{ generatedAt, timeZone, today, since, until, accounts: [{ id, label, color }], numbers: { sessions: { total, active }, agents: { total, active }, tokens: { total, cachePct }, cost: { usd, days, unpriced, byAccount: [{ account, usd, unpriced }] }, events: { total, perSession } }, activity: { weeks, since, days: [{ day, events }] }, last30: { days: [{ day, sessions }], peak, total }, tokensByModel: [{ model, tokens }], tools: [{ name, uses }], weekday: [{ day, sessions }] }`; `weekday[].day` é `mon` … `sun`. `usd: null` é "sem preço"; `unpriced` lista os modelos fora da tabela. Fuso inválido dá 400 (`tz: …`). Contrato em [src/api/rota-analytics.ts](src/api/rota-analytics.ts) |
+| `GET /api/analytics/cost?days=7\|30\|90&tz=<IANA>` | O Custo do Analytics (#32, C13): `{ generatedAt, timeZone, days, today, since, until, estimate, currency, accounts, todaySummary: { usd, sessions, byAccount }, period: { usd, dailyAverage }, cache: { pct }, unpriced: { models, totalTokens }, byDay: [{ day, usd }], peak, byModel: [{ model, usd, pct, totalTokens }], byProject: [{ project, usd }], byAccount: [{ account, label, color, usd, unpriced, byDay }] }`. Parâmetro inválido dá 400 citando `days:` ou `tz:`; a rota antiga `/api/analytics/custo` responde o corpo antigo, em português (#173) |
+| `GET /api/repos?refresh=1` | Os repositórios da conta do GitHub (#104, C22), sempre 200 e sem esperar o GitHub: `{ state, updatedAt, error, account, summary: { organizations, repositories, withSessionsThisMonth, openPrs, prsAwaitingReview, openIssues, issuesClosedThisWeek, ci: { greenRate, runs, days } }, groups: [{ owner, type, repos }] }`, cada repo `{ owner, name, fullName, url, visibility, language, commits12, openIssues, openPrs, ci, sessions: { active, needYou, thisMonth }, lastPush }`. `state` é `ready`, `loading`, `no-github` ou `error`; `type` `org \| personal`; `visibility` `public \| private`; `ci` `ok \| failed \| running` ou `null`. A mudança `repos` da lista tem a chave `list` (a do repositório, `owner/repo`). Contrato em [src/api/repos-tipos.ts](src/api/repos-tipos.ts) |
+| `GET /api/repos/<owner>/<repo>?period=30d\|90d\|1y&refresh=1` | As métricas de um repositório (#105, C23): `{ state, updatedAt, error, computing, period, repo: { fullName, url, visibility, ci, defaultBranch, stars, forks, watchers, release: { tag, at }, license }, tabs, lines: { total, inPeriod }, commits: { total, perWeek, weeks }, frequency: { weeks: [{ week, added, removed }], added, removed }, issues: { byType: [{ type, closed, open }], closed, open, medianTimeToCloseMs, sample: { read, total, truncated } }, prs: { merged, closedUnmerged, open, medianTimeToMergeMs, medianTimeToFirstReviewMs, medianSize, reviewRounds, agentShare, sample }, ci: { greenRate, runs, averageDurationMs }, languages: [{ name, bytes, share }], contributors: [{ login, commits, added, removed }], releases, releasesTotal, community, canWrite, traffic?, security? }`. `state` também pode ser `not-found`; `computing` lista as estatísticas que o GitHub ainda calcula (`commits`, `frequency`, `lines`, `contributors`). O ano antigo, `1a`, ainda é aceito; período inválido dá 400 (`period: um de 30d, 90d, 1y`) |
+| `GET /api/dev-console?context=<id>` | O Dev Console (#177, decisão 0008 seção 4), derivado do GitHub (cache da 0001) e das sessões: placar, "depende de você" (as sessões que pedem permissão, perguntam, esperam um plano ou uma decisão, pararam num erro ou foram interrompidas, com a frase do `/api/attention`, e as decisões sugeridas sem resposta), fila de merge e não prontos com o motivo (`reason`, o de maior prioridade, e `reasons`, todos, nesta ordem: `draft`, `conflict`, `checking`, `ci-failing`, `changes-requested`, `behind`, `ci-running`, `no-ci`, `stacked`; `checking` é `mergeable` ainda `UNKNOWN`, relido no TTL dos PRs), quadro das issues em seis colunas (`todo`, `delegated`, `in-progress`, `in-review`, `blocked` pelas etiquetas `blocked` ou `bloqueada`, configuráveis, e `done`, fechada como concluída em 24 h) e mesclados nas últimas 24 h, e `decisionsToday` (as decisões vigentes tomadas hoje nas sessões do contexto, vivas ou encerradas hoje, #179), com `readAt`, `stale` e `truncated` por repositório (lista do GitHub maior que a página). Sem `context`, os contextos e a fila de todos. Contextos em `~/.ahrena-console/dev-console.json` (`owner/repo` sem diferença de caixa); sem ele, um por repositório com sessão nos últimos 7 dias ([src/dev-console/](src/dev-console/index.ts)) |
+| `GET /api/agent-config?project=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
+| `GET /api/agent-config/skill?root=<id>&name=<nome>` | O `SKILL.md` de uma skill, com a `version` |
+| `POST /api/agent-config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `create: true`, só cria (409 se já existe) |
 
-`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa.
+`?account=`, `?org=`, `?local=`, `?model=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa, e o `POST /api/agent-config/skill` vindo dela.
 
 | Arquivo | O quê |
 | --- | --- |
@@ -68,9 +89,11 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`), esforço (`effort`), arquivada e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
-| [historico.ts](src/api/historico.ts) | `GET /api/historico`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
+| [historico.ts](src/api/historico.ts) | `GET /api/history`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
 | [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
+| [agent-config.ts](src/api/agent-config.ts) | As rotas da tela Agent Config, sobre [src/agent-config/](src/agent-config/) |
+| [legacy-routes.ts](src/api/legacy-routes.ts) | As rotas e os parâmetros antigos, em português, como alias das novas (#173) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
 **Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
@@ -81,16 +104,64 @@ node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 
 ### Mural ao vivo
 
-`GET /api/mural` (#34) responde `{ versao: 1, geradoEm, contagem: { todas, esperando, ativas }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/tipos.ts](src/api/tipos.ts)). Cada card traz id (leva a `/ui/sessoes/<id>`), título, projeto (o nome da pasta), branch, status, estado, motivo, urgente, desde, a atividade (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), modelo, esforço, agentes (`ativos`/`total`, o principal mais os subagentes), custo (`usd: null` é "sem preço"), plano (`feitos`/`total`/`atual`) e contexto (`pct`/`usados`/`limite`/`rotulo`); plano e contexto são `null` quando a sessão não tem.
+`GET /api/wall` (#34) responde `{ version: 1, generatedAt, count: { all, waiting, active }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/tipos.ts](src/api/tipos.ts)); a rota antiga `/api/mural` continua respondendo o corpo antigo, com as chaves em português (#173). Cada card traz `id` (leva a `/ui/sessions/<id>`), `title`, `project` (o nome da pasta), `branch`, `status`, `state`, `reason`, `urgent`, `since`, a `activity` (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), `model`, `effort`, `agents` (`active`/`total`, o principal mais os subagentes), `cost` (`usd: null` é "sem preço"), `plan` (`done`/`total`/`current`) e `context` (`pct`/`used`/`limit`/`label`); `plan` e `context` são `null` quando a sessão não tem.
 
 - **Aberta:** não arquivada no Claude Desktop, e `active` (o que inclui esperando, delegando e em background) ou `error` sem `endedAt`; a `completed` (ou o erro já encerrado) só enquanto a última atividade estiver dentro do `abandonoMs` do vigia (180 min), o card "Terminou sem erro": fica pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada. `abandoned` nunca entra.
-- **Ordem e urgência:** `urgente` é a espera `notification` ou `interrupted` e também o erro, como no "precisam de você" do painel. Primeiro as que precisam de você (`waiting` e `error`), as urgentes antes, e entre elas o pedido mais recente; depois as outras, pela atividade mais recente.
-- **Contagem:** `esperando` são as `waiting` e `error`; `ativas`, as `active`, `delegating` e `background`; as concluídas só contam em `todas`.
+- **Ordem e urgência:** `urgent` é a espera `notification` ou `interrupted` e também o erro, como no "precisam de você" do painel. Primeiro as que precisam de você (`waiting` e `error`), as urgentes antes, e entre elas o pedido mais recente; depois as outras, pela atividade mais recente.
+- **Contagem:** `count.waiting` são as `waiting` e `error`; `count.active`, as `active`, `delegating` e `background`; as concluídas só contam em `count.all`.
 - **Esforço:** o `effort` do índice do Claude Desktop (`local_*.json`, o mesmo arquivo que já dá título e branch); sessão só de terminal ou fora do índice, `null`.
 - **Branch:** o do Desktop ou da metadata e, sem eles, o do git pelo trabalho por branch, que responde do cache (o primeiro pedido não espera o git).
 - **Consumo:** o custo sai do mesmo cache do painel (por sessão, a cada 30 s ou quando ela muda), os eventos pelo resumo incremental, e a resposta inteira fica guardada por 2 s, com pedidos ao mesmo tempo esperando a mesma montagem. Duas consultas por índice (vivas e as concluídas recentes); nada varre transcripts.
 
 O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das ferramentas do plano (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `update_plan`), cortada como os outros textos; a de nenhuma outra.
+
+### Detalhe da sessão e Workflows
+
+O Detalhe da sessão (#29, #30 e #97) lê, só do banco ([src/api/detalhe.ts](src/api/detalhe.ts) e [src/api/workflows.ts](src/api/workflows.ts)):
+
+- `GET /api/sessions/<id>`: `{ version: 1, generatedAt, session, cost, branch, local, opensSession, command, endedAt, counts: { agents, events } }`, com o card e o custo do painel.
+- `GET /api/sessions/<id>/agents`: `numbers` (`events`, `perMinute`, `tools`, `uniqueTools`, `subagents`, `compactions`, `errors`, `durationMin`, `running`), `tools` (`{ name, n }`), `tasks` (o plano do painel), `tokens` (`cacheRead`, `cacheWrite`, `input`, `output`, `total`) e `agents` (`type` `main | subagent`, `name`, `task`, `model`, `turns`, `status`, `start`, `end`, `costUsd`, `parent`).
+- `GET /api/sessions/<id>/conversation?agent=&limit=`: `{ agents, agent, total, messages }`; cada mensagem tem `role` (`you | assistant`), `at`, `text`, `model`, `tokens` (`input`, `output`) e `tools` (`name`, `summary`, `state` `ok | error | permission | running`, `input`, `result`).
+- `GET /api/sessions/<id>/events?q=&type=&tool=&agent=&status=&from=&to=&limit=&before=`: `{ total, filtered, items, next, options: { types, tools, agents, status } }`; cada item tem `at`, `type`, `tool`, `summary`, `agent` (`id`, `name`), `status` e `data` (o `data` do evento em JSON, cortado). Filtro malformado é ignorado.
+- `GET /api/sessions/<id>/workflow`: `{ sessionId, start, end, durationMs, summary, nodes, edges, reviewRounds, changesRequested, timeline: { start, end, lanes: [{ nodeId, label, spans }] } }`; o nó tem `state` `active | completed | error` e `changesRequested` (os ajustes pedidos por um review); a aresta, `type` `opened | delivered | changes-requested` e `label` (o texto da tela: `plano`, `diff`, `v2`, `ajustes`).
+
+`GET /api/workflows?filter=all|active|completed&node=<id>` (#96) responde `{ filter, node, generatedAt, sessions, truncated, max, kpis, runs, graph }`: `kpis` (`averageDepth`, `subagentsPerSession`, `subagentSuccess`, `commonFlow: { label, fraction }`, `roundsPerPr`, `averageDurationMs`), `runs` (`name`, `state` `active | completed | error`, `model`, `project`, `sessionId`, `tools`, `tokens`, `durationMs`, `start`, `end`, `phases`, `loop`, `agents` com `state` `completed | running | changes-requested | error`) e `graph` (`columns` `origin | main | subagent | compaction | outcome`, `nodes` e `edges` `{ from, to, volume }`). Os nós são `origin:prompt`, `origin:resume`, `main`, `subagent:<tipo>`, `compaction:none`, `compaction:compacted` e `outcome:completed|error|active|abandoned`.
+
+As rotas antigas `/api/sessoes/<id>[/agentes|/conversa|/eventos|/workflow]` continuam respondendo o corpo antigo, com as chaves e os valores em português; `/api/workflows` não tem caminho antigo, mas ainda aceita `?filtro=`/`?no=` e os valores antigos (`todas`, `ativas`, `concluidas`, `principal`, `subagente:<tipo>`…) (#173).
+
+## Agent Config (#63)
+
+A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem configurado nesta máquina e edita skills. A leitura mora em [src/agent-config/](src/agent-config/), as rotas em [src/api/agent-config.ts](src/api/agent-config.ts); o contrato está em [src/agent-config/model.ts](src/agent-config/model.ts).
+
+**De onde lê.** As raízes de usuário são todas as pastas de configuração que os perfis conhecem (decisão [0006](../../docs/decisoes/0006-multiplas-contas.md): `~/.claude`, as `~/.claude-*`, as de `perfis.json` e as que os hooks revelaram), cada uma com o seu `.claude.json` (`~/.claude.json` para a padrão, `<pasta>/.claude.json` para as outras). A raiz do projeto é `<projeto>/.claude`. De cada uma:
+
+| O quê | Onde | O que sai |
+| --- | --- | --- |
+| Skills | `skills/*/SKILL.md` | O nome da pasta (a chave da edição), `name` e `description` do frontmatter, a data |
+| Subagentes | `agents/*.md` | `name` (ou o nome do arquivo) e `description` |
+| Comandos | `commands/**/*.md` | O caminho sem `.md`, com `:` no lugar de `/` (`git/limpar.md` é `git:limpar`) |
+| Memória | `CLAUDE.md` da pasta de usuário; `CLAUDE.md`, `CLAUDE.local.md` e `.claude/CLAUDE.md` do projeto; os `.md` de `<pasta>/projects/<cwd codificado>/memory` | Nome e caminho, nunca o conteúdo |
+| Hooks | `settings.json` e `settings.local.json` | O nome do evento e quantos hooks ele tem. Nenhum comando |
+| MCP | `mcpServers` do `.claude.json` (topo: usuário; `projects[<projeto>]`: projeto) e do `.mcp.json` do projeto | Só o nome do servidor |
+| Plugins | `enabledPlugins` dos settings | As chaves ligadas (`nome@marketplace`) |
+| Configurações | `settings.json`, `settings.local.json` e o `.claude.json` | Quais existem, com o caminho |
+
+Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta. Um `SKILL.md` ou `agents/*.md` que é symlink para fora da própria pasta continua listado, mas o frontmatter dele não é lido (`description: null`): um link (symlink ou hardlink) para o `.credentials.json` não vaza pela descrição.
+
+**O projeto.** `projects` são os `cwd` das sessões que o núcleo já viu, das mais recentes para as mais velhas, sem repetir, até 50, só pastas que existem nesta máquina ([projects.ts](src/agent-config/projects.ts)). Sem `?project=`, vale o primeiro (ou nenhum, com `project: null`); `?project=` fora da lista dá 400, para o pedido nunca escolher uma pasta qualquer do disco. As rotas da skill aceitam o mesmo `project` (na query do `GET`, no corpo do `POST`) para a raiz `p`.
+
+**As raízes.** Ids opacos e estáveis: a letra do tipo e um hash curto do caminho real (`u-…` para cada pasta de configuração de usuário, `kind: home`; `c-…` para o `.claude.json` dela, `claude-json`, só se existe; `p-…` para `<projeto>/.claude`, `project-claude`; `r-…` para o projeto, `project`). O id não depende da ordem da descoberta dos perfis: o `POST` grava na mesma pasta que a tela mostrou, e um id cuja pasta saiu da descoberta dá 400. Só `home` e `project-claude` recebem skill. O projeto que é a pasta pai de uma home (o próprio `$HOME`) não tem `p`: `<projeto>/.claude` é a home, já lida como usuário, e não sai de novo como projeto (nem o `.claude/CLAUDE.md`); o `POST` com o id `p-…` dessa pasta dá 400.
+
+**A edição de uma skill.** `GET /api/agent-config/skill?root=&name=` devolve `{ root, name, scope, path, content, version, editedAt }`, com `version` = sha256 do conteúdo. `POST /api/agent-config/skill` com `{ root, name, content, version?, project?, create? }` grava e responde `{ ok, path, version, editedAt, backup }`:
+
+- skill que existe: copia o `SKILL.md` atual para `~/.ahrena-console/backups/<aaaa-mm-dd>/<pasta>-<hash>/<nome>/SKILL.md.bak-<data>-<sufixo>` e só então troca, por um temporário na mesma pasta e `rename`;
+- skill que não existe: cria `skills/<nome>/SKILL.md` (o botão "Nova"), com `backup: null`; na raiz `p`, cria a `.claude` do projeto se faltar;
+- `version` que não bate com a atual, ou que veio para uma skill que não existe: 409, nada gravado;
+- `create: true` (o "Nova" da tela) com a skill existindo: 409, nada gravado. A conferência corre dentro da fila do arquivo e a criação usa `link` em vez de `rename`, então de dois "Nova" juntos um passa e o outro dá 409.
+
+Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `root` só um id conhecido de tipo `home` ou `project-claude` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz (e o `SKILL.md`, dentro da pasta da skill), o `SKILL.md` não pode ser symlink nem para ler nem para gravar, mesmo apontando para dentro da raiz, e a `.claude` do projeto tem de ficar dentro do projeto (403; a listagem marca essas skills com `editable: false`); duas gravações no mesmo arquivo passam uma de cada vez, então a segunda com a mesma `version` dá 409; só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); corpo do `POST` acima do limite: 413 assim que passa, sem ler o resto, e a conexão fecha; `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
+
+**Na `--demo`.** Nada da `~/.claude` real é lido: a API monta num temporário do sistema uma pasta de configuração e um projeto fictícios (`motor-de-regras`), com as skills do wireframe, agentes, comandos, `CLAUDE.md`, settings com hooks e plugins, `.claude.json` e `.mcp.json` ([demo.ts](src/agent-config/demo.ts)). Os backups também ficam lá, e a pasta é apagada quando a API sai.
 
 ## Importação do histórico
 
@@ -228,7 +299,7 @@ Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens 
 
 Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
 
-A API local expõe o quadro em `GET /api/projeto` e `POST /api/projeto/mover` (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
+A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
@@ -285,6 +356,61 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 
 `gerarCenario()` devolve só o roteiro, sem gravar; `agora` e `esperar` são injetáveis para testes.
 
+## Telemetria das máquinas
+
+#175, [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). O núcleo mede a própria máquina a cada 30 s enquanto está de pé e guarda 12 h no SQLite. É a base das telas "Esta máquina" e "Workstation" (C24 e C25) e do bloco Máquinas da bandeja (A6); a leitura da máquina remota pelo túnel é a #176 ([Máquinas remotas](#máquinas-remotas), abaixo). Código, rotas e chaves de JSON em inglês; o texto dos alertas, que a tela mostra, em pt-BR.
+
+| Arquivo | O quê |
+| --- | --- |
+| [model.ts](src/telemetry/model.ts) | A leitura (`TelemetryReading`), os alertas, os pontos da série e os estados de uma máquina |
+| [ports.ts](src/telemetry/ports.ts) | As portas: `TelemetryCollector` (mede) e `TelemetryStore` (guarda), e o que o coletor recebe de fora: `CommandRunner`, `FileReader`, `StatFs`, `PortProbe`, `OsFacts` |
+| [alerts.ts](src/telemetry/alerts.ts) | Os alertas sobre as amostras e o `AlertTracker`, que diz o que entrou e o que saiu |
+| [sampler.ts](src/telemetry/sampler.ts) | O `TelemetrySampler`: lê, grava com a poda, recalcula os alertas e publica a passagem em `/api/changes` |
+| [service.ts](src/telemetry/service.ts) | O `TelemetryService`: o que `/api/machines` e `/api/telemetry` respondem |
+| [adapters/darwin.ts](src/telemetry/adapters/darwin.ts), [adapters/linux.ts](src/telemetry/adapters/linux.ts) | Os coletores, um por plataforma, com a base comum em [adapters/common.ts](src/telemetry/adapters/common.ts) |
+| [adapters/sqlite.ts](src/telemetry/adapters/sqlite.ts) | As amostras na tabela `telemetry_samples` (migração 9, [migration.ts](src/telemetry/migration.ts)) |
+| [adapters/system.ts](src/telemetry/adapters/system.ts) | O executor de comandos, a sonda de porta e o `collectorFor(plataforma)` do núcleo no ar |
+| [machines-config.ts](src/telemetry/machines-config.ts) | O `~/.ahrena-console/machines.json` das máquinas remotas (#176) |
+| [remote.ts](src/telemetry/remote.ts) | A `RemoteMachine`: lê o núcleo de lá a cada 30 s, guarda a última leitura, o estado, os alertas e as sessões que precisam de você (#176) |
+| [adapters/loopback-http.ts](src/telemetry/adapters/loopback-http.ts) | O `GET` em `127.0.0.1:<porta>` com `Host: 127.0.0.1:4720` e 3 s de prazo (#176) |
+
+**De onde vem cada número.** Tudo é leitura, sem `sudo` e sem dependência nova: o `node:os` e os comandos que já vêm no sistema.
+
+| Grupo | Mac | Linux |
+| --- | --- | --- |
+| CPU (`cpu.usedPct`, `cpu.load` contra `cpu.cores`) | `os.cpus()` (a diferença entre duas amostras) e `os.loadavg()` | igual |
+| Memória (`memory.usedBytes`, `memory.swapUsedBytes`, `memory.pressure`) | `vm_stat`, `sysctl vm.swapusage`, `sysctl kern.memorystatus_vm_pressure_level` | `/proc/meminfo` (sem pressão) |
+| GPU (`gpu`) | `ioreg -c IOAccelerator` | `nvidia-smi`, se existir |
+| Volumes (`disk.volumes[]`) | `fs.statfs` de cada ponto; o `df -P` só lista (fora os volumes de sistema do APFS) | igual (fora `tmpfs`, snaps e EFI) |
+| Rede (`network`) | `route -n get default` e `netstat -ibn`, bytes/s entre amostras | `/proc/net/route` e `/proc/net/dev` |
+| Claude (`claude.processes`, `.cli`, `.desktop`) e `topProcesses` | `ps -axo` (o CLI pela linha de comando, o Desktop por `Claude.app`) | `ps -eo` |
+| Docker (`docker`) | `docker ps -a` (stacks pelo rótulo `com.docker.compose.project`) e `docker system df`, se o `docker` responder | igual |
+| Portas (`ports[]`) | `lsof -nP -iTCP -sTCP:LISTEN` (os processos do usuário) | `ss -ltnp` |
+| Túnel (`tunnels[].ports[].state`) | os `ssh` com `-L` (ou `LocalForward` pelo `ssh -G <destino>`), e a sonda de cada porta: `up`, `idle`, `busy`, `down` | não se aplica (`null`) |
+
+- **Ausente, nunca erro.** Cada comando roda sem shell, com `LC_ALL=C` e 2,5 s de tempo (3 s no `docker system df`). O que falta, falha ou estoura o tempo sai `null` no grupo; a rota nunca falha por isso. A primeira leitura espera 1 s entre duas medidas, para CPU e rede já virem preenchidas.
+- **Amostras.** A tabela `telemetry_samples` (uma linha por máquina e hora: as colunas das séries e a leitura inteira em JSON). A poda vai na mesma transação da gravação: nada passa de 12 h. A série de 1 h tem um ponto por amostra (120); a de 12 h, baldes de 2 min com a média (360).
+- **Alertas.** Carga de 1 min acima dos núcleos em todas as amostras dos últimos 5 min (`load-high`), volume acima de 85% (`volume-full:<ponto>`), porta em todas as interfaces (`port-exposed:<porta>`) e porta do túnel ocupada por outro processo (`tunnel-busy:<porta>`). Cada um com `level`, `message` e `detail` em pt-BR e `since`. A entrada e a saída viram a mudança `alert` em `/api/changes` (`?type=alert` só elas), com a chave `<máquina>:<alerta>`.
+- **Túnel.** A sonda conecta em `127.0.0.1:<porta>` e não escreve nada: a conexão que fica aberta 1 s é `up` (o outro lado responde), a que fecha antes é `idle` (o `ssh` aceitou e lá não há ninguém), a recusada é `down`; outro processo escutando a porta é `busy`.
+- **No ar.** O `cli.ts` liga o amostrador na subida e o para no desligamento; sem coletor para a plataforma, ou com `--no-telemetry`, as duas rotas dão 404. Na `--demo`, as leituras são do simulador ([src/simulador/telemetry.ts](src/simulador/telemetry.ts)): esta máquina (`mac-exemplo`) e a máquina remota sintética `workstation` (`ws-exemplo`), com 12 h já semeadas e os alertas dos wireframes; a carga da workstation passa dos núcleos por uns 15 min a cada 40, então o alerta entra e sai sozinho.
+- **Testes.** Os coletores rodam sobre saídas escritas à mão em [test/fixtures/telemetry](test/fixtures/telemetry/) (Mac e Linux), nunca sobre o sistema.
+
+### Máquinas remotas
+
+#176, seções 2 e 3 da [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). A máquina remota roda o próprio núcleo; o deste Mac o lê pela porta que o **seu** túnel já encaminha. O núcleo não abre SSH, não guarda chave, não conhece o host e não sobe nem derruba túnel.
+
+```json
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720 } ] }
+```
+
+- **Configuração.** `~/.ahrena-console/machines.json` (ou `--machines <arquivo>`), lido ao subir. `port` é a porta deste Mac encaminhada para a `4720` de lá (`LocalForward 14720 127.0.0.1:4720`). Sem arquivo, só esta máquina; arquivo inválido (qualquer entrada errada, `id` repetido ou `local`) vai para o log e também fica só esta máquina. A `--demo` não lê o arquivo: a workstation dela continua sintética.
+- **Leitura.** A cada 30 s, e uma vez na subida: `GET http://127.0.0.1:<port>/api/telemetry` e, se respondeu, `GET /api/attention`, com `Host: 127.0.0.1:4720` (a defesa da [0003](../../docs/decisoes/0003-responder-sessao.md) recusa outro Host) e 3 s de prazo. Só `GET`: nada deste Mac escreve na remota.
+- **Estado.** `connected`; `unreachable` com `reason` `port-closed` (a porta recusa: o túnel caiu) ou `no-response` (aceita e não responde HTTP em 3 s, fecha na hora ou responde um erro HTTP que não seja 404); `incompatible-version` quando o `version` da telemetria de lá é outro, falta, ou lá não há a rota (404). Antes da primeira leitura, `unreachable` sem `reason`. `not-configured` não aparece: sem arquivo não há remota para mostrar.
+- **Última leitura.** Vai para `telemetry_samples` com o `id` da remota, só com os campos da leitura, até 256 kB e com o `takenAt` da hora em que este Mac leu (o relógio de lá não decide a poda); `/api/telemetry?machine=<id>` a devolve, com `lastReadAt`, também com a remota fora do ar.
+- **Alertas.** Os que o núcleo de lá calculou, mais `machine-unreachable` ("Workstation sem conexão", com o `label`) enquanto não dá para ler. A queda e a volta saem em `/api/changes` como `alert`, chave `<id>:machine-unreachable`.
+- **Sessões.** As que precisam de você lá entram em `/api/attention` com `machine: { id, label }` e `local: null` (sem "Abrir no Claude Desktop"); as daqui têm `machine: null`. Uma que entra ou sai da lista lá vira `needs-you` em `/api/changes`, chave `<id>:<sessão>`. Um núcleo de lá anterior à #173 (fase 2b) ainda responde a atenção em português (`itens`, `sessao`, `motivo`…): este Mac a lê como a inglesa até a fase 6.
+- **Testes.** Um núcleo remoto FALSO em loopback, numa porta livre ([test/telemetry/fake-remote.ts](test/telemetry/fake-remote.ts)): nenhuma rede externa.
+
 ## Testes
 
 ```bash
@@ -296,11 +422,11 @@ npm test
 
 O que deixa as telas ao vivo sem polling curto: o artefato, cujo `watchTool` tem piso de 30 s (validação V2), o app de bandeja (decisão 0005) e o painel.
 
-- **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave, sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reiniciar: true` (releia tudo).
+- **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`session`, `state`, `needs-you`, `plan`, `decision`, `account` e `alert`, o alerta de máquina da [telemetria](#telemetria-das-máquinas); a rota antiga `/api/mudancas` ainda responde e aceita os nomes antigos, `sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave (`key`), sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reset: true` (releia tudo).
 - **Espera.** `aguardarMudancas(cursor, { filtros, timeoutMs, signal })` responde na hora se já há novidade; senão segura até chegar uma que passe nos filtros (sessão, conta, tipo) ou até o timeout (padrão 25 s, máximo 110 s, abaixo dos ~130 s do app). Cada espera responde no mínimo 1 s depois de começar: com hooks chegando sem parar, quem faz long polling em laço acorda no máximo uma vez por segundo, e a rajada sai numa resposta só, uma vez por (tipo, chave). O cursor devolvido é sempre o de agora: as mudanças que os filtros deixaram de fora ficam para trás e não voltam num pedido seguinte com outros filtros. No máximo 256 esperas abertas; acima disso, `ErroDeLotacao` (503 no HTTP).
-- **Fontes.** [fontes.ts](src/mudancas/fontes.ts): `comMudancas(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `sessao` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisoesComMudancas` a das decisões, e `aoMudarDaMaquina` vai no `aoMudar` da máquina de estados (`estado` e, quando entra ou sai do inbox, `precisa-de-voce`). A API (`cli.ts`) liga as três.
-- **HTTP.** `GET /api/mudancas?desde=<cursor>&espera=<s>&sessao=<id>&conta=<id|sem-conta>&tipo=<tipo>` ([http.ts](src/mudancas/http.ts)). O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
-- **MCP.** [mcp.ts](src/mudancas/mcp.ts): a ferramenta `wait_for_changes` no formato `Ferramenta` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `criarServidorMcp`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types`; saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.sinal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/mudancas/contrato-sdk.test.ts](test/mudancas/contrato-sdk.test.ts).
+- **Fontes.** [fontes.ts](src/mudancas/fontes.ts): `comMudancas(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `session` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisoesComMudancas` a das decisões, e `aoMudarDaMaquina` vai no `aoMudar` da máquina de estados (`state` e, quando entra ou sai do inbox, `needs-you`). A API (`cli.ts`) liga as três.
+- **HTTP.** `GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id|no-account>&type=<type>` (o antigo `sem-conta` ainda vale) ([http.ts](src/mudancas/http.ts)): `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`. O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
+- **MCP.** [mcp.ts](src/mudancas/mcp.ts): a ferramenta `wait_for_changes` no formato `Ferramenta` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `criarServidorMcp`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types` (os tipos em inglês; os nomes antigos, `sessao`, `plano`…, ainda valem); saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.sinal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/mudancas/contrato-sdk.test.ts](test/mudancas/contrato-sdk.test.ts).
 
 **Consumo.** Parado, cada espera aberta é só um timer; nada varre o banco. Para medir, parado e com hooks sintéticos pelo receptor de verdade:
 

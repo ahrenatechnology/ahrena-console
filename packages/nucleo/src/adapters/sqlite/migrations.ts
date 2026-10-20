@@ -4,6 +4,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { CONTEXTO_MIGRATION_DESCRIPTION, CONTEXTO_MIGRATION_SQL } from '../../contexto/migracao.ts';
 import { DECISOES_MIGRATION_DESCRIPTION, DECISOES_MIGRATION_SQL } from '../../decisoes/migracao.ts';
+import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
 export interface Migration {
   version: number;
@@ -199,6 +200,8 @@ export const MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  // The telemetry samples schema lives in its own folder (src/telemetry/migration.ts).
+  { version: 9, description: TELEMETRY_MIGRATION_DESCRIPTION, sql: TELEMETRY_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

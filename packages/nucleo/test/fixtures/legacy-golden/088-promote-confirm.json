@@ -1,0 +1,44 @@
+{
+  "name": "promote-confirm",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{current}/promover",
+    "body": {
+      "sessao": "sim-painel-esta",
+      "confirmar": true,
+      "caminho": "{recordPath}",
+      "hash": "{recordHash}"
+    }
+  },
+  "status": 201,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "decisao": {
+      "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+      "rotulo": "D4",
+      "origem": "correcao",
+      "estado": "vigente",
+      "titulo": "SQLite em memória nos testes",
+      "texto": "SQLite em memória nos testes",
+      "contexto": null,
+      "desfazer": null,
+      "nao": [
+        "Postgres no Docker"
+      ],
+      "decididaPor": "usuario",
+      "decididaEm": "2026-10-20T14:46:00.000Z",
+      "confirmadaEm": null,
+      "substituidaPor": null,
+      "sessao": "esta",
+      "toolUseId": "sim-toolu-p9-4",
+      "sessionId": "sim-painel-esta",
+      "escopo": "familia",
+      "substitui": "D3",
+      "promovidaPara": "docs/decisoes/0001-sqlite-em-memoria-nos-testes.md",
+      "branch": "feat/42-kanban-de-sessoes",
+      "repo": "/simulacao/ahrena-demo",
+      "conversa": "/ui/sessions/sim-painel-esta"
+    },
+    "caminho": "docs/decisoes/0001-sqlite-em-memoria-nos-testes.md"
+  }
+}

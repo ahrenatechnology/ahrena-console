@@ -1,0 +1,12 @@
+{
+  "name": "session-decisions-invalid-scope",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta/decisoes?escopo=nada"
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "escopo: sessao, familia ou branch"
+  }
+}

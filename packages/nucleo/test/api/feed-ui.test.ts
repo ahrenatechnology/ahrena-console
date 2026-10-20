@@ -1,11 +1,11 @@
 // O Feed de atividade na /ui (#94): o estado (lista, pausa, cursor, tempo) e a tela montada sobre um
-// DOM mínimo, com um `ctx` falso que devolve respostas fixas de `GET /api/eventos`.
+// DOM mínimo, com um `ctx` falso que devolve respostas fixas de `GET /api/events`.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import * as E from '../../ui/telas/feed-estado.js';
+import * as E from '../../ui/screens/feed-state.js';
 
 // ---------- um DOM mínimo, só o que el(), icone() e a tela usam ----------
 
@@ -142,95 +142,103 @@ const agora = Date.now();
 const iso = (s: number) => new Date(agora - s * 1000).toISOString();
 const evento = (id: string, s: number, extra: Record<string, unknown> = {}) => ({
   id,
-  criadoEm: iso(s),
-  tipo: 'PreToolUse',
+  createdAt: iso(s),
+  type: 'PreToolUse',
   status: 'active',
-  ferramenta: 'Bash',
-  resumo: `Bash: npm test ${id}`,
-  sessao: { id: 'c3f09b52-4e1', titulo: 'Separar pagamentos em serviços', projeto: 'motor-de-regras' },
-  agente: { id: 'a7c2e0', nome: 'test-runner' },
-  detalhe: { callId: 'toolu_01', entrada: 'npm test -- cobranca' },
+  tool: 'Bash',
+  summary: `Bash: npm test ${id}`,
+  session: { id: 'c3f09b52-4e1', title: 'Separar pagamentos em serviços', project: 'motor-de-regras' },
+  agent: { id: 'a7c2e0', name: 'test-runner' },
+  detail: { callId: 'toolu_01', input: 'npm test -- cobranca' },
   ...extra,
 });
 
 describe('Feed de atividade: estado', () => {
   test('tempo relativo, hora e data local', () => {
     const t = Date.parse('2026-10-18T23:12:04Z');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 2000), 'agora');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 12_000), '12 s');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 61_000), '1 min');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 2 * 3600_000), '2 h');
-    assert.equal(E.tempoRelativo('lixo'), '');
-    assert.match(E.horaCurta(new Date(t).toISOString()), /^\d{2}:\d{2}$/);
-    assert.match(E.dataHora(new Date(t).toISOString()), /^\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 2000), 'agora');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 12_000), '12 s');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 61_000), '1 min');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 2 * 3600_000), '2 h');
+    assert.equal(E.relativeTime('lixo'), '');
+    assert.match(E.shortTime(new Date(t).toISOString()), /^\d{2}:\d{2}$/);
+    assert.match(E.dateTime(new Date(t).toISOString()), /^\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   test('a consulta codifica cada parâmetro e pula os vazios', () => {
-    assert.equal(E.consulta({}), '/api/eventos');
-    assert.equal(E.consulta({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/eventos?depois=k%201&sessao=x%2Fy&busca=a%26b%3Dc');
-    assert.ok(E.temFiltro({ status: 'error' }));
-    assert.ok(!E.temFiltro({ status: '', busca: '  ' }));
+    assert.equal(E.query({}), '/api/events');
+    assert.equal(E.query({ search: ' a&b=c ', type: '', session: 'x/y' }, { after: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
+    assert.ok(E.hasFilter({ status: 'error' }));
+    assert.ok(!E.hasFilter({ status: '', search: '  ' }));
+  });
+
+  test('o caminho escreve o agente: main é "principal", subagent sem tipo é "subagente", o tipo fica como veio', () => {
+    const ev = (name: string | null) => ({ session: { id: 's1', title: 'Título', project: 'proj' }, agent: { id: null, name } });
+    assert.equal(E.trail(ev('main')), 'proj › Título › principal');
+    assert.equal(E.trail(ev('subagent')), 'proj › Título › subagente');
+    assert.equal(E.trail(ev('test-runner')), 'proj › Título › test-runner');
+    assert.equal(E.trail({ session: { id: 's1', title: null, project: null }, agent: { name: null } }), 's1');
   });
 
   test('só id que serve de rota vira link para o Detalhe', () => {
-    assert.equal(E.rotaDaSessao('c3f09b52-4e1'), '/ui/sessoes/c3f09b52-4e1');
-    for (const ruim of ['../x', 'a b', '', null, 'x'.repeat(129), 'javascript:alert(1)/']) assert.equal(E.rotaDaSessao(ruim), null, String(ruim));
+    assert.equal(E.sessionRoute('c3f09b52-4e1'), '/ui/sessions/c3f09b52-4e1');
+    for (const ruim of ['../x', 'a b', '', null, 'x'.repeat(129), 'javascript:alert(1)/']) assert.equal(E.sessionRoute(ruim), null, String(ruim));
   });
 
   test('pausa acumula os novos sem repetir e solta no topo ao retomar', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [evento('b', 10), evento('a', 20)], cursor: 'c1', anteriores: 'v1' });
-    E.pausar(s);
-    assert.deepEqual(E.receberNovos(s, { eventos: [evento('c', 5)], cursor: 'c2' }).entraram, []);
-    E.receberNovos(s, { eventos: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
+    const s = E.newState();
+    E.load(s, { events: [evento('b', 10), evento('a', 20)], cursor: 'c1', older: 'v1' });
+    E.pause(s);
+    assert.deepEqual(E.receiveNewer(s, { events: [evento('c', 5)], cursor: 'c2' }).entraram, []);
+    E.receiveNewer(s, { events: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
     assert.deepEqual(s.pendentes.map((e: { id: string }) => e.id), ['d', 'c']);
     assert.equal(s.cursor, 'c3');
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['b', 'a'], 'a lista congela');
-    const { entraram } = E.retomar(s);
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['b', 'a'], 'a lista congela');
+    const { entraram } = E.resume(s);
     assert.deepEqual(entraram.map((e: { id: string }) => e.id), ['d', 'c']);
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['d', 'c', 'b', 'a']);
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['d', 'c', 'b', 'a']);
     assert.deepEqual(s.pendentes, []);
   });
 
   test('o evento gravado atrasado entra no lugar dele, não no topo', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
-    const r = E.receberNovos(s, { eventos: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
+    const s = E.newState();
+    E.load(s, { events: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
+    const r = E.receiveNewer(s, { events: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
     assert.equal(r.noTopo, false);
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
-    assert.equal(E.receberNovos(s, { eventos: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
+    assert.equal(E.receiveNewer(s, { events: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
   });
 
   test('a pausa guarda no máximo o limite, mas conta tudo o que chegou', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [], cursor: 'c1' });
-    E.pausar(s);
-    E.receberNovos(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
-    E.receberNovos(s, { eventos: [evento('ultimo', 1)], cursor: 'c3' });
-    assert.equal(s.pendentes.length, E.LIMITE);
+    const s = E.newState();
+    E.load(s, { events: [], cursor: 'c1' });
+    E.pause(s);
+    E.receiveNewer(s, { events: Array.from({ length: E.LIMIT }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
+    E.receiveNewer(s, { events: [evento('ultimo', 1)], cursor: 'c3' });
+    assert.equal(s.pendentes.length, E.LIMIT);
     assert.equal(s.pendentes[0].id, 'ultimo');
-    assert.equal(s.chegados, E.LIMITE + 1);
-    E.retomar(s);
+    assert.equal(s.chegados, E.LIMIT + 1);
+    E.resume(s);
     assert.equal(s.chegados, 0);
   });
 
   test('o limite corta o fim e some com o "mostrar mais"', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', anteriores: 'v' });
-    const { cortados } = E.receberNovos(s, { eventos: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
-    assert.equal(s.eventos.length, E.LIMITE);
-    assert.deepEqual(cortados.map((e: { id: string }) => e.id), [`v${E.LIMITE - 2}`, `v${E.LIMITE - 1}`]);
-    assert.equal(s.anteriores, null);
+    const s = E.newState();
+    E.load(s, { events: Array.from({ length: E.LIMIT }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', older: 'v' });
+    const { cortados } = E.receiveNewer(s, { events: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
+    assert.equal(s.events.length, E.LIMIT);
+    assert.deepEqual(cortados.map((e: { id: string }) => e.id), [`v${E.LIMIT - 2}`, `v${E.LIMIT - 1}`]);
+    assert.equal(s.older, null);
   });
 });
 
 describe('Feed de atividade: a tela', () => {
   const salvo = { document: globalThis.document, Node: globalThis.Node };
-  let montar: (area: unknown, ctx: unknown) => Promise<() => void>;
+  let mount: (area: unknown, ctx: unknown) => Promise<() => void>;
   before(async () => {
     Object.assign(globalThis, { document: documento, Node: No });
     // @ts-expect-error: idem
-    ({ montar } = await import('../../ui/telas/feed.js'));
+    ({ mount } = await import('../../ui/screens/feed.js'));
   });
   after(() => Object.assign(globalThis, salvo));
 
@@ -244,14 +252,14 @@ describe('Feed de atividade: a tela', () => {
       mudar: () => ouvintes.mudar.forEach((f) => f()),
       ctx: {
         params: {},
-        sinal: sair.signal,
-        ler: async (rota: string) => (pedidos.push(rota), responder(rota)),
-        aoMudar: (f: () => void) => ouvintes.mudar.push(f),
-        aoReiniciar: (f: () => void) => ouvintes.reiniciar.push(f),
-        aoVivo: () => 'ao-vivo',
-        contador: () => {},
+        signal: sair.signal,
+        read: async (rota: string) => (pedidos.push(rota), responder(rota)),
+        onChange: (f: () => void) => ouvintes.mudar.push(f),
+        onRestart: (f: () => void) => ouvintes.reiniciar.push(f),
+        liveState: () => 'live',
+        counter: () => {},
         titulo: () => {},
-        navegar: () => {},
+        navigate: () => {},
       },
     };
   }
@@ -263,56 +271,56 @@ describe('Feed de atividade: a tela', () => {
     const ataque = '<script>alert(1)</script><img src=x onerror=alert(2)>';
     let fila: unknown[] = [
       {
-        eventos: [evento('e2', 12, { resumo: ataque, sessao: { id: '../fora', titulo: ataque, projeto: null } }), evento('e1', 70, { status: 'waiting', ferramenta: null })],
+        events: [evento('e2', 12, { summary: ataque, session: { id: '../fora', title: ataque, project: null } }), evento('e1', 70, { status: 'waiting', tool: null })],
         cursor: 'k2',
-        anteriores: null,
-        opcoes: { tipos: ['PreToolUse', 'Stop'], ferramentas: ['Bash'], sessoes: [{ id: 'c3f09b52-4e1', titulo: 'Separar pagamentos em serviços', projeto: 'motor-de-regras' }] },
+        older: null,
+        options: { types: ['PreToolUse', 'Stop'], tools: ['Bash'], sessions: [{ id: 'c3f09b52-4e1', title: 'Separar pagamentos em serviços', project: 'motor-de-regras' }] },
       },
     ];
     const f = ctxFalso(() => fila.shift());
     const area = new Elemento('main');
-    const limpar = await montar(area, f.ctx);
+    const limpar = await mount(area, f.ctx);
 
-    assert.equal(f.pedidos[0], '/api/eventos');
-    assert.ok(documento.head.querySelector('link[data-tela="feed"]'), 'o CSS da tela entrou no head');
+    assert.equal(f.pedidos[0], '/api/events');
+    assert.ok(documento.head.querySelector('link[data-screen="feed"]'), 'o CSS da tela entrou no head');
     assert.deepEqual(linhasDe(area), ['e2', 'e1']);
     const [l2, l1] = area.querySelectorAll('.feed-item');
     assert.match(l1!.textContent, /Esperando você/);
     assert.match(l1!.textContent, /motor-de-regras › Separar pagamentos em serviços › test-runner/);
     assert.match(l1!.textContent, /1 min/);
-    assert.equal(l1!.querySelector('a')!.getAttribute('href'), '/ui/sessoes/c3f09b52-4e1');
+    assert.equal(l1!.querySelector('a')!.getAttribute('href'), '/ui/sessions/c3f09b52-4e1');
     assert.equal(l2!.querySelector('a'), null, 'id de sessão que não serve de rota não vira link');
     assert.ok(l2!.textContent.includes(ataque), 'o <script> do núcleo está lá como texto');
     assert.ok(!area.querySelectorAll('script, img').length, 'e nenhum elemento nasceu dele');
     assert.deepEqual(area.querySelectorAll('select')[1]!.childNodes.map((o) => o.textContent), ['Tipo de evento', 'PreToolUse', 'Stop']);
 
     // Abre o detalhe de e1 pela seta; abrir e2 fecha e1.
-    l1!.querySelector('.feed-seta')!.click();
-    let det = area.querySelector('.feed-detalhe')!;
+    l1!.querySelector('.feed-arrow')!.click();
+    let det = area.querySelector('.feed-detail')!;
     assert.match(det.textContent, /EventoPreToolUse/);
     assert.match(det.textContent, /Sessãoc3f09b52-4e1/);
     assert.match(det.textContent, /Agentetest-runner · a7c2/);
     assert.match(det.textContent, /Call idtoolu_01/);
     assert.match(det.textContent, /Ferramenta—/);
-    assert.equal(area.querySelector('.feed-seta')!.getAttribute('aria-expanded'), 'false');
-    area.querySelectorAll('.feed-item')[0]!.querySelector('.feed-linha')!.click();
-    assert.equal(area.querySelectorAll('.feed-detalhe').length, 1);
-    det = area.querySelector('.feed-detalhe')!;
+    assert.equal(area.querySelector('.feed-arrow')!.getAttribute('aria-expanded'), 'false');
+    area.querySelectorAll('.feed-item')[0]!.querySelector('.feed-row')!.click();
+    assert.equal(area.querySelectorAll('.feed-detail').length, 1);
+    det = area.querySelector('.feed-detail')!;
     assert.match(det.textContent, /npm test -- cobranca/);
     assert.ok(det.closest('.feed-item')!.getAttribute('data-id') === 'e2');
 
     // Pausa: os novos esperam no aviso.
-    const [pausa] = area.querySelector('.acoes')!.querySelectorAll('button');
+    const [pausa] = area.querySelector('.actions')!.querySelectorAll('button');
     pausa!.click();
     assert.match(pausa!.textContent, /Retomar/);
-    fila = [{ eventos: [evento('e3', 1)], cursor: 'k3', anteriores: null, opcoes: null }];
+    fila = [{ events: [evento('e3', 1)], cursor: 'k3', older: null, options: null }];
     f.mudar();
     await espera();
-    assert.equal(f.pedidos.at(-1), '/api/eventos?depois=k2');
-    fila = [{ eventos: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', anteriores: null, opcoes: null }];
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
+    fila = [{ events: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', older: null, options: null }];
     f.mudar();
     await espera();
-    const aviso = area.querySelector('.feed-novos')!;
+    const aviso = area.querySelector('.feed-new')!;
     assert.equal(aviso.hidden, false);
     assert.equal(aviso.textContent, '2 novos');
     assert.deepEqual(linhasDe(area), ['e2', 'e1'], 'pausado, a lista não mexe');
@@ -324,30 +332,30 @@ describe('Feed de atividade: a tela', () => {
     assert.match(pausa!.textContent, /Pausar/);
 
     limpar();
-    assert.equal(documento.head.querySelector('link[data-tela="feed"]'), null, 'a limpeza tira o CSS');
+    assert.equal(documento.head.querySelector('link[data-screen="feed"]'), null, 'a limpeza tira o CSS');
   });
 
   test('um pedido do ao vivo em voo por vez; mudança no meio pede um só a mais', async () => {
     let soltar: (v: unknown) => void = () => {};
     let n = 0;
     const f = ctxFalso((rota) => {
-      if (!rota.includes('depois')) return { eventos: [evento('a', 30)], cursor: 'k1', anteriores: 'v1', opcoes: null };
+      if (!rota.includes('after=')) return { events: [evento('a', 30)], cursor: 'k1', older: 'v1', options: null };
       n++;
       return new Promise((r) => (soltar = r));
     });
     const area = new Elemento('main');
-    const limpar = await montar(area, f.ctx);
+    const limpar = await mount(area, f.ctx);
     f.mudar();
     f.mudar();
     f.mudar();
     await espera();
     assert.equal(n, 1);
-    soltar({ eventos: [evento('b', 1)], cursor: 'k2', anteriores: null });
+    soltar({ events: [evento('b', 1)], cursor: 'k2', older: null });
     await espera();
     await espera();
     assert.equal(n, 2);
-    assert.equal(f.pedidos.at(-1), '/api/eventos?depois=k2');
-    soltar({ eventos: [], cursor: 'k2', anteriores: null });
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
+    soltar({ events: [], cursor: 'k2', older: null });
     await espera();
     assert.deepEqual(linhasDe(area), ['b', 'a']);
     limpar();
@@ -355,7 +363,7 @@ describe('Feed de atividade: a tela', () => {
 
   test('vazio, vazio com filtro, erro e "mostrar mais"', async () => {
     const area = new Elemento('main');
-    let limpar = await montar(area, ctxFalso(() => ({ eventos: [], cursor: null, anteriores: null, opcoes: null })).ctx);
+    let limpar = await mount(area, ctxFalso(() => ({ events: [], cursor: null, older: null, options: null })).ctx);
     assert.match(area.textContent, /Nenhum evento ainda/);
     const status = area.querySelectorAll('select')[0]!;
     status.value = 'error';
@@ -364,21 +372,21 @@ describe('Feed de atividade: a tela', () => {
     assert.match(area.textContent, /Nenhum evento com esses filtros/);
     limpar();
 
-    const falha = ctxFalso(() => Promise.reject(Object.assign(new Error('O núcleo respondeu 500'), { name: 'ErroDeLeitura' })));
-    limpar = await montar(area, falha.ctx);
+    const falha = ctxFalso(() => Promise.reject(Object.assign(new Error('O núcleo respondeu 500'), { name: 'ReadError' })));
+    limpar = await mount(area, falha.ctx);
     assert.match(area.textContent, /Sem conexão com o núcleo/);
     assert.match(area.textContent, /Tentar de novo/);
     limpar();
 
     const mais = ctxFalso((rota) =>
-      rota.includes('antes=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
+      rota.includes('before=') ? { events: [evento('velho', 900)], cursor: null, older: null } : { events: [evento('novo', 1)], cursor: 'k', older: 'v 1', options: null },
     );
-    limpar = await montar(area, mais.ctx);
-    const botao = area.querySelector('.feed-mais')!;
+    limpar = await mount(area, mais.ctx);
+    const botao = area.querySelector('.feed-more')!;
     assert.equal(botao.hidden, false);
     botao.click();
     await espera();
-    assert.equal(mais.pedidos.at(-1), '/api/eventos?antes=v%201');
+    assert.equal(mais.pedidos.at(-1), '/api/events?before=v%201');
     assert.deepEqual(linhasDe(area), ['novo', 'velho']);
     assert.equal(botao.hidden, true);
     limpar();
@@ -389,7 +397,7 @@ describe('Feed de atividade: a tela', () => {
     let soltar: (v: unknown) => void = () => {};
     const f = ctxFalso(() => new Promise((_, rejeitar) => (soltar = rejeitar)));
     const area = documento.createElement('main');
-    const montado = montar(area, f.ctx);
+    const montado = mount(area, f.ctx);
     assert.equal(documento.head.querySelectorAll('link').length, antes + 1);
     f.sair.abort();
     soltar(Object.assign(new Error('saiu'), { name: 'AbortError' }));
@@ -401,18 +409,18 @@ describe('Feed de atividade: a tela', () => {
   // a outra. As do Feed levam o prefixo `feed-`; em comum, só as da moldura e os selos de status.
   test('o feed.css só estiliza classes com o prefixo feed-, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-    const daMoldura = classes('moldura.css');
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const daMoldura = classes('shell.css');
     const minhas = [...classes('feed.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('feed-')), [], 'classe própria sem o prefixo feed-');
-    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'moldura.css', 'marca.css'].includes(a))) {
+    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'shell.css', 'brand.css'].includes(a))) {
       const delas = classes(outra);
       assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `feed.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   test('a tela não usa fetch, innerHTML nem estilo inline', () => {
-    for (const a of ['telas/feed.js', 'telas/feed-estado.js']) {
+    for (const a of ['screens/feed.js', 'screens/feed-state.js']) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       assert.doesNotMatch(texto, /\bfetch\(|innerHTML|\.style\.|style=/, a);
     }

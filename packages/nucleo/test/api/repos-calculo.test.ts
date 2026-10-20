@@ -59,22 +59,23 @@ describe('#104 CA1: agrupados por organização e pela conta pessoal, ordenados 
       },
       { esperandoReview: 2, fechadasNaSemana: 5 },
       new Map(),
-      { taxaVerde: 0.5, execucoes: 4 },
+      { greenRate: 0.5, runs: 4 },
     );
-    assert.deepEqual(lista.grupos.map((g) => [g.dono, g.tipo, g.repos.map((r) => r.nome)]), [
+    assert.deepEqual(lista.groups.map((g) => [g.owner, g.type, g.repos.map((r) => r.name)]), [
       ['org-a', 'org', ['recente', 'velho']],
       ['org-b', 'org', ['novo']],
-      ['eu', 'pessoal', ['notas']],
+      ['eu', 'personal', ['notas']],
     ]);
-    assert.equal(lista.grupos[1].repos[0].visibilidade, 'privado');
+    assert.equal(lista.groups[1].repos[0].visibility, 'private');
+    assert.equal(lista.groups[0].repos[0].visibility, 'public');
     // A org sem repositório conta no resumo, como no cabeçalho "2 organizações".
-    assert.equal(lista.resumo.organizacoes, 3);
-    assert.equal(lista.resumo.repositorios, 4);
-    assert.equal(lista.resumo.prsAbertos, 4);
-    assert.equal(lista.resumo.issuesAbertas, 8);
-    assert.equal(lista.resumo.prsEsperandoReview, 2);
-    assert.equal(lista.resumo.issuesFechadasNaSemana, 5);
-    assert.deepEqual(lista.resumo.ci, { taxaVerde: 0.5, execucoes: 4, dias: 7 });
+    assert.equal(lista.summary.organizations, 3);
+    assert.equal(lista.summary.repositories, 4);
+    assert.equal(lista.summary.openPrs, 4);
+    assert.equal(lista.summary.openIssues, 8);
+    assert.equal(lista.summary.prsAwaitingReview, 2);
+    assert.equal(lista.summary.issuesClosedThisWeek, 5);
+    assert.deepEqual(lista.summary.ci, { greenRate: 0.5, runs: 4, days: 7 });
   });
 });
 
@@ -88,10 +89,10 @@ describe('#104 CA2: linguagem, commits das 12 semanas e CI de cada linha', () =>
 
   test('CI do branch padrão: sucesso, falha e em andamento; sem checks, nulo', () => {
     assert.equal(ciDoRollup('SUCCESS'), 'ok');
-    assert.equal(ciDoRollup('FAILURE'), 'falhou');
-    assert.equal(ciDoRollup('ERROR'), 'falhou');
-    assert.equal(ciDoRollup('PENDING'), 'rodando');
-    assert.equal(ciDoRollup('EXPECTED'), 'rodando');
+    assert.equal(ciDoRollup('FAILURE'), 'failed');
+    assert.equal(ciDoRollup('ERROR'), 'failed');
+    assert.equal(ciDoRollup('PENDING'), 'running');
+    assert.equal(ciDoRollup('EXPECTED'), 'running');
     assert.equal(ciDoRollup(null), null);
   });
 });
@@ -105,20 +106,20 @@ describe('#105 CA1: linhas de código, commits por semana e frequência', () => 
   ];
 
   test('linhas são a soma de adições menos remoções desde o primeiro commit; o saldo do período à parte', () => {
-    assert.deepEqual(linhasDe(frequencia, inicioDoPeriodo('90d', AGORA)), { total: 1300, noPeriodo: 150 });
-    assert.deepEqual(linhasDe(frequencia, inicioDoPeriodo('1a', AGORA)), { total: 1300, noPeriodo: 400 });
+    assert.deepEqual(linhasDe(frequencia, inicioDoPeriodo('90d', AGORA)), { total: 1300, inPeriod: 150 });
+    assert.deepEqual(linhasDe(frequencia, inicioDoPeriodo('1y', AGORA)), { total: 1300, inPeriod: 400 });
   });
 
   test('a frequência traz adicionadas e removidas por semana do período, com as remoções positivas', () => {
     const f = frequenciaDoPeriodo(frequencia, inicioDoPeriodo('30d', AGORA));
-    assert.deepEqual(f.semanas.map((s) => [s.adicionadas, s.removidas]), [[200, 20], [10, 40]]);
-    assert.equal(f.adicionadas, 210);
-    assert.equal(f.removidas, 60);
+    assert.deepEqual(f.weeks.map((s) => [s.added, s.removed]), [[200, 20], [10, 40]]);
+    assert.equal(f.added, 210);
+    assert.equal(f.removed, 60);
   });
 
   test('commits por semana: total e média das semanas do período', () => {
     const atividade = [{ week: semanaSeg(20), total: 9 }, { week: semanaSeg(2), total: 4 }, { week: semanaSeg(1), total: 6 }, { week: semanaSeg(0), total: 2 }];
-    assert.deepEqual(commitsDoPeriodo(atividade, inicioDoPeriodo('30d', AGORA)), { total: 12, porSemana: 4, semanas: [4, 6, 2] });
+    assert.deepEqual(commitsDoPeriodo(atividade, inicioDoPeriodo('30d', AGORA)), { total: 12, perWeek: 4, weeks: [4, 6, 2] });
   });
 });
 
@@ -131,16 +132,16 @@ describe('#105 CA2: issues por tipo e o tempo mediano até fechar', () => {
     ];
     const abertas = [{ issueType: { name: 'História' } }, { issueType: { name: 'Bug' } }];
     const r = issuesDoPeriodo(fechadas, abertas);
-    assert.deepEqual(r.porTipo, [
-      { tipo: 'Bug', fechadas: 2, abertas: 1 },
-      { tipo: 'História', fechadas: 0, abertas: 1 },
-      { tipo: 'Sem tipo', fechadas: 1, abertas: 0 },
+    assert.deepEqual(r.byType, [
+      { type: 'Bug', closed: 2, open: 1 },
+      { type: 'História', closed: 0, open: 1 },
+      { type: 'Sem tipo', closed: 1, open: 0 },
     ]);
-    assert.equal(r.fechadas, 3);
-    assert.equal(r.abertas, 2);
-    assert.equal(r.medianaAteFecharMs, 20 * H);
+    assert.equal(r.closed, 3);
+    assert.equal(r.open, 2);
+    assert.equal(r.medianTimeToCloseMs, 20 * H);
     // Sem as contagens (cache gravado antes delas), o total é o que se leu.
-    assert.deepEqual(r.amostra, { lidos: 5, total: 5, truncado: false });
+    assert.deepEqual(r.sample, { read: 5, total: 5, truncated: false });
   });
 
   test('mediana com número par e vazia', () => {
@@ -163,25 +164,25 @@ describe('#105 CA3: PRs, review e a fatia aberta por agentes', () => {
 
   test('mergeados e fechados sem merge do período, abertos de agora, medianas e tamanho', () => {
     const r = prsDoPeriodo(prs, 7, desde);
-    assert.equal(r.mergeados, 3);
-    assert.equal(r.fechadosSemMerge, 1);
-    assert.equal(r.abertos, 7);
-    assert.equal(r.medianaAteMergeMs, 20 * H);
-    assert.equal(r.medianaAtePrimeiroReviewMs, 3 * H);
-    assert.deepEqual(r.tamanhoMediano, { adicionadas: 200, removidas: 20 });
+    assert.equal(r.merged, 3);
+    assert.equal(r.closedUnmerged, 1);
+    assert.equal(r.open, 7);
+    assert.equal(r.medianTimeToMergeMs, 20 * H);
+    assert.equal(r.medianTimeToFirstReviewMs, 3 * H);
+    assert.deepEqual(r.medianSize, { added: 200, removed: 20 });
     // Mergeados com review: (1 pedido + 1) e (0 + 1) → média 1,5.
-    assert.equal(r.rodadasDeReview, 1.5);
+    assert.equal(r.reviewRounds, 1.5);
     // Criados no período: 4; por agente: o do bot e o do branch claude/.
-    assert.equal(r.fatiaPorAgentes, 0.5);
-    assert.deepEqual(r.amostra, { lidos: 5, total: 5, truncado: false });
+    assert.equal(r.agentShare, 0.5);
+    assert.deepEqual(r.sample, { read: 5, total: 5, truncated: false });
   });
 
   test('com as contagens, mergeados e fechados sem merge são o total do GitHub, e a amostra diz se cortou', () => {
     const r = prsDoPeriodo(prs, 7, desde, { prs: 500, mergeados: 420, fechadosSemMerge: 30 });
-    assert.deepEqual([r.mergeados, r.fechadosSemMerge, r.abertos], [420, 30, 7]);
-    assert.deepEqual(r.amostra, { lidos: 5, total: 500, truncado: true });
+    assert.deepEqual([r.merged, r.closedUnmerged, r.open], [420, 30, 7]);
+    assert.deepEqual(r.sample, { read: 5, total: 500, truncated: true });
     // As medianas continuam sobre a amostra.
-    assert.equal(r.medianaAteMergeMs, 20 * H);
+    assert.equal(r.medianTimeToMergeMs, 20 * H);
   });
 
   test('agente: autor Bot, login terminado em [bot] ou branch claude/; o resto não', () => {
@@ -194,7 +195,7 @@ describe('#105 CA3: PRs, review e a fatia aberta por agentes', () => {
 
   test('sem PR no período: medianas e fatia nulas', () => {
     const r = prsDoPeriodo([], 0, desde);
-    assert.deepEqual([r.medianaAteMergeMs, r.tamanhoMediano, r.rodadasDeReview, r.fatiaPorAgentes], [null, null, null, null]);
+    assert.deepEqual([r.medianTimeToMergeMs, r.medianSize, r.reviewRounds, r.agentShare], [null, null, null, null]);
   });
 });
 
@@ -202,12 +203,12 @@ describe('#105 CA4: CI, linguagens e contribuidores', () => {
   test('taxa verde e duração média dos runs concluídos; cancelado não conta', () => {
     const run = (conclusion: string, min: number) => ({ status: 'completed', conclusion, run_started_at: iso(AGORA), updated_at: iso(AGORA + min * 60_000) });
     const r = ciDosRuns({ total_count: 40, workflow_runs: [run('success', 4), run('success', 6), run('failure', 2), run('cancelled', 1), run('success', 8)] });
-    assert.deepEqual(r, { taxaVerde: 0.75, execucoes: 40, duracaoMediaMs: 5 * 60_000 });
-    assert.deepEqual(ciDosRuns({ total_count: 0, workflow_runs: [] }), { taxaVerde: null, execucoes: 0, duracaoMediaMs: null });
+    assert.deepEqual(r, { greenRate: 0.75, runs: 40, averageDurationMs: 5 * 60_000 });
+    assert.deepEqual(ciDosRuns({ total_count: 0, workflow_runs: [] }), { greenRate: null, runs: 0, averageDurationMs: null });
   });
 
   test('linguagens por bytes, a maior primeiro, com a fatia', () => {
-    assert.deepEqual(linguagensDe({ CSS: 25, TypeScript: 75 }), [{ nome: 'TypeScript', bytes: 75, fatia: 0.75 }, { nome: 'CSS', bytes: 25, fatia: 0.25 }]);
+    assert.deepEqual(linguagensDe({ CSS: 25, TypeScript: 75 }), [{ name: 'TypeScript', bytes: 75, share: 0.75 }, { name: 'CSS', bytes: 25, share: 0.25 }]);
   });
 
   test('contribuidores com commits e linhas no período, quem mais contribuiu primeiro', () => {
@@ -218,7 +219,7 @@ describe('#105 CA4: CI, linguagens e contribuidores', () => {
       ],
       inicioDoPeriodo('30d', AGORA),
     );
-    assert.deepEqual(c, [{ login: 'b', commits: 3, adicionadas: 30, removidas: 3 }, { login: 'a', commits: 1, adicionadas: 10, removidas: 2 }]);
+    assert.deepEqual(c, [{ login: 'b', commits: 3, added: 30, removed: 3 }, { login: 'a', commits: 1, added: 10, removed: 2 }]);
   });
 });
 

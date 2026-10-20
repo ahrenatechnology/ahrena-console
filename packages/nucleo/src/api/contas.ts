@@ -117,6 +117,6 @@ export class Contas {
     const a = this.daPorta.get(id);
     const c = this.configurados.get(id);
     const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? CORES_DAS_CONTAS[i % CORES_DAS_CONTAS.length];
-    return { id, rotulo: c?.rotulo ?? a?.label ?? nomeDaOrg(a?.organizationName) ?? `conta ${i + 1}`, cor, fonte };
+    return { id, label: c?.rotulo ?? a?.label ?? nomeDaOrg(a?.organizationName) ?? `conta ${i + 1}`, color: cor, source: fonte };
   }
 }

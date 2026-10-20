@@ -33,21 +33,25 @@ export function repoDoRemote(remote: string): string | null {
 
 type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
 
-/** CI do último commit, como o painel e o kanban mostram: `ok`, `falhou`, `rodando` ou `null` sem checagens. */
-export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrDoPainel['ci'] {
-  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
+export type PrCi = NonNullable<PrDoPainel['ci']>;
+export type PrReview = NonNullable<PrDoPainel['review']>;
+
+/** CI do último commit, como o painel e o kanban do projeto mostram: `ok`, `failed`, `running` ou `null` sem checagens. */
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrCi | null {
+  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'failed' : 'running';
 }
 
-/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`. */
-export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrDoPainel['review'] {
-  return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
+/** Review do PR: `approved`, `changes-requested`, `pending` (aberto sem decisão) ou `null`. */
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrReview | null {
+  return p.review === 'APPROVED' ? 'approved' : p.review === 'CHANGES_REQUESTED' ? 'changes-requested' : p.state === 'OPEN' ? 'pending' : null;
 }
 
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
-  const estado = p.state === 'MERGED' ? 'mergeado' : p.state === 'CLOSED' ? 'fechado' : p.isDraft ? 'rascunho' : 'aberto';
-  return { numero: p.number, url: p.url, estado, ci: ciDoPr(p), checks: p.checks ?? null, review: reviewDoPr(p) };
+  const state = p.state === 'MERGED' ? 'merged' : p.state === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : 'open';
+  const checks = p.checks ? { total: p.checks.total, ok: p.checks.ok, failed: p.checks.falhas, running: p.checks.rodando } : null;
+  return { number: p.number, url: p.url, state, ci: ciDoPr(p), checks, review: reviewDoPr(p) };
 }
 
 interface Entrada {
@@ -156,9 +160,9 @@ export class TrabalhoPorBranch {
     if (!branch) return null;
     const remote = cwd ? await this.rodarGit(cwd, ['remote', 'get-url', 'origin']) : null;
     const repo = remote ? repoDoRemote(remote) : null;
-    const semPush = cwd ? (await this.rodarGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])) === null : false;
+    const notPushed = cwd ? (await this.rodarGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])) === null : false;
     const numero = issueDoBranch(branch);
-    const base: TrabalhoDoPainel = { branch, repo, issue: null, pr: null, semPush, erro: null };
+    const base: TrabalhoDoPainel = { branch, repo, issue: null, pr: null, notPushed, error: null };
     if (!repo || numero === null || !this.fonte) return base;
 
     const key = workKey(repo, numero);
@@ -172,16 +176,16 @@ export class TrabalhoPorBranch {
       return {
         ...base,
         issue: {
-          numero,
-          titulo: no.title,
+          number: numero,
+          title: no.title,
           url: no.url,
-          subIssues: no.progress ? { feitas: no.progress.completed, total: no.progress.total } : null,
+          subIssues: no.progress ? { done: no.progress.completed, total: no.progress.total } : null,
         },
         pr: prDoPainel(detalhe.value.pullRequests),
-        erro: nos.stale || detalhe.stale ? (nos.staleReason ?? detalhe.staleReason ?? 'GitHub indisponível') : null,
+        error: nos.stale || detalhe.stale ? (nos.staleReason ?? detalhe.staleReason ?? 'GitHub indisponível') : null,
       };
     } catch (err) {
-      return { ...(anterior ?? base), branch, semPush, erro: (err as Error).message };
+      return { ...(anterior ?? base), branch, notPushed, error: (err as Error).message };
     }
   }
 }

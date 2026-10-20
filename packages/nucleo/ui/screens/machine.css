@@ -1,0 +1,133 @@
+/* The machine screens (C24, C25, C26, issue 178): the wireframe's look, ported. The screen puts this
+   sheet in the head when it opens (link[data-screen="machine"]) and removes it when the person
+   leaves; while it is there, the other screens' CSS is loaded too, so every own class starts with
+   `tm-` and the shared ones are only the shell's and the status seals (`badge`, `b-*`), repeated in
+   each screen's CSS. Every color comes from brand.css. Nothing scrolls horizontally from a 1100 px
+   window: two columns up to 1299 px of window, three from 1300. */
+
+/* ---------- seals: the same block as dashboard.css, on purpose ---------- */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+.tm-muted { color: var(--muted); }
+.tm-small { font-size: 11.5px; margin: 0; }
+.tm-wrap { overflow-wrap: anywhere; margin: 0; }
+.tm-c-accent { color: var(--accent-text); }
+.tm-c-waiting { color: var(--status-waiting-text); }
+.tm-c-error { color: var(--status-error-text); }
+.tm-c-muted { color: var(--muted); }
+.tm-head-title { min-width: 0; overflow-wrap: anywhere; }
+.tm-pill-slot { display: inline-flex; }
+
+/* ---------- 1 h / 12 h and the port filter ---------- */
+.tm-seg { display: inline-flex; padding: 2px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); flex: none; }
+.tm-seg button { border: 0; background: transparent; color: var(--muted); font-size: 11.5px; padding: 4px 9px; border-radius: 6px; white-space: nowrap; }
+.tm-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.tm-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- the cards on top ---------- */
+.tm-stats { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tm-stat { padding: 14px 16px; min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; position: relative; min-width: 0; }
+.tm-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 22px; }
+.tm-stat-ic { position: absolute; top: 13px; right: 14px; font-size: 17px; }
+.tm-stat-v { font-size: 24px; font-weight: var(--weight-semibold); font-family: var(--font-mono); letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tm-stat-v small { font-size: 12px; font-family: var(--font-sans); color: var(--muted); font-weight: var(--weight-regular); margin-left: 6px; letter-spacing: 0; }
+.tm-stat-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tm-stat.tm-bad { background: color-mix(in srgb, var(--status-error-badge) 80%, var(--surface)); border-color: color-mix(in srgb, var(--status-error-dot) 40%, var(--border)); }
+
+/* ---------- the grid ---------- */
+.tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tm-span-wide, .tm-span-half, .tm-span-full { grid-column: span 2; }
+.tm-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tm-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.tm-title > .tm-note, .tm-title > .tm-seg { margin-left: auto; }
+.tm-note { font-weight: var(--weight-regular); color: var(--muted); font-size: 11.5px; }
+.tm-sub-eyebrow { margin-top: 4px; }
+.tm-card p { margin: 0; font-size: 12.5px; }
+
+@media (min-width: 1300px) {
+  .tm-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tm-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tm-span-half { grid-column: span 1; }
+  .tm-span-full { grid-column: span 3; }
+}
+
+/* ---------- the chart ---------- */
+.tm-chart { width: 100%; height: 120px; display: block; }
+.tm-gridline { stroke: var(--border); stroke-width: 1; }
+.tm-limit { stroke: var(--status-error-dot); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.tm-line { fill: none; stroke-width: 1.7; }
+.tm-line-a { stroke: var(--accent); }
+.tm-line-b { stroke: var(--rose); }
+.tm-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+.tm-legend { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.tm-key { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.tm-key-a { background: var(--accent); }
+.tm-key-b { background: var(--rose); }
+.tm-key-limit { background: var(--status-error-dot); }
+
+/* ---------- volumes and Docker: <progress> and CSSOM widths, no inline style ---------- */
+.tm-meter { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; min-width: 0; }
+.tm-meter-top { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
+.tm-meter-top b { font-weight: var(--weight-medium); overflow-wrap: anywhere; min-width: 0; }
+.tm-meter-top span.mono { font-size: 11.5px; color: var(--muted); text-align: right; }
+.tm-bar { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 8px; border: 0; border-radius: 99px; overflow: hidden; background: var(--raised); color: var(--accent); }
+.tm-bar::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
+.tm-bar::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
+.tm-bar::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
+.tm-bar.tm-bar-warn::-webkit-progress-value { background: var(--status-waiting-dot); }
+.tm-bar.tm-bar-warn::-moz-progress-bar { background: var(--status-waiting-dot); }
+.tm-bar.tm-bar-bad::-webkit-progress-value { background: var(--status-error-dot); }
+.tm-bar.tm-bar-bad::-moz-progress-bar { background: var(--status-error-dot); }
+.tm-stack { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); }
+.tm-stack-part { display: block; height: 100%; width: var(--w, 0); }
+.tm-stack-used { background: var(--accent); }
+.tm-stack-free { background: var(--rose); }
+
+/* ---------- alerts and sessions ---------- */
+.tm-alerts, .tm-sessions { list-style: none; margin: 0; padding: 0; }
+.tm-alerts li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tm-alerts li:last-child, .tm-sessions li:last-child { border-bottom: 0; }
+.tm-alert-ic { font-size: 15px; line-height: 1.2; flex: none; }
+.tm-alert-text { min-width: 0; overflow-wrap: anywhere; }
+.tm-alert-text small { display: block; color: var(--muted); font-size: 11.5px; }
+.tm-alert-age { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; padding-left: 8px; }
+.tm-sessions li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.tm-session-name { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tm-session-name b { font-weight: var(--weight-medium); font-size: 12.5px; overflow-wrap: anywhere; }
+.tm-session-name small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+
+/* ---------- tables: fixed layout, nothing scrolls ---------- */
+.tm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+.tm-table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.tm-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
+.tm-table th:first-child, .tm-table td:first-child { padding-left: 0; }
+.tm-table tr:last-child td { border-bottom: 0; }
+.tm-table .badge { white-space: nowrap; font-family: var(--font-sans); }
+.tm-cols-tunnel th:nth-child(1), .tm-cols-tunnel th:nth-child(2) { width: 14%; }
+.tm-cols-tunnel th:nth-child(3) { width: 26%; }
+.tm-cols-ports th:nth-child(1) { width: 26%; }
+.tm-cols-ports th:nth-child(2) { width: 22%; }
+.tm-cols-ports th:nth-child(3) { width: 16%; }
+.tm-cols-ports-remote th:nth-child(1) { width: 16%; }
+.tm-cols-ports-remote th:nth-child(2) { width: 18%; }
+.tm-cols-ports-remote th:nth-child(3) { width: 14%; }
+.tm-cols-ports-remote th:nth-child(5) { width: 28%; }
+.tm-pill { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; }
+
+/* ---------- C26: the faded last reading, the state cards and the "only shows" note ---------- */
+.tm-faded { opacity: .5; filter: saturate(.3); display: flex; flex-direction: column; gap: 16px; }
+.tm-state { padding: 22px 20px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; min-width: 0; }
+.tm-state > b { font-size: 14px; font-weight: var(--weight-semibold); }
+.tm-state > span { max-width: 560px; font-size: 12.5px; }
+.tm-state-ic { width: 38px; height: 38px; border-radius: 10px; background: var(--raised); display: grid; place-items: center; font-size: 18px; }
+.tm-config { text-align: left; font-family: var(--font-mono); font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+.tm-only-shows { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); font-size: 12.5px; }
+.tm-only-shows > .icon { color: var(--status-waiting-text); font-size: 16px; margin-top: 1px; }
+.tm-only-shows p { margin: 0; }
+.tm-only-shows b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
