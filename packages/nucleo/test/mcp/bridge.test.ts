@@ -8,15 +8,18 @@ import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { instanceId, isPidAlive, listInstances, readLock, verifyInstance, writeInstance, type Installation, type Instance } from '../../src/owner/index.ts';
+import { instanceId, isPidAlive, listInstances, readLock, removeInstance, verifyInstance, writeInstance, type Installation, type Instance } from '../../src/owner/index.ts';
 import { chooseInstance, shouldStartOwn } from '../../src/mcp/target.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MCP_CLI = join(ROOT, 'src/mcp/cli.ts');
+const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
+const HOOKS_ONLY = ['--sem-historico', '--sem-desktop', '--sem-github', '--no-telemetry'];
 const CORE_VARS = ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME', 'XDG_DATA_HOME', 'APPDATA'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -47,6 +50,17 @@ afterEach(async () => {
   for (const i of listInstances({ home: consoleDir, clean: false })) if (i.pid !== process.pid && (await verifyInstance(i))) process.kill(i.pid, 'SIGKILL');
   rmSync(home, { recursive: true, force: true });
 });
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = createNetServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address() as { port: number };
+      s.close(() => resolve(port));
+    });
+  });
+}
 
 function idle(): ChildProcess {
   const p = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
@@ -113,8 +127,13 @@ interface Bridge {
 }
 
 function bridge(...args: string[]): Bridge {
+  return bridgeWith({}, ...args);
+}
+
+function bridgeWith(extra: NodeJS.ProcessEnv, ...args: string[]): Bridge {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
   for (const name of CORE_VARS) delete env[name];
+  Object.assign(env, extra);
   const proc = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', MCP_CLI, ...args], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   children.push(proc);
   let buffer = '';
@@ -271,6 +290,61 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     await register('dev', { name: 'second' });
     assert.equal((await b.call()).text, 'second');
     await b.close();
+  });
+
+  test('dev with no core live starts its own, on the port AHRENA_CONSOLE_CORE_PORT forces', async () => {
+    const port = await freePort();
+    const b = bridgeWith({ AHRENA_CONSOLE_CORE_PORT: String(port) });
+    let own: Instance | undefined;
+    assert.ok(
+      await until(() => {
+        own = listInstances({ home: consoleDir }).find((i) => i.installation === 'dev');
+        return own !== undefined;
+      }),
+      `the bridge started a dev core\n${b.stderr()}`,
+    );
+    assert.equal(own!.port, port);
+    const r = await b.call();
+    assert.equal(r.isError, false, r.text);
+    assert.equal(r.structured, true);
+    await b.close();
+    assert.ok(await until(() => !isPidAlive(own!.pid)), 'the core exited with the bridge');
+  });
+
+  test('a live core that does not answer is not a reason for dev to start a second one', async () => {
+    const hung = await register('app');
+    hung.server.closeAllConnections();
+    await new Promise((r) => hung.server.close(r));
+    const b = bridge();
+    const r = await b.call();
+    assert.equal(r.isError, true);
+    await sleep(1500);
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.installation), ['app'], 'no dev core was started');
+    assert.equal(readLock(consoleDir), null);
+    await b.close();
+  });
+
+  test('a core of its installation that is only in the lock (not in the registry) comes before another installation', async () => {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+    for (const name of CORE_VARS) delete env[name];
+    const start = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CORE_CLI, 'start', '--installation', 'mcpb', '--json', '--', ...HOOKS_ONLY], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    start.stdout!.on('data', (c) => (out += c));
+    await new Promise((r) => start.once('close', r));
+    const legacy = JSON.parse(out) as { pid: number; porta: number };
+    try {
+      // As a core from before #221: up, with its lock, but without a registry entry.
+      assert.ok(removeInstance(instanceId('mcpb', legacy.pid), { home: consoleDir }));
+      await register('app');
+      const b = bridge('--installation', 'mcpb');
+      assert.ok(await until(async () => (await b.call()).text !== 'app'), `the bridge adopted the core of the lock\n${b.stderr()}`);
+      const r = await b.call();
+      assert.equal(r.isError, false, r.text);
+      assert.equal(r.structured, true);
+      await b.close();
+    } finally {
+      if (isPidAlive(legacy.pid)) process.kill(legacy.pid, 'SIGKILL');
+    }
   });
 
   test('with no core and --no-start, the call says how to start one', async () => {

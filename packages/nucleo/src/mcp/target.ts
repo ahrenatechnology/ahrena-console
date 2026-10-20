@@ -7,7 +7,8 @@
 //
 //   1. The oldest live core of `I` in the registry.
 //   2. The core this bridge started or adopted through `I`'s lock (a core that is not in the
-//      registry, such as one from before #221, or the instant between the lock and the entry).
+//      registry, such as one from before #221, or the instant between the lock and the entry), while
+//      its pid lives and its port answers with that pid.
 //   3. Otherwise, the oldest live core of any installation.
 //   4. With no core of `I` live, the bridge may start its own (`start --installation I`, port 0 or
 //      the forced one, `--parent` on the bridge), in the background:
@@ -15,7 +16,8 @@
 //          up it answers through rule 3;
 //        - `dev` and `app` start their own only when no core of any installation is live: a checkout
 //          that finds the app's core uses it instead of opening a second database.
-//      `--no-start` never starts.
+//      `--no-start` never starts. A core that is live but does not answer is not a reason to start
+//      another one. After a failed start, the bridge waits 30 s before trying again.
 //
 // Before the first request to a core, `verifyInstance` checks that its port answers with its pid (a
 // live pid may be a reused number). A core that does not answer is skipped for that request and the
@@ -24,6 +26,7 @@
 import { resolve } from 'node:path';
 import { registerClient } from '../owner/clients.ts';
 import type { Installation } from '../owner/installation.ts';
+import { isPidAlive, probeCore } from '../owner/probe.ts';
 import { listInstances, verifyInstance, type Instance } from '../owner/registry.ts';
 import type { StartOptions, StartOutput } from '../owner/start.ts';
 
@@ -65,14 +68,18 @@ export interface ResolverOptions {
   home?: string;
   start: (o: StartOptions) => Promise<StartOutput>;
   verify?: (i: Instance) => Promise<boolean>;
+  /** After a failed start, how long before trying again (default 30 s). */
+  retryAfterMs?: number;
   log?: (m: string) => void;
 }
 
 export class CoreResolver {
   private readonly o: ResolverOptions;
   private starting: Promise<void> | null = null;
-  /** Rule 2: the port of the core of this installation that `start` started or adopted. */
-  private lockPort: number | null = null;
+  /** Rule 2: the core of this installation that `start` started or adopted (port and pid). */
+  private lockCore: { port: number; pid: number | null; verified: boolean } | null = null;
+  /** When the last start failed: no new start before `retryAfterMs` (a start that keeps failing spawns nothing per request). */
+  private failedAt = 0;
   /** Ids already verified (pid and port match). */
   private readonly verified = new Set<string>();
   /** Ids this bridge is already a client of. */
@@ -90,8 +97,10 @@ export class CoreResolver {
       if (!this.o.noStart && shouldStartOwn(installation, live)) this.startOwn();
       const { instance, own } = chooseInstance(live, installation, exclude);
       // Rule 2 comes before another installation's core.
-      if ((!instance || !own) && this.lockPort !== null && !exclude.has(lockKey(this.lockPort))) {
-        return { key: lockKey(this.lockPort), port: this.lockPort, installation };
+      if ((!instance || !own) && this.lockCore !== null && !exclude.has(lockKey(this.lockCore.port))) {
+        if (await this.lockCoreIsItself()) return { key: lockKey(this.lockCore.port), port: this.lockCore.port, installation };
+        this.lockCore = null;
+        continue;
       }
       if (!instance) return null;
       if (!this.verified.has(instance.id)) {
@@ -110,7 +119,17 @@ export class CoreResolver {
   /** The core at `t` did not answer: forget it, so the next request looks again. */
   failed(t: CoreTarget): void {
     this.verified.delete(t.key);
-    if (t.key === lockKey(t.port) && this.lockPort === t.port) this.lockPort = null;
+    if (t.key === lockKey(t.port) && this.lockCore?.port === t.port) this.lockCore = null;
+  }
+
+  /** Rule 2's core is still the one `start` gave: its pid lives and its port answers with that pid. */
+  private async lockCoreIsItself(): Promise<boolean> {
+    const c = this.lockCore!;
+    if (c.pid === null || !isPidAlive(c.pid)) return false;
+    if (c.verified) return true;
+    const v = await probeCore(c.port);
+    c.verified = v !== null && v.pid === c.pid;
+    return c.verified;
   }
 
   /** Waits for a start already under way (tests and the first request). */
@@ -120,17 +139,23 @@ export class CoreResolver {
 
   /** Starts (or adopts, through the lock) the core of this installation, in the background. */
   startOwn(): void {
-    if (this.o.noStart || this.starting) return;
+    if (this.o.noStart || this.starting || Date.now() - this.failedAt < (this.o.retryAfterMs ?? RETRY_AFTER_MS)) return;
     const { installation, dataDir, startPort, parent, log } = this.o;
     this.starting = this.o
       .start({ installation, dir: dataDir, port: startPort, parent, log })
       .then((r) => {
         if (r.estado === 'de-pe' && typeof r.porta === 'number') {
-          this.lockPort = r.porta;
+          this.lockCore = { port: r.porta, pid: typeof r.pid === 'number' ? r.pid : null, verified: false };
           log?.(`core ${installation} at ${r.url} (${r.subiu ? 'started now' : 'adopted'})`);
-        } else log?.(`the core did not start: ${r.motivo ?? 'unknown reason'}`);
+        } else {
+          this.failedAt = Date.now();
+          log?.(`the core did not start: ${r.motivo ?? 'unknown reason'}`);
+        }
       })
-      .catch((e) => log?.(`the core did not start: ${(e as Error).message}`))
+      .catch((e) => {
+        this.failedAt = Date.now();
+        log?.(`the core did not start: ${(e as Error).message}`);
+      })
       .finally(() => {
         this.starting = null;
       });
@@ -151,4 +176,6 @@ export class CoreResolver {
   }
 }
 
-const lockKey = (port: number) => `lock:${port}`;
+export const lockKey = (port: number) => `lock:${port}`;
+
+const RETRY_AFTER_MS = 30_000;

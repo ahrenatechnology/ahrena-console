@@ -18,7 +18,7 @@ import { startOrAdopt } from '../owner/start.ts';
 import { MCP_PATH } from './http.ts';
 import { serverWithoutCore } from './index.ts';
 import { serveStdio, httpBridge, type MessageHandler } from './stdio.ts';
-import { CoreResolver, type CoreTarget } from './target.ts';
+import { CoreResolver, lockKey, type CoreTarget } from './target.ts';
 
 const HELP = `Usage: npm run mcp -- [options]
 
@@ -131,13 +131,14 @@ await serveStdio({
         return await send(t.port, m);
       } catch (e) {
         if (!(e instanceof Unreachable)) throw e;
-        // The core went down or moved: skip it now, look in the registry again next time.
+        // The core went down or moved: skip it now, look in the registry again next time. Its port
+        // is not tried again as rule 2 in this request either.
         resolver!.failed(t);
-        tried.add(t.key);
+        tried.add(t.key).add(lockKey(t.port));
       }
     }
-    // Nobody answered: the next request tries again, and a core may be starting meanwhile.
-    if (!noStart) resolver!.startOwn();
+    // Nobody answered: the next request tries again, and a core may be starting meanwhile (target()
+    // decides that, by the rule; a live core that does not answer does not start another one).
     return serverWithoutCore(howToStart).handle(m);
   },
   log,

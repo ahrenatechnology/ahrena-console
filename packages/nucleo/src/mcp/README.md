@@ -15,7 +15,7 @@ Registre a **ponte stdio** ([cli.ts](cli.ts)). Ela acha o núcleo sozinha e, se 
 **Claude Code**, por stdio (Node 24 ou mais novo):
 
 ```bash
-claude mcp add ahrena-console -- node <checkout>/packages/nucleo/src/mcp/cli.ts
+claude mcp add ahrena-console -- node --disable-warning=ExperimentalWarning <checkout>/packages/nucleo/src/mcp/cli.ts
 ```
 
 **Claude Desktop**, no `claude_desktop_config.json` (Configurações › Desenvolvedor › Editar configuração). O `command` é o caminho absoluto do Node 24 ou mais novo, porque o Desktop não herda o `PATH` do shell:
@@ -40,11 +40,13 @@ claude mcp add ahrena-console -- node <checkout>/packages/nucleo/src/mcp/cli.ts
 O stdio é uma ponte para o `/mcp` de um núcleo que já roda: o mesmo servidor, e um só processo lendo cada banco. A cada pedido, a ponte lê o registro de instâncias (`~/.ahrena-console/instances/`, [src/owner](../owner/README.md)) e escolhe, pela regra de [target.ts](target.ts):
 
 1. o núcleo vivo mais antigo **da instalação dela** (`--installation app|dev|mcpb`, padrão `dev`, o checkout);
-2. o núcleo da instalação dela que ela mesma subiu ou adotou pela trava, se ainda não está no registro (um núcleo de antes da #221);
+2. o núcleo da instalação dela que ela mesma subiu ou adotou pela trava, se ainda não está no registro (um núcleo de antes da #221), enquanto o pid dele vive e a porta responde com esse pid;
 3. senão, o núcleo vivo mais antigo de **qualquer** instalação;
 4. sem nenhum da instalação dela, ela pode subir o próprio (`--installation` dela, porta `0` e `--parent` na ponte), em segundo plano:
    - **`mcpb`** sobe o próprio sempre que não há um da instalação dela: a extensão é autônoma. Enquanto ele sobe, responde pelo item 3;
    - **`dev`** e **`app`** sobem o próprio só quando **nenhum** núcleo está vivo: um checkout que acha o núcleo do app usa esse, em vez de abrir um segundo banco.
+
+   Um núcleo vivo que não responde não é motivo para subir outro. Depois de uma subida que falhou, a ponte espera 30 s antes de tentar de novo.
 
 Antes do primeiro pedido a um núcleo, a ponte confere que a porta responde com o pid da entrada (`verifyInstance`): um pid vivo pode ser um número reaproveitado. Um núcleo que não responde é pulado no mesmo pedido, e a ponte tenta o seguinte; como ela lê o registro a cada pedido, segue um núcleo que reiniciou noutra porta. Do núcleo da própria pasta de dados, a ponte se registra como cliente: ele não sai enquanto ela estiver de pé. O núcleo que ela sobe sai quando a ponte e todos os clientes registrados saem.
 
