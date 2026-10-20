@@ -282,6 +282,22 @@ describe('fontes das mudanças', () => {
     await storage.close();
   });
 
+  test('agente que entra ou muda de status registra a sessão dele; só o updatedAt não (#31)', async () => {
+    const { cursor } = novo();
+    const sqlite = openSqliteStorage({ path: ':memory:' });
+    const storage = comMudancas(sqlite, cursor);
+    await storage.putSession(session({ id: 's1', accountId: 'conta-a', accountSource: 'transcript' }));
+    const a = agent({ id: 's1:a1', sessionId: 's1', type: 'subagent', status: 'working' });
+    await storage.putAgent(a);
+    const c1 = cursor.atual;
+    await storage.putAgent({ ...a, updatedAt: T0.replace('12:00', '12:05') });
+    assert.equal(cursor.atual, c1, 'só o updatedAt não é mudança');
+    await storage.putAgent({ ...a, status: 'completed', endedAt: T0.replace('12:00', '12:06') });
+    const r = await cursor.aguardar(c1);
+    assert.deepEqual(r.mudancas.map((m) => [m.tipo, m.chave, m.accountId]), [['sessao', 's1', 'conta-a']]);
+    await storage.close();
+  });
+
   test('decisão gravada e mudança de estado da máquina viram mudanças, com a conta da sessão', async () => {
     const { cursor } = novo();
     const sqlite = openSqliteStorage({ path: ':memory:' });

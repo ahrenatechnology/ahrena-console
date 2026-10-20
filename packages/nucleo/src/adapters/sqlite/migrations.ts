@@ -179,6 +179,26 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   // O esquema do medidor de contexto fica na pasta dele (src/contexto/migracao.ts).
   { version: 7, description: CONTEXTO_MIGRATION_DESCRIPTION, sql: CONTEXTO_MIGRATION_SQL },
+  {
+    version: 8,
+    description: 'ordem de gravação dos eventos e índices do feed (#94)',
+    // Aditiva: `seq` é a ordem em que o evento foi gravado (o ao vivo do feed pega o evento atrasado,
+    // com createdAt mais velho). Os que já existem recebem o rowid, que é a ordem em que entraram.
+    // Coluna própria, e não o rowid direto: o VACUUM pode renumerar o rowid de tabela sem INTEGER PRIMARY KEY.
+    sql: `
+      ALTER TABLE events ADD COLUMN seq INTEGER;
+      UPDATE events SET seq = rowid;
+      CREATE UNIQUE INDEX events_by_seq ON events (seq);
+      CREATE INDEX events_by_created ON events (created_at, id);
+      CREATE INDEX events_by_type ON events (type, created_at);
+      CREATE INDEX events_by_tool ON events (tool_name, created_at);
+      -- Um processo de antes da migração, com o banco já aberto, grava sem seq: o gatilho preenche.
+      CREATE TRIGGER events_seq_faltando AFTER INSERT ON events WHEN NEW.seq IS NULL
+      BEGIN
+        UPDATE events SET seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM events) WHERE rowid = NEW.rowid;
+      END;
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

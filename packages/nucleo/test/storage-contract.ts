@@ -244,6 +244,123 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       });
     });
 
+    describe('eventos recentes de todas as sessões (feed, #94)', () => {
+      const ids = (p: { items: { id: string }[] }) => p.items.map((e) => e.id);
+      async function semear() {
+        await store.appendEvent(event({ id: 'e1', sessionId: 's1', createdAt: at(1), type: 'UserPromptSubmit', toolName: null, summary: 'pedido' }));
+        await store.appendEvent(event({ id: 'e2', sessionId: 's2', createdAt: at(2), type: 'PreToolUse', toolName: 'Bash', summary: 'npm test' }));
+        await store.appendEvent(event({ id: 'e3', sessionId: 's1', createdAt: at(3), type: 'PreToolUse', toolName: 'Read', summary: '/repo/a_b.ts' }));
+        await store.appendEvent(event({ id: 'e4', sessionId: 's2', createdAt: at(4), type: 'Notification', toolName: null, summary: '100% pronto' }));
+        await store.appendEvent(event({ id: 'e5', sessionId: 's1', createdAt: at(5), type: 'Stop', toolName: null, summary: null }));
+      }
+
+      test('sem evento nenhum: vazio, com o cursor do ao vivo no começo', async () => {
+        const p = await store.listRecentEvents();
+        assert.deepEqual(p.items, []);
+        assert.equal(p.nextCursor, null);
+        assert.ok(p.liveCursor);
+        await store.appendEvent(event({ id: 'primeiro', createdAt: at(1) }));
+        assert.deepEqual(ids(await store.listRecentEvents({ after: p.liveCursor })), ['primeiro']);
+      });
+
+      test('todas as sessões, mais novo primeiro, paginando para trás por cursor', async () => {
+        await semear();
+        const p1 = await store.listRecentEvents({ limit: 2 });
+        assert.deepEqual(ids(p1), ['e5', 'e4']);
+        assert.ok(p1.liveCursor);
+        assert.ok(p1.nextCursor);
+        const p2 = await store.listRecentEvents({ limit: 2, before: p1.nextCursor });
+        assert.deepEqual(ids(p2), ['e3', 'e2']);
+        const p3 = await store.listRecentEvents({ limit: 2, before: p2.nextCursor });
+        assert.deepEqual(ids(p3), ['e1']);
+        assert.equal(p3.nextCursor, null);
+        assert.deepEqual(p3.items[0], event({ id: 'e1', sessionId: 's1', createdAt: at(1), type: 'UserPromptSubmit', toolName: null, summary: 'pedido' }));
+      });
+
+      test('createdAt empatado desempata pelo id, sem repetir nem pular', async () => {
+        for (const id of ['a', 'c', 'b']) await store.appendEvent(event({ id, createdAt: T0 }));
+        const p1 = await store.listRecentEvents({ limit: 2 });
+        const p2 = await store.listRecentEvents({ limit: 2, before: p1.nextCursor });
+        assert.deepEqual([...ids(p1), ...ids(p2)], ['c', 'b', 'a']);
+      });
+
+      test('ao vivo: depois do cursor vem só o gravado depois, inclusive com createdAt mais velho (backfill)', async () => {
+        await semear();
+        const p = await store.listRecentEvents({ limit: 10 });
+        const nada = await store.listRecentEvents({ after: p.liveCursor });
+        assert.deepEqual(nada.items, []);
+        assert.equal(nada.liveCursor, p.liveCursor, 'sem nada novo, repete o cursor recebido');
+        assert.equal(nada.nextCursor, null);
+
+        await store.appendEvent(event({ id: 'novo', sessionId: 's3', createdAt: at(9) }));
+        await store.appendEvent(event({ id: 'atrasado', sessionId: 's3', createdAt: at(0) }));
+        await store.appendEvent(event({ id: 'e2', createdAt: at(99) })); // repetido: não conta
+        const vivo = await store.listRecentEvents({ after: p.liveCursor });
+        assert.deepEqual(ids(vivo), ['novo', 'atrasado']);
+        assert.notEqual(vivo.liveCursor, p.liveCursor);
+        assert.deepEqual((await store.listRecentEvents({ after: vivo.liveCursor })).items, []);
+      });
+
+      test('a página para trás não traz o que foi gravado depois do primeiro pedido (isso vem pelo ao vivo)', async () => {
+        await semear();
+        const p1 = await store.listRecentEvents({ limit: 2 });
+        await store.appendEvent(event({ id: 'atrasado', createdAt: at(2.5) }));
+        const p2 = await store.listRecentEvents({ limit: 10, before: p1.nextCursor });
+        assert.deepEqual(ids(p2), ['e3', 'e2', 'e1']);
+        assert.deepEqual(ids(await store.listRecentEvents({ after: p1.liveCursor })), ['atrasado']);
+      });
+
+      test('ao vivo com mais novos que o limite: os gravados primeiro, e o cursor busca o resto', async () => {
+        await store.appendEvent(event({ id: 'zero', createdAt: at(0) }));
+        const base = await store.listRecentEvents();
+        for (let i = 1; i <= 5; i++) await store.appendEvent(event({ id: `n${i}`, createdAt: at(i) }));
+        const a = await store.listRecentEvents({ limit: 3, after: base.liveCursor });
+        assert.deepEqual(ids(a), ['n3', 'n2', 'n1']);
+        const b = await store.listRecentEvents({ limit: 3, after: a.liveCursor });
+        assert.deepEqual(ids(b), ['n5', 'n4']);
+      });
+
+      test('filtra por sessão, tipos, fora de tipos, ferramenta, texto e período', async () => {
+        await semear();
+        const q = async (query: Parameters<StoragePort['listRecentEvents']>[0]) => ids(await store.listRecentEvents(query));
+        assert.deepEqual(await q({ sessionId: 's2' }), ['e4', 'e2']);
+        assert.deepEqual(await q({ types: ['PreToolUse', 'Stop'] }), ['e5', 'e3', 'e2']);
+        assert.deepEqual(await q({ types: [] }), []);
+        assert.deepEqual(await q({ excludeTypes: ['PreToolUse', 'Stop'] }), ['e4', 'e1']);
+        assert.deepEqual(await q({ toolName: 'Bash' }), ['e2']);
+        assert.deepEqual(await q({ text: 'NPM' }), ['e2'], 'sem diferenciar maiúsculas');
+        assert.deepEqual(await q({ text: 'rea' }), ['e3'], 'acha também no nome da ferramenta');
+        assert.deepEqual(await q({ text: '%' }), ['e4'], '% é literal');
+        assert.deepEqual(await q({ text: 'a_b' }), ['e3'], '_ é literal');
+        assert.deepEqual(await q({ text: '_' }), ['e3']);
+        assert.deepEqual(await q({ text: '\\' }), []);
+        assert.deepEqual(await q({ createdFrom: at(2), createdUntil: at(4) }), ['e3', 'e2']);
+        assert.deepEqual(await q({ sessionId: 's1', types: ['PreToolUse'], text: 'a_b' }), ['e3']);
+      });
+
+      test('o ao vivo respeita os filtros', async () => {
+        await semear();
+        const p = await store.listRecentEvents({ sessionId: 's1' });
+        await store.appendEvent(event({ id: 'outra', sessionId: 's2', createdAt: at(10) }));
+        await store.appendEvent(event({ id: 'dela', sessionId: 's1', createdAt: at(11) }));
+        assert.deepEqual(ids(await store.listRecentEvents({ sessionId: 's1', after: p.liveCursor })), ['dela']);
+      });
+
+      test('cursor inválido e depois com antes são erro', async () => {
+        await semear();
+        await assert.rejects(store.listRecentEvents({ after: 'lixo' }), RangeError);
+        await assert.rejects(store.listRecentEvents({ before: 'lixo' }), RangeError);
+        const p = await store.listRecentEvents({ limit: 1 });
+        await assert.rejects(store.listRecentEvents({ after: p.liveCursor, before: p.nextCursor }), RangeError);
+      });
+
+      test('as opções dos filtros: tipos e ferramentas distintos, em ordem, limitados', async () => {
+        await semear();
+        assert.deepEqual(await store.listEventFacets(), { types: ['Notification', 'PreToolUse', 'Stop', 'UserPromptSubmit'], toolNames: ['Bash', 'Read'] });
+        assert.deepEqual(await store.listEventFacets(1), { types: ['Notification'], toolNames: ['Bash'] });
+      });
+    });
+
     describe('uso de tokens', () => {
       test('um registro por bucket; put substitui o mesmo bucket', async () => {
         await store.putTokenUsage(usage());
