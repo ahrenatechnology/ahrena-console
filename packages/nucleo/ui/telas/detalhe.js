@@ -9,6 +9,7 @@ import { el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 import { abrirNoDesktop } from '../ler.js';
 import { criar as abaWorkflow } from './detalhe-workflow.js';
+import { criar as abaDecisoes } from './detalhe-decisoes.js';
 
 // ---------- Formatos ----------
 
@@ -117,6 +118,7 @@ const ABAS = [
   { id: 'conversa', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
   { id: 'tempo', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
   { id: 'workflow', rotulo: 'Workflow', icone: 'grafo', criar: abaWorkflow },
+  { id: 'decisoes', rotulo: 'Decisões', icone: 'decisao', criar: abaDecisoes },
 ];
 
 let cssCarregado = false;
