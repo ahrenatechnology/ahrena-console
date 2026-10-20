@@ -621,7 +621,7 @@ function lado(ativo, q = 4, ws = 'ok') {
     ['-', '', 'Entrega'], ['repos', 'folder-git-2', 'Repositórios'], ['projeto', 'github', 'Kanban do projeto'], ['dev', 'gauge', 'Dev Console'],
     ['-', '', 'Decisões'], ['decisoes', 'git-commit-horizontal', 'Das sessões'], ['adrs', 'scroll-text', 'ADR'], ['pdrs', 'lightbulb', 'PDR'],
     ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
-    ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
+    ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'], ['connections', 'plug', 'Conexões'],
   ]
   return `<aside class="cc-lado">
     <div class="cc-marca"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>Claude Code</small></div></div>
@@ -2176,6 +2176,157 @@ const APP = {
 // =====================================================================
 // Catálogo de telas
 // =====================================================================
+// ---------- Conexões: o console conecta ao GitHub sozinho (issue 241, decisão 0011) ----------
+// Device flow com o OAuth App da Ahrena, credencial no Keychain, e o "Conectar ao GitHub" nas telas
+// que dependem dele. Dados sintéticos: a conta é dev-sintetico, as organizações são as do simulador.
+const GH_FOOTER = () => `<div class="cartao">${ic('github')}<span>ahrena-console</span></div>`
+const ghFooter = state => ({
+  off: `<div class="cartao">${ic('github')}<span>GitHub</span><span class="c-waiting" style="margin-left:auto">conectar</span></div>`,
+  pending: `<div class="cartao">${ic('github')}<span>GitHub</span><span class="c-waiting" style="margin-left:auto">${ic('loader-2')} esperando</span></div>`,
+  on: `<div class="cartao">${ic('github')}<span>dev-sintetico</span><b style="margin-left:auto">conectado</b></div>`,
+}[state])
+const frameGh = (w, active, body, state = 'on') => frameAt(w, active, body).replace(GH_FOOTER(), ghFooter(state))
+const connCab = () => cab('plug', 'Conexões', 'As contas de fora que o console usa. A credencial nunca sai do Keychain.')
+const connRow = (k, v) => `<span class="c-muted">${k}</span><span style="min-width:0">${v}</span>`
+const ghProviderHead = (pill, actions) => `<div style="display:flex;gap:12px;align-items:center;min-width:0"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;font-size:18px;flex:none">${ic('github')}</div>
+  <div style="min-width:0"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:14px">GitHub</b>${pill}</div><div class="c-muted" style="font-size:12px">Repositórios, Kanban do projeto, Dev Console, Instruções, ADRs e PDRs</div></div><div style="margin-left:auto;display:flex;gap:8px">${actions}</div></div>`
+const SCOPES = [
+  ['repo', 'Ler os repositórios privados: issues, PRs, conteúdo, CI, tráfego e alertas. Abrir o PR do instalador.'],
+  ['read:org', 'Listar as suas organizações, os repositórios e os Projects delas.'],
+  ['project', 'Ler os Projects e mover um card no Kanban do projeto.'],
+]
+const scopeList = (granted = ['repo', 'read:org', 'project']) => `<div style="display:flex;flex-direction:column;gap:8px">${SCOPES.map(([s, why]) => {
+  const ok = granted.includes(s)
+  return `<div style="display:grid;grid-template-columns:22px 92px minmax(0,1fr);gap:8px;align-items:baseline;font-size:12px"><span class="${ok ? 'c-completed' : 'c-error'}">${ic(ok ? 'check' : 'x')}</span><code>${s}</code><span class="c-muted">${ok ? why : `<b class="c-error">falta</b> · ${why}`}</span></div>`
+}).join('')}</div>`
+const vaultCard = (extra = '') => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('key-round')}Onde fica a credencial</div>
+  <div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 10px;font-size:12px">${connRow('Cofre', 'Keychain do macOS')}${connRow('Item', '<code>dev.ahrena.console.github</code>')}${extra}</div>
+  <span class="c-muted" style="font-size:11.5px">Nunca vai para arquivo, banco, log ou tela. Os núcleos do app e do terminal usam a mesma entrada.</span></div>`
+const sourceCard = (gh = false) => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('route')}Fonte da credencial</div>
+  <div class="seg"><span class="${gh ? '' : 'on'}">Ahrena Console</span><span class="${gh ? 'on' : ''}">Login do <code>gh</code> desta máquina</span></div>
+  <span class="c-muted" style="font-size:11.5px">${gh ? 'Usando o token do <code>gh auth</code>. Para quem já usa o <code>gh</code>; o app não depende dele.' : 'O padrão. O <code>gh</code> é opcional e aparece aqui só se estiver instalado.'}</span></div>`
+const usedBy = on => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px"><div class="olhinho">${ic('layers')}Telas que usam o GitHub</div>
+  ${[['folder-git-2', 'Repositórios'], ['github', 'Kanban do projeto'], ['gauge', 'Dev Console'], ['book-open-check', 'Instruções, ADRs e PDRs']].map(([i, n]) => `<div style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="c-muted">${ic(i)}</span>${n}<span style="margin-left:auto" class="${on ? 'c-completed' : 'c-muted'}">${on ? 'funcionando' : 'esperando a conexão'}</span></div>`).join('')}</div>`
+
+// C39: desconectado, o ponto de partida.
+function connectionsOffScreen(w) {
+  const wide = w === 1440
+  return `${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead('<span class="pill b-waiting">não conectado</span>', `<span class="btn cheio">${ic('github')}Conectar ao GitHub</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;grid-template-columns:${wide ? 'minmax(0,1.3fr) minmax(0,1fr)' : 'minmax(0,1fr)'};gap:16px">
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('shield-check')}O que o console vai pedir ao GitHub</div>${scopeList()}
+        <span class="c-muted" style="font-size:11.5px">O console só escreve no GitHub em dois casos, sempre por um clique seu: mover um card e abrir o PR do instalador.</span></div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('list-ordered')}Como funciona</div><ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.7;color:var(--muted)"><li>O console mostra um código de 8 letras.</li><li>Você abre <b style="color:var(--text)">github.com/login/device</b>, cola o código e autoriza o <b style="color:var(--text)">Ahrena Console</b>.</li><li>A credencial vai direto para o Keychain. Ninguém digita nem vê.</li></ol></div>` : ''}
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:${wide ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr) minmax(0,1fr)'};gap:12px;align-items:start">${vaultCard()}${sourceCard()}${wide ? usedBy(false) : ''}</div>
+  ${wide ? '' : usedBy(false)}`
+}
+
+// C40: o código do device flow, esperando a pessoa autorizar no github.com.
+function connectionsPendingScreen(w) {
+  const wide = w === 1440
+  const step = (n, t, body) => `<div style="display:flex;gap:12px;align-items:flex-start"><span style="width:24px;height:24px;border-radius:99px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;font-size:11.5px;font-weight:600;flex:none">${n}</span><div style="display:flex;flex-direction:column;gap:8px;min-width:0;flex:1"><b style="font-size:13px">${t}</b>${body}</div></div>`
+  const code = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="mono" style="font-size:${wide ? 34 : 30}px;letter-spacing:.14em;font-weight:600;padding:8px 16px;border-radius:10px;background:var(--bg);border:1px solid var(--border)">WDJB-MJHT</span><span class="btn contorno">${ic('copy')}Copiar código</span></div>`
+  return `${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead(`<span class="pill b-waiting">${ic('loader-2')}esperando você</span>`, `<span class="btn contorno">Cancelar</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:14px;display:grid;grid-template-columns:${wide ? 'minmax(0,1.2fr) minmax(0,1fr)' : 'minmax(0,1fr)'};gap:20px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        ${step(1, 'Copie este código', code)}
+        ${step(2, 'Abra o GitHub e cole o código', `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="btn cheio">${ic('external-link')}Abrir github.com/login/device</span><span class="c-muted" style="font-size:11.5px">abre no seu navegador, com a sua sessão do GitHub</span></div>`)}
+        ${step(3, 'Autorize o Ahrena Console', `<div class="c-muted" style="font-size:12px">O GitHub mostra o aplicativo <b style="color:var(--text)">Ahrena Console</b>, da organização <b style="color:var(--text)">ahrenatechnology</b>, e os escopos <code>repo</code>, <code>read:org</code> e <code>project</code>.</div>`)}
+        <div class="cartao" style="padding:10px 12px;background:var(--bg);display:flex;gap:10px;align-items:center;font-size:12.5px"><span class="c-waiting">${ic('loader-2')}</span><span>Esperando a autorização no GitHub. Esta tela muda sozinha.</span><span class="c-muted mono" style="margin-left:auto">expira em 14:12</span></div>
+      </div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:12px"><div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)"><div class="olhinho">${ic('shield-alert')}Antes de colar</div>
+        <ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.7;color:var(--muted)"><li>Confira que o endereço é <b style="color:var(--text)">github.com</b>.</li><li>O código serve só para isto e vale 15 minutos.</li><li>Ninguém do console pede esse código por mensagem. Se alguém pedir, não mande.</li></ul></div>${vaultCard()}</div>` : ''}
+    </div>
+  </div>
+  ${wide ? '' : `<span class="c-muted" style="font-size:11.5px">${ic('shield-alert')} Confira que o endereço é github.com. O código vale 15 minutos e serve só para isto.</span>`}`
+}
+
+// C41: conectado. Em 1440, a confirmação de Desconectar aberta.
+function connectionsOnScreen(w) {
+  const wide = w === 1440
+  const org = (n, ok) => `<div style="display:flex;gap:8px;align-items:center;font-size:12.5px;min-width:0"><span class="c-muted">${ic('building-2')}</span><span class="trunc">${n}</span><span style="margin-left:auto;white-space:nowrap" class="${ok ? 'c-completed' : 'c-waiting'}">${ok ? 'visível' : `bloqueia o aplicativo · <span class="c-accent">pedir aprovação ${ic('external-link')}</span>`}</span></div>`
+  const modal = `<div style="position:absolute;inset:0;background:color-mix(in srgb, var(--mono-black) 30%, transparent);display:flex;align-items:flex-end;justify-content:center;padding-bottom:40px">
+    <div class="cartao" style="width:440px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 16px 40px color-mix(in srgb, var(--mono-black) 40%, transparent)">
+      <b style="font-size:15px">Desconectar dev-sintetico?</b>
+      <span class="c-muted" style="font-size:12.5px;line-height:1.6">Apagamos a credencial do Keychain e o que o console guardou do GitHub. Repositórios, Kanban do projeto, Dev Console e Instruções voltam a pedir a conexão.</span>
+      <div class="cartao" style="padding:10px 12px;background:var(--bg);font-size:12px;display:flex;gap:8px;align-items:flex-start"><span class="c-waiting">${ic('info')}</span><span>O Ahrena Console continua autorizado na sua conta do GitHub até você revogar lá. <span class="c-accent">Revogar no GitHub ${ic('external-link')}</span></span></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><span class="btn contorno">Cancelar</span><span class="btn cheio" style="background:var(--status-error-text)">${ic('log-out')}Desconectar</span></div>
+    </div></div>`
+  return `<div style="position:relative;display:flex;flex-direction:column;gap:16px;${wide ? 'min-height:860px' : ''}">${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead('<span class="pill b-completed">conectado</span>', `<span class="btn contorno">${ic('refresh-cw')}Reconectar</span><span class="btn contorno">${ic('log-out')}Desconectar</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;grid-template-columns:${wide ? 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr) minmax(0,1fr)'};gap:18px">
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('user')}Conta</div>
+        <div style="display:flex;gap:10px;align-items:center"><span style="width:34px;height:34px;border-radius:99px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center" class="c-accent">${ic('user')}</span><div><b style="font-size:13.5px">dev-sintetico</b><div class="c-muted" style="font-size:11.5px">desde 20/10 14:02 · pelo device flow</div></div></div>
+        <div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 10px;font-size:12px">${connRow('Limite', '<span class="mono">4.880 / 5.000</span> por hora')}${connRow('Última leitura', 'há 12 s')}</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('shield-check')}Escopos concedidos</div>${scopeList()}</div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('building-2')}Organizações</div>${org('exemplo-labs', true)}${org('estudio-ficticio', true)}${org('cliente-confidencial', false)}<span class="c-muted" style="font-size:11.5px">Uma organização que restringe aplicativos esconde os dados até o dono aprovar.</span></div>` : ''}
+    </div>
+  </div>
+  ${wide ? '' : `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px"><div class="olhinho">${ic('building-2')}Organizações</div>${org('exemplo-labs', true)}${org('estudio-ficticio', true)}${org('cliente-confidencial', false)}</div>`}
+  <div style="display:grid;grid-template-columns:${wide ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr) minmax(0,1fr)'};gap:12px;align-items:start">${vaultCard(connRow('Conta', '<code>dev-sintetico</code>'))}${sourceCard()}${wide ? usedBy(true) : ''}</div>
+  ${wide ? modal : ''}</div>`
+}
+
+// C42: o "Conectar ao GitHub" nas telas que dependem dele. Um vazio só, com o que a tela faria.
+const connectEmpty = (what) => `<div class="cartao vazio" style="min-height:330px"><span class="ic">${ic('github')}</span><b>Conecte o console ao GitHub</b><span style="max-width:460px">${what}</span>
+  <span style="display:flex;gap:8px;margin-top:6px"><span class="btn cheio">${ic('github')}Conectar ao GitHub</span></span>
+  <span class="c-muted" style="font-size:11.5px;max-width:460px">Uma vez para todas as telas. Abre Conexões já com o código; a credencial fica no Keychain do macOS.</span></div>`
+const connectRepos = () => `${cab('folder-git-2', 'Repositórios', 'Organizações e repositórios da sua conta do GitHub')}${connectEmpty('Repositórios lê as organizações e os repositórios da sua conta: atividade, issues, PRs, CI e as sessões que mexem em cada um.')}`
+const connectProject = () => `${cab('github', 'Kanban do projeto', 'Um GitHub Project por Status')}${connectEmpty('O Kanban do projeto mostra um GitHub Project por Status, e arrastar um card muda o Status lá. Depois de conectar, você escolhe o Project.')}`
+const connectDev = () => `${cab('gauge', 'Dev Console', 'PRs, issues e sessões dos repositórios do contexto')}${connectEmpty('O Dev Console junta PRs, CI e issues dos repositórios do contexto com as sessões que trabalham neles.')}`
+const connectInstr = () => `${repoCab('instr').replace('<span class="pill b-waiting">CI …</span>', '').replace(/ \((\d+)\)/g, '')}${connectEmpty('As instruções dos agentes, as ADRs e as PDRs são lidas do repositório no GitHub. As sessões deste repositório continuam aqui, sem GitHub.')}`
+
+// C43: escolher o Project do Kanban, sem variável de ambiente. 1100: a lista; 1440: o quadro com Trocar aberto.
+const PROJECTS = [
+  ['Roadmap do app', 'exemplo-labs', 3, 65, 'Status', 'há 2 h', true],
+  ['Motor de regras · 4º tri', 'exemplo-labs', 7, 41, 'Status', 'ontem'],
+  ['Receitas v2', 'estudio-ficticio', 2, 23, 'Fase', 'há 3 dias'],
+  ['Pessoal', 'dev-sintetico', 1, 12, 'Status', 'há 1 semana'],
+  ['Pesquisa de UX', 'estudio-ficticio', 5, 8, null, 'há 2 semanas'],
+]
+function projectPickerScreen() {
+  return `${cab('github', 'Kanban do projeto', 'Escolha o GitHub Project que este quadro mostra')}
+  <div class="cartao filtros"><span class="campo" style="flex:1">${ic('search')}Buscar Projects…</span><div class="seg"><span class="on">Todos · 5</span><span>Seus</span><span>exemplo-labs</span><span>estudio-ficticio</span></div><span class="chip" style="font-family:var(--font-sans)">${ic('eye-off')}fechados ocultos</span></div>
+  <div class="cartao"><table class="tabela"><thead><tr><th style="width:32px"></th><th>Project</th><th>Itens</th><th>Colunas por</th><th>Atualizado</th></tr></thead><tbody>
+  ${PROJECTS.map(([n, o, num, it, f, at, sel]) => `<tr style="${sel ? 'background:color-mix(in srgb, var(--accent) 8%, transparent)' : ''}"><td><span class="${sel ? 'c-accent' : 'c-muted'}">${ic(sel ? 'circle-dot' : 'circle')}</span></td><td class="nm"><b>${n}</b><small>${o} · #${num}</small></td><td class="mono">${it}</td>
+    <td>${f ? `<span class="campo" style="height:26px;width:130px;display:inline-flex">${f}<span style="margin-left:auto">${ic('chevron-down')}</span></span>` : '<span class="c-waiting" style="font-size:12px">sem campo de seleção</span>'}</td><td class="c-muted">${at}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;align-items:center"><span class="c-muted" style="font-size:12px">${ic('info')} Fica nas preferências deste console. Você troca quando quiser, no cabeçalho do quadro.</span><span style="margin-left:auto" class="btn cheio">${ic('check')}Usar “Roadmap do app”</span></div>`
+}
+function projectSwitchScreen() {
+  const pop = `<div class="cartao" style="position:absolute;right:0;top:46px;width:380px;padding:8px;display:flex;flex-direction:column;gap:2px;z-index:2;box-shadow:0 12px 32px color-mix(in srgb, var(--mono-black) 35%, transparent)">
+    <span class="campo" style="height:30px;margin-bottom:4px">${ic('search')}Buscar Projects…</span>
+    ${PROJECTS.slice(0, 4).map(([n, o, num, it, f, at, sel]) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:7px;font-size:12.5px;${sel ? 'background:var(--raised)' : ''}"><span class="${sel ? 'c-accent' : 'c-muted'}">${ic(sel ? 'check' : 'kanban')}</span><span class="trunc">${n}</span><span class="c-muted mono" style="margin-left:auto;font-size:11px">${o} #${num}</span></div>`).join('')}
+    <div style="border-top:1px solid var(--border);margin-top:4px;padding:8px 8px 2px;font-size:11.5px" class="c-muted">Colunas por <span class="campo" style="display:inline-flex;height:24px;width:110px;margin-left:6px">Status<span style="margin-left:auto">${ic('chevron-down')}</span></span></div></div>`
+  return telaProjeto()
+    .replace('GitHub Project “Ahrena Console” · por Status · arraste para mudar', 'GitHub Project “Roadmap do app” · exemplo-labs #3 · por Status · arraste para mudar')
+    .replace(`<span class="campo" style="width:200px">Marco: M1 · Local`, `<span style="position:relative"><span class="btn contorno">${ic('repeat')}Trocar de Project${ic('chevron-down')}</span>${pop}</span><span class="campo" style="width:200px">Marco: M1 · Local`)
+    .replace(/<div class="toast">[\s\S]*?<\/div><\/div>$/, '</div>')
+}
+
+// C44: os estados da conexão que não são o caminho feliz.
+function connectionsStatesScreen() {
+  const box = (label, pill, title, text, buttons = '') => `<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">${label}</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:190px">${ghProviderHead(pill, '')}
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px"><b style="font-size:13px">${title}</b><span class="c-muted" style="font-size:12px;line-height:1.6">${text}</span></div>
+      <div style="display:flex;gap:8px;margin-top:auto;flex-wrap:wrap">${buttons}</div></div></div>`
+  return `${connCab()}
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
+    ${box('Aplicativo não configurado', '<span class="pill b-waiting">indisponível</span>', 'Este console não tem o aplicativo do GitHub', 'Acontece num console montado do código antes do aplicativo da Ahrena existir. Quem montou define <code>AHRENA_CONSOLE_GITHUB_CLIENT_ID</code> com o Client ID de um OAuth App com device flow.', `<span class="btn cheio" style="opacity:.45">${ic('github')}Conectar ao GitHub</span><span class="btn contorno">${ic('external-link')}Como configurar</span>`)}
+    ${box('Sem cofre nesta máquina', '<span class="pill b-waiting">indisponível</span>', 'Não há onde guardar a credencial com segurança', 'Esta máquina não tem o Keychain do macOS nem o Secret Service do Linux. O console não guarda a credencial em arquivo, então não conecta. O <code>gh</code> está instalado e autenticado: dá para usar o login dele.', `<span class="btn contorno">${ic('terminal')}Usar o login do gh</span>`)}
+    ${box('Falta um escopo', '<span class="pill b-waiting">conectado, incompleto</span>', 'Falta o escopo project', `${scopeList(['repo', 'read:org'])}<span style="display:block;margin-top:6px">O Kanban do projeto não lê nem move cards. Reconectar pede os três escopos de novo.</span>`, `<span class="btn cheio">${ic('refresh-cw')}Reconectar</span>`)}
+    ${box('O código expirou, ou foi recusado', '<span class="pill b-error">não conectado</span>', 'O código expirou antes da autorização', 'Os 15 minutos passaram sem autorizar no GitHub. Se você clicou em <b>Cancel</b> no GitHub, a frase é "Você recusou no GitHub", e nada foi guardado.', `<span class="btn cheio">${ic('refresh-cw')}Gerar outro código</span>`)}
+  </div>
+  <div class="faixa"><span class="ic">${ic('terminal')}</span><div><b>Usando o login do <code>gh</code>.</b> A fonte desta máquina é o <code>gh auth</code>, escolhida em Conexões ou por <code>AHRENA_CONSOLE_GITHUB_SOURCE=gh</code>. Desconectar aqui não mexe no <code>gh</code>.</div><span class="btn contorno">Voltar ao padrão</span></div>
+  <div class="faixa"><span class="ic">${ic('info')}</span><div><b>AHRENA_CONSOLE_PROJECT está definida.</b> O Kanban do projeto mostra exemplo-labs #7 por ela, e a escolha da tela fica guardada para quando a variável sair.</div></div>`
+}
+
 const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do CCAM</h4><ul>${ccam.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Onde diverge, e por quê</h4><ul>${diverge.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
 const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.js</code>): cartão do servidor com a pílula <b>Online</b>, rótulo de seção com <b>auto · 5 s</b>, blocos de estatística com sparkline, barra empilhada de saúde dos agentes e a lista com ícone de status.']
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
@@ -2306,6 +2457,18 @@ const TELAS = [
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
   { id: 'console-pdrs', cod: 'C38', nome: 'PDR · decisões de produto', sub: 'A irmã de ADR (C28): as decisões de produto dos repositórios, com a mesma lista, a mesma busca e o mesmo filtro por status. Vêm de pastas só de PDR (docs/product-decisions) e das pastas mistas, pelo campo Tipo. A PDR aberta é a C30, com outro rótulo. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'pdrs', telaPdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'pdrs', telaPdrs(true))}</div>`,
     n: N(['A tela de ADR (C28), inteira: a mesma função desenha as duas.'], ['No grupo Decisões da barra ficam três itens: Das sessões (C20 e C21), ADR e PDR.', 'Numa pasta mista, como docs/decisoes, o campo Tipo separa: a linha do grupo diz isso.', 'Sem nenhum sinal, o registro fica como ADR.']) },
+  { id: 'console-connections-off', cod: 'C39', nome: 'Conexões · desconectado', sub: 'Feature Conectar ao GitHub (#241, decisão 0011). A seção nova de Controle: o GitHub sem conexão, os escopos que o console vai pedir e por quê, onde a credencial vai ficar e a fonte (o console, ou o gh para quem já usa). Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsOffScreen(w), 'off'))}</div>`,
+    n: N(['Nada: o CCAM lê o GitHub com o gh da máquina.'], ['O console conecta sozinho, pelo device flow do OAuth App da Ahrena: o app instalado não depende do gh.', 'A barra ganha Conexões em Controle; o pé da barra diz se o GitHub está conectado.', 'Os escopos aparecem antes de conectar, cada um com o motivo.']) },
+  { id: 'console-connections-pending', cod: 'C40', nome: 'Conexões · o código do device flow', sub: 'Depois de Conectar: o código de 8 letras, o botão que abre github.com/login/device no navegador e a espera, que muda sozinha quando a pessoa autoriza. O código vale 15 minutos. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsPendingScreen(w), 'pending'))}</div>`,
+    n: N(['—'], ['Quem pede o token ao GitHub é o núcleo; a /ui só mostra o código e acompanha o estado. O device_code nunca sai do núcleo.', 'Só a própria /ui começa o fluxo (Origin da mesma origem, decisão 0003): nenhum agente conecta pela pessoa.']) },
+  { id: 'console-connections-on', cod: 'C41', nome: 'Conexões · conectado', sub: 'Conectado como dev-sintetico: os escopos concedidos, as organizações (uma bloqueia o aplicativo, com o link para pedir aprovação), o limite da API, o Keychain e as telas que voltaram a funcionar. Em 1440, a confirmação de Desconectar, com o link para revogar no GitHub. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsOnScreen(w), 'on'))}</div>`,
+    n: N(['—'], ['Desconectar apaga a entrada do Keychain e o cache do GitHub; revogar o aplicativo é no github.com, porque o console não tem o client secret.', 'Reconectar é o mesmo device flow, para quando falta um escopo.']) },
+  { id: 'console-connect-github', cod: 'C42', nome: 'Conectar ao GitHub nas telas', sub: 'Repositórios, Kanban do projeto, Dev Console e a aba Instruções sem conexão: o mesmo vazio, que diz o que a tela faria e leva a Conexões já com o código. Repositórios e Dev Console em 1100; Kanban do projeto e Instruções em 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="fila"><div class="width-col"><div class="rotulo">1100 px · Repositórios</div>${frameGh(1100, 'repos', connectRepos(), 'off')}</div><div class="width-col"><div class="rotulo">1100 px · Dev Console</div>${frameGh(1100, 'dev', connectDev(), 'off')}</div></div><div class="width-col"><div class="rotulo">1440 px · Kanban do projeto</div>${frameGh(1440, 'projeto', connectProject(), 'off')}</div><div class="width-col"><div class="rotulo">1440 px · Repositório · Instruções</div>${frameGh(1440, 'repos', connectInstr(), 'off')}</div></div>`,
+    n: N(['—'], ['Hoje essas telas mandam rodar gh auth login. Agora o vazio é um só, com um botão.', 'As ADRs e PDRs usam o mesmo vazio; as abas do repositório que não dependem do GitHub (Sessões, Decisões) continuam.']) },
+  { id: 'console-project-picker', cod: 'C43', nome: 'Kanban do projeto · escolher o Project', sub: 'Sem AHRENA_CONSOLE_PROJECT: a lista dos Projects que a conta enxerga (seus e das organizações), com busca, o campo que vira colunas e Usar. Em 1440, o quadro com Trocar de Project aberto no cabeçalho. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameGh(1100, 'projeto', projectPickerScreen())}<div class="rotulo">1440 px</div>${frameGh(1440, 'projeto', projectSwitchScreen())}</div>`,
+    n: N(['O quadro do Kanban do projeto (C11).'], ['A escolha fica nas preferências da instalação, sem variável de ambiente; nada aponta para o Project da Ahrena.', 'Um Project sem campo de seleção não vira quadro: a linha diz isso.']) },
+  { id: 'console-connections-states', cod: 'C44', nome: 'Conexões · estados', sub: 'O que não é o caminho feliz: o console sem o aplicativo do GitHub configurado, a máquina sem cofre, um escopo faltando e o código expirado ou recusado. Embaixo, as faixas da fonte gh e de AHRENA_CONSOLE_PROJECT definida (esta no Kanban do projeto). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsStatesScreen(), 'off')}</div>`,
+    n: N(['—'], ['Sem cofre o console não conecta: a credencial nunca vai para arquivo.', 'Sem o aplicativo configurado, Conectar fica desligado e a tela diz por quê; nada aponta para um aplicativo de outra pessoa.']) },
 ]
 
 // =====================================================================
