@@ -6,7 +6,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { registerDecision } from '../../src/decisoes/registro.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
-import { createDevConsole, DEV_CONSOLE_TTL, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
+import { createDevConsole, DEV_CONSOLE_TTL, parseContexts, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
 import type { Session } from '../../src/model.ts';
@@ -52,7 +52,7 @@ beforeEach(async () => {
     git: devConsoleSimulatorGit,
     now,
   });
-  // Trabalhando no #61 (branch no remoto), no #68 (sem push) e uma pedindo permissão (não entra no "depende de você").
+  // Trabalhando no #61 (branch no remoto), no #68 (sem push) e uma pedindo permissão no #68, que depende de você.
   await live({ id: 'trabalhando', name: 'Separar pagamentos', cwd: '/sim/vitrine-demo' });
   await live({ id: 'delegada', name: 'Cupom por categoria', cwd: '/sim/ahrena-demo' });
   await live(
@@ -92,21 +92,24 @@ describe('Dev Console de um contexto', () => {
 
   test('#177/AC-2 o placar: prontos, CI rodando, CI vermelho ou conflito, sessões trabalhando e esperando você', async () => {
     const v = (await devConsole.view('loja'))!;
-    assert.deepEqual(v.scoreboard, { ready: 3, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 2, waitingOnYou: 2 });
+    assert.deepEqual(v.scoreboard, { ready: 3, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 2, waitingOnYou: 3 });
   });
 
-  test('#177/AC-2 depende de você: a sessão do contexto que espera o plano e a decisão sugerida sem resposta; a permissão não entra', async () => {
+  test('#177/AC-2 depende de você: as sessões do contexto que precisam de você (o plano e a permissão), com o motivo legível, e a decisão sugerida sem resposta', async () => {
     const v = (await devConsole.view('loja'))!;
     assert.deepEqual(
       v.dependsOnYou.map((d) => [d.kind, d.sessionId, d.kind === 'session' ? d.reason : d.choice, d.issue]),
       [
         ['session', 'plano', 'plan', 58],
         ['suggested-decision', 'trabalhando', '10 cards por coluna', 61],
+        ['session', 'permissao', 'permission', 68],
       ],
     );
     const s = v.dependsOnYou[0];
     assert.equal(s.kind === 'session' && s.reasonText, 'espera você aprovar o plano');
     assert.equal(s.minutes, 9);
+    const p = v.dependsOnYou[2];
+    assert.match(p.kind === 'session' ? p.reasonText : '', /^pede permissão/);
     const d = v.dependsOnYou[1];
     assert.deepEqual(d.kind === 'suggested-decision' && [d.label, d.alternatives, d.minutes], ['D1', ['20 por coluna'], 6]);
   });
@@ -120,7 +123,8 @@ describe('Dev Console de um contexto', () => {
     assert.deepEqual(numbers(v.board['in-review']), [31, 47, 58]);
     assert.deepEqual(numbers(v.board.blocked), [55]);
     assert.deepEqual(numbers(v.board.done), [52, 50, 49]);
-    assert.deepEqual(v.board.delegated[0].session, { id: 'delegada', title: 'Cupom por categoria', waitingOnYou: false });
+    // Duas sessões no branch do #68: a que espera você vem no card.
+    assert.deepEqual(v.board.delegated[0].session, { id: 'permissao', title: 'Rodar a migração', waitingOnYou: true });
     const review = v.board['in-review'];
     assert.deepEqual(review.map((c) => [c.number, c.pullRequest?.number, c.ci]), [
       [31, 81, 'ok'],
@@ -150,6 +154,38 @@ describe('Dev Console de um contexto', () => {
     assert.equal(v.readAt, T0);
     assert.deepEqual(numbers(v.mergeQueue), [81, 79, 84]);
     assert.deepEqual(numbers(v.board.todo), [64, 66, 70]);
+  });
+
+  test('#177/AC-5 lista parcial do GitHub: truncated por repositório', async () => {
+    let v = (await devConsole.view('loja'))!;
+    assert.deepEqual(v.truncated, { [DEV_CONSOLE_SIMULATOR_CATALOG]: false, [DEV_CONSOLE_SIMULATOR_RULES]: false });
+    class Partial extends SimulatedDevConsoleSource {
+      override async issues(repo: string) {
+        const r = await super.issues(repo);
+        return repo === DEV_CONSOLE_SIMULATOR_RULES ? { ...r, truncated: true } : r;
+      }
+    }
+    const contas = new Contas({ storage, arquivo: null });
+    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 0 });
+    const partial = createDevConsole({ storage, frota, source: new Partial({ now }), cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
+    v = (await partial.view('loja'))!;
+    assert.deepEqual(v.truncated, { [DEV_CONSOLE_SIMULATOR_CATALOG]: false, [DEV_CONSOLE_SIMULATOR_RULES]: true });
+  });
+
+  test('#177/AC-1 #177/AC-3 owner/repo com caixa misturada no arquivo e no remote da sessão casam', async () => {
+    const contas = new Contas({ storage, arquivo: null });
+    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 0 });
+    const git: typeof devConsoleSimulatorGit = async (cwd, args) =>
+      cwd !== '/sim/ahrena-demo' ? null : args[0] === 'remote' ? 'git@github.com:Dev-Sintetico/Catalogo-Exemplo.git' : args[0] === 'branch' ? 'feat/68-cupom' : null;
+    const mixed = createDevConsole({
+      storage, frota, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, git, now,
+      contexts: parseContexts({ contexts: [{ id: 'mix', repos: ['DEV-SINTETICO/catalogo-exemplo'] }] }),
+    });
+    const v = (await mixed.view('mix'))!;
+    assert.deepEqual(v.context.repos, [DEV_CONSOLE_SIMULATOR_CATALOG]);
+    assert.deepEqual(numbers(v.board.delegated), [68]);
+    assert.equal(v.board.delegated[0].session?.id, 'delegada');
+    assert.equal(v.scoreboard.sessionsWorking, 1);
   });
 
   test('contexto desconhecido: null', async () => {
@@ -187,7 +223,7 @@ describe('GET /api/dev-console', () => {
     const res = await fetch(`${api.url}/api/dev-console?context=loja`);
     assert.equal(res.status, 200);
     const v = (await res.json()) as DevConsoleView;
-    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason']);
+    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason', 'truncated']);
     assert.equal(v.scoreboard.ready, 3);
   });
 

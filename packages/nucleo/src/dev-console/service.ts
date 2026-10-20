@@ -1,7 +1,6 @@
 // O Dev Console montado (decisão 0008, seção 4): junta os contextos, as leituras do GitHub pelo
 // cache e as sessões, e entrega o que a tela C27 desenha. Só leitura; nada é anotado à mão.
 
-import type { GetOptions } from '../github/cache.ts';
 import type { DevConsoleContext, DevConsoleContexts } from './contexts.ts';
 import {
   buildBoard,
@@ -42,6 +41,8 @@ export interface DevConsoleView extends GithubFreshness {
   notReady: NotReadyItem[];
   board: Board;
   mergedLast24h: MergedPullRequestFact[];
+  /** Por repositório do contexto: `true` quando alguma lista do GitHub veio parcial (mais do que a página). */
+  truncated: Record<string, boolean>;
 }
 
 export interface DevConsoleOverview extends GithubFreshness {
@@ -82,15 +83,11 @@ export class DevConsole {
     this.now = now;
   }
 
-  listContexts(): Promise<DevConsoleContext[]> {
-    return this.contexts.list();
-  }
-
   /** O Dev Console de um contexto; `null` se o contexto não existe. */
-  async view(contextId: string, options: GetOptions = {}): Promise<DevConsoleView | null> {
+  async view(contextId: string): Promise<DevConsoleView | null> {
     const context = await this.contexts.get(contextId);
     if (!context) return null;
-    const [snapshots, sessions] = await Promise.all([this.snapshots(context.repos, options), this.sessions.read(new Set(context.repos))]);
+    const [snapshots, sessions] = await Promise.all([this.snapshots(context.repos), this.sessions.read(new Set(context.repos))]);
     const now = this.now();
     const openPullRequests = snapshots.flatMap((s) => s.openPullRequests);
     const contextSessions: ContextSession[] = context.repos.flatMap((r) => sessions.byRepo.get(r) ?? []);
@@ -116,15 +113,16 @@ export class DevConsole {
         snapshots.flatMap((s) => s.merged),
         now,
       ),
+      truncated: Object.fromEntries(snapshots.map((s) => [s.repo, s.truncated])),
       ...freshness(snapshots),
     };
   }
 
   /** Os contextos e a fila de merge de todos eles; um repositório em dois contextos é lido uma vez. */
-  async overview(options: GetOptions = {}): Promise<DevConsoleOverview> {
+  async overview(): Promise<DevConsoleOverview> {
     const contexts = await this.contexts.list();
     const repos = [...new Set(contexts.flatMap((c) => c.repos))];
-    const snapshots = await this.snapshots(repos, options);
+    const snapshots = await this.snapshots(repos);
     const byRepo = new Map(snapshots.map((s) => [s.repo, s]));
     const queueOf = (rs: readonly string[]) => buildMergeQueue(rs.flatMap((r) => byRepo.get(r)?.openPullRequests ?? []));
     return {
@@ -138,7 +136,7 @@ export class DevConsole {
     };
   }
 
-  private snapshots(repos: readonly string[], options: GetOptions): Promise<RepoSnapshot[]> {
-    return Promise.all(repos.map((r) => this.github.read(r, options)));
+  private snapshots(repos: readonly string[]): Promise<RepoSnapshot[]> {
+    return Promise.all(repos.map((r) => this.github.read(r)));
   }
 }
