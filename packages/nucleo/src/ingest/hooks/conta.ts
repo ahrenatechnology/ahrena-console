@@ -10,7 +10,7 @@
 //   `metadata.desktopScopeConflict` ("Desktop numa org, CLI remoto em outra").
 
 import { claudeAccountId, type AccountSource, type ClaudeAccount } from '../../model.ts';
-import type { Perfis } from '../../perfis/perfis.ts';
+import type { Profiles } from '../../profiles/profiles.ts';
 import type { HookEnv } from './normalize.ts';
 
 export interface ContaResolvida {
@@ -20,7 +20,7 @@ export interface ContaResolvida {
 }
 
 /** O que o receptor usa dos perfis (#109): ler a conta de uma pasta e registrar a do ambiente. */
-export type PerfisDoHook = Pick<Perfis, 'contaDaPasta' | 'registrar'>;
+export type PerfisDoHook = Pick<Profiles, 'accountForFolder' | 'register'>;
 
 export interface ResolucaoDaConta {
   conta: ContaResolvida | null;
@@ -49,7 +49,7 @@ export async function resolverConta(
   const ssh = env?.ssh === true;
 
   if (doAmbiente && !ssh) {
-    const account = await perfis.registrar({ ...doAmbiente, organizationName: null, organizationType: null }, configDir);
+    const account = await perfis.register({ ...doAmbiente, organizationName: null, organizationType: null }, configDir);
     return { conta: { account, source: 'env' }, desktopScope: null, desktopScopeConflict: null };
   }
 
@@ -58,7 +58,7 @@ export async function resolverConta(
   // núcleo do Mac por um túnel reverso, o caminho é da máquina remota e quase nunca existe no Mac:
   // a sessão fica em "Sem conta", só com o `desktopScope`. Um caminho que por acaso exista nas duas
   // máquinas daria a conta do Mac; não há como o receptor distinguir, e esse arranjo não é suportado.
-  const daPasta = configDir ? await perfis.contaDaPasta(configDir) : null;
+  const daPasta = configDir ? await perfis.accountForFolder(configDir) : null;
   const conta: ContaResolvida | null = daPasta ? { account: daPasta, source: 'config' } : null;
   const desktopScope = ssh && doAmbiente ? claudeAccountId(doAmbiente.accountUuid, doAmbiente.organizationUuid) : null;
   const desktopScopeConflict = desktopScope && doAmbiente && conta ? doAmbiente.organizationUuid !== conta.account.organizationUuid : null;

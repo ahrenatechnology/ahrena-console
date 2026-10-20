@@ -18,7 +18,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import type { PastaDeConfiguracao } from '../perfis/descoberta.ts';
+import type { ConfigFolder } from '../profiles/discovery.ts';
 import { chooseProject, readAgentConfig, rootsFor } from '../agent-config/reading.ts';
 import { AgentConfigError } from '../agent-config/model.ts';
 import { writeSkill, readSkill, MAX_CONTENT, defaultBackupsDir, skillRoot } from '../agent-config/skills.ts';
@@ -30,7 +30,7 @@ export const MAX_SKILL_BODY = 4 * MAX_CONTENT + 4096;
 
 export interface AgentConfigOptions {
   /** The user configuration folders (profiles), re-read on every request. */
-  folders: () => Promise<readonly Pick<PastaDeConfiguracao, 'dir' | 'claudeJson'>[]>;
+  folders: () => Promise<readonly Pick<ConfigFolder, 'dir' | 'claudeJson'>[]>;
   /** The known project directories, most recent first. */
   projects: () => Promise<readonly string[]>;
   /** Backups folder; default `~/.ahrena-console/backups`. */

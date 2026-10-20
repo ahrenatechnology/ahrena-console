@@ -86,7 +86,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
 /** An account color, as the local ones (src/api/contas.ts): `#rrggbb`. */
 const HEX = /^#[0-9a-f]{6}$/i;
-/** The neutral account color (the gray of `CORES_DAS_CONTAS`), for a remote color that is not hex. */
+/** The neutral account color (the gray of `ACCOUNT_COLORS`), for a remote color that is not hex. */
 const NEUTRAL_ACCOUNT_COLOR = paleta.gray['200'];
 /** The most a remote may add to `active` or `withError`. */
 const MAX_REMOTE_COUNT = 10_000;

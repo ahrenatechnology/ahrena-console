@@ -90,8 +90,8 @@ const plural = (n, one, many) => `${integer.format(n)} ${n === 1 ? one : many}`;
 
 // ---------- Cor da conta ----------
 
-// A cor da conta chega como valor; aqui ela só vira classe quando é uma das cores da marca que o
-// núcleo dá às contas (perfis/cores.ts). Uma cor própria fora da paleta fica só com o rótulo.
+// The account color arrives as a value; here it only becomes a class when it is one of the brand
+// colors the core gives accounts (profiles/colors.ts). A custom color outside the palette keeps only the label.
 const ACCOUNT_COLORS = { 'an-account-pink': '--rose-500', 'an-account-green': '--green-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
 
 export function accountClass(color) {

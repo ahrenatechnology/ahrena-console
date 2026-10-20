@@ -4,7 +4,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { StoragePort } from '../../storage-port.ts';
-import { Perfis } from '../../perfis/perfis.ts';
+import { Profiles } from '../../profiles/profiles.ts';
 import type { PerfisDoHook } from './conta.ts';
 import { ingestHook, type IngestResult } from './ingest.ts';
 import { InvalidHookError } from './normalize.ts';
@@ -25,7 +25,7 @@ export interface HookReceiverOptions {
   /** Para onde vão os erros; o padrão é `console.error`. */
   log?: (message: string) => void;
   now?: () => Date;
-  /** Perfis (#109) para a conta das sessões; o padrão é um novo sobre a porta. */
+  /** Profiles (#109) for the sessions' account; defaults to a new one over the port. */
   perfis?: PerfisDoHook;
 }
 
@@ -96,7 +96,7 @@ export type HookRouteOptions = Omit<HookReceiverOptions, 'host' | 'port'>;
 export function createHookRoute(opts: HookRouteOptions): HookRoute {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console hooks] ${m}`));
   const now = opts.now ?? (() => new Date());
-  const perfis = opts.perfis ?? new Perfis({ storage: opts.storage });
+  const perfis = opts.perfis ?? new Profiles({ storage: opts.storage });
   // Uma gravação por vez: os hooks de uma sessão chegam em rajada e a leitura-e-gravação da sessão
   // não pode intercalar.
   let queue: Promise<unknown> = Promise.resolve();
