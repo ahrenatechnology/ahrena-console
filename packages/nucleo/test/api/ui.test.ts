@@ -319,6 +319,24 @@ describe('screen registry', () => {
     assert.match(css, /\.cc-nav-title \{/);
   });
 
+  test('sidebar breathing: items keep their height and only the item list scrolls on a short window', () => {
+    const css = readFileSync(`${UI_FOLDER}shell.css`, 'utf8');
+    const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.#]/g, '\\$&')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+    // The wireframe item is about 34 px tall; it never shrinks to fit the window.
+    assert.match(rule('.cc-nav'), /min-height: 34px/);
+    assert.match(rule('.cc-nav'), /flex: none/);
+    assert.match(rule('.cc-nav-title'), /padding: 18px 12px 8px/);
+    // The list scrolls; the brand and the footer stay put.
+    assert.match(rule('#nav'), /overflow-y: auto/);
+    assert.match(rule('#nav'), /min-height: 0/);
+    assert.match(rule('.cc-side'), /overflow: hidden/);
+    assert.match(rule('.cc-brand'), /flex: none/);
+    assert.match(rule('.cc-foot'), /flex: none/);
+    assert.match(rule('.cc-foot'), /padding-top: 16px/);
+    // The lit item is brought into view when the list scrolls.
+    assert.match(readFileSync(`${UI_FOLDER}nav.js`, 'utf8'), /scrollIntoView\?\.\(\{ block: 'nearest' \}\)/);
+  });
+
   // Issue 178, criterion 1: the remote machines are not in the static registry; the shell reads
   // GET /api/machines and adds one item per remote to the Máquinas block, after "Esta máquina".
   test('#178 criterion 1: Máquinas has "Esta máquina" and one item per remote of /api/machines, with its state; without remotes, only "Esta máquina"', () => {
