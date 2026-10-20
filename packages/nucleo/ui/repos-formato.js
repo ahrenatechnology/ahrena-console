@@ -26,11 +26,11 @@ export function decimal(n) {
 }
 
 /** "48,3 mil", "1,2 mi"; abaixo de mil, o número inteiro. Sem sinal. Arredonda antes de escolher a
- * escala: 999,6 é "1,0 mil", não "1.000". */
+ * escala: 999,6 é "1,0 mil", não "1.000"; e só vira "mi" quando "mil" daria "1.000,0 mil". */
 export function mil(n) {
   if (vazio(n)) return TRACO;
   const a = Math.abs(n);
-  if (Math.round(a / 1e5) >= 10) return `${NF1.format(a / 1e6)} mi`;
+  if (Math.round(a / 100) >= 1e4) return `${NF1.format(a / 1e6)} mi`;
   if (Math.round(a) >= 1e3) return `${NF1.format(a / 1e3)} mil`;
   return NF0.format(Math.round(a));
 }

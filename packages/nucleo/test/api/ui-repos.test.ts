@@ -123,6 +123,14 @@ describe('repos na /ui: os números', () => {
     assert.equal(kilo(999.4), '999');
   });
 
+  test('#105 critério 1: mil só vira mi quando arredondar daria 1.000,0 mil', () => {
+    assert.equal(mil(950_000), '950,0 mil');
+    assert.equal(mil(960_000), '960,0 mil');
+    assert.equal(mil(999_949), '999,9 mil');
+    assert.equal(mil(999_950), '1,0 mi');
+    assert.equal(mil(1_000_000), '1,0 mi');
+  });
+
   test('#105 critério 3: durações a partir de ms', () => {
     assert.equal(duracao(DIA + 4 * HORA + 20 * MIN), '1 d 4 h');
     assert.equal(duracao(2 * DIA), '2 d');
@@ -363,7 +371,12 @@ describe('repos na /ui: as classes', () => {
 
   test('repos.css não estiliza classe de outra tela, fora selos e moldura', () => {
     const minhas = new Set([...classesDoCss('repos.css')].filter((c) => !daMoldura.has(c)));
-    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'moldura.css', 'marca.css'].includes(a))) {
+    const outras = [
+      ...readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'moldura.css', 'marca.css'].includes(a)),
+      ...readdirSync(`${PASTA_DA_UI}telas`).filter((a) => a.endsWith('.css')).map((a) => `telas/${a}`),
+    ];
+    assert.ok(outras.includes('telas/detalhe.css'));
+    for (const outra of outras) {
       assert.deepEqual([...classesDoCss(outra)].filter((c) => minhas.has(c) && !SELOS.has(c)), [], `repos.css e ${outra} estilizam as mesmas classes`);
     }
   });

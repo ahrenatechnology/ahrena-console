@@ -64,7 +64,8 @@ function card(titulo, direita, ...filhos) {
 }
 
 const nota = (texto) => el('p', { class: 'repo-vazio' }, texto);
-const amostraParcial = (a, nome) => (a?.truncado ? el('span', { class: 'repo-nota' }, `Medianas sobre ${inteiro(a.lidos)} de ${inteiro(a.total)} ${nome}.`) : null);
+/** A nota da amostra paginada que não cobre o total: `Por tipo sobre 100 de 240 issues lidas.` */
+const amostraParcial = (a, inicio, nome) => (a?.truncado ? el('span', { class: 'repo-nota' }, `${inicio} sobre ${inteiro(a.lidos)} de ${inteiro(a.total)} ${nome}.`) : null);
 
 function graficoCommits(semanas) {
   const W = 520;
@@ -197,11 +198,12 @@ export async function montar(area, ctx) {
     return el(
       'nav',
       { class: 'repo-abas', 'aria-label': 'Seções do repositório' },
-      el('span', { 'aria-current': 'page' }, icone('metricas'), 'Métricas'),
+      el('span', { 'aria-current': 'page' }, icone('analytics'), 'Métricas'),
       fora('issues', 'ponto', `Issues (${inteiro(dados.abas.issues)})`),
       fora('pulls', 'git-pull-request', `PRs (${inteiro(dados.abas.prs)})`),
       fora('actions', 'ci', 'CI'),
-      el('a', { href: '/ui/sessoes' }, icone('sessoes'), `Sessões (${inteiro(dados.abas.sessoes)})`),
+      // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
+      el('a', { href: `/ui/sessoes?busca=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icone('sessoes'), `Sessões (${inteiro(dados.abas.sessoes)})`),
       el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icone('decisao'), 'Decisões'),
     );
   }
@@ -276,7 +278,7 @@ export async function montar(area, ctx) {
           ),
         ),
       ),
-      amostraParcial(i.amostra, 'issues lidas'),
+      amostraParcial(i.amostra, 'Por tipo', 'issues lidas'),
     );
   }
 
@@ -304,7 +306,7 @@ export async function montar(area, ctx) {
         el('span', {}, 'Rodadas de review ', el('b', {}, decimal(p.rodadasDeReview))),
         el('span', {}, 'Abertos por agentes ', el('b', {}, porcentagem(p.fatiaPorAgentes))),
       ),
-      amostraParcial(p.amostra, 'PRs lidos'),
+      amostraParcial(p.amostra, 'Medianas', 'PRs lidos'),
     );
   }
 
