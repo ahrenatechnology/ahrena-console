@@ -6,13 +6,13 @@
 // - Sessões vivas e o estado delas: a `LeituraDaFrota` do MCP, a mesma da bandeja.
 // - Eventos: cada sessão é lida uma vez e, depois, só do cursor em diante quando o `updatedAt`
 //   muda. A cada `releituraMs` a sessão é relida inteira, para pegar o evento que chegou atrasado.
-// - Custo: `agregarCusto` dos últimos 30 dias e o das sessões vivas, no máximo a cada `custoMs`.
+// - Cost: `aggregateCost` of the last 30 days and of the live sessions, at most every `custoMs`.
 // - A resposta inteira vale `cacheMs`: uma rajada de mudanças não refaz a conta a cada pedido.
 //
 // Texto da conversa: só o resumo de uma linha que o núcleo já guarda (o prompt, cortado), nas
 // duas últimas mensagens do card, como o C1 pede. Nunca a resposta do agente.
 
-import { agregarCusto, diaDe, type RelatorioDeCusto } from '../custo/agregacao.ts';
+import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import type { InboxState } from '../states/inbox.ts';
 import { fraseDoEvento } from './frase-do-evento.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
@@ -138,7 +138,7 @@ export class MontadorDoDashboard {
   private readonly leituras = new Map<string, Leitura>();
   private resposta: { em: number; corpo: RespostaDoDashboard } | null = null;
   private rodando: Promise<RespostaDoDashboard> | null = null;
-  private custo: { em: number; chave: string; mes: RelatorioDeCusto; vivas: RelatorioDeCusto } | null = null;
+  private custo: { em: number; chave: string; mes: CostReport; vivas: CostReport } | null = null;
 
   constructor({ frota, cacheMs = 2_000, custoMs = 30_000, releituraMs = 10 * 60_000, linhas = 8 }: OpcoesDoDashboard) {
     this.frota = frota;
@@ -196,7 +196,7 @@ export class MontadorDoDashboard {
     }
 
     const { mes, vivas: custoDasVivas } = await this.custos(vivas.map((v) => v.session.id), hoje);
-    const custoPorSessao = new Map(custoDasVivas.porSessao.map((l) => [l.chave, l.custoUsd]));
+    const custoPorSessao = new Map(custoDasVivas.bySession.map((l) => [l.key, l.costUsd]));
 
     const sessoes = { total: totalDeSessoes, active: 0, waiting: 0, withError: 0 };
     const agentes = { active: 0, sessions: 0 };
@@ -236,7 +236,7 @@ export class MontadorDoDashboard {
     }
     atividade.sort((a, b) => b.at.localeCompare(a.at));
 
-    const custoDoMes = mes.total.custoUsd;
+    const custoDoMes = mes.total.costUsd;
     return {
       generatedAt: new Date(agora).toISOString(),
       day: hoje,
@@ -246,7 +246,7 @@ export class MontadorDoDashboard {
         agents: agentes,
         subagents: subagentes,
         events: eventos,
-        cost: { usd: custoDoMes === null ? null : Math.round(custoDoMes * 100) / 100, days: DIAS_DO_CUSTO, unpriced: [...mes.total.semPreco.modelos].sort() },
+        cost: { usd: custoDoMes === null ? null : Math.round(custoDoMes * 100) / 100, days: DIAS_DO_CUSTO, unpriced: [...mes.total.unpriced.models].sort() },
       },
       agents: cards,
       activity: atividade.slice(0, this.linhas),
@@ -314,15 +314,15 @@ export class MontadorDoDashboard {
     this.leituras.set(id, l);
   }
 
-  private async custos(vivas: string[], hoje: string): Promise<{ mes: RelatorioDeCusto; vivas: RelatorioDeCusto }> {
+  private async custos(vivas: string[], hoje: string): Promise<{ mes: CostReport; vivas: CostReport }> {
     const chave = `${hoje}|${[...vivas].sort().join(',')}`;
     const c = this.custo;
     if (c && c.chave === chave && this.frota.agora() - c.em < this.custoMs) return c;
     const fusoHorario = this.frota.fusoHorario;
-    const desde = diaDe(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
+    const desde = dayOf(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
     const [mes, dasVivas] = await Promise.all([
-      agregarCusto(this.storage, { desde, ate: hoje, fusoHorario }),
-      agregarCusto(this.storage, { sessionIds: vivas, fusoHorario }),
+      aggregateCost(this.storage, { since: desde, until: hoje, timeZone: fusoHorario }),
+      aggregateCost(this.storage, { sessionIds: vivas, timeZone: fusoHorario }),
     ]);
     this.custo = { em: this.frota.agora(), chave, mes, vivas: dasVivas };
     return this.custo;
@@ -419,8 +419,8 @@ function cortar(texto: string | null | undefined, max: number): string | null {
 function inicioDoDiaEm(dia: string, agora: number, fuso: string): number {
   // Volta de hora em hora até o dia mudar; depois afina por minuto. No máximo 26 + 60 passos.
   let t = agora - (agora % 60_000);
-  while (diaDe(new Date(t - HORA).toISOString(), fuso) === dia) t -= HORA;
-  while (diaDe(new Date(t - 60_000).toISOString(), fuso) === dia) t -= 60_000;
+  while (dayOf(new Date(t - HORA).toISOString(), fuso) === dia) t -= HORA;
+  while (dayOf(new Date(t - 60_000).toISOString(), fuso) === dia) t -= 60_000;
   return t;
 }
 

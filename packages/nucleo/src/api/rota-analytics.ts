@@ -1,9 +1,9 @@
 // A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral, C12) e `GET /api/analytics/cost` (Custo, C13).
 //
 // Tudo sai da porta de armazenamento, só leitura:
-// - custo e tokens pelas parcelas e pelo relatório de custo (src/custo/agregacao.ts), com a tabela
-//   vigente; o que não tem preço fica `null` e a lista dos modelos sem preço vai junto;
-// - dias pelo `diaDe` no fuso pedido (`?tz=<IANA>`, padrão UTC);
+// - cost and tokens from the slices and the cost report (src/cost/aggregation.ts), with the table
+//   in force; what has no price stays `null` and the list of unpriced models goes along;
+// - days by `dayOf` in the requested time zone (`?tz=<IANA>`, UTC by default);
 // - somar só o que soma (decisão 0006): custo e contagens somam, sempre com a divisão por conta ao lado.
 //
 // Definições:
@@ -22,8 +22,8 @@
 //   Com `versao` (a posição do cursor de mudanças), fica enquanto nada mudar, até 5 min.
 
 import type { Session, SessionEvent } from '../model.ts';
-import { diaDe, parcelasDaSessao, relatorioDeCusto, type LinhaDeCusto, type Parcela } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
+import { dayOf, sessionCostSlices, costReport, type CostLine, type CostSlice } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 
@@ -103,8 +103,8 @@ export function validarFuso(v: string | null): string {
 
 const arredondar = (v: number | null, casas = 4): number | null => (v === null ? null : Math.round(v * 10 ** casas) / 10 ** casas);
 const pct = (parte: number, todo: number): number | null => (todo > 0 ? arredondar((parte / todo) * 100, 1) : null);
-const entradaDe = (l: LinhaDeCusto) => l.tokens.input + l.tokens.cacheRead + l.tokens.cacheWrite5m + l.tokens.cacheWrite1h;
-const cachePctDe = (l: LinhaDeCusto) => pct(l.tokens.cacheRead, entradaDe(l));
+const entradaDe = (l: CostLine) => l.tokens.input + l.tokens.cacheRead + l.tokens.cacheWrite5m + l.tokens.cacheWrite1h;
+const cachePctDe = (l: CostLine) => pct(l.tokens.cacheRead, entradaDe(l));
 const projetoDe = (cwd: string | null): string => (cwd ? cwd.replace(/\/+$/, '').split('/').pop() || SEM_PASTA : SEM_PASTA);
 
 function pico<T extends { day: string }>(dias: readonly T[], valor: (d: T) => number | null): T | null {
@@ -142,7 +142,7 @@ async function sessoesDesde(porta: Porta, desde: string, fuso: string): Promise<
     const page = await porta.listSessions({ limit: 500, cursor });
     for (const s of page.items) {
       // Mais recentes primeiro: sessão parada antes do primeiro dia não tem nada no período.
-      if (diaDe(s.updatedAt, fuso) < desde) return out;
+      if (dayOf(s.updatedAt, fuso) < desde) return out;
       out.push(s);
     }
     cursor = page.nextCursor;
@@ -166,8 +166,8 @@ async function eventosDa(porta: Porta, sessionId: string, guardar: boolean, aoLe
 }
 
 /** As parcelas da sessão sem reler os eventos: a porta das parcelas devolve os já lidos. */
-function parcelasDe(porta: Porta, lida: SessaoLida, precos: Parameters<typeof parcelasDaSessao>[2], fuso: string): Promise<Parcela[]> {
-  return parcelasDaSessao(
+function parcelasDe(porta: Porta, lida: SessaoLida, precos: Parameters<typeof sessionCostSlices>[2], fuso: string): Promise<CostSlice[]> {
+  return sessionCostSlices(
     { listEvents: async () => ({ items: lida.eventos, nextCursor: null }), listTokenUsage: (id) => porta.listTokenUsage(id) },
     lida.sessao.id,
     precos,
@@ -207,7 +207,7 @@ export class RotaAnalytics {
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
       const fuso = validarFuso(url.searchParams.get('tz'));
-      const hoje = diaDe(new Date(this.agora()).toISOString(), fuso);
+      const hoje = dayOf(new Date(this.agora()).toISOString(), fuso);
       if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
       if (url.pathname === COST_ROUTE) {
         const dias = Number(url.searchParams.get('days') ?? 30);
@@ -250,19 +250,19 @@ export class RotaAnalytics {
     await this.contas?.atualizar();
     const sessoes = await sessoesDesde(this.porta, desde, fuso);
     return emParalelo(sessoes, LEITURAS_EM_PARALELO, async (sessao) => {
-      const guardar = diaDe(sessao.updatedAt, fuso) >= guardarDesde;
+      const guardar = dayOf(sessao.updatedAt, fuso) >= guardarDesde;
       return { sessao, eventos: await eventosDa(this.porta, sessao.id, guardar, aoLer) };
     });
   }
 
   /** Parcelas de cada sessão dentro de [desde, ate], com a conta de cada sessão. */
   private async parcelasDaJanela(lidas: readonly SessaoLida[], desde: string, ate: string, fuso: string) {
-    const precos = await precosVigentes(this.porta);
-    const porSessao = new Map<string, Parcela[]>();
+    const precos = await currentPrices(this.porta);
+    const porSessao = new Map<string, CostSlice[]>();
     const contaDaSessao = new Map<string, ContaDoAnalytics>();
     for (const l of lidas) {
-      if (diaDe(l.sessao.updatedAt, fuso) < desde) continue;
-      const ps = (await parcelasDe(this.porta, l, precos, fuso)).filter((p) => p.dia >= desde && p.dia <= ate);
+      if (dayOf(l.sessao.updatedAt, fuso) < desde) continue;
+      const ps = (await parcelasDe(this.porta, l, precos, fuso)).filter((p) => p.day >= desde && p.day <= ate);
       porSessao.set(l.sessao.id, ps);
       contaDaSessao.set(l.sessao.id, this.contaDe(l.sessao));
     }
@@ -280,13 +280,13 @@ export class RotaAnalytics {
 
   async visaoGeral(fuso: string) {
     const geradoEm = new Date(this.agora()).toISOString();
-    const hoje = diaDe(geradoEm, fuso);
+    const hoje = dayOf(geradoEm, fuso);
     const desde = somarDias(hoje, -(DIAS_DA_VISAO - 1));
     // 52 semanas alinhadas à segunda: começa na segunda de 51 semanas antes da semana de hoje.
     const desdeHeatmap = somarDias(hoje, -indiceDaSemana(hoje) - 7 * (SEMANAS_DO_HEATMAP - 1));
     const eventosPorDia = new Map<string, number>();
     const contarNoHeatmap = (e: SessionEvent) => {
-      const dia = diaDe(e.createdAt, fuso);
+      const dia = dayOf(e.createdAt, fuso);
       if (dia >= desdeHeatmap && dia <= hoje) eventosPorDia.set(dia, (eventosPorDia.get(dia) ?? 0) + 1);
     };
     const lidas = await this.lerJanela(desdeHeatmap, desde, fuso, contarNoHeatmap);
@@ -307,7 +307,7 @@ export class RotaAnalytics {
     for (const { sessao, eventos } of lidas) {
       let ativa = false;
       for (const e of eventos) {
-        const dia = diaDe(e.createdAt, fuso);
+        const dia = dayOf(e.createdAt, fuso);
         if (dia < desde || dia > hoje) continue;
         ativa = true;
         eventosNaJanela++;
@@ -324,7 +324,7 @@ export class RotaAnalytics {
       }
       for (const p of porSessao.get(sessao.id) ?? []) {
         ativa = true;
-        marcar(p.dia, sessao.id);
+        marcar(p.day, sessao.id);
       }
       if (ativa) comAtividade.push(sessao);
     }
@@ -338,12 +338,12 @@ export class RotaAnalytics {
       }
     }
 
-    const relatorio = relatorioDeCusto(todas, fuso);
+    const relatorio = costReport(todas, fuso);
     const contas = RotaAnalytics.contasDistintas(comAtividade.map((s) => contaDaSessao.get(s.id) ?? this.contaDe(s)));
     const porConta = contas.map((c) => {
       const ps = todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id);
-      const total = relatorioDeCusto(ps, fuso).total;
-      return { account: c.id, usd: arredondar(total.custoUsd), unpriced: total.semPreco.modelos };
+      const total = costReport(ps, fuso).total;
+      return { account: c.id, usd: arredondar(total.costUsd), unpriced: total.unpriced.models };
     });
 
     const ultimos = diasEntre(desde, hoje).map((day) => ({ day, sessions: sessoesPorDia.get(day)?.size ?? 0 }));
@@ -361,8 +361,8 @@ export class RotaAnalytics {
       numbers: {
         sessions: { total: comAtividade.length, active: comAtividade.filter((s) => s.status === 'active').length },
         agents: { total: agentes, active: agentesAtivos },
-        tokens: { total: relatorio.total.totalDeTokens, cachePct: cachePctDe(relatorio.total) },
-        cost: { usd: arredondar(relatorio.total.custoUsd), days: DIAS_DA_VISAO, unpriced: relatorio.total.semPreco.modelos, byAccount: porConta },
+        tokens: { total: relatorio.total.totalTokens, cachePct: cachePctDe(relatorio.total) },
+        cost: { usd: arredondar(relatorio.total.costUsd), days: DIAS_DA_VISAO, unpriced: relatorio.total.unpriced.models, byAccount: porConta },
         events: { total: eventosNaJanela, perSession: comAtividade.length ? arredondar(eventosNaJanela / comAtividade.length, 1) : null },
       },
       activity: {
@@ -375,8 +375,8 @@ export class RotaAnalytics {
         peak: picoDosDias ? { day: picoDosDias.day, sessions: picoDosDias.sessions } : null,
         total: ultimos.reduce((s, d) => s + d.sessions, 0),
       },
-      tokensByModel: relatorio.porModelo
-        .map((l) => ({ model: l.chave, tokens: l.totalDeTokens }))
+      tokensByModel: relatorio.byModel
+        .map((l) => ({ model: l.key, tokens: l.totalTokens }))
         .filter((l) => l.tokens > 0)
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model)),
       tools: [...ferramentas]
@@ -391,23 +391,23 @@ export class RotaAnalytics {
 
   async custo(dias: number, fuso: string) {
     const geradoEm = new Date(this.agora()).toISOString();
-    const hoje = diaDe(geradoEm, fuso);
+    const hoje = dayOf(geradoEm, fuso);
     const desde = somarDias(hoje, -(dias - 1));
     const lidas = await this.lerJanela(desde, desde, fuso);
     const { porSessao, contaDaSessao, todas } = await this.parcelasDaJanela(lidas, desde, hoje, fuso);
-    const relatorio = relatorioDeCusto(todas, fuso);
+    const relatorio = costReport(todas, fuso);
     const calendario = diasEntre(desde, hoje);
 
-    const porDiaDe = (r: ReturnType<typeof relatorioDeCusto>) => {
-      const m = new Map(r.porDia.map((l) => [l.chave, l.custoUsd]));
+    const porDiaDe = (r: ReturnType<typeof costReport>) => {
+      const m = new Map(r.byDay.map((l) => [l.key, l.costUsd]));
       return calendario.map((day) => ({ day, usd: m.has(day) ? arredondar(m.get(day)!) : 0 }));
     };
     const porDia = porDiaDe(relatorio);
-    const linhaDeHoje = relatorio.porDia.find((l) => l.chave === hoje);
+    const linhaDeHoje = relatorio.byDay.find((l) => l.key === hoje);
     const picoDoCusto = pico(porDia, (d) => d.usd);
 
-    const somaComPreco = relatorio.porModelo.reduce((s, l) => s + (l.custoUsd ?? 0), 0);
-    const projetos = new Map<string, Parcela[]>();
+    const somaComPreco = relatorio.byModel.reduce((s, l) => s + (l.costUsd ?? 0), 0);
+    const projetos = new Map<string, CostSlice[]>();
     const cwdDe = new Map(lidas.map((l) => [l.sessao.id, l.sessao.cwd]));
     for (const p of todas) {
       const k = projetoDe(cwdDe.get(p.sessionId) ?? null);
@@ -418,7 +418,7 @@ export class RotaAnalytics {
 
     const sessoesComUso = [...porSessao].filter(([, ps]) => ps.length > 0).map(([id]) => id);
     const contas = RotaAnalytics.contasDistintas(sessoesComUso.map((id) => contaDaSessao.get(id)!));
-    const porConta = contas.map((c) => ({ c, r: relatorioDeCusto(todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id), fuso) }));
+    const porConta = contas.map((c) => ({ c, r: costReport(todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id), fuso) }));
 
     return {
       generatedAt: geradoEm,
@@ -431,37 +431,37 @@ export class RotaAnalytics {
       currency: 'USD' as const,
       accounts: contas,
       todaySummary: {
-        usd: linhaDeHoje ? arredondar(linhaDeHoje.custoUsd) : 0,
-        sessions: new Set(todas.filter((p) => p.dia === hoje).map((p) => p.sessionId)).size,
+        usd: linhaDeHoje ? arredondar(linhaDeHoje.costUsd) : 0,
+        sessions: new Set(todas.filter((p) => p.day === hoje).map((p) => p.sessionId)).size,
         // A divisão por conta (decisão 0006), do dia de hoje de cada uma; conta sem uso hoje vale 0.
         byAccount: porConta.map(({ c, r }) => {
-          const l = r.porDia.find((d) => d.chave === hoje);
-          return { account: c.id, label: c.label, color: c.color, usd: l ? arredondar(l.custoUsd) : 0, unpriced: l?.semPreco.modelos ?? [] };
+          const l = r.byDay.find((d) => d.key === hoje);
+          return { account: c.id, label: c.label, color: c.color, usd: l ? arredondar(l.costUsd) : 0, unpriced: l?.unpriced.models ?? [] };
         }),
       },
       period: {
-        usd: arredondar(relatorio.total.custoUsd),
-        dailyAverage: relatorio.total.custoUsd === null ? null : arredondar(relatorio.total.custoUsd / dias),
+        usd: arredondar(relatorio.total.costUsd),
+        dailyAverage: relatorio.total.costUsd === null ? null : arredondar(relatorio.total.costUsd / dias),
       },
       cache: { pct: cachePctDe(relatorio.total) },
-      unpriced: { models: relatorio.total.semPreco.modelos, totalTokens: relatorio.total.semPreco.totalDeTokens },
+      unpriced: { models: relatorio.total.unpriced.models, totalTokens: relatorio.total.unpriced.totalTokens },
       byDay: porDia,
       peak: picoDoCusto ? { day: picoDoCusto.day, usd: picoDoCusto.usd } : null,
-      byModel: relatorio.porModelo.map((l) => ({
-        model: l.chave,
-        usd: arredondar(l.custoUsd),
-        pct: l.custoUsd === null ? null : pct(l.custoUsd, somaComPreco),
-        totalTokens: l.totalDeTokens,
+      byModel: relatorio.byModel.map((l) => ({
+        model: l.key,
+        usd: arredondar(l.costUsd),
+        pct: l.costUsd === null ? null : pct(l.costUsd, somaComPreco),
+        totalTokens: l.totalTokens,
       })),
       byProject: [...projetos]
-        .map(([project, ps]) => ({ project, usd: arredondar(relatorioDeCusto(ps, fuso).total.custoUsd) }))
+        .map(([project, ps]) => ({ project, usd: arredondar(costReport(ps, fuso).total.costUsd) }))
         .sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1) || a.project.localeCompare(b.project)),
       byAccount: porConta.map(({ c, r }) => ({
         account: c.id,
         label: c.label,
         color: c.color,
-        usd: arredondar(r.total.custoUsd),
-        unpriced: r.total.semPreco.modelos,
+        usd: arredondar(r.total.costUsd),
+        unpriced: r.total.unpriced.models,
         byDay: porDiaDe(r),
       })),
     };

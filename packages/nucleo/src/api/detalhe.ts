@@ -14,8 +14,8 @@
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
+import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
 import type { Agent, DisplayStatus, Session, SessionEvent } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -306,7 +306,7 @@ export class LeiturasDoDetalhe {
       this.storage.listAgents(session.id),
       this.todosOsEventos(session.id),
       this.storage.listTokenUsage(session.id),
-      precosVigentes(this.storage),
+      currentPrices(this.storage),
     ]);
     const quem = new Agentes(session.id, lista);
 
@@ -347,12 +347,12 @@ export class LeiturasDoDetalhe {
     }
 
     // Custo por nó: o uso sem agente (o piso da compactação) fica com o principal.
-    const relatorio = relatorioDeCusto(await parcelasDaSessao(this.storage, session.id, precos));
+    const relatorio = costReport(await sessionCostSlices(this.storage, session.id, precos));
     const custoDe = new Map<string, number | null>();
-    for (const linha of relatorio.porAgente) {
+    for (const linha of relatorio.byAgent) {
       const id = linha.agentId ? quem.de(linha.agentId) : quem.principal;
       const antes = custoDe.get(id);
-      custoDe.set(id, linha.custoUsd === null ? (antes ?? null) : (antes ?? 0) + linha.custoUsd);
+      custoDe.set(id, linha.costUsd === null ? (antes ?? null) : (antes ?? 0) + linha.costUsd);
     }
     const main = lista.find((a) => a.type === 'main');
     const agentes: AgenteDoDetalhe[] = [

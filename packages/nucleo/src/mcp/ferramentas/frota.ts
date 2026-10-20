@@ -125,13 +125,13 @@ export function fleetOverview(frota: LeituraDaFrota): Ferramenta {
         else n.yourTurn++;
       }
       const semPreco = new Set<string>();
-      for (const s of custo.porSessao) {
-        const c = contaPorSessao.has(s.chave) ? contaPorSessao.get(s.chave)! : await frota.contaDe(s.chave);
+      for (const s of custo.bySession) {
+        const c = contaPorSessao.has(s.key) ? contaPorSessao.get(s.key)! : await frota.contaDe(s.key);
         const t = linha(c);
-        if (s.custoUsd === null) {
+        if (s.costUsd === null) {
           if (t.costTodayUsd === 0) t.costTodayUsd = null;
-        } else t.costTodayUsd = (t.costTodayUsd ?? 0) + s.custoUsd;
-        for (const m of s.semPreco.modelos) semPreco.add(m);
+        } else t.costTodayUsd = (t.costTodayUsd ?? 0) + s.costUsd;
+        for (const m of s.unpriced.models) semPreco.add(m);
       }
 
       const filtradas = [...linhas.values()].filter((l) => casaConta(l.conta, comuns.contas));

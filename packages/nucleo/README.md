@@ -11,7 +11,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/model.ts](src/model.ts) | Sessão, conta do Claude, agente, evento, uso de tokens e preço, com os validadores |
 | [src/storage-port.ts](src/storage-port.ts) | A porta: a única coisa de que o resto do núcleo depende |
 | [src/pricing.ts](src/pricing.ts) | Preço pelo padrão mais longo e custo estimado, com modificadores e "sem preço" explícito |
-| [src/custo/](src/custo/) | Tabela de preços editável, piso da compactação e agregações de custo (item 1.6, seção abaixo) |
+| [src/cost/](src/cost/) | Tabela de preços editável, piso da compactação e agregações de custo (item 1.6, seção abaixo) |
 | [src/adapters/sqlite/](src/adapters/sqlite/) | Adaptador SQLite e as migrações do esquema |
 | [src/ingest/hooks/](src/ingest/hooks/) | Receptor dos hooks do Claude Code e a configuração de hooks do plugin (item 1.4) |
 | [test/storage-contract.ts](test/storage-contract.ts) | Contrato da porta. Todo adaptador roda a mesma bateria |
@@ -196,12 +196,12 @@ await follower.stop();   // espera a rodada em andamento; pode chamar start() de
 
 Item 1.6. Tudo é **estimativa**: não há leitura de fatura, e todo resultado leva `estimate: true` / `estimativa: true`.
 
-- **Tabela de preços:** o padrão fica versionado em [precos-padrao.ts](src/custo/precos-padrao.ts), com a fonte (a página pública de preços da Anthropic) e a data da consulta. O usuário sobrescreve pela porta: `definirPreco(porta, preco)` grava, `restaurarPadrao(porta, pattern?)` apaga a sobrescrita. `tabelaDePrecos(porta)` devolve as linhas com a origem (`padrao` ou `usuario`) e o preço padrão que foi trocado; `precosVigentes(porta)` só os preços. Cada modelo casa pelo id e pelo id com data, sem padrão aberto, para um modelo novo não herdar o preço de outro.
+- **Tabela de preços:** o padrão fica versionado em [default-prices.ts](src/cost/default-prices.ts), com a fonte (a página pública de preços da Anthropic) e a data da consulta. O usuário sobrescreve pela porta: `setPrice(porta, preco)` grava, `restoreDefault(porta, pattern?)` apaga a sobrescrita. `priceTable(porta)` devolve as linhas com a origem (`origin`: `default` ou `user`) e o preço padrão que foi trocado; `currentPrices(porta)` só os preços. Cada modelo casa pelo id e pelo id com data, sem padrão aberto, para um modelo novo não herdar o preço de outro.
 - **Cache:** escrita de 5 min e de 1 h e leitura com preço próprio por modelo; sem preço informado, valem os multiplicadores 1,25x, 2x e 0,1x do input.
 - **Modificadores** (em [pricing.ts](src/pricing.ts)): batch 0,5x, `inference_geo = us` 1,1x, fast pelo multiplicador do modelo (Opus 5.5, 5 e 4.8: 2x) e contexto longo do Haiku 5.5 (prompt acima de 100 mil tokens, 5x), todos acumulando. Busca na web a US$ 10 por mil. Web fetch não tem cobrança além dos tokens; execução de código é cobrada por hora de contêiner e fica de fora.
 - **Sem preço:** modelo fora da tabela, ou em modo fast sem multiplicador conhecido, aparece como "sem preço" (`costUsd: null`, com o motivo), nunca como zero.
-- **Piso depois da compactação:** `aplicarPiso(anterior, vivo)` move para o `baseline` o que a contagem viva perdeu, então `tokens + baseline` nunca diminui. A importação do histórico já grava o uso por ele.
-- **Agregações:** `agregarCusto(porta, { desde, ate, fusoHorario, sessionIds })` devolve o total e as linhas por sessão, agente, modelo e dia; `custoDaSessao(porta, id)` é o atalho para uma sessão. A parte de cada agente e dia vem das mensagens do assistente gravadas como eventos, deduplicadas por `message.id`. O que o bucket tem além disso (o piso, uso gravado sem evento) entra sem agente, no dia da última atualização do bucket, para todos os agrupamentos somarem o mesmo total. Linha com parte sem preço soma só o que tem preço e lista em `semPreco` os modelos e tokens que ficaram de fora.
+- **Piso depois da compactação:** `applyFloor(anterior, vivo)` move para o `baseline` o que a contagem viva perdeu, então `tokens + baseline` nunca diminui. A importação do histórico já grava o uso por ele.
+- **Agregações:** `aggregateCost(porta, { since, until, timeZone, sessionIds })` devolve o total e as linhas por sessão, agente, modelo e dia; `sessionCost(porta, id)` é o atalho para uma sessão. A parte de cada agente e dia vem das mensagens do assistente gravadas como eventos, deduplicadas por `message.id`. O que o bucket tem além disso (o piso, uso gravado sem evento) entra sem agente, no dia da última atualização do bucket, para todos os agrupamentos somarem o mesmo total. Linha com parte sem preço soma só o que tem preço e lista em `unpriced` os modelos e tokens que ficaram de fora.
 
 ## Estados
 

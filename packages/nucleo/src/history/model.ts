@@ -11,8 +11,8 @@
 // - The search is a case-insensitive substring on the title, the id and the project, before paging.
 
 import { basename } from 'node:path';
-import { diaDe } from '../custo/agregacao.ts';
-import { PRECOS_PADRAO, type PrecoPadrao } from '../custo/precos-padrao.ts';
+import { dayOf } from '../cost/aggregation.ts';
+import { DEFAULT_PRICES, type DefaultPrice } from '../cost/default-prices.ts';
 import type { Session, SessionStatus } from '../model.ts';
 import { resolvePricing } from '../pricing.ts';
 
@@ -61,7 +61,7 @@ export function modelDisplayName(model: string | null): string | null {
   if (!model) return null;
   const long = /\[1m\]$/i.test(model);
   const id = model.replace(/\[1m\]$/i, '');
-  const name = (resolvePricing(id, PRECOS_PADRAO) as PrecoPadrao | null)?.nome.replace(/^Claude /, '');
+  const name = (resolvePricing(id, DEFAULT_PRICES) as DefaultPrice | null)?.name.replace(/^Claude /, '');
   return name ? `${name}${long ? ' 1M' : ''}` : model;
 }
 
@@ -91,7 +91,7 @@ export function historyPage<T extends EndedSession>(sessions: readonly T[], requ
   const byDay = new Map<string, T[]>();
   for (const s of sessions) {
     if (request.search && !matchesSearch(s, request.search)) continue;
-    const day = diaDe(s.end, timeZone);
+    const day = dayOf(s.end, timeZone);
     if (request.before && day >= request.before) continue;
     const list = byDay.get(day);
     if (list) list.push(s);

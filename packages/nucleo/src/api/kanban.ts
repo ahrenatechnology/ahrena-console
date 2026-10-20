@@ -26,8 +26,8 @@
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { PRECOS_PADRAO } from '../custo/precos-padrao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
+import { DEFAULT_PRICES } from '../cost/default-prices.ts';
+import { currentPrices } from '../cost/table.ts';
 import { tituloSeguro } from '../mcp/saida.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -168,7 +168,7 @@ export function pedidoDoKanban(url: URL): PedidoDoKanban {
 export function rotuloDoModelo(modelo: string | null | undefined): string | null {
   if (!modelo) return null;
   const id = modelo.replace(/\[[^\]]*\]$/, '').replace(/-\d{8}$/, '');
-  const nome = PRECOS_PADRAO.find((p) => p.pattern === id)?.nome;
+  const nome = DEFAULT_PRICES.find((p) => p.pattern === id)?.name;
   return nome ? nome.replace(/^Claude /, '') : modelo;
 }
 
@@ -220,7 +220,7 @@ export class QuadroKanban {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
     const sessoes = await this.lerSessoes();
     const colunas =
-      pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await precosVigentes(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
+      pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await currentPrices(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
     return { view: pedido.visao, perPage: POR_PAGINA, columns: colunas };
   }
 

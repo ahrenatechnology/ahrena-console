@@ -8,7 +8,7 @@
 // série, e quando ela descobre algo novo chama `aoDescobrir` (o serviço registra a mudança no
 // cursor e a tela relê). O remote de cada cwd vale por `remoteMs`.
 
-import { diaDe } from '../custo/agregacao.ts';
+import { dayOf } from '../cost/aggregation.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import type { SessoesDoRepo } from './repos-tipos.ts';
 import { gitDoSistema, repoDoRemote, type Git } from './trabalho.ts';
@@ -125,7 +125,7 @@ export class SessoesPorRepo {
     pagina: do {
       const page = await this.frota.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
-        if (diaDe(s.updatedAt, this.frota.fusoHorario) < inicioDoMes) break pagina;
+        if (dayOf(s.updatedAt, this.frota.fusoHorario) < inicioDoMes) break pagina;
         const repo = s.cwd ? this.repoDe(s.cwd) : null;
         if (repo) de(repo).thisMonth++;
       }

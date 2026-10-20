@@ -10,8 +10,8 @@
 // - o GitHub e o git respondem por trás, nunca no caminho do pedido (trabalho.ts).
 
 import { basename } from 'node:path';
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
+import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
 import { readInbox, type InboxReading } from '../states/inbox.ts';
 import { readMemory, mainAgentOf } from '../states/rules.ts';
 import type { Agent, Session } from '../model.ts';
@@ -376,11 +376,11 @@ export class MontadorDoPainel {
     const c = this.custos.get(session.id);
     const agora = this.agora();
     if (c && (c.updatedAt === session.updatedAt || agora - c.em < this.custoMs)) return c;
-    const precos = await precosVigentes(this.storage);
-    const [parcelas, buckets] = await Promise.all([parcelasDaSessao(this.storage, session.id, precos), this.storage.listTokenUsage(session.id)]);
-    const relatorio = relatorioDeCusto(parcelas);
+    const precos = await currentPrices(this.storage);
+    const [parcelas, buckets] = await Promise.all([sessionCostSlices(this.storage, session.id, precos), this.storage.listTokenUsage(session.id)]);
+    const relatorio = costReport(parcelas);
     let acumulado = 0;
-    const pontos = parcelas.map((p) => (acumulado += p.custo.costUsd ?? 0));
+    const pontos = parcelas.map((p) => (acumulado += p.cost.costUsd ?? 0));
     const passo = Math.max(1, Math.ceil(pontos.length / PONTOS_DA_SERIE));
     const serie = [0, ...pontos.filter((_, i) => (i + 1) % passo === 0 || i === pontos.length - 1)];
     let entrada = 0;
@@ -393,7 +393,7 @@ export class MontadorDoPainel {
     const valor = {
       em: agora,
       updatedAt: session.updatedAt,
-      custo: { usd: relatorio.total.custoUsd ?? (relatorio.total.totalDeTokens === 0 ? 0 : null), series: serie, estimate: true as const },
+      custo: { usd: relatorio.total.costUsd ?? (relatorio.total.totalTokens === 0 ? 0 : null), series: serie, estimate: true as const },
       tokens: buckets.length ? { input: entrada, output: saida } : null,
     };
     this.custos.set(session.id, valor);

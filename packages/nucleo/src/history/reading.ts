@@ -6,8 +6,8 @@
 // The session list is read in full on every request (the port has no index on `endedAt`); each
 // session's cost is kept while its `updatedAt` does not change.
 
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
+import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { clearNeighbours } from '../decisoes/registro.ts';
 import type { Session } from '../model.ts';
@@ -75,7 +75,7 @@ export class SessionHistory {
     } while (cursor);
 
     const page = historyPage(ended, request, this.timeZone);
-    const prices = await precosVigentes(this.storage);
+    const prices = await currentPrices(this.storage);
     const days = [];
     for (const d of page.days) {
       const sessions: HistoryItem[] = [];
@@ -95,11 +95,11 @@ export class SessionHistory {
   }
 
   // The same number as the panel (custoDe in api/painel.ts); with no usage, `null` instead of zero.
-  private async costOf(s: Session, prices: Awaited<ReturnType<typeof precosVigentes>>): Promise<number | null> {
+  private async costOf(s: Session, prices: Awaited<ReturnType<typeof currentPrices>>): Promise<number | null> {
     const kept = this.costs.get(s.id);
     if (kept && kept.updatedAt === s.updatedAt) return kept.usd;
-    const total = relatorioDeCusto(await parcelasDaSessao(this.storage, s.id, prices)).total;
-    const usd = total.totalDeTokens === 0 ? null : total.custoUsd;
+    const total = costReport(await sessionCostSlices(this.storage, s.id, prices)).total;
+    const usd = total.totalTokens === 0 ? null : total.costUsd;
     this.costs.set(s.id, { updatedAt: s.updatedAt, usd });
     return usd;
   }
