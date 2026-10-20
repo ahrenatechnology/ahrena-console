@@ -1,5 +1,5 @@
 // O Feed de atividade na /ui (#94): o estado (lista, pausa, cursor, tempo) e a tela montada sobre um
-// DOM mínimo, com um `ctx` falso que devolve respostas fixas de `GET /api/eventos`.
+// DOM mínimo, com um `ctx` falso que devolve respostas fixas de `GET /api/events`.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
@@ -142,14 +142,14 @@ const agora = Date.now();
 const iso = (s: number) => new Date(agora - s * 1000).toISOString();
 const evento = (id: string, s: number, extra: Record<string, unknown> = {}) => ({
   id,
-  criadoEm: iso(s),
-  tipo: 'PreToolUse',
+  createdAt: iso(s),
+  type: 'PreToolUse',
   status: 'active',
-  ferramenta: 'Bash',
-  resumo: `Bash: npm test ${id}`,
-  sessao: { id: 'c3f09b52-4e1', titulo: 'Separar pagamentos em serviços', projeto: 'motor-de-regras' },
-  agente: { id: 'a7c2e0', nome: 'test-runner' },
-  detalhe: { callId: 'toolu_01', entrada: 'npm test -- cobranca' },
+  tool: 'Bash',
+  summary: `Bash: npm test ${id}`,
+  session: { id: 'c3f09b52-4e1', title: 'Separar pagamentos em serviços', project: 'motor-de-regras' },
+  agent: { id: 'a7c2e0', name: 'test-runner' },
+  detail: { callId: 'toolu_01', input: 'npm test -- cobranca' },
   ...extra,
 });
 
@@ -167,9 +167,17 @@ describe('Feed de atividade: estado', () => {
 
   test('a consulta codifica cada parâmetro e pula os vazios', () => {
     assert.equal(E.query({}), '/api/events');
-    assert.equal(E.query({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
+    assert.equal(E.query({ search: ' a&b=c ', type: '', session: 'x/y' }, { after: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
     assert.ok(E.hasFilter({ status: 'error' }));
-    assert.ok(!E.hasFilter({ status: '', busca: '  ' }));
+    assert.ok(!E.hasFilter({ status: '', search: '  ' }));
+  });
+
+  test('o caminho escreve o agente: main é "principal", subagent sem tipo é "subagente", o tipo fica como veio', () => {
+    const ev = (name: string | null) => ({ session: { id: 's1', title: 'Título', project: 'proj' }, agent: { id: null, name } });
+    assert.equal(E.trail(ev('main')), 'proj › Título › principal');
+    assert.equal(E.trail(ev('subagent')), 'proj › Título › subagente');
+    assert.equal(E.trail(ev('test-runner')), 'proj › Título › test-runner');
+    assert.equal(E.trail({ session: { id: 's1', title: null, project: null }, agent: { name: null } }), 's1');
   });
 
   test('só id que serve de rota vira link para o Detalhe', () => {
@@ -179,34 +187,34 @@ describe('Feed de atividade: estado', () => {
 
   test('pausa acumula os novos sem repetir e solta no topo ao retomar', () => {
     const s = E.newState();
-    E.load(s, { eventos: [evento('b', 10), evento('a', 20)], cursor: 'c1', anteriores: 'v1' });
+    E.load(s, { events: [evento('b', 10), evento('a', 20)], cursor: 'c1', older: 'v1' });
     E.pause(s);
-    assert.deepEqual(E.receiveNewer(s, { eventos: [evento('c', 5)], cursor: 'c2' }).entraram, []);
-    E.receiveNewer(s, { eventos: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
+    assert.deepEqual(E.receiveNewer(s, { events: [evento('c', 5)], cursor: 'c2' }).entraram, []);
+    E.receiveNewer(s, { events: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
     assert.deepEqual(s.pendentes.map((e: { id: string }) => e.id), ['d', 'c']);
     assert.equal(s.cursor, 'c3');
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['b', 'a'], 'a lista congela');
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['b', 'a'], 'a lista congela');
     const { entraram } = E.resume(s);
     assert.deepEqual(entraram.map((e: { id: string }) => e.id), ['d', 'c']);
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['d', 'c', 'b', 'a']);
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['d', 'c', 'b', 'a']);
     assert.deepEqual(s.pendentes, []);
   });
 
   test('o evento gravado atrasado entra no lugar dele, não no topo', () => {
     const s = E.newState();
-    E.load(s, { eventos: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
-    const r = E.receiveNewer(s, { eventos: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
+    E.load(s, { events: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
+    const r = E.receiveNewer(s, { events: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
     assert.equal(r.noTopo, false);
-    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
-    assert.equal(E.receiveNewer(s, { eventos: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
+    assert.deepEqual(s.events.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
+    assert.equal(E.receiveNewer(s, { events: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
   });
 
   test('a pausa guarda no máximo o limite, mas conta tudo o que chegou', () => {
     const s = E.newState();
-    E.load(s, { eventos: [], cursor: 'c1' });
+    E.load(s, { events: [], cursor: 'c1' });
     E.pause(s);
-    E.receiveNewer(s, { eventos: Array.from({ length: E.LIMIT }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
-    E.receiveNewer(s, { eventos: [evento('ultimo', 1)], cursor: 'c3' });
+    E.receiveNewer(s, { events: Array.from({ length: E.LIMIT }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
+    E.receiveNewer(s, { events: [evento('ultimo', 1)], cursor: 'c3' });
     assert.equal(s.pendentes.length, E.LIMIT);
     assert.equal(s.pendentes[0].id, 'ultimo');
     assert.equal(s.chegados, E.LIMIT + 1);
@@ -216,11 +224,11 @@ describe('Feed de atividade: estado', () => {
 
   test('o limite corta o fim e some com o "mostrar mais"', () => {
     const s = E.newState();
-    E.load(s, { eventos: Array.from({ length: E.LIMIT }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', anteriores: 'v' });
-    const { cortados } = E.receiveNewer(s, { eventos: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
-    assert.equal(s.eventos.length, E.LIMIT);
+    E.load(s, { events: Array.from({ length: E.LIMIT }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', older: 'v' });
+    const { cortados } = E.receiveNewer(s, { events: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
+    assert.equal(s.events.length, E.LIMIT);
     assert.deepEqual(cortados.map((e: { id: string }) => e.id), [`v${E.LIMIT - 2}`, `v${E.LIMIT - 1}`]);
-    assert.equal(s.anteriores, null);
+    assert.equal(s.older, null);
   });
 });
 
@@ -263,10 +271,10 @@ describe('Feed de atividade: a tela', () => {
     const ataque = '<script>alert(1)</script><img src=x onerror=alert(2)>';
     let fila: unknown[] = [
       {
-        eventos: [evento('e2', 12, { resumo: ataque, sessao: { id: '../fora', titulo: ataque, projeto: null } }), evento('e1', 70, { status: 'waiting', ferramenta: null })],
+        events: [evento('e2', 12, { summary: ataque, session: { id: '../fora', title: ataque, project: null } }), evento('e1', 70, { status: 'waiting', tool: null })],
         cursor: 'k2',
-        anteriores: null,
-        opcoes: { tipos: ['PreToolUse', 'Stop'], ferramentas: ['Bash'], sessoes: [{ id: 'c3f09b52-4e1', titulo: 'Separar pagamentos em serviços', projeto: 'motor-de-regras' }] },
+        older: null,
+        options: { types: ['PreToolUse', 'Stop'], tools: ['Bash'], sessions: [{ id: 'c3f09b52-4e1', title: 'Separar pagamentos em serviços', project: 'motor-de-regras' }] },
       },
     ];
     const f = ctxFalso(() => fila.shift());
@@ -305,11 +313,11 @@ describe('Feed de atividade: a tela', () => {
     const [pausa] = area.querySelector('.actions')!.querySelectorAll('button');
     pausa!.click();
     assert.match(pausa!.textContent, /Retomar/);
-    fila = [{ eventos: [evento('e3', 1)], cursor: 'k3', anteriores: null, opcoes: null }];
+    fila = [{ events: [evento('e3', 1)], cursor: 'k3', older: null, options: null }];
     f.mudar();
     await espera();
     assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
-    fila = [{ eventos: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', anteriores: null, opcoes: null }];
+    fila = [{ events: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', older: null, options: null }];
     f.mudar();
     await espera();
     const aviso = area.querySelector('.feed-new')!;
@@ -331,7 +339,7 @@ describe('Feed de atividade: a tela', () => {
     let soltar: (v: unknown) => void = () => {};
     let n = 0;
     const f = ctxFalso((rota) => {
-      if (!rota.includes('after=')) return { eventos: [evento('a', 30)], cursor: 'k1', anteriores: 'v1', opcoes: null };
+      if (!rota.includes('after=')) return { events: [evento('a', 30)], cursor: 'k1', older: 'v1', options: null };
       n++;
       return new Promise((r) => (soltar = r));
     });
@@ -342,12 +350,12 @@ describe('Feed de atividade: a tela', () => {
     f.mudar();
     await espera();
     assert.equal(n, 1);
-    soltar({ eventos: [evento('b', 1)], cursor: 'k2', anteriores: null });
+    soltar({ events: [evento('b', 1)], cursor: 'k2', older: null });
     await espera();
     await espera();
     assert.equal(n, 2);
     assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
-    soltar({ eventos: [], cursor: 'k2', anteriores: null });
+    soltar({ events: [], cursor: 'k2', older: null });
     await espera();
     assert.deepEqual(linhasDe(area), ['b', 'a']);
     limpar();
@@ -355,7 +363,7 @@ describe('Feed de atividade: a tela', () => {
 
   test('vazio, vazio com filtro, erro e "mostrar mais"', async () => {
     const area = new Elemento('main');
-    let limpar = await mount(area, ctxFalso(() => ({ eventos: [], cursor: null, anteriores: null, opcoes: null })).ctx);
+    let limpar = await mount(area, ctxFalso(() => ({ events: [], cursor: null, older: null, options: null })).ctx);
     assert.match(area.textContent, /Nenhum evento ainda/);
     const status = area.querySelectorAll('select')[0]!;
     status.value = 'error';
@@ -371,7 +379,7 @@ describe('Feed de atividade: a tela', () => {
     limpar();
 
     const mais = ctxFalso((rota) =>
-      rota.includes('before=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
+      rota.includes('before=') ? { events: [evento('velho', 900)], cursor: null, older: null } : { events: [evento('novo', 1)], cursor: 'k', older: 'v 1', options: null },
     );
     limpar = await mount(area, mais.ctx);
     const botao = area.querySelector('.feed-more')!;

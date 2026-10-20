@@ -32,7 +32,7 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao } from './resumo.ts';
-import { custoDaSessao, duracaoDe, tituloDe, type LinhaDeSessao } from './sessoes.ts';
+import { custoDaSessao, duracaoDe, tituloDe } from './sessoes.ts';
 
 export const ROTA_DO_KANBAN = '/api/kanban';
 export const POR_PAGINA = 10;
@@ -81,8 +81,24 @@ export function colunaDoAgente(status: DisplayStatus): ColunaDeAgente {
   return DO_AGENTE[status];
 }
 
-/** A linha da tela Sessões (`GET /api/sessions`, #28) com o último prompt e o modelo. */
-export interface CardDeSessao extends LinhaDeSessao {
+/**
+ * The session card of the Kanban: what the Sessions list row had before phase 2b of #173, with the
+ * last prompt and the model. It keeps its Portuguese keys until the Kanban's own layer (the Sessions
+ * list, `GET /api/sessions`, is English since phase 2b layer 4).
+ */
+export interface CardDeSessao {
+  id: string;
+  titulo: string;
+  status: DisplayStatus;
+  motivo: AwaitingReason | null;
+  ultimaAtividade: string;
+  inicio: string;
+  rodando: boolean;
+  duracaoMs: number;
+  agentes: number;
+  custoUsd: number | null;
+  cwd: string | null;
+  conta: { rotulo: string; cor: string } | null;
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
   ultimoPrompt: string | null;
   /** Rótulo legível ("Opus 5.5"); o id cru quando a tabela não conhece o modelo. */

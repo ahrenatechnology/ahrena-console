@@ -126,6 +126,9 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   period: { '1y': '1a' },
   // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
+  // Phase 2b layer 4: the Sessions list filter and order are English in `/api/sessions?status=&order=`.
+  status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
+  order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
 };
 
 /** The new path of an old one; any other path comes back as it is. */
@@ -632,6 +635,128 @@ const LOAD: LegacyBodySpec = {
   opaque: ['.follower', '.work'],
 };
 
+// ---------------------------------------------------------------------------------------------
+// The activity feed, the Sessions list and the History (phase 2b layer 4): `GET /api/events` (old
+// `/api/eventos`), `GET /api/sessions` (old `/api/sessoes`) and `GET /api/history` (old `/api/historico`).
+//
+// `GET /api/events` (RespostaDoFeed, src/api/eventos.ts), keys old → new:
+// - top: eventos → events, anteriores → older, opcoes → options (cursor stays); options: tipos →
+//   types, ferramentas → tools, sessoes → sessions;
+// - each event: criadoEm → createdAt, tipo → type, ferramenta → tool, resumo → summary, sessao →
+//   session, agente → agent, detalhe → detail (id, status stay); session (and options.sessions):
+//   titulo → title, projeto → project; agent: nome → name; detail: entrada → input (callId stays);
+// - values: agent.name principal → main, subagente → subagent (a subagent's type is data and stays);
+//   the event status was English already;
+// - errors cite the new parameter: `limit:`, `after:`, `before:`, `type:`, `session:`, `tool:`,
+//   `search:`, `from:`, `to:` (`after e before não se combinam`, `from: depois do to`).
+//
+// `GET /api/sessions` (ListaDeSessoesHttp, src/api/sessoes.ts), keys old → new:
+// - top: registradas → registered, pagina → page, porPagina → perPage, paginas → pages, diretorios →
+//   directories, itens → items (total stays);
+// - items: titulo → title, motivo → reason, ultimaAtividade → lastActivity, inicio → start, rodando
+//   → running, duracaoMs → durationMs, agentes → agents, custoUsd → costUsd, conta → account (rotulo
+//   → label, cor → color) (id, status, cwd stay; the status and reason values were English already);
+// - query values (ENGLISH_VALUES, both accepted): status todas → all, ativas → active, esperando →
+//   waiting, concluidas → completed, erro → error, abandonadas → abandoned; order atividade →
+//   activity, duracao → duration, custo → cost (direction desc|asc stays);
+// - errors cite the new parameter and values: `status: um de all, …`, `order: um de activity, …`,
+//   `direction:`, `page:`, `search grande demais`.
+//
+// `GET /api/history` (RespostaDoHistorico, src/historico/leitura.ts), keys old → new: dias → days,
+// proximo → next; each day: dia → day, sessoes → sessions; each session: titulo → title, projeto →
+// project, modelo → model, inicio → start, fim → end, duracaoMs → durationMs, custoUsd → costUsd,
+// anterior → previous, seguinte → next (id, status stay); previous/next: titulo → title. Errors:
+// `before:`, `days:`, `search:`.
+// ---------------------------------------------------------------------------------------------
+
+const FEED_SESSION_KEYS = { title: 'titulo', project: 'projeto' };
+
+/** `GET /api/events`, new → old. */
+const EVENTS: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { events: 'eventos', older: 'anteriores', options: 'opcoes' }),
+    ...scoped('options', { types: 'tipos', tools: 'ferramentas', sessions: 'sessoes' }),
+    ...scoped('events', { createdAt: 'criadoEm', type: 'tipo', tool: 'ferramenta', summary: 'resumo', session: 'sessao', agent: 'agente', detail: 'detalhe' }),
+    ...scoped('session', FEED_SESSION_KEYS),
+    ...scoped('sessions', FEED_SESSION_KEYS),
+    ...scoped('agent', { name: 'nome' }),
+    ...scoped('detail', { input: 'entrada' }),
+  },
+  values: {
+    'agent.name': { main: 'principal', subagent: 'subagente' },
+    '.error': {
+      'limit: um inteiro de 1 a 200': 'limite: um inteiro de 1 a 200',
+      'after e before não se combinam': 'depois e antes não se combinam',
+      'after: cursor inválido': 'depois: cursor inválido',
+      'before: cursor inválido': 'antes: cursor inválido',
+      'type: só letras, números e _, até 64': 'tipo: só letras, números e _, até 64',
+      'session: id de sessão inválido': 'sessao: id de sessão inválido',
+      'tool: nome de ferramenta inválido': 'ferramenta: nome de ferramenta inválido',
+      'search: sem quebras de linha nem caracteres de controle': 'busca: sem quebras de linha nem caracteres de controle',
+      'search: até 100 caracteres': 'busca: até 100 caracteres',
+      'from: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'de: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
+      'to: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'ate: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
+      'from: depois do to': 'de: depois do ate',
+    },
+  },
+};
+
+/** `GET /api/sessions`, new → old: the page, its rows and the errors that cite a parameter. */
+const SESSIONS: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { registered: 'registradas', page: 'pagina', perPage: 'porPagina', pages: 'paginas', directories: 'diretorios', items: 'itens' }),
+    ...scoped('items', {
+      title: 'titulo',
+      reason: 'motivo',
+      lastActivity: 'ultimaAtividade',
+      start: 'inicio',
+      running: 'rodando',
+      durationMs: 'duracaoMs',
+      agents: 'agentes',
+      costUsd: 'custoUsd',
+      account: 'conta',
+    }),
+    ...scoped('account', { label: 'rotulo', color: 'cor' }),
+  },
+  values: {
+    '.error': {
+      'status: um de all, active, waiting, completed, error, abandoned': 'status: um de todas, ativas, esperando, concluidas, erro, abandonadas',
+      'order: um de activity, duration, cost': 'ordem: um de atividade, duracao, custo',
+      'direction: um de desc, asc': 'sentido: um de desc, asc',
+      'page: um inteiro a partir de 1': 'pagina: um inteiro a partir de 1',
+      'search grande demais': 'busca grande demais',
+    },
+  },
+};
+
+/** `GET /api/history`, new → old. */
+const HISTORY: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { days: 'dias', next: 'proximo' }),
+    ...scoped('days', { day: 'dia', sessions: 'sessoes' }),
+    ...scoped('sessions', {
+      title: 'titulo',
+      project: 'projeto',
+      model: 'modelo',
+      start: 'inicio',
+      end: 'fim',
+      durationMs: 'duracaoMs',
+      costUsd: 'custoUsd',
+      previous: 'anterior',
+      next: 'seguinte',
+    }),
+    ...scoped('previous', { title: 'titulo' }),
+    ...scoped('next', { title: 'titulo' }),
+  },
+  values: {
+    '.error': {
+      'before: um dia AAAA-MM-DD': 'antes: um dia AAAA-MM-DD',
+      'days: um inteiro de 1 a 31': 'dias: um inteiro de 1 a 31',
+      'search: até 100 caracteres': 'busca: até 100 caracteres',
+    },
+  },
+};
+
 /**
  * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
  * fill its entry, and the goldens prove the old body did not move.
@@ -642,9 +767,9 @@ export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
   panel: { response: PANEL },
   open: {},
   wall: { response: WALL },
-  events: {},
+  events: { response: EVENTS },
   load: { response: LOAD },
-  sessions: {},
+  sessions: { response: SESSIONS },
   // The Detail's top: the session card and the cost are the panel's.
   session: { response: merge(sessionCard('sessao'), { keys: scoped('custo', { series: 'serie', estimate: 'estimativa' }) }) },
   // The Detail's agents tab: the task progress is the panel's plan.
@@ -659,7 +784,7 @@ export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
       decision('itens', true),
     ),
   },
-  history: {},
+  history: { response: HISTORY },
   'decisions/scope': { response: merge(decisionList(''), { values: { '.error': SCOPE_ERRORS } }) },
   // The Decisions page: only the cards (`grupos[].itens[]`) are the panel's.
   decisions: { response: decision('itens', true) },

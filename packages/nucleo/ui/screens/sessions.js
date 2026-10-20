@@ -6,21 +6,36 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
+// The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173).
 export const PILLS = [
-  ['todas', 'Todas'],
-  ['ativas', 'Ativas'],
-  ['esperando', 'Esperando'],
-  ['concluidas', 'Concluídas'],
-  ['erro', 'Erro'],
-  ['abandonadas', 'Abandonadas'],
+  ['all', 'Todas'],
+  ['active', 'Ativas'],
+  ['waiting', 'Esperando'],
+  ['completed', 'Concluídas'],
+  ['error', 'Erro'],
+  ['abandoned', 'Abandonadas'],
 ];
 
 // O rótulo da ordem diz também o sentido: o ⇅ ao lado inverte.
 const ORDERS = {
-  atividade: { desc: 'Atividade: recente', asc: 'Atividade: antiga' },
-  duracao: { desc: 'Duração: maior', asc: 'Duração: menor' },
-  custo: { desc: 'Custo: maior', asc: 'Custo: menor' },
+  activity: { desc: 'Atividade: recente', asc: 'Atividade: antiga' },
+  duration: { desc: 'Duração: maior', asc: 'Duração: menor' },
+  cost: { desc: 'Custo: maior', asc: 'Custo: menor' },
 };
+
+/** The values an old bookmark carries in the address bar (`?status=esperando&order=custo`), as the new ones. */
+const OLD_VALUES = {
+  todas: 'all',
+  ativas: 'active',
+  esperando: 'waiting',
+  concluidas: 'completed',
+  erro: 'error',
+  abandonadas: 'abandoned',
+  atividade: 'activity',
+  duracao: 'duration',
+  custo: 'cost',
+};
+const current = (v) => (v !== null && Object.hasOwn(OLD_VALUES, v) ? OLD_VALUES[v] : v);
 
 export const STATUS = {
   active: 'Ativa',
@@ -38,17 +53,22 @@ export const REASONS = {
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 
-const DEFAULTS = { status: 'todas', search: '', dir: '', order: 'atividade', direction: 'desc', page: 1 };
+const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
-/** The screen state from the query (`?status=esperando&page=2`); what is not valid falls back to the default. */
+/**
+ * The screen state from the query (`?status=waiting&page=2`); an old bookmark's values (`esperando`,
+ * `custo`) still work, and what is not valid falls back to the default.
+ */
 export function stateFromQuery(query) {
   const p = new URLSearchParams(query);
   const page = Number(p.get('page'));
+  const status = current(p.get('status'));
+  const order = current(p.get('order'));
   return {
-    status: PILLS.some(([v]) => v === p.get('status')) ? p.get('status') : DEFAULTS.status,
+    status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
     search: (p.get('search') ?? '').slice(0, 200),
     dir: (p.get('dir') ?? '').startsWith('/') ? p.get('dir') : '',
-    order: p.get('order') in ORDERS ? p.get('order') : DEFAULTS.order,
+    order: Object.hasOwn(ORDERS, order ?? '') ? order : DEFAULTS.order,
     direction: p.get('direction') === 'asc' ? 'asc' : 'desc',
     page: Number.isInteger(page) && page > 1 ? page : 1,
   };
@@ -96,7 +116,7 @@ export function cost(usd) {
 }
 
 /** "1–10 de 12"; "0 de 0" sem nada. */
-export function band({ total, pagina: page, porPagina: perPage }) {
+export function band({ total, page, perPage }) {
   if (!total) return '0 de 0';
   const from = (page - 1) * perPage + 1;
   return `${from}–${Math.min(total, page * perPage)} de ${total}`;
@@ -140,8 +160,8 @@ function badgeEl(status, reason) {
 function account(c) {
   if (!c) return null;
   const dot = el('i', { class: 'account-dot' });
-  if (COLOR.test(c.cor)) dot.style.setProperty('--cor-da-conta', c.cor);
-  return el('span', { class: 'account' }, dot, c.rotulo);
+  if (COLOR.test(c.color)) dot.style.setProperty('--cor-da-conta', c.color);
+  return el('span', { class: 'account' }, dot, c.label);
 }
 
 export async function mount(area, ctx) {
@@ -199,13 +219,13 @@ export async function mount(area, ctx) {
     const tr = el(
       'tr',
       { class: 'session-row' },
-      el('td', { class: 'nm' }, el('a', { href: target, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.conta))),
-      el('td', { class: 'st' }, ...badgeEl(s.status, s.motivo)),
-      el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, age(s.ultimaAtividade)),
+      el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account))),
+      el('td', { class: 'st' }, ...badgeEl(s.status, s.reason)),
+      el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
-      el('td', { class: 'mono dur' }, s.rodando ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.rodando ? ' ' : null, el('span', {}, duration(s.duracaoMs))),
-      el('td', { class: 'mono' }, String(s.agentes)),
-      el('td', { class: 'mono' }, cost(s.custoUsd)),
+      el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, duration(s.durationMs))),
+      el('td', { class: 'mono' }, String(s.agents)),
+      el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       el('td', { class: 'c-muted arrow' }, icon('chevron-right')),
@@ -221,7 +241,7 @@ export async function mount(area, ctx) {
     return el(
       'div',
       { class: 'card' },
-      el('table', { class: 'table' }, el('thead', {}, el('tr', {}, ...COLUMNS.map(([className, c]) => el('th', { scope: 'col', class: className }, c)))), el('tbody', {}, ...list.itens.map(row))),
+      el('table', { class: 'table' }, el('thead', {}, el('tr', {}, ...COLUMNS.map(([className, c]) => el('th', { scope: 'col', class: className }, c)))), el('tbody', {}, ...list.items.map(row))),
     );
   }
 
@@ -233,25 +253,25 @@ export async function mount(area, ctx) {
       el(
         'span',
         { class: 'pages' },
-        el('button', { type: 'button', class: 'btn outline', disabled: list.pagina <= 1, onClick: () => change({ page: list.pagina - 1 }) }, 'Anterior'),
-        el('button', { type: 'button', class: 'btn outline', disabled: list.pagina >= list.paginas, onClick: () => change({ page: list.pagina + 1 }) }, 'Próxima'),
+        el('button', { type: 'button', class: 'btn outline', disabled: list.page <= 1, onClick: () => change({ page: list.page - 1 }) }, 'Anterior'),
+        el('button', { type: 'button', class: 'btn outline', disabled: list.page >= list.pages, onClick: () => change({ page: list.page + 1 }) }, 'Próxima'),
       ),
     );
   }
 
   function draw(list) {
-    sub.textContent = list.registradas === 1 ? '1 sessão registrada' : `${list.registradas} sessões registradas`;
+    sub.textContent = list.registered === 1 ? '1 sessão registrada' : `${list.registered} sessões registradas`;
     // A página pedida pode ter sumido (a lista encolheu): fica a que o núcleo devolveu.
-    if (list.pagina !== state.page) {
-      state = { ...state, page: list.pagina };
+    if (list.page !== state.page) {
+      state = { ...state, page: list.page };
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
-    drawFilters(list.diretorios);
-    if (list.itens.length) return body.replaceChildren(table(list), footer(list));
-    const filtering = state.status !== 'todas' || state.search.trim() || state.dir;
+    drawFilters(list.directories);
+    if (list.items.length) return body.replaceChildren(table(list), footer(list));
+    const filtering = state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(
       filtering
-        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'todas', search: '', dir: '', page: 1 })) } })
+        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'all', search: '', dir: '', page: 1 })) } })
         : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
     );
   }

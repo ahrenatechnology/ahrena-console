@@ -18,7 +18,7 @@ export const MAX_SEARCH = 100;
 // ---------- Funções puras ----------
 
 /** A rota da API do histórico, só com os parâmetros presentes. */
-export function historyRoute({ antes: before = null, busca: search = '', dias: days = DAYS_PER_PAGE } = {}) {
+export function historyRoute({ before = null, search = '', days = DAYS_PER_PAGE } = {}) {
   const parts = [];
   if (before) parts.push(`before=${encodeURIComponent(before)}`);
   if (days) parts.push(`days=${encodeURIComponent(days)}`);
@@ -70,13 +70,14 @@ export function formatDuration(ms) {
 export const shortId = (id) => String(id ?? '').slice(0, 8);
 
 /**
- * Ao vivo: a primeira página relida (`novos`) mais os dias já carregados que são mais antigos que o
- * dia mais antigo dela. Primeira página vazia: lista vazia.
+ * Ao vivo: a primeira página relida (`newOnes`) mais os dias já carregados que são mais antigos que o
+ * dia mais antigo dela. Primeira página vazia: lista vazia. A day is `{ day, sessions }`, as
+ * `/api/history` answers it.
  */
 export function mergeDays(currentOnes, newOnes) {
   if (!newOnes?.length) return [];
-  const oldest = newOnes[newOnes.length - 1].dia;
-  return [...newOnes, ...(currentOnes ?? []).filter((d) => d.dia < oldest)];
+  const oldest = newOnes[newOnes.length - 1].day;
+  return [...newOnes, ...(currentOnes ?? []).filter((d) => d.day < oldest)];
 }
 
 /** Anexa uma página seguinte: se o primeiro dia novo é o último carregado, as sessões vão juntas. */
@@ -84,9 +85,9 @@ export function appendDays(currentOnes, newOnes) {
   const list = [...(currentOnes ?? [])];
   for (const day of newOnes ?? []) {
     const last = list[list.length - 1];
-    if (last && last.dia === day.dia) {
-      const ids = new Set(last.sessoes.map((s) => s.id));
-      list[list.length - 1] = { ...last, sessoes: [...last.sessoes, ...day.sessoes.filter((s) => !ids.has(s.id))] };
+    if (last && last.day === day.day) {
+      const ids = new Set(last.sessions.map((s) => s.id));
+      list[list.length - 1] = { ...last, sessions: [...last.sessions, ...day.sessions.filter((s) => !ids.has(s.id))] };
     } else list.push(day);
   }
   return list;
@@ -111,7 +112,7 @@ const sessionRoute = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
 function row(s) {
   const id = String(s.id);
-  const previous = s.anterior
+  const previous = s.previous
     ? el(
         'div',
         { class: 'hist-o hist-trunc hist-continued' },
@@ -119,30 +120,30 @@ function row(s) {
         ' continuou depois do ',
         el('code', {}, '/clear'),
         ' em ',
-        el('a', { class: 'hist-accent hist-previous', href: sessionRoute(String(s.anterior.id)) }, s.anterior.titulo || shortId(s.anterior.id)),
+        el('a', { class: 'hist-accent hist-previous', href: sessionRoute(String(s.previous.id)) }, s.previous.title || shortId(s.previous.id)),
       )
     : null;
   return el(
     'div',
     { class: 'hist-row' },
     badge(s.status),
-    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.titulo || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id)), previous),
-    el('span', { class: 'hist-o mono hist-trunc hist-project' }, s.projeto || '—'),
-    el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.modelo || '—'),
-    el('span', { class: 'hist-o mono hist-duration' }, formatDuration(s.duracaoMs)),
-    el('span', { class: 'mono hist-cost' }, formatCost(s.custoUsd)),
+    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.title || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id)), previous),
+    el('span', { class: 'hist-o mono hist-trunc hist-project' }, s.project || '—'),
+    el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.model || '—'),
+    el('span', { class: 'hist-o mono hist-duration' }, formatDuration(s.durationMs)),
+    el('span', { class: 'mono hist-cost' }, formatCost(s.costUsd)),
     el('span', { class: 'hist-muted hist-arrow' }, icon('chevron-right')),
   );
 }
 
 function group(day, today) {
-  const label = dayLabel(day.dia, today);
-  const n = day.sessoes.length;
+  const label = dayLabel(day.day, today);
+  const n = day.sessions.length;
   return el(
     'section',
     { class: 'hist-group', 'aria-label': label },
     el('h2', { class: 'eyebrow hist-day' }, icon('calendar'), label, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
-    el('div', { class: 'card hist-rows' }, ...day.sessoes.map(row)),
+    el('div', { class: 'card hist-rows' }, ...day.sessions.map(row)),
   );
 }
 
@@ -257,10 +258,10 @@ export function mount(area, ctx) {
     pickLane(footer, null);
     list.replaceChildren(loading());
     try {
-      const r = await read(historyRoute({ busca: search }));
+      const r = await read(historyRoute({ search }));
       if (g !== generation || ended) return;
-      days = r?.dias ?? [];
-      next = r?.proximo ?? null;
+      days = r?.days ?? [];
+      next = r?.next ?? null;
       ready = true;
       drawList();
     } catch (e) {
@@ -275,10 +276,10 @@ export function mount(area, ctx) {
     const g = generation;
     loadingMore = true;
     try {
-      const r = await read(historyRoute({ antes: next, busca: search }));
+      const r = await read(historyRoute({ before: next, search }));
       if (g !== generation || ended) return;
-      days = appendDays(days, r?.dias ?? []);
-      next = r?.proximo ?? null;
+      days = appendDays(days, r?.days ?? []);
+      next = r?.next ?? null;
       moreBand = null;
     } catch (e) {
       if (aborted(e) || g !== generation) return;
@@ -300,14 +301,14 @@ export function mount(area, ctx) {
     const g = generation;
     const turn = ++liveTurn;
     try {
-      const r = await read(historyRoute({ busca: search }));
+      const r = await read(historyRoute({ search }));
       if (g !== generation || turn !== liveTurn || ended) return;
-      const newOnes = r?.dias ?? [];
-      const oldest = newOnes.length ? newOnes[newOnes.length - 1].dia : null;
+      const newOnes = r?.days ?? [];
+      const oldest = newOnes.length ? newOnes[newOnes.length - 1].day : null;
       // Os dias já carregados além da primeira página ficam, e o cursor deles também.
-      const keepOld = oldest !== null && days.some((d) => d.dia < oldest);
+      const keepOld = oldest !== null && days.some((d) => d.day < oldest);
       days = mergeDays(days, newOnes);
-      if (!keepOld) next = r?.proximo ?? null;
+      if (!keepOld) next = r?.next ?? null;
       liveBand = null;
     } catch (e) {
       if (aborted(e) || g !== generation || turn !== liveTurn) return;

@@ -3,10 +3,10 @@
 // `feed-state.js`, e esta tela só desenha.
 //
 // - Primeira leitura (ou filtro novo, ou "Atualizar", ou o núcleo reiniciado): a página do topo.
-// - Ao vivo: a cada mudança do long polling, pede `depois=<cursor>` e põe os novos no topo. Um pedido
+// - Ao vivo: a cada mudança do long polling, pede `after=<cursor>` e põe os novos no topo. Um pedido
 //   em voo por vez; mudança que chega no meio pede um único pedido a mais no fim.
 // - Pausa: a lista congela; o que chega espera e aparece como "N novos", que solta tudo ao retomar.
-// - "Mostrar mais": pede `antes=<anteriores>` e põe os mais velhos no fim.
+// - "Mostrar mais": pede `before=<older>` e põe os mais velhos no fim.
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
@@ -28,6 +28,7 @@ import {
   relativeTime,
   hasFilter,
   trail,
+  agentName,
 } from './feed-state.js';
 
 const CSS = '/ui/feed.css';
@@ -103,13 +104,13 @@ export async function mount(area, ctx) {
   );
 
   function readFilters() {
-    filters.busca = search.value;
-    filters.de = dayToIso(from.value);
-    filters.ate = dayToIso(until.value, true);
+    filters.search = search.value;
+    filters.from = dayToIso(from.value);
+    filters.to = dayToIso(until.value, true);
     filters.status = sStatus.value;
-    filters.tipo = sType.value;
-    filters.ferramenta = sTool.value;
-    filters.sessao = sSession.value;
+    filters.type = sType.value;
+    filters.tool = sTool.value;
+    filters.session = sSession.value;
   }
   const filterChanged = () => (readFilters(), reload());
   search.addEventListener('input', () => {
@@ -129,9 +130,9 @@ export async function mount(area, ctx) {
 
   function refreshOptions(options) {
     if (!options) return;
-    optionsOf(sType, 'Tipo de evento', (options.tipos ?? []).map((t) => [t, t]));
-    optionsOf(sTool, 'Ferramenta', (options.ferramentas ?? []).map((t) => [t, t]));
-    optionsOf(sSession, 'Sessão', (options.sessoes ?? []).map((s) => [s.id, [s.projeto, s.titulo ?? s.id].filter(Boolean).join(' › ')]));
+    optionsOf(sType, 'Tipo de evento', (options.types ?? []).map((t) => [t, t]));
+    optionsOf(sTool, 'Ferramenta', (options.tools ?? []).map((t) => [t, t]));
+    optionsOf(sSession, 'Sessão', (options.sessions ?? []).map((s) => [s.id, [s.project, s.title ?? s.id].filter(Boolean).join(' › ')]));
   }
 
   // ---------- aviso de novos, faixa e corpo ----------
@@ -154,7 +155,7 @@ export async function mount(area, ctx) {
 
   function row(ev) {
     const isOpen = state.aberto === ev.id;
-    const route = sessionRoute(ev.sessao?.id);
+    const route = sessionRoute(ev.session?.id);
     const status = STATUS[ev.status] ? ev.status : 'completed';
     const arrow = el(
       'button',
@@ -170,12 +171,12 @@ export async function mount(area, ctx) {
       'div',
       { class: `feed-row${isOpen ? ' feed-open' : ''}` },
       arrow,
-      el('span', { class: 'feed-o mono feed-time' }, shortTime(ev.criadoEm)),
+      el('span', { class: 'feed-o mono feed-time' }, shortTime(ev.createdAt)),
       el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
       el('span', { class: 'feed-o feed-trunc feed-trail', title: path }, path),
-      el('span', { class: 'feed-trunc feed-summary', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
-      ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
-      el('span', { class: 'feed-o feed-rel', title: dateTime(ev.criadoEm) }, relativeTime(ev.criadoEm)),
+      el('span', { class: 'feed-trunc feed-summary', title: ev.summary ?? ev.type ?? '' }, ev.summary ?? ev.type ?? ''),
+      ev.tool ? el('span', { class: 'feed-chip' }, ev.tool) : null,
+      el('span', { class: 'feed-o feed-rel', title: dateTime(ev.createdAt) }, relativeTime(ev.createdAt)),
       route ? el('a', { class: 'btn outline feed-session', href: route }, 'Sessão', icon('external')) : null,
     );
     headEl.addEventListener('click', (e) => {
@@ -186,23 +187,23 @@ export async function mount(area, ctx) {
   }
 
   function detail(ev) {
-    const d = ev.detalhe ?? {};
-    const agent = ev.agente ?? {};
+    const d = ev.detail ?? {};
+    const agent = ev.agent ?? {};
     const pairs = [
-      ['Evento', ev.tipo],
-      ['Registrado', dateTime(ev.criadoEm)],
-      ['Sessão', ev.sessao?.id],
-      ['Agente', [agent.nome, shortId(agent.id)].filter(Boolean).join(' · ')],
-      ['Ferramenta', ev.ferramenta],
+      ['Evento', ev.type],
+      ['Registrado', dateTime(ev.createdAt)],
+      ['Sessão', ev.session?.id],
+      ['Agente', [agentName(agent.name), shortId(agent.id)].filter(Boolean).join(' · ')],
+      ['Ferramenta', ev.tool],
       ['Call id', d.callId],
     ];
-    const block = ev.ferramenta
-      ? el('div', { class: 'feed-toolblock' }, icon('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
-      : el('p', { class: 'feed-text' }, ev.resumo ?? d.entrada ?? '—');
+    const block = ev.tool
+      ? el('div', { class: 'feed-toolblock' }, icon('terminal'), el('span', { class: 'feed-n' }, ev.tool), el('span', { class: 'feed-cmd feed-trunc', title: d.input ?? '' }, d.input ?? ''))
+      : el('p', { class: 'feed-text' }, ev.summary ?? d.input ?? '—');
     return el(
       'div',
       { class: 'feed-detail' },
-      el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), block, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-text' }, ev.resumo) : null),
+      el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), block, ev.tool && ev.summary ? el('p', { class: 'feed-text' }, ev.summary) : null),
       el('dl', { class: 'feed-kv mono' }, ...pairs.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
     );
   }
@@ -229,7 +230,7 @@ export async function mount(area, ctx) {
 
   function drawAll() {
     items.clear();
-    if (!state.eventos.length) {
+    if (!state.events.length) {
       showBody(
         hasFilter(filters)
           ? empty({ title: 'Nenhum evento com esses filtros', text: 'Mude ou limpe os filtros para ver mais.' })
@@ -237,8 +238,8 @@ export async function mount(area, ctx) {
       );
       return;
     }
-    listEl.replaceChildren(...state.eventos.map(item));
-    moreButton.hidden = !state.anteriores;
+    listEl.replaceChildren(...state.events.map(item));
+    moreButton.hidden = !state.older;
     showBody(listCard);
   }
 
@@ -250,7 +251,7 @@ export async function mount(area, ctx) {
       items.delete(ev.id);
     }
     listEl.prepend(...entered.map(item));
-    moreButton.hidden = !state.anteriores;
+    moreButton.hidden = !state.older;
   }
 
   function drawPause() {
@@ -282,7 +283,7 @@ export async function mount(area, ctx) {
       const r = await ctx.read(query(filters));
       if (g !== generation) return;
       load(state, r);
-      refreshOptions(r.opcoes);
+      refreshOptions(r.options);
       ready = true;
       clearBand();
       drawAll();
@@ -300,14 +301,14 @@ export async function mount(area, ctx) {
     inFlight = true;
     const g = generation;
     try {
-      const r = await ctx.read(query(filters, { depois: state.cursor }));
+      const r = await ctx.read(query(filters, { after: state.cursor }));
       if (g !== generation) return;
       clearBand();
-      refreshOptions(r.opcoes);
+      refreshOptions(r.options);
       drawNew(receiveNewer(state, r));
       drawPause();
       // Lote cheio: há mais gravado depois deste cursor; pede de novo na hora.
-      if ((r.eventos?.length ?? 0) >= LIVE_BATCH) again = true;
+      if ((r.events?.length ?? 0) >= LIVE_BATCH) again = true;
     } catch (e) {
       if (isAbort(e) || g !== generation) return;
       showBand('O ao vivo do feed falhou.', e?.message);
@@ -321,15 +322,15 @@ export async function mount(area, ctx) {
   }
 
   async function showMore() {
-    if (!state.anteriores) return;
+    if (!state.older) return;
     const g = generation;
     moreButton.disabled = true;
     try {
-      const r = await ctx.read(query(filters, { antes: state.anteriores }));
+      const r = await ctx.read(query(filters, { before: state.older }));
       if (g !== generation) return;
       const stale = receiveOlder(state, r);
       listEl.append(...stale.map(item));
-      moreButton.hidden = !state.anteriores;
+      moreButton.hidden = !state.older;
     } catch (e) {
       if (isAbort(e) || g !== generation) return;
       showBand('Não deu para ler os eventos mais velhos.', e?.message);
@@ -348,7 +349,7 @@ export async function mount(area, ctx) {
     const now = Date.now();
     for (const { no: node, ev } of items.values()) {
       const rel = node.querySelector('.feed-rel');
-      if (rel) rel.textContent = relativeTime(ev.criadoEm, now);
+      if (rel) rel.textContent = relativeTime(ev.createdAt, now);
     }
   }, CLOCK_MS);
 

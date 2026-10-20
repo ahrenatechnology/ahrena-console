@@ -16,17 +16,17 @@ import { encerradaDe, paginaDoHistorico, type PaginaDoHistorico, type PedidoDoHi
 /** A sessão de antes ou de depois do /clear. */
 export interface VizinhaDoHistorico {
   id: string;
-  titulo: string | null;
+  title: string | null;
 }
 
 export interface ItemDoHistorico extends SessaoEncerrada {
-  duracaoMs: number;
+  durationMs: number;
   /** Estimativa em US$; `null` sem uso gravado ou sem preço para o modelo. */
-  custoUsd: number | null;
+  costUsd: number | null;
   /** A sessão de antes do /clear. */
-  anterior: VizinhaDoHistorico | null;
+  previous: VizinhaDoHistorico | null;
   /** A sessão nova depois do /clear. */
-  seguinte: VizinhaDoHistorico | null;
+  next: VizinhaDoHistorico | null;
 }
 
 export type RespostaDoHistorico = PaginaDoHistorico<ItemDoHistorico>;
@@ -35,7 +35,7 @@ type PortaDeLeitura = Pick<StoragePort, 'listSessions' | 'getSession' | 'listEve
 
 export interface OpcoesDoHistorico {
   storage: PortaDeLeitura;
-  /** A ligação de sessões (#99); sem ela, `anterior` e `seguinte` vêm `null`. */
+  /** A ligação de sessões (#99); sem ela, `previous` e `next` vêm `null`. */
   decisoes?: Pick<DecisionPort, 'getSessionLink' | 'listSessionLinks'> | null;
   /** Fuso IANA dos dias. Padrão: o da máquina do núcleo. */
   fusoHorario?: string;
@@ -76,21 +76,21 @@ export class HistoricoDeSessoes {
     const pagina = paginaDoHistorico(encerradas, pedido, this.fuso);
     const precos = await precosVigentes(this.storage);
     const dias = [];
-    for (const d of pagina.dias) {
+    for (const d of pagina.days) {
       const sessoes: ItemDoHistorico[] = [];
-      for (const e of d.sessoes) {
+      for (const e of d.sessions) {
         const vizinhas = this.decisoes ? await clearNeighbours(this.decisoes, e.id) : { previous: null, next: null };
         sessoes.push({
           ...e,
-          duracaoMs: Math.max(0, Date.parse(e.fim) - Date.parse(e.inicio)),
-          custoUsd: await this.custoDe(porId.get(e.id)!, precos),
-          anterior: await this.vizinha(vizinhas.previous, porId),
-          seguinte: await this.vizinha(vizinhas.next, porId),
+          durationMs: Math.max(0, Date.parse(e.end) - Date.parse(e.start)),
+          costUsd: await this.custoDe(porId.get(e.id)!, precos),
+          previous: await this.vizinha(vizinhas.previous, porId),
+          next: await this.vizinha(vizinhas.next, porId),
         });
       }
-      dias.push({ dia: d.dia, sessoes });
+      dias.push({ day: d.day, sessions: sessoes });
     }
-    return { dias, proximo: pagina.proximo };
+    return { days: dias, next: pagina.next };
   }
 
   // O mesmo número do painel (custoDe em api/painel.ts); sem uso, `null` em vez de zero.
@@ -106,6 +106,6 @@ export class HistoricoDeSessoes {
   private async vizinha(id: string | null, porId: Map<string, Session>): Promise<VizinhaDoHistorico | null> {
     if (!id) return null;
     const s = porId.get(id) ?? (await this.storage.getSession(id));
-    return { id, titulo: s ? (this.tituloDe(s) ?? s.name ?? null) : null };
+    return { id, title: s ? (this.tituloDe(s) ?? s.name ?? null) : null };
   }
 }

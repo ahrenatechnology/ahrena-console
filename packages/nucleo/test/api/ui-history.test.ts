@@ -77,7 +77,8 @@ describe('Histórico: registro e arquivo', () => {
 
   test('o histórico não desenha a sessão seguinte e limita a busca ao que o núcleo aceita', () => {
     const texto = readFileSync(`${PASTA_DA_UI}screens/history.js`, 'utf8');
-    assert.doesNotMatch(texto, /\.seguinte\b/);
+    // The session's `next` (after the /clear) is not drawn; the page's `next` cursor is `r?.next`.
+    assert.doesNotMatch(texto, /\b(s|item|session)\.next\b/);
     assert.equal(MAX_SEARCH, 100);
     assert.match(texto, /maxlength: MAX_SEARCH/);
     assert.match(texto, /el\('h2', \{ class: 'eyebrow hist-day' \}/);
@@ -116,9 +117,9 @@ describe('Histórico: funções puras', () => {
   test('rotaDoHistorico só leva os parâmetros presentes', () => {
     assert.equal(DAYS_PER_PAGE, 7);
     assert.equal(historyRoute({}), '/api/history?days=7');
-    assert.equal(historyRoute({ antes: '2025-10-11' }), '/api/history?before=2025-10-11&days=7');
-    assert.equal(historyRoute({ busca: 'fetch nativo & cia' }), '/api/history?days=7&search=fetch%20nativo%20%26%20cia');
-    assert.equal(historyRoute({ antes: '2025-10-11', busca: '', dias: 3 }), '/api/history?before=2025-10-11&days=3');
+    assert.equal(historyRoute({ before: '2025-10-11' }), '/api/history?before=2025-10-11&days=7');
+    assert.equal(historyRoute({ search: 'fetch nativo & cia' }), '/api/history?days=7&search=fetch%20nativo%20%26%20cia');
+    assert.equal(historyRoute({ before: '2025-10-11', search: '', days: 3 }), '/api/history?before=2025-10-11&days=3');
   });
 
   test('rotuloDoDia: hoje, ontem, outro dia e outro ano', () => {
@@ -178,15 +179,15 @@ describe('Histórico: funções puras', () => {
     assert.equal(shortId('abc'), 'abc');
   });
 
-  const sessao = (id: string) => ({ id, titulo: id, projeto: 'vitrine-demo', modelo: 'Opus 5.5', status: 'completed', inicio: '', fim: '', duracaoMs: 0, custoUsd: 0, anterior: null, seguinte: null });
-  const dia = (d: string, ...ids: string[]) => ({ dia: d, sessoes: ids.map(sessao) });
+  const sessao = (id: string) => ({ id, title: id, project: 'vitrine-demo', model: 'Opus 5.5', status: 'completed', start: '', end: '', durationMs: 0, costUsd: 0, previous: null, next: null });
+  const dia = (d: string, ...ids: string[]) => ({ day: d, sessions: ids.map(sessao) });
 
   test('juntarDias: a primeira página relida e os dias carregados mais antigos que ela', () => {
     const atuais = [dia('2025-10-18', 'a'), dia('2025-10-17', 'b'), dia('2025-10-12', 'c'), dia('2025-10-10', 'd')];
     const novos = [dia('2025-10-18', 'e', 'a'), dia('2025-10-17', 'b'), dia('2025-10-12', 'c')];
     assert.deepEqual(mergeDays(atuais, novos), [...novos, dia('2025-10-10', 'd')]);
     // A primeira página ganhou um dia novo: o que estava carregado depois dela continua, sem repetir dia.
-    assert.deepEqual(mergeDays(atuais, [dia('2025-10-19', 'f'), dia('2025-10-18', 'a')]).map((d: { dia: string }) => d.dia), ['2025-10-19', '2025-10-18', '2025-10-17', '2025-10-12', '2025-10-10']);
+    assert.deepEqual(mergeDays(atuais, [dia('2025-10-19', 'f'), dia('2025-10-18', 'a')]).map((d: { day: string }) => d.day), ['2025-10-19', '2025-10-18', '2025-10-17', '2025-10-12', '2025-10-10']);
     assert.deepEqual(mergeDays(atuais, []), []);
     assert.deepEqual(mergeDays([], novos), novos);
   });

@@ -3,14 +3,15 @@
 //
 // | Parâmetro | Valores                                                              | Padrão      |
 // | --------- | -------------------------------------------------------------------- | ----------- |
-// | `status`  | `todas`, `ativas`, `esperando`, `concluidas`, `erro`, `abandonadas`   | `todas`     |
+// | `status`  | `all`, `active`, `waiting`, `completed`, `error`, `abandoned`        | `all`       |
 // | `search`  | texto: título, id ou diretório, sem diferença de caixa                | —           |
-// | `dir`     | um diretório exato (os de `diretorios` na resposta)                   | —           |
-// | `order`   | `atividade`, `duracao` ou `custo`                                     | `atividade` |
-// | `direction` | `desc` ou `asc`                                                       | `desc`      |
+// | `dir`     | um diretório exato (os de `directories` na resposta)                  | —           |
+// | `order`   | `activity`, `duration` ou `cost`                                      | `activity`  |
+// | `direction` | `desc` ou `asc`                                                     | `desc`      |
 // | `page`    | a partir de 1, com `POR_PAGINA` itens                                 | 1           |
 //
-// The old parameter names (and route) are aliases: src/api/legacy-routes.ts.
+// The old parameter names, values (`status=esperando`, `order=custo`) and route are aliases, and the
+// old route answers the body in its old keys: src/api/legacy-routes.ts (phase 2b of #173).
 //
 // Tudo pela porta e por caches em memória (decisão 0004). O custo de uma sessão é refeito só quando
 // o `updatedAt` dela muda, e só para as sessões da página, a não ser que a ordem seja por custo.
@@ -33,18 +34,11 @@ export const SESSIONS_ROUTE = '/api/sessions';
 export const ROTA_DAS_SESSOES = '/api/sessoes';
 export const POR_PAGINA = 10;
 
-export const FILTROS_DE_STATUS = ['todas', 'ativas', 'esperando', 'concluidas', 'erro', 'abandonadas'] as const;
+/** `all`, or one `DisplayStatus`. */
+export const FILTROS_DE_STATUS = ['all', 'active', 'waiting', 'completed', 'error', 'abandoned'] as const;
 export type FiltroDeStatus = (typeof FILTROS_DE_STATUS)[number];
-export const ORDENS = ['atividade', 'duracao', 'custo'] as const;
+export const ORDENS = ['activity', 'duration', 'cost'] as const;
 export type Ordem = (typeof ORDENS)[number];
-
-const DO_FILTRO: Record<Exclude<FiltroDeStatus, 'todas'>, DisplayStatus> = {
-  ativas: 'active',
-  esperando: 'waiting',
-  concluidas: 'completed',
-  erro: 'error',
-  abandonadas: 'abandoned',
-};
 
 export interface PedidoDeSessoes {
   status: FiltroDeStatus;
@@ -57,32 +51,32 @@ export interface PedidoDeSessoes {
 
 export interface LinhaDeSessao {
   id: string;
-  titulo: string;
+  title: string;
   status: DisplayStatus;
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
-  motivo: AwaitingReason | null;
-  ultimaAtividade: string;
-  inicio: string;
+  reason: AwaitingReason | null;
+  lastActivity: string;
+  start: string;
   /** Ativa ou esperando: a duração ainda corre. */
-  rodando: boolean;
-  duracaoMs: number;
-  agentes: number;
+  running: boolean;
+  durationMs: number;
+  agents: number;
   /** Estimativa; `null` quando há uso e nada dele tem preço. */
-  custoUsd: number | null;
+  costUsd: number | null;
   cwd: string | null;
-  conta: { rotulo: string; cor: string } | null;
+  account: { label: string; color: string } | null;
 }
 
 export interface ListaDeSessoesHttp {
   total: number;
   /** Todas as sessões registradas, sem filtro: o "12 sessões registradas" do cabeçalho. */
-  registradas: number;
-  pagina: number;
-  porPagina: number;
-  paginas: number;
+  registered: number;
+  page: number;
+  perPage: number;
+  pages: number;
   /** Os diretórios do filtro, em ordem alfabética. */
-  diretorios: string[];
-  itens: LinhaDeSessao[];
+  directories: string[];
+  items: LinhaDeSessao[];
 }
 
 export class ErroDoPedido extends Error {}
@@ -93,24 +87,24 @@ const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 /** Os parâmetros da URL, validados; parâmetro inválido lança `ErroDoPedido` (400). */
 export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
   const p = url.searchParams;
-  // `rotulo`: the name the error message shows, kept as it was (the message is the same on the old route).
-  const um = <T extends string>(nome: string, validos: readonly T[], padrao: T, rotulo = nome): T => {
+  // The error cites the parameter by its new name; the old route translates it back.
+  const um = <T extends string>(nome: string, validos: readonly T[], padrao: T): T => {
     const v = p.get(nome) || padrao;
-    if (!validos.includes(v as T)) throw new ErroDoPedido(`${rotulo}: um de ${validos.join(', ')}`);
+    if (!validos.includes(v as T)) throw new ErroDoPedido(`${nome}: um de ${validos.join(', ')}`);
     return v as T;
   };
   const busca = (p.get('search') ?? '').trim();
-  if (busca.length > BUSCA_MAXIMA) throw new ErroDoPedido('busca grande demais');
+  if (busca.length > BUSCA_MAXIMA) throw new ErroDoPedido('search grande demais');
   const dir = p.get('dir') || null;
   if (dir !== null && !CAMINHO.test(dir)) throw new ErroDoPedido('dir: um caminho absoluto');
   const pagina = Number(p.get('page') || 1);
-  if (!Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) throw new ErroDoPedido('pagina: um inteiro a partir de 1');
+  if (!Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) throw new ErroDoPedido('page: um inteiro a partir de 1');
   return {
-    status: um('status', FILTROS_DE_STATUS, 'todas'),
+    status: um('status', FILTROS_DE_STATUS, 'all'),
     busca: busca || null,
     dir,
-    ordem: um('order', ORDENS, 'atividade', 'ordem'),
-    sentido: um('direction', ['desc', 'asc'] as const, 'desc', 'sentido'),
+    ordem: um('order', ORDENS, 'activity'),
+    sentido: um('direction', ['desc', 'asc'] as const, 'desc'),
     pagina,
   };
 }
@@ -152,7 +146,7 @@ export class ListaDeSessoes {
 
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
-    const alvo = pedido.status === 'todas' ? null : DO_FILTRO[pedido.status];
+    const alvo = pedido.status === 'all' ? null : pedido.status;
     let filtradas = todas.filter(
       ({ s, titulo }) =>
         (!alvo || displayStatus(s) === alvo) &&
@@ -162,10 +156,10 @@ export class ListaDeSessoes {
 
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
-    if (pedido.ordem === 'duracao') {
+    if (pedido.ordem === 'duration') {
       const dur = new Map(filtradas.map(({ s }) => [s.id, duracaoDe(s, agora)]));
       filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b.s.id)! - dur.get(a.s.id)!));
-    } else if (pedido.ordem === 'custo') {
+    } else if (pedido.ordem === 'cost') {
       const custo = new Map<string, number>();
       for (const { s } of filtradas) custo.set(s.id, (await this.custoDe(s)) ?? -1);
       filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b.s.id)! - custo.get(a.s.id)!));
@@ -180,20 +174,20 @@ export class ListaDeSessoes {
       const conta = this.contas.daSessao(s, desktop);
       itens.push({
         id: s.id,
-        titulo,
+        title: titulo,
         status,
-        motivo: status === 'waiting' ? s.awaitingReason : null,
-        ultimaAtividade: s.updatedAt,
-        inicio: s.startedAt,
-        rodando: status === 'active' || status === 'waiting',
-        duracaoMs: duracaoDe(s, agora),
-        agentes: (await this.storage.listAgents(s.id)).length,
-        custoUsd: await this.custoDe(s),
+        reason: status === 'waiting' ? s.awaitingReason : null,
+        lastActivity: s.updatedAt,
+        start: s.startedAt,
+        running: status === 'active' || status === 'waiting',
+        durationMs: duracaoDe(s, agora),
+        agents: (await this.storage.listAgents(s.id)).length,
+        costUsd: await this.custoDe(s),
         cwd: s.cwd,
-        conta: conta ? { rotulo: conta.label, cor: conta.color } : null,
+        account: conta ? { label: conta.label, color: conta.color } : null,
       });
     }
-    return { total, registradas: todas.length, pagina, porPagina: POR_PAGINA, paginas, diretorios, itens };
+    return { total, registered: todas.length, page: pagina, perPage: POR_PAGINA, pages: paginas, directories: diretorios, items: itens };
   }
 
   private async custoDe(s: Session): Promise<number | null> {

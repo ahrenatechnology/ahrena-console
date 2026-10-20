@@ -20,21 +20,25 @@ export function sessionRoute(id) {
   return typeof id === 'string' && ID.test(id) ? `/ui/sessions/${encodeURIComponent(id)}` : null;
 }
 
+/** Como a moldura escreve o agente do evento: o principal e o subagente sem tipo (`main`, `subagent`). */
+export const AGENTS = { main: 'principal', subagent: 'subagente' };
+
+/** `events` and `older` mirror the body of `/api/events` (`{ events, cursor, older, options }`). */
 export function newState() {
-  return { eventos: [], cursor: null, anteriores: null, pausado: false, pendentes: [], chegados: 0, aberto: null };
+  return { events: [], cursor: null, older: null, pausado: false, pendentes: [], chegados: 0, aberto: null };
 }
 
 /** A primeira página (ou a releitura): troca a lista inteira e esvazia o que estava pendente. */
 export function load(state, response) {
-  state.eventos = [...(response.eventos ?? [])].slice(0, LIMIT);
+  state.events = [...(response.events ?? [])].slice(0, LIMIT);
   state.cursor = response.cursor ?? null;
-  state.anteriores = response.anteriores ?? null;
+  state.older = response.older ?? null;
   state.pendentes = [];
   state.chegados = 0;
-  if (state.aberto && !state.eventos.some((e) => e.id === state.aberto)) state.aberto = null;
+  if (state.aberto && !state.events.some((e) => e.id === state.aberto)) state.aberto = null;
 }
 
-const ids = (state) => new Set([...state.eventos, ...state.pendentes].map((e) => e.id));
+const ids = (state) => new Set([...state.events, ...state.pendentes].map((e) => e.id));
 
 /**
  * Eventos novos do ao vivo (mais novo primeiro). Pausado, eles esperam em `pendentes`; senão entram no
@@ -43,7 +47,7 @@ const ids = (state) => new Set([...state.eventos, ...state.pendentes].map((e) =>
 export function receiveNewer(state, response) {
   if (response.cursor) state.cursor = response.cursor;
   const seen = ids(state);
-  const newOnes = (response.eventos ?? []).filter((e) => !seen.has(e.id));
+  const newOnes = (response.events ?? []).filter((e) => !seen.has(e.id));
   if (state.pausado) {
     // Guarda só os `LIMITE` mais novos (mais que isso cairia da lista ao retomar), mas conta todos.
     state.pendentes = [...newOnes, ...state.pendentes].slice(0, LIMIT);
@@ -53,25 +57,25 @@ export function receiveNewer(state, response) {
   return up(state, newOnes);
 }
 
-/** Mais novo primeiro: `criadoEm` decrescente e, no empate, `id` decrescente (a ordem do núcleo). */
+/** Mais novo primeiro: `createdAt` decrescente e, no empate, `id` decrescente (a ordem do núcleo). */
 export function newestFirst(a, b) {
-  if (a.criadoEm !== b.criadoEm) return a.criadoEm < b.criadoEm ? 1 : -1;
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 /**
- * Os novos entram na lista pela ordem: o evento gravado atrasado (com `criadoEm` mais velho) cai no
+ * Os novos entram na lista pela ordem: o evento gravado atrasado (com `createdAt` mais velho) cai no
  * lugar dele, não no topo. `noTopo` diz se todos ficaram acima dos que já estavam (a tela só antepõe).
  */
 function up(state, newOnes) {
   if (!newOnes.length) return { entraram: [], cortados: [], noTopo: true };
-  const top = state.eventos[0];
+  const top = state.events[0];
   const sorted = [...newOnes].sort(newestFirst);
   const atTop = !top || newestFirst(sorted.at(-1), top) < 0;
-  state.eventos = atTop ? [...sorted, ...state.eventos] : [...sorted, ...state.eventos].sort(newestFirst);
-  const cutOff = state.eventos.splice(LIMIT);
+  state.events = atTop ? [...sorted, ...state.events] : [...sorted, ...state.events].sort(newestFirst);
+  const cutOff = state.events.splice(LIMIT);
   // Cortar o fim deixa o cursor de "mostrar mais" apontando para depois do buraco: some o botão.
-  if (cutOff.length) state.anteriores = null;
+  if (cutOff.length) state.older = null;
   if (cutOff.some((e) => e.id === state.aberto)) state.aberto = null;
   const dropped = new Set(cutOff.map((e) => e.id));
   return { entraram: sorted.filter((e) => !dropped.has(e.id)), cortados: cutOff, noTopo: atTop };
@@ -93,9 +97,9 @@ export function resume(state) {
 /** A página mais velha ("mostrar mais"): entra no fim, sem repetir. */
 export function receiveOlder(state, response) {
   const seen = ids(state);
-  const stale = (response.eventos ?? []).filter((e) => !seen.has(e.id));
-  state.eventos = [...state.eventos, ...stale];
-  state.anteriores = response.anteriores ?? null;
+  const stale = (response.events ?? []).filter((e) => !seen.has(e.id));
+  state.events = [...state.events, ...stale];
+  state.older = response.older ?? null;
   return stale;
 }
 
@@ -107,17 +111,16 @@ export function toggleOne(state, id) {
 
 // ---------- consulta ----------
 
-const FILTERS = ['tipo', 'sessao', 'ferramenta', 'status', 'busca', 'de', 'ate'];
-/** The filter and extra names of the screen state → the English parameters of `/api/events`. */
-const PARAM = { tipo: 'type', sessao: 'session', ferramenta: 'tool', status: 'status', busca: 'search', de: 'from', ate: 'to', depois: 'after', antes: 'before', limite: 'limit' };
+/** The filters of the screen, by the names of the parameters of `/api/events`. */
+const FILTERS = ['type', 'session', 'tool', 'status', 'search', 'from', 'to'];
 
-/** A rota de `/api/events` com os filtros preenchidos e os extras (`depois`, `antes`, `limite`). */
+/** A rota de `/api/events` com os filtros preenchidos e os extras (`after`, `before`, `limit`). */
 export function query(filters = {}, extras = {}) {
   const parts = [];
-  for (const [k, v] of Object.entries(extras)) if (v !== null && v !== undefined && v !== '') parts.push(`${PARAM[k] ?? k}=${encodeURIComponent(v)}`);
+  for (const [k, v] of Object.entries(extras)) if (v !== null && v !== undefined && v !== '') parts.push(`${k}=${encodeURIComponent(v)}`);
   for (const k of FILTERS) {
     const v = filters[k];
-    if (v !== null && v !== undefined && String(v).trim() !== '') parts.push(`${PARAM[k]}=${encodeURIComponent(String(v).trim())}`);
+    if (v !== null && v !== undefined && String(v).trim() !== '') parts.push(`${k}=${encodeURIComponent(String(v).trim())}`);
   }
   return parts.length ? `/api/events?${parts.join('&')}` : '/api/events';
 }
@@ -171,6 +174,9 @@ export const shortId = (id) => (typeof id === 'string' && id ? id.slice(0, 4) : 
 
 /** `projeto › sessão › agente`, pulando o que falta. */
 export function trail(event) {
-  const session = event.sessao ?? {};
-  return [session.projeto, session.titulo ?? session.id, event.agente?.nome].filter(Boolean).join(' › ');
+  const session = event.session ?? {};
+  return [session.project, session.title ?? session.id, agentName(event.agent?.name)].filter(Boolean).join(' › ');
 }
+
+/** O nome do agente como a tela escreve: `main` é "principal"; o tipo do subagente fica como veio. */
+export const agentName = (name) => (name && Object.hasOwn(AGENTS, name) ? AGENTS[name] : name);
