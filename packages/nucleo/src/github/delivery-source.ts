@@ -6,14 +6,14 @@
 // | RepoDelivery       | the open counts, the first page of PRs updated since `since` (with the submitted time of their last 20 reviews), of issues updated since `since`, and the 50 oldest open PRs and issues | 1 |
 // | RepoDeliveryPage   | the next pages of the PR search (up to 19 more) or of the issue search (up to 4 more) | 0 to 23 |
 //
-// The cost, estimated by GitHub's rule (nodes asked ÷ 100, rounded up, at least 1) and not measured:
-// RepoDelivery asks 25 PRs × 20 reviews + 100 issues + 50 open items × (1 commit + 1 linked PR)
-// ≈ 750 nodes, ≈ 8 points; each PR page ≈ 525 nodes, ≈ 6 points; each issue page 1 point. Worst case,
-// a repository at both caps (500 PRs, 500 issues updated in 90 days): 1 + 19 + 4 = 24 queries,
-// ≈ 8 + 19 × 6 + 4 ≈ 126 points. Every refresh re-reads the whole 90 days (no delta): with
+// The cost, estimated by GitHub's rule and not measured: a query costs the requests it makes (one per
+// connection it opens, its sub-connections included) ÷ 100, rounded, at least 1 point; the nodes it
+// asks for do not count. Each query or page here opens about a hundred connections, so it costs about
+// 1 point. Worst case, a repository at both caps (500 PRs, 500 issues updated in 90 days):
+// 1 + 19 + 4 = 24 queries, ≈ 24 points. Every refresh re-reads the whole 90 days (no delta): with
 // `DELIVERY_MAX_REPOS` = 30 repositories at the caps, one refresh cycle is up to 720 queries and
-// ≈ 3,800 points of the 5,000 per hour, and 90 `search` calls in a burst (the secondary limit). That
-// is why `DELIVERY_TTL_MS` is 15 min (src/api/delivery-github.ts); a quiet repository costs 1 query, ≈ 8 points.
+// ≈ 720 points of the 5,000 per hour, and 90 `search` calls in a burst (the secondary limit). That
+// is why `DELIVERY_TTL_MS` is 15 min (src/api/delivery-github.ts); a quiet repository costs 1 query, ≈ 1 point.
 //
 // One read covers the longest period (90 days, `DELIVERY_FETCH_DAYS`), and 7 and 30 days are cut
 // from it in memory: a PR merged, opened or reviewed in the period, or an issue opened or closed in

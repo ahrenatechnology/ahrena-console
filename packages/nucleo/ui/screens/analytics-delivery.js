@@ -580,8 +580,8 @@ export async function mountDelivery(area, ctx, { rereadMs = REREAD_MS } = {}) {
     if (!rows.length) {
       if (github.status === 'loading') out.push(loading({ label: 'Lendo o GitHub…', blocks: 2 }));
       else if (github.status === 'error') out.push(empty({ icon: 'github', title: 'Nada em cache ainda', text: 'Os PRs e as issues aparecem quando o GitHub responder. Tente de novo em alguns minutos.' }));
-      else if (state.key) out.push(empty({ title: `Nada em ${state.key} nos últimos ${state.days} dias`, text: 'Escolha outro período ou volte para a lista inteira.', action: { label: 'Ver todos', onClick: () => change({ key: null }) } }));
       else if (state.groupBy === 'project' && data?.projectsPending) out.push(loading({ label: 'Lendo os GitHub Projects…', blocks: 2 }));
+      else if (state.key) out.push(empty({ title: `Nada em ${state.key} nos últimos ${state.days} dias`, text: 'Escolha outro período ou volte para a lista inteira.', action: { label: 'Ver todos', onClick: () => change({ key: null }) } }));
       else if (state.groupBy === 'project')
         out.push(
           empty({

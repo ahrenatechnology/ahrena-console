@@ -590,6 +590,16 @@ describe('Delivery: states', () => {
     }
   });
 
+  test('by project with a key, the Projects not read yet show "Lendo os GitHub Projects…", not "Nada em …" (#266/AC-8)', async () => {
+    const { area, cleanup } = await mountTab({ search: '?groupBy=project&key=sim-org/7', read: async () => answer({ groupBy: 'project', rows: [], extra: { projectsPending: true, openItems: [] } }) });
+    try {
+      assert.match(visible(area), /Lendo os GitHub Projects…/);
+      assert.doesNotMatch(visible(area), /Nada em sim-org\/7/);
+    } finally {
+      cleanup();
+    }
+  });
+
   test('a key with no rows offers "Ver todos", which clears it; no rows at all says the period (#266/AC-6)', async () => {
     const { area, routes, cleanup } = await mountTab({ search: '?key=sim-org/nada', read: async () => answer({ rows: [], extra: { openItems: [] } }) });
     try {
