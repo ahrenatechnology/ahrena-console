@@ -1,5 +1,5 @@
 // Os alertas da máquina (#175/AC-3): carga acima dos núcleos por 5 min, volume acima de 85%, porta
-// em todas as interfaces, porta do túnel ocupada; e a passagem (entra, sai) que vai para /api/mudancas.
+// em todas as interfaces, porta do túnel ocupada; e a passagem (entra, sai) que vai para /api/changes.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { AlertTracker, computeAlerts, formatBytes, loadHighSince } from '../../src/telemetry/alerts.ts';

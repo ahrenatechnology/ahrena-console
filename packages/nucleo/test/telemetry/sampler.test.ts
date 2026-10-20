@@ -68,7 +68,7 @@ describe('#175/AC-2 amostrador', () => {
   });
 });
 
-describe('#175/AC-3 alertas em /api/mudancas', () => {
+describe('#175/AC-3 alertas em /api/changes', () => {
   test('a entrada e a saída de um alerta viram mudanças `alert`, uma vez cada', async () => {
     const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
     const start = cursor.atual;

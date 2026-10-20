@@ -328,7 +328,7 @@ mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
 // Telemetria das máquinas (#175, decisão 0008): uma amostra a cada 30 s, 12 h no banco, e o alerta
-// que entra ou sai em /api/mudancas. Na --demo, as leituras sintéticas do simulador, já com 12 h
+// que entra ou sai em /api/changes. Na --demo, as leituras sintéticas do simulador, já com 12 h
 // semeadas, e a "workstation" que a #176 vai ler de verdade pelo túnel.
 const sampleStore = new SqliteTelemetryStore(sqlite.db);
 const alertTracker = new AlertTracker();
