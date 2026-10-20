@@ -188,6 +188,74 @@ describe('Dev Console of one context', () => {
     assert.equal(v.scoreboard.sessionsWorking, 1);
   });
 
+  test('#179/AC-2 decisions taken today: the ones in force from the context sessions, most recent first; yesterday and outside the context stay out', async () => {
+    const decide = (sessionId: string, key: string, choice: string, minutesAgo: number) =>
+      registerDecision(
+        decisions,
+        { sourceKey: key, sessionId, topic: key, context: null, choice, alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-minutesAgo) },
+        at(-minutesAgo),
+      );
+    await decide('trabalhando', 'q1', 'SQLite em memória nos testes', 14);
+    await decide('plano', 'q2', 'Cobrança vira um serviço à parte', 25);
+    await decide('fora', 'q3', 'Fora do contexto', 5);
+    // T0 is 12:00 UTC: 13 h ago is yesterday.
+    await decide('trabalhando', 'q4', 'De ontem', 13 * 60);
+    const v = (await devConsole.view('loja'))!;
+    assert.deepEqual(
+      v.decisionsToday.map((d) => [d.sessionId, d.choice, d.minutes]),
+      [
+        ['trabalhando', 'SQLite em memória nos testes', 14],
+        ['plano', 'Cobrança vira um serviço à parte', 25],
+      ],
+    );
+    assert.match(v.decisionsToday[0].label, /^D\d+$/);
+    assert.equal(v.decisionsToday[1].repo, DEV_CONSOLE_SIMULATOR_RULES);
+  });
+
+  test('#179/AC-2 decisions taken today include a context session that already ended today', async () => {
+    await storage.putSession(session({ id: 'ended', name: 'Encerrada', cwd: '/sim/motor-de-regras', status: 'completed', startedAt: at(-120), updatedAt: at(-5), endedAt: at(-5) }));
+    await registerDecision(
+      decisions,
+      { sourceKey: 'e1', sessionId: 'ended', topic: 'e1', context: null, choice: 'Decidida numa sessão encerrada', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-20) },
+      at(-20),
+    );
+    const v = (await devConsole.view('loja'))!;
+    assert.deepEqual(v.decisionsToday.map((d) => [d.sessionId, d.choice, d.repo]), [['ended', 'Decidida numa sessão encerrada', DEV_CONSOLE_SIMULATOR_RULES]]);
+  });
+
+  test('#179/AC-2 a session that completes while the live list is cached is counted once', async () => {
+    const contas = new Contas({ storage, arquivo: null });
+    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 60_000 });
+    const cached = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
+    await registerDecision(
+      decisions,
+      { sourceKey: 'c1', sessionId: 'plano', topic: 'c1', context: null, choice: 'Uma vez só', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-3) },
+      at(-3),
+    );
+    await cached.view('loja');
+    const s = (await storage.getSession('plano'))!;
+    await storage.putSession({ ...s, status: 'completed', endedAt: at(-1), updatedAt: at(-1) });
+    const v = (await cached.view('loja'))!;
+    assert.deepEqual(v.decisionsToday.filter((d) => d.choice === 'Uma vez só').length, 1);
+  });
+
+  test('#179/AC-2 "today" is the machine day: in America/Sao_Paulo a decision at 01:00 UTC is yesterday', async () => {
+    const decide = (key: string, choice: string, minutesAgo: number) =>
+      registerDecision(
+        decisions,
+        { sourceKey: key, sessionId: 'trabalhando', topic: key, context: null, choice, alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-minutesAgo) },
+        at(-minutesAgo),
+      );
+    // T0 is 12:00 UTC, 09:00 in São Paulo: 04:00 UTC is 01:00 there (today), 01:00 UTC is 22:00 there (yesterday).
+    await decide('sp1', 'Hoje em São Paulo', 8 * 60);
+    await decide('sp2', 'Ontem em São Paulo', 11 * 60);
+    const contas = new Contas({ storage, arquivo: null });
+    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'America/Sao_Paulo', cacheMs: 0 });
+    const sp = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
+    assert.deepEqual((await sp.view('loja'))!.decisionsToday.map((d) => d.choice), ['Hoje em São Paulo']);
+    assert.deepEqual((await devConsole.view('loja'))!.decisionsToday.map((d) => d.choice), ['Hoje em São Paulo', 'Ontem em São Paulo'], 'both are today in UTC');
+  });
+
   test('unknown context: null', async () => {
     assert.equal(await devConsole.view('nenhum'), null);
   });
@@ -223,7 +291,7 @@ describe('GET /api/dev-console', () => {
     const res = await fetch(`${api.url}/api/dev-console?context=loja`);
     assert.equal(res.status, 200);
     const v = (await res.json()) as DevConsoleView;
-    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason', 'truncated']);
+    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'decisionsToday', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason', 'truncated']);
     assert.equal(v.scoreboard.ready, 3);
   });
 

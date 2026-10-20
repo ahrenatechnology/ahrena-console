@@ -35,6 +35,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | Repositório (C23) | `/ui/repos/:owner/:repo` | `GET /api/repos/<dono>/<repo>?period=30d\|90d\|1y` | `screens/repo.js` |
 | Esta máquina (C24) | `/ui/machines/local` | `GET /api/telemetry?machine=local&hours=1\|12`, `GET /api/machines`, `GET /api/attention` | `screens/machine.js` |
 | Máquina remota (C25, C26) | `/ui/machines/:id` | o mesmo, com `machine=<id>`; e a telemetria daqui para a coluna "No Mac" | `screens/machine.js` |
+| Dev Console (C27) | `/ui/dev-console` (`?context=<id>`, `?tab=merge-queue`) | `GET /api/dev-console` e `GET /api/dev-console?context=<id>` | `screens/dev-console.js` e `screens/dev-console.css` (classes `dev-`) |
 
 As máquinas (issue 178, decisão 0008): as duas rotas abrem a mesma tela, `screens/machine.js`, com o que cada cartão mostra em `screens/machine-format.js` (sem DOM; o teste importa direto) e o estilo em `screens/machine.css` (classes `tm-`). Um grupo `null` da leitura não vira cartão; o que uma remota manda com outro formato é descartado campo a campo, sem derrubar a tela. A tela só mostra: nenhum botão sobe, derruba ou encaminha túnel ("Tentar agora" só relê). Relê a cada 30 s (amostra nova não publica mudança) e na hora quando chega um `alert` desta máquina ou um `<id>:machine-unreachable`.
 

@@ -99,6 +99,15 @@ export const SCREENS = [
     file: '/ui/screens/repo.js', // C23
   },
   {
+    id: 'dev-console',
+    route: '/ui/dev-console',
+    item: { label: 'Dev Console', icon: 'gauge', section: 'main' },
+    title: 'Dev Console',
+    sub: 'PRs, issues e sessões dos repositórios do contexto',
+    icon: 'gauge',
+    file: '/ui/screens/dev-console.js', // C27, issue 179
+  },
+  {
     id: 'analytics',
     route: '/ui/analytics',
     item: { label: 'Analytics', icon: 'analytics', section: 'main' },
