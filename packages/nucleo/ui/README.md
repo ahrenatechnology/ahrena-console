@@ -13,7 +13,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
-| `telas/` | As telas, uma por arquivo |
+| `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
+| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao` |
 
 ## Registrar uma tela
 
