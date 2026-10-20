@@ -38,7 +38,7 @@ flowchart LR
   GH[(GitHub)]
   APP -- só lê --> NM
   NM -- mede esta máquina --> NM
-  NM -- GET /api/telemetria, /api/atencao<br/>pela porta encaminhada --> T --> NR
+  NM -- GET /api/telemetry, /api/atencao<br/>pela porta encaminhada --> T --> NR
   NR -- mede a si mesma --> NR
   NM -- cache 0001 --> GH
 ```
@@ -65,21 +65,25 @@ Tudo é leitura, sem `sudo` e sem dependência nova: módulos do Node e comandos
 
 **Rotas novas, só `GET`:**
 
-- `GET /api/maquinas`: esta máquina e as remotas configuradas, cada uma com estado (`conectada`, `sem-resposta`, `nao-configurada`, `versao-incompativel`), a hora da última leitura e o número de alertas.
-- `GET /api/telemetria?maquina=<id>&horas=1|12`: a leitura atual e as séries. `local` é esta máquina.
-- `GET /api/dev?contexto=<id>`: o Dev Console (seção 4).
+- `GET /api/machines`: esta máquina e as remotas configuradas, cada uma com `state` (`connected`, `unreachable`, `not-configured`, `incompatible-version`), a hora da última leitura e o número de alertas.
+- `GET /api/telemetry?machine=<id>&hours=1|12`: a leitura atual e as séries. `local` é esta máquina.
+- `GET /api/dev-console?context=<id>`: o Dev Console (seção 4).
+
+**Telas da `/ui`:** `/ui/telemetry` (esta máquina), `/ui/workstation` (a máquina remota; com mais de uma, `/ui/machines/<id>`) e `/ui/dev-console`.
+
+**Nomes.** Seguem a regra do repositório para o que é novo: código, rotas, URLs, arquivos, classes CSS, chaves de JSON e nomes de métrica em inglês (`cpu.usedPct`, `memory.swapUsedBytes`, `disk.volumes[]`, `ports[].state`); o texto de tela em pt-BR.
 
 ### 2. Como o núcleo chega à máquina remota
 
 A máquina remota roda o mesmo núcleo (Node 24, sem dependências; o Linux já é suportado pelos coletores da seção 1). Quem o sobe lá é quem usa, do jeito que preferir (um `systemd --user`, o próprio Claude Code); o README da 0.0.1 explica.
 
-O núcleo do Mac não abre SSH, não guarda chave e não conhece o host. Ele lê uma configuração do usuário, `~/.ahrena-console/maquinas.json`:
+O núcleo do Mac não abre SSH, não guarda chave e não conhece o host. Ele lê uma configuração do usuário, `~/.ahrena-console/machines.json`:
 
 ```json
-{ "maquinas": [ { "id": "workstation", "rotulo": "Workstation", "porta": 14720 } ] }
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720 } ] }
 ```
 
-`porta` é a porta **local** do Mac que o túnel do usuário encaminha para a `4720` de lá (`LocalForward 14720 127.0.0.1:4720`). A cada 30 s, e logo depois de uma mudança no túnel, o núcleo do Mac pede `GET http://127.0.0.1:<porta>/api/telemetria` e `/api/atencao`, mandando o `Host` que o núcleo remoto espera (`127.0.0.1:4720`), porque a defesa da [0003](0003-responder-sessao.md) recusa `Host` estranho. Só `GET`: nada do Mac escreve na remota.
+`port` é a porta **local** do Mac que o túnel do usuário encaminha para a `4720` de lá (`LocalForward 14720 127.0.0.1:4720`). A cada 30 s, e logo depois de uma mudança no túnel, o núcleo do Mac pede `GET http://127.0.0.1:<port>/api/telemetry` e `/api/atencao`, mandando o `Host` que o núcleo remoto espera (`127.0.0.1:4720`), porque a defesa da [0003](0003-responder-sessao.md) recusa `Host` estranho. Só `GET`: nada do Mac escreve na remota.
 
 Sem arquivo, não há máquina remota e a barra lateral não mostra o item (regra de não apontar para nada interno por padrão). A tela "Esta máquina" diz como configurar.
 
@@ -89,7 +93,7 @@ Sem arquivo, não há máquina remota e a barra lateral não mostra o item (regr
 | --- | --- | --- |
 | Túnel caído | a porta local não aceita conexão | Workstation "sem conexão", com a última leitura e a hora; a bandeja põe a linha em cinza. Não há botão de subir túnel: o app só mostra |
 | Túnel de pé, núcleo remoto parado | a porta aceita e fecha (o `idle` do coletor antigo) ou não responde HTTP em 3 s | "O túnel está de pé, mas o núcleo de lá não respondeu", com o comando para subi-lo |
-| Versão diferente | o campo `versao` de `/api/telemetria` | lê o que reconhece; avisa numa faixa |
+| Versão diferente | o campo `version` de `/api/telemetry` | lê o que reconhece; avisa numa faixa |
 | Núcleo do Mac parado | a bandeja já trata (A4) | nada muda |
 
 A última leitura de cada máquina fica no SQLite do Mac, então a tela abre com ela e diz a idade. Uma máquina que cai gera um alerta, que a bandeja mostra e notifica uma vez (na passagem, como o [#88](https://github.com/ahrenatechnology/ahrena-console/issues/88)), sem som.
@@ -100,7 +104,7 @@ O mesmo desenho do Dev Console antigo, mas **derivado**, sem sessão de PM grava
 
 | Peça | De onde vem |
 | --- | --- |
-| Contexto | `~/.ahrena-console/dev-console.json` (`{ "contextos": [{ "id", "nome", "repos": ["dono/repo"] }] }`); sem arquivo, um contexto por repositório que teve sessão nos últimos 7 dias |
+| Contexto | `~/.ahrena-console/dev-console.json` (`{ "contexts": [{ "id", "name", "repos": ["owner/repo"] }] }`); sem arquivo, um contexto por repositório que teve sessão nos últimos 7 dias |
 | PRs prontos, com CI rodando, com CI vermelho ou conflito | PRs abertos dos repositórios do contexto, pelo cache da 0001: CI do último commit, `mergeable`, rascunho e `reviewDecision` |
 | Fila de merge | os prontos (CI verde, sem conflito, fora de rascunho, sem pedido de mudança), a base antes do empilhado e o mais antigo primeiro |
 | Sessões trabalhando | sessões vivas cujo branch ou cwd é de um repositório do contexto |
