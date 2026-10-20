@@ -173,7 +173,7 @@ describe('a página (C21) e a aba (C20)', () => {
 const TELA = 'decisions.css';
 const PREFIXO = 'dec-';
 const JS_DA_TELA = ['screens/decisions.js', 'screens/session-detail-decisions.js', 'screens/decisions-common.js'];
-// Igual ao `classes()` e ao `SELOS` de test/api/sessoes.test.ts (no main), para os dois testes andarem juntos.
+// Igual ao `classes()` e ao `SELOS` de test/api/sessions.test.ts (no main), para os dois testes andarem juntos.
 const classesDoCss = (caminho: string) => new Set([...readFileSync(caminho, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const classes = (arquivo: string) => classesDoCss(`${PASTA_DA_UI}${arquivo}`);
 const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
@@ -252,7 +252,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
-  // telas desmonta a outra. Mesmo teste do sessoes.test.ts do main, para o decisions.css.
+  // telas desmonta a outra. Mesmo teste do sessions.test.ts do main, para o decisions.css.
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', (t) => {
     const outras = outrosCss();
     if (outras.length === 0) return t.skip('sem outro css até o rebase');

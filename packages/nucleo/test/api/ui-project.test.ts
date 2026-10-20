@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFalso } from './dom-falso.ts';
+import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFalso } from './fake-dom.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { WriteError, ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem

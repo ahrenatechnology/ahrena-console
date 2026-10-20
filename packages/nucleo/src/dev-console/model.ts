@@ -2,7 +2,7 @@
 // Everything here is derived from facts already read (PRs, issues, remote branches and the
 // context's sessions); nothing is annotated by hand. Pure functions: reading and serving live outside.
 
-import { issueDoBranch } from '../api/trabalho.ts';
+import { issueDoBranch } from '../api/work.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
 
 // ---------- facts read from GitHub ----------

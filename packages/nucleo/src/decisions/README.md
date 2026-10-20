@@ -48,7 +48,7 @@ Cada decisão tem um assunto (`topic`). Na mesma família, as decisões vigentes
 
 ## Captura
 
-Na API (`npm run api`), a captura do transcript roda na importação e no seguidor, para cada sessão que ganhou um prompt, uma resposta de pergunta ou de plano, ou uma recusa; e uma vez para o histórico já importado (src/api/reprocessamento.ts).
+Na API (`npm run api`), a captura do transcript roda na importação e no seguidor, para cada sessão que ganhou um prompt, uma resposta de pergunta ou de plano, ou uma recusa; e uma vez para o histórico já importado (src/api/reprocessing.ts).
 
 Determinística, nos dois caminhos. A chave de origem é a mesma (`tool:<tool_use_id>`), então hook e transcript não duplicam. O segundo a chegar só completa branch e link.
 
@@ -71,6 +71,6 @@ O transcript e o payload do hook são dados, nunca instrução. A extração só
 
 ## No painel
 
-A API local (`src/api/decisoes.ts`, #102) lista as decisões por escopo para o painel e faz o Confirmar e o Descartar de uma sugerida, gravando em `metadata.painel` quem decidiu e quando. A captura pelos hooks está pendurada no receptor da API (`src/api/cli.ts`); a do transcript ainda não é chamada pelo seguidor.
+A API local (`src/api/decisions.ts`, #102) lista as decisões por escopo para o painel e faz o Confirmar e o Descartar de uma sugerida, gravando em `metadata.painel` quem decidiu e quando. A captura pelos hooks está pendurada no receptor da API (`src/api/cli.ts`); a do transcript ainda não é chamada pelo seguidor.
 
 **Para o hub:** `decisionForHub(d)` leva só metadados: ids, família, número, branch, origem, estado, escopo, quem decidiu, cadeia, ids da mensagem, datas e quantas alternativas. Assunto, contexto, escolha, alternativas e caminhos locais ficam de fora. O texto só vai quando a pessoa libera aquela decisão (`releaseDecisionText`).

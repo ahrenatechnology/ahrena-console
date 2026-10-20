@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, ACCOUNT_COLORS } from '../../src/api/contas.ts';
+import { Contas, ACCOUNT_COLORS } from '../../src/api/accounts.ts';
 import { accountFromClaudeJson, freeColor, discoverFolders, Profiles } from '../../src/profiles/index.ts';
 
 const UUID_A = '00000000-0000-4000-8000-00000000000a';

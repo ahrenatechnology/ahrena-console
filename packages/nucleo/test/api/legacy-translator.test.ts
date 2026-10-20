@@ -4,19 +4,19 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, normalizeLegacyQuery, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
 import { CHANGE_TYPES } from '../../src/changes/cursor.ts';
-import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
-import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
+import { MOTIVO_CURTO } from '../../src/api/attention-route.ts';
+import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/events.ts';
 import { MAX_SEARCH_LENGTH as HISTORY_SEARCH_MAX, MAX_DAYS } from '../../src/history/model.ts';
-import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
+import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessions.ts';
 import { AGENT_STATUSES, AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
-import { DETAIL_AGENT_TYPES, MESSAGE_ROLES, TOOL_STATES } from '../../src/api/detalhe.ts';
+import { DETAIL_AGENT_TYPES, MESSAGE_ROLES, TOOL_STATES } from '../../src/api/session-detail.ts';
 import { EDGE_TYPES, FILTROS_DOS_WORKFLOWS, GRAPH_NODE_LABELS, NODE_STATES, NO_DO_GRAFO } from '../../src/api/workflows.ts';
-import { DECISION_GROUPINGS, DECISION_STATE_FILTERS, GROUPING_ERROR, PROMOTE_PATH_ERROR, PROMOTE_SESSION_ERROR, STATE_FILTER_ERROR } from '../../src/api/decisoes-ui.ts';
-import { ESCOPOS_DAS_DECISOES } from '../../src/api/decisoes.ts';
-import { PROJECT_ERROR_CODES } from '../../src/api/projeto.ts';
-import { ciDoPr, reviewDoPr } from '../../src/api/trabalho.ts';
+import { DECISION_GROUPINGS, DECISION_STATE_FILTERS, GROUPING_ERROR, PROMOTE_PATH_ERROR, PROMOTE_SESSION_ERROR, STATE_FILTER_ERROR } from '../../src/api/decisions-ui.ts';
+import { ESCOPOS_DAS_DECISOES } from '../../src/api/decisions.ts';
+import { PROJECT_ERROR_CODES } from '../../src/api/project.ts';
+import { ciDoPr, reviewDoPr } from '../../src/api/work.ts';
 import { COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, VISOES } from '../../src/api/kanban.ts';
-import { DAYS_ERROR, DIAS_DO_CUSTO, TZ_ERROR } from '../../src/api/rota-analytics.ts';
+import { DAYS_ERROR, DIAS_DO_CUSTO, TZ_ERROR } from '../../src/api/analytics-route.ts';
 import { LIST_CHANGE_KEY, PERIODOS } from '../../src/api/repos.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
@@ -161,7 +161,7 @@ describe('#173 phase 2b: the back-translator', () => {
     }
   });
 
-  // Every member of the unions of the panel and decision shapes (src/api/tipos.ts), new → the old value
+  // Every member of the unions of the panel and decision shapes (src/api/types.ts), new → the old value
   // of the plugin's types (plugins/ahrena-console/types). The goldens only see what the demo emits.
   describe('every union member of the panel and the decisions answers the old value on the old route', () => {
     const panel = legacyResponseFor('/api/painel/x')!;

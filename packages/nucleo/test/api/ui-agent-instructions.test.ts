@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import type { AgentInstructions, ImportNodeWithText, InstructionFileView } from '../../src/agent-instructions/model.ts';
-import { ElementoFalso, instalarDomFalso, texto, type NoFalso } from './dom-falso.ts';
+import { ElementoFalso, instalarDomFalso, texto, type NoFalso } from './fake-dom.ts';
 
 instalarDomFalso();
 

@@ -11,7 +11,7 @@
 //   logged, and no remote machine. One bad line voids the whole file, so a typo never leaves a
 //   half-configured fleet that looks right.
 //
-// The path is injectable (tests and `--machines`), like `contas.json` in src/api/contas.ts. The file
+// The path is injectable (tests and `--machines`), like `contas.json` in src/api/accounts.ts. The file
 // is read once, when the núcleo starts.
 
 import { readFile } from 'node:fs/promises';

@@ -67,7 +67,7 @@
 // ## Segurança
 //
 // A escrita aceita a própria `/ui`: `Origin` exatamente `http://<Host>` com o nosso Host, só no
-// caminho exato do `POST` (`frameworkInstallWriteFromSameOrigin`, chamada em servidor.ts), e o pedido
+// caminho exato do `POST` (`frameworkInstallWriteFromSameOrigin`, chamada em server.ts), e o pedido
 // sem `Origin` de 127.0.0.1, como as outras escritas (decisão 0003). Pede `Content-Type:
 // application/json`. Nenhum token entra na resposta, nos erros ou no log; o branch padrão nunca é
 // escrito. O diff mostra 3 linhas de contexto em volta do que muda.

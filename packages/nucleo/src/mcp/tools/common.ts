@@ -1,7 +1,7 @@
 // The account as the tools show it: the label and the color, never the id (which carries the
 // account and org UUIDs). The `account` filter takes the id, for whoever has it from another source.
 
-import type { ContaDoPainel } from '../../api/tipos.ts';
+import type { ContaDoPainel } from '../../api/types.ts';
 
 export interface OutputAccount {
   label: string;

@@ -14,7 +14,7 @@ import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { TELEMETRY_VERSION, type MachineState, type UnreachableReason } from '../../src/telemetry/model.ts';
 import { TelemetrySampler } from '../../src/telemetry/sampler.ts';
 import { localMachine, TelemetryService, type MachineStatus } from '../../src/telemetry/service.ts';
-import { ElementoFalso, instalarDomFalso, texto } from './dom-falso.ts';
+import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
 

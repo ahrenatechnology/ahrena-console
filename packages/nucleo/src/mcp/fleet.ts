@@ -14,11 +14,11 @@ import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import { readInbox, type InboxState, type InboxReading } from '../states/inbox.ts';
 import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from '../api/contas.ts';
-import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/indice-desktop.ts';
-import { atencaoDe, type MotivoDaAtencao } from '../api/atencao.ts';
-import { ResumosDeSessao, type ResumoDosEventos } from '../api/resumo.ts';
-import type { ContaDoPainel } from '../api/tipos.ts';
+import type { Contas } from '../api/accounts.ts';
+import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/desktop-index.ts';
+import { atencaoDe, type MotivoDaAtencao } from '../api/attention.ts';
+import { ResumosDeSessao, type ResumoDosEventos } from '../api/summary.ts';
+import type { ContaDoPainel } from '../api/types.ts';
 import { safeToolName, safeTitle } from './output.ts';
 
 /**
@@ -173,7 +173,7 @@ export class FleetReader {
 }
 
 /**
- * The reason and the group come from `atencaoDe` (src/api/atencao.ts), the same rule as the panel's
+ * The reason and the group come from `atencaoDe` (src/api/attention.ts), the same rule as the panel's
  * "precisam de você"; here we only add what MCP shows beyond it, without conversation text.
  */
 export function classify(inbox: InboxReading, r: ResumoDosEventos): Attention {
