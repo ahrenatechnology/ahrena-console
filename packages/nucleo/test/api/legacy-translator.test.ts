@@ -109,12 +109,28 @@ describe('#173 phase 2b: the back-translator', () => {
     assert.equal(rawPathnameOf(undefined), '/');
   });
 
-  test('phase 2b layer 1: every spec is empty, so no body changes', () => {
+  test('a route whose spec is still empty gives its body back as it is', () => {
     const body = { sessao: 's', texto: 't', itens: [{ estado: 'a_confirmar' }] };
-    for (const path of ['/api/painel/s', '/api/decisoes/d/ajustar', '/api/projeto/mover']) {
+    for (const path of ['/api/atencao', '/api/projeto/mover']) {
       assert.equal(legacyResponseFor(path)!(body), body, path);
       assert.equal(legacyRequestBody(path, body), body, path);
     }
+  });
+
+  test('phase 2b layer 2: a decision write reads `{ sessao, texto }` and answers `{ decisao }` on the old route', () => {
+    assert.deepEqual(legacyRequestBody('/api/decisoes/d/ajustar', { sessao: 's', texto: 't' }), { session: 's', text: 't' });
+    const decision = { id: 'd', label: 'D1', origin: 'suggested', state: 'to_confirm', undo: 'adjust', decidedBy: 'agent', session: 'parent' };
+    assert.deepEqual(legacyResponseFor('/api/decisoes/d/confirmar')!({ decision }), {
+      decisao: { id: 'd', rotulo: 'D1', origem: 'sugerida', estado: 'a_confirmar', desfazer: 'ajustar', decididaPor: 'agente', sessao: 'mae' },
+    });
+    assert.deepEqual(legacyResponseFor('/api/decisoes/d/confirmar')!({ error: 'informe a sessão: { "session": "<id>" }' }), { error: 'informe a sessão: { "sessao": "<id>" }' });
+    // The scope: as a value, as the keys of the counts, and in the error that names the parameter.
+    assert.deepEqual(legacyResponseFor('/api/decisoes/s')!({ scope: 'family', current: 1, toConfirm: 0, items: [], byScope: { session: 1, family: 2, branch: 3 } }), {
+      escopo: 'familia', vigentes: 1, aConfirmar: 0, itens: [], porEscopo: { sessao: 1, familia: 2, branch: 3 },
+    });
+    assert.deepEqual(legacyResponseFor('/api/decisoes/s')!({ error: 'scope: session, family ou branch' }), { error: 'escopo: sessao, familia ou branch' });
+    // Inside the panel, `work.error` is the old `erro`; a top-level `error` stays the error response.
+    assert.deepEqual(legacyResponseFor('/api/painel/s')!({ work: { error: null }, error: 'x' }), { trabalho: { erro: null }, error: 'x' });
   });
 
   test('request bodies: old → new on the old write routes only', () => {

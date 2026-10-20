@@ -79,9 +79,9 @@ describe('#140 CA3: PRs aguardando aprovação', () => {
     // P3: o PR #91 está aberto e espera review.
     const p3 = await montar('p3');
     assert.equal(p3.prs.total, 1);
-    assert.equal(p3.prs.itens[0]?.numero, 91);
-    assert.match(p3.prs.itens[0]!.url, /^https:\/\/github\.com\/.+\/pull\/91$/);
-    assert.equal(p3.prs.itens[0]?.sessao.id, SESSAO_DO_PAINEL);
+    assert.equal(p3.prs.items[0]?.number, 91);
+    assert.match(p3.prs.items[0]!.url, /^https:\/\/github\.com\/.+\/pull\/91$/);
+    assert.equal(p3.prs.items[0]?.session.id, SESSAO_DO_PAINEL);
     // P1: o PR #78 é rascunho: não aguarda aprovação.
     assert.equal((await montar('p1')).prs.total, 0);
   });

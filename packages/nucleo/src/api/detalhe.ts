@@ -278,15 +278,15 @@ export class LeiturasDoDetalhe {
     const painel = await this.montador.montar({ sessionId: session.id }, { literal: true });
     const [agentes, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
-    const pede = painel.sessao?.faixa?.tipo === 'permissao' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
+    const pede = painel.session?.banner?.type === 'permission' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
       versao: 1,
       geradoEm: new Date(this.agora()).toISOString(),
-      sessao: painel.sessao!,
-      custo: painel.custo,
-      branch: painel.sessao?.branch ?? painel.trabalho?.branch ?? null,
+      sessao: painel.session!,
+      custo: painel.cost,
+      branch: painel.session?.branch ?? painel.work?.branch ?? null,
       local: local && LOCAL.test(local) ? local : null,
-      abreSessao: painel.api.abreSessao,
+      abreSessao: painel.api.opensSession,
       comando: pede?.resumo ?? null,
       encerradaEm: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
       contagens: { agentes: agentes.length, eventos: eventos.length },
@@ -355,7 +355,7 @@ export class LeiturasDoDetalhe {
         nome: 'Agente principal',
         tarefa: null,
         modelo: session.model,
-        turnos: painel.sessao?.turno ?? 0,
+        turnos: painel.session?.turn ?? 0,
         status: main?.status ?? (session.awaitingInputSince ? 'waiting' : session.status === 'error' ? 'error' : session.status === 'active' ? 'working' : 'completed'),
         inicio: main?.startedAt ?? session.startedAt,
         fim: main?.endedAt ?? session.endedAt,
@@ -386,13 +386,13 @@ export class LeiturasDoDetalhe {
         ferramentas: chamadas,
         ferramentasUnicas: ferramentas.length,
         subagentes: agentes.length - 1,
-        compactacoes: painel.contexto ? painel.contexto.estouros + painel.contexto.compactacoesManuais : compactacoes,
+        compactacoes: painel.context ? painel.context.overflows + painel.context.manualCompactions : compactacoes,
         erros,
         duracaoMin,
         rodando: session.status === 'active',
       },
       ferramentas: ferramentas.slice(0, MAX_FERRAMENTAS),
-      tarefas: painel.plano,
+      tarefas: painel.plan,
       tokens,
       agentes,
     };

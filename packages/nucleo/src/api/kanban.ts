@@ -259,7 +259,7 @@ export class QuadroKanban {
       modelo: rotuloDoModelo(s.model),
       custoUsd: await this.custoDe(s, precos),
       cwd: s.cwd,
-      conta: conta ? { rotulo: conta.rotulo, cor: conta.cor } : null,
+      conta: conta ? { rotulo: conta.label, cor: conta.color } : null,
     };
   }
 

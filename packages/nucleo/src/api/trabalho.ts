@@ -33,21 +33,31 @@ export function repoDoRemote(remote: string): string | null {
 
 type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
 
-/** CI do último commit, como o painel e o kanban mostram: `ok`, `falhou`, `rodando` ou `null` sem checagens. */
-export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrDoPainel['ci'] {
+/**
+ * CI do último commit, como o kanban do projeto mostra: `ok`, `falhou`, `rodando` ou `null` sem
+ * checagens. The project route still answers these Portuguese values (its JSON turns English in a
+ * later layer of #173 phase 2b); the panel maps them to English in `prDoPainel`.
+ */
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): 'ok' | 'falhou' | 'rodando' | null {
   return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
 }
 
-/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`. */
-export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrDoPainel['review'] {
+/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`; o painel os passa para inglês. */
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): 'aprovado' | 'ajustes' | 'pendente' | null {
   return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
 }
+
+const CI_DO_PAINEL = { ok: 'ok', falhou: 'failed', rodando: 'running' } as const satisfies Record<string, PrDoPainel['ci']>;
+const REVIEW_DO_PAINEL = { aprovado: 'approved', ajustes: 'changes-requested', pendente: 'pending' } as const satisfies Record<string, PrDoPainel['review']>;
 
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
-  const estado = p.state === 'MERGED' ? 'mergeado' : p.state === 'CLOSED' ? 'fechado' : p.isDraft ? 'rascunho' : 'aberto';
-  return { numero: p.number, url: p.url, estado, ci: ciDoPr(p), checks: p.checks ?? null, review: reviewDoPr(p) };
+  const state = p.state === 'MERGED' ? 'merged' : p.state === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : 'open';
+  const ci = ciDoPr(p);
+  const review = reviewDoPr(p);
+  const checks = p.checks ? { total: p.checks.total, ok: p.checks.ok, failed: p.checks.falhas, running: p.checks.rodando } : null;
+  return { number: p.number, url: p.url, state, ci: ci && CI_DO_PAINEL[ci], checks, review: review && REVIEW_DO_PAINEL[review] };
 }
 
 interface Entrada {
@@ -156,9 +166,9 @@ export class TrabalhoPorBranch {
     if (!branch) return null;
     const remote = cwd ? await this.rodarGit(cwd, ['remote', 'get-url', 'origin']) : null;
     const repo = remote ? repoDoRemote(remote) : null;
-    const semPush = cwd ? (await this.rodarGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])) === null : false;
+    const notPushed = cwd ? (await this.rodarGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])) === null : false;
     const numero = issueDoBranch(branch);
-    const base: TrabalhoDoPainel = { branch, repo, issue: null, pr: null, semPush, erro: null };
+    const base: TrabalhoDoPainel = { branch, repo, issue: null, pr: null, notPushed, error: null };
     if (!repo || numero === null || !this.fonte) return base;
 
     const key = workKey(repo, numero);
@@ -172,16 +182,16 @@ export class TrabalhoPorBranch {
       return {
         ...base,
         issue: {
-          numero,
-          titulo: no.title,
+          number: numero,
+          title: no.title,
           url: no.url,
-          subIssues: no.progress ? { feitas: no.progress.completed, total: no.progress.total } : null,
+          subIssues: no.progress ? { done: no.progress.completed, total: no.progress.total } : null,
         },
         pr: prDoPainel(detalhe.value.pullRequests),
-        erro: nos.stale || detalhe.stale ? (nos.staleReason ?? detalhe.staleReason ?? 'GitHub indisponível') : null,
+        error: nos.stale || detalhe.stale ? (nos.staleReason ?? detalhe.staleReason ?? 'GitHub indisponível') : null,
       };
     } catch (err) {
-      return { ...(anterior ?? base), branch, semPush, erro: (err as Error).message };
+      return { ...(anterior ?? base), branch, notPushed, error: (err as Error).message };
     }
   }
 }

@@ -29,11 +29,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, isAbsolute, join, posix } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Session } from '../model.ts';
-import type { Decision, DecisionState } from '../decisoes/modelo.ts';
+import type { Decision, DecisionScope, DecisionState } from '../decisoes/modelo.ts';
 import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
 import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisoes/registro.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
-import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
+import { DecisoesDaSessao, ErroDaDecisao, ESCOPO_DA_API, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
 import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
@@ -43,19 +43,22 @@ export const DECISIONS_PAGE_ROUTE = '/api/decisions';
 export type AgrupamentoDasDecisoes = 'branch' | 'familia' | 'sessao';
 export type FiltroDeEstado = 'todas' | 'vigentes' | 'a_confirmar';
 
-/** O card de uma decisão, igual na página e na aba. */
+/**
+ * O card de uma decisão, igual na página e na aba: the panel's decision (`DecisaoDoPainel`) and what
+ * the /ui adds, with English keys since #173 phase 2b (the page and tab around it follow in a later layer).
+ */
 export interface DecisaoDaUi extends DecisaoDoPainel {
   sessionId: string;
   /** Até onde vale ("escopo: sessão"). */
-  escopo: EscopoDasDecisoes;
+  scope: EscopoDasDecisoes;
   /** O "D2" da decisão que esta substituiu. */
-  substitui: string | null;
+  supersedes: string | null;
   /** `docs/decisoes/NNNN-slug.md`, quando virou registro. */
-  promovidaPara: string | null;
+  promotedTo: string | null;
   branch: string | null;
   repo: string | null;
   /** O "Ver na conversa": `/ui/sessions/<sessionId>`. */
-  conversa: string;
+  conversation: string;
 }
 
 export interface GrupoDeDecisoes {
@@ -145,7 +148,7 @@ const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', familia: 
 const CAMINHO_DO_REGISTRO = /^docs\/decisoes\/(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 /** Um registro na pasta, de qualquer slug: o número dele. */
 const REGISTRO_NUMERADO = /^(\d{4})-.*\.md$/;
-const ESCOPO_POR_EXTENSO: Record<EscopoDasDecisoes, string> = { sessao: 'sessão', familia: 'família', branch: 'branch' };
+const ESCOPO_POR_EXTENSO: Record<DecisionScope, string> = { sessao: 'sessão', familia: 'família', branch: 'branch' };
 const TIPO: Record<Decision['origin'], string> = { sugerida: 'Sugerida', correcao: 'Correção sua', permissao: 'Permissão', pergunta: 'Pergunta', plano: 'Plano' };
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
@@ -256,12 +259,12 @@ export class DecisoesDaUi {
     return {
       ...paraOPainel(d, ref.sessionId, ref.familyId, ref.mae, await this.rotuloDe(d.supersededBy, lidas)),
       sessionId: d.sessionId,
-      escopo: d.scope,
-      substitui: await this.rotuloDe(d.supersedes, lidas),
-      promovidaPara: d.promotedTo,
+      scope: ESCOPO_DA_API[d.scope],
+      supersedes: await this.rotuloDe(d.supersedes, lidas),
+      promotedTo: d.promotedTo,
       branch: d.branch,
       repo: d.repo,
-      conversa: `/ui/sessions/${encodeURIComponent(d.sessionId)}`,
+      conversation: `/ui/sessions/${encodeURIComponent(d.sessionId)}`,
     };
   }
 
@@ -349,7 +352,7 @@ export class DecisoesDaUi {
     for (const d of doEscopo) if (DO_FILTRO[p.estado].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
 
     // O que a injeção (#100) e a ferramenta MCP (#101) consultariam: as vigentes do branch.
-    const nivel: EscopoDasDecisoes = alvo.branch ? 'branch' : 'familia';
+    const nivel: DecisionScope = alvo.branch ? 'branch' : 'familia';
     const vigentes = (await currentDecisionsFor(this.port, alvo, nivel)).reverse();
     const linhas: string[] = [];
     const cadeias: string[] = [];
@@ -373,7 +376,7 @@ export class DecisoesDaUi {
       porEscopo,
       total: porEscopo[p.escopo],
       itens,
-      injecao: { ligada: this.injecaoLigada, escopo: nivel, decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
+      injecao: { ligada: this.injecaoLigada, escopo: ESCOPO_DA_API[nivel], decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
       mcp: {
         ferramenta: 'session_decisions',
         existe: this.mcpExiste,
@@ -587,8 +590,8 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const sessao = decodificado(aba[1]!);
     if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
-    const escopo = (url.searchParams.get('scope') ?? 'familia') as EscopoDasDecisoes;
-    if (!ESCOPOS_DAS_DECISOES.includes(escopo)) return send(res, 400, { error: 'escopo: sessao, familia ou branch' }), true;
+    const escopo = (url.searchParams.get('scope') ?? 'family') as EscopoDasDecisoes;
+    if (!ESCOPOS_DAS_DECISOES.includes(escopo)) return send(res, 400, { error: 'scope: session, family ou branch' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;
     const corpo = await ui.aba(sessao, { escopo, ...f });

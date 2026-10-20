@@ -190,7 +190,7 @@ export class ListaDeSessoes {
         agentes: (await this.storage.listAgents(s.id)).length,
         custoUsd: await this.custoDe(s),
         cwd: s.cwd,
-        conta: conta ? { rotulo: conta.rotulo, cor: conta.cor } : null,
+        conta: conta ? { rotulo: conta.label, cor: conta.color } : null,
       });
     }
     return { total, registradas: todas.length, pagina, porPagina: POR_PAGINA, paginas, diretorios, itens };

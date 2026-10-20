@@ -9,7 +9,7 @@
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
 // | `GET /api/decisions/<session>` | As decisões de um escopo (`?scope=session|family|branch`)  |
 // | `POST /api/decisions/<id>/confirm` e `/dismiss` | O Confirmar e o Descartar de uma sugerida |
-// | `POST /api/decisions/<id>/adjust` e `/undo` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
+// | `POST /api/decisions/<id>/adjust` e `/undo` | O ajuste escrito pela pessoa (`{ text }`) e o Desfazer da última ação |
 // | `POST /open/<local_…>`        | Abre a conversa no Claude Desktop (`open claude://…`, no macOS); JSON, como as outras escritas |
 // | `GET /open/<local_…>`         | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
@@ -53,7 +53,8 @@
 // (`/abrir/…`, `/api/projeto/mover`, `/api/decisoes/<id>/<ação>`) passam pelas mesmas regras.
 // Um site de fora não consegue esse `Origin`, nem mandar JSON sem o preflight de CORS, e o núcleo não
 // responde CORS. A escrita nas decisões pede ainda `Content-Type: application/json` e o corpo
-// `{ "sessao": "<id>" }`, e só alcança uma decisão que essa sessão enxerga, da conta dela.
+// `{ "session": "<id>" }` (the old `{ "sessao" }` is still read, on every path), e só alcança uma
+// decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -248,14 +249,16 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function listaDeDecisoes(res: ServerResponse, sessionId: string, url: URL) {
     if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
-    const escopo = escopoDe(url.searchParams.get('scope') ?? 'familia');
-    if (!escopo) return send(res, 400, { error: 'escopo: sessao, familia ou branch' });
+    const escopo = escopoDe(url.searchParams.get('scope') ?? 'family');
+    if (!escopo) return send(res, 400, { error: 'scope: session, family ou branch' });
     const lista = await opts.montador.listaDeDecisoes(pedidoDe(sessionId, url), escopo);
     if (!lista) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
     send(res, 200, lista);
   }
 
-  // Escrita: só JSON, com a sessão no corpo; a montagem confere se a sessão enxerga a decisão.
+  // Escrita: só JSON, com a sessão no corpo; a montagem confere se a sessão enxerga a decisão. The body
+  // is `{ session, text }`; the old `{ sessao, texto }` is read too, on the new path as well (the old
+  // path translates it through `legacyRequestBody`), so a client can move to the new route first.
   async function decidir(req: IncomingMessage, res: ServerResponse, id: string, acao: AcaoNaDecisao, url: URL) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
@@ -264,18 +267,18 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     let sessao: unknown;
     let ajuste: unknown;
     try {
-      const corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as { sessao?: unknown; texto?: unknown } | null;
-      sessao = corpo?.sessao;
-      ajuste = corpo?.texto;
+      const corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as { session?: unknown; text?: unknown; sessao?: unknown; texto?: unknown } | null;
+      sessao = corpo?.session ?? corpo?.sessao;
+      ajuste = corpo?.text ?? corpo?.texto;
     } catch {
       return send(res, 400, { error: 'JSON inválido' });
     }
-    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "sessao": "<id>" }' });
+    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "session": "<id>" }' });
     try {
       const decisao = await opts.montador.decidir(pedidoDe(sessao, url), id, acao, typeof ajuste === 'string' ? ajuste : null);
       if (!decisao) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
       log(`decisão ${id}: ${acao} pela sessão ${sessao}`);
-      send(res, 200, { decisao });
+      send(res, 200, { decision: decisao });
     } catch (err) {
       if (err instanceof ErroDaDecisao) return send(res, err.status, { error: err.message });
       throw err;

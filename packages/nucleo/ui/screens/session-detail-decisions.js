@@ -15,10 +15,11 @@ import { toggle, searchField, loadDecisionsCss, decisionCard, API_VALUE } from '
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);
 
-const SCOPE_OPTIONS = { sessao: 'Sessão', familia: 'Família', branch: 'Branch' };
+// The scope is the API's value (English since issue 173, phase 2b); an old one still maps through `API_VALUE`.
+const SCOPE_OPTIONS = { session: 'Sessão', family: 'Família', branch: 'Branch' };
 
 /** A rota da leitura da aba. */
-export function tabRoute(base, { escopo: scope = 'sessao', estado: state = 'todas', q = '' } = {}) {
+export function tabRoute(base, { escopo: scope = 'session', estado: state = 'todas', q = '' } = {}) {
   const p = new URLSearchParams({ scope: API_VALUE[scope] ?? scope });
   if (state !== 'todas') p.set('state', state);
   if (q) p.set('q', q.slice(0, 200));
@@ -72,7 +73,7 @@ function promoteCard() {
 
 export function create(ctx, base, { head: headEl = () => null, setLabel = () => {} } = {}) {
   // Abre em Sessão, como o C20; Família e Branch somam as das outras sessões.
-  const filters = { escopo: 'sessao', estado: 'todas', q: '' };
+  const filters = { escopo: 'session', estado: 'todas', q: '' };
   let target = null;
   let last = null;
   let request = 0;
@@ -84,7 +85,7 @@ export function create(ctx, base, { head: headEl = () => null, setLabel = () => 
     const bar = el(
       'div',
       { class: 'dec-bar' },
-      toggle({ rotulo: 'Escopo', opcoes: [['sessao', 'Sessão'], ['familia', 'Família'], ['branch', 'Branch']], atual: filters.escopo, aoTrocar: (v) => ((filters.escopo = v), draw()) }),
+      toggle({ rotulo: 'Escopo', opcoes: [['session', 'Sessão'], ['family', 'Família'], ['branch', 'Branch']], atual: filters.escopo, aoTrocar: (v) => ((filters.escopo = v), draw()) }),
       toggle({ rotulo: 'Estado', opcoes: [['todas', 'Todas'], ['vigentes', 'Vigentes'], ['a_confirmar', 'A confirmar']], atual: filters.estado, aoTrocar: (v) => ((filters.estado = v), draw()) }),
       searchField({ placeholder: 'Buscar nas decisões…', aoBuscar: (q) => ((filters.q = q), draw()) }),
     );

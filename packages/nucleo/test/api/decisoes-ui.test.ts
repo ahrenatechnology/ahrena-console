@@ -70,7 +70,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   };
 }
 
-const rotulos = (itens: DecisaoDaUi[]) => itens.map((i) => i.titulo);
+const rotulos = (itens: DecisaoDaUi[]) => itens.map((i) => i.title);
 
 describe('C21: GET /api/decisoes (todas as decisões)', () => {
   let c: Cenario;
@@ -80,7 +80,7 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
   after(() => c.fechar());
 
   test('por branch (padrão): as contagens sobre tudo, os grupos mais recentes primeiro, até 3 itens', async () => {
-    const { status, corpo } = await c.ler<DecisoesDaPagina>('/api/decisoes');
+    const { status, corpo } = await c.ler<DecisoesDaPagina>('/api/decisions');
     assert.equal(status, 200);
     assert.equal(corpo.agrupar, 'branch');
     assert.equal(corpo.estado, 'todas');
@@ -98,26 +98,26 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
     assert.match(vitrine.chave, /^[A-Za-z0-9_.-]+$/, 'a chave vai na URL sem escapar');
     assert.deepEqual(rotulos(vitrine.itens), ['Esconder sessões encerradas há mais de 7 dias', 'SQLite em memória nos testes', 'Card com 3 linhas: título, branch e PR']);
     const sugerida = vitrine.itens[0]!;
-    assert.equal(sugerida.estado, 'a_confirmar');
-    assert.equal(sugerida.origem, 'sugerida');
+    assert.equal(sugerida.state, 'to_confirm');
+    assert.equal(sugerida.origin, 'suggested');
     assert.equal(sugerida.sessionId, VITRINE);
-    assert.equal(sugerida.escopo, 'sessao');
-    assert.equal(sugerida.sessao, 'esta', 'na página não há sessão de referência');
-    assert.equal(sugerida.conversa, `/ui/sessions/${VITRINE}`);
+    assert.equal(sugerida.scope, 'session');
+    assert.equal(sugerida.session, 'this', 'na página não há sessão de referência');
+    assert.equal(sugerida.conversation, `/ui/sessions/${VITRINE}`);
     assert.equal(sugerida.branch, 'feat/42-kanban');
     assert.equal(sugerida.repo, '/simulacao/vitrine-demo');
     const correcao = vitrine.itens[1]!;
-    assert.equal(correcao.origem, 'correcao');
-    assert.equal(correcao.rotulo, 'D7');
-    assert.equal(correcao.substitui, 'D3');
-    assert.deepEqual(correcao.nao, ['Postgres no Docker']);
+    assert.equal(correcao.origin, 'correction');
+    assert.equal(correcao.label, 'D7');
+    assert.equal(correcao.supersedes, 'D3');
+    assert.deepEqual(correcao.rejected, ['Postgres no Docker']);
     const [refactor, perf] = [corpo.grupos[2]!, corpo.grupos[3]!];
     assert.deepEqual([refactor.pasta, refactor.vigentes, refactor.aConfirmar], ['motor-de-regras', 4, 0]);
     assert.deepEqual([perf.pasta, perf.vigentes, perf.aConfirmar], ['painel-de-metricas', 3, 1]);
   });
 
   test('a lista sai de todas as sessões, inclusive a mãe que só existe na porta das decisões', async () => {
-    const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisoes?agrupar=sessao');
+    const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisions?agrupar=sessao');
     const sessoes = corpo.grupos.map((g) => g.chave && g.itens[0]!.sessionId);
     for (const s of [SESSAO_DO_PAINEL, MAE_DO_P9, VITRINE, VITRINE_ONTEM, 'sim-painel-motor-de-regras', 'sim-painel-painel-de-metricas']) assert.ok(sessoes.includes(s), s);
     const vitrine = corpo.grupos.find((g) => g.itens[0]!.sessionId === VITRINE)!;
@@ -127,63 +127,63 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
   });
 
   test('por família: a mãe e a filha juntas, com o título de uma sessão gravada da família', async () => {
-    const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisoes?agrupar=familia');
+    const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisions?agrupar=familia');
     assert.equal(corpo.agrupar, 'familia');
     assert.equal(corpo.grupos.length, 4);
     const vitrine = corpo.grupos.find((g) => g.titulo === 'Kanban da vitrine')!;
     assert.equal(vitrine.tipo, 'familia');
     assert.equal(vitrine.total, 8);
     assert.equal(vitrine.pasta, 'vitrine-demo');
-    const todas = (await c.ler<DecisoesDaPagina>(`/api/decisoes?agrupar=familia&grupo=${vitrine.chave}`)).corpo.grupos[0]!;
-    assert.ok(todas.itens.some((i) => i.sessionId === VITRINE_ONTEM && i.titulo === 'Cards só leitura, sem arrastar'));
+    const todas = (await c.ler<DecisoesDaPagina>(`/api/decisions?agrupar=familia&grupo=${vitrine.chave}`)).corpo.grupos[0]!;
+    assert.ok(todas.itens.some((i) => i.sessionId === VITRINE_ONTEM && i.title === 'Cards só leitura, sem arrastar'));
   });
 
   test('estado: vigentes e a confirmar filtram os itens e os números do grupo, não as contagens', async () => {
-    const vigentes = (await c.ler<DecisoesDaPagina>('/api/decisoes?estado=vigentes')).corpo;
+    const vigentes = (await c.ler<DecisoesDaPagina>('/api/decisions?estado=vigentes')).corpo;
     assert.equal(vigentes.estado, 'vigentes');
     assert.deepEqual(vigentes.contagens.aConfirmar, 3);
     for (const g of vigentes.grupos) {
       assert.equal(g.aConfirmar, 0);
       assert.equal(g.total, g.vigentes);
-      for (const i of g.itens) assert.equal(i.estado, 'vigente');
+      for (const i of g.itens) assert.equal(i.state, 'current');
     }
-    const aConfirmar = (await c.ler<DecisoesDaPagina>('/api/decisoes?estado=a_confirmar')).corpo;
+    const aConfirmar = (await c.ler<DecisoesDaPagina>('/api/decisions?estado=a_confirmar')).corpo;
     assert.deepEqual(aConfirmar.grupos.map((g) => [g.titulo, g.total]), [['feat/42-kanban-de-sessoes', 1], ['feat/42-kanban', 1], ['perf/47-relatorio', 1]]);
-    assert.equal((await c.ler('/api/decisoes?estado=descartada')).status, 400);
-    assert.equal((await c.ler('/api/decisoes?agrupar=conta')).status, 400);
+    assert.equal((await c.ler('/api/decisions?estado=descartada')).status, 400);
+    assert.equal((await c.ler('/api/decisions?agrupar=conta')).status, 400);
   });
 
   test('busca sem acento e sem caixa: escolha, alternativas, branch e rótulo', async () => {
-    const sqlite = (await c.ler<DecisoesDaPagina>('/api/decisoes?q=SQLITE%20em%20memoria')).corpo;
+    const sqlite = (await c.ler<DecisoesDaPagina>('/api/decisions?q=SQLITE%20em%20memoria')).corpo;
     assert.equal(sqlite.q, 'SQLITE em memoria');
     assert.deepEqual(sqlite.contagens.vigentes, 17, 'as contagens não filtram');
-    const achadas = sqlite.grupos.flatMap((g) => g.itens.map((i) => `${g.titulo} ${i.titulo}`));
+    const achadas = sqlite.grupos.flatMap((g) => g.itens.map((i) => `${g.titulo} ${i.title}`));
     assert.deepEqual(achadas.sort(), [
       'feat/42-kanban Postgres no Docker nos testes',
       'feat/42-kanban SQLite em memória nos testes',
       'feat/42-kanban-de-sessoes Postgres no Docker nos testes',
       'feat/42-kanban-de-sessoes SQLite em memória nos testes',
     ]);
-    const indice = (await c.ler<DecisoesDaPagina>('/api/decisoes?q=indice')).corpo;
+    const indice = (await c.ler<DecisoesDaPagina>('/api/decisions?q=indice')).corpo;
     assert.deepEqual(indice.grupos.flatMap((g) => rotulos(g.itens)), ['Índice composto em (mes, conta)']);
-    const branch = (await c.ler<DecisoesDaPagina>('/api/decisoes?q=refactor/pagamentos')).corpo;
+    const branch = (await c.ler<DecisoesDaPagina>('/api/decisions?q=refactor/pagamentos')).corpo;
     assert.deepEqual(branch.grupos.map((g) => [g.titulo, g.total]), [['refactor/pagamentos', 5]]);
-    const rotulo = (await c.ler<DecisoesDaPagina>('/api/decisoes?q=D8')).corpo;
-    assert.ok(rotulo.grupos.flatMap((g) => g.itens).every((i) => i.rotulo === 'D8'));
-    assert.equal((await c.ler(`/api/decisoes?q=${'x'.repeat(201)}`)).status, 400);
+    const rotulo = (await c.ler<DecisoesDaPagina>('/api/decisions?q=D8')).corpo;
+    assert.ok(rotulo.grupos.flatMap((g) => g.itens).every((i) => i.label === 'D8'));
+    assert.equal((await c.ler(`/api/decisions?q=${'x'.repeat(201)}`)).status, 400);
   });
 
   test('grupo=: o "Ver todas" de um grupo, com todos os itens', async () => {
-    const chave = (await c.ler<DecisoesDaPagina>('/api/decisoes')).corpo.grupos[1]!.chave;
-    const { corpo } = await c.ler<DecisoesDaPagina>(`/api/decisoes?grupo=${chave}`);
+    const chave = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.grupos[1]!.chave;
+    const { corpo } = await c.ler<DecisoesDaPagina>(`/api/decisions?grupo=${chave}`);
     assert.equal(corpo.grupos.length, 1);
     assert.equal(corpo.grupos[0]!.titulo, 'feat/42-kanban');
     assert.equal(corpo.grupos[0]!.itens.length, 8);
     assert.equal(corpo.grupos[0]!.mais, 0);
-    const vigentes = (await c.ler<DecisoesDaPagina>(`/api/decisoes?grupo=${chave}&estado=vigentes`)).corpo;
+    const vigentes = (await c.ler<DecisoesDaPagina>(`/api/decisions?grupo=${chave}&estado=vigentes`)).corpo;
     assert.equal(vigentes.grupos[0]!.itens.length, 6);
-    assert.equal((await c.ler<DecisoesDaPagina>('/api/decisoes?grupo=b.bmFkYQ')).corpo.grupos.length, 0, 'chave que não existe: nenhum grupo');
-    assert.equal((await c.ler('/api/decisoes?grupo=%3Cscript%3E')).status, 400);
+    assert.equal((await c.ler<DecisoesDaPagina>('/api/decisions?grupo=b.bmFkYQ')).corpo.grupos.length, 0, 'chave que não existe: nenhum grupo');
+    assert.equal((await c.ler('/api/decisions?grupo=%3Cscript%3E')).status, 400);
   });
 });
 
@@ -191,14 +191,14 @@ describe('C21: a janela de 30 dias das substituídas', () => {
   test('uma substituída há 31 dias não conta; uma há 29, conta', async () => {
     const c = await cenario();
     try {
-      const antes = (await c.ler<DecisoesDaPagina>('/api/decisoes')).corpo.contagens;
+      const antes = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.contagens;
       const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-painel-motor-de-regras', states: ['vigente'] })).items;
       assert.ok(vigentes.length >= 3);
       const ha = (dias: number) => new Date(AGORA - dias * 86_400_000).toISOString();
       const nova = vigentes[2]!.id;
       await c.decisoes.putDecision({ ...vigentes[0]!, state: 'substituida', supersededBy: nova, updatedAt: ha(31) });
       await c.decisoes.putDecision({ ...vigentes[1]!, state: 'substituida', supersededBy: nova, updatedAt: ha(29) });
-      const depois = (await c.ler<DecisoesDaPagina>('/api/decisoes')).corpo.contagens;
+      const depois = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.contagens;
       assert.equal(depois.vigentes, antes.vigentes - 2);
       assert.equal(depois.substituidas30d, antes.substituidas30d + 1, 'só a de 29 dias entra');
     } finally {
@@ -215,41 +215,41 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
   after(() => c.fechar());
 
   test('o escopo família (padrão): todos os itens do escopo, sem o limite do painel, e as contagens', async () => {
-    const { status, corpo } = await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes`);
+    const { status, corpo } = await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions`);
     assert.equal(status, 200);
     assert.equal(corpo.sessao, VITRINE);
-    assert.equal(corpo.escopo, 'familia');
+    assert.equal(corpo.escopo, 'family');
     assert.equal(corpo.estado, 'todas');
-    assert.deepEqual(corpo.porEscopo, { sessao: 6, familia: 7, branch: 7 });
+    assert.deepEqual(corpo.porEscopo, { session: 6, family: 7, branch: 7 });
     assert.equal(corpo.total, 7);
     assert.equal(corpo.itens.length, 8, 'com a substituída');
     const mae = corpo.itens.find((i) => i.sessionId === VITRINE_ONTEM)!;
-    assert.equal(mae.sessao, 'mae', 'na aba, relativo à sessão aberta');
-    assert.equal(mae.rotulo, 'D1');
-    assert.equal(mae.escopo, 'familia');
-    const promovida = corpo.itens.find((i) => i.promovidaPara)!;
-    assert.equal(promovida.titulo, 'Kanban atualiza por long polling');
-    assert.equal(promovida.promovidaPara, 'docs/decisoes/0003-kanban-por-long-polling.md');
+    assert.equal(mae.session, 'parent', 'na aba, relativo à sessão aberta');
+    assert.equal(mae.label, 'D1');
+    assert.equal(mae.scope, 'family');
+    const promovida = corpo.itens.find((i) => i.promotedTo)!;
+    assert.equal(promovida.title, 'Kanban atualiza por long polling');
+    assert.equal(promovida.promotedTo, 'docs/decisoes/0003-kanban-por-long-polling.md');
   });
 
   test('escopo, estado e busca', async () => {
-    const sessao = (await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes?escopo=sessao`)).corpo;
+    const sessao = (await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions?escopo=sessao`)).corpo;
     assert.equal(sessao.total, 6);
     assert.ok(sessao.itens.every((i) => i.sessionId === VITRINE));
-    const aConfirmar = (await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes?estado=a_confirmar`)).corpo;
+    const aConfirmar = (await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions?estado=a_confirmar`)).corpo;
     assert.deepEqual(rotulos(aConfirmar.itens), ['Esconder sessões encerradas há mais de 7 dias']);
     assert.equal(aConfirmar.total, 7, 'o total da aba não depende do filtro');
-    const busca = (await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes?q=long%20polling`)).corpo;
+    const busca = (await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions?q=long%20polling`)).corpo;
     assert.deepEqual(rotulos(busca.itens), ['Kanban atualiza por long polling']);
-    assert.equal((await c.ler(`/api/sessoes/${VITRINE}/decisoes?escopo=conta`)).status, 400);
-    assert.equal((await c.ler(`/api/sessoes/${VITRINE}/decisoes?estado=x`)).status, 400);
-    assert.equal((await c.ler('/api/sessoes/n%C3%A3o-existe/decisoes')).status, 400);
-    assert.equal((await c.ler('/api/sessoes/nao-existe/decisoes')).status, 404);
-    assert.equal((await c.ler(`/api/sessoes/${VITRINE_ONTEM}/decisoes`)).status, 200, 'a sessão que só a porta das decisões conhece');
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions?escopo=conta`)).status, 400);
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions?estado=x`)).status, 400);
+    assert.equal((await c.ler('/api/sessions/n%C3%A3o-existe/decisions')).status, 400);
+    assert.equal((await c.ler('/api/sessions/nao-existe/decisions')).status, 404);
+    assert.equal((await c.ler(`/api/sessions/${VITRINE_ONTEM}/decisions`)).status, 200, 'a sessão que só a porta das decisões conhece');
   });
 
   test('injeção e MCP: ainda não existem; o texto e a conta saem das vigentes do branch', async () => {
-    const { corpo } = await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes`);
+    const { corpo } = await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions`);
     assert.equal(corpo.injecao.ligada, false);
     assert.equal(corpo.injecao.escopo, 'branch');
     assert.equal(corpo.injecao.decisoes, 6);
@@ -265,7 +265,7 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
     assert.match(corpo.mcp.resposta, /6 vigentes/);
     assert.match(corpo.mcp.resposta, /D7 substituiu D3/);
 
-    const esta = (await c.ler<DecisoesDaAba>(`/api/sessoes/${SESSAO_DO_PAINEL}/decisoes`)).corpo;
+    const esta = (await c.ler<DecisoesDaAba>(`/api/sessions/${SESSAO_DO_PAINEL}/decisions`)).corpo;
     assert.match(esta.injecao.texto, /^Decisões vigentes em feat\/42-kanban-de-sessoes:\n/);
   });
 });
@@ -283,14 +283,14 @@ describe('a aba e as escritas: o mesmo alvo do Confirmar do painel', () => {
     });
     montador = c.montador;
     try {
-      const aba = (await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes?escopo=branch`)).corpo;
-      const d = aba.itens.find((i) => i.estado === 'vigente')!;
+      const aba = (await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions?escopo=branch`)).corpo;
+      const d = aba.itens.find((i) => i.state === 'current')!;
       assert.equal((await c.postar(`/api/decisoes/${d.id}/promover`, { sessao: VITRINE })).status, 200);
       const esperado = await c.montador.alvoDaSessao(VITRINE);
       assert.deepEqual(esperado, { sessionId: VITRINE, branch: 'feat/42-kanban', repo: '/simulacao/vitrine-demo', contaId: esperado.contaId });
       assert.deepEqual(pedidos, [[VITRINE, esperado], [VITRINE, esperado]], 'a aba e o Promover, pelo montador');
       const doPainel = (await c.montador.listaDeDecisoes({ sessionId: VITRINE }, 'branch'))!;
-      assert.deepEqual(doPainel.porEscopo, aba.porEscopo, 'o painel (o alvo do Confirmar) conta o mesmo que a aba');
+      assert.deepEqual(doPainel.byScope, aba.porEscopo, 'o painel (o alvo do Confirmar) conta o mesmo que a aba');
     } finally {
       await c.fechar();
     }
@@ -309,7 +309,7 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
   test('Origin igual a http://<Host>, caminho exato e JSON: passa; o resto, 403 ou 415', async () => {
     const nossa = { ...JSON_, origin: `http://${c.host}` };
     const d = await sugeridaDe(VITRINE);
-    const ok = await c.postar<{ decisao: DecisaoDaUi }>(`/api/decisoes/${d.id}/confirmar`, { sessao: VITRINE }, nossa);
+    const ok = await c.postar<{ decision: DecisaoDaUi }>(`/api/decisions/${d.id}/confirm`, { session: VITRINE }, nossa);
     assert.equal(ok.status, 200);
     assert.equal((await c.decisoes.getDecision(d.id))?.state, 'vigente');
 
@@ -346,10 +346,10 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
   });
 
   test('leitura: a própria /ui lê; outro Origin, não', async () => {
-    assert.equal((await c.ler('/api/decisoes', { origin: `http://${c.host}` })).status, 200);
-    assert.equal((await c.ler(`/api/sessoes/${VITRINE}/decisoes`, { origin: `http://${c.host}` })).status, 200);
-    assert.equal((await c.ler('/api/decisoes', { origin: 'http://evil.example' })).status, 403);
-    assert.equal((await c.ler(`/api/sessoes/${VITRINE}/decisoes`, { origin: 'http://evil.example' })).status, 403);
+    assert.equal((await c.ler('/api/decisions', { origin: `http://${c.host}` })).status, 200);
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions`, { origin: `http://${c.host}` })).status, 200);
+    assert.equal((await c.ler('/api/decisions', { origin: 'http://evil.example' })).status, 403);
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions`, { origin: 'http://evil.example' })).status, 403);
   });
 });
 
@@ -427,10 +427,11 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.equal(await readFile(join(repo, 'docs', 'decisoes', '0007-setima.md'), 'utf8'), '# 0007 · Sétima\n');
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
 
-      const feito = await c.postar<{ decisao: DecisaoDaUi; caminho: string }>(rota, { sessao: 'teste-promover', confirmar: true, caminho: rascunho.caminho });
+      // The promote keeps its old keys on the new route until its layer; the card inside is English.
+      const feito = await c.postar<{ decisao: DecisaoDaUi; caminho: string }>(`/api/decisions/${d.id}/promote`, { sessao: 'teste-promover', confirmar: true, caminho: rascunho.caminho });
       assert.equal(feito.status, 201);
       assert.equal(feito.corpo.caminho, rascunho.caminho);
-      assert.equal(feito.corpo.decisao.promovidaPara, rascunho.caminho);
+      assert.equal(feito.corpo.decisao.promotedTo, rascunho.caminho);
       assert.equal(await readFile(join(repo, rascunho.caminho), 'utf8'), rascunho.markdown);
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, rascunho.caminho, 'markPromoted');
 

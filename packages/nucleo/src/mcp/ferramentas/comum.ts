@@ -11,7 +11,7 @@ export interface ContaDeSaida {
 }
 
 export function contaDeSaida(c: ContaDoPainel | null): ContaDeSaida | null {
-  return c ? { label: c.rotulo, color: c.cor, source: c.fonte } : null;
+  return c ? { label: c.label, color: c.color, source: c.source } : null;
 }
 
 export function linhaDeConta(c: ContaDeSaida | null): string {

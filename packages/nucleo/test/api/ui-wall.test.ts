@@ -120,7 +120,7 @@ function cardDeExemplo(id: string, extra: Card = {}): Card {
     motivo: null,
     urgente: false,
     desde: '2026-10-20T12:00:00Z',
-    atividade: { tipo: 'ferramenta', texto: 'Rodar a bateria' },
+    atividade: { type: 'tool', text: 'Rodar a bateria' },
     modelo: 'claude-opus-5-5',
     esforco: 'high',
     agentes: { ativos: 1, total: 2 },
@@ -136,10 +136,10 @@ const MURAL = {
   contagem: { todas: 5, esperando: 2, ativas: 1 },
   cards: [
     cardDeExemplo('ativa-1'),
-    cardDeExemplo('espera-1', { status: 'waiting', estado: 'waiting', motivo: 'notification', urgente: true, atividade: { tipo: 'permissao', texto: 'Bash: npm run migrate' }, esforco: null, plano: null }),
-    cardDeExemplo('espera-2', { status: 'waiting', estado: 'waiting', motivo: 'stop', atividade: { tipo: 'sua-vez', texto: 'Rodo os testes?' }, contexto: null }),
-    cardDeExemplo('erro-1', { status: 'error', estado: 'error', urgente: true, atividade: { tipo: 'erro', texto: 'API 529 · overloaded_error' }, contexto: { pct: 84, usados: 168_000, limite: 200_000, rotulo: '' } }),
-    cardDeExemplo('feita-1', { titulo: '<b>negrito</b>', status: 'completed', estado: 'completed', atividade: { tipo: 'concluida', texto: '' }, custo: { usd: null, estimativa: true }, modelo: null }),
+    cardDeExemplo('espera-1', { status: 'waiting', estado: 'waiting', motivo: 'notification', urgente: true, atividade: { type: 'permission', text: 'Bash: npm run migrate' }, esforco: null, plano: null }),
+    cardDeExemplo('espera-2', { status: 'waiting', estado: 'waiting', motivo: 'stop', atividade: { type: 'your-turn', text: 'Rodo os testes?' }, contexto: null }),
+    cardDeExemplo('erro-1', { status: 'error', estado: 'error', urgente: true, atividade: { type: 'error', text: 'API 529 · overloaded_error' }, contexto: { pct: 84, usados: 168_000, limite: 200_000, rotulo: '' } }),
+    cardDeExemplo('feita-1', { titulo: '<b>negrito</b>', status: 'completed', estado: 'completed', atividade: { type: 'completed', text: '' }, custo: { usd: null, estimativa: true }, modelo: null }),
   ],
 };
 
@@ -246,7 +246,7 @@ describe('Mural: a tela montada', () => {
   });
 
   test('esperando sem motivo: só o texto da atividade, sem chip', async () => {
-    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', estado: 'waiting', motivo: null, atividade: { tipo: 'sua-vez', texto: 'Aguardando você' } });
+    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', estado: 'waiting', motivo: null, atividade: { type: 'your-turn', text: 'Aguardando você' } });
     const { area, sair } = await montarTela(async () => ({ ...MURAL, cards: [semMotivo] }));
     try {
       await ate(() => comClasse(area, 'wall-card').length === 1);

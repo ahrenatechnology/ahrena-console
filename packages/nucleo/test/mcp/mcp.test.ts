@@ -272,13 +272,13 @@ describe('fleet_overview', () => {
     const painel = await montador.montar({ sessionId: 'nenhuma' });
     const mcp = (await chamar('sessions_needing_attention', {}, s)).structuredContent;
     // O total do painel conta só as que precisam de você; a sua vez vem à parte (#140).
-    assert.equal(mcp.blocking, painel.precisam.total);
-    assert.equal(mcp.yourTurn, painel.precisam.suaVez);
+    assert.equal(mcp.blocking, painel.needYou.total);
+    assert.equal(mcp.yourTurn, painel.needYou.yourTurn);
     assert.deepEqual(
       mcp.byAccount.filter((c: any) => c.blocking > 0).map((c: any) => [c.account?.label, c.blocking]).sort(),
-      painel.precisam.porConta.map((c) => [c.conta?.rotulo, c.n]).sort(),
+      painel.needYou.byAccount.map((c) => [c.account?.label, c.n]).sort(),
     );
-    const doPainel = new Map(painel.precisam.maquina.map((i) => [i.id, i.nivel === 'precisa' ? 'blocking' : 'your_turn']));
+    const doPainel = new Map(painel.needYou.machine.map((i) => [i.id, i.level === 'needs' ? 'blocking' : 'your_turn']));
     for (const i of mcp.items) assert.equal(i.group, doPainel.get(i.sessionId), i.sessionId);
     await sim.close();
   });
