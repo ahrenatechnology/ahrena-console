@@ -72,6 +72,8 @@ Português é reconhecido por acento, por terminação (`-ção`, `-dade`, `-men
 
 Em fases, um PR por fase, com o plano no corpo da issue #173: API (rotas novas com as antigas como alias), /ui, núcleo, app, banco (com migração do SQLite existente sem perder dados) e, por último, a retirada dos alias. **Compatibilidade:** o mod publicado na v0.0.30 chama `/api/painel` e `/abrir/<id>`, e o app instalado chama `/api/atencao` e `/api/mudancas`; essas rotas continuam respondendo até o PR final.
 
+**Alias retirados em 20/10/2026** (fase 6, PRs [#271](https://github.com/ahrenatechnology/ahrena-console/pull/271), [#272](https://github.com/ahrenatechnology/ahrena-console/pull/272) e [#273](https://github.com/ahrenatechnology/ahrena-console/pull/273)): o mod publicado (v0.0.34) e o app (0.0.5) já só usam os nomes em inglês.
+
 ## Alternativas consideradas
 
 - **Tudo em pt-BR.** Coerente com quem usa, mas fecha o repositório para quem contribui de fora. Recusada pelo Fernando.

@@ -103,7 +103,7 @@ fn main() {
         .manage(CoreLoop(Mutex::new(wake)))
         .setup(move |app| {
             // The launch Apple Event is still in progress here, in `applicationDidFinishLaunching`.
-            let variable = core::env_var("AHRENA_CONSOLE_LAUNCH_ORIGIN", "AHRENA_ORIGEM");
+            let variable = core::env_var("AHRENA_CONSOLE_LAUNCH_ORIGIN");
             let (origin, source) = login::detect(variable.as_deref(), login::launch_event());
             eprintln!("[ahrena-console] origin: {} ({source})", origin.name());
             let open_at_launch = login::opens_window_at_launch(origin);
@@ -494,10 +494,10 @@ fn dot_image(d: Dot) -> Image<'static> {
     Image::new_owned(rgba, SIDE, SIDE)
 }
 
-/// `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` (old name `AHRENA_ABRIR_MENU`) opens the menu by itself
+/// `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` opens the menu by itself
 /// after that many seconds, for the tray screenshots and hand tests without clicking.
 fn open_menu_later(app: &AppHandle) {
-    let Some(seconds) = core::env_var("AHRENA_CONSOLE_OPEN_MENU_AFTER", "AHRENA_ABRIR_MENU").and_then(|s| s.parse::<u64>().ok()) else { return };
+    let Some(seconds) = core::env_var("AHRENA_CONSOLE_OPEN_MENU_AFTER").and_then(|s| s.parse::<u64>().ok()) else { return };
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(seconds));

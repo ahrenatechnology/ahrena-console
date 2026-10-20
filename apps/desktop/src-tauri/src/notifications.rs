@@ -332,10 +332,10 @@ pub fn valid_local(local: &str) -> bool {
     (8..=64).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
-/// Where the JSON lives: in `AHRENA_CONSOLE_DATA_DIR` (old name `AHRENA_DADOS_DIR`), if set, or in
+/// Where the JSON lives: in `AHRENA_CONSOLE_DATA_DIR`, if set, or in
 /// the app's data folder. Only this file: the app's core always uses the app's data folder (core.rs).
 pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
-    let dir = crate::core::env_var("AHRENA_CONSOLE_DATA_DIR", "AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
+    let dir = crate::core::env_var("AHRENA_CONSOLE_DATA_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
     Some(dir.join(FILE))
 }
 

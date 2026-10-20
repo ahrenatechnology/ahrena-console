@@ -11,29 +11,22 @@ use serde::Deserialize;
 
 use crate::machines;
 
-/// One item of `GET /api/attention` (packages/nucleo/src/api/attention-route.ts). The keys are in
-/// English (#173 phase 2b); the `alias` also reads those of an older core, which the app may adopt
-/// (its `/api/overview` still answers with `nome`, core.rs), and `from_json` maps its values to
-/// the new ones.
+/// One item of `GET /api/attention` (packages/nucleo/src/api/attention-route.ts), in English (#173
+/// phase 2b). The Portuguese keys of an older core are not read since phase 6: the app runs the core
+/// it bundles.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct AttentionItem {
-    #[serde(alias = "sessao")]
     pub session: String,
-    #[serde(alias = "titulo")]
     pub title: String,
-    #[serde(alias = "conta")]
     pub account: Option<Account>,
     /// `needs` (the session is blocked) or `your-turn` (idle): the level from before #245, which
     /// `from_json` turns into `attention` when the core does not send it.
-    #[serde(alias = "nivel")]
     pub level: String,
-    #[serde(alias = "motivo")]
     pub reason: String,
-    #[serde(rename = "shortReason", alias = "motivoCurto")]
+    #[serde(rename = "shortReason")]
     pub short_reason: String,
-    #[serde(rename = "longReason", alias = "motivoLongo")]
+    #[serde(rename = "longReason")]
     pub long_reason: String,
-    #[serde(alias = "minutos")]
     pub minutes: u64,
     pub local: Option<String>,
     /// The remote machine the session runs on (#176); `None` for this machine and for a core
@@ -80,9 +73,7 @@ pub struct SessionMachine {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Account {
-    #[serde(alias = "rotulo")]
     pub label: String,
-    #[serde(alias = "cor")]
     pub color: String,
 }
 
@@ -90,11 +81,9 @@ pub struct Account {
 pub struct Attention {
     pub cursor: Option<String>,
     pub total: u64,
-    #[serde(alias = "ativas")]
     pub active: u64,
-    #[serde(rename = "withError", alias = "comErro")]
+    #[serde(rename = "withError")]
     pub with_error: u64,
-    #[serde(alias = "itens")]
     pub items: Vec<AttentionItem>,
     /// #245: the sessions that need you, the bar's number. A core from before #245 does not send
     /// it: `from_json` fills it from `needs` or from the items.
@@ -104,9 +93,9 @@ pub struct Attention {
     #[serde(default)]
     pub idle: Option<u64>,
     /// The counts from before #245 (`blocked` and `idle` under their old names).
-    #[serde(default, alias = "precisam")]
+    #[serde(default)]
     pub needs: Option<u64>,
-    #[serde(default, rename = "yourTurn", alias = "suaVez")]
+    #[serde(default, rename = "yourTurn")]
     pub your_turn: Option<u64>,
 }
 
@@ -114,12 +103,6 @@ impl Attention {
     pub fn from_json(text: &str) -> Option<Attention> {
         let mut a: Attention = serde_json::from_str(text).ok()?;
         for i in &mut a.items {
-            if let Some(new) = english_level(&i.level) {
-                i.level = new.to_owned();
-            }
-            if let Some(new) = english_reason(&i.reason) {
-                i.reason = new.to_owned();
-            }
             if i.attention.is_none() {
                 i.attention = attention_from_level(&i.level, &i.reason);
             }
@@ -165,30 +148,6 @@ fn attention_from_level(level: &str, reason: &str) -> Option<ItemAttention> {
         r => r,
     };
     Some(ItemAttention { level: level.into(), reason: reason.into() })
-}
-
-/// The `nivel` of a core from before #173 (phase 2b) as the new value; `None` if it already is.
-fn english_level(level: &str) -> Option<&'static str> {
-    match level {
-        "precisa" => Some("needs"),
-        "sua-vez" => Some("your-turn"),
-        _ => None,
-    }
-}
-
-/// The `motivo` of a core from before #173 (phase 2b) as the new value; `None` if it already is
-/// (`no-prompt` did not change).
-fn english_reason(reason: &str) -> Option<&'static str> {
-    match reason {
-        "permissao" => Some("permission"),
-        "pergunta" => Some("question"),
-        "plano" => Some("plan"),
-        "decisao" => Some("decision"),
-        "erro" => Some("error"),
-        "sua-vez" => Some("your-turn"),
-        "interrompida" => Some("interrupted"),
-        _ => None,
-    }
 }
 
 /// The core as the tray sees it.
@@ -1009,47 +968,18 @@ mod tests {
     }
 
     #[test]
-    fn older_core_with_portuguese_keys_and_values() {
-        // The `/api/atencao` of a core from before #173 (phase 2b): the new app may adopt it.
+    fn the_portuguese_body_of_an_old_core_is_not_read() {
+        // The Portuguese attention body of a core from before #173 (phase 2b): not read since phase 6.
         const OLD: &str = r##"{
-          "geradoEm": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 2, "precisam": 1, "suaVez": 1,
+          "geradoEm": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 1, "precisam": 1, "suaVez": 0,
           "ativas": 4, "comErro": 1,
           "itens": [
-            { "sessao": "s2", "titulo": "painel-de-metricas", "projeto": null, "conta": { "rotulo": "equipe", "cor": "#f47c20" },
+            { "sessao": "s2", "titulo": "painel-de-metricas", "projeto": null, "conta": null,
               "nivel": "precisa", "motivo": "erro", "motivoCurto": "Com erro", "motivoLongo": "parou num erro",
-              "desde": "2026-10-18T23:07:00.000Z", "minutos": 3, "local": null },
-            { "sessao": "s3", "titulo": "fila-de-tarefas", "projeto": null, "conta": null,
-              "nivel": "sua-vez", "motivo": "sua-vez", "motivoCurto": "Sua vez", "motivoLongo": "terminou o turno, sua vez",
-              "desde": "2026-10-18T23:09:00.000Z", "minutos": 1 }
+              "desde": "2026-10-18T23:07:00.000Z", "minutos": 3, "local": null }
           ]
         }"##;
-        let a = Attention::from_json(OLD).unwrap();
-        assert_eq!((a.total, a.active, a.with_error, a.items.len()), (2, 4, 1, 2));
-        assert_eq!((a.blocked_count(), a.idle_count()), (1, 1), "from `precisam` and `suaVez`");
-        assert_eq!(a.items[0].attention, Some(ItemAttention { level: BLOCKED.into(), reason: "error".into() }));
-        assert_eq!(a.items[1].attention, Some(ItemAttention { level: IDLE.into(), reason: "turn_ended".into() }));
-        let e = &a.items[0];
-        assert_eq!((e.session.as_str(), e.title.as_str(), e.level.as_str(), e.reason.as_str()), ("s2", "painel-de-metricas", "needs", "error"));
-        assert_eq!((e.short_reason.as_str(), e.long_reason.as_str(), e.minutes), ("Com erro", "parou num erro", 3));
-        assert_eq!(e.account, Some(Account { label: "equipe".into(), color: "#f47c20".into() }));
-        assert_eq!(session_dot(e), Dot::Red);
-        let v = &a.items[1];
-        assert_eq!((v.level.as_str(), v.reason.as_str(), v.local.as_deref()), ("your-turn", "your-turn", None));
-        for (old, new) in [
-            ("permissao", "permission"),
-            ("pergunta", "question"),
-            ("plano", "plan"),
-            ("decisao", "decision"),
-            ("erro", "error"),
-            ("sua-vez", "your-turn"),
-            ("interrompida", "interrupted"),
-        ] {
-            assert_eq!(english_reason(old), Some(new));
-            assert_eq!(english_reason(new), None);
-        }
-        assert_eq!(english_reason("no-prompt"), None);
-        assert_eq!(english_level("precisa"), Some("needs"));
-        assert_eq!(english_level("needs"), None);
+        assert_eq!(Attention::from_json(OLD), None);
     }
 
     #[test]
