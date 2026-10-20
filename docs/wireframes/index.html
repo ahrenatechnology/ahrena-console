@@ -560,8 +560,10 @@ body.captura .palco { overflow: visible; }
 .dash-idle .dash-idle-t b { color: var(--text); font-weight: 500; }
 .dash-idle .dash-idle-i { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; flex: 0 1 auto; }
 .mot { white-space: nowrap; flex: none; }
-.cc.w1100 .col .cab { white-space: nowrap; letter-spacing: .03em; }
-.cc.w1100 .kanban-session-card .pe { grid-template-columns: auto auto; justify-content: space-between; } .cc.w1100 .kanban-session-card .pe span:nth-child(-n+2) { display: none; }
+.cc.w1100 .col .cab { letter-spacing: .03em; min-height: 32px; line-height: 1.25; }
+.cc.w1100 .col .cab > span:nth-child(2) { min-width: 0; } .cc.w1100 .col .cab .n { flex: none; }
+.cc.w1100 .kc .pe { grid-template-columns: auto auto; justify-content: space-between; gap: 3px 6px; } .cc.w1100 .kc .pe svg { display: none; }
+.cc.w1100 .kanban-session-card .pe span:nth-child(-n+2) { display: none; }
 .cc.w1100 .ac .rodape span { white-space: nowrap; } .cc.w1100 .ac .rodape .trunc { flex: 1; min-width: 0; display: block; }
 .dash-idle .dash-idle-i .mono { font-size: 11.5px; }
 .dash-idle .r { margin-left: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
