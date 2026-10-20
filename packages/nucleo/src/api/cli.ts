@@ -6,8 +6,8 @@
 // e a versão e sai com 0) em vez de subir outro.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -32,13 +32,15 @@ import { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
 import { waitForChanges } from '../mudancas/mcp.ts';
 import {
+  apelidoDaDemo,
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
-  SESSAO_DO_PAINEL,
+  pastasDosRegistrosDaDemo,
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
 import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
 import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
@@ -47,6 +49,7 @@ import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
+import { DecisoesDaUi } from './decisoes-ui.ts';
 import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
@@ -253,7 +256,22 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),
+  ...(demo ? { apelido: apelidoDaDemo } : {}),
+});
+
+// A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
+// agora e apagada na saída, no lugar de /simulacao; fora da demo, no próprio repositório da decisão.
+const pastaDaDemo = demo ? mkdtempSync(join(tmpdir(), 'ahrena-console-demo-')) : null;
+const decisoesUi = new DecisoesDaUi({
+  decisions: decisoes,
+  storage,
+  // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
+  alvoDe: (id) => montador.alvoDaSessao(id),
+  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  localDe: async (id) => {
+    await desktop?.atualizar();
+    return desktop?.sessaoPorCli(id)?.localId ?? null;
+  },
 });
 
 if (demo) {
@@ -261,6 +279,7 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
   await semearHistorico(storage);
   await semearDetalhe(storage);
@@ -325,6 +344,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  decisoesUi,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
   eventos: new FeedDeEventos({ storage }),
@@ -408,6 +428,7 @@ async function desligar() {
   await follower?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
+  if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
 process.on('SIGINT', () => void desligar());

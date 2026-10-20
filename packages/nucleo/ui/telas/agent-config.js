@@ -20,7 +20,7 @@ export const SKILL_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const TABS = [
   { id: 'overview', label: 'Visão geral', icon: 'mural' },
-  { id: 'skills', label: 'Skills', icon: 'sparkles', summary: 'skills' },
+  { id: 'skills', label: 'Skills', icon: 'sugerida', summary: 'skills' },
   { id: 'subagents', label: 'Subagentes', icon: 'users', summary: 'subagents' },
   { id: 'commands', label: 'Comandos', icon: 'slash', summary: 'commands' },
   { id: 'memory', label: 'Memória', icon: 'book-open', summary: 'memory' },
@@ -30,7 +30,7 @@ export const TABS = [
 ];
 
 const SUMMARY = [
-  ['skills', 'sparkles', 'Skills'],
+  ['skills', 'sugerida', 'Skills'],
   ['subagents', 'users', 'Subagentes'],
   ['commands', 'slash', 'Comandos'],
   ['mcp', 'server', 'Servidores MCP'],
@@ -390,7 +390,7 @@ export async function montar(area, ctx) {
           ? found.map(skillCard)
           : [
               vazio({
-                icone: 'sparkles',
+                icone: 'sugerida',
                 titulo: state.search ? 'Nenhuma skill com essa busca' : 'Nenhuma skill neste escopo',
                 texto: state.search ? `Nada em ${d.skills.length} skill(s) bate com “${state.search}”.` : `Há ${d.summary.skills.total} skill(s) em todos os escopos.`,
               }),
@@ -424,7 +424,7 @@ export async function montar(area, ctx) {
       el(
         'div',
         { class: 'ac-item-row' },
-        el('span', { class: 'ac-accent' }, icone('sparkles')),
+        el('span', { class: 'ac-accent' }, icone('sugerida')),
         el('b', { class: 'ac-trunc' }, s.name),
         el('span', { class: 'ac-chip' }, SCOPE_LABEL[s.scope] ?? s.scope),
         s.declaredName && s.declaredName !== s.name ? el('span', { class: 'mono ac-muted ac-trunc', title: 'O name do frontmatter' }, `name: ${s.declaredName}`) : null,

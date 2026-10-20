@@ -90,6 +90,15 @@ export const TELAS = [
     arquivo: '/ui/telas/analytics.js',
   },
   {
+    id: 'workflows',
+    rota: '/ui/workflows',
+    item: { rotulo: 'Workflows', icone: 'workflows' },
+    titulo: 'Workflows',
+    sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
+    icone: 'workflows',
+    arquivo: '/ui/telas/workflows.js', // #96
+  },
+  {
     id: 'historico',
     rota: '/ui/historico',
     item: { rotulo: 'Histórico', icone: 'historico' },
@@ -97,6 +106,15 @@ export const TELAS = [
     sub: 'Sessões encerradas, por dia',
     icone: 'historico',
     arquivo: '/ui/telas/historico.js', // #33
+  },
+  {
+    id: 'decisoes',
+    rota: '/ui/decisoes',
+    item: { rotulo: 'Decisões', icone: 'decisao' },
+    titulo: 'Decisões',
+    sub: 'O que você e os agentes decidiram, em todas as sessões',
+    icone: 'decisao',
+    arquivo: '/ui/telas/decisoes.js', // issue 103
   },
   { id: 'agent-config', rota: '/ui/agent-config', item: { rotulo: 'Agent Config', icone: 'bot' }, titulo: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icone: 'bot', arquivo: '/ui/telas/agent-config.js' }, // #63
 ];

@@ -514,7 +514,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
     assert.equal((await post({ root: 'u0', name: 'de-fora', content: 'x' }, { ...json, host: `localhost:${port}`, origin: `http://127.0.0.1:${port}` })).status, 403);
     assert.ok(!existsSync(join(home.dir, 'skills', 'de-fora')));
     // The exception is only for this route: another write with Origin is still refused.
-    assert.equal((await get(api.url, '/api/decisoes/x/confirmar', { method: 'POST', headers: { ...json, origin: `http://${host}` }, body: '{}' })).status, 403);
+    assert.equal((await get(api.url, '/api/hooks', { method: 'POST', headers: { ...json, origin: `http://${host}` }, body: '{}' })).status, 403);
   });
 
   test('write defenses: JSON required, name, root, symlink, size', async () => {

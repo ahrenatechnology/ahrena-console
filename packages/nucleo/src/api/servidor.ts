@@ -23,9 +23,11 @@
 // | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 // | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
+// | `GET /api/workflows` e `/api/sessoes/<id>/workflow` | Workflows e a aba Workflow (api/workflows.ts, #96 e #97) |
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
+// | `GET /api/decisoes`, `GET /api/sessoes/<id>/decisoes` e `POST /api/decisoes/<id>/promover` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
@@ -33,11 +35,13 @@
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
 // até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo três, só com `Origin`
-// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`,
-// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e o `POST /api/agent-config/skill` da
-// tela Agent Config (api/agent-config.ts). A escrita nas
-// decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
-// alcança uma decisão que essa sessão enxerga, da conta dela.
+// exatamente `http://<Host>` e caminho exato (sem query): o "Abrir no Claude Desktop" do Detalhe,
+// `POST /abrir/<local_…>`, o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e as
+// decisões pela /ui (#103), `POST /api/decisoes/<id>/(confirmar|descartar|ajustar|desfazer|promover)`, e o
+// `POST /api/agent-config/skill` da tela Agent Config (api/agent-config.ts).
+// Um site de fora não consegue esse `Origin`, nem mandar JSON sem o preflight de CORS, e o núcleo não
+// responde CORS. A escrita nas decisões pede ainda `Content-Type: application/json` e o corpo
+// `{ "sessao": "<id>" }`, e só alcança uma decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -45,11 +49,13 @@ import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteO
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { ROTA_DAS_MUDANCAS, responderMudancas } from '../mudancas/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
+import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
@@ -103,6 +109,8 @@ export interface OpcoesDaApi {
   historico?: HistoricoDeSessoes;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
+  /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */
+  decisoesUi?: DecisoesDaUi;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
 }
@@ -139,6 +147,13 @@ const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.me
  */
 const mesmaOrigemAbrindo = (req: IncomingMessage, port: number): boolean =>
   req.method === 'POST' && /^\/abrir\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && daPropriaUi(req, port);
+
+/**
+ * A própria `/ui` decidindo (#103): só `POST /api/decisoes/<id>/<ação>`, com o caminho cru exato
+ * (query dá 403) e da mesma origem. O id começa por alfanumérico: `/api/decisoes/../confirmar` não passa. O JSON obrigatório continua com quem responde (415).
+ */
+const mesmaOrigemDecidindo = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/api\/decisoes\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirmar|descartar|ajustar|desfazer|promover)$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -253,11 +268,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
     if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]));
+    if (opts.decisoesUi && (await responderDecisoesDaUi(req, res, url, opts.decisoesUi, log))) return;
     const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname);
     if (escrita) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
@@ -292,6 +308,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         ...(opts.carga?.() ?? {}),
       });
     }
+    if (await responderWorkflows(res, url, opts.montador)) return;
     const m = /^\/api\/(?:painel|sessao)\/([^/]+)$/.exec(url.pathname);
     if (m) return painel(res, decodeURIComponent(m[1]), url);
     const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);
