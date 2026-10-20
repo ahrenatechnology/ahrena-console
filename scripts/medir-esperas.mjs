@@ -95,7 +95,7 @@ try {
         const r = await (await fetch(`${base}/api/changes?since=${c}&wait=${espera}`)).json();
         if (!ligado) break;
         respostas++;
-        if (r.mudancas.length) comMudanca++;
+        if (r.changes.length) comMudanca++;
         c = r.cursor;
       }
     }
@@ -103,7 +103,7 @@ try {
     const h0 = hooks;
     const timer = comHooks ? setInterval(enviar, 60_000 / hooksPorMin) : null;
     await dormir(1000);
-    const abertas = (await (await fetch(`${base}/api/load`)).json()).esperasAbertas;
+    const abertas = (await (await fetch(`${base}/api/load`)).json()).openWaits;
     const r0 = respostas;
     const m0 = comMudanca;
     const a = amostra(filho.pid);

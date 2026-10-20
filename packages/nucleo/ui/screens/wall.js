@@ -28,9 +28,9 @@ const EFFORTS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito al
 
 export const FILTERS = [
   { id: 'todas', rotulo: 'Todas', passa: () => true, vazio: 'Nenhuma sessão aberta' },
-  // Os mesmos grupos da `contagem` do núcleo: o erro também precisa de você.
-  { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.estado === 'waiting' || c.estado === 'error', vazio: 'Nenhuma sessão esperando você' },
-  { id: 'ativas', rotulo: 'Ativas', passa: (c) => ['active', 'delegating', 'background'].includes(c.estado), vazio: 'Nenhuma sessão ativa' },
+  // Os mesmos grupos do `count` do núcleo: o erro também precisa de você.
+  { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.state === 'waiting' || c.state === 'error', vazio: 'Nenhuma sessão esperando você' },
+  { id: 'ativas', rotulo: 'Ativas', passa: (c) => ['active', 'delegating', 'background'].includes(c.state), vazio: 'Nenhuma sessão ativa' },
 ];
 
 // ---------- Formatação ----------
@@ -59,30 +59,30 @@ const limit = (n) => Math.min(100, Math.max(0, Math.round(n)));
  * assim a sessão sem plano); contexto `null` é "contexto —" com a barra vazia.
  */
 export function cardContent(c) {
-  const plan = c.plano ?? { feitos: 0, total: 0 };
-  const pct = c.contexto ? limit(c.contexto.pct) : null;
+  const plan = c.plan ?? { done: 0, total: 0 };
+  const pct = c.context ? limit(c.context.pct) : null;
   let row;
-  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.motivo] ?? null, texto: c.atividade?.text ?? '' };
-  else if (c.status === 'error') row = { tipo: 'erro', texto: c.atividade?.text ?? '' };
+  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.reason] ?? null, texto: c.activity?.text ?? '' };
+  else if (c.status === 'error') row = { tipo: 'erro', texto: c.activity?.text ?? '' };
   else if (c.status === 'completed') row = { tipo: 'concluida', texto: 'Terminou sem erro' };
-  else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.atividade?.text ?? '' };
-  else row = { tipo: 'fazendo', texto: c.atividade?.text ?? '' };
+  else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.activity?.text ?? '' };
+  else row = { tipo: 'fazendo', texto: c.activity?.text ?? '' };
   return {
     id: c.id,
     href: `/ui/sessions/${encodeURIComponent(c.id)}`,
     status: c.status,
-    titulo: c.titulo,
-    origem: [c.projeto, c.branch].filter(Boolean).join(' · ') || '—',
+    title: c.title,
+    origem: [c.project, c.branch].filter(Boolean).join(' · ') || '—',
     linha: row,
     grade: [
-      ['Modelo', modelName(c.modelo)],
-      ['Esforço', effort(c.esforco)],
-      ['Agentes', String(c.agentes?.total ?? 0)],
-      ['Custo', cost(c.custo?.usd)],
+      ['Modelo', modelName(c.model)],
+      ['Esforço', effort(c.effort)],
+      ['Agentes', String(c.agents?.total ?? 0)],
+      ['Custo', cost(c.cost?.usd)],
     ],
-    agentes: c.agentes ?? { ativos: 0, total: 0 },
-    plano: { feitos: plan.feitos, total: plan.total, rotulo: `Plano ${plan.feitos}/${plan.total}`, atual: c.plano?.atual ?? null },
-    contexto: { pct, rotulo: pct === null ? 'contexto —' : `contexto ${pct}%`, alto: pct !== null && pct >= HIGH_CONTEXT },
+    agents: c.agents ?? { active: 0, total: 0 },
+    plan: { done: plan.done, total: plan.total, label: `Plano ${plan.done}/${plan.total}`, current: c.plan?.current ?? null },
+    context: { pct, label: pct === null ? 'contexto —' : `contexto ${pct}%`, high: pct !== null && pct >= HIGH_CONTEXT },
   };
 }
 
@@ -116,22 +116,22 @@ function card(c) {
   return el(
     'a',
     { class: `card wall-card wall-st-${v.status}`, href: v.href, 'data-session': v.id },
-    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.titulo }, v.titulo), badge(v.status)),
+    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.title }, v.title), badge(v.status)),
     el('div', { class: 'wall-prj wall-trunc' }, v.origem),
     cardRow(v.linha),
     el(
       'div',
       { class: 'wall-gr' },
       ...v.grade.map(([label, value]) =>
-        el('div', label === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
+        el('div', label === 'Agentes' ? { title: `${v.agents.active} ativos de ${v.agents.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
       ),
     ),
-    el('div', { class: 'wall-planrow' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
+    el('div', { class: 'wall-planrow' }, el('span', { title: v.plan.current ?? null }, v.plan.label), el('span', {}, v.context.label)),
     el(
       'div',
       { class: 'wall-bars' },
-      bar({ tipo: 'plan', valor: v.plano.feitos, max: v.plano.total, rotulo: `Plano: ${v.plano.feitos} de ${v.plano.total}` }),
-      bar({ tipo: 'context', valor: v.contexto.pct ?? 0, max: 100, alto: v.contexto.alto, rotulo: v.contexto.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.contexto.pct}%` }),
+      bar({ tipo: 'plan', valor: v.plan.done, max: v.plan.total, rotulo: `Plano: ${v.plan.done} de ${v.plan.total}` }),
+      bar({ tipo: 'context', valor: v.context.pct ?? 0, max: 100, alto: v.context.high, rotulo: v.context.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.context.pct}%` }),
     ),
   );
 }
@@ -146,7 +146,7 @@ export async function mount(area, ctx) {
   let request = 0;
   let wait = null;
 
-  // O seletor só com os rótulos, como no wireframe: a `contagem` do núcleo não aparece.
+  // O seletor só com os rótulos, como no wireframe: o `count` do núcleo não aparece.
   const buttons = new Map();
   const selector = el(
     'div',

@@ -6,37 +6,38 @@
 
 use serde::Deserialize;
 
-/// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts).
+/// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts). As chaves em inglês
+/// (#173 fase 2b): o app fala com o núcleo que vem com ele.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ItemDaAtencao {
-    pub sessao: String,
-    pub titulo: String,
-    pub conta: Option<Conta>,
-    /// `precisa` (trava a sessão) ou `sua-vez`.
-    pub nivel: String,
-    pub motivo: String,
-    #[serde(rename = "motivoCurto")]
-    pub motivo_curto: String,
-    #[serde(rename = "motivoLongo")]
-    pub motivo_longo: String,
-    pub minutos: u64,
+    pub session: String,
+    pub title: String,
+    pub account: Option<Conta>,
+    /// `needs` (trava a sessão) ou `your-turn`.
+    pub level: String,
+    pub reason: String,
+    #[serde(rename = "shortReason")]
+    pub short_reason: String,
+    #[serde(rename = "longReason")]
+    pub long_reason: String,
+    pub minutes: u64,
     pub local: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Conta {
-    pub rotulo: String,
-    pub cor: String,
+    pub label: String,
+    pub color: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Atencao {
     pub cursor: Option<String>,
     pub total: u64,
-    pub ativas: u64,
-    #[serde(rename = "comErro")]
-    pub com_erro: u64,
-    pub itens: Vec<ItemDaAtencao>,
+    pub active: u64,
+    #[serde(rename = "withError")]
+    pub with_error: u64,
+    pub items: Vec<ItemDaAtencao>,
 }
 
 impl Atencao {
@@ -120,7 +121,7 @@ pub fn tempo(minutos: u64) -> String {
 }
 
 fn ponto_da_sessao(i: &ItemDaAtencao) -> Ponto {
-    if i.motivo == "erro" {
+    if i.reason == "error" {
         Ponto::Vermelho
     } else {
         Ponto::Amarelo
@@ -170,30 +171,30 @@ fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
         m.push(Item::Texto { texto: "Lendo as sessões…".into(), ponto: None });
         return;
     };
-    if a.itens.is_empty() {
+    if a.items.is_empty() {
         // A1: dois itens, cada um com a sua bolinha (o menu nativo não põe duas na mesma linha).
         // Com a lista vazia não há sessão com erro: uma com erro estaria na lista.
         m.push(Item::Texto { texto: "Ninguém precisa de você".into(), ponto: Some(Ponto::Vazio) });
-        m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
+        m.push(Item::Texto { texto: ativas(a.active), ponto: Some(Ponto::Laranja) });
         m.push(Item::Texto { texto: "nenhuma com erro".into(), ponto: Some(Ponto::Vermelho) });
         return;
     }
-    let n = a.itens.len();
+    let n = a.items.len();
     let quem = if n == 1 { "1 precisa de você".to_string() } else { format!("{n} precisam de você") };
     m.push(Item::Cabecalho { texto: format!("{quem} · abrir na janela"), alternativo: format!("{quem} · abrir no Claude Desktop") });
-    for i in &a.itens {
-        let conta = i.conta.as_ref().map(|c| c.rotulo.as_str()).unwrap_or("Sem conta");
+    for i in &a.items {
+        let conta = i.account.as_ref().map(|c| c.label.as_str()).unwrap_or("Sem conta");
         m.push(Item::Sessao {
-            id: i.sessao.clone(),
-            texto: format!("{} · {} · {}", i.titulo, i.motivo_curto, tempo(i.minutos)),
-            alternativo: format!("{} · Abrir no Claude Desktop", i.titulo),
+            id: i.session.clone(),
+            texto: format!("{} · {} · {}", i.title, i.short_reason, tempo(i.minutes)),
+            alternativo: format!("{} · Abrir no Claude Desktop", i.title),
             ponto: ponto_da_sessao(i),
-            dica: format!("{conta} · {}", i.motivo_longo),
+            dica: format!("{conta} · {}", i.long_reason),
             local: i.local.clone(),
         });
     }
     m.push(Item::Separador);
-    m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
+    m.push(Item::Texto { texto: ativas(a.active), ponto: Some(Ponto::Laranja) });
 }
 
 fn ativas(n: u64) -> String {
@@ -210,22 +211,22 @@ mod testes {
 
     // O JSON de `/api/attention`, no formato da rota (campos a mais são ignorados).
     const TRES: &str = r##"{
-      "geradoEm": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 3, "precisam": 2, "suaVez": 1,
-      "ativas": 4, "comErro": 1,
-      "itens": [
-        { "sessao": "s1", "titulo": "motor-de-regras", "projeto": null, "conta": { "rotulo": "equipe", "cor": "#f47c20" },
-          "nivel": "precisa", "motivo": "permissao", "motivoCurto": "Pede permissão", "motivoLongo": "pede permissão para usar Bash",
-          "desde": "2026-10-18T23:08:00.000Z", "minutos": 2, "local": "local_00000000-0000-4000-8000-000000000001" },
-        { "sessao": "s2", "titulo": "painel-de-metricas", "projeto": null, "conta": null,
-          "nivel": "precisa", "motivo": "erro", "motivoCurto": "Com erro", "motivoLongo": "parou num erro",
-          "desde": "2026-10-18T23:07:00.000Z", "minutos": 3, "local": null },
-        { "sessao": "s3", "titulo": "fila-de-tarefas", "projeto": null, "conta": { "rotulo": "cliente", "cor": "#3b82f6" },
-          "nivel": "sua-vez", "motivo": "sua-vez", "motivoCurto": "Sua vez", "motivoLongo": "terminou o turno, sua vez",
-          "desde": "2026-10-18T23:09:00.000Z", "minutos": 1, "local": null }
+      "generatedAt": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 3, "needs": 2, "yourTurn": 1,
+      "active": 4, "withError": 1,
+      "items": [
+        { "session": "s1", "title": "motor-de-regras", "project": null, "account": { "label": "equipe", "color": "#f47c20" },
+          "level": "needs", "reason": "permission", "shortReason": "Pede permissão", "longReason": "pede permissão para usar Bash",
+          "since": "2026-10-18T23:08:00.000Z", "minutes": 2, "local": "local_00000000-0000-4000-8000-000000000001" },
+        { "session": "s2", "title": "painel-de-metricas", "project": null, "account": null,
+          "level": "needs", "reason": "error", "shortReason": "Com erro", "longReason": "parou num erro",
+          "since": "2026-10-18T23:07:00.000Z", "minutes": 3, "local": null },
+        { "session": "s3", "title": "fila-de-tarefas", "project": null, "account": { "label": "cliente", "color": "#3b82f6" },
+          "level": "your-turn", "reason": "your-turn", "shortReason": "Sua vez", "longReason": "terminou o turno, sua vez",
+          "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null }
       ]
     }"##;
 
-    const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "precisam": 0, "suaVez": 0, "ativas": 4, "comErro": 0, "itens": [] }"#;
+    const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "needs": 0, "yourTurn": 0, "active": 4, "withError": 0, "items": [] }"#;
 
     fn entrada<'a>(nucleo: &'a EstadoDoNucleo, atencao: Option<&'a Atencao>) -> Entrada<'a> {
         Entrada { nucleo, atencao, sem_atencao: false, notificacoes: true, login: false, versao: "0.0.1", atualizacao: None }
@@ -328,9 +329,9 @@ mod testes {
     #[test]
     fn singular_e_tempo() {
         let mut a = Atencao::do_json(TRES).unwrap();
-        a.itens.truncate(1);
+        a.items.truncate(1);
         a.total = 1;
-        a.ativas = 1;
+        a.active = 1;
         let n = EstadoDoNucleo::DePe { porta: 4720 };
         let t = textos(&montar(&entrada(&n, Some(&a))));
         assert!(t.contains(&"1 precisa de você · abrir na janela".to_string()));

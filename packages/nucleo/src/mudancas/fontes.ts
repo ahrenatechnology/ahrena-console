@@ -5,11 +5,11 @@
 //   `putSession` só registra quando muda um campo que as telas mostram (`camposVisiveis`): todo hook
 //   grava a sessão para avançar o `updatedAt`, e isso sozinho não acorda ninguém. Atividade nova
 //   (eventos) não é mudança: estado, plano e decisões têm os seus tipos.
-// - `putAgent` registra `sessao` (da sessão do agente) quando muda o que o Kanban mostra do agente
+// - `putAgent` registra `session` (da sessão do agente) quando muda o que o Kanban mostra do agente
 //   (`camposVisiveisDoAgente`): um subagente que começa ou termina mexe na visão Agentes (#31).
 // - `decisoesComMudancas(porta, cursor, contaDe)` faz o mesmo com `putDecision`.
-// - `aoMudarDaMaquina(cursor, contaDe)` vai no `aoMudar` da máquina: registra `estado` e, quando
-//   entra ou sai do inbox, `precisa-de-voce`.
+// - `aoMudarDaMaquina(cursor, contaDe)` vai no `aoMudar` da máquina: registra `state` e, quando
+//   entra ou sai do inbox, `needs-you`.
 //
 // A conta de cada sessão vem de `ContasDasSessoes`: aprendida em cada `putSession`, e só lida da porta
 // quando a sessão ainda não passou por aqui.
@@ -64,7 +64,7 @@ export function comMudancas<T extends StoragePort>(storage: T, cursor: CursorDeM
       const visivel = camposVisiveis(session);
       if (contas.vistas.get(session.id) === visivel) return;
       contas.vistas.set(session.id, visivel);
-      cursor.registrar({ tipo: 'sessao', chave: session.id, sessionId: session.id, accountId: session.accountId });
+      cursor.registrar({ type: 'session', key: session.id, sessionId: session.id, accountId: session.accountId });
     },
     async putAgent(agent) {
       await storage.putAgent(agent);
@@ -73,16 +73,16 @@ export function comMudancas<T extends StoragePort>(storage: T, cursor: CursorDeM
       if (contas.agentesVistos.get(chave) === visivel) return;
       contas.agentesVistos.set(chave, visivel);
       const accountId = await contas.de(agent.sessionId);
-      cursor.registrar({ tipo: 'sessao', chave: agent.sessionId, sessionId: agent.sessionId, accountId });
+      cursor.registrar({ type: 'session', key: agent.sessionId, sessionId: agent.sessionId, accountId });
     },
     async putPlan(plan) {
       await storage.putPlan(plan);
       const accountId = await contas.de(plan.sessionId);
-      cursor.registrar({ tipo: 'plano', chave: plan.sessionId, sessionId: plan.sessionId, accountId });
+      cursor.registrar({ type: 'plan', key: plan.sessionId, sessionId: plan.sessionId, accountId });
     },
     async putAccount(account) {
       await storage.putAccount(account);
-      cursor.registrar({ tipo: 'conta', chave: account.id, sessionId: null, accountId: account.id });
+      cursor.registrar({ type: 'account', key: account.id, sessionId: null, accountId: account.id });
     },
   };
   return new Proxy(storage, {
@@ -98,7 +98,7 @@ export function decisoesComMudancas<T extends DecisionPort>(porta: T, cursor: Cu
   const putDecision: DecisionPort['putDecision'] = async (d) => {
     await porta.putDecision(d);
     const accountId = await contas.de(d.sessionId);
-    cursor.registrar({ tipo: 'decisao', chave: d.id, sessionId: d.sessionId, accountId });
+    cursor.registrar({ type: 'decision', key: d.id, sessionId: d.sessionId, accountId });
   };
   return new Proxy(porta, {
     get(alvo, prop, receptor) {
@@ -116,9 +116,9 @@ export function aoMudarDaMaquina(cursor: CursorDeMudancas, contas: ContasDasSess
   return (m) => {
     // A máquina chama de forma síncrona; a conta quase sempre já está no mapa (a máquina acabou de gravar).
     void contas.de(m.sessionId).then((accountId) => {
-      cursor.registrar({ tipo: 'estado', chave: m.sessionId, sessionId: m.sessionId, accountId });
+      cursor.registrar({ type: 'state', key: m.sessionId, sessionId: m.sessionId, accountId });
       if (noInbox(m.antes) !== noInbox(m.depois)) {
-        cursor.registrar({ tipo: 'precisa-de-voce', chave: m.sessionId, sessionId: m.sessionId, accountId });
+        cursor.registrar({ type: 'needs-you', key: m.sessionId, sessionId: m.sessionId, accountId });
       }
     });
   };

@@ -286,7 +286,7 @@ export function valueOrPending(value, data, field, format = (v) => String(v)) {
  */
 export function changeMatters(changes, key = null) {
   const mine = key ? key.toLowerCase() : null;
-  return (changes ?? []).some((m) => m.tipo === 'repos' && (m.chave === 'lista' || (mine !== null && String(m.chave).toLowerCase() === mine)));
+  return (changes ?? []).some((m) => m.type === 'repos' && (m.key === 'lista' || (mine !== null && String(m.key).toLowerCase() === mine)));
 }
 
 /** O card do fim das métricas: com escrita, `trafego` ("Tráfego e segurança"); sem, `comunidade`. */

@@ -1,5 +1,6 @@
 // O que diz se um núcleo está vivo: o pid existe e a porta responde `/api/overview` com o nome
-// `ahrena-console`. Uma coisa sem a outra é trava órfã (o pid foi reaproveitado, ou a porta mudou).
+// (`name`, ou `nome` num núcleo de antes da #173 fase 2b) `ahrena-console`. Uma coisa sem a outra é
+// trava órfã (o pid foi reaproveitado, ou a porta mudou).
 
 import { get } from 'node:http';
 import { createServer, type Server } from 'node:net';
@@ -37,12 +38,15 @@ export function sondar(porta: number, timeoutMs = 1000): Promise<Visao | null> {
       });
       res.on('end', () => {
         try {
-          const v = JSON.parse(corpo) as Partial<Visao>;
+          // `name`/`version` since #173 phase 2b; an older core answers only `nome`/`versao`.
+          const v = JSON.parse(corpo) as Partial<Visao> & { name?: unknown; version?: unknown };
+          const nome = typeof v.name === 'string' ? v.name : v.nome;
+          const versao = typeof v.version === 'string' ? v.version : v.versao;
           resolve(
-            typeof v.nome === 'string'
+            typeof nome === 'string'
               ? {
-                  nome: v.nome,
-                  versao: typeof v.versao === 'string' ? v.versao : '?',
+                  nome,
+                  versao: typeof versao === 'string' ? versao : '?',
                   pid: Number.isInteger(v.pid) ? v.pid! : null,
                   commit: typeof v.commit === 'string' ? v.commit : null,
                 }

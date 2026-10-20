@@ -59,7 +59,7 @@ class RelogioFalso implements Relogio {
   }
 }
 
-const sessao = (id: string, over: Partial<NovaMudanca> = {}): NovaMudanca => ({ tipo: 'sessao', chave: id, sessionId: id, accountId: null, ...over });
+const sessao = (id: string, over: Partial<NovaMudanca> = {}): NovaMudanca => ({ type: 'session', key: id, sessionId: id, accountId: null, ...over });
 
 function novo(opcoes: { capacidade?: number; agruparMs?: number; intervaloMinimoMs?: number; maximoDeEsperas?: number } = {}) {
   const relogio = new RelogioFalso();
@@ -81,7 +81,7 @@ describe('cursor de mudanças', () => {
     cursor.registrar(sessao('s1'));
     for (const c of [null, '', 'lixo', 'g0.1', 'g1.99']) {
       const r = await cursor.aguardar(c);
-      assert.deepEqual(r, { cursor: 'g1.1', mudancas: [], reiniciar: true, expirou: false }, String(c));
+      assert.deepEqual(r, { cursor: 'g1.1', changes: [], reset: true, timedOut: false }, String(c));
     }
   });
 
@@ -91,10 +91,10 @@ describe('cursor de mudanças', () => {
     cursor.registrar(sessao('s1'));
     cursor.registrar(sessao('s2'));
     cursor.registrar(sessao('s1'));
-    cursor.registrar({ tipo: 'plano', chave: 's1', sessionId: 's1', accountId: null });
+    cursor.registrar({ type: 'plan', key: 's1', sessionId: 's1', accountId: null });
     const r = await aguardarMudancas(cursor, c0);
     assert.equal(r.cursor, 'g1.4');
-    assert.deepEqual(r.mudancas.map((m) => `${m.tipo}:${m.chave}:${m.seq}`), ['sessao:s2:2', 'sessao:s1:3', 'plano:s1:4']);
+    assert.deepEqual(r.changes.map((m) => `${m.type}:${m.key}:${m.seq}`), ['session:s2:2', 'session:s1:3', 'plan:s1:4']);
     assert.equal(relogio.timers.size, 0, 'resposta na hora não arma timer');
     assert.equal(cursor.abertas, 0);
   });
@@ -107,8 +107,8 @@ describe('cursor de mudanças', () => {
     assert.equal(cursor.abertas, 1);
     cursor.registrar(sessao('s1'));
     const r = await espera.p;
-    assert.deepEqual(r.mudancas.map((m) => m.chave), ['s1']);
-    assert.equal(r.expirou, false);
+    assert.deepEqual(r.changes.map((m) => m.key), ['s1']);
+    assert.equal(r.timedOut, false);
     assert.equal(cursor.abertas, 0);
   });
 
@@ -121,7 +121,7 @@ describe('cursor de mudanças', () => {
     assert.equal(espera.valor, null);
     relogio.avancar(1);
     const r = await espera.p;
-    assert.deepEqual(r, { cursor: 'g1.1', mudancas: [], reiniciar: false, expirou: true });
+    assert.deepEqual(r, { cursor: 'g1.1', changes: [], reset: false, timedOut: true });
     assert.equal(relogio.timers.size, 0);
   });
 
@@ -135,7 +135,7 @@ describe('cursor de mudanças', () => {
     assert.ok(ESPERA_MAXIMA_MS < 120_000);
     cursor.encerrar();
     const r = await cursor.aguardar(cursor.atual, { timeoutMs: 0 });
-    assert.equal(r.expirou, false);
+    assert.equal(r.timedOut, false);
     assert.equal(cursor.abertas, 0);
   });
 
@@ -146,8 +146,8 @@ describe('cursor de mudanças', () => {
     const s2 = observar(cursor.aguardar(c, { filtros: { sessionIds: ['s2'] } }));
     const contaB = observar(cursor.aguardar(c, { filtros: { accountIds: ['b'] } }));
     const semConta = observar(cursor.aguardar(c, { filtros: { accountIds: [null] } }));
-    const planos = observar(cursor.aguardar(c, { filtros: { tipos: ['plano'] } }));
-    const muitas = Array.from({ length: 100 }, () => observar(cursor.aguardar(c, { filtros: { tipos: ['decisao'] } })));
+    const planos = observar(cursor.aguardar(c, { filtros: { tipos: ['plan'] } }));
+    const muitas = Array.from({ length: 100 }, () => observar(cursor.aguardar(c, { filtros: { tipos: ['decision'] } })));
     assert.equal(cursor.abertas, 105);
 
     cursor.registrar(sessao('s1', { accountId: 'a' }));
@@ -158,18 +158,18 @@ describe('cursor de mudanças', () => {
     assert.equal(semConta.valor, null);
     assert.equal(planos.valor, null);
 
-    cursor.registrar({ tipo: 'plano', chave: 's2', sessionId: 's2', accountId: 'b' });
+    cursor.registrar({ type: 'plan', key: 's2', sessionId: 's2', accountId: 'b' });
     await tique();
-    assert.deepEqual((s2.valor as RespostaDaEspera | null)?.mudancas.map((m) => m.tipo), ['plano']);
-    assert.deepEqual((contaB.valor as RespostaDaEspera | null)?.mudancas.map((m) => m.chave), ['s2']);
-    assert.deepEqual((planos.valor as RespostaDaEspera | null)?.mudancas.map((m) => m.chave), ['s2']);
+    assert.deepEqual((s2.valor as RespostaDaEspera | null)?.changes.map((m) => m.type), ['plan']);
+    assert.deepEqual((contaB.valor as RespostaDaEspera | null)?.changes.map((m) => m.key), ['s2']);
+    assert.deepEqual((planos.valor as RespostaDaEspera | null)?.changes.map((m) => m.key), ['s2']);
     assert.equal(semConta.valor, null);
     assert.equal(cursor.abertas, 101);
 
-    cursor.registrar({ tipo: 'decisao', chave: 'd1', sessionId: 's3', accountId: null });
+    cursor.registrar({ type: 'decision', key: 'd1', sessionId: 's3', accountId: null });
     await tique();
     assert.ok(semConta.valor);
-    assert.ok(muitas.every((m) => m.valor?.mudancas[0]?.chave === 'd1'));
+    assert.ok(muitas.every((m) => m.valor?.changes[0]?.key === 'd1'));
     assert.equal(cursor.abertas, 0);
     assert.equal(relogio.timers.size, 0, 'quem respondeu desarma o timer');
   });
@@ -184,7 +184,7 @@ describe('cursor de mudanças', () => {
     relogio.avancar(50);
     const r = await espera.p;
     assert.equal(r.cursor, 'g1.30');
-    assert.deepEqual(r.mudancas.map((m) => m.chave), ['s0', 's1', 's2']);
+    assert.deepEqual(r.changes.map((m) => m.key), ['s0', 's1', 's2']);
   });
 
   test('intervalo mínimo: com hooks sem parar, o laço acorda no máximo uma vez por intervalo', async () => {
@@ -211,7 +211,7 @@ describe('cursor de mudanças', () => {
     void cursor.aguardar(cursor.atual);
     void cursor.aguardar(cursor.atual);
     await assert.rejects(cursor.aguardar(cursor.atual), ErroDeLotacao);
-    assert.equal((await cursor.aguardar(null)).reiniciar, true, 'sem cursor responde na hora, mesmo lotado');
+    assert.equal((await cursor.aguardar(null)).reset, true, 'sem cursor responde na hora, mesmo lotado');
     cursor.encerrar();
   });
 
@@ -223,10 +223,10 @@ describe('cursor de mudanças', () => {
       return cursor.atual;
     })();
     for (let i = 0; i < 4; i++) cursor.registrar(sessao(`x${i}`));
-    assert.equal((await cursor.aguardar(velho)).reiniciar, true);
+    assert.equal((await cursor.aguardar(velho)).reset, true);
     const r = await cursor.aguardar(quase);
-    assert.equal(r.reiniciar, false);
-    assert.equal(r.mudancas.length, 4);
+    assert.equal(r.reset, false);
+    assert.equal(r.changes.length, 4);
   });
 
   test('abortar e encerrar respondem na hora e liberam a espera', async () => {
@@ -234,7 +234,7 @@ describe('cursor de mudanças', () => {
     const ac = new AbortController();
     const espera = cursor.aguardar(cursor.atual, { signal: ac.signal });
     ac.abort();
-    assert.equal((await espera).expirou, false);
+    assert.equal((await espera).timedOut, false);
     const outra = cursor.aguardar(cursor.atual);
     cursor.encerrar();
     await outra;
@@ -250,7 +250,7 @@ describe('cursor de mudanças', () => {
     assert.equal(relogio.timers.size, 50, 'nenhum timer novo enquanto espera');
     relogio.avancar(1);
     const rs = await Promise.all(esperas);
-    assert.ok(rs.every((r) => r.expirou));
+    assert.ok(rs.every((r) => r.timedOut));
     assert.equal(relogio.timers.size, 0);
   });
 });
@@ -272,11 +272,11 @@ describe('fontes das mudanças', () => {
     assert.equal((await storage.getSession('s1'))?.accountId, 'conta-a');
     const r = await cursor.aguardar(c0);
     assert.deepEqual(
-      r.mudancas.map((m) => [m.tipo, m.chave, m.sessionId, m.accountId]),
+      r.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]),
       [
-        ['sessao', 's1', 's1', 'conta-a'],
-        ['plano', 's1', 's1', 'conta-a'],
-        ['conta', conta.id, null, conta.id],
+        ['session', 's1', 's1', 'conta-a'],
+        ['plan', 's1', 's1', 'conta-a'],
+        ['account', conta.id, null, conta.id],
       ],
     );
     await storage.close();
@@ -294,7 +294,7 @@ describe('fontes das mudanças', () => {
     assert.equal(cursor.atual, c1, 'só o updatedAt não é mudança');
     await storage.putAgent({ ...a, status: 'completed', endedAt: T0.replace('12:00', '12:06') });
     const r = await cursor.aguardar(c1);
-    assert.deepEqual(r.mudancas.map((m) => [m.tipo, m.chave, m.accountId]), [['sessao', 's1', 'conta-a']]);
+    assert.deepEqual(r.changes.map((m) => [m.type, m.key, m.accountId]), [['session', 's1', 'conta-a']]);
     await storage.close();
   });
 
@@ -308,18 +308,18 @@ describe('fontes das mudanças', () => {
     const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), cursor, contas);
     const c0 = cursor.atual;
     await registerDecision(decisoes, draft({ sessionId: 's1' }), T0);
-    const d = await cursor.aguardar(c0, { filtros: { tipos: ['decisao'] } });
-    assert.equal(d.mudancas.length, 1);
-    assert.equal(d.mudancas[0].accountId, 'conta-b');
+    const d = await cursor.aguardar(c0, { filtros: { tipos: ['decision'] } });
+    assert.equal(d.changes.length, 1);
+    assert.equal(d.changes[0].accountId, 'conta-b');
 
     const maquina = new MaquinaDeEstados({ storage, sonda: null, agora: () => new Date(T0), aoMudar: aoMudarDaMaquina(cursor, contas), log: () => {} });
     const c1 = cursor.atual;
-    const espera = cursor.aguardar(c1, { filtros: { tipos: ['precisa-de-voce'] }, timeoutMs: 1000 });
+    const espera = cursor.aguardar(c1, { filtros: { tipos: ['needs-you'] }, timeoutMs: 1000 });
     await maquina.aplicar({ id: 'h1', sessionId: 's1', agentId: null, type: 'Notification', toolName: null, summary: null, data: { notification_type: 'permission_prompt', message: 'Permitir?' }, createdAt: T0 });
     const r = await espera;
-    assert.deepEqual(r.mudancas.map((m) => [m.tipo, m.chave, m.accountId]), [['precisa-de-voce', 's1', 'conta-b']]);
+    assert.deepEqual(r.changes.map((m) => [m.type, m.key, m.accountId]), [['needs-you', 's1', 'conta-b']]);
     const tudo = await cursor.aguardar(c1);
-    assert.deepEqual(new Set(tudo.mudancas.map((m) => m.tipo)), new Set(['sessao', 'estado', 'precisa-de-voce']));
+    assert.deepEqual(new Set(tudo.changes.map((m) => m.type)), new Set(['session', 'state', 'needs-you']));
     await sqlite.close();
   });
 });
@@ -331,7 +331,7 @@ describe('rota HTTP', () => {
     assert.deepEqual(p('desde=g1.3&espera=5&sessao=s1,s2&conta=a&conta=sem-conta&tipo=plano'), {
       cursor: 'g1.3',
       timeoutMs: 5000,
-      filtros: { sessionIds: ['s1', 's2'], accountIds: ['a', null], tipos: ['plano'] },
+      filtros: { sessionIds: ['s1', 's2'], accountIds: ['a', null], tipos: ['plan'] },
     });
     assert.equal((p('') as { timeoutMs: number }).timeoutMs, ESPERA_PADRAO_MS);
     assert.equal(typeof p('tipo=outro'), 'string');
@@ -339,7 +339,7 @@ describe('rota HTTP', () => {
     assert.equal(typeof p('sessao=a b'), 'string');
   });
 
-  test('GET /api/mudancas segura até a mudança e libera quando o cliente desiste', async () => {
+  test('GET /api/changes segura até a mudança e libera quando o cliente desiste', async () => {
     const cursor = new CursorDeMudancas({ agruparMs: 0, intervaloMinimoMs: 0, maximoDeEsperas: 2 });
     const sqlite = openSqliteStorage({ path: ':memory:' });
     const storage = comMudancas(sqlite, cursor);
@@ -347,30 +347,30 @@ describe('rota HTTP', () => {
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho });
     const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
     try {
-      const inicio = (await (await fetch(`${api.url}/api/mudancas`)).json()) as RespostaDaEspera;
-      assert.equal(inicio.reiniciar, true);
-      assert.equal((await fetch(`${api.url}/api/mudancas?tipo=x`)).status, 400);
+      const inicio = (await (await fetch(`${api.url}/api/changes`)).json()) as RespostaDaEspera;
+      assert.equal(inicio.reset, true);
+      assert.equal((await fetch(`${api.url}/api/changes?type=x`)).status, 400);
 
-      const pedido = fetch(`${api.url}/api/mudancas?desde=${inicio.cursor}&espera=20&sessao=sess-http`).then((r) => r.json() as Promise<RespostaDaEspera>);
+      const pedido = fetch(`${api.url}/api/changes?since=${inicio.cursor}&wait=20&session=sess-http`).then((r) => r.json() as Promise<RespostaDaEspera>);
       while (cursor.abertas === 0) await tique();
       const hook = { session_id: 'sess-http', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
       const h = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
       assert.equal(h.status, 202);
       const r = await pedido;
-      assert.deepEqual(r.mudancas.map((m) => [m.tipo, m.chave]), [['sessao', 'sess-http']]);
+      assert.deepEqual(r.changes.map((m) => [m.type, m.key]), [['session', 'sess-http']]);
 
       const ac = new AbortController();
-      const desistente = fetch(`${api.url}/api/mudancas?desde=${r.cursor}&espera=20`, { signal: ac.signal }).catch(() => null);
+      const desistente = fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`, { signal: ac.signal }).catch(() => null);
       while (cursor.abertas === 0) await tique();
       ac.abort();
       await desistente;
       while (cursor.abertas > 0) await tique();
-      const carga = (await (await fetch(`${api.url}/api/carga`)).json()) as { esperasAbertas: number };
-      assert.equal(carga.esperasAbertas, 0);
+      const carga = (await (await fetch(`${api.url}/api/load`)).json()) as { openWaits: number };
+      assert.equal(carga.openWaits, 0);
 
-      const abertas = [1, 2].map(() => fetch(`${api.url}/api/mudancas?desde=${r.cursor}&espera=20`));
+      const abertas = [1, 2].map(() => fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`));
       while (cursor.abertas < 2) await tique();
-      const lotado = await fetch(`${api.url}/api/mudancas?desde=${r.cursor}&espera=20`);
+      const lotado = await fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`);
       assert.equal(lotado.status, 503);
       assert.equal(lotado.headers.get('retry-after'), '5');
       cursor.encerrar();
@@ -401,22 +401,40 @@ describe('ferramenta MCP wait_for_changes', () => {
     const c = primeira.dados.cursor as string;
 
     const pendente = f.executar({ cursor: c, timeout: 30, account: 'cliente', types: ['plano', 'decisao'] }, ctx());
-    cursor.registrar({ tipo: 'plano', chave: 's1', sessionId: 's1', accountId: equipe.id });
+    cursor.registrar({ type: 'plan', key: 's1', sessionId: 's1', accountId: equipe.id });
     cursor.registrar(sessao('s2', { accountId: cliente.id }));
-    cursor.registrar({ tipo: 'decisao', chave: 'd9', sessionId: 's2', accountId: cliente.id });
+    cursor.registrar({ type: 'decision', key: 'd9', sessionId: 's2', accountId: cliente.id });
     const r = await pendente;
     assert.deepEqual(r.dados, {
       cursor: 'g1.3',
       reset: false,
       timedOut: false,
-      changes: [{ type: 'decisao', sessionId: 's2', decisionId: 'd9', account: { label: 'cliente', color: (r.dados.changes as any)[0].account.color } }],
+      changes: [{ type: 'decision', sessionId: 's2', decisionId: 'd9', account: { label: 'cliente', color: (r.dados.changes as any)[0].account.color } }],
     });
     assert.ok(!JSON.stringify(r.dados).includes(cliente.accountUuid), 'o id da conta não sai');
-    assert.match(r.texto, /1 mudança\(s\): decisao 1/);
+    assert.match(r.texto, /1 mudança\(s\): decision 1/);
 
     const semConta = f.executar({ cursor: 'g1.3', timeout: 30, account: 'none' }, ctx());
     cursor.registrar(sessao('s3'));
-    assert.deepEqual(((await semConta).dados.changes as any[]).map((m) => [m.type, m.sessionId, m.account]), [['sessao', 's3', null]]);
+    assert.deepEqual(((await semConta).dados.changes as any[]).map((m) => [m.type, m.sessionId, m.account]), [['session', 's3', null]]);
+    await storage.close();
+  });
+
+  test('#173 phase 2b: `types` takes the English names and still the old ones; the answer is English', async () => {
+    const { cursor } = novo();
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const f = waitForChanges({ mudancas: cursor, contas: new Contas({ storage, arquivo: null }) });
+    const c = cursor.atual;
+    cursor.registrar({ type: 'plan', key: 's1', sessionId: 's1', accountId: null });
+    cursor.registrar({ type: 'needs-you', key: 's2', sessionId: 's2', accountId: null });
+    cursor.registrar(sessao('s3'));
+    const tipos = async (types: string[]) => ((await f.executar({ cursor: c, timeout: 0, types }, ctx())).dados.changes as { type: string }[]).map((m) => m.type);
+    assert.deepEqual(await tipos(['plan', 'needs-you']), ['plan', 'needs-you']);
+    assert.deepEqual(await tipos(['plano', 'precisa-de-voce']), ['plan', 'needs-you'], 'the old names');
+    assert.deepEqual(await tipos(['sessao', 'state']), ['session'], 'a mix');
+    const enumDosTipos = ((f.entrada as any).properties.types.items.enum as string[]).sort();
+    assert.deepEqual(enumDosTipos, ['account', 'alert', 'conta', 'decisao', 'decision', 'estado', 'needs-you', 'plan', 'plano', 'precisa-de-voce', 'sessao', 'session', 'state']);
+    assert.deepEqual((f.saida as any).properties.changes.items.properties.type.enum, ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'alert']);
     await storage.close();
   });
 
@@ -427,15 +445,15 @@ describe('ferramenta MCP wait_for_changes', () => {
     const c = cursor.atual;
     const semFiltro = observar(f.executar({ cursor: c, timeout: 30 }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
     const semConta = observar(f.executar({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
-    cursor.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null });
-    cursor.registrar({ tipo: 'repos', chave: 'org/repo', sessionId: null, accountId: null });
+    cursor.registrar({ type: 'repos', key: 'lista', sessionId: null, accountId: null });
+    cursor.registrar({ type: 'repos', key: 'org/repo', sessionId: null, accountId: null });
     await tique();
     assert.equal(semFiltro.valor, null, 'acordou com `repos`');
     assert.equal(semConta.valor, null, 'acordou com `repos` em account "none"');
     cursor.registrar(sessao('s1'));
     const [a, b] = (await Promise.all([semFiltro.p, semConta.p])) as unknown as { changes: { type: string }[] }[];
-    assert.deepEqual(a.changes.map((x) => x.type), ['sessao']);
-    assert.deepEqual(b.changes.map((x) => x.type), ['sessao']);
+    assert.deepEqual(a.changes.map((x) => x.type), ['session']);
+    assert.deepEqual(b.changes.map((x) => x.type), ['session']);
     // Já registrada antes do pedido: também não sai.
     const depois = await f.executar({ cursor: c, timeout: 0 }, ctx());
     assert.ok(!JSON.stringify(depois.dados).includes('repos'));

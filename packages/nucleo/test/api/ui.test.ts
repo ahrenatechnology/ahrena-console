@@ -158,6 +158,8 @@ describe('/ui no núcleo', () => {
   test('ler(rota) lê a API por HTTP e só a API do núcleo local', async () => {
     const read = httpReader({ base: api.url });
     const overview = await read('/api/overview');
+    assert.equal(overview.name, 'ahrena-console');
+    // `nome` stays beside `name` until phase 6 of #173: the installed app reads it.
     assert.equal(overview.nome, 'ahrena-console');
     const painel = await read(`/api/painel/${SESSAO_DO_PAINEL}`);
     assert.ok(JSON.stringify(painel).includes(SESSAO_DO_PAINEL), 'o painel da sessão do simulador');
@@ -173,16 +175,16 @@ describe('/ui no núcleo', () => {
     await assert.rejects(fechado('/api/overview'), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 
-  test('Ao vivo: conecta com reiniciar, entrega a mudança de um hook e para', async () => {
+  test('Ao vivo: conecta com reset, entrega a mudança de um hook e para', async () => {
     const estados: string[] = [];
-    const mudancas: { tipo: string; chave: string }[][] = [];
+    const mudancas: { type: string; key: string }[][] = [];
     let reiniciou = 0;
     const vivo = startLive({
       read: httpReader({ base: api.url }),
       wait: 5,
       onState: ({ state }: { state: string }) => estados.push(state),
       onRestart: () => reiniciou++,
-      onChange: (m: { tipo: string; chave: string }[]) => mudancas.push(m),
+      onChange: (m: { type: string; key: string }[]) => mudancas.push(m),
     });
     await ate(() => reiniciou === 1 && cursor.abertas === 1);
     assert.deepEqual(estados, ['live']);
@@ -190,7 +192,7 @@ describe('/ui no núcleo', () => {
     const hook = { session_id: 'sess-ui', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
     const h = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
     assert.equal(h.status, 202);
-    await ate(() => mudancas.flat().some((m) => m.tipo === 'sessao' && m.chave === 'sess-ui'));
+    await ate(() => mudancas.flat().some((m) => m.type === 'session' && m.key === 'sess-ui'));
     assert.equal(reiniciou, 1, 'mudança comum não pede releitura');
 
     await vivo.stop();
@@ -226,7 +228,7 @@ describe('/ui no núcleo', () => {
       read: async () => {
         if (n++ === 0) throw new ReadError('lotado', { status: 503, retryIn: 5000 });
         await new Promise((r) => setTimeout(r, 5));
-        return { cursor: 'c', mudancas: [], reiniciar: true, expirou: false };
+        return { cursor: 'c', changes: [], reset: true, timedOut: false };
       },
       sleep: (ms: number) => (esperas.push(ms), Promise.resolve()),
     });

@@ -74,8 +74,8 @@ describe('mural ao vivo (#34)', () => {
   test('formato, ordem e contagem', async () => {
     const storage = await semear();
     const mural = await muralDe(storage).montar();
-    assert.equal(mural.versao, 1);
-    assert.equal(mural.geradoEm, T0);
+    assert.equal(mural.version, 1);
+    assert.equal(mural.generatedAt, T0);
     assert.deepEqual(
       mural.cards.map((c) => c.id),
       [
@@ -85,14 +85,14 @@ describe('mural ao vivo (#34)', () => {
         SESSAO_DO_PAINEL, sim('catalogo-exemplo'), sim('blog-estatico'),
       ],
     );
-    assert.deepEqual(mural.contagem, { todas: 7, esperando: 4, ativas: 2 });
+    assert.deepEqual(mural.count, { all: 7, waiting: 4, active: 2 });
     const [permissao, erro, , suaVez] = mural.cards;
-    assert.deepEqual([permissao.status, permissao.estado, permissao.motivo, permissao.urgente, permissao.atividade.type], ['waiting', 'waiting', 'notification', true, 'permission']);
-    assert.deepEqual([erro.status, erro.estado, erro.urgente, erro.atividade.type], ['error', 'error', true, 'error']);
-    assert.equal(erro.desde, iso(3));
-    assert.deepEqual([suaVez.urgente, suaVez.atividade], [false, { type: 'your-turn', text: '"Terminei a migração. Rodo os testes?"' }]);
+    assert.deepEqual([permissao.status, permissao.state, permissao.reason, permissao.urgent, permissao.activity.type], ['waiting', 'waiting', 'notification', true, 'permission']);
+    assert.deepEqual([erro.status, erro.state, erro.urgent, erro.activity.type], ['error', 'error', true, 'error']);
+    assert.equal(erro.since, iso(3));
+    assert.deepEqual([suaVez.urgent, suaVez.activity], [false, { type: 'your-turn', text: '"Terminei a migração. Rodo os testes?"' }]);
     const concluida = mural.cards.at(-1)!;
-    assert.deepEqual([concluida.status, concluida.atividade.type], ['completed', 'completed']);
+    assert.deepEqual([concluida.status, concluida.activity.type], ['completed', 'completed']);
     await storage.close();
   });
 
@@ -100,20 +100,20 @@ describe('mural ao vivo (#34)', () => {
     const storage = await semear();
     const mural = await muralDe(storage).montar();
     const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
-    assert.equal(esta.titulo, 'Separar pagamentos em serviços');
-    assert.equal(esta.projeto, 'vitrine-demo');
+    assert.equal(esta.title, 'Separar pagamentos em serviços');
+    assert.equal(esta.project, 'vitrine-demo');
     assert.equal(esta.branch, 'feat/63-separar-pagamentos', 'sem o Desktop, o branch da metadata');
-    assert.equal(esta.estado, 'delegating');
-    assert.equal(esta.modelo, 'claude-opus-5-5');
-    assert.equal(esta.esforco, 'high', 'sem o índice do Desktop, o esforço da metadata');
-    assert.deepEqual(esta.agentes, { ativos: 4, total: 5 }, 'o principal conta');
-    assert.deepEqual(esta.plano, { feitos: 2, total: 6, atual: 'Extrair a cobrança' });
-    assert.equal(esta.contexto?.limite, 200_000);
-    assert.equal(esta.contexto?.usados, 114_000);
-    assert.equal(esta.contexto?.pct, 57);
-    assert.equal(typeof esta.contexto?.rotulo, 'string');
-    assert.equal(esta.custo.estimativa, true);
-    assert.ok(esta.custo.usd !== null && Math.abs(esta.custo.usd - 3.47) < 0.05, `custo ${esta.custo.usd}`);
+    assert.equal(esta.state, 'delegating');
+    assert.equal(esta.model, 'claude-opus-5-5');
+    assert.equal(esta.effort, 'high', 'sem o índice do Desktop, o esforço da metadata');
+    assert.deepEqual(esta.agents, { active: 4, total: 5 }, 'o principal conta');
+    assert.deepEqual(esta.plan, { done: 2, total: 6, current: 'Extrair a cobrança' });
+    assert.equal(esta.context?.limit, 200_000);
+    assert.equal(esta.context?.used, 114_000);
+    assert.equal(esta.context?.pct, 57);
+    assert.equal(typeof esta.context?.label, 'string');
+    assert.equal(esta.cost.estimate, true);
+    assert.ok(esta.cost.usd !== null && Math.abs(esta.cost.usd - 3.47) < 0.05, `custo ${esta.cost.usd}`);
     await storage.close();
   });
 
@@ -121,11 +121,11 @@ describe('mural ao vivo (#34)', () => {
     const storage = await semear();
     const mural = await muralDe(storage).montar();
     const catalogo = mural.cards.find((c) => c.id === sim('catalogo-exemplo'))!;
-    assert.equal(catalogo.plano, null);
-    assert.equal(catalogo.contexto, null);
-    assert.deepEqual(catalogo.custo, { usd: 0, estimativa: true });
-    assert.deepEqual(catalogo.agentes, { ativos: catalogo.estado === 'active' ? 1 : 0, total: 1 });
-    assert.equal(catalogo.esforco, 'medium');
+    assert.equal(catalogo.plan, null);
+    assert.equal(catalogo.context, null);
+    assert.deepEqual(catalogo.cost, { usd: 0, estimate: true });
+    assert.deepEqual(catalogo.agents, { active: catalogo.state === 'active' ? 1 : 0, total: 1 });
+    assert.equal(catalogo.effort, 'medium');
     assert.equal(catalogo.branch, 'feat/31-csv');
     await storage.close();
   });
@@ -137,11 +137,11 @@ describe('mural ao vivo (#34)', () => {
     const mural = new MontadorDoMural({ painel, storage: porta, agora: () => AGORA, cacheMs: 0 });
     const primeiro = await mural.montar();
     const lidos = n.usos;
-    assert.ok(lidos >= primeiro.contagem.todas, 'o primeiro pedido calcula o custo de cada sessão aberta');
+    assert.ok(lidos >= primeiro.count.all, 'o primeiro pedido calcula o custo de cada sessão aberta');
     const segundo = await mural.montar();
     assert.notEqual(segundo, primeiro, 'sem o cache da resposta, montou de novo');
     assert.equal(n.usos, lidos, 'mas o custo saiu do cache: nada novo lido');
-    assert.deepEqual(segundo.cards.map((c) => c.custo), primeiro.cards.map((c) => c.custo));
+    assert.deepEqual(segundo.cards.map((c) => c.cost), primeiro.cards.map((c) => c.cost));
     await storage.close();
   });
 
@@ -166,10 +166,10 @@ describe('mural ao vivo (#34)', () => {
     const desktop = { atualizar: async () => {}, sessaoPorCli: (id: string) => doDesktop[id] ?? null, sessaoPorLocal: () => null, filhasDe: () => [] } as unknown as IndiceDoDesktop;
     const mural = await muralDe(storage, desktop).montar();
     const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
-    assert.equal(esta.esforco, 'max', 'o Desktop vale mais que a metadata');
+    assert.equal(esta.effort, 'max', 'o Desktop vale mais que a metadata');
     assert.equal(esta.branch, 'feat/63-do-desktop');
     assert.equal(mural.cards.some((c) => c.id === sim('catalogo-exemplo')), false, 'a arquivada no Desktop sai do mural');
-    assert.deepEqual(mural.contagem, { todas: 6, esperando: 4, ativas: 1 });
+    assert.deepEqual(mural.count, { all: 6, waiting: 4, active: 1 });
     await storage.close();
   });
 
@@ -189,15 +189,17 @@ describe('mural ao vivo (#34)', () => {
     await storage.close();
   });
 
-  test('GET /api/mural pela API local', async () => {
+  test('GET /api/wall pela API local', async () => {
     const storage = await semear();
     const api = await iniciarApiLocal({ montador: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
     try {
-      const r = await fetch(`${api.url}/api/mural`);
+      const r = await fetch(`${api.url}/api/wall`);
       assert.equal(r.status, 200);
       assert.match(r.headers.get('content-type') ?? '', /application\/json/);
       const mural = (await r.json()) as Mural;
-      assert.equal(mural.versao, 1);
+      assert.equal(mural.version, 1);
+      // The old route answers the old keys (#173 phase 2b; its golden has the whole body).
+      assert.equal(((await (await fetch(`${api.url}/api/mural`)).json()) as { versao: number }).versao, 1);
       assert.equal(mural.cards.length, 7);
       assert.equal((await fetch(`${api.url}/api/mural`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
       assert.equal((await fetch(`${api.url}/api/mural`, { method: 'POST' })).status, 405);

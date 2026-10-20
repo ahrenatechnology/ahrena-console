@@ -5,7 +5,7 @@
 // - `GET /api/kanban?view=<v>` brings every column on page 1; "mostrar mais" asks for
 //   `&column=<id>&page=<n>` and appends the items at the end of the column.
 // - Ao vivo: uma mudança de sessão relê o quadro (com um respiro de 400 ms, para juntar rajadas);
-//   reiniciar relê. A releitura volta cada coluna à página 1.
+//   reset relê. A releitura volta cada coluna à página 1.
 // - O estilo está em `ui/kanban.css`, que a tela põe no <head> ao montar e tira ao sair.
 
 import { header, el, icon } from '../dom.js';
@@ -118,9 +118,9 @@ export function missing(column, shown) {
 }
 
 /** Uma mudança do long polling que mexe no quadro. */
-const TYPES_THAT_MATTER = new Set(['sessao', 'estado', 'precisa-de-voce']);
+const TYPES_THAT_MATTER = new Set(['session', 'state', 'needs-you']);
 export function touchesBoard(changes) {
-  return Array.isArray(changes) && changes.some((m) => TYPES_THAT_MATTER.has(m?.tipo));
+  return Array.isArray(changes) && changes.some((m) => TYPES_THAT_MATTER.has(m?.type));
 }
 
 // ---------- Peças ----------

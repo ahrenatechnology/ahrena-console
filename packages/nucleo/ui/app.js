@@ -67,7 +67,7 @@ function restart() {
 
 async function readVersion() {
   try {
-    version = (await read('/api/overview')).versao ?? null;
+    version = (await read('/api/overview')).version ?? null;
   } catch {}
   drawLive();
 }

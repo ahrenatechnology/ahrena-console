@@ -115,11 +115,11 @@ describe('Dashboard: formatação', () => {
   });
   test('os seis cards, na ordem e com o texto do C1', () => {
     const c = cards({
-      sessoes: { total: 12, ativas: 4, esperando: 4, comErro: 1 },
-      agentes: { ativos: 4, sessoes: 4 },
-      subagentes: { ativos: 7, sessoes: 3 },
-      eventos: { hoje: 3200, ultimaHora: 412, total: 48_100 },
-      custo: { usd: 41.2, dias: 30, semPreco: [] },
+      sessions: { total: 12, active: 4, waiting: 4, withError: 1 },
+      agents: { active: 4, sessions: 4 },
+      subagents: { active: 7, sessions: 3 },
+      events: { today: 3200, lastHour: 412, total: 48_100 },
+      cost: { usd: 41.2, days: 30, unpriced: [] },
     });
     assert.deepEqual(
       c.map((x: { rotulo: string; valor: string; extra?: string; sub: string }) => [x.rotulo, x.valor, x.extra ?? null, x.sub]),
@@ -134,12 +134,12 @@ describe('Dashboard: formatação', () => {
     );
   });
   test('inbox: no máximo quatro, o pedido e o modelo vindos do card do agente', () => {
-    const item = (sessao: string, reason: string, minutos = 2) => ({ sessao, titulo: sessao, projeto: `p-${sessao}`, conta: { rotulo: 'equipe', cor: '' }, nivel: 'precisa', motivo: reason, motivoCurto: 'Pede permissão', motivoLongo: 'pede permissão para usar Bash', desde: '', minutos, local: null });
-    const atencao = { total: 5, itens: [item('a', 'permissao'), item('b', 'erro', 0), item('c', 'sua-vez'), item('d', 'plano'), item('e', 'pergunta')] };
-    const c = inboxCards(atencao, [{ sessao: 'a', tarefa: 'Bash: npm run migrate', modelo: 'claude-opus-5-5' }]);
+    const item = (session: string, reason: string, minutes = 2) => ({ session, title: session, project: `p-${session}`, account: { label: 'equipe', color: '' }, level: 'needs', reason, shortReason: 'Pede permissão', longReason: 'pede permissão para usar Bash', since: '', minutes, local: null });
+    const atencao = { total: 5, items: [item('a', 'permission'), item('b', 'error', 0), item('c', 'your-turn'), item('d', 'plan'), item('e', 'question')] };
+    const c = inboxCards(atencao, [{ session: 'a', task: 'Bash: npm run migrate', model: 'claude-opus-5-5' }]);
     assert.equal(c.length, 4);
-    assert.deepEqual([c[0].nome, c[0].texto, c[0].pe, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessions/a']);
-    assert.deepEqual([c[1].texto, c[1].pe, c[1].idade], ['pede permissão para usar Bash', 'equipe', 'agora']);
+    assert.deepEqual([c[0].name, c[0].text, c[0].foot, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessions/a']);
+    assert.deepEqual([c[1].text, c[1].foot, c[1].age, c[1].urgent], ['pede permissão para usar Bash', 'equipe', 'agora', true]);
     assert.equal(inboxTitle(1), '1 precisa de você');
     assert.equal(inboxTitle(4), '4 precisam de você');
   });

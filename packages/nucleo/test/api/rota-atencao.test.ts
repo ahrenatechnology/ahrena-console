@@ -1,4 +1,4 @@
-// `GET /api/atencao` (#87): a lista da bandeja, com os dados sintéticos do simulador e dos testes
+// `GET /api/attention` (#87): a lista da bandeja, com os dados sintéticos do simulador e dos testes
 // do MCP. Nenhum dado real.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -25,25 +25,25 @@ describe('montarAtencao', () => {
     await semear(storage);
     const r = await montarAtencao(frota, null);
     assert.deepEqual(
-      r.itens.map((i) => [i.sessao, i.nivel, i.motivo]),
+      r.items.map((i) => [i.session, i.level, i.reason]),
       [
-        ['plano', 'precisa', 'plano'],
-        ['permissao', 'precisa', 'permissao'],
-        ['pergunta', 'precisa', 'pergunta'],
-        ['erro', 'precisa', 'erro'],
-        ['sua-vez', 'sua-vez', 'sua-vez'],
-        ['interrompida', 'sua-vez', 'interrompida'],
-        ['abriu', 'sua-vez', 'no-prompt'],
+        ['plano', 'needs', 'plan'],
+        ['permissao', 'needs', 'permission'],
+        ['pergunta', 'needs', 'question'],
+        ['erro', 'needs', 'error'],
+        ['sua-vez', 'your-turn', 'your-turn'],
+        ['interrompida', 'your-turn', 'interrupted'],
+        ['abriu', 'your-turn', 'no-prompt'],
       ],
     );
     assert.equal(r.total, 7);
-    assert.equal(r.precisam, 4);
-    assert.equal(r.suaVez, 3);
-    assert.equal(r.comErro, 1);
+    assert.equal(r.needs, 4);
+    assert.equal(r.yourTurn, 3);
+    assert.equal(r.withError, 1);
     // Trabalhando e delegando; as que esperam você não contam como ativas.
-    assert.equal(r.ativas, 2);
+    assert.equal(r.active, 2);
     assert.deepEqual(
-      r.itens.slice(0, 4).map((i) => [i.motivoCurto, i.minutos]),
+      r.items.slice(0, 4).map((i) => [i.shortReason, i.minutes]),
       [
         ['Plano para aprovar', 8],
         ['Pede permissão', 5],
@@ -56,11 +56,11 @@ describe('montarAtencao', () => {
   test('a conta sai com rótulo e cor, nunca o id; sem conta é null', async () => {
     await semear(storage);
     const r = await montarAtencao(frota, null);
-    const porId = new Map(r.itens.map((i) => [i.sessao, i]));
-    assert.equal(porId.get('permissao')?.conta?.rotulo, 'equipe');
-    assert.match(porId.get('permissao')?.conta?.cor ?? '', /^#[0-9a-f]{6}$/i);
-    assert.deepEqual(Object.keys(porId.get('permissao')?.conta ?? {}).sort(), ['cor', 'rotulo']);
-    assert.equal(porId.get('erro')?.conta, null);
+    const porId = new Map(r.items.map((i) => [i.session, i]));
+    assert.equal(porId.get('permissao')?.account?.label, 'equipe');
+    assert.match(porId.get('permissao')?.account?.color ?? '', /^#[0-9a-f]{6}$/i);
+    assert.deepEqual(Object.keys(porId.get('permissao')?.account ?? {}).sort(), ['color', 'label']);
+    assert.equal(porId.get('erro')?.account, null);
     assert.doesNotMatch(JSON.stringify(r), /"id"|accountId/);
   });
 
@@ -76,31 +76,31 @@ describe('montarAtencao', () => {
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => AGORA });
     const painel = await montador.montar({ sessionId: 'nenhuma' });
     assert.ok(r.total > 0);
-    assert.equal(r.precisam, painel.needYou.total);
-    assert.equal(r.suaVez, painel.needYou.yourTurn);
-    // The attention route still answers the Portuguese level (its layer of #173 phase 2b comes later).
-    const doPainel = new Map(painel.needYou.machine.map((i) => [i.id, i.level === 'needs' ? 'precisa' : 'sua-vez']));
-    for (const i of r.itens) if (doPainel.has(i.sessao)) assert.equal(i.nivel, doPainel.get(i.sessao), i.sessao);
+    assert.equal(r.needs, painel.needYou.total);
+    assert.equal(r.yourTurn, painel.needYou.yourTurn);
+    // The same level and reason values as the panel's (#173 phase 2b).
+    const doPainel = new Map(painel.needYou.machine.map((i) => [i.id, [i.level, i.why]]));
+    for (const i of r.items) if (doPainel.has(i.session)) assert.deepEqual([i.level, i.reason], doPainel.get(i.session), i.session);
   });
 
   test('A2 do wireframe: a permissão vem antes do erro mais antigo, e a sua vez por último', async () => {
     await semearCenariosDoPainel(storage, 'p7', AGORA);
     const r = await montarAtencao(frota, null);
     assert.deepEqual(
-      r.itens.map((i) => i.motivo),
-      ['permissao', 'erro', 'sua-vez'],
+      r.items.map((i) => i.reason),
+      ['permission', 'error', 'your-turn'],
     );
     // O erro espera há mais tempo que a permissão, e mesmo assim vem depois.
-    assert.ok(r.itens[1].minutos > r.itens[0].minutos);
+    assert.ok(r.items[1].minutes > r.items[0].minutes);
   });
 
   test('ninguém esperando: lista vazia', async () => {
     const r = await montarAtencao(frota, 'c1');
-    assert.deepEqual({ total: r.total, itens: r.itens, cursor: r.cursor }, { total: 0, itens: [], cursor: 'c1' });
+    assert.deepEqual({ total: r.total, items: r.items, cursor: r.cursor }, { total: 0, items: [], cursor: 'c1' });
   });
 });
 
-describe('GET /api/atencao', () => {
+describe('GET /api/attention', () => {
   let api: ApiLocal;
   let mudancas: CursorDeMudancas;
   beforeEach(async () => {
@@ -111,27 +111,36 @@ describe('GET /api/atencao', () => {
   });
   afterEach(() => api.close());
 
-  test('responde a lista com o cursor de /api/mudancas', async () => {
-    const res = await fetch(`${api.url}/api/atencao`);
+  test('responde a lista com o cursor de /api/changes', async () => {
+    const res = await fetch(`${api.url}/api/attention`);
     assert.equal(res.status, 200);
     const r = (await res.json()) as RespostaDaAtencao;
     assert.equal(r.cursor, mudancas.atual);
-    assert.equal(r.total, r.itens.length);
+    assert.equal(r.total, r.items.length);
     // O cursor serve para esperar a próxima mudança: sem mudança, volta vazio quando a espera acaba.
-    const m = (await (await fetch(`${api.url}/api/mudancas?desde=${encodeURIComponent(r.cursor!)}&espera=0`)).json()) as { reiniciar: boolean; mudancas: unknown[] };
-    assert.equal(m.reiniciar, false);
-    assert.deepEqual(m.mudancas, []);
+    const m = (await (await fetch(`${api.url}/api/changes?since=${encodeURIComponent(r.cursor!)}&wait=0`)).json()) as { reset: boolean; changes: unknown[] };
+    assert.equal(m.reset, false);
+    assert.deepEqual(m.changes, []);
+  });
+
+  test('a rota antiga responde as chaves e os valores antigos (#173 fase 2b)', async () => {
+    const novo = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
+    const antigo = (await (await fetch(`${api.url}/api/atencao`)).json()) as Record<string, unknown> & { itens: Record<string, unknown>[] };
+    assert.deepEqual(Object.keys(antigo), ['geradoEm', 'cursor', 'total', 'precisam', 'suaVez', 'ativas', 'comErro', 'itens']);
+    assert.equal(antigo.precisam, novo.needs);
+    assert.ok(antigo.itens.length > 0);
+    assert.deepEqual(Object.keys(antigo.itens[0]!), ['sessao', 'titulo', 'projeto', 'conta', 'nivel', 'motivo', 'motivoCurto', 'motivoLongo', 'desde', 'minutos', 'local']);
   });
 
   test('pedido com Origin dá 403, como as outras rotas', async () => {
-    const res = await fetch(`${api.url}/api/atencao`, { headers: { origin: 'https://exemplo.com' } });
+    const res = await fetch(`${api.url}/api/attention`, { headers: { origin: 'https://exemplo.com' } });
     assert.equal(res.status, 403);
   });
 
   test('sem a frota, a rota não existe', async () => {
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
     const outra = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
-    assert.equal((await fetch(`${outra.url}/api/atencao`)).status, 404);
+    assert.equal((await fetch(`${outra.url}/api/attention`)).status, 404);
     await outra.close();
   });
 });

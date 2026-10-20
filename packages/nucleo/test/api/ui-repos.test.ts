@@ -324,12 +324,12 @@ describe('repos na /ui: o que a tela mostra', () => {
   });
 
   test('#104 e #105: a mudança do Ao vivo que pede releitura (lista e a chave sem caixa)', () => {
-    assert.equal(changeMatters([{ tipo: 'repos', chave: 'lista' }]), true);
-    assert.equal(changeMatters([{ tipo: 'repos', chave: 'exemplo-labs/vitrine-demo' }]), false, 'a lista só relê por `lista`');
-    assert.equal(changeMatters([{ tipo: 'sessao', chave: 'lista' }]), false);
-    assert.equal(changeMatters([{ tipo: 'repos', chave: 'exemplo-labs/vitrine-demo' }], 'Exemplo-Labs/Vitrine-Demo'), true);
-    assert.equal(changeMatters([{ tipo: 'repos', chave: 'lista' }], 'a/b'), true);
-    assert.equal(changeMatters([{ tipo: 'repos', chave: 'a/c' }], 'a/b'), false);
+    assert.equal(changeMatters([{ type: 'repos', key: 'lista' }]), true);
+    assert.equal(changeMatters([{ type: 'repos', key: 'exemplo-labs/vitrine-demo' }]), false, 'a lista só relê por `lista`');
+    assert.equal(changeMatters([{ type: 'session', key: 'lista' }]), false);
+    assert.equal(changeMatters([{ type: 'repos', key: 'exemplo-labs/vitrine-demo' }], 'Exemplo-Labs/Vitrine-Demo'), true);
+    assert.equal(changeMatters([{ type: 'repos', key: 'lista' }], 'a/b'), true);
+    assert.equal(changeMatters([{ type: 'repos', key: 'a/c' }], 'a/b'), false);
     assert.equal(changeMatters([], 'a/b'), false);
   });
 

@@ -102,7 +102,7 @@ try {
     const t = performance.now();
     for (;;) {
       const c = await (await fetch(`${base}/api/load`)).json();
-      if (c.historico !== 'importando') break;
+      if (c.history !== 'importing') break;
       if (performance.now() - t > 15 * 60_000) throw new Error('a importação passou de 15 min');
       await dormir(1000);
     }
@@ -162,10 +162,10 @@ try {
     ...(rota === 'painel'
       ? {
           hooksPorMin, hooks, importacao,
-          eventosLidosNaJanela: depoisCarga.eventosLidos - antesCarga.eventosLidos,
-          arquivosDoSeguidor: depoisCarga.seguidor?.filesKnown ?? null,
-          arquivosImportadosNaJanela: (depoisCarga.seguidor?.filesImported ?? 0) - (antesCarga.seguidor?.filesImported ?? 0),
-          desktopLidosNaJanela: depoisCarga.desktopLidos - antesCarga.desktopLidos,
+          eventosLidosNaJanela: depoisCarga.eventsRead - antesCarga.eventsRead,
+          arquivosDoSeguidor: depoisCarga.follower?.filesKnown ?? null,
+          arquivosImportadosNaJanela: (depoisCarga.follower?.filesImported ?? 0) - (antesCarga.follower?.filesImported ?? 0),
+          desktopLidosNaJanela: depoisCarga.desktopRead - antesCarga.desktopRead,
         }
       : {}),
   };

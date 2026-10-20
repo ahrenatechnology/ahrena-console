@@ -173,8 +173,8 @@ describe('#175/AC-3 o alerta chega por /api/changes', () => {
       const pending = get(`/api/changes?since=${start.cursor}&wait=5&type=alert`);
       const exposed = reading({ ports: [{ port: 6379, interface: 'all', address: null, process: 'redis-server', pid: 9 }] }, NOW + 30_000);
       await new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposed]), store, tracker, onAlertChange: publishAlertChanges(cursor) }).sampleOnce();
-      const r = (await (await pending).json()) as { mudancas: { tipo: string; chave: string }[] };
-      assert.ok(r.mudancas.some((m) => m.tipo === 'alert' && m.chave === 'local:port-exposed:6379'), JSON.stringify(r.mudancas));
+      const r = (await (await pending).json()) as { changes: { type: string; key: string }[] };
+      assert.ok(r.changes.some((m) => m.type === 'alert' && m.key === 'local:port-exposed:6379'), JSON.stringify(r.changes));
     } finally {
       await close();
     }

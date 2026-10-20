@@ -66,8 +66,9 @@ describe('wait_for_changes com o cliente oficial', () => {
       while (mudancas.abertas === 0) await new Promise((r) => setImmediate(r));
       await storage.putSession(session({ id: `nova-${k}-a`, accountId: c1.id, accountSource: 'env' }));
       const r = await pendente;
-      assert.deepEqual(r.changes.map((m) => [m.type, m.sessionId, m.account?.label]), [['sessao', `nova-${k}-a`, 'equipe']]);
+      assert.deepEqual(r.changes.map((m) => [m.type, m.sessionId, m.account?.label]), [['session', `nova-${k}-a`, 'equipe']]);
 
+      // The old type name (`sessao`) is still accepted (#173 phase 2b), the answer is English.
       const filtrada = chamar({ cursor: r.cursor, timeout: 20, account: ['cliente', 'none'], types: ['sessao'], sessions: [`nova-${k}-b`, `nova-${k}-c`] });
       while (mudancas.abertas === 0) await new Promise((r) => setImmediate(r));
       await storage.putSession(session({ id: `nova-${k}-x`, accountId: c2.id, accountSource: 'env' }));

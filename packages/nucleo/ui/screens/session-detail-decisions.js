@@ -127,7 +127,7 @@ export function create(ctx, base, { head: headEl = () => null, setLabel = () => 
   // pelas mudanças desta sessão, então a aba escuta as de decisão por conta própria.
   let wait = null;
   ctx.onChange((changes) => {
-    if (!changes.some((m) => m.tipo === 'decisao')) return;
+    if (!changes.some((m) => m.type === 'decision')) return;
     clearTimeout(wait);
     wait = setTimeout(draw, 400);
   });

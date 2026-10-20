@@ -124,6 +124,8 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   view: { sessions: 'sessoes', agents: 'agentes' },
   groupBy: { family: 'familia', session: 'sessao' },
   period: { '1y': '1a' },
+  // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
+  type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
 };
 
 /** The new path of an old one; any other path comes back as it is. */
@@ -142,7 +144,9 @@ export function normalizeLegacyQuery(query: URLSearchParams): URLSearchParams {
     const next = LEGACY_PARAMS[name];
     if (next !== undefined && query.has(next)) continue;
     const key = next ?? name;
-    out.append(key, ENGLISH_VALUES[key]?.[value] ?? value);
+    const values = ENGLISH_VALUES[key];
+    // A list parameter (`?type=sessao,estado`) has each of its values translated.
+    out.append(key, values ? value.split(',').map((v) => (Object.hasOwn(values, v) ? values[v] : v)).join(',') : value);
   }
   return out;
 }
@@ -501,19 +505,145 @@ const DECISION_WRITE: LegacyRouteSpec = {
   request: { keys: { '.sessao': 'session', '.texto': 'text' } },
 };
 
+// ---------------------------------------------------------------------------------------------
+// The installed app and the live group (phase 2b layer 3): `GET /api/attention` (old `/api/atencao`)
+// and `GET /api/changes` (old `/api/mudancas`), what the installed app reads; `GET /api/wall` (old
+// `/api/mural`) and `GET /api/load` (old `/api/carga`). `/api/dashboard` and `/api/overview` have no
+// old alias (the overview keeps `nome`/`versao` beside `name`/`version` until phase 6: servidor.ts).
+//
+// `GET /api/attention` (RespostaDaAtencao, src/api/rota-atencao.ts), keys old → new:
+// - top: geradoEm → generatedAt, precisam → needs, suaVez → yourTurn, ativas → active, comErro →
+//   withError, itens → items (cursor, total stay);
+// - items: sessao → session, titulo → title, projeto → project, conta → account (rotulo → label,
+//   cor → color), nivel → level, motivo → reason, motivoCurto → shortReason, motivoLongo →
+//   longReason, desde → since, minutos → minutes (local stays);
+// - values: nivel and motivo as the panel's `level` and `why` (precisa → needs, sua-vez → your-turn;
+//   permissao → permission, pergunta → question, plano → plan, decisao → decision, erro → error,
+//   interrompida → interrupted; no-prompt stays).
+//
+// `GET /api/changes` (RespostaDaEspera, src/mudancas/cursor.ts), keys old → new: mudancas → changes,
+// reiniciar → reset, expirou → timedOut (cursor stays); each change: tipo → type, chave → key
+// (sessionId, accountId, seq stay). The type values: sessao → session, estado → state,
+// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert stay);
+// `?type=` takes both (ENGLISH_VALUES). The errors cite the new parameter: `wait inválida`, `type: um
+// de …`, `session inválida`, `account inválida`.
+//
+// `GET /api/wall` (Mural, src/api/tipos.ts), keys old → new: versao → version, geradoEm →
+// generatedAt, contagem → count (todas → all, esperando → waiting, ativas → active); each card:
+// titulo → title, projeto → project, estado → state, motivo → reason, urgente → urgent, desde →
+// since, atividade → activity, modelo → model, esforco → effort, agentes → agents (ativos → active),
+// custo → cost (estimativa → estimate), plano → plan (feitos → done, atual → current), contexto →
+// context (usados → used, limite → limit, rotulo → label). The values were English already, but the
+// activity types (the panel's).
+//
+// `GET /api/load` (servidor.ts and the extras of cli.ts), keys old → new: pedidos → requests, painel →
+// panel, msPainel → panelMs, eventosLidos → eventsRead, esperasAbertas → openWaits, historico →
+// history (pronto → ready, importando → importing, desligado → off), seguidor → follower, desktopLidos
+// → desktopRead, trabalho → work.
+// ---------------------------------------------------------------------------------------------
+
+const ATTENTION_LEVELS = { needs: 'precisa', 'your-turn': 'sua-vez' };
+const ATTENTION_REASONS = { permission: 'permissao', question: 'pergunta', plan: 'plano', decision: 'decisao', error: 'erro', 'your-turn': 'sua-vez', interrupted: 'interrompida' };
+
+/** `GET /api/attention`, new → old. */
+const ATTENTION: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { generatedAt: 'geradoEm', needs: 'precisam', yourTurn: 'suaVez', active: 'ativas', withError: 'comErro', items: 'itens' }),
+    ...scoped('items', {
+      session: 'sessao',
+      title: 'titulo',
+      project: 'projeto',
+      account: 'conta',
+      level: 'nivel',
+      reason: 'motivo',
+      shortReason: 'motivoCurto',
+      longReason: 'motivoLongo',
+      since: 'desde',
+      minutes: 'minutos',
+    }),
+    ...scoped('account', { label: 'rotulo', color: 'cor' }),
+  },
+  values: { 'items.level': ATTENTION_LEVELS, 'items.reason': ATTENTION_REASONS },
+};
+
+const CHANGE_TYPES = { session: 'sessao', state: 'estado', 'needs-you': 'precisa-de-voce', plan: 'plano', decision: 'decisao', account: 'conta' };
+
+/** `GET /api/changes`, new → old, the errors that cite a parameter included. */
+const CHANGES: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { changes: 'mudancas', reset: 'reiniciar', timedOut: 'expirou' }),
+    ...scoped('changes', { type: 'tipo', key: 'chave' }),
+  },
+  values: {
+    'changes.type': CHANGE_TYPES,
+    '.error': {
+      'session inválida': 'sessao inválida',
+      'account inválida': 'conta inválida',
+      'wait inválida': 'espera inválida',
+      'type: um de session, state, needs-you, plan, decision, account, repos, alert': 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert',
+    },
+  },
+};
+
+/** `GET /api/wall`, new → old: the counts and the card, with the panel's activity line. */
+const WALL: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { version: 'versao', generatedAt: 'geradoEm', count: 'contagem' }),
+    ...scoped('count', { all: 'todas', waiting: 'esperando', active: 'ativas' }),
+    ...scoped('cards', {
+      title: 'titulo',
+      project: 'projeto',
+      state: 'estado',
+      reason: 'motivo',
+      urgent: 'urgente',
+      since: 'desde',
+      activity: 'atividade',
+      model: 'modelo',
+      effort: 'esforco',
+      agents: 'agentes',
+      cost: 'custo',
+      plan: 'plano',
+      context: 'contexto',
+    }),
+    ...scoped('activity', { type: 'tipo', text: 'texto' }),
+    ...scoped('agents', { active: 'ativos' }),
+    ...scoped('cost', { estimate: 'estimativa' }),
+    ...scoped('plan', { done: 'feitos', current: 'atual' }),
+    ...scoped('context', { used: 'usados', limit: 'limite', label: 'rotulo' }),
+  },
+  values: { 'activity.type': ACTIVITY_TYPES },
+};
+
+/** `GET /api/load`, new → old (its golden holds only the key set: the counters move on their own). */
+const LOAD: LegacyBodySpec = {
+  keys: scoped('', {
+    requests: 'pedidos',
+    panel: 'painel',
+    panelMs: 'msPainel',
+    eventsRead: 'eventosLidos',
+    openWaits: 'esperasAbertas',
+    history: 'historico',
+    follower: 'seguidor',
+    desktopRead: 'desktopLidos',
+    work: 'trabalho',
+  }),
+  values: { '.history': { ready: 'pronto', importing: 'importando', off: 'desligado' } },
+  // The follower's stats and the work counters were English already.
+  opaque: ['.follower', '.work'],
+};
+
 /**
  * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
  * fill its entry, and the goldens prove the old body did not move.
  */
 export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
-  attention: {},
-  changes: {},
+  attention: { response: ATTENTION },
+  changes: { response: CHANGES },
   panel: { response: PANEL },
   open: {},
-  // The wall's card keeps its keys until its layer; only the activity line is the panel's.
-  wall: { response: { keys: scoped('atividade', { type: 'tipo', text: 'texto' }), values: { 'atividade.type': ACTIVITY_TYPES } } },
+  wall: { response: WALL },
   events: {},
-  load: {},
+  load: { response: LOAD },
   sessions: {},
   // The Detail's top: the session card and the cost are the panel's.
   session: { response: merge(sessionCard('sessao'), { keys: scoped('custo', { series: 'serie', estimate: 'estimativa' }) }) },
