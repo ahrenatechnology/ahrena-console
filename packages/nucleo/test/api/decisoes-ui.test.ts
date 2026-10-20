@@ -2,6 +2,7 @@
 // C20 do Detalhe (escopo, injeção e MCP), a exceção de origem da própria /ui escrevendo (decisão
 // 0003) e o "Promover a registro". Dados do simulador (P9) e pastas temporárias, nunca o repo real.
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,6 +32,8 @@ const JSON_ = { 'content-type': 'application/json' };
 interface Cenario {
   storage: SqliteStorage;
   decisoes: SqliteDecisionStore;
+  /** As opções da `DecisoesDaUi` da API, para montar outra igual. */
+  opcoes: ConstructorParameters<typeof DecisoesDaUi>[0];
   api: ApiLocal;
   host: string;
   ler<T>(caminho: string, headers?: Record<string, string>): Promise<{ status: number; corpo: T }>;
@@ -44,7 +47,8 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   await semearCenariosDoPainel(storage, 'p9', AGORA);
   await semearDecisoesDoPainel(decisoes, 'p9', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
-  const decisoesUi = new DecisoesDaUi({ decisions: decisoes, storage, agora: () => AGORA, ...opcoes });
+  const opcoesDaUi = { decisions: decisoes, storage, agora: () => AGORA, ...opcoes };
+  const decisoesUi = new DecisoesDaUi(opcoesDaUi);
   const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, decisoesUi });
   const host = new URL(api.url).host;
   const ler = async <T>(caminho: string, headers: Record<string, string> = {}) => {
@@ -56,7 +60,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
     return { status: r.status, corpo: (await r.json()) as T };
   };
   return {
-    storage, decisoes, api, host, ler, postar,
+    storage, decisoes, opcoes: opcoesDaUi, api, host, ler, postar,
     fechar: async () => {
       await api.close();
       await storage.close();
@@ -275,6 +279,23 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
     assert.equal((await c.postar('/api/hooks', hook, nossa)).status, 403);
   });
 
+  test('o id da exceção começa por alfanumérico: ".." e "..." no lugar do id dão 403', async () => {
+    // Pelo http cru: o fetch normalizaria o "..".
+    const cru = (caminho: string) =>
+      new Promise<number>((resolve, reject) => {
+        const [hostname, port] = c.host.split(':');
+        const r = request({ hostname, port: Number(port), path: caminho, method: 'POST', headers: { ...JSON_, origin: `http://${c.host}` } }, (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        });
+        r.on('error', reject);
+        r.end(JSON.stringify({ sessao: VITRINE }));
+      });
+    for (const caminho of ['/api/decisoes/../confirmar', '/api/decisoes/.../confirmar', '/api/decisoes/.x/promover', '/api/decisoes/-x/descartar']) {
+      assert.equal(await cru(caminho), 403, caminho);
+    }
+  });
+
   test('leitura: a própria /ui lê; outro Origin, não', async () => {
     assert.equal((await c.ler('/api/decisoes', { origin: `http://${c.host}` })).status, 200);
     assert.equal((await c.ler(`/api/sessoes/${VITRINE}/decisoes`, { origin: `http://${c.host}` })).status, 200);
@@ -415,6 +436,84 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.equal(r4.status, 409);
       assert.equal(await readFile(alvo, 'utf8'), 'intacto\n');
       assert.equal((await c.decisoes.getDecision(comArquivo.id))?.promotedTo, null);
+    } finally {
+      await c.fechar();
+    }
+  });
+
+  test('descartada ou revertida não vira registro: 409, no rascunho e no confirmar', async () => {
+    const c = await cenario();
+    try {
+      const repo = await repoComRegistros();
+      for (const state of ['descartada', 'revertida'] as const) {
+        const d = await comRepo(c, `teste-${state}`, repo);
+        await c.decisoes.putDecision({ ...d, state });
+        const rota = `/api/decisoes/${d.id}/promover`;
+        const r = await c.postar<{ error: string }>(rota, { sessao: `teste-${state}` });
+        assert.equal(r.status, 409, state);
+        assert.match(r.corpo.error, new RegExp(state));
+        assert.equal((await c.postar(rota, { sessao: `teste-${state}`, confirmar: true, caminho: 'docs/decisoes/0008-x.md' })).status, 409, state);
+      }
+      assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
+    } finally {
+      await c.fechar();
+    }
+  });
+
+  test('um número que já existe com outro slug: 409, nada gravado', async () => {
+    const c = await cenario();
+    try {
+      const repo = await repoComRegistros();
+      const d = await comRepo(c, 'teste-numero', repo);
+      const r = await c.postar<{ error: string }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-numero', confirmar: true, caminho: 'docs/decisoes/0007-outra.md' });
+      assert.equal(r.status, 409);
+      assert.match(r.corpo.error, /0007-setima\.md/);
+      assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
+      assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
+    } finally {
+      await c.fechar();
+    }
+  });
+
+  test('repo relativo: 409; docs/decisoes symlink, mesmo para dentro do repo: 400', async () => {
+    const c = await cenario();
+    try {
+      const relativo = await comRepo(c, 'teste-relativo', 'simulacao/relativo');
+      const r1 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo' })).corpo.rascunho;
+      assert.equal(r1.podeGravar, false);
+      assert.match(r1.motivo!, /absoluta/);
+      assert.equal((await c.postar(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo', confirmar: true, caminho: r1.caminho })).status, 409);
+
+      const repo = await pasta();
+      await mkdir(join(repo, 'docs', 'de-verdade'), { recursive: true });
+      await symlink(join(repo, 'docs', 'de-verdade'), join(repo, 'docs', 'decisoes'));
+      const d = await comRepo(c, 'teste-symlink-dentro', repo);
+      const r2 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro' })).corpo.rascunho;
+      assert.equal(r2.podeGravar, false);
+      assert.match(r2.motivo!, /symlink/);
+      assert.equal((await c.postar(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro', confirmar: true, caminho: r2.caminho })).status, 400);
+      assert.deepEqual(await readdir(join(repo, 'docs', 'de-verdade')), []);
+    } finally {
+      await c.fechar();
+    }
+  });
+
+  test('se a marca (markPromoted) falha depois de gravar, o arquivo é apagado', async () => {
+    const c = await cenario();
+    try {
+      const repo = await repoComRegistros();
+      const d = await comRepo(c, 'teste-marca', repo);
+      const falha = new Proxy(c.decisoes, {
+        get(alvo, k) {
+          if (k === 'putDecision') return async () => Promise.reject(new Error('a porta caiu'));
+          const v = Reflect.get(alvo, k) as unknown;
+          return typeof v === 'function' ? v.bind(alvo) : v;
+        },
+      });
+      const ui = new DecisoesDaUi({ ...c.opcoes, decisions: falha });
+      await assert.rejects(ui.promover(d.id, 'teste-marca', { confirmar: true, caminho: 'docs/decisoes/0008-indice.md' }), /a porta caiu/);
+      assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
+      assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
     } finally {
       await c.fechar();
     }

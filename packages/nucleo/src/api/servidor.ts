@@ -97,10 +97,10 @@ const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.me
 
 /**
  * A própria `/ui` decidindo (#103): só `POST /api/decisoes/<id>/<ação>`, com o caminho cru exato
- * (query dá 403) e da mesma origem. O JSON obrigatório continua com quem responde (415).
+ * (query dá 403) e da mesma origem. O id começa por alfanumérico: `/api/decisoes/../confirmar` não passa. O JSON obrigatório continua com quem responde (415).
  */
 const mesmaOrigemDecidindo = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && /^\/api\/decisoes\/[A-Za-z0-9_.:-]{1,128}\/(confirmar|descartar|ajustar|desfazer|promover)$/.test(req.url ?? '') && daPropriaUi(req, port);
+  req.method === 'POST' && /^\/api\/decisoes\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirmar|descartar|ajustar|desfazer|promover)$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 

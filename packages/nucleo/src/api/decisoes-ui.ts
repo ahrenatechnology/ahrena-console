@@ -20,9 +20,9 @@
 // O Promover não grava nada sem `{ confirmar: true, caminho }`; grava só em `<repo>/docs/decisoes/`,
 // nunca por cima (flag `wx`), conferindo com `realpath` que a pasta não sai do repositório.
 
-import { readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import { readdir, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { basename, isAbsolute, join, posix, sep } from 'node:path';
+import { basename, isAbsolute, join, posix } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Session } from '../model.ts';
 import type { Decision, DecisionState } from '../decisoes/modelo.ts';
@@ -128,6 +128,8 @@ const MAX_BUSCA = 200;
 const DIA = 86_400_000;
 const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', familia: 'f', sessao: 's' };
 const CAMINHO_DO_REGISTRO = /^docs\/decisoes\/(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
+/** Um registro na pasta, de qualquer slug: o número dele. */
+const REGISTRO_NUMERADO = /^(\d{4})-.*\.md$/;
 const ESCOPO_POR_EXTENSO: Record<EscopoDasDecisoes, string> = { sessao: 'sessão', familia: 'família', branch: 'branch' };
 const TIPO: Record<Decision['origin'], string> = { sugerida: 'Sugerida', correcao: 'Correção sua', permissao: 'Permissão', pergunta: 'Pergunta', plano: 'Plano' };
 
@@ -368,10 +370,11 @@ export class DecisoesDaUi {
   }
 
   /**
-   * `<repo>/docs/decisoes` de verdade, conferida: existe, é pasta e, depois de seguir os symlinks,
-   * continua dentro do repositório.
+   * `<repo>/docs/decisoes` de verdade, conferida: o repo é absoluto, a pasta existe, é pasta e não é
+   * symlink (nem para dentro do repositório): o `realpath` dela é `<realpath do repo>/docs/decisoes`.
    */
   private async pastaDosRegistros(d: Decision): Promise<string> {
+    if (d.repo && !isAbsolute(d.repo)) throw new ErroDaDecisao(409, `a pasta do repositório não é absoluta: ${d.repo}`);
     const repo = d.repo ? this.raiz(d.repo) : null;
     if (!repo) throw new ErroDaDecisao(409, 'a decisão não tem a pasta do repositório');
     let raiz: string;
@@ -387,7 +390,7 @@ export class DecisoesDaUi {
     } catch {
       throw new ErroDaDecisao(409, `${d.repo} não tem docs/decisoes`);
     }
-    if (pasta !== esperada && !pasta.startsWith(raiz + sep)) throw new ErroDaDecisao(400, 'docs/decisoes aponta para fora do repositório');
+    if (pasta !== esperada) throw new ErroDaDecisao(400, 'docs/decisoes é um symlink: grave numa pasta de verdade do repositório');
     if (!(await stat(pasta)).isDirectory()) throw new ErroDaDecisao(409, `${d.repo}/docs/decisoes não é uma pasta`);
     return pasta;
   }
@@ -395,7 +398,7 @@ export class DecisoesDaUi {
   private async proximoNumero(pasta: string): Promise<string> {
     let maior = 0;
     for (const nome of await readdir(pasta)) {
-      const m = /^(\d{4})-.*\.md$/.exec(nome);
+      const m = REGISTRO_NUMERADO.exec(nome);
       if (m) maior = Math.max(maior, Number(m[1]));
     }
     return String(maior + 1).padStart(4, '0');
@@ -474,19 +477,31 @@ export class DecisoesDaUi {
     const d = await this.port.getDecision(id);
     const visivel = alvo && d && (await this.sessao.doEscopo(alvo, 'branch', [d.state])).some((x) => x.id === id);
     if (!alvo || !d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
+    // Só o que a página mostra vira registro: uma descartada ou revertida não é "aceita".
+    if (!NA_LISTA.includes(d.state)) throw new ErroDaDecisao(409, `a decisão está ${d.state}: só vigente, a confirmar ou substituída vira registro`);
     if (corpo.confirmar !== true) return { status: 200, corpo: { rascunho: await this.rascunho(d) } };
 
     const caminho = caminhoValido(corpo.caminho);
     if (d.promotedTo) throw new ErroDaDecisao(409, `já promovida para ${d.promotedTo}`);
     const pasta = await this.pastaDosRegistros(d);
+    const numero = CAMINHO_DO_REGISTRO.exec(caminho)![1]!;
+    const mesmoNumero = (await readdir(pasta)).find((nome) => REGISTRO_NUMERADO.exec(nome)?.[1] === numero);
+    if (mesmoNumero) throw new ErroDaDecisao(409, `o número ${numero} já existe: docs/decisoes/${mesmoNumero}`);
     const destino = join(pasta, basename(caminho));
     try {
-      await this.escrever(destino, await this.markdown(d, CAMINHO_DO_REGISTRO.exec(caminho)![1]!));
+      await this.escrever(destino, await this.markdown(d, numero));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new ErroDaDecisao(409, `${caminho} já existe`);
       throw err;
     }
-    const feita = await markPromoted(this.port, id, caminho, new Date(this.agora()).toISOString());
+    let feita: Decision;
+    try {
+      feita = await markPromoted(this.port, id, caminho, new Date(this.agora()).toISOString());
+    } catch (err) {
+      // Sem a marca, o arquivo seria um registro órfão: apaga o que acabou de gravar.
+      await unlink(destino).catch(() => {});
+      throw err;
+    }
     const ref = { sessionId: sessao, familyId: await familyOf(this.port, sessao), mae: (await this.port.getSessionLink(sessao))?.parentSessionId ?? null };
     return { status: 201, corpo: { decisao: await this.paraUi(feita, ref, new Map()), caminho } };
   }
