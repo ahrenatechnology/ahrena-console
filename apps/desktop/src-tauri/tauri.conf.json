@@ -27,5 +27,11 @@
     "macOS": {
       "minimumSystemVersion": "13.0"
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/ahrenatechnology/ahrena-console/releases/latest/download/latest.json"],
+      "pubkey": ""
+    }
   }
 }
