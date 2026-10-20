@@ -24,7 +24,7 @@ describe('contextos do arquivo', () => {
   test('#177/AC-1 lê os contextos de dev-console.json, no caminho injetado', async () => {
     const file = write('ok.json', { contexts: [{ id: 'loja', name: 'Loja', repos: [REPO, OTHER_REPO] }] });
     const contexts = new DevConsoleContexts({ file, recentRepos: async () => assert.fail('com arquivo, as sessões não contam') });
-    assert.deepEqual(await contexts.list(), [{ id: 'loja', name: 'Loja', repos: [REPO, OTHER_REPO], blockedLabels: ['blocked'], source: 'file' }]);
+    assert.deepEqual(await contexts.list(), [{ id: 'loja', name: 'Loja', repos: [REPO, OTHER_REPO], blockedLabels: ['blocked', 'bloqueada'], source: 'file' }]);
     assert.equal((await contexts.get('loja'))?.name, 'Loja');
     assert.equal(await contexts.get('outro'), null);
   });
@@ -49,6 +49,12 @@ describe('contextos do arquivo', () => {
     );
     assert.deepEqual(parseContexts(null), []);
     assert.deepEqual(parseContexts({ contexts: 'x' }), []);
+  });
+
+  test('#177/AC-1 owner/repo em qualquer caixa vira uma chave só, em minúsculas', () => {
+    const [c] = parseContexts({ contexts: [{ id: 'loja', repos: ['Dev-Sintetico/Catalogo-Exemplo', REPO] }] });
+    assert.deepEqual(c.repos, [REPO]);
+    assert.deepEqual(contextsFromRepos(['DEV-SINTETICO/catalogo-exemplo', REPO]).map((x) => x.id), [REPO]);
   });
 
   test('#177/AC-1 relê o arquivo quando ele muda', async () => {
@@ -81,7 +87,7 @@ describe('contextos sem arquivo', () => {
       };
       const contexts = new DevConsoleContexts({ file: join(dir, 'nao-existe.json'), recentRepos: () => recentRepos(storage, where, { now: NOW }) });
       assert.deepEqual(await contexts.list(), contextsFromRepos([REPO, OTHER_REPO]));
-      assert.deepEqual((await contexts.list())[0], { id: REPO, name: 'catalogo-exemplo', repos: [REPO], blockedLabels: ['blocked'], source: 'sessions' });
+      assert.deepEqual((await contexts.list())[0], { id: REPO, name: 'catalogo-exemplo', repos: [REPO], blockedLabels: ['blocked', 'bloqueada'], source: 'sessions' });
       // Cada pasta uma vez; a de 8 dias atrás nem é lida.
       assert.deepEqual(seen.sort(), ['/w/catalogo', '/w/motor', '/w/sem-remote']);
     } finally {

@@ -10,7 +10,7 @@ import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
 import { ESTADOS_VIVOS, minutosDesde, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { ContextSession } from './model.ts';
+import { repoKey, type ContextSession } from './model.ts';
 
 export interface SessionLocation {
   repo: string | null;
@@ -35,8 +35,14 @@ export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now 
   };
 }
 
-/** Os motivos do "depende de você" (critério 2 da #177): pergunta, plano ou decisão. */
-export const DEPENDS_ON_YOU_REASONS: readonly Motivo[] = ['question', 'plan', 'decision'];
+/**
+ * Os motivos do "depende de você": todos os do `/api/atencao` em que a sessão precisa de você
+ * (permissão, pergunta, plano, decisão, erro, interrompida), menos a sua vez no bate-bola
+ * (`turn_ended`) e a sessão nova no prompt (`first_prompt`).
+ */
+export const DEPENDS_ON_YOU_REASONS = ['permission', 'question', 'plan', 'decision', 'error', 'interrupted'] as const satisfies readonly Motivo[];
+export type DependsOnYouReason = (typeof DEPENDS_ON_YOU_REASONS)[number];
+const isDependsOnYouReason = (m: Motivo): m is DependsOnYouReason => (DEPENDS_ON_YOU_REASONS as readonly Motivo[]).includes(m);
 
 export interface WaitingSessionItem {
   kind: 'session';
@@ -44,8 +50,8 @@ export interface WaitingSessionItem {
   title: string;
   repo: string;
   issue: number | null;
-  reason: 'question' | 'plan' | 'decision';
-  /** A frase do `/api/atencao` ("espera você aprovar o plano"); nunca texto da conversa. */
+  reason: DependsOnYouReason;
+  /** A frase do `/api/atencao` ("pede permissão para usar Bash"); nunca texto da conversa. */
   reasonText: string;
   since: string;
   minutes: number;
@@ -94,11 +100,11 @@ export class DevConsoleSessions {
     this.locate = locate;
   }
 
-  /** O repositório e o branch de uma sessão: o branch do Desktop vence o do git. */
+  /** O repositório (em minúsculas, `repoKey`) e o branch de uma sessão: o branch do Desktop vence o do git. */
   async where(session: Pick<Session, 'cwd'>, desktopBranch: string | null = null): Promise<SessionLocation> {
     if (!session.cwd) return { repo: null, branch: desktopBranch };
     const l = await this.locate(session.cwd);
-    return { repo: l.repo, branch: desktopBranch ?? l.branch };
+    return { repo: l.repo ? repoKey(l.repo) : null, branch: desktopBranch ?? l.branch };
   }
 
   /** As sessões vivas dos repositórios pedidos, e o que delas depende de você. */
@@ -113,7 +119,7 @@ export class DevConsoleSessions {
       const { repo, branch } = await this.where(s.session, s.desktop?.branch ?? null);
       if (!repo || !repos.has(repo)) continue;
       const w = waiting.get(s.session.id);
-      const reason = w && DEPENDS_ON_YOU_REASONS.includes(w.reason) ? (w.reason as WaitingSessionItem['reason']) : null;
+      const reason = w && isDependsOnYouReason(w.reason) ? w.reason : null;
       const estado = s.inbox.estado;
       push(byRepo, repo, {
         id: s.session.id,

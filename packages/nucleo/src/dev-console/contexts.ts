@@ -10,7 +10,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_BLOCKED_LABELS } from './model.ts';
+import { DEFAULT_BLOCKED_LABELS, repoKey } from './model.ts';
 
 export interface DevConsoleContext {
   id: string;
@@ -46,7 +46,7 @@ export function parseContexts(json: unknown): DevConsoleContext[] {
   const ids = new Set<string>();
   for (const c of root.contexts.slice(0, MAX_CONTEXTS) as { id?: unknown; name?: unknown; repos?: unknown; blockedLabels?: unknown }[]) {
     if (typeof c?.id !== 'string' || !CONTEXT_ID.test(c.id) || ids.has(c.id) || !Array.isArray(c.repos)) continue;
-    const repos = [...new Set(c.repos.filter((r): r is string => typeof r === 'string' && REPO_NAME.test(r)))].slice(0, MAX_REPOS);
+    const repos = [...new Set(c.repos.filter((r): r is string => typeof r === 'string' && REPO_NAME.test(r)).map(repoKey))].slice(0, MAX_REPOS);
     if (repos.length === 0) continue;
     ids.add(c.id);
     const name = typeof c.name === 'string' && c.name.trim() ? c.name.trim().slice(0, 64) : c.id;
@@ -57,8 +57,7 @@ export function parseContexts(json: unknown): DevConsoleContext[] {
 
 /** Um contexto por repositório, com o próprio `owner/repo` de id e o nome do repositório. */
 export function contextsFromRepos(repos: readonly string[]): DevConsoleContext[] {
-  return repos
-    .filter((r) => REPO_NAME.test(r))
+  return [...new Set(repos.filter((r) => REPO_NAME.test(r)).map(repoKey))]
     .slice(0, MAX_CONTEXTS)
     .map((repo) => ({ id: repo, name: repo.split('/')[1], repos: [repo], blockedLabels: [...DEFAULT_BLOCKED_LABELS], source: 'sessions' as const }));
 }

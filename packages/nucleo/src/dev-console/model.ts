@@ -21,6 +21,8 @@ export interface PullRequestFact {
   mergeStateStatus: string | null;
   baseRefName: string;
   headRefName: string;
+  /** O branch vem de um fork: o `headRefName` é do fork, e nada se empilha nele. */
+  isCrossRepository: boolean;
   createdAt: string;
   /** `statusCheckRollup.state` do último commit; `null` sem checagens. */
   ci: CiState | null;
@@ -58,7 +60,7 @@ export interface ContextSession {
   branch: string | null;
   /** Trabalhando agora (não espera você nem parou num erro). */
   working: boolean;
-  /** Espera você numa pergunta, num plano ou numa decisão. */
+  /** Precisa de você: um dos motivos do "depende de você" (permissão, pergunta, plano, decisão, erro, interrompida). */
   waitingOnYou: boolean;
 }
 
@@ -117,7 +119,11 @@ export interface Scoreboard {
   waitingOnYou: number;
 }
 
-export const DEFAULT_BLOCKED_LABELS: readonly string[] = ['blocked'];
+/** As etiquetas da coluna "Bloqueada" (decisão 0008, seção 4), configuráveis no `dev-console.json`. */
+export const DEFAULT_BLOCKED_LABELS: readonly string[] = ['blocked', 'bloqueada'];
+
+/** A chave de um repositório: `owner/repo` em minúsculas, como o GitHub compara. */
+export const repoKey = (repo: string): string => repo.toLowerCase();
 export const DONE_WINDOW_MS = 24 * 60 * 60_000;
 
 export function ciSummary(ci: CiState | null): CiSummary {
@@ -129,9 +135,13 @@ export function ciSummary(ci: CiState | null): CiSummary {
 
 const prKey = (repo: string, number: number) => `${repo}#${number}`;
 
-/** O PR aberto do mesmo repositório cujo branch é a base deste: este está empilhado nele. */
+/**
+ * O PR aberto do mesmo repositório cujo branch é a base deste: este está empilhado nele. Só PRs
+ * de branch do próprio repositório entram no índice: o `headRefName` de um fork (às vezes `main`)
+ * não é um branch daqui.
+ */
 function stackBases(prs: readonly PullRequestFact[]): Map<string, PullRequestFact> {
-  const byHead = new Map(prs.map((p) => [`${p.repo}\0${p.headRefName}`, p]));
+  const byHead = new Map(prs.filter((p) => !p.isCrossRepository).map((p) => [`${p.repo}\0${p.headRefName}`, p]));
   const out = new Map<string, PullRequestFact>();
   for (const p of prs) {
     const base = byHead.get(`${p.repo}\0${p.baseRefName}`);
@@ -161,6 +171,9 @@ const byAge = (a: { createdAt: string; repo: string; number: number }, b: { crea
  * A fila de merge: prontos (CI verde, sem conflito, fora de rascunho, sem pedido de mudança, em
  * dia com a base), o mais antigo primeiro, e o empilhado logo depois da base. Um empilhado só
  * entra se a base entrou; senão fica fora com `stacked`.
+ *
+ * `mergeable: 'UNKNOWN'` (o GitHub ainda calcula) conta como pronto: só `CONFLICTING` tira da fila.
+ * Se houver conflito, o próprio GitHub recusa o merge, e a próxima leitura já traz `conflict`.
  */
 export function buildMergeQueue(prs: readonly PullRequestFact[]): MergeQueue {
   const bases = stackBases(prs);

@@ -2,7 +2,7 @@
 // placar, derivados de fatos sintéticos. Sem GitHub, sem banco, sem rede.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildBoard, buildMergeQueue, buildScoreboard, columnOf, mergedSince, ownReasons } from '../../src/dev-console/model.ts';
+import { buildBoard, buildMergeQueue, buildScoreboard, columnOf, DEFAULT_BLOCKED_LABELS, mergedSince, ownReasons } from '../../src/dev-console/model.ts';
 import { contextSession, hoursAgo, issue, merged, NOW, OTHER_REPO, pr, REPO } from './helpers.ts';
 
 const numbers = (xs: readonly { number: number }[]) => xs.map((x) => x.number);
@@ -72,6 +72,20 @@ describe('fila de merge', () => {
     );
   });
 
+  test('#177/AC-6 PR de fork com headRefName main não empilha os PRs que miram main', () => {
+    const fork = pr(90, { headRefName: 'main', isCrossRepository: true, ci: 'FAILURE', createdAt: hoursAgo(40) });
+    const a = pr(91, { createdAt: hoursAgo(20) });
+    const b = pr(92, { createdAt: hoursAgo(10) });
+    const q = buildMergeQueue([fork, a, b]);
+    assert.deepEqual(numbers(q.ready), [91, 92]);
+    assert.deepEqual(q.ready.map((x) => x.stackedOn), [null, null]);
+    assert.deepEqual(q.notReady.map((n) => [n.number, n.reasons]), [[90, ['ci-failing']]]);
+  });
+
+  test('#177/AC-6 mergeable UNKNOWN conta como pronto; só CONFLICTING tira da fila', () => {
+    assert.deepEqual(numbers(buildMergeQueue([pr(93, { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' })]).ready), [93]);
+  });
+
   test('#177/AC-6 a pilha só vale dentro do mesmo repositório', () => {
     const a = pr(1, { headRefName: 'feat/1-x', ci: 'FAILURE' });
     const b = pr(2, { repo: OTHER_REPO, baseRefName: 'feat/1-x' });
@@ -96,10 +110,13 @@ describe('colunas do quadro', () => {
   test('#177/AC-3 in-review: PR aberto que fecha a issue', () => {
     assert.equal(columnOf(issue(31), { ...none, remoteBranch: true, pullRequest: pr(81, { closes: [31] }) }), 'in-review');
   });
-  test('#177/AC-3 blocked: a etiqueta vence tudo, e a etiqueta é configurável', () => {
+  test('#177/AC-3 blocked: a etiqueta vence tudo; o padrão é blocked ou bloqueada, e a etiqueta é configurável', () => {
+    assert.deepEqual(DEFAULT_BLOCKED_LABELS, ['blocked', 'bloqueada']);
     assert.equal(columnOf(issue(55, { labels: ['Blocked'] }), { ...none, pullRequest: pr(1) }), 'blocked');
-    assert.equal(columnOf(issue(55, { labels: ['bloqueada'] }), none), 'todo');
-    assert.equal(columnOf(issue(55, { labels: ['bloqueada'] }), none, ['bloqueada']), 'blocked');
+    assert.equal(columnOf(issue(55, { labels: ['bloqueada'] }), none), 'blocked');
+    assert.equal(columnOf(issue(55, { labels: ['espera-fornecedor'] }), none), 'todo');
+    assert.equal(columnOf(issue(55, { labels: ['espera-fornecedor'] }), none, ['espera-fornecedor']), 'blocked');
+    assert.equal(columnOf(issue(55, { labels: ['blocked'] }), none, ['espera-fornecedor']), 'todo');
   });
 
   test('#177/AC-3 o quadro: cada issue na sua coluna, com sessão, PR e CI; done só as fechadas em 24 h', () => {

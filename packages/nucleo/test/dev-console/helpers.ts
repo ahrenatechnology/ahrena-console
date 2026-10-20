@@ -19,6 +19,7 @@ export function pr(number: number, over: Partial<PullRequestFact> = {}): PullReq
     mergeStateStatus: 'CLEAN',
     baseRefName: 'main',
     headRefName: `feat/${number}-pr`,
+    isCrossRepository: false,
     createdAt: hoursAgo(10),
     ci: 'SUCCESS',
     review: 'APPROVED',
