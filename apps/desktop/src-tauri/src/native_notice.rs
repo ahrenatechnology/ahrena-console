@@ -18,9 +18,8 @@
 // it; window work goes through `run_on_main_thread`.
 //
 // Notifications already delivered stay in the Notification Center across an app update. Those of a
-// version from before #173 (phase 4) carry the Portuguese category, action ids and `userInfo` key:
-// the legacy category is still registered and `respond` still reads them, until the end of the
-// aliases (#173 phase 6).
+// version from before #173 (phase 4, app 0.0.4 and older) carry the Portuguese category, action ids
+// and `userInfo` key, which are not read since phase 6: their buttons do nothing.
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -57,14 +56,6 @@ const LOCAL_KEY: &str = "local";
 const PATH_KEY: &str = "path";
 /// The machine id "Reconectar" sends (#244); the only thing it sends.
 const MACHINE_KEY: &str = "machine";
-
-/// The session category, the action ids and the session key of a notification delivered by an app
-/// from before #173 (phase 4).
-const LEGACY_SESSION_CATEGORY: &str = "sessao";
-const LEGACY_OPEN_ACTION: &str = "abrir";
-const LEGACY_OPEN_IN_DESKTOP_ACTION: &str = "abrir-no-desktop";
-const LEGACY_SILENCE_ACTION: &str = "silenciar";
-const LEGACY_SESSION_KEY: &str = "sessao";
 
 /// What each answer does; it comes from main.rs, which has the state and the window.
 pub struct Handlers {
@@ -150,9 +141,8 @@ pub fn start(app: &AppHandle, handlers: Handlers, _main: MainThreadMarker) -> bo
         // In the background: the command may open a login in the browser; the window stays as is.
         Action::Reconnect => action(RECONNECT_ACTION, "Reconectar", UNNotificationActionOptions::empty()),
     };
-    // One category per kind of notice, with the actions `Origin::actions` gives it, plus the legacy
-    // session category, so a notification delivered before the update keeps its buttons.
-    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect)), (Origin::Session, LEGACY_SESSION_CATEGORY)]
+    // One category per kind of notice, with the actions `Origin::actions` gives it.
+    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect))]
         .into_iter()
         .map(|(o, id)| {
             let actions = NSArray::from_retained_slice(&o.actions().iter().map(|a| button(*a)).collect::<Vec<_>>());
@@ -242,23 +232,23 @@ fn read(info: &NSDictionary, key: &str) -> Option<String> {
 fn respond(response: &UNNotificationResponse) {
     let Some((app, handlers)) = APP.get() else { return };
     let info = response.notification().request().content().userInfo();
-    let Some(session) = read(&info, SESSION_KEY).or_else(|| read(&info, LEGACY_SESSION_KEY)) else { return };
+    let Some(session) = read(&info, SESSION_KEY) else { return };
     let local = read(&info, LOCAL_KEY);
     // A notice from before #180 has no path: the session's screen, as then.
     let path = read(&info, PATH_KEY).unwrap_or_else(|| notifications::session_path(&session));
     let action = response.actionIdentifier();
-    let is = |ids: [&str; 2]| ids.iter().any(|id| action.isEqualToString(&NSString::from_str(id)));
+    let is = |id: &str| action.isEqualToString(&NSString::from_str(id));
     // SAFETY: a UserNotifications constant, read after the framework has loaded.
     let default = unsafe { UNNotificationDefaultActionIdentifier };
     let (open, open_in_desktop, silence, reconnect) = (handlers.open, handlers.open_in_desktop, handlers.silence, handlers.reconnect);
     let handle = app.clone();
-    let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is([OPEN_ACTION, LEGACY_OPEN_ACTION]) {
+    let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is(OPEN_ACTION) {
         Box::new(move || open(&handle, &path))
-    } else if is([OPEN_IN_DESKTOP_ACTION, LEGACY_OPEN_IN_DESKTOP_ACTION]) {
+    } else if is(OPEN_IN_DESKTOP_ACTION) {
         Box::new(move || open_in_desktop(&handle, local))
-    } else if is([SILENCE_ACTION, LEGACY_SILENCE_ACTION]) {
+    } else if is(SILENCE_ACTION) {
         Box::new(move || silence(&handle, &session))
-    } else if action.isEqualToString(&NSString::from_str(RECONNECT_ACTION)) {
+    } else if is(RECONNECT_ACTION) {
         let Some(machine) = read(&info, MACHINE_KEY) else { return };
         Box::new(move || reconnect(&handle, &machine))
     } else {
