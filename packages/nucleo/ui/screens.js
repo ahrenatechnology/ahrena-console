@@ -201,7 +201,13 @@ const LEGACY_PATHS = [
 
 // Query parameters of each screen: old name → new name, and old value → new value.
 const LEGACY_QUERY = {
-  sessions: { keys: { busca: 'search', ordem: 'order', sentido: 'direction', pagina: 'page' } },
+  sessions: {
+    keys: { busca: 'search', ordem: 'order', sentido: 'direction', pagina: 'page' },
+    values: {
+      status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
+      order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
+    },
+  },
   kanban: { keys: { visao: 'view' }, values: { view: { agentes: 'agents', sessoes: 'sessions' } } },
   repo: { keys: { periodo: 'period' }, values: { period: { '1a': '1y' } } },
 };

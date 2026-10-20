@@ -126,9 +126,20 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   period: { '1y': '1a' },
   // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
-  // Phase 2b layer 4: the Sessions list filter and order are English in `/api/sessions?status=&order=`.
-  status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
-  order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
+};
+
+/**
+ * Query values that only one route knows, by the route's NEW path: a name as common as `status` or
+ * `order` means something else elsewhere (`/api/events?status=` takes `active|waiting|error|completed`
+ * and must keep answering `?status=erro` with its 400), so these do not go global.
+ */
+const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>> = {
+  // Phase 2b layer 4: the Sessions list filter and order are English in `/api/sessions?status=&order=`
+  // (old alias `/api/sessoes`, which reaches here already as the new path); both value sets accepted.
+  '/api/sessions': {
+    status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
+    order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
+  },
 };
 
 /** The new path of an old one; any other path comes back as it is. */
@@ -140,14 +151,18 @@ export function normalizeLegacyPath(pathname: string): string {
   return pathname;
 }
 
-/** The query with the new parameter names and the values the handlers read. */
-export function normalizeLegacyQuery(query: URLSearchParams): URLSearchParams {
+/**
+ * The query with the new parameter names and the values the handlers read. `pathname` is the route's
+ * NEW path (after `normalizeLegacyPath`); it picks the values only that route knows.
+ */
+export function normalizeLegacyQuery(query: URLSearchParams, pathname = ''): URLSearchParams {
   const out = new URLSearchParams();
+  const routeValues = Object.hasOwn(ENGLISH_VALUES_BY_PATH, pathname) ? ENGLISH_VALUES_BY_PATH[pathname] : undefined;
   for (const [name, value] of query) {
     const next = LEGACY_PARAMS[name];
     if (next !== undefined && query.has(next)) continue;
     const key = next ?? name;
-    const values = ENGLISH_VALUES[key];
+    const values = routeValues?.[key] ?? ENGLISH_VALUES[key];
     // A list parameter (`?type=sessao,estado`) has each of its values translated.
     out.append(key, values ? value.split(',').map((v) => (Object.hasOwn(values, v) ? values[v] : v)).join(',') : value);
   }
@@ -160,7 +175,7 @@ export function normalizeLegacyUrl(url: URL): URL {
   if (url.pathname.startsWith('/api/hooks')) return url;
   const out = new URL(url);
   out.pathname = normalizeLegacyPath(url.pathname);
-  const query = normalizeLegacyQuery(url.searchParams);
+  const query = normalizeLegacyQuery(url.searchParams, out.pathname);
   out.search = query.size > 0 ? `?${query}` : '';
   return out;
 }
@@ -656,9 +671,9 @@ const LOAD: LegacyBodySpec = {
 // - items: titulo → title, motivo → reason, ultimaAtividade → lastActivity, inicio → start, rodando
 //   → running, duracaoMs → durationMs, agentes → agents, custoUsd → costUsd, conta → account (rotulo
 //   → label, cor → color) (id, status, cwd stay; the status and reason values were English already);
-// - query values (ENGLISH_VALUES, both accepted): status todas → all, ativas → active, esperando →
-//   waiting, concluidas → completed, erro → error, abandonadas → abandoned; order atividade →
-//   activity, duracao → duration, custo → cost (direction desc|asc stays);
+// - query values (ENGLISH_VALUES_BY_PATH, this route only, both accepted): status todas → all,
+//   ativas → active, esperando → waiting, concluidas → completed, erro → error, abandonadas →
+//   abandoned; order atividade → activity, duracao → duration, custo → cost (direction stays);
 // - errors cite the new parameter and values: `status: um de all, …`, `order: um de activity, …`,
 //   `direction:`, `page:`, `search grande demais`.
 //
@@ -683,6 +698,9 @@ const EVENTS: LegacyBodySpec = {
     ...scoped('detail', { input: 'entrada' }),
   },
   values: {
+    // An accepted edge: `agent.name` mixes the fixed values main|subagent with data (a subagent's
+    // type), so a subagent whose type is literally `main` or `subagent` reads as principal|subagente
+    // on the old route.
     'agent.name': { main: 'principal', subagent: 'subagente' },
     '.error': {
       'limit: um inteiro de 1 a 200': 'limite: um inteiro de 1 a 200',

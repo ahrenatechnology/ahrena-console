@@ -23,20 +23,6 @@ const ORDERS = {
   cost: { desc: 'Custo: maior', asc: 'Custo: menor' },
 };
 
-/** The values an old bookmark carries in the address bar (`?status=esperando&order=custo`), as the new ones. */
-const OLD_VALUES = {
-  todas: 'all',
-  ativas: 'active',
-  esperando: 'waiting',
-  concluidas: 'completed',
-  erro: 'error',
-  abandonadas: 'abandoned',
-  atividade: 'activity',
-  duracao: 'duration',
-  custo: 'cost',
-};
-const current = (v) => (v !== null && Object.hasOwn(OLD_VALUES, v) ? OLD_VALUES[v] : v);
-
 export const STATUS = {
   active: 'Ativa',
   waiting: 'Esperando você',
@@ -56,14 +42,14 @@ export const REASONS = {
 const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
 /**
- * The screen state from the query (`?status=waiting&page=2`); an old bookmark's values (`esperando`,
- * `custo`) still work, and what is not valid falls back to the default.
+ * The screen state from the query (`?status=waiting&page=2`); what is not valid falls back to the
+ * default. An old bookmark's values (`esperando`, `custo`) were swapped by the shell (`legacyUrl`).
  */
 export function stateFromQuery(query) {
   const p = new URLSearchParams(query);
   const page = Number(p.get('page'));
-  const status = current(p.get('status'));
-  const order = current(p.get('order'));
+  const status = p.get('status');
+  const order = p.get('order');
   return {
     status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
     search: (p.get('search') ?? '').slice(0, 200),

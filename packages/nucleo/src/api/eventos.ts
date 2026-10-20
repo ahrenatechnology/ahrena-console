@@ -94,7 +94,9 @@ export interface RespostaDoFeed {
 export const LIMITE_PADRAO = 50;
 export const LIMITE_MAXIMO = 200;
 const MAX_OPCOES = 100;
-const MAX = { id: 128, tipo: 64, ferramenta: 128, resumo: 300, titulo: 120, projeto: 120, agente: 60, callId: 64, entrada: 300, busca: 100 };
+/** The longest `?search=` the feed takes. */
+export const SEARCH_MAX = 100;
+const MAX = { id: 128, tipo: 64, ferramenta: 128, resumo: 300, titulo: 120, projeto: 120, agente: 60, callId: 64, entrada: 300, busca: SEARCH_MAX };
 
 const TIPO = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

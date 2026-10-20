@@ -5,7 +5,8 @@ import { describe, test } from 'node:test';
 import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, normalizeLegacyQuery, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
 import { TIPOS_DE_MUDANCA } from '../../src/mudancas/cursor.ts';
 import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
-import { MAIN_AGENT, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
+import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
+import { BUSCA_MAXIMA as HISTORY_SEARCH_MAX, DIAS_MAXIMO } from '../../src/historico/modelo.ts';
 import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
 import { AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
 
@@ -378,7 +379,7 @@ describe('every union member of the feed, the Sessions list and the History answ
   test('events: every error that cites a parameter cites the old one on the old route', () => {
     const route = legacyResponseFor('/api/eventos')!;
     const errors = {
-      'limit: um inteiro de 1 a 200': 'limite: um inteiro de 1 a 200',
+      [`limit: um inteiro de 1 a ${LIMITE_MAXIMO}`]: `limite: um inteiro de 1 a ${LIMITE_MAXIMO}`,
       'after e before não se combinam': 'depois e antes não se combinam',
       'after: cursor inválido': 'depois: cursor inválido',
       'before: cursor inválido': 'antes: cursor inválido',
@@ -387,7 +388,7 @@ describe('every union member of the feed, the Sessions list and the History answ
       'tool: nome de ferramenta inválido': 'ferramenta: nome de ferramenta inválido',
       'status: um de active, waiting, error, completed': 'status: um de active, waiting, error, completed',
       'search: sem quebras de linha nem caracteres de controle': 'busca: sem quebras de linha nem caracteres de controle',
-      'search: até 100 caracteres': 'busca: até 100 caracteres',
+      [`search: até ${SEARCH_MAX} caracteres`]: `busca: até ${SEARCH_MAX} caracteres`,
       'from: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'de: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
       'to: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'ate: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
       'from: depois do to': 'de: depois do ate',
@@ -418,12 +419,16 @@ describe('every union member of the feed, the Sessions list and the History answ
     assert.deepEqual(Object.values(STATUS), [...FILTROS_DE_STATUS], 'every status filter');
     assert.deepEqual(Object.values(ORDER), [...ORDENS], 'every order');
     for (const [old, status] of Object.entries(STATUS)) {
-      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`)).get('status'), status, old);
-      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${status}`)).get('status'), status, status);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`), '/api/sessions').get('status'), status, old);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${status}`), '/api/sessions').get('status'), status, status);
+      // Only on the sessions list: elsewhere (`/api/events?status=`) the old value reaches the handler as it came.
+      for (const path of ['', '/api/events', '/api/sessions/s1/events'])
+        assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`), path).get('status'), old, `${path} ${old}`);
     }
     for (const [old, order] of Object.entries(ORDER)) {
-      assert.equal(normalizeLegacyQuery(new URLSearchParams(`ordem=${old}`)).get('order'), order, old);
-      assert.equal(normalizeLegacyQuery(new URLSearchParams(`order=${order}`)).get('order'), order, order);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`ordem=${old}`), '/api/sessions').get('order'), order, old);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`order=${order}`), '/api/sessions').get('order'), order, order);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`ordem=${old}`), '/api/events').get('order'), old, old);
     }
   });
 
@@ -461,10 +466,20 @@ describe('every union member of the feed, the Sessions list and the History answ
     const route = legacyResponseFor('/api/historico')!;
     const errors = {
       'before: um dia AAAA-MM-DD': 'antes: um dia AAAA-MM-DD',
-      'days: um inteiro de 1 a 31': 'dias: um inteiro de 1 a 31',
-      'search: até 100 caracteres': 'busca: até 100 caracteres',
+      [`days: um inteiro de 1 a ${DIAS_MAXIMO}`]: `dias: um inteiro de 1 a ${DIAS_MAXIMO}`,
+      [`search: até ${HISTORY_SEARCH_MAX} caracteres`]: `busca: até ${HISTORY_SEARCH_MAX} caracteres`,
       'o núcleo subiu sem o histórico': 'o núcleo subiu sem o histórico',
     };
     for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('the error texts with a limit in them follow the limit: the spec holds the exact current message', () => {
+    // legacy-routes.ts imports nothing, so its keys spell the numbers out; a limit that moves fails here.
+    const has = (route: 'events' | 'history', message: string) =>
+      assert.ok(Object.hasOwn(LEGACY_BODIES[route].response?.values?.['.error'] ?? {}, message), `${route}: ${message}`);
+    has('events', `limit: um inteiro de 1 a ${LIMITE_MAXIMO}`);
+    has('events', `search: até ${SEARCH_MAX} caracteres`);
+    has('history', `days: um inteiro de 1 a ${DIAS_MAXIMO}`);
+    has('history', `search: até ${HISTORY_SEARCH_MAX} caracteres`);
   });
 });

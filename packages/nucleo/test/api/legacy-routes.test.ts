@@ -164,6 +164,19 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     await same('/api/kanban?view=agents', '/api/kanban?visao=agentes');
   });
 
+  test('the sessions `status`/`order` values are that route\'s alone: `/api/eventos?status=erro` answers its old 400', async () => {
+    const events = await call('/api/eventos?status=erro');
+    assert.deepEqual(events, { status: 400, location: null, body: { error: 'status: um de active, waiting, error, completed' } });
+    assert.equal(normalizeLegacyUrl(new URL(`http://x/api/sessoes/${DEMO_SESSION}/eventos?status=erro`)).search, '?status=erro', 'the session events too');
+    assert.equal(normalizeLegacyUrl(new URL('http://x/api/eventos?status=erro&ordem=custo')).search, '?status=erro&order=custo');
+    // The sessions list keeps both value sets, on the old path and on the new one.
+    const old = await call('/api/sessoes?status=esperando&ordem=custo');
+    assert.equal(old.status, 200);
+    assert.deepEqual(old, await call('/api/sessoes?status=waiting&order=cost'));
+    assert.deepEqual(asOld('/api/sessoes', await call('/api/sessions?status=esperando&order=custo')), old);
+    assert.equal(normalizeLegacyUrl(new URL('http://x/api/sessoes?status=esperando&ordem=custo')).search, '?status=waiting&order=cost');
+  });
+
   test('GET /api/load answers like /api/carga (the counters move with each request)', async () => {
     const a = await call('/api/load');
     const b = await call('/api/carga');

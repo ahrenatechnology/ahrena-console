@@ -172,7 +172,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
     assert.equal(ok.status, 200);
     const corpo = JSON.parse(ok.corpo) as ListaDeSessoesHttp;
     assert.ok(corpo.items.every((s) => s.status === 'waiting'));
-    // The old values are still accepted (ENGLISH_VALUES), on the new route too.
+    // The old values are still accepted (ENGLISH_VALUES_BY_PATH), on the new route too.
     assert.equal((await pedir(api.url, '/api/sessions?status=esperando&order=custo&direction=asc&page=1')).corpo, ok.corpo);
     const erros: Record<string, string> = {
       'status=nenhuma': 'status: um de all, active, waiting, completed, error, abandoned',
@@ -219,11 +219,7 @@ describe('#28 a tela Sessões', () => {
     assert.deepEqual(e, { status: 'waiting', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
     assert.deepEqual(stateFromQuery(queryFromState(e)), e);
     assert.equal(queryFromState(e), '?status=waiting&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
-    assert.deepEqual(stateFromQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2'), e, 'an old bookmark still works');
-    for (const [old, status] of [['todas', 'all'], ['ativas', 'active'], ['esperando', 'waiting'], ['concluidas', 'completed'], ['erro', 'error'], ['abandonadas', 'abandoned']]) {
-      assert.equal(stateFromQuery(`?status=${old}`).status, status, old);
-    }
-    for (const [old, order] of [['atividade', 'activity'], ['duracao', 'duration'], ['custo', 'cost']]) assert.equal(stateFromQuery(`?order=${old}`).order, order, old);
+    // An old bookmark's values (`esperando`, `custo`) are the shell's job (legacyUrl, ui.test.ts).
     assert.equal(queryFromState(stateFromQuery('')), '');
     assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });

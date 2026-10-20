@@ -127,7 +127,7 @@ As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173). As antigas contin
 | Antiga | Nova |
 | --- | --- |
 | `/ui/sessoes`, `/ui/sessoes/<id>` | `/ui/sessions`, `/ui/sessions/<id>` |
-| `/ui/sessoes?busca=&ordem=&sentido=&pagina=` | `/ui/sessions?search=&order=&direction=&page=` |
+| `/ui/sessoes?busca=&ordem=&sentido=&pagina=`, `?status=esperando&ordem=custo` | `/ui/sessions?search=&order=&direction=&page=`, `?status=waiting&order=cost` |
 | `/ui/sessoes/<id>#agentes`, `#conversa`, `#tempo`, `#decisoes` | `/ui/sessions/<id>#agents`, `#conversation`, `#timeline`, `#decisions` |
 | `/ui/historico` | `/ui/history` |
 | `/ui/mural` | `/ui/wall` |
