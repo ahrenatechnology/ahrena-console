@@ -1,0 +1,176 @@
+# Build e release do app desktop (apps/desktop, issue #90): um DMG por arquitetura do Mac,
+# assinado ad hoc, e, com a chave do updater, os artefatos que o app usa para se atualizar.
+#
+# Quando cria a release (rascunho, publicada à mão depois):
+# - push de uma tag `app-vX.Y.Z` igual à versão do tauri.conf.json;
+# - "Run workflow" com `criar_release` marcado;
+# - "Run workflow" a partir de uma tag `app-v…` (a ref é a tag, como no push dela).
+# Nos outros casos só faz a build e sobe o DMG como artefato do workflow.
+#
+# Como provar este workflow num pull request: o `workflow_dispatch` só aparece na aba Actions
+# depois que o arquivo está no main. Por isso ele também roda em PR que mexe neste arquivo ou no
+# tauri.conf.json, só com a build, sem release e sem a chave do updater.
+#
+# Antes de mexer aqui, veja a seção "Release" de apps/desktop/README.md.
+
+name: app-release
+
+on:
+  push:
+    tags: ['app-v*']
+  workflow_dispatch:
+    inputs:
+      criar_release:
+        description: Criar a release (rascunho) com a tag app-v<versão do tauri.conf.json>
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/app-release.yml
+      - apps/desktop/src-tauri/tauri.conf.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  # Num PR, um push novo cancela a build anterior; uma release nunca é cancelada no meio.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build (${{ matrix.arquitetura }})
+    runs-on: macos-latest
+    # O job todo recebe `contents: write` porque o mesmo passo (tauri-action) builda e cria a
+    # release; a permissão não pode depender do evento. Para não expor o token de escrita ao
+    # código que a build roda num PR: o checkout não guarda credenciais e o GITHUB_TOKEN só é
+    # passado ao tauri-action quando a release vai ser criada (tag ou `criar_release`).
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - alvo: aarch64-apple-darwin
+            arquitetura: aarch64
+          - alvo: x86_64-apple-darwin
+            arquitetura: x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Tag e versão do app
+        id: plano
+        env:
+          EVENTO: ${{ github.event_name }}
+          TIPO_DA_REF: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+          CRIAR_RELEASE: ${{ inputs.criar_release }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          versao=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "$TIPO_DA_REF" = tag ] && [ "$TAG" != "app-v$versao" ]; then
+            echo "::error::A tag $TAG não bate com a versão $versao do tauri.conf.json (esperava app-v$versao)."
+            exit 1
+          fi
+          release=false
+          if [ "$EVENTO" != pull_request ] && { [ "$TIPO_DA_REF" = tag ] || [ "$CRIAR_RELEASE" = true ]; }; then
+            release=true
+          fi
+          # Publicar o rascunho criado pelo "Run workflow" cria a tag, e o push dela dispara este
+          # workflow de novo. O tauri-action reaproveitaria a release já publicada e trocaria os
+          # assets dela. Se a release da tag já está publicada, só builda. Se ela não existe (o
+          # `gh` falha), segue criando.
+          if [ "$EVENTO" = push ] && [ "$TIPO_DA_REF" = tag ] && [ "$release" = true ]; then
+            rascunho=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
+            if [ "$rascunho" = false ]; then
+              echo "::notice::A release $TAG já está publicada: só a build, sem mexer na release."
+              release=false
+            fi
+          fi
+          echo "Versão $versao; release: $release"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+      # A chave privada do updater é um segredo do repositório. Sem ela (PR de fork, ou antes de
+      # o projeto gerar a chave) a build sai sem updater. Num PR a chave nunca é usada: o código
+      # do PR rodaria com ela no ambiente.
+      - name: Updater (chave de assinatura)
+        id: updater
+        env:
+          TEM_CHAVE: ${{ github.event_name != 'pull_request' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          ALVO: ${{ matrix.alvo }}
+        run: |
+          pubkey=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').plugins?.updater?.pubkey ?? ''")
+          if [ "$TEM_CHAVE" != true ]; then
+            echo "::warning::Sem o segredo TAURI_SIGNING_PRIVATE_KEY (ou num PR): a build sai sem updater (sem latest.json nem .app.tar.gz.sig)."
+            ligado=false
+          elif [ -z "$pubkey" ]; then
+            echo "::error::Há o segredo TAURI_SIGNING_PRIVATE_KEY, mas plugins.updater.pubkey do tauri.conf.json está vazio: cole a chave pública lá (veja apps/desktop/README.md, seção Release)."
+            exit 1
+          else
+            ligado=true
+          fi
+          echo "assinar=$ligado" >> "$GITHUB_OUTPUT"
+          echo "includeUpdaterJson=$ligado" >> "$GITHUB_OUTPUT"
+          echo "args=--target $ALVO --config '{\"bundle\":{\"createUpdaterArtifacts\":$ligado}}'" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: ${{ matrix.alvo }}
+
+      - name: Dependências do app
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build (e release, se for o caso)
+        id: tauri
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ steps.plano.outputs.release == 'true' && secrets.GITHUB_TOKEN || '' }}
+          # Assinatura ad hoc: o macOS pede "Abrir Mesmo Assim" na primeira abertura.
+          APPLE_SIGNING_IDENTITY: '-'
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.updater.outputs.assinar == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.updater.outputs.assinar == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          # Notarização (desligada; precisa da conta Apple Developer). Para ligar, crie os segredos
+          # e troque o APPLE_SIGNING_IDENTITY acima por estas linhas:
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}                   # o .p12 do Developer ID, em base64
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}         # "Developer ID Application: … (TEAMID)"
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}                         # senha de app do Apple ID
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: apps/desktop
+          args: ${{ steps.updater.outputs.args }}
+          includeUpdaterJson: ${{ steps.updater.outputs.includeUpdaterJson }}
+          # Sem tagName o tauri-action só builda; com ele, cria a release (rascunho) e sobe os assets.
+          tagName: ${{ steps.plano.outputs.release == 'true' && 'app-v__VERSION__' || '' }}
+          releaseName: ${{ steps.plano.outputs.release == 'true' && 'app-v__VERSION__' || '' }}
+          releaseBody: Veja como instalar em apps/desktop/README.md (seção Instalar).
+          releaseDraft: true
+          prerelease: false
+
+      - name: Artefatos da build
+        if: steps.plano.outputs.release != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ahrena-console-${{ matrix.arquitetura }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.alvo }}/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/${{ matrix.alvo }}/release/bundle/macos/*.app.tar.gz
+            apps/desktop/src-tauri/target/${{ matrix.alvo }}/release/bundle/macos/*.app.tar.gz.sig
+          if-no-files-found: error
