@@ -47,6 +47,10 @@ const ICONES = {
   'an-alerta': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   'an-baixar': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
   'an-relogio': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  // Mural ao vivo (C2, #34)
+  mural: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  'mural-loader': '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  'mural-check': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   // Sessões (C3, #28)
   buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   'abrir-lista': '<path d="m6 9 6 6 6-6"/>',

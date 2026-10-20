@@ -14,8 +14,9 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
+| `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
-| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `sessoes.js` (C3, #28) lê `GET /api/sessoes`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `sessoes.css`), carregado pela própria tela |
+| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`), carregado pela própria tela |
 | `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
 
@@ -83,4 +84,4 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 - **A única escrita é o "Abrir no Claude Desktop"** (`abrirNoDesktop()` de `ler.js`): `POST /abrir/<local_…>`, o único POST que o núcleo aceita com o `Origin` da página.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
-- **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe.
+- **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
