@@ -6,6 +6,12 @@
 // pergunta, plano e decisão; depois erro; depois a sua vez. Dentro de cada grupo, quem espera há
 // mais tempo. A conta sai só com rótulo e cor, nunca o id. Sem texto da conversa.
 //
+// Remote machines (#176): the sessions of each remote núcleo that need you come in the same list,
+// marked with `machine: { id, label }` and with `local: null` (the Claude Desktop of this Mac does
+// not know them, so the tray offers no "Abrir no Claude Desktop"). This machine's sessions have
+// `machine: null`. The remote's answer is validated item by item: what does not have the shape is
+// left out, and nothing of a remote's own remotes is passed on.
+//
 // Para acompanhar, o cliente lê esta rota e depois espera em
 // `GET /api/changes?since=<cursor>&wait=25`, a partir do `cursor` daqui; com `reiniciar: true`,
 // relê tudo.
@@ -13,6 +19,7 @@
 import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
 import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
 import type { MotivoDaAtencao, NivelDeAtencao } from './atencao.ts';
+import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
 /** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
@@ -56,6 +63,60 @@ export interface ItemDaAtencao {
   minutos: number;
   /** O `local_…` do Claude Desktop, quando ele conhece a sessão (`POST /open/<local_…>`). */
   local: string | null;
+  /** The remote machine the session runs on (#176); `null` for this machine. */
+  machine: { id: string; label: string } | null;
+}
+
+/** A remote machine whose sessions enter the list (#176, `RemoteMachine` in src/telemetry/remote.ts). */
+export interface RemoteAttentionSource {
+  id: string;
+  label: string;
+  /** The remote núcleo's last `GET /api/attention` answer; `null` while it cannot be read. */
+  attention(): unknown;
+}
+
+const ATTENTION_LEVELS: readonly NivelDeAtencao[] = ['precisa', 'sua-vez'];
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const text = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
+/** An account color, as the local ones (src/api/contas.ts): `#rrggbb`. */
+const HEX = /^#[0-9a-f]{6}$/i;
+/** The neutral account color (the gray of `CORES_DAS_CONTAS`), for a remote color that is not hex. */
+const NEUTRAL_ACCOUNT_COLOR = paleta.gray['200'];
+/** The most a remote may add to `ativas` or `comErro`. */
+const MAX_REMOTE_COUNT = 10_000;
+
+/** The remote's items that have this route's shape, marked with the machine; at most 200. */
+export function remoteAttentionItems(body: unknown, machine: { id: string; label: string }): ItemDaAtencao[] {
+  const items = isObject(body) && Array.isArray(body.itens) ? body.itens.slice(0, 200) : [];
+  const out: ItemDaAtencao[] = [];
+  for (const i of items) {
+    if (!isObject(i) || (i.machine !== null && i.machine !== undefined)) continue;
+    const reason = i.motivo as MotivoDaAtencao;
+    const level = i.nivel as NivelDeAtencao;
+    const session = text(i.sessao, 128);
+    const since = text(i.desde, 40);
+    if (!session || !since || !Number.isFinite(Date.parse(since)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
+    if (!Number.isFinite(i.minutos) || (i.minutos as number) < 0) continue;
+    const account =
+      isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string'
+        ? { rotulo: i.conta.rotulo.slice(0, 40), cor: HEX.test(i.conta.cor) ? i.conta.cor : NEUTRAL_ACCOUNT_COLOR }
+        : null;
+    out.push({
+      sessao: session,
+      titulo: text(i.titulo, 200) ?? '',
+      projeto: text(i.projeto, 200),
+      conta: account,
+      nivel: level,
+      motivo: reason,
+      motivoCurto: MOTIVO_CURTO[reason],
+      motivoLongo: text(i.motivoLongo, 300) ?? MOTIVO_CURTO[reason],
+      desde: since,
+      minutos: i.minutos as number,
+      local: null,
+      machine: { id: machine.id, label: machine.label },
+    });
+  }
+  return out;
 }
 
 export interface RespostaDaAtencao {
@@ -72,7 +133,7 @@ export interface RespostaDaAtencao {
   itens: ItemDaAtencao[];
 }
 
-export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null): Promise<RespostaDaAtencao> {
+export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null, remotes: readonly RemoteAttentionSource[] = []): Promise<RespostaDaAtencao> {
   const lista = await precisamDeVoce(frota, null);
   const itens = lista.map((i): ItemDaAtencao => {
     const motivo = MOTIVO[i.reason];
@@ -88,13 +149,22 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
       desde: i.waitingSince,
       minutos: i.waitingMinutes,
       local: i.open.desktopSessionId,
+      machine: null,
     };
   });
-  // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
-  const grupo = (i: ItemDaAtencao) => (i.nivel === 'sua-vez' ? 2 : i.motivo === 'erro' ? 1 : 0);
-  itens.sort((a, b) => grupo(a) - grupo(b) || a.desde.localeCompare(b.desde) || a.sessao.localeCompare(b.sessao));
   let ativas = 0;
   let comErro = 0;
+  for (const r of remotes) {
+    const body = r.attention();
+    itens.push(...remoteAttentionItems(body, r));
+    if (isObject(body)) {
+      if (Number.isInteger(body.ativas) && (body.ativas as number) >= 0) ativas += Math.min(body.ativas as number, MAX_REMOTE_COUNT);
+      if (Number.isInteger(body.comErro) && (body.comErro as number) >= 0) comErro += Math.min(body.comErro as number, MAX_REMOTE_COUNT);
+    }
+  }
+  // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
+  const grupo = (i: ItemDaAtencao) => (i.nivel === 'sua-vez' ? 2 : i.motivo === 'erro' ? 1 : 0);
+  itens.sort((a, b) => grupo(a) - grupo(b) || a.desde.localeCompare(b.desde) || a.sessao.localeCompare(b.sessao) || (a.machine?.id ?? '').localeCompare(b.machine?.id ?? ''));
   for (const s of await frota.vivas()) {
     if (s.inbox.estado === 'error') comErro++;
     else if (ESTADOS_VIVOS.includes(s.inbox.estado) && s.inbox.estado !== 'waiting') ativas++;
