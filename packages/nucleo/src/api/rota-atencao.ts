@@ -94,10 +94,10 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     const reason = i.motivo as MotivoDaAtencao;
     const level = i.nivel as NivelDeAtencao;
     const session = text(i.sessao, 128);
-    const desde = text(i.desde, 40);
-    if (!session || !desde || !Number.isFinite(Date.parse(desde)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
+    const since = text(i.desde, 40);
+    if (!session || !since || !Number.isFinite(Date.parse(since)) || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
     if (!Number.isFinite(i.minutos) || (i.minutos as number) < 0) continue;
-    const conta =
+    const account =
       isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string'
         ? { rotulo: i.conta.rotulo.slice(0, 40), cor: HEX.test(i.conta.cor) ? i.conta.cor : NEUTRAL_ACCOUNT_COLOR }
         : null;
@@ -105,12 +105,12 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
       sessao: session,
       titulo: text(i.titulo, 200) ?? '',
       projeto: text(i.projeto, 200),
-      conta,
+      conta: account,
       nivel: level,
       motivo: reason,
       motivoCurto: MOTIVO_CURTO[reason],
       motivoLongo: text(i.motivoLongo, 300) ?? MOTIVO_CURTO[reason],
-      desde,
+      desde: since,
       minutos: i.minutos as number,
       local: null,
       machine: { id: machine.id, label: machine.label },
