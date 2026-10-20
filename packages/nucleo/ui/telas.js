@@ -23,7 +23,7 @@ export const TELAS = [
     titulo: 'Sessões',
     sub: 'As sessões registradas nesta máquina',
     icone: 'sessoes',
-    arquivo: null, // #28
+    arquivo: '/ui/telas/sessoes.js', // #28
   },
   {
     id: 'detalhe',
@@ -32,7 +32,7 @@ export const TELAS = [
     titulo: 'Sessão',
     sub: null,
     icone: 'sessoes',
-    arquivo: null, // #29 e #30
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
   },
   {
     id: 'projeto',

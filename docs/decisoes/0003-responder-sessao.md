@@ -86,7 +86,7 @@ sequenceDiagram
 | Ameaça | Defesa |
 | --- | --- |
 | Outro processo ou usuário do Mac responde | Núcleo só em `127.0.0.1`; dois tokens aleatórios em arquivo `0600` (`~/.ahrena-console/`): o da **sessão** (publica e espera) e o do **console** (lista e responde). Um não faz o papel do outro. No produto, preferir Unix socket num diretório privado (`$.http.fetch` aceita `socketPath`) |
-| Página web no navegador chama o núcleo (CSRF, DNS rebinding) | Recusa qualquer requisição com `Origin` e qualquer `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>`. O artefato fala pelo MCP da extensão, não por HTTP. Duas exceções, para a `/ui` que o próprio núcleo serve (veja abaixo) |
+| Página web no navegador chama o núcleo (CSRF, DNS rebinding) | Recusa qualquer requisição com `Origin` e qualquer `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>`. O artefato fala pelo MCP da extensão, não por HTTP. Três exceções, para a `/ui` que o próprio núcleo serve (veja abaixo) |
 | Resposta dada para outra chamada | O plugin calcula um `digest` SHA-256 de sessão, tipo, ferramenta, id da chamada e argumentos, e só aceita resposta com o mesmo `id` de pedido e o mesmo `digest`. O núcleo copia os dois do pedido guardado: o console não os escolhe |
 | Replay | Pedido com `id` aleatório e `expiraEm`. O núcleo entrega a resposta **uma vez** e encerra o pedido; o plugin guarda os ids usados. Segunda resposta: `409`; depois do prazo: `410` |
 | Resposta sem pessoa | Toda resposta leva `quem` e `canal` (`painel`, `artefato`, `hub`), que vão para a auditoria e para o texto que o modelo lê ("Permitido uma vez por ana, pelo painel") |
@@ -96,9 +96,10 @@ sequenceDiagram
 
 ### As exceções de mesma origem da `/ui`
 
-A `/ui` ([#26](https://github.com/ahrenatechnology/ahrena-console/issues/26)) é servida pelo núcleo na mesma origem, e o navegador manda `Origin` até num `fetch` da mesma origem. Por isso o núcleo aceita `Origin` em dois casos, sempre com `Host` igual a `127.0.0.1:<porta>` ou `localhost:<porta>` e `Origin` exatamente `http://<Host>`:
+A `/ui` ([#26](https://github.com/ahrenatechnology/ahrena-console/issues/26)) é servida pelo núcleo na mesma origem, e o navegador manda `Origin` até num `fetch` da mesma origem. Por isso o núcleo aceita `Origin` em três casos, sempre com `Host` igual a `127.0.0.1:<porta>` ou `localhost:<porta>` e `Origin` exatamente `http://<Host>`:
 
 - **Ler:** qualquer `GET`.
+- **Abrir a sessão no Claude Desktop** ([#29/#30](https://github.com/ahrenatechnology/ahrena-console/issues/29)): só `POST /abrir/<local_…>`, em JSON.
 - **Mover um card do Kanban do projeto** ([#80](https://github.com/ahrenatechnology/ahrena-console/issues/80)): só `POST` em exatamente `/api/projeto/mover`, com `Content-Type: application/json` (um formulário de outra página não manda sem preflight) e corpo de até 4 KiB.
 
 Toda outra escrita com `Origin`, mesmo o nosso, continua 403. A única página nessa origem é a `/ui`, que desenha o dado do núcleo e do GitHub só como texto (`textContent`) e tem uma política de conteúdo que bloqueia script de fora. Como `GET /api/projeto` chama o GitHub e gasta a cota do token, o núcleo também recusa esse `GET` quando o navegador diz `Sec-Fetch-Site: cross-site` ou `same-site` (um `<img>` de outra página não manda `Origin`).

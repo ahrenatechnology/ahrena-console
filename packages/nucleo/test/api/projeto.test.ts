@@ -450,6 +450,7 @@ describe('origem do mover (decisão 0003)', () => {
     }
   });
 
+  // O `POST /abrir/<local_…>` do Detalhe tem a própria exceção (#29/#30), com os testes dela.
   test('as outras rotas de escrita com Origin, mesmo o nosso, continuam 403', async () => {
     const { kanban } = doSimulador();
     const s = await subir({ kanban, fonte: 'demo' });
@@ -459,7 +460,6 @@ describe('origem do mover (decisão 0003)', () => {
         '/api/hooks',
         '/api/decisoes/d1/confirmar',
         '/api/decisoes/d1/descartar',
-        '/abrir/local_00000000-0000-4000-8000-000000000000',
         '/mcp',
         '/api/projeto',
         '/api/projeto/mover/',

@@ -127,3 +127,42 @@ export function escrever(rota, corpo, opcoes) {
   escritor ??= escritorHttp();
   return escritor(rota, corpo, opcoes);
 }
+
+// ---------- A única escrita da página ----------
+//
+// O "Abrir no Claude Desktop" do Detalhe: `POST /abrir/<local_…>` na própria origem, em JSON. O núcleo
+// aceita esse POST com o `Origin` da página e nenhum outro (servidor.ts). O artefato troca o
+// transporte com `usarAbridor()`.
+
+const LOCAL_DO_DESKTOP = /^local_[0-9a-f-]{36}$/;
+
+export function abridorHttp({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
+  const origem = new URL(base);
+  if (origem.protocol !== 'http:' || !LOCAIS.has(origem.hostname)) throw new ErroDeLeitura(`o console só fala com o núcleo local, não ${origem.origin}`);
+  return async function abrirPorHttp(local) {
+    if (typeof local !== 'string' || !LOCAL_DO_DESKTOP.test(local)) throw new ErroDeLeitura(`id de sessão do Desktop inválido: ${local}`);
+    const rota = `/abrir/${local}`;
+    let resposta;
+    try {
+      resposta = await fetch(new URL(rota, origem), { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: '{}', credentials: 'omit', cache: 'no-store' });
+    } catch {
+      throw new ErroDeLeitura(`O núcleo em ${origem.host} não respondeu`, { rota });
+    }
+    const corpo = await resposta.json().catch(() => null);
+    if (!resposta.ok) throw new ErroDeLeitura(corpo?.error ?? `O núcleo respondeu ${resposta.status}`, { status: resposta.status, rota });
+    return corpo;
+  };
+}
+
+let abridor = null;
+
+/** Troca o transporte do "Abrir no Claude Desktop". */
+export function usarAbridor(f) {
+  abridor = f;
+}
+
+/** Abre a conversa `local_…` no Claude Desktop, pelo núcleo. */
+export function abrirNoDesktop(local) {
+  abridor ??= abridorHttp();
+  return abridor(local);
+}

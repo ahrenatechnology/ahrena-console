@@ -40,7 +40,9 @@ import {
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
+import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
+import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
@@ -53,6 +55,7 @@ import {
   reprocessarHistorico,
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
+import { ListaDeSessoes } from './sessoes.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -71,6 +74,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
                       wireframe C11, num GitHub falso (mover vale em memória)
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
+                      A demo grava também o Detalhe da /ui: uma sessão que pede permissão
+                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
@@ -246,7 +251,9 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  await semearDetalhe(storage);
 }
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -297,7 +304,9 @@ const api: ApiLocal = await iniciarApiLocal({
   commit,
   mudancas,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
+  detalhe,
   frota: mcp.frota,
+  sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
