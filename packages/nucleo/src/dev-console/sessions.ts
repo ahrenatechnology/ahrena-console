@@ -132,6 +132,9 @@ export class DevConsoleSessions {
     const push = <T>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
 
     const waiting = new Map((await precisamDeVoce(this.frota, null)).map((i) => [i.sessionId, i]));
+    // The live list is cached (`frota.cacheMs`) and the ended-today one is not: a session that completes
+    // inside that window is in both, and is scanned once.
+    const scanned = new Set<string>();
     for (const s of await this.frota.vivas()) {
       const { repo, branch } = await this.where(s.session, s.desktop?.branch ?? null);
       if (!repo || !repos.has(repo)) continue;
@@ -168,11 +171,13 @@ export class DevConsoleSessions {
           minutes: minutosDesde(d.decidedAt, now),
         });
       }
+      scanned.add(s.session.id);
       await this.decisionsTakenToday(s.session.id, repo, today, now, (item) => push(decisionsToday, repo, item));
     }
     // Sessions that ended today count too: a decision taken at 09:00 stays "taken today" after its session completes at 09:30.
     if (this.decisions) {
       for (const ended of await this.frota.encerradasHoje()) {
+        if (scanned.has(ended.id)) continue;
         const session = await this.frota.storage.getSession(ended.id);
         if (!session) continue;
         const { repo } = await this.where(session);

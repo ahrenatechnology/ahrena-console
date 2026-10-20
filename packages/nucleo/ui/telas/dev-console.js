@@ -388,6 +388,8 @@ function truncatedNote(view) {
 
 /** What identifies a focusable node across re-renders: tag, link and text. */
 const focusKey = (node) => (node ? `${node.tagName}|${node.getAttribute?.('href') ?? ''}|${node.textContent}` : null);
+/** The focusable nodes of the screen, in document order. */
+const focusables = (area) => [...area.querySelectorAll('a'), ...area.querySelectorAll('button'), ...area.querySelectorAll('summary')];
 
 export async function montar(area, ctx) {
   const sheet = loadStylesheet();
@@ -472,7 +474,9 @@ export async function montar(area, ctx) {
     const now = Date.now();
     const wasOpen = !!area.querySelector('details.dev-more')?.hasAttribute('open');
     const active = document.activeElement;
+    // The key and which of the nodes with that key: the same PR link is in the queue and on the board.
     const focused = active && area.contains(active) ? focusKey(active) : null;
+    const focusedIndex = focused ? focusables(area).filter((n) => focusKey(n) === focused).indexOf(active) : -1;
 
     const shown = state.tab === MERGE_QUEUE_TAB ? overview : view;
     if (sub) sub.textContent = `PRs, issues e sessões dos repositórios do contexto${shown?.readAt ? ` · GitHub lido ${ago(shown.readAt, now)}` : ''}`;
@@ -512,8 +516,8 @@ export async function montar(area, ctx) {
     }
     area.replaceChildren(...parts.filter(Boolean));
     if (focused) {
-      const again = [...area.querySelectorAll('a'), ...area.querySelectorAll('button'), ...area.querySelectorAll('summary')].find((n) => focusKey(n) === focused);
-      again?.focus();
+      const same = focusables(area).filter((n) => focusKey(n) === focused);
+      (same[focusedIndex] ?? same[0])?.focus();
     }
   }
 

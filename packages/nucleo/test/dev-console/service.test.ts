@@ -223,6 +223,22 @@ describe('Dev Console of one context', () => {
     assert.deepEqual(v.decisionsToday.map((d) => [d.sessionId, d.choice, d.repo]), [['ended', 'Decidida numa sessão encerrada', DEV_CONSOLE_SIMULATOR_RULES]]);
   });
 
+  test('#179/AC-2 a session that completes while the live list is cached is counted once', async () => {
+    const contas = new Contas({ storage, arquivo: null });
+    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 60_000 });
+    const cached = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
+    await registerDecision(
+      decisions,
+      { sourceKey: 'c1', sessionId: 'plano', topic: 'c1', context: null, choice: 'Uma vez só', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-3) },
+      at(-3),
+    );
+    await cached.view('loja');
+    const s = (await storage.getSession('plano'))!;
+    await storage.putSession({ ...s, status: 'completed', endedAt: at(-1), updatedAt: at(-1) });
+    const v = (await cached.view('loja'))!;
+    assert.deepEqual(v.decisionsToday.filter((d) => d.choice === 'Uma vez só').length, 1);
+  });
+
   test('#179/AC-2 "today" is the machine day: in America/Sao_Paulo a decision at 01:00 UTC is yesterday', async () => {
     const decide = (key: string, choice: string, minutesAgo: number) =>
       registerDecision(

@@ -449,6 +449,19 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(document.activeElement, m.area.querySelector('details.dev-more summary'), 'focus back on the new summary');
   });
 
+  test('#179/AC-2 the focus stays on the same copy of a link that is both in the queue and on the board', async () => {
+    const m = mount(readerOf(() => devConsole));
+    await m.ready;
+    const onBoard = m.area.querySelectorAll('.dev-board a.dev-ext').find((a) => a.getAttribute('href')?.includes('/pull/81'))!;
+    const href = onBoard.getAttribute('href');
+    assert.ok(m.area.querySelectorAll('.dev-queue a').some((a) => a.getAttribute('href') === href), 'the PR link is also in the queue');
+    onBoard.focus();
+    m.restart();
+    await until(() => m.reads.length === 4);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok((document.activeElement as unknown as ElementoFalso).closest('.dev-board'), 'focus stays on the board copy');
+  });
+
   test('#179/AC-1 tab switch: loading at once, and the last tab clicked wins over a late answer', async () => {
     const read = readerOf(() => devConsole);
     let releaseLoja!: () => void;
