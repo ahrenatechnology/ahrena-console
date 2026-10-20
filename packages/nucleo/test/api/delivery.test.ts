@@ -8,7 +8,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, type DeliveryOptions } from '../../src/api/analytics-route.ts';
 import { activeHoursPerDay, GROUP_BY_ERROR, KEY_ERROR, openItemState, OPEN_ITEM_STATES, type DeliveryGithubRead } from '../../src/api/delivery.ts';
-import { createCoreDelivery, DeliveryGithub, latestProjects, projectGroupOf } from '../../src/api/delivery-github.ts';
+import { createCoreDelivery, DeliveryGithub, latestProjects, projectGroupOf, RETRY_AFTER_FAILURE_MS } from '../../src/api/delivery-github.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubCache, MemoryCacheStore, RateLimitedError } from '../../src/github/cache.ts';
 import { DELIVERY_QUERIES, GithubDeliverySource, type DeliveryOpenRaw, type DeliveryRaw, type DeliverySource } from '../../src/github/delivery-source.ts';
@@ -389,6 +389,25 @@ describe('#266 DeliveryGithub: the screen learns of every outcome', () => {
     await none.settle();
     assert.equal(recorded.length, 2);
     assert.equal((await none.read(['exemplo-labs/alpha'])).status, 'disconnected');
+  });
+
+  test('#266/AC-8: no token is retried after the backoff, not on every request', async () => {
+    let now = NOW;
+    let calls = 0;
+    const none = new DeliveryGithub({ source: { delivery: async () => { calls++; throw new SemGithubError('gh sem login'); } }, cache: new GithubCache({ store: new MemoryCacheStore(), now: () => now }), now: () => now });
+    await none.read(['exemplo-labs/alpha']);
+    await none.settle();
+    assert.equal(calls, 1);
+    now += RETRY_AFTER_FAILURE_MS - 1;
+    const inside = await none.read(['exemplo-labs/alpha']);
+    assert.equal(inside.status, 'disconnected');
+    assert.equal(inside.pending, 0);
+    await none.settle();
+    assert.equal(calls, 1, 'a second read inside the window makes no new source call');
+    now += 1;
+    assert.equal((await none.read(['exemplo-labs/alpha'])).pending, 1);
+    await none.settle();
+    assert.equal(calls, 2);
   });
 
   test('#266/AC-5: the Projects never wait for GitHub: the last read answers while the next one runs', async () => {

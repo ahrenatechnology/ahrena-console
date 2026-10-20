@@ -57,6 +57,8 @@ export class DeliveryGithub {
   private readonly running = new Map<string, Promise<void>>();
   /** The reason the last read of each repository failed; cleared by the next one that works. */
   private readonly failures = new Map<string, { reason: string; at: number }>();
+  /** When a read of each repository last found no token; it waits `RETRY_AFTER_FAILURE_MS` like a failure. */
+  private readonly noTokenAt = new Map<string, number>();
   private noToken = false;
 
   constructor({ source, cache, queue = new GithubCallQueue(), changes = null, now = Date.now, ttlMs = DELIVERY_TTL_MS, log = () => {} }: DeliveryGithubOptions) {
@@ -77,7 +79,7 @@ export class DeliveryGithub {
     const hits = await Promise.all(repos.map((repo) => this.cache.peek<DeliveryRaw | null>(deliveryCacheKey(repo))));
     for (const [i, repo] of repos.entries()) {
       const hit = hits[i];
-      const failedAt = this.failures.get(repo)?.at ?? -Infinity;
+      const failedAt = Math.max(this.failures.get(repo)?.at ?? -Infinity, this.noTokenAt.get(repo) ?? -Infinity);
       // A failed read is retried after `RETRY_AFTER_FAILURE_MS`, not on every request.
       if ((!hit || this.now() - hit.fetchedAt >= this.ttlMs) && this.now() - failedAt >= RETRY_AFTER_FAILURE_MS) this.refresh(repo);
       if (this.running.has(repo)) out.pending++;
@@ -116,6 +118,7 @@ export class DeliveryGithub {
       .get<DeliveryRaw | null>(deliveryCacheKey(repo), this.ttlMs, async () => ({ value: await this.queue.run(() => this.source!.delivery(owner, name, since)) }))
       .then((r) => {
         this.noToken = false;
+        this.noTokenAt.delete(repo);
         if (r.stale) fail(r.staleReason ?? 'o GitHub não respondeu');
         else {
           this.failures.delete(repo);
@@ -127,8 +130,10 @@ export class DeliveryGithub {
         if (cause instanceof SemGithubError) {
           this.noToken = true;
           this.failures.delete(repo);
+          this.noTokenAt.set(repo, this.now());
           return;
         }
+        this.noTokenAt.delete(repo);
         fail(reason(cause ?? err));
         this.log(`delivery: reading ${repo} failed: ${reason(err)}`);
       })
