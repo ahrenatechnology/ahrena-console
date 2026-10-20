@@ -18,8 +18,8 @@ import {
   type EventosDoDetalhe,
 } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
-import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from '../../src/simulator/detail.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
+import { DETAIL_LOCAL, demoLocal, DETAIL_SESSION, seedDetail } from '../../src/simulator/detail.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { httpOpener } from '../../ui/api.js';
 // @ts-expect-error: idem
@@ -40,12 +40,12 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
 
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
-    await semearDetalhe(storage, AGORA);
-    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+    await seedPanelScenario(storage, 'p4', AGORA);
+    await seedDetail(storage, AGORA);
+    const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     // Como na --demo: o painel troca qualquer id pelo da sessão do cenário; o Detalhe, não.
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
-    const detalhe = new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: localDaDemo });
+    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
+    const detalhe = new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: demoLocal });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, detalhe, abrirNoDesktop: async (url) => void abertos.push(url) });
     host = new URL(api.url).host;
   });
@@ -55,8 +55,8 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
   });
 
   test('o topo (A5): a sessão pedida, não a do apelido, com status, motivo, faixa, pílulas e o local', async () => {
-    const c = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}`);
-    assert.equal(c.session.id, SESSAO_DO_DETALHE);
+    const c = await read<CabecaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}`);
+    assert.equal(c.session.id, DETAIL_SESSION);
     assert.equal(c.session.title, 'Migração do esquema de pedidos');
     assert.equal(c.session.status, 'waiting');
     assert.equal(c.session.reason, 'notification');
@@ -65,19 +65,19 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.equal(c.session.model, 'claude-opus-5-5');
     assert.equal(c.session.cwd, '/simulacao/motor-de-regras');
     assert.equal(c.branch, 'feat/58-pedidos');
-    assert.equal(c.local, LOCAL_DO_DETALHE);
+    assert.equal(c.local, DETAIL_LOCAL);
     assert.equal(c.command, 'npm run migrate', 'a faixa mostra o comando em código');
     assert.ok(c.cost && c.cost.usd! > 1, 'o custo das mensagens da sessão');
     assert.equal(c.endedAt, null);
-    assert.deepEqual(c.counts, { agents: 2, events: (await storage.listEvents(SESSAO_DO_DETALHE, { limit: 500 })).items.length });
+    assert.deepEqual(c.counts, { agents: 2, events: (await storage.listEvents(DETAIL_SESSION, { limit: 500 })).items.length });
 
-    const p4 = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}`);
+    const p4 = await read<CabecaDoDetalhe>(`/api/sessions/${PANEL_SESSION}`);
     assert.equal(p4.session.title, 'Separar pagamentos em serviços');
     assert.equal(p4.local, null, 'sessão sem Desktop: sem local');
     assert.equal(p4.session.banner, null);
     assert.equal(p4.command, null);
     // The old route answers the same top with the old keys and values.
-    const antigo = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}`);
+    const antigo = await read<any>(`/api/sessoes/${DETAIL_SESSION}`);
     assert.deepEqual([antigo.sessao.faixa.tipo, antigo.comando, antigo.contagens.agentes], ['permissao', 'npm run migrate', 2]);
   });
 
@@ -85,12 +85,12 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.equal((await fetch(`${api.url}/api/sessoes/${encodeURIComponent('a b')}`)).status, 400);
     assert.equal((await fetch(`${api.url}/api/sessoes/nao-existe`)).status, 404);
     assert.equal((await fetch(`${api.url}/api/sessoes/nao-existe/conversa`)).status, 404);
-    assert.equal((await fetch(`${api.url}/api/sessoes/${SESSAO_DO_DETALHE}/outra`)).status, 404);
+    assert.equal((await fetch(`${api.url}/api/sessoes/${DETAIL_SESSION}/outra`)).status, 404);
     assert.equal((await fetch(`${api.url}/api/sessoes`)).status, 404);
   });
 
   test('Agentes (C4): números, ferramentas contadas uma vez por chamada, tarefas, tokens e custo por nó', async () => {
-    const a = await read<AgentesDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}/agents`);
+    const a = await read<AgentesDoDetalhe>(`/api/sessions/${PANEL_SESSION}/agents`);
     assert.equal(a.numbers.subagents, 4);
     assert.equal(a.numbers.errors, 0);
     assert.ok(a.numbers.running);
@@ -118,8 +118,8 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
   });
 
   test('Conversa (C5): mensagens em ordem, o prompt do hook e o do transcript uma vez só, e o Bash aguardando permissão', async () => {
-    const c = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation`);
-    assert.equal(c.agent, `${SESSAO_DO_DETALHE}:main`);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}/conversation`);
+    assert.equal(c.agent, `${DETAIL_SESSION}:main`);
     assert.deepEqual(c.agents.map((a) => a.name), ['Agente principal', 'Explore']);
     assert.deepEqual(c.messages.map((m) => m.role), ['you', 'assistant', 'you', 'assistant', 'you', 'assistant']);
     assert.equal(c.total, 6);
@@ -133,24 +133,24 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.deepEqual([ultima.tools[0]!.name, ultima.tools[0]!.summary, ultima.tools[0]!.state], ['Bash', 'npm run migrate', 'permission']);
     assert.match(ultima.tools[0]!.input!, /npm run migrate/);
 
-    const explore = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?agent=${encodeURIComponent(c.agents[1]!.id)}`);
+    const explore = await read<ConversaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}/conversation?agent=${encodeURIComponent(c.agents[1]!.id)}`);
     assert.equal(explore.agent, c.agents[1]!.id);
     assert.deepEqual(explore.messages.map((m) => m.tools.map((f) => f.name)), [['Read', 'Grep'], []]);
     assert.ok(explore.messages.every((m) => m.tools.every((f) => f.state !== 'permission')), 'só o principal espera a permissão');
 
-    const ultimas = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?limit=2`);
+    const ultimas = await read<ConversaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}/conversation?limit=2`);
     assert.equal(ultimas.total, 6);
     assert.deepEqual(ultimas.messages.map((m) => m.text), ['pode seguir', 'Vou aplicar a migração no banco local.']);
-    const outro = await read<ConversaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}/conversation?agent=qualquer`);
+    const outro = await read<ConversaDoDetalhe>(`/api/sessions/${DETAIL_SESSION}/conversation?agent=qualquer`);
     assert.equal(outro.agent, c.agent, 'agente que não é da sessão: o principal');
     // The old route and parameters answer the same conversation with the old keys and values.
-    const antiga = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}/conversa?limite=2`);
+    const antiga = await read<any>(`/api/sessoes/${DETAIL_SESSION}/conversa?limite=2`);
     assert.deepEqual(antiga.mensagens.map((m: any) => [m.papel, m.texto]), [['voce', 'pode seguir'], ['assistente', 'Vou aplicar a migração no banco local.']]);
   });
 
   test('Conversa: o texto do transcript volta como texto, sem virar HTML', async () => {
     const id = 'sim-detalhe-html';
-    await storage.putSession({ ...(await storage.getSession(SESSAO_DO_DETALHE))!, id, awaitingInputSince: null, awaitingReason: null });
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, awaitingInputSince: null, awaitingReason: null });
     const veneno = '<img src=x onerror="alert(1)"> `<b>`';
     await storage.appendEvent({ id: `${id}-e1`, sessionId: id, agentId: null, type: 'UserPrompt', toolName: null, summary: veneno, data: null, createdAt: new Date(AGORA).toISOString() });
     const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
@@ -161,7 +161,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
   });
 
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {
-    const base = `/api/sessions/${SESSAO_DO_DETALHE}/events`;
+    const base = `/api/sessions/${DETAIL_SESSION}/events`;
     const tudo = await read<EventosDoDetalhe>(`${base}?limit=500`);
     assert.equal(tudo.total, tudo.filtered);
     assert.equal(tudo.items[0]!.type, 'Notification');
@@ -193,13 +193,13 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     // Filtro malformado é ignorado, não quebra.
     assert.equal((await read<EventosDoDetalhe>(`${base}?from=ontem&status=talvez&type=${encodeURIComponent('<x>')}`)).filtered, tudo.total);
     // The old route and parameters answer the same page with the old keys.
-    const antiga = await read<any>(`/api/sessoes/${SESSAO_DO_DETALHE}/eventos?ferramenta=Bash&tipo=PreToolUse`);
+    const antiga = await read<any>(`/api/sessoes/${DETAIL_SESSION}/eventos?ferramenta=Bash&tipo=PreToolUse`);
     assert.deepEqual(antiga.itens.map((e: any) => e.resumo), ['npm run migrate', 'npm test -- pedidos']);
     assert.equal(antiga.filtrados, bash.filtered);
   });
 
   test('"Abrir no Claude Desktop": o POST /abrir da própria página passa; outro Origin, não (decisão 0003)', async () => {
-    const local = LOCAL_DO_DETALHE;
+    const local = DETAIL_LOCAL;
     const post = (caminho: string, headers: Record<string, string>) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
     const json = { 'content-type': 'application/json' };
     assert.equal((await post(`/abrir/${local}`, { ...json, origin: `http://${host}` })).status, 200);
@@ -221,7 +221,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
 
   test('o abridor da página manda o POST em JSON e só com um local_… estrito', async () => {
     const abrir = httpOpener({ base: api.url });
-    assert.deepEqual(await abrir(LOCAL_DO_DETALHE), { ok: true });
+    assert.deepEqual(await abrir(DETAIL_LOCAL), { ok: true });
     await assert.rejects(abrir('local_x"><script>'), /inválido/);
     await assert.rejects(abrir('../api/hooks'), /inválido/);
     assert.throws(() => httpOpener({ base: 'http://exemplo.com:4720' }), /núcleo local/);

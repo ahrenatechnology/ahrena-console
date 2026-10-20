@@ -19,16 +19,16 @@ import { SessionHistory } from '../../src/history/reading.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { withChanges, SessionAccounts, decisionsWithChanges } from '../../src/changes/sources.ts';
-import { localDaDemo, semearDetalhe } from '../../src/simulator/detail.ts';
-import { semearHistoricoDoPainel } from '../../src/simulator/history-ended.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulator/project.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
+import { demoLocal, seedDetail } from '../../src/simulator/detail.ts';
+import { seedPanelHistory } from '../../src/simulator/history-ended.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
+import { SIMULATOR_PROJECT, SimulatorProject } from '../../src/simulator/project.ts';
+import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
 /** The "this session" of the demo panel (p4). */
-export const DEMO_SESSION = SESSAO_DO_PAINEL;
+export const DEMO_SESSION = PANEL_SESSION;
 /** The id the mod sends for the demo session: the server reads it as `DEMO_SESSION`. Any other id is read as it is. */
 export const DEMO_ALIAS = 'demo';
 /** The repository of the demo decisions (p9), whose records folder lives under the temp dir. */
@@ -59,15 +59,15 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   const sessionAccounts = new SessionAccounts(sqlite);
   const storage = withChanges(sqlite, changes, sessionAccounts);
   const decisions = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
-  const work = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: clock });
+  const work = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: clock });
   const accounts = new Contas({ storage, arquivo: null });
   const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id) });
-  await semearCenariosDoPainel(storage, 'p4', NOW);
+  await seedPanelScenario(storage, 'p4', NOW);
   // The decisions of the p9 scenario (p4 has none): a suggested one to confirm and undo.
-  await semearDecisoesDoPainel(decisions, 'p9', NOW);
-  await semearWorkflowsDoDemo(storage, NOW);
-  await semearDetalhe(storage, NOW);
-  await semearHistoricoDoPainel(storage, decisions, 'p4', NOW);
+  await seedPanelDecisions(decisions, 'p9', NOW);
+  await seedDemoWorkflows(storage, NOW);
+  await seedDetail(storage, NOW);
+  await seedPanelHistory(storage, decisions, 'p4', NOW);
   const mcp = createMcpServer({ storage, accounts, desktop: null, now: clock, timeZone: 'UTC', log: () => {} });
   const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), frota: mcp.fleet, mudancas: changes, log: () => {} });
   const decisionsUi = new DecisoesDaUi({
@@ -78,7 +78,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     agora: clock,
     raiz: (repo) => (repo === DEMO_REPO ? repoFolder : null),
   });
-  const project = new GithubProject({ source: new ProjetoDoSimulador(NOW), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), project: PROJECT_DO_SIMULADOR });
+  const project = new GithubProject({ source: new SimulatorProject(NOW), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), project: SIMULATOR_PROJECT });
   const api = await iniciarApiLocal({
     montador: builder,
     hooks: { storage },
@@ -87,7 +87,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     abrirNoDesktop: async (url) => void opened.push(url),
     mudancas: changes,
     projeto: { kanban: project, fonte: 'demo', log: () => {} },
-    detalhe: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: localDaDemo }),
+    detalhe: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: demoLocal }),
     eventos: new FeedDeEventos({ storage }),
     frota: mcp.fleet,
     analytics: new RotaAnalytics({ storage, contas: accounts, agora: clock }),

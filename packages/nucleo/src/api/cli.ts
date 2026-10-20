@@ -32,20 +32,20 @@ import { ChangeCursor } from '../changes/cursor.ts';
 import { onMachineChange, withChanges, SessionAccounts, decisionsWithChanges } from '../changes/sources.ts';
 import { waitForChanges } from '../changes/mcp.ts';
 import {
-  apelidoDaDemo,
-  CENARIOS_DO_PAINEL,
-  FonteDeTrabalhoDoSimulador,
-  pastasDosRegistrosDaDemo,
-  semearCenariosDoPainel,
-  semearDecisoesDoPainel,
-  type CenarioDoPainel,
+  demoAlias,
+  PANEL_SCENARIOS,
+  SimulatorWorkSource,
+  demoRecordFolders,
+  seedPanelScenario,
+  seedPanelDecisions,
+  type PanelScenario,
 } from '../simulator/panel.ts';
-import { semearWorkflowsDoDemo } from '../simulator/workflows.ts';
-import { semearHistoricoDoPainel } from '../simulator/history-ended.ts';
+import { seedDemoWorkflows } from '../simulator/workflows.ts';
+import { seedPanelHistory } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulator/project.ts';
+import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
-import { localDaDemo, semearDetalhe } from '../simulator/detail.ts';
+import { demoLocal, seedDetail } from '../simulator/detail.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
@@ -222,13 +222,13 @@ const maquina = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
-const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+const fonte = demo ? new SimulatorWorkSource() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
 // Um cache do GitHub só, no banco, para o trabalho e os repositórios: a pausa por limite vale para os dois.
 const cacheDoGithub = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const trabalho = new TrabalhoPorBranch({
   fonte,
   cache: cacheDoGithub,
-  ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
+  ...(demo ? { git: SimulatorWorkSource.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
 // Sem a variável não há Project padrão: a tela explica como escolher um.
@@ -241,7 +241,7 @@ function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? ''): Pr
 const projetoEscolhido = demo || o['sem-github'] ? null : projetoDoAmbiente();
 const cacheDoProjeto = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const kanban = demo
-  ? new GithubProject({ source: new ProjetoDoSimulador(), cache: cacheDoProjeto, project: PROJECT_DO_SIMULADOR })
+  ? new GithubProject({ source: new SimulatorProject(), cache: cacheDoProjeto, project: SIMULATOR_PROJECT })
   : projetoEscolhido
     ? createGithubProject({ project: projetoEscolhido, cache: cacheDoProjeto, token: () => ghCliToken() })
     : null;
@@ -280,7 +280,7 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: apelidoDaDemo } : {}),
+  ...(demo ? { apelido: demoAlias } : {}),
 });
 
 // A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
@@ -291,7 +291,7 @@ const decisoesUi = new DecisoesDaUi({
   storage,
   // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
   alvoDe: (id) => montador.alvoDaSessao(id),
-  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  ...(pastaDaDemo ? { raiz: demoRecordFolders(pastaDaDemo) } : {}),
   localDe: async (id) => {
     await desktop?.atualizar();
     return desktop?.sessaoPorCli(id)?.localId ?? null;
@@ -299,17 +299,17 @@ const decisoesUi = new DecisoesDaUi({
 });
 
 if (demo) {
-  const cenario = o.cenario as CenarioDoPainel;
-  if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
-  await semearCenariosDoPainel(storage, cenario);
-  await semearDecisoesDoPainel(decisoes, cenario);
-  if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
+  const cenario = o.cenario as PanelScenario;
+  if (!PANEL_SCENARIOS.includes(cenario)) throw new Error(`--cenario: um de ${PANEL_SCENARIOS.join(', ')}`);
+  await seedPanelScenario(storage, cenario);
+  await seedPanelDecisions(decisoes, cenario);
+  if (cenario === 'p4') await seedDemoWorkflows(storage); // #96 e #97: as sessões das telas Workflows
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
   await seedHistory(storage);
-  await semearDetalhe(storage);
-  await semearHistoricoDoPainel(storage, decisoes, cenario);
+  await seedDetail(storage);
+  await seedPanelHistory(storage, decisoes, cenario);
 }
-const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: demoLocal } : {}) });
 
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
 const historico = new SessionHistory({ storage, decisions: decisoes, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });

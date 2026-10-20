@@ -9,7 +9,7 @@ import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, Trabalho
 import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/rota-analytics.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { seedHistory } from '../../src/simulator/history.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { account, agent, event, session } from '../fixtures.ts';
 
 // Terça-feira, 12h em São Paulo.
@@ -323,7 +323,7 @@ describe('histórico simulado da --demo', () => {
   let storage: SqliteStorage;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
+    await seedPanelScenario(storage, 'p4', AGORA);
     await seedHistory(storage, { now: AGORA });
   });
   after(() => storage.close());

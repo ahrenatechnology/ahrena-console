@@ -11,25 +11,25 @@ import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
 import { FleetReader } from '../../src/mcp/fleet.ts';
 import { ChangeCursor, type RecordedChange } from '../../src/changes/cursor.ts';
-import { criarGithubFalso, gitDaDemo, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { createFakeGithub, demoGit, type FakeGithubData, type FakeRepo } from '../../src/simulator/fake-github.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 
 const T0 = Date.parse('2026-10-15T12:00:00Z');
 const MIN = 60_000;
 
-function dados(extra: Partial<Record<string, Partial<RepoFalso>>> = {}): DadosDoGithubFalso {
-  const repos: RepoFalso[] = [
-    { dono: 'org-a', nome: 'motor-de-regras', privado: true, linguagem: 'TypeScript', permissao: 'WRITE', pushMin: 5, issues: 4, prs: 2, ci: 'FAILURE', ritmo: 10, dependabot: 3, codeScanning: 1, releases: 7, release: { tag: 'v1.0.0', diasAtras: 2 }, estrelas: 4, licenca: 'MIT' },
-    { dono: 'org-a', nome: 'app-receitas', privado: false, linguagem: 'Kotlin', permissao: 'READ', pushMin: 60, issues: 1, prs: 0, ci: 'PENDING', ritmo: 6 },
-    { dono: 'org-b', nome: 'antigo', privado: true, linguagem: 'Go', permissao: 'WRITE', pushMin: 200 * 24 * 60, issues: 0, prs: 0, ci: null, ritmo: 2 },
-    { dono: 'dev-sintetico', nome: 'cli-de-notas', privado: false, linguagem: 'Rust', permissao: 'ADMIN', pushMin: 30, issues: 2, prs: 1, ci: 'SUCCESS', ritmo: 4 },
+function dados(extra: Partial<Record<string, Partial<FakeRepo>>> = {}): FakeGithubData {
+  const repos: FakeRepo[] = [
+    { owner: 'org-a', name: 'motor-de-regras', isPrivate: true, language: 'TypeScript', permission: 'WRITE', pushMin: 5, issues: 4, prs: 2, ci: 'FAILURE', commitsPerWeek: 10, dependabot: 3, codeScanning: 1, releases: 7, release: { tag: 'v1.0.0', daysAgo: 2 }, stars: 4, license: 'MIT' },
+    { owner: 'org-a', name: 'app-receitas', isPrivate: false, language: 'Kotlin', permission: 'READ', pushMin: 60, issues: 1, prs: 0, ci: 'PENDING', commitsPerWeek: 6 },
+    { owner: 'org-b', name: 'antigo', isPrivate: true, language: 'Go', permission: 'WRITE', pushMin: 200 * 24 * 60, issues: 0, prs: 0, ci: null, commitsPerWeek: 2 },
+    { owner: 'dev-sintetico', name: 'cli-de-notas', isPrivate: false, language: 'Rust', permission: 'ADMIN', pushMin: 30, issues: 2, prs: 1, ci: 'SUCCESS', commitsPerWeek: 4 },
   ];
   return {
     login: 'dev-sintetico',
-    organizacoes: ['org-a', 'org-b'],
-    esperandoReview: 3,
-    fechadasNaSemana: 9,
-    repos: repos.map((r) => ({ ...r, ...(extra[r.nome] ?? {}) })),
+    organizations: ['org-a', 'org-b'],
+    awaitingReview: 3,
+    closedThisWeek: 9,
+    repos: repos.map((r) => ({ ...r, ...(extra[r.name] ?? {}) })),
   };
 }
 
@@ -50,7 +50,7 @@ interface Montagem {
 }
 
 interface OpcoesDaMontagem {
-  base?: DadosDoGithubFalso;
+  base?: FakeGithubData;
   fonteNula?: boolean;
   token?: () => Promise<string>;
   /** Atraso de cada resposta, em ms reais (para pedidos simultâneos ficarem visíveis). */
@@ -63,7 +63,7 @@ interface OpcoesDaMontagem {
 async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada, sinalDoPedido }: OpcoesDaMontagem = {}): Promise<Montagem> {
   const relogio = { agora: T0 };
   const agora = () => relogio.agora;
-  const gh = criarGithubFalso(base, { agora });
+  const gh = createFakeGithub(base, { now: agora });
   const modo = { atual: 'ok' as Modo };
   const status: number[] = [];
   const pedidos = { total: 0, emVoo: 0, maximoEmVoo: 0 };
@@ -90,11 +90,11 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
 
   const storage = openSqliteStorage({ path: ':memory:' });
   // P1: motor-de-regras pede permissão (precisa de você), app-receitas foi interrompida (sua vez).
-  await semearCenariosDoPainel(storage, 'p1', T0);
+  await seedPanelScenario(storage, 'p1', T0);
   const frota = new FleetReader({ storage, accounts: new Contas({ storage, arquivo: null }), now: agora, timeZone: 'UTC' });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const inicio = cursor.current;
-  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.record({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
+  const sessoes = new SessoesPorRepo({ frota, git: demoGit(base), cacheMs: 0, aoDescobrir: () => cursor.record({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
   const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
   const logs: string[] = [];
@@ -109,7 +109,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   });
   return {
     repos,
-    chamadas: gh.chamadas,
+    chamadas: gh.calls,
     status,
     agendados,
     relogio,
@@ -271,7 +271,7 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
   });
 
   test('o 202 só é tentado de novo enquanto alguém leu a resposta nos últimos 5 min; o próximo pedido retoma', async () => {
-    const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['contributors'] } }) });
+    const m = await montar({ base: dados({ 'motor-de-regras': { computeFirst: ['contributors'] } }) });
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
     assert.deepEqual(d.computing, ['contributors']);
     assert.equal(m.agendados.length, 1);
@@ -323,7 +323,7 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
   });
 
   test('o GitHub ainda calcula (202): as 12 semanas ficam vazias e o núcleo tenta de novo em 3 s', async () => {
-    const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['commit_activity'] } }) });
+    const m = await montar({ base: dados({ 'motor-de-regras': { computeFirst: ['commit_activity'] } }) });
     const l = await listaPronta(m);
     assert.deepEqual(linha(l, 'org-a/motor-de-regras').commits12, []);
     assert.deepEqual(m.agendados.map((a) => a.ms), [3_000]);
@@ -460,7 +460,7 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
   });
 
   test('estatística em 202: o campo vem nulo, o nome entra em `calculando`, e a nova tentativa preenche', async () => {
-    const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['contributors', 'code_frequency'] } }) });
+    const m = await montar({ base: dados({ 'motor-de-regras': { computeFirst: ['contributors', 'code_frequency'] } }) });
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
     assert.deepEqual(d.computing, ['frequency', 'lines', 'contributors']);
     assert.equal(d.contributors, null);
@@ -600,7 +600,7 @@ describe('#104 e #105: o serviço como o núcleo monta', () => {
     }) as typeof fetch;
     try {
       const storage = openSqliteStorage({ path: ':memory:' });
-      await semearCenariosDoPainel(storage, 'p1', T0);
+      await seedPanelScenario(storage, 'p1', T0);
       const frota = new FleetReader({ storage, accounts: new Contas({ storage, arquivo: null }) });
       const logs: string[] = [];
       const { repos } = criarReposDoNucleo({

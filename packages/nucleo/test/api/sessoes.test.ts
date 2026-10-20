@@ -8,7 +8,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type ApiLocal, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
+import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { simulate } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
@@ -49,7 +49,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
     await simulate(storage, { seed: 28, sessions: 16, chaos: true, prices: true, now: () => AGORA });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
+    await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     const contas = new Contas({ storage, arquivo: null });
     lista = new ListaDeSessoes({ storage, contas, agora: () => AGORA });
@@ -107,8 +107,8 @@ describe('#28 GET /api/sessions com o simulador', () => {
 
   test('a busca acha pelo título, pelo id e pelo diretório, sem diferença de caixa', async () => {
     const porTitulo = await listar({ busca: 'SEPARAR PAGAMENTOS' });
-    assert.deepEqual(porTitulo.items.map((s) => s.id), [SESSAO_DO_PAINEL]);
-    const alvo = sessoes.find((s) => s.id !== SESSAO_DO_PAINEL)!;
+    assert.deepEqual(porTitulo.items.map((s) => s.id), [PANEL_SESSION]);
+    const alvo = sessoes.find((s) => s.id !== PANEL_SESSION)!;
     assert.ok((await listar({ busca: alvo.id })).items.some((s) => s.id === alvo.id));
     const porDir = await tudo({ busca: 'vitrine-demo' });
     assert.ok(porDir.itens.length > 0 && porDir.itens.every((s) => s.cwd?.includes('vitrine-demo') || s.title.toLowerCase().includes('vitrine-demo')));
@@ -211,7 +211,7 @@ describe('#28 a tela Sessões', () => {
     assert.ok(existsSync(`${PASTA_DA_UI}screens/sessions.js`));
     assert.ok(existsSync(`${PASTA_DA_UI}sessions.css`));
     // A linha leva ao Detalhe, que casa o id do simulador.
-    assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(SESSAO_DO_PAINEL)}`).screen.id, 'session-detail');
+    assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(PANEL_SESSION)}`).screen.id, 'session-detail');
   });
 
   test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {

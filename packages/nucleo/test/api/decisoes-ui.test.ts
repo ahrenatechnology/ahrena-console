@@ -22,7 +22,7 @@ import {
 } from '../../src/api/index.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
-import { MAE_DO_P9, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { P9_PARENT, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -49,8 +49,8 @@ interface Cenario {
 async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi>[0]> = {}): Promise<Cenario> {
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisoes = new SqliteDecisionStore(storage.db);
-  await semearCenariosDoPainel(storage, 'p9', AGORA);
-  await semearDecisoesDoPainel(decisoes, 'p9', AGORA);
+  await seedPanelScenario(storage, 'p9', AGORA);
+  await seedPanelDecisions(decisoes, 'p9', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
   const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
@@ -122,7 +122,7 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
   test('a lista sai de todas as sessões, inclusive a mãe que só existe na porta das decisões', async () => {
     const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisions?groupBy=session');
     const sessoes = corpo.groups.map((g) => g.key && g.items[0]!.sessionId);
-    for (const s of [SESSAO_DO_PAINEL, MAE_DO_P9, VITRINE, VITRINE_ONTEM, 'sim-painel-motor-de-regras', 'sim-painel-painel-de-metricas']) assert.ok(sessoes.includes(s), s);
+    for (const s of [PANEL_SESSION, P9_PARENT, VITRINE, VITRINE_ONTEM, 'sim-painel-motor-de-regras', 'sim-painel-painel-de-metricas']) assert.ok(sessoes.includes(s), s);
     const vitrine = corpo.groups.find((g) => g.items[0]!.sessionId === VITRINE)!;
     assert.equal(vitrine.type, 'session');
     assert.equal(vitrine.title, 'Kanban da vitrine', 'o título da sessão gravada');
@@ -271,7 +271,7 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
     assert.match(corpo.mcp.response, /6 vigentes/);
     assert.match(corpo.mcp.response, /D7 substituiu D3/);
 
-    const esta = (await c.ler<DecisoesDaAba>(`/api/sessions/${SESSAO_DO_PAINEL}/decisions`)).corpo;
+    const esta = (await c.ler<DecisoesDaAba>(`/api/sessions/${PANEL_SESSION}/decisions`)).corpo;
     assert.match(esta.injection.text, /^Decisões vigentes em feat\/42-kanban-de-sessoes:\n/);
   });
 });

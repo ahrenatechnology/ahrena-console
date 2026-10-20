@@ -4,9 +4,9 @@ import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
-import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
-import { SESSOES_DOS_WORKFLOWS, semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
+import { WORKFLOW_SESSIONS, seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -31,9 +31,9 @@ describe('Workflows na API, com a demonstração do p4', () => {
   let trabalho: TrabalhoPorBranch;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
-    await semearWorkflowsDoDemo(storage, AGORA);
-    trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+    await seedPanelScenario(storage, 'p4', AGORA);
+    await seedDemoWorkflows(storage, AGORA);
+    trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
   });
@@ -113,7 +113,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     const todas = (await pedir(api.url, '/api/workflows')).corpo as RespostaDosWorkflows;
     const total = todas.sessions;
     assert.equal(todas.truncated, false);
-    assert.ok(total >= SESSOES_DOS_WORKFLOWS.length);
+    assert.ok(total >= WORKFLOW_SESSIONS.length);
     assert.deepEqual(todas.graph.columns.map((c) => c.id), ['origin', 'main', 'subagent', 'compaction', 'outcome']);
     for (const id of ['origin:prompt', 'origin:resume', 'compaction:none', 'compaction:compacted', 'outcome:completed', 'outcome:error']) {
       assert.ok(todas.graph.nodes.some((n) => n.id === id && n.volume > 0), id);
