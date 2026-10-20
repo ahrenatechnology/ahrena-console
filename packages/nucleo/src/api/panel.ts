@@ -89,7 +89,7 @@ export interface OpcoesDoPainel {
   commitDaPasta?: () => string | null;
   /** A API abre a sessão no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   abreSessao?: boolean;
-  /** The version in the footer, `API_VERSION` by default; the goldens pin the one they were recorded with. */
+  /** The version in the footer, `API_VERSION` by default; a test can pin one. */
   version?: string;
 }
 
