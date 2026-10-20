@@ -6,13 +6,14 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | --- | --- |
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
-| `telas.js` | **O registro das telas** (rota, item da barra, arquivo) |
+| `telas.js` | **O registro das telas** (rota, item da barra, arquivo, folha de estilo) |
 | `ler.js` | A camada de leitura: `ler(rota)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()` |
 | `ao-vivo.js` | Long polling em `GET /api/mudancas?desde=<cursor>&espera=25` |
 | `estados.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
+| `repos.css` | O estilo das telas Repositórios e Repositório (C22, C23) |
 | `telas/` | As telas, uma por arquivo |
 
 ## Registrar uma tela
@@ -42,7 +43,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
    }
    ```
 
-2. Em `telas.js`, aponte o `arquivo` da entrada: `arquivo: '/ui/telas/<nome>.js'`. Uma tela nova ganha uma entrada com `rota`, `titulo`, `icone` e, se aparece na barra, `item: { rotulo, icone }`. Uma tela fora da barra usa `acende` para dizer qual item fica aceso (o Detalhe acende Sessões).
+2. Em `telas.js`, aponte o `arquivo` da entrada: `arquivo: '/ui/telas/<nome>.js'`. Uma tela nova ganha uma entrada com `rota`, `titulo`, `icone` e, se aparece na barra, `item: { rotulo, icone }`. Uma tela fora da barra usa `acende` para dizer qual item fica aceso (o Detalhe acende Sessões). Se a tela tem estilo próprio, aponte `css: '/ui/<nome>.css'`: a moldura põe o `<link>` no head ao abrir a tela (um por arquivo, reaproveitado) e espera ele carregar.
 
 3. Um ícone novo entra em `ICONES` (`dom.js`), copiado do Lucide, com `currentColor`.
 
@@ -60,7 +61,7 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 | `aoVivo()` | `'conectando'`, `'ao-vivo'` ou `'sem-conexao'` |
 | `contador(id, n)` | O número no item da barra (o "4" do Dashboard); `0` esconde |
 | `titulo(texto)` | O título da janela (`Ahrena Console · <texto>`) |
-| `navegar(rota)` | Troca de tela sem recarregar. Links `<a href="/ui/...">` já fazem isso sozinhos |
+| `navegar(rota)` | Troca de tela sem recarregar, levando a busca (`?periodo=30d`). Links `<a href="/ui/...">` já fazem isso sozinhos |
 
 ## Regras
 

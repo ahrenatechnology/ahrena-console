@@ -99,9 +99,23 @@ iniciarAoVivo({
 let saida = null;
 let telaComErro = false;
 
+// `rota` pode trazer a busca (`/ui/repos/x/y?periodo=30d`); a tela é escolhida só pelo caminho.
 function navegar(rota) {
-  if (rota !== location.pathname) history.pushState(null, '', rota);
+  if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();
+}
+
+// A folha de estilo própria da tela (`css` em telas.js): um `<link>` por arquivo, criado na primeira
+// vez e reaproveitado depois. Espera carregar para a tela não piscar sem estilo.
+const folhas = new Map();
+function folhaDaTela(tela) {
+  if (!tela.css) return null;
+  if (!folhas.has(tela.css)) {
+    const link = el('link', { rel: 'stylesheet', href: tela.css, 'data-tela': tela.id });
+    folhas.set(tela.css, new Promise((pronto) => (link.addEventListener('load', pronto, { once: true }), link.addEventListener('error', pronto, { once: true }))));
+    document.head.append(link);
+  }
+  return folhas.get(tela.css);
 }
 
 async function abrir() {
@@ -139,7 +153,7 @@ async function abrir() {
     aoVivo: () => estadoAoVivo.estado,
   };
   try {
-    const modulo = await import(tela.arquivo);
+    const [modulo] = await Promise.all([import(tela.arquivo), folhaDaTela(tela)]);
     if (sair.signal.aborted) return;
     area.replaceChildren();
     const limpar = await modulo.montar(area, ctx);
@@ -159,7 +173,7 @@ document.addEventListener('click', (ev) => {
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || !(url.pathname === '/ui' || url.pathname.startsWith('/ui/'))) return;
   ev.preventDefault();
-  navegar(url.pathname);
+  navegar(url.pathname + url.search);
 });
 addEventListener('popstate', abrir);
 

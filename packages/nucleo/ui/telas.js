@@ -5,6 +5,8 @@
 //   fica aceso quando ela está aberta (o Detalhe acende Sessões, como no A5).
 // - `arquivo`: o módulo da tela em `ui/telas/`. Sem ele, a moldura mostra o cabeçalho e o estado vazio.
 // - `titulo`, `sub` e `icone`: o cabeçalho do estado vazio e o título da janela.
+// - `css`: a folha de estilo própria da tela, em `ui/`. A moldura põe um `<link>` no head ao abrir a
+//   tela, um por arquivo, e o reaproveita nas próximas vezes.
 
 export const TELAS = [
   {
@@ -34,8 +36,29 @@ export const TELAS = [
     icone: 'sessoes',
     arquivo: null, // #29 e #30
   },
+  {
+    id: 'repos',
+    rota: '/ui/repos',
+    item: { rotulo: 'Repositórios', icone: 'repos' },
+    titulo: 'Repositórios',
+    sub: 'Organizações e repositórios da sua conta do GitHub',
+    icone: 'repos',
+    arquivo: '/ui/telas/repos.js', // C22
+    css: '/ui/repos.css',
+  },
+  {
+    id: 'repo',
+    rota: '/ui/repos/:dono/:repo',
+    acende: 'repos',
+    titulo: 'Repositório',
+    sub: null,
+    icone: 'repos',
+    arquivo: '/ui/telas/repo.js', // C23
+    css: '/ui/repos.css',
+  },
 ];
 
+// Um id de sessão ou um nome do GitHub (ponto, hífen e sublinhado); `.` e `..` nunca.
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 /** A tela e os parâmetros de um caminho, ou `null` se nenhuma casa. */
@@ -52,7 +75,7 @@ export function acharTela(caminho, telas = TELAS) {
         try {
           valor = decodeURIComponent(partes[i]);
         } catch {}
-        if (ID.test(valor)) params[molde[i].slice(1)] = valor;
+        if (ID.test(valor) && valor !== '.' && valor !== '..') params[molde[i].slice(1)] = valor;
         else casa = false;
       } else casa = molde[i] === partes[i];
     }
