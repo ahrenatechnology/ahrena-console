@@ -14,13 +14,21 @@
 2. **Texto no cache.** O texto vem em lotes de até 50 arquivos, a 1 ponto por lote, e fica no cache pelo hash do Git, sem TTL. Enquanto não há push, reabrir a tela custa zero.
 3. **Instruções (#183):** o que pesa é achar os `CLAUDE.md` e `AGENTS.md` das subpastas. Para isso é preciso a árvore inteira do repositório (de 48 KB a 13,7 MB), pedida só quando a aba abre, com ETag. Os `@imports` são resolvidos como o Claude Code resolve: relativos ao arquivo, fora de blocos de código, até 5 saltos.
 4. **Instalar (#184):** o framework novo é distribuído por plugins de marketplace, sem transpilação. Instalar num repositório escreve:
-   - o marketplace e os plugins habilitados (`.claude/settings.json` e, a confirmar, `.codex/config.toml`);
+   - o marketplace e os plugins habilitados em `.claude/settings.json` (o Claude Code vai completo; o Codex leva só o `AGENTS.md`);
    - um índice de uma linha por regra de julgamento no `AGENTS.md`;
-   - `@AGENTS.md` no `CLAUDE.md`.
+   - `@AGENTS.md` no `CLAUDE.md`, sempre.
 
    O console monta o plano, mostra o diff e abre um PR num branch novo, sem tocar no branch padrão. O que já existe é mesclado por blocos com marcadores, e um JSON quebrado bloqueia a instalação em vez de virar `{}` (o erro do instalador antigo).
 5. **ADRs (#174):** cinco formatos cobrem o que se encontra. Faltar uma seção é comum: o próprio repositório do MADR não escreve status nem data. A tela diz "não está no texto" em vez de esconder a seção.
 6. **Este repositório não tem nenhuma instrução para agentes:** nem `CLAUDE.md`, nem `AGENTS.md`, nem `.claude/`. É o caso do aviso de C33, que agora oferece Instalar.
+
+## Decisões de 20/10 (Fernando, pelo PM)
+
+1. **Repositório do framework.** O padrão é o marketplace público `ahrenatechnology/ahrena-framework`, trocável por `AHRENA_CONSOLE_FRAMEWORK_REPO`.
+2. **Plataformas.** O Claude Code vai completo: plugins no `settings.json` e o índice pelo `@AGENTS.md`. O Codex vai só pelo `AGENTS.md`. Plugins no Codex (`.codex/config.toml`) e o Cursor ficam marcados como "a confirmar", e a instalação não escreve nada deles.
+3. **Issue.** O PR tem um campo opcional de issue: com número, leva `Refs #N`; vazio, não leva referência.
+4. **Nomes.** As abas se chamam "Instruções" e "ADRs".
+5. **Import.** A instalação sempre deixa `@AGENTS.md` no `CLAUDE.md`; se a pessoa já importa, não duplica. O aviso "nenhum CLAUDE.md importa este AGENTS.md" só aparece sem o import.
 
 ## Parte 1 · Instruções dos agentes (#183)
 
@@ -30,7 +38,7 @@
 | --- | --- | --- |
 | `CLAUDE.md` e `.claude/CLAUDE.md` na raiz | O Claude Code, em toda sessão aberta no repositório | Arquivo de instrução "raiz", renderizado |
 | `CLAUDE.md` numa subpasta | O Claude Code, quando trabalha em arquivos daquela pasta | "Subpasta", com o caminho |
-| `AGENTS.md` na raiz e nas subpastas | Os agentes que seguem a convenção AGENTS.md. O Claude Code o carrega quando um `CLAUDE.md` o importa (`@AGENTS.md`); se ele também lê o arquivo sozinho, ainda está **a confirmar** | "Importado pelo CLAUDE.md", ou o aviso "nenhum CLAUDE.md importa este arquivo" (C33) |
+| `AGENTS.md` na raiz e nas subpastas | Os agentes que seguem a convenção AGENTS.md, entre eles o Codex. O Claude Code o carrega pelo `@AGENTS.md` do `CLAUDE.md`, e a instalação sempre põe esse import | "Importado pelo CLAUDE.md", ou, sem o import, o aviso "nenhum CLAUDE.md importa este AGENTS.md" (C33) |
 | `@caminho` dentro desses arquivos | O Claude Code, no lugar do `@` | O bloco aberto no lugar, com a borda laranja (C32) |
 | `CLAUDE.local.md` | Só a máquina de quem o criou; costuma ficar fora do git | Não aparece: não está no repositório |
 | `.claude/rules/*.md` | O Claude Code; com `paths:` no front matter, só ao mexer nesses caminhos | Card Regras, com o nome e os caminhos |
@@ -123,8 +131,8 @@ O framework novo ([ARCHITECTURE.md](https://github.com/ahrenatechnology/ahrena-f
 | Claude Code | `.claude/settings.json` | `extraKnownMarketplaces.ahrena` (fonte GitHub do framework) e `enabledPlugins["<plugin>@ahrena"] = true`. Quem clona recebe a oferta de instalar | O formato que o Agent Config já lê (`enabledPlugins`) |
 | Claude Code | `CLAUDE.md` | `@AGENTS.md` num bloco `<!-- ahrena:framework:start/end -->` | O Claude Code carrega o índice pelo import |
 | Claude Code e Codex | `AGENTS.md` | Bloco com os plugins e o índice das regras de julgamento dos plugins escolhidos, uma linha cada, com o link para o texto. Em inglês, como o framework | ARCHITECTURE.md, "How rules and docs reach the agent" |
-| Codex | `.codex/config.toml` | `[marketplaces.ahrena]` e `[plugins."<plugin>@ahrena"] enabled = true`, num bloco com marcadores | **A confirmar:** é o formato do `config.toml` do usuário (conferido nesta máquina, só pelos nomes das tabelas). Falta provar que o Codex o aceita no `.codex/config.toml` de um projeto confiável |
-| Cursor (opcional) | `.cursor/rules/ahrena-<regra>.mdc` | Uma regra por regra de julgamento, com `description` e `alwaysApply: false` | ARCHITECTURE.md; os plugins do Cursor também têm manifesto, mas como habilitá-los por projeto ainda está **a confirmar** |
+| Codex | — | Nada além do `AGENTS.md` (decisão 2). Habilitar plugins pelo `.codex/config.toml` do projeto fica **a confirmar**: o formato `[marketplaces.ahrena]` e `[plugins."<plugin>@ahrena"] enabled = true` é o do `config.toml` do usuário (conferido nesta máquina, só pelos nomes das tabelas), mas não está provado no escopo de um projeto | — |
+| Cursor | `.cursor/rules/ahrena-<regra>.mdc` | **A confirmar** (decisão 2): a tela mostra a opção desabilitada. O plano já sabe gerar uma regra `.mdc` por regra de julgamento, com `description` e `alwaysApply: false`, como o ARCHITECTURE.md descreve | ARCHITECTURE.md |
 | Agência (opcional, com o plugin delivery) | `CLAUDE.md` ou `AGENTS.md` | A diretiva da `athena` entre os marcadores da skill `installing-the-agency` | ADR-017 do framework |
 
 **Fica de fora do PR:**
@@ -153,7 +161,7 @@ O framework novo ([ARCHITECTURE.md](https://github.com/ahrenatechnology/ahrena-f
 
 ### Mesclar, nunca sobrescrever
 
-- **Arquivos de texto** (`CLAUDE.md`, `AGENTS.md`, `config.toml`): só o que está entre os marcadores do framework muda. Sem marcadores, o bloco vai para o fim. O resto do arquivo não é tocado.
+- **Arquivos de texto** (`CLAUDE.md` e `AGENTS.md`): só o que está entre os marcadores do framework muda. Sem marcadores, o bloco vai para o fim. O resto do arquivo não é tocado.
 - **`.claude/settings.json`:** é lido como JSON.
   - O plano acrescenta o marketplace se ele não existir e habilita só os plugins que ainda não aparecem.
   - Um plugin que a pessoa desligou (`false`) continua desligado.
@@ -179,11 +187,11 @@ O branch padrão nunca é escrito: a porta recusa um branch de instalação com 
 
 **Depois do PR:** a tela acompanha o estado (aberto, CI, review, mergeado) pela leitura de PR que o Kanban do projeto já faz (C11). Depois do merge, a aba mostra o framework instalado e os plugins.
 
-**Issue antes do PR.** O `ahrena-contributing` pede uma issue para cada PR (`Refs #N`), mas o repositório ainda não tem o framework quando o PR é aberto. A proposta é o PR citar a issue que a pessoa indicar, ou nenhuma. Fica para o Fernando decidir.
+**Issue do PR (decisão 3).** O `ahrena-contributing` pede uma issue para cada PR (`Refs #N`), mas o repositório ainda não tem o framework quando o PR é aberto. A prévia (C36) tem um campo opcional: com número, o corpo leva `Refs #N`; vazio, nenhuma referência. Um valor que não é número é recusado antes de qualquer escrita.
 
 ### Teste
 
-`node --test spikes/framework-install/` roda 10 testes e todos passam. Eles cobrem:
+`node --test spikes/framework-install/` roda 12 testes e todos passam. Eles cobrem:
 
 - a sugestão de plugins por sinal;
 - o índice só com as regras de julgamento;
@@ -193,20 +201,21 @@ O branch padrão nunca é escrito: a porta recusa um branch de instalação com 
 - o JSON inválido recusado;
 - o Cursor;
 - o diff;
+- o `@AGENTS.md` sempre presente, sem duplicar o da pessoa;
+- o campo de issue (com número, vazio e recusado);
 - o PR contra um GitHub falso: branch novo, um commit, o padrão intocado, e nenhuma escrita quando o PR já existe, quando não há nada a fazer ou quando um arquivo é recusado.
 
 O catálogo vem do framework real: `spikes/framework-install/catalog.json`, gerado por `catalog.mjs` a partir do commit `9d70de7`.
 
-No exemplo de C36 (Python com FastAPI, `CLAUDE.md` e `settings.json` já existentes), o plano dá 4 arquivos:
+No exemplo de C36 (Python com FastAPI, `CLAUDE.md` e `settings.json` já existentes), o plano dá 3 arquivos, +40 linhas:
 
 | Arquivo | Ação | Linhas |
 | --- | --- | ---: |
 | `AGENTS.md` | criar | +21 |
 | `CLAUDE.md` | mesclar | +4 |
 | `.claude/settings.json` | mesclar | +15 |
-| `.codex/config.toml` | criar | +20 |
 
-Com o Cursor, entram mais 13 regras `.mdc`.
+Quando o Cursor for confirmado, entram mais 13 regras `.mdc`.
 
 ## Parte 3 · ADRs (#174)
 
@@ -316,7 +325,7 @@ Bastidores em inglês, inclusive variáveis de ambiente; tela em pt-BR.
   - `packages/nucleo/src/agent-instructions/` com a leitura e os imports (`read.ts`, `imports.ts`), usando `src/agent-config/parse.ts`;
   - `packages/nucleo/src/framework-install/` com a detecção, o plano, a mescla e o diff (`detect.ts`, `plan.ts`, `merge.ts`, `diff.ts`) e o catálogo do framework, lido do `marketplace.json` e das regras pelo mesmo cache (TTL de 1 h).
 - **Fonte:** `packages/nucleo/src/github/repo-files-source.ts`, com a descoberta comum, a árvore com ETag e os lotes de blob. Usa o mesmo `githubGraphql`, o `rest` com ETag de `repos-source.ts` e o cache único do `cli.ts`. As escritas ficam em `packages/nucleo/src/github/pull-request-writer.ts`, com as quatro operações da porta do spike.
-- **Configuração:** `AHRENA_CONSOLE_FRAMEWORK_REPO` troca o repositório do framework, para um fork ou para os testes. O padrão é `ahrenatechnology/ahrena-framework`, o marketplace público do framework, não um recurso interno.
+- **Configuração:** `AHRENA_CONSOLE_FRAMEWORK_REPO` troca o repositório do framework, para um fork ou para os testes. O padrão é `ahrenatechnology/ahrena-framework`, o marketplace público do framework (decisão 1).
 - **API:**
   - `GET /api/adrs?q=&status=&repo=`: a lista de todos os repositórios, sem o texto;
   - `GET /api/adrs/<owner>/<repo>`: a lista de um repositório, a pasta e a hora da leitura;
@@ -339,7 +348,6 @@ Bastidores em inglês, inclusive variáveis de ambiente; tela em pt-BR.
 - **Árvores enormes.** Acima de 100 mil arquivos, o GitHub corta a lista: os `CLAUDE.md` de subpastas podem faltar, e a tela avisa. Um monorepo grande também tem `AGENTS.md` de exemplo em pastas de teste (um repositório medido tem 11, metade em `evals/`). A tela agrupa por pasta e mostra primeiro a raiz.
 - **Status de ADR fora do vocabulário.** Vira "Sem status", com o texto original no card Registro.
 - **Números de ADR repetidos** (duas ADRs 0007 depois de um merge): a chave é o nome do arquivo, não o número; a tela mostra as duas.
-- **AGENTS.md no Claude Code.** Se o Claude Code passar a ler o `AGENTS.md` sozinho, o aviso "nenhum CLAUDE.md importa este arquivo" perde o sentido. Isso fica a confirmar antes da implementação.
-- **Codex e Cursor por projeto.** Que o `.codex/config.toml` de um projeto habilite plugins e que o Cursor habilite plugins por repositório ainda está a confirmar. Sem isso, o Codex fica só com o `AGENTS.md` (o índice das regras), e o Cursor só com as regras `.mdc`. A tela marca "a confirmar" até a prova.
+- **Codex e Cursor por projeto.** Plugins pelo `.codex/config.toml` de um projeto e plugins do Cursor por repositório continuam a confirmar. Até a prova, o Codex fica só com o `AGENTS.md`, e o Cursor fica desabilitado na tela.
 - **O framework anda.** Os plugins apontam para o `main` do framework, e o índice do `AGENTS.md` é um retrato do dia da instalação. Um "atualizar" futuro refaz só os blocos com marcadores, com o mesmo fluxo de PR.
 - **Repositórios privados.** O token do `gh` lê só o que a pessoa lê. A tela não mostra nada que ela não veria no GitHub.

@@ -617,7 +617,9 @@ const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="wi
 function lado(ativo, q = 4, ws = 'ok') {
   const nav = [
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
-    ['kanban', 'kanban', 'Kanban'], ['projeto', 'github', 'Kanban do projeto'], ['repos', 'folder-git-2', 'Repositórios'], ['dev', 'gauge', 'Dev Console'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'], ['decisoes', 'git-commit-horizontal', 'Decisões'], ['adrs', 'scroll-text', 'ADRs'],
+    ['kanban', 'kanban', 'Kanban'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'],
+    ['-', '', 'Entrega'], ['repos', 'folder-git-2', 'Repositórios'], ['projeto', 'github', 'Kanban do projeto'], ['dev', 'gauge', 'Dev Console'],
+    ['-', '', 'Decisões'], ['decisoes', 'git-commit-horizontal', 'Decisões'], ['adrs', 'scroll-text', 'ADRs'],
     ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
@@ -1379,21 +1381,31 @@ function telaAdr(larga) {
   </div>`
 }
 
-// Vazio, cache velho e ADR com partes faltando.
-function telaAdrsEstados() {
-  return `${cab('scroll-text', 'ADRs', 'Estados da tela: nenhum repositório com ADR, GitHub fora e uma ADR incompleta')}
-  <div class="faixa"><span class="ic">${ic('clock')}</span><div><b>GitHub limitou as leituras.</b> Mostrando as ADRs em cache, de 14:02. Tentamos de novo em 2 min.</div><span class="btn contorno">Tentar agora</span></div>
-  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
-    <div class="cartao vazio"><span class="ic">${ic('folder-search')}</span><b>Nenhuma ADR nos seus repositórios</b><span>Procuramos em <code>docs/adr</code>, <code>docs/decisions</code>, <code>docs/decisoes</code>, <code>doc/adr</code>, <code>adr</code> e mais 9 pastas, nos 8 repositórios da conta. Uma pasta com arquivos <code>0001-titulo.md</code> já aparece aqui.</span><span class="btn contorno">${ic('external-link')}Como escrever uma ADR</span></div>
-    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;gap:10px;align-items:center"><span class="mono c-muted">0001</span><b>Kotlin Multiplatform no app</b>${adrPill('unknown')}</div>
-      <div class="chips" style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">${ic('folder-git-2')}estudio-ficticio/app-receitas</span><span class="chip">${ic('calendar')}sem data</span><span class="chip" style="font-family:var(--font-sans)">livre</span></div>
-      <div class="cartao" style="padding:10px 12px;background:var(--bg)"><div class="ttl" style="font-size:12.5px">${ic('file-question')}Contexto</div><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">O app precisa rodar no iOS e no Android com uma base só…</p></div>
-      <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('scale')}Consequências<span class="r">não estão no texto</span></div></div>
-      <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('git-fork')}Alternativas<span class="r">não estão no texto</span></div></div>
-      <span class="c-muted" style="font-size:11.5px">Sem status e sem data no texto: a lista mostra "Sem status" e ordena pelo número do arquivo.</span>
-    </div>
+// Molde comum dos estados das abas ADRs (C31) e Instruções (C33): a faixa no topo, o vazio à
+// esquerda e o item com partes faltando à direita, com o mesmo card e as mesmas linhas tracejadas.
+const estadoLinha = (cor, i, nome, texto) => `<div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center;min-width:0"><span class="${cor}">${ic(i)}</span><span class="mono" style="white-space:nowrap">${nome}</span><span class="c-muted trunc">${texto}</span></div>`
+function estadosDaAba({ cab, faixa, vazio, direita }) {
+  return `${cab}
+  ${faixa}
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">${vazio.rotulo}</div>
+      <div class="cartao vazio" style="min-height:300px"><span class="ic">${ic(vazio.ic)}</span><b>${vazio.titulo}</b><span>${vazio.texto}</span><span style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:4px">${vazio.botoes}</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">${direita.rotulo}</div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-height:300px;min-width:0"><div style="display:flex;gap:8px;align-items:center;min-width:0">${direita.titulo}</div>
+        <span class="c-muted" style="font-size:12px">${direita.texto}</span>
+        ${direita.linhas.join('')}
+        <span class="c-muted" style="font-size:11.5px;margin-top:auto">${direita.pe}</span></div></div>
   </div>`
+}
+function telaAdrsEstados() {
+  return estadosDaAba({
+    cab: repoCab('adrs').replace('exemplo-labs/motor-de-regras', 'estudio-ficticio/app-receitas').replace('ADRs (9)', 'ADRs (2)'),
+    faixa: `<div class="faixa"><span class="ic">${ic('clock')}</span><div><b>GitHub limitou as leituras.</b> Mostrando as ADRs em cache, de 14:02. Tentamos de novo em 2 min.</div><span class="btn contorno">Tentar agora</span></div>`,
+    vazio: { rotulo: 'Repositório sem ADR', ic: 'folder-search', titulo: 'Nenhuma ADR neste repositório', texto: 'Procuramos em <code>docs/adr</code>, <code>docs/decisions</code>, <code>docs/decisoes</code>, <code>doc/adr</code>, <code>adr</code> e mais 9 pastas. Uma pasta com arquivos <code>0001-titulo.md</code> já aparece aqui. A página ADRs (C28) usa o mesmo vazio, para a conta inteira.', botoes: `<span class="btn contorno">${ic('external-link')}Como escrever uma ADR</span>` },
+    direita: { rotulo: 'ADR incompleta', titulo: `<span class="mono c-muted">0001</span><b class="trunc">Kotlin Multiplatform no app</b>${adrPill('unknown')}`, texto: 'O que não está no texto aparece tracejado, em vez de sumir.',
+      linhas: [estadoLinha('c-muted', 'tag', 'Status', 'não está no texto: a lista mostra "Sem status"'), estadoLinha('c-muted', 'calendar', 'Data', 'não está no texto: ordena pelo número do arquivo'), estadoLinha('c-muted', 'git-fork', 'Alternativas', 'não estão no texto'), estadoLinha('c-muted', 'scale', 'Consequências', 'não estão no texto')],
+      pe: 'Contexto e decisão vieram; abrir a ADR mostra as seções como em C30.' },
+  })
 }
 
 // ---------- Instruções dos agentes do repositório (issue 183) ----------
@@ -1462,17 +1474,14 @@ function telaRepoInstr(larga) {
   </div>`
 }
 function telaInstrEstados() {
-  return `${repoCab('instr').replace('exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox')}
-  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
-    <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">Repositório sem nenhuma instrução</div><div class="cartao vazio"><span class="ic">${ic('book-dashed')}</span><b>Nenhuma instrução para agentes neste repositório</b><span>Procuramos <code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code> e <code>AGENTS.md</code> na raiz e nas subpastas, e <code>.claude/</code> e <code>.mcp.json</code> na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.</span><span style="display:flex;gap:8px"><span class="btn cheio">${ic('package-plus')}Instalar o Ahrena Framework</span><span class="btn contorno">${ic('external-link')}Como escrever um CLAUDE.md</span></span></div></div>
-    <div style="display:flex;flex-direction:column;gap:12px"><div class="olhinho" style="margin-bottom:-4px">Avisos, em outros repositórios</div>
-      <div class="faixa"><span class="ic">${ic('folder-tree')}</span><div><b>Árvore grande demais.</b> O GitHub cortou a lista em 100 mil arquivos: as instruções da raiz e de <code>.claude/</code> estão aqui, mas subpastas podem faltar.</div></div>
-      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('file-text')}<span class="mono" style="font-size:13px">AGENTS.md</span><span class="r">raiz</span></div>
-        <span class="c-muted" style="font-size:12px">Nenhum <code>CLAUDE.md</code> deste repositório importa este arquivo.</span>
-        <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-error">${ic('file-x')}</span><span class="mono">@docs/antigo.md</span><span class="c-muted">não existe mais no repositório</span></div>
-        <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-muted">${ic('file-warning')}</span><span class="mono">.claude/settings.json</span><span class="c-muted">JSON inválido: hooks e plugins não foram lidos</span></div></div>
-    </div>
-  </div>`
+  return estadosDaAba({
+    cab: repoCab('instr').replace('exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox'),
+    faixa: `<div class="faixa"><span class="ic">${ic('folder-tree')}</span><div><b>Árvore grande demais.</b> O GitHub cortou a lista em 100 mil arquivos: a raiz e <code>.claude/</code> estão aqui, mas subpastas podem faltar.</div><span class="btn contorno">Tentar agora</span></div>`,
+    vazio: { rotulo: 'Repositório sem instruções', ic: 'book-dashed', titulo: 'Nenhuma instrução para agentes neste repositório', texto: 'Procuramos <code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code> e <code>AGENTS.md</code> na raiz e nas subpastas, e <code>.claude/</code> e <code>.mcp.json</code> na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.', botoes: `<span class="btn cheio">${ic('package-plus')}Instalar o Ahrena Framework</span><span class="btn contorno">${ic('external-link')}Como escrever um CLAUDE.md</span>` },
+    direita: { rotulo: 'Instruções com avisos', titulo: `<span class="c-accent">${ic('file-text')}</span><b class="mono" style="font-size:13px">AGENTS.md</b><span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans)">raiz</span>`, texto: 'O que não deu para ler aparece tracejado, com o motivo.',
+      linhas: [estadoLinha('c-waiting', 'link-2-off', 'CLAUDE.md', 'nenhum CLAUDE.md importa este AGENTS.md'), estadoLinha('c-error', 'file-x', '@docs/antigo.md', 'não existe mais no repositório'), estadoLinha('c-muted', 'circle-slash', '@~/.claude/meu.md', 'fora do repositório'), estadoLinha('c-error', 'file-warning', '.claude/settings.json', 'JSON inválido: hooks e plugins não foram lidos')],
+      pe: 'O aviso do import some quando um CLAUDE.md passa a ter @AGENTS.md; instalar o framework põe esse import.' },
+  })
 }
 
 // ---------- Instalar o Ahrena Framework pelo console (issue 184) ----------
@@ -1499,7 +1508,7 @@ function telaSemFramework() {
 // C35: passo 1, plataformas e plugins, com o que o repositório tem.
 const PLUG_OUTROS = [['typescript', 'TypeScript'], ['go', 'Go'], ['rust', 'Rust'], ['frontend', 'frontend de fora para dentro'], ['data', 'dados'], ['delivery', 'a agência (athena)'], ['quality', 'review e correções'], ['security', 'segurança'], ['reliability', 'confiabilidade'], ['observability', 'observabilidade'], ['code-review', 'roteia o review'], ['costs', 'custo por PR']]
 function telaInstalarEscolha() {
-  const plat = (on, n, arqs, nota) => `<div class="cartao" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;background:var(--bg);${on ? 'border-color:color-mix(in srgb, var(--accent) 50%, var(--border))' : ''}">${caixa(on)}<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="font-size:13px">${n}</b><span class="mono c-muted trunc" style="font-size:11px">${arqs}</span>${nota ? `<span style="font-size:11px" class="c-waiting">${nota}</span>` : ''}</div></div>`
+  const plat = (on, n, arqs, nota, off) => `<div class="cartao" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;background:var(--bg);${on ? 'border-color:color-mix(in srgb, var(--accent) 50%, var(--border))' : ''}${off ? 'opacity:.6;border-style:dashed' : ''}">${caixa(on)}<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="font-size:13px">${n}</b><span class="mono c-muted trunc" style="font-size:11px">${arqs}</span>${nota ? `<span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans);color:var(--status-waiting-text);align-self:flex-start">${nota}</span>` : ''}</div></div>`
   const plug = (on, n, why, trava) => `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;font-size:12.5px;min-width:0">${caixa(on, trava)}<span class="mono" style="font-size:12px;white-space:nowrap">${n}</span><span class="c-muted trunc" style="font-size:11.5px">${why}</span></div>`
   return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
   ${instCab(0, `<span class="btn contorno">Cancelar</span><span class="btn cheio">Ver a prévia ${ic('arrow-right')}</span>`)}
@@ -1507,9 +1516,9 @@ function telaInstalarEscolha() {
   <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:12px;align-items:start">
     <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('monitor-smartphone')}Plataformas</div>
       ${plat(true, 'Claude Code', '.claude/settings.json · CLAUDE.md · AGENTS.md')}
-      ${plat(true, 'Codex', 'AGENTS.md · .codex/config.toml', 'plugins pelo config.toml do projeto: a confirmar')}
-      ${plat(false, 'Cursor', '.cursor/rules/ahrena-*.mdc · 13 regras')}
-      <span class="c-muted" style="font-size:11.5px">O Claude Code lê o AGENTS.md pelo import no CLAUDE.md; o Codex lê o AGENTS.md direto. Um índice só serve aos dois.</span></div>
+      ${plat(true, 'Codex', 'AGENTS.md', '')}
+      ${plat(false, 'Cursor', '.cursor/rules/ahrena-*.mdc', 'a confirmar', true)}
+      <span class="c-muted" style="font-size:11.5px">O Claude Code vai completo: plugins no settings.json e o índice pelo import no CLAUDE.md. O Codex lê o mesmo AGENTS.md. Plugins no Codex e o Cursor ficam a confirmar.</span></div>
     <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:4px"><div class="ttl">${ic('plug')}Plugins<span class="r">5 de 17 · marketplace ahrena</span></div>
       <div class="olhinho" style="margin-top:6px">Base, sempre</div>
       ${plug(true, 'foundation', 'o núcleo que os outros pedem', true)}${plug(true, 'contributing', 'issue, branch, commit e PR', true)}${plug(true, 'engineering-fundamentals', 'SOLID, KISS, YAGNI e afins', true)}
@@ -1522,18 +1531,19 @@ function telaInstalarEscolha() {
 
 // C36: passo 2, a prévia do diff, arquivo por arquivo; nada foi escrito ainda.
 function telaInstalarPrevia(larga) {
-  const arqs = [['AGENTS.md', 'criar', 21, 0, false], ['CLAUDE.md', 'mesclar', 4, 0, false], ['.claude/settings.json', 'mesclar', 15, 0, true], ['.codex/config.toml', 'criar', 20, 0, false]]
+  const arqs = [['AGENTS.md', 'criar', 21, 0, false], ['CLAUDE.md', 'mesclar', 4, 0, false], ['.claude/settings.json', 'mesclar', 15, 0, true]]
   const ln = (t, k) => `<div style="display:grid;grid-template-columns:34px 14px minmax(0,1fr);font-family:var(--font-mono);font-size:11.5px;line-height:1.65;${k === '+' ? 'background:color-mix(in srgb, var(--status-completed-badge) 75%, transparent)' : ''}"><span class="c-muted" style="text-align:right;padding-right:8px">${t[0]}</span><span class="${k === '+' ? 'c-completed' : 'c-muted'}">${k}</span><span style="white-space:pre;overflow:hidden;text-overflow:ellipsis">${t[1]}</span></div>`
   const diff = [[1, '{'], [2, '  "permissions": {'], [3, '    "allow": ['], [4, '      "Bash(uv run pytest:*)"'], [5, '    ]'], ['+', '  },', '+'], ['+', '  "extraKnownMarketplaces": {', '+'], ['+', '    "ahrena": {', '+'], ['+', '      "source": { "source": "github", "repo": "ahrenatechnology/ahrena-framework" }', '+'], ['+', '    }', '+'], ['+', '  },', '+'], ['+', '  "enabledPlugins": {', '+'], ['+', '    "ahrena-foundation@ahrena": true,', '+'], ['+', '    "ahrena-contributing@ahrena": true,', '+'], ['+', '    "ahrena-engineering-fundamentals@ahrena": true,', '+'], ['+', '    "ahrena-engineering-python@ahrena": true,', '+'], ['+', '    "ahrena-engineering-backend@ahrena": true', '+'], [6, '  }'], [7, '}']]
   return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
   ${instCab(1, `<span class="btn contorno">${ic('arrow-left')}Voltar</span><span class="btn cheio">${ic('git-pull-request')}Abrir PR</span>`)}
   <div style="display:grid;grid-template-columns:${larga ? 300 : 250}px minmax(0,1fr);gap:12px;align-items:start">
     <div style="display:flex;flex-direction:column;gap:12px">
-      <div class="cartao" style="padding:8px;display:flex;flex-direction:column;gap:2px"><div class="olhinho" style="padding:4px 8px">4 arquivos · +60 −0</div>
+      <div class="cartao" style="padding:8px;display:flex;flex-direction:column;gap:2px"><div class="olhinho" style="padding:4px 8px">3 arquivos · +40 −0</div>
         ${arqs.map(([p, a, mais, menos, on]) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:7px;font-size:12px;${on ? 'background:var(--raised);box-shadow:inset 2px 0 0 var(--accent);' : ''}"><span class="mono trunc" style="font-size:11.5px;flex:1">${p}</span><span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans);${a === 'mesclar' ? 'color:var(--status-waiting-text)' : ''}">${a}</span><span class="mono c-completed" style="font-size:11px">+${mais}</span></div>`).join('')}</div>
       <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;font-size:12px"><div class="ttl">${ic('git-branch')}O PR</div>
         <span class="c-muted">Branch novo</span><span class="mono" style="font-size:11.5px">chore/install-ahrena-framework</span><span class="c-muted">para <b class="mono" style="color:var(--text);font-weight:500">main</b>, um commit, sem tocar no main.</span>
-        <span class="c-muted">Título</span><span>chore: install the Ahrena Framework</span></div>
+        <span class="c-muted">Título</span><span>chore: install the Ahrena Framework</span>
+        <span class="c-muted">Issue (opcional)</span><span class="campo" style="height:30px">#<span style="margin-left:2px">número</span></span><span class="c-muted" style="font-size:11px">Com número, o PR leva Refs #N; vazio, nenhuma referência.</span></div>
     </div>
     <div class="cartao" style="overflow:hidden;min-width:0"><div style="display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)"><b class="mono" style="font-size:12.5px">.claude/settings.json</b><span class="chip" style="height:20px;font-size:10.5px;font-family:var(--font-sans);color:var(--status-waiting-text)">mesclar</span><span class="c-muted" style="font-size:12px">a permissão que já existia fica; nada sai</span><span class="seg" style="margin-left:auto"><span class="on">Unificado</span><span>Lado a lado</span></span></div>
       <div style="padding:8px 4px">${diff.map(([n, t, k]) => ln([typeof n === 'number' ? n : '', t], k || ' ')).join('')}</div></div>
@@ -1545,7 +1555,7 @@ function telaInstalarPr() {
   return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
   ${instCab(2, `<span class="btn contorno">${ic('external-link')}Abrir no GitHub</span>`)}
   <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span class="c-completed" style="font-size:18px">${ic('git-pull-request')}</span><b style="font-size:14px">PR 12 · chore: install the Ahrena Framework</b><span class="pill b-completed">Aberto</span><span class="pill b-waiting">CI …</span><span class="c-muted" style="margin-left:auto;font-size:12px">há 1 min</span></div>
-    <div class="leg"><span>Branch <b>chore/install-ahrena-framework</b> → <b>main</b></span><span>Arquivos <b>4</b></span><span>Linhas <b>+60 −0</b></span><span>Plugins <b>5</b></span><span>Review <b>esperando</b></span></div>
+    <div class="leg"><span>Branch <b>chore/install-ahrena-framework</b> → <b>main</b></span><span>Arquivos <b>3</b></span><span>Linhas <b>+40 −0</b></span><span>Plugins <b>5</b></span><span>Review <b>esperando</b></span></div>
     <span class="c-muted" style="font-size:12px">Depois do merge, quem abrir o repositório no Claude Code recebe a oferta de instalar os 5 plugins; no Codex, o AGENTS.md já vale.</span></div>
   <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
     <div class="faixa erro"><span class="ic">${ic('x-circle')}</span><div><b>Não abrimos o PR.</b> O <code>.claude/settings.json</code> deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.</div></div>
@@ -2251,18 +2261,18 @@ const TELAS = [
     n: N(['O cabeçalho e as abas do Session Detail, como em C23.'], ['A aba fica ao lado de Decisões: Decisões são as das sessões (C20 e C21); ADRs são os registros que estão no repositório.', 'A cadeia mostra quem substituiu quem, inclusive quando só um dos lados escreveu a ligação.']) },
   { id: 'console-adr', cod: 'C30', nome: 'ADR aberta', sub: 'Uma ADR estruturada: cabeçalho com status e data, as ligações, contexto, decisão com a opção escolhida, alternativas, consequências boas e ruins, e os metadados. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdr(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdr(true))}</div>`,
     n: N(['O cabeçalho com chips do Session Detail e a coluna lateral de Decisões (C20).'], ['"Markdown" troca para o texto do arquivo, para quando o extrator errar; o padrão é a estruturada.', 'Seções que o extrator não reconhece ficam em "Outras seções do texto", fechadas, e nada do arquivo some.', 'MADR 4 traz decisores, consultados e informados; Nygard e os livres mostram só o que tiverem.']) },
-  { id: 'console-adrs-estados', cod: 'C31', nome: 'ADRs · vazio, cache e incompleta', sub: 'Nenhum repositório com ADR, o GitHub limitando (mostra o cache e a hora dele) e uma ADR sem status, data, alternativas e consequências. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'adrs', telaAdrsEstados())}</div>`,
-    n: N(['EmptyState e a faixa de erro de C19.'], ['O que falta na ADR aparece como seção tracejada "não está no texto", em vez de sumir: quem lê sabe que o autor não escreveu.']) },
+  { id: 'console-adrs-estados', cod: 'C31', nome: 'ADRs · estados', sub: 'Feature ADRs (#174), aba ADRs do repositório: o GitHub limitando (o cache com a hora dele), um repositório sem ADR e uma ADR incompleta. Mesmo molde dos estados de Instruções (C33). Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaAdrsEstados())}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaAdrsEstados())}</div>`,
+    n: N(['EmptyState e a faixa de C19.'], ['Um molde só para os estados das abas ADRs e Instruções: faixa no topo, o vazio à esquerda, o item com partes faltando à direita, em linhas tracejadas.', 'O que falta na ADR aparece tracejado, "não está no texto", em vez de sumir: quem lê sabe que o autor não escreveu.']) },
   { id: 'console-repo-instr', cod: 'C32', nome: 'Repositório · Instruções dos agentes', sub: 'A aba Instruções na tela de um repositório: os arquivos de instrução (CLAUDE.md e AGENTS.md da raiz e das subpastas), cada um renderizado com os @imports abertos no lugar, e o que .claude/ traz (regras, skills, agentes, hooks, plugins habilitados e MCP). Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaRepoInstr(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaRepoInstr(true))}</div>`,
     n: N(['A lista e o editor do Agent Config (C16 e C17), que lê o .claude/ desta máquina; aqui o mesmo conteúdo vem do repositório, pelo GitHub, e só se lê.'], ['A aba se chama "Instruções" para caber em 1100 ao lado de ADRs; o título "Instruções dos agentes" fica no índice.', 'O @import abre no lugar, com a borda laranja; o que fica fora do repositório (@~/…) é dito, não escondido.', 'Hooks mostram o evento, o matcher e quantos comandos; nunca o comando, como o Agent Config.', 'Em 1440, o que .claude/ traz vai para uma coluna à direita; em 1100, desce para baixo do arquivo.']) },
-  { id: 'console-repo-instr-estados', cod: 'C33', nome: 'Instruções · vazio e avisos', sub: 'Um repositório sem nenhuma instrução para agentes, a árvore cortada pelo GitHub, um AGENTS.md que nenhum CLAUDE.md importa, um @import que não existe e um settings.json quebrado. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstrEstados())}</div>`,
-    n: N(['EmptyState e a faixa de C19.'], ['O aviso diz onde procuramos e o que o agente leva no lugar.']) },
+  { id: 'console-repo-instr-estados', cod: 'C33', nome: 'Instruções · estados', sub: 'Feature Instruções dos agentes (#183), aba Instruções do repositório: a árvore cortada pelo GitHub, um repositório sem nenhuma instrução (com Instalar, da #184) e instruções com avisos. Mesmo molde dos estados de ADRs (C31). Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaInstrEstados())}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaInstrEstados())}</div>`,
+    n: N(['EmptyState e a faixa de C19.'], ['O mesmo molde de ADRs · estados (C31).', 'O vazio diz onde procuramos e o que o agente leva no lugar, e oferece Instalar.', 'O aviso "nenhum CLAUDE.md importa este AGENTS.md" só aparece sem o import.']) },
   { id: 'console-install-start', cod: 'C34', nome: 'Instruções · sem Ahrena Framework', sub: 'A aba Instruções de um repositório que tem instruções, mas não o framework: o card com Instalar fica no topo, e o que existe continua embaixo.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaSemFramework())}</div>`,
     n: N(['A aba Instruções (C32).'], ['Instalar só aparece para quem pode escrever no repositório (permissão lida pela tela Repositórios); sem ela, o card diz por quê (C37).']) },
-  { id: 'console-install-choose', cod: 'C35', nome: 'Instalar · plataformas e plugins', sub: 'Passo 1: o que achamos no repositório, as plataformas (Claude Code e Codex marcados, Cursor opcional) e os plugins, com a base sempre, os sugeridos pelo que o repositório tem e os outros desmarcados. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarEscolha())}</div>`,
-    n: N(['Do instalador antigo: escolher a plataforma. Lá era manual (PLATFORM= e --clades); aqui os plugins vêm sugeridos pelo que o repositório tem, e a pessoa ajusta.'], ['A base (foundation, contributing, fundamentals) não desmarca: os outros dependem dela.', 'Cada sugestão diz o motivo: "achamos pyproject.toml".', 'O Codex leva o aviso "a confirmar" até provarmos que o config.toml do projeto habilita plugins.']) },
+  { id: 'console-install-choose', cod: 'C35', nome: 'Instalar · plataformas e plugins', sub: 'Passo 1: o que achamos no repositório, as plataformas (Claude Code completo, Codex pelo AGENTS.md, Cursor a confirmar) e os plugins, com a base sempre, os sugeridos pelo que o repositório tem e os outros desmarcados. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarEscolha())}</div>`,
+    n: N(['Do instalador antigo: escolher a plataforma. Lá era manual (PLATFORM= e --clades); aqui os plugins vêm sugeridos pelo que o repositório tem, e a pessoa ajusta.'], ['A base (foundation, contributing, fundamentals) não desmarca: os outros dependem dela.', 'Cada sugestão diz o motivo: "achamos pyproject.toml".', 'Claude Code completo; Codex só pelo AGENTS.md; Cursor desabilitado e marcado "a confirmar" (decidido em 20/10).']) },
   { id: 'console-install-preview', cod: 'C36', nome: 'Instalar · prévia do diff', sub: 'Passo 2: cada arquivo com a ação (criar ou mesclar) e o diff; o que já existia fica. Nada foi escrito ainda. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaInstalarPrevia(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaInstalarPrevia(true))}</div>`,
-    n: N(['O diff do GitHub, unificado ou lado a lado.'], ['Os números são os do planejador do spike sobre estes arquivos: AGENTS.md +21, CLAUDE.md +4, settings.json +15, config.toml +20.', 'Mesclar nunca apaga: no exemplo, a permissão que já existia continua.', 'O PR sai num branch novo, com um commit; o main não é tocado.']) },
+    n: N(['O diff do GitHub, unificado ou lado a lado.'], ['Os números são os do planejador do spike sobre estes arquivos: AGENTS.md +21, CLAUDE.md +4, settings.json +15.', 'O campo de issue é opcional: vazio, o PR sai sem referência.', 'Mesclar nunca apaga: no exemplo, a permissão que já existia continua.', 'O PR sai num branch novo, com um commit; o main não é tocado.']) },
   { id: 'console-install-pr', cod: 'C37', nome: 'Instalar · PR aberto e o que impede', sub: 'Passo 3: o PR aberto, com CI e review, ao vivo. Embaixo, os dois casos em que o PR não sai: um settings.json quebrado e a falta de permissão de escrita. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarPr())}</div>`,
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
 ]

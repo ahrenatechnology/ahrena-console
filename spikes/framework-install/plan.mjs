@@ -6,7 +6,6 @@
 export const MARKETPLACE = 'ahrena';
 export const FRAMEWORK_REPO = 'ahrenatechnology/ahrena-framework';
 const BLOCK = { start: '<!-- ahrena:framework:start -->', end: '<!-- ahrena:framework:end -->' };
-const TOML_BLOCK = { start: '# ahrena:framework:start', end: '# ahrena:framework:end' };
 
 /** Sempre: o núcleo que os outros pedem, o fluxo de contribuição e os fundamentos. */
 export const BASE = ['ahrena-foundation', 'ahrena-contributing', 'ahrena-engineering-fundamentals'];
@@ -79,14 +78,6 @@ export function mergeClaudeSettings(text, plugins) {
   return { text: `${JSON.stringify(next, null, 2)}\n` };
 }
 
-/** `.codex/config.toml`: o marketplace e os plugins, num bloco com marcadores, como o `config.toml` do usuário. */
-export function codexConfigBlock(plugins) {
-  return [
-    `[marketplaces.${MARKETPLACE}]`, 'source_type = "git"', `source = "https://github.com/${FRAMEWORK_REPO}.git"`, '',
-    ...plugins.flatMap((p) => [`[plugins."${p}@${MARKETPLACE}"]`, 'enabled = true', '']),
-  ].join('\n');
-}
-
 /**
  * O plano. O texto que vai para o repositório fica em inglês, como o framework; só a tela é pt-BR.
  * `choice` = { platforms: ['claude', 'codex', 'cursor'], plugins: [...], agency: bool }.
@@ -116,10 +107,9 @@ export function plan(files, catalog, choice) {
     if (s.refused) out.push({ path: '.claude/settings.json', action: 'refused', before: files['.claude/settings.json'], after: null, why: s.refused });
     else put('.claude/settings.json', s.text, 'quem clonar recebe a oferta de instalar os plugins');
   }
-  if (choice.platforms.includes('codex')) {
-    put('.codex/config.toml', upsertBlock(files['.codex/config.toml'], codexConfigBlock(choice.plugins), TOML_BLOCK), 'marketplace e plugins para o Codex (a confirmar no escopo do projeto)');
-  }
-  if (choice.platforms.includes('cursor')) {
+  // Codex: só o AGENTS.md (decidido em 20/10). Habilitar plugins pelo .codex/config.toml do
+  // projeto fica a confirmar, e o Cursor também: a tela os marca assim e não escreve nada deles.
+  if (choice.platforms.includes('cursor')) { // a confirmar: a tela não oferece ainda
     for (const p of catalog.plugins.filter((p) => choice.plugins.includes(p.name))) {
       for (const r of p.rules.filter((r) => r.enforcement === 'judgment')) {
         put(`.cursor/rules/ahrena-${r.id}.mdc`, `---\ndescription: ${r.statement}\nalwaysApply: false\n---\n\n${r.title}. Full text: https://github.com/${FRAMEWORK_REPO}/blob/main/${r.path}\n`, 'regra de julgamento no formato do Cursor');

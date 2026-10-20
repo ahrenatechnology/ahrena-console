@@ -10,7 +10,10 @@ export class InstallRefused extends Error {}
  * Cria o branch a partir do HEAD do padrão, grava um commit só com os arquivos do plano e abre o
  * PR. Idempotente: com um PR aberto desse branch, devolve o que já existe. Nunca escreve no padrão.
  */
-export async function openInstallPr(github, { plan, title, body, branch = INSTALL_BRANCH }) {
+export async function openInstallPr(github, { plan, title, body, issue = null, branch = INSTALL_BRANCH }) {
+  // O campo de issue é opcional: com número, o corpo leva `Refs #N`; vazio, nenhuma referência.
+  if (issue !== null && !/^[1-9]\d*$/.test(String(issue))) throw new InstallRefused('issue: só o número, ou vazio');
+  const fullBody = issue === null ? body : `${body}${body ? '\n\n' : ''}Refs #${issue}`;
   const refused = plan.filter((f) => f.action === 'refused');
   if (refused.length) throw new InstallRefused(refused.map((f) => `${f.path}: ${f.why}`).join('; '));
   const changes = plan.filter((f) => f.action === 'create' || f.action === 'merge');
@@ -28,6 +31,6 @@ export async function openInstallPr(github, { plan, title, body, branch = INSTAL
     message: { headline: 'chore: install the Ahrena Framework', body: changes.map((f) => `${f.action} ${f.path}`).join('\n') },
     additions: changes.map((f) => ({ path: f.path, contents: Buffer.from(f.after, 'utf8').toString('base64') })),
   });
-  const pr = await github.createPullRequest({ base: base.name, head: branch, title, body, draft: false });
+  const pr = await github.createPullRequest({ base: base.name, head: branch, title, body: fullBody, draft: false });
   return { status: 'opened', commit, pr };
 }

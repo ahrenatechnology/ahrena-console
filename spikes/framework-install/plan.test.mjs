@@ -38,7 +38,7 @@ test('o índice tem uma linha por regra de julgamento dos plugins escolhidos, e 
 
 test('mescla sem perder nada: CLAUDE.md, AGENTS.md novo, settings.json e o plugin desligado continua desligado', () => {
   const p = Object.fromEntries(plan(REPO, catalog, CHOICE).map((f) => [f.path, f]));
-  assert.deepEqual(Object.keys(p).sort(), ['.claude/settings.json', '.codex/config.toml', 'AGENTS.md', 'CLAUDE.md']);
+  assert.deepEqual(Object.keys(p).sort(), ['.claude/settings.json', 'AGENTS.md', 'CLAUDE.md']); // Codex: só o AGENTS.md
   assert.equal(p['AGENTS.md'].action, 'create');
   assert.equal(p['CLAUDE.md'].action, 'merge');
   assert.ok(p['CLAUDE.md'].after.startsWith(REPO['CLAUDE.md'].trimEnd()));
@@ -49,7 +49,6 @@ test('mescla sem perder nada: CLAUDE.md, AGENTS.md novo, settings.json e o plugi
   assert.equal(s.enabledPlugins['ahrena-contributing@ahrena'], false);
   assert.equal(s.enabledPlugins['ahrena-foundation@ahrena'], true);
   assert.deepEqual(s.extraKnownMarketplaces.ahrena, { source: { source: 'github', repo: 'ahrenatechnology/ahrena-framework' } });
-  assert.match(p['.codex/config.toml'].after, /\[plugins\."ahrena-foundation@ahrena"\]\nenabled = true/);
 });
 
 test('rodar de novo sobre o resultado não muda nada', () => {
@@ -97,7 +96,7 @@ function fakeGithub({ openPr = null } = {}) {
       refs[branch] = 'bbb222';
       return { oid: 'bbb222' };
     },
-    createPullRequest: async ({ base, head }) => { calls.push(['pr', base, head]); return { number: 7, url: 'https://github.test/pr/7' }; },
+    createPullRequest: async ({ base, head, body }) => { calls.push(['pr', base, head, body]); return { number: 7, url: 'https://github.test/pr/7' }; },
   };
 }
 
@@ -106,7 +105,7 @@ test('abrir o PR: branch novo, um commit, o PR, e o padrão intocado', async () 
   const r = await openInstallPr(gh, { plan: plan(REPO, catalog, CHOICE), title: 'Instala o Ahrena Framework', body: '' });
   assert.equal(r.status, 'opened');
   assert.deepEqual(gh.calls.map((c) => c[0]), ['createRef', 'commit', 'pr']);
-  assert.deepEqual(gh.calls[2], ['pr', 'main', INSTALL_BRANCH]);
+  assert.deepEqual(gh.calls[2], ['pr', 'main', INSTALL_BRANCH, '']);
   assert.equal(gh.refs.main, 'aaa111');
 });
 
@@ -120,4 +119,21 @@ test('PR já aberto, nada a fazer e arquivo recusado não escrevem nada', async 
   await assert.rejects(openInstallPr(recusado, { plan: plan({ ...REPO, '.claude/settings.json': '{' }, catalog, CHOICE), title: '', body: '' }), InstallRefused);
   assert.deepEqual(recusado.calls, []);
   await assert.rejects(openInstallPr(fakeGithub(), { plan: plan(REPO, catalog, CHOICE), title: '', body: '', branch: 'main' }), InstallRefused);
+});
+
+test('issue opcional: com número vira Refs #N; vazio, nenhuma referência; texto é recusado', async () => {
+  const com = fakeGithub();
+  await openInstallPr(com, { plan: plan(REPO, catalog, CHOICE), title: 't', body: 'Instala.', issue: 42 });
+  assert.equal(com.calls[2][3], 'Instala.\n\nRefs #42');
+  const sem = fakeGithub();
+  await openInstallPr(sem, { plan: plan(REPO, catalog, CHOICE), title: 't', body: 'Instala.' });
+  assert.equal(sem.calls[2][3], 'Instala.');
+  await assert.rejects(openInstallPr(fakeGithub(), { plan: plan(REPO, catalog, CHOICE), title: 't', body: '', issue: '42; rm' }), InstallRefused);
+});
+
+test('o CLAUDE.md sempre sai com @AGENTS.md, e não duplica o import que a pessoa já tem', () => {
+  const sem = plan({ 'CLAUDE.md': '# x\n' }, catalog, CHOICE).find((f) => f.path === 'CLAUDE.md');
+  assert.match(sem.after, /^@AGENTS\.md$/m);
+  const com = plan({ 'CLAUDE.md': '# x\n\n@AGENTS.md\n' }, catalog, CHOICE).find((f) => f.path === 'CLAUDE.md');
+  assert.equal(com.after.match(/^@AGENTS\.md$/gm).length, 1);
 });
