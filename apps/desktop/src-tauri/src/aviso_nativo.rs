@@ -120,12 +120,14 @@ pub fn iniciar(app: &AppHandle, acoes: Acoes, _principal: MainThreadMarker) -> b
     centro.setNotificationCategories(&NSSet::from_retained_slice(&[categoria]));
 
     let ao_autorizar = RcBlock::new(|ok: Bool, erro: *mut NSError| {
+        // Negadas (ou um bundle sem assinatura que o macOS recusa): cai no plugin, que ainda mostra o aviso.
         if !ok.as_bool() {
-            eprintln!("[ahrena-console] notificações não autorizadas{}", descrever(erro));
+            eprintln!("[ahrena-console] notificações não autorizadas{}; usando o plugin do Tauri", descrever(erro));
+            ATIVO.store(false, Ordering::Relaxed);
         }
     });
-    centro.requestAuthorizationWithOptions_completionHandler(UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound, &ao_autorizar);
     ATIVO.store(true, Ordering::Relaxed);
+    centro.requestAuthorizationWithOptions_completionHandler(UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound, &ao_autorizar);
     true
 }
 
