@@ -35,6 +35,21 @@ interface Resposta {
   json: any;
 }
 
+/** O corpo da rota antiga `/api/projeto`, nas chaves antigas (a rota nova responde `QuadroDoProjeto`). */
+interface CardAntigo {
+  itemId: string;
+  numero: number;
+  raiaId: string;
+  tipoDaIssue: string | null;
+  pr: { numero: number; ci: string; review: string | null } | null;
+}
+interface RaiaAntiga {
+  id: string;
+  nome: string;
+  cor: string;
+  cards: CardAntigo[];
+}
+
 /** `http.request`, para poder mandar `Host` e `Origin` como um navegador mandaria. */
 function pedir(api: ApiLocal, caminho: string, { method = 'GET', headers = {} as Record<string, string>, corpo = '' } = {}): Promise<Resposta> {
   const { hostname, port } = new URL(api.url);
@@ -160,7 +175,7 @@ describe('GET /api/projeto', () => {
       const q = r.json;
       assert.deepEqual(Object.keys(q).sort(), ['desatualizado', 'fonte', 'lidoEm', 'marcos', 'motivo', 'projeto', 'raias', 'total'].sort());
       assert.deepEqual(q.projeto, { dono: 'exemplo', numero: 3, titulo: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', campo: 'Status' });
-      assert.deepEqual(q.raias.map((l) => [l.nome, l.cards.map((c) => c.numero)]), [
+      assert.deepEqual(q.raias.map((l: RaiaAntiga) => [l.nome, l.cards.map((c) => c.numero)]), [
         ['Backlog', [80, 87, 89]],
         ['Ready', [35, 36]],
         ['In Progress', [42, 81]],
@@ -172,9 +187,9 @@ describe('GET /api/projeto', () => {
       const card = q.raias[2].cards[0];
       assert.deepEqual(Object.keys(card).sort(), ['estado', 'itemId', 'marco', 'numero', 'pr', 'raiaId', 'repo', 'subIssues', 'tipo', 'tipoDaIssue', 'titulo', 'url'].sort());
       assert.deepEqual([card.tipo, card.tipoDaIssue, card.titulo, card.subIssues, card.pr?.numero, card.pr?.ci, card.raiaId], ['Issue', 'Story', 'Kanban de sessões', { feitas: 2, total: 4 }, 78, 'rodando', q.raias[2].id]);
-      const pills = q.raias.flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.numero, c.pr!.ci, c.pr!.review]);
+      const pills = (q.raias as RaiaAntiga[]).flatMap((l) => l.cards).filter((c) => c.pr).map((c) => [c.numero, c.pr!.ci, c.pr!.review]);
       assert.deepEqual(pills, [[42, 'rodando', null], [81, 'ok', null], [92, 'ok', 'pendente'], [64, 'falhou', 'ajustes'], [40, 'ok', 'aprovado'], [82, 'ok', 'aprovado']]);
-      assert.deepEqual([...new Set(q.raias.flatMap((l) => l.cards.map((c) => c.tipoDaIssue)))].sort(), ['Bug', 'Spike', 'Story', 'Tech Task']);
+      assert.deepEqual([...new Set((q.raias as RaiaAntiga[]).flatMap((l) => l.cards.map((c) => c.tipoDaIssue)))].sort(), ['Bug', 'Spike', 'Story', 'Tech Task']);
     } finally {
       await s.fechar();
     }
@@ -185,9 +200,9 @@ describe('GET /api/projeto', () => {
     const s = await subir({ kanban, fonte: 'github' });
     try {
       const q = (await pedir(s.api, '/api/projeto')).json;
-      assert.deepEqual(q.raias.map((l) => [l.id, l.nome, l.cor, l.cards.length]), [[TODO, 'Todo', 'GREEN', 51], [IN_PROGRESS, 'In Progress', 'YELLOW', 5], ['98236657', 'Done', 'PURPLE', 9]]);
+      assert.deepEqual(q.raias.map((l: RaiaAntiga) => [l.id, l.nome, l.cor, l.cards.length]), [[TODO, 'Todo', 'GREEN', 51], [IN_PROGRESS, 'In Progress', 'YELLOW', 5], ['98236657', 'Done', 'PURPLE', 9]]);
       assert.deepEqual([q.total, q.fonte, q.lidoEm, q.marcos], [65, 'github', AGORA, []]);
-      assert.deepEqual(q.raias[0].cards.find((c) => c.itemId === ITEM), {
+      assert.deepEqual(q.raias[0].cards.find((c: CardAntigo) => c.itemId === ITEM), {
         itemId: ITEM, tipo: 'Issue', tipoDaIssue: 'Initiative', numero: 1, titulo: 'Ahrena Console 0.0.1', url: 'https://github.com/ahrenatechnology/ahrena-console/issues/1',
         repo: 'ahrenatechnology/ahrena-console', estado: 'OPEN', marco: null, subIssues: null, pr: null, raiaId: TODO,
       });
@@ -307,7 +322,7 @@ describe('POST /api/projeto/mover', () => {
     const s = await subir({ kanban, fonte: 'demo' });
     try {
       const antes = (await pedir(s.api, '/api/projeto')).json;
-      const c92 = antes.raias.flatMap((l) => l.cards).find((c) => c.numero === 92)!;
+      const c92 = (antes.raias as RaiaAntiga[]).flatMap((l) => l.cards).find((c) => c.numero === 92)!;
       const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
       const r = await mover(s.api, { itemId: c92.itemId, optionId: done });
       assert.equal(r.status, 200);
