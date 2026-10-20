@@ -43,6 +43,9 @@
 /* ---------- the grid ---------- */
 .tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tm-span-wide, .tm-span-half, .tm-span-full { grid-column: span 2; }
+/* The alerts and the Claude processes, stacked beside the tunnel in three columns (.card-column in
+   shell.css); in two columns they are plain grid items again, alerts beside the volumes. */
+.tm-side { display: contents; }
 .tm-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tm-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .tm-title > .tm-note, .tm-title > .tm-seg { margin-left: auto; }
@@ -54,11 +57,13 @@
   .tm-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .tm-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tm-span-half { grid-column: span 1; }
+  .tm-side { display: flex; }
   .tm-span-full { grid-column: span 3; }
 }
 
 /* ---------- the chart ---------- */
-.tm-chart { width: 100%; height: 120px; display: block; }
+/* A chart card stretched to its row (rule 9) gives the extra height to the chart, not to a blank band. */
+.tm-chart { width: 100%; height: 120px; flex: 1 0 120px; display: block; }
 .tm-gridline { stroke: var(--border); stroke-width: 1; }
 .tm-limit { stroke: var(--status-error-dot); stroke-width: 1.2; stroke-dasharray: 5 4; }
 .tm-line { fill: none; stroke-width: 1.7; }

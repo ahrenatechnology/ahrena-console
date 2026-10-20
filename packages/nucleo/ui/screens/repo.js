@@ -6,9 +6,10 @@
 //   (`loading`), "calculando…" (`valueOrPending`). Número nenhum é inventado.
 // - Com escrita no repositório, o último card é "Tráfego e segurança"; sem, "Comunidade".
 // - `loading` ou `computing`: relê a cada 5 s, além da mudança `repos` do Ao vivo.
-// - As abas ficam no cabeçalho. Métricas é `/ui/repos/<dono>/<repo>`; Instruções (C32, issue 183) é
-//   `/ui/repos/<dono>/<repo>/instructions`, com o conteúdo de agent-instructions.js. Na aba Instruções,
-//   a leitura das métricas só enche o cabeçalho (chips e contagens das abas).
+// - As abas ficam no cabeçalho. Métricas é `/ui/repos/<dono>/<repo>`; ADRs (C29, issue 174) é
+//   `/ui/repos/<dono>/<repo>/adrs`, com o conteúdo de repo-adrs.js; Instruções (C32, issue 183) é
+//   `/ui/repos/<dono>/<repo>/instructions`, com o conteúdo de agent-instructions.js. Nas abas ADRs e
+//   Instruções, a leitura das métricas só enche o cabeçalho (chips e contagens das abas).
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
@@ -40,9 +41,10 @@ import {
 } from '../repos-format.js';
 import { loadStyle, ciPill } from './repos.js';
 import { mountInstructions } from './agent-instructions.js';
+import { mountRepoDecisions } from './repo-adrs.js';
 
 /** As abas com URL própria: a da rota (`:tab`) e a Métricas, sem segmento. */
-const TABS = ['metrics', 'instructions'];
+const TABS = ['metrics', 'adrs', 'instructions'];
 
 const SVG = 'http://www.w3.org/2000/svg';
 const REREAD_MS = 5000;
@@ -116,6 +118,8 @@ export async function mount(area, ctx) {
   let failure = null;
   let timer = null;
   let request = 0;
+  /** Quantas decisões (ADR e PDR) o repositório tem: só se sabe com a aba ADRs aberta. */
+  let decisionCount = null;
 
   // ---------- o cabeçalho: montado uma vez, o segmentado não perde o foco ----------
   const title = el('h1', {}, `${owner}/${name}`);
@@ -189,7 +193,7 @@ export async function mount(area, ctx) {
   function drawHeader() {
     const r = data?.repo;
     title.textContent = r?.fullName ?? `${owner}/${name}`;
-    ctx.title(tab === 'instructions' ? `${title.textContent} · Instruções` : title.textContent);
+    ctx.title(tab === 'instructions' ? `${title.textContent} · Instruções` : tab === 'adrs' ? `${title.textContent} · ADRs` : title.textContent);
     ciSlot.replaceChildren(...(r?.ci ? [ciPill(r.ci)] : []));
     visSlot.replaceChildren(...(r ? [el('span', { class: 'repo-chip repo-chip-sans' }, r.visibility === 'public' ? 'público' : 'privado')] : []));
     const url = r ? githubUrl(r.url) : null;
@@ -211,7 +215,7 @@ export async function mount(area, ctx) {
     chips.replaceChildren(...list.filter(Boolean));
   }
 
-  /** A fila de abas (C29): Métricas, Issues, PRs, CI, Sessões, Decisões e Instruções; a aberta com `aria-current`. */
+  /** A fila de abas (C29): Métricas, Issues, PRs, CI, Sessões, Decisões, ADRs e Instruções; a aberta com `aria-current`. */
   function tabs() {
     const url = data?.repo ? githubUrl(data.repo.url) : null;
     const count = (label, n) => (typeof n === 'number' ? `${label} (${integer(n)})` : label);
@@ -226,6 +230,8 @@ export async function mount(area, ctx) {
       // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
       el('a', { href: `/ui/sessions?search=${encodeURIComponent(name)}`, title: `Sessões cujo diretório tem "${name}"` }, icon('sessions'), count('Sessões', data?.tabs?.sessions)),
       el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icon('decision'), 'Decisões'),
+      // Decisões são as das sessões; ADRs são os registros que estão no repositório (ADR e PDR).
+      own('adrs', `${base}/adrs`, 'scroll-text', count('ADRs', decisionCount)),
       own('instructions', `${base}/instructions`, 'book-open', 'Instruções'),
     ];
   }
@@ -477,6 +483,27 @@ export async function mount(area, ctx) {
     if (changeMatters(changes, `${owner}/${name}`)) read();
   });
   ctx.onRestart(() => read());
+
+  if (tab === 'adrs') {
+    drawHeader();
+    const header = read();
+    const leaveDecisions = await mountRepoDecisions(content, ctx, {
+      owner,
+      name,
+      onCount: (n) => {
+        if (n === decisionCount) return;
+        decisionCount = n;
+        tabsNav.replaceChildren(...tabs());
+      },
+    });
+    await header;
+    return () => {
+      clearTimeout(timer);
+      timer = null;
+      request++;
+      leaveDecisions?.();
+    };
+  }
 
   if (tab === 'instructions') {
     drawHeader();
