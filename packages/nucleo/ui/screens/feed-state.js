@@ -12,12 +12,12 @@ export const STATUS = {
   error: 'Com erro',
 };
 
-/** O mesmo molde de id que a moldura aceita em `/ui/sessoes/:id`. */
+/** O mesmo molde de id que a moldura aceita em `/ui/sessions/:id`. */
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 /** O caminho do Detalhe de uma sessão, ou `null` se o id não serve como rota. */
 export function rotaDaSessao(id) {
-  return typeof id === 'string' && ID.test(id) ? `/ui/sessoes/${encodeURIComponent(id)}` : null;
+  return typeof id === 'string' && ID.test(id) ? `/ui/sessions/${encodeURIComponent(id)}` : null;
 }
 
 export function novoEstado() {

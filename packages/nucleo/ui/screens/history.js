@@ -4,7 +4,7 @@
 // As funções puras exportadas (rota, datas, valores) não tocam o DOM: os testes as importam no node.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 /** Quantos dias cada página traz. */
 export const DIAS_POR_PAGINA = 7;
@@ -107,7 +107,7 @@ function badge(status) {
   return el('span', { class: `badge b-${conhecido ? status : 'abandoned'}` }, el('span', { class: 'p' }), conhecido ? STATUS[status] : String(status ?? '—'));
 }
 
-const rotaDaSessao = (id) => `/ui/sessoes/${encodeURIComponent(id)}`;
+const rotaDaSessao = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
 function linha(s) {
   const id = String(s.id);
@@ -151,7 +151,7 @@ function grupo(dia, hoje) {
 export function montar(area, ctx) {
   // O estilo da tela, uma vez por página.
   if (!document.querySelector('link[data-tela="historico"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/historico.css', 'data-tela': 'historico' }));
+    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/history.css', 'data-tela': 'historico' }));
   }
   const entrada = el('input', { type: 'search', placeholder: 'Buscar…', 'aria-label': 'Buscar no histórico', maxlength: BUSCA_MAXIMA, autocomplete: 'off', spellcheck: 'false' });
   const campo = el('label', { class: 'hist-busca' }, icone('buscar'), entrada);

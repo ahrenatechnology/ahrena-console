@@ -1,12 +1,12 @@
 // A tela do Kanban na /ui (#31): as funções puras dos cards, o registro da tela e os arquivos dela
-// (telas/kanban.js e kanban.css), que o núcleo serve e que seguem as regras da /ui.
+// (screens/kanban.js e kanban.css), que o núcleo serve e que seguem as regras da /ui.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI, responderUi } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { findScreen, SCREENS } from '../../ui/screens.js';
 import {
   corDaColuna,
   faltam,
@@ -22,9 +22,9 @@ import {
   status,
   visaoDaUrl,
   // @ts-expect-error: idem
-} from '../../ui/telas/kanban.js';
+} from '../../ui/screens/kanban.js';
 
-const ARQUIVOS = ['telas/kanban.js', 'kanban.css'];
+const ARQUIVOS = ['screens/kanban.js', 'kanban.css'];
 
 describe('Kanban: funções da tela', () => {
   test('duração: segundos, minutos e horas com minutos', () => {
@@ -81,10 +81,11 @@ describe('Kanban: funções da tela', () => {
 
   test('visão na URL e rotas da API', () => {
     assert.equal(visaoDaUrl(''), 'sessoes');
-    assert.equal(visaoDaUrl('?visao=agentes'), 'agentes');
-    assert.equal(visaoDaUrl('?visao=sessoes'), 'sessoes');
-    assert.equal(visaoDaUrl('?visao=<x>'), 'sessoes');
-    assert.equal(queryDaVisao('agentes'), '?visao=agentes');
+    assert.equal(visaoDaUrl('?view=agents'), 'agentes');
+    assert.equal(visaoDaUrl('?view=sessions'), 'sessoes');
+    assert.equal(visaoDaUrl('?view=<x>'), 'sessoes');
+    assert.equal(visaoDaUrl('?visao=agentes'), 'sessoes', 'the old query is the shell router\'s job (legacyUrl)');
+    assert.equal(queryDaVisao('agentes'), '?view=agents');
     assert.equal(queryDaVisao('sessoes'), '');
     assert.equal(rotaDoKanban('sessoes'), '/api/kanban?view=sessions');
     assert.equal(rotaDoKanban('agentes', 'esperando', 2), '/api/kanban?view=agents&column=esperando&page=2');
@@ -102,12 +103,12 @@ describe('Kanban: funções da tela', () => {
 
 describe('Kanban: registro e arquivos', () => {
   test('a rota /ui/kanban abre a tela, com o item depois de Sessões e do Feed (a ordem do wireframe)', () => {
-    const ids = TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
-    assert.equal(ids.indexOf('kanban'), Math.max(ids.indexOf('sessoes'), ids.indexOf('feed')) + 1);
-    const { tela } = acharTela('/ui/kanban');
+    const ids = SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
+    assert.equal(ids.indexOf('kanban'), Math.max(ids.indexOf('sessions'), ids.indexOf('feed')) + 1);
+    const { screen: tela } = findScreen('/ui/kanban');
     assert.equal(tela.id, 'kanban');
-    assert.equal(tela.arquivo, '/ui/telas/kanban.js');
-    assert.deepEqual(tela.item, { rotulo: 'Kanban', icone: 'kanban', section: 'main' });
+    assert.equal(tela.file, '/ui/screens/kanban.js');
+    assert.deepEqual(tela.item, { label: 'Kanban', icon: 'kanban', section: 'main' });
     assert.match(readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8'), /\n {2}kanban: '/);
   });
 
@@ -125,22 +126,22 @@ describe('Kanban: registro e arquivos', () => {
   // desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões). Tudo do Kanban é `kb-`.
   test('o CSS do Kanban só estiliza classe kb- ou da moldura, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const daMoldura = classes('moldura.css');
+    const daMoldura = classes('shell.css');
     const minhas = [...classes('kanban.css')].filter((c) => !daMoldura.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('kb-')), [], 'classe própria sem o prefixo kb-');
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['kanban.css', 'moldura.css', 'marca.css'].includes(a));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['kanban.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const delas = classes(outra);
       assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `kanban.css e ${outra} estilizam as mesmas classes`);
     }
     // E a tela só usa classes que existem (as kb- do CSS, as da moldura e o `cartao`).
-    const js = readFileSync(`${PASTA_DA_UI}telas/kanban.js`, 'utf8');
+    const js = readFileSync(`${PASTA_DA_UI}screens/kanban.js`, 'utf8');
     const usadas = new Set([...js.matchAll(/\bkb-[a-z0-9-]+/g)].map((m) => m[0]).filter((c) => !c.endsWith('-')));
     for (const c of usadas) assert.ok(minhas.includes(c), `${c} não está no kanban.css`);
   });
 
-  test('o núcleo serve telas/kanban.js e kanban.css com o tipo certo', async () => {
-    for (const [a, tipo] of [['telas/kanban.js', /^text\/javascript/], ['kanban.css', /^text\/css/]] as const) {
+  test('o núcleo serve screens/kanban.js e kanban.css com o tipo certo', async () => {
+    for (const [a, tipo] of [['screens/kanban.js', /^text\/javascript/], ['kanban.css', /^text\/css/]] as const) {
       let status = 0;
       let headers: Record<string, string | number> = {};
       let corpo = '';

@@ -1,4 +1,4 @@
-/* Kanban do projeto (C11, #80): carregado pela tela (ui/telas/projeto.js). Só variáveis de marca.css. */
+/* Kanban do projeto (C11, #80): carregado pela tela (ui/screens/project.js). Só variáveis de marca.css. */
 .pj-marco { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; min-width: 200px; cursor: pointer; }
 .pj-marco > .icone { margin-left: auto; pointer-events: none; }
 .pj-marco:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }

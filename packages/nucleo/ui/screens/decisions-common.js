@@ -3,19 +3,19 @@
 // "Promover a registro".
 //
 // Tudo o que vem do núcleo é conteúdo não confiável: entra por `textContent` (`el()`), nunca como HTML.
-// As escritas passam por `escrever()` (ler.js); nada aqui chama `fetch`.
+// As escritas passam por `escrever()` (api.js); nada aqui chama `fetch`.
 
 import { el, icone } from '../dom.js';
-import { escrever } from '../ler.js';
+import { escrever } from '../api.js';
 
 // ---------- Estilo ----------
 
 let cssCarregado = false;
-/** As duas telas usam o mesmo `ui/decisoes.css` (na raiz, como o das outras telas); a primeira que abrir o põe no `<head>`. */
+/** As duas telas usam o mesmo `ui/decisions.css` (na raiz, como o das outras telas); a primeira que abrir o põe no `<head>`. */
 export function carregarCssDasDecisoes() {
   if (cssCarregado || typeof document === 'undefined' || document.querySelector('link[data-tela="decisoes"]')) return;
   cssCarregado = true;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/decisoes.css', 'data-tela': 'decisoes' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/decisions.css', 'data-tela': 'decisoes' }));
 }
 
 // ---------- Rótulos (funções puras) ----------
@@ -90,7 +90,7 @@ export function pedidoDePromover(id, sessao, gravar = null) {
 }
 
 /** O "Ver na conversa" só vira link quando é uma rota da própria interface. */
-export const linkDaConversa = (d) => (typeof d.conversa === 'string' && /^\/ui\/sessoes\/[A-Za-z0-9_.:%-]{1,200}$/.test(d.conversa) ? d.conversa : null);
+export const linkDaConversa = (d) => (typeof d.conversa === 'string' && /^\/ui\/sessions\/[A-Za-z0-9_.:%-]{1,200}$/.test(d.conversa) ? d.conversa : null);
 
 // ---------- Peças ----------
 

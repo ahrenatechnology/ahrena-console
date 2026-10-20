@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFalso } from './dom-falso.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import { ErroDeEscrita, ErroDeLeitura, escritorHttp } from '../../ui/ler.js';
+import { ErroDeEscrita, ErroDeLeitura, escritorHttp } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { filtrar, montar, tipoDoCard } from '../../ui/telas/projeto.js';
+import { filtrar, montar, tipoDoCard } from '../../ui/screens/project.js';
 // @ts-expect-error: idem
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { findScreen, SCREENS } from '../../ui/screens.js';
 
 instalarDomFalso();
 
@@ -494,29 +494,29 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('a tela não escreve cor à mão nem cita endereço externo, e está no registro', () => {
-    const fonte = readFileSync(`${PASTA_DA_UI}telas/projeto.js`, 'utf8');
+    const fonte = readFileSync(`${PASTA_DA_UI}screens/project.js`, 'utf8');
     assert.doesNotMatch(fonte, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i);
     assert.doesNotMatch(fonte, /https?:\/\//);
     assert.doesNotMatch(fonte, /innerHTML|style=|\bfetch\(/);
-    assert.ok(readdirSync(`${PASTA_DA_UI}telas`).includes('projeto.js'));
-    const achada = acharTela('/ui/projeto');
-    assert.equal(achada.tela.id, 'projeto');
-    assert.equal(achada.tela.arquivo, '/ui/telas/projeto.js');
-    assert.deepEqual(TELAS.find((t: { id: string }) => t.id === 'projeto').item, { rotulo: 'Kanban do projeto', icone: 'github', section: 'main' });
+    assert.ok(readdirSync(`${PASTA_DA_UI}screens`).includes('project.js'));
+    const achada = findScreen('/ui/project');
+    assert.equal(achada.screen.id, 'project');
+    assert.equal(achada.screen.file, '/ui/screens/project.js');
+    assert.deepEqual(SCREENS.find((t: { id: string }) => t.id === 'project').item, { label: 'Kanban do projeto', icon: 'github', section: 'main' });
   });
 
   // O CSS de cada tela fica na página depois que ela abre: uma classe de nome igual em duas telas quebra a outra.
-  test('o CSS da tela fica em projeto.css, que a tela carrega, com as classes próprias em pj-', () => {
+  test('o CSS da tela fica em project.css, que a tela carrega, com as classes próprias em pj-', () => {
     const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const css = semComentario('projeto.css');
+    const css = semComentario('project.css');
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(|https?:\/\//i);
-    assert.doesNotMatch(semComentario('moldura.css'), /\.pj-/, 'nada da tela na moldura');
-    assert.match(readFileSync(`${PASTA_DA_UI}telas/projeto.js`, 'utf8'), /'\/ui\/projeto\.css'/);
+    assert.doesNotMatch(semComentario('shell.css'), /\.pj-/, 'nada da tela na moldura');
+    assert.match(readFileSync(`${PASTA_DA_UI}screens/project.js`, 'utf8'), /'\/ui\/project\.css'/);
     // Toda regra começa por uma classe pj-: o resto (.cab, .tipo, .pe…) só vale dentro dela.
     for (const regra of css.split('}').map((r) => r.split('{')[0]!.trim()).filter((r) => r && !r.startsWith('@'))) {
       for (const seletor of regra.split(',')) assert.match(seletor.trim(), /^\.pj-/, seletor);
     }
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && a !== 'projeto.css');
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && a !== 'project.css');
     for (const outra of outras) assert.doesNotMatch(semComentario(outra), /\.pj-/, outra);
   });
 });

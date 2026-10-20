@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 
-// ---------- Um DOM mínimo: só o que dom.js, estados.js e a tela usam ----------
+// ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
 class No {
   filhos: No[] = [];
@@ -92,9 +92,9 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const tela = await import('../../ui/telas/mural.js');
+const tela = await import('../../ui/screens/wall.js');
 // @ts-expect-error: idem
-const { acharTela } = await import('../../ui/telas.js');
+const { findScreen } = await import('../../ui/screens.js');
 const { custo, esforco, montar, nomeDoModelo, oQueOCardMostra } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
@@ -212,7 +212,7 @@ describe('Mural: a tela montada', () => {
       assert.ok(cards.every((c) => c.tag === 'a'));
       assert.deepEqual(
         cards.map((c) => c.getAttribute('href')),
-        ['/ui/sessoes/ativa-1', '/ui/sessoes/espera-1', '/ui/sessoes/espera-2', '/ui/sessoes/erro-1', '/ui/sessoes/feita-1'],
+        ['/ui/sessions/ativa-1', '/ui/sessions/espera-1', '/ui/sessions/espera-2', '/ui/sessions/erro-1', '/ui/sessions/feita-1'],
       );
       assert.ok(cards[1]!.classes.includes('mural-st-waiting'));
 
@@ -239,7 +239,7 @@ describe('Mural: a tela montada', () => {
 
       // Concluída: "Terminou sem erro", sem modelo é traço, sem preço é traço.
       assert.match(cards[4]!.textContent, /Terminou sem erro.*Modelo—.*Custo—/);
-      assert.ok(head.todos((e) => e.getAttribute('href') === '/ui/mural.css').length === 1, 'a tela carrega o próprio CSS');
+      assert.ok(head.todos((e) => e.getAttribute('href') === '/ui/wall.css').length === 1, 'a tela carrega o próprio CSS');
     } finally {
       await sair();
     }
@@ -258,13 +258,13 @@ describe('Mural: a tela montada', () => {
     }
   });
 
-  test('montar a tela de novo não duplica o <link> do mural.css', async () => {
+  test('montar a tela de novo não duplica o <link> do wall.css', async () => {
     for (let i = 0; i < 3; i++) {
       const { pronta, sair } = await montarTela(async () => MURAL);
       await pronta;
       await sair();
     }
-    assert.equal(head.todos((e) => e.tag === 'link' && e.getAttribute('href') === '/ui/mural.css').length, 1);
+    assert.equal(head.todos((e) => e.tag === 'link' && e.getAttribute('href') === '/ui/wall.css').length, 1);
     assert.equal(head.todos((e) => e.tag === 'link').length, 1);
   });
 
@@ -360,7 +360,7 @@ describe('Mural: a tela montada', () => {
       for (const f of ouvintes.mudar) f([{ tipo: 'plano', chave: 'nova-1' }]);
       await ate(() => comClasse(area, 'mural-card').length === 6);
       assert.equal(rotas.length, 2, 'a rajada vira uma leitura só');
-      assert.equal(comClasse(area, 'mural-card')[0]!.getAttribute('href'), '/ui/sessoes/nova-1');
+      assert.equal(comClasse(area, 'mural-card')[0]!.getAttribute('href'), '/ui/sessions/nova-1');
 
       dados = MURAL;
       for (const f of ouvintes.reiniciar) f();
@@ -406,16 +406,16 @@ describe('Mural: ao vivo com atividade contínua', () => {
   });
 });
 
-test('a tela está registrada em /ui/mural, na barra como "Mural ao vivo"', () => {
-  const { tela: t } = acharTela('/ui/mural');
-  assert.equal(t.id, 'mural');
-  assert.equal(t.arquivo, '/ui/telas/mural.js');
-  assert.deepEqual(t.item, { rotulo: 'Mural ao vivo', icone: 'mural', section: 'main' });
+test('a tela está registrada em /ui/wall, na barra como "Mural ao vivo"', () => {
+  const { screen: t } = findScreen('/ui/wall');
+  assert.equal(t.id, 'wall');
+  assert.equal(t.file, '/ui/screens/wall.js');
+  assert.deepEqual(t.item, { label: 'Mural ao vivo', icon: 'mural', section: 'main' });
   assert.equal(t.sub, 'Um card por sessão aberta nesta máquina');
 });
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem HTML ou estilo inline', () => {
-  for (const arquivo of ['telas/mural.js', 'mural.css']) {
+  for (const arquivo of ['screens/wall.js', 'wall.css']) {
     const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     assert.doesNotMatch(texto, /https?:\/\//, `${arquivo} chama endereço de fora`);
@@ -430,14 +430,14 @@ test('a rota da tela é a do núcleo', async () => {
 
 // O CSS de cada tela fica carregado quando se troca de tela: classe com o mesmo nome em duas telas
 // desmonta a outra. As do mural levam `mural-`; em comum só a moldura e os selos de status.
-test('o mural.css não estiliza classe de outra tela: as próprias levam mural-', () => {
+test('o wall.css não estiliza classe de outra tela: as próprias levam mural-', () => {
   const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
   const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-  const daMoldura = classes('moldura.css');
-  const minhas = [...classes('mural.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
+  const daMoldura = classes('shell.css');
+  const minhas = [...classes('wall.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
   assert.deepEqual(minhas.filter((c) => !c.startsWith('mural-')), [], 'classe própria sem o prefixo mural-');
-  const css = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)];
-  for (const outra of css.filter((a) => a.endsWith('.css') && !['mural.css', 'moldura.css', 'marca.css'].includes(a))) {
-    assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `mural.css e ${outra} estilizam as mesmas classes`);
+  const css = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)];
+  for (const outra of css.filter((a) => a.endsWith('.css') && !['wall.css', 'shell.css', 'brand.css'].includes(a))) {
+    assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `wall.css e ${outra} estilizam as mesmas classes`);
   }
 });

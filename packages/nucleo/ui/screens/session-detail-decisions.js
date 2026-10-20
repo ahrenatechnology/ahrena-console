@@ -1,16 +1,16 @@
-// A aba Decisões do Detalhe da sessão (C20, issue 103), num módulo à parte para o detalhe.js (#29 e #30)
+// A aba Decisões do Detalhe da sessão (C20, issue 103), num módulo à parte para o session-detail.js (#29 e #30)
 // só importar. Lê `GET /api/sessions/<id>/decisions?scope=&state=&q=` (src/api/decisoes-ui.ts).
 //
-// Contrato com o detalhe.js, igual às outras abas:
+// Contrato com o session-detail.js, igual às outras abas:
 //   const aba = criar(ctx, base, { cabeca: () => cabeca, rotular: (texto) => … });
 //   aba.mostrar(corpo); aba.esconder(); aba.atualizar();
 // `rotular(texto)` recebe o que vai entre parênteses na aba (o total do escopo, "4"), ou `null` para tirar
-// o número; o detalhe.js redesenha as abas. O escopo padrão é a família, como o da API.
+// o número; o session-detail.js redesenha as abas. O escopo padrão é a família, como o da API.
 // `atualizar()` também serve com a aba escondida: lê e só rotula.
 
 import { el, icone } from '../dom.js';
-import { erro } from '../estados.js';
-import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisoes-comum.js';
+import { erro } from '../states.js';
+import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisions-common.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);
@@ -122,7 +122,7 @@ export function criar(ctx, base, { cabeca = () => null, rotular = () => {} } = {
     }
   }
 
-  // As decisões de outra sessão da família ou do branch também mudam esta aba: o detalhe.js só relê
+  // As decisões de outra sessão da família ou do branch também mudam esta aba: o session-detail.js só relê
   // pelas mudanças desta sessão, então a aba escuta as de decisão por conta própria.
   let espera = null;
   ctx.aoMudar((mudancas) => {

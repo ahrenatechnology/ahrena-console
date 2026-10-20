@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
-import * as E from '../../ui/telas/feed-estado.js';
+import * as E from '../../ui/screens/feed-state.js';
 
 // ---------- um DOM mínimo, só o que el(), icone() e a tela usam ----------
 
@@ -173,7 +173,7 @@ describe('Feed de atividade: estado', () => {
   });
 
   test('só id que serve de rota vira link para o Detalhe', () => {
-    assert.equal(E.rotaDaSessao('c3f09b52-4e1'), '/ui/sessoes/c3f09b52-4e1');
+    assert.equal(E.rotaDaSessao('c3f09b52-4e1'), '/ui/sessions/c3f09b52-4e1');
     for (const ruim of ['../x', 'a b', '', null, 'x'.repeat(129), 'javascript:alert(1)/']) assert.equal(E.rotaDaSessao(ruim), null, String(ruim));
   });
 
@@ -230,7 +230,7 @@ describe('Feed de atividade: a tela', () => {
   before(async () => {
     Object.assign(globalThis, { document: documento, Node: No });
     // @ts-expect-error: idem
-    ({ montar } = await import('../../ui/telas/feed.js'));
+    ({ montar } = await import('../../ui/screens/feed.js'));
   });
   after(() => Object.assign(globalThis, salvo));
 
@@ -280,7 +280,7 @@ describe('Feed de atividade: a tela', () => {
     assert.match(l1!.textContent, /Esperando você/);
     assert.match(l1!.textContent, /motor-de-regras › Separar pagamentos em serviços › test-runner/);
     assert.match(l1!.textContent, /1 min/);
-    assert.equal(l1!.querySelector('a')!.getAttribute('href'), '/ui/sessoes/c3f09b52-4e1');
+    assert.equal(l1!.querySelector('a')!.getAttribute('href'), '/ui/sessions/c3f09b52-4e1');
     assert.equal(l2!.querySelector('a'), null, 'id de sessão que não serve de rota não vira link');
     assert.ok(l2!.textContent.includes(ataque), 'o <script> do núcleo está lá como texto');
     assert.ok(!area.querySelectorAll('script, img').length, 'e nenhum elemento nasceu dele');
@@ -402,17 +402,17 @@ describe('Feed de atividade: a tela', () => {
   test('o feed.css só estiliza classes com o prefixo feed-, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-    const daMoldura = classes('moldura.css');
+    const daMoldura = classes('shell.css');
     const minhas = [...classes('feed.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('feed-')), [], 'classe própria sem o prefixo feed-');
-    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'moldura.css', 'marca.css'].includes(a))) {
+    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'shell.css', 'brand.css'].includes(a))) {
       const delas = classes(outra);
       assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `feed.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   test('a tela não usa fetch, innerHTML nem estilo inline', () => {
-    for (const a of ['telas/feed.js', 'telas/feed-estado.js']) {
+    for (const a of ['screens/feed.js', 'screens/feed-state.js']) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       assert.doesNotMatch(texto, /\bfetch\(|innerHTML|\.style\.|style=/, a);
     }

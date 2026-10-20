@@ -179,7 +179,7 @@ pub fn caminho_da_sessao(sessao: &str) -> String {
     if matches!(sessao, "" | "." | "..") {
         return "/ui".into();
     }
-    format!("/ui/sessoes/{}", http::codificar(sessao))
+    format!("/ui/sessions/{}", http::codificar(sessao))
 }
 
 /// O `local_…` que o `POST /open/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.
@@ -308,8 +308,8 @@ mod testes {
 
     #[test]
     fn caminho_da_tela_da_sessao() {
-        assert_eq!(caminho_da_sessao("c3f09b52"), "/ui/sessoes/c3f09b52");
-        assert_eq!(caminho_da_sessao("a:b/c"), "/ui/sessoes/a%3Ab%2Fc");
+        assert_eq!(caminho_da_sessao("c3f09b52"), "/ui/sessions/c3f09b52");
+        assert_eq!(caminho_da_sessao("a:b/c"), "/ui/sessions/a%3Ab%2Fc");
         for vazia in ["", ".", ".."] {
             assert_eq!(caminho_da_sessao(vazia), "/ui", "{vazia:?}");
         }

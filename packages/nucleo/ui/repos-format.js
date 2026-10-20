@@ -100,11 +100,15 @@ export const PERIODOS = [
 ];
 export const PERIODO_PADRAO = '90d';
 
-/** O período de `?periodo=`, ou o padrão se não veio ou é estranho. */
+/** The period of `?period=` (`1y` in the URL is `1a`, the API value), or the default when it is missing or odd. */
 export function periodoDe(busca) {
-  const p = new URLSearchParams(busca ?? '').get('periodo');
+  const q = new URLSearchParams(busca ?? '').get('period');
+  const p = q === '1y' ? '1a' : q;
   return PERIODOS.some(([v]) => v === p) ? p : PERIODO_PADRAO;
 }
+
+/** The period as the URL writes it: `1y` for the year, the others as they are. */
+export const periodInUrl = (p) => (p === '1a' ? '1y' : p);
 
 export const rotuloDoPeriodo = (p) => (PERIODOS.find(([v]) => v === p) ?? PERIODOS[1])[1];
 

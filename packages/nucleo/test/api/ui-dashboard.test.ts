@@ -9,7 +9,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 
-// ---------- Um DOM mínimo: só o que dom.js, estados.js e a tela usam ----------
+// ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
 class No {
   filhos: No[] = [];
@@ -84,7 +84,7 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const tela = await import('../../ui/telas/dashboard.js');
+const tela = await import('../../ui/screens/dashboard.js');
 const { cards, cartoesDaInbox, custo, idade, montar, nomeDoModelo, quantidade, tituloDaInbox } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
@@ -138,7 +138,7 @@ describe('Dashboard: formatação', () => {
     const atencao = { total: 5, itens: [item('a', 'permissao'), item('b', 'erro', 0), item('c', 'sua-vez'), item('d', 'plano'), item('e', 'pergunta')] };
     const c = cartoesDaInbox(atencao, [{ sessao: 'a', tarefa: 'Bash: npm run migrate', modelo: 'claude-opus-5-5' }]);
     assert.equal(c.length, 4);
-    assert.deepEqual([c[0].nome, c[0].texto, c[0].pe, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessoes/a']);
+    assert.deepEqual([c[0].nome, c[0].texto, c[0].pe, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessions/a']);
     assert.deepEqual([c[1].texto, c[1].pe, c[1].idade], ['pede permissão para usar Bash', 'equipe', 'agora']);
     assert.equal(tituloDaInbox(1), '1 precisa de você');
     assert.equal(tituloDaInbox(4), '4 precisam de você');
@@ -195,21 +195,21 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       const inbox = comClasse(area, 'inbox')[0]!;
       assert.match(inbox.textContent, /2 precisam de você/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessoes/sim-painel-motor-de-regras', '/ui/sessoes/sim-painel-app-receitas']);
+      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
       assert.equal(contadores.dashboard, 2);
 
       const agentes = comClasse(area, 'ac');
       assert.equal(agentes.length, 3);
-      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessoes/${SESSAO_DO_PAINEL}`);
+      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessions/${SESSAO_DO_PAINEL}`);
       assert.match(agentes[0]!.textContent, /Agente principal · Kanban de sessões no artefato.*ahrena-demo · 2 subagentes · 18 turnos.*Ativa/);
       assert.match(agentes[0]!.textContent, /Opus 5\.5.*~US\$ 1,84.*Rodar a bateria/);
       assert.ok(agentes[1]!.classes.includes('st-waiting'));
 
       const linhas = comClasse(area, 'linha');
-      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessoes/sim-painel-motor-de-regras', '/ui/sessoes/sim-painel-app-receitas']);
+      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
       assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
-      assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessoes').length > 0), 'Ver tudo leva às Sessões');
+      assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
     } finally {
       sair();
     }
@@ -266,7 +266,7 @@ test('as rotas da tela são as do núcleo', async () => {
 });
 
 test('a tela e o estilo dela não escrevem cor à mão nem chamam endereço de fora', () => {
-  for (const arquivo of ['telas/dashboard.js', 'dashboard.css']) {
+  for (const arquivo of ['screens/dashboard.js', 'dashboard.css']) {
     const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     assert.doesNotMatch(texto, /https?:\/\//, `${arquivo} chama endereço de fora`);

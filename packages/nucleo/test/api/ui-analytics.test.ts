@@ -5,9 +5,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { findScreen, SCREENS } from '../../ui/screens.js';
 
-// ---------- Um DOM mínimo: só o que dom.js, estados.js e a tela usam ----------
+// ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
 class No {
   filhos: No[] = [];
@@ -83,7 +83,7 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const tela = await import('../../ui/telas/analytics.js');
+const tela = await import('../../ui/screens/analytics.js');
 const { montar, quantidade, usd, dataCurta, nomeDoModelo, milhoes, porcento, topoDoEixo, fatiasPorModelo, classeDaConta, nomeDoArquivo } = tela;
 
 const comClasse = (r: No, c: string) => r.todos((e) => e.classes.includes(c));
@@ -182,7 +182,7 @@ async function montarTela({ aba, ler }: { aba?: string; ler: (rota: string) => P
   const reiniciar: (() => void)[] = [];
   const navegou: string[] = [];
   const ctx = {
-    params: aba === undefined ? {} : { aba },
+    params: aba === undefined ? {} : { tab: aba },
     sinal: new AbortController().signal,
     ler: async (rota: string) => (rotas.push(rota), ler(rota)),
     aoMudar: (f: () => void) => mudar.push(f),
@@ -297,7 +297,7 @@ describe('Analytics: Visão geral', () => {
       const links = porTag(abas[0]!, 'a');
       assert.deepEqual(links.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')]), [
         ['Visão geral', '/ui/analytics', 'page'],
-        ['Custo', '/ui/analytics/custo', null],
+        ['Custo', '/ui/analytics/cost', null],
       ]);
 
       assert.equal(comClasse(area, 'an-cel').length, 364, 'heatmap: uma célula por dia');
@@ -408,7 +408,7 @@ describe('Analytics: Visão geral', () => {
 
 describe('Analytics: Custo', () => {
   test('seletor 7/30/90, quatro números, linha, rosca e por projeto; trocar o período relê com ?days=', async () => {
-    const { area, rotas, limpar } = await montarTela({ aba: 'custo', ler: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
+    const { area, rotas, limpar } = await montarTela({ aba: 'cost', ler: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
     try {
       assert.match(rotas[0]!, /^\/api\/analytics\/cost\?days=30&tz=[^&]+$/);
       const texto = area.textContent;
@@ -448,7 +448,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('com duas contas, hoje e o período levam a divisão por conta (parcial quando falta preço); com uma, não', async () => {
-    const duas = await montarTela({ aba: 'custo', ler: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
+    const duas = await montarTela({ aba: 'cost', ler: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
     try {
       const card = (id: string) => comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === id)!;
       const periodo = porTag(comClasse(card('periodo'), 'an-contas')[0]!, 'li');
@@ -460,7 +460,7 @@ describe('Analytics: Custo', () => {
     } finally {
       duas.limpar();
     }
-    const uma = await montarTela({ aba: 'custo', ler: async () => custo(30) });
+    const uma = await montarTela({ aba: 'cost', ler: async () => custo(30) });
     try {
       assert.equal(comClasse(uma.area, 'an-contas').length, 0);
     } finally {
@@ -472,7 +472,7 @@ describe('Analytics: Custo', () => {
     const d = custo(30);
     d.periodo = { usd: null, mediaPorDia: null };
     d.resumoDeHoje = { usd: null, sessoes: 2, porConta: [] };
-    const { area, limpar } = await montarTela({ aba: 'custo', ler: async () => d });
+    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => d });
     try {
       const textos = comClasse(area, 'an-stat').map((s) => s.textContent);
       assert.equal(textos[0], 'Hojesem preço2 sessões');
@@ -483,7 +483,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('período sem custo: o estado vazio, com o seletor no ar', async () => {
-    const { area, limpar } = await montarTela({ aba: 'custo', ler: async () => custo(7, { vazio: true }) });
+    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => custo(7, { vazio: true }) });
     try {
       assert.match(area.textContent, /Nenhum custo nos últimos 30 dias/);
       assert.equal(porTag(area, 'button').filter((b) => b.getAttribute('data-dias')).length, 3);
@@ -493,7 +493,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('erro na leitura do custo', async () => {
-    const { area, limpar } = await montarTela({ aba: 'custo', ler: async () => Promise.reject(new Error('O núcleo respondeu 500')) });
+    const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => Promise.reject(new Error('O núcleo respondeu 500')) });
     try {
       assert.match(area.textContent, /Sem conexão com o núcleo.*O núcleo respondeu 500.*Tentar de novo/);
     } finally {
@@ -516,15 +516,15 @@ describe('Analytics: Custo', () => {
 
 // ---------- Registro, rotas e regras da página ----------
 
-test('o registro: Analytics na barra; /ui/analytics/custo abre a mesma tela e acende Analytics', () => {
-  const a = acharTela('/ui/analytics');
-  assert.equal(a.tela.id, 'analytics');
-  assert.deepEqual(a.tela.item, { rotulo: 'Analytics', icone: 'analytics', section: 'main' });
-  const c = acharTela('/ui/analytics/custo');
-  assert.equal(c.tela.acende, 'analytics');
-  assert.deepEqual(c.params, { aba: 'custo' });
-  assert.equal(c.tela.arquivo, a.tela.arquivo);
-  assert.equal(TELAS.filter((t: { item?: { rotulo: string } }) => t.item?.rotulo === 'Analytics').length, 1, 'um item só na barra');
+test('the registry: Analytics in the sidebar; /ui/analytics/cost opens the same screen and lights Analytics', () => {
+  const a = findScreen('/ui/analytics');
+  assert.equal(a.screen.id, 'analytics');
+  assert.deepEqual(a.screen.item, { label: 'Analytics', icon: 'analytics', section: 'main' });
+  const c = findScreen('/ui/analytics/cost');
+  assert.equal(c.screen.highlights, 'analytics');
+  assert.deepEqual(c.params, { tab: 'cost' });
+  assert.equal(c.screen.file, a.screen.file);
+  assert.equal(SCREENS.filter((t: { item?: { label: string } }) => t.item?.label === 'Analytics').length, 1, 'um item só na barra');
 });
 
 test('as rotas e os períodos da tela são os do núcleo', async () => {
@@ -535,7 +535,7 @@ test('as rotas e os períodos da tela são os do núcleo', async () => {
 });
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem estilo inline', () => {
-  for (const arquivo of ['telas/analytics.js', 'analytics.css']) {
+  for (const arquivo of ['screens/analytics.js', 'analytics.css']) {
     const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
@@ -547,10 +547,10 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
   // em outra tela, desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões, #151).
   test('analytics.css só estiliza classes an-* ou da moldura, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const daMoldura = classes('moldura.css');
+    const daMoldura = classes('shell.css');
     const minhas = [...classes('analytics.css')].filter((c) => !daMoldura.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('an-')), [], 'classe própria do Analytics sem o prefixo an-');
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['analytics.css', 'moldura.css', 'marca.css'].includes(a));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['analytics.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
       assert.deepEqual(comuns, [], `analytics.css e ${outra} estilizam as mesmas classes`);

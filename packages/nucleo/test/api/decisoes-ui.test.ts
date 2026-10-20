@@ -103,7 +103,7 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
     assert.equal(sugerida.sessionId, VITRINE);
     assert.equal(sugerida.escopo, 'sessao');
     assert.equal(sugerida.sessao, 'esta', 'na página não há sessão de referência');
-    assert.equal(sugerida.conversa, `/ui/sessoes/${VITRINE}`);
+    assert.equal(sugerida.conversa, `/ui/sessions/${VITRINE}`);
     assert.equal(sugerida.branch, 'feat/42-kanban');
     assert.equal(sugerida.repo, '/simulacao/vitrine-demo');
     const correcao = vitrine.itens[1]!;
@@ -406,7 +406,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.match(rascunho.markdown, /\*\*Data:\*\* 2026-11-02/);
       assert.match(rascunho.markdown, /## Contexto\n\nA consulta do relatório mensal varre a tabela inteira\. Qual índice\?/);
       assert.match(rascunho.markdown, /## Alternativas consideradas\n\n- view materializada\n- sem índice/);
-      assert.match(rascunho.markdown, /\/ui\/sessoes\/teste-promover/);
+      assert.match(rascunho.markdown, /\/ui\/sessions\/teste-promover/);
       // Com caminho mas sem confirmar: continua rascunho.
       assert.equal((await c.postar(rota, { sessao: 'teste-promover', caminho: rascunho.caminho })).status, 200);
       assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: 'sim', caminho: rascunho.caminho })).status, 200);

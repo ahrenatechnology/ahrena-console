@@ -23,9 +23,9 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const { montar: montarLista } = await import('../../ui/telas/repos.js');
+const { montar: montarLista } = await import('../../ui/screens/repos.js');
 // @ts-expect-error: idem
-const { montar: montarRepo } = await import('../../ui/telas/repo.js');
+const { montar: montarRepo } = await import('../../ui/screens/repo.js');
 
 const AGORA = Date.now();
 const HORA = 3_600_000;
@@ -170,7 +170,7 @@ const montarListaCom = async (lista: ListaDeRepos) => {
 
 const montarRepoCom = async (dados: MetricasDoRepo) => {
   local.search = '';
-  const m = montar(montarRepo, async () => dados, { dono: 'exemplo-labs', repo: 'vitrine-demo' });
+  const m = montar(montarRepo, async () => dados, { owner: 'exemplo-labs', repo: 'vitrine-demo' });
   await m.pronta;
   return m;
 };
@@ -298,19 +298,19 @@ describe('Repositório (C23) montada', () => {
   });
 
   test('#105 critério 6: trocar o período relê com o novo periodo e descarta a resposta do período velho', async () => {
-    local.search = '?periodo=90d';
+    local.search = '?period=90d';
     const pendentes = new Map<string, (d: MetricasDoRepo) => void>();
     const m = montar(
       montarRepo,
       (rota) => new Promise((resolver) => pendentes.set(new URLSearchParams(rota.split('?')[1]).get('period')!, resolver as (d: MetricasDoRepo) => void)),
-      { dono: 'exemplo-labs', repo: 'vitrine-demo' },
+      { owner: 'exemplo-labs', repo: 'vitrine-demo' },
     );
     assert.deepEqual(m.leituras, ['/api/repos/exemplo-labs/vitrine-demo?period=90d']);
 
     const botao = (rotulo: string) => m.area.querySelectorAll('.repo-seg button').find((b) => texto(b) === rotulo)!;
     botao('30 dias').click();
     assert.deepEqual(m.leituras.at(-1), '/api/repos/exemplo-labs/vitrine-demo?period=30d');
-    assert.equal(local.search, '?periodo=30d');
+    assert.equal(local.search, '?period=30d');
     assert.equal(botao('30 dias').getAttribute('aria-pressed'), 'true');
     assert.equal(botao('90 dias').getAttribute('aria-pressed'), 'false');
 
@@ -335,7 +335,7 @@ describe('Repositório (C23) montada', () => {
     const { area } = await montarRepoCom(metricasDeExemplo());
     const aba = area.querySelectorAll('nav.repo-abas a').find((a) => texto(a).startsWith('Sessões'))!;
     assert.equal(texto(aba), 'Sessões (5)');
-    assert.equal(aba.getAttribute('href'), '/ui/sessoes?busca=vitrine-demo');
+    assert.equal(aba.getAttribute('href'), '/ui/sessions?search=vitrine-demo');
   });
 
   test('a aba Métricas usa o ícone do Analytics', async () => {

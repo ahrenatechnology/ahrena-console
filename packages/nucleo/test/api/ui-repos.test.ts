@@ -1,5 +1,5 @@
 // Os formatos, os filtros e as escalas das telas Repositórios (C22, #104) e Repositório (C23, #105),
-// em ui/repos-formato.js: puros, sem DOM.
+// em ui/repos-format.js: puros, sem DOM.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
@@ -29,6 +29,7 @@ import {
   linguagens,
   MENOS,
   mil,
+  periodInUrl,
   periodoDe,
   porcentagem,
   relativo,
@@ -37,7 +38,7 @@ import {
   sparkline,
   TRACO,
   // @ts-expect-error: módulo do navegador, em JavaScript puro
-} from '../../ui/repos-formato.js';
+} from '../../ui/repos-format.js';
 
 const MIN = 60_000;
 const HORA = 60 * MIN;
@@ -165,11 +166,14 @@ describe('repos na /ui: os números', () => {
     assert.equal(ha(antes(30 * HORA), agora), 'ontem');
   });
 
-  test('#105 critério 6: o período vem de ?periodo= e cai no padrão se estranho', () => {
-    assert.equal(periodoDe('?periodo=30d'), '30d');
-    assert.equal(periodoDe('?periodo=1a'), '1a');
+  test('#105 critério 6: o período vem de ?period= (1y na URL é o 1a da API) e cai no padrão se estranho', () => {
+    assert.equal(periodoDe('?period=30d'), '30d');
+    assert.equal(periodoDe('?period=1y'), '1a');
     assert.equal(periodoDe(''), '90d');
-    assert.equal(periodoDe('?periodo=7d'), '90d');
+    assert.equal(periodoDe('?period=7d'), '90d');
+    assert.equal(periodoDe('?periodo=30d'), '90d', 'the old query is the shell router\'s job (legacyUrl)');
+    assert.equal(periodInUrl('1a'), '1y');
+    assert.equal(periodInUrl('30d'), '30d');
     assert.equal(rotuloDoPeriodo('30d'), '30 dias');
     assert.equal(rotuloDoPeriodo('1a'), '1 ano');
   });
@@ -362,7 +366,7 @@ describe('repos na /ui: o que a tela mostra', () => {
 describe('repos na /ui: as classes', () => {
   const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
   const classesDoCss = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-  const daMoldura = classesDoCss('moldura.css');
+  const daMoldura = classesDoCss('shell.css');
   const permitida = (c: string) => c.startsWith('repo-') || SELOS.has(c) || daMoldura.has(c);
 
   test('toda classe de repos.css começa com repo-, é selo ou é da moldura', () => {
@@ -372,17 +376,17 @@ describe('repos na /ui: as classes', () => {
   test('repos.css não estiliza classe de outra tela, fora selos e moldura', () => {
     const minhas = new Set([...classesDoCss('repos.css')].filter((c) => !daMoldura.has(c)));
     const outras = [
-      ...readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'moldura.css', 'marca.css'].includes(a)),
-      ...readdirSync(`${PASTA_DA_UI}telas`).filter((a) => a.endsWith('.css')).map((a) => `telas/${a}`),
+      ...readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'shell.css', 'brand.css'].includes(a)),
+      ...readdirSync(`${PASTA_DA_UI}screens`).filter((a) => a.endsWith('.css')).map((a) => `screens/${a}`),
     ];
-    assert.ok(outras.includes('telas/detalhe.css'));
+    assert.ok(outras.includes('screens/session-detail.css'));
     for (const outra of outras) {
       assert.deepEqual([...classesDoCss(outra)].filter((c) => minhas.has(c) && !SELOS.has(c)), [], `repos.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   test('as telas só usam classe da moldura, selo ou repo-', () => {
-    for (const arquivo of ['telas/repos.js', 'telas/repo.js']) {
+    for (const arquivo of ['screens/repos.js', 'screens/repo.js']) {
       const fonte = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
       const usadas = new Set<string>();
       for (const [, , valor] of fonte.matchAll(/class:\s*(['`])(.*?)\1/g)) for (const c of valor!.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/)) if (c) usadas.add(c);

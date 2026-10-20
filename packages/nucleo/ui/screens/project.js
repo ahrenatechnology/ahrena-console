@@ -10,10 +10,10 @@
 //   movimento não pode desfazê-lo na tela.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../states.js';
 
 const ROTA = '/api/project';
-const ESTILO = '/ui/projeto.css';
+const ESTILO = '/ui/project.css';
 const ROTA_MOVER = '/api/project/move';
 const TEMPO_DO_TOAST = 8000;
 const ESPERA_DO_AO_VIVO = 1000;

@@ -1,12 +1,14 @@
-// A interface do console (#26), servida pelo núcleo em `/ui`: a janela do app desktop e, depois, o
-// artefato. Página estática, sem build e sem dependências, em `packages/nucleo/ui/`.
+// The console interface (#26), served by the core at `/ui`: the desktop app window and, later, the
+// artifact. A static page, with no build and no dependencies, in `packages/nucleo/ui/`.
 //
-// - `/ui`, `/ui/` e qualquer outro `/ui/<caminho>` que não pareça arquivo devolvem o `index.html`: o
-//   roteamento é no cliente (`/ui/sessoes`, `/ui/sessoes/<id>`).
-// - `/ui/<arquivo>.<js|css|svg>` e `/ui/telas/<arquivo>.js` devolvem o arquivo, se existir; nada fora
-//   da pasta, nada com `..`.
-// - A política de conteúdo só deixa a página falar com a própria origem (127.0.0.1:<porta>): nem
-//   fontes, nem scripts, nem `fetch` para fora.
+// - `/ui`, `/ui/` and any other `/ui/<path>` that does not look like a file return `index.html`: the
+//   routing is in the client (`/ui/sessions`, `/ui/sessions/<id>`; the old `/ui/sessoes/<id>` too,
+//   which the client swaps for the new one).
+// - `/ui/<file>.<js|css|svg>` and `/ui/screens/<file>.<js|css>` return the file, if it exists; nothing
+//   outside the folder, nothing with `..`. `/ui/telas/` is the old name of the `screens/` folder and
+//   serves the same files until the aliases leave (decision 0009, issue #173).
+// - The content policy only lets the page talk to its own origin (127.0.0.1:<port>): no fonts, no
+//   scripts, no `fetch` going out.
 
 import { readFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
@@ -23,7 +25,9 @@ const TIPOS: Record<string, string> = {
   html: 'text/html; charset=utf-8',
 };
 
-const ARQUIVO = /^\/ui\/((?:telas\/)?[a-z0-9-]+\.(js|css|svg))$/;
+const ARQUIVO = /^\/ui\/((?:screens\/)?[a-z0-9-]+\.(js|css|svg))$/;
+// The old folder of the screens: the same files.
+const LEGACY_SCREENS = /^\/ui\/telas\//;
 // Um arquivo que não existe dá 404, não a página: um id de sessão nunca termina assim.
 const PARECE_ARQUIVO = /\.(js|mjs|css|svg|html?|json|map|png|ico|txt|woff2?)$/i;
 
@@ -42,7 +46,7 @@ export const POLITICA_DA_UI = [
 export const ehDaUi = (caminho: string): boolean => caminho === ROTA_DA_UI || caminho.startsWith(`${ROTA_DA_UI}/`);
 
 export async function responderUi(res: ServerResponse, caminho: string, pasta: string = PASTA_DA_UI): Promise<void> {
-  const arquivo = ARQUIVO.exec(caminho);
+  const arquivo = ARQUIVO.exec(caminho.replace(LEGACY_SCREENS, '/ui/screens/'));
   if (!arquivo && PARECE_ARQUIVO.test(caminho)) return send(res, 404, { error: 'não encontrado' });
   const nome = arquivo ? arquivo[1] : 'index.html';
   let corpo: Buffer;
