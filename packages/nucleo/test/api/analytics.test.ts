@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/analytics-route.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { seedHistory } from '../../src/simulator/history.ts';
@@ -64,7 +64,7 @@ async function fixtures(): Promise<SqliteStorage> {
 }
 
 function rota(storage: SqliteStorage, relogio = { agora: AGORA }) {
-  return new RotaAnalytics({ storage, contas: new Contas({ storage, arquivo: null }), agora: () => relogio.agora });
+  return new RotaAnalytics({ storage, contas: new Accounts({ storage, file: null }), agora: () => relogio.agora });
 }
 
 // The handlers read the English parameters; the old ones in these strings pass through the alias map.
@@ -281,7 +281,7 @@ describe('as rotas no servidor', () => {
   let api: LocalApi;
   before(async () => {
     storage = await fixtures();
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null }) });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, analytics: new RotaAnalytics({ storage, contas, agora: () => AGORA }) });
   });
@@ -308,7 +308,7 @@ describe('as rotas no servidor', () => {
   });
 
   test('sem a rota ligada, 404', async () => {
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null }) });
     const sem = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {

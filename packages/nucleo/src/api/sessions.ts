@@ -26,8 +26,8 @@ import { currentPrices } from '../cost/table.ts';
 import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from './accounts.ts';
-import type { IndiceDoDesktop, SessaoDoDesktop } from './desktop-index.ts';
+import type { Accounts } from './accounts.ts';
+import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
 
 export const SESSIONS_ROUTE = '/api/sessions';
 export const POR_PAGINA = 10;
@@ -109,15 +109,15 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
 
 export interface OpcoesDaLista {
   storage: StoragePort;
-  contas: Contas;
-  desktop?: IndiceDoDesktop | null;
+  contas: Accounts;
+  desktop?: DesktopIndex | null;
   agora?: () => number;
 }
 
 export class ListaDeSessoes {
   private readonly storage: StoragePort;
-  private readonly contas: Contas;
-  private readonly desktop: IndiceDoDesktop | null;
+  private readonly contas: Accounts;
+  private readonly desktop: DesktopIndex | null;
   private readonly agora: () => number;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
 
@@ -129,14 +129,14 @@ export class ListaDeSessoes {
   }
 
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
-    await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
+    await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
     const agora = this.agora();
-    const todas: { s: Session; desktop: SessaoDoDesktop | null; titulo: string }[] = [];
+    const todas: { s: Session; desktop: DesktopSession | null; titulo: string }[] = [];
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
-        const desktop = this.desktop?.sessaoPorCli(s.id) ?? null;
+        const desktop = this.desktop?.sessionByCli(s.id) ?? null;
         todas.push({ s, desktop, titulo: tituloDe(s, desktop) });
       }
       cursor = page.nextCursor;
@@ -169,7 +169,7 @@ export class ListaDeSessoes {
     const itens: LinhaDeSessao[] = [];
     for (const { s, desktop, titulo } of filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)) {
       const status = displayStatus(s);
-      const conta = this.contas.daSessao(s, desktop);
+      const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
         title: titulo,
@@ -210,8 +210,8 @@ export function duracaoDe(s: Session, agora: number): number {
 }
 
 /** O título: o do Desktop, o nome da sessão, a pasta ou o começo do id. O Kanban (#31) também usa. */
-export function tituloDe(s: Session, d: SessaoDoDesktop | null): string {
-  return safeTitle(d?.titulo) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
+export function tituloDe(s: Session, d: DesktopSession | null): string {
+  return safeTitle(d?.title) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
 /** `GET /api/sessions`: 400 com a explicação quando um parâmetro não vale. */

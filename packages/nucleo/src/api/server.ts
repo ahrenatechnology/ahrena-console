@@ -64,7 +64,7 @@ import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisions.ts';
 import { responderDecisoesDaUi, type DecisoesDaUi } from './decisions-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './panel.ts';
-import type { EscopoDasDecisoes } from './types.ts';
+import type { PanelDecisionScope } from './types.ts';
 import { API_VERSION } from './version.ts';
 import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
 import { isUiPath, respondUi } from './ui.ts';
@@ -203,7 +203,7 @@ const sameOriginDecision = (req: IncomingMessage, port: number): boolean =>
   req.method === 'POST' && DECISION_WRITE_FROM_UI.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
 
 /** The decision list scope of a parameter, or `null`. */
-const scopeOf = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
+const scopeOf = (v: string | null): PanelDecisionScope | null => (ESCOPOS_DAS_DECISOES.includes(v as PanelDecisionScope) ? (v as PanelDecisionScope) : null);
 
 /** What the panel sends about itself: the same parameters as `GET /api/panel`. */
 function panelRequestOf(sessionId: string, url: URL): PedidoDoPainel {

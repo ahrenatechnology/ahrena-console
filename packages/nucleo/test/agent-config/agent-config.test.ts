@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, createAgentConfigRoute, startLocalApi, MAX_SKILL_BODY, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type AgentConfigRoute } from '../../src/api/index.ts';
+import { Accounts, createAgentConfigRoute, startLocalApi, MAX_SKILL_BODY, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type AgentConfigRoute } from '../../src/api/index.ts';
 import { AgentConfigError, chooseProject, readAgentConfig, readFrontmatter, MAX_CONTENT, mountDemoAgentConfig, autoMemoryDir, knownProjects, rootIdFor, rootsFor, skillRoot, versionOf } from '../../src/agent-config/index.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
@@ -309,7 +309,7 @@ function get(url: string, path: string, { method = 'GET', headers = {} as Record
 /** A local API with only the given agent config route, for the cases that need other folders. */
 async function withApi(route: AgentConfigRoute, fn: (url: string) => Promise<void>): Promise<void> {
   const s = openSqliteStorage({ path: ':memory:' });
-  const builder = new MontadorDoPainel({ storage: s, contas: new Contas({ storage: s, arquivo: null }), desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(s.db) }) }) });
+  const builder = new MontadorDoPainel({ storage: s, contas: new Accounts({ storage: s, file: null }), desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(s.db) }) }) });
   const a = await startLocalApi({ panelBuilder: builder, hooks: { storage: s }, port: 0, log: () => {}, agentConfig: route });
   try {
     await fn(a.url);
@@ -378,7 +378,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
 
     sqlite = openSqliteStorage({ path: ':memory:' });
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
-    const builder = new MontadorDoPainel({ storage: sqlite, contas: new Contas({ storage: sqlite, arquivo: null }), desktop: null, trabalho: work });
+    const builder = new MontadorDoPainel({ storage: sqlite, contas: new Accounts({ storage: sqlite, file: null }), desktop: null, trabalho: work });
     const agentConfig = createAgentConfigRoute({ folders: async () => [home], projects: async () => [project], backups, now: () => new Date('2026-10-20T12:34:56.789Z') });
     api = await startLocalApi({ panelBuilder: builder, hooks: { storage: sqlite }, port: 0, log: () => {}, agentConfig });
     host = new URL(api.url).host;

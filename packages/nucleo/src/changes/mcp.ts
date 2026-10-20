@@ -11,7 +11,7 @@
 // enum and the wait always filters by the MCP types, so that a repository build does not wake up
 // whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
 
-import type { Contas } from '../api/accounts.ts';
+import type { Accounts } from '../api/accounts.ts';
 import { matchesAccountFilter } from '../mcp/fleet.ts';
 import { ToolError, ArgumentError, type Tool, type JsonObject } from '../mcp/protocol.ts';
 import { objectSchema, arrayOf, strictObject, nullable, T } from '../mcp/output.ts';
@@ -72,14 +72,14 @@ const CHANGE_SCHEMA = strictObject({
 
 export interface WaitForChangesOptions {
   changes: ChangeCursor;
-  /** The same `Contas` as the panel and the other tools: the label is the same on every surface. */
-  accounts: Contas;
+  /** The same `Accounts` as the panel and the other tools: the label is the same on every surface. */
+  accounts: Accounts;
 }
 
 export function waitForChanges({ changes, accounts }: WaitForChangesOptions): Tool {
   // The account by id, as the panel shows it. The source does not matter here: the id is already decided.
   const accountOf = (accountId: string | null) =>
-    accountId === null ? null : accounts.daSessao({ id: '', accountId, accountSource: 'transcript' }, null);
+    accountId === null ? null : accounts.ofSession({ id: '', accountId, accountSource: 'transcript' }, null);
 
   return {
     name: WAIT_FOR_CHANGES,
@@ -120,7 +120,7 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): To
     async execute(args, ctx) {
       const { cursor, timeoutMs, filters, requestedAccounts } = parseArgs(args);
       // Labels and colors read from the port and from ~/.ahrena-console/contas.json (at most every 30 s).
-      await accounts.atualizar();
+      await accounts.refresh();
       if (requestedAccounts) filters.matchesAccount = (accountId) => matchesAccountFilter(accountOf(accountId), requestedAccounts);
       let r: WaitResult;
       try {

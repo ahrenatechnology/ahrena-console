@@ -9,7 +9,7 @@
 // `decisions/scope` in src/api/legacy-routes.ts), exactly what the mod gets. When the mod migrates to
 // `/api/panel`, drop the translation here together with its types.
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, ESCOPOS_DAS_DECISOES, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, translateBody } from '../../src/api/index.ts';
+import { Accounts, ESCOPOS_DAS_DECISOES, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, translateBody } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { PANEL_SCENARIOS, SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
@@ -26,7 +26,7 @@ for (const nome of PANEL_SCENARIOS) {
   await seedPanelDecisions(decisoes, nome, AGORA);
   const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
   const montador = new MontadorDoPainel({
-    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
+    storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
   });
   const pedido = { sessionId: 'sessao-teste', modelo: 'claude-sonnet-5-5', cwd: '/simulacao/cli-de-notas' };
   await montador.montar(pedido);
