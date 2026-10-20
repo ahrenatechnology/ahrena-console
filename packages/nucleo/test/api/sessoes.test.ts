@@ -1,7 +1,7 @@
 // A tela Sessões (C3, #28): a rota `GET /api/sessoes` (filtros, ordem e página no servidor) com
 // dados do simulador, e as peças da tela que não precisam de navegador.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -258,6 +258,21 @@ describe('#28 a tela Sessões', () => {
     for (const c of classes) {
       assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
       if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
+    }
+  });
+
+  // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
+  // telas desmonta a outra (o `.linha` do Dashboard, que é flex, desmontava as linhas desta tabela).
+  test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
+    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    // As da moldura (`.icone`, `.btn`) são de todas as telas.
+    const daMoldura = classes('moldura.css');
+    const minhas = new Set([...classes('sessoes.css')].filter((c) => !daMoldura.has(c)));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessoes.css', 'moldura.css', 'marca.css'].includes(a));
+    for (const outra of outras) {
+      const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
+      assert.deepEqual(comuns, [], `sessoes.css e ${outra} estilizam as mesmas classes`);
     }
   });
 });

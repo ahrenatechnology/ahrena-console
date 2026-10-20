@@ -198,7 +198,7 @@ export async function montar(area, ctx) {
     const destino = `/ui/sessoes/${encodeURIComponent(s.id)}`;
     const tr = el(
       'tr',
-      { class: 'linha' },
+      { class: 'linha-sessao' },
       el('td', { class: 'nm' }, el('a', { href: destino, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, idCurto(s.id)), conta(s.conta))),
       el('td', { class: 'st' }, ...selo(s.status, s.motivo)),
       el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, idade(s.ultimaAtividade)),
