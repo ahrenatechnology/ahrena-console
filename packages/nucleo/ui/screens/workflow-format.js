@@ -10,7 +10,7 @@ export const num = (n) => NUM.format(n);
 export const decimal = (n) => (n === null || n === undefined ? '—' : DEC.format(n));
 
 /** 0,96 → "96%"; `null` → "—". */
-export const porcento = (f) => (f === null || f === undefined ? '—' : `${NUM.format(Math.round(f * 100))}%`);
+export const percent = (f) => (f === null || f === undefined ? '—' : `${NUM.format(Math.round(f * 100))}%`);
 
 /** 6.000.000 → "6,0 M"; 223.000 → "223 k"; 4.100 → "4,1 k". */
 export function tokens(n) {
@@ -21,7 +21,7 @@ export function tokens(n) {
 }
 
 /** 12 s, 28 min, 1 h 05 min; `null` → "—". */
-export function duracao(ms) {
+export function duration(ms) {
   if (ms === null || ms === undefined) return '—';
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s} s`;
@@ -31,7 +31,7 @@ export function duracao(ms) {
 }
 
 /** "claude-opus-5-5" → "Opus 5.5"; um id que não é Claude fica como veio. */
-export function nomeDoModelo(id) {
+export function modelName(id) {
   if (!id) return null;
   const m = /claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id);
   if (!m) return id;
@@ -39,11 +39,11 @@ export function nomeDoModelo(id) {
 }
 
 /** "hoje", "ontem" ou "há 2 dias", pelo dia do calendário. */
-export function quando(iso, agora = new Date()) {
+export function when(iso, now = new Date()) {
   const d = new Date(iso);
-  const meiaNoite = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dias = Math.round((meiaNoite(agora) - meiaNoite(d)) / 86_400_000);
-  if (dias <= 0) return 'hoje';
-  if (dias === 1) return 'ontem';
-  return `há ${dias} dias`;
+  const midnight = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((midnight(now) - midnight(d)) / 86_400_000);
+  if (days <= 0) return 'hoje';
+  if (days === 1) return 'ontem';
+  return `há ${days} dias`;
 }

@@ -8,16 +8,16 @@
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { openInDesktop } from '../api.js';
-import { criar as abaWorkflow } from './session-detail-workflow.js';
-import { criar as abaDecisoes } from './session-detail-decisions.js';
+import { create as workflowTab } from './session-detail-workflow.js';
+import { create as decisionsTab } from './session-detail-decisions.js';
 
 // ---------- Formatos ----------
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const DEC = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const USD = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
-const DIA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
+const HOUR = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const DAY = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
 
 const num = (n) => NUM.format(n);
 const usd = (v) => (v === null || v === undefined ? 'sem preço' : `~US$ ${USD.format(v)}`);
@@ -31,7 +31,7 @@ function tokens(n) {
 }
 
 /** "claude-opus-5-5" → "Opus 5.5". */
-export function nomeDoModelo(id) {
+export function modelName(id) {
   if (!id) return null;
   const m = /claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id);
   if (!m) return id;
@@ -39,7 +39,7 @@ export function nomeDoModelo(id) {
 }
 
 /** 40 s, 12 min, 1 h 05 min. */
-function duracao(ms) {
+function duration(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s} s`;
   const m = Math.round(s / 60);
@@ -48,8 +48,8 @@ function duracao(ms) {
 }
 
 /** "agora", "2 min", "3 h", "2 d". */
-function ha(iso, agora = Date.now()) {
-  const m = Math.round((agora - Date.parse(iso)) / 60_000);
+function ago(iso, now = Date.now()) {
+  const m = Math.round((now - Date.parse(iso)) / 60_000);
   if (m < 1) return 'agora';
   if (m < 60) return `${m} min`;
   if (m < 48 * 60) return `${Math.round(m / 60)} h`;
@@ -57,43 +57,43 @@ function ha(iso, agora = Date.now()) {
 }
 
 /** "hoje, 22:41", "ontem, 09:10" ou "18/10, 09:10". */
-function quando(iso, agora = new Date()) {
+function when(iso, now = new Date()) {
   const d = new Date(iso);
-  const dia = (x) => x.toDateString();
-  const ontem = new Date(agora);
-  ontem.setDate(agora.getDate() - 1);
-  const prefixo = dia(d) === dia(agora) ? 'hoje' : dia(d) === dia(ontem) ? 'ontem' : DIA.format(d);
-  return `${prefixo}, ${HORA.format(d)}`;
+  const day = (x) => x.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const prefix = day(d) === day(now) ? 'hoje' : day(d) === day(yesterday) ? 'ontem' : DAY.format(d);
+  return `${prefix}, ${HOUR.format(d)}`;
 }
 
 const STATUS = { active: 'Ativa', working: 'Ativa', waiting: 'Esperando você', error: 'Erro', completed: 'Concluída', abandoned: 'Abandonada' };
-const COR = { active: 'active', working: 'active', waiting: 'waiting', error: 'error', completed: 'completed', abandoned: 'abandoned' };
+const COLOR = { active: 'active', working: 'active', waiting: 'waiting', error: 'error', completed: 'completed', abandoned: 'abandoned' };
 
-function pilulaDeStatus(status, rotulo = STATUS[status] ?? status) {
-  return el('span', { class: `sd-status sd-s-${COR[status] ?? 'abandoned'}` }, rotulo);
+function statusPill(status, label = STATUS[status] ?? status) {
+  return el('span', { class: `sd-status sd-s-${COLOR[status] ?? 'abandoned'}` }, label);
 }
 
 /** O motivo da espera, como no A5: "Pede permissão", "Pergunta", "Sua vez"… */
-function motivoDe(sessao) {
-  if (sessao.status === 'error') return null;
-  if (sessao.faixa?.tipo === 'permissao') return 'Pede permissão';
-  if (sessao.faixa?.tipo === 'pergunta') return 'Pergunta';
-  return { interrupted: 'Interrompida', stop: 'Sua vez', session_start: 'No prompt', notification: 'Pede permissão' }[sessao.motivo] ?? null;
+function reasonOf(session) {
+  if (session.status === 'error') return null;
+  if (session.faixa?.tipo === 'permissao') return 'Pede permissão';
+  if (session.faixa?.tipo === 'pergunta') return 'Pergunta';
+  return { interrupted: 'Interrompida', stop: 'Sua vez', session_start: 'No prompt', notification: 'Pede permissão' }[session.motivo] ?? null;
 }
 
 /** Texto com `código` entre crases: cada pedaço vira nó de texto ou `<code>`, nunca HTML. */
-function comCodigo(texto) {
-  const partes = String(texto ?? '').split(/`([^`\n]+)`/);
-  return partes.map((p, i) => (i % 2 ? el('code', { class: 'sd-code' }, p) : p));
+function withCode(text) {
+  const parts = String(text ?? '').split(/`([^`\n]+)`/);
+  return parts.map((p, i) => (i % 2 ? el('code', { class: 'sd-code' }, p) : p));
 }
 
-const ICONE_DA_FERRAMENTA = { Bash: 'terminal', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', Read: 'file', Agent: 'robot', Task: 'robot', Grep: 'search', Glob: 'search', TaskUpdate: 'tasks', TaskCreate: 'tasks', TodoWrite: 'tasks' };
+const TOOL_ICON = { Bash: 'terminal', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', Read: 'file', Agent: 'robot', Task: 'robot', Grep: 'search', Glob: 'search', TaskUpdate: 'tasks', TaskCreate: 'tasks', TodoWrite: 'tasks' };
 
-function botaoCopiar(texto, rotulo) {
-  const b = el('button', { type: 'button', class: 'sd-copy', title: `Copiar ${rotulo}`, 'aria-label': `Copiar ${rotulo}` }, icon('copy'));
+function copyButton(text, label) {
+  const b = el('button', { type: 'button', class: 'sd-copy', title: `Copiar ${label}`, 'aria-label': `Copiar ${label}` }, icon('copy'));
   b.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(texto);
+      await navigator.clipboard.writeText(text);
       b.classList.add('sd-copied');
       setTimeout(() => b.classList.remove('sd-copied'), 1200);
     } catch {}
@@ -101,8 +101,8 @@ function botaoCopiar(texto, rotulo) {
   return b;
 }
 
-function pilula(iconName, ...filhos) {
-  return el('span', { class: 'sd-pill mono' }, iconName ? icon(iconName) : null, ...filhos);
+function pill(iconName, ...children) {
+  return el('span', { class: 'sd-pill mono' }, iconName ? icon(iconName) : null, ...children);
 }
 
 // ---------- A tela ----------
@@ -113,219 +113,219 @@ function pilula(iconName, ...filhos) {
 // - `base` é `/api/sessions/<id>`; `cabeca()` é o topo já lido (`GET /api/sessions/<id>`);
 // - `rotular(texto)` põe o "(…)" ao lado do nome da aba; `null` tira.
 // A aba carrega o próprio CSS, se tiver.
-const ABAS = [
-  { id: 'agents', rotulo: 'Agentes', icone: 'robot', criar: abaAgentes },
-  { id: 'conversation', rotulo: 'Conversa', icone: 'conversation', criar: abaConversa },
-  { id: 'timeline', rotulo: 'Linha do tempo', icone: 'list', criar: abaTempo },
-  { id: 'workflow', rotulo: 'Workflow', icone: 'graph', criar: abaWorkflow },
-  { id: 'decisions', rotulo: 'Decisões', icone: 'decision', criar: abaDecisoes },
+const TABS_LIST = [
+  { id: 'agents', rotulo: 'Agentes', icone: 'robot', create: agentsTab },
+  { id: 'conversation', rotulo: 'Conversa', icone: 'conversation', create: conversationTab },
+  { id: 'timeline', rotulo: 'Linha do tempo', icone: 'list', create: timelineTab },
+  { id: 'workflow', rotulo: 'Workflow', icone: 'graph', create: workflowTab },
+  { id: 'decisions', rotulo: 'Decisões', icone: 'decision', create: decisionsTab },
 ];
 
-let cssCarregado = false;
-function carregarCss() {
-  if (cssCarregado || document.querySelector('link[data-screen="session-detail"]')) return;
-  cssCarregado = true;
+let cssLoaded = false;
+function loadCss() {
+  if (cssLoaded || document.querySelector('link[data-screen="session-detail"]')) return;
+  cssLoaded = true;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail.css', 'data-screen': 'session-detail' }));
 }
 
 export async function mount(area, ctx) {
-  carregarCss();
+  loadCss();
   const id = ctx.params.id;
   const base = `/api/sessions/${encodeURIComponent(id)}`;
-  const topo = el('div', { class: 'sd-top' });
-  const abas = el('nav', { class: 'sd-tabs', role: 'tablist', 'aria-label': 'Abas da sessão' });
-  const corpo = el('div', { class: 'sd-body', role: 'tabpanel' });
+  const top = el('div', { class: 'sd-top' });
+  const tabs = el('nav', { class: 'sd-tabs', role: 'tablist', 'aria-label': 'Abas da sessão' });
+  const body = el('div', { class: 'sd-body', role: 'tabpanel' });
   area.replaceChildren(loading({ label: 'Carregando a sessão' }));
 
-  let cabeca = null;
-  let aba = (location.hash.slice(1) && ABAS.some((a) => a.id === location.hash.slice(1))) ? location.hash.slice(1) : null;
-  const rotulos = {};
-  const telas = Object.fromEntries(
-    ABAS.map((a) => [a.id, a.criar(ctx, base, { cabeca: () => cabeca, rotular: (t) => ((rotulos[a.id] = t ?? undefined), desenharAbas()) })]),
+  let headData = null;
+  let tab = (location.hash.slice(1) && TABS_LIST.some((a) => a.id === location.hash.slice(1))) ? location.hash.slice(1) : null;
+  const labels = {};
+  const tabScreens = Object.fromEntries(
+    TABS_LIST.map((a) => [a.id, a.create(ctx, base, { head: () => headData, setLabel: (t) => ((labels[a.id] = t ?? undefined), drawTabs()) })]),
   );
 
-  function desenharAbas() {
-    abas.replaceChildren(
-      ...ABAS.map((a) => {
+  function drawTabs() {
+    tabs.replaceChildren(
+      ...TABS_LIST.map((a) => {
         // Até a aba dizer o dela, Agentes e Linha do tempo usam as contagens do topo.
-        const padrao = { agents: cabeca?.contagens.agentes, timeline: cabeca ? num(cabeca.contagens.eventos) : null }[a.id];
-        const rotulo = rotulos[a.id] ?? padrao;
-        const sufixo = rotulo === undefined || rotulo === null ? '' : ` (${rotulo})`;
-        const b = el('button', { type: 'button', role: 'tab', class: `sd-tab${a.id === aba ? ' on' : ''}`, 'aria-selected': a.id === aba ? 'true' : 'false', 'data-tab': a.id }, icon(a.icone), `${a.rotulo}${sufixo}`);
-        b.addEventListener('click', () => trocar(a.id));
+        const fallback = { agents: headData?.contagens.agentes, timeline: headData ? num(headData.contagens.eventos) : null }[a.id];
+        const label = labels[a.id] ?? fallback;
+        const suffix = label === undefined || label === null ? '' : ` (${label})`;
+        const b = el('button', { type: 'button', role: 'tab', class: `sd-tab${a.id === tab ? ' on' : ''}`, 'aria-selected': a.id === tab ? 'true' : 'false', 'data-tab': a.id }, icon(a.icone), `${a.rotulo}${suffix}`);
+        b.addEventListener('click', () => switchTo(a.id));
         return b;
       }),
     );
   }
 
-  function trocar(nova) {
-    if (nova === aba) return;
-    telas[aba]?.esconder();
-    aba = nova;
-    history.replaceState(null, '', `${location.pathname}#${aba}`);
-    desenharAbas();
-    corpo.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
-    telas[aba].mostrar(corpo);
+  function switchTo(fresh) {
+    if (fresh === tab) return;
+    tabScreens[tab]?.hide();
+    tab = fresh;
+    history.replaceState(null, '', `${location.pathname}#${tab}`);
+    drawTabs();
+    body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
+    tabScreens[tab].show(body);
   }
 
-  async function lerCabeca() {
+  async function readHead() {
     try {
-      cabeca = await ctx.read(base);
-      ctx.title(cabeca.sessao.titulo);
-      topo.replaceChildren(...desenharTopo(cabeca, atualizarTudo));
-      desenharAbas();
+      headData = await ctx.read(base);
+      ctx.title(headData.sessao.titulo);
+      top.replaceChildren(...drawTop(headData, refreshAll));
+      drawTabs();
       return true;
     } catch (e) {
       if (e.name === 'AbortError') return false;
-      if (!cabeca) {
+      if (!headData) {
         area.replaceChildren(
           e.status === 404
             ? empty({ title: 'Sessão não encontrada', text: `O núcleo não conhece a sessão ${id}.`, action: { label: 'Voltar para Sessões', icon: 'back', onClick: () => ctx.navigate('/ui/sessions') } })
-            : error({ text: e.message, retry: () => primeira() }),
+            : error({ text: e.message, retry: () => first() }),
         );
       } else {
-        topo.querySelector('.error-band')?.remove();
-        topo.append(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: atualizarTudo } }));
+        top.querySelector('.error-band')?.remove();
+        top.append(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: refreshAll } }));
       }
       return false;
     }
   }
 
-  async function primeira() {
+  async function first() {
     area.replaceChildren(loading({ label: 'Carregando a sessão' }));
-    if (!(await lerCabeca())) return;
-    aba ??= cabeca.sessao.status === 'waiting' ? 'conversation' : 'agents';
-    area.replaceChildren(topo, abas, corpo);
-    desenharAbas();
-    corpo.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
-    telas[aba].mostrar(corpo);
+    if (!(await readHead())) return;
+    tab ??= headData.sessao.status === 'waiting' ? 'conversation' : 'agents';
+    area.replaceChildren(top, tabs, body);
+    drawTabs();
+    body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
+    tabScreens[tab].show(body);
   }
 
-  async function atualizarTudo() {
-    if (!cabeca) return primeira();
-    await lerCabeca();
-    telas[aba].atualizar();
+  async function refreshAll() {
+    if (!headData) return first();
+    await readHead();
+    tabScreens[tab].refresh();
   }
 
   // Ao vivo: a mudança desta sessão relê o topo e a aba aberta, juntando as que chegam perto.
-  let espera = null;
-  ctx.onChange((mudancas) => {
-    if (!mudancas.some((m) => m.sessionId === id)) return;
-    clearTimeout(espera);
-    espera = setTimeout(atualizarTudo, 400);
+  let wait = null;
+  ctx.onChange((changes) => {
+    if (!changes.some((m) => m.sessionId === id)) return;
+    clearTimeout(wait);
+    wait = setTimeout(refreshAll, 400);
   });
-  ctx.onRestart(atualizarTudo);
+  ctx.onRestart(refreshAll);
 
-  await primeira();
-  return () => clearTimeout(espera);
+  await first();
+  return () => clearTimeout(wait);
 }
 
 // ---------- Topo (A5) ----------
 
-function desenharTopo(c, atualizar) {
+function drawTop(c, refresh) {
   const s = c.sessao;
-  const agora = Date.now();
-  const motivo = motivoDe(s);
-  const fim = s.status === 'active' || s.status === 'waiting' ? agora : Date.parse(c.encerradaEm ?? s.desde);
-  const linha1 = el(
+  const now = Date.now();
+  const reason = reasonOf(s);
+  const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.encerradaEm ?? s.desde);
+  const row1 = el(
     'div',
     { class: 'sd-row' },
     el('a', { class: 'sd-back', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icon('back')),
     el('h1', {}, s.titulo),
-    pilulaDeStatus(s.status),
-    motivo && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgente ? ' sd-urgent' : ''}` }, s.faixa?.tipo === 'permissao' ? icon('shield') : null, motivo) : null,
-    el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: atualizar }, icon('refresh')),
+    statusPill(s.status),
+    reason && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgente ? ' sd-urgent' : ''}` }, s.faixa?.tipo === 'permissao' ? icon('shield') : null, reason) : null,
+    el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: refresh }, icon('refresh')),
   );
-  const pilulas = el(
+  const pills = el(
     'div',
     { class: 'sd-pills' },
-    pilula(null, s.id.slice(0, 12), botaoCopiar(s.id, 'o id da sessão')),
-    s.modelo ? pilula('port', nomeDoModelo(s.modelo)) : null,
-    pilula('clock', `${quando(s.iniciadaEm)} (${duracao(fim - Date.parse(s.iniciadaEm))})`),
+    pill(null, s.id.slice(0, 12), copyButton(s.id, 'o id da sessão')),
+    s.modelo ? pill('port', modelName(s.modelo)) : null,
+    pill('clock', `${when(s.iniciadaEm)} (${duration(end - Date.parse(s.iniciadaEm))})`),
     c.custo ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.custo.usd)) : null,
-    c.branch ? pilula('branch', c.branch) : null,
+    c.branch ? pill('branch', c.branch) : null,
   );
-  const pasta = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), botaoCopiar(s.cwd, 'a pasta')) : null;
-  return [linha1, pilulas, pasta, s.faixa ? faixa(c) : null].filter(Boolean);
+  const folder = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), copyButton(s.cwd, 'a pasta')) : null;
+  return [row1, pills, folder, s.faixa ? band(c) : null].filter(Boolean);
 }
 
 /** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
-function comComando(texto, comando) {
-  const i = comando ? texto.indexOf(comando) : -1;
-  if (i < 0) return comCodigo(texto);
-  return [texto.slice(0, i), el('code', { class: 'sd-code' }, comando), texto.slice(i + comando.length)];
+function withCommand(text, command) {
+  const i = command ? text.indexOf(command) : -1;
+  if (i < 0) return withCode(text);
+  return [text.slice(0, i), el('code', { class: 'sd-code' }, command), text.slice(i + command.length)];
 }
 
 // The class of each band type and tool state (the API value stays as it comes).
 const BAND_CLASS = { permissao: 'permission', pergunta: 'question', erro: 'error' };
 const TOOL_STATE_CLASS = { ok: 'ok', erro: 'error', permissao: 'permission', rodando: 'running' };
-const TITULO_DA_FAIXA = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
+const BAND_TITLE = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
 
-function faixa(c) {
+function band(c) {
   const f = c.sessao.faixa;
-  const aviso = el('span', { class: 'sd-notice', role: 'status' });
-  const botao = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
-  botao.addEventListener('click', async () => {
-    aviso.textContent = '';
+  const notice = el('span', { class: 'sd-notice', role: 'status' });
+  const button = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
+  button.addEventListener('click', async () => {
+    notice.textContent = '';
     try {
       await openInDesktop(c.local);
     } catch (e) {
       // Sem quem abra (fora do macOS, ou a demonstração): o link de reserva leva ao `claude://`.
       if (e.status === 501) return void (location.href = `/open/${c.local}`);
-      aviso.textContent = e.message;
+      notice.textContent = e.message;
     }
   });
   return el(
     'section',
     { class: `sd-band sd-t-${BAND_CLASS[f.tipo] ?? f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
     icon(f.tipo === 'erro' ? 'error' : 'shield'),
-    el('p', {}, el('b', {}, TITULO_DA_FAIXA[f.tipo] ?? ''), ' ', ...comComando(f.texto, c.comando), `. Há ${ha(f.desde).replace('agora', 'menos de 1 min')}.`, aviso),
-    botao,
+    el('p', {}, el('b', {}, BAND_TITLE[f.tipo] ?? ''), ' ', ...withCommand(f.texto, c.comando), `. Há ${ago(f.desde).replace('agora', 'menos de 1 min')}.`, notice),
+    button,
   );
 }
 
 // ---------- Aba Agentes (C4) ----------
 
-function abaAgentes(ctx, base) {
-  let alvo = null;
-  async function desenhar() {
+function agentsTab(ctx, base) {
+  let target = null;
+  async function draw() {
     try {
       const a = await ctx.read(`${base}/agents`);
-      alvo?.replaceChildren(...agentes(a));
+      target?.replaceChildren(...agents(a));
     } catch (e) {
       if (e.name === 'AbortError') return;
-      alvo?.replaceChildren(error({ title: 'Não deu para ler os agentes', text: e.message, retry: desenhar }));
+      target?.replaceChildren(error({ title: 'Não deu para ler os agentes', text: e.message, retry: draw }));
     }
   }
   return {
-    mostrar(no) {
-      alvo = no;
-      return desenhar();
+    show(node) {
+      target = node;
+      return draw();
     },
-    esconder: () => (alvo = null),
-    atualizar: () => desenhar(),
+    hide: () => (target = null),
+    refresh: () => draw(),
   };
 }
 
-function numero(iconName, rotulo, valor, detalhe) {
-  return el('div', { class: 'card sd-number' }, el('div', { class: 'eyebrow' }, icon(iconName), rotulo), el('div', { class: 'sd-value' }, el('b', { class: 'mono' }, valor), detalhe ? el('small', {}, detalhe) : null));
+function number(iconName, label, value, detail) {
+  return el('div', { class: 'card sd-number' }, el('div', { class: 'eyebrow' }, icon(iconName), label), el('div', { class: 'sd-value' }, el('b', { class: 'mono' }, value), detail ? el('small', {}, detail) : null));
 }
 
-function agentes(a) {
+function agents(a) {
   const n = a.numeros;
-  const numeros = el(
+  const numbers = el(
     'div',
     { class: 'sd-numbers' },
-    numero('bolt', 'Eventos', num(n.eventos), `${num(n.porMinuto)}/min`),
-    numero('key', 'Ferramentas', num(n.ferramentas), `${num(n.ferramentasUnicas)} únicas`),
-    numero('subagent', 'Subagentes', num(n.subagentes), '+1 principal'),
-    numero('layers', 'Compactações', num(n.compactacoes)),
-    numero('alert', 'Erros', num(n.erros)),
-    numero('timer', 'Duração', `${num(n.duracaoMin)} min`, n.rodando ? 'rodando' : null),
+    number('bolt', 'Eventos', num(n.eventos), `${num(n.porMinuto)}/min`),
+    number('key', 'Ferramentas', num(n.ferramentas), `${num(n.ferramentasUnicas)} únicas`),
+    number('subagent', 'Subagentes', num(n.subagentes), '+1 principal'),
+    number('layers', 'Compactações', num(n.compactacoes)),
+    number('alert', 'Erros', num(n.erros)),
+    number('timer', 'Duração', `${num(n.duracaoMin)} min`, n.rodando ? 'rodando' : null),
   );
 
-  const maior = Math.max(1, ...a.ferramentas.map((f) => f.n));
-  const ferramentas = el(
+  const largest = Math.max(1, ...a.ferramentas.map((f) => f.n));
+  const tools = el(
     'section',
     { class: 'card sd-block' },
     el('header', {}, el('div', { class: 'eyebrow' }, icon('key'), 'Ferramentas mais usadas'), el('small', {}, `${num(n.ferramentasUnicas)} no total`)),
@@ -334,58 +334,58 @@ function agentes(a) {
           'ul',
           { class: 'sd-bars' },
           ...a.ferramentas.map((f) => {
-            const barra = el('span', { class: 'sd-full' });
-            barra.style.setProperty('--w', `${(f.n / maior) * 100}%`);
-            return el('li', {}, el('span', { class: 'sd-ico' }, icon(ICONE_DA_FERRAMENTA[f.nome] ?? 'key')), el('span', { class: 'mono sd-name' }, f.nome), el('span', { class: 'sd-rail' }, barra), el('span', { class: 'mono sd-n' }, num(f.n)));
+            const bar = el('span', { class: 'sd-full' });
+            bar.style.setProperty('--w', `${(f.n / largest) * 100}%`);
+            return el('li', {}, el('span', { class: 'sd-ico' }, icon(TOOL_ICON[f.nome] ?? 'key')), el('span', { class: 'mono sd-name' }, f.nome), el('span', { class: 'sd-rail' }, bar), el('span', { class: 'mono sd-n' }, num(f.n)));
           }),
         )
       : el('p', { class: 'sd-none' }, 'Nenhuma ferramenta ainda.'),
   );
 
   const t = a.tarefas;
-  const tarefas = el(
+  const tasks = el(
     'section',
     { class: 'card sd-block' },
     el('header', {}, el('div', { class: 'eyebrow' }, icon('tasks'), 'Progresso das tarefas')),
-    t && t.total ? progresso(t) : el('p', { class: 'sd-none' }, 'Sem plano nesta sessão.'),
+    t && t.total ? progress(t) : el('p', { class: 'sd-none' }, 'Sem plano nesta sessão.'),
   );
 
   const k = a.tokens;
-  const fluxo = el(
+  const flow = el(
     'section',
     { class: 'card sd-block' },
     el('header', {}, el('div', { class: 'eyebrow' }, icon('coins'), 'Fluxo de tokens'), k ? el('small', {}, `${tokens(k.total)} no total`) : null),
-    k && k.total ? fluxoDeTokens(k) : el('p', { class: 'sd-none' }, 'Nenhum uso medido ainda.'),
+    k && k.total ? tokenFlow(k) : el('p', { class: 'sd-none' }, 'Nenhum uso medido ainda.'),
   );
 
-  const arvore = el(
+  const tree = el(
     'section',
     { class: 'sd-tree' },
     el('div', { class: 'eyebrow' }, icon('robot'), `Agentes · ${a.agentes.length}`),
-    ...a.agentes.map((g) => no(g)),
+    ...a.agentes.map((g) => node(g)),
   );
 
-  return [numeros, el('div', { class: 'sd-two' }, ferramentas, tarefas), fluxo, arvore];
+  return [numbers, el('div', { class: 'sd-two' }, tools, tasks), flow, tree];
 }
 
-function progresso(t) {
+function progress(t) {
   const pct = Math.round((t.feitos / t.total) * 100);
   const r = 26;
-  const volta = 2 * Math.PI * r;
+  const back = 2 * Math.PI * r;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 64 64');
   svg.setAttribute('class', 'sd-ring');
   svg.setAttribute('aria-hidden', 'true');
-  for (const [cls, dash] of [['sd-bg', `${volta} ${volta}`], ['sd-front', `${(volta * pct) / 100} ${volta}`]]) {
+  for (const [cls, dash] of [['sd-bg', `${back} ${back}`], ['sd-front', `${(back * pct) / 100} ${back}`]]) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     for (const [k, v] of Object.entries({ cx: 32, cy: 32, r, class: cls, 'stroke-dasharray': dash, transform: 'rotate(-90 32 32)' })) c.setAttribute(k, String(v));
     svg.append(c);
   }
-  const andamento = t.passos.filter((p) => p.estado === 'in_progress').length;
-  const pendentes = t.passos.filter((p) => p.estado === 'pending').length;
-  const mostrar = 4;
-  const passos = t.passos.slice(0, mostrar);
-  const resto = t.passos.length - passos.length;
+  const inProgress = t.passos.filter((p) => p.estado === 'in_progress').length;
+  const pending = t.passos.filter((p) => p.estado === 'pending').length;
+  const show = 4;
+  const steps = t.passos.slice(0, show);
+  const rest = t.passos.length - steps.length;
   return el(
     'div',
     { class: 'sd-tasks' },
@@ -394,264 +394,264 @@ function progresso(t) {
       'div',
       { class: 'sd-legend' },
       el('span', { class: 'sd-l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
-      el('span', { class: 'sd-l-progress' }, 'Em andamento ', el('b', {}, num(andamento))),
-      el('span', { class: 'sd-l-pending' }, 'Pendentes ', el('b', {}, num(pendentes))),
+      el('span', { class: 'sd-l-progress' }, 'Em andamento ', el('b', {}, num(inProgress))),
+      el('span', { class: 'sd-l-pending' }, 'Pendentes ', el('b', {}, num(pending))),
     ),
     el(
       'ul',
       { class: 'sd-steps' },
-      ...passos.map((p, i) =>
-        el('li', { class: `sd-p-${p.estado}` }, icon(p.estado === 'completed' ? 'done' : 'circle'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === passos.length - 1 && resto > 0 ? el('span', { class: 'sd-more' }, ` · +${resto}`) : null),
+      ...steps.map((p, i) =>
+        el('li', { class: `sd-p-${p.estado}` }, icon(p.estado === 'completed' ? 'done' : 'circle'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === steps.length - 1 && rest > 0 ? el('span', { class: 'sd-more' }, ` · +${rest}`) : null),
       ),
     ),
   );
 }
 
-function fluxoDeTokens(k) {
-  const partes = [
+function tokenFlow(k) {
+  const parts = [
     ['read', 'Cache lido', k.cacheLido],
     ['written', 'Cache gravado', k.cacheGravado],
     ['input', 'Entrada', k.entrada],
     ['output', 'Saída', k.saida],
   ];
-  const barra = el('div', { class: 'sd-flow', role: 'img', 'aria-label': partes.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
-  for (const [cls, , v] of partes) {
+  const bar = el('div', { class: 'sd-flow', role: 'img', 'aria-label': parts.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
+  for (const [cls, , v] of parts) {
     if (!v) continue;
     const p = el('span', { class: `sd-f-${cls}` });
     p.style.setProperty('--w', `${(v / k.total) * 100}%`);
-    barra.append(p);
+    bar.append(p);
   }
-  return el('div', {}, barra, el('div', { class: 'sd-legend' }, ...partes.map(([cls, r, v]) => el('span', { class: `sd-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
+  return el('div', {}, bar, el('div', { class: 'sd-legend' }, ...parts.map(([cls, r, v]) => el('span', { class: `sd-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
 }
 
-function no(g) {
-  const fim = g.fim ? Date.parse(g.fim) : Date.now();
+function node(g) {
+  const end = g.fim ? Date.parse(g.fim) : Date.now();
   const sub =
     g.tipo === 'principal'
-      ? [nomeDoModelo(g.modelo), g.turnos !== null ? `${num(g.turnos)} turno${g.turnos === 1 ? '' : 's'}` : null]
-      : [g.tarefa, duracao(fim - Date.parse(g.inicio))];
+      ? [modelName(g.modelo), g.turnos !== null ? `${num(g.turnos)} turno${g.turnos === 1 ? '' : 's'}` : null]
+      : [g.tarefa, duration(end - Date.parse(g.inicio))];
   return el(
     'div',
     { class: `card sd-node${g.tipo === 'subagente' ? ' sd-sub' : ''}` },
     el('span', { class: 'sd-ico' }, icon(g.tipo === 'principal' ? 'robot' : 'subagent')),
     el('div', { class: 'sd-text' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
     el('span', { class: 'mono sd-cost' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
-    pilulaDeStatus(g.status),
+    statusPill(g.status),
   );
 }
 
 // ---------- Aba Conversa (C5) ----------
 
-const ESTADO_DA_FERRAMENTA = {
+const TOOL_STATE = {
   ok: { rotulo: 'OK', icone: 'ok' },
   erro: { rotulo: 'Erro', icone: 'error' },
   permissao: { rotulo: 'Aguardando permissão', icone: 'hourglass' },
   rodando: { rotulo: 'Rodando', icone: 'clock' },
 };
 
-function abaConversa(ctx, base) {
-  let alvo = null;
-  let agente = null;
-  const abertas = new Set();
-  const fechadas = new Set();
-  const lista = el('div', { class: 'card sd-messages' });
-  const seletor = el('select', { class: 'sd-select', 'aria-label': 'Agente' });
-  const contagem = el('span', { class: 'sd-pill mono' });
-  seletor.addEventListener('change', () => {
-    agente = seletor.value;
-    desenhar();
+function conversationTab(ctx, base) {
+  let target = null;
+  let agent = null;
+  const opened = new Set();
+  const closed = new Set();
+  const list = el('div', { class: 'card sd-messages' });
+  const selector = el('select', { class: 'sd-select', 'aria-label': 'Agente' });
+  const count = el('span', { class: 'sd-pill mono' });
+  selector.addEventListener('change', () => {
+    agent = selector.value;
+    draw();
   });
-  const barra = el('div', { class: 'sd-bar' }, seletor, contagem, el('button', { type: 'button', class: 'btn outline', onClick: () => desenhar() }, icon('refresh'), 'Atualizar'));
+  const bar = el('div', { class: 'sd-bar' }, selector, count, el('button', { type: 'button', class: 'btn outline', onClick: () => draw() }, icon('refresh'), 'Atualizar'));
 
-  async function desenhar() {
+  async function draw() {
     try {
-      const c = await ctx.read(`${base}/conversation${agente ? `?agent=${encodeURIComponent(agente)}` : ''}`);
-      agente = c.agente;
-      seletor.replaceChildren(...c.agentes.map((a) => el('option', { value: a.id, selected: a.id === c.agente }, a.nome)));
-      contagem.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
-      lista.replaceChildren(...(c.mensagens.length ? c.mensagens.map(mensagem) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
-      alvo?.replaceChildren(barra, lista);
+      const c = await ctx.read(`${base}/conversation${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`);
+      agent = c.agente;
+      selector.replaceChildren(...c.agentes.map((a) => el('option', { value: a.id, selected: a.id === c.agente }, a.nome)));
+      count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
+      list.replaceChildren(...(c.mensagens.length ? c.mensagens.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
+      target?.replaceChildren(bar, list);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      alvo?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: desenhar }));
+      target?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
     }
   }
 
-  function mensagem(m) {
-    const voce = m.papel === 'voce';
+  function message(m) {
+    const you = m.papel === 'voce';
     return el(
       'article',
-      { class: `sd-msg ${voce ? 'sd-you' : 'sd-assistant'}` },
-      el('span', { class: 'sd-avatar' }, icon(voce ? 'person' : 'robot')),
+      { class: `sd-msg ${you ? 'sd-you' : 'sd-assistant'}` },
+      el('span', { class: 'sd-avatar' }, icon(you ? 'person' : 'robot')),
       el(
         'div',
         { class: 'sd-content' },
         el(
           'header',
           {},
-          el('b', {}, voce ? 'Você' : 'Assistente'),
-          m.modelo ? el('span', { class: 'sd-pill mono' }, nomeDoModelo(m.modelo)) : null,
+          el('b', {}, you ? 'Você' : 'Assistente'),
+          m.modelo ? el('span', { class: 'sd-pill mono' }, modelName(m.modelo)) : null,
           m.tokens ? el('span', { class: 'sd-pill mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.entrada)} · ↑ ${tokens(m.tokens.saida)}`) : null,
-          el('time', { class: 'mono', datetime: m.em }, HORA.format(new Date(m.em))),
+          el('time', { class: 'mono', datetime: m.em }, HOUR.format(new Date(m.em))),
         ),
-        m.texto ? el('p', {}, ...comCodigo(m.texto)) : null,
-        ...m.ferramentas.map(ferramenta),
+        m.texto ? el('p', {}, ...withCode(m.texto)) : null,
+        ...m.ferramentas.map(tool),
       ),
     );
   }
 
-  function ferramenta(f) {
+  function tool(f) {
     // A que pede permissão já vem aberta, como no C5; a pessoa pode fechar.
-    const aberta = abertas.has(f.id) || (f.estado === 'permissao' && !fechadas.has(f.id));
-    const est = ESTADO_DA_FERRAMENTA[f.estado];
-    const detalhe = el(
+    const isOpen = opened.has(f.id) || (f.estado === 'permissao' && !closed.has(f.id));
+    const st = TOOL_STATE[f.estado];
+    const detail = el(
       'div',
-      { class: 'sd-tool-body', hidden: !aberta },
+      { class: 'sd-tool-body', hidden: !isOpen },
       f.entrada ? el('div', {}, el('div', { class: 'eyebrow' }, 'Entrada'), el('pre', { class: 'mono sd-pre' }, f.entrada)) : null,
       f.resultado ? el('div', {}, el('div', { class: 'eyebrow' }, 'Resultado'), el('pre', { class: 'mono sd-pre' }, f.resultado)) : null,
       !f.entrada && !f.resultado ? el('p', { class: 'sd-none' }, 'Sem entrada nem resultado guardados.') : null,
     );
-    const cabeca = el(
+    const headData = el(
       'button',
-      { type: 'button', class: 'sd-tool-head', 'aria-expanded': aberta ? 'true' : 'false' },
-      icon(aberta ? 'chevron-down' : 'chevron-right'),
+      { type: 'button', class: 'sd-tool-head', 'aria-expanded': isOpen ? 'true' : 'false' },
+      icon(isOpen ? 'chevron-down' : 'chevron-right'),
       el('b', { class: 'mono sd-name' }, f.nome),
       el('span', { class: 'mono sd-summary' }, f.resumo ?? ''),
-      est ? el('span', { class: `mono sd-situation sd-e-${TOOL_STATE_CLASS[f.estado] ?? f.estado}` }, icon(est.icone), est.rotulo) : null,
+      st ? el('span', { class: `mono sd-situation sd-e-${TOOL_STATE_CLASS[f.estado] ?? f.estado}` }, icon(st.icone), st.rotulo) : null,
     );
-    cabeca.addEventListener('click', () => {
-      const abrir = detalhe.hidden;
-      detalhe.hidden = !abrir;
-      cabeca.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cabeca.firstChild.replaceWith(icon(abrir ? 'chevron-down' : 'chevron-right'));
-      (abrir ? abertas : fechadas).add(f.id);
-      (abrir ? fechadas : abertas).delete(f.id);
+    headData.addEventListener('click', () => {
+      const open = detail.hidden;
+      detail.hidden = !open;
+      headData.setAttribute('aria-expanded', open ? 'true' : 'false');
+      headData.firstChild.replaceWith(icon(open ? 'chevron-down' : 'chevron-right'));
+      (open ? opened : closed).add(f.id);
+      (open ? closed : opened).delete(f.id);
     });
-    return el('div', { class: `sd-tool${f.estado === 'permissao' ? ' sd-asks' : ''}` }, cabeca, detalhe);
+    return el('div', { class: `sd-tool${f.estado === 'permissao' ? ' sd-asks' : ''}` }, headData, detail);
   }
 
   return {
-    mostrar(no) {
-      alvo = no;
-      return desenhar();
+    show(node) {
+      target = node;
+      return draw();
     },
-    esconder: () => (alvo = null),
-    atualizar: () => desenhar(),
+    hide: () => (target = null),
+    refresh: () => draw(),
   };
 }
 
 // ---------- Aba Linha do tempo (C6) ----------
 
-const POR_PAGINA = 50;
+const PER_PAGE = 50;
 
-function abaTempo(ctx, base, { rotular }) {
-  let alvo = null;
-  let ultimo = null;
-  let quantos = POR_PAGINA;
-  const abertos = new Set();
-  const filtros = { q: '', de: '', ate: '', status: '', tipo: '', ferramenta: '', agente: '' };
+function timelineTab(ctx, base, { setLabel }) {
+  let target = null;
+  let last = null;
+  let howMany = PER_PAGE;
+  const expanded = new Set();
+  const filters = { q: '', de: '', ate: '', status: '', tipo: '', ferramenta: '', agente: '' };
 
-  const busca = el('input', { type: 'search', class: 'sd-field', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
-  const de = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'De' });
-  const ate = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'Até' });
+  const search = el('input', { type: 'search', class: 'sd-field', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
+  const from = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'De' });
+  const until = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'Até' });
   const selects = {
     status: el('select', { class: 'sd-chip mono', 'aria-label': 'Status' }),
     tipo: el('select', { class: 'sd-chip mono', 'aria-label': 'Tipo de evento' }),
     ferramenta: el('select', { class: 'sd-chip mono', 'aria-label': 'Ferramenta' }),
     agente: el('select', { class: 'sd-chip mono', 'aria-label': 'Agente' }),
   };
-  let pausa = null;
-  busca.addEventListener('input', () => {
-    clearTimeout(pausa);
-    pausa = setTimeout(() => ((filtros.q = busca.value.trim()), recomecar()), 250);
+  let pause = null;
+  search.addEventListener('input', () => {
+    clearTimeout(pause);
+    pause = setTimeout(() => ((filters.q = search.value.trim()), restart()), 250);
   });
-  de.addEventListener('change', () => ((filtros.de = de.value), recomecar()));
-  ate.addEventListener('change', () => ((filtros.ate = ate.value), recomecar()));
-  for (const [k, s] of Object.entries(selects)) s.addEventListener('change', () => ((filtros[k] = s.value), recomecar()));
+  from.addEventListener('change', () => ((filters.de = from.value), restart()));
+  until.addEventListener('change', () => ((filters.ate = until.value), restart()));
+  for (const [k, s] of Object.entries(selects)) s.addEventListener('change', () => ((filters[k] = s.value), restart()));
 
-  const painelDeFiltros = el(
+  const filtersPanel = el(
     'section',
     { class: 'card sd-filters' },
-    el('div', { class: 'sd-filters-row' }, el('label', { class: 'sd-search' }, icon('filter'), busca), el('label', { class: 'sd-date' }, icon('calendar'), el('span', {}, 'De'), de), el('label', { class: 'sd-date' }, icon('calendar'), el('span', {}, 'Até'), ate)),
+    el('div', { class: 'sd-filters-row' }, el('label', { class: 'sd-search' }, icon('filter'), search), el('label', { class: 'sd-date' }, icon('calendar'), el('span', {}, 'De'), from), el('label', { class: 'sd-date' }, icon('calendar'), el('span', {}, 'Até'), until)),
     el('div', { class: 'sd-filters-row' }, ...Object.values(selects)),
   );
-  const lista = el('div', { class: 'card sd-events' });
-  const rodape = el('div', { class: 'sd-footer' });
+  const list = el('div', { class: 'card sd-events' });
+  const footer = el('div', { class: 'sd-footer' });
 
-  function opcoes(sel, rotulo, itens, atual) {
-    sel.replaceChildren(el('option', { value: '' }, rotulo), ...itens.map(([v, r]) => el('option', { value: v, selected: v === atual }, r)));
-    sel.classList.toggle('on', !!atual);
+  function options(sel, label, items, current) {
+    sel.replaceChildren(el('option', { value: '' }, label), ...items.map(([v, r]) => el('option', { value: v, selected: v === current }, r)));
+    sel.classList.toggle('on', !!current);
   }
 
-  function consulta() {
+  function query() {
     const p = new URLSearchParams();
     // The filter state keeps its names; the API reads the English parameters.
-    for (const [k, nome] of [['q', 'q'], ['status', 'status'], ['tipo', 'type'], ['ferramenta', 'tool'], ['agente', 'agent']]) if (filtros[k]) p.set(nome, filtros[k]);
+    for (const [k, name] of [['q', 'q'], ['status', 'status'], ['tipo', 'type'], ['ferramenta', 'tool'], ['agente', 'agent']]) if (filters[k]) p.set(name, filters[k]);
     // `datetime-local` é a hora do lugar; a API quer ISO em UTC.
-    for (const [k, nome] of [['de', 'from'], ['ate', 'to']]) if (filtros[k]) p.set(nome, new Date(filtros[k]).toISOString());
-    p.set('limit', String(quantos));
+    for (const [k, name] of [['de', 'from'], ['ate', 'to']]) if (filters[k]) p.set(name, new Date(filters[k]).toISOString());
+    p.set('limit', String(howMany));
     return `${base}/events?${p}`;
   }
 
-  function recomecar() {
-    quantos = POR_PAGINA;
-    desenhar();
+  function restart() {
+    howMany = PER_PAGE;
+    draw();
   }
 
-  async function desenhar() {
+  async function draw() {
     try {
-      const r = await ctx.read(consulta());
-      ultimo = r;
-      rotular(`${num(r.filtrados)}/${num(r.total)}`);
-      opcoes(selects.status, 'Status', r.opcoes.status.map((s) => [s, STATUS[s]]), filtros.status);
-      opcoes(selects.tipo, 'Tipo de evento', r.opcoes.tipos.map((t) => [t, t]), filtros.tipo);
-      opcoes(selects.ferramenta, 'Ferramenta', r.opcoes.ferramentas.map((t) => [t, t]), filtros.ferramenta);
-      opcoes(selects.agente, 'Agente', r.opcoes.agentes.map((a) => [a.id, a.nome]), filtros.agente);
-      lista.replaceChildren(...(r.itens.length ? r.itens.map(linha) : [el('p', { class: 'sd-none' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
-      rodape.replaceChildren(
+      const r = await ctx.read(query());
+      last = r;
+      setLabel(`${num(r.filtrados)}/${num(r.total)}`);
+      options(selects.status, 'Status', r.opcoes.status.map((s) => [s, STATUS[s]]), filters.status);
+      options(selects.tipo, 'Tipo de evento', r.opcoes.tipos.map((t) => [t, t]), filters.tipo);
+      options(selects.ferramenta, 'Ferramenta', r.opcoes.ferramentas.map((t) => [t, t]), filters.ferramenta);
+      options(selects.agente, 'Agente', r.opcoes.agentes.map((a) => [a.id, a.nome]), filters.agente);
+      list.replaceChildren(...(r.itens.length ? r.itens.map(row) : [el('p', { class: 'sd-none' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
+      footer.replaceChildren(
         ...[
           r.itens.length ? el('small', {}, `Mostrando ${num(r.itens.length)} de ${num(r.filtrados)}`) : null,
-          r.proximo ? el('button', { type: 'button', class: 'btn outline', onClick: () => ((quantos += POR_PAGINA), desenhar()) }, 'Carregar mais') : null,
+          r.proximo ? el('button', { type: 'button', class: 'btn outline', onClick: () => ((howMany += PER_PAGE), draw()) }, 'Carregar mais') : null,
         ].filter(Boolean),
       );
-      alvo?.replaceChildren(painelDeFiltros, lista, rodape);
+      target?.replaceChildren(filtersPanel, list, footer);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      alvo?.replaceChildren(error({ title: 'Não deu para ler a linha do tempo', text: e.message, retry: desenhar }));
+      target?.replaceChildren(error({ title: 'Não deu para ler a linha do tempo', text: e.message, retry: draw }));
     }
   }
 
-  function linha(e) {
-    const aberto = abertos.has(e.id);
-    const dados = el('pre', { class: 'mono sd-pre sd-data', hidden: !aberto }, e.dados ?? 'Sem dados guardados.');
-    const cab = el(
+  function row(e) {
+    const isOpen = expanded.has(e.id);
+    const data = el('pre', { class: 'mono sd-pre sd-data', hidden: !isOpen }, e.dados ?? 'Sem dados guardados.');
+    const head = el(
       'button',
-      { type: 'button', class: 'sd-event-head', 'aria-expanded': aberto ? 'true' : 'false' },
-      icon(aberto ? 'chevron-down' : 'chevron-right'),
-      el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ha(e.em)),
-      pilulaDeStatus(e.status),
+      { type: 'button', class: 'sd-event-head', 'aria-expanded': isOpen ? 'true' : 'false' },
+      icon(isOpen ? 'chevron-down' : 'chevron-right'),
+      el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ago(e.em)),
+      statusPill(e.status),
       el('span', { class: 'mono sd-type' }, e.tipo),
       el('span', { class: 'sd-summary' }, e.resumo ?? ''),
       e.ferramenta ? el('span', { class: 'sd-chip mono' }, e.ferramenta) : null,
     );
-    cab.addEventListener('click', () => {
-      const abrir = dados.hidden;
-      dados.hidden = !abrir;
-      cab.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cab.firstChild.replaceWith(icon(abrir ? 'chevron-down' : 'chevron-right'));
-      if (abrir) abertos.add(e.id);
-      else abertos.delete(e.id);
+    head.addEventListener('click', () => {
+      const open = data.hidden;
+      data.hidden = !open;
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      head.firstChild.replaceWith(icon(open ? 'chevron-down' : 'chevron-right'));
+      if (open) expanded.add(e.id);
+      else expanded.delete(e.id);
     });
-    return el('div', { class: 'sd-event' }, cab, dados);
+    return el('div', { class: 'sd-event' }, head, data);
   }
 
   return {
-    mostrar(no) {
-      alvo = no;
-      if (ultimo) alvo.replaceChildren(painelDeFiltros, lista, rodape);
-      return desenhar();
+    show(node) {
+      target = node;
+      if (last) target.replaceChildren(filtersPanel, list, footer);
+      return draw();
     },
-    esconder: () => (alvo = null),
-    atualizar: () => desenhar(),
+    hide: () => (target = null),
+    refresh: () => draw(),
   };
 }
