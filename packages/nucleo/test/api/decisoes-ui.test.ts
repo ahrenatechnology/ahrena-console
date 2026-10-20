@@ -30,6 +30,9 @@ const VITRINE = 'sim-painel-vitrine-demo';
 const VITRINE_ONTEM = 'sim-painel-vitrine-ontem';
 const JSON_ = { 'content-type': 'application/json' };
 
+/** O rascunho como a rota antiga `/api/decisoes/:id/promover` o responde: as chaves antigas (a nova responde `draft`, um `RascunhoDeRegistro`). */
+type RascunhoAntigo = Omit<RascunhoDeRegistro, 'path' | 'canWrite' | 'reason'> & { caminho: string; podeGravar: boolean; motivo: string | null };
+
 interface Cenario {
   storage: SqliteStorage;
   decisoes: SqliteDecisionStore;
@@ -397,7 +400,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       const d = await comRepo(c, 'teste-promover', repo);
       const rota = `/api/decisoes/${d.id}/promover`;
 
-      const r = await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-promover' });
+      const r = await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-promover' });
       assert.equal(r.status, 200);
       const { rascunho } = r.corpo;
       assert.equal(rascunho.caminho, 'docs/decisoes/0008-indice-composto-em-mes-conta.md');
@@ -438,7 +441,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.equal(await readFile(join(repo, rascunho.caminho), 'utf8'), rascunho.markdown);
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, rascunho.caminho, 'markPromoted');
 
-      const depois = (await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-promover' })).corpo.rascunho;
+      const depois = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-promover' })).corpo.rascunho;
       assert.equal(depois.podeGravar, false);
       assert.match(depois.motivo!, /já promovida/);
       assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: true, caminho: 'docs/decisoes/0009-de-novo.md' })).status, 409);
@@ -462,7 +465,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const semRepo = await comRepo(c, 'teste-sem-repo', null);
-      const r1 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${semRepo.id}/promover`, { sessao: 'teste-sem-repo' })).corpo.rascunho;
+      const r1 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${semRepo.id}/promover`, { sessao: 'teste-sem-repo' })).corpo.rascunho;
       assert.equal(r1.podeGravar, false);
       assert.equal(r1.repo, null);
       assert.ok(r1.motivo);
@@ -470,7 +473,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
 
       const vazio = await pasta();
       const semPasta = await comRepo(c, 'teste-sem-pasta', vazio);
-      const r2 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${semPasta.id}/promover`, { sessao: 'teste-sem-pasta' })).corpo.rascunho;
+      const r2 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${semPasta.id}/promover`, { sessao: 'teste-sem-pasta' })).corpo.rascunho;
       assert.equal(r2.podeGravar, false);
       assert.match(r2.motivo!, /docs\/decisoes/);
       assert.equal((await c.postar(`/api/decisoes/${semPasta.id}/promover`, { sessao: 'teste-sem-pasta', confirmar: true, caminho: r2.caminho })).status, 409);
@@ -481,7 +484,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       await mkdir(join(repo, 'docs'));
       await symlink(fora, join(repo, 'docs', 'decisoes'));
       const comLink = await comRepo(c, 'teste-symlink', repo);
-      const r3 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${comLink.id}/promover`, { sessao: 'teste-symlink' })).corpo.rascunho;
+      const r3 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${comLink.id}/promover`, { sessao: 'teste-symlink' })).corpo.rascunho;
       assert.equal(r3.podeGravar, false);
       assert.equal((await c.postar(`/api/decisoes/${comLink.id}/promover`, { sessao: 'teste-symlink', confirmar: true, caminho: r3.caminho })).status, 400);
       assert.deepEqual(await readdir(fora), []);
@@ -539,7 +542,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const relativo = await comRepo(c, 'teste-relativo', 'simulacao/relativo');
-      const r1 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo' })).corpo.rascunho;
+      const r1 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo' })).corpo.rascunho;
       assert.equal(r1.podeGravar, false);
       assert.match(r1.motivo!, /absoluta/);
       assert.equal((await c.postar(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo', confirmar: true, caminho: r1.caminho })).status, 409);
@@ -548,7 +551,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       await mkdir(join(repo, 'docs', 'de-verdade'), { recursive: true });
       await symlink(join(repo, 'docs', 'de-verdade'), join(repo, 'docs', 'decisoes'));
       const d = await comRepo(c, 'teste-symlink-dentro', repo);
-      const r2 = (await c.postar<{ rascunho: RascunhoDeRegistro }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro' })).corpo.rascunho;
+      const r2 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro' })).corpo.rascunho;
       assert.equal(r2.podeGravar, false);
       assert.match(r2.motivo!, /symlink/);
       assert.equal((await c.postar(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro', confirmar: true, caminho: r2.caminho })).status, 400);
@@ -585,7 +588,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       const repo = await repoComRegistros();
       const d = await comRepo(c, 'teste-hash', repo);
       const rota = `/api/decisoes/${d.id}/promover`;
-      const { rascunho } = (await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-hash' })).corpo;
+      const { rascunho } = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-hash' })).corpo;
       assert.equal(rascunho.hash, createHash('sha256').update(rascunho.markdown).digest('hex'));
       const gravar = { sessao: 'teste-hash', confirmar: true, caminho: rascunho.caminho };
       for (const hash of ['x', 42, 'AB'.repeat(32)]) assert.equal((await c.postar(rota, { ...gravar, hash })).status, 400, String(hash));
@@ -597,7 +600,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.match(mudou.corpo.error, /o rascunho mudou, abra de novo/);
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
 
-      const { rascunho: novo } = (await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-hash' })).corpo;
+      const { rascunho: novo } = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-hash' })).corpo;
       assert.notEqual(novo.hash, rascunho.hash);
       assert.equal((await c.postar(rota, { ...gravar, hash: novo.hash })).status, 201);
       assert.equal(await readFile(join(repo, novo.caminho), 'utf8'), novo.markdown);
