@@ -1046,7 +1046,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "estado": "waiting",
         "motivo": "stop",
         "desde": "2026-11-02T11:59:00.000Z",
-        "fazendo": null
+        "fazendo": null,
+        "arquivada": false
       },
       {
         "id": "sim-painel-catalogo-exemplo",
@@ -1055,7 +1056,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "estado": "active",
         "motivo": null,
         "desde": "2026-11-02T11:20:00.000Z",
-        "fazendo": "pensando"
+        "fazendo": "pensando",
+        "arquivada": false
       },
       {
         "id": "sim-painel-blog-estatico",
@@ -1064,7 +1066,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "estado": "completed",
         "motivo": null,
         "desde": "2026-11-02T11:40:00.000Z",
-        "fazendo": null
+        "fazendo": null,
+        "arquivada": false
       }
     ],
     "trabalho": {
@@ -1670,7 +1673,8 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "estado": "waiting",
         "motivo": "stop",
         "desde": "2026-11-02T11:59:00.000Z",
-        "fazendo": null
+        "fazendo": null,
+        "arquivada": false
       }
     ],
     "trabalho": {

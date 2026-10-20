@@ -402,6 +402,52 @@ test('0.0.24: o "#N" na descrição do subagente é link para o PR, inteiro; sem
   await ui.unmount()
 })
 
+test('#145: as filhas arquivadas contam, vêm por último e se desarquivam pela sessão, só com ela ociosa', async ($, on) => {
+  const enviados: string[] = []
+  on('prompt.submit', async (_$: unknown, e: { text: string }) => {
+    enviados.push(e.text)
+    return { text: e.text }
+  })
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const base = p4.filhas[0]!
+  const filha = (i: number, extra: object) => ({ ...base, id: `sim-filha-${i}`, titulo: `filha-sintetica-${i}`, local: `local_00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}`, desde: new Date(AGORA - i * 60_000).toISOString(), ...extra })
+  const filhas = [
+    ...Array.from({ length: 9 }, (_, i) => filha(i, { estado: 'completed', motivo: null, arquivada: true })),
+    filha(9, { estado: 'active', motivo: null, fazendo: 'pensando' }),
+    ...Array.from({ length: 5 }, (_, i) => filha(10 + i, { estado: 'completed', motivo: null })),
+  ]
+  const ociosa = { ...p4.sessao!, estado: 'waiting' as const, status: 'waiting' as const, motivo: 'stop' as const }
+  f.estado.painel = { ...p4, sessao: ociosa, filhas }
+  await f.relogio.advance(15_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 200) })
+  // O total com as arquivadas, e quantas são; o pé no padrão.
+  expect((await ui.find({ key: 'card-filhas' }))?.text).toMatch(/SESSÕES FILHAS\s*15 · 9 arquivadas/)
+  expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe('15 sessões filhas ›')
+  // No card, a ativa primeiro; nenhuma arquivada entre as 3.
+  const noCard = (await ui.findAll({ type: 'Box' })).filter((b: any) => b.key?.startsWith('filha-')).map((b: any) => b.key)
+  expect(noCard[0]).toBe('filha-sim-filha-9')
+  // Na lista completa, as arquivadas por último, com "arquivada" e o "Desarquivar".
+  await ui.press({ key: 'ver-filhas' })
+  const lista = (await ui.findAll({ type: 'Box' })).filter((b: any) => b.key?.startsWith('filha-')).map((b: any) => b.key)
+  const arquivadas = filhas.filter((x) => x.arquivada).map((x) => `filha-${x.id}`)
+  expect(lista.slice(-9).sort()).toEqual([...arquivadas].sort())
+  expect((await ui.find({ key: 'filha-sim-filha-0' }))?.text).toMatch(/filha-sintetica-0 · arquivada/)
+  // O clique manda à sessão o pedido para desarquivar, como a pessoa.
+  await ui.press({ key: 'desarquivar-sim-filha-0' })
+  for (let i = 0; i < 20 && !enviados.length; i++) await f.relogio.advance(10)
+  expect(enviados).toEqual(['Desarquive a sessão filha-sintetica-0 (local_00000000-0000-4000-8000-000000000000) com unarchive_session.'])
+  await ui.unmount()
+  // No meio de um turno: sem o botão, "aguarde o turno".
+  f.estado.painel = { ...p4, sessao: { ...p4.sessao!, estado: 'active', status: 'active', motivo: null }, filhas }
+  await f.relogio.advance(5_000)
+  const ui2 = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 200) })
+  expect(await ui2.find({ key: 'desarquivar-sim-filha-0' })).toBeUndefined()
+  expect(await ui2.find({ type: 'Text', text: 'aguarde o turno' })).toBeDefined()
+  await ui2.press({ key: 'voltar-sessao' })
+  await ui2.unmount()
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })

@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.25'
+export const VERSAO_DO_PLUGIN = '0.0.26'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -136,6 +136,8 @@ export type Acoes = {
   verPrs: () => void
   /** #140: manda ao chat a resposta de um botão da caixa de próximo passo. */
   responder: (mensagem: string) => void
+  /** #145: pede à sessão do painel para desarquivar a filha (`unarchive_session`, a pessoa aprova). */
+  desarquivar: (f: FilhaDoPainel) => void
 }
 
 export type Contexto = {
@@ -253,9 +255,12 @@ function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, 
   const { Box, Text } = c.el
   return (
     <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-      <Text mono size="caption" weight="semibold" dimColor wrap="truncate-end">
-        {icone} {titulo}
-      </Text>
+      {/* O título nunca corta: quem cede é o valor da direita. */}
+      <Box flexShrink={0}>
+        <Text mono size="caption" weight="semibold" dimColor>
+          {icone} {titulo}
+        </Text>
+      </Box>
       <Text mono size="caption" tabular color={opcoes.cor} dimColor={!opcoes.cor} wrap="truncate-end">
         {direita}
       </Text>
@@ -1029,9 +1034,11 @@ function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | 
 }
 
 /** Onde a filha entra na lista: trabalhando, precisando de você, na sua vez ou parada. */
-export type GrupoDaFilha = 'trabalhando' | 'precisa' | 'sua-vez' | 'parada'
+export type GrupoDaFilha = 'trabalhando' | 'precisa' | 'sua-vez' | 'parada' | 'arquivada'
 
 export function grupoDaFilha(f: FilhaDoPainel): GrupoDaFilha {
+  // #145: a arquivada no Desktop vem por último, seja qual for o estado em que parou.
+  if (f.arquivada) return 'arquivada'
   if (f.estado === 'active' || f.estado === 'delegating' || f.estado === 'background') return 'trabalhando'
   if (f.estado === 'error') return 'precisa'
   // Uma permissão ou uma pergunta chega como `notification`; o fim do turno e o Esc são a sua vez.
@@ -1039,7 +1046,7 @@ export function grupoDaFilha(f: FilhaDoPainel): GrupoDaFilha {
   return 'parada'
 }
 
-const ORDEM_DAS_FILHAS: GrupoDaFilha[] = ['trabalhando', 'precisa', 'sua-vez', 'parada']
+const ORDEM_DAS_FILHAS: GrupoDaFilha[] = ['trabalhando', 'precisa', 'sua-vez', 'parada', 'arquivada']
 
 /** O que vem depois do nome, em cor neutra: o que a filha que trabalha está fazendo. */
 const fazendoDaFilha = (f: FilhaDoPainel) => (grupoDaFilha(f) === 'trabalhando' ? (f.fazendo ?? null) : null)
@@ -1049,6 +1056,8 @@ function direitaDaFilha(f: FilhaDoPainel, agora: number): { texto: string; cor?:
   const grupo = grupoDaFilha(f)
   if (grupo === 'sua-vez') return { texto: 'Sua vez', cor: AMARELO }
   if (grupo === 'precisa') return { texto: f.estado === 'error' ? 'Erro' : 'Precisa', cor: f.estado === 'error' ? VERMELHO_TEXTO : AMARELO }
+  // Na coluna de 7: "arquiv." (na lista completa, "· arquivada" vai depois do nome).
+  if (grupo === 'arquivada') return { texto: 'arquiv.' }
   return { texto: desde(f.desde, agora) }
 }
 
@@ -1085,6 +1094,34 @@ function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = fals
   )
 }
 
+/** A sessão do painel está no meio de um turno? O `prompt.submit` de um plugin só roda com ela ociosa. */
+const emTurno = (s: SessaoDoPainel | null | undefined) => !!s && (s.estado === 'active' || s.estado === 'delegating')
+
+/**
+ * Uma filha arquivada na lista completa (#145): o nome e "· arquivada" em cor neutra e, à direita,
+ * "Desarquivar", que pede à sessão do painel para chamar `unarchive_session` (a pessoa aprova). Com a
+ * sessão no meio de um turno, o pedido só rodaria depois: "aguarde o turno" no lugar do botão.
+ */
+function linhaDeArquivada(c: Contexto, f: FilhaDoPainel, sessao: SessaoDoPainel | null | undefined) {
+  const { Box, Button, Text } = c.el
+  return (
+    <Box key={`filha-${f.id}`} flexDirection="row" alignItems="center" gap={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text mono size="footnote" dimColor wrap="wrap">
+          ○ {f.titulo} · arquivada
+        </Text>
+      </Box>
+      {!f.local ? null : emTurno(sessao) ? (
+        <Text key={`aguarde-${f.id}`} mono size="footnote" dimColor>
+          aguarde o turno
+        </Text>
+      ) : (
+        <Button key={`desarquivar-${f.id}`} label="Desarquivar" variant="secondary" onPress={() => c.acoes.desarquivar(f)} />
+      )}
+    </Box>
+  )
+}
+
 /** Na ordem do card: as trabalhando, as que precisam, as na sua vez e as paradas; em cada grupo, a mais recente antes. */
 const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
   [...filhas].sort(
@@ -1098,7 +1135,9 @@ const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
 function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   const filhas = filhasEmOrdem(todasAsFilhas)
   const { Text } = c.el
-  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length))]
+  // O total com as arquivadas, e quantas são (#145): "15 · 9 arquivadas".
+  const arquivadas = filhas.filter((f) => f.arquivada).length
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑃', 'SESSÕES FILHAS', `${filhas.length}${arquivadas ? ` · ${contagem(arquivadas, 'arquivada', 'arquivadas')}` : ''}`)]
   if (filhas.length === 0) {
     corpo.push(
       <Text mono size="footnote" dimColor>
@@ -1152,7 +1191,7 @@ function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 's
   const itens =
     qual === 'subagentes'
       ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x, true))
-      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => linhaDeFilha(c, f, g.largura, true))
+      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => (f.arquivada ? linhaDeArquivada(c, f, p.sessao) : linhaDeFilha(c, f, g.largura, true)))
   const titulo = qual === 'subagentes' ? `SUBAGENTES · ${p.subagentes.itens.length}` : `SESSÕES FILHAS · ${p.filhas.length}`
   return [
     rotuloDaSecao(c, g.largura, titulo, chip(c, `chip-${qual}`, qual === 'subagentes' ? plural(p.subagentes.ativos, 'ativo', 'ativos') : 'desta sessão')),

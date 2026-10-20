@@ -87,6 +87,8 @@ export type FilhaDoPainel = {
   desde: string | null
   /** #131: o que a filha trabalhando faz ("pensando", "rodando Bash"); ausente no núcleo antigo. */
   fazendo?: string | null
+  /** #145: arquivada no Claude Desktop; ausente no núcleo antigo. */
+  arquivada?: boolean
 }
 
 export type TrabalhoDoPainel = {

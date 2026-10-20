@@ -157,6 +157,8 @@ export interface FilhaDoPainel {
   desde: string | null;
   /** #131: o que a filha trabalhando está fazendo ("pensando", "rodando Bash"); `null` parada. */
   fazendo?: string | null;
+  /** #145: arquivada no Claude Desktop. O painel a conta e lista por último, e oferece desarquivar. */
+  arquivada?: boolean;
 }
 
 export interface TrabalhoDoPainel {

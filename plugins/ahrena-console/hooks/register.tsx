@@ -13,7 +13,7 @@ import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-c
 
 import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PerguntaDaSessao, PrecisaDeVoce, Vista } from '../types'
 import { desenhar, escopoDasDecisoes, type Acoes, type Elementos } from './desenho'
-import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, precisamTexto, STATUS, statusDe, tokens } from './formato'
+import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, pedidoDeDesarquivar, precisamTexto, STATUS, statusDe, tokens } from './formato'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
@@ -420,6 +420,21 @@ async function responder($: Engine, mensagem: string) {
   }
 }
 
+/**
+ * #145: pede à sessão do painel para desarquivar uma filha. O plugin não tem como desarquivar (o
+ * app só expõe `unarchive_session` às sessões de Claude); a sessão chama a ferramenta, e a pessoa
+ * aprova. Roda quando a sessão estiver ociosa; o painel só oferece o botão nessa hora.
+ */
+async function desarquivar($: Engine, f: { titulo: string; local?: string | null }) {
+  if (!f.local) return
+  try {
+    await $.prompt.submit({ text: pedidoDeDesarquivar(f), asUser: true })
+    $.ui.toast(`Pedi para desarquivar "${f.titulo}": aprove no chat.`)
+  } catch (err) {
+    $.ui.toast(`Não deu para pedir o desarquivar: ${(err as Error)?.message ?? String(err)}.`)
+  }
+}
+
 /** Pede à API local que abra a conversa no Claude Desktop (no macOS, `open claude://…`). */
 async function abrirSessao($: Engine, local: string, titulo: string) {
   try {
@@ -594,6 +609,7 @@ export const register: Register = (on, options) => {
         verFilhas: () => void mudarVista($, { tela: 'filhas' }),
         verPrs: () => void mudarVista($, { tela: 'prs' }),
         responder: (mensagem) => void responder($, mensagem),
+        desarquivar: (f) => void desarquivar($, f),
       },
     })
   })

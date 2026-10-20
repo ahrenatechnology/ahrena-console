@@ -308,17 +308,22 @@ export class MontadorDoPainel {
   }
 
   private async filhasDe(session: Session | null, desktop: SessaoDoDesktop | null): Promise<FilhaDoPainel[]> {
-    const ids = new Map<string, { titulo: string | null; local: string | null }>();
-    for (const f of desktop ? (this.desktop?.filhasDe(desktop.localId) ?? []) : []) if (f.cliSessionId) ids.set(f.cliSessionId, { titulo: f.titulo, local: f.localId });
+    const ids = new Map<string, { titulo: string | null; local: string | null; arquivada: boolean }>();
+    // As arquivadas no Desktop vêm junto, marcadas (#145): o painel as conta e lista por último.
+    for (const f of desktop ? (this.desktop?.filhasDe(desktop.localId) ?? []) : []) if (f.cliSessionId) ids.set(f.cliSessionId, { titulo: f.titulo, local: f.localId, arquivada: f.arquivada });
     const familia = session?.metadata?.familia as { filhas?: unknown } | undefined;
     if (Array.isArray(familia?.filhas)) {
-      for (const id of familia.filhas) if (typeof id === 'string' && !ids.has(id)) ids.set(id, { titulo: null, local: this.desktop?.sessaoPorCli(id)?.localId ?? null });
+      for (const id of familia.filhas) {
+        if (typeof id !== 'string' || ids.has(id)) continue;
+        const noDesktop = this.desktop?.sessaoPorCli(id) ?? null;
+        ids.set(id, { titulo: null, local: noDesktop?.localId ?? null, arquivada: noDesktop?.arquivada ?? false });
+      }
     }
     const out: FilhaDoPainel[] = [];
-    for (const [id, { titulo, local }] of ids) {
+    for (const [id, { titulo, local, arquivada }] of ids) {
       const s = await this.storage.getSession(id);
       if (!s) {
-        out.push({ id, local, titulo: titulo ?? id.slice(0, 8), estado: 'desconhecido', motivo: null, desde: null });
+        out.push({ id, local, titulo: titulo ?? id.slice(0, 8), estado: 'desconhecido', motivo: null, desde: null, arquivada });
         continue;
       }
       const agentes = await this.storage.listAgents(id);
@@ -332,6 +337,7 @@ export class MontadorDoPainel {
         motivo: inbox.motivo,
         desde: f ? f.desde : (s.awaitingInputSince ?? s.updatedAt),
         fazendo: f?.texto ?? null,
+        arquivada,
       });
     }
     return out;

@@ -189,3 +189,6 @@ export function semMarkdown(texto: string): string {
     .replace(/`/g, '')
     .replace(/^#{1,6}\s+/gm, '')
 }
+
+/** #145: o que o painel manda à sessão para desarquivar uma filha (ela chama `unarchive_session`). */
+export const pedidoDeDesarquivar = (f: { titulo: string; local?: string | null }) => `Desarquive a sessão ${f.titulo} (${f.local}) com unarchive_session.`
