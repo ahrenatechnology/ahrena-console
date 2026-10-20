@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import type { Painel } from '../types'
 import { paleta } from '../hooks/marca'
-import { linhasDaVisao, passosEmDestaque } from '../hooks/desenho'
+import { COLUNAS_SEM_CORTE, linhaDoModelo, linhasDaVisao, passosEmDestaque } from '../hooks/desenho'
 import { AGORA, CENARIOS } from './cenarios'
 
 type Cenario = keyof typeof CENARIOS
@@ -1331,5 +1331,31 @@ test('P1: os cards de Subagentes e Sessões filhas nunca aparecem só com o cabe
       }
       await ui.unmount()
     }
+  }
+})
+
+// --- 0.0.30: a linha do modelo no card Esta sessão nunca corta ---
+
+test('0.0.30: a linha do modelo encurta por etapas, sem reticências: "Opus 5.5" → "Opus", "turno 262" → "t262"', () => {
+  const dias = (d: number) => new Date(AGORA - d * 86_400_000).toISOString()
+  expect(linhaDoModelo({ modelo: 'claude-opus-5-5', iniciadaEm: new Date(AGORA - 12 * 60_000).toISOString(), turno: 18 }, AGORA)).toBe('Opus 5.5 · 12 min · turno 18')
+  expect(linhaDoModelo({ modelo: 'claude-opus-5-5[1m]', iniciadaEm: dias(2), turno: 262 }, AGORA)).toBe('Opus 1M · 2 d · turno 262')
+  expect(linhaDoModelo({ modelo: 'claude-sonnet-5-5[1m]', iniciadaEm: dias(12), turno: 1234 }, AGORA)).toBe('Sonnet 1M · 12 d · t1234')
+})
+
+test('0.0.30: o maior caso real (modelo longo, "12 d", "turno 1234") cabe inteiro no card, nas duas larguras', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  f.estado.painel = { ...p1, sessao: { ...p1.sessao!, modelo: 'claude-sonnet-5-5[1m]', iniciadaEm: new Date(AGORA - 12 * 86_400_000).toISOString(), turno: 1234 } }
+  await f.relogio.advance(15_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const linha = await ui.find({ type: 'Text', text: /t1234/ })
+    expect(linha?.text).toBe('Sonnet 1M · 12 d · t1234')
+    expect([...(linha?.text ?? '')].length).toBeLessThanOrEqual(COLUNAS_SEM_CORTE)
+    // Nunca com reticências: o que não coube quebra a linha.
+    expect(linha?.props.wrap).toBe('wrap')
+    expect(linha?.text).not.toMatch(/…/)
+    await ui.unmount()
   }
 })

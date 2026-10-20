@@ -64,7 +64,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.29'
+export const VERSAO_DO_PLUGIN = '0.0.30'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -499,7 +499,25 @@ const GLIFO_DA_ATIVIDADE: Record<string, string> = {
 }
 /** A atividade da sessão como texto: a do erro, a primeira frase; a última mensagem, sem o markdown cru. */
 const textoDaAtividade = (s: SessaoDoPainel) => semMarkdown(s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
-const linhaDoModelo = (s: SessaoDoPainel, agora: number) => `${modelo(s.modelo)} · ${desde(s.iniciadaEm, agora)} · turno ${s.turno}`
+/**
+ * Colunas que uma linha de texto do card ocupa sem cortar no Desktop. A conta nominal é UTIL (30), mas
+ * o Desktop acrescenta respiro ao Box com borda: "Opus 5.5 · 12 min · turno 18" (28) cabe, e a linha
+ * de uma sessão de dias com o modelo 1M ("Opus 5.5 1M · 2 d · turno 262", 29) saiu cortada.
+ */
+export const COLUNAS_SEM_CORTE = UTIL - 2
+
+/**
+ * A linha do modelo no card Esta sessão, que nunca corta com reticências: inteira se couber; senão o
+ * modelo sem a versão ("Opus 5.5" → "Opus"); depois o turno curto ("turno 262" → "t262"). Se nem
+ * assim couber, a linha quebra (o desenho usa `wrap`).
+ */
+export function linhaDoModelo(s: Pick<SessaoDoPainel, 'modelo' | 'iniciadaEm' | 'turno'>, agora: number, max = COLUNAS_SEM_CORTE): string {
+  const nome = modelo(s.modelo)
+  const curto = nome.replace(/^(Opus|Sonnet|Haiku|Fable) \d+(?:\.\d+)?/, '$1')
+  const tempo = desde(s.iniciadaEm, agora)
+  const opcoes = [`${nome} · ${tempo} · turno ${s.turno}`, `${curto} · ${tempo} · turno ${s.turno}`, `${curto} · ${tempo} · t${s.turno}`]
+  return opcoes.find((x) => [...x].length <= max) ?? opcoes.at(-1)!
+}
 /**
  * O card "Esta sessão" (pnEstado do P1): a duração à direita do cabeçalho, as pills, o título, o
  * modelo e o que ela faz agora, cada um numa linha. No card de altura fixa, o título e a atividade
@@ -526,7 +544,8 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
       <Text mono weight="bold" wrap="truncate-end">
         {s.titulo}
       </Text>,
-      <Text mono size="footnote" dimColor wrap="truncate-end">
+      // Nunca com reticências: encurta e, em último caso, quebra (ver linhaDoModelo).
+      <Text mono size="footnote" dimColor wrap="wrap">
         {linhaDoModelo(s, c.agora)}
       </Text>,
       <Text mono size="footnote" wrap="truncate-end">
@@ -980,7 +999,9 @@ const LINHAS_DA_LISTA = 3
 function peDosSubagentes(fora: SubagenteDoPainel[]): string {
   if (fora.length === 0) return 'ver o grafo ›'
   const erros = fora.filter((i) => i.status === 'error').length
-  return `+${fora.length}${erros ? ` · ${erros} com erro` : ''} · grafo ›`
+  const longo = `+${fora.length}${erros ? ` · ${erros} com erro` : ''} · grafo ›`
+  // O botão nativo não quebra: sem caber, o erro vira o glifo ("+22 · 1 ✕ · grafo ›").
+  return [...longo].length <= COLUNAS_SEM_CORTE ? longo : `+${fora.length}${erros ? ` · ${erros} ✕` : ''} · grafo ›`
 }
 
 /**
