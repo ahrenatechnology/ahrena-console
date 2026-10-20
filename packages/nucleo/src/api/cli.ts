@@ -70,15 +70,16 @@ import { RotaAnalytics } from './analytics-route.ts';
 import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
-  LIMPEZA_DAS_DECISOES,
+  DECISION_NOISE_CLEANUP,
   limparDecisoes,
-  REPROCESSAMENTO,
-  REPROCESSAMENTO_DO_CONTEXTO,
+  PLANS_AND_DECISIONS_REPROCESSING,
+  CONTEXT_REPROCESSING,
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
+import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { FeedDeEventos } from './events.ts';
@@ -352,6 +353,8 @@ const githubQueue = new GithubCallQueue();
 const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
 // The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
+// Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
+const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -454,6 +457,7 @@ const api: LocalApi = await startLocalApi({
   kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
   repos: repos.rota,
   agentInstructions: agentInstructions.route,
+  frameworkInstall: frameworkInstall.route,
   // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
   ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
@@ -534,20 +538,20 @@ if (follower) {
 // capture existed, the cleanup of what the old capture wrote that is not a decision, and the context
 // meters of the sessions imported before item 1.7.
 async function reprocessOnce() {
-  if (!storage.reprocessado(REPROCESSAMENTO)) {
+  if (!storage.isReprocessed(PLANS_AND_DECISIONS_REPROCESSING)) {
     const start = Date.now();
     const r = await reprocessarHistorico({ storage, decisoes: decisions, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    storage.markReprocessed(PLANS_AND_DECISIONS_REPROCESSING, new Date().toISOString());
     log(`reprocessed in ${Math.round((Date.now() - start) / 1000)} s: ${r.sessoes} sessions, ${r.planos} plans in ${r.comPlano}, ${r.decisoes} decisions`);
   }
-  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+  if (!storage.isReprocessed(DECISION_NOISE_CLEANUP)) {
     const r = await limparDecisoes(storage, decisions);
-    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    storage.markReprocessed(DECISION_NOISE_CLEANUP, new Date().toISOString());
     log(`decisions cleaned: ${r.ruido} outside the lists, ${r.encurtadas} with a shortened title`);
   }
-  if (!storage.reprocessado(REPROCESSAMENTO_DO_CONTEXTO)) {
+  if (!storage.isReprocessed(CONTEXT_REPROCESSING)) {
     const r = await reprocessarContexto({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO_DO_CONTEXTO, new Date().toISOString());
+    storage.markReprocessed(CONTEXT_REPROCESSING, new Date().toISOString());
     log(`context meter rebuilt: ${r.medidores} meters in ${r.sessoes} sessions`);
   }
 }

@@ -607,8 +607,8 @@ const DECISION_WRITE: LegacyRouteSpec = {
 // `GET /api/changes` (WaitResult, src/changes/cursor.ts), keys old → new: mudancas → changes,
 // reiniciar → reset, expirou → timedOut (cursor stays); each change: tipo → type, chave → key
 // (sessionId, accountId, seq stay). The type values: sessao → session, estado → state,
-// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert and
-// agent-instructions stay);
+// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert,
+// agent-instructions and framework-install stay);
 // `?type=` takes both (ENGLISH_VALUES). The errors cite the new parameter: `wait inválida`, `type: um
 // de …`, `session inválida`, `account inválida`.
 //
@@ -670,7 +670,8 @@ const CHANGES: LegacyBodySpec = {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions': 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions',
+      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions, framework-install':
+        'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions, framework-install',
     },
   },
 };

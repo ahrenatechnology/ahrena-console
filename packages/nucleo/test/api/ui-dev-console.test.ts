@@ -75,7 +75,7 @@ beforeEach(async () => {
   await storage.appendEvent(event({ sessionId: s.id, id: 'permission-e1', agentId: 'permission:main', createdAt: minutesAgo(2), type: 'Notification', toolName: null, summary: 'Claude needs your permission', data: { notification_type: 'permission_prompt' } }));
   await registerDecision(
     decisions,
-    { sourceKey: 'q1', sessionId: 'working', topic: 'db', context: null, choice: 'SQLite em memória nos testes', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: minutesAgo(1) },
+    { sourceKey: 'q1', sessionId: 'working', topic: 'db', context: null, choice: 'SQLite em memória nos testes', alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: minutesAgo(1) },
     minutesAgo(1),
   );
 });

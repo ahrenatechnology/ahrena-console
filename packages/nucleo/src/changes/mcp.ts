@@ -29,8 +29,10 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the GitHub screens' ones (`repos` and `agent-instructions`). */
-export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions'> => t !== 'repos' && t !== 'agent-instructions');
+/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions` and `framework-install`). */
+export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter(
+  (t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install'> => t !== 'repos' && t !== 'agent-instructions' && t !== 'framework-install',
+);
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 
 /**

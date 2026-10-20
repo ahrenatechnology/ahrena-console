@@ -11,12 +11,12 @@ export const COMPACTION_TRIGGERS = ['auto', 'manual'] as const;
 export type CompactionTrigger = (typeof COMPACTION_TRIGGERS)[number];
 
 /**
- * De onde veio o tamanho da janela:
- * - `modelo`: o padrão do modelo;
- * - `sufixo`: o modelo da sessão pede a janela longa (`[1m]`);
- * - `observado`: a sessão já passou da janela padrão, então está na longa.
+ * Where the window size came from:
+ * - `model`: the model's default;
+ * - `suffix`: the session's model asks for the long window (`[1m]`);
+ * - `observed`: the session already went past the default window, so it is on the long one.
  */
-export const WINDOW_SOURCES = ['modelo', 'sufixo', 'observado'] as const;
+export const WINDOW_SOURCES = ['model', 'suffix', 'observed'] as const;
 export type WindowSource = (typeof WINDOW_SOURCES)[number];
 
 /** Medidor de um agente da sessão. A chave é (sessionId, agentId); `agentId` nulo é o principal. */
