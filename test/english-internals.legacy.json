@@ -9,7 +9,6 @@
     "packages/marca/src/gerar.ts",
     "packages/marca/test/marca.test.ts",
     "packages/nucleo",
-    "packages/nucleo/src/dono",
     "scripts/medir-carga.mjs",
     "scripts/medir-esperas.mjs",
     "spikes/app-desktop/src-tauri/src/integracao.rs",
