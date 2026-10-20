@@ -35,6 +35,7 @@ import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../d
 import type { Page, StoragePort } from '../storage-port.ts';
 import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
+import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
 /** The Decisions page of the /ui (C21). */
 export const DECISIONS_PAGE_ROUTE = '/api/decisions';
@@ -606,7 +607,7 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (texto === null) return send(res, 413, { error: 'corpo grande demais' }), true;
     let corpo: { sessao?: unknown; confirmar?: unknown; caminho?: unknown; hash?: unknown } | null;
     try {
-      corpo = JSON.parse(texto) as typeof corpo;
+      corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as typeof corpo;
     } catch {
       return send(res, 400, { error: 'JSON inválido' }), true;
     }

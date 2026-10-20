@@ -4,7 +4,7 @@
 // `/api/mudancas`. The server is the --demo one (scenario p4), assembled in `legacy-demo.ts`.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal } from '../../src/api/index.ts';
+import { LEGACY_BODIES, normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal, type LegacyRouteSpec } from '../../src/api/index.ts';
 import { DEMO_SESSION, LOCAL, startLegacyDemo, type LegacyDemo } from './legacy-demo.ts';
 
 describe('#173 phase 1: English routes, Portuguese aliases', () => {
@@ -219,6 +219,42 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     const foreign = { ...json, origin: 'https://exemplo.com' };
     assert.equal((await call('/api/project/move', { method: 'POST', headers: foreign, body })).status, 403);
     assert.equal((await call('/api/projeto/mover', { method: 'POST', headers: foreign, body })).status, 403);
+  });
+
+  test('phase 2b wiring: an old route answers through its back-translator, errors included, and reads its body through it', async () => {
+    const specs = LEGACY_BODIES as Record<string, LegacyRouteSpec>;
+    const saved = { panel: specs.panel, confirm: specs['decision/confirm'], promote: specs['decision/promote'], move: specs['project/move'] };
+    const json = { 'content-type': 'application/json' };
+    try {
+      specs.panel = { response: { keys: { error: 'erro' }, values: { error: { 'id de sessão inválido': 'id inválido' } } } };
+      assert.deepEqual((await call('/api/painel/a%20b')).body, { erro: 'id inválido' });
+      assert.deepEqual((await call('/api/sessao/a%20b?conta=x')).body, { erro: 'id inválido' });
+      assert.deepEqual((await call('/api/panel/a%20b')).body, { error: 'id de sessão inválido' }, 'the new route is not translated');
+      // The 403 of the Origin check is written after the translator is set: it goes through it too.
+      assert.deepEqual((await call(`/api/painel/${DEMO_SESSION}`, { headers: { origin: 'https://exemplo.com' } })).body, { erro: 'origem não permitida' });
+
+      // Request bodies, old → new, on the three readers: the decisions, the promote and the project move.
+      specs['decision/confirm'] = { request: { keys: { quem: 'sessao' } } };
+      const confirm = (path: string) => call(path, { method: 'POST', headers: json, body: JSON.stringify({ quem: 'a b' }) });
+      assert.deepEqual((await confirm('/api/decisoes/nao-existe/confirmar')).body, { error: 'informe a sessão: { "sessao": "<id>" }' }, 'the body was read as { sessao }');
+      specs['decision/confirm'] = { request: { keys: { quem: 'sessao' } }, response: { keys: { error: 'erro' } } };
+      assert.equal((await confirm('/api/decisoes/nao-existe/confirmar')).status, 400);
+      const body = { quem: DEMO_SESSION };
+      const r = await call('/api/decisoes/nao-existe/confirmar', { method: 'POST', headers: json, body: JSON.stringify(body) });
+      assert.deepEqual(r, { status: 404, location: null, body: { erro: 'decisão não encontrada nesta sessão' } }, 'the old body reached the handler as { sessao }');
+      specs['decision/promote'] = { request: { keys: { quem: 'sessao' } } };
+      const promoted = await call('/api/decisoes/nao-existe/promover', { method: 'POST', headers: json, body: JSON.stringify(body) });
+      assert.deepEqual(promoted.body, { error: 'decisão não encontrada nesta sessão' });
+      specs['project/move'] = { request: { keys: { item: 'itemId', opcao: 'optionId' } } };
+      const moved = await call('/api/projeto/mover', { method: 'POST', headers: json, body: JSON.stringify({ item: 'nada', opcao: 'x' }) });
+      const plain = await call('/api/projeto/mover', { method: 'POST', headers: json, body: JSON.stringify({ itemId: 'nada', optionId: 'x' }) });
+      assert.deepEqual(moved, plain);
+    } finally {
+      specs.panel = saved.panel;
+      specs['decision/confirm'] = saved.confirm;
+      specs['decision/promote'] = saved.promote;
+      specs['project/move'] = saved.move;
+    }
   });
 
   test('routes that did not change, and unknown ones, are not touched', async () => {
