@@ -4,7 +4,7 @@
 import type { Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import type { GithubCache } from '../github/cache.ts';
-import type { LeituraDaFrota } from '../mcp/fleet.ts';
+import type { FleetReader } from '../mcp/fleet.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { DevConsoleContexts, defaultDevConsoleFile, type DevConsoleContext } from './contexts.ts';
 import { DevConsoleGithub } from './reader.ts';
@@ -21,7 +21,7 @@ export * from './service.ts';
 
 export interface CreateDevConsoleOptions {
   storage: Pick<StoragePort, 'listSessions'>;
-  frota: LeituraDaFrota;
+  frota: FleetReader;
   source: DevConsoleSource;
   cache: GithubCache;
   decisions?: Pick<DecisionPort, 'listDecisions'> | null;
@@ -34,7 +34,7 @@ export interface CreateDevConsoleOptions {
 }
 
 /** Builds the Dev Console from the núcleo's parts. */
-export function createDevConsole({ storage, frota, source, cache, decisions = null, file = defaultDevConsoleFile(), contexts: fixed = null, git, now = frota.agora }: CreateDevConsoleOptions): DevConsole {
+export function createDevConsole({ storage, frota, source, cache, decisions = null, file = defaultDevConsoleFile(), contexts: fixed = null, git, now = frota.now }: CreateDevConsoleOptions): DevConsole {
   const sessions = new DevConsoleSessions({ frota, decisions, locate: gitLocator({ git, now }) });
   const contexts = new DevConsoleContexts({
     file,

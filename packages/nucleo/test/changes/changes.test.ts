@@ -30,7 +30,7 @@ import {
 import { T0, account, agent, session } from '../fixtures.ts';
 import { draft } from '../decisions/helpers.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
-import { ErroDaFerramenta, ErroDeArgumento } from '../../src/mcp/protocol.ts';
+import { ToolError, ArgumentError } from '../../src/mcp/protocol.ts';
 
 /** Manual clock: `advance(ms)` fires, in order, the timers that are due. */
 class FakeClock implements Clock {
@@ -391,7 +391,7 @@ describe('HTTP route', () => {
 
 describe('MCP tool wait_for_changes', () => {
   const newSignal = () => new AbortController().signal;
-  const ctx = () => ({ sinal: newSignal(), versao: null });
+  const ctx = () => ({ signal: newSignal(), version: null });
 
   test('same wait, account by label (never the id) and filter by label', async () => {
     const { cursor } = setup();
@@ -401,29 +401,29 @@ describe('MCP tool wait_for_changes', () => {
     await storage.putAccount(team);
     await storage.putAccount(client);
     const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
-    assert.equal(f.nome, WAIT_FOR_CHANGES);
+    assert.equal(f.name, WAIT_FOR_CHANGES);
 
-    const first = await f.executar({}, ctx());
-    assert.equal(first.dados.reset, true);
-    const c = first.dados.cursor as string;
+    const first = await f.execute({}, ctx());
+    assert.equal(first.data.reset, true);
+    const c = first.data.cursor as string;
 
-    const pending = f.executar({ cursor: c, timeout: 30, account: 'cliente', types: ['plano', 'decisao'] }, ctx());
+    const pending = f.execute({ cursor: c, timeout: 30, account: 'cliente', types: ['plano', 'decisao'] }, ctx());
     cursor.record({ type: 'plan', key: 's1', sessionId: 's1', accountId: team.id });
     cursor.record(sessionChange('s2', { accountId: client.id }));
     cursor.record({ type: 'decision', key: 'd9', sessionId: 's2', accountId: client.id });
     const r = await pending;
-    assert.deepEqual(r.dados, {
+    assert.deepEqual(r.data, {
       cursor: 'g1.3',
       reset: false,
       timedOut: false,
-      changes: [{ type: 'decision', sessionId: 's2', decisionId: 'd9', account: { label: 'cliente', color: (r.dados.changes as any)[0].account.color } }],
+      changes: [{ type: 'decision', sessionId: 's2', decisionId: 'd9', account: { label: 'cliente', color: (r.data.changes as any)[0].account.color } }],
     });
-    assert.ok(!JSON.stringify(r.dados).includes(client.accountUuid), 'the account id does not go out');
-    assert.match(r.texto, /1 mudança\(s\): decision 1/);
+    assert.ok(!JSON.stringify(r.data).includes(client.accountUuid), 'the account id does not go out');
+    assert.match(r.text, /1 mudança\(s\): decision 1/);
 
-    const noAccount = f.executar({ cursor: 'g1.3', timeout: 30, account: 'none' }, ctx());
+    const noAccount = f.execute({ cursor: 'g1.3', timeout: 30, account: 'none' }, ctx());
     cursor.record(sessionChange('s3'));
-    assert.deepEqual(((await noAccount).dados.changes as any[]).map((m) => [m.type, m.sessionId, m.account]), [['session', 's3', null]]);
+    assert.deepEqual(((await noAccount).data.changes as any[]).map((m) => [m.type, m.sessionId, m.account]), [['session', 's3', null]]);
     await storage.close();
   });
 
@@ -435,13 +435,13 @@ describe('MCP tool wait_for_changes', () => {
     cursor.record({ type: 'plan', key: 's1', sessionId: 's1', accountId: null });
     cursor.record({ type: 'needs-you', key: 's2', sessionId: 's2', accountId: null });
     cursor.record(sessionChange('s3'));
-    const typesOf = async (types: string[]) => ((await f.executar({ cursor: c, timeout: 0, types }, ctx())).dados.changes as { type: string }[]).map((m) => m.type);
+    const typesOf = async (types: string[]) => ((await f.execute({ cursor: c, timeout: 0, types }, ctx())).data.changes as { type: string }[]).map((m) => m.type);
     assert.deepEqual(await typesOf(['plan', 'needs-you']), ['plan', 'needs-you']);
     assert.deepEqual(await typesOf(['plano', 'precisa-de-voce']), ['plan', 'needs-you'], 'the old names');
     assert.deepEqual(await typesOf(['sessao', 'state']), ['session'], 'a mix');
-    const typeEnum = ((f.entrada as any).properties.types.items.enum as string[]).sort();
+    const typeEnum = ((f.inputSchema as any).properties.types.items.enum as string[]).sort();
     assert.deepEqual(typeEnum, ['account', 'alert', 'conta', 'decisao', 'decision', 'estado', 'needs-you', 'plan', 'plano', 'precisa-de-voce', 'sessao', 'session', 'state']);
-    assert.deepEqual((f.saida as any).properties.changes.items.properties.type.enum, ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'alert']);
+    assert.deepEqual((f.outputSchema as any).properties.changes.items.properties.type.enum, ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'alert']);
     await storage.close();
   });
 
@@ -450,8 +450,8 @@ describe('MCP tool wait_for_changes', () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
     const c = cursor.current;
-    const noFilter = observe(f.executar({ cursor: c, timeout: 30 }, ctx()).then((r) => r.dados as unknown as WaitResult));
-    const noAccount = observe(f.executar({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.dados as unknown as WaitResult));
+    const noFilter = observe(f.execute({ cursor: c, timeout: 30 }, ctx()).then((r) => r.data as unknown as WaitResult));
+    const noAccount = observe(f.execute({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.data as unknown as WaitResult));
     cursor.record({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null });
     cursor.record({ type: 'repos', key: 'org/repo', sessionId: null, accountId: null });
     await tick();
@@ -462,10 +462,10 @@ describe('MCP tool wait_for_changes', () => {
     assert.deepEqual(a.changes.map((x) => x.type), ['session']);
     assert.deepEqual(b.changes.map((x) => x.type), ['session']);
     // Recorded before the request already: it does not go out either.
-    const later = await f.executar({ cursor: c, timeout: 0 }, ctx());
-    assert.ok(!JSON.stringify(later.dados).includes('repos'));
-    await assert.rejects(f.executar({ types: ['repos'] }, ctx()), ErroDeArgumento);
-    assert.ok(!JSON.stringify(f.entrada).includes('"repos"') && !JSON.stringify(f.saida).includes('"repos"'));
+    const later = await f.execute({ cursor: c, timeout: 0 }, ctx());
+    assert.ok(!JSON.stringify(later.data).includes('repos'));
+    await assert.rejects(f.execute({ types: ['repos'] }, ctx()), ArgumentError);
+    assert.ok(!JSON.stringify(f.inputSchema).includes('"repos"') && !JSON.stringify(f.outputSchema).includes('"repos"'));
     await storage.close();
   });
 
@@ -474,14 +474,14 @@ describe('MCP tool wait_for_changes', () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
     for (const args of [{ types: ['x'] }, { timeout: -1 }, { sessions: ['a b'] }, { account: [] }, { outro: 1 }]) {
-      await assert.rejects(f.executar(args as never, ctx()), ErroDeArgumento, JSON.stringify(args));
+      await assert.rejects(f.execute(args as never, ctx()), ArgumentError, JSON.stringify(args));
     }
     const ac = new AbortController();
-    const openCall = f.executar({ cursor: cursor.current }, { sinal: ac.signal, versao: null });
+    const openCall = f.execute({ cursor: cursor.current }, { signal: ac.signal, version: null });
     await tick();
-    await assert.rejects(f.executar({ cursor: cursor.current }, ctx()), (e: Error) => e instanceof ErroDaFerramenta && /esperas abertas demais/.test(e.message));
+    await assert.rejects(f.execute({ cursor: cursor.current }, ctx()), (e: Error) => e instanceof ToolError && /esperas abertas demais/.test(e.message));
     ac.abort();
-    assert.equal((await openCall).dados.timedOut, false);
+    assert.equal((await openCall).data.timedOut, false);
     assert.equal(cursor.openWaits, 0);
     await storage.close();
   });

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, remoteAttentionItems, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
-import { LeituraDaFrota } from '../../src/mcp/index.ts';
+import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet } from '../../src/telemetry/adapters/loopback-http.ts';
@@ -14,13 +14,13 @@ import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { RemoteMachine } from '../../src/telemetry/remote.ts';
 import { publishAlertChanges } from '../../src/telemetry/sampler.ts';
 import { localMachine, TelemetryService, type TelemetryResponse } from '../../src/telemetry/service.ts';
-import { AGORA, semear } from '../mcp/helpers.ts';
+import { NOW, seed } from '../mcp/helpers.ts';
 import { attentionBody, remoteItem, startFakeRemote, type FakeRemote } from '../telemetry/fake-remote.ts';
 import { reading } from '../telemetry/reading.ts';
 
-/** The remote's own clock; the stored reading carries when this Mac read it (AGORA). */
-const READ_AT = AGORA - 30_000;
-const READ_AT_ISO = new Date(AGORA).toISOString();
+/** The remote's own clock; the stored reading carries when this Mac read it (NOW). */
+const READ_AT = NOW - 30_000;
+const READ_AT_ISO = new Date(NOW).toISOString();
 
 let storage: SqliteStorage;
 let api: ApiLocal | null = null;
@@ -35,9 +35,9 @@ afterEach(async () => {
 
 async function boot() {
   storage = openSqliteStorage({ path: ':memory:' });
-  await semear(storage);
+  await seed(storage);
   const contas = new Contas({ storage, arquivo: null });
-  const frota = new LeituraDaFrota({ storage, contas, agora: () => AGORA, fusoHorario: 'UTC' });
+  const frota = new FleetReader({ storage, accounts: contas, now: () => NOW, timeZone: 'UTC' });
   const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   const store = new SqliteTelemetryStore(storage.db);
   const tracker = new AlertTracker();
@@ -60,9 +60,9 @@ async function boot() {
     store,
     tracker,
     onAlertChange: publishAlertChanges(cursor),
-    now: () => AGORA,
+    now: () => NOW,
   });
-  const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote], now: () => AGORA });
+  const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote], now: () => NOW });
   const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
   api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor, telemetry, frota, remoteAttention: [remote] });
   const url = api.url;

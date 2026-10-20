@@ -3,21 +3,21 @@
 
 import type { ContaDoPainel } from '../../api/tipos.ts';
 
-export interface ContaDeSaida {
+export interface OutputAccount {
   label: string;
   color: string;
-  /** De onde veio a conta (decisão 0006): `env`, `config`, `transcript`, `desktop` ou `profile`. */
+  /** Where the account came from (decision 0006): `env`, `config`, `transcript`, `desktop` or `profile`. */
   source: string;
 }
 
-export function contaDeSaida(c: ContaDoPainel | null): ContaDeSaida | null {
+export function outputAccount(c: ContaDoPainel | null): OutputAccount | null {
   return c ? { label: c.label, color: c.color, source: c.source } : null;
 }
 
-export function linhaDeConta(c: ContaDeSaida | null): string {
+export function accountLabel(c: OutputAccount | null): string {
   return c?.label ?? 'Sem conta';
 }
 
-export function dolares(usd: number | null): string {
+export function dollars(usd: number | null): string {
   return usd === null ? 'sem preço' : `US$ ${usd.toFixed(2)}`;
 }

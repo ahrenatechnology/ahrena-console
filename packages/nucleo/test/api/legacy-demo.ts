@@ -16,7 +16,7 @@ import { GithubCache } from '../../src/github/cache.ts';
 import { GithubProject } from '../../src/github/project.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { SessionHistory } from '../../src/history/reading.ts';
-import { criarServidorMcp } from '../../src/mcp/index.ts';
+import { createMcpServer } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { withChanges, SessionAccounts, decisionsWithChanges } from '../../src/changes/sources.ts';
 import { localDaDemo, semearDetalhe } from '../../src/simulador/detalhe.ts';
@@ -68,8 +68,8 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   await semearWorkflowsDoDemo(storage, NOW);
   await semearDetalhe(storage, NOW);
   await semearHistoricoDoPainel(storage, decisions, 'p4', NOW);
-  const mcp = criarServidorMcp({ storage, contas: accounts, desktop: null, agora: clock, fusoHorario: 'UTC', log: () => {} });
-  const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), frota: mcp.frota, mudancas: changes, log: () => {} });
+  const mcp = createMcpServer({ storage, accounts, desktop: null, now: clock, timeZone: 'UTC', log: () => {} });
+  const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), frota: mcp.fleet, mudancas: changes, log: () => {} });
   const decisionsUi = new DecisoesDaUi({
     decisions,
     storage,
@@ -89,7 +89,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     projeto: { kanban: project, fonte: 'demo', log: () => {} },
     detalhe: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: localDaDemo }),
     eventos: new FeedDeEventos({ storage }),
-    frota: mcp.frota,
+    frota: mcp.fleet,
     analytics: new RotaAnalytics({ storage, contas: accounts, agora: clock }),
     sessoes: new ListaDeSessoes({ storage, contas: accounts, agora: clock }),
     historico: new SessionHistory({ storage, decisions, timeZone: 'UTC' }),

@@ -4,7 +4,7 @@
 //
 // Like the other tools: the account goes out as label and color, never the id (which carries the
 // account and org UUIDs); the `account` filter takes a label, an id or "none". No conversation text
-// goes out: only the type, the session id and the decision id. The wait listens to `ctx.sinal`, which
+// goes out: only the type, the session id and the decision id. The wait listens to `ctx.signal`, which
 // aborts when the client closes the connection.
 //
 // The `repos` type (#104, #105) is for the screen only, through the HTTP route: here it is not in the
@@ -12,9 +12,9 @@
 // whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
 
 import type { Contas } from '../api/contas.ts';
-import { casaConta } from '../mcp/fleet.ts';
-import { ErroDaFerramenta, ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../mcp/protocol.ts';
-import { esquema, lista, objeto, ouNulo, T } from '../mcp/output.ts';
+import { matchesAccountFilter } from '../mcp/fleet.ts';
+import { ToolError, ArgumentError, type Tool, type JsonObject } from '../mcp/protocol.ts';
+import { objectSchema, arrayOf, strictObject, nullable, T } from '../mcp/output.ts';
 import {
   TooManyWaitersError,
   MAX_WAIT_MS,
@@ -63,11 +63,11 @@ export interface WaitForChangesOutput {
   changes: OutputChange[];
 }
 
-const CHANGE_SCHEMA = objeto({
+const CHANGE_SCHEMA = strictObject({
   type: { type: 'string', enum: [...MCP_CHANGE_TYPES] },
-  sessionId: ouNulo(T.texto),
-  decisionId: ouNulo(T.texto),
-  account: ouNulo(objeto({ label: T.texto, color: T.texto })),
+  sessionId: nullable(T.string),
+  decisionId: nullable(T.string),
+  account: nullable(strictObject({ label: T.string, color: T.string })),
 });
 
 export interface WaitForChangesOptions {
@@ -76,22 +76,22 @@ export interface WaitForChangesOptions {
   accounts: Contas;
 }
 
-export function waitForChanges({ changes, accounts }: WaitForChangesOptions): Ferramenta {
+export function waitForChanges({ changes, accounts }: WaitForChangesOptions): Tool {
   // The account by id, as the panel shows it. The source does not matter here: the id is already decided.
   const accountOf = (accountId: string | null) =>
     accountId === null ? null : accounts.daSessao({ id: '', accountId, accountSource: 'transcript' }, null);
 
   return {
-    nome: WAIT_FOR_CHANGES,
-    titulo: 'Esperar mudanças',
-    descricao:
+    name: WAIT_FOR_CHANGES,
+    title: 'Esperar mudanças',
+    description:
       'Long polling: responde assim que algo muda no Ahrena Console (sessão, estado, precisa de você, plano, decisão, conta, alerta de máquina) ' +
       `ou depois de timeout segundos (padrão ${DEFAULT_WAIT_MS / 1000}, máximo ${MAX_WAIT_MS / 1000}). ` +
       'Chame sem cursor para receber o atual; depois passe sempre o cursor da última resposta. Com reset=true, releia tudo ' +
       '(sessions_needing_attention, fleet_overview) antes de continuar. O cursor devolvido pula as mudanças que os filtros deixaram de fora. ' +
       'Desde a #173, o changes[].type da resposta vem em inglês; os nomes antigos em português ainda valem em types. ' +
       'Não devolve texto das conversas.',
-    entrada: esquema({
+    inputSchema: objectSchema({
       cursor: { type: 'string', description: 'O cursor da última resposta. Sem ele, volta na hora com o atual e reset=true.' },
       timeout: {
         type: 'number',
@@ -111,22 +111,22 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): Fe
         description: `Só estes tipos de mudança: ${MCP_CHANGE_TYPES.join(', ')}. Os nomes antigos (${Object.keys(LEGACY_CHANGE_TYPES).join(', ')}) ainda valem.`,
       },
     }),
-    saida: objeto({
-      cursor: T.texto,
-      reset: T.booleano,
-      timedOut: T.booleano,
-      changes: lista(CHANGE_SCHEMA),
+    outputSchema: strictObject({
+      cursor: T.string,
+      reset: T.boolean,
+      timedOut: T.boolean,
+      changes: arrayOf(CHANGE_SCHEMA),
     }),
-    async executar(args, ctx) {
+    async execute(args, ctx) {
       const { cursor, timeoutMs, filters, requestedAccounts } = parseArgs(args);
       // Labels and colors read from the port and from ~/.ahrena-console/contas.json (at most every 30 s).
       await accounts.atualizar();
-      if (requestedAccounts) filters.matchesAccount = (accountId) => casaConta(accountOf(accountId), requestedAccounts);
+      if (requestedAccounts) filters.matchesAccount = (accountId) => matchesAccountFilter(accountOf(accountId), requestedAccounts);
       let r: WaitResult;
       try {
-        r = await changes.wait(cursor, { filters, timeoutMs, signal: ctx.sinal });
+        r = await changes.wait(cursor, { filters, timeoutMs, signal: ctx.signal });
       } catch (e) {
-        if (e instanceof TooManyWaitersError) throw new ErroDaFerramenta(`${e.message}; tente de novo em alguns segundos`);
+        if (e instanceof TooManyWaitersError) throw new ToolError(`${e.message}; tente de novo em alguns segundos`);
         throw e;
       }
       const data: WaitForChangesOutput = {
@@ -135,7 +135,7 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): Fe
         timedOut: r.timedOut,
         changes: r.changes.flatMap((m) => (m.type === 'repos' ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
       };
-      return { texto: summaryText(data), dados: data as unknown as ObjetoJson };
+      return { text: summaryText(data), data: data as unknown as JsonObject };
     },
   };
 }
@@ -164,21 +164,21 @@ interface WaitRequest {
   requestedAccounts: string[] | null;
 }
 
-function parseArgs(args: ObjetoJson): WaitRequest {
+function parseArgs(args: JsonObject): WaitRequest {
   for (const k of Object.keys(args)) {
-    if (!(ALLOWED_ARGS as readonly string[]).includes(k)) throw new ErroDeArgumento(`argumento desconhecido: ${k}. Use ${ALLOWED_ARGS.join(', ')}`);
+    if (!(ALLOWED_ARGS as readonly string[]).includes(k)) throw new ArgumentError(`argumento desconhecido: ${k}. Use ${ALLOWED_ARGS.join(', ')}`);
   }
   const filters: ChangeFilters = {};
   const { cursor, timeout, sessions, account, types } = args;
   if (cursor != null && (typeof cursor !== 'string' || cursor.length > 64)) {
-    throw new ErroDeArgumento('cursor precisa ser o texto devolvido na última resposta');
+    throw new ArgumentError('cursor precisa ser o texto devolvido na última resposta');
   }
   if (timeout != null && (typeof timeout !== 'number' || !(timeout >= 0))) {
-    throw new ErroDeArgumento(`timeout precisa ser um número de 0 a ${MAX_WAIT_MS / 1000}`);
+    throw new ArgumentError(`timeout precisa ser um número de 0 a ${MAX_WAIT_MS / 1000}`);
   }
   if (sessions != null) {
     if (!Array.isArray(sessions) || sessions.length > 50 || !sessions.every((s) => typeof s === 'string' && ID.test(s))) {
-      throw new ErroDeArgumento('sessions precisa ser uma lista de ids de sessão');
+      throw new ArgumentError('sessions precisa ser uma lista de ids de sessão');
     }
     if (sessions.length) filters.sessionIds = sessions as string[];
   }
@@ -186,14 +186,14 @@ function parseArgs(args: ObjetoJson): WaitRequest {
   if (account != null) {
     const l = typeof account === 'string' ? [account] : Array.isArray(account) ? account : null;
     if (!l || l.length === 0 || l.length > 20 || !l.every((x) => typeof x === 'string' && x.trim() && x.length <= 200)) {
-      throw new ErroDeArgumento('account precisa ser um texto ou uma lista de textos (rótulo, id ou "none")');
+      throw new ArgumentError('account precisa ser um texto ou uma lista de textos (rótulo, id ou "none")');
     }
     requestedAccounts = (l as string[]).map((x) => x.trim());
   }
   if (types != null) {
     const normalized = Array.isArray(types) ? types.map((t) => (typeof t === 'string' && Object.hasOwn(LEGACY_CHANGE_TYPES, t) ? LEGACY_CHANGE_TYPES[t] : t)) : null;
     if (!normalized || !normalized.every((t) => typeof t === 'string' && (MCP_CHANGE_TYPES as readonly string[]).includes(t))) {
-      throw new ErroDeArgumento(`types: uma lista com ${MCP_CHANGE_TYPES.join(', ')}`);
+      throw new ArgumentError(`types: uma lista com ${MCP_CHANGE_TYPES.join(', ')}`);
     }
     if (normalized.length) filters.types = normalized as McpChangeType[];
   }

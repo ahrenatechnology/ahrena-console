@@ -5,7 +5,7 @@
 // - Live: the port's `active` and `error` ones, with `readInbox` (1.5). Kept for `cacheMs`, and
 //   concurrent calls wait for the same read.
 // - Ended today: `completed` and `abandoned` with the last activity today, in the machine's time zone.
-// - Today's cost: the day's `aggregateCost` (1.6), recomputed at most every `custoMs`.
+// - Today's cost: the day's `aggregateCost` (1.6), recomputed at most every `costMs`.
 // - Account: `Contas.daSessao` (decision 0006), the same instance as the panel when the core passes
 //   it, so that the "conta 1" label is the same on both surfaces.
 
@@ -19,18 +19,18 @@ import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/indice-desktop.ts'
 import { atencaoDe, type MotivoDaAtencao } from '../api/atencao.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from '../api/resumo.ts';
 import type { ContaDoPainel } from '../api/tipos.ts';
-import { ferramentaSegura, tituloSeguro } from './output.ts';
+import { safeToolName, safeTitle } from './output.ts';
 
 /**
- * Por que a sessão precisa de você. A divisão é a do painel (`atencaoDe`, #140): as cinco
- * primeiras travam a sessão até você agir; as três últimas são "sua vez" no bate-bola (o turno
- * acabou, Esc, sessão nova no prompt).
+ * Why the session needs you. The split is the panel's (`atencaoDe`, #140): the first five block
+ * the session until you act; the last three are "your turn" in the back-and-forth (the turn
+ * ended, Esc, a new session at the prompt).
  */
-export type Motivo = 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt';
-export type Grupo = 'blocking' | 'your_turn';
-export const MOTIVOS: readonly Motivo[] = ['permission', 'question', 'plan', 'decision', 'error', 'turn_ended', 'interrupted', 'first_prompt'];
+export type McpAttentionReason = 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt';
+export type McpAttentionGroup = 'blocking' | 'your_turn';
+export const MCP_ATTENTION_REASONS: readonly McpAttentionReason[] = ['permission', 'question', 'plan', 'decision', 'error', 'turn_ended', 'interrupted', 'first_prompt'];
 
-const MOTIVO_DO_PAINEL: Record<MotivoDaAtencao, Motivo> = {
+const REASON_FROM_PANEL: Record<MotivoDaAtencao, McpAttentionReason> = {
   permissao: 'permission',
   pergunta: 'question',
   plano: 'plan',
@@ -41,130 +41,130 @@ const MOTIVO_DO_PAINEL: Record<MotivoDaAtencao, Motivo> = {
   'no-prompt': 'first_prompt',
 };
 
-export interface SessaoDaFrota {
+export interface FleetSession {
   session: Session;
   inbox: InboxReading;
   desktop: SessaoDoDesktop | null;
-  conta: ContaDoPainel | null;
-  /** Já limpo (output.ts). */
-  titulo: string;
+  account: ContaDoPainel | null;
+  /** Already cleaned (output.ts). */
+  title: string;
 }
 
-export interface Atencao {
-  motivo: Motivo;
-  grupo: Grupo;
-  /** A ferramenta que pede permissão, quando tem nome conhecido. */
-  ferramenta: string | null;
-  /** Quantas opções a pergunta tem (`AskUserQuestion`); nunca o texto. */
-  opcoes: number | null;
-  /** O código do erro da API ("529", "overloaded_error"); nunca a mensagem. */
-  codigoDoErro: string | null;
+export interface Attention {
+  reason: McpAttentionReason;
+  group: McpAttentionGroup;
+  /** The tool asking for permission, when it has a known name. */
+  tool: string | null;
+  /** How many options the question has (`AskUserQuestion`); never the text. */
+  questionOptions: number | null;
+  /** The API error code ("529", "overloaded_error"); never the message. */
+  errorCode: string | null;
 }
 
-export interface EncerradaHoje {
+export interface EndedToday {
   id: string;
   status: SessionStatus;
-  conta: ContaDoPainel | null;
+  account: ContaDoPainel | null;
 }
 
-export interface OpcoesDaFrota {
+export interface FleetOptions {
   storage: StoragePort;
-  contas: Contas;
+  accounts: Contas;
   desktop?: IndiceDoDesktop | null;
-  agora?: () => number;
-  /** Fuso IANA dos dias (custo de hoje, encerradas hoje). Padrão: o da máquina. */
-  fusoHorario?: string;
+  now?: () => number;
+  /** IANA time zone of the days (today's cost, ended today). Default: the machine's. */
+  timeZone?: string;
   cacheMs?: number;
-  custoMs?: number;
+  costMs?: number;
 }
 
-export class LeituraDaFrota {
+export class FleetReader {
   readonly storage: StoragePort;
-  private readonly contas: Contas;
+  private readonly accounts: Contas;
   private readonly desktop: IndiceDoDesktop | null;
-  readonly agora: () => number;
-  readonly fusoHorario: string;
+  readonly now: () => number;
+  readonly timeZone: string;
   private readonly cacheMs: number;
-  private readonly custoMs: number;
-  private readonly resumos: ResumosDeSessao;
-  private vivasCache: { em: number; itens: SessaoDaFrota[] } | null = null;
-  private vivasRodando: Promise<SessaoDaFrota[]> | null = null;
-  private custoCache: { em: number; dia: string; relatorio: CostReport } | null = null;
+  private readonly costMs: number;
+  private readonly summaries: ResumosDeSessao;
+  private liveCache: { at: number; items: FleetSession[] } | null = null;
+  private liveLoading: Promise<FleetSession[]> | null = null;
+  private costCache: { at: number; day: string; report: CostReport } | null = null;
 
-  constructor({ storage, contas, desktop = null, agora = Date.now, fusoHorario, cacheMs = 2_000, custoMs = 30_000 }: OpcoesDaFrota) {
+  constructor({ storage, accounts, desktop = null, now = Date.now, timeZone, cacheMs = 2_000, costMs = 30_000 }: FleetOptions) {
     this.storage = storage;
-    this.contas = contas;
+    this.accounts = accounts;
     this.desktop = desktop;
-    this.agora = agora;
-    this.fusoHorario = fusoHorario ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    this.now = now;
+    this.timeZone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
     this.cacheMs = cacheMs;
-    this.custoMs = custoMs;
-    this.resumos = new ResumosDeSessao(storage, { agora, maximo: 256 });
+    this.costMs = costMs;
+    this.summaries = new ResumosDeSessao(storage, { agora: now, maximo: 256 });
   }
 
-  hoje(): string {
-    return dayOf(new Date(this.agora()).toISOString(), this.fusoHorario);
+  today(): string {
+    return dayOf(new Date(this.now()).toISOString(), this.timeZone);
   }
 
-  /** As sessões `active` e `error`, com o estado do inbox e a conta. Mais recentes primeiro. */
-  async vivas(): Promise<SessaoDaFrota[]> {
-    if (this.vivasCache && this.agora() - this.vivasCache.em < this.cacheMs) return this.vivasCache.itens;
-    this.vivasRodando ??= (async () => {
-      await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
-      const itens: SessaoDaFrota[] = [];
-      for await (const session of this.todas({ status: ['active', 'error'] })) {
-        const agentes: Agent[] = await this.storage.listAgents(session.id);
+  /** The `active` and `error` sessions, with the inbox state and the account. Most recent first. */
+  async live(): Promise<FleetSession[]> {
+    if (this.liveCache && this.now() - this.liveCache.at < this.cacheMs) return this.liveCache.items;
+    this.liveLoading ??= (async () => {
+      await Promise.all([this.accounts.atualizar(), this.desktop?.atualizar()]);
+      const items: FleetSession[] = [];
+      for await (const session of this.all({ status: ['active', 'error'] })) {
+        const agents: Agent[] = await this.storage.listAgents(session.id);
         const desktop = this.desktop?.sessaoPorCli(session.id) ?? null;
-        itens.push({ session, inbox: readInbox(session, agentes), desktop, conta: this.contas.daSessao(session, desktop), titulo: tituloDe(session, desktop) });
+        items.push({ session, inbox: readInbox(session, agents), desktop, account: this.accounts.daSessao(session, desktop), title: titleOf(session, desktop) });
       }
-      this.vivasCache = { em: this.agora(), itens };
-      return itens;
+      this.liveCache = { at: this.now(), items };
+      return items;
     })().finally(() => {
-      this.vivasRodando = null;
+      this.liveLoading = null;
     });
-    return this.vivasRodando;
+    return this.liveLoading;
   }
 
-  /** `completed` e `abandoned` com a última atividade hoje. */
-  async encerradasHoje(): Promise<EncerradaHoje[]> {
-    const hoje = this.hoje();
-    const out: EncerradaHoje[] = [];
-    for await (const s of this.todas({ status: ['completed', 'abandoned'] }, hoje)) {
+  /** `completed` and `abandoned` with the last activity today. */
+  async endedToday(): Promise<EndedToday[]> {
+    const today = this.today();
+    const out: EndedToday[] = [];
+    for await (const s of this.all({ status: ['completed', 'abandoned'] }, today)) {
       const desktop = this.desktop?.sessaoPorCli(s.id) ?? null;
-      out.push({ id: s.id, status: s.status, conta: this.contas.daSessao(s, desktop) });
+      out.push({ id: s.id, status: s.status, account: this.accounts.daSessao(s, desktop) });
     }
     return out;
   }
 
-  async custoDeHoje(): Promise<CostReport> {
-    const dia = this.hoje();
-    const c = this.custoCache;
-    if (c && c.dia === dia && this.agora() - c.em < this.custoMs) return c.relatorio;
-    const relatorio = await aggregateCost(this.storage, { since: dia, until: dia, timeZone: this.fusoHorario });
-    this.custoCache = { em: this.agora(), dia, relatorio };
-    return relatorio;
+  async costToday(): Promise<CostReport> {
+    const day = this.today();
+    const c = this.costCache;
+    if (c && c.day === day && this.now() - c.at < this.costMs) return c.report;
+    const report = await aggregateCost(this.storage, { since: day, until: day, timeZone: this.timeZone });
+    this.costCache = { at: this.now(), day, report };
+    return report;
   }
 
-  /** A conta de uma sessão qualquer (para o custo de uma que não está entre as vivas). */
-  async contaDe(sessionId: string): Promise<ContaDoPainel | null> {
+  /** The account of any session (for the cost of one that is not among the live ones). */
+  async accountOf(sessionId: string): Promise<ContaDoPainel | null> {
     const s = await this.storage.getSession(sessionId);
     if (!s) return null;
-    return this.contas.daSessao(s, this.desktop?.sessaoPorCli(s.id) ?? null);
+    return this.accounts.daSessao(s, this.desktop?.sessaoPorCli(s.id) ?? null);
   }
 
-  /** Por que uma sessão que precisa de você está esperando, sem texto da conversa. */
-  async atencao(s: SessaoDaFrota): Promise<Atencao> {
-    const r = await this.resumos.ler(s.session.id, s.session.updatedAt);
-    return classificar(s.inbox, r);
+  /** Why a session that needs you is waiting, without conversation text. */
+  async attention(s: FleetSession): Promise<Attention> {
+    const r = await this.summaries.ler(s.session.id, s.session.updatedAt);
+    return classify(s.inbox, r);
   }
 
-  private async *todas(query: { status: SessionStatus[] }, desdeODia?: string): AsyncGenerator<Session> {
+  private async *all(query: { status: SessionStatus[] }, sinceDay?: string): AsyncGenerator<Session> {
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ ...query, limit: 500, cursor });
       for (const s of page.items) {
-        // Mais recentes primeiro: a primeira de antes do dia encerra a busca.
-        if (desdeODia && dayOf(s.updatedAt, this.fusoHorario) < desdeODia) return;
+        // Most recent first: the first one from before the day ends the search.
+        if (sinceDay && dayOf(s.updatedAt, this.timeZone) < sinceDay) return;
         yield s;
       }
       cursor = page.nextCursor;
@@ -173,48 +173,48 @@ export class LeituraDaFrota {
 }
 
 /**
- * O motivo e o grupo vêm de `atencaoDe` (src/api/atencao.ts), a mesma regra do "precisam de você"
- * do painel; aqui só se acrescenta o que o MCP mostra além dela, sem texto da conversa.
+ * The reason and the group come from `atencaoDe` (src/api/atencao.ts), the same rule as the panel's
+ * "precisam de você"; here we only add what MCP shows beyond it, without conversation text.
  */
-export function classificar(inbox: InboxReading, r: ResumoDosEventos): Atencao {
+export function classify(inbox: InboxReading, r: ResumoDosEventos): Attention {
   const { nivel, porque } = atencaoDe(inbox, r);
-  const motivo = MOTIVO_DO_PAINEL[porque];
+  const reason = REASON_FROM_PANEL[porque];
   return {
-    motivo,
-    grupo: nivel === 'precisa' ? 'blocking' : 'your_turn',
-    ferramenta: motivo === 'permission' ? ferramentaSegura(r.ultimaFerramenta?.nome) : null,
-    opcoes: motivo === 'question' ? r.ultimaPergunta?.opcoes || null : null,
-    codigoDoErro: motivo === 'error' ? codigoDoErro(r.ultimoErro?.texto ?? null) : null,
+    reason,
+    group: nivel === 'precisa' ? 'blocking' : 'your_turn',
+    tool: reason === 'permission' ? safeToolName(r.ultimaFerramenta?.nome) : null,
+    questionOptions: reason === 'question' ? r.ultimaPergunta?.opcoes || null : null,
+    errorCode: reason === 'error' ? errorCodeOf(r.ultimoErro?.texto ?? null) : null,
   };
 }
 
-/** Só o código: o status HTTP e o tipo do erro da API, nunca a mensagem. */
-function codigoDoErro(texto: string | null): string | null {
-  if (!texto) return null;
-  const partes = [/\b([45]\d\d)\b/.exec(texto)?.[1], /\b([a-z]+(?:_[a-z]+)*_error)\b/.exec(texto)?.[1]].filter(Boolean);
-  return partes.length > 0 ? partes.join(' ') : null;
+/** Only the code: the HTTP status and the API error type, never the message. */
+function errorCodeOf(text: string | null): string | null {
+  if (!text) return null;
+  const parts = [/\b([45]\d\d)\b/.exec(text)?.[1], /\b([a-z]+(?:_[a-z]+)*_error)\b/.exec(text)?.[1]].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
-function tituloDe(s: Session, d: SessaoDoDesktop | null): string {
-  return tituloSeguro(d?.titulo) ?? tituloSeguro(s.name) ?? (s.cwd ? tituloSeguro(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
+function titleOf(s: Session, d: SessaoDoDesktop | null): string {
+  return safeTitle(d?.titulo) ?? safeTitle(s.name) ?? (s.cwd ? safeTitle(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
-export function projetoDe(s: Session): string | null {
-  return s.cwd ? tituloSeguro(basename(s.cwd)) : null;
+export function projectOf(s: Session): string | null {
+  return s.cwd ? safeTitle(basename(s.cwd)) : null;
 }
 
-/** Estados vivos na ordem em que aparecem nos totais. */
-export const ESTADOS_VIVOS: readonly InboxState[] = ['active', 'waiting', 'delegating', 'background', 'error'];
+/** Live states in the order they appear in the totals. */
+export const LIVE_STATES: readonly InboxState[] = ['active', 'waiting', 'delegating', 'background', 'error'];
 
 /**
- * Casa a conta da sessão com o filtro `account`: rótulo (sem diferença de caixa), id, ou "none"
- * para "Sem conta". Sem filtro, tudo passa.
+ * Matches the session's account against the `account` filter: label (case-insensitive), id, or
+ * "none" for "Sem conta". Without a filter, everything passes.
  */
-export function casaConta(conta: ContaDoPainel | null, filtro: readonly string[] | null): boolean {
-  if (!filtro) return true;
-  return filtro.some((f) => (f.toLowerCase() === 'none' ? conta === null : conta !== null && (conta.id === f || conta.label.toLowerCase() === f.toLowerCase())));
+export function matchesAccountFilter(account: ContaDoPainel | null, filter: readonly string[] | null): boolean {
+  if (!filter) return true;
+  return filter.some((f) => (f.toLowerCase() === 'none' ? account === null : account !== null && (account.id === f || account.label.toLowerCase() === f.toLowerCase())));
 }
 
-export function minutosDesde(iso: string, agora: number): number {
-  return Math.max(0, Math.floor((agora - Date.parse(iso)) / 60_000));
+export function minutesSince(iso: string, now: number): number {
+  return Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000));
 }

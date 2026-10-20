@@ -8,7 +8,7 @@ import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { createDevConsole, DEV_CONSOLE_TTL, parseContexts, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
-import { LeituraDaFrota } from '../../src/mcp/index.ts';
+import { FleetReader } from '../../src/mcp/index.ts';
 import type { Session } from '../../src/model.ts';
 import {
   DEV_CONSOLE_SIMULATOR_CATALOG,
@@ -40,7 +40,7 @@ beforeEach(async () => {
   now = clock(Date.parse(T0));
   source = new SimulatedDevConsoleSource({ now });
   const contas = new Contas({ storage, arquivo: null });
-  const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 0 });
+  const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
   devConsole = createDevConsole({
     storage,
     frota,
@@ -166,7 +166,7 @@ describe('Dev Console of one context', () => {
       }
     }
     const contas = new Contas({ storage, arquivo: null });
-    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 0 });
+    const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
     const partial = createDevConsole({ storage, frota, source: new Partial({ now }), cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     v = (await partial.view('loja'))!;
     assert.deepEqual(v.truncated, { [DEV_CONSOLE_SIMULATOR_CATALOG]: false, [DEV_CONSOLE_SIMULATOR_RULES]: true });
@@ -174,7 +174,7 @@ describe('Dev Console of one context', () => {
 
   test('#177/AC-1 #177/AC-3 mixed-case owner/repo in the file and in the session remote match', async () => {
     const contas = new Contas({ storage, arquivo: null });
-    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 0 });
+    const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 0 });
     const git: typeof devConsoleSimulatorGit = async (cwd, args) =>
       cwd !== '/sim/ahrena-demo' ? null : args[0] === 'remote' ? 'git@github.com:Dev-Sintetico/Catalogo-Exemplo.git' : args[0] === 'branch' ? 'feat/68-cupom' : null;
     const mixed = createDevConsole({
@@ -225,7 +225,7 @@ describe('Dev Console of one context', () => {
 
   test('#179/AC-2 a session that completes while the live list is cached is counted once', async () => {
     const contas = new Contas({ storage, arquivo: null });
-    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'UTC', cacheMs: 60_000 });
+    const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'UTC', cacheMs: 60_000 });
     const cached = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     await registerDecision(
       decisions,
@@ -250,7 +250,7 @@ describe('Dev Console of one context', () => {
     await decide('sp1', 'Hoje em São Paulo', 8 * 60);
     await decide('sp2', 'Ontem em São Paulo', 11 * 60);
     const contas = new Contas({ storage, arquivo: null });
-    const frota = new LeituraDaFrota({ storage, contas, agora: now, fusoHorario: 'America/Sao_Paulo', cacheMs: 0 });
+    const frota = new FleetReader({ storage, accounts: contas, now, timeZone: 'America/Sao_Paulo', cacheMs: 0 });
     const sp = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     assert.deepEqual((await sp.view('loja'))!.decisionsToday.map((d) => d.choice), ['Hoje em São Paulo']);
     assert.deepEqual((await devConsole.view('loja'))!.decisionsToday.map((d) => d.choice), ['Hoje em São Paulo', 'Ontem em São Paulo'], 'both are today in UTC');

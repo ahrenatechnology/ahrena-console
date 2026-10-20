@@ -1,6 +1,6 @@
 // `GET /api/attention`: quem precisa de você, em todas as contas, para a bandeja do app (#87).
 //
-// A lista é a do `sessions_needing_attention` do MCP (`precisamDeVoce`, src/mcp): as que esperam
+// A lista é a do `sessions_needing_attention` do MCP (`needingYou`, src/mcp): as que esperam
 // você ou pararam num erro, com a divisão do painel (#140) entre o que trava a sessão ("needs")
 // e o que é só a sua vez ("your-turn"). A ordem é a do wireframe A2, urgentes primeiro: permissão,
 // pergunta, plano e decisão; depois erro; depois a sua vez. Dentro de cada grupo, quem espera há
@@ -16,8 +16,8 @@
 // `GET /api/changes?since=<cursor>&wait=25`, a partir do `cursor` daqui; com `reset: true`,
 // relê tudo.
 
-import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/fleet.ts';
-import { precisamDeVoce } from '../mcp/tools/attention.ts';
+import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
+import { needingYou } from '../mcp/tools/attention.ts';
 import type { PrecisaDeVoce } from './tipos.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
@@ -30,7 +30,7 @@ export type AttentionLevel = PrecisaDeVoce['level'];
 /** O motivo, com os valores do "precisam de você" do painel. */
 export type AttentionReason = PrecisaDeVoce['why'];
 
-const MOTIVO: Record<Motivo, AttentionReason> = {
+const MOTIVO: Record<McpAttentionReason, AttentionReason> = {
   permission: 'permission',
   question: 'question',
   plan: 'plan',
@@ -144,8 +144,8 @@ export interface RespostaDaAtencao {
   items: ItemDaAtencao[];
 }
 
-export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null, remotes: readonly RemoteAttentionSource[] = []): Promise<RespostaDaAtencao> {
-  const lista = await precisamDeVoce(frota, null);
+export async function montarAtencao(frota: FleetReader, cursor: string | null, remotes: readonly RemoteAttentionSource[] = []): Promise<RespostaDaAtencao> {
+  const lista = await needingYou(frota, null);
   const items = lista.map((i): ItemDaAtencao => {
     const reason = MOTIVO[i.reason];
     return {
@@ -176,13 +176,13 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
   // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
   const grupo = (i: ItemDaAtencao) => (i.level === 'your-turn' ? 2 : i.reason === 'error' ? 1 : 0);
   items.sort((a, b) => grupo(a) - grupo(b) || a.since.localeCompare(b.since) || a.session.localeCompare(b.session) || (a.machine?.id ?? '').localeCompare(b.machine?.id ?? ''));
-  for (const s of await frota.vivas()) {
+  for (const s of await frota.live()) {
     if (s.inbox.state === 'error') withError++;
-    else if (ESTADOS_VIVOS.includes(s.inbox.state) && s.inbox.state !== 'waiting') active++;
+    else if (LIVE_STATES.includes(s.inbox.state) && s.inbox.state !== 'waiting') active++;
   }
   const needs = items.filter((i) => i.level === 'needs').length;
   return {
-    generatedAt: new Date(frota.agora()).toISOString(),
+    generatedAt: new Date(frota.now()).toISOString(),
     cursor,
     total: items.length,
     needs,

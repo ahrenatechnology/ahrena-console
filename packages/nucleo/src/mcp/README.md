@@ -31,7 +31,7 @@ claude mcp add --transport http ahrena-console http://127.0.0.1:4720/mcp
 }
 ```
 
-O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e um só processo lendo o banco. Com o núcleo fora do ar, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta o núcleo de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar. Sem `--porta`, a ponte usa o dono único ([src/owner](../owner/README.md)): adota o núcleo da trava `~/.ahrena-console/nucleo.json` ou, se não há, sobe um em segundo plano na `AHRENA_CONSOLE_PORT` (ou 4720) com `--pai` nela, e se registra como cliente quando adota. O núcleo sai quando a ponte e todos os clientes registrados saem. `--sem-subir` só adota. `--porta` fala só com aquela porta, sem adotar nem subir.
+O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e um só processo lendo o banco. Com o núcleo fora do ar, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta o núcleo de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar. Sem `--port`, a ponte usa o dono único ([src/owner](../owner/README.md)): adota o núcleo da trava `~/.ahrena-console/nucleo.json` ou, se não há, sobe um em segundo plano na `AHRENA_CONSOLE_PORT` (ou 4720) com `--parent` nela, e se registra como cliente quando adota. O núcleo sai quando a ponte e todos os clientes registrados saem. `--no-start` só adota. `--port` fala só com aquela porta, sem adotar nem subir. Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
 
 ## Protocolo
 
@@ -41,7 +41,7 @@ O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e 
 | HTTP | `POST /mcp` com JSON-RPC (mensagem ou lote) → `application/json`. Só notificações → 202. `GET` e `DELETE` → 405: não há stream nem `Mcp-Session-Id`. `MCP-Protocol-Version` desconhecida → 400 |
 | Segurança | Bind só em `127.0.0.1`. Pedido com `Origin`, ou com `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>`, dá 403 ([decisão 0003](../../../../docs/decisoes/0003-responder-sessao.md)) |
 | Métodos | `initialize`, `ping`, `tools/list`, `tools/call`. Os outros dão -32601 |
-| Resultado | `content` com um texto curto em pt-BR e `structuredContent` com o mesmo dado em JSON, descrito no `outputSchema`. O esquema declara todos os campos (`objeto()` em [output.ts](output.ts): obrigatórios e nada a mais), porque o cliente oficial valida e recusa a chamada com campo sobrando |
+| Resultado | `content` com um texto curto em pt-BR e `structuredContent` com o mesmo dado em JSON, descrito no `outputSchema`. O esquema declara todos os campos (`strictObject()` em [output.ts](output.ts): obrigatórios e nada a mais), porque o cliente oficial valida e recusa a chamada com campo sobrando |
 
 **Sem o SDK oficial no servidor.** Servir ferramentas de leitura sem sessão é `initialize`, `ping`, `tools/list` e `tools/call` sobre JSON-RPC; o [protocol.ts](protocol.ts) faz isso em menos de 200 linhas. O SDK traria o `zod` e um transporte com sessão que, no modo stateless, é criado e descartado a cada pedido (era assim no spike `nucleo-teste`), e o núcleo segue sem dependência de execução. O SDK entra só como devDependency, na versão que o Claude Code usa, para o teste de contrato.
 
@@ -76,13 +76,13 @@ Delegando (esperando subagentes) e em background (processo rodando depois do tur
 
 ## Acrescentar uma ferramenta
 
-O ponto de registro é `ServidorMcp.registrar(ferramenta)`. É por ele que a 2.4 (`wait_for_changes`) entra.
+O ponto de registro é `McpServer.register(tool)`. É por ele que a 2.4 (`wait_for_changes`) entra.
 
-1. Crie `src/mcp/tools/<nome>.ts` com uma função que recebe o que a ferramenta lê e devolve uma `Ferramenta` ([protocol.ts](protocol.ts)): `nome` em `snake_case`, `titulo`, `descricao`, `entrada` e `saida` (JSON Schema, com `esquema()` de [output.ts](output.ts)) e `executar(args, ctx)`, que devolve `{ texto, dados }`.
-2. Leia os argumentos com `lerComuns(args, permitidos)` e lance `ErroDeArgumento` para argumento errado: volta como `isError`, para o modelo corrigir.
-3. Registre em [src/api/cli.ts](../api/cli.ts), logo depois de `criarServidorMcp`, com `mcp.servidor.registrar(...)`; ou, se ela for padrão em todo núcleo, em `criarServidorMcp` ([index.ts](index.ts)). `criarServidorMcp({ extras })` também aceita uma lista.
-4. Declare em `saida` todos os campos que `dados` traz, com `objeto()`, e acrescente as chamadas da ferramenta em `CHAMADAS` de [test/mcp/sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts): o cliente oficial recusa campo fora do esquema.
-5. Ferramenta longa (long polling) ouve `ctx.sinal`: ele aborta quando o cliente fecha a conexão HTTP. A resposta sai no próprio `POST`, sem SSE.
+1. Crie `src/mcp/tools/<nome>.ts` com uma função que recebe o que a ferramenta lê e devolve uma `Tool` ([protocol.ts](protocol.ts)): `name` em `snake_case`, `title`, `description`, `inputSchema` e `outputSchema` (JSON Schema, com `objectSchema()` de [output.ts](output.ts)) e `execute(args, ctx)`, que devolve `{ text, data }`.
+2. Leia os argumentos com `parseCommonArgs(args, allowed)` e lance `ArgumentError` para argumento errado: volta como `isError`, para o modelo corrigir.
+3. Registre em [src/api/cli.ts](../api/cli.ts), logo depois de `createMcpServer`, com `mcp.server.register(...)`; ou, se ela for padrão em todo núcleo, em `createMcpServer` ([index.ts](index.ts)). `createMcpServer({ extras })` também aceita uma lista.
+4. Declare em `outputSchema` todos os campos que `data` traz, com `strictObject()`, e acrescente as chamadas da ferramenta em `CALLS` de [test/mcp/sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts): o cliente oficial recusa campo fora do esquema.
+5. Ferramenta longa (long polling) ouve `ctx.signal`: ele aborta quando o cliente fecha a conexão HTTP. A resposta sai no próprio `POST`, sem SSE.
 
 O servidor recusa nome repetido, nome fora do padrão e a 11ª ferramenta. Toda ferramenta sai com `readOnlyHint: true`: ferramenta de escrita fica fora da 0.0.1 (2.5).
 
@@ -90,7 +90,7 @@ O servidor recusa nome repetido, nome fora do padrão e a 11ª ferramenta. Toda 
 
 | Arquivo | O quê |
 | --- | --- |
-| [protocol.ts](protocol.ts) | `ServidorMcp`: JSON-RPC, negociação de versão, registro e chamada de ferramentas |
+| [protocol.ts](protocol.ts) | `McpServer`: JSON-RPC, negociação de versão, registro e chamada de ferramentas |
 | [http.ts](http.ts) | A rota `/mcp` que o servidor da API monta |
 | [stdio.ts](stdio.ts) | Uma mensagem por linha, e a ponte para o HTTP |
 | [cli.ts](cli.ts) | `npm run mcp`: o stdio para o Claude Desktop |

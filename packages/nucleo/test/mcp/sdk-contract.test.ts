@@ -13,14 +13,14 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
-import { criarServidorMcp } from '../../src/mcp/index.ts';
+import { createMcpServer } from '../../src/mcp/index.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
-import { AGORA, semear } from './helpers.ts';
+import { NOW, seed } from './helpers.ts';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '../../src/mcp/cli.ts');
 
-/** As chamadas que exercitam cada forma da saída: grupos, filtros, páginas, vazio. */
-const CHAMADAS: [string, Record<string, unknown>][] = [
+/** The calls that exercise every shape of the output: groups, filters, pages, empty. */
+const CALLS: [string, Record<string, unknown>][] = [
   ['sessions_needing_attention', {}],
   ['sessions_needing_attention', { group: 'blocking' }],
   ['sessions_needing_attention', { group: 'your_turn', account: 'equipe' }],
@@ -33,79 +33,80 @@ const CHAMADAS: [string, Record<string, unknown>][] = [
   ['fleet_overview', { limit: 1 }],
 ];
 
-async function exercitar(transporte: Transport) {
-  const cliente = new Client({ name: 'contrato', version: '0.0.0' });
-  await cliente.connect(transporte);
+async function exercise(transport: Transport) {
+  const client = new Client({ name: 'contrato', version: '0.0.0' });
+  await client.connect(transport);
   try {
-    const { tools } = await cliente.listTools();
+    const { tools } = await client.listTools();
     assert.deepEqual(tools.map((t) => t.name), ['sessions_needing_attention', 'fleet_overview']);
-    for (const t of tools) assert.ok(t.outputSchema, `${t.name} sem outputSchema`);
-    for (const [name, args] of CHAMADAS) {
-      // O cliente valida contra o outputSchema; um campo fora dele vira McpError aqui.
-      const r = await cliente.callTool({ name, arguments: args });
+    for (const t of tools) assert.ok(t.outputSchema, `${t.name} has no outputSchema`);
+    for (const [name, args] of CALLS) {
+      // The client validates against the outputSchema; a field outside it becomes an McpError here.
+      const r = await client.callTool({ name, arguments: args });
       assert.equal(r.isError, false, `${name} ${JSON.stringify(args)}`);
-      assert.ok(r.structuredContent, `${name} sem structuredContent`);
+      assert.ok(r.structuredContent, `${name} has no structuredContent`);
       const cursor = (r.structuredContent as any).nextCursor ?? (r.structuredContent as any).activeSessions?.nextCursor;
-      if (cursor) await cliente.callTool({ name, arguments: { ...args, cursor } });
+      if (cursor) await client.callTool({ name, arguments: { ...args, cursor } });
     }
-    const errado = await cliente.callTool({ name: 'fleet_overview', arguments: { limit: 0 } });
-    assert.equal(errado.isError, true);
+    const wrong = await client.callTool({ name: 'fleet_overview', arguments: { limit: 0 } });
+    assert.equal(wrong.isError, true);
   } finally {
-    await cliente.close();
+    await client.close();
   }
 }
 
-for (const [nome, semente] of [
-  ['casos sintéticos', semear],
-  ['cenário p2 do simulador', (s: SqliteStorage) => semearCenariosDoPainel(s, 'p2', AGORA)],
-  ['banco vazio', async () => {}],
+for (const [name, seedWith] of [
+  ['synthetic cases', seed],
+  ['simulator scenario p2', (s: SqliteStorage) => semearCenariosDoPainel(s, 'p2', NOW)],
+  ['empty database', async () => {}],
 ] as const) {
-  describe(`contrato com o cliente oficial: ${nome}`, () => {
+  describe(`contract with the official client: ${name}`, () => {
     let storage: SqliteStorage;
     let api: ApiLocal;
     before(async () => {
       storage = openSqliteStorage({ path: ':memory:' });
-      await semente(storage);
-      const contas = new Contas({ storage, arquivo: null });
-      const { servidor } = criarServidorMcp({ storage, contas, agora: () => AGORA, fusoHorario: 'UTC' });
-      api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: servidor });
+      await seedWith(storage);
+      const accounts = new Contas({ storage, arquivo: null });
+      const { server } = createMcpServer({ storage, accounts, now: () => NOW, timeZone: 'UTC' });
+      api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
     });
     after(async () => {
       await api.close();
       await storage.close();
     });
 
-    test('HTTP: a saída das ferramentas passa no outputSchema', () => exercitar(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`))));
+    test('HTTP: the tools output passes the outputSchema', () => exercise(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`))));
 
-    test('stdio (a ponte do Desktop): a saída das ferramentas passa no outputSchema', () =>
-      exercitar(
+    test('stdio (the Desktop bridge): the tools output passes the outputSchema', () =>
+      exercise(
         new StdioClientTransport({
           command: process.execPath,
-          args: ['--disable-warning=ExperimentalWarning', CLI, '--porta', new URL(api.url).port],
+          args: ['--disable-warning=ExperimentalWarning', CLI, '--port', new URL(api.url).port],
           stderr: 'ignore',
         }),
       ));
   });
 }
 
-test('stdio sem o núcleo: o cliente oficial conecta, lista as ferramentas e a chamada volta com isError', async () => {
-  // Uma porta que ninguém escuta: sobe e derruba uma API para pegar uma livre.
+test('stdio without the core: the official client connects, lists the tools and the call comes back with isError', async () => {
+  // A port nobody listens on: start and stop an API to get a free one.
   const storage = openSqliteStorage({ path: ':memory:' });
-  const contas = new Contas({ storage, arquivo: null });
-  const api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
-  const porta = new URL(api.url).port;
+  const accounts = new Contas({ storage, arquivo: null });
+  const api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
+  const port = new URL(api.url).port;
   await api.close();
   await storage.close();
 
-  const cliente = new Client({ name: 'contrato', version: '0.0.0' });
-  await cliente.connect(new StdioClientTransport({ command: process.execPath, args: ['--disable-warning=ExperimentalWarning', CLI, '--porta', porta], stderr: 'ignore' }));
+  const client = new Client({ name: 'contrato', version: '0.0.0' });
+  // The old option name (`--porta`) is still accepted until phase 6 of #173.
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: ['--disable-warning=ExperimentalWarning', CLI, '--porta', port], stderr: 'ignore' }));
   try {
-    const { tools } = await cliente.listTools();
+    const { tools } = await client.listTools();
     assert.equal(tools.length, 2);
-    const r = await cliente.callTool({ name: 'sessions_needing_attention', arguments: {} });
+    const r = await client.callTool({ name: 'sessions_needing_attention', arguments: {} });
     assert.equal(r.isError, true);
     assert.match((r.content as { text: string }[])[0].text, /npm run api/);
   } finally {
-    await cliente.close();
+    await client.close();
   }
 });
