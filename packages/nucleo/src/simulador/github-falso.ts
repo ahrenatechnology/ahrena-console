@@ -30,6 +30,7 @@ export interface RepoFalso {
   observadores?: number;
   licenca?: string | null;
   release?: { tag: string; diasAtras: number } | null;
+  /** Releases desde sempre: a mais nova em `release.diasAtras` (ou 10 dias), as outras a cada 40 dias. */
   releases?: number;
   /** Estatísticas que respondem 202 na primeira chamada: `commit_activity`, `code_frequency`, `contributors`. */
   calcularPrimeiro?: string[];
@@ -248,13 +249,19 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
     if (op === 'ReposResumo') return { rateLimit, review: { issueCount: dados.esperandoReview }, fechadas: { issueCount: dados.fechadasNaSemana } };
     if (op === 'RepoDetalhe') {
       const repo = achar(v.o, v.r);
-      if (!repo) return { rateLimit, repository: null, prs: vazia(), fechadas: vazia(), abertas: vazia() };
+      if (!repo) return { rateLimit, repository: null, prs: vazia(), fechadas: vazia(), abertas: vazia(), mergeados: vazia(), fechadosSemMerge: vazia() };
       const s = seriesDe(repo);
       const desdePr = desdeDaBusca(v.prs, 'updated');
       const desdeIssue = desdeDaBusca(v.fechadas, 'closed');
       const prs = s.prs.filter((p) => (p._atualizado as number) >= desdePr).map(semInternos);
       const fechadas = s.fechadas.filter((i) => Date.parse(i.closedAt as string) >= desdeIssue);
+      const desdeMerge = desdeDaBusca(v.mergeados, 'merged');
+      const desdeFechado = desdeDaBusca(v.fechadosSemMerge, 'closed');
+      const mergeados = s.prs.filter((p) => p.mergedAt && Date.parse(p.mergedAt as string) >= desdeMerge).length;
+      const fechadosSemMerge = s.prs.filter((p) => p.state === 'CLOSED' && !p.mergedAt && Date.parse(p.closedAt as string) >= desdeFechado).length;
       const t = agora();
+      const maisNova = repo.release?.diasAtras ?? 10;
+      const releases = Array.from({ length: Math.min(100, repo.releases ?? 0) }, (_, i) => ({ publishedAt: iso(t - (maisNova + i * 40) * DIA) }));
       return {
         rateLimit,
         repository: {
@@ -264,8 +271,10 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
           watchers: { totalCount: repo.observadores ?? 0 },
           licenseInfo: repo.licenca ? { spdxId: repo.licenca, name: repo.licenca } : null,
           latestRelease: repo.release ? { tagName: repo.release.tag, publishedAt: iso(t - repo.release.diasAtras * DIA) } : null,
-          releases: { totalCount: repo.releases ?? 0 },
+          releases: { totalCount: repo.releases ?? 0, nodes: releases },
         },
+        mergeados: { issueCount: mergeados },
+        fechadosSemMerge: { issueCount: fechadosSemMerge },
         prs: pagina(prs),
         fechadas: pagina(fechadas),
         abertas: pagina(s.abertas),

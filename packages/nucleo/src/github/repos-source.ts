@@ -6,8 +6,12 @@
 // | -------------- | ------------------------------------------------------------------- | -----: |
 // | ReposLista     | login, orgs e até 100 repos por página, com contagens e CI do padrão | 1 a 2  |
 // | ReposResumo    | duas buscas só com `issueCount`: PRs esperando review, issues fechadas na semana | 1 |
-// | RepoDetalhe    | o repositório, a 1ª página de PRs, issues fechadas e abertas do período | ≈ 3   |
+// | RepoDetalhe    | o repositório, as 100 releases mais novas, a 1ª página de PRs, issues fechadas e abertas do período, e duas contagens (PRs mergeados e fechados sem merge) | ≈ 4 |
 // | RepoBusca      | as páginas seguintes de uma das buscas, até o teto                  | ≈ 2    |
+//
+// Os totais (issues fechadas e abertas, PRs mergeados e fechados sem merge) vêm do `issueCount` das
+// buscas, que conta tudo; as páginas lidas são a amostra das medianas e do `porTipo`, cortada em
+// `PAGINAS_DA_BUSCA`. `ContagensCruas` leva os dois números, e a resposta diz se a amostra cortou.
 //
 // REST, cada uma com `If-None-Match` (o 304 não gasta o limite primário):
 // `stats/commit_activity`, `stats/code_frequency`, `stats/contributors` (os três devolvem 202
@@ -19,7 +23,7 @@ import { ghCliToken, githubGraphql, type GithubGraphqlSourceOptions } from './gi
 
 export const GITHUB_API_URL = 'https://api.github.com';
 
-/** Páginas de 100 que cada busca do detalhe lê, no máximo. */
+/** Páginas de 100 que cada busca do detalhe lê, no máximo (a amostra; os totais vêm do `issueCount`). */
 export const PAGINAS_DA_BUSCA = { prs: 5, fechadas: 5, abertas: 3 } as const;
 /** Páginas de 100 repositórios na lista, no máximo. */
 export const PAGINAS_DA_LISTA = 5;
@@ -56,7 +60,8 @@ export interface InfoCrua extends RepoCru {
   watchers: { totalCount: number };
   licenseInfo: { spdxId: string | null; name: string } | null;
   latestRelease: { tagName: string; publishedAt: string | null } | null;
-  releases: { totalCount: number };
+  /** `totalCount` é desde sempre; `nodes`, as 100 mais novas, para contar as do período. */
+  releases: { totalCount: number; nodes?: { publishedAt: string | null }[] };
 }
 
 export interface PrCru {
@@ -78,8 +83,24 @@ export interface IssueCrua {
   issueType: { name: string } | null;
 }
 
+/** O `issueCount` de cada busca do detalhe: o total, mesmo quando a amostra lida é menor. */
+export interface ContagensCruas {
+  /** Issues fechadas no período. */
+  fechadas: number;
+  /** Issues abertas agora. */
+  abertas: number;
+  /** PRs atualizados no período (o universo da amostra `prs`). */
+  prs: number;
+  /** PRs mergeados no período (`is:merged merged:>=`). */
+  mergeados: number;
+  /** PRs fechados sem merge no período (`is:unmerged closed:>=`). */
+  fechadosSemMerge: number;
+}
+
 export interface DetalheCru {
   repo: InfoCrua;
+  /** Ausente só no cache gravado antes dela; o cálculo cai na contagem da amostra. */
+  contagens?: ContagensCruas;
   /** PRs atualizados desde o começo do período. */
   prs: PrCru[];
   /** Issues fechadas desde o começo do período. */
@@ -96,16 +117,21 @@ export type RespostaRest<T> =
   /** 403, 404, 409, 410, 422, 451: o recurso não existe, está desligado ou não é para este token. */
   | { estado: 'indisponivel'; status: number };
 
-/** Porta da fonte dos repositórios: o adaptador do GitHub e o GitHub falso da demonstração. */
+// Uma implementação só, e fica: é a porta da decisão 0001 por onde entra o adaptador do hub.
+/** Porta da fonte dos repositórios; a demonstração usa o adaptador do GitHub com o `fetch` do GitHub falso. */
 export interface FonteDosRepos {
   lista(): Promise<ListaCrua>;
   /** A conta e as orgs dela, para as buscas ficarem nos repositórios da lista. `desde`: AAAA-MM-DD. */
   resumo(login: string, organizacoes: readonly string[], desde: string): Promise<ResumoCru>;
   /** `null`: o repositório não existe ou não é visível. `desde`: AAAA-MM-DD. */
   detalhe(dono: string, nome: string, desde: string): Promise<DetalheCru | null>;
-  /** GET em `/repos/...`, com ETag. `caminho` já vem validado de quem chama. */
+  /** GET em `/repos/<dono>/<repo>/...`, com ETag. Dono e repo fora de `NOME_DO_DONO`/`NOME_DO_REPO` dão erro sem chamar o GitHub. */
   rest<T>(caminho: string, etag: string | null): Promise<RespostaRest<T>>;
 }
+
+/** Padrão de nome do GitHub: login de até 39 caracteres, sem hífen nas pontas nem duplo; repo de até 100. */
+export const NOME_DO_DONO = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
+export const NOME_DO_REPO = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/;
 
 /** O núcleo não tem token do GitHub (`gh` sem login, ou desligado). */
 export class SemGithubError extends Error {
@@ -120,11 +146,12 @@ const REPO = `name nameWithOwner url isPrivate pushedAt viewerPermission owner {
   issues(states: OPEN) { totalCount } pullRequests(states: OPEN) { totalCount }
   defaultBranchRef { name target { ... on Commit { statusCheckRollup { state } } } }`;
 const INFO = `${REPO} stargazerCount forkCount watchers { totalCount } licenseInfo { spdxId name }
-  latestRelease { tagName publishedAt } releases { totalCount }`;
+  latestRelease { tagName publishedAt } releases(first: 100, orderBy: { field: CREATED_AT, direction: DESC }) { totalCount nodes { publishedAt } }`;
 const PR = `createdAt mergedAt closedAt state additions deletions headRefName author { login __typename }
   reviews(first: 1) { totalCount nodes { createdAt } } pedidosDeMudanca: reviews(states: CHANGES_REQUESTED) { totalCount }`;
 const ISSUE = 'createdAt closedAt issueType { name }';
 const PAGINA = 'issueCount pageInfo { hasNextPage endCursor }';
+const CONTAGEM = 'type: ISSUE, first: 1) { issueCount }';
 
 export const CONSULTAS_DOS_REPOS = {
   lista: `query ReposLista($after: String) { ${RATE}
@@ -134,8 +161,10 @@ export const CONSULTAS_DOS_REPOS = {
   resumo: `query ReposResumo($review: String!, $fechadas: String!) { ${RATE}
   review: search(query: $review, type: ISSUE, first: 1) { issueCount }
   fechadas: search(query: $fechadas, type: ISSUE, first: 1) { issueCount } }`,
-  detalhe: `query RepoDetalhe($o: String!, $r: String!, $prs: String!, $fechadas: String!, $abertas: String!) { ${RATE}
+  detalhe: `query RepoDetalhe($o: String!, $r: String!, $prs: String!, $fechadas: String!, $abertas: String!, $mergeados: String!, $fechadosSemMerge: String!) { ${RATE}
   repository(owner: $o, name: $r) { ${INFO} }
+  mergeados: search(query: $mergeados, ${CONTAGEM}
+  fechadosSemMerge: search(query: $fechadosSemMerge, ${CONTAGEM}
   prs: search(query: $prs, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on PullRequest { ${PR} } } }
   fechadas: search(query: $fechadas, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on Issue { ${ISSUE} } } }
   abertas: search(query: $abertas, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on Issue { issueType { name } } } } }`,
@@ -149,6 +178,8 @@ export function buscasDoDetalhe(completo: string, desde: string) {
     prs: `repo:${completo} is:pr updated:>=${desde} sort:updated-desc`,
     fechadas: `repo:${completo} is:issue is:closed closed:>=${desde} sort:updated-desc`,
     abertas: `repo:${completo} is:issue is:open sort:updated-desc`,
+    mergeados: `repo:${completo} is:pr is:merged merged:>=${desde}`,
+    fechadosSemMerge: `repo:${completo} is:pr is:closed is:unmerged closed:>=${desde}`,
   };
 }
 
@@ -207,11 +238,25 @@ export class GithubReposSource implements FonteDosRepos {
 
   async detalhe(dono: string, nome: string, desde: string): Promise<DetalheCru | null> {
     const buscas = buscasDoDetalhe(`${dono}/${nome}`, desde);
-    type Data = { repository: InfoCrua | null; prs: Pagina<PrCru>; fechadas: Pagina<IssueCrua>; abertas: Pagina<IssueCrua> };
+    type Data = {
+      repository: InfoCrua | null;
+      prs: Pagina<PrCru>;
+      fechadas: Pagina<IssueCrua>;
+      abertas: Pagina<IssueCrua>;
+      mergeados: { issueCount: number };
+      fechadosSemMerge: { issueCount: number };
+    };
     const data = await this.graphql<Data>('RepoDetalhe', CONSULTAS_DOS_REPOS.detalhe, { o: dono, r: nome, ...buscas }, true);
     if (!data.repository) return null;
     return {
       repo: data.repository,
+      contagens: {
+        fechadas: data.fechadas.issueCount,
+        abertas: data.abertas.issueCount,
+        prs: data.prs.issueCount,
+        mergeados: data.mergeados.issueCount,
+        fechadosSemMerge: data.fechadosSemMerge.issueCount,
+      },
       prs: await this.resto(buscas.prs, data.prs, PAGINAS_DA_BUSCA.prs) as PrCru[],
       fechadas: await this.resto(buscas.fechadas, data.fechadas, PAGINAS_DA_BUSCA.fechadas) as IssueCrua[],
       abertas: await this.resto(buscas.abertas, data.abertas, PAGINAS_DA_BUSCA.abertas) as IssueCrua[],
@@ -231,6 +276,8 @@ export class GithubReposSource implements FonteDosRepos {
   }
 
   async rest<T>(caminho: string, etag: string | null): Promise<RespostaRest<T>> {
+    const m = /^\/repos\/([^/]+)\/([^/?]+)\//.exec(caminho);
+    if (!m || !NOME_DO_DONO.test(m[1]) || !NOME_DO_REPO.test(m[2])) throw new Error(`caminho do REST fora de /repos/<dono>/<repo>/: ${caminho.slice(0, 120)}`);
     const doFetch = this.opts.fetch ?? fetch;
     const now = this.opts.now ?? Date.now;
     const headers: Record<string, string> = {
@@ -264,7 +311,7 @@ export class GithubReposSource implements FonteDosRepos {
     try {
       this.tokenValue = typeof t === 'string' ? t : await t();
     } catch (err) {
-      throw new SemGithubError((err as Error).message);
+      throw new SemGithubError(err instanceof Error ? err.message : String(err));
     }
     return this.tokenValue;
   }

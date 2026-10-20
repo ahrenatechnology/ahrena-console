@@ -15,17 +15,24 @@
 // Toda resposta é 200 e sai do que já está montado em memória. Se a montagem venceu (60 s) ou não
 // existe, ela é disparada por trás e o pedido volta na hora: sem dado ainda, com
 // `estado: 'carregando'`. Cada montagem lê o GitHub pelo `GithubCache` (TTL por chave, ETag no
-// REST, dado velho por até 24 h, pausa quando o GitHub limita), em série. Quando a montagem muda
-// a resposta, o núcleo registra no cursor `{ tipo: 'repos', chave: 'lista' }` ou
-// `{ tipo: 'repos', chave: '<dono>/<repo>' }` (como veio na rota), e a tela relê. A descoberta de
-// sessões novas num repositório também registra `lista`.
+// REST, dado velho por até 24 h, pausa quando o GitHub limita), o mesmo do trabalho no núcleo, para
+// a pausa valer para os dois. Todas as chamadas à fonte, de qualquer montagem (a lista e as
+// métricas de vários repositórios ao mesmo tempo), passam por uma fila só (`chamar()`): uma de cada
+// vez, nunca em paralelo (decisão 0001, item 6). Quando a montagem muda a resposta, o núcleo
+// registra no cursor `{ tipo: 'repos', chave: 'lista' }` ou `{ tipo: 'repos', chave: '<dono>/<repo>' }`
+// em minúsculas (`chaveDoRepo`, seja qual for a caixa da rota), e a tela relê. A descoberta de
+// sessões novas num repositório também registra `lista`. As métricas guardam em memória no máximo
+// `MAXIMO_DE_ENTRADAS` combinações de repositório e período, as menos lidas saem primeiro.
 //
 // - `estado`: `pronto`; `carregando` (sem dado ainda, ou a montagem parcial: o cabeçalho do repo já
 //   veio e os números ainda não); `sem-github` (núcleo sem `gh` ou com `--sem-github`); `erro`
 //   (falhou e não há dado anterior); `nao-encontrado` (só nas métricas).
 // - `erro`: o motivo do dado velho, do limite ou da falha; o último dado vem junto.
 // - `calculando` (métricas): as estatísticas que o GitHub devolveu 202. O campo fica `null`, e o
-//   núcleo tenta de novo sozinho em 3 s, 6 s, 12 s, 30 s e depois a cada 60 s.
+//   núcleo tenta de novo sozinho em 3 s, 6 s, 12 s, 30 s e depois a cada 60 s, enquanto alguém leu
+//   a resposta nos últimos 5 min; depois para, e volta no próximo pedido.
+// - Uma falha fora do previsto na montagem vai para o `log` e para o `erro` da resposta, com
+//   `estado: 'erro'` quando não há dado anterior.
 // - Sem escrita no repositório (`escrita: false`), as chaves `trafego` e `seguranca` não vêm e o
 //   núcleo nem chama esses endpoints (#105 critério 5).
 //
@@ -37,11 +44,12 @@
 // do GraphQL porque o REST dá as 52 semanas numa chamada que o 304 deixa de graça, e a mesma chave
 // do cache serve as métricas do repositório; o GraphQL pediria 12 contagens por repositório. O CI
 // de 7 dias do resumo soma os workflow runs concluídos dos repositórios com push nos 7 dias.
-// Métricas: `RepoDetalhe` (GraphQL: o repositório, PRs, issues fechadas e abertas do período) e o
-// REST listado em src/github/repos-source.ts. As sessões vêm do próprio núcleo (repos-sessoes.ts).
+// Métricas: `RepoDetalhe` (GraphQL: o repositório e as releases, PRs, issues fechadas e abertas do
+// período, e os totais pelo `issueCount`) e o REST listado em src/github/repos-source.ts. As
+// sessões vêm do próprio núcleo (repos-sessoes.ts).
 
 import type { ServerResponse } from 'node:http';
-import { GithubCache, MemoryCacheStore, type CachePort } from '../github/cache.ts';
+import { GithubCache, MemoryCacheStore } from '../github/cache.ts';
 import {
   ciDosRuns,
   commits12,
@@ -57,6 +65,7 @@ import {
   linhasDe,
   montarLista,
   prsDoPeriodo,
+  releasesDoPeriodo,
   repoDoDetalhe,
   somarCi,
   temEscrita,
@@ -65,7 +74,16 @@ import {
   type SemanaDeCodigo,
   type SemanaDeCommits,
 } from '../github/repos-calculo.ts';
-import { GithubReposSource, SemGithubError, type DetalheCru, type FonteDosRepos, type ListaCrua, type ResumoCru } from '../github/repos-source.ts';
+import {
+  GithubReposSource,
+  NOME_DO_DONO,
+  NOME_DO_REPO,
+  SemGithubError,
+  type DetalheCru,
+  type FonteDosRepos,
+  type ListaCrua,
+  type ResumoCru,
+} from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
@@ -74,6 +92,7 @@ import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
 import { PERIODO_PADRAO, PERIODOS, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
 
 export * from './repos-tipos.ts';
+export { NOME_DO_DONO, NOME_DO_REPO };
 
 /** TTLs das chaves do cache, além da tabela da decisão 0001. */
 export const TTL_DOS_REPOS = {
@@ -91,12 +110,12 @@ export const TTL_DOS_REPOS = {
 
 /** Espera entre as tentativas enquanto o GitHub devolve 202; a última se repete. */
 export const REPETIR_CALCULANDO_MS = [3_000, 6_000, 12_000, 30_000, 60_000] as const;
+/** Depois de tanto tempo sem ninguém ler a resposta, a nova tentativa do 202 para. */
+export const REPETIR_ENQUANTO_LIDA_MS = 5 * 60_000;
 /** Repositórios lidos um a um na lista (commits das 12 semanas e CI), os de push mais recente. */
 export const MAXIMO_POR_REPO = 30;
-
-/** Padrão de nome do GitHub: login de até 39 caracteres, sem hífen nas pontas nem duplo; repo de até 100. */
-export const NOME_DO_DONO = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
-export const NOME_DO_REPO = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/;
+/** Combinações de repositório e período guardadas em memória; acima disso sai a lida há mais tempo. */
+export const MAXIMO_DE_ENTRADAS = 50;
 
 const CALCULANDO = 'o GitHub ainda está calculando (202)';
 
@@ -114,9 +133,13 @@ interface Entrada<T> {
   /** Tentativas seguidas com 202. */
   tentativas: number;
   agendado: boolean;
+  /** Último pedido que leu a resposta (a nova tentativa do 202 só segue enquanto é recente). */
+  lidaEm: number;
 }
 
-const entrada = <T>(): Entrada<T> => ({ valor: null, em: -Infinity, rodando: null, forcar: false, tentativas: 0, agendado: false });
+const entrada = <T>(): Entrada<T> => ({ valor: null, em: -Infinity, rodando: null, forcar: false, tentativas: 0, agendado: false, lidaEm: -Infinity });
+
+const motivo = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 interface LeituraRest<T> {
   valor: T | null;
@@ -136,6 +159,8 @@ export interface OpcoesDosRepos {
   /** Agenda a nova tentativa depois de um 202 (testes trocam). Padrão `setTimeout` sem prender o processo. */
   agendar?: (fn: () => void, ms: number) => void;
   maximoPorRepo?: number;
+  /** Falhas fora do previsto numa montagem (no núcleo, o `log` do cli). Padrão: nada. */
+  log?: (mensagem: string) => void;
 }
 
 const agendarDoSistema = (fn: () => void, ms: number) => {
@@ -151,13 +176,16 @@ export class ReposDoGithub {
   private readonly validadeMs: number;
   private readonly agendar: (fn: () => void, ms: number) => void;
   private readonly maximoPorRepo: number;
+  private readonly log: (mensagem: string) => void;
+  /** A fila global das chamadas à fonte: cada uma começa quando a anterior terminou. */
+  private fila: Promise<unknown> = Promise.resolve();
   private readonly entradaDaLista = entrada<ListaDeRepos>();
   private readonly entradas = new Map<string, Entrada<MetricasDoRepo>>();
   private semToken: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   chamadas = { fonte: 0 };
 
-  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO }: OpcoesDosRepos) {
+  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO, log = () => {} }: OpcoesDosRepos) {
     this.fonte = fonte;
     this.cache = cache ?? new GithubCache({ store: new MemoryCacheStore(), now: agora });
     this.sessoes = sessoes;
@@ -166,14 +194,16 @@ export class ReposDoGithub {
     this.validadeMs = validadeMs;
     this.agendar = agendar;
     this.maximoPorRepo = maximoPorRepo;
+    this.log = log;
   }
 
   /** A lista como está agora; dispara a montagem por trás se venceu. Nunca espera o GitHub. */
   async lista({ atualizar = false } = {}): Promise<ListaDeRepos> {
     const e = this.entradaDaLista;
     if (!this.fonte) return listaVazia('sem-github', null);
+    e.lidaEm = this.agora();
     if (atualizar) this.vencer(e);
-    this.disparar(e, () => this.montarLista(e));
+    this.disparar(e, 'lista', () => this.montarLista(e), (msg) => listaVazia('erro', msg));
     const base = e.valor ?? listaVazia('carregando', null);
     return this.comSessoesNaLista(base, await this.contagens());
   }
@@ -181,14 +211,13 @@ export class ReposDoGithub {
   /** As métricas de `dono/nome` no período; mesma regra da lista. */
   async metricas(dono: string, nome: string, periodo: Periodo = PERIODO_PADRAO, { atualizar = false } = {}): Promise<MetricasDoRepo> {
     if (!this.fonte) return metricasVazias('sem-github', periodo, null);
-    const chave = `${chaveDoRepo(`${dono}/${nome}`)}\0${periodo}`;
-    let e = this.entradas.get(chave);
-    if (!e) this.entradas.set(chave, (e = entrada()));
-    if (atualizar) this.vencer(e);
-    const alvo = e;
-    this.disparar(alvo, () => this.montarMetricas(alvo, dono, nome, periodo));
+    const k = chaveDoRepo(`${dono}/${nome}`);
+    const alvo = this.entradaDasMetricas(`${k}\0${periodo}`);
+    alvo.lidaEm = this.agora();
+    if (atualizar) this.vencer(alvo);
+    this.disparar(alvo, k, () => this.montarMetricas(alvo, dono, nome, periodo), (msg) => metricasVazias('erro', periodo, msg));
     const base = alvo.valor ?? metricasVazias('carregando', periodo, null);
-    const sessoes = (await this.contagens())?.get(chaveDoRepo(`${dono}/${nome}`));
+    const sessoes = (await this.contagens())?.get(k);
     return { ...base, abas: { ...base.abas, sessoes: sessoes?.noMes ?? 0 } };
   }
 
@@ -202,16 +231,39 @@ export class ReposDoGithub {
     await this.sessoes?.esperar();
   }
 
+  /** A entrada de repositório e período, no fim da fila do LRU; acima do teto sai a lida há mais tempo. */
+  private entradaDasMetricas(chave: string): Entrada<MetricasDoRepo> {
+    let e = this.entradas.get(chave);
+    if (e) this.entradas.delete(chave);
+    else e = entrada();
+    this.entradas.set(chave, e);
+    if (this.entradas.size > MAXIMO_DE_ENTRADAS) {
+      // A mais antiga que não está montando; se todas estão, a mais antiga mesmo.
+      const [velha] = [...this.entradas].find(([, x]) => !x.rodando) ?? [...this.entradas][0];
+      this.entradas.delete(velha);
+    }
+    return e;
+  }
+
   private vencer<T>(e: Entrada<T>): void {
     if (e.rodando) return;
     e.em = -Infinity;
     e.forcar = true;
   }
 
-  private disparar<T>(e: Entrada<T>, montar: () => Promise<void>): void {
+  /**
+   * Monta por trás, se venceu. Uma falha que a montagem não tratou vai para o `log` e para o `erro`
+   * da resposta (com o dado anterior, se houver; sem ele, `vazia(motivo)`, com `estado: 'erro'`).
+   */
+  private disparar<T extends { estado: string; erro: string | null }>(e: Entrada<T>, chave: string, montar: () => Promise<void>, vazia: (msg: string) => T): void {
     if (e.rodando || this.agora() - e.em < this.validadeMs) return;
     e.rodando = montar()
-      .catch(() => undefined)
+      .catch((err: unknown) => {
+        const msg = motivo(err);
+        this.log(`repos: a montagem de ${chave} falhou: ${msg}`);
+        const anterior = e.valor && e.valor.estado !== 'carregando' ? e.valor : null;
+        this.publicar(e, anterior ? { ...anterior, erro: msg } : vazia(msg), chave);
+      })
       .finally(() => {
         e.em = this.agora();
         e.forcar = false;
@@ -219,9 +271,14 @@ export class ReposDoGithub {
       });
   }
 
-  /** Depois de um 202, tenta de novo com espera curta e crescente; sem 202, zera. */
-  private repetirSeCalculando<T>(e: Entrada<T>, calculando: boolean, montar: () => Promise<void>): void {
-    if (!calculando) {
+  /**
+   * Depois de um 202, tenta de novo com espera curta e crescente; sem 202, zera. Só enquanto alguém
+   * leu a resposta nos últimos `REPETIR_ENQUANTO_LIDA_MS`: depois para, e o próximo pedido, que acha
+   * a montagem vencida, recomeça do 3 s.
+   */
+  private repetirSeCalculando<T extends { estado: string; erro: string | null }>(e: Entrada<T>, calculando: boolean, chave: string, montar: () => Promise<void>, vazia: (msg: string) => T): void {
+    const lidaHaPouco = () => this.agora() - e.lidaEm <= REPETIR_ENQUANTO_LIDA_MS;
+    if (!calculando || !lidaHaPouco()) {
       e.tentativas = 0;
       return;
     }
@@ -231,8 +288,12 @@ export class ReposDoGithub {
     e.agendado = true;
     this.agendar(() => {
       e.agendado = false;
+      if (!lidaHaPouco()) {
+        e.tentativas = 0;
+        return;
+      }
       e.em = -Infinity;
-      this.disparar(e, montar);
+      this.disparar(e, chave, montar, vazia);
     }, ms);
   }
 
@@ -260,17 +321,24 @@ export class ReposDoGithub {
     return { ...base, resumo: { ...base.resumo, comSessoesNoMes: comSessoes }, grupos };
   }
 
-  /** Uma chamada à fonte, contada; o token que falta vira `sem-github`. */
-  private async chamar<T>(fn: (fonte: FonteDosRepos) => Promise<T>): Promise<T> {
+  /**
+   * Uma chamada à fonte, contada e posta na fila global: começa só quando a anterior, de qualquer
+   * montagem, terminou (decisão 0001, item 6). O token que falta vira `sem-github`.
+   */
+  private chamar<T>(fn: (fonte: FonteDosRepos) => Promise<T>): Promise<T> {
     this.chamadas.fonte++;
-    try {
-      const v = await fn(this.fonte!);
-      this.semToken = null;
-      return v;
-    } catch (err) {
-      if (err instanceof SemGithubError) this.semToken = err.message;
-      throw err;
-    }
+    const vez = this.fila.then(async () => {
+      try {
+        const v = await fn(this.fonte!);
+        this.semToken = null;
+        return v;
+      } catch (err) {
+        if (err instanceof SemGithubError) this.semToken = err.message;
+        throw err;
+      }
+    });
+    this.fila = vez.catch(() => undefined);
+    return vez;
   }
 
   private async graphql<T>(chave: string, ttl: number, forcar: boolean, fn: (fonte: FonteDosRepos) => Promise<T>) {
@@ -288,7 +356,7 @@ export class ReposDoGithub {
       });
       return { valor: r.value, calculando: false, erro: r.stale && r.staleReason !== CALCULANDO ? r.staleReason : null };
     } catch (err) {
-      const msg = (err as Error).message;
+      const msg = motivo(err);
       if (msg.includes(CALCULANDO)) return { valor: null, calculando: true, erro: null };
       return { valor: null, calculando: false, erro: msg };
     }
@@ -306,7 +374,7 @@ export class ReposDoGithub {
     try {
       crua = await this.graphql('repos:lista', TTL_DOS_REPOS.lista, e.forcar, (f) => f.lista());
     } catch (err) {
-      const msg = this.semToken ?? (err as Error).message;
+      const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, erro: msg } : listaVazia(this.estadoDaFalha(), msg), 'lista');
       return;
     }
@@ -328,7 +396,7 @@ export class ReposDoGithub {
       resumo = r.value;
       if (r.stale && r.staleReason) erros.push(r.staleReason);
     } catch (err) {
-      erros.push((err as Error).message);
+      erros.push(motivo(err));
     }
 
     const recentes = [...crua.value.repos]
@@ -351,20 +419,21 @@ export class ReposDoGithub {
       }
     }
     this.publicar(e, montar(resumo, commits, somarCi(partesDoCi)), 'lista');
-    this.repetirSeCalculando(e, calculando, () => this.montarLista(e));
+    this.repetirSeCalculando(e, calculando, 'lista', () => this.montarLista(e), (msg) => listaVazia('erro', msg));
   }
 
   // ---- Métricas (#105) ----
 
   private async montarMetricas(e: Entrada<MetricasDoRepo>, dono: string, nome: string, periodo: Periodo): Promise<void> {
-    const chave = `${dono}/${nome}`;
+    // A chave da mudança e do cache é a da entrada: `dono/repo` em minúsculas.
+    const chave = chaveDoRepo(`${dono}/${nome}`);
     const agora = this.agora();
     const desde = inicioDoPeriodo(periodo, agora);
     let detalhe: { value: DetalheCru | null; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      detalhe = await this.graphql(`repos:detalhe:${chaveDoRepo(chave)}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
+      detalhe = await this.graphql(`repos:detalhe:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
     } catch (err) {
-      const msg = this.semToken ?? (err as Error).message;
+      const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, erro: msg } : metricasVazias(this.estadoDaFalha(), periodo, msg), chave);
       return;
     }
@@ -382,9 +451,10 @@ export class ReposDoGithub {
       atualizadoEm: new Date(detalhe.fetchedAt).toISOString(),
       repo: repoDoDetalhe(d.repo),
       abas: { issues: d.repo.issues.totalCount, prs: d.repo.pullRequests.totalCount, sessoes: 0 },
-      issues: issuesDoPeriodo(d.fechadas, d.abertas),
-      prs: prsDoPeriodo(d.prs, d.repo.pullRequests.totalCount, desde),
-      releases: d.repo.releases.totalCount,
+      issues: issuesDoPeriodo(d.fechadas, d.abertas, d.contagens),
+      prs: prsDoPeriodo(d.prs, d.repo.pullRequests.totalCount, desde, d.contagens),
+      releases: releasesDoPeriodo(d.repo, desde),
+      releasesNoTotal: d.repo.releases.totalCount,
       escrita,
     };
     // Primeira etapa: o cabeçalho e o que veio do GraphQL; o REST vem em seguida.
@@ -434,7 +504,7 @@ export class ReposDoGithub {
     }
     resultado.erro = erros[0] ?? null;
     this.publicar(e, resultado, chave);
-    this.repetirSeCalculando(e, calculando.length > 0, () => this.montarMetricas(e, dono, nome, periodo));
+    this.repetirSeCalculando(e, calculando.length > 0, chave, () => this.montarMetricas(e, dono, nome, periodo), (msg) => metricasVazias('erro', periodo, msg));
   }
 }
 
@@ -471,6 +541,7 @@ export function metricasVazias(estado: MetricasDoRepo['estado'], periodo: Period
     linguagens: null,
     contribuidores: null,
     releases: null,
+    releasesNoTotal: null,
     comunidade: null,
     escrita: false,
   };
@@ -507,14 +578,19 @@ export interface OpcoesDosReposDoNucleo {
   demo: boolean;
   /** `--sem-github`: as respostas vêm com `estado: 'sem-github'`. */
   semGithub: boolean;
-  /** Onde o cache fica (no núcleo, `new SqliteCacheStore(storage.db)`). */
-  store: CachePort;
+  /**
+   * O cache do GitHub do núcleo (no cli, o mesmo `GithubCache` do trabalho, sobre o banco): uma
+   * instância só, para a pausa por limite valer para as duas leituras.
+   */
+  cache: GithubCache;
   frota: LeituraDaFrota;
   mudancas: CursorDeMudancas;
+  /** As falhas fora do previsto das montagens. */
+  log?: (mensagem: string) => void;
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, store, frota, mudancas }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
     ? new GithubReposSource({ token: 'demo', fetch: criarGithubFalso(DADOS_DA_DEMO, { atrasoMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
@@ -526,6 +602,6 @@ export function criarReposDoNucleo({ demo, semGithub, store, frota, mudancas }: 
     aoDescobrir: () => mudancas.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null }),
     ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
   });
-  const repos = new ReposDoGithub({ fonte, cache: new GithubCache({ store }), sessoes, mudancas });
+  const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });
   return { repos, rota: criarRotaDosRepos(repos) };
 }

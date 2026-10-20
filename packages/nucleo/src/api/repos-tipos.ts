@@ -85,6 +85,16 @@ export interface SemanaDeFrequencia {
   removidas: number;
 }
 
+/**
+ * O que a amostra paginada leu contra o total que o GitHub conta (`issueCount`). As medianas e o
+ * `porTipo` saem da amostra; `truncado` diz que ela não cobre o total.
+ */
+export interface Amostra {
+  lidos: number;
+  total: number;
+  truncado: boolean;
+}
+
 export interface MetricasDoRepo {
   estado: EstadoDosRepos | 'nao-encontrado';
   atualizadoEm: string | null;
@@ -111,10 +121,19 @@ export interface MetricasDoRepo {
   /** Commits por semana no período, a mais antiga primeiro (commit_activity, até 52 semanas). */
   commits: { total: number; porSemana: number; semanas: number[] } | null;
   frequencia: { semanas: SemanaDeFrequencia[]; adicionadas: number; removidas: number } | null;
-  /** Fechadas no período e abertas agora, por tipo de issue (`sem tipo` quando não há). Mediana sobre as fechadas no período. */
-  issues: { porTipo: Array<{ tipo: string; fechadas: number; abertas: number }>; fechadas: number; medianaAteFecharMs: number | null } | null;
+  /**
+   * `fechadas` (no período) e `abertas` (agora) são os totais do GitHub. `porTipo` e a mediana (sobre
+   * as fechadas) saem da amostra, que soma fechadas e abertas lidas (`amostra`).
+   */
+  issues: {
+    porTipo: Array<{ tipo: string; fechadas: number; abertas: number }>;
+    fechadas: number;
+    abertas: number;
+    medianaAteFecharMs: number | null;
+    amostra: Amostra;
+  } | null;
   prs: {
-    /** Mergeados e fechados sem merge no período; abertos agora. */
+    /** Mergeados e fechados sem merge no período (totais do GitHub); abertos agora. */
     mergeados: number;
     fechadosSemMerge: number;
     abertos: number;
@@ -127,13 +146,18 @@ export interface MetricasDoRepo {
     rodadasDeReview: number | null;
     /** De 0 a 1: PRs criados no período cujo autor é bot (`[bot]` ou tipo Bot) ou cujo branch começa com `claude/`. */
     fatiaPorAgentes: number | null;
+    /** Os PRs atualizados no período lidos, de onde saem as medianas, as rodadas e a fatia. */
+    amostra: Amostra;
   } | null;
-  /** Workflow runs concluídos no período (até 300 amostrados); `execucoes` é o total que o GitHub conta. */
+  /** Workflow runs concluídos no período (até 100 amostrados); `execucoes` é o total que o GitHub conta. */
   ci: { taxaVerde: number | null; execucoes: number; duracaoMediaMs: number | null } | null;
   linguagens: Array<{ nome: string; bytes: number; fatia: number }> | null;
   /** Commits, adições e remoções no período, por quem contribuiu (até 100, os mais ativos primeiro). */
   contribuidores: Array<{ login: string; commits: number; adicionadas: number; removidas: number }> | null;
+  /** Releases publicadas no período (das 100 mais novas). */
   releases: number | null;
+  /** Releases desde sempre. */
+  releasesNoTotal: number | null;
   /** health_percentage, 0 a 100. */
   comunidade: number | null;
   /** viewerPermission ADMIN, MAINTAIN ou WRITE. */

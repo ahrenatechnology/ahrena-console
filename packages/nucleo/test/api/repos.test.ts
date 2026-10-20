@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
-import { criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
+import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
 import { SessoesPorRepo } from '../../src/api/repos-sessoes.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
@@ -33,7 +33,7 @@ function dados(extra: Partial<Record<string, Partial<RepoFalso>>> = {}): DadosDo
   };
 }
 
-type Modo = 'ok' | 'falha' | 'pendurado';
+type Modo = 'ok' | 'falha' | 'pendurado' | 'limitado';
 
 interface Montagem {
   repos: ReposDoGithub;
@@ -43,24 +43,47 @@ interface Montagem {
   mudancas: () => Promise<MudancaRegistrada[]>;
   relogio: { agora: number };
   modo: { atual: Modo };
+  /** Pedidos ao `fetch`, em qualquer modo, e o máximo de pedidos em voo ao mesmo tempo. */
+  pedidos: { total: number; emVoo: number; maximoEmVoo: number };
+  cache: GithubCache;
+  logs: string[];
 }
 
-async function montar({ base = dados(), fonteNula = false, token }: { base?: DadosDoGithubFalso; fonteNula?: boolean; token?: () => Promise<string> } = {}): Promise<Montagem> {
+interface OpcoesDaMontagem {
+  base?: DadosDoGithubFalso;
+  fonteNula?: boolean;
+  token?: () => Promise<string>;
+  /** Atraso de cada resposta, em ms reais (para pedidos simultâneos ficarem visíveis). */
+  atrasoMs?: number;
+  fonte?: FonteDosRepos;
+}
+
+async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada }: OpcoesDaMontagem = {}): Promise<Montagem> {
   const relogio = { agora: T0 };
   const agora = () => relogio.agora;
   const gh = criarGithubFalso(base, { agora });
   const modo = { atual: 'ok' as Modo };
   const status: number[] = [];
+  const pedidos = { total: 0, emVoo: 0, maximoEmVoo: 0 };
   const fetch = (async (entrada: string | URL | Request, init?: RequestInit) => {
-    if (modo.atual === 'pendurado') return new Promise<Response>(() => {});
-    if (modo.atual === 'falha') throw new Error('rede fora');
-    const r = await gh.fetch(entrada, init);
-    status.push(r.status);
-    return r;
+    pedidos.total++;
+    pedidos.emVoo++;
+    pedidos.maximoEmVoo = Math.max(pedidos.maximoEmVoo, pedidos.emVoo);
+    try {
+      if (atrasoMs > 0) await new Promise((r) => setTimeout(r, atrasoMs));
+      if (modo.atual === 'pendurado') return await new Promise<Response>(() => {});
+      if (modo.atual === 'falha') throw new Error('rede fora');
+      if (modo.atual === 'limitado') return Response.json({ message: 'API rate limit exceeded' }, { status: 429, headers: { 'retry-after': '120' } });
+      const r = await gh.fetch(entrada, init);
+      status.push(r.status);
+      return r;
+    } finally {
+      pedidos.emVoo--;
+    }
   }) as typeof globalThis.fetch;
   const fonte: FonteDosRepos | null = fonteNula
     ? null
-    : new GithubReposSource({ token: token ?? 'token-de-teste', fetch, now: agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' });
+    : (fonteDada ?? new GithubReposSource({ token: token ?? 'token-de-teste', fetch, now: agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }));
 
   const storage = openSqliteStorage({ path: ':memory:' });
   // P1: motor-de-regras pede permissão (precisa de você), app-receitas foi interrompida (sua vez).
@@ -70,13 +93,16 @@ async function montar({ base = dados(), fonteNula = false, token }: { base?: Dad
   const inicio = cursor.atual;
   const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
+  const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
+  const logs: string[] = [];
   const repos = new ReposDoGithub({
     fonte,
-    cache: new GithubCache({ store: new MemoryCacheStore(), now: agora }),
+    cache,
     sessoes,
     mudancas: cursor,
     agora,
     agendar: (fn, ms) => agendados.push({ fn, ms }),
+    log: (msg) => logs.push(msg),
   });
   return {
     repos,
@@ -85,6 +111,9 @@ async function montar({ base = dados(), fonteNula = false, token }: { base?: Dad
     agendados,
     relogio,
     modo,
+    pedidos,
+    cache,
+    logs,
     mudancas: async () => (await cursor.aguardar(inicio, { timeoutMs: 0 })).mudancas,
   };
 }
@@ -238,6 +267,58 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.equal(l.estado, 'sem-github');
   });
 
+  test('o 202 só é tentado de novo enquanto alguém leu a resposta nos últimos 5 min; o próximo pedido retoma', async () => {
+    const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['contributors'] } }) });
+    const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
+    assert.deepEqual(d.calculando, ['contribuidores']);
+    assert.equal(m.agendados.length, 1);
+    m.relogio.agora += 5 * MIN + 1;
+    const antes = m.repos.chamadas.fonte;
+    m.agendados[0].fn();
+    await m.repos.esperar();
+    assert.equal(m.repos.chamadas.fonte, antes, 'tentou de novo sem ninguém lendo');
+    assert.equal(m.agendados.length, 1, 'agendou outra');
+    // O próximo pedido acha a montagem vencida e retoma; o 202 já passou, e o campo vem.
+    await m.repos.metricas('org-a', 'motor-de-regras');
+    await m.repos.esperar();
+    const depois = await m.repos.metricas('org-a', 'motor-de-regras');
+    assert.ok(m.repos.chamadas.fonte > antes);
+    assert.deepEqual(depois.calculando, []);
+    assert.ok(depois.contribuidores);
+  });
+
+  test('a pausa por limite passa pelo ReposDoGithub: depois do 429 nenhuma chamada sai até o retry-after, e o dado velho fica', async () => {
+    const m = await montar();
+    await listaPronta(m);
+    m.relogio.agora += TTL_DOS_REPOS.estatisticas + MIN;
+    m.modo.atual = 'limitado';
+    const antes = m.pedidos.total;
+    const limitada = await listaPronta(m);
+    assert.equal(m.pedidos.total - antes, 1, 'só a primeira chamada sai; as outras param na pausa');
+    assert.equal(limitada.estado, 'pronto');
+    assert.match(limitada.erro ?? '', /limitou/);
+    assert.ok(m.cache.pauseLeftMs() > 0);
+    // Vencida a resposta (60 s) e ainda na pausa (120 s): nada sai, mesmo com o GitHub de volta.
+    m.modo.atual = 'ok';
+    m.relogio.agora += 61_000;
+    await listaPronta(m);
+    assert.equal(m.pedidos.total - antes, 1);
+    // Passada a pausa, volta a ler.
+    m.relogio.agora += 60_000;
+    const volta = await listaPronta(m);
+    assert.ok(m.pedidos.total - antes > 1);
+    assert.equal(volta.erro, null);
+  });
+
+  test('a pausa de quem divide o cache (o trabalho, no núcleo) também segura os repositórios', async () => {
+    const m = await montar();
+    m.cache.pause(60_000);
+    const l = await listaPronta(m);
+    assert.equal(m.pedidos.total, 0);
+    assert.equal(l.estado, 'erro');
+    assert.match(l.erro ?? '', /limitou/);
+  });
+
   test('o GitHub ainda calcula (202): as 12 semanas ficam vazias e o núcleo tenta de novo em 3 s', async () => {
     const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['commit_activity'] } }) });
     const l = await listaPronta(m);
@@ -283,14 +364,70 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     assert.equal(d.linguagens?.[0].nome, 'TypeScript');
     assert.ok(Math.abs((d.linguagens ?? []).reduce((s, l) => s + l.fatia, 0) - 1) < 0.01);
     assert.ok((d.contribuidores ?? []).length > 0);
-    assert.equal(d.releases, 7);
+    // Releases: as publicadas no período (90 dias: 2, 42 e 82 dias atrás) e o total desde sempre.
+    assert.equal(d.releases, 3);
+    assert.equal(d.releasesNoTotal, 7);
+    // Os totais vêm do `issueCount`; aqui a amostra cobre tudo.
+    assert.deepEqual([d.issues.amostra.truncado, d.prs.amostra.truncado], [false, false]);
+    assert.equal(d.issues.abertas, 4);
     assert.equal(typeof d.comunidade, 'number');
   });
 
-  test('a leitura que muda as métricas registra `repos`/`<dono>/<repo>`', async () => {
+  test('a leitura que muda as métricas registra `repos`/`<dono>/<repo>`, em minúsculas seja qual for a caixa da rota', async () => {
+    const m = await montar();
+    const d = await metricasProntas(m, 'Org-A', 'Motor-de-Regras');
+    assert.equal(d.repo?.completo, 'org-a/motor-de-regras');
+    const chaves = (await m.mudancas()).filter((x) => x.tipo === 'repos').map((x) => x.chave);
+    assert.ok(chaves.includes('org-a/motor-de-regras'));
+    assert.ok(!chaves.some((c) => c !== c.toLowerCase()), chaves.join(','));
+    // A mesma entrada para as duas caixas: dentro da validade, nenhuma chamada nova.
+    const antes = m.repos.chamadas.fonte;
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
+    assert.equal(m.repos.chamadas.fonte, antes);
+  });
+
+  test('duas métricas pedidas juntas não têm chamadas ao GitHub sobrepostas (decisão 0001, item 6)', async () => {
+    const m = await montar({ atrasoMs: 3 });
+    await Promise.all([m.repos.metricas('org-a', 'motor-de-regras'), m.repos.metricas('dev-sintetico', 'cli-de-notas'), m.repos.lista()]);
+    await m.repos.esperar();
+    assert.ok(m.pedidos.total > 10, `só ${m.pedidos.total} pedidos`);
+    assert.equal(m.pedidos.maximoEmVoo, 1);
+    assert.equal((await m.repos.metricas('dev-sintetico', 'cli-de-notas')).estado, 'pronto');
+  });
+
+  test('falha fora do previsto na montagem: vai para o log e para o `erro`, com estado "erro" sem dado anterior', async () => {
+    const quebrada: FonteDosRepos = {
+      lista: async () => ({ login: 'dev-sintetico', organizacoes: [], repos: null as never }),
+      resumo: async () => ({ esperandoReview: 0, fechadasNaSemana: 0 }),
+      detalhe: async () => ({ repo: null as never, prs: [], fechadas: [], abertas: [] }),
+      rest: async () => ({ estado: 'indisponivel', status: 404 }),
+    };
+    const m = await montar({ fonte: quebrada });
+    const l = await listaPronta(m);
+    assert.equal(l.estado, 'erro');
+    assert.match(l.erro ?? '', /\w/);
+    const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
+    assert.equal(d.estado, 'erro');
+    assert.ok(d.erro);
+    assert.equal(m.logs.length, 2);
+    assert.match(m.logs[0], /^repos: a montagem de lista falhou: /);
+    assert.match(m.logs[1], /^repos: a montagem de org-a\/motor-de-regras falhou: /);
+    assert.ok((await m.mudancas()).some((x) => x.tipo === 'repos' && x.chave === 'org-a/motor-de-regras'));
+  });
+
+  test('no máximo 50 combinações de repositório e período em memória: a lida há mais tempo sai', async () => {
     const m = await montar();
     await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.ok((await m.mudancas()).some((x) => x.tipo === 'repos' && x.chave === 'org-a/motor-de-regras'));
+    for (let i = 0; i < 49; i++) await m.repos.metricas('org-a', `outro-${i}`);
+    await m.repos.esperar();
+    // 50 entradas: a primeira ainda está.
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
+    // Lida agora, ela é a mais nova; a 51ª tira `outro-0`, e `outro-0` volta do zero.
+    await m.repos.metricas('org-a', 'mais-um');
+    await m.repos.esperar();
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
+    assert.equal((await m.repos.metricas('org-a', 'outro-0')).estado, 'carregando');
+    await m.repos.esperar();
   });
 
   test('estatística em 202: o campo vem nulo, o nome entra em `calculando`, e a nova tentativa preenche', async () => {
@@ -349,6 +486,8 @@ describe('#105 CA6: o período vale para a tela inteira', () => {
     assert.ok(mes.prs!.mergeados < ano.prs!.mergeados);
     assert.ok(mes.issues!.fechadas < ano.issues!.fechadas);
     assert.ok(mes.ci!.execucoes < ano.ci!.execucoes);
+    assert.deepEqual([mes.releases, padrao.releases, ano.releases], [1, 3, 7]);
+    assert.deepEqual([mes.releasesNoTotal, ano.releasesNoTotal], [7, 7]);
     const commitsDe = (d: MetricasDoRepo) => d.contribuidores!.reduce((s, c) => s + c.commits, 0);
     assert.ok(commitsDe(mes) < commitsDe(ano));
     // As estatísticas do REST não dependem do período: trocar de período não as relê.
@@ -383,6 +522,7 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
   });
 
   test('dono, repo e período fora do padrão dão 400, e nada do pedido chega ao GitHub', async () => {
+    await m.repos.esperar();
     const antes = m.chamadas.length;
     // `..` nem chega: o URL do pedido já o resolve antes da rota.
     for (const ruim of ['-org/x', 'org-/x', 'a--b/x', 'org/a%20b', 'org/a%3Bb', 'a%2Fb/c', `${'a'.repeat(40)}/x`, `org/${'r'.repeat(101)}`, 'org/%E0%A4%A']) {
@@ -391,11 +531,65 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=2a')).status, 400);
     assert.equal((await get('/api/repos/org-a/motor-de-regras/issues')).status, 404);
     await m.repos.esperar();
-    assert.ok(m.chamadas.slice(antes).every((c) => !/%20|%3B|--/.test(c)));
+    assert.equal(m.chamadas.length, antes);
+  });
+
+  test('?atualizar=1 relê o GitHub, mas respeita o mínimo de 30 s entre releituras forçadas', async () => {
+    await m.repos.esperar();
+    await get('/api/repos');
+    await m.repos.esperar();
+    const listas = () => m.chamadas.filter((c) => c === 'GRAPHQL ReposLista').length;
+    const antes = listas();
+    m.relogio.agora += 10_000;
+    await get('/api/repos?atualizar=1');
+    await m.repos.esperar();
+    assert.equal(listas(), antes, 'releu antes de 30 s');
+    m.relogio.agora += 21_000;
+    await get('/api/repos?atualizar=1');
+    await m.repos.esperar();
+    assert.equal(listas(), antes + 1);
   });
 
   test('só GET', async () => {
     const r = await fetch(`${api.url}/api/repos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 405);
+  });
+});
+
+describe('#104 e #105: o serviço como o núcleo monta', () => {
+  test('criarReposDoNucleo({ demo: true }) não chama nenhum fetch fora do GitHub falso', async () => {
+    const original = globalThis.fetch;
+    const fora: string[] = [];
+    globalThis.fetch = (async (entrada: string | URL | Request) => {
+      fora.push(String(entrada));
+      throw new Error('fetch de verdade na demo');
+    }) as typeof fetch;
+    try {
+      const storage = openSqliteStorage({ path: ':memory:' });
+      await semearCenariosDoPainel(storage, 'p1', T0);
+      const frota = new LeituraDaFrota({ storage, contas: new Contas({ storage, arquivo: null }) });
+      const logs: string[] = [];
+      const { repos } = criarReposDoNucleo({
+        demo: true,
+        semGithub: false,
+        cache: new GithubCache({ store: new MemoryCacheStore() }),
+        frota,
+        mudancas: new CursorDeMudancas(),
+        log: (msg) => logs.push(msg),
+      });
+      await repos.lista();
+      await repos.metricas('exemplo-labs', 'vitrine-demo');
+      await repos.esperar();
+      const l = await repos.lista();
+      const d = await repos.metricas('exemplo-labs', 'vitrine-demo');
+      assert.equal(l.estado, 'pronto');
+      assert.equal(l.conta, 'dev-sintetico');
+      assert.equal(d.estado, 'pronto');
+      assert.deepEqual(fora, []);
+      assert.deepEqual(logs, []);
+      await storage.close();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

@@ -137,7 +137,10 @@ describe('#105 CA2: issues por tipo e o tempo mediano até fechar', () => {
       { tipo: 'Sem tipo', fechadas: 1, abertas: 0 },
     ]);
     assert.equal(r.fechadas, 3);
+    assert.equal(r.abertas, 2);
     assert.equal(r.medianaAteFecharMs, 20 * H);
+    // Sem as contagens (cache gravado antes delas), o total é o que se leu.
+    assert.deepEqual(r.amostra, { lidos: 5, total: 5, truncado: false });
   });
 
   test('mediana com número par e vazia', () => {
@@ -170,6 +173,15 @@ describe('#105 CA3: PRs, review e a fatia aberta por agentes', () => {
     assert.equal(r.rodadasDeReview, 1.5);
     // Criados no período: 4; por agente: o do bot e o do branch claude/.
     assert.equal(r.fatiaPorAgentes, 0.5);
+    assert.deepEqual(r.amostra, { lidos: 5, total: 5, truncado: false });
+  });
+
+  test('com as contagens, mergeados e fechados sem merge são o total do GitHub, e a amostra diz se cortou', () => {
+    const r = prsDoPeriodo(prs, 7, desde, { prs: 500, mergeados: 420, fechadosSemMerge: 30 });
+    assert.deepEqual([r.mergeados, r.fechadosSemMerge, r.abertos], [420, 30, 7]);
+    assert.deepEqual(r.amostra, { lidos: 5, total: 500, truncado: true });
+    // As medianas continuam sobre a amostra.
+    assert.equal(r.medianaAteMergeMs, 20 * H);
   });
 
   test('agente: autor Bot, login terminado em [bot] ou branch claude/; o resto não', () => {

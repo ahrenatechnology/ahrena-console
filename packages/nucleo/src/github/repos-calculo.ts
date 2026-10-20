@@ -4,7 +4,8 @@
 // data; o que o GitHub só dá por janela fixa (tráfego: 14 dias) fica como vem.
 
 import type { CiDoRepo, GrupoDeRepos, MetricasDoRepo, Periodo, RepoDaLista, ResumoDosRepos, SemanaDeFrequencia } from '../api/repos-tipos.ts';
-import type { InfoCrua, IssueCrua, ListaCrua, PrCru, RepoCru, ResumoCru } from './repos-source.ts';
+import type { Amostra } from '../api/repos-tipos.ts';
+import type { ContagensCruas, InfoCrua, IssueCrua, ListaCrua, PrCru, RepoCru, ResumoCru } from './repos-source.ts';
 
 export const DIA_MS = 24 * 60 * 60_000;
 export const SEMANA_MS = 7 * DIA_MS;
@@ -148,7 +149,14 @@ export function ciDosRuns(runs: RunsCrus): NonNullable<MetricasDoRepo['ci']> {
 
 export const SEM_TIPO = 'Sem tipo';
 
-export function issuesDoPeriodo(fechadas: readonly IssueCrua[], abertas: readonly IssueCrua[]): NonNullable<MetricasDoRepo['issues']> {
+/** A amostra contra o total; sem total (cache antigo), o total é o que se leu. */
+export function amostraDe(lidos: number, total: number | undefined): Amostra {
+  const t = Math.max(lidos, total ?? lidos);
+  return { lidos, total: t, truncado: lidos < t };
+}
+
+/** Totais pelo `issueCount` (`contagens`); `porTipo` e a mediana pela amostra lida. */
+export function issuesDoPeriodo(fechadas: readonly IssueCrua[], abertas: readonly IssueCrua[], contagens?: Pick<ContagensCruas, 'fechadas' | 'abertas'>): NonNullable<MetricasDoRepo['issues']> {
   const porTipo = new Map<string, { tipo: string; fechadas: number; abertas: number }>();
   const de = (i: IssueCrua) => {
     const tipo = i.issueType?.name ?? SEM_TIPO;
@@ -161,8 +169,10 @@ export function issuesDoPeriodo(fechadas: readonly IssueCrua[], abertas: readonl
   const tempos = fechadas.map((i) => Date.parse(i.closedAt ?? '') - Date.parse(i.createdAt ?? '')).filter((d) => Number.isFinite(d) && d >= 0);
   return {
     porTipo: [...porTipo.values()].sort((a, b) => b.fechadas + b.abertas - (a.fechadas + a.abertas) || a.tipo.localeCompare(b.tipo)),
-    fechadas: fechadas.length,
+    fechadas: contagens?.fechadas ?? fechadas.length,
+    abertas: contagens?.abertas ?? abertas.length,
     medianaAteFecharMs: mediana(tempos),
+    amostra: amostraDe(fechadas.length + abertas.length, contagens ? contagens.fechadas + contagens.abertas : undefined),
   };
 }
 
@@ -179,8 +189,11 @@ export function abertoPorAgente(pr: Pick<PrCru, 'author' | 'headRefName'>): bool
   return /^claude\//.test(pr.headRefName ?? '');
 }
 
-/** PRs do período: mergeados e fechados sem merge no período; abertos agora vêm do repositório. */
-export function prsDoPeriodo(prs: readonly PrCru[], abertosAgora: number, desde: number): NonNullable<MetricasDoRepo['prs']> {
+/**
+ * PRs do período: mergeados e fechados sem merge pelo `issueCount` (`contagens`; sem ele, pela
+ * amostra); abertos agora vêm do repositório. Medianas, rodadas e fatia saem da amostra.
+ */
+export function prsDoPeriodo(prs: readonly PrCru[], abertosAgora: number, desde: number, contagens?: Pick<ContagensCruas, 'prs' | 'mergeados' | 'fechadosSemMerge'>): NonNullable<MetricasDoRepo['prs']> {
   const em = (iso: string | null) => (iso ? Date.parse(iso) : NaN);
   const mergeados = prs.filter((p) => p.mergedAt && em(p.mergedAt) >= desde);
   const fechados = prs.filter((p) => p.state === 'CLOSED' && !p.mergedAt && em(p.closedAt) >= desde);
@@ -192,15 +205,23 @@ export function prsDoPeriodo(prs: readonly PrCru[], abertosAgora: number, desde:
   const removidas = mediana(mergeados.map((p) => p.deletions));
   const rodadas = media(mergeadosComReview.map((p) => (p.pedidosDeMudanca?.totalCount ?? 0) + 1));
   return {
-    mergeados: mergeados.length,
-    fechadosSemMerge: fechados.length,
+    mergeados: contagens?.mergeados ?? mergeados.length,
+    fechadosSemMerge: contagens?.fechadosSemMerge ?? fechados.length,
     abertos: abertosAgora,
     medianaAteMergeMs: mediana(mergeados.map((p) => em(p.mergedAt) - em(p.createdAt)).filter((d) => d >= 0)),
     medianaAtePrimeiroReviewMs: mediana(primeiroReview),
     tamanhoMediano: adicionadas === null || removidas === null ? null : { adicionadas, removidas },
     rodadasDeReview: rodadas === null ? null : arred(rodadas, 1),
     fatiaPorAgentes: criados.length ? arred(criados.filter(abertoPorAgente).length / criados.length, 4) : null,
+    amostra: amostraDe(prs.length, contagens?.prs),
   };
+}
+
+/** Releases publicadas desde `desde`, entre as 100 mais novas; sem os nós (cache antigo), `null`. */
+export function releasesDoPeriodo(info: Pick<InfoCrua, 'releases'>, desde: number): number | null {
+  const nos = info.releases.nodes;
+  if (!nos) return null;
+  return nos.filter((r) => r.publishedAt && Date.parse(r.publishedAt) >= desde).length;
 }
 
 export function repoDoDetalhe(info: InfoCrua): NonNullable<MetricasDoRepo['repo']> {

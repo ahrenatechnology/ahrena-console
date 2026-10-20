@@ -14,7 +14,8 @@
 //   outra geração, ou mais velho que a fila, volta na hora com `reiniciar: true` (releia tudo).
 // - Relógio injetável, para os testes serem determinísticos.
 
-// `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave `lista` ou `<dono>/<repo>`.
+// `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave `lista` ou `<dono>/<repo>`
+// em minúsculas. Só a rota HTTP o expõe; o `wait_for_changes` do MCP o filtra (mcp.ts).
 export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta', 'repos'] as const;
 export type TipoDeMudanca = (typeof TIPOS_DE_MUDANCA)[number];
 

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { RateLimitedError } from '../../src/github/cache.ts';
+import { inicioDoPeriodo, issuesDoPeriodo, prsDoPeriodo, releasesDoPeriodo } from '../../src/github/repos-calculo.ts';
 import { buscasDoDetalhe, buscasDoResumo, GithubReposSource, PAGINAS_DA_BUSCA, SemGithubError } from '../../src/github/repos-source.ts';
 
 interface Pedido {
@@ -47,6 +48,15 @@ describe('#104 CA3 e #105: REST com ETag', () => {
     await assert.rejects(fonte(fetchDe(() => new Response('', { status: 500 })).f).rest('/repos/a/b/x', null), /500/);
   });
 
+  test('caminho fora de /repos/<dono>/<repo>/ com o nome do GitHub: erro, sem chamar o GitHub', async () => {
+    const { f, pedidos } = fetchDe(() => Response.json([]));
+    for (const ruim of ['/user', '/repos/a/b', '/repos/-a/b/languages', '/repos/a/../languages', '/repos/a b/c/languages', '/repos/a/b%3Bc/languages']) {
+      await assert.rejects(fonte(f).rest(ruim, null), /fora de/, ruim);
+    }
+    assert.equal(pedidos.length, 0);
+    assert.equal((await fonte(f).rest('/repos/a/b.c_d-e/stats/contributors?x=1', null)).estado, 'ok');
+  });
+
   test('sem token do gh: SemGithubError, sem chamar o GitHub', async () => {
     const { f, pedidos } = fetchDe(() => Response.json({}));
     const s = new GithubReposSource({ token: () => Promise.reject(new Error('sem token')), fetch: f });
@@ -61,6 +71,8 @@ describe('#105: o detalhe pelo GraphQL', () => {
       prs: 'repo:org/repo is:pr updated:>=2026-07-17 sort:updated-desc',
       fechadas: 'repo:org/repo is:issue is:closed closed:>=2026-07-17 sort:updated-desc',
       abertas: 'repo:org/repo is:issue is:open sort:updated-desc',
+      mergeados: 'repo:org/repo is:pr is:merged merged:>=2026-07-17',
+      fechadosSemMerge: 'repo:org/repo is:pr is:closed is:unmerged closed:>=2026-07-17',
     });
     assert.match(buscasDoResumo('eu', ['org-a'], '2026-10-08').review, /review:required.*user:eu org:org-a/);
   });
@@ -70,8 +82,8 @@ describe('#105: o detalhe pelo GraphQL', () => {
     const pagina = (temMais: boolean) => ({ issueCount: 999, pageInfo: { hasNextPage: temMais, endCursor: 'c' }, nodes: [{ createdAt: 'x', issueType: null }] });
     const { f, pedidos } = fetchDe((p) => {
       const op = /query (\w+)/.exec(p.body!.query)![1];
-      if (op === 'RepoDetalhe' && p.body!.variables.r === 'nada') return Response.json({ data: { repository: null, prs: pagina(false), fechadas: pagina(false), abertas: pagina(false) }, errors: [{ type: 'NOT_FOUND', message: 'x' }] });
-      if (op === 'RepoDetalhe') return Response.json({ data: { repository: { nameWithOwner: 'o/r' }, prs: pagina(false), fechadas: pagina(true), abertas: pagina(false) } });
+      if (op === 'RepoDetalhe' && p.body!.variables.r === 'nada') return Response.json({ data: { repository: null, prs: pagina(false), fechadas: pagina(false), abertas: pagina(false), mergeados: pagina(false), fechadosSemMerge: pagina(false) }, errors: [{ type: 'NOT_FOUND', message: 'x' }] });
+      if (op === 'RepoDetalhe') return Response.json({ data: { repository: { nameWithOwner: 'o/r' }, prs: pagina(false), fechadas: pagina(true), abertas: pagina(false), mergeados: pagina(false), fechadosSemMerge: pagina(false) } });
       paginas++;
       return Response.json({ data: { search: pagina(true) } });
     });
@@ -81,5 +93,39 @@ describe('#105: o detalhe pelo GraphQL', () => {
     assert.equal(d?.fechadas.length, PAGINAS_DA_BUSCA.fechadas);
     assert.equal(paginas, PAGINAS_DA_BUSCA.fechadas - 1);
     assert.ok(pedidos.every((p) => p.url === 'https://api.falso/graphql'));
+  });
+
+  test('os totais vêm do issueCount: com 999 contados e 5 lidos, o total diz 999 e a amostra diz truncado', async () => {
+    const AGORA = Date.parse('2026-10-15T12:00:00Z');
+    const desde = inicioDoPeriodo('90d', AGORA);
+    const quando = new Date(AGORA - 3 * 24 * 3_600_000).toISOString();
+    const cinco = <T>(no: T) => ({ issueCount: 999, pageInfo: { hasNextPage: false, endCursor: null }, nodes: Array.from({ length: 5 }, () => no) });
+    const pr = { createdAt: quando, mergedAt: quando, closedAt: quando, state: 'MERGED', additions: 1, deletions: 1, headRefName: 'x', author: null, reviews: null, pedidosDeMudanca: null };
+    const releases = { totalCount: 40, nodes: [{ publishedAt: quando }, { publishedAt: null }, { publishedAt: '2025-01-01T00:00:00Z' }] };
+    const { f, pedidos } = fetchDe(() =>
+      Response.json({
+        data: {
+          repository: { nameWithOwner: 'o/r', releases },
+          prs: cinco(pr),
+          fechadas: cinco({ createdAt: quando, closedAt: quando, issueType: null }),
+          abertas: cinco({ issueType: { name: 'Bug' } }),
+          mergeados: { issueCount: 999 },
+          fechadosSemMerge: { issueCount: 999 },
+        },
+      }),
+    );
+    const d = await fonte(f).detalhe('o', 'r', '2026-07-17');
+    assert.ok(d);
+    assert.equal(pedidos.length, 1);
+    assert.match(pedidos[0].body!.query, /mergeados: search/);
+    assert.deepEqual(d.contagens, { fechadas: 999, abertas: 999, prs: 999, mergeados: 999, fechadosSemMerge: 999 });
+    const issues = issuesDoPeriodo(d.fechadas, d.abertas, d.contagens);
+    assert.deepEqual([issues.fechadas, issues.abertas], [999, 999]);
+    assert.deepEqual(issues.amostra, { lidos: 10, total: 1998, truncado: true });
+    assert.equal(issues.porTipo.reduce((s, t) => s + t.fechadas + t.abertas, 0), 10);
+    const prs = prsDoPeriodo(d.prs, 3, desde, d.contagens);
+    assert.deepEqual([prs.mergeados, prs.fechadosSemMerge, prs.abertos], [999, 999, 3]);
+    assert.deepEqual(prs.amostra, { lidos: 5, total: 999, truncado: true });
+    assert.equal(releasesDoPeriodo(d.repo, desde), 1);
   });
 });
