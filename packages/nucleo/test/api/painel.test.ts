@@ -24,7 +24,7 @@ import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, t
 import { parseLine } from '../../src/ingest/historico/transcript.ts';
 import { ingestHook } from '../../src/ingest/hooks/index.ts';
 import { T0, at, event, session } from '../fixtures.ts';
-import type { SessionPlan } from '../../src/plano/modelo.ts';
+import type { SessionPlan } from '../../src/plan/model.ts';
 
 const AGORA = Date.parse(T0);
 

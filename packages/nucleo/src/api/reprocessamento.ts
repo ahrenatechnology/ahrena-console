@@ -1,9 +1,9 @@
 // O que a importação do histórico deixou de fora, e como a API completa.
 //
-// - Sessões importadas antes do plano (#19) ou do histórico de planos (#131): a gravação do plano
-//   só vê eventos novos, então os planos antigos nunca entraram, e a importação antiga não guardou
-//   a entrada das ferramentas do plano. `reconstruirPlano` refaz o plano e o histórico de cada
-//   sessão a partir dos eventos gravados e dos mesmos eventos relidos do transcript.
+// - Sessions imported before the plan (#19) or the plan history (#131): the plan write only sees
+//   new events, so the old plans never came in, and the old import did not keep the plan tools'
+//   input. `rebuildPlan` rebuilds each session's plan and history from the stored events and the
+//   same events re-read from the transcript.
 // - Decisões (#99): a captura pelos hooks só vê o que acontece com o núcleo no ar. As respostas ao
 //   AskUserQuestion, os planos aprovados e as permissões negadas que ficaram só no transcript
 //   entram pela captura do transcript, que agora roda na importação (`capturarDoTranscript`) e
@@ -22,8 +22,8 @@ import { markNoise } from '../decisoes/registro.ts';
 import { isDismissedAnswer, looksLikeCorrection, shortChoice } from '../decisoes/texto.ts';
 import { eventosDoTranscript, type SessaoImportada } from '../ingest/historico/importer.ts';
 import type { Session, SessionEvent } from '../model.ts';
-import { eventoDoPlano } from '../plano/extracao.ts';
-import { reconstruirPlano } from '../plano/gravacao.ts';
+import { isPlanEvent } from '../plan/extraction.ts';
+import { rebuildPlan } from '../plan/recording.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
 
 /** O nome do reprocessamento; um nome novo faz rodar de novo em todo banco. */
@@ -78,8 +78,8 @@ export async function reprocessarHistorico(o: {
       try {
         const t = transcriptDe(s, o.raiz);
         const arquivo = t && existsSync(t) ? t : null;
-        const relidos = arquivo ? await eventosDoTranscript(arquivo, s.id, eventoDoPlano) : [];
-        const n = await reconstruirPlano(o.storage, s.id, relidos);
+        const relidos = arquivo ? await eventosDoTranscript(arquivo, s.id, isPlanEvent) : [];
+        const n = await rebuildPlan(o.storage, s.id, relidos);
         if (n > 0) (r.comPlano++, (r.planos += n));
         if (o.decisoes && arquivo) r.decisoes += (await captureTranscriptFile(o.decisoes, arquivo, agora())).created.length;
       } catch (err) {

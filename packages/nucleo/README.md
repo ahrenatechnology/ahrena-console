@@ -23,7 +23,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
 | [src/changes/](src/changes/) | Cursor de mudanças e long polling: `awaitChanges`, `GET /api/changes` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
-| [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
+| [src/plan/](src/plan/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 | [src/history/](src/history/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
 | [src/agent-config/](src/agent-config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/owner/](src/owner/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
@@ -211,7 +211,7 @@ A sessão persiste `active`, `completed`, `error` ou `abandoned`. `waiting` não
 
 Item 1.9. O plano é a lista de tarefas que o agente mantém enquanto trabalha, não a issue do GitHub (essa é o Trabalho). `getPlan(sessionId)` devolve o `SessionPlan`: os passos na ordem, cada um com texto, texto no gerúndio (`activeForm`), estado (`pending`, `in_progress`, `completed`) e dono, mais `done`/`total`, o passo atual (`currentStepId`, o primeiro em andamento) e a hora da última mudança (`changedAt`).
 
-- **De onde vem:** dos hooks `PreToolUse` e `PostToolUse` (`ingestHook`) e do transcript (importador e seguidor), que chamam `atualizarPlano(porta, sessionId, eventos)` com os eventos que acabaram de gravar. O transcript guarda a entrada dessas ferramentas no evento (`tool_input`, curta) e o id da tarefa no resultado do TaskCreate (`taskId`).
+- **De onde vem:** dos hooks `PreToolUse` e `PostToolUse` (`ingestHook`) e do transcript (importador e seguidor), que chamam `updatePlan(porta, sessionId, eventos)` com os eventos que acabaram de gravar. O transcript guarda a entrada dessas ferramentas no evento (`tool_input`, curta) e o id da tarefa no resultado do TaskCreate (`taskId`).
 - **Lista inteira:** TodoWrite e `update_plan` com `items` (de qualquer plugin: `mcp__<servidor>__update_plan`) reescrevem o plano. O passo de mesmo texto mantém o dono e a hora. Lista mais velha que a última mudança não volta o plano.
 - **Incremental:** TaskCreate acrescenta um passo com id provisório (o próximo número), trocado pelo do resultado; TaskUpdate muda estado, texto e dono, e `deleted` tira o passo. `update_plan` com `advance`, `done` e `start` (posições a partir de 1) anda na lista que já existe.
 - **`/clear`:** `SessionStart` com `source: clear` ou o prompt `/clear` do transcript esvazia o plano.
@@ -222,11 +222,11 @@ Item 1.9. O plano é a lista de tarefas que o agente mantém enquanto trabalha, 
 
 Issue #131. A sessão abre vários planos; cada um fica guardado como `PlanRecord`, com início, fim, passos, `done`/`total` e resultado: `current` (o aberto), `completed` (todos os passos feitos) ou `abandoned` (X de Y). A porta grava com `putPlanRecord` e lista com `listPlanRecords(sessionId)`, do mais recente para o mais antigo (migração 5, tabela `session_plan_history`).
 
-- **A regra:** `separarPlano(anterior, novo, incremental)` em [historico.ts](src/plano/historico.ts). Plano novo quando a lista é trocada por outra com menos da metade dos passos em comum, ou quando o anterior terminou e vem passo novo por fazer (ou a mesma lista inteira de volta a pendente). Marcar, desmarcar, reordenar, acrescentar e renomear continuam no plano. Lista vazia (`/clear`, TodoWrite vazio) fecha o plano.
+- **A regra:** `splitPlan(previous, next, incremental)` em [history.ts](src/plan/history.ts). Plano novo quando a lista é trocada por outra com menos da metade dos passos em comum, ou quando o anterior terminou e vem passo novo por fazer (ou a mesma lista inteira de volta a pendente). Marcar, desmarcar, reordenar, acrescentar e renomear continuam no plano. Lista vazia (`/clear`, TodoWrite vazio) fecha o plano.
 - **TaskCreate depois das tarefas feitas:** as tarefas antigas continuam na lista da ferramenta, mas são do plano anterior; o novo leva só as novas.
 - **Plano gravado antes da #131:** vira o primeiro do histórico na próxima mudança. O estado fica em `metadata.historico`.
 - **`wrap_up`:** no Claude Desktop, o fechamento do turno dá por feita a lista do `update_plan`. O `wrap_up` do principal marca os passos que faltam; sem isso, quase todo plano do Desktop ficava abandonado.
-- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`reconstruirPlano`, em [src/api/reprocessamento.ts](src/api/reprocessamento.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessamentos` (migração 6).
+- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`rebuildPlan`, em [src/api/reprocessamento.ts](src/api/reprocessamento.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessamentos` (migração 6).
 
 ## Contas
 
