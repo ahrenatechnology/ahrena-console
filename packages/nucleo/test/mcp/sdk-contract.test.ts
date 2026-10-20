@@ -14,7 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { NOW, seed } from './helpers.ts';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '../../src/mcp/cli.ts');

@@ -8,8 +8,8 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type ApiLocal, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
-import { simular } from '../../src/simulador/index.ts';
+import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
+import { simular } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem

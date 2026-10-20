@@ -8,8 +8,8 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/rota-analytics.ts';
 import type { TokenCounts } from '../../src/model.ts';
-import { semearHistorico } from '../../src/simulador/historico.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { semearHistorico } from '../../src/simulator/history.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { account, agent, event, session } from '../fixtures.ts';
 
 // Terça-feira, 12h em São Paulo.

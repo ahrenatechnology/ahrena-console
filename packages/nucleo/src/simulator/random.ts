@@ -1,5 +1,5 @@
-// Gerador pseudoaleatório com semente. Mesma semente, mesma sequência, em qualquer máquina:
-// é o que torna a simulação reproduzível. Não serve para criptografia.
+// Seeded pseudo-random generator. Same seed, same sequence, on any machine: that is what makes
+// the simulation reproducible. Not for cryptography.
 
 /** Hash de texto em 32 bits (FNV-1a), para transformar a semente em estado inicial. */
 export function hash32(texto: string): number {

@@ -9,7 +9,7 @@
 
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, type TelemetryReading } from '../telemetry/model.ts';
 import type { TelemetryCollector, TelemetryStore } from '../telemetry/ports.ts';
-import { hash32 } from './aleatorio.ts';
+import { hash32 } from './random.ts';
 
 export type SimulatedProfile = 'local' | 'workstation';
 

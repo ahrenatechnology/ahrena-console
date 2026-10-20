@@ -6,7 +6,7 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { atencaoDe } from '../../src/api/atencao.ts';
 import { Contas, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
 import { aplicarEvento, resumoVazio } from '../../src/api/resumo.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { T0, at, event } from '../fixtures.ts';
 
 const S = 'sess-atencao';

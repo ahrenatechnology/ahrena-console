@@ -1,5 +1,5 @@
 // Repositórios (#104) e métricas de um repositório (#105) pelo serviço e pela rota, contra o GitHub
-// falso (src/simulador/github-falso.ts): nenhuma chamada à API real e nenhum token lido. As sessões
+// falso (src/simulator/fake-github.ts): nenhuma chamada à API real e nenhum token lido. As sessões
 // vêm do cenário P1 do simulador, pela mesma leitura do MCP.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
@@ -11,8 +11,8 @@ import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
 import { FleetReader } from '../../src/mcp/fleet.ts';
 import { ChangeCursor, type RecordedChange } from '../../src/changes/cursor.ts';
-import { criarGithubFalso, gitDaDemo, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { criarGithubFalso, gitDaDemo, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 
 const T0 = Date.parse('2026-10-15T12:00:00Z');
 const MIN = 60_000;

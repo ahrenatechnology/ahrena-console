@@ -1,7 +1,7 @@
-// Cenários do painel lateral (P1 a P7 e P9 dos wireframes, docs/wireframes), para demonstrar e
-// capturar o painel sem dados reais: `npm run api -- --demo p1`. Tudo é sintético, com o
-// vocabulário do simulador: projetos sob /simulacao, repositório `exemplo/simulacao` e duas
-// contas sintéticas (UUIDs de zeros). A sessão do painel, seja qual for o id que ele mande, vira `sim-painel-esta`.
+// Side panel scenarios (P1 to P7 and P9 of the wireframes, docs/wireframes), to demo and capture
+// the panel without real data: `npm run api -- --demo p1`. All synthetic, with the simulator's
+// vocabulary: projects under /simulacao, repository `exemplo/simulacao` and two synthetic accounts
+// (all-zero UUIDs). The panel's session, whatever id it sends, becomes `sim-painel-esta`.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,7 +15,7 @@ import { linkSession, markPromoted, registerDecision, type DecisionDraft } from 
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
-import { RAIZ } from './vocabulario.ts';
+import { RAIZ } from './vocabulary.ts';
 
 /** As checagens do CI como no P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
 const CHECKS_DO_P1: Record<string, CiCounts> = {

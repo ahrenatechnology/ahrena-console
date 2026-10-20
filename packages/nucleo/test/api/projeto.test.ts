@@ -10,7 +10,7 @@ import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../
 import { PROJECT_ERROR_CODES, quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/projeto.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { createGithubProject, GithubProject, toProjectCard, type RawProjectItem } from '../../src/github/project.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador, RAIAS_DO_SIMULADOR } from '../../src/simulador/projeto.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador, RAIAS_DO_SIMULADOR } from '../../src/simulator/project.ts';
 import { clock, replayFetch, type Recorded } from '../github/helpers.ts';
 
 const recordedBoard: Recorded[] = JSON.parse(readFileSync(new URL('../github/fixtures/project.json', import.meta.url), 'utf8'));

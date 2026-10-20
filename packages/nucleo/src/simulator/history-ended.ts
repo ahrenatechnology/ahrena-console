@@ -1,13 +1,13 @@
-// O histórico do P4 (#33, C15): sessões encerradas em vários dias, uma com erro e uma abandonada,
-// e uma ligação depois do /clear (a de ontem continuou em outra). Tudo sintético, com o vocabulário
-// do simulador. Só o P4 tem: nos outros cenários, nada, para os painéis deles não mudarem.
+// P4's history (#33, C15): sessions ended over several days, one with an error and one abandoned,
+// and a link after /clear (yesterday's continued in another). All synthetic, with the simulator's
+// vocabulary. Only P4 has it: the other scenarios get nothing, so their panels do not change.
 
 import { emptyTokenCounts, type Session, type SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import { linkSession } from '../decisions/registry.ts';
-import type { CenarioDoPainel } from './painel.ts';
-import { RAIZ } from './vocabulario.ts';
+import type { CenarioDoPainel } from './panel.ts';
+import { RAIZ } from './vocabulary.ts';
 
 const MIN = 60_000;
 const DIA = 24 * 60;

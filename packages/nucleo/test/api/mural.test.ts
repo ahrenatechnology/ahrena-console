@@ -13,7 +13,7 @@ import {
   type Mural,
   type SessaoDoDesktop,
 } from '../../src/api/index.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import type { StoragePort } from '../../src/storage-port.ts';
 import { T0, session } from '../fixtures.ts';
 

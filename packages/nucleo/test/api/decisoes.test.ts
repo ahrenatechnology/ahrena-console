@@ -7,7 +7,7 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, translateBody, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel, type CenarioDoPainel } from '../../src/simulador/painel.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel, type CenarioDoPainel } from '../../src/simulator/panel.ts';
 import { T0, session } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);

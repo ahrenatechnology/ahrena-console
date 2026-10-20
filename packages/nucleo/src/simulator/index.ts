@@ -1,4 +1,4 @@
-export { Aleatorio, hash32 } from './aleatorio.ts';
+export { Aleatorio, hash32 } from './random.ts';
 export {
   LIMITE_DE_CONTEXTO,
   MINUTOS_ATE_ABANDONO,
@@ -10,7 +10,7 @@ export {
   type Operacao,
   type Roteiro,
   type TipoDeCaos,
-} from './cenario.ts';
-export { semearHistorico, type OpcoesDoHistorico, type ResumoDoHistorico } from './historico.ts';
-export { PRECOS_ILUSTRATIVOS, simular, type Modo, type OpcoesDaSimulacao, type Resumo } from './simulador.ts';
+} from './scenario.ts';
+export { semearHistorico, type OpcoesDoHistorico, type ResumoDoHistorico } from './history.ts';
+export { PRECOS_ILUSTRATIVOS, simular, type Modo, type OpcoesDaSimulacao, type Resumo } from './simulator.ts';
 export { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry, simulatedReading, type SimulatedProfile } from './telemetry.ts';

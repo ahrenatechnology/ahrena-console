@@ -17,8 +17,8 @@ import {
   type KanbanHttp,
 } from '../../src/api/kanban.ts';
 import { displayStatus, type Agent, type Session } from '../../src/model.ts';
-import { simular } from '../../src/simulador/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { simular } from '../../src/simulator/index.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
 

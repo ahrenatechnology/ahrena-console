@@ -13,7 +13,7 @@ import { createDevConsole, DEV_CONSOLE_TTL, type DevConsole, type DevConsoleView
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import type { Session } from '../../src/model.ts';
-import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../../src/simulador/dev-console.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../../src/simulator/dev-console.ts';
 import { agent, event, session } from '../fixtures.ts';
 import { clock, type Clock } from '../github/helpers.ts';
 import { ElementoFalso, instalarDomFalso, texto } from './dom-falso.ts';

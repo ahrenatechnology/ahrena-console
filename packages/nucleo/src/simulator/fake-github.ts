@@ -1,15 +1,15 @@
-// GitHub falso dos repositórios (#104 e #105): um `fetch` que responde ao GraphQL e ao REST que
-// src/github/repos-source.ts chama, com dados sintéticos e determinísticos. Serve à demonstração
-// (`npm run api -- --demo`) e aos testes; nunca sai para a rede, e qualquer rota que ele não
-// conhece dá 404 e fica registrada em `chamadas`.
+// Fake GitHub for the repositories (#104 and #105): a `fetch` that answers the GraphQL and REST that
+// src/github/repos-source.ts calls, with synthetic, deterministic data. It serves the demo
+// (`npm run api -- --demo`) and the tests; it never goes to the network, and any route it does not
+// know gives 404 and is recorded in `chamadas`.
 //
-// Imita do GitHub o que as telas dependem: ETag e 304 com `If-None-Match`, 202 enquanto uma
-// estatística "calcula" (`calcularPrimeiro`), 403 no tráfego e nos alertas sem escrita.
-// Os nomes seguem o vocabulário do simulador (vocabulario.ts): orgs `exemplo-labs` e
-// `estudio-ficticio`, conta `dev-sintetico`, projetos sob /simulacao.
+// It imitates what the screens depend on from GitHub: ETag and 304 with `If-None-Match`, 202 while a
+// statistic "computes" (`calcularPrimeiro`), 403 on traffic and on alerts without write access.
+// Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
+// `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
-import { Aleatorio, hash32 } from './aleatorio.ts';
-import { RAIZ } from './vocabulario.ts';
+import { Aleatorio, hash32 } from './random.ts';
+import { RAIZ } from './vocabulary.ts';
 
 export interface RepoFalso {
   dono: string;
