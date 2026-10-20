@@ -48,7 +48,7 @@ function usageData(model: string, messageId: string, tokens: Partial<TokenCounts
 function makeAgent(id: string, sessionId: string, type: Agent['type'], start: string, extra: Partial<Agent> = {}): Agent {
   return {
     id, sessionId, name: null, type, subagentType: null, status: 'working', task: null, currentTool: null,
-    parentAgentId: null, startedAt: start, endedAt: null, updatedAt: start, metadata: { simulado: true }, ...extra,
+    parentAgentId: null, startedAt: start, endedAt: null, updatedAt: start, metadata: { simulated: true }, ...extra,
   };
 }
 
@@ -73,7 +73,7 @@ async function writePermissionSession(storage: StoragePort, now: number) {
     id, name: 'Migração do esquema de pedidos', status: 'active', cwd: `${ROOT}/motor-de-regras`, model: OPUS, source: 'startup',
     startedAt: start, endedAt: null, awaitingInputSince: iso(now, 2), awaitingReason: 'notification', updatedAt: iso(now, 2),
     accountId: null, accountSource: null,
-    metadata: { simulado: true, branch: 'feat/58-pedidos', estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: null, delegacoes: {}, background: {} } },
+    metadata: { simulated: true, branch: 'feat/58-pedidos', states: { lastEvent: null, idsAtLastInstant: [], errorAt: null, delegations: {}, background: {} } },
   });
   await storage.putAgent(makeAgent(main, id, 'main', start, { status: 'waiting', currentTool: 'Bash' }));
   await storage.putAgent(makeAgent(explore, id, 'subagent', iso(now, 30), { subagentType: 'Explore', name: 'mapear o esquema atual', status: 'completed', endedAt: iso(now, 28), parentAgentId: main }));

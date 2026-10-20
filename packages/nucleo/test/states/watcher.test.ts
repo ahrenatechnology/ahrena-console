@@ -69,8 +69,8 @@ describe('process probe', () => {
     const v = checkWatcherRules(state({}, [mainAgent({ currentTool: 'Bash' })]), minute(1), new Set(['/other']));
     assert.equal(v?.rule, 'probe');
     assert.equal(v?.event.type, 'SessionEnd');
-    assert.deepEqual(v?.event.data, { sintetico: true, reason: 'processo_encerrado' });
-    assert.match(v!.event.id, /^estado:[0-9a-f]{32}$/);
+    assert.deepEqual(v?.event.data, { synthetic: true, reason: 'process_ended' });
+    assert.match(v!.event.id, /^state:[0-9a-f]{32}$/);
     assert.equal(transition(state(), v!.event).session.status, 'completed');
   });
 

@@ -94,7 +94,7 @@ describe('meter from the transcript', () => {
     ]);
     const m = await mainMeter(sid);
     assert.deepEqual(summary(m), { used: 62_600, window: DEFAULT_WINDOW, overflows: 0, label: '62.6k / 200k (31%)' });
-    assert.equal(m.windowSource, 'modelo');
+    assert.equal(m.windowSource, 'model');
     assert.equal(m.model, 'claude-opus-5-5');
     assert.equal(m.measuredAt, at(2));
   });
@@ -160,7 +160,7 @@ describe('meter from the transcript', () => {
     await ingestHook(store, { session_id: sid, hook_event_name: 'SessionStart', source: 'startup', model: 'claude-opus-5-5[1m]' }, { receivedAt: at(0) });
     await importTranscript('longo', sid, [message(sid, 1, { input: 2_000, cacheRead: 60_000 })]);
     let m = await mainMeter(sid);
-    assert.deepEqual([m.usedTokens, m.windowTokens, m.windowSource, contextLabel(m)], [62_000, LONG_WINDOW, 'sufixo', '62k / 1M (6%)']);
+    assert.deepEqual([m.usedTokens, m.windowTokens, m.windowSource, contextLabel(m)], [62_000, LONG_WINDOW, 'suffix', '62k / 1M (6%)']);
 
     const sid2 = '00000000-0000-4000-8000-0000000000c6';
     await importTranscript('observado', sid2, [
@@ -169,7 +169,7 @@ describe('meter from the transcript', () => {
       message(sid2, 3, { input: 1_000, cacheRead: 100_000 }),
     ]);
     m = await mainMeter(sid2);
-    assert.deepEqual([m.usedTokens, m.windowTokens, m.windowSource], [101_000, LONG_WINDOW, 'observado'], 'the window does not shrink');
+    assert.deepEqual([m.usedTokens, m.windowTokens, m.windowSource], [101_000, LONG_WINDOW, 'observed'], 'the window does not shrink');
   });
 });
 
@@ -207,7 +207,7 @@ describe('applyToMeter', () => {
   test('the compaction\'s preTokens does not change the window ("prompt too long" above 200k)', () => {
     const c = event({ id: 'c1', type: 'Compaction', createdAt: at(1), data: { subtype: 'compact_boundary', compact: { trigger: 'auto', preTokens: 260_000, postTokens: 20_000 } } });
     const m = applyToMeter(emptyMeter('s1', null, at(0)), c, null)!;
-    assert.deepEqual([m.windowTokens, m.windowSource, m.usedTokens, m.compactions], [DEFAULT_WINDOW, 'modelo', 20_000, 1]);
+    assert.deepEqual([m.windowTokens, m.windowSource, m.usedTokens, m.compactions], [DEFAULT_WINDOW, 'model', 20_000, 1]);
   });
 
   test('dates with different precisions are compared as instants', async () => {
@@ -282,7 +282,7 @@ describe('panel API', () => {
   });
 });
 
-describe('reprocessing contexto-1', () => {
+describe('reprocessing context-1', () => {
   test('rebuilds the meter of a session imported before 1.7, with the compactions reread from the transcript and the subagent', async () => {
     const sid = '00000000-0000-4000-8000-0000000000c9';
     const lines = [

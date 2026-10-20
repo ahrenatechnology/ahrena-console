@@ -32,18 +32,6 @@ export const CHAOS_KINDS = ['stuck', 'error', 'abandonment', 'overflow', 'swarm'
 export type ChaosKind = (typeof CHAOS_KINDS)[number];
 export type Script = 'normal' | ChaosKind;
 
-/**
- * The value each script is stored with in `metadata.roteiro` of a simulated session: persisted, so it
- * keeps the old Portuguese value (phase 5 renames stored values).
- */
-export const STORED_SCRIPT: Readonly<Record<Script, string>> = {
-  normal: 'normal',
-  stuck: 'travada',
-  error: 'erro',
-  abandonment: 'abandono',
-  overflow: 'estouro',
-  swarm: 'enxame',
-};
 
 export const CONTEXT_LIMIT = 200_000;
 export const MINUTES_UNTIL_ABANDONED = 180;
@@ -112,7 +100,7 @@ export function generateScenario(options: ScenarioOptions): Scenario {
     configDirs: [c.configDir],
     firstSeenAt: options.clock(0),
     lastSeenAt: options.clock(0),
-    metadata: { simulado: true },
+    metadata: { simulated: true },
   }));
 
   const operations: Operation[] = [];
@@ -229,7 +217,7 @@ class SimulatedSession {
       startedAt: t,
       endedAt: null,
       updatedAt: t,
-      metadata: { simulado: true },
+      metadata: { simulated: true },
     };
   }
 
@@ -353,7 +341,7 @@ class SimulatedSession {
         startedAt: this.clock(start),
         endedAt: null,
         updatedAt: this.clock(start),
-        metadata: { simulado: true },
+        metadata: { simulated: true },
       };
       this.writeAgent(start, sub);
       const model = this.rng.pick(V.MODELS.subagent);
@@ -499,8 +487,8 @@ class SimulatedSession {
         usage.tokens = emptyTokenCounts();
         this.event(t, this.main.id, 'PreCompact', null, `contexto estourou (${this.overflows}x): compactação automática`, {
           trigger: 'auto',
-          contexto: this.context,
-          limite: CONTEXT_LIMIT,
+          context: this.context,
+          limit: CONTEXT_LIMIT,
         });
         this.context = this.rng.int(18_000, 40_000);
       }
@@ -541,12 +529,11 @@ class SimulatedSession {
 
   private writeSession(t: number): void {
     this.session.updatedAt = this.clock(t);
-    // Persisted metadata keys stay as they are (phase 5).
     this.session.metadata = {
-      simulado: true,
-      roteiro: STORED_SCRIPT[this.script],
-      projeto: this.project,
-      contexto: { usados: this.context, limite: CONTEXT_LIMIT, estouros: this.overflows },
+      simulated: true,
+      script: this.script,
+      project: this.project,
+      context: { used: this.context, limit: CONTEXT_LIMIT, overflows: this.overflows },
     };
     this.emit(t, { kind: 'session', record: structuredClone(this.session) });
   }

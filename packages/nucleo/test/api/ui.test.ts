@@ -362,7 +362,7 @@ describe('screen registry', () => {
   });
 
   test('sidebar breathing: items keep their height and only the item list scrolls on a short window', () => {
-    const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}shell.css`, 'utf8');
     const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.#]/g, '\\$&')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
     // The wireframe item is about 34 px tall; it never shrinks to fit the window.
     assert.match(rule('.cc-nav'), /min-height: 34px/);
@@ -376,7 +376,7 @@ describe('screen registry', () => {
     assert.match(rule('.cc-foot'), /flex: none/);
     assert.match(rule('.cc-foot'), /padding-top: 16px/);
     // The lit item is brought into view when the list scrolls.
-    assert.match(readFileSync(`${PASTA_DA_UI}nav.js`, 'utf8'), /scrollIntoView\?\.\(\{ block: 'nearest' \}\)/);
+    assert.match(readFileSync(`${UI_FOLDER}nav.js`, 'utf8'), /scrollIntoView\?\.\(\{ block: 'nearest' \}\)/);
   });
 
   // Issue 178, criterion 1: the remote machines are not in the static registry; the shell reads

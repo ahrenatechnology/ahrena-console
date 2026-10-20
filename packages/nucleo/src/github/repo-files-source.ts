@@ -54,6 +54,11 @@ export interface RepoBlob {
   /** O texto; `''` em arquivo binário. */
   text: string;
   bytes: number;
+  /**
+   * O texto é o arquivo inteiro: nem binário, nem cortado pelo GitHub (`isTruncated`), e com o
+   * tamanho do `byteSize`. Quem reescreve o arquivo (a instalação, #184) só confia nele assim.
+   */
+  complete: boolean;
 }
 
 export type BlobRequest = { oid: string } | { commit: string; path: string };
@@ -82,11 +87,11 @@ export function blobsQuery(requests: readonly BlobRequest[]): { query: string; v
     if ('oid' in r) {
       vars.push(`$o${i}: GitObjectID!`);
       variables[`o${i}`] = r.oid;
-      fields.push(`b${i}: object(oid: $o${i}) { ... on Blob { oid byteSize isBinary text } }`);
+      fields.push(`b${i}: object(oid: $o${i}) { ... on Blob { oid byteSize isBinary isTruncated text } }`);
     } else {
       vars.push(`$e${i}: String!`);
       variables[`e${i}`] = `${r.commit}:${r.path}`;
-      fields.push(`b${i}: object(expression: $e${i}) { ... on Blob { oid byteSize isBinary text } }`);
+      fields.push(`b${i}: object(expression: $e${i}) { ... on Blob { oid byteSize isBinary isTruncated text } }`);
     }
   });
   return { query: `query RepoBlobs(${vars.join(', ')}) { ${RATE}\n  repository(owner: $owner, name: $name) {\n    ${fields.join('\n    ')} } }`, variables };
@@ -128,7 +133,7 @@ interface RawTree {
   tree?: { path: string; type: string; sha: string }[];
 }
 
-type RawBlob = { oid?: string; byteSize?: number; isBinary?: boolean; text?: string | null } | null;
+type RawBlob = { oid?: string; byteSize?: number; isBinary?: boolean; isTruncated?: boolean; text?: string | null } | null;
 
 export class RepoFilesSource {
   private readonly transport: GithubTransport;
@@ -161,16 +166,17 @@ export class RepoFilesSource {
   }
 
   /**
-   * A árvore recursiva do HEAD, com ETag. Do que vem, fica só o que interessa (`isInterestingPath`):
+   * A árvore recursiva do HEAD, com ETag. Do que vem, fica só o que interessa (`keep`; padrão
+   * `isInterestingPath`, a leitura das instruções; a instalação do framework, #184, passa a dela):
    * a árvore inteira pode ter 13 MB. 404 e 409 (repositório vazio) viram árvore vazia.
    */
-  async tree(owner: string, name: string, etag: string | null): Promise<{ state: 'ok'; value: RepoTreeSummary; etag: string | null } | { state: 'not-modified' }> {
+  async tree(owner: string, name: string, etag: string | null, keep: (path: string) => boolean = isInterestingPath): Promise<{ state: 'ok'; value: RepoTreeSummary; etag: string | null } | { state: 'not-modified' }> {
     const r = await this.transport.rest<RawTree>(`/repos/${owner}/${name}/git/trees/HEAD?recursive=1`, etag);
     if (r.estado === 'nao-modificado') return { state: 'not-modified' };
     if (r.estado === 'indisponivel' || r.estado === 'calculando') return { state: 'ok', value: { sha: null, truncated: false, files: [] }, etag: null };
     const raw = r.valor ?? {};
     const files = (raw.tree ?? [])
-      .filter((e) => e && e.type === 'blob' && typeof e.path === 'string' && OID.test(e.sha) && isInterestingPath(e.path))
+      .filter((e) => e && e.type === 'blob' && typeof e.path === 'string' && OID.test(e.sha) && keep(e.path))
       .slice(0, MAX_TREE_PATHS)
       .map((e) => ({ path: e.path, oid: e.sha }));
     return { state: 'ok', value: { sha: typeof raw.sha === 'string' ? raw.sha : null, truncated: raw.truncated === true, files }, etag: r.etag };
@@ -186,7 +192,10 @@ export class RepoFilesSource {
       const data = await this.transport.query<{ repository: Record<string, RawBlob> | null }>('RepoBlobs', query, { owner, name, ...variables });
       batch.forEach((_r, j) => {
         const b = data.repository?.[`b${j}`] ?? null;
-        out.push(b && typeof b.oid === 'string' ? { oid: b.oid, text: b.isBinary ? '' : (b.text ?? ''), bytes: typeof b.byteSize === 'number' ? b.byteSize : 0 } : null);
+        if (!b || typeof b.oid !== 'string') return void out.push(null);
+        const text = b.isBinary ? '' : (b.text ?? '');
+        const bytes = typeof b.byteSize === 'number' ? b.byteSize : 0;
+        out.push({ oid: b.oid, text, bytes, complete: !b.isBinary && b.isTruncated !== true && typeof b.text === 'string' && bytes === Buffer.byteLength(text) });
       });
     }
     return out;
