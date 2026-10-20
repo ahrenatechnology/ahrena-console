@@ -22,6 +22,9 @@ button { font: inherit; cursor: pointer; }
 .logo-ponta { fill: var(--rose-500); stroke: var(--rose-500); stroke-width: 1; stroke-linejoin: round; }
 
 #nav { display: flex; flex-direction: column; gap: 2px; }
+/* As seções da barra (C24): o título é um olhinho com respiro em cima; a de cima não tem título. */
+.cc-nav-section { display: flex; flex-direction: column; gap: 2px; }
+.cc-nav-title { padding: 12px 10px 4px; }
 .cc-nav { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); }
 .cc-nav .icone { font-size: 16px; }
 .cc-nav:hover { color: var(--text); }
@@ -89,7 +92,9 @@ button { font: inherit; cursor: pointer; }
   .cc { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .cc-lado { border-right: 0; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; }
   .cc-marca { border: 0; margin: 0; padding: 0 8px 0 0; }
-  #nav { flex-direction: row; }
+  #nav { flex-direction: row; flex-wrap: wrap; }
+  .cc-nav-section { display: contents; }
+  .cc-nav-title { display: none; }
   .cc-pe { margin: 0 0 0 auto; padding: 0; flex-direction: row; }
   .cc-main { padding: 16px; }
 }

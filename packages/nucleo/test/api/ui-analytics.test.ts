@@ -519,7 +519,7 @@ describe('Analytics: Custo', () => {
 test('o registro: Analytics na barra; /ui/analytics/custo abre a mesma tela e acende Analytics', () => {
   const a = acharTela('/ui/analytics');
   assert.equal(a.tela.id, 'analytics');
-  assert.deepEqual(a.tela.item, { rotulo: 'Analytics', icone: 'analytics' });
+  assert.deepEqual(a.tela.item, { rotulo: 'Analytics', icone: 'analytics', section: 'main' });
   const c = acharTela('/ui/analytics/custo');
   assert.equal(c.tela.acende, 'analytics');
   assert.deepEqual(c.params, { aba: 'custo' });

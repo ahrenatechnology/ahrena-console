@@ -107,7 +107,7 @@ describe('Kanban: registro e arquivos', () => {
     const { tela } = acharTela('/ui/kanban');
     assert.equal(tela.id, 'kanban');
     assert.equal(tela.arquivo, '/ui/telas/kanban.js');
-    assert.deepEqual(tela.item, { rotulo: 'Kanban', icone: 'kanban' });
+    assert.deepEqual(tela.item, { rotulo: 'Kanban', icone: 'kanban', section: 'main' });
     assert.match(readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8'), /\n {2}kanban: '/);
   });
 

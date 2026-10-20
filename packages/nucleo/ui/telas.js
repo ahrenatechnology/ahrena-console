@@ -1,16 +1,25 @@
 // O registro das telas: a rota, o item da barra e o arquivo de cada uma (veja o README.md).
 //
 // - `rota`: o caminho no navegador; `:id` casa um segmento.
-// - `item`: o item na barra lateral. Sem `item`, a tela não aparece na barra e `acende` diz qual item
+// - `item`: o item na barra lateral, `{ rotulo, icone, section }`. `section` é o id de uma entrada de
+//   `SECTIONS` e diz em que bloco da barra o item fica; dentro do bloco, vale a ordem deste registro. Sem `item`, a tela não aparece na barra e `acende` diz qual item
 //   fica aceso quando ela está aberta (o Detalhe acende Sessões, como no A5).
 // - `arquivo`: o módulo da tela em `ui/telas/`. Sem ele, a moldura mostra o cabeçalho e o estado vazio.
 // - `titulo`, `sub` e `icone`: o cabeçalho do estado vazio e o título da janela.
+
+// Os blocos da barra, na ordem do C24: as telas do dia a dia (sem título), Máquinas e Controle. Um bloco
+// sem item não aparece.
+export const SECTIONS = [
+  { id: 'main', label: null },
+  { id: 'machines', label: 'Máquinas' },
+  { id: 'control', label: 'Controle' },
+];
 
 export const TELAS = [
   {
     id: 'dashboard',
     rota: '/ui',
-    item: { rotulo: 'Dashboard', icone: 'dashboard' },
+    item: { rotulo: 'Dashboard', icone: 'dashboard', section: 'main' },
     titulo: 'Dashboard',
     sub: 'O agora das suas sessões',
     icone: 'dashboard',
@@ -19,7 +28,7 @@ export const TELAS = [
   {
     id: 'mural',
     rota: '/ui/mural',
-    item: { rotulo: 'Mural ao vivo', icone: 'mural' },
+    item: { rotulo: 'Mural ao vivo', icone: 'mural', section: 'main' },
     titulo: 'Mural ao vivo',
     sub: 'Um card por sessão aberta nesta máquina',
     icone: 'mural',
@@ -28,7 +37,7 @@ export const TELAS = [
   {
     id: 'sessoes',
     rota: '/ui/sessoes',
-    item: { rotulo: 'Sessões', icone: 'sessoes' },
+    item: { rotulo: 'Sessões', icone: 'sessoes', section: 'main' },
     titulo: 'Sessões',
     sub: 'As sessões registradas nesta máquina',
     icone: 'sessoes',
@@ -37,7 +46,7 @@ export const TELAS = [
   {
     id: 'feed',
     rota: '/ui/feed',
-    item: { rotulo: 'Feed de atividade', icone: 'atividade' },
+    item: { rotulo: 'Feed de atividade', icone: 'atividade', section: 'main' },
     titulo: 'Feed de atividade',
     sub: 'Todos os eventos das sessões, ao vivo',
     icone: 'atividade',
@@ -46,7 +55,7 @@ export const TELAS = [
   {
     id: 'kanban',
     rota: '/ui/kanban',
-    item: { rotulo: 'Kanban', icone: 'kanban' },
+    item: { rotulo: 'Kanban', icone: 'kanban', section: 'main' },
     titulo: 'Kanban',
     sub: 'As sessões por status, só leitura',
     icone: 'kanban',
@@ -64,7 +73,7 @@ export const TELAS = [
   {
     id: 'projeto',
     rota: '/ui/projeto',
-    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    item: { rotulo: 'Kanban do projeto', icone: 'github', section: 'main' },
     titulo: 'Kanban do projeto',
     sub: 'O GitHub Project por Status',
     icone: 'github',
@@ -73,7 +82,7 @@ export const TELAS = [
   {
     id: 'repos',
     rota: '/ui/repos',
-    item: { rotulo: 'Repositórios', icone: 'repos' },
+    item: { rotulo: 'Repositórios', icone: 'repos', section: 'main' },
     titulo: 'Repositórios',
     sub: 'Organizações e repositórios da sua conta do GitHub',
     icone: 'repos',
@@ -91,7 +100,7 @@ export const TELAS = [
   {
     id: 'analytics',
     rota: '/ui/analytics',
-    item: { rotulo: 'Analytics', icone: 'analytics' },
+    item: { rotulo: 'Analytics', icone: 'analytics', section: 'main' },
     titulo: 'Analytics',
     sub: 'Uso, custo e produtividade das sessões',
     icone: 'analytics',
@@ -110,7 +119,7 @@ export const TELAS = [
   {
     id: 'workflows',
     rota: '/ui/workflows',
-    item: { rotulo: 'Workflows', icone: 'workflows' },
+    item: { rotulo: 'Workflows', icone: 'workflows', section: 'main' },
     titulo: 'Workflows',
     sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
     icone: 'workflows',
@@ -119,7 +128,7 @@ export const TELAS = [
   {
     id: 'historico',
     rota: '/ui/historico',
-    item: { rotulo: 'Histórico', icone: 'historico' },
+    item: { rotulo: 'Histórico', icone: 'historico', section: 'main' },
     titulo: 'Histórico',
     sub: 'Sessões encerradas, por dia',
     icone: 'historico',
@@ -128,13 +137,24 @@ export const TELAS = [
   {
     id: 'decisoes',
     rota: '/ui/decisoes',
-    item: { rotulo: 'Decisões', icone: 'decisao' },
+    item: { rotulo: 'Decisões', icone: 'decisao', section: 'main' },
     titulo: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     icone: 'decisao',
     arquivo: '/ui/telas/decisoes.js', // issue 103
   },
 ];
+
+/**
+ * Os blocos da barra com os itens de cada um, na ordem de `SECTIONS`; os blocos vazios ficam de fora.
+ * Um item sem `section` conhecida cai no primeiro bloco, para a tela nunca sumir da barra (o teste do
+ * registro recusa esse item).
+ */
+export function sidebarSections(telas = TELAS, sections = SECTIONS) {
+  const known = new Set(sections.map((s) => s.id));
+  const sectionOf = (t) => (known.has(t.item.section) ? t.item.section : sections[0].id);
+  return sections.map((s) => ({ ...s, items: telas.filter((t) => t.item && sectionOf(t) === s.id) })).filter((s) => s.items.length);
+}
 
 // Um id de sessão ou um nome do GitHub (ponto, hífen e sublinhado); `.` e `..` nunca.
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

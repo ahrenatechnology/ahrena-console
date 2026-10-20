@@ -17,7 +17,7 @@ import { ErroDeLeitura, leitorHttp } from '../../ui/ler.js';
 // @ts-expect-error: idem
 import { iniciarAoVivo } from '../../ui/ao-vivo.js';
 // @ts-expect-error: idem
-import { acharTela, TELAS } from '../../ui/telas.js';
+import { acharTela, SECTIONS, sidebarSections, TELAS } from '../../ui/telas.js';
 
 interface Resposta {
   status: number;
@@ -223,6 +223,10 @@ describe('/ui no núcleo', () => {
 describe('registro das telas', () => {
   test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico e Decisões; o Detalhe abre por uma sessão e acende Sessões', () => {
     assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes']);
+    assert.deepEqual(
+      sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
+      [['main', null, ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes']]],
+    );
     assert.equal(acharTela('/ui/decisoes').tela.arquivo, '/ui/telas/decisoes.js');
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
     assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
@@ -240,10 +244,43 @@ describe('registro das telas', () => {
     assert.equal(acharTela('/ui/nao-existe'), null);
   });
 
+  test('a barra tem as seções do C24: as telas do dia a dia sem título, Máquinas e Controle; seção vazia não aparece', () => {
+    assert.deepEqual(SECTIONS, [
+      { id: 'main', label: null },
+      { id: 'machines', label: 'Máquinas' },
+      { id: 'control', label: 'Controle' },
+    ]);
+    for (const t of TELAS.filter((x: { item?: unknown }) => x.item)) assert.ok(SECTIONS.some((s: { id: string }) => s.id === t.item.section), t.id);
+    // Um item de Controle registrado antes dos do dia a dia ainda sai no bloco dele, depois de Máquinas.
+    const telas = [
+      { id: 'config', item: { rotulo: 'Agent Config', icone: 'x', section: 'control' } },
+      { id: 'dashboard', item: { rotulo: 'Dashboard', icone: 'x', section: 'main' } },
+      { id: 'detalhe', acende: 'dashboard' },
+      { id: 'local', item: { rotulo: 'Esta máquina', icone: 'x', section: 'machines' } },
+      { id: 'dev', item: { rotulo: 'Dev Console', icone: 'x', section: 'main' } },
+    ];
+    const ver = (ts: unknown[]) => sidebarSections(ts).map((s: { id: string; items: { id: string }[] }) => [s.id, s.items.map((t) => t.id)]);
+    assert.deepEqual(ver(telas), [['main', ['dashboard', 'dev']], ['machines', ['local']], ['control', ['config']]]);
+    assert.deepEqual(ver(telas.filter((t) => t.id !== 'local')), [['main', ['dashboard', 'dev']], ['control', ['config']]]);
+    // Um item com seção errada não some: cai no bloco de cima (e o laço acima recusa o registro).
+    assert.deepEqual(ver([{ id: 'x', item: { rotulo: 'X', icone: 'x', section: 'maquinas' } }]), [['main', ['x']]]);
+  });
+
+  test('a moldura desenha o título de cada seção com as classes da moldura, sem estilo inline', () => {
+    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
+    assert.match(app, /sidebarSections\(\)/);
+    assert.match(app, /'cc-nav-section'/);
+    assert.match(app, /'cc-nav-title olhinho'/);
+    const css = readFileSync(`${PASTA_DA_UI}moldura.css`, 'utf8');
+    assert.match(css, /\.cc-nav-section \{/);
+    assert.match(css, /\.cc-nav-title \{/);
+  });
+
   test('#104 critério 1: /ui/repos abre a lista de repositórios, com item na barra', () => {
     const r = acharTela('/ui/repos');
     assert.equal(r.tela.id, 'repos');
     assert.equal(r.tela.item.rotulo, 'Repositórios');
+    assert.equal(r.tela.item.section, 'main');
     assert.equal(acharTela('/ui/repos/').tela.id, 'repos');
   });
 

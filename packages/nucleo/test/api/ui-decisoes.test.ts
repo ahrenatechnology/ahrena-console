@@ -124,6 +124,7 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.ok(ids.indexOf('decisoes') > ids.indexOf('analytics'));
     const { tela } = acharTela('/ui/decisoes');
     assert.equal(tela.item.rotulo, 'Decisões');
+    assert.equal(tela.item.section, 'main', 'nas telas do dia a dia, antes de Máquinas e Controle');
     assert.equal(tela.item.icone, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
     assert.equal(tela.icone, 'decisao');
   });
