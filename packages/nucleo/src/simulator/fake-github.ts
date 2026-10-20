@@ -51,6 +51,8 @@ export interface FakeRepo {
   files?: Record<string, string>;
   /** The recursive tree comes truncated (`truncated: true`), without files 3 or more folders deep. */
   truncatedTree?: boolean;
+  /** Arquivos que o GitHub não entrega inteiros no lote de conteúdo (#184): `binary` (`isBinary`) ou `truncated` (`isTruncated`, texto cortado). */
+  unreadable?: Record<string, 'binary' | 'truncated'>;
 }
 
 export interface FakeGithubData {
@@ -115,6 +117,8 @@ export interface FakeGithub {
   pullRequests: FakePullRequest[];
   /** A repository's branches, name → commit (`main` included). */
   refs(owner: string, name: string): Record<string, string>;
+  /** A próxima mutação com este nome (`CreateInstallBranch`, `CommitInstallFiles`, `OpenInstallPullRequest`) falha, sem escrever (#184). */
+  failNext(operation: string): void;
 }
 
 /** A GraphQL error the fake answers with (`errors`), as GitHub does for a refused mutation. */
@@ -365,7 +369,9 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     pullRequests.filter((p) => p.repo === `${repo.owner}/${repo.name}` && p.head === head).sort((a, b) => b.number - a.number);
 
   /** The install's read and the three writes (#184). */
+  const failures = new Set<string>();
   function installOperation(op: string, v: Record<string, unknown>): unknown {
+    if (failures.delete(op)) throw new FakeGraphqlError('INTERNAL', `falha simulada em ${op}`);
     if (op === 'FrameworkInstallTarget') {
       const repo = find(String(v.owner), String(v.name));
       if (!repo) return { rateLimit, repository: null };
@@ -478,9 +484,14 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
           path = commit === g.commit ? rest.join(':') : undefined;
         }
         const text = path === undefined ? undefined : g.files[path];
+        const how = path === undefined ? undefined : repo.unreadable?.[path];
         out[`b${m[2]}`] =
           text !== undefined
-            ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, text }
+            ? how === 'binary'
+              ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: true, isTruncated: false, text: null }
+              : how === 'truncated'
+                ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, isTruncated: true, text: text.slice(0, Math.floor(text.length / 2)) }
+                : { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, isTruncated: false, text }
             : path !== undefined && g.folders.has(path)
               ? {}
               : null;
@@ -612,6 +623,7 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     calls,
     writes,
     pullRequests,
+    failNext: (operation) => void failures.add(operation),
     refs: (owner, name) => {
       const repo = find(owner, name);
       return repo ? Object.fromEntries([...branchesOf(repo)].map(([b, x]) => [b, x.oid])) : {};

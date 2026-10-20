@@ -45,6 +45,8 @@ function data(py: Record<string, string> = PY, frameworkRepo?: string): FakeGith
       { ...base, owner: 'org-a', name: 'empty', permission: 'ADMIN' },
       { ...base, owner: 'org-a', name: 'broken', files: { 'README.md': '# broken\n', 'CLAUDE.md': '# broken\n', '.claude/settings.json': '{ "hooks": { "Stop": [ ] ,\n' } },
       { ...base, owner: 'org-a', name: 'read-only', permission: 'READ', files: { 'go.mod': 'module x\n', 'cmd/x/main.go': 'package main\n' } },
+      { ...base, owner: 'org-a', name: 'binary', files: { ...PY, 'CLAUDE.md': '# py-app\u0000\u0001\n' }, unreadable: { 'CLAUDE.md': 'binary' } },
+      { ...base, owner: 'org-a', name: 'truncated', files: { ...PY, 'AGENTS.md': `# regras\n\n${'- uma regra longa da pessoa\n'.repeat(40)}` }, unreadable: { 'AGENTS.md': 'truncated' } },
       fakeFrameworkRepo(frameworkRepo),
     ],
   };
@@ -505,7 +507,38 @@ describe('#184 opening the pull request, through the service', () => {
     assert.deepEqual(s.gh().writes, []);
   });
 
-  test('a leftover install branch without an open PR is not overwritten: 409', async () => {
+  test('a file GitHub did not deliver whole (binary, truncated) blocks the preview and the POST: 422, nothing written', async () => {
+    for (const [repo, path] of [['binary', 'CLAUDE.md'], ['truncated', 'AGENTS.md']]) {
+      const s = setup();
+      const p = await ready(s, repo);
+      const f = p.files.find((x) => x.path === path)!;
+      assert.deepEqual([f.action, f.diff, f.why], ['refused', '', 'não deu para ler o arquivo inteiro no GitHub: nada é escrito'], repo);
+      assert.deepEqual([p.blocked!.kind, p.blocked!.path, p.blocked!.url], ['unreadable', path, null], repo);
+      const a = await install(s, p, {}, repo);
+      assert.equal(a.status, 422, repo);
+      assert.equal((a.body as { code: string }).code, 'unreadable');
+      assert.deepEqual(s.gh().writes, [], repo);
+      assert.ok(![...s.store.entries.keys()].some((k) => k.startsWith('blob:') && JSON.stringify(s.store.entries.get(k)!.value).includes('uma regra longa')), 'the cut text is not cached');
+    }
+  });
+
+  test('a failure between the branch and the commit leaves an empty branch; the retry reuses it and opens the PR', async () => {
+    const s = setup();
+    const p = await ready(s);
+    s.gh().failNext('CommitInstallFiles');
+    const failed = await install(s, p);
+    assert.equal(failed.status, 502);
+    assert.equal((failed.body as { code: string }).code, 'github-error');
+    assert.deepEqual(s.gh().writes.map((w) => w.operation), ['createRef']);
+    assert.equal(s.gh().refs('org-a', 'py-app')[INSTALL_BRANCH], s.gh().refs('org-a', 'py-app').main, 'the branch is at the default HEAD, empty');
+    const preview = await ready(s);
+    assert.equal(preview.blocked, null, 'an empty branch left by the console does not block');
+    const retry = await install(s, preview);
+    assert.equal(retry.status, 201, JSON.stringify(retry.body));
+    assert.deepEqual(s.gh().writes.map((w) => w.operation), ['createRef', 'createCommitOnBranch', 'createPullRequest'], 'no second createRef');
+  });
+
+  test('a leftover install branch with commits and no open PR blocks the preview and is not overwritten: 409', async () => {
     const s = setup();
     const p = await ready(s);
     assert.equal((await install(s, p)).status, 201);
@@ -513,6 +546,9 @@ describe('#184 opening the pull request, through the service', () => {
     s.clock.now += 61_000;
     const again = await ready(s);
     assert.equal(again.pullRequest!.state, 'closed');
+    assert.equal(again.blocked!.kind, 'branch-exists');
+    assert.match(again.blocked!.message, /chore\/install-ahrena-framework.*apague-o ou mescle-o no GitHub/);
+    assert.equal(again.blocked!.url, `https://github.com/org-a/py-app/tree/${INSTALL_BRANCH}`);
     const writes = s.gh().writes.length;
     const a = await install(s, again);
     assert.equal(a.status, 409);

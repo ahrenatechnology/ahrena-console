@@ -52,6 +52,11 @@ export function pullRequestBody(files: readonly PlanFile[], plugins: readonly st
   return issue === null ? body : `${body}\n\nRefs #${issue}`;
 }
 
+/** O aviso do branch de instalação que sobrou com commits e sem PR aberto. */
+export function branchExistsMessage(branch: string = INSTALL_BRANCH): string {
+  return `O branch ${branch} já existe no GitHub, com commits e sem PR aberto: apague-o ou mescle-o no GitHub antes de instalar de novo.`;
+}
+
 /**
  * Cria o branch a partir do HEAD do padrão, grava um commit só com os arquivos do plano e abre o
  * PR. Idempotente: com um PR aberto desse branch, devolve o que já existe sem escrever. Nunca
@@ -62,7 +67,7 @@ export async function openInstallPullRequest(
   { files, title, body, branch = INSTALL_BRANCH }: { files: readonly PlanFile[]; title: string; body: string; branch?: string },
 ): Promise<InstallOutcome> {
   const refused = files.filter((f) => f.action === 'refused');
-  if (refused.length) throw new InstallRefused('invalid-json', refused.map((f) => `${f.path}: ${f.why}`).join('; '));
+  if (refused.length) throw new InstallRefused(refused[0].refusal ?? 'invalid-json', refused.map((f) => `${f.path}: ${f.why}`).join('; '));
   const changes = files.filter((f) => f.action === 'create' || f.action === 'merge');
   if (!changes.length) return { status: 'nothing-to-do' };
 
@@ -70,10 +75,12 @@ export async function openInstallPullRequest(
   if (branch === base.name) throw new InstallRefused('default-branch', 'o branch da instalação não pode ser o branch padrão');
   const open = await port.findOpenPr(branch);
   if (open) return { status: 'already-open', pullRequest: open };
-  // Um branch que sobrou (PR fechado, ou criado à mão) não é sobrescrito: a pessoa decide.
-  if ((await port.branchHead(branch)) !== null) throw new InstallRefused('branch-exists', `o branch ${branch} já existe sem PR aberto: apague-o ou abra o PR dele`);
-
-  await port.createRef(branch, base.oid);
+  // Um branch que sobrou com commits (PR fechado ou mergeado, ou criado à mão) não é sobrescrito: a
+  // pessoa decide. Um branch vazio, no HEAD do padrão (deixado pelo próprio console numa falha entre o
+  // branch e o commit), é reaproveitado. Nunca se apaga nem se força um branch.
+  const head = await port.branchHead(branch);
+  if (head !== null && head !== base.oid) throw new InstallRefused('branch-exists', branchExistsMessage(branch));
+  if (head === null) await port.createRef(branch, base.oid);
   const commit = await port.createCommitOnBranch({
     branch,
     expectedHeadOid: base.oid,

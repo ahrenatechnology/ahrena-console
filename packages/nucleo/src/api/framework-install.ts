@@ -27,7 +27,8 @@
 //   plugins: [{ name, description, group: 'base' | 'suggested' | 'other', why: string | null, checked, locked }],
 //   choice: { platforms: string[], plugins: string[] },
 //   files: [{ path, action: 'create' | 'merge' | 'unchanged' | 'refused', why, add, del, diff }],
-//   blocked: null | { kind: 'invalid-json' | 'no-write' | 'nothing-to-do' | 'empty-repository', message, path: string | null },
+//   blocked: null | { kind: 'invalid-json' | 'unpaired-markers' | 'unreadable' | 'no-write' | 'empty-repository'
+//                            | 'nothing-to-do' | 'branch-exists', message, path: string | null, url: string | null },
 //   branch: 'chore/install-ahrena-framework', title: 'chore: install the Ahrena Framework',
 //   planHash: string | null, pullRequest: PullRequestState | null }
 // PullRequestState = { number, url, title, branch, base, state: 'open' | 'merged' | 'closed',
@@ -36,12 +37,20 @@
 // erro = { error: string, code: string, planHash?: string }
 // ```
 //
+// `blocked`, conferido nesta ordem: um arquivo recusado (`invalid-json`: o `.claude/settings.json` não
+// dá para mesclar; `unpaired-markers`: os marcadores do framework desemparelhados; `unreadable`: o
+// arquivo existe mas o GitHub não o entregou inteiro, binário ou cortado; `path` diz qual), `no-write`,
+// `empty-repository`, `nothing-to-do` e `branch-exists` (o branch `chore/install-ahrena-framework`
+// sobrou com commits e sem PR aberto; `url` é o link do branch no GitHub, para a pessoa apagá-lo ou
+// mesclá-lo). `url` é `null` nos outros. Um branch vazio no HEAD do padrão, deixado pelo próprio console
+// numa falha, é reaproveitado e não bloqueia. O console nunca apaga nem força um branch.
+//
 // Os erros do `POST`, todos antes de qualquer escrita: 400 `bad-request` (corpo, título, plataforma
 // ou plugin), 415 sem JSON, 422 `invalid-issue` (a issue não é número), 403 `no-write` (a conta não
-// escreve no repositório), 422 `invalid-json` (um `.claude/settings.json` recusado), 409
-// `plan-changed` (o plano mudou desde a prévia; o corpo traz o `planHash` novo), 422
-// `nothing-to-do`, 422 `empty-repository`, 409 `branch-exists` (o branch de instalação sobrou sem PR
-// aberto), 404 `not-found`, 503 `no-github`, 502 `github-error`.
+// escreve no repositório), 422 `invalid-json`, `unpaired-markers` ou `unreadable` (um arquivo
+// recusado), 409 `plan-changed` (o plano mudou desde a prévia; o corpo traz o `planHash` novo), 422
+// `nothing-to-do`, 422 `empty-repository`, 409 `branch-exists`, 404 `not-found`, 503 `no-github`,
+// 502 `github-error`.
 //
 // ## Nunca espera o GitHub
 //
@@ -91,7 +100,7 @@ import { buildCatalog, isCatalogPath, MARKETPLACE_PATH } from '../framework-inst
 import { detect, DETECTION_TEXTS, isDetectionPath } from '../framework-install/detect.ts';
 import { unifiedDiff } from '../framework-install/diff.ts';
 import { isInstalled, plan, planHash } from '../framework-install/plan.ts';
-import { openInstallPullRequest, parseIssue, pullRequestBody } from '../framework-install/pull-request.ts';
+import { branchExistsMessage, openInstallPullRequest, parseIssue, pullRequestBody } from '../framework-install/pull-request.ts';
 import { GithubCache, MemoryCacheStore, NoDataError, type CacheResult } from '../github/cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
 import { PullRequestWriter, type InstallTarget } from '../github/pull-request-writer.ts';
@@ -133,6 +142,9 @@ const NO_GITHUB = 'sem GitHub neste núcleo';
 
 export type FrameworkInstallState = 'ready' | 'loading' | 'error' | 'not-found' | 'no-github';
 
+/** Por que a instalação não pode seguir, na ordem em que é conferida. */
+export type BlockedKind = 'invalid-json' | 'unpaired-markers' | 'unreadable' | 'no-write' | 'empty-repository' | 'nothing-to-do' | 'branch-exists';
+
 export interface PlanFileView {
   path: string;
   action: PlanFile['action'];
@@ -163,7 +175,7 @@ export interface FrameworkInstallPlan {
   plugins: { name: string; description: string; group: 'base' | 'suggested' | 'other'; why: string | null; checked: boolean; locked: boolean }[];
   choice: { platforms: PlatformId[]; plugins: string[] };
   files: PlanFileView[];
-  blocked: null | { kind: 'invalid-json' | 'no-write' | 'nothing-to-do' | 'empty-repository'; message: string; path: string | null };
+  blocked: null | { kind: BlockedKind; message: string; path: string | null; url: string | null };
   branch: string;
   title: string;
   planHash: string | null;
@@ -183,6 +195,8 @@ interface Inputs {
   readAt: string;
   /** Os caminhos da detecção (texto `''`) e os textos lidos. */
   files: Record<string, string>;
+  /** Arquivos de instrução que existem mas não vieram inteiros do GitHub (binário, cortado, outro tamanho). */
+  unreadable: string[];
   target: InstallTarget;
   catalog: Catalog;
 }
@@ -265,19 +279,24 @@ const planFilesOf = (files: Record<string, string>) => Object.fromEntries(INSTRU
 /** O plano de uma escolha sobre o que foi lido; nunca chama o GitHub. */
 export function planView(inputs: Inputs, choice: Choice, frameworkRepo: string): FrameworkInstallPlan {
   const detection = detect(inputs.files);
-  const files = plan(planFilesOf(inputs.files), inputs.catalog, choice, { frameworkRepo });
+  const files = plan(planFilesOf(inputs.files), inputs.catalog, choice, { frameworkRepo, unreadable: inputs.unreadable });
   const refused = files.find((f) => f.action === 'refused');
   const target = inputs.target;
   const nothing = files.every((f) => f.action === 'unchanged');
+  // O branch de instalação sobrou com commits e sem PR aberto (PR fechado ou mergeado, commit sem PR):
+  // não é sobrescrito. Vazio, no HEAD do padrão, ele é reaproveitado e não bloqueia.
+  const leftover = target.branchHead !== null && !target.openPullRequest && target.branchHead !== target.defaultBranch?.oid;
   const blocked: FrameworkInstallPlan['blocked'] = refused
-    ? { kind: 'invalid-json', message: `${refused.path}: ${refused.why}. Nada será escrito.`, path: refused.path }
+    ? { kind: refused.refusal ?? 'invalid-json', message: `${refused.path}: ${refused.why}. Nada será escrito.`, path: refused.path, url: null }
     : !target.canWrite
-      ? { kind: 'no-write', message: NO_WRITE, path: null }
+      ? { kind: 'no-write', message: NO_WRITE, path: null, url: null }
       : !inputs.commit || !target.defaultBranch
-        ? { kind: 'empty-repository', message: 'O repositório ainda não tem commit: não há de onde criar o branch.', path: null }
+        ? { kind: 'empty-repository', message: 'O repositório ainda não tem commit: não há de onde criar o branch.', path: null, url: null }
         : nothing
-          ? { kind: 'nothing-to-do', message: 'O framework já está instalado com esta escolha: nada a mudar.', path: null }
-          : null;
+          ? { kind: 'nothing-to-do', message: 'O framework já está instalado com esta escolha: nada a mudar.', path: null, url: null }
+          : leftover
+            ? { kind: 'branch-exists', message: branchExistsMessage(INSTALL_BRANCH), path: null, url: `https://github.com/${inputs.repo}/tree/${INSTALL_BRANCH}` }
+            : null;
   const order = displayOrder(inputs.catalog, detection.suggested.map((s) => s.name));
   const why = new Map(detection.suggested.map((s) => [s.name, s.why]));
   return {
@@ -516,21 +535,26 @@ export class FrameworkInstallService {
     // Com o PR aberto, ele volta como está, mesmo que o plano tenha mudado desde a prévia.
     const open = inputs.target.openPullRequest;
     if (open) return { status: 200, body: { status: 'already-open', pullRequest: open } };
-    if (view.blocked?.kind === 'invalid-json') return { status: 422, body: { error: view.blocked.message, code: 'invalid-json' } };
+    const kind = view.blocked?.kind;
+    if (kind === 'invalid-json' || kind === 'unpaired-markers' || kind === 'unreadable') return { status: 422, body: { error: view.blocked!.message, code: kind } };
     const changed = { status: 409 as const, body: { error: 'o repositório mudou desde a prévia: confira o plano de novo', code: 'plan-changed', planHash: view.planHash! } };
     if (view.planHash !== request.planHash) return changed;
     if (view.blocked?.kind === 'empty-repository') return { status: 422, body: { error: view.blocked.message, code: 'empty-repository' } };
     // O branch nasce do HEAD lido no alvo; se o padrão andou entre a descoberta e o alvo, o plano é de outro commit.
     if (inputs.commit !== inputs.target.defaultBranch?.oid) return changed;
     if (view.blocked?.kind === 'nothing-to-do') return { status: 422, body: { error: view.blocked.message, code: 'nothing-to-do' } };
+    if (view.blocked?.kind === 'branch-exists') return { status: 409, body: { error: view.blocked.message, code: 'branch-exists' } };
 
-    const files = plan(planFilesOf(inputs.files), inputs.catalog, choice, { frameworkRepo: this.frameworkRepo });
+    const files = plan(planFilesOf(inputs.files), inputs.catalog, choice, { frameworkRepo: this.frameworkRepo, unreadable: inputs.unreadable });
     let outcome: Awaited<ReturnType<typeof openInstallPullRequest>>;
     try {
       outcome = await openInstallPullRequest(this.writer.port(inputs.target), { files, title, body: pullRequestBody(files, choice.plugins, issue) });
     } catch (err) {
       if (err instanceof InstallRefused) return { status: err.code === 'branch-exists' ? 409 : 422, body: { error: err.message, code: err.code } };
       this.log(`framework-install: o PR de ${owner}/${repo} falhou: ${reason(err)}`);
+      // O branch pode ter sido criado antes da falha: a prévia relê o alvo em vez de usar o guardado.
+      await this.cache.invalidate(`framework-install:target:${repoKey(owner, repo)}`);
+      e.at = -Infinity;
       return { status: 502, body: { error: `o GitHub recusou: ${reason(err)}`, code: 'github-error' } };
     }
     if (outcome.status === 'nothing-to-do') return { status: 422, body: { error: 'O framework já está instalado com esta escolha: nada a mudar.', code: 'nothing-to-do' } };
@@ -625,7 +649,7 @@ export class FrameworkInstallService {
     const d = discovery.value;
     const readAt = new Date(discovery.fetchedAt).toISOString();
     const base = { repo: d.nameWithOwner, commit: d.commit, readAt, target: target.value, catalog: catalog.value };
-    if (!d.commit) return { state: 'ready', error: errors[0] ?? null, inputs: { ...base, files: {} } };
+    if (!d.commit) return { state: 'ready', error: errors[0] ?? null, inputs: { ...base, files: {}, unreadable: [] } };
 
     // Os caminhos da detecção: a árvore (relida na hora quando a árvore do commit é outra) e a descoberta.
     const known = new Map(d.files.filter((f) => isDetectionPath(f.path)).map((f) => [f.path, f.oid] as const));
@@ -655,7 +679,9 @@ export class FrameworkInstallService {
     const forPath: string[] = [];
     for (const p of wanted) {
       const oid = known.get(p)!;
-      const hit = p === '.claude/settings.json' ? this.settingsTexts.get(oid) : ((await this.cache.store.get(`blob:${oid}`))?.value as StoredBlob | undefined)?.text;
+      // Do cache só o texto inteiro: a #183 guarda o `''` de um binário e o texto cortado com o `byteSize` do arquivo.
+      const stored = p === '.claude/settings.json' ? undefined : ((await this.cache.store.get(`blob:${oid}`))?.value as StoredBlob | undefined);
+      const hit = p === '.claude/settings.json' ? this.settingsTexts.get(oid) : stored && Buffer.byteLength(stored.text) === stored.bytes ? stored.text : undefined;
       if (hit !== undefined) {
         files[p] = hit;
         continue;
@@ -663,6 +689,8 @@ export class FrameworkInstallService {
       requests.push({ oid });
       forPath.push(p);
     }
+    // Um arquivo de instrução que existe e não veio inteiro: o plano o recusa, nunca o trata como vazio.
+    const unreadable: string[] = [];
     if (requests.length) {
       let blobs;
       try {
@@ -672,7 +700,10 @@ export class FrameworkInstallService {
       }
       for (let i = 0; i < forPath.length; i++) {
         const b = blobs[i];
-        if (!b) continue;
+        if (!b || !b.complete) {
+          if ((INSTRUCTION_FILES as readonly string[]).includes(forPath[i])) unreadable.push(forPath[i]);
+          continue;
+        }
         files[forPath[i]] = b.text;
         if (forPath[i] !== '.claude/settings.json') await this.cache.put(`blob:${b.oid}`, { text: b.text, bytes: b.bytes } satisfies StoredBlob);
         else {
@@ -682,7 +713,7 @@ export class FrameworkInstallService {
         }
       }
     }
-    return { state: 'ready', error: errors[0] ?? null, inputs: { ...base, files } };
+    return { state: 'ready', error: errors[0] ?? null, inputs: { ...base, files, unreadable } };
   }
 
   /** O catálogo do repositório do framework: o marketplace e as regras de cada plugin (frontmatter). */

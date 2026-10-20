@@ -15,9 +15,17 @@ import { createHash } from 'node:crypto';
 import { blockMarkersPaired, claudeBlock, enablesFramework, hasBlock, mergeClaudeSettings, UNPAIRED_MARKERS, upsertBlock } from './merge.ts';
 import { DEFAULT_FRAMEWORK_REPO, MARKETPLACE, type Catalog, type Choice, type PlanFile } from './model.ts';
 
+/** O motivo da recusa de um arquivo que existe mas não veio inteiro do GitHub. */
+export const UNREADABLE = 'não deu para ler o arquivo inteiro no GitHub: nada é escrito';
+
 export interface PlanOptions {
   /** `dono/repo` do framework, para o marketplace e os links do índice. */
   frameworkRepo?: string;
+  /**
+   * Arquivos que existem no repositório mas cujo texto não veio inteiro (binário, cortado, ou com
+   * outro tamanho): são recusados, nunca tratados como vazios e sobrescritos.
+   */
+  unreadable?: readonly string[];
 }
 
 const ruleLink = (frameworkRepo: string, path: string) => `https://github.com/${frameworkRepo}/blob/main/${path}`;
@@ -34,17 +42,22 @@ export function rulesIndex(catalog: Catalog, plugins: readonly string[], { frame
 }
 
 /** O plano para os arquivos de hoje (caminho → texto; ausente = não existe), o catálogo e a escolha. */
-export function plan(files: Readonly<Record<string, string>>, catalog: Catalog, choice: Choice, { frameworkRepo = DEFAULT_FRAMEWORK_REPO }: PlanOptions = {}): PlanFile[] {
+export function plan(files: Readonly<Record<string, string>>, catalog: Catalog, choice: Choice, { frameworkRepo = DEFAULT_FRAMEWORK_REPO, unreadable = [] }: PlanOptions = {}): PlanFile[] {
   const out: PlanFile[] = [];
   const current = (path: string) => (Object.hasOwn(files, path) ? files[path] : null);
+  // Só o que existe e não veio inteiro: um arquivo que não está no repositório continua `create`.
+  const illegible = (path: string) => current(path) !== null && unreadable.includes(path);
+  const refuse = (path: string, refusal: NonNullable<PlanFile['refusal']>, why: string) => out.push({ path, action: 'refused', before: current(path), after: null, why, refusal });
   const put = (path: string, after: string, why: string) => {
     const before = current(path);
+    if (illegible(path)) return void refuse(path, 'unreadable', UNREADABLE);
     out.push({ path, before, after, why, action: before === null ? 'create' : before === after ? 'unchanged' : 'merge' });
   };
   // Um arquivo de texto com os marcadores desemparelhados é recusado, nunca acrescentado.
   const putBlock = (path: string, body: (text: string | null) => string, why: string) => {
     const before = current(path);
-    if (!blockMarkersPaired(before)) out.push({ path, action: 'refused', before, after: null, why: UNPAIRED_MARKERS });
+    if (illegible(path)) refuse(path, 'unreadable', UNREADABLE);
+    else if (!blockMarkersPaired(before)) refuse(path, 'unpaired-markers', UNPAIRED_MARKERS);
     else put(path, upsertBlock(before, body(before)), why);
   };
   const index = rulesIndex(catalog, choice.plugins, { frameworkRepo });
@@ -65,8 +78,9 @@ export function plan(files: Readonly<Record<string, string>>, catalog: Catalog, 
     // O import que conta é o da pessoa, fora do nosso bloco; o de dentro é nosso e volta igual.
     putBlock('CLAUDE.md', claudeBlock, 'o Claude Code carrega o AGENTS.md por import');
     const before = current('.claude/settings.json');
-    const s = mergeClaudeSettings(before, choice.plugins, frameworkRepo);
-    if ('refused' in s) out.push({ path: '.claude/settings.json', action: 'refused', before, after: null, why: s.refused });
+    const s = illegible('.claude/settings.json') ? null : mergeClaudeSettings(before, choice.plugins, frameworkRepo);
+    if (s === null) refuse('.claude/settings.json', 'unreadable', UNREADABLE);
+    else if ('refused' in s) refuse('.claude/settings.json', 'invalid-json', s.refused);
     else put('.claude/settings.json', s.text, 'quem clonar recebe a oferta de instalar os plugins');
   }
   if (choice.platforms.includes('cursor')) {

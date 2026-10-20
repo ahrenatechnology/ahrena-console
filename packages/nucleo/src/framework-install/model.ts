@@ -78,6 +78,12 @@ export interface Choice {
 
 export type FileAction = 'create' | 'merge' | 'unchanged' | 'refused';
 
+/**
+ * Por que um arquivo foi recusado: JSON que não dá para mesclar, marcadores do framework
+ * desemparelhados, ou um arquivo que existe mas o GitHub não entregou inteiro (binário, cortado).
+ */
+export type RefusalKind = 'invalid-json' | 'unpaired-markers' | 'unreadable';
+
 export interface PlanFile {
   path: string;
   action: FileAction;
@@ -87,6 +93,8 @@ export interface PlanFile {
   after: string | null;
   /** O motivo, em pt-BR, para a tela. */
   why: string;
+  /** Só em `refused`: a causa. */
+  refusal?: RefusalKind;
 }
 
 export type PullRequestLifecycle = 'open' | 'merged' | 'closed';

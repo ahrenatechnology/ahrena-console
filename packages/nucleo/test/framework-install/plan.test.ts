@@ -19,6 +19,7 @@ import {
   pullRequestBody,
   rulesIndex,
   unifiedDiff,
+  UNREADABLE,
   UNPAIRED_MARKERS,
   upsertBlock,
   type Choice,
@@ -132,7 +133,15 @@ describe('#184 the plan (ported from the spike)', () => {
       assert.throws(() => upsertBlock(text, 'novo'), /desemparelhados/);
     }
     const agents = plan({ ...REPO, 'AGENTS.md': `${start}\n` }, catalog, CHOICE).find((f) => f.path === 'AGENTS.md')!;
-    assert.equal(agents.action, 'refused');
+    assert.deepEqual([agents.action, agents.refusal], ['refused', 'unpaired-markers']);
+  });
+
+  test('a file that exists but did not come whole is refused, never overwritten; a missing one is still created', () => {
+    const p = plan({ ...REPO, 'AGENTS.md': '' }, catalog, CHOICE, { unreadable: ['CLAUDE.md', 'AGENTS.md', '.claude/settings.json'] });
+    for (const f of p) assert.deepEqual([f.path, f.action, f.after, f.refusal, f.why], [f.path, 'refused', null, 'unreadable', UNREADABLE], f.path);
+    const missing = plan({ 'README.md': '' }, catalog, CHOICE, { unreadable: ['CLAUDE.md'] });
+    assert.ok(missing.every((f) => f.action === 'create'), 'listed as unreadable but absent from the tree: create');
+    assert.equal(plan({ ...REPO, '.claude/settings.json': '{' }, catalog, CHOICE).find((f) => f.action === 'refused')!.refusal, 'invalid-json');
   });
 
   test('settings.json keeps its indentation, so the merge does not reformat the file', () => {
@@ -203,10 +212,10 @@ describe('#184 the catalog', () => {
 });
 
 // Porta falsa: guarda os branches e registra cada escrita.
-function fakePort({ openPr = null as PullRequestState | null, existing = [] as string[] } = {}) {
+function fakePort({ openPr = null as PullRequestState | null, existing = [] as string[], existingAt = 'ccc333' } = {}) {
   const calls: unknown[][] = [];
   const refs: Record<string, string> = { main: 'aaa111' };
-  for (const b of existing) refs[b] = 'ccc333';
+  for (const b of existing) refs[b] = existingAt;
   const port: InstallPullRequestPort = {
     defaultBranch: async () => ({ name: 'main', oid: refs.main }),
     findOpenPr: async () => openPr,
@@ -252,9 +261,20 @@ describe('#184 opening the pull request (ported from the spike)', () => {
     await assert.rejects(openInstallPullRequest(refused.port, { files: plan({ ...REPO, '.claude/settings.json': '{' }, catalog, CHOICE), title: '', body: '' }), (e: unknown) => e instanceof InstallRefused && e.code === 'invalid-json');
     assert.deepEqual(refused.calls, []);
     await assert.rejects(openInstallPullRequest(fakePort().port, { files: plan(REPO, catalog, CHOICE), title: '', body: '', branch: 'main' }), (e: unknown) => e instanceof InstallRefused && e.code === 'default-branch');
+    const unreadable = fakePort();
+    await assert.rejects(openInstallPullRequest(unreadable.port, { files: plan(REPO, catalog, CHOICE, { unreadable: ['CLAUDE.md'] }), title: '', body: '' }), (e: unknown) => e instanceof InstallRefused && e.code === 'unreadable');
+    assert.deepEqual(unreadable.calls, []);
     const leftover = fakePort({ existing: [INSTALL_BRANCH] });
     await assert.rejects(openInstallPullRequest(leftover.port, { files: plan(REPO, catalog, CHOICE), title: '', body: '' }), (e: unknown) => e instanceof InstallRefused && e.code === 'branch-exists');
     assert.deepEqual(leftover.calls, []);
+  });
+
+  test('an empty install branch at the default HEAD, left by a failure, is reused: no createRef, the commit on top of it', async () => {
+    const gh = fakePort({ existing: [INSTALL_BRANCH], existingAt: 'aaa111' });
+    const r = await openInstallPullRequest(gh.port, { files: plan(REPO, catalog, CHOICE), title: 't', body: '' });
+    assert.equal(r.status, 'opened');
+    assert.deepEqual(gh.calls.map((c) => c[0]), ['commit', 'pr']);
+    assert.equal(gh.refs.main, 'aaa111');
   });
 
   test('optional issue: a number becomes Refs #N; empty, no reference; text is refused', () => {
