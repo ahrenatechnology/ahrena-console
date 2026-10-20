@@ -253,8 +253,11 @@ const branchHasIssue = (branch: string | null, number: number) => branch !== nul
 
 export function buildBoard(input: BoardInput): Board {
   const board: Board = { todo: [], delegated: [], 'in-progress': [], 'in-review': [], blocked: [], done: [] };
+  // Várias sessões no branch da issue: a que espera você, senão a que trabalha, senão a de menor id.
   const sessionFor = (i: IssueFact) =>
-    input.sessions.filter((s) => s.repo === i.repo && branchHasIssue(s.branch, i.number)).sort((a, b) => Number(b.waitingOnYou) - Number(a.waitingOnYou))[0] ?? null;
+    input.sessions
+      .filter((s) => s.repo === i.repo && branchHasIssue(s.branch, i.number))
+      .sort((a, b) => Number(b.waitingOnYou) - Number(a.waitingOnYou) || Number(b.working) - Number(a.working) || a.id.localeCompare(b.id))[0] ?? null;
   const prFor = (i: IssueFact) =>
     input.openPullRequests.filter((p) => p.repo === i.repo && p.closes.includes(i.number)).sort((a, b) => Number(a.isDraft) - Number(b.isDraft) || a.number - b.number)[0] ??
     null;

@@ -69,6 +69,7 @@ import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
 import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
+import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 
 export { VERSAO_DA_API };
 
@@ -112,6 +113,8 @@ export interface OpcoesDaApi {
   decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
+  /** O Dev Console (#177); liga `GET /api/dev-console`. */
+  devConsole?: DevConsole;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -299,6 +302,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
     if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
+    if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,

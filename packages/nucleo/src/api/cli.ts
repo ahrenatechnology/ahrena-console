@@ -67,6 +67,8 @@ import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
+import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 
@@ -307,6 +309,16 @@ const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
+// O Dev Console (#177): o contexto sintético e o GitHub falso na --demo; senão o GitHub pelo cache da 0001.
+const devConsole = createDevConsole({
+  storage,
+  frota: mcp.frota,
+  decisions: decisoes,
+  cache: cacheDoGithub,
+  source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
+  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+});
+
 let historicoPronto = false;
 const follower =
   demo || o['sem-historico']
@@ -349,6 +361,7 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  devConsole,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
