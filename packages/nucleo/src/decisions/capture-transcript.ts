@@ -155,7 +155,7 @@ export function extractTranscriptDecisions(lines: Iterable<unknown>, opts: Trans
             if (title) list.push(title);
             const feedback = rejectionFeedback(text);
             if (feedback) {
-              emit([correctionDraft(base(toolUseId), { sourceKey: `tool:${toolUseId}`, text: feedback, proposal: title, topic: 'plano', inferred: false })]);
+              emit([correctionDraft(base(toolUseId), { sourceKey: `tool:${toolUseId}`, text: feedback, proposal: title, topic: 'plan', inferred: false })]);
             }
           } else if (b.is_error !== true) {
             emit([planDraft(base(toolUseId), call.input, list)]);

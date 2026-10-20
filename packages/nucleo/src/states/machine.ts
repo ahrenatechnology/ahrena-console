@@ -114,7 +114,7 @@ export class SessionStateMachine {
     // Activity the machine did not see (imported history, a hook that failed in onEvent): apply it before judging.
     const memory = readMemory(s);
     let synced: StateChange | null = null;
-    if (!memory.ultimoEvento || s.updatedAt > memory.ultimoEvento) synced = await this.syncNow(s.id);
+    if (!memory.lastEvent || s.updatedAt > memory.lastEvent) synced = await this.syncNow(s.id);
 
     const state = await this.load(s.id);
     if (!state) return synced;

@@ -169,7 +169,7 @@ export class TrabalhoPorBranch {
     const fonte = this.fonte;
     try {
       this.chamadas.github++;
-      const nos = await this.cache.get(`painel:issue:${key}`, GITHUB_TTL.issues, async () => ({ value: await fonte.nodes([key]) }));
+      const nos = await this.cache.get(`panel:issue:${key}`, GITHUB_TTL.issues, async () => ({ value: await fonte.nodes([key]) }));
       const no = nos.value.find((n) => n.key === key);
       if (!no) return base;
       const detalhe = await this.cache.get(`github:detail:${key}`, GITHUB_TTL.detail, async () => ({ value: await fonte.detail(key) }));

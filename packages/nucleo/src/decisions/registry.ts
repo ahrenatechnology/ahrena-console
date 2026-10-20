@@ -31,9 +31,9 @@ export interface DecisionDraft {
   decidedBy: Decider;
   origin: DecisionOrigin;
   inferred: boolean;
-  /** Padrão `vigente`; sugerida sempre entra `a_confirmar`. */
-  state?: Extract<DecisionState, 'vigente' | 'a_confirmar'>;
-  /** Padrão `familia`: a decisão segue a sessão pelo /clear, pela compactação e para as filhas. */
+  /** Default `current`; a suggested one always comes in `to_confirm`. */
+  state?: Extract<DecisionState, 'current' | 'to_confirm'>;
+  /** Default `family`: the decision follows the session through /clear, compaction and into child sessions. */
   scope?: DecisionScope;
   message?: Partial<MessageRef>;
   decidedAt: string;
@@ -106,7 +106,7 @@ export async function registerDecision(port: DecisionPort, draft: DecisionDraft,
   }
 
   const familyId = await familyOf(port, draft.sessionId);
-  const suggested = draft.origin === 'sugerida';
+  const suggested = draft.origin === 'suggested';
   const decision: Decision = {
     id,
     sourceKey: draft.sourceKey,
@@ -120,11 +120,11 @@ export async function registerDecision(port: DecisionPort, draft: DecisionDraft,
     context: draft.context,
     choice: draft.choice,
     alternatives: draft.alternatives,
-    decidedBy: suggested ? 'agente' : draft.decidedBy,
+    decidedBy: suggested ? 'agent' : draft.decidedBy,
     origin: draft.origin,
     inferred: suggested ? true : draft.inferred,
-    state: suggested ? 'a_confirmar' : (draft.state ?? 'vigente'),
-    scope: draft.scope ?? 'familia',
+    state: suggested ? 'to_confirm' : (draft.state ?? 'current'),
+    scope: draft.scope ?? 'family',
     supersedes: null,
     supersededBy: null,
     message: {
@@ -149,7 +149,7 @@ export async function registerDecision(port: DecisionPort, draft: DecisionDraft,
  * deixa a cadeia certa mesmo quando a captura chega fora de ordem (hook agora, transcript depois).
  */
 async function rebuildTopic(port: DecisionPort, familyId: string, topic: string, now: string): Promise<void> {
-  const all = await listAll(port, { familyId, states: ['vigente', 'substituida'] });
+  const all = await listAll(port, { familyId, states: ['current', 'superseded'] });
   const chain = all
     .filter((d) => d.topic === topic)
     .sort((a, b) => (a.decidedAt === b.decidedAt ? a.seq - b.seq : a.decidedAt < b.decidedAt ? -1 : 1));
@@ -158,7 +158,7 @@ async function rebuildTopic(port: DecisionPort, familyId: string, topic: string,
     const next = chain[i + 1] ?? null;
     const want: Decision = {
       ...d,
-      state: next ? 'substituida' : 'vigente',
+      state: next ? 'superseded' : 'current',
       supersededBy: next?.id ?? null,
       // Quem já saiu da cadeia (revertida) deixa de ser apontado; o elo passa para o anterior vivo.
       supersedes: prev?.id ?? null,
@@ -183,15 +183,15 @@ async function setState(port: DecisionPort, d: Decision, state: DecisionState, n
 /** "Confirmar": a decisão a confirmar passa a valer e entra na cadeia do assunto. */
 export async function confirmDecision(port: DecisionPort, id: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  if (d.state !== 'a_confirmar') throw new DecisionStateError(`só decisão a confirmar é confirmada (${d.state})`);
-  return setState(port, d, 'vigente', now);
+  if (d.state !== 'to_confirm') throw new DecisionStateError(`só decisão a confirmar é confirmada (${d.state})`);
+  return setState(port, d, 'current', now);
 }
 
 /** "Descartar": a decisão a confirmar sai das listas, mas fica no histórico. */
 export async function discardDecision(port: DecisionPort, id: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  if (d.state !== 'a_confirmar') throw new DecisionStateError(`só decisão a confirmar é descartada (${d.state})`);
-  return setState(port, d, 'descartada', now);
+  if (d.state !== 'to_confirm') throw new DecisionStateError(`só decisão a confirmar é descartada (${d.state})`);
+  return setState(port, d, 'dismissed', now);
 }
 
 /**
@@ -200,8 +200,8 @@ export async function discardDecision(port: DecisionPort, id: string, now: strin
  */
 export async function revertDecision(port: DecisionPort, id: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  if (d.state !== 'vigente') throw new DecisionStateError(`só decisão vigente é revertida (${d.state})`);
-  return setState(port, { ...d, supersedes: null }, 'revertida', now);
+  if (d.state !== 'current') throw new DecisionStateError(`só decisão vigente é revertida (${d.state})`);
+  return setState(port, { ...d, supersedes: null }, 'reverted', now);
 }
 
 /**
@@ -210,14 +210,14 @@ export async function revertDecision(port: DecisionPort, id: string, now: string
  */
 export async function reopenDecision(port: DecisionPort, id: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  if (d.state !== 'vigente' && d.state !== 'descartada') throw new DecisionStateError(`só decisão vigente ou descartada volta a confirmar (${d.state})`);
-  return setState(port, { ...d, supersedes: null }, 'a_confirmar', now);
+  if (d.state !== 'current' && d.state !== 'dismissed') throw new DecisionStateError(`só decisão vigente ou descartada volta a confirmar (${d.state})`);
+  return setState(port, { ...d, supersedes: null }, 'to_confirm', now);
 }
 
 /** Tira das listas o que a captura antiga gravou e não é decisão (pergunta fechada sem resposta, conversa). */
 export async function markNoise(port: DecisionPort, id: string, reason: string, now: string): Promise<Decision> {
   const d = await requireDecision(port, id);
-  return setState(port, { ...d, metadata: { ...d.metadata, ruido: reason } }, 'descartada', now);
+  return setState(port, { ...d, metadata: { ...d.metadata, noise: reason } }, 'dismissed', now);
 }
 
 /** A pessoa liberou o texto da decisão para sair da máquina. */
@@ -315,8 +315,8 @@ export type DecisionLevel = DecisionScope;
 
 /**
  * As decisões vigentes que valem para a sessão, no nível pedido, mais recentes primeiro:
- * - `sessao`: as da própria sessão;
- * - `familia`: as da sessão e as de escopo família ou branch das outras sessões da família;
+ * - `session`: as da própria sessão;
+ * - `family`: as da sessão e as de escopo família ou branch das outras sessões da família;
  * - `branch`: as da família e as de escopo branch de outras famílias no mesmo branch.
  * É o que a injeção no início da sessão (#100) e a ferramenta MCP (#101) consultam.
  */
@@ -325,15 +325,15 @@ export async function currentDecisionsFor(
   target: { sessionId: string; branch?: string | null; repo?: string | null },
   level: DecisionLevel,
 ): Promise<Decision[]> {
-  const own = await listAll(port, { sessionId: target.sessionId, states: ['vigente'] });
-  if (level === 'sessao') return own;
+  const own = await listAll(port, { sessionId: target.sessionId, states: ['current'] });
+  if (level === 'session') return own;
   const familyId = await familyOf(port, target.sessionId);
   const byId = new Map(own.map((d) => [d.id, d]));
-  for (const d of await listAll(port, { familyId, states: ['vigente'] })) {
-    if (d.scope !== 'sessao') byId.set(d.id, d);
+  for (const d of await listAll(port, { familyId, states: ['current'] })) {
+    if (d.scope !== 'session') byId.set(d.id, d);
   }
   if (level === 'branch' && target.branch) {
-    for (const d of await listAll(port, { branch: target.branch, repo: target.repo ?? null, states: ['vigente'] })) {
+    for (const d of await listAll(port, { branch: target.branch, repo: target.repo ?? null, states: ['current'] })) {
       if (d.scope === 'branch') byId.set(d.id, d);
     }
   }

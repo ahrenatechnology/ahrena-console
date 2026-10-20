@@ -33,11 +33,11 @@ describe('decisions: capture through the hooks', () => {
     );
     assert.equal(got.length, 2);
     const [database, screens] = got;
-    assert.equal(database.origin, 'pergunta');
+    assert.equal(database.origin, 'question');
     assert.equal(database.context, 'Qual banco usar nos testes?');
     assert.equal(database.choice, 'Postgres no Docker');
     assert.deepEqual(database.alternatives, ['SQLite em memória']);
-    assert.equal(database.decidedBy, 'usuario');
+    assert.equal(database.decidedBy, 'user');
     assert.equal(database.branch, 'feat/42-kanban');
     assert.equal(database.repo, '/repo/app');
     assert.equal(database.message.toolUseId, 'toolu_ask');
@@ -59,9 +59,9 @@ describe('decisions: capture through the hooks', () => {
         tool_response: { plan: PLAN, isAgent: false, filePath: '/home/dev/.claude/plans/x.md' },
       }),
     );
-    assert.equal(d.origin, 'plano');
+    assert.equal(d.origin, 'plan');
     assert.equal(d.choice, 'Kanban só leitura');
-    assert.equal(d.topic, 'plano');
+    assert.equal(d.topic, 'plan');
     assert.equal(d.metadata.steps, 3);
   });
 
@@ -69,7 +69,7 @@ describe('decisions: capture through the hooks', () => {
     assert.deepEqual(await cap.onEvent(hook(1, { hook_event_name: 'PreToolUse', ...bash('t1') })), []);
     assert.deepEqual(await cap.onEvent(hook(2, permissionPrompt)), []);
     const [d] = await cap.onEvent(hook(3, { hook_event_name: 'PostToolUse', ...bash('t1'), tool_response: { stdout: 'ok' } }));
-    assert.equal(d.origin, 'permissao');
+    assert.equal(d.origin, 'permission');
     assert.equal(d.choice, 'Permitir Bash: npm test');
     assert.deepEqual(d.alternatives, ['negar']);
     assert.equal(d.metadata.allowed, true);
@@ -123,8 +123,8 @@ describe('decisions: capture through the hooks', () => {
     }
     const all = (await ctx.decisions.listDecisions({ sessionId: 's1' })).items;
     assert.deepEqual(all.map((d) => [d.choice, d.state]), [
-      ['Negar Bash: npm test', 'vigente'],
-      ['Permitir Bash: npm test', 'substituida'],
+      ['Negar Bash: npm test', 'current'],
+      ['Permitir Bash: npm test', 'superseded'],
     ]);
   });
 

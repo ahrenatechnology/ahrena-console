@@ -38,3 +38,40 @@ export class SqliteCacheStore implements CachePort {
     this.db.prepare('DELETE FROM github_cache WHERE key = ?').run(key);
   }
 }
+
+/** The English key of a cache key written before #173 phase 5, or `null` if it has no Portuguese segment. */
+export function englishGithubCacheKey(key: string): string | null {
+  let next = key
+    .replace(/^repos:detalhe:/, 'repos:detail:')
+    .replace(/^repos:lista$/, 'repos:list')
+    .replace(/^repos:resumo$/, 'repos:summary')
+    .replace(/^painel:issue:/, 'panel:issue:');
+  if (next.endsWith(':1a')) next = `${next.slice(0, -3)}:1y`;
+  return next === key ? null : next;
+}
+
+/**
+ * #173 phase 5: the cache keys that had Portuguese segments (`repos:detalhe:…`, `repos:lista`,
+ * `repos:resumo`, `painel:issue:…`, the `1a` period) are read under English keys now. The value is the
+ * raw GitHub answer, whose shape did not change, so each row moves to its English key with its
+ * `fetched_at` and `etag`: nothing still fresh is lost. If the English key already exists, the most
+ * recently fetched row stays. The table may not exist yet.
+ */
+export function renameLegacyGithubCacheKeys(db: DatabaseSync): void {
+  const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'github_cache'`).get();
+  if (!exists) return;
+  const rows = db.prepare('SELECT key FROM github_cache').all() as { key: string }[];
+  const move = db.prepare(
+    `INSERT INTO github_cache (key, value_json, fetched_at, etag)
+       SELECT ?, value_json, fetched_at, etag FROM github_cache WHERE key = ?
+     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, fetched_at = excluded.fetched_at, etag = excluded.etag
+       WHERE excluded.fetched_at > github_cache.fetched_at`,
+  );
+  const drop = db.prepare('DELETE FROM github_cache WHERE key = ?');
+  for (const { key } of rows) {
+    const english = englishGithubCacheKey(key);
+    if (!english) continue;
+    move.run(english, key);
+    drop.run(key);
+  }
+}
