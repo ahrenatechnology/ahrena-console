@@ -152,6 +152,8 @@ export interface GithubGraphqlSourceOptions {
   now?: () => number;
   /** Chamado a cada consulta com o custo que o GitHub cobrou. */
   onCost?: (cost: QueryCost) => void;
+  /** Waits between retries of a 502/503/504 (tests make it instant). Default `setTimeout`. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface GraphqlError {
@@ -237,7 +239,8 @@ export class GithubGraphqlSource implements WorkSource {
   }
 
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
-    return githubGraphql<T>({ ...this.opts, token: await this.token() }, operation, query, variables, { tolerateNotFound });
+    const token = await this.token();
+    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound }), { sleep: this.opts.sleep });
   }
 }
 
@@ -246,6 +249,43 @@ export class GithubScopeError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'GithubScopeError';
+  }
+}
+
+/**
+ * GitHub answered 502, 503 or 504: on the GraphQL API this is usually a query that took longer than
+ * GitHub's ~10 s limit (too many nodes in one request), sometimes a passing outage.
+ */
+export class GithubGatewayError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'GithubGatewayError';
+    this.status = status;
+  }
+}
+
+/** Waits before each retry of a 502/503/504 read; after the last one the error goes up. */
+export const GATEWAY_RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000];
+
+const sleepFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs a read and repeats it on `GithubGatewayError`, waiting `delaysMs` between tries. `attempt`
+ * gets the try number (0 first), so a paged read can ask for a smaller page each time. Only for
+ * queries: a mutation that timed out on GitHub's side may have been applied.
+ */
+export async function retryOnGateway<T>(
+  attempt: (n: number) => Promise<T>,
+  { delaysMs = GATEWAY_RETRY_DELAYS_MS, sleep = sleepFor }: { delaysMs?: readonly number[]; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<T> {
+  for (let n = 0; ; n++) {
+    try {
+      return await attempt(n);
+    } catch (err) {
+      if (!(err instanceof GithubGatewayError) || n >= delaysMs.length) throw err;
+      await sleep(delaysMs[n]);
+    }
   }
 }
 
@@ -295,6 +335,7 @@ export async function githubGraphql<T>(
   const message = json.errors?.[0]?.message ?? json.message ?? `HTTP ${res.status}`;
   if (res.status === 429 || (res.status === 403 && (/rate limit/i.test(message) || res.headers.get('x-ratelimit-remaining') === '0')))
     throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));
+  if (res.status === 502 || res.status === 503 || res.status === 504) throw new GithubGatewayError(`GitHub respondeu ${res.status}: ${message}`, res.status);
   if (!res.ok) throw new Error(`GitHub respondeu ${res.status}: ${message}`);
   if (json.errors?.some((e) => e.type === 'RATE_LIMITED'))
     throw new RateLimitedError(`GitHub limitou as chamadas: ${message}`, backoffMs(res.headers, now()));

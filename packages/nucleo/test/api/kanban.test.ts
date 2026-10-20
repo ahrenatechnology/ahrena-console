@@ -184,8 +184,8 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.equal(corpo.columns.length, 1);
     assert.equal(corpo.columns[0].id, 'abandoned');
     assert.equal(corpo.columns[0].page, 1);
-    // The old parameter names and values still read the same (src/api/legacy-routes.ts).
-    assert.deepEqual((await get('/api/kanban?coluna=abandonada')).corpo, corpo);
+    // The old Portuguese parameter name is gone: `coluna` is ignored and the whole board comes back.
+    assert.equal((await get('/api/kanban?coluna=abandonada')).corpo.columns.length, 5);
     const alem = await get('/api/kanban?column=abandoned&page=999');
     assert.equal(alem.status, 200);
     assert.deepEqual(alem.corpo.columns[0].items, []);
@@ -206,7 +206,9 @@ describe('#31 GET /api/kanban com o simulador', () => {
         ['error', 'Erro'],
       ],
     );
-    assert.deepEqual((await get('/api/kanban?visao=agentes')).corpo, corpo, 'the old view value');
+    // The old Portuguese view value is refused; the old parameter name is ignored (sessions view).
+    assert.equal((await get('/api/kanban?view=agentes')).status, 400, 'the old view value');
+    assert.equal((await get('/api/kanban?visao=agentes')).corpo.view, 'sessions', 'the old parameter name');
     assert.deepEqual(COLUNAS_DOS_AGENTES.map((c) => c.id), corpo.columns.map((c) => c.id));
   });
 
@@ -289,15 +291,16 @@ describe('#31 GET /api/kanban com o simulador', () => {
       ['column=active&page=0', 'page: um inteiro a partir de 1'],
     ];
     for (const [q, error] of errors) assert.deepEqual(await get(`/api/kanban?${q}`), { status: 400, corpo: { error }, texto: JSON.stringify({ error }) }, q);
+    // Bad values, and the old Portuguese values, which are no longer accepted.
     for (const q of [
-      'visao=quadro',
-      'visao=agentes&coluna=ativa',
-      'visao=sessoes&coluna=trabalhando',
-      'coluna=nada',
-      'coluna=ativa&pagina=0',
-      'coluna=ativa&pagina=1.5',
-      'coluna=ativa&pagina=abc',
-      'pagina=2',
+      'view=sessoes',
+      'view=agentes',
+      'view=agents&column=trabalhando',
+      'column=ativa',
+      'column=abandonada',
+      'column=nada',
+      'column=active&page=1.5',
+      'column=active&page=abc',
     ]) {
       const { status, corpo } = await get(`/api/kanban?${q}`);
       assert.equal(status, 400, q);

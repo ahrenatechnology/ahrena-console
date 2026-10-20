@@ -13,7 +13,7 @@ Um núcleo por **instalação**, em porta aleatória (issue #221; decisão [0010
 | [start.ts](start.ts) | `startOrAdopt`: o `start` como função, para o comando e para a ponte do MCP |
 | [clients.ts](clients.ts) | Clientes registrados em `<pasta de dados>/clientes/<pid>` |
 | [owner.ts](owner.ts) | As regras: `examine`, `planStart` (adotar, recuperar, substituir), `claimLock`, `stopCore`, `watchParent` |
-| [cli.ts](cli.ts) | `npm run core -- status\|start\|stop`. O caminho antigo `src/dono/cli.ts` é um atalho para ele, que o app de bandeja chama até a fase 4 da #173 (sai na fase 6) |
+| [cli.ts](cli.ts) | `npm run core -- status\|start\|stop` |
 
 ## Instalação, pasta de dados e porta
 
@@ -29,7 +29,7 @@ Na pasta de dados ficam o banco (`nucleo.sqlite`, a menos que `--db` ou `AHRENA_
 
 Fica em `~/.ahrena-console/` (a pasta do usuário, `consoleHome()`; `AHRENA_CONSOLE_HOME` a troca, para testes) o que não é dado de um núcleo: o registro de instâncias, `contas.json`, `machines.json`, `dev-console.json`, `perfis.json`, `backups/` e o `hooks.log`. Na instalação `dev`, as duas pastas são a mesma.
 
-**Porta:** por padrão `0`, e o sistema escolhe uma livre. O núcleo a anuncia no log (`listening on port <n> · installation <i> · data <pasta>`), na trava, no registro e na linha `--json` do `start`. `--port`, `AHRENA_CONSOLE_CORE_PORT` ou o nome antigo `AHRENA_CONSOLE_PORT` forçam uma porta, para testes, demos e a transição (decisão 0010, item 7: quem quiser os hooks do mod publicado no núcleo de desenvolvimento o sobe com `--port 4720`).
+**Porta:** por padrão `0`, e o sistema escolhe uma livre. O núcleo a anuncia no log (`listening on port <n> · installation <i> · data <pasta>`), na trava, no registro e na linha `--json` do `start`. `--port`, `AHRENA_CONSOLE_CORE_PORT` ou `AHRENA_CONSOLE_PORT` forçam uma porta, para testes, demos e a transição (decisão 0010, item 7: quem quiser os hooks do mod publicado no núcleo de desenvolvimento o sobe com `--port 4720`).
 
 ## O registro de instâncias
 
@@ -45,7 +45,7 @@ Cada núcleo com trava grava `~/.ahrena-console/instances/<id>.json` depois que 
 - `pickInstance({ installation })` devolve a entrada viva da instalação pedida, senão a primeira viva, senão `null`.
 - `verifyInstance(i)` confere que a porta responde `/api/overview` com aquele pid. Use antes de mandar algo que muda estado: um pid vivo pode ser um número reaproveitado.
 - Uma falha ao gravar o registro vai para o log e não derruba o núcleo; um arquivo que não dá para ler agora (permissão, uma pasta) é pulado, não apagado.
-- `--demo` e `--no-lock` (`--sem-trava`) **não** se registram: não são o núcleo da instalação, e ninguém deve achá-los por ali.
+- `--demo` e `--no-lock` **não** se registram: não são o núcleo da instalação, e ninguém deve achá-los por ali.
 
 ```ts
 import { listInstances, pickInstance, verifyInstance } from '@ahrena-console/nucleo/owner';
@@ -65,7 +65,7 @@ As chaves do arquivo continuam em português, porque outros núcleos instalados 
 
 - **Atômica e exclusiva:** grava um temporário na mesma pasta e o liga com `link`, que falha se já há trava: de dois núcleos que a criam ao mesmo tempo (em portas diferentes), um só consegue, e o outro fecha e adota. Para tirar uma trava (órfã, ou a própria ao sair), move com `rename` e confere o token; se não era a esperada, ela volta para o lugar. Quem lê vê uma trava inteira, nunca metade.
 - **Permissão:** o arquivo é 0600 e a pasta, 0700. A pasta é fechada também quando já existia aberta (o `mkdir` de antes dava 0755), porque o banco mora nela. O `token` é aleatório (32 bytes) e é dos clientes locais: provar que leram a trava, para rotas que mudam estado. Ele não aparece no `status` nem no log.
-- **Viva** quando o pid existe **e** a porta responde `/api/overview` com `"name": "ahrena-console"` (ou `"nome"`, num núcleo de antes da #173 fase 2b) **e o mesmo `pid`**. Pid morto, porta muda, porta de outro processo (o pid da trava foi reaproveitado) ou arquivo ilegível: **órfã**, e quem sobe a recupera.
+- **Viva** quando o pid existe **e** a porta responde `/api/overview` com `"name": "ahrena-console"` **e o mesmo `pid`**. Pid morto, porta muda, porta de outro processo (o pid da trava foi reaproveitado) ou arquivo ilegível: **órfã**, e quem sobe a recupera.
 - **Nunca sinaliza um estranho:** `stop` e `--replace` só mandam SIGTERM ou SIGKILL depois de conferir, antes de cada sinal, que a porta responde com aquele pid (ou, com a porta já fechada, que o processo ainda é o `node … src/api/cli.ts`).
 
 ## Subir ou adotar
@@ -75,9 +75,9 @@ As chaves do arquivo continuam em português, porque outros núcleos instalados 
 3. **Prende a porta** em 127.0.0.1 antes de abrir o banco (com `0`, a que o sistema der). Com uma porta forçada, é o sistema que garante um núcleo só quando dois sobem ao mesmo tempo: só um consegue a porta. O outro espera o núcleo responder e o adota.
 4. Abre o banco e sobe a API **no mesmo socket** que prendeu (sem soltar a porta no meio, por isso ninguém a pega antes), grava a trava, solta a guarda e grava a entrada do registro.
 
-Se a porta forçada está presa por algo que não responde como núcleo em 30 s, sai com 1. Se responde como o núcleo de **outra instalação** (está no registro com outra pasta de dados, ou tem a trava da pasta `dev`), sai com 1 e pede outra porta: não adota. Se responde como núcleo sem trava (uma `--demo`, uma `--sem-trava` ou um núcleo de antes da #86), adota e avisa.
+Se a porta forçada está presa por algo que não responde como núcleo em 30 s, sai com 1. Se responde como o núcleo de **outra instalação** (está no registro com outra pasta de dados, ou tem a trava da pasta `dev`), sai com 1 e pede outra porta: não adota. Se responde como núcleo sem trava (uma `--demo`, uma `--no-lock` ou um núcleo de antes da #86), adota e avisa.
 
-`--demo` e `--sem-trava` não leem nem gravam a trava e **nunca adotam**: se a porta já tem núcleo, saem com 1 e pedem outra porta. Quem pede a demo não recebe o núcleo real.
+`--demo` e `--no-lock` não leem nem gravam a trava e **nunca adotam**: se a porta já tem núcleo, saem com 1 e pedem outra porta. Quem pede a demo não recebe o núcleo real.
 
 Vale a trava, não a `--port`: se o núcleo da instalação já roda em outra porta, quem sobe o adota lá.
 
@@ -85,7 +85,7 @@ A adoção e o `--replace` (versão e commit, abaixo) valem só dentro da mesma 
 
 ### Versão e código
 
-A `VERSAO_DA_API` muda pouco, e dois checkouts da mesma versão podem ser códigos diferentes. Por isso o `/api/overview` diz também o `commit` do núcleo no ar, e quem sobe compara:
+A `API_VERSION` muda pouco, e dois checkouts da mesma versão podem ser códigos diferentes. Por isso o `/api/overview` diz também o `commit` do núcleo no ar, e quem sobe compara:
 
 | O núcleo no ar | Sem `--replace` | Com `--replace` |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ Ninguém fica sem núcleo por causa da versão. Parar o velho é SIGTERM e, depo
 
 ## A regra do `--parent`
 
-- `--parent <pid>` no núcleo que sobe (na API, `--pai`): ele vigia esse pid a cada segundo.
+- `--parent <pid>` no núcleo que sobe (na API também `--parent`): ele vigia esse pid a cada segundo.
 - `--parent <pid>` em quem adota: o pid vira **cliente registrado** (`<pasta de dados>/clientes/<pid>`).
 - O núcleo **sai** quando o pai morreu **e** nenhum cliente registrado está vivo. Enquanto houver um, fica. Cliente morto é apagado da pasta.
 - Sem `--parent`, ninguém vigia: o núcleo subido no terminal só sai com `stop`, SIGTERM ou Ctrl-C, mesmo que clientes se registrem.
@@ -114,21 +114,21 @@ npm run core -- start                             # adota ou sobe em segundo pla
 npm run core -- start --installation app --parent 777 --json   # para o app
 npm run core -- start --port 4720                 # porta forçada (os hooks do mod publicado)
 npm run core -- start --data-dir /tmp/x           # outra pasta de dados
-npm run core -- start -- --sem-github             # depois de --, opções da API
+npm run core -- start -- --no-github              # depois de --, opções da API
 npm run core -- stop --installation app           # para só o núcleo daquela instalação
 ```
 
-Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--substituir`) continuam aceitos até a fase 6 da #173; se vierem os dois, vale o novo. As chaves que a linha do `--json` já tinha não mudam (chaves e valores em português, porque o app as lê); as novas (`installation`, `dataDir`, `instances`) nascem em inglês. Na API, `--port`, `--db`, `--parent`, `--replace` e `--no-lock` ganharam o nome em inglês, e os antigos (`--porta`, `--banco`, `--pai`, `--substituir`, `--sem-trava`) continuam aceitos.
+Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--substituir`, e na API `--banco`, `--sem-trava`…) saíram na fase 6 da #173: uma opção desconhecida é erro. A linha do `--json` é em inglês desde então (o app lê essas chaves desde a 0.0.5); só o texto de `reason` e `warning` é pt-BR, porque vai para a tela.
 
-`start` sobe a API (`src/api/cli.ts`, com `--port`, `--installation` e `--data-dir`) num processo à parte, com o log em `<pasta de dados>/nucleo.log`, e só volta quando ela responde. Com `--json`, uma linha; `porta` é a que o núcleo recebeu, e `installation` e `dataDir` (chaves novas, em inglês) dizem de quem é:
+`start` sobe a API (`src/api/cli.ts`, com `--port`, `--installation` e `--data-dir`) num processo à parte, com o log em `<pasta de dados>/nucleo.log`, e só volta quando ela responde. Com `--json`, uma linha; `port` é a que o núcleo recebeu, e `installation` e `dataDir` dizem de quem é:
 
 ```json
-{"estado":"de-pe","url":"http://127.0.0.1:53817","porta":53817,"pid":4242,"versao":"0.0.1","inicio":"…","pai":777,"subiu":true,"commit":"cc20484","installation":"app","dataDir":"/Users/…/Library/Application Support/dev.ahrena.console"}
+{"state":"up","url":"http://127.0.0.1:53817","port":53817,"pid":4242,"version":"0.0.1","startedAt":"…","parent":777,"started":true,"commit":"cc20484","installation":"app","dataDir":"/Users/…/Library/Application Support/dev.ahrena.console"}
 ```
 
-`status --json` dá a mesma linha (ou `{"estado":"parado",…}`) com `installation`, `dataDir` e `instances`, a lista do registro (as entradas como no arquivo, sem token). Sem `--json`, uma linha por instância: `dev-4242 · dev · port 53817 · pid 4242 · version 0.0.1 (cc20484) · /Users/…/.ahrena-console`.
+`status --json` dá a mesma linha (ou `{"state":"stopped",…}`) com `installation`, `dataDir` e `instances`, a lista do registro (as entradas como no arquivo, sem token). Sem `--json`, uma linha por instância: `dev-4242 · dev · port 53817 · pid 4242 · version 0.0.1 (cc20484) · /Users/…/.ahrena-console`.
 
-`subiu: false` quer dizer que adotou. `npm run api` (em primeiro plano) usa o mesmo mecanismo: se há núcleo, adota e sai com 0.
+`started: false` quer dizer que adotou. `npm run api` (em primeiro plano) usa o mesmo mecanismo: se há núcleo, adota e sai com 0.
 
 ### Quem usa como
 
@@ -141,15 +141,15 @@ Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--sub
 
 A ponte do MCP acha o núcleo pelo registro (#221, 5a); o app usa só o próprio núcleo (#221, 4/5).
 
-O `scripts/medir-carga.mjs` sobe com `--sem-trava` numa porta à parte.
+O `scripts/medir-carga.mjs` sobe com `--no-lock` numa porta à parte.
 
 ## Testes
 
 [test/owner/owner.test.ts](../../test/owner/owner.test.ts) sobe núcleos de verdade, cada um com um `HOME` falso numa pasta temporária e numa porta livre:
 - duas e três subidas ao mesmo tempo dão um núcleo só;
 - trava órfã por pid morto, por porta muda e por pid reaproveitado, sem sinalizar o processo estranho;
-- versão mais velha e commit diferente, com e sem `--substituir` (na API) e `replace`;
-- `--demo` e `--sem-trava` com a porta ocupada;
+- versão mais velha e commit diferente, com e sem `--replace` (na API) e `replace`;
+- `--demo` e `--no-lock` com a porta ocupada;
 - a pasta 0700, a trava exclusiva e a liberação que devolve a trava alheia;
 - pai morto com e sem cliente registrado;
 - a ponte do MCP subindo, adotando e saindo.

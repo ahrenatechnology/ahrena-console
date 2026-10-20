@@ -168,10 +168,10 @@ describe('repos na /ui: os números', () => {
   test('#105 critério 6: o período vem de ?period= (o valor da API, 1y para o ano) e cai no padrão se estranho', () => {
     assert.equal(periodFrom('?period=30d'), '30d');
     assert.equal(periodFrom('?period=1y'), '1y');
-    assert.equal(periodFrom('?period=1a'), '90d', 'the old value is the shell router\'s job (legacyUrl)');
+    assert.equal(periodFrom('?period=1a'), '90d', 'the old value is not read (#173, phase 6)');
     assert.equal(periodFrom(''), '90d');
     assert.equal(periodFrom('?period=7d'), '90d');
-    assert.equal(periodFrom('?periodo=30d'), '90d', 'the old query is the shell router\'s job (legacyUrl)');
+    assert.equal(periodFrom('?periodo=30d'), '90d', 'the old query is not read (#173, phase 6)');
     assert.equal(periodLabel('30d'), '30 dias');
     assert.equal(periodLabel('1y'), '1 ano');
   });
@@ -353,7 +353,7 @@ describe('repos na /ui: o que a tela mostra', () => {
 
   test('sem GitHub: um texto só, que diz como configurar', () => {
     assert.match(NO_GITHUB.texto, /gh auth login/);
-    assert.match(NO_GITHUB.texto, /--sem-github/);
+    assert.match(NO_GITHUB.texto, /--no-github/);
     assert.match(NO_GITHUB.titulo, /sem o GitHub/);
   });
 });

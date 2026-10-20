@@ -134,7 +134,8 @@ test('the guard recognizes Portuguese and leaves English alone', () => {
     '/api/decisions/*/dismiss',
   ])
   assert.deepEqual(sorted(routes("rota: '/ui/sessions/:id', arquivo: '/ui/screens/a.js'; // src/api/x.ts")), ['/ui/screens', '/ui/sessions/*'])
-  assert.deepEqual(portugueseWords('AHRENA_NUCLEO_PORTA'), ['nucleo', 'porta'])
+  // Split, so this file does not read as a variable the code uses.
+  assert.deepEqual(portugueseWords('AHRENA_' + 'NUCLEO_PORTA'), ['nucleo', 'porta'])
   assert.deepEqual(portugueseWords('AHRENA_CONSOLE_CORE_PORT'), [])
   assert.deepEqual(sorted(envVars('process.env.AHRENA_X; env::var("HOME"); cmd.env("AHRENA_CONSOLE_DATA_DIR", d); process.env["NODE_ENV"]')), [
     'AHRENA_CONSOLE_DATA_DIR',

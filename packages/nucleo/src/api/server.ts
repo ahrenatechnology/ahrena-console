@@ -17,7 +17,7 @@
 // | `GET /api/events`             | The activity feed, all sessions (api/events.ts, #94)      |
 // | `GET /api/attention`          | Who needs you, across all accounts (the tray, #87)        |
 // | `GET /api/dashboard`          | The Dashboard's numbers, active agents and activity (C1, #27) |
-// | `GET /api/analytics` and `/api/analytics/cost` | The Analytics screen (`?tz=`, `?days=`; api/analytics-route.ts, #95 and #32) |
+// | `GET /api/analytics`, `/api/analytics/cost` and `/api/analytics/delivery` | The Analytics screen (`?tz=`, `?days=`, `?groupBy=`, `?key=`; api/analytics-route.ts, #95, #32 and #266) |
 // | `GET /api/sessions`           | The Sessions screen's list, paginated and filtered (api/sessions.ts, #28) |
 // | `GET /api/history`            | The ended sessions by day (`?before=`, `?days=`, `?search=`; api/history.ts, #33) |
 // | `GET /ui` and `/ui/*`         | The console's interface (api/ui.ts, folder `ui/`, #26)    |
@@ -35,14 +35,8 @@
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 //
-// The old Portuguese routes and query parameters (`/api/painel/<id>`, `/api/sessao/<id>`, `/abrir/<id>`,
-// `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
-// `normalizeLegacyUrl` (api/legacy-routes.ts, the only place that knows them) runs before the routing
-// (issue #173, phase 1). They leave in phase 6, after the published mod and the installed app migrate.
-// Since phase 2b the JSON is English, and an old route still answers its old body and takes its old
-// request body: `handle` sets the route's back-translator (`legacyResponseFor`) on the response, and
-// `send` applies it to every JSON it writes, errors included; the writes read the body through
-// `legacyRequestBody`.
+// The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
+// aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
 //
 // `?local=`, `?account=`, `?org=`, `?model=` and `?cwd=` on the panel are what it reads from its own session;
 // `?decisions=<scope>` brings the open decision list in the same request.
@@ -55,16 +49,15 @@
 // the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
 // install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
-// decision 0012). The old aliases
-// (`/abrir/…`, `/api/projeto/mover`, `/api/decisoes/<id>/<action>`) go through the same rules.
+// decision 0012).
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
-// `{ "session": "<id>" }` (the old `{ "sessao" }` is still read, on every path), and it only reaches a
+// `{ "session": "<id>" }`, and it only reaches a
 // decision that session sees, from its account.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Server as NetServer } from 'node:net';
-import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
+import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisions.ts';
@@ -89,7 +82,6 @@ import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { RotaAnalytics } from './analytics-route.ts';
-import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
@@ -155,11 +147,6 @@ export interface ApiOptions {
   frameworkInstall?: FrameworkInstallRoute;
   /** As ADRs e as PDRs dos repositórios (api/adrs.ts, #174); sem ela, `/api/adrs` e `/api/pdrs` dão 404. */
   decisions?: DecisionsRoute;
-  /**
-   * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
-   * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
-   */
-  demoUrl?: (url: URL) => URL;
   /** The Dev Console (#177); turns on `GET /api/dev-console`. */
   devConsole?: DevConsole;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
@@ -211,20 +198,18 @@ function fromOwnUi(req: IncomingMessage, port: number): boolean {
 const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && fromOwnUi(req, port);
 
 /**
- * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` (or the alias `/abrir/<local_…>`)
- * from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
+ * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
  * holds as in the other writes: JSON (`openDirect` checks it) and the strict id.
  */
 const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
+  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && fromOwnUi(req, port);
 
 /**
- * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>` (or the alias
- * `/api/decisoes/<id>/<ação>`), with the exact raw path (a query gives 403) and from the same origin. The id
+ * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>`, with the exact raw path (a query gives 403) and from the same origin. The id
  * starts with an alphanumeric: `/api/decisions/../confirm` does not pass. The mandatory JSON stays with the handler (415).
  */
 const sameOriginDecision = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
+  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
 
 /** The decision list scope of a parameter, or `null`. */
 const scopeOf = (v: string | null): PanelDecisionScope | null => (ESCOPOS_DAS_DECISOES.includes(v as PanelDecisionScope) ? (v as PanelDecisionScope) : null);
@@ -291,8 +276,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   }
 
   // A write: JSON only, with the session in the body; the panel builder checks the session sees the decision. The body
-  // is `{ session, text }`; the old `{ sessao, texto }` is read too, on the new path as well (the old
-  // path translates it through `legacyRequestBody`), so a client can move to the new route first.
+  // is `{ session, text }`.
   async function decide(req: IncomingMessage, res: ServerResponse, id: string, action: AcaoNaDecisao, url: URL) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
@@ -301,9 +285,9 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     let session: unknown;
     let adjustment: unknown;
     try {
-      const body = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(text)) as { session?: unknown; text?: unknown; sessao?: unknown; texto?: unknown } | null;
-      session = body?.session ?? body?.sessao;
-      adjustment = body?.text ?? body?.texto;
+      const body = JSON.parse(text) as { session?: unknown; text?: unknown } | null;
+      session = body?.session;
+      adjustment = body?.text;
     } catch {
       return send(res, 400, { error: 'JSON inválido' });
     }
@@ -343,21 +327,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
-    // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
-    const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const normalized = normalizeLegacyUrl(raw);
-    const url = opts.demoUrl ? opts.demoUrl(normalized) : normalized;
-    // An old route answers its old body: every JSON written from here on, errors included, goes
-    // through its back-translator (new → old keys and values).
-    const toLegacy = legacyResponseFor(raw.pathname);
-    if (toLegacy) rewriteJsonBodies(res, toLegacy);
+    const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
-    // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
-    // its live refresh work with the current id.
-    if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
-      res.writeHead(302, { location: `${url.pathname}${url.search}`, 'cache-control': 'no-store', 'content-length': 0 });
-      return void res.end();
-    }
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
@@ -378,9 +349,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
     if (desktopMatch) return redirectToDesktop(res, desktopMatch[1]!);
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
-    // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
-    // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
-    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: API_VERSION });
+    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);

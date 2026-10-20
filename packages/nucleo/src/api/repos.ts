@@ -5,7 +5,7 @@
 // | `GET /api/repos`                              | `ListaDeRepos`                    |
 // | `GET /api/repos/<dono>/<repo>?period=90d`     | `MetricasDoRepo`                  |
 //
-// `?period=` é `30d`, `90d` (padrão) ou `1y` (o antigo `1a` ainda vale, src/api/legacy-routes.ts), e vale para a resposta inteira (#105 critério 6);
+// `?period=` é `30d`, `90d` (padrão) ou `1y`, e vale para a resposta inteira (#105 critério 6);
 // outro valor dá 400. `?refresh=1` é o botão Atualizar: relê o GraphQL ignorando o TTL, com o
 // intervalo mínimo de 30 s do cache (decisão 0001). `<dono>` e `<repo>` passam pelo padrão de
 // nome do GitHub antes de qualquer coisa; fora dele, 400.
@@ -26,7 +26,7 @@
 // `MAXIMO_DE_ENTRADAS` combinações de repositório e período, as menos lidas saem primeiro.
 //
 // - `state`: `ready`; `loading` (sem dado ainda, ou a montagem parcial: o cabeçalho do repo já
-//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--sem-github`); `error`
+//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--no-github`); `error`
 //   (falhou e não há dado anterior); `not-found` (só nas métricas).
 // - `error`: o motivo do dado velho, do limite ou da falha (texto da tela); o último dado vem junto.
 // - `computing` (métricas): as estatísticas que o GitHub devolveu 202 (`commits`, `frequency`, `lines`, `contributors`). O campo fica `null`, e o
@@ -78,6 +78,7 @@ import {
 } from '../github/repos-calculo.ts';
 import {
   GithubReposSource,
+  incompleteListMessage,
   NOME_DO_DONO,
   NOME_DO_REPO,
   SemGithubError,
@@ -123,7 +124,7 @@ const CALCULANDO = 'o GitHub ainda está calculando (202)';
 
 /**
  * The key of the `repos` change for the list (`/api/changes`); a repository's own change has its
- * `owner/repo` in lower case. The old route `/api/mudancas` answers it as `lista`.
+ * `owner/repo` in lower case.
  */
 export const LIST_CHANGE_KEY = 'list';
 
@@ -381,13 +382,23 @@ export class ReposDoGithub {
     const agora = this.agora();
     let crua: { value: ListaCrua; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, (f) => f.lista());
+      // A cut list never replaces a longer one already shown: it fails, and the cache keeps serving
+      // the old one with the reason (#269).
+      const shown = e.valor?.summary.repositories ?? 0;
+      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, async (f) => {
+        const list = await f.lista();
+        if (list.incomplete && list.repos.length < shown) throw new Error(incompleteListMessage(list.incomplete));
+        return list;
+      });
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : listaVazia(this.estadoDaFalha(), msg), LIST_CHANGE_KEY);
       return;
     }
     const erros: string[] = crua.stale && crua.staleReason ? [crua.staleReason] : [];
+    // A list cut by a page that failed says so first: how many came and why the rest did not.
+    const missing = crua.value.incomplete;
+    if (missing) erros.unshift(incompleteListMessage(missing));
     const commitsAntes = new Map((e.valor?.groups ?? []).flatMap((g) => g.repos.map((r) => [r.fullName, r.commits12] as const)));
     const ciAntes = e.valor?.summary.ci ?? { greenRate: null, runs: 0 };
     const montar = (resumo: ResumoCru | null, commits: ReadonlyMap<string, number[]>, ci: { greenRate: number | null; runs: number }): ListaDeRepos => ({
@@ -440,7 +451,13 @@ export class ReposDoGithub {
     const desde = inicioDoPeriodo(periodo, agora);
     let detalhe: { value: DetalheCru | null; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      detalhe = await this.graphql(`repos:detail:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
+      // A cut sample never replaces a longer one already shown, the same as the list.
+      const shownPrs = e.valor?.prs?.sample.read ?? 0;
+      detalhe = await this.graphql(`repos:detail:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, async (f) => {
+        const d = await f.detalhe(dono, nome, diaIso(desde));
+        if (d?.incomplete && d.prs.length < shownPrs) throw new Error(d.incomplete.join('; '));
+        return d;
+      });
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : metricasVazias(this.estadoDaFalha(), periodo, msg), chave);
@@ -454,7 +471,8 @@ export class ReposDoGithub {
     const completo = d.repo.nameWithOwner;
     const k = chaveDoRepo(completo);
     const escrita = temEscrita(d.repo.viewerPermission);
-    const erros: string[] = detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [];
+    // A sample page that failed comes first: it says which part of these numbers is missing.
+    const erros: string[] = [...(d.incomplete ?? []), ...(detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [])];
     const base: MetricasDoRepo = {
       ...metricasVazias('ready', periodo, null),
       updatedAt: new Date(detalhe.fetchedAt).toISOString(),
@@ -585,7 +603,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
 export interface OpcoesDosReposDoNucleo {
   /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
-  /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
+  /** `--no-github`: as respostas vêm com `state: 'no-github'`. */
   semGithub: boolean;
   /**
    * O cache do GitHub do núcleo (no cli, o mesmo `GithubCache` do trabalho, sobre o banco): uma
@@ -601,7 +619,7 @@ export interface OpcoesDosReposDoNucleo {
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos; sessions: SessoesPorRepo } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
     ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
@@ -614,5 +632,6 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
     ...(demo ? { git: demoGit(), extras: DEMO_EXTRA_SESSIONS } : {}),
   });
   const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log, ...(queue ? { queue } : {}) });
-  return { repos, rota: criarRotaDosRepos(repos) };
+  // `sessions` is also the Delivery tab's session → repository (#266, src/api/delivery-github.ts).
+  return { repos, rota: criarRotaDosRepos(repos), sessions: sessoes };
 }

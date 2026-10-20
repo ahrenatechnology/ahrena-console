@@ -275,7 +275,7 @@ describe('Analytics: formatação', () => {
 // ---------- Visão geral (C12) ----------
 
 describe('Analytics: Visão geral', () => {
-  test('cabeçalho, os cinco números, as duas abas e os gráficos', async () => {
+  test('header, the five numbers, the three tabs and the charts', async () => {
     const { area, rotas, limpar } = await montarTela({ read: async () => visao() });
     try {
       assert.match(rotas[0]!, /^\/api\/analytics\?tz=[^&]+$/);
@@ -298,6 +298,7 @@ describe('Analytics: Visão geral', () => {
       assert.deepEqual(links.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')]), [
         ['Visão geral', '/ui/analytics', 'page'],
         ['Custo', '/ui/analytics/cost', null],
+        ['Entregas', '/ui/analytics/delivery', null],
       ]);
 
       assert.equal(comClasse(area, 'an-cell').length, 364, 'heatmap: uma célula por dia');
@@ -535,7 +536,7 @@ test('as rotas e os períodos da tela são os do núcleo', async () => {
 });
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem estilo inline', () => {
-  for (const arquivo of ['screens/analytics.js', 'analytics.css']) {
+  for (const arquivo of ['screens/analytics.js', 'screens/analytics-delivery.js', 'analytics.css']) {
     const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');

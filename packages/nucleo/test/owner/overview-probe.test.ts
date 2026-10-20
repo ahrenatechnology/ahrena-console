@@ -1,5 +1,5 @@
-// The `/api/overview` probe (#86) recognises the core by `name` (#173 phase 2b) and, on an older
-// core, by `nome`. Fake servers on free ports: never 4720.
+// The `/api/overview` probe (#86) recognises the core by `name` (#173 phase 2b); the old `nome` left
+// in phase 6. Fake servers on free ports: never 4720.
 
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
@@ -18,20 +18,20 @@ function answer(body: unknown): Promise<number> {
   return new Promise((resolve) => server!.listen(0, '127.0.0.1', () => resolve((server!.address() as AddressInfo).port)));
 }
 
-describe('#173 phase 2b: probing /api/overview', () => {
-  test('the current core: name and version (with nome and versao alongside)', async () => {
-    const port = await answer({ ok: true, name: 'ahrena-console', version: '0.2.0', pid: 42, commit: 'abc', nome: 'ahrena-console', versao: '0.2.0' });
+describe('#173: probing /api/overview', () => {
+  test('the current core: name and version', async () => {
+    const port = await answer({ ok: true, name: 'ahrena-console', version: '0.2.0', pid: 42, commit: 'abc' });
     assert.deepEqual(await probe(port), { name: 'ahrena-console', version: '0.2.0', pid: 42, commit: 'abc' });
   });
 
-  test('only name and version: the phase 6 core', async () => {
+  test('only name and version, no commit', async () => {
     const port = await answer({ ok: true, name: 'ahrena-console', version: '0.3.0', pid: 7, commit: null });
     assert.deepEqual(await probeCore(port), { name: 'ahrena-console', version: '0.3.0', pid: 7, commit: null });
   });
 
-  test('an old core: only nome and versao', async () => {
+  test('a core from before phase 2b (only nome and versao) is not recognised since phase 6', async () => {
     const port = await answer({ ok: true, nome: 'ahrena-console', versao: '0.1.0', pid: 9 });
-    assert.deepEqual(await probeCore(port), { name: 'ahrena-console', version: '0.1.0', pid: 9, commit: null });
+    assert.equal(await probeCore(port), null);
   });
 
   test('another service is not the core', async () => {

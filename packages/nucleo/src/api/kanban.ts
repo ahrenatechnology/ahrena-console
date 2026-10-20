@@ -8,8 +8,7 @@
 // | `page`     | a partir de 1, com `POR_PAGINA` itens; só com `column`   | 1          |
 //
 // The JSON keys and the view and column values are English since #173 phase 2b; the route never had an
-// old path, so its body simply turned English. The old parameter names (`visao`, `coluna`, `pagina`)
-// and values (`sessoes`, `agentes`, `ativa`, `trabalhando`…) are still read: src/api/legacy-routes.ts.
+// old path, so its body simply turned English. The old parameter names and values left in phase 6.
 //
 // #245: the waiting column splits in two, by the session's `attention` (src/api/attention.ts):
 // Visão sessões: `active`, `blocked` ("Precisam de você", as de erro incluídas), `idle` ("Ociosas"),

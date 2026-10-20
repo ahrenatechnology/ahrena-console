@@ -103,8 +103,7 @@ const MAX_REMOTE_COUNT = 10_000;
 
 /**
  * The remote's items that have this route's shape, marked with the machine; at most 200. The body is
- * the English one: a remote núcleo that still answers in Portuguese is read through
- * `englishAttentionBody` (src/telemetry/remote.ts) before it gets here.
+ * the English one (a remote núcleo from before #173 phase 2b has no `items` and adds nothing).
  */
 export function remoteAttentionItems(body: unknown, machine: { id: string; label: string }): ItemDaAtencao[] {
   const items = isObject(body) && Array.isArray(body.items) ? body.items.slice(0, 200) : [];

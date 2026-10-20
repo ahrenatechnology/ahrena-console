@@ -5,8 +5,7 @@
 // | `GET /api/project`            | The board: lanes, cards, milestones. `?refresh=1` re-reads (at least 30 s apart) |
 // | `POST /api/project/move`      | `{ itemId, optionId }`: changes the Status on GitHub and returns the board |
 //
-// The JSON keys and the error `code` values are English since #173 phase 2b. `/api/projeto`,
-// `?forcar=1` and `/api/projeto/mover` are aliases that answer the old body (src/api/legacy-routes.ts).
+// The JSON keys and the error `code` values are English since #173 phase 2b.
 //
 // The data comes from `GithubProject` (the cache of decision 0001): with GitHub down and something in the
 // cache, the GET answers 200 with `stale: true`. The write accepts the /ui itself (Origin equal to
@@ -25,7 +24,6 @@ import {
   type ProjectMoveResult,
 } from '../github/project.ts';
 import { send } from '../ingest/hooks/receiver.ts';
-import { legacyRequestBody, normalizeLegacyPath, rawPathnameOf } from './legacy-routes.ts';
 import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './work.ts';
 
 export const PROJECT_ROUTE = '/api/project';
@@ -48,7 +46,7 @@ export interface KanbanDoProjeto {
 export interface OpcoesDoProjeto {
   /** `null` sem GitHub ou sem Project escolhido: as duas rotas respondem 503 (veja `semProjeto`). */
   kanban: KanbanDoProjeto | null;
-  /** Sem kanban porque nenhum Project foi escolhido (`AHRENA_CONSOLE_PROJECT` vazia), e não por `--sem-github`. */
+  /** Sem kanban porque nenhum Project foi escolhido (`AHRENA_CONSOLE_PROJECT` vazia), e não por `--no-github`. */
   semProjeto?: boolean;
   /** `demo` quando o kanban é o GitHub falso do simulador. */
   fonte: 'github' | 'demo';
@@ -123,12 +121,12 @@ export function quadroDe(b: ProjectBoard, fonte: QuadroDoProjeto['source']): Qua
   };
 }
 
-/** A própria `/ui` movendo um card: `POST /api/project/move` (ou o alias antigo) com `Origin` exatamente `http://<Host>`, e o Host é o nosso. */
+/** A própria `/ui` movendo um card: `POST /api/project/move` com `Origin` exatamente `http://<Host>`, e o Host é o nosso. */
 export function mesmaOrigemMovendo(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
   const origem = req.headers.origin;
   if (req.method !== 'POST' || typeof origem !== 'string') return false;
-  if (normalizeLegacyPath(new URL(req.url ?? '/', 'http://x').pathname) !== PROJECT_MOVE_ROUTE) return false;
+  if (new URL(req.url ?? '/', 'http://x').pathname !== PROJECT_MOVE_ROUTE) return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
   return origem === `http://${host}`;
 }
@@ -158,7 +156,7 @@ function enviarErro(res: ServerResponse, e: Erro): void {
   send(res, e.status, { error: e.error, code: e.code, ...(e.extra ?? {}) });
 }
 
-const DESLIGADO: Erro = { status: 503, code: 'off', error: 'o núcleo subiu sem o GitHub (--sem-github): não há quadro' };
+const DESLIGADO: Erro = { status: 503, code: 'off', error: 'o núcleo subiu sem o GitHub (--no-github): não há quadro' };
 const SEM_PROJETO: Erro = {
   status: 503,
   code: 'no-project',
@@ -217,7 +215,7 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
     }
     let corpo: { itemId?: unknown; optionId?: unknown } | null;
     try {
-      corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as typeof corpo;
+      corpo = JSON.parse(texto) as typeof corpo;
     } catch {
       return send(res, 400, { error: 'JSON inválido', code: 'invalid' });
     }

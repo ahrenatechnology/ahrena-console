@@ -10,9 +10,6 @@
 // | `direction` | `desc` or `asc`                                                    | `desc`      |
 // | `page`    | from 1, with `POR_PAGINA` items                                      | 1           |
 //
-// The old parameter names, values (`status=esperando`, `order=custo`) and route are aliases, and the
-// old route answers the body in its old keys: src/api/legacy-routes.ts (phase 2b of #173).
-//
 // #245: each row carries `attention` (`blocked` or `idle`, with the reason, or `null`; src/api/attention.ts),
 // `status=blocked` and `status=idle` filter by it (`blocked` takes the errors too, as "Precisam de você"
 // does), and `counts` has one number per `status` value, with the search and the directory applied, for

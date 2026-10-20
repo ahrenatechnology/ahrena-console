@@ -94,14 +94,14 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 
 | Variável | Efeito |
 | --- | --- |
-| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints. O nome antigo `AHRENA_NUCLEO_PORTA` continua aceito |
-| `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4). O nome antigo `AHRENA_NODE` continua aceito |
-| `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app. O nome antigo `AHRENA_NUCLEO_DIR` continua aceito |
-| `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints). O nome antigo `AHRENA_ABRIR_MENU` continua aceito |
-| `AHRENA_CONSOLE_DATA_DIR=<pasta>` | Grava e lê o `notifications.json` nesta pasta em vez do diretório de dados do app; o núcleo do app continua na pasta do app. O nome antigo `AHRENA_DADOS_DIR` continua aceito |
-| `AHRENA_CONSOLE_LAUNCH_ORIGIN=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console). O nome antigo `AHRENA_ORIGEM` continua aceito |
+| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints |
+| `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4) |
+| `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app |
+| `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
+| `AHRENA_CONSOLE_DATA_DIR=<pasta>` | Grava e lê o `notifications.json` nesta pasta em vez do diretório de dados do app; o núcleo do app continua na pasta do app |
+| `AHRENA_CONSOLE_LAUNCH_ORIGIN=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console) |
 
-Quando vêm o nome novo e o antigo, vale o novo.
+Os nomes antigos, em português (`AHRENA_NUCLEO_PORTA`, `AHRENA_NODE`…), saíram na fase 6 da #173.
 
 Pelo Finder, `open --env` passa as variáveis:
 

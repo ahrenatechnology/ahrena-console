@@ -23,8 +23,7 @@
 // is `<owner>/<repo>` in lower case. Only the HTTP route exposes it.
 // `alert` (#175, src/telemetry): a machine alert that enters or exits; the key is `<machine>:<alert>`,
 // with no session and no account.
-// The values are English since #173 phase 2b; the old ones (`sessao`, `estado`, `precisa-de-voce`, `plano`,
-// `decisao`, `conta`) are still accepted in `?type=` and answered on the old route (src/api/legacy-routes.ts).
+// The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
 export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 

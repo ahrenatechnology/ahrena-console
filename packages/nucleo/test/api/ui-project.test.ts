@@ -331,7 +331,7 @@ describe('Kanban do projeto (C11)', () => {
     });
     const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
-    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--sem-github/);
+    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--no-github/);
   });
 
   test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
@@ -371,7 +371,7 @@ describe('Kanban do projeto (C11)', () => {
     tela = await montarTela({
       read: async () => {
         if (n++ === 0) return quadroFalso();
-        throw new ReadError('O núcleo em 127.0.0.1 não respondeu', { route: '/api/projeto' });
+        throw new ReadError('O núcleo em 127.0.0.1 não respondeu', { route: '/api/project' });
       },
     });
     for (const f of tela.onRestart) f();
@@ -529,9 +529,9 @@ describe('a camada de escrita', () => {
       base: 'http://127.0.0.1:4720',
       fetch: async (url: URL, init: RequestInit) => (pedidos.push({ url: String(url), init }), new Response(JSON.stringify({ ok: true }), { status: 200 })),
     });
-    assert.deepEqual(await write('/api/projeto/mover', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
+    assert.deepEqual(await write('/api/project/move', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
     const [p] = pedidos;
-    assert.equal(p!.url, 'http://127.0.0.1:4720/api/projeto/mover');
+    assert.equal(p!.url, 'http://127.0.0.1:4720/api/project/move');
     assert.equal(p!.init.method, 'POST');
     assert.equal(p!.init.credentials, 'omit');
     assert.equal((p!.init.headers as Record<string, string>)['content-type'], 'application/json');
@@ -543,7 +543,7 @@ describe('a camada de escrita', () => {
     const fetch = async () => (chamou++, new Response('{}'));
     const write = httpWriter({ base: 'http://127.0.0.1:4720', fetch });
     await assert.rejects(write('/ui', {}), (e: Error) => e instanceof WriteError && /rota fora da API/.test(e.message));
-    await assert.rejects(write('https://exemplo.com/api/projeto/mover', {}), /rota fora da API/);
+    await assert.rejects(write('https://exemplo.com/api/project/move', {}), /rota fora da API/);
     await assert.rejects(write('/api/../../ui', {}), /rota fora do núcleo/);
     assert.throws(() => httpWriter({ base: 'http://exemplo.com:4720', fetch }), /só escreve no núcleo local/);
     assert.throws(() => httpWriter({ base: 'https://127.0.0.1:4720', fetch }), /só escreve no núcleo local/);
@@ -555,7 +555,7 @@ describe('a camada de escrita', () => {
       base: 'http://localhost:4720',
       fetch: async () => new Response(JSON.stringify({ error: 'Calma.', code: 'rate-limited' }), { status: 429, headers: { 'retry-after': '7' } }),
     });
-    await assert.rejects(write('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => {
+    await assert.rejects(write('/api/project/move', {}), (e: InstanceType<typeof WriteError>) => {
       assert.ok(e instanceof ReadError, 'é também um ReadError');
       assert.equal(e.name, 'WriteError');
       assert.equal(e.status, 429);
@@ -565,6 +565,6 @@ describe('a camada de escrita', () => {
       return true;
     });
     const fora = httpWriter({ base: 'http://127.0.0.1:1', fetch: async () => Promise.reject(new TypeError('fetch failed')) });
-    await assert.rejects(fora('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => e.status === 0 && /não respondeu/.test(e.message));
+    await assert.rejects(fora('/api/project/move', {}), (e: InstanceType<typeof WriteError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 });

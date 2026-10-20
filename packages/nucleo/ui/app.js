@@ -5,7 +5,7 @@ import { write, read } from './api.js';
 import { startLive } from './live.js';
 import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
-import { findScreen, legacyUrl, litItem } from './screens.js';
+import { findScreen, litItem } from './screens.js';
 import { createNav } from './nav.js';
 
 const nav = document.getElementById('nav');
@@ -97,9 +97,6 @@ async function open() {
   const leave = new AbortController();
   leaving = leave;
   screenFailed = false;
-  // An old URL (`/ui/sessoes/<id>`) becomes the new one, in place, before routing.
-  const next = legacyUrl(location);
-  if (next) history.replaceState(history.state, '', next);
   const found = findScreen(location.pathname);
   if (!found) {
     highlight(null);

@@ -18,10 +18,9 @@
 //
 // #245: each event carries `attention` (`blocked` or `idle`, with the reason, or `null`): the state that
 // event alone stands for, by the same rule as the sessions' (`eventAttention`, src/api/attention.ts).
-// `status` keeps `waiting` for both; the old route answers no `attention`.
+// `status` keeps `waiting` for both.
 //
-// The body is English since phase 2b of #173 (`{ events, cursor, older, options }`); the old route
-// `/api/eventos` answers it in the old keys (src/api/legacy-routes.ts).
+// The body is English since phase 2b of #173 (`{ events, cursor, older, options }`).
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';

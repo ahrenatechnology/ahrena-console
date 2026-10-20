@@ -57,11 +57,8 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.deepEqual([w.reviewRounds, w.changesRequested], [2, 3]);
     assert.equal(w.summary, 'dev → review até aprovar · termina no PR #90');
     assert.equal(w.durationMs, 28 * 60_000);
-    // The old route answers the old body: the same graph, Portuguese keys and values.
-    const antigo = (await pedir(api.url, '/api/sessoes/sim-wf-payments/workflow')).corpo;
-    assert.deepEqual(antigo.nos.map((n: any) => n.estado), w.nodes.map((n) => ({ active: 'ativo', completed: 'concluido', error: 'erro' })[n.state]));
-    assert.deepEqual(antigo.arestas.map((e: any) => e.tipo), w.edges.map((e) => ({ opened: 'abriu', delivered: 'entregou', 'changes-requested': 'ajustes' })[e.type]));
-    assert.deepEqual([antigo.rodadasDeReview, antigo.ajustes, antigo.linhaDoTempo.faixas.length], [2, 3, w.timeline.lanes.length]);
+    // The old Portuguese route is gone.
+    assert.deepEqual(await pedir(api.url, '/api/sessoes/sim-wf-payments/workflow'), { status: 404, corpo: { error: 'não encontrado' } });
   });
 
   test('#97/AC-3 Dado a sessão do laço, a linha do tempo vai do início dela até agora, uma faixa por agente', async () => {
@@ -74,12 +71,12 @@ describe('Workflows na API, com a demonstração do p4', () => {
   });
 
   test('#97 Dado uma sessão que não existe, a aba recebe 404; um id estranho, 400', async () => {
-    assert.equal((await pedir(api.url, '/api/sessoes/nao-existe/workflow')).status, 404);
-    assert.equal((await pedir(api.url, '/api/sessoes/a%20b/workflow')).status, 400);
-    const malformado = await pedir(api.url, '/api/sessoes/%E0/workflow');
+    assert.equal((await pedir(api.url, '/api/sessions/nao-existe/workflow')).status, 404);
+    assert.equal((await pedir(api.url, '/api/sessions/a%20b/workflow')).status, 400);
+    const malformado = await pedir(api.url, '/api/sessions/%E0/workflow');
     assert.equal(malformado.status, 400, 'decodeURIComponent falha: 400, não 500');
     assert.equal(malformado.corpo.error, 'id de sessão inválido');
-    assert.equal((await pedir(api.url, '/api/sessoes/%E0%A4%A/workflow')).status, 400, 'escape malformado não é 500');
+    assert.equal((await pedir(api.url, '/api/sessions/%E0%A4%A/workflow')).status, 400, 'escape malformado não é 500');
   });
 
   test('#96/AC-1 #96/AC-2 Dado a demonstração, a tela Workflows traz os KPIs e os três runs, o ativo primeiro', async () => {
@@ -132,19 +129,18 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.deepEqual([noRuim.status, noRuim.corpo.error], [400, 'node: um id de nó do grafo (ex.: subagent:Explore)']);
   });
 
-  test('#96 Dado os nomes e valores antigos da query, a resposta é a mesma, em inglês', async () => {
-    const pares: [string, string][] = [
-      ['/api/workflows?filtro=ativas', '/api/workflows?filter=active'],
-      ['/api/workflows?filter=concluidas', '/api/workflows?filter=completed'],
-      ['/api/workflows?filtro=todas&no=origem:retomada', '/api/workflows?filter=all&node=origin:resume'],
-      ['/api/workflows?no=principal', '/api/workflows?node=main'],
-      ['/api/workflows?no=resultado:erro', '/api/workflows?node=outcome:error'],
-      ['/api/workflows?no=compactacao:compactou', '/api/workflows?node=compaction:compacted'],
-      ['/api/workflows?no=subagente:Explore', '/api/workflows?node=subagent:Explore'],
-    ];
-    for (const [antigo, novo] of pares) {
-      const [a, b] = [(await pedir(api.url, antigo)).corpo, (await pedir(api.url, novo)).corpo];
-      assert.deepEqual({ ...a, generatedAt: null }, { ...b, generatedAt: null }, antigo);
+  test('#96 Dado os nomes e valores antigos da query, eles não valem mais: o nome é ignorado, o valor dá 400', async () => {
+    const todas = (await pedir(api.url, '/api/workflows')).corpo;
+    for (const antigo of ['/api/workflows?filtro=active', '/api/workflows?no=main']) {
+      const { status, corpo } = await pedir(api.url, antigo);
+      assert.equal(status, 200, antigo);
+      assert.deepEqual({ ...corpo, generatedAt: null }, { ...todas, generatedAt: null }, antigo);
+    }
+    for (const antigo of ['/api/workflows?filter=ativas', '/api/workflows?filter=concluidas', '/api/workflows?filter=todas']) {
+      assert.deepEqual(await pedir(api.url, antigo), { status: 400, corpo: { error: 'filter: all, active ou completed' } }, antigo);
+    }
+    for (const antigo of ['principal', 'origem:retomada', 'resultado:erro', 'compactacao:compactou', 'subagente:Explore']) {
+      assert.equal((await pedir(api.url, `/api/workflows?node=${antigo}`)).status, 400, antigo);
     }
   });
 

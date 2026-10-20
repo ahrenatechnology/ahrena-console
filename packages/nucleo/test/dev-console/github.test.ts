@@ -189,6 +189,6 @@ describe('through the 0001 cache', () => {
     const github = new DevConsoleGithub({ source: disabledDevConsoleSource(), cache: new GithubCache({ store: new MemoryCacheStore() }) });
     const r = await github.read(REPO);
     assert.deepEqual([r.openPullRequests, r.openIssues, r.branches, r.readAt, r.stale, r.truncated], [[], [], [], null, true, false]);
-    assert.match(r.staleReason ?? '', /--sem-github/);
+    assert.match(r.staleReason ?? '', /--no-github/);
   });
 });
