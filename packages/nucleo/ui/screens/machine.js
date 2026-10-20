@@ -209,7 +209,7 @@ function tunnelCard(tunnels, machines, remoteReadings, now) {
 
 const percent = (n) => (n === null ? DASH : `${String(Math.round(n * 10) / 10).replace('.', ',')}%`);
 
-function claudeCard(claude, top) {
+function claudeCard(claude, top, { wide = false } = {}) {
   const rows = [
     ['claude (CLI)', claude.cli],
     ['Claude Desktop', claude.desktop],
@@ -218,7 +218,7 @@ function claudeCard(claude, top) {
     .map(([name, g]) => el('tr', {}, td(name), td(String(g.count), 'mono'), td(percent(g.cpuPct), 'mono'), td(g.memoryBytes === null ? DASH : bytes(g.memoryBytes), 'mono')));
   return el(
     'section',
-    { class: 'card tm-card tm-span-half', 'data-part': 'claude' },
+    { class: `card tm-card ${wide ? 'tm-span-wide' : 'tm-span-half'}`, 'data-part': 'claude' },
     el('h2', { class: 'tm-title' }, icon('bot'), el('span', {}, 'Processos do Claude')),
     table(['Processo', 'Qtde', 'CPU', 'Memória'], rows),
     top?.length ? el('div', { class: 'eyebrow tm-sub-eyebrow' }, 'Os que mais usam CPU') : null,
@@ -290,8 +290,8 @@ function portsCard(portsList, { local, owner, forwards, filter, setFilter }) {
   const head = ['Porta', 'Escuta em', 'Processo', 'De quem', ...(local ? [] : ['No Mac'])];
   return el(
     'section',
-    // As in the wireframe: next to the Claude processes on this machine, the whole row on a remote one.
-    { class: `card tm-card ${local ? 'tm-span-wide' : 'tm-span-full'}`, 'data-part': 'ports' },
+    // The whole row: the list is long, and a short card beside it would leave a hole (rule 9, issue 255).
+    { class: 'card tm-card tm-span-full', 'data-part': 'ports' },
     el('h2', { class: 'tm-title' }, icon('radio-tower'), el('span', {}, local ? 'Portas em escuta' : 'Portas em escuta lá'), segment),
     rows.length ? table(head, rows, local ? ' tm-cols-ports' : ' tm-cols-ports-remote') : el('p', { class: 'tm-muted' }, 'Nenhuma porta neste filtro.'),
   );
@@ -330,8 +330,13 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
   if (local) {
     if (reading.volumes.length || reading.network) grid.push(volumesCard(reading, { local }));
     if (reading.tunnels) grid.push(tunnelCard(reading.tunnels, machines, remoteReadings, now));
-    grid.push(alertsCard(alerts, now));
-    if (reading.claude) grid.push(claudeCard(reading.claude, reading.topProcesses));
+    // The two short cards stack beside the tunnel (rule 9, issue 255): the long port list goes below, on
+    // its own row, instead of next to the Claude processes with a hole under them.
+    // Without a tunnel reading (a Linux core, a failed probe) there is nothing to stack beside: the
+    // alerts take one column and the Claude processes the other two, so the row stays full.
+    const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses, { wide: !reading.tunnels }) : null;
+    if (reading.tunnels) grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), claude));
+    else grid.push(alertsCard(alerts, now), ...(claude ? [claude] : []));
     if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter }));
     if (!machines.some((m) => m.id !== LOCAL_ID)) grid.push(el('div', { class: 'tm-span-full' }, noRemoteCard()));
   } else {
