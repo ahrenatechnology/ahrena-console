@@ -10,11 +10,11 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo, stateClass } from '../../ui/screens/decisions-common.js';
+import { howLongAgo, conversationLink, actionRequest, promoteRequest, whoDecided, scopeLabel, stateLabel, typeLabel, stateClass } from '../../ui/screens/decisions-common.js';
 // @ts-expect-error: idem
-import { resumoDoGrupo, rotaDasDecisoes } from '../../ui/screens/decisions.js';
+import { groupSummary, decisionsRoute } from '../../ui/screens/decisions.js';
 // @ts-expect-error: idem
-import { criar, partesDaChamada, rotaDaAba } from '../../ui/screens/session-detail-decisions.js';
+import { create, callParts, tabRoute } from '../../ui/screens/session-detail-decisions.js';
 // @ts-expect-error: idem
 import { findScreen, SCREENS } from '../../ui/screens.js';
 
@@ -68,53 +68,53 @@ describe('escrever (api.js)', () => {
 
 describe('o card de uma decisão', () => {
   test('pílula de tipo, quem e estado como o wireframe escreve', () => {
-    assert.deepEqual(['sugerida', 'correcao', 'permissao', 'pergunta', 'plano'].map(rotuloDoTipo), ['Sugerida', 'Correção sua', 'Permissão', 'Pergunta', 'Plano']);
-    assert.equal(quemDecidiu({ origem: 'sugerida', decididaPor: 'agente' }), 'agente propôs');
-    assert.equal(quemDecidiu({ origem: 'correcao', decididaPor: 'usuario' }), 'você corrigiu');
-    assert.equal(quemDecidiu({ origem: 'plano', decididaPor: 'usuario' }), 'você aprovou');
-    assert.equal(quemDecidiu({ origem: 'pergunta', decididaPor: 'agente' }), 'agente');
-    assert.equal(quemDecidiu({ origem: 'pergunta', decididaPor: 'usuario' }), 'você');
-    assert.deepEqual(['vigente', 'a_confirmar', 'substituida'].map(rotuloDoEstado), ['Vigente', 'A confirmar', 'Substituída']);
+    assert.deepEqual(['sugerida', 'correcao', 'permissao', 'pergunta', 'plano'].map(typeLabel), ['Sugerida', 'Correção sua', 'Permissão', 'Pergunta', 'Plano']);
+    assert.equal(whoDecided({ origem: 'sugerida', decididaPor: 'agente' }), 'agente propôs');
+    assert.equal(whoDecided({ origem: 'correcao', decididaPor: 'usuario' }), 'você corrigiu');
+    assert.equal(whoDecided({ origem: 'plano', decididaPor: 'usuario' }), 'você aprovou');
+    assert.equal(whoDecided({ origem: 'pergunta', decididaPor: 'agente' }), 'agente');
+    assert.equal(whoDecided({ origem: 'pergunta', decididaPor: 'usuario' }), 'você');
+    assert.deepEqual(['vigente', 'a_confirmar', 'substituida'].map(stateLabel), ['Vigente', 'A confirmar', 'Substituída']);
   });
 
   test('escopo, e de onde veio só quando não é desta sessão', () => {
-    assert.equal(rotuloDoEscopo({ escopo: 'sessao', sessao: 'esta' }), 'escopo: sessão');
-    assert.equal(rotuloDoEscopo({ escopo: 'familia', sessao: 'mae' }), 'escopo: família · da sessão mãe');
-    assert.equal(rotuloDoEscopo({ escopo: 'branch', sessao: 'branch' }), 'escopo: branch · de outra sessão do branch');
+    assert.equal(scopeLabel({ escopo: 'sessao', sessao: 'esta' }), 'escopo: sessão');
+    assert.equal(scopeLabel({ escopo: 'familia', sessao: 'mae' }), 'escopo: família · da sessão mãe');
+    assert.equal(scopeLabel({ escopo: 'branch', sessao: 'branch' }), 'escopo: branch · de outra sessão do branch');
   });
 
   test('"há X min"', () => {
     const agora = Date.parse('2026-10-20T12:00:00Z');
     const antes = (min: number) => new Date(agora - min * 60_000).toISOString();
-    assert.equal(haQuanto(antes(0.5), agora), 'agora');
-    assert.equal(haQuanto(antes(14), agora), 'há 14 min');
-    assert.equal(haQuanto(antes(3 * 60 + 5), agora), 'há 3 h');
-    assert.equal(haQuanto(antes(30 * 60), agora), 'ontem');
-    assert.equal(haQuanto(antes(4 * 24 * 60), agora), 'há 4 d');
-    assert.equal(haQuanto('não é data', agora), '');
+    assert.equal(howLongAgo(antes(0.5), agora), 'agora');
+    assert.equal(howLongAgo(antes(14), agora), 'há 14 min');
+    assert.equal(howLongAgo(antes(3 * 60 + 5), agora), 'há 3 h');
+    assert.equal(howLongAgo(antes(30 * 60), agora), 'ontem');
+    assert.equal(howLongAgo(antes(4 * 24 * 60), agora), 'há 4 d');
+    assert.equal(howLongAgo('não é data', agora), '');
   });
 
   test('Ver na conversa só com rota da própria interface', () => {
-    assert.equal(linkDaConversa({ conversa: '/ui/sessions/sess-1' }), '/ui/sessions/sess-1');
-    for (const conversa of ['https://exemplo.com/ui/sessions/x', 'javascript:alert(1)', '/ui/sessions/x/../../api', null]) assert.equal(linkDaConversa({ conversa }), null, String(conversa));
+    assert.equal(conversationLink({ conversa: '/ui/sessions/sess-1' }), '/ui/sessions/sess-1');
+    for (const conversa of ['https://exemplo.com/ui/sessions/x', 'javascript:alert(1)', '/ui/sessions/x/../../api', null]) assert.equal(conversationLink({ conversa }), null, String(conversa));
   });
 
   test('os pedidos de escrita: Confirmar, Descartar e as duas fases do Promover', () => {
-    assert.deepEqual(pedidoDaAcao('d1', 'confirmar', { sessao: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { sessao: 's1' } });
+    assert.deepEqual(actionRequest('d1', 'confirmar', { sessao: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { sessao: 's1' } });
     // O id do núcleo tem `:` ("dec:…"): vai cru, como a regra de origem do servidor espera.
-    assert.equal(pedidoDaAcao('dec:4b1f', 'confirmar', { sessao: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
-    assert.deepEqual(pedidoDaAcao('d1', 'descartar', { sessao: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { sessao: 's1' } });
-    assert.deepEqual(pedidoDePromover('d1', 's1'), { rota: '/api/decisions/d1/promote', corpo: { sessao: 's1' } });
-    assert.deepEqual(pedidoDePromover('d1', 's1', { caminho: 'docs/decisoes/0008-x.md' }), {
+    assert.equal(actionRequest('dec:4b1f', 'confirmar', { sessao: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
+    assert.deepEqual(actionRequest('d1', 'descartar', { sessao: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { sessao: 's1' } });
+    assert.deepEqual(promoteRequest('d1', 's1'), { rota: '/api/decisions/d1/promote', corpo: { sessao: 's1' } });
+    assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md' }), {
       rota: '/api/decisions/d1/promote',
       corpo: { sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md' },
     });
-    assert.deepEqual(pedidoDePromover('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
+    assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
       sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32),
     }, 'o hash do rascunho vai junto no confirmar');
-    assert.throws(() => pedidoDaAcao('../x', 'confirmar', { sessao: 's1' }), /id de decisão/);
-    assert.throws(() => pedidoDaAcao('d1', 'apagar', { sessao: 's1' }), /ação desconhecida/);
-    assert.throws(() => pedidoDaAcao('d1', 'confirmar', {}), /precisa da sessão/);
+    assert.throws(() => actionRequest('../x', 'confirmar', { sessao: 's1' }), /id de decisão/);
+    assert.throws(() => actionRequest('d1', 'apagar', { sessao: 's1' }), /ação desconhecida/);
+    assert.throws(() => actionRequest('d1', 'confirmar', {}), /precisa da sessão/);
   });
 });
 
@@ -130,19 +130,19 @@ describe('a página (C21) e a aba (C20)', () => {
   });
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {
-    assert.equal(rotaDasDecisoes(), '/api/decisions?groupBy=branch');
-    assert.equal(rotaDasDecisoes({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisions?groupBy=family&state=a_confirmar&q=banco+de+testes&group=b%3Aabc');
-    assert.equal(rotaDasDecisoes({ q: 'x'.repeat(500) }).length, '/api/decisions?groupBy=branch&q='.length + 200);
-    assert.equal(rotaDaAba('/api/sessions/s1'), '/api/sessions/s1/decisions?scope=session');
-    assert.equal(rotaDaAba('/api/sessions/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessions/s1/decisions?scope=branch&state=vigentes&q=kanban');
+    assert.equal(decisionsRoute(), '/api/decisions?groupBy=branch');
+    assert.equal(decisionsRoute({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisions?groupBy=family&state=a_confirmar&q=banco+de+testes&group=b%3Aabc');
+    assert.equal(decisionsRoute({ q: 'x'.repeat(500) }).length, '/api/decisions?groupBy=branch&q='.length + 200);
+    assert.equal(tabRoute('/api/sessions/s1'), '/api/sessions/s1/decisions?scope=session');
+    assert.equal(tabRoute('/api/sessions/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessions/s1/decisions?scope=branch&state=vigentes&q=kanban');
   });
 
   test('o resumo do grupo e a chamada do MCP', () => {
-    assert.equal(resumoDoGrupo({ tipo: 'branch', pasta: 'vitrine-demo', vigentes: 6, aConfirmar: 1 }), 'vitrine-demo · 6 vigentes · 1 a confirmar');
-    assert.equal(resumoDoGrupo({ tipo: 'branch', pasta: 'motor-de-regras', vigentes: 1, aConfirmar: 0 }), 'motor-de-regras · 1 vigente');
-    assert.equal(resumoDoGrupo({ tipo: 'familia', titulo: 'Kanban da vitrine', pasta: 'vitrine-demo', vigentes: 2, aConfirmar: 0 }), 'vitrine-demo · 2 vigentes');
-    assert.equal(resumoDoGrupo({ tipo: 'familia', titulo: 'motor-de-regras', pasta: 'motor-de-regras', vigentes: 2, aConfirmar: 0 }), '2 vigentes');
-    assert.deepEqual(partesDaChamada({ ferramenta: 'session_decisions', chamada: 'session_decisions branch: "feat/42-kanban"' }), ['session_decisions', 'branch: "feat/42-kanban"']);
+    assert.equal(groupSummary({ tipo: 'branch', pasta: 'vitrine-demo', vigentes: 6, aConfirmar: 1 }), 'vitrine-demo · 6 vigentes · 1 a confirmar');
+    assert.equal(groupSummary({ tipo: 'branch', pasta: 'motor-de-regras', vigentes: 1, aConfirmar: 0 }), 'motor-de-regras · 1 vigente');
+    assert.equal(groupSummary({ tipo: 'familia', titulo: 'Kanban da vitrine', pasta: 'vitrine-demo', vigentes: 2, aConfirmar: 0 }), 'vitrine-demo · 2 vigentes');
+    assert.equal(groupSummary({ tipo: 'familia', titulo: 'motor-de-regras', pasta: 'motor-de-regras', vigentes: 2, aConfirmar: 0 }), '2 vigentes');
+    assert.deepEqual(callParts({ ferramenta: 'session_decisions', chamada: 'session_decisions branch: "feat/42-kanban"' }), ['session_decisions', 'branch: "feat/42-kanban"']);
   });
 
   test('a aba lê a rota dela e rotula com o total, mesmo escondida', async () => {
@@ -153,10 +153,10 @@ describe('a página (C21) e a aba (C20)', () => {
       read: async (rota: string) => (lidas.push(rota), { sessao: 's1', total: 4, itens: [], porEscopo: { sessao: 4, familia: 5, branch: 6 }, injecao: {}, mcp: {} }),
       onChange: (f: (m: { tipo: string }[]) => void) => ouvintes.push(f),
     };
-    const aba = criar(ctx, '/api/sessions/s1', { cabeca: () => null, rotular: (t: string | null) => rotulos.push(t) });
-    assert.equal(typeof aba.mostrar, 'function');
-    assert.equal(typeof aba.esconder, 'function');
-    await aba.atualizar();
+    const aba = create(ctx, '/api/sessions/s1', { head: () => null, setLabel: (t: string | null) => rotulos.push(t) });
+    assert.equal(typeof aba.show, 'function');
+    assert.equal(typeof aba.hide, 'function');
+    await aba.refresh();
     assert.deepEqual(lidas, ['/api/sessions/s1/decisions?scope=session'], 'a aba abre em Sessão, como o C20');
     assert.deepEqual(rotulos, ['4'], 'o texto entre parênteses');
     assert.equal(ouvintes.length, 1, 'a aba escuta as mudanças de decisão');

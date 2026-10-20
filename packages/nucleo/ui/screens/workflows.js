@@ -10,12 +10,12 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
-import { decimal, duracao, nomeDoModelo, num, porcento, quando, tokens } from './workflow-format.js';
+import { decimal, duration, modelName, num, percent, when, tokens } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
-const RELER_ATIVO_MS = 10_000;
+const REREAD_ACTIVE_MS = 10_000;
 
-export const FILTROS = [
+export const FILTERS = [
   { id: 'todas', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
   { id: 'ativas', rotulo: 'Só ativas', resumo: 'só as ativas' },
   { id: 'concluidas', rotulo: 'Concluídas', resumo: 'só as concluídas' },
@@ -24,42 +24,42 @@ export const FILTROS = [
 // ---------- Partes puras (testadas no node) ----------
 
 /** A rota da API para o filtro e o nó escolhidos. */
-export function rotaDosWorkflows(filtro, no) {
-  const q = new URLSearchParams({ filter: filtro });
-  if (no) q.set('node', no);
+export function workflowsRoute(filter, node) {
+  const q = new URLSearchParams({ filter: filter });
+  if (node) q.set('node', node);
   return `/api/workflows?${q}`;
 }
 
 /** As seis KPIs do C14, já escritas: `{ id, rotulo, valor, sub, icone, cor }`. `null` vira "—". */
-export function kpisEscritas(k) {
+export function writtenKpis(k) {
   return [
     { id: 'depth', rotulo: 'Profundidade', valor: decimal(k.profundidadeMedia), sub: 'níveis de agente', icone: 'subagent', cor: 'accent' },
     { id: 'subagents', rotulo: 'Subagentes', valor: decimal(k.subagentesPorSessao), sub: 'por sessão', icone: 'people', cor: 'accent' },
-    { id: 'success', rotulo: 'Sucesso', valor: porcento(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
-    { id: 'flow', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${porcento(k.fluxoComum.fracao)} das sessões` : null, icone: 'repeat', cor: 'accent' },
+    { id: 'success', rotulo: 'Sucesso', valor: percent(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
+    { id: 'flow', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${percent(k.fluxoComum.fracao)} das sessões` : null, icone: 'repeat', cor: 'accent' },
     { id: 'rounds', rotulo: 'Rodadas', valor: decimal(k.rodadasPorPr), sub: 'de review por PR', icone: 'refresh', cor: 'accent' },
-    { id: 'duration', rotulo: 'Duração', valor: duracao(k.duracaoMediaMs), sub: 'média', icone: 'timer', cor: 'wait' },
+    { id: 'duration', rotulo: 'Duração', valor: duration(k.duracaoMediaMs), sub: 'média', icone: 'timer', cor: 'wait' },
   ];
 }
 
 /** "motor-de-regras · 5 agentes · 36 ferramentas · 223 k tokens · 28 min" e, se acabou, "· ontem". */
-export function metaDoRun(run, agora = new Date()) {
+export function runMeta(run, now = new Date()) {
   const n = run.agentes.length;
-  const partes = [
+  const parts = [
     run.projeto,
     `${num(n)} ${n === 1 ? 'agente' : 'agentes'}`,
     `${num(run.ferramentas)} ${run.ferramentas === 1 ? 'ferramenta' : 'ferramentas'}`,
     `${tokens(run.tokens)} tokens`,
-    duracao(run.duracaoMs),
-    run.estado === 'ativa' ? null : quando(run.fim ?? run.inicio, agora),
+    duration(run.duracaoMs),
+    run.estado === 'ativa' ? null : when(run.fim ?? run.inicio, now),
   ];
-  return partes.filter(Boolean).join(' · ');
+  return parts.filter(Boolean).join(' · ');
 }
 
-const ESTADO_DO_RUN = { ativa: ['Ativa', 'active'], concluida: ['Concluída', 'completed'], erro: ['Erro', 'error'] };
+const RUN_STATE = { ativa: ['Ativa', 'active'], concluida: ['Concluída', 'completed'], erro: ['Erro', 'error'] };
 
 /** O estado de um agente do run: `[texto, cor]`. */
-export function estadoDoAgente(a) {
+export function agentState(a) {
   if (a.estado === 'concluido') return ['Concluído', 'completed'];
   if (a.estado === 'rodando') return ['Rodando', 'active'];
   if (a.estado === 'erro') return ['Erro', 'error'];
@@ -68,15 +68,15 @@ export function estadoDoAgente(a) {
 }
 
 /** Espessura de uma aresta pelo volume, entre 1,2 e 22 (a mais grossa é a de maior volume). */
-export function espessura(volume, maior) {
-  if (!(maior > 0)) return 1.2;
-  return Math.max(1.2, Math.round((volume / maior) * 220) / 10);
+export function thickness(volume, largest) {
+  if (!(largest > 0)) return 1.2;
+  return Math.max(1.2, Math.round((volume / largest) * 220) / 10);
 }
 
-const LARGURA = 960;
-const NO_A = 30;
-const PASSO = 42;
-const LETRA = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
+const WIDTH = 960;
+const NODE_H = 30;
+const STEP = 42;
+const LETTER = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
 
 /**
  * O desenho do grafo de orquestração na `largura` do painel, em px, sem escala: as colunas, na ordem da
@@ -84,79 +84,79 @@ const LETRA = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
  * direita de um nó à esquerda do outro, com espessura pelo volume. O rótulo que não cabe no nó encolhe
  * com reticências (`texto`); o inteiro fica em `rotulo`.
  */
-export function layoutDaOrquestracao(grafo, largura = LARGURA) {
-  const colunas = grafo.colunas;
-  const n = Math.max(1, colunas.length);
-  const NO_L = Math.round(Math.min(152, Math.max(104, (largura - 20) / n - 18)));
-  const passoX = colunas.length > 1 ? (largura - 20 - NO_L) / (colunas.length - 1) : 0;
-  const porColuna = colunas.map((c) => grafo.nos.filter((no) => no.coluna === c.id));
-  const altura = Math.max(1, ...porColuna.map((l) => l.length)) * PASSO;
+export function orchestrationLayout(graph, width = WIDTH) {
+  const columns = graph.colunas;
+  const n = Math.max(1, columns.length);
+  const NODE_W = Math.round(Math.min(152, Math.max(104, (width - 20) / n - 18)));
+  const stepX = columns.length > 1 ? (width - 20 - NODE_W) / (columns.length - 1) : 0;
+  const byColumn = columns.map((c) => graph.nos.filter((node) => node.coluna === c.id));
+  const height = Math.max(1, ...byColumn.map((l) => l.length)) * STEP;
   const pos = new Map();
-  const nos = [];
-  porColuna.forEach((lista, i) => {
-    const x = Math.round(10 + i * passoX);
-    const k = lista.length;
-    const s = k > 1 ? Math.min(70, (altura - NO_A) / (k - 1)) : 0;
-    const topo = (altura - (NO_A + s * (k - 1))) / 2;
-    lista.forEach((no, j) => {
-      const y = Math.round(topo + j * s);
-      const volume = num(no.volume);
-      const cabe = Math.max(4, Math.floor((NO_L - 22 - volume.length * LETRA) / LETRA));
-      pos.set(no.id, { x, y });
-      nos.push({ ...no, x, y, texto: no.rotulo.length > cabe ? `${no.rotulo.slice(0, cabe - 1)}…` : no.rotulo, volumeEscrito: volume });
+  const nodes = [];
+  byColumn.forEach((list, i) => {
+    const x = Math.round(10 + i * stepX);
+    const k = list.length;
+    const s = k > 1 ? Math.min(70, (height - NODE_H) / (k - 1)) : 0;
+    const top = (height - (NODE_H + s * (k - 1))) / 2;
+    list.forEach((node, j) => {
+      const y = Math.round(top + j * s);
+      const volume = num(node.volume);
+      const fits = Math.max(4, Math.floor((NODE_W - 22 - volume.length * LETTER) / LETTER));
+      pos.set(node.id, { x, y });
+      nodes.push({ ...node, x, y, texto: node.rotulo.length > fits ? `${node.rotulo.slice(0, fits - 1)}…` : node.rotulo, volumeEscrito: volume });
     });
   });
-  const maior = Math.max(0, ...grafo.arestas.map((a) => a.volume));
-  const arestas = grafo.arestas
+  const largest = Math.max(0, ...graph.arestas.map((a) => a.volume));
+  const edges = graph.arestas
     .filter((a) => pos.has(a.de) && pos.has(a.para))
     .map((a) => {
       const A = pos.get(a.de);
       const B = pos.get(a.para);
-      const x1 = A.x + NO_L;
-      const y1 = A.y + NO_A / 2;
+      const x1 = A.x + NODE_W;
+      const y1 = A.y + NODE_H / 2;
       const x2 = B.x;
-      const y2 = B.y + NO_A / 2;
+      const y2 = B.y + NODE_H / 2;
       const m = (x1 + x2) / 2;
-      return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: espessura(a.volume, maior), erro: a.para === 'resultado:erro' };
+      return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: thickness(a.volume, largest), erro: a.para === 'resultado:erro' };
     });
   return {
-    largura,
-    altura,
-    colunas: colunas.map((c, i) => ({ ...c, x: Math.round(10 + i * passoX + NO_L / 2) })),
-    nos,
-    arestas,
-    no: { largura: NO_L, altura: NO_A },
+    largura: width,
+    altura: height,
+    colunas: columns.map((c, i) => ({ ...c, x: Math.round(10 + i * stepX + NODE_W / 2) })),
+    nos: nodes,
+    arestas: edges,
+    no: { largura: NODE_W, altura: NODE_H },
   };
 }
 
 /** Há o que mudar sem aviso? Run ativo ou sessão em andamento: a tela relê de tempos em tempos. */
-export function temAtivo(dados) {
-  return dados.runs.some((r) => r.estado === 'ativa') || dados.grafo.nos.some((n) => n.id === 'resultado:andamento' && n.volume > 0);
+export function hasActive(data) {
+  return data.runs.some((r) => r.estado === 'ativa') || data.grafo.nos.some((n) => n.id === 'resultado:andamento' && n.volume > 0);
 }
 
 // ---------- DOM ----------
 
-function svg(tag, atributos = {}, ...filhos) {
-  const no = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(atributos)) if (v !== null && v !== undefined && v !== false) no.setAttribute(k, String(v));
-  for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) no.append(f instanceof Node ? f : document.createTextNode(String(f)));
-  return no;
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attributes)) if (v !== null && v !== undefined && v !== false) node.setAttribute(k, String(v));
+  for (const f of children.flat()) if (f !== null && f !== undefined && f !== false) node.append(f instanceof Node ? f : document.createTextNode(String(f)));
+  return node;
 }
 
-function carregarCss() {
+function loadCss() {
   if (document.querySelector('link[data-screen="workflows"]')) return;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-screen': 'workflows' }));
 }
 
-function selo(texto, cor) {
-  return el('span', { class: `badge b-${cor}` }, el('span', { class: 'p' }), texto);
+function badgeEl(text, color) {
+  return el('span', { class: `badge b-${color}` }, el('span', { class: 'p' }), text);
 }
 
 function kpis(k) {
   return el(
     'div',
     { class: 'wf-kpis' },
-    ...kpisEscritas(k).map((c) =>
+    ...writtenKpis(k).map((c) =>
       el(
         'div',
         { class: `card wf-kpi wf-kpi-${c.id}` },
@@ -169,42 +169,42 @@ function kpis(k) {
   );
 }
 
-function painel(titulo, direita, ...corpo) {
-  return el('section', { class: 'card wf-panel' }, el('div', { class: 'wf-ttl' }, ...titulo, el('span', { class: 'wf-ttl-r' }, direita)), ...corpo);
+function panel(title, right, ...body) {
+  return el('section', { class: 'card wf-panel' }, el('div', { class: 'wf-ttl' }, ...title, el('span', { class: 'wf-ttl-r' }, right)), ...body);
 }
 
-function chip(texto, extra = '') {
-  return el('span', { class: `wf-chip${extra}` }, texto);
+function chip(text, extra = '') {
+  return el('span', { class: `wf-chip${extra}` }, text);
 }
 
-function linhaDoRun(run, aberto, alternar, ctx) {
-  const [rotulo, cor] = ESTADO_DO_RUN[run.estado] ?? ESTADO_DO_RUN.concluida;
-  const destino = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
-  const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icon('external'));
+function runRow(run, isOpen, toggleOne, ctx) {
+  const [label, color] = RUN_STATE[run.estado] ?? RUN_STATE.concluida;
+  const target = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
+  const link = el('a', { class: 'wf-run-link', href: `${target}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icon('external'));
   // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
   link.addEventListener('click', (ev) => {
     if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     ev.preventDefault();
-    history.pushState(null, '', `${destino}#workflow`);
-    ctx.navigate(destino);
+    history.pushState(null, '', `${target}#workflow`);
+    ctx.navigate(target);
   });
-  const cab = el(
+  const head = el(
     'div',
     { class: 'wf-run-head' },
     el(
       'button',
-      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', onClick: alternar },
-      el('span', { class: 'wf-mute' }, icon(aberto ? 'chevron-down' : 'chevron-right')),
+      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': isOpen ? 'true' : 'false', onClick: toggleOne },
+      el('span', { class: 'wf-mute' }, icon(isOpen ? 'chevron-down' : 'chevron-right')),
       el('b', {}, run.nome),
-      selo(rotulo, cor),
-      aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' wf-chip-model mono') : null,
-      el('span', { class: 'wf-meta' }, metaDoRun(run)),
+      badgeEl(label, color),
+      isOpen && run.modelo ? chip(modelName(run.modelo), ' wf-chip-model mono') : null,
+      el('span', { class: 'wf-meta' }, runMeta(run)),
     ),
     link,
   );
-  if (!aberto) return el('div', { class: 'wf-run' }, cab);
+  if (!isOpen) return el('div', { class: 'wf-run' }, head);
 
-  const fases = run.fases.length
+  const phases = run.fases.length
     ? el(
         'div',
         { class: 'wf-phases' },
@@ -214,7 +214,7 @@ function linhaDoRun(run, aberto, alternar, ctx) {
       )
     : null;
 
-  const tabela = el(
+  const table = el(
     'table',
     { class: 'wf-table' },
     el('colgroup', {}, ...['agent', 'phase', 'state', 'tokens', 'tools', 'duration'].map((c) => el('col', { class: `wf-col-${c}` }))),
@@ -223,184 +223,184 @@ function linhaDoRun(run, aberto, alternar, ctx) {
       'tbody',
       {},
       ...run.agentes.map((a) => {
-        const [texto, c] = estadoDoAgente(a);
+        const [text, c] = agentState(a);
         return el(
           'tr',
           {},
           el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-type' }, `· ${a.tipo}`) : null),
           el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mute' }, '—')),
-          el('td', {}, el('span', { class: `wf-pill b-${c}` }, texto)),
+          el('td', {}, el('span', { class: `wf-pill b-${c}` }, text)),
           el('td', { class: 'wf-num mono' }, tokens(a.tokens)),
           el('td', { class: 'wf-num mono' }, num(a.ferramentas)),
-          el('td', { class: 'wf-num mono' }, duracao(a.duracaoMs)),
+          el('td', { class: 'wf-num mono' }, duration(a.duracaoMs)),
         );
       }),
     ),
   );
-  return el('div', { class: 'wf-run wf-run-open' }, cab, fases, el('div', { class: 'wf-table-box' }, tabela));
+  return el('div', { class: 'wf-run wf-run-open' }, head, phases, el('div', { class: 'wf-table-box' }, table));
 }
 
-function grafoSvg(grafo, largura, selecionado, escolher) {
-  const g = layoutDaOrquestracao(grafo, largura);
+function graphSvg(graph, width, selected, choose) {
+  const g = orchestrationLayout(graph, width);
   const { largura: W, altura: H } = g.no;
-  const raiz = svg('svg', { class: 'wf-orch', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
-  for (const c of g.colunas) raiz.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
-  for (const a of g.arestas) raiz.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
+  const root = svg('svg', { class: 'wf-orch', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
+  for (const c of g.colunas) root.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
+  for (const a of g.arestas) root.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
   for (const n of g.nos) {
-    const cls = ['wf-node', n.id === 'resultado:concluida' ? 'wf-node-ok' : '', n.id === 'resultado:erro' ? 'wf-node-error' : '', n.id === selecionado ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
-    const grupo = svg(
+    const cls = ['wf-node', n.id === 'resultado:concluida' ? 'wf-node-ok' : '', n.id === 'resultado:erro' ? 'wf-node-error' : '', n.id === selected ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
+    const group = svg(
       'g',
-      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selecionado ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selecionado ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
-      svg('title', {}, `${n.rotulo} · ${n.id === selecionado ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
+      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selected ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selected ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
+      svg('title', {}, `${n.rotulo} · ${n.id === selected ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
       svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 7 }),
       svg('text', { class: 'wf-node-label', x: n.x + 8, y: n.y + 19 }, n.texto),
       svg('text', { class: 'wf-node-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
     );
-    grupo.addEventListener('click', () => escolher(n.id));
-    grupo.addEventListener('keydown', (ev) => {
+    group.addEventListener('click', () => choose(n.id));
+    group.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Enter' && ev.key !== ' ') return;
       ev.preventDefault();
-      escolher(n.id);
+      choose(n.id);
     });
-    raiz.append(grupo);
+    root.append(group);
   }
-  return raiz;
+  return root;
 }
 
 // ---------- A tela ----------
 
 export async function mount(area, ctx) {
-  carregarCss();
-  let filtro = 'todas';
-  let no = null;
-  let dados = null;
-  let falha = null;
+  loadCss();
+  let filter = 'todas';
+  let node = null;
+  let data = null;
+  let failure = null;
   let seq = 0;
   let timer = null;
-  let espera = null;
-  let abertos = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
-  let foco = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
+  let wait = null;
+  let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
+  let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
 
-  const botoes = FILTROS.map((f) => {
-    const b = el('button', { type: 'button', 'aria-pressed': f.id === filtro ? 'true' : 'false' }, f.rotulo);
+  const buttons = FILTERS.map((f) => {
+    const b = el('button', { type: 'button', 'aria-pressed': f.id === filter ? 'true' : 'false' }, f.rotulo);
     b.addEventListener('click', () => {
-      if (filtro === f.id) return;
-      filtro = f.id;
-      marcarFiltro();
+      if (filter === f.id) return;
+      filter = f.id;
+      markFilter();
       read();
     });
     return b;
   });
-  const marcarFiltro = () => FILTROS.forEach((f, i) => botoes[i].setAttribute('aria-pressed', f.id === filtro ? 'true' : 'false'));
-  const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...botoes);
-  const cab = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
+  const markFilter = () => FILTERS.forEach((f, i) => buttons[i].setAttribute('aria-pressed', f.id === filter ? 'true' : 'false'));
+  const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...buttons);
+  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
 
-  area.replaceChildren(cab, loading({ label: 'Carregando os workflows' }));
+  area.replaceChildren(head, loading({ label: 'Carregando os workflows' }));
 
-  function escolherNo(id) {
-    no = no === id ? null : id;
-    foco = id;
+  function chooseNode(id) {
+    node = node === id ? null : id;
+    focusTarget = id;
     read();
   }
 
-  const caixaDoGrafo = el('div', { class: 'wf-orch-box' });
-  let larguraDoGrafo = 0;
-  function desenharGrafo() {
-    const largura = Math.floor(caixaDoGrafo.clientWidth);
-    if (!dados || !caixaDoGrafo.isConnected || largura <= 0) return;
-    larguraDoGrafo = largura;
-    caixaDoGrafo.replaceChildren(grafoSvg(dados.grafo, largura, dados.no, escolherNo));
+  const graphBox = el('div', { class: 'wf-orch-box' });
+  let graphWidth = 0;
+  function drawGraph() {
+    const width = Math.floor(graphBox.clientWidth);
+    if (!data || !graphBox.isConnected || width <= 0) return;
+    graphWidth = width;
+    graphBox.replaceChildren(graphSvg(data.grafo, width, data.no, chooseNode));
   }
-  const observador = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
-    if (Math.floor(caixaDoGrafo.clientWidth) !== larguraDoGrafo) desenharGrafo();
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    if (Math.floor(graphBox.clientWidth) !== graphWidth) drawGraph();
   }) : null;
-  observador?.observe(caixaDoGrafo);
+  observer?.observe(graphBox);
 
-  function desenhar() {
-    const d = dados;
+  function draw() {
+    const d = data;
     // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
     if (!d.sessoes && d.filtro === 'todas' && !d.no) {
       area.replaceChildren(
-        ...[cab, falha ? errorBand({ title: 'Não deu para atualizar.', text: falha, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
+        ...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
         empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
       );
       return;
     }
-    if (abertos === null) abertos = new Set(d.runs.length ? [d.runs[0].id] : []);
-    const rotuloDoNo = no ? (d.grafo.nos.find((n) => n.id === no)?.rotulo ?? no) : null;
+    if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
+    const nodeLabel = node ? (d.grafo.nos.find((n) => n.id === node)?.rotulo ?? node) : null;
     // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
-    const resumo = `${FILTROS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? `, das ${d.maximo ?? 500} mais recentes` : ''}`;
+    const summary = `${FILTERS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? `, das ${d.maximo ?? 500} mais recentes` : ''}`;
 
     const runs = d.runs.length
       ? d.runs.map((r) =>
-          linhaDoRun(r, abertos.has(r.id), () => {
-            abertos.has(r.id) ? abertos.delete(r.id) : abertos.add(r.id);
-            desenhar();
+          runRow(r, expanded.has(r.id), () => {
+            expanded.has(r.id) ? expanded.delete(r.id) : expanded.add(r.id);
+            draw();
             [...area.querySelectorAll('.wf-run-expand')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
           }, ctx),
         )
       : [el('p', { class: 'wf-none' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
 
     // O grafo é desenhado depois, na largura que o painel tem na tela (e de novo quando ela muda).
-    const grafo = d.grafo.nos.length
-      ? caixaDoGrafo
+    const graph = d.grafo.nos.length
+      ? graphBox
       : el(
           'div',
           { class: 'wf-none' },
           el('p', {}, 'Nenhuma sessão para desenhar.'),
-          no ? el('button', { type: 'button', class: 'btn outline', onClick: () => escolherNo(no) }, 'Limpar o filtro do nó') : null,
+          node ? el('button', { type: 'button', class: 'btn outline', onClick: () => chooseNode(node) }, 'Limpar o filtro do nó') : null,
         );
 
-    const partes = [
-      cab,
-      falha ? errorBand({ title: 'Não deu para atualizar.', text: falha, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
+    const parts = [
+      head,
+      failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
       kpis(d.kpis),
-      painel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
-      painel(
+      panel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
+      panel(
         ['Grafo de orquestração'],
-        no ? `${resumo} · passando por ${rotuloDoNo} · clique de novo para limpar` : `${resumo} · clique num nó para filtrar`,
-        grafo,
+        node ? `${summary} · passando por ${nodeLabel} · clique de novo para limpar` : `${summary} · clique num nó para filtrar`,
+        graph,
       ),
     ];
-    area.replaceChildren(...partes.filter(Boolean));
-    if (d.grafo.nos.length) desenharGrafo();
-    if (foco) {
-      [...area.querySelectorAll('.wf-node')].find((g) => g.getAttribute('data-node') === foco)?.focus();
-      foco = null;
+    area.replaceChildren(...parts.filter(Boolean));
+    if (d.grafo.nos.length) drawGraph();
+    if (focusTarget) {
+      [...area.querySelectorAll('.wf-node')].find((g) => g.getAttribute('data-node') === focusTarget)?.focus();
+      focusTarget = null;
     }
   }
 
   async function read() {
-    const meu = ++seq;
+    const mine = ++seq;
     clearTimeout(timer);
     try {
-      const d = await ctx.read(rotaDosWorkflows(filtro, no));
-      if (meu !== seq) return;
-      dados = d;
-      falha = null;
-      desenhar();
+      const d = await ctx.read(workflowsRoute(filter, node));
+      if (mine !== seq) return;
+      data = d;
+      failure = null;
+      draw();
     } catch (e) {
-      if (e?.name === 'AbortError' || meu !== seq) return;
-      if (!dados) area.replaceChildren(cab, error({ text: e.message, retry: () => (area.replaceChildren(cab, loading({ label: 'Carregando os workflows' })), read()) }));
+      if (e?.name === 'AbortError' || mine !== seq) return;
+      if (!data) area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
       else {
-        falha = e.message;
-        desenhar();
+        failure = e.message;
+        draw();
       }
     }
-    if (meu === seq && !ctx.signal.aborted && dados && temAtivo(dados)) timer = setTimeout(read, RELER_ATIVO_MS);
+    if (mine === seq && !ctx.signal.aborted && data && hasActive(data)) timer = setTimeout(read, REREAD_ACTIVE_MS);
   }
 
-  ctx.onChange((mudancas) => {
-    if (!mudancas.some((m) => m.tipo === 'sessao' || m.tipo === 'estado')) return;
-    clearTimeout(espera);
-    espera = setTimeout(read, 400);
+  ctx.onChange((changes) => {
+    if (!changes.some((m) => m.tipo === 'sessao' || m.tipo === 'estado')) return;
+    clearTimeout(wait);
+    wait = setTimeout(read, 400);
   });
   ctx.onRestart(() => read());
 
   await read();
   return () => {
     clearTimeout(timer);
-    clearTimeout(espera);
-    observador?.disconnect();
+    clearTimeout(wait);
+    observer?.disconnect();
   };
 }

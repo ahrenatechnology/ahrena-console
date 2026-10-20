@@ -11,10 +11,10 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand } from '../states.js';
-import { duracao, nomeDoModelo, num } from './workflow-format.js';
+import { duration, modelName, num } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
-const RELER_ATIVO_MS = 10_000;
+const REREAD_ACTIVE_MS = 10_000;
 const DEC = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
 
 // ---------- Partes puras (testadas no node) ----------
@@ -25,91 +25,91 @@ const DEC = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
  * outros filhos ocupam a linha livre mais perto, primeiro abaixo, depois acima.
  * Devolve `{ colunas, linhas, pos: { [id]: { coluna, linha } } }`.
  */
-export function layoutDoGrafo(nos, arestas) {
-  const ids = nos.map((n) => n.id);
-  const existe = new Set(ids);
-  const validas = arestas.filter((a) => existe.has(a.de) && existe.has(a.para) && a.de !== a.para);
-  const filhos = new Map(ids.map((i) => [i, []]));
-  const pais = new Map(ids.map((i) => [i, []]));
-  for (const a of validas) {
-    if (!filhos.get(a.de).includes(a.para)) filhos.get(a.de).push(a.para);
-    if (!pais.get(a.para).includes(a.de)) pais.get(a.para).push(a.de);
+export function graphLayout(nodes, edges) {
+  const ids = nodes.map((n) => n.id);
+  const exists = new Set(ids);
+  const valid = edges.filter((a) => exists.has(a.de) && exists.has(a.para) && a.de !== a.para);
+  const children = new Map(ids.map((i) => [i, []]));
+  const country = new Map(ids.map((i) => [i, []]));
+  for (const a of valid) {
+    if (!children.get(a.de).includes(a.para)) children.get(a.de).push(a.para);
+    if (!country.get(a.para).includes(a.de)) country.get(a.para).push(a.de);
   }
 
   // Profundidade: o maior caminho desde uma raiz (Kahn). Num ciclo, o nó fica depois dos pais já vistos.
-  const prof = new Map();
-  const grau = new Map(ids.map((i) => [i, pais.get(i).length]));
-  const fila = ids.filter((i) => grau.get(i) === 0);
-  for (const i of fila) prof.set(i, 0);
-  while (fila.length) {
-    const i = fila.shift();
-    for (const f of filhos.get(i)) {
-      prof.set(f, Math.max(prof.get(f) ?? 0, prof.get(i) + 1));
-      grau.set(f, grau.get(f) - 1);
-      if (grau.get(f) === 0) fila.push(f);
+  const depth = new Map();
+  const degree = new Map(ids.map((i) => [i, country.get(i).length]));
+  const queue = ids.filter((i) => degree.get(i) === 0);
+  for (const i of queue) depth.set(i, 0);
+  while (queue.length) {
+    const i = queue.shift();
+    for (const f of children.get(i)) {
+      depth.set(f, Math.max(depth.get(f) ?? 0, depth.get(i) + 1));
+      degree.set(f, degree.get(f) - 1);
+      if (degree.get(f) === 0) queue.push(f);
     }
   }
   for (const i of ids) {
-    if (prof.has(i)) continue;
-    const vistos = pais.get(i).filter((p) => prof.has(p));
-    prof.set(i, vistos.length ? Math.max(...vistos.map((p) => prof.get(p))) + 1 : 0);
+    if (depth.has(i)) continue;
+    const seen = country.get(i).filter((p) => depth.has(p));
+    depth.set(i, seen.length ? Math.max(...seen.map((p) => depth.get(p))) + 1 : 0);
   }
 
   // Quem põe cada nó na tela: o primeiro pai da coluna anterior (ou o primeiro pai).
-  const dono = new Map();
+  const owner = new Map();
   for (const i of ids) {
-    const ps = pais.get(i);
-    const p = ps.find((x) => prof.get(x) === prof.get(i) - 1) ?? ps.find((x) => prof.get(x) < prof.get(i));
-    if (p !== undefined) dono.set(i, p);
+    const ps = country.get(i);
+    const p = ps.find((x) => depth.get(x) === depth.get(i) - 1) ?? ps.find((x) => depth.get(x) < depth.get(i));
+    if (p !== undefined) owner.set(i, p);
   }
-  const debaixo = new Map(ids.map((i) => [i, []]));
-  for (const i of ids) if (dono.has(i)) debaixo.get(dono.get(i)).push(i);
+  const below = new Map(ids.map((i) => [i, []]));
+  for (const i of ids) if (owner.has(i)) below.get(owner.get(i)).push(i);
 
   // Altura do ramo: quantas colunas ele ainda anda.
   const alt = new Map();
-  const altura = (i, pilha = new Set()) => {
+  const height = (i, stack = new Set()) => {
     if (alt.has(i)) return alt.get(i);
-    if (pilha.has(i)) return 0;
-    pilha.add(i);
-    const h = 1 + Math.max(0, ...debaixo.get(i).map((f) => altura(f, pilha)));
-    pilha.delete(i);
+    if (stack.has(i)) return 0;
+    stack.add(i);
+    const h = 1 + Math.max(0, ...below.get(i).map((f) => height(f, stack)));
+    stack.delete(i);
     alt.set(i, h);
     return h;
   };
 
-  const ocupado = new Map();
-  const livre = (coluna, desejada) => {
-    const usadas = ocupado.get(coluna) ?? new Set();
+  const busy = new Map();
+  const free = (column, wanted) => {
+    const used = busy.get(column) ?? new Set();
     for (let d = 0; ; d++) {
-      for (const l of d === 0 ? [desejada] : [desejada + d, desejada - d]) if (!usadas.has(l)) return l;
+      for (const l of d === 0 ? [wanted] : [wanted + d, wanted - d]) if (!used.has(l)) return l;
     }
   };
   const pos = {};
-  const por = (i, desejada) => {
+  const by = (i, wanted) => {
     if (pos[i]) return;
-    const coluna = prof.get(i);
-    const linha = livre(coluna, desejada);
-    if (!ocupado.has(coluna)) ocupado.set(coluna, new Set());
-    ocupado.get(coluna).add(linha);
-    pos[i] = { coluna, linha };
-    const ordem = [...debaixo.get(i)].sort((a, b) => altura(b) - altura(a));
-    for (const f of ordem) por(f, linha);
+    const column = depth.get(i);
+    const row = free(column, wanted);
+    if (!busy.has(column)) busy.set(column, new Set());
+    busy.get(column).add(row);
+    pos[i] = { coluna: column, linha: row };
+    const order = [...below.get(i)].sort((a, b) => height(b) - height(a));
+    for (const f of order) by(f, row);
   };
-  for (const i of ids) if (!dono.has(i)) por(i, 0);
-  for (const i of ids) por(i, 0);
+  for (const i of ids) if (!owner.has(i)) by(i, 0);
+  for (const i of ids) by(i, 0);
 
-  const linhas = Object.values(pos).map((p) => p.linha);
-  const menor = linhas.length ? Math.min(...linhas) : 0;
-  for (const p of Object.values(pos)) p.linha -= menor;
+  const rows = Object.values(pos).map((p) => p.linha);
+  const smallest = rows.length ? Math.min(...rows) : 0;
+  for (const p of Object.values(pos)) p.linha -= smallest;
   return {
     colunas: ids.length ? Math.max(...Object.values(pos).map((p) => p.coluna)) + 1 : 0,
-    linhas: linhas.length ? Math.max(...linhas) - menor + 1 : 0,
+    linhas: rows.length ? Math.max(...rows) - smallest + 1 : 0,
     pos,
   };
 }
 
 /** Minutos para o eixo: inteiros a partir de 4 min, uma casa abaixo disso. */
-function minutos(ms, total) {
+function minutes(ms, total) {
   const m = ms / 60_000;
   return total >= 4 * 60_000 ? String(Math.round(m)) : DEC.format(m);
 }
@@ -118,122 +118,122 @@ function minutos(ms, total) {
  * A escala da linha do tempo, de `inicio` a `fim` da sessão: `fracao(iso)` de 0 a 1, as marcas do
  * eixo (0, ¼, ½, ¾ e o fim, em min) e o resumo "0 a 28 min".
  */
-export function escalaDaLinha({ inicio, fim }) {
-  const a = Date.parse(inicio);
-  const total = Math.max(1, Date.parse(fim) - a);
-  const fracao = (iso) => (iso === null || iso === undefined ? 1 : Math.min(1, Math.max(0, (Date.parse(iso) - a) / total)));
-  const marcas = [0, 0.25, 0.5, 0.75, 1].map((k) => (k === 0 ? '0' : `${minutos(k * total, total)} min`));
-  return { total, fracao, marcas, resumo: `0 a ${minutos(total, total)} min` };
+export function timelineScale({ inicio: start, fim: end }) {
+  const a = Date.parse(start);
+  const total = Math.max(1, Date.parse(end) - a);
+  const fraction = (iso) => (iso === null || iso === undefined ? 1 : Math.min(1, Math.max(0, (Date.parse(iso) - a) / total)));
+  const marks = [0, 0.25, 0.5, 0.75, 1].map((k) => (k === 0 ? '0' : `${minutes(k * total, total)} min`));
+  return { total, fracao: fraction, marcas: marks, resumo: `0 a ${minutes(total, total)} min` };
 }
 
 /** Os trechos de uma faixa em porcentagem da sessão: `{ x, largura, estado }`. Trecho aberto vai até o fim. */
-export function trechosDaFaixa(faixa, escala) {
-  return faixa.trechos.map((t) => {
-    const x = escala.fracao(t.inicio);
-    const f = escala.fracao(t.fim);
+export function bandSegments(band, scale) {
+  return band.trechos.map((t) => {
+    const x = scale.fracao(t.inicio);
+    const f = scale.fracao(t.fim);
     return { x: Math.round(x * 10000) / 100, largura: Math.max(0.4, Math.round((f - x) * 10000) / 100), estado: t.estado };
   });
 }
 
 /** O nome do nó com a rodada: "dev · r1". */
-export const nomeDoNo = (n) => (n.rodada ? `${n.nome} · r${n.rodada}` : n.nome);
+export const nodeName = (n) => (n.rodada ? `${n.nome} · r${n.rodada}` : n.nome);
 
 /** A segunda linha do nó: "3 ajustes pedidos" no review que pediu; senão a tarefa (ou o modelo) e o tempo. */
-export function detalheDoNo(n) {
+export function nodeDetail(n) {
   if (n.ajustes > 0) return { texto: `${num(n.ajustes)} ${n.ajustes === 1 ? 'ajuste pedido' : 'ajustes pedidos'}`, ajustes: true };
-  const quem = n.tarefa ?? (n.modelo ? nomeDoModelo(n.modelo) : null);
-  return { texto: [quem, duracao(n.duracaoMs)].filter(Boolean).join(' · '), ajustes: false };
+  const who = n.tarefa ?? (n.modelo ? modelName(n.modelo) : null);
+  return { texto: [who, duration(n.duracaoMs)].filter(Boolean).join(' · '), ajustes: false };
 }
 
-const ESTADO = { ativo: 'Ativa', concluido: 'Concluída', erro: 'Erro' };
+const STATE_LABEL = { ativo: 'Ativa', concluido: 'Concluída', erro: 'Erro' };
 // The class of each node state (the API value stays as it comes): `wfd-e-<state>`.
 const STATE_CLASS = { ativo: 'active', concluido: 'completed', erro: 'error' };
-const stateClass = (estado) => `wfd-e-${STATE_CLASS[estado] ?? estado}`;
+const stateClass = (state) => `wfd-e-${STATE_CLASS[state] ?? state}`;
 
 // ---------- DOM ----------
 
-function svg(tag, atributos = {}, ...filhos) {
-  const no = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(atributos)) if (v !== null && v !== undefined && v !== false) no.setAttribute(k, String(v));
-  for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) no.append(f instanceof Node ? f : document.createTextNode(String(f)));
-  return no;
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attributes)) if (v !== null && v !== undefined && v !== false) node.setAttribute(k, String(v));
+  for (const f of children.flat()) if (f !== null && f !== undefined && f !== false) node.append(f instanceof Node ? f : document.createTextNode(String(f)));
+  return node;
 }
 
-const curto = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+const short = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
-function carregarCss() {
+function loadCss() {
   if (document.querySelector('link[data-screen="session-detail-workflow"]')) return;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail-workflow.css', 'data-screen': 'session-detail-workflow' }));
 }
 
 // As medidas do C7 (6 colunas em ~980 px): o SVG encolhe para caber no painel, o texto junto.
-const NO_L = 128;
-const NO_A = 64;
-const PASSO_X = 168;
-const PASSO_Y = 96;
-const MARGEM = 4;
+const NODE_W = 128;
+const NODE_H = 64;
+const STEP_X = 168;
+const STEP_Y = 96;
+const MARGIN = 4;
 
-function grafo(w) {
-  const lay = layoutDoGrafo(w.nos, w.arestas);
-  const largura = MARGEM * 2 + (lay.colunas - 1) * PASSO_X + NO_L;
-  const altura = MARGEM * 2 + (lay.linhas - 1) * PASSO_Y + NO_A;
-  const xy = (id) => ({ x: MARGEM + lay.pos[id].coluna * PASSO_X, y: MARGEM + lay.pos[id].linha * PASSO_Y });
-  const raiz = svg('svg', { class: largura > 720 ? 'wfd-graph wfd-wide' : 'wfd-graph', viewBox: `0 0 ${largura} ${altura}`, width: largura, height: altura, role: 'img', 'aria-label': 'Grafo dos agentes da sessão' });
-  const seta = (id, cls) => svg('marker', { id, viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' }, svg('path', { d: 'M0,0 L8,4 L0,8 Z', class: cls }));
-  raiz.append(svg('defs', {}, seta('wfd-arrow', 'wfd-tip'), seta('wfd-arrow-adj', 'wfd-tip wfd-adj')));
+function graph(w) {
+  const lay = graphLayout(w.nos, w.arestas);
+  const width = MARGIN * 2 + (lay.colunas - 1) * STEP_X + NODE_W;
+  const height = MARGIN * 2 + (lay.linhas - 1) * STEP_Y + NODE_H;
+  const xy = (id) => ({ x: MARGIN + lay.pos[id].coluna * STEP_X, y: MARGIN + lay.pos[id].linha * STEP_Y });
+  const root = svg('svg', { class: width > 720 ? 'wfd-graph wfd-wide' : 'wfd-graph', viewBox: `0 0 ${width} ${height}`, width: width, height: height, role: 'img', 'aria-label': 'Grafo dos agentes da sessão' });
+  const arrow = (id, cls) => svg('marker', { id, viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' }, svg('path', { d: 'M0,0 L8,4 L0,8 Z', class: cls }));
+  root.append(svg('defs', {}, arrow('wfd-arrow', 'wfd-tip'), arrow('wfd-arrow-adj', 'wfd-tip wfd-adj')));
 
   for (const a of w.arestas) {
     if (!lay.pos[a.de] || !lay.pos[a.para]) continue;
     const A = xy(a.de);
     const B = xy(a.para);
-    const x1 = A.x + NO_L;
-    const y1 = A.y + NO_A / 2;
+    const x1 = A.x + NODE_W;
+    const y1 = A.y + NODE_H / 2;
     const x2 = B.x - 3;
-    const y2 = B.y + NO_A / 2;
+    const y2 = B.y + NODE_H / 2;
     const m = (x1 + x2) / 2;
-    const aj = a.tipo === 'ajustes';
-    raiz.append(svg('path', { class: `wfd-edge${aj ? ' wfd-adj' : ''}`, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, 'marker-end': `url(#${aj ? 'wfd-arrow-adj' : 'wfd-arrow'})` }));
-    if (a.rotulo) raiz.append(svg('text', { class: `wfd-label${aj ? ' wfd-adj' : ''}`, x: m, y: (y1 + y2) / 2 - 6, 'text-anchor': 'middle' }, a.rotulo));
+    const adj = a.tipo === 'ajustes';
+    root.append(svg('path', { class: `wfd-edge${adj ? ' wfd-adj' : ''}`, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, 'marker-end': `url(#${adj ? 'wfd-arrow-adj' : 'wfd-arrow'})` }));
+    if (a.rotulo) root.append(svg('text', { class: `wfd-label${adj ? ' wfd-adj' : ''}`, x: m, y: (y1 + y2) / 2 - 6, 'text-anchor': 'middle' }, a.rotulo));
   }
 
   for (const n of w.nos) {
     if (!lay.pos[n.id]) continue;
     const { x, y } = xy(n.id);
-    const det = detalheDoNo(n);
-    const estado = ESTADO[n.estado] ?? n.estado;
-    raiz.append(
+    const detail = nodeDetail(n);
+    const state = STATE_LABEL[n.estado] ?? n.estado;
+    root.append(
       svg(
         'g',
         { class: `wfd-node ${stateClass(n.estado)}` },
-        svg('title', {}, [nomeDoNo(n), n.tarefa, duracao(n.duracaoMs), estado].filter(Boolean).join(' · ')),
-        svg('rect', { class: 'wfd-box', x, y, width: NO_L, height: NO_A, rx: 8 }),
-        svg('rect', { class: 'wfd-border', x, y: y + 1, width: 3, height: NO_A - 2, rx: 1.5 }),
-        svg('text', { class: 'wfd-node-name', x: x + 11, y: y + 19 }, curto(nomeDoNo(n), 18)),
-        svg('text', { class: `wfd-node-detail${det.ajustes ? ' wfd-adj' : ''}`, x: x + 11, y: y + 36 }, curto(det.texto, 20)),
+        svg('title', {}, [nodeName(n), n.tarefa, duration(n.duracaoMs), state].filter(Boolean).join(' · ')),
+        svg('rect', { class: 'wfd-box', x, y, width: NODE_W, height: NODE_H, rx: 8 }),
+        svg('rect', { class: 'wfd-border', x, y: y + 1, width: 3, height: NODE_H - 2, rx: 1.5 }),
+        svg('text', { class: 'wfd-node-name', x: x + 11, y: y + 19 }, short(nodeName(n), 18)),
+        svg('text', { class: `wfd-node-detail${detail.ajustes ? ' wfd-adj' : ''}`, x: x + 11, y: y + 36 }, short(detail.texto, 20)),
         n.estado === 'ativo' ? svg('circle', { class: 'wfd-node-dot', cx: x + 15, cy: y + 49, r: 3.5 }) : null,
-        svg('text', { class: 'wfd-node-state', x: x + (n.estado === 'ativo' ? 22 : 11), y: y + 53 }, n.estado === 'concluido' ? `✓ ${estado}` : n.estado === 'erro' ? `✕ ${estado}` : estado),
+        svg('text', { class: 'wfd-node-state', x: x + (n.estado === 'ativo' ? 22 : 11), y: y + 53 }, n.estado === 'concluido' ? `✓ ${state}` : n.estado === 'erro' ? `✕ ${state}` : state),
       ),
     );
   }
-  return el('div', { class: 'wfd-scroll' }, raiz);
+  return el('div', { class: 'wfd-scroll' }, root);
 }
 
-function legenda(w) {
-  const tracejado = svg('svg', { class: 'wfd-dashed', viewBox: '0 0 18 4', width: 18, height: 4, 'aria-hidden': 'true' }, svg('line', { x1: 0, y1: 2, x2: 18, y2: 2 }));
+function legend(w) {
+  const dashed = svg('svg', { class: 'wfd-dashed', viewBox: '0 0 18 4', width: 18, height: 4, 'aria-hidden': 'true' }, svg('line', { x1: 0, y1: 2, x2: 18, y2: 2 }));
   return el(
     'div',
     { class: 'wfd-legend' },
     el('span', {}, el('i', { class: 'wfd-ball wfd-e-active' }), 'Ativo'),
     el('span', {}, el('i', { class: 'wfd-ball wfd-e-completed' }), 'Concluído'),
-    el('span', {}, tracejado, 'review pediu ajustes: volta para o dev'),
+    el('span', {}, dashed, 'review pediu ajustes: volta para o dev'),
     el('span', {}, 'Rodadas de review ', el('b', { class: 'mono' }, num(w.rodadasDeReview))),
     el('span', {}, 'Ajustes ', el('b', { class: 'mono' }, num(w.ajustes))),
   );
 }
 
-function linhaDoTempo(w) {
-  const escala = escalaDaLinha(w.linhaDoTempo);
-  const faixas = w.linhaDoTempo.faixas.map((f) =>
+function timeline(w) {
+  const scale = timelineScale(w.linhaDoTempo);
+  const bands = w.linhaDoTempo.faixas.map((f) =>
     el(
       'div',
       { class: 'wfd-band' },
@@ -242,70 +242,70 @@ function linhaDoTempo(w) {
         'svg',
         { class: 'wfd-lane', width: '100%', height: 16, 'aria-hidden': 'true' },
         svg('rect', { class: 'wfd-bg', x: 0, y: 0, width: '100%', height: 16, rx: 4 }),
-        ...trechosDaFaixa(f, escala).map((t) => svg('rect', { class: `wfd-segment ${stateClass(t.estado)}`, x: `${t.x}%`, y: 2, width: `${t.largura}%`, height: 12, rx: 3 })),
+        ...bandSegments(f, scale).map((t) => svg('rect', { class: `wfd-segment ${stateClass(t.estado)}`, x: `${t.x}%`, y: 2, width: `${t.largura}%`, height: 12, rx: 3 })),
       ),
     ),
   );
-  const eixo = el('div', { class: 'wfd-band wfd-axis mono' }, el('span', {}), el('div', {}, ...escala.marcas.map((m) => el('span', {}, m))));
+  const axis = el('div', { class: 'wfd-band wfd-axis mono' }, el('span', {}), el('div', {}, ...scale.marcas.map((m) => el('span', {}, m))));
   return el(
     'section',
     { class: 'card wfd-panel' },
-    el('div', { class: 'wfd-ttl' }, icon('gantt'), 'Linha do tempo dos agentes', el('span', { class: 'wfd-ttl-r' }, `${escala.resumo} · concorrência`)),
-    ...faixas,
-    eixo,
+    el('div', { class: 'wfd-ttl' }, icon('gantt'), 'Linha do tempo dos agentes', el('span', { class: 'wfd-ttl-r' }, `${scale.resumo} · concorrência`)),
+    ...bands,
+    axis,
   );
 }
 
-function desenho(w) {
+function drawing(w) {
   return [
     el(
       'section',
       { class: 'card wfd-panel' },
       el('div', { class: 'wfd-ttl' }, icon('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.resumo ?? '')),
-      grafo(w),
-      legenda(w),
+      graph(w),
+      legend(w),
     ),
-    linhaDoTempo(w),
+    timeline(w),
   ];
 }
 
 // ---------- A aba ----------
 
-export function criar(ctx, base) {
-  let alvo = null;
-  let dados = null;
+export function create(ctx, base) {
+  let target = null;
+  let data = null;
   let seq = 0;
   let timer = null;
   ctx.signal?.addEventListener('abort', () => clearTimeout(timer));
 
-  async function desenhar() {
-    const meu = ++seq;
+  async function draw() {
+    const mine = ++seq;
     clearTimeout(timer);
-    if (!alvo) return;
-    carregarCss();
+    if (!target) return;
+    loadCss();
     try {
       const w = await ctx.read(`${base}/workflow`);
-      if (meu !== seq || !alvo) return;
-      dados = w;
-      alvo.replaceChildren(...desenho(w));
+      if (mine !== seq || !target) return;
+      data = w;
+      target.replaceChildren(...drawing(w));
     } catch (e) {
-      if (e?.name === 'AbortError' || meu !== seq || !alvo) return;
-      if (dados) alvo.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => desenhar() } }), ...desenho(dados));
-      else alvo.replaceChildren(error({ title: e.status === 404 ? 'Sessão não encontrada' : 'Não deu para ler o workflow', text: e.message, retry: () => (alvo?.replaceChildren(loading({ label: 'Carregando', blocks: 2 })), desenhar()) }));
+      if (e?.name === 'AbortError' || mine !== seq || !target) return;
+      if (data) target.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => draw() } }), ...drawing(data));
+      else target.replaceChildren(error({ title: e.status === 404 ? 'Sessão não encontrada' : 'Não deu para ler o workflow', text: e.message, retry: () => (target?.replaceChildren(loading({ label: 'Carregando', blocks: 2 })), draw()) }));
     }
-    if (meu === seq && alvo && !ctx.signal?.aborted && dados?.nos.some((n) => n.estado === 'ativo')) timer = setTimeout(desenhar, RELER_ATIVO_MS);
+    if (mine === seq && target && !ctx.signal?.aborted && data?.nos.some((n) => n.estado === 'ativo')) timer = setTimeout(draw, REREAD_ACTIVE_MS);
   }
 
   return {
-    mostrar(corpo) {
-      alvo = corpo;
-      return desenhar();
+    show(body) {
+      target = body;
+      return draw();
     },
-    esconder() {
-      alvo = null;
+    hide() {
+      target = null;
       seq++;
       clearTimeout(timer);
     },
-    atualizar: () => desenhar(),
+    refresh: () => draw(),
   };
 }

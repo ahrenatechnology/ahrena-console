@@ -10,71 +10,71 @@
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import {
-  barras,
-  cardDeTrafego,
-  comSinal,
+  bars,
+  trafficCardKind,
+  signed,
   decimal,
-  duracao,
-  estadoDaTela,
-  fatias,
-  frequencia,
-  ha,
-  inteiro,
+  duration,
+  screenState,
+  slices,
+  frequency,
+  ago,
+  integer,
   kilo,
-  linguagens,
-  mil,
-  mudancaInteressa,
+  languages,
+  thousand,
+  changeMatters,
   periodInUrl,
-  periodoDe,
-  PERIODOS,
-  porcentagem,
-  respostaAtual,
-  rotuloDoPeriodo,
-  SEM_GITHUB,
-  temRepo,
-  TRACO,
-  urlDoGithub,
-  valorOuPendente,
+  periodFrom,
+  PERIODS,
+  percentage,
+  currentResponse,
+  periodLabel,
+  NO_GITHUB,
+  hasRepo,
+  DASH,
+  githubUrl,
+  valueOrPending,
 } from '../repos-format.js';
-import { carregarEstilo, pilulaDeCi } from './repos.js';
+import { loadStyle, ciPill } from './repos.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
-const RELER_MS = 5000;
-const CONTRIBUIDORES = 10;
+const REREAD_MS = 5000;
+const CONTRIBUTORS = 10;
 
-const COR_DO_TIPO = { História: 'repo-k-accent', 'Tarefa técnica': 'repo-k-orange-light', Bug: 'repo-k-error', Spike: 'repo-k-wait', Épico: 'repo-k-pink' };
-const CORES_DAS_LINGUAGENS = ['repo-k-accent', 'repo-k-orange-light', 'repo-k-orange-dark', 'repo-k-muted'];
+const TYPE_COLOR = { História: 'repo-k-accent', 'Tarefa técnica': 'repo-k-orange-light', Bug: 'repo-k-error', Spike: 'repo-k-wait', Épico: 'repo-k-pink' };
+const LANGUAGE_COLORS = ['repo-k-accent', 'repo-k-orange-light', 'repo-k-orange-dark', 'repo-k-muted'];
 
-function svg(tag, atributos = {}, ...filhos) {
-  const no = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(atributos)) no.setAttribute(k, String(v));
-  for (const f of filhos) no.append(f);
-  return no;
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attributes)) node.setAttribute(k, String(v));
+  for (const f of children) node.append(f);
+  return node;
 }
 
-const barraH = (pct, cor) => {
-  const i = el('i', { class: cor });
+const barH = (pct, color) => {
+  const i = el('i', { class: color });
   i.style.setProperty('--w', `${Math.max(0, Math.min(100, pct))}%`);
   return i;
 };
 
-const soLeitor = (texto) => el('span', { class: 'repo-sr-only' }, texto);
+const srOnly = (text) => el('span', { class: 'repo-sr-only' }, text);
 
-function card(titulo, direita, ...filhos) {
-  return el('section', { class: 'card repo-card' }, el('h2', { class: 'repo-ttl' }, titulo, direita ? el('span', { class: 'repo-ttl-r' }, direita) : null), ...filhos);
+function card(title, right, ...children) {
+  return el('section', { class: 'card repo-card' }, el('h2', { class: 'repo-ttl' }, title, right ? el('span', { class: 'repo-ttl-r' }, right) : null), ...children);
 }
 
-const nota = (texto) => el('p', { class: 'repo-empty' }, texto);
+const note = (text) => el('p', { class: 'repo-empty' }, text);
 /** A nota da amostra paginada que não cobre o total: `Por tipo sobre 100 de 240 issues lidas.` */
-const amostraParcial = (a, inicio, nome) => (a?.truncado ? el('span', { class: 'repo-note' }, `${inicio} sobre ${inteiro(a.lidos)} de ${inteiro(a.total)} ${nome}.`) : null);
+const partialSample = (a, start, name) => (a?.truncado ? el('span', { class: 'repo-note' }, `${start} sobre ${integer(a.lidos)} de ${integer(a.total)} ${name}.`) : null);
 
-function graficoCommits(semanas) {
+function commitsChart(weeks) {
   const W = 520;
   const H = 90;
-  const n = semanas.length;
-  const total = semanas.reduce((s, x) => s + x, 0);
-  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 16}`, class: 'repo-chart', role: 'img', 'aria-label': `Commits por semana, ${n} semanas: ${inteiro(total)} no total, ${inteiro(semanas[n - 1])} nesta semana` });
-  barras(semanas, W, H).forEach((b, i) => g.append(svg('rect', { x: b.x, y: b.y, width: b.largura, height: b.altura, rx: 1.5, class: i === n - 1 ? 'repo-chart-bar repo-chart-current' : 'repo-chart-bar' })));
+  const n = weeks.length;
+  const total = weeks.reduce((s, x) => s + x, 0);
+  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 16}`, class: 'repo-chart', role: 'img', 'aria-label': `Commits por semana, ${n} semanas: ${integer(total)} no total, ${integer(weeks[n - 1])} nesta semana` });
+  bars(weeks, W, H).forEach((b, i) => g.append(svg('rect', { x: b.x, y: b.y, width: b.largura, height: b.altura, rx: 1.5, class: i === n - 1 ? 'repo-chart-bar repo-chart-current' : 'repo-chart-bar' })));
   g.append(
     svg('line', { x1: 0, x2: W, y1: H + 0.5, y2: H + 0.5, class: 'repo-chart-base' }),
     svg('text', { x: 0, y: H + 13 }, `${n} ${n === 1 ? 'semana' : 'semanas'} atrás`),
@@ -83,17 +83,17 @@ function graficoCommits(semanas) {
   return g;
 }
 
-function graficoFrequencia(f) {
+function frequencyChart(f) {
   const W = 520;
   const H = 120;
-  const MEIO = 64;
+  const MIDDLE = 64;
   const n = f.semanas.length;
-  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 14}`, class: 'repo-chart', role: 'img', 'aria-label': `Frequência de código, ${n} semanas: ${comSinal(f.adicionadas, kilo)} linhas adicionadas e ${comSinal(-f.removidas, kilo)} removidas` });
-  for (const s of frequencia(f.semanas, W, MEIO, 58, 52)) {
+  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 14}`, class: 'repo-chart', role: 'img', 'aria-label': `Frequência de código, ${n} semanas: ${signed(f.adicionadas, kilo)} linhas adicionadas e ${signed(-f.removidas, kilo)} removidas` });
+  for (const s of frequency(f.semanas, W, MIDDLE, 58, 52)) {
     g.append(svg('rect', { x: s.x, y: s.cima.y, width: s.largura, height: s.cima.altura, rx: 1.5, class: 'repo-chart-add' }), svg('rect', { x: s.x, y: s.baixo.y, width: s.largura, height: s.baixo.altura, rx: 1.5, class: 'repo-chart-rem' }));
   }
   g.append(
-    svg('line', { x1: 0, x2: W, y1: MEIO, y2: MEIO, class: 'repo-chart-base' }),
+    svg('line', { x1: 0, x2: W, y1: MIDDLE, y2: MIDDLE, class: 'repo-chart-base' }),
     svg('text', { x: 0, y: H + 12 }, `${n} ${n === 1 ? 'semana' : 'semanas'} atrás`),
     svg('text', { x: W, y: H + 12, 'text-anchor': 'end' }, 'esta semana'),
   );
@@ -101,162 +101,162 @@ function graficoFrequencia(f) {
 }
 
 export async function mount(area, ctx) {
-  carregarEstilo();
-  const { owner: dono, repo: nome } = ctx.params;
-  let periodo = periodoDe(location.search);
-  let dados = null;
-  let falha = null;
+  loadStyle();
+  const { owner: owner, repo: name } = ctx.params;
+  let period = periodFrom(location.search);
+  let data = null;
+  let failure = null;
   let timer = null;
-  let pedido = 0;
+  let request = 0;
 
   // ---------- o cabeçalho: montado uma vez, o segmentado não perde o foco ----------
-  const titulo = el('h1', {}, `${dono}/${nome}`);
-  const ciLugar = el('span', {});
-  const visLugar = el('span', {});
-  const botoesPeriodo = PERIODOS.map(([v, rotulo]) => {
-    const b = el('button', { type: 'button', 'aria-pressed': String(v === periodo) }, rotulo);
-    b.addEventListener('click', () => trocarPeriodo(v));
+  const title = el('h1', {}, `${owner}/${name}`);
+  const ciSlot = el('span', {});
+  const visSlot = el('span', {});
+  const periodButtons = PERIODS.map(([v, label]) => {
+    const b = el('button', { type: 'button', 'aria-pressed': String(v === period) }, label);
+    b.addEventListener('click', () => switchPeriod(v));
     return b;
   });
-  const abrirNoGithub = el('a', { class: 'btn outline', target: '_blank', rel: 'noopener noreferrer', hidden: true }, icon('external'), 'Abrir no GitHub');
+  const openOnGithub = el('a', { class: 'btn outline', target: '_blank', rel: 'noopener noreferrer', hidden: true }, icon('external'), 'Abrir no GitHub');
   const chips = el('div', { class: 'repo-chips' });
-  const cab = el(
+  const head = el(
     'header',
     { class: 'repo-head' },
     el(
       'div',
       { class: 'repo-head-l1' },
       el('a', { class: 'repo-back', href: '/ui/repos', 'aria-label': 'Voltar para Repositórios' }, icon('back')),
-      titulo,
-      ciLugar,
-      visLugar,
-      el('div', { class: 'repo-head-dir' }, el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Período' }, ...botoesPeriodo), abrirNoGithub),
+      title,
+      ciSlot,
+      visSlot,
+      el('div', { class: 'repo-head-dir' }, el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Período' }, ...periodButtons), openOnGithub),
     ),
     chips,
   );
-  const faixa = el('div', { hidden: true });
-  const conteudo = el('div', { class: 'repo-groups' });
-  area.replaceChildren(cab, faixa, conteudo);
+  const band = el('div', { hidden: true });
+  const content = el('div', { class: 'repo-groups' });
+  area.replaceChildren(head, band, content);
 
-  function trocarPeriodo(v) {
-    if (v === periodo) return;
-    periodo = v;
-    for (const [i, b] of botoesPeriodo.entries()) b.setAttribute('aria-pressed', String(PERIODOS[i][0] === v));
+  function switchPeriod(v) {
+    if (v === period) return;
+    period = v;
+    for (const [i, b] of periodButtons.entries()) b.setAttribute('aria-pressed', String(PERIODS[i][0] === v));
     history.replaceState(history.state, '', `${location.pathname}?period=${periodInUrl(v)}`);
-    dados = null;
-    falha = null;
-    conteudo.replaceChildren(loading({ label: `Lendo ${rotuloDoPeriodo(v)}…` }));
+    data = null;
+    failure = null;
+    content.replaceChildren(loading({ label: `Lendo ${periodLabel(v)}…` }));
     read();
   }
 
   // ---------- os valores ----------
-  const valor = (v, campo, formatar) => valorOuPendente(v, dados, campo, formatar).texto;
+  const value = (v, field, format) => valueOrPending(v, data, field, format).texto;
 
-  function stat(rotulo, campo, v, formatar, sub, nomeIcone, cor) {
-    const r = valorOuPendente(v, dados, campo, formatar);
-    const tem = v !== null && v !== undefined;
+  function stat(label, field, v, format, sub, iconName, color) {
+    const r = valueOrPending(v, data, field, format);
+    const has = v !== null && v !== undefined;
     return el(
       'section',
       { class: 'card repo-stat' },
-      el('span', { class: 'repo-stat-label' }, rotulo),
-      el('span', { class: `repo-stat-ic ${cor}` }, icon(nomeIcone)),
-      el('span', { class: tem ? 'repo-stat-v' : 'repo-stat-v repo-pending' }, r.texto),
-      el('span', { class: 'repo-stat-s' }, tem ? sub : ''),
+      el('span', { class: 'repo-stat-label' }, label),
+      el('span', { class: `repo-stat-ic ${color}` }, icon(iconName)),
+      el('span', { class: has ? 'repo-stat-v' : 'repo-stat-v repo-pending' }, r.texto),
+      el('span', { class: 'repo-stat-s' }, has ? sub : ''),
     );
   }
 
-  function chip(nomeIcone, titulo, visivel, leitor = null) {
-    return el('span', { class: 'repo-chip', title: titulo }, icon(nomeIcone), visivel, leitor ? soLeitor(leitor) : null);
+  function chip(iconName, title, visible, reader = null) {
+    return el('span', { class: 'repo-chip', title: title }, icon(iconName), visible, reader ? srOnly(reader) : null);
   }
 
-  function desenharCabecalho() {
-    const r = dados?.repo;
-    titulo.textContent = r?.completo ?? `${dono}/${nome}`;
-    ctx.title(titulo.textContent);
-    ciLugar.replaceChildren(...(r?.ci ? [pilulaDeCi(r.ci)] : []));
-    visLugar.replaceChildren(...(r ? [el('span', { class: 'repo-chip repo-chip-sans' }, r.visibilidade === 'publico' ? 'público' : 'privado')] : []));
-    const url = r ? urlDoGithub(r.url) : null;
-    abrirNoGithub.hidden = !url;
-    if (url) abrirNoGithub.setAttribute('href', url);
-    else abrirNoGithub.removeAttribute('href');
+  function drawHeader() {
+    const r = data?.repo;
+    title.textContent = r?.completo ?? `${owner}/${name}`;
+    ctx.title(title.textContent);
+    ciSlot.replaceChildren(...(r?.ci ? [ciPill(r.ci)] : []));
+    visSlot.replaceChildren(...(r ? [el('span', { class: 'repo-chip repo-chip-sans' }, r.visibilidade === 'publico' ? 'público' : 'privado')] : []));
+    const url = r ? githubUrl(r.url) : null;
+    openOnGithub.hidden = !url;
+    if (url) openOnGithub.setAttribute('href', url);
+    else openOnGithub.removeAttribute('href');
     if (!r) return chips.replaceChildren();
-    const agora = Date.now();
-    const lista = [
+    const now = Date.now();
+    const list = [
       r.branchPadrao ? chip('branch', 'Branch padrão', r.branchPadrao, ' (branch padrão)') : null,
-      chip('star', 'Estrelas', inteiro(r.estrelas), r.estrelas === 1 ? ' estrela' : ' estrelas'),
-      chip('subagent', 'Forks', inteiro(r.forks), r.forks === 1 ? ' fork' : ' forks'),
-      chip('eye', 'Observadores', inteiro(r.observadores), r.observadores === 1 ? ' observador' : ' observadores'),
-      r.release ? chip('tag', 'Última release', `${r.release.tag} · ${ha(r.release.em, agora)}`, ' (última release)') : null,
+      chip('star', 'Estrelas', integer(r.estrelas), r.estrelas === 1 ? ' estrela' : ' estrelas'),
+      chip('subagent', 'Forks', integer(r.forks), r.forks === 1 ? ' fork' : ' forks'),
+      chip('eye', 'Observadores', integer(r.observadores), r.observadores === 1 ? ' observador' : ' observadores'),
+      r.release ? chip('tag', 'Última release', `${r.release.tag} · ${ago(r.release.em, now)}`, ' (última release)') : null,
       r.licenca ? chip('license', 'Licença', r.licenca, ' (licença)') : null,
     ];
     // `replaceChildren` escreveria "null": só os chips que existem.
-    chips.replaceChildren(...lista.filter(Boolean));
+    chips.replaceChildren(...list.filter(Boolean));
   }
 
-  function abas(url) {
-    const fora = (caminho, nomeIcone, rotulo) =>
-      url ? el('a', { href: `${url}/${caminho}`, target: '_blank', rel: 'noopener noreferrer' }, icon(nomeIcone), rotulo) : el('span', {}, icon(nomeIcone), rotulo);
+  function tabs(url) {
+    const outside = (path, iconName, label) =>
+      url ? el('a', { href: `${url}/${path}`, target: '_blank', rel: 'noopener noreferrer' }, icon(iconName), label) : el('span', {}, icon(iconName), label);
     return el(
       'nav',
       { class: 'repo-tabs', 'aria-label': 'Seções do repositório' },
       el('span', { 'aria-current': 'page' }, icon('analytics'), 'Métricas'),
-      fora('issues', 'dot', `Issues (${inteiro(dados.abas.issues)})`),
-      fora('pulls', 'git-pull-request', `PRs (${inteiro(dados.abas.prs)})`),
-      fora('actions', 'ci', 'CI'),
+      outside('issues', 'dot', `Issues (${integer(data.abas.issues)})`),
+      outside('pulls', 'git-pull-request', `PRs (${integer(data.abas.prs)})`),
+      outside('actions', 'ci', 'CI'),
       // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
-      el('a', { href: `/ui/sessions?search=${encodeURIComponent(nome)}`, title: `Sessões cujo diretório tem "${nome}"` }, icon('sessions'), `Sessões (${inteiro(dados.abas.sessoes)})`),
+      el('a', { href: `/ui/sessions?search=${encodeURIComponent(name)}`, title: `Sessões cujo diretório tem "${name}"` }, icon('sessions'), `Sessões (${integer(data.abas.sessoes)})`),
       el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icon('decision'), 'Decisões'),
     );
   }
 
   function kpis() {
-    const { linhas, commits, prs, issues, ci } = dados;
-    const rot = rotuloDoPeriodo(dados.periodo ?? periodo);
-    const mediana = (ms, texto) => (ms === null ? 'sem mediana no período' : texto(duracao(ms)));
-    const ciSub = ci ? `${inteiro(ci.execucoes)} execuções${ci.duracaoMediaMs === null ? '' : ` · ${duracao(ci.duracaoMediaMs)} médio`}` : '';
+    const { linhas: rows, commits, prs, issues, ci } = data;
+    const periodText = periodLabel(data.periodo ?? period);
+    const median = (ms, text) => (ms === null ? 'sem mediana no período' : text(duration(ms)));
+    const ciSub = ci ? `${integer(ci.execucoes)} execuções${ci.duracaoMediaMs === null ? '' : ` · ${duration(ci.duracaoMediaMs)} médio`}` : '';
     return el(
       'div',
       { class: 'repo-stats repo-stats-6' },
-      stat('Linhas', 'linhas', linhas?.total ?? null, mil, linhas ? `${comSinal(linhas.noPeriodo, mil)} em ${rot}` : '', 'lines', 'repo-c-accent'),
-      stat('Commits', 'commits', commits?.total ?? null, inteiro, commits ? `~${inteiro(commits.porSemana)} por semana` : '', 'decision', 'repo-c-accent'),
-      stat('PRs mergeados', 'prs', prs?.mergeados ?? null, inteiro, prs ? mediana(prs.medianaAteMergeMs, (d) => `merge em ${d} (mediana)`) : '', 'merge', 'repo-c-ok'),
-      stat('Issues fechadas', 'issues', issues?.fechadas ?? null, inteiro, issues ? mediana(issues.medianaAteFecharMs, (d) => `fecha em ${d} (mediana)`) : '', 'ok', 'repo-c-ok'),
-      stat('Review', 'prs', prs?.medianaAtePrimeiroReviewMs ?? null, duracao, 'até o 1º review (mediana)', 'conversation', 'repo-c-wait'),
-      stat('CI verde', 'ci', ci?.taxaVerde ?? null, porcentagem, ciSub, 'ci', 'repo-c-ok'),
+      stat('Linhas', 'linhas', rows?.total ?? null, thousand, rows ? `${signed(rows.noPeriodo, thousand)} em ${periodText}` : '', 'lines', 'repo-c-accent'),
+      stat('Commits', 'commits', commits?.total ?? null, integer, commits ? `~${integer(commits.porSemana)} por semana` : '', 'decision', 'repo-c-accent'),
+      stat('PRs mergeados', 'prs', prs?.mergeados ?? null, integer, prs ? median(prs.medianaAteMergeMs, (d) => `merge em ${d} (mediana)`) : '', 'merge', 'repo-c-ok'),
+      stat('Issues fechadas', 'issues', issues?.fechadas ?? null, integer, issues ? median(issues.medianaAteFecharMs, (d) => `fecha em ${d} (mediana)`) : '', 'ok', 'repo-c-ok'),
+      stat('Review', 'prs', prs?.medianaAtePrimeiroReviewMs ?? null, duration, 'até o 1º review (mediana)', 'conversation', 'repo-c-wait'),
+      stat('CI verde', 'ci', ci?.taxaVerde ?? null, percentage, ciSub, 'ci', 'repo-c-ok'),
     );
   }
 
-  function cardCommits() {
-    const c = dados.commits;
-    if (!c) return card('Commits por semana', null, nota(valor(null, 'commits')));
-    if (!c.semanas.length) return card('Commits por semana', null, nota('Nenhuma semana no período'));
-    return card('Commits por semana', `${c.semanas.length} ${c.semanas.length === 1 ? 'semana' : 'semanas'}`, graficoCommits(c.semanas));
+  function commitsCard() {
+    const c = data.commits;
+    if (!c) return card('Commits por semana', null, note(value(null, 'commits')));
+    if (!c.semanas.length) return card('Commits por semana', null, note('Nenhuma semana no período'));
+    return card('Commits por semana', `${c.semanas.length} ${c.semanas.length === 1 ? 'semana' : 'semanas'}`, commitsChart(c.semanas));
   }
 
-  function cardFrequencia() {
-    const f = dados.frequencia;
+  function frequencyCard() {
+    const f = data.frequencia;
     const t = 'Frequência de código';
     const r = 'linhas adicionadas e removidas por semana';
-    if (!f) return card(t, r, nota(valor(null, 'frequencia')));
-    if (!f.semanas.length) return card(t, r, nota('Nenhuma semana no período'));
+    if (!f) return card(t, r, note(value(null, 'frequencia')));
+    if (!f.semanas.length) return card(t, r, note('Nenhuma semana no período'));
     return card(
       t,
       r,
-      graficoFrequencia(f),
+      frequencyChart(f),
       el(
         'div',
         { class: 'repo-leg' },
-        el('span', {}, el('span', { class: 'repo-dot repo-k-ok' }), 'Adicionadas ', el('b', {}, comSinal(f.adicionadas, kilo))),
-        el('span', {}, el('span', { class: 'repo-dot repo-k-error' }), 'Removidas ', el('b', {}, comSinal(-f.removidas, kilo))),
+        el('span', {}, el('span', { class: 'repo-dot repo-k-ok' }), 'Adicionadas ', el('b', {}, signed(f.adicionadas, kilo))),
+        el('span', {}, el('span', { class: 'repo-dot repo-k-error' }), 'Removidas ', el('b', {}, signed(-f.removidas, kilo))),
       ),
     );
   }
 
-  function cardIssues() {
-    const i = dados.issues;
+  function issuesCard() {
+    const i = data.issues;
     const t = 'Issues fechadas por tipo';
-    if (!i) return card(t, 'fechadas · abertas', nota(valor(null, 'issues')));
-    if (!i.porTipo.length) return card(t, 'fechadas · abertas', nota('Nenhuma issue no período'));
+    if (!i) return card(t, 'fechadas · abertas', note(value(null, 'issues')));
+    if (!i.porTipo.length) return card(t, 'fechadas · abertas', note('Nenhuma issue no período'));
     const max = Math.max(1, ...i.porTipo.map((x) => x.fechadas));
     return card(
       t,
@@ -269,66 +269,66 @@ export async function mount(area, ctx) {
             'div',
             { class: 'repo-type' },
             el('span', { class: 'repo-trunc', title: x.tipo }, x.tipo),
-            el('div', { class: 'repo-bar', 'aria-hidden': 'true' }, barraH((x.fechadas / max) * 100, COR_DO_TIPO[x.tipo] ?? 'repo-k-muted')),
+            el('div', { class: 'repo-bar', 'aria-hidden': 'true' }, barH((x.fechadas / max) * 100, TYPE_COLOR[x.tipo] ?? 'repo-k-muted')),
             el(
               'span',
               { class: 'repo-type-q' },
-              el('span', { 'aria-hidden': 'true' }, `${inteiro(x.fechadas)} · ${inteiro(x.abertas)}`),
-              soLeitor(`${inteiro(x.fechadas)} ${x.fechadas === 1 ? 'fechada' : 'fechadas'}, ${inteiro(x.abertas)} ${x.abertas === 1 ? 'aberta' : 'abertas'}`),
+              el('span', { 'aria-hidden': 'true' }, `${integer(x.fechadas)} · ${integer(x.abertas)}`),
+              srOnly(`${integer(x.fechadas)} ${x.fechadas === 1 ? 'fechada' : 'fechadas'}, ${integer(x.abertas)} ${x.abertas === 1 ? 'aberta' : 'abertas'}`),
             ),
           ),
         ),
       ),
-      amostraParcial(i.amostra, 'Por tipo', 'issues lidas'),
+      partialSample(i.amostra, 'Por tipo', 'issues lidas'),
     );
   }
 
-  function cardPrs() {
-    const p = dados.prs;
-    const rot = rotuloDoPeriodo(dados.periodo ?? periodo);
-    if (!p) return card('Pull requests', rot, nota(valor(null, 'prs')));
-    const [m, f, a] = fatias([p.mergeados, p.fechadosSemMerge, p.abertos]);
-    const tam = p.tamanhoMediano ? `${comSinal(p.tamanhoMediano.adicionadas)} ${comSinal(-p.tamanhoMediano.removidas)}` : TRACO;
+  function prsCard() {
+    const p = data.prs;
+    const periodText = periodLabel(data.periodo ?? period);
+    if (!p) return card('Pull requests', periodText, note(value(null, 'prs')));
+    const [m, f, a] = slices([p.mergeados, p.fechadosSemMerge, p.abertos]);
+    const size = p.tamanhoMediano ? `${signed(p.tamanhoMediano.adicionadas)} ${signed(-p.tamanhoMediano.removidas)}` : DASH;
     return card(
       'Pull requests',
-      rot,
-      el('div', { class: 'repo-bar repo-bar-thick', 'aria-hidden': 'true' }, barraH(m, 'repo-k-ok'), barraH(f, 'repo-k-muted'), barraH(a, 'repo-k-wait')),
+      periodText,
+      el('div', { class: 'repo-bar repo-bar-thick', 'aria-hidden': 'true' }, barH(m, 'repo-k-ok'), barH(f, 'repo-k-muted'), barH(a, 'repo-k-wait')),
       el(
         'div',
         { class: 'repo-leg' },
-        el('span', {}, el('span', { class: 'repo-dot repo-k-ok' }), 'Mergeados ', el('b', {}, inteiro(p.mergeados))),
-        el('span', {}, el('span', { class: 'repo-dot repo-k-muted' }), 'Fechados sem merge ', el('b', {}, inteiro(p.fechadosSemMerge))),
-        el('span', {}, el('span', { class: 'repo-dot repo-k-wait' }), 'Abertos ', el('b', {}, inteiro(p.abertos))),
+        el('span', {}, el('span', { class: 'repo-dot repo-k-ok' }), 'Mergeados ', el('b', {}, integer(p.mergeados))),
+        el('span', {}, el('span', { class: 'repo-dot repo-k-muted' }), 'Fechados sem merge ', el('b', {}, integer(p.fechadosSemMerge))),
+        el('span', {}, el('span', { class: 'repo-dot repo-k-wait' }), 'Abertos ', el('b', {}, integer(p.abertos))),
       ),
       el(
         'div',
         { class: 'repo-leg' },
-        el('span', {}, 'Tamanho mediano ', el('b', {}, tam)),
+        el('span', {}, 'Tamanho mediano ', el('b', {}, size)),
         el('span', {}, 'Rodadas de review ', el('b', {}, decimal(p.rodadasDeReview))),
-        el('span', {}, 'Abertos por agentes ', el('b', {}, porcentagem(p.fatiaPorAgentes))),
+        el('span', {}, 'Abertos por agentes ', el('b', {}, percentage(p.fatiaPorAgentes))),
       ),
-      amostraParcial(p.amostra, 'Medianas', 'PRs lidos'),
+      partialSample(p.amostra, 'Medianas', 'PRs lidos'),
     );
   }
 
-  function cardLinguagens() {
-    const l = dados.linguagens;
-    if (!l) return card('Linguagens', 'bytes', nota(valor(null, 'linguagens')));
-    const partes = linguagens(l);
-    if (!partes.length) return card('Linguagens', 'bytes', nota('Nenhuma linguagem detectada'));
-    const cor = (p, i) => (p.nome === 'Outras' ? 'repo-k-border' : CORES_DAS_LINGUAGENS[i]);
+  function languagesCard() {
+    const l = data.linguagens;
+    if (!l) return card('Linguagens', 'bytes', note(value(null, 'linguagens')));
+    const parts = languages(l);
+    if (!parts.length) return card('Linguagens', 'bytes', note('Nenhuma linguagem detectada'));
+    const color = (p, i) => (p.nome === 'Outras' ? 'repo-k-border' : LANGUAGE_COLORS[i]);
     return card(
       'Linguagens',
       'bytes',
-      el('div', { class: 'repo-bar repo-bar-thick', 'aria-hidden': 'true' }, ...partes.map((p, i) => barraH(p.pct, cor(p, i)))),
-      el('div', { class: 'repo-lang' }, ...partes.map((p, i) => el('span', {}, el('span', { class: `repo-dot ${cor(p, i)}` }), el('span', { class: 'repo-trunc' }, p.nome), el('span', { class: 'repo-lang-pct' }, `${Math.round(p.pct)}%`)))),
+      el('div', { class: 'repo-bar repo-bar-thick', 'aria-hidden': 'true' }, ...parts.map((p, i) => barH(p.pct, color(p, i)))),
+      el('div', { class: 'repo-lang' }, ...parts.map((p, i) => el('span', {}, el('span', { class: `repo-dot ${color(p, i)}` }), el('span', { class: 'repo-trunc' }, p.nome), el('span', { class: 'repo-lang-pct' }, `${Math.round(p.pct)}%`)))),
     );
   }
 
-  function cardContribuidores() {
-    const c = dados.contribuidores;
-    if (!c) return card('Quem contribuiu', null, nota(valor(null, 'contribuidores')));
-    if (!c.length) return card('Quem contribuiu', null, nota('Ninguém contribuiu no período'));
+  function contributorsCard() {
+    const c = data.contribuidores;
+    if (!c) return card('Quem contribuiu', null, note(value(null, 'contribuidores')));
+    if (!c.length) return card('Quem contribuiu', null, note('Ninguém contribuiu no período'));
     return el(
       'div',
       { class: 'card' },
@@ -344,14 +344,14 @@ export async function mount(area, ctx) {
         el(
           'tbody',
           {},
-          ...c.slice(0, CONTRIBUIDORES).map((p) =>
+          ...c.slice(0, CONTRIBUTORS).map((p) =>
             el(
               'tr',
               {},
               el('td', { title: p.login }, p.login),
-              el('td', { class: 'repo-num repo-dir' }, inteiro(p.commits)),
-              el('td', { class: 'repo-num repo-dir repo-c-ok' }, comSinal(p.adicionadas, kilo)),
-              el('td', { class: 'repo-num repo-dir repo-c-error' }, comSinal(-p.removidas, kilo)),
+              el('td', { class: 'repo-num repo-dir' }, integer(p.commits)),
+              el('td', { class: 'repo-num repo-dir repo-c-ok' }, signed(p.adicionadas, kilo)),
+              el('td', { class: 'repo-num repo-dir repo-c-error' }, signed(-p.removidas, kilo)),
             ),
           ),
         ),
@@ -359,108 +359,108 @@ export async function mount(area, ctx) {
     );
   }
 
-  function cardTrafego() {
-    const rot = rotuloDoPeriodo(dados.periodo ?? periodo);
+  function trafficCard() {
+    const periodText = periodLabel(data.periodo ?? period);
     const releases = el(
       'span',
       {},
       'Releases ',
-      el('b', {}, valor(dados.releases, 'releases', inteiro)),
-      dados.releases !== null && dados.releases !== undefined ? ` em ${rot}` : null,
-      dados.releasesNoTotal !== null && dados.releasesNoTotal !== undefined ? ` · ${inteiro(dados.releasesNoTotal)} no total` : null,
+      el('b', {}, value(data.releases, 'releases', integer)),
+      data.releases !== null && data.releases !== undefined ? ` em ${periodText}` : null,
+      data.releasesNoTotal !== null && data.releasesNoTotal !== undefined ? ` · ${integer(data.releasesNoTotal)} no total` : null,
     );
-    const comunidade = el('span', {}, 'Saúde da comunidade ', el('b', {}, valor(dados.comunidade, 'comunidade', (n) => `${inteiro(n)}%`)));
+    const community = el('span', {}, 'Saúde da comunidade ', el('b', {}, value(data.comunidade, 'comunidade', (n) => `${integer(n)}%`)));
     // Sem escrita (critério 5 da issue 105), tráfego e alertas somem: só a comunidade.
-    if (cardDeTrafego(dados) === 'comunidade') return card('Comunidade', null, el('div', { class: 'repo-leg' }, comunidade, releases));
+    if (trafficCardKind(data) === 'comunidade') return card('Comunidade', null, el('div', { class: 'repo-leg' }, community, releases));
 
-    const t = dados.trafego ?? null;
-    const s = dados.seguranca ?? null;
-    const alerta = (rotulo, n) => {
-      const cor = !s || n === null ? 'repo-k-muted' : n > 0 ? 'repo-k-wait' : 'repo-k-ok';
-      return el('span', {}, el('span', { class: `repo-dot ${cor}` }), `${rotulo} `, el('b', {}, s ? (n === null ? 'desligado' : inteiro(n)) : valor(null, 'seguranca')));
+    const t = data.trafego ?? null;
+    const s = data.seguranca ?? null;
+    const alert = (label, n) => {
+      const color = !s || n === null ? 'repo-k-muted' : n > 0 ? 'repo-k-wait' : 'repo-k-ok';
+      return el('span', {}, el('span', { class: `repo-dot ${color}` }), `${label} `, el('b', {}, s ? (n === null ? 'desligado' : integer(n)) : value(null, 'seguranca')));
     };
-    const origens = !t ? [el('b', {}, valor(null, 'trafego'))] : t.origens.length ? t.origens.flatMap((o, i) => (i ? [', ', el('b', {}, o)] : [el('b', {}, o)])) : [el('b', {}, TRACO)];
+    const origins = !t ? [el('b', {}, value(null, 'trafego'))] : t.origens.length ? t.origens.flatMap((o, i) => (i ? [', ', el('b', {}, o)] : [el('b', {}, o)])) : [el('b', {}, DASH)];
     return card(
       'Tráfego e segurança',
       `${t?.dias ?? 14} dias`,
       el(
         'div',
         { class: 'repo-leg' },
-        el('span', {}, 'Visitas ', el('b', {}, valor(t?.visitas ?? null, 'trafego', inteiro)), t ? ` (${inteiro(t.unicas)} únicas)` : null),
-        el('span', {}, 'Clones ', el('b', {}, valor(t?.clones ?? null, 'trafego', inteiro))),
+        el('span', {}, 'Visitas ', el('b', {}, value(t?.visitas ?? null, 'trafego', integer)), t ? ` (${integer(t.unicas)} únicas)` : null),
+        el('span', {}, 'Clones ', el('b', {}, value(t?.clones ?? null, 'trafego', integer))),
       ),
-      el('div', { class: 'repo-leg' }, el('span', {}, 'Origem: ', ...origens)),
-      el('div', { class: 'repo-leg' }, alerta('Alertas do Dependabot', s?.dependabot ?? null), alerta('Code scanning', s?.codeScanning ?? null)),
-      el('div', { class: 'repo-leg' }, comunidade, releases),
+      el('div', { class: 'repo-leg' }, el('span', {}, 'Origem: ', ...origins)),
+      el('div', { class: 'repo-leg' }, alert('Alertas do Dependabot', s?.dependabot ?? null), alert('Code scanning', s?.codeScanning ?? null)),
+      el('div', { class: 'repo-leg' }, community, releases),
       el('span', { class: 'repo-note' }, 'Tráfego e alertas só aparecem para quem tem acesso de escrita no repositório.'),
     );
   }
 
-  function metricas() {
+  function metrics() {
     return [
-      abas(urlDoGithub(dados.repo.url)),
+      tabs(githubUrl(data.repo.url)),
       kpis(),
-      el('div', { class: 'repo-two' }, cardCommits(), cardFrequencia()),
-      el('div', { class: 'repo-three' }, cardIssues(), cardPrs(), cardLinguagens()),
-      el('div', { class: 'repo-end' }, cardContribuidores(), cardTrafego()),
+      el('div', { class: 'repo-two' }, commitsCard(), frequencyCard()),
+      el('div', { class: 'repo-three' }, issuesCard(), prsCard(), languagesCard()),
+      el('div', { class: 'repo-end' }, contributorsCard(), trafficCard()),
     ];
   }
 
   // ---------- os estados ----------
-  const tentar = () => (conteudo.replaceChildren(loading()), read());
-  const naoEncontrado = () =>
-    empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${dono}/${nome} não existe ou a conta do GitHub não tem acesso a ele.`, action: { label: 'Voltar para Repositórios', icon: 'back', onClick: () => ctx.navigate('/ui/repos') } });
+  const retry = () => (content.replaceChildren(loading()), read());
+  const notFound = () =>
+    empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${owner}/${name} não existe ou a conta do GitHub não tem acesso a ele.`, action: { label: 'Voltar para Repositórios', icon: 'back', onClick: () => ctx.navigate('/ui/repos') } });
 
-  function desenhar() {
+  function draw() {
     clearTimeout(timer);
     timer = null;
-    desenharCabecalho();
-    const e = estadoDaTela({ dados, falha, temDado: temRepo(dados) });
-    if (e.reler) timer = setTimeout(read, RELER_MS);
+    drawHeader();
+    const e = screenState({ dados: data, falha: failure, temDado: hasRepo(data) });
+    if (e.reler) timer = setTimeout(read, REREAD_MS);
 
-    const quando = dados?.atualizadoEm ? new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
-    if (e.faixa === 'conexao') faixa.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${falha.message}. Mostrando a última leitura${quando ? `, de ${quando}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
-    else if (e.faixa === 'github') faixa.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${dados.erro}. Mostrando as métricas${quando ? ` de ${quando}` : ' da última leitura'}.` }));
-    else faixa.replaceChildren();
-    faixa.hidden = !faixa.firstChild;
+    const when = data?.atualizadoEm ? new Date(data.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+    if (e.faixa === 'conexao') band.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura${when ? `, de ${when}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
+    else if (e.faixa === 'github') band.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${data.erro}. Mostrando as métricas${when ? ` de ${when}` : ' da última leitura'}.` }));
+    else band.replaceChildren();
+    band.hidden = !band.firstChild;
 
-    if (e.tela === 'erro') return conteudo.replaceChildren(falha ? error({ text: falha.message, retry: tentar }) : error({ title: 'O GitHub não respondeu', text: dados.erro ?? 'A leitura do repositório falhou.', retry: tentar }));
-    if (e.tela === 'carregando') return conteudo.replaceChildren(loading());
-    if (e.tela === 'lendo') return conteudo.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
-    if (e.tela === 'sem-github') return conteudo.replaceChildren(empty({ icon: 'github', ...SEM_GITHUB }));
-    if (e.tela !== 'dados') return conteudo.replaceChildren(naoEncontrado());
-    conteudo.replaceChildren(...metricas());
+    if (e.tela === 'erro') return content.replaceChildren(failure ? error({ text: failure.message, retry }) : error({ title: 'O GitHub não respondeu', text: data.erro ?? 'A leitura do repositório falhou.', retry }));
+    if (e.tela === 'carregando') return content.replaceChildren(loading());
+    if (e.tela === 'lendo') return content.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
+    if (e.tela === 'sem-github') return content.replaceChildren(empty({ icon: 'github', ...NO_GITHUB }));
+    if (e.tela !== 'dados') return content.replaceChildren(notFound());
+    content.replaceChildren(...metrics());
   }
 
   async function read() {
     clearTimeout(timer);
     timer = null;
-    const n = ++pedido;
-    const p = periodo;
+    const n = ++request;
+    const p = period;
     // Resposta de um pedido velho ou de um período que a pessoa já trocou: descartada.
-    const vale = () => respostaAtual({ pedido: n, ultimo: pedido, periodo: p, periodoAtual: periodo });
+    const stillValid = () => currentResponse({ pedido: n, ultimo: request, periodo: p, periodoAtual: period });
     try {
-      const d = await ctx.read(`/api/repos/${encodeURIComponent(dono)}/${encodeURIComponent(nome)}?period=${p === '1a' ? '1y' : p}`);
-      if (!vale()) return;
-      dados = d;
-      falha = null;
+      const d = await ctx.read(`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}?period=${p === '1a' ? '1y' : p}`);
+      if (!stillValid()) return;
+      data = d;
+      failure = null;
     } catch (e) {
-      if (e?.name === 'AbortError' || !vale()) return;
-      falha = e instanceof Error ? e : new Error(String(e));
+      if (e?.name === 'AbortError' || !stillValid()) return;
+      failure = e instanceof Error ? e : new Error(String(e));
     }
-    desenhar();
+    draw();
   }
 
-  ctx.onChange((mudancas) => {
-    if (mudancaInteressa(mudancas, `${dono}/${nome}`)) read();
+  ctx.onChange((changes) => {
+    if (changeMatters(changes, `${owner}/${name}`)) read();
   });
   ctx.onRestart(() => read());
 
-  conteudo.replaceChildren(loading());
+  content.replaceChildren(loading());
   await read();
   return () => {
     clearTimeout(timer);
     timer = null;
-    pedido++;
+    request++;
   };
 }

@@ -23,7 +23,7 @@ import { LOCAL_DO_DETALHE, localDaDemo, SESSAO_DO_DETALHE, semearDetalhe } from 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { httpOpener } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { nomeDoModelo } from '../../ui/screens/session-detail.js';
+import { modelName } from '../../ui/screens/session-detail.js';
 
 const AGORA = Date.now();
 
@@ -236,10 +236,10 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('o nome do modelo nas pílulas', () => {
-    assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus 5.5');
-    assert.equal(nomeDoModelo('claude-sonnet-4-5-20250929'), 'Sonnet 4.5');
-    assert.equal(nomeDoModelo('claude-haiku-4-20250101'), 'Haiku 4');
-    assert.equal(nomeDoModelo('gpt-x'), 'gpt-x');
-    assert.equal(nomeDoModelo(null), null);
+    assert.equal(modelName('claude-opus-5-5'), 'Opus 5.5');
+    assert.equal(modelName('claude-sonnet-4-5-20250929'), 'Sonnet 4.5');
+    assert.equal(modelName('claude-haiku-4-20250101'), 'Haiku 4');
+    assert.equal(modelName('gpt-x'), 'gpt-x');
+    assert.equal(modelName(null), null);
   });
 });
