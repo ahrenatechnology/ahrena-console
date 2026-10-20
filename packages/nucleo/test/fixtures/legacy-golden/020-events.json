@@ -1,0 +1,1207 @@
+{
+  "name": "events",
+  "request": {
+    "method": "GET",
+    "path": "/api/eventos"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "eventos": [
+      {
+        "id": "sim-painel-esta-d0084",
+        "criadoEm": "2026-10-20T14:59:48.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0083",
+        "criadoEm": "2026-10-20T14:59:48.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: cobrar(",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_3_g",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0082",
+        "criadoEm": "2026-10-20T14:59:48.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/pagamentos/cobranca.ts",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_3_r",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0034",
+        "criadoEm": "2026-10-20T14:59:42.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Agent",
+        "resumo": "Agent: 3 subagentes em paralelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": "3 subagentes em paralelo"
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0064",
+        "criadoEm": "2026-10-20T14:59:38.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0062",
+        "criadoEm": "2026-10-20T14:59:38.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0033",
+        "criadoEm": "2026-10-20T14:59:30.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "TodoWrite",
+        "resumo": "Plano atualizado",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "sim-painel-esta-plano-32",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0063",
+        "criadoEm": "2026-10-20T14:59:19.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0061",
+        "criadoEm": "2026-10-20T14:59:19.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0081",
+        "criadoEm": "2026-10-20T14:59:18.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a1",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0080",
+        "criadoEm": "2026-10-20T14:59:18.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: cobrar(",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a1",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_2_g",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0079",
+        "criadoEm": "2026-10-20T14:59:18.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/pagamentos/cobranca.ts",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a1",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_2_r",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0058",
+        "criadoEm": "2026-10-20T14:59:12.750Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Edit",
+        "resumo": "Edit: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:tr",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-fila-de-tarefas-e0035",
+        "criadoEm": "2026-10-20T14:59:00.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta: \"Terminei a migração. Rodo os testes?\"",
+        "sessao": {
+          "id": "sim-painel-fila-de-tarefas",
+          "titulo": "fila-de-tarefas",
+          "projeto": "fila-de-tarefas"
+        },
+        "agente": {
+          "id": "sim-painel-fila-de-tarefas:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0078",
+        "criadoEm": "2026-10-20T14:59:00.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0077",
+        "criadoEm": "2026-10-20T14:59:00.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: cobrar(",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_1_g",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0076",
+        "criadoEm": "2026-10-20T14:59:00.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/pagamentos/cobranca.ts",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_1_r",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0060",
+        "criadoEm": "2026-10-20T14:58:58.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:tr",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0053",
+        "criadoEm": "2026-10-20T14:58:45.600Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm test",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:r2",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0057",
+        "criadoEm": "2026-10-20T14:58:28.500Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:tr",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-retomada-w0010",
+        "criadoEm": "2026-10-20T14:58:18.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-retomada",
+          "titulo": "Rotas do gateway",
+          "projeto": "gateway-sandbox"
+        },
+        "agente": {
+          "id": "sim-wf-retomada:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0044",
+        "criadoEm": "2026-10-20T14:58:00.000Z",
+        "tipo": "Notification",
+        "status": "waiting",
+        "ferramenta": null,
+        "resumo": "Pede permissão: Bash npm run migrate",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0059",
+        "criadoEm": "2026-10-20T14:57:59.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:tr",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0055",
+        "criadoEm": "2026-10-20T14:57:58.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:r2",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0025",
+        "criadoEm": "2026-10-20T14:57:52.941Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0043",
+        "criadoEm": "2026-10-20T14:57:48.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm run migrate",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_008",
+          "entrada": "npm run migrate"
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0042",
+        "criadoEm": "2026-10-20T14:57:48.000Z",
+        "tipo": "ToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm run migrate",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_008",
+          "entrada": "npm run migrate"
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0072",
+        "criadoEm": "2026-10-20T14:57:46.666Z",
+        "tipo": "PostToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash concluído",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_035",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0071",
+        "criadoEm": "2026-10-20T14:57:46.666Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm run build",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_035",
+          "entrada": "npm run build"
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0056",
+        "criadoEm": "2026-10-20T14:57:44.250Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:tr",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0052",
+        "criadoEm": "2026-10-20T14:57:34.200Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Edit",
+        "resumo": "Edit: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:r2",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0041",
+        "criadoEm": "2026-10-20T14:57:30.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta: \"Vou aplicar a migração no banco local.\"",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-retomada-w0008",
+        "criadoEm": "2026-10-20T14:57:28.500Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-retomada",
+          "titulo": "Rotas do gateway",
+          "projeto": "gateway-sandbox"
+        },
+        "agente": {
+          "id": "sim-wf-retomada:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0070",
+        "criadoEm": "2026-10-20T14:57:03.333Z",
+        "tipo": "PostToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read concluído",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_034",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0069",
+        "criadoEm": "2026-10-20T14:57:03.333Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: docs/servicos.md",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_034",
+          "entrada": "docs/servicos.md"
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0040",
+        "criadoEm": "2026-10-20T14:57:00.000Z",
+        "tipo": "UserPrompt",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Prompt: \"pode seguir\"",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0039",
+        "criadoEm": "2026-10-20T14:57:00.000Z",
+        "tipo": "UserPromptSubmit",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Prompt: \"pode seguir\"",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-retomada-w0009",
+        "criadoEm": "2026-10-20T14:56:39.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-retomada",
+          "titulo": "Rotas do gateway",
+          "projeto": "gateway-sandbox"
+        },
+        "agente": {
+          "id": "sim-wf-retomada:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0051",
+        "criadoEm": "2026-10-20T14:56:22.800Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:r2",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0068",
+        "criadoEm": "2026-10-20T14:56:20.000Z",
+        "tipo": "PostToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash concluído",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_033",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0067",
+        "criadoEm": "2026-10-20T14:56:20.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm test -- pagamentos",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_033",
+          "entrada": "npm test -- pagamentos"
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0024",
+        "criadoEm": "2026-10-20T14:56:15.882Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0038",
+        "criadoEm": "2026-10-20T14:56:00.000Z",
+        "tipo": "Stop",
+        "status": "waiting",
+        "ferramenta": null,
+        "resumo": "Turno concluído em 8 min",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0054",
+        "criadoEm": "2026-10-20T14:55:59.000Z",
+        "tipo": "AssistantMessage",
+        "status": "active",
+        "ferramenta": null,
+        "resumo": "Resposta do modelo",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:r2",
+          "nome": "code-reviewer"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0066",
+        "criadoEm": "2026-10-20T14:55:36.666Z",
+        "tipo": "PostToolUse",
+        "status": "active",
+        "ferramenta": "Edit",
+        "resumo": "Edit concluído",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_032",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0065",
+        "criadoEm": "2026-10-20T14:55:36.666Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Edit",
+        "resumo": "Edit: test/pagamentos.test.ts",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_painel_032",
+          "entrada": "test/pagamentos.test.ts"
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0037",
+        "criadoEm": "2026-10-20T14:55:36.000Z",
+        "tipo": "PostToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash concluído",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_007",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0036",
+        "criadoEm": "2026-10-20T14:55:36.000Z",
+        "tipo": "ToolResult",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "12 testes passaram",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_007",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0035",
+        "criadoEm": "2026-10-20T14:55:24.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm test -- pedidos",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_007",
+          "entrada": "npm test -- pedidos"
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos-d0034",
+        "criadoEm": "2026-10-20T14:55:24.000Z",
+        "tipo": "ToolUse",
+        "status": "active",
+        "ferramenta": "Bash",
+        "resumo": "Bash: npm test -- pedidos",
+        "sessao": {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-detalhe-pedidos:main",
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_007",
+          "entrada": "npm test -- pedidos"
+        }
+      }
+    ],
+    "cursor": "WyJmIiwiNDc1IiwiIiwiIl0",
+    "anteriores": "WyJmIiwiNDc1IiwiMjAyNi0xMC0yMFQxNDo1NToyNC4wMDBaIiwic2ltLWRldGFsaGUtcGVkaWRvcy1kMDAzNCJd",
+    "opcoes": {
+      "tipos": [
+        "AssistantMessage",
+        "Compaction",
+        "Notification",
+        "PostToolUse",
+        "PreToolUse",
+        "SessionStart",
+        "Stop",
+        "SubagentStop",
+        "ToolResult",
+        "ToolUse",
+        "UserPrompt",
+        "UserPromptSubmit"
+      ],
+      "ferramentas": [
+        "Agent",
+        "Bash",
+        "Edit",
+        "Grep",
+        "Read",
+        "TodoWrite",
+        "Workflow"
+      ],
+      "sessoes": [
+        {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-retomada",
+          "titulo": "Rotas do gateway",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "titulo": "fila-de-tarefas",
+          "projeto": "fila-de-tarefas"
+        },
+        {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-painel-catalogo-exemplo",
+          "titulo": "catalogo-exemplo",
+          "projeto": "catalogo-exemplo"
+        },
+        {
+          "id": "sim-painel-blog-estatico",
+          "titulo": "blog-estatico",
+          "projeto": "blog-estatico"
+        },
+        {
+          "id": "sim-wf-cache",
+          "titulo": "Migração do cache de sessões",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-wf-cadastro",
+          "titulo": "Ajustar o layout do cadastro",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-categoria",
+          "titulo": "Filtro por categoria",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-csv",
+          "titulo": "Exportação em CSV",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-wf-parser",
+          "titulo": "Testes do parser de datas",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-wf-erros",
+          "titulo": "Tratamento de erros da API",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-historico-extrair-cobranca",
+          "titulo": "Extrair a cobrança",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-triagem",
+          "titulo": "Triagem dos bugs abertos",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-historico-mapear-pagamentos",
+          "titulo": "Mapear o módulo de pagamentos",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-historico-relatorio-mensal",
+          "titulo": "Relatório mensal mais rápido",
+          "projeto": "painel-de-metricas"
+        },
+        {
+          "id": "sim-wf-bibliotecas",
+          "titulo": "Comparar clientes HTTP",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-historico-busca-de-receitas",
+          "titulo": "Busca de receitas",
+          "projeto": "app-receitas"
+        },
+        {
+          "id": "sim-historico-regras-de-desconto",
+          "titulo": "Regras de desconto",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-historico-notas-em-markdown",
+          "titulo": "Notas em Markdown",
+          "projeto": "cli-de-notas"
+        },
+        {
+          "id": "sim-historico-agenda-semanal",
+          "titulo": "Agenda semanal",
+          "projeto": "agenda-ficticia"
+        },
+        {
+          "id": "sim-historico-limites-do-gateway",
+          "titulo": "Limites do gateway",
+          "projeto": "gateway-sandbox"
+        }
+      ]
+    }
+  }
+}

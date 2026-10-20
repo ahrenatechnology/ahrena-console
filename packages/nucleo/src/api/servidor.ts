@@ -36,6 +36,10 @@
 // `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
 // `normalizeLegacyUrl` (api/legacy-routes.ts, the only place that knows them) runs before the routing
 // (issue #173, phase 1). They leave in phase 6, after the published mod and the installed app migrate.
+// Since phase 2b the JSON is English, and an old route still answers its old body and takes its old
+// request body: `handle` sets the route's back-translator (`legacyResponseFor`) on the response, and
+// `send` applies it to every JSON it writes, errors included; the writes read the body through
+// `legacyRequestBody`.
 //
 // `?local=`, `?account=`, `?org=`, `?model=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisions=<scope>` traz a lista de decisões aberta no mesmo pedido.
@@ -53,7 +57,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
+import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { CHANGES_ROUTE, responderMudancas } from '../mudancas/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
@@ -78,7 +82,7 @@ import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
-import { normalizeLegacyPath, normalizeLegacyUrl } from './legacy-routes.ts';
+import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
 import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
@@ -262,7 +266,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     let sessao: unknown;
     let ajuste: unknown;
     try {
-      const corpo = JSON.parse(texto) as { sessao?: unknown; texto?: unknown } | null;
+      const corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as { sessao?: unknown; texto?: unknown } | null;
       sessao = corpo?.sessao;
       ajuste = corpo?.texto;
     } catch {
@@ -305,7 +309,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
     // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
-    const url = normalizeLegacyUrl(new URL(req.url ?? '/', `http://127.0.0.1:${port}`));
+    const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    const url = normalizeLegacyUrl(raw);
+    // An old route answers its old body: every JSON written from here on, errors included, goes
+    // through its back-translator (new → old keys and values).
+    const toLegacy = legacyResponseFor(raw.pathname);
+    if (toLegacy) rewriteJsonBodies(res, toLegacy);
     if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = OPEN.exec(url.pathname);

@@ -1,0 +1,12 @@
+{
+  "name": "events-invalid-limit",
+  "request": {
+    "method": "GET",
+    "path": "/api/eventos?limite=0"
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "limite: um inteiro de 1 a 200"
+  }
+}

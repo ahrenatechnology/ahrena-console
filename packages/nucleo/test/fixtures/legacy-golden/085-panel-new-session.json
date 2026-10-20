@@ -1,0 +1,160 @@
+{
+  "name": "panel-new-session",
+  "request": {
+    "method": "GET",
+    "path": "/api/painel/sessao-nova?local=local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f&conta=c1&org=o1&modelo=claude-opus-5-5&cwd=/simulacao/ahrena-demo"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
+    },
+    "geradoEm": "2026-10-20T15:00:00.000Z",
+    "sessao": {
+      "id": "sessao-nova",
+      "titulo": "Sessão nova, sem transcript",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-10-20T15:00:00.000Z",
+      "status": "waiting",
+      "estado": "waiting",
+      "motivo": "session_start",
+      "urgente": false,
+      "desde": "2026-10-20T15:00:00.000Z",
+      "turno": 0,
+      "atividade": {
+        "tipo": "prompt",
+        "texto": "esperando o primeiro prompt"
+      },
+      "faixa": null,
+      "conta": null,
+      "branch": null,
+      "cwd": "/simulacao/ahrena-demo"
+    },
+    "contexto": null,
+    "custo": null,
+    "tokens": null,
+    "background": {
+      "total": 0,
+      "primeiro": null
+    },
+    "plano": null,
+    "planos": [],
+    "subagentes": {
+      "ativos": 0,
+      "itens": []
+    },
+    "filhas": [],
+    "trabalho": null,
+    "precisam": {
+      "total": 3,
+      "suaVez": 1,
+      "porConta": [
+        {
+          "conta": null,
+          "n": 2
+        },
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          },
+          "n": 1
+        }
+      ],
+      "familia": [],
+      "maquina": [
+        {
+          "id": "sim-detalhe-pedidos",
+          "nivel": "precisa",
+          "porque": "permissao",
+          "local": null,
+          "titulo": "Migração do esquema de pedidos",
+          "estado": "waiting",
+          "motivo": "notification",
+          "urgente": true,
+          "desde": "2026-10-20T14:58:00.000Z",
+          "texto": "Bash: npm run migrate",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": null
+        },
+        {
+          "id": "sim-wf-cache",
+          "nivel": "precisa",
+          "porque": "erro",
+          "local": null,
+          "titulo": "Migração do cache de sessões",
+          "estado": "error",
+          "motivo": null,
+          "urgente": true,
+          "desde": "2026-10-20T13:51:00.000Z",
+          "texto": "a sessão parou num erro",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          }
+        },
+        {
+          "id": "sim-historico-relatorio-mensal",
+          "nivel": "precisa",
+          "porque": "erro",
+          "local": null,
+          "titulo": "Relatório mensal mais rápido",
+          "estado": "error",
+          "motivo": null,
+          "urgente": true,
+          "desde": "2026-10-18T15:00:00.000Z",
+          "texto": "a sessão parou num erro",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": null
+        },
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
+          "local": null,
+          "titulo": "fila-de-tarefas",
+          "estado": "waiting",
+          "motivo": "stop",
+          "urgente": false,
+          "desde": "2026-10-20T14:59:00.000Z",
+          "texto": "\"Terminei a migração. Rodo os testes?\"",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        }
+      ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
+    }
+  }
+}

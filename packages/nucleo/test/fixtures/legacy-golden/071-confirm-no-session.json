@@ -1,0 +1,13 @@
+{
+  "name": "confirm-no-session",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{decision}/confirmar",
+    "body": {}
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "informe a sessão: { \"sessao\": \"<id>\" }"
+  }
+}

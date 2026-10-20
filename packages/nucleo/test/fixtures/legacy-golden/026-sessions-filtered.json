@@ -1,0 +1,61 @@
+{
+  "name": "sessions-filtered",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes?status=esperando&ordem=custo&sentido=asc&pagina=1&busca=a"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "total": 2,
+    "registradas": 23,
+    "pagina": 1,
+    "porPagina": 10,
+    "paginas": 1,
+    "diretorios": [
+      "/simulacao/agenda-ficticia",
+      "/simulacao/app-receitas",
+      "/simulacao/blog-estatico",
+      "/simulacao/catalogo-exemplo",
+      "/simulacao/cli-de-notas",
+      "/simulacao/fila-de-tarefas",
+      "/simulacao/gateway-sandbox",
+      "/simulacao/motor-de-regras",
+      "/simulacao/painel-de-metricas",
+      "/simulacao/vitrine-demo"
+    ],
+    "itens": [
+      {
+        "id": "sim-painel-fila-de-tarefas",
+        "titulo": "fila-de-tarefas",
+        "status": "waiting",
+        "motivo": "stop",
+        "ultimaAtividade": "2026-10-20T14:59:00.000Z",
+        "inicio": "2026-10-20T14:20:00.000Z",
+        "rodando": true,
+        "duracaoMs": 2400000,
+        "agentes": 1,
+        "custoUsd": 0,
+        "cwd": "/simulacao/fila-de-tarefas",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-detalhe-pedidos",
+        "titulo": "Migração do esquema de pedidos",
+        "status": "waiting",
+        "motivo": "notification",
+        "ultimaAtividade": "2026-10-20T14:58:00.000Z",
+        "inicio": "2026-10-20T14:26:00.000Z",
+        "rodando": true,
+        "duracaoMs": 2040000,
+        "agentes": 2,
+        "custoUsd": 1.7983000000000005,
+        "cwd": "/simulacao/motor-de-regras",
+        "conta": null
+      }
+    ]
+  }
+}

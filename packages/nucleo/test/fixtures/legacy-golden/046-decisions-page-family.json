@@ -1,0 +1,63 @@
+{
+  "name": "decisions-page-family",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisoes?agrupar=familia&estado=a_confirmar&q=kanban"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "agrupar": "familia",
+    "estado": "a_confirmar",
+    "q": "kanban",
+    "contagens": {
+      "vigentes": 4,
+      "branches": 1,
+      "aConfirmar": 1,
+      "substituidas30d": 1,
+      "promovidas": 0
+    },
+    "grupos": [
+      {
+        "chave": "f.c2ltLXBhaW5lbC1rYW5iYW4tb250ZW0",
+        "tipo": "familia",
+        "titulo": "Separar pagamentos em serviços",
+        "repo": "/simulacao/ahrena-demo",
+        "pasta": "ahrena-demo",
+        "vigentes": 0,
+        "aConfirmar": 1,
+        "total": 1,
+        "itens": [
+          {
+            "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+            "rotulo": "D6",
+            "origem": "sugerida",
+            "estado": "a_confirmar",
+            "titulo": "10 cards por coluna, com \"mostrar mais\"",
+            "texto": "10 cards por coluna, com \"mostrar mais\"",
+            "contexto": null,
+            "desfazer": null,
+            "nao": [
+              "20 por coluna",
+              "rolagem infinita"
+            ],
+            "decididaPor": "agente",
+            "decididaEm": "2026-10-20T14:54:00.000Z",
+            "confirmadaEm": null,
+            "substituidaPor": null,
+            "sessao": "esta",
+            "toolUseId": "sim-toolu-p9-6",
+            "sessionId": "sim-painel-esta",
+            "escopo": "familia",
+            "substitui": null,
+            "promovidaPara": null,
+            "branch": "feat/42-kanban-de-sessoes",
+            "repo": "/simulacao/ahrena-demo",
+            "conversa": "/ui/sessions/sim-painel-esta"
+          }
+        ],
+        "mais": 0
+      }
+    ]
+  }
+}

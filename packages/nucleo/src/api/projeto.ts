@@ -24,7 +24,7 @@ import {
   type ProjectMoveResult,
 } from '../github/project.ts';
 import { send } from '../ingest/hooks/receiver.ts';
-import { normalizeLegacyPath } from './legacy-routes.ts';
+import { legacyRequestBody, normalizeLegacyPath, rawPathnameOf } from './legacy-routes.ts';
 import { ciDoPr, reviewDoPr } from './trabalho.ts';
 
 export const PROJECT_ROUTE = '/api/project';
@@ -213,7 +213,7 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
     }
     let corpo: { itemId?: unknown; optionId?: unknown } | null;
     try {
-      corpo = JSON.parse(texto) as typeof corpo;
+      corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as typeof corpo;
     } catch {
       return send(res, 400, { error: 'JSON inválido', codigo: 'invalido' });
     }

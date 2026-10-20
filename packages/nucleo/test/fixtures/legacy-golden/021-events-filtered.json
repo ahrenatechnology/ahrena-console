@@ -1,0 +1,262 @@
+{
+  "name": "events-filtered",
+  "request": {
+    "method": "GET",
+    "path": "/api/eventos?limite=5&tipo=PreToolUse"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "eventos": [
+      {
+        "id": "sim-painel-esta-d0083",
+        "criadoEm": "2026-10-20T14:59:48.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: cobrar(",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_3_g",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-d0082",
+        "criadoEm": "2026-10-20T14:59:48.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Read",
+        "resumo": "Read: src/pagamentos/cobranca.ts",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner"
+        },
+        "detalhe": {
+          "callId": "toolu_sim_sub_3_r",
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0034",
+        "criadoEm": "2026-10-20T14:59:42.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Agent",
+        "resumo": "Agent: 3 subagentes em paralelo",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": "3 subagentes em paralelo"
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos-w0062",
+        "criadoEm": "2026-10-20T14:59:38.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "Grep",
+        "resumo": "Grep: src/servicos/pagamentos.ts",
+        "sessao": {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        "agente": {
+          "id": "sim-wf-pagamentos:ex2",
+          "nome": "Explore"
+        },
+        "detalhe": {
+          "callId": null,
+          "entrada": null
+        }
+      },
+      {
+        "id": "sim-painel-esta-e0033",
+        "criadoEm": "2026-10-20T14:59:30.000Z",
+        "tipo": "PreToolUse",
+        "status": "active",
+        "ferramenta": "TodoWrite",
+        "resumo": "Plano atualizado",
+        "sessao": {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        "agente": {
+          "id": null,
+          "nome": "principal"
+        },
+        "detalhe": {
+          "callId": "sim-painel-esta-plano-32",
+          "entrada": null
+        }
+      }
+    ],
+    "cursor": "WyJmIiwiNDc1IiwiIiwiIl0",
+    "anteriores": "WyJmIiwiNDc1IiwiMjAyNi0xMC0yMFQxNDo1OTozMC4wMDBaIiwic2ltLXBhaW5lbC1lc3RhLWUwMDMzIl0",
+    "opcoes": {
+      "tipos": [
+        "AssistantMessage",
+        "Compaction",
+        "Notification",
+        "PostToolUse",
+        "PreToolUse",
+        "SessionStart",
+        "Stop",
+        "SubagentStop",
+        "ToolResult",
+        "ToolUse",
+        "UserPrompt",
+        "UserPromptSubmit"
+      ],
+      "ferramentas": [
+        "Agent",
+        "Bash",
+        "Edit",
+        "Grep",
+        "Read",
+        "TodoWrite",
+        "Workflow"
+      ],
+      "sessoes": [
+        {
+          "id": "sim-painel-esta",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-retomada",
+          "titulo": "Rotas do gateway",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-wf-pagamentos",
+          "titulo": "Separar pagamentos em serviços",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "titulo": "fila-de-tarefas",
+          "projeto": "fila-de-tarefas"
+        },
+        {
+          "id": "sim-detalhe-pedidos",
+          "titulo": "Migração do esquema de pedidos",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-painel-catalogo-exemplo",
+          "titulo": "catalogo-exemplo",
+          "projeto": "catalogo-exemplo"
+        },
+        {
+          "id": "sim-painel-blog-estatico",
+          "titulo": "blog-estatico",
+          "projeto": "blog-estatico"
+        },
+        {
+          "id": "sim-wf-cache",
+          "titulo": "Migração do cache de sessões",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-wf-cadastro",
+          "titulo": "Ajustar o layout do cadastro",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-categoria",
+          "titulo": "Filtro por categoria",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-csv",
+          "titulo": "Exportação em CSV",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-wf-parser",
+          "titulo": "Testes do parser de datas",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-wf-erros",
+          "titulo": "Tratamento de erros da API",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-historico-extrair-cobranca",
+          "titulo": "Extrair a cobrança",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-wf-triagem",
+          "titulo": "Triagem dos bugs abertos",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-historico-mapear-pagamentos",
+          "titulo": "Mapear o módulo de pagamentos",
+          "projeto": "vitrine-demo"
+        },
+        {
+          "id": "sim-historico-relatorio-mensal",
+          "titulo": "Relatório mensal mais rápido",
+          "projeto": "painel-de-metricas"
+        },
+        {
+          "id": "sim-wf-bibliotecas",
+          "titulo": "Comparar clientes HTTP",
+          "projeto": "gateway-sandbox"
+        },
+        {
+          "id": "sim-historico-busca-de-receitas",
+          "titulo": "Busca de receitas",
+          "projeto": "app-receitas"
+        },
+        {
+          "id": "sim-historico-regras-de-desconto",
+          "titulo": "Regras de desconto",
+          "projeto": "motor-de-regras"
+        },
+        {
+          "id": "sim-historico-notas-em-markdown",
+          "titulo": "Notas em Markdown",
+          "projeto": "cli-de-notas"
+        },
+        {
+          "id": "sim-historico-agenda-semanal",
+          "titulo": "Agenda semanal",
+          "projeto": "agenda-ficticia"
+        },
+        {
+          "id": "sim-historico-limites-do-gateway",
+          "titulo": "Limites do gateway",
+          "projeto": "gateway-sandbox"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "name": "scope-decisions-after-promote",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisoes/sim-painel-esta?escopo=familia"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "escopo": "familia",
+    "vigentes": 4,
+    "aConfirmar": 1,
+    "itens": [
+      {
+        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "rotulo": "D6",
+        "origem": "sugerida",
+        "estado": "a_confirmar",
+        "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "texto": "10 cards por coluna, com \"mostrar mais\"",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "20 por coluna",
+          "rolagem infinita"
+        ],
+        "decididaPor": "agente",
+        "decididaEm": "2026-10-20T14:54:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-6"
+      },
+      {
+        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "rotulo": "D4",
+        "origem": "correcao",
+        "estado": "vigente",
+        "titulo": "SQLite em memória nos testes",
+        "texto": "SQLite em memória nos testes",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "Postgres no Docker"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:46:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-4"
+      },
+      {
+        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "rotulo": "D5",
+        "origem": "permissao",
+        "estado": "vigente",
+        "titulo": "Permitir npm test sem perguntar",
+        "texto": "Permitir npm test sem perguntar",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "perguntar a cada vez"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:39:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-5"
+      },
+      {
+        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "rotulo": "D3",
+        "origem": "pergunta",
+        "estado": "substituida",
+        "titulo": "Postgres no Docker nos testes",
+        "texto": "Postgres no Docker nos testes",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "SQLite em memória"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:27:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": "D4",
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-3"
+      },
+      {
+        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "rotulo": "D2",
+        "origem": "plano",
+        "estado": "vigente",
+        "titulo": "Plano de 5 passos aprovado",
+        "texto": "Plano de 5 passos aprovado",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "plano com drag-and-drop"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:20:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-2"
+      },
+      {
+        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "rotulo": "D1",
+        "origem": "pergunta",
+        "estado": "vigente",
+        "titulo": "Kanban só leitura, sem arrastar",
+        "texto": "Kanban só leitura, sem arrastar",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "arrastar muda o status"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-19T19:00:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "mae",
+        "toolUseId": null
+      }
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
+  }
+}

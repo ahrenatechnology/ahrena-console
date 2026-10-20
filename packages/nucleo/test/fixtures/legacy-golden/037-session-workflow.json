@@ -1,0 +1,177 @@
+{
+  "name": "session-workflow",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta/workflow"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "sessaoId": "sim-painel-esta",
+    "inicio": "2026-10-20T14:32:00.000Z",
+    "fim": null,
+    "duracaoMs": 1680000,
+    "resumo": "dev → review · termina no PR #90",
+    "nos": [
+      {
+        "id": "sim-painel-esta:main",
+        "nome": "Principal",
+        "tipo": null,
+        "rodada": null,
+        "tarefa": null,
+        "modelo": "claude-opus-5-5",
+        "duracaoMs": 1680000,
+        "estado": "ativo",
+        "ajustes": null,
+        "inicio": "2026-10-20T14:32:00.000Z",
+        "fim": null
+      },
+      {
+        "id": "sim-painel-esta:a3",
+        "nome": "Plan",
+        "tipo": "Plan",
+        "rodada": null,
+        "tarefa": "plano",
+        "modelo": null,
+        "duracaoMs": 180000,
+        "estado": "concluido",
+        "ajustes": null,
+        "inicio": "2026-10-20T14:37:00.000Z",
+        "fim": "2026-10-20T14:40:00.000Z"
+      },
+      {
+        "id": "sim-painel-esta:a0",
+        "nome": "Explore",
+        "tipo": "Explore",
+        "rodada": null,
+        "tarefa": "achar usos",
+        "modelo": null,
+        "duracaoMs": 60000,
+        "estado": "ativo",
+        "ajustes": null,
+        "inicio": "2026-10-20T14:59:00.000Z",
+        "fim": null
+      },
+      {
+        "id": "sim-painel-esta:a1",
+        "nome": "review",
+        "tipo": "code-reviewer",
+        "rodada": 1,
+        "tarefa": "diff",
+        "modelo": null,
+        "duracaoMs": 42000,
+        "estado": "ativo",
+        "ajustes": null,
+        "inicio": "2026-10-20T14:59:18.000Z",
+        "fim": null
+      },
+      {
+        "id": "sim-painel-esta:a2",
+        "nome": "test-runner",
+        "tipo": "test-runner",
+        "rodada": null,
+        "tarefa": "bateria",
+        "modelo": null,
+        "duracaoMs": 12000,
+        "estado": "ativo",
+        "ajustes": null,
+        "inicio": "2026-10-20T14:59:48.000Z",
+        "fim": null
+      }
+    ],
+    "arestas": [
+      {
+        "de": "sim-painel-esta:main",
+        "para": "sim-painel-esta:a3",
+        "tipo": "abriu",
+        "rotulo": null
+      },
+      {
+        "de": "sim-painel-esta:main",
+        "para": "sim-painel-esta:a0",
+        "tipo": "abriu",
+        "rotulo": null
+      },
+      {
+        "de": "sim-painel-esta:main",
+        "para": "sim-painel-esta:a1",
+        "tipo": "abriu",
+        "rotulo": null
+      },
+      {
+        "de": "sim-painel-esta:main",
+        "para": "sim-painel-esta:a2",
+        "tipo": "abriu",
+        "rotulo": null
+      }
+    ],
+    "rodadasDeReview": 1,
+    "ajustes": 0,
+    "linhaDoTempo": {
+      "inicio": "2026-10-20T14:32:00.000Z",
+      "fim": "2026-10-20T15:00:00.000Z",
+      "faixas": [
+        {
+          "noId": "sim-painel-esta:main",
+          "rotulo": "Agente principal",
+          "trechos": [
+            {
+              "noId": "sim-painel-esta:main",
+              "inicio": "2026-10-20T14:32:00.000Z",
+              "fim": null,
+              "estado": "ativo"
+            }
+          ]
+        },
+        {
+          "noId": "sim-painel-esta:a3",
+          "rotulo": "Plan",
+          "trechos": [
+            {
+              "noId": "sim-painel-esta:a3",
+              "inicio": "2026-10-20T14:37:00.000Z",
+              "fim": "2026-10-20T14:40:00.000Z",
+              "estado": "concluido"
+            }
+          ]
+        },
+        {
+          "noId": "sim-painel-esta:a0",
+          "rotulo": "Explore",
+          "trechos": [
+            {
+              "noId": "sim-painel-esta:a0",
+              "inicio": "2026-10-20T14:59:00.000Z",
+              "fim": null,
+              "estado": "ativo"
+            }
+          ]
+        },
+        {
+          "noId": "sim-painel-esta:a1",
+          "rotulo": "review · r1",
+          "trechos": [
+            {
+              "noId": "sim-painel-esta:a1",
+              "inicio": "2026-10-20T14:59:18.000Z",
+              "fim": null,
+              "estado": "ativo"
+            }
+          ]
+        },
+        {
+          "noId": "sim-painel-esta:a2",
+          "rotulo": "test-runner",
+          "trechos": [
+            {
+              "noId": "sim-painel-esta:a2",
+              "inicio": "2026-10-20T14:59:48.000Z",
+              "fim": null,
+              "estado": "ativo"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "name": "sessions-search-order",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes?busca=&ordem=duracao&sentido=desc&pagina=2"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "total": 23,
+    "registradas": 23,
+    "pagina": 2,
+    "porPagina": 10,
+    "paginas": 3,
+    "diretorios": [
+      "/simulacao/agenda-ficticia",
+      "/simulacao/app-receitas",
+      "/simulacao/blog-estatico",
+      "/simulacao/catalogo-exemplo",
+      "/simulacao/cli-de-notas",
+      "/simulacao/fila-de-tarefas",
+      "/simulacao/gateway-sandbox",
+      "/simulacao/motor-de-regras",
+      "/simulacao/painel-de-metricas",
+      "/simulacao/vitrine-demo"
+    ],
+    "itens": [
+      {
+        "id": "sim-detalhe-pedidos",
+        "titulo": "Migração do esquema de pedidos",
+        "status": "waiting",
+        "motivo": "notification",
+        "ultimaAtividade": "2026-10-20T14:58:00.000Z",
+        "inicio": "2026-10-20T14:26:00.000Z",
+        "rodando": true,
+        "duracaoMs": 2040000,
+        "agentes": 2,
+        "custoUsd": 1.7983000000000005,
+        "cwd": "/simulacao/motor-de-regras",
+        "conta": null
+      },
+      {
+        "id": "sim-wf-erros",
+        "titulo": "Tratamento de erros da API",
+        "status": "completed",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T03:31:00.000Z",
+        "inicio": "2026-10-20T03:00:00.000Z",
+        "rodando": false,
+        "duracaoMs": 1860000,
+        "agentes": 4,
+        "custoUsd": 0.2784,
+        "cwd": "/simulacao/gateway-sandbox",
+        "conta": {
+          "rotulo": "cliente-exemplo",
+          "cor": "#1baf7a"
+        }
+      },
+      {
+        "id": "sim-painel-esta",
+        "titulo": "Separar pagamentos em serviços",
+        "status": "active",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T14:59:57.000Z",
+        "inicio": "2026-10-20T14:32:00.000Z",
+        "rodando": true,
+        "duracaoMs": 1680000,
+        "agentes": 5,
+        "custoUsd": 3.7559921999999997,
+        "cwd": "/simulacao/vitrine-demo",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-wf-pagamentos",
+        "titulo": "Separar pagamentos em serviços",
+        "status": "active",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T14:59:54.000Z",
+        "inicio": "2026-10-20T14:32:00.000Z",
+        "rodando": true,
+        "duracaoMs": 1680000,
+        "agentes": 9,
+        "custoUsd": 0.7968000000000002,
+        "cwd": "/simulacao/motor-de-regras",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-wf-parser",
+        "titulo": "Testes do parser de datas",
+        "status": "completed",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T05:24:00.000Z",
+        "inicio": "2026-10-20T05:00:00.000Z",
+        "rodando": false,
+        "duracaoMs": 1440000,
+        "agentes": 5,
+        "custoUsd": 0.2656,
+        "cwd": "/simulacao/motor-de-regras",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-wf-cache",
+        "titulo": "Migração do cache de sessões",
+        "status": "error",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T13:51:00.000Z",
+        "inicio": "2026-10-20T13:30:00.000Z",
+        "rodando": false,
+        "duracaoMs": 1260000,
+        "agentes": 3,
+        "custoUsd": 0.20479999999999998,
+        "cwd": "/simulacao/gateway-sandbox",
+        "conta": {
+          "rotulo": "cliente-exemplo",
+          "cor": "#1baf7a"
+        }
+      },
+      {
+        "id": "sim-painel-blog-estatico",
+        "titulo": "blog-estatico",
+        "status": "completed",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T14:40:00.000Z",
+        "inicio": "2026-10-20T14:20:00.000Z",
+        "rodando": false,
+        "duracaoMs": 1200000,
+        "agentes": 1,
+        "custoUsd": 0,
+        "cwd": "/simulacao/blog-estatico",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-historico-busca-de-receitas",
+        "titulo": "Busca de receitas",
+        "status": "completed",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-17T14:30:00.000Z",
+        "inicio": "2026-10-17T14:10:00.000Z",
+        "rodando": false,
+        "duracaoMs": 1200000,
+        "agentes": 0,
+        "custoUsd": 0,
+        "cwd": "/simulacao/app-receitas",
+        "conta": null
+      },
+      {
+        "id": "sim-wf-retomada",
+        "titulo": "Rotas do gateway",
+        "status": "active",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-20T14:59:54.000Z",
+        "inicio": "2026-10-20T14:45:00.000Z",
+        "rodando": true,
+        "duracaoMs": 900000,
+        "agentes": 3,
+        "custoUsd": 0.028800000000000003,
+        "cwd": "/simulacao/gateway-sandbox",
+        "conta": {
+          "rotulo": "equipe",
+          "cor": "#df285d"
+        }
+      },
+      {
+        "id": "sim-historico-notas-em-markdown",
+        "titulo": "Notas em Markdown",
+        "status": "completed",
+        "motivo": null,
+        "ultimaAtividade": "2026-10-14T15:00:00.000Z",
+        "inicio": "2026-10-14T14:45:00.000Z",
+        "rodando": false,
+        "duracaoMs": 900000,
+        "agentes": 0,
+        "custoUsd": 0.2,
+        "cwd": "/simulacao/cli-de-notas",
+        "conta": null
+      }
+    ]
+  }
+}

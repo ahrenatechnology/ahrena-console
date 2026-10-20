@@ -1,0 +1,16 @@
+{
+  "name": "load",
+  "request": {
+    "method": "GET",
+    "path": "/api/carga"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    "esperasAbertas",
+    "eventosLidos",
+    "msPainel",
+    "painel",
+    "pedidos"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "open-post-invalid-id",
+  "request": {
+    "method": "POST",
+    "path": "/abrir/local_curto",
+    "body": {}
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "id de sessão do Desktop inválido"
+  }
+}

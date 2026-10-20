@@ -1,0 +1,64 @@
+{
+  "name": "session-detail",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "versao": 1,
+    "geradoEm": "2026-10-20T15:00:00.000Z",
+    "sessao": {
+      "id": "sim-painel-esta",
+      "titulo": "Separar pagamentos em serviços",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-10-20T14:32:00.000Z",
+      "status": "active",
+      "estado": "delegating",
+      "motivo": null,
+      "urgente": false,
+      "desde": "2026-10-20T14:59:57.000Z",
+      "turno": 9,
+      "atividade": {
+        "tipo": "delegando",
+        "texto": "esperando 3 subagentes"
+      },
+      "faixa": null,
+      "conta": {
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "rotulo": "equipe",
+        "cor": "#df285d",
+        "fonte": "env"
+      },
+      "branch": "feat/63-separar-pagamentos",
+      "cwd": "/simulacao/vitrine-demo"
+    },
+    "custo": {
+      "usd": 3.7559921999999997,
+      "serie": [
+        0,
+        0.41416,
+        0.66534,
+        1.0879,
+        1.51606,
+        1.9498199999999999,
+        2.38918,
+        2.83414,
+        3.2847,
+        3.5719922,
+        3.7559921999999997
+      ],
+      "estimativa": true
+    },
+    "branch": "feat/63-separar-pagamentos",
+    "local": null,
+    "abreSessao": false,
+    "comando": null,
+    "encerradaEm": null,
+    "contagens": {
+      "agentes": 5,
+      "eventos": 118
+    }
+  }
+}

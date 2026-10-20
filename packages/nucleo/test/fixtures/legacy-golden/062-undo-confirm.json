@@ -1,0 +1,34 @@
+{
+  "name": "undo-confirm",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{decision}/desfazer",
+    "body": {
+      "sessao": "sim-painel-esta"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "decisao": {
+      "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+      "rotulo": "D6",
+      "origem": "sugerida",
+      "estado": "a_confirmar",
+      "titulo": "10 cards por coluna, com \"mostrar mais\"",
+      "texto": "10 cards por coluna, com \"mostrar mais\"",
+      "contexto": null,
+      "desfazer": null,
+      "nao": [
+        "20 por coluna",
+        "rolagem infinita"
+      ],
+      "decididaPor": "agente",
+      "decididaEm": "2026-10-20T14:54:00.000Z",
+      "confirmadaEm": null,
+      "substituidaPor": null,
+      "sessao": "esta",
+      "toolUseId": "sim-toolu-p9-6"
+    }
+  }
+}

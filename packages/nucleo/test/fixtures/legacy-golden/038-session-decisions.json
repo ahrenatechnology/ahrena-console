@@ -1,0 +1,193 @@
+{
+  "name": "session-decisions",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta/decisoes"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "sessao": "sim-painel-esta",
+    "escopo": "familia",
+    "estado": "todas",
+    "q": null,
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    },
+    "total": 5,
+    "itens": [
+      {
+        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "rotulo": "D6",
+        "origem": "sugerida",
+        "estado": "a_confirmar",
+        "titulo": "10 cards por coluna, com \"mostrar mais\"",
+        "texto": "10 cards por coluna, com \"mostrar mais\"",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "20 por coluna",
+          "rolagem infinita"
+        ],
+        "decididaPor": "agente",
+        "decididaEm": "2026-10-20T14:54:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-6",
+        "sessionId": "sim-painel-esta",
+        "escopo": "familia",
+        "substitui": null,
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-esta"
+      },
+      {
+        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "rotulo": "D4",
+        "origem": "correcao",
+        "estado": "vigente",
+        "titulo": "SQLite em memória nos testes",
+        "texto": "SQLite em memória nos testes",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "Postgres no Docker"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:46:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-4",
+        "sessionId": "sim-painel-esta",
+        "escopo": "familia",
+        "substitui": "D3",
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-esta"
+      },
+      {
+        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "rotulo": "D5",
+        "origem": "permissao",
+        "estado": "vigente",
+        "titulo": "Permitir npm test sem perguntar",
+        "texto": "Permitir npm test sem perguntar",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "perguntar a cada vez"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:39:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-5",
+        "sessionId": "sim-painel-esta",
+        "escopo": "familia",
+        "substitui": null,
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-esta"
+      },
+      {
+        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "rotulo": "D3",
+        "origem": "pergunta",
+        "estado": "substituida",
+        "titulo": "Postgres no Docker nos testes",
+        "texto": "Postgres no Docker nos testes",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "SQLite em memória"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:27:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": "D4",
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-3",
+        "sessionId": "sim-painel-esta",
+        "escopo": "familia",
+        "substitui": null,
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-esta"
+      },
+      {
+        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "rotulo": "D2",
+        "origem": "plano",
+        "estado": "vigente",
+        "titulo": "Plano de 5 passos aprovado",
+        "texto": "Plano de 5 passos aprovado",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "plano com drag-and-drop"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-20T14:20:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "esta",
+        "toolUseId": "sim-toolu-p9-2",
+        "sessionId": "sim-painel-esta",
+        "escopo": "familia",
+        "substitui": null,
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-esta"
+      },
+      {
+        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "rotulo": "D1",
+        "origem": "pergunta",
+        "estado": "vigente",
+        "titulo": "Kanban só leitura, sem arrastar",
+        "texto": "Kanban só leitura, sem arrastar",
+        "contexto": null,
+        "desfazer": null,
+        "nao": [
+          "arrastar muda o status"
+        ],
+        "decididaPor": "usuario",
+        "decididaEm": "2026-10-19T19:00:00.000Z",
+        "confirmadaEm": null,
+        "substituidaPor": null,
+        "sessao": "mae",
+        "toolUseId": null,
+        "sessionId": "sim-painel-kanban-ontem",
+        "escopo": "familia",
+        "substitui": null,
+        "promovidaPara": null,
+        "branch": "feat/42-kanban-de-sessoes",
+        "repo": "/simulacao/ahrena-demo",
+        "conversa": "/ui/sessions/sim-painel-kanban-ontem"
+      }
+    ],
+    "injecao": {
+      "ligada": false,
+      "escopo": "branch",
+      "decisoes": 4,
+      "tokens": 53,
+      "texto": "Decisões vigentes em feat/63-separar-pagamentos:\n- Kanban só leitura, sem arrastar (D1)\n- Plano de 5 passos aprovado (D2)\n- Permitir npm test sem perguntar (D5)\n- SQLite em memória nos testes (D4, substituiu D3)"
+    },
+    "mcp": {
+      "ferramenta": "session_decisions",
+      "existe": false,
+      "chamada": "session_decisions branch: \"feat/63-separar-pagamentos\"",
+      "resposta": "Responde com as 4 vigentes e a cadeia de substituição: D4 substituiu D3."
+    }
+  }
+}
