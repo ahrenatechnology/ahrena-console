@@ -127,7 +127,11 @@ describe('#175/AC-5 GET /api/telemetry', () => {
   test('parâmetro inválido dá 400; máquina que não existe, 404; sem telemetria, 404 nas duas', async () => {
     const { get, fechar } = await subir();
     try {
-      for (const q of ['?hours=2', '?hours=abc', '?hours=1.0', '?hours=-1', '?machine=Local', '?machine=../x', `?machine=${'a'.repeat(65)}`]) {
+      // Vazio vale o padrão, como ausente.
+      const vazio = await get('/api/telemetry?hours=');
+      assert.equal(vazio.status, 200);
+      assert.equal(((await vazio.json()) as TelemetryResponse).hours, 1);
+      for (const q of ['?hours=2', '?hours=abc', '?hours=1.0', '?hours=-1', '?hours=012', '?machine=Local', '?machine=../x', `?machine=${'a'.repeat(65)}`]) {
         const r = await get(`/api/telemetry${q}`);
         assert.equal(r.status, 400, q);
         assert.equal(typeof ((await r.json()) as { error: string }).error, 'string');

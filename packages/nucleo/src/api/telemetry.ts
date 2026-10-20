@@ -10,7 +10,7 @@
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { isWindowHours, LOCAL_MACHINE_ID, MACHINE_ID, type WindowHours } from '../telemetry/model.ts';
+import { LOCAL_MACHINE_ID, MACHINE_ID, type WindowHours } from '../telemetry/model.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 
 export const MACHINES_ROUTE = '/api/machines';
@@ -26,9 +26,10 @@ export function isTelemetryRoute(pathname: string): boolean {
 export function readTelemetryRequest(params: URLSearchParams): { machine: string; hours: WindowHours } | string {
   const machine = params.get('machine') ?? LOCAL_MACHINE_ID;
   if (!MACHINE_ID.test(machine)) return 'machine inválida: letras minúsculas, números e hífen';
-  const bruto = params.get('hours');
-  const hours = bruto === null || bruto === '' ? 1 : Number(bruto);
-  if (!/^\d+$/.test(bruto ?? '1') || !isWindowHours(hours)) return 'hours: 1 ou 12';
+  // Ausente ou vazio vale o padrão; fora isso, só `1` ou `12` escritos assim (`012` e `1.0` não).
+  const bruto = params.get('hours') || '1';
+  if (!/^(1|12)$/.test(bruto)) return 'hours: 1 ou 12';
+  const hours = Number(bruto) as WindowHours;
   return { machine, hours };
 }
 
