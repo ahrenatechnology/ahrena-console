@@ -252,6 +252,48 @@ describe('/ui in the core', () => {
   });
 });
 
+describe('UI rule 9 (#255): cards in the same row have the same height', () => {
+  const rules = (css: string) =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: m[1]!.split(',').map((x) => x.trim()), body: m[2]! }));
+  const screenFiles = (ext: string) =>
+    readdirSync(UI_FOLDER, { recursive: true })
+      .map(String)
+      .filter((a) => a.endsWith(ext) && !['shell.css', 'brand.css'].includes(a));
+
+  test('shell.css stretches every card of a screen to its grid row and stacks short cards in .card-column', () => {
+    const shell = rules(readFileSync(`${UI_FOLDER}shell.css`, 'utf8'));
+    const body = (selector: string) => shell.find((r) => r.selectors.includes(selector))?.body ?? '';
+    // One class of specificity, so a screen that has to place one card still can.
+    assert.match(body(':where(.cc-main) .card'), /align-self:\s*stretch/);
+    assert.match(body('.card-column'), /display:\s*flex;[^}]*flex-direction:\s*column/);
+    assert.match(body('.card-column > .card:last-child'), /flex:\s*1/);
+  });
+
+  test('no screen CSS takes a card out of its row height', () => {
+    // Every class a screen gives together with `card` (class: 'card tm-card …').
+    const cardClasses = new Set(['card']);
+    for (const a of screenFiles('.js')) {
+      const js = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
+      for (const [, list] of js.matchAll(/class: [`'"]([^`'"]*)[`'"]/g)) {
+        const names = list!.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/).filter(Boolean);
+        if (names.includes('card')) for (const n of names) cardClasses.add(n);
+      }
+    }
+    assert.ok(cardClasses.has('tm-card') && cardClasses.size > 20);
+    const optOuts: string[] = [];
+    for (const a of screenFiles('.css')) {
+      for (const r of rules(readFileSync(`${UI_FOLDER}${a}`, 'utf8'))) {
+        if (!/align-self:\s*(?!stretch|auto)[a-z-]+/.test(r.body)) continue;
+        for (const sel of r.selectors) {
+          const last = sel.split(/[\s>+~]+/).pop() ?? '';
+          if ([...last.matchAll(/\.([\w-]+)/g)].some(([, c]) => cardClasses.has(c!))) optOuts.push(`${a}: ${sel}`);
+        }
+      }
+    }
+    assert.deepEqual(optOuts, []);
+  });
+});
+
 describe('screen registry', () => {
   test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões; under Máquinas Esta máquina and, under Controle, Agent Config; the Detail opens by a session and lights Sessões', () => {
     assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);

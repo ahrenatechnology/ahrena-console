@@ -217,6 +217,24 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.equal(part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!.getAttribute('aria-pressed'), 'true');
   });
 
+  test('#255 rule 9: the alerts and the Claude processes stack beside the tunnel, and the ports take the whole row', async () => {
+    const m = mount(null);
+    await m.ready;
+    const grid = m.area.querySelector('.tm-grid')!;
+    const column = grid.querySelector('.card-column')!;
+    assert.equal(column.parentNode, grid);
+    assert.ok(column.classList.contains('tm-side'));
+    assert.equal(column.children.length, 2);
+    assert.ok(column.children[0]!.querySelector('.tm-alerts'), 'O que pede atenção first, as in the wireframe');
+    assert.equal(column.children[1]!.getAttribute('data-part'), 'claude');
+    // The wireframe order: chart, volumes, tunnel, the stacked column, then the ports on their own row.
+    assert.deepEqual(
+      grid.children.map((c) => c.getAttribute('data-part') ?? (c.classList.contains('card-column') ? 'column' : c.querySelector('.tm-meter') ? 'volumes' : '?')),
+      ['chart', 'volumes', 'tunnel', 'column', 'ports'],
+    );
+    assert.ok(part(m.area, 'ports')!.classList.contains('tm-span-full'));
+  });
+
   test('12 h: the toggle reads hours=12, keeps it in the URL and the axis follows', async () => {
     const m = mount(null);
     await m.ready;
@@ -555,6 +573,14 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
     const used = [...js.matchAll(/class: [`'"]([^`'"]+)[`'"]/g)].flatMap((m) => m[1]!.split(/\s+/)).map((c) => (c.includes('${') ? c.slice(0, c.indexOf('${')) : c)).filter((c) => /^[a-z][a-z0-9-]*$/.test(c));
     assert.ok(used.length > 20);
     assert.deepEqual(used.filter((c) => !c.startsWith('tm-') && !shell.has(c) && !SEALS.has(c) && !['card', 'btn', 'outline', 'mono', 'eyebrow', 'badge', 'error-band'].includes(c)), []);
+  });
+
+  test('#255 rule 9: the stacked column is plain grid items in two columns and a flex column in three; a stretched chart grows', () => {
+    const css = readFileSync(`${UI_FOLDER}screens/machine.css`, 'utf8');
+    const wide = css.slice(css.indexOf('@media (min-width: 1300px)'));
+    assert.match(css, /\.tm-side \{ display: contents; \}/);
+    assert.match(wide.slice(0, wide.indexOf('}\n}')), /\.tm-side \{ display: flex; \}/);
+    assert.match(css, /\.tm-chart \{[^}]*flex: 1 0 120px;/);
   });
 
   test('criterion 4 (static part): nothing scrolls horizontally: fixed tables, wrapping text, no overflow-x', () => {
