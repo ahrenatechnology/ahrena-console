@@ -370,6 +370,38 @@ test('0.0.22: os PRs para revisar abrem direto no GitHub: com um, a faixa é o l
   await ui.unmount()
 })
 
+test('0.0.24: o "#N" na descrição do subagente é link para o PR, inteiro; sem repositório, texto puro', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const base = p4.subagentes.itens[0]!
+  const comTarefa = (tarefa: string): Painel => ({ ...p4, subagentes: { ativos: 1, itens: [{ ...base, nome: 'general-purpose', tarefa }] } })
+  f.estado.painel = comTarefa('Revisar PR #139')
+  await f.relogio.advance(15_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const links = (await ui.findAll({ type: 'Link' })).filter((l: any) => /\/pull\/139$/.test(l.props.href))
+    expect(links.map((l: any) => l.props.href)).toEqual([`https://github.com/${p4.trabalho!.repo}/pull/139`])
+    // O número inteiro, nunca "#13…".
+    expect(links[0]!.text).toMatch(/#139$/)
+    expect((await ui.find({ key: `sub-${base.id}` }))?.text).toMatch(/#139/)
+    await ui.unmount()
+  }
+  // Uma descrição longa: o texto antes do número encurta; o "#N" fica.
+  f.estado.painel = comTarefa('Revisar com calma o PR inteiro, arquivo por arquivo, #139')
+  await f.relogio.advance(15_000)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect((await ui.findAll({ type: 'Link' })).some((l: any) => /\/pull\/139$/.test(l.props.href) && /#139$/.test(l.text))).toBe(true)
+  await ui.unmount()
+  // Sem repositório conhecido: texto puro, sem link.
+  f.estado.painel = { ...comTarefa('Revisar PR #139'), trabalho: { ...p4.trabalho!, repo: null } }
+  await f.relogio.advance(15_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  expect((await ui.findAll({ type: 'Link' })).some((l: any) => /\/pull\/139$/.test(l.props.href))).toBe(false)
+  // O número inteiro também sem link: o que corta é o texto antes dele.
+  expect((await ui.find({ key: `sub-${base.id}` }))?.text).toMatch(/ · \S*… #139/)
+  await ui.unmount()
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })

@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.23'
+export const VERSAO_DO_PLUGIN = '0.0.24'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -290,6 +290,47 @@ function link(c: Contexto, key: string, href: string, texto: string) {
       </Text>
     </Link>
   )
+}
+
+/** Uma referência a PR no texto: "#139" ou "PR #139". */
+const REF_DE_PR = /#(\d+)\b/g
+
+/**
+ * O texto com cada "#N" como link laranja para o PR no GitHub, no repositório da sessão (o do card
+ * Trabalho). Sem "#N", o texto puro, que a linha corta. Com `max`, o texto cabe em `max` colunas
+ * cortando o que vem antes do número, nunca o "#N" ("Revisar… #139"), com ou sem repositório.
+ */
+export function textoComPrs(c: Contexto, texto: string, max?: number): (string | RenderElement)[] {
+  const repo = c.leitura.painel?.trabalho?.repo ?? null
+  const refs = [...texto.matchAll(REF_DE_PR)]
+  // Sem "#N" a proteger, o texto inteiro: a linha corta com reticências, no Desktop.
+  if (refs.length === 0) return [texto]
+  let t = texto
+  if (max !== undefined && [...t].length > max) {
+    // Corta o que vem antes da primeira referência; o número e o que vem depois ficam.
+    const primeira = refs[0]!
+    const depois = t.slice(primeira.index!)
+    const sobra = max - [...depois].length - 2
+    t = sobra >= 1 ? `${corta(t.slice(0, primeira.index!).trimEnd(), sobra + 1)} ${depois}` : depois
+  }
+  // Sem repositório conhecido, texto puro (com o número inteiro).
+  if (!repo) return [t]
+  const { Link, Text } = c.el
+  const partes: (string | RenderElement)[] = []
+  let ultimo = 0
+  for (const m of t.matchAll(REF_DE_PR)) {
+    if (m.index! > ultimo) partes.push(t.slice(ultimo, m.index!))
+    partes.push(
+      <Link key={`pr-${m[1]}-${m.index}`} href={`https://github.com/${repo}/pull/${m[1]}`}>
+        <Text color={LARANJA} underline>
+          {m[0]}
+        </Text>
+      </Link>,
+    )
+    ultimo = m.index! + m[0].length
+  }
+  if (ultimo < t.length) partes.push(t.slice(ultimo))
+  return partes
 }
 
 /**
@@ -752,7 +793,7 @@ function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
     `plano-${p.numero}`,
     [
       <Text color={marca.cor}>{marca.g} </Text>,
-      <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{p.resumo}</Text>,
+      <Text weight={p.resultado === 'atual' ? 'semibold' : undefined}>{textoComPrs(c, p.resumo)}</Text>,
       p.resultado === 'concluido' && !detalhe ? null : <Text dimColor> · {p.feitos}/{p.total}</Text>,
       detalhe && p.atual ? <Text dimColor> · {p.atual}</Text> : null,
     ],
@@ -760,6 +801,9 @@ function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
     detalhe,
   )
 }
+
+/** Colunas do texto de um passo no card do Plano: a largura útil menos o anel (~7) e o glifo. */
+const PASSO_NO_CARD = UTIL - 9 - 2
 
 /** Quantos passos o card do Plano destaca ao lado do anel. */
 const PASSOS_NO_CARD = 3
@@ -805,7 +849,7 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
     return (
       <Text key={`passo-${x.id}`} mono size="footnote" wrap="truncate-end" dimColor={!feito && !atual}>
         <Text color={feito ? VERDE : atual ? LARANJA : undefined}>{feito ? '✓' : atual ? '●' : '○'} </Text>
-        <Text weight={atual ? 'bold' : undefined}>{atual ? (x.textoAtivo ?? x.texto) : x.texto}</Text>
+        <Text weight={atual ? 'bold' : undefined}>{textoComPrs(c, atual ? (x.textoAtivo ?? x.texto) : x.texto, PASSO_NO_CARD)}</Text>
       </Text>
     )
   }
@@ -866,7 +910,12 @@ function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
   return linhaDeLista(
     c,
     `sub-${s.id}`,
-    [<Text color={marca.cor}>{marca.g} </Text>, <Text weight="bold">{nome}</Text>, s.tarefa ? <Text dimColor> · {s.tarefa}</Text> : null],
+    [
+      <Text color={marca.cor}>{marca.g} </Text>,
+      <Text weight="bold">{nome}</Text>,
+      // O "#N" da descrição é link para o PR; no card, o texto cabe na linha sem cortar o número.
+      s.tarefa ? <Text dimColor> · {textoComPrs(c, s.tarefa, inteiro ? undefined : Math.max(1, TEXTO_DA_LINHA - 2 - [...nome].length - 3))}</Text> : null,
+    ],
     tempo,
     inteiro,
   )
@@ -1008,7 +1057,7 @@ function linhaDeFilha(c: Contexto, f: FilhaDoPainel, max: number, inteiro = fals
       {fazendo ? (
         <Box flexShrink={2} minWidth={0}>
           <Text mono size="footnote" dimColor wrap="truncate-end">
-            {' '}· {fazendo}
+            {' '}· {textoComPrs(c, fazendo)}
           </Text>
         </Box>
       ) : null}
@@ -1749,7 +1798,7 @@ function telaPlanos(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreit
         {passos.map((x) => (
           <Text key={`passo-${x.id}`} mono size="footnote" wrap="wrap" dimColor={x.estado === 'pending'}>
             <Text color={marca(x.estado).cor}>{marca(x.estado).g} </Text>
-            <Text weight={x.estado === 'in_progress' ? 'bold' : undefined}>{x.estado === 'in_progress' ? (x.textoAtivo ?? x.texto) : x.texto}</Text>
+            <Text weight={x.estado === 'in_progress' ? 'bold' : undefined}>{textoComPrs(c, x.estado === 'in_progress' ? (x.textoAtivo ?? x.texto) : x.texto)}</Text>
           </Text>
         ))}
       </Box>

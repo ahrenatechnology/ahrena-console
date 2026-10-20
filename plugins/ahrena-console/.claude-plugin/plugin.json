@@ -1,6 +1,6 @@
 {
   "name": "ahrena-console",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "description": "Ahrena Console: painel lateral da sessão (/console) e os hooks que alimentam o núcleo local",
   "author": {
     "name": "Ahrena"
