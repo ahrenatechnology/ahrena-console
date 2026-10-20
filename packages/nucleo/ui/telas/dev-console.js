@@ -4,7 +4,8 @@
 // and the queue of all of them) and `GET /api/dev-console?context=<id>` (src/api/dev-console.ts).
 //
 // The context lives in the address (`?context=<id>`); `?tab=merge-queue` is the "Fila de merge" tab,
-// the queue of every context together. Switching tabs keeps the screen mounted (`history.pushState`).
+// the queue of every context together. A click on a tab keeps the screen mounted (`history.pushState`);
+// back and forward go through the frame's `popstate`, which mounts the screen again.
 //
 // Live: re-reads on a session, state, needs-you or decision change, when the frame asks for a full
 // re-read, and every 30 s (GitHub comes from the núcleo's cache, which no change announces).
@@ -76,8 +77,14 @@ export function stateFromSearch(search) {
   const q = new URLSearchParams(search ?? '');
   if (q.get('tab') === MERGE_QUEUE_TAB) return { tab: MERGE_QUEUE_TAB, context: null };
   const context = q.get('context');
-  return { tab: 'context', context: context && /^[A-Za-z0-9_./-]{1,128}$/.test(context) ? context : null };
+  return { tab: 'context', context: context ? context.slice(0, 200) : null };
 }
+
+/** A context id the núcleo accepts (`CONTEXT_ID` in src/dev-console/contexts.ts). */
+export const isContextId = (id) => typeof id === 'string' && /^[A-Za-z0-9_./-]{1,128}$/.test(id);
+
+/** Only web addresses become links: a `javascript:` or any other scheme from a bad cache stays text. */
+export const safeHref = (href) => (typeof href === 'string' && /^https:\/\//i.test(href) ? href : null);
 
 /** The address of a tab: `/ui/dev-console?context=<id>` or `/ui/dev-console?tab=merge-queue`. */
 export function screenRoute({ tab, context }) {
@@ -205,7 +212,10 @@ const ciPill = (ci) => {
   const c = ciLabel(ci);
   return c ? pill(c[0], c[1]) : null;
 };
-const external = (href, text, extra = '') => (href ? el('a', { class: `dev-ext ${extra}`.trim(), href, target: '_blank', rel: 'noopener noreferrer' }, text) : el('span', { class: extra || null }, text));
+const external = (href, text, extra = '') => {
+  const safe = safeHref(href);
+  return safe ? el('a', { class: `dev-ext ${extra}`.trim(), href: safe, target: '_blank', rel: 'noopener noreferrer' }, text) : el('span', { class: extra || null }, text);
+};
 const eyebrow = (name, ...text) => el('div', { class: 'olhinho dev-eyebrow' }, icone(name), ...text);
 
 function scoreboard(view) {
@@ -258,13 +268,13 @@ function queueRow(item, queue, { showContext = false } = {}) {
   );
 }
 
-function notReady(view) {
+function notReady(view, open) {
   const items = view.notReady;
   if (!items.length) return null;
   const tag = (n) => pill(`#${n.number} ${reasonLabel(n.reason, n.stackedOn)}`, reasonTone(n.reason));
   return el(
     'details',
-    { class: 'dev-more' },
+    { class: 'dev-more', open: open || null },
     el('summary', {}, icone('chevron-direita'), el('span', {}, `Na fila, ainda não prontos · ${items.length}`), el('span', { class: 'dev-more-tags' }, ...items.map(tag))),
     el(
       'ul',
@@ -364,10 +374,11 @@ function footer(view, now) {
   );
 }
 
-function staleBand(view, now) {
-  if (!view.stale) return null;
-  const when = view.readAt ? `Mostrando a leitura das ${HOUR.format(new Date(view.readAt))} (${ago(view.readAt, now)}).` : 'Ainda não há leitura guardada.';
-  return faixaDeErro({ titulo: 'Sem conexão com o GitHub.', texto: `${when}${view.staleReason ? ` ${view.staleReason}.` : ''} Tentamos de novo a cada 30 s.` });
+/** The GitHub-down band's text: the hour of the cache shown, and why. Stable between re-reads. */
+export function staleText(view) {
+  if (!view?.stale) return null;
+  const when = view.readAt ? `Mostrando a leitura das ${HOUR.format(new Date(view.readAt))}.` : 'Ainda não há leitura guardada.';
+  return `${when}${view.staleReason ? ` ${view.staleReason}.` : ''} Tentamos de novo a cada 30 s.`;
 }
 
 function truncatedNote(view) {
@@ -375,18 +386,31 @@ function truncatedNote(view) {
   return repos.length ? el('p', { class: 'dev-note' }, icone('info'), `O GitHub devolveu só a primeira página de ${repos.join(', ')}: o quadro pode estar incompleto.`) : null;
 }
 
+/** What identifies a focusable node across re-renders: tag, link and text. */
+const focusKey = (node) => (node ? `${node.tagName}|${node.getAttribute?.('href') ?? ''}|${node.textContent}` : null);
+
 export async function montar(area, ctx) {
   const sheet = loadStylesheet();
-  ctx.sinal.addEventListener('abort', () => sheet?.remove());
 
   let state = stateFromSearch(location.search);
   let overview = null;
   let view = null;
+  let loading = false;
   let failure = null;
   let notFound = null;
   let seq = 0;
   let timer = null;
   let debounce = null;
+  // The bands are kept between re-renders: a live region rebuilt every 30 s would be announced every 30 s.
+  const bands = { stale: { text: null, node: null }, failure: { text: null, node: null } };
+
+  const stop = () => {
+    seq++;
+    clearTimeout(timer);
+    clearTimeout(debounce);
+  };
+  // On the signal, not only on the returned function: leaving during the first read must stop too.
+  ctx.sinal.addEventListener('abort', () => (stop(), sheet?.remove()));
 
   const refresh = el('button', { type: 'button', class: 'btn', aoClicar: () => read() }, icone('atualizar'), 'Atualizar');
   const header = cabecalho({ icone: 'gauge', titulo: 'Dev Console', sub: 'PRs, issues e sessões dos repositórios do contexto', acoes: [refresh] });
@@ -395,27 +419,31 @@ export async function montar(area, ctx) {
   area.replaceChildren(header, carregando({ rotulo: 'Lendo o Dev Console' }));
 
   function go(next) {
+    if (screenRoute(next) === screenRoute(state)) return;
     state = next;
     const route = screenRoute(state);
     if (route !== location.pathname + location.search) history.pushState(null, '', route);
     view = null;
     notFound = null;
+    loading = true;
+    render();
     read();
   }
 
+  const sourceText = () => (overview?.contexts[0]?.source === 'sessions' ? 'um contexto por repositório com sessão nos últimos 7 dias' : `contextos de ${CONFIG_FILE}`);
+
   function tabs() {
     const contexts = overview?.contexts ?? [];
+    const current = state.tab === 'context' ? (state.context ?? contexts[0]?.id) : null;
     const tab = (label, target, on, iconName = null) => {
       const a = el('a', { class: 'dev-tab', href: screenRoute(target), 'aria-current': on ? 'page' : null }, iconName ? icone(iconName) : null, label);
       a.addEventListener('click', (ev) => {
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
         ev.preventDefault?.();
-        if (!on) go(target);
+        go(target);
       });
       return a;
     };
-    const current = state.tab === 'context' ? (state.context ?? contexts[0]?.id) : null;
-    const source = contexts[0]?.source === 'sessions' ? 'um contexto por repositório com sessão nos últimos 7 dias' : `contextos de ${CONFIG_FILE}`;
     return el(
       'div',
       { class: 'dev-tabs-row' },
@@ -425,16 +453,36 @@ export async function montar(area, ctx) {
         tab(`Fila de merge · ${overview?.mergeQueue?.length ?? 0}`, { tab: MERGE_QUEUE_TAB, context: null }, state.tab === MERGE_QUEUE_TAB, 'merge'),
         ...contexts.map((c) => tab(c.repos.length > 1 ? `${c.name} · ${c.repos.length} repos` : c.name, { tab: 'context', context: c.id }, c.id === current)),
       ),
-      el('span', { class: 'dev-source' }, source),
+      el('span', { class: 'dev-source' }, sourceText()),
     );
+  }
+
+  function band(kind, text, build) {
+    const b = bands[kind];
+    if (!text) {
+      b.text = null;
+      b.node = null;
+      return null;
+    }
+    if (b.text !== text) Object.assign(b, { text, node: build(text) });
+    return b.node;
   }
 
   function render() {
     const now = Date.now();
-    const band = failure ? faixaDeErro({ titulo: 'Não deu para atualizar.', texto: failure, acao: { rotulo: 'Tentar de novo', aoClicar: () => read() } }) : null;
-    const freshness = (view ?? overview)?.readAt ? ` · GitHub lido ${ago((view ?? overview).readAt, now)}` : '';
-    if (sub) sub.textContent = `PRs, issues e sessões dos repositórios do contexto${freshness}`;
-    const parts = [header, band];
+    const wasOpen = !!area.querySelector('details.dev-more')?.hasAttribute('open');
+    const active = document.activeElement;
+    const focused = active && area.contains(active) ? focusKey(active) : null;
+
+    const shown = state.tab === MERGE_QUEUE_TAB ? overview : view;
+    if (sub) sub.textContent = `PRs, issues e sessões dos repositórios do contexto${shown?.readAt ? ` · GitHub lido ${ago(shown.readAt, now)}` : ''}`;
+    const failureBand = band('failure', failure, (t) => faixaDeErro({ titulo: 'Não deu para atualizar.', texto: t, acao: { rotulo: 'Tentar de novo', aoClicar: () => read() } }));
+    const stale = band('stale', staleText(shown), (t) => {
+      const node = faixaDeErro({ titulo: 'Sem conexão com o GitHub.', texto: t });
+      node.setAttribute('role', 'status');
+      return node;
+    });
+    const parts = [header, failureBand];
     if (!overview.contexts.length) {
       parts.push(
         vazio({
@@ -443,23 +491,30 @@ export async function montar(area, ctx) {
           texto: `Um contexto é um conjunto de repositórios. Grave em ${CONFIG_FILE}: { "contexts": [{ "id": "loja", "name": "Loja", "repos": ["dono/repo"] }] }. Sem o arquivo, cada repositório com sessão do Claude Code nos últimos 7 dias vira um contexto.`,
         }),
       );
-    } else if (state.tab === MERGE_QUEUE_TAB) {
-      parts.push(tabs(), staleBand(overview, now), mergeQueue(overview.mergeQueue, null, 'Fila de merge de todos os contextos, na ordem · de cima para baixo; o empilhado entra depois da base', { showContext: true }));
-    } else if (notFound) {
-      parts.push(tabs(), vazio({ icone: 'gauge', titulo: 'Contexto não encontrado', texto: `Não há contexto "${notFound}" em ${CONFIG_FILE}.`, acao: { rotulo: 'Abrir o primeiro contexto', aoClicar: () => go({ tab: 'context', context: overview.contexts[0].id }) } }));
-    } else if (view) {
-      parts.push(
-        tabs(),
-        staleBand(view, now),
-        scoreboard(view),
-        dependsOnYou(view),
-        mergeQueue(view.mergeQueue, notReady(view), 'Fila de merge, na ordem · de cima para baixo; o empilhado entra depois da base'),
-        board(view),
-        truncatedNote(view),
-        footer(view, now),
-      );
+    } else {
+      parts.push(tabs(), stale);
+      if (state.tab === MERGE_QUEUE_TAB) {
+        parts.push(mergeQueue(overview.mergeQueue, null, 'Fila de merge de todos os contextos, na ordem · de cima para baixo; o empilhado entra depois da base', { showContext: true }));
+      } else if (notFound) {
+        parts.push(vazio({ icone: 'gauge', titulo: 'Contexto não encontrado', texto: `Não há contexto "${notFound}" (${sourceText()}).`, acao: { rotulo: 'Abrir o primeiro contexto', aoClicar: () => go({ tab: 'context', context: overview.contexts[0].id }) } }));
+      } else if (view) {
+        parts.push(
+          scoreboard(view),
+          dependsOnYou(view),
+          mergeQueue(view.mergeQueue, notReady(view, wasOpen), 'Fila de merge, na ordem · de cima para baixo; o empilhado entra depois da base'),
+          board(view),
+          truncatedNote(view),
+          footer(view, now),
+        );
+      } else if (loading) {
+        parts.push(carregando({ rotulo: 'Lendo o contexto' }));
+      }
     }
     area.replaceChildren(...parts.filter(Boolean));
+    if (focused) {
+      const again = [...area.querySelectorAll('a'), ...area.querySelectorAll('button'), ...area.querySelectorAll('summary')].find((n) => focusKey(n) === focused);
+      again?.focus();
+    }
   }
 
   async function read() {
@@ -471,22 +526,28 @@ export async function montar(area, ctx) {
       if (mine !== seq) return;
       overview = o;
       let v = null;
-      notFound = null;
+      let missing = null;
       if (state.tab === 'context' && o.contexts.length) {
         const id = state.context ?? o.contexts[0].id;
-        try {
-          v = await ctx.ler(apiRoute(id));
-        } catch (e) {
-          if (e?.status !== 404) throw e;
-          notFound = id;
+        if (!isContextId(id)) missing = id;
+        else {
+          try {
+            v = await ctx.ler(apiRoute(id));
+          } catch (e) {
+            if (e?.status !== 404) throw e;
+            missing = id;
+          }
         }
         if (mine !== seq) return;
       }
       view = v;
+      notFound = missing;
       failure = null;
+      loading = false;
       render();
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq) return;
+      loading = false;
       if (!overview) area.replaceChildren(header, erro({ texto: e?.message ?? String(e), tentar: () => (area.replaceChildren(header, carregando({ rotulo: 'Lendo o Dev Console' })), read()) }));
       else {
         failure = e?.message ?? String(e);
@@ -501,16 +562,12 @@ export async function montar(area, ctx) {
   }
 
   ctx.aoMudar((changes) => {
-    if (!touchesDevConsole(changes)) return;
+    if (!touchesDevConsole(changes) || ctx.sinal.aborted) return;
     clearTimeout(debounce);
     debounce = setTimeout(read, DEBOUNCE_MS);
   });
   ctx.aoReiniciar(() => read());
 
   await read();
-  return () => {
-    seq++;
-    clearTimeout(timer);
-    clearTimeout(debounce);
-  };
+  return stop;
 }

@@ -41,7 +41,7 @@ export interface DevConsoleView extends GithubFreshness {
   notReady: NotReadyItem[];
   board: Board;
   mergedLast24h: MergedPullRequestFact[];
-  /** Decisions in force taken today in the context's live sessions, most recent first. */
+  /** Decisions in force taken today in the context's sessions (live or ended today), most recent first. */
   decisionsToday: DecisionTodayItem[];
   /** Per context repository: `true` when a GitHub list came back partial (more than one page). */
   truncated: Record<string, boolean>;

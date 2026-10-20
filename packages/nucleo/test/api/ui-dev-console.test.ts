@@ -44,7 +44,7 @@ const screen = await import(
   // @ts-expect-error: idem
   '../../ui/telas/dev-console.js'
 );
-const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, montar, queueNote, reasonLabel, reasonTone, reviewLabel, scoreboardCards, screenRoute, stateFromSearch, touchesDevConsole } = screen;
+const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, isContextId, montar, queueNote, reasonLabel, reasonTone, reviewLabel, safeHref, scoreboardCards, screenRoute, stateFromSearch, touchesDevConsole } = screen;
 
 const FILES = ['telas/dev-console.js', 'telas/dev-console.css'];
 
@@ -152,7 +152,7 @@ const all = (area: ElementoFalso, selector: string) => area.querySelectorAll(sel
 // ---------- pure parts ----------
 
 describe('Dev Console: pure parts', () => {
-  test('#179/AC-3 every not-ready reason has a readable pt-BR label and a tone; stacked names its base', () => {
+  test('#179/AC-2 every not-ready reason has a readable pt-BR label and a tone; stacked names its base', () => {
     const labels = ['draft', 'conflict', 'checking', 'ci-failing', 'changes-requested', 'behind', 'ci-running', 'no-ci', 'stacked'].map((r) => reasonLabel(r));
     assert.deepEqual(labels, ['rascunho', 'conflito', 'verificando', 'CI vermelho', 'pediram mudanças', 'atrás da base', 'CI rodando', 'sem CI', 'empilhado']);
     assert.equal(reasonLabel('stacked', 79), 'empilhado em #79');
@@ -166,11 +166,15 @@ describe('Dev Console: pure parts', () => {
     assert.equal(ciLabel(null), null);
   });
 
-  test('#179/AC-2 the context and the merge-queue tab live in the address, round trip', () => {
+  test('#179/AC-1 the context and the merge-queue tab live in the address, round trip', () => {
     assert.deepEqual(stateFromSearch(''), { tab: 'context', context: null });
     assert.deepEqual(stateFromSearch('?context=loja'), { tab: 'context', context: 'loja' });
     assert.deepEqual(stateFromSearch('?context=dono/repo'), { tab: 'context', context: 'dono/repo' });
-    assert.deepEqual(stateFromSearch('?context=a%20b'), { tab: 'context', context: null });
+    assert.deepEqual(stateFromSearch('?context=a%20b'), { tab: 'context', context: 'a b' });
+    assert.equal(isContextId('a b'), false);
+    assert.equal(isContextId('dono/repo'), true);
+    assert.equal(safeHref('https://exemplo.test/pull/1'), 'https://exemplo.test/pull/1');
+    for (const bad of ['javascript:alert(1)', 'JAVASCRIPT:x', 'data:text/html,x', '/ui', null]) assert.equal(safeHref(bad), null, String(bad));
     assert.deepEqual(stateFromSearch('?tab=merge-queue&context=loja'), { tab: 'merge-queue', context: null });
     for (const s of [{ tab: 'context', context: 'loja' }, { tab: 'context', context: 'dono/repo' }, { tab: 'merge-queue', context: null }]) {
       assert.deepEqual(stateFromSearch(new URL(screenRoute(s), 'http://x').search), s);
@@ -180,7 +184,7 @@ describe('Dev Console: pure parts', () => {
     assert.equal(apiRoute('dono/repo'), '/api/dev-console?context=dono%2Frepo');
   });
 
-  test('#179/AC-5 relative and clock times in pt-BR', () => {
+  test('#179/AC-2 #179/AC-4 relative and clock times in pt-BR', () => {
     const t = Date.parse('2026-10-20T15:00:00');
     assert.equal(ago(new Date(t - 40_000).toISOString(), t), 'há 40 s');
     assert.equal(ago(new Date(t - 4 * 60_000).toISOString(), t), 'há 4 min');
@@ -191,13 +195,13 @@ describe('Dev Console: pure parts', () => {
     assert.equal(clockTime(new Date(Date.parse('2026-10-17T18:05:00')).toISOString(), t), '17/10 18:05');
   });
 
-  test('#179/AC-3 the six columns, in order, each with its criterion', () => {
+  test('#179/AC-2 the six columns, in order, each with its criterion', () => {
     assert.deepEqual(DEV_COLUMNS.map((c: { id: string }) => c.id), ['todo', 'delegated', 'in-progress', 'in-review', 'blocked', 'done']);
     assert.deepEqual(DEV_COLUMNS.map((c: { label: string }) => c.label), ['A fazer', 'Delegada', 'Em desenvolvimento', 'Em revisão', 'Bloqueada', 'Feita']);
     for (const c of DEV_COLUMNS) assert.ok(c.criterion.length > 10, c.id);
   });
 
-  test('#179/AC-3 scoreboard, depends-on-you and queue notes from the simulator data', async () => {
+  test('#179/AC-2 #179/AC-5 scoreboard, depends-on-you and queue notes from the simulator data', async () => {
     const v = JSON.parse(JSON.stringify(await devConsole.view('loja'))) as DevConsoleView;
     const cards = scoreboardCards(v);
     assert.deepEqual(cards.map((c: { label: string; value: number }) => [c.label, c.value]), [
@@ -221,7 +225,7 @@ describe('Dev Console: pure parts', () => {
     assert.deepEqual(v.mergeQueue.map((q) => queueNote(q, v.mergeQueue)), ['fecha #31', 'fecha #58 · base de #84', 'empilhado em #79']);
   });
 
-  test('#179/AC-7 only session, state, needs-you and decision changes re-read the screen', () => {
+  test('#179 live: only session, state, needs-you and decision changes re-read the screen', () => {
     assert.equal(touchesDevConsole([{ tipo: 'sessao' }]), true);
     assert.equal(touchesDevConsole([{ tipo: 'conta' }, { tipo: 'decisao' }]), true);
     assert.equal(touchesDevConsole([{ tipo: 'precisa-de-voce' }]), true);
@@ -245,14 +249,14 @@ describe('Dev Console: registration and files', () => {
     assert.ok(ids.indexOf('dev-console') > ids.indexOf('repo') && ids.indexOf('dev-console') < ids.indexOf('analytics'));
   });
 
-  test('#179/AC-6 every icon the screen uses exists in dom.js', () => {
+  test('#179/AC-5 every icon the screen uses exists in dom.js', () => {
     const js = readFileSync(`${PASTA_DA_UI}telas/dev-console.js`, 'utf8');
     const used = new Set([...js.matchAll(/(?:icone|eyebrow)\('([a-z-]+)'/g), ...js.matchAll(/icon: '([a-z-]+)'/g), ...js.matchAll(/icone: '([a-z-]+)'/g)].map((m) => m[1]!));
     assert.ok(used.has('gauge') && used.has('hand') && used.has('merge'));
     for (const name of used) assert.ok(NOMES_DOS_ICONES.includes(name), `${name} is not in dom.js`);
   });
 
-  test('#179/AC-6 the files call nothing outside, write no colour, no inline style, no HTML from data', () => {
+  test('#179/AC-5 the files call nothing outside, write no colour, no inline style, no HTML from data', () => {
     for (const f of FILES) {
       const body = readFileSync(`${PASTA_DA_UI}${f}`, 'utf8');
       const urls = (body.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
@@ -262,7 +266,7 @@ describe('Dev Console: registration and files', () => {
     }
   });
 
-  test('#179/AC-6 the screen only uses dev- classes that exist in its stylesheet', () => {
+  test('#179/AC-5 the screen only uses dev- classes that exist in its stylesheet', () => {
     const css = readFileSync(`${PASTA_DA_UI}telas/dev-console.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const defined = new Set([...css.matchAll(/\.(dev-[a-z0-9-]+)/g)].map((m) => m[1]!));
     const js = readFileSync(`${PASTA_DA_UI}telas/dev-console.js`, 'utf8');
@@ -274,7 +278,7 @@ describe('Dev Console: registration and files', () => {
     assert.ok(defined.has('dev-col-blocked') && defined.has('dev-col-done'));
   });
 
-  test('#179/AC-4 the board has six tracks side by side and, below 1280 px of window, four and two underneath', () => {
+  test('#179/AC-3 the board has six tracks side by side and, below 1280 px of window, four and two underneath', () => {
     const css = readFileSync(`${PASTA_DA_UI}telas/dev-console.css`, 'utf8');
     assert.match(css, /\.dev-board \{[^}]*grid-template-columns: repeat\(12, minmax\(0, 1fr\)\)/);
     assert.match(css, /\.dev-col \{[^}]*grid-column: span 2;/);
@@ -286,7 +290,7 @@ describe('Dev Console: registration and files', () => {
 // ---------- mounted ----------
 
 describe('Dev Console mounted on the simulator data', () => {
-  test('#179/AC-5 loading first, then the screen; the stylesheet goes to the head and leaves with the screen', async () => {
+  test('#179 C19 loading first, then the screen; the stylesheet goes to the head and leaves with the screen', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     const read = readerOf(() => devConsole);
@@ -300,7 +304,7 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(document.head.querySelector('link[data-tela="dev-console"]'), null);
   });
 
-  test('#179/AC-2 #179/AC-3 the first context opens with the five numbers, depends on you, the queue, the board and the footer', async () => {
+  test('#179/AC-1 #179/AC-2 #179/AC-5 the first context opens with the five numbers, depends on you, the queue, the board and the footer', async () => {
     const m = mount(readerOf(() => devConsole));
     await m.ready;
     assert.deepEqual(m.reads, ['/api/dev-console', '/api/dev-console?context=loja']);
@@ -337,7 +341,7 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(texto(decisions!.querySelector('.dev-list-link')), '1 · ver em Decisões ›');
   });
 
-  test('#179/AC-2 the "Fila de merge" tab shows the queue of every context, and clicking a tab keeps the screen and changes the address', async () => {
+  test('#179/AC-1 the "Fila de merge" tab shows the queue of every context, and clicking a tab keeps the screen and changes the address', async () => {
     const m = mount(readerOf(() => devConsole), '?tab=merge-queue');
     await m.ready;
     assert.deepEqual(m.reads, ['/api/dev-console']);
@@ -352,7 +356,7 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.ok(m.reads.includes('/api/dev-console?context=loja'));
   });
 
-  test('#179/AC-5 without GitHub: the band with the cache time over the cached screen', async () => {
+  test('#179/AC-4 without GitHub: the band with the cache time over the cached screen', async () => {
     await devConsole.view('loja');
     now.add(DEV_CONSOLE_TTL.issues + 1);
     source.offline = true;
@@ -360,11 +364,17 @@ describe('Dev Console mounted on the simulator data', () => {
     await m.ready;
     const band = m.area.querySelector('.faixa-erro');
     assert.ok(band);
-    assert.match(texto(band), /Sem conexão com o GitHub\. Mostrando a leitura das \d\d:\d\d \(há [^)]+\)\. GitHub fora do ar \(simulado\)\./);
+    assert.match(texto(band), /Sem conexão com o GitHub\. Mostrando a leitura das \d\d:\d\d\. GitHub fora do ar \(simulado\)\./);
     assert.deepEqual(all(m.area, '.dev-stat-value'), ['3', '1', '2', '1', '1']);
+    // A polite status, kept between re-reads, so a screen reader does not repeat it every 30 s.
+    assert.equal(band!.getAttribute('role'), 'status');
+    m.restart();
+    await until(() => m.reads.length === 4);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(m.area.querySelector('.faixa-erro'), band, 'the same band node after a re-read');
   });
 
-  test('#179/AC-5 no context configured: the empty state explains ~/.ahrena-console/dev-console.json', async () => {
+  test('#179/AC-4 no context configured: the empty state explains ~/.ahrena-console/dev-console.json', async () => {
     const m = mount(async () => ({ contexts: [], mergeQueue: [], readAt: null, stale: false, staleReason: null }));
     await m.ready;
     const empty = m.area.querySelector('.estado');
@@ -373,14 +383,19 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(m.area.querySelector('.dev-tabs'), null);
   });
 
-  test('#179/AC-5 unknown context: says so and offers the first one', async () => {
+  test('#179/AC-1 unknown or invalid context: says so and offers the first one', async () => {
     const m = mount(readerOf(() => devConsole), '?context=nenhum');
     await m.ready;
     assert.match(texto(m.area.querySelector('.estado')), /Contexto não encontrado/);
     assert.ok(m.area.querySelector('.dev-tabs'));
+    // An id the núcleo would refuse is not asked for, and does not silently open another context.
+    const bad = mount(readerOf(() => devConsole), '?context=a%20b');
+    await bad.ready;
+    assert.deepEqual(bad.reads, ['/api/dev-console']);
+    assert.match(texto(bad.area.querySelector('.estado')), /Contexto não encontrado.*"a b"/);
   });
 
-  test('#179/AC-5 the read fails: the error state with "Tentar de novo", which reads again', async () => {
+  test('#179 C19 the read fails: the error state with "Tentar de novo", which reads again', async () => {
     let fail = true;
     const read = readerOf(() => devConsole);
     const m = mount(async (r) => {
@@ -395,7 +410,7 @@ describe('Dev Console mounted on the simulator data', () => {
     await until(() => !!m.area.querySelector('.dev-stats'));
   });
 
-  test('#179/AC-7 live: a decision change re-reads (debounced), a restart re-reads, an account change does not', async () => {
+  test('#179 live: a decision change re-reads (debounced), a restart re-reads, an account change does not', async () => {
     const m = mount(readerOf(() => devConsole));
     await m.ready;
     const before = m.reads.length;
@@ -409,5 +424,69 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(m.reads.length, before + 2, 'two changes in a row read once (overview and context)');
     m.restart();
     await until(() => m.reads.length === before + 4);
+  });
+
+  test('#179 C19 a failed context read after the overview keeps the tabs and shows the band', async () => {
+    const read = readerOf(() => devConsole);
+    const m = mount(async (r) => {
+      if (r.includes('context=')) throw Object.assign(new Error('O núcleo respondeu 500'), { status: 500 });
+      return read(r);
+    });
+    await m.ready;
+    assert.ok(m.area.querySelector('.dev-tabs'), 'tabs stay');
+    assert.match(texto(m.area.querySelector('.faixa-erro')), /Não deu para atualizar\. O núcleo respondeu 500/);
+  });
+
+  test('#179/AC-2 the open "não prontos" list stays open, and keeps the focus, across a re-read', async () => {
+    const m = mount(readerOf(() => devConsole));
+    await m.ready;
+    m.area.querySelector('details.dev-more')!.setAttribute('open', '');
+    m.area.querySelector('details.dev-more summary')!.focus();
+    m.restart();
+    await until(() => m.reads.length === 4);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(m.area.querySelector('details.dev-more')!.hasAttribute('open'), true);
+    assert.equal(document.activeElement, m.area.querySelector('details.dev-more summary'), 'focus back on the new summary');
+  });
+
+  test('#179/AC-1 tab switch: loading at once, and the last tab clicked wins over a late answer', async () => {
+    const read = readerOf(() => devConsole);
+    let releaseLoja!: () => void;
+    const lojaGate = new Promise<void>((r) => (releaseLoja = r));
+    let gateLoja = false;
+    const m = mount(async (r) => {
+      if (gateLoja && r.includes('context=loja')) await lojaGate;
+      return read(r);
+    }, '?tab=merge-queue');
+    await m.ready;
+    gateLoja = true;
+    const tab = (label: string) => m.area.querySelectorAll('.dev-tab').find((t) => texto(t) === label)!;
+    tab('Loja · 2 repos').dispatchEvent({ type: 'click' });
+    assert.ok(m.area.querySelector('.carregando'), 'loading under the tabs while the context is read');
+    assert.equal(texto(m.area.querySelector('.dev-tab[aria-current="page"]')), 'Loja · 2 repos');
+    await until(() => m.reads.includes('/api/dev-console?context=loja'));
+    // Back to the queue before Loja answers: the queue must stay.
+    tab('Fila de merge · 3').dispatchEvent({ type: 'click' });
+    await until(() => !!m.area.querySelector('.dev-queue-card') && !m.area.querySelector('.carregando'));
+    releaseLoja();
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(m.area.querySelector('.dev-stats'), null, 'the late Loja answer is dropped');
+    assert.equal(texto(m.area.querySelector('.dev-tab[aria-current="page"]')), 'Fila de merge · 3');
+  });
+
+  test('#179 live: leaving the screen stops the re-reads, even when it happens during the first read', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const read = readerOf(() => devConsole);
+    const m = mount(async (r) => (await gate, read(r)));
+    m.change([{ tipo: 'sessao' }]);
+    m.leave();
+    release();
+    await m.ready.catch(() => {});
+    const reads = m.reads.length;
+    const html = texto(m.area);
+    await new Promise((r) => setTimeout(r, 500));
+    assert.equal(m.reads.length, reads, 'no read after leaving');
+    assert.equal(texto(m.area), html, 'nothing drawn after leaving');
   });
 });

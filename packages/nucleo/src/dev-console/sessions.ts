@@ -75,7 +75,7 @@ export interface SuggestedDecisionItem {
 
 export type DependsOnYouItem = WaitingSessionItem | SuggestedDecisionItem;
 
-/** A decision in force taken today (the machine's day) in one of the context's live sessions: the C27 "Decisões tomadas hoje". */
+/** A decision in force taken today (the machine's day) in one of the context's sessions, live or ended today: the C27 "Decisões tomadas hoje". */
 export interface DecisionTodayItem {
   decisionId: string;
   /** The UI's "D4". */
@@ -168,23 +168,34 @@ export class DevConsoleSessions {
           minutes: minutosDesde(d.decidedAt, now),
         });
       }
-      // Most recent first: the first decision from another day ends the scan.
-      const inForce = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['vigente'], limit: 50 });
-      for (const d of inForce.items) {
-        if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
-        push(decisionsToday, repo, {
-          decisionId: d.id,
-          label: decisionLabel(d),
-          choice: d.choice.slice(0, MAX_CHOICE),
-          sessionId: s.session.id,
-          repo,
-          decidedAt: d.decidedAt,
-          minutes: minutosDesde(d.decidedAt, now),
-        });
+      await this.decisionsTakenToday(s.session.id, repo, today, now, (item) => push(decisionsToday, repo, item));
+    }
+    // Sessions that ended today count too: a decision taken at 09:00 stays "taken today" after its session completes at 09:30.
+    if (this.decisions) {
+      for (const ended of await this.frota.encerradasHoje()) {
+        const session = await this.frota.storage.getSession(ended.id);
+        if (!session) continue;
+        const { repo } = await this.where(session);
+        if (!repo || !repos.has(repo)) continue;
+        await this.decisionsTakenToday(session.id, repo, today, now, (item) => push(decisionsToday, repo, item));
       }
     }
     for (const list of dependsOnYou.values()) list.sort((a, b) => a.since.localeCompare(b.since));
     return { byRepo, dependsOnYou, decisionsToday };
+  }
+
+  /**
+   * The decisions in force a session took today (the machine's day, `frota.fusoHorario`). The port
+   * lists most recent first, so the first decision from another day ends the scan; the 50 cap is
+   * deliberate (more than 50 decisions in force in one session in one day is not a footer).
+   */
+  private async decisionsTakenToday(sessionId: string, repo: string, today: string, now: number, push: (item: DecisionTodayItem) => void): Promise<void> {
+    if (!this.decisions) return;
+    const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
+    for (const d of page.items) {
+      if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
+      push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutosDesde(d.decidedAt, now) });
+    }
   }
 }
 
