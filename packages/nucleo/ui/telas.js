@@ -134,6 +134,7 @@ export const TELAS = [
     icone: 'decisao',
     arquivo: '/ui/telas/decisoes.js', // issue 103
   },
+  { id: 'agent-config', rota: '/ui/agent-config', item: { rotulo: 'Agent Config', icone: 'bot' }, titulo: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icone: 'bot', arquivo: '/ui/telas/agent-config.js' }, // #63
 ];
 
 // Um id de sessão ou um nome do GitHub (ponto, hífen e sublinhado); `.` e `..` nunca.

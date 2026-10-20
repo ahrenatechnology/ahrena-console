@@ -16,13 +16,14 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
-| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`; `historico.js` (C15, #33) lê `GET /api/historico`; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?periodo=`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`, `historico.css`, `repos.css`), carregado pela própria tela |
+| `telas/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`; `historico.js` (C15, #33) lê `GET /api/historico`; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?periodo=`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`, `historico.css`, `repos.css`), carregado pela própria tela |
 | `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
 | `telas/kanban.js` | O Kanban ([#31](https://github.com/ahrenatechnology/ahrena-console/issues/31)): sessões ou agentes em colunas por status, só leitura, em `/ui/kanban` (`?visao=agentes` para os agentes) |
 | `kanban.css` | O estilo do Kanban, carregado pela tela só enquanto ela está aberta |
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
 | `repos.css` | O estilo das telas Repositórios e Repositório (classes `repo-`), carregado por `<link>` pela própria tela |
 | `repos-formato.js` | Formatos, filtros, escalas e o que as telas de repositórios mostram, sem DOM (o teste importa direto) |
+| `agent-config.css` | O estilo próprio da Agent Config (classes `ac-`), posto no `<head>` pela tela (`link[data-tela="agent-config"]`) |
 
 ## As telas
 
@@ -98,20 +99,20 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?visao=`. A mo
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
 | `ler(rota)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
-| `escrever(rota, corpo)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards) |
+| `escrever(rota, corpo)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
 | `sinal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
 | `aoMudar(f)` | `f(mudancas)` a cada novidade do long polling (`{ tipo, chave, sessionId, accountId }`) |
 | `aoReiniciar(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
 | `aoVivo()` | `'conectando'`, `'ao-vivo'` ou `'sem-conexao'` |
 | `contador(id, n)` | O número no item da barra (o "4" do Dashboard); `0` esconde |
 | `titulo(texto)` | O título da janela (`Ahrena Console · <texto>`) |
-| `navegar(rota)` | Troca de tela sem recarregar. Links `<a href="/ui/...">` já fazem isso sozinhos |
+| `navegar(rota)` | Troca de tela sem recarregar; a rota pode levar query (`/ui/agent-config?tab=skills`). Links `<a href="/ui/...">` já fazem isso sozinhos, com a query |
 
 ## Regras
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
-- **Toda leitura passa por `ler()`**, nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
-- **A única escrita é o "Abrir no Claude Desktop"** (`abrirNoDesktop()` de `ler.js`): `POST /abrir/<local_…>`, o único POST que o núcleo aceita com o `Origin` da página.
+- **Toda leitura passa por `ler()`, toda escrita por `escrever()`** (ou `abrirNoDesktop()`), nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
+- **As escritas com o `Origin` da página** são só três: o "Abrir no Claude Desktop" (`POST /abrir/<local_…>`), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.

@@ -46,6 +46,8 @@ import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
+import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
 import { DecisoesDaUi } from './decisoes-ui.ts';
 import { QuadroKanban } from './kanban.ts';
@@ -83,7 +85,9 @@ const AJUDA = `Uso: npm run api -- [opções]
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
-                      wireframe C11, num GitHub falso (mover vale em memória)
+                      wireframe C11, num GitHub falso (mover vale em memória). A tela
+                      Agent Config lê uma pasta de configuração e um projeto fictícios
+                      num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
                       (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
@@ -299,6 +303,12 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+// The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
+const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
+if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
+const agentConfig = demoAgentConfig
+  ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
+  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
@@ -349,6 +359,7 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  agentConfig,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

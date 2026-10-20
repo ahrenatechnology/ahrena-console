@@ -29,6 +29,7 @@
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
 // | `GET /api/decisoes`, `GET /api/sessoes/<id>/decisoes` e `POST /api/decisoes/<id>/promover` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 // | `GET /api/repos` e `/api/repos/<dono>/<repo>` | Repositórios do GitHub e métricas (api/repos.ts, #104, #105) |
+// | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -37,7 +38,8 @@
 // até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo três, só com `Origin`
 // exatamente `http://<Host>` e caminho exato (sem query): o "Abrir no Claude Desktop" do Detalhe,
 // `POST /abrir/<local_…>`, o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e as
-// decisões pela /ui (#103), `POST /api/decisoes/<id>/(confirmar|descartar|ajustar|desfazer|promover)`.
+// decisões pela /ui (#103), `POST /api/decisoes/<id>/(confirmar|descartar|ajustar|desfazer|promover)`, e o
+// `POST /api/agent-config/skill` da tela Agent Config (api/agent-config.ts).
 // Um site de fora não consegue esse `Origin`, nem mandar JSON sem o preflight de CORS, e o núcleo não
 // responde CORS. A escrita nas decisões pede ainda `Content-Type: application/json` e o corpo
 // `{ "sessao": "<id>" }`, e só alcança uma decisão que essa sessão enxerga, da conta dela.
@@ -61,6 +63,7 @@ import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
 import type { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
+import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
@@ -112,6 +115,8 @@ export interface OpcoesDaApi {
   decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
+  /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
+  agentConfig?: AgentConfigRoute;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -267,7 +272,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -280,6 +285,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
+    if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
