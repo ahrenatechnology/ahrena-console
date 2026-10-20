@@ -15,6 +15,17 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao` |
+| `telas/` | As telas, uma por arquivo |
+| `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
+
+## As telas
+
+| Tela | Rota | Lê | Arquivo |
+| --- | --- | --- | --- |
+| Analytics · Visão geral (C12) | `/ui/analytics` | `GET /api/analytics?fuso=` | `telas/analytics.js` |
+| Analytics · Custo (C13) | `/ui/analytics/custo` | `GET /api/analytics/custo?dias=7\|30\|90&fuso=` | `telas/analytics.js` |
+
+O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `analytics` (item da barra) e a `analytics-aba` (`/ui/analytics/:aba`, acende Analytics). A tela lê `ctx.params.aba`: só `custo` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
 
 ## Registrar uma tela
 
