@@ -504,6 +504,21 @@ describe('Kanban do projeto (C11)', () => {
     assert.equal(achada.tela.arquivo, '/ui/telas/projeto.js');
     assert.deepEqual(TELAS.find((t: { id: string }) => t.id === 'projeto').item, { rotulo: 'Kanban do projeto', icone: 'github' });
   });
+
+  // O CSS de cada tela fica na página depois que ela abre: uma classe de nome igual em duas telas quebra a outra.
+  test('o CSS da tela fica em projeto.css, que a tela carrega, com as classes próprias em pj-', () => {
+    const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = semComentario('projeto.css');
+    assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(|https?:\/\//i);
+    assert.doesNotMatch(semComentario('moldura.css'), /\.pj-/, 'nada da tela na moldura');
+    assert.match(readFileSync(`${PASTA_DA_UI}telas/projeto.js`, 'utf8'), /'\/ui\/projeto\.css'/);
+    // Toda regra começa por uma classe pj-: o resto (.cab, .tipo, .pe…) só vale dentro dela.
+    for (const regra of css.split('}').map((r) => r.split('{')[0]!.trim()).filter((r) => r && !r.startsWith('@'))) {
+      for (const seletor of regra.split(',')) assert.match(seletor.trim(), /^\.pj-/, seletor);
+    }
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && a !== 'projeto.css');
+    for (const outra of outras) assert.doesNotMatch(semComentario(outra), /\.pj-/, outra);
+  });
 });
 
 describe('a camada de escrita', () => {

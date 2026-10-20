@@ -213,18 +213,21 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Kanban do projeto, Analytics e Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'projeto', 'analytics', 'config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics, Histórico e Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'historico', 'config']);
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
+    assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');
+    assert.equal(acharTela('/ui/historico').tela.id, 'historico');
     const d = acharTela('/ui/sessoes/b91d04aa-4e1');
     assert.equal(d.tela.id, 'detalhe');
     assert.equal(d.tela.acende, 'sessoes');
     assert.deepEqual(d.params, { id: 'b91d04aa-4e1' });
     assert.equal(acharTela('/ui/sessoes/a%20b'), null);
-    assert.equal(acharTela('/ui/kanban'), null);
+    assert.equal(acharTela('/ui/kanban').tela.id, 'kanban');
+    assert.equal(acharTela('/ui/nao-existe'), null);
   });
 });
 

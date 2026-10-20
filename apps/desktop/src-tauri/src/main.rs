@@ -8,11 +8,13 @@
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /abrir/<local_…>`); "Abrir o console"
 //    abre a `/ui` do núcleo numa janela;
 // 5. com a chave do updater no tauri.conf.json, procura versão nova ao abrir e a cada 6 h
-//    (atualizacao.rs) e a oferece no menu.
+//    (atualizacao.rs) e a oferece no menu;
+// 6. aberto à mão, abre também o console; aberto pelo login, fica só na bandeja (login.rs).
 // O app não grava hooks nem configuração do Claude, não embute Node e não tem telas próprias.
 
 mod atualizacao;
 mod http;
+mod login;
 mod menu;
 #[cfg(target_os = "macos")]
 mod nativo;
@@ -30,6 +32,7 @@ use tauri::menu::{CheckMenuItem, IconMenuItem, IsMenuItem, Menu, MenuItem, Prede
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
+use login::Registro;
 use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
 
 const BANDEJA: &str = "ahrena";
@@ -41,8 +44,9 @@ struct Estado {
     nucleo: EstadoDoNucleo,
     atencao: Option<Atencao>,
     sem_atencao: bool,
-    // Nesta etapa só marcam: o efeito é das issues #88 (notificações) e #89 (abrir no login).
+    // Nesta etapa só marca: o efeito é da issue #88.
     notificacoes: bool,
+    /// O status do `SMAppService` é `enabled` (login.rs), relido a cada menu.
     login: bool,
     /// `id da sessão` → `local_…` do Claude Desktop, do último menu.
     locais: HashMap<String, Option<String>>,
@@ -74,10 +78,14 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| abrir_console(app)))
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(estado.clone())
         .manage(Laco(Mutex::new(acordar)))
         .setup(move |app| {
+            // O Apple Event de abertura ainda está em curso aqui, no `applicationDidFinishLaunching`.
+            let variavel = std::env::var("AHRENA_ORIGEM").ok();
+            let (origem, fonte) = login::descobrir(variavel.as_deref(), login::evento_de_abertura());
+            eprintln!("[ahrena-console] origem: {} ({fonte})", origem.nome());
+            let abrir_na_partida = login::abrir_janela_na_partida(origem);
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -105,7 +113,7 @@ fn main() {
 
             let recursos = app.path().resource_dir().ok();
             let handle = app.handle().clone();
-            std::thread::spawn(move || acompanhar(handle, estado, nucleo::pasta_do_nucleo(recursos), sinais));
+            std::thread::spawn(move || acompanhar(handle, estado, nucleo::pasta_do_nucleo(recursos), sinais, abrir_na_partida));
             abrir_o_menu_depois(app.handle());
             Ok(())
         })
@@ -113,6 +121,12 @@ fn main() {
         .expect("falha ao montar o app");
 
     app.run(|app, ev| {
+        // Abrir de novo pelo Finder, Dock ou Spotlight com o app já de pé (ex.: aberto no login, só
+        // na bandeja) chega aqui, e não no single-instance: abre o console.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Reopen { .. } = ev {
+            abrir_console(app);
+        }
         // Fechar a janela do console só a esconde: o app vive na bandeja, e a última janela nunca
         // fecha (fechar pediria para sair). Sair, logout e desligar seguem normais.
         if let RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. } = ev {
@@ -125,7 +139,9 @@ fn main() {
 }
 
 /// O laço do núcleo: adota ou sobe, lê a atenção e espera mudanças. Roda numa thread à parte.
-fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std::sync::mpsc::Receiver<()>) {
+/// `abrir_na_partida`: abre o console se o núcleo fica de pé já na primeira tentativa (partida à
+/// mão); se ele só sobe depois (falta Node, "Procurar de novo"), o console não aparece sozinho.
+fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std::sync::mpsc::Receiver<()>, mut abrir_na_partida: bool) {
     loop {
         mudar(&app, &estado, |e| {
             e.nucleo = EstadoDoNucleo::Procurando;
@@ -133,6 +149,7 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
             e.sem_atencao = false;
         });
         let r = nucleo::adotar_ou_subir(&pasta);
+        let abrir = std::mem::take(&mut abrir_na_partida);
         let porta = match r.estado {
             EstadoDoNucleo::DePe { porta } => porta,
             ref parado => {
@@ -146,6 +163,11 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
             }
         };
         mudar(&app, &estado, |e| e.nucleo = EstadoDoNucleo::DePe { porta });
+        if abrir {
+            eprintln!("[ahrena-console] partida à mão: abre o console");
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || abrir_console(&handle));
+        }
         seguir(&app, &estado, porta, &sinais);
         // O núcleo parou de responder: procura (e sobe) de novo.
         while sinais.try_recv().is_ok() {}
@@ -211,6 +233,8 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         let mut e = estado.lock().unwrap();
+        // Relido sempre: o usuário pode tirar o item em Ajustes.
+        e.login = login::marcado(login::DoSistema.status());
         let versao = handle.package_info().version.to_string();
         let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.notificacoes, login: e.login, versao: &versao, atualizacao: e.atualizacao.as_deref() });
         let titulo = menu::titulo_da_bandeja(&e.nucleo, e.atencao.as_ref());
@@ -329,7 +353,11 @@ fn clique(app: &AppHandle, id: &str) {
         menu::ID_ABRIR => abrir_console(app),
         menu::ID_SAIR => app.exit(0),
         menu::ID_NOTIFICACOES => mudar(app, &estado, |e| e.notificacoes = !e.notificacoes),
-        menu::ID_LOGIN => mudar(app, &estado, |e| e.login = !e.login),
+        menu::ID_LOGIN => {
+            login::clicar(&login::DoSistema);
+            // O clique já inverteu a marca nativa: refaz o menu mesmo sem mudança (erro, aprovação).
+            mudar(app, &estado, |e| e.ultimo = None);
+        }
         menu::ID_ATUALIZAR => atualizacao::instalar(app),
         menu::ID_PROCURAR => {
             let _ = app.state::<Laco>().0.lock().unwrap().send(());

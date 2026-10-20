@@ -19,6 +19,16 @@ const hooksJson = JSON.parse(readFileSync(join(PLUGIN_ROOT, 'hooks', 'hooks.json
   hooks: Record<string, { matcher?: string; hooks: { type: string; command: string; timeout: number }[] }[]>;
 };
 
+/**
+ * Prazo do encaminhador nos testes que não são sobre o prazo. O padrão de 800 ms conta do carregamento
+ * do script no relógio real, e numa máquina carregada o boot do `fetch` e a ida ao núcleo passam disso:
+ * o hook desistia com TimeoutError e o teste falhava sem ter nada a ver com o prazo (#165). Com um prazo
+ * folgado, o resultado desses testes não depende mais do relógio.
+ */
+const FOLGA_MS = 30_000;
+/** Rede de segurança: um hook que não sai nem com a folga é bug, e o teste falha em vez de travar. */
+const LIMITE_MS = 2 * FOLGA_MS;
+
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-hooks-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 let logN = 0;
@@ -27,7 +37,6 @@ interface Run {
   code: number | null;
   stdout: string;
   stderr: string;
-  ms: number;
   log: string;
 }
 
@@ -40,25 +49,35 @@ const cleanEnv = Object.fromEntries(
 function runHook(event: string, payload: unknown, env: Record<string, string>, opts: { keepStdinOpen?: boolean } = {}): Promise<Run> {
   const command = hooksJson.hooks[event][0].hooks[0].command;
   const logPath = join(dir, `hooks-${logN++}.log`);
-  const started = Date.now();
   return new Promise((resolve, reject) => {
     const child = spawn(command, {
       shell: true,
-      env: { ...cleanEnv, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, AHRENA_CONSOLE_HOOK_LOG: logPath, ...env },
+      env: {
+        ...cleanEnv,
+        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+        AHRENA_CONSOLE_HOOK_LOG: logPath,
+        AHRENA_CONSOLE_HOOK_TIMEOUT_MS: String(FOLGA_MS),
+        ...env,
+      },
     });
+    const guard = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`${event}: o hook não saiu em ${LIMITE_MS} ms`));
+    }, LIMITE_MS);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (c) => (stdout += c));
     child.stderr.on('data', (c) => (stderr += c));
     child.on('error', reject);
     child.on('close', (code) => {
+      clearTimeout(guard);
       let log = '';
       try {
         log = readFileSync(logPath, 'utf8');
       } catch {
         // sem log: nada falhou
       }
-      resolve({ code, stdout, stderr, ms: Date.now() - started, log });
+      resolve({ code, stdout, stderr, log });
     });
     child.stdin.write(JSON.stringify(payload));
     if (!opts.keepStdinOpen) child.stdin.end();
@@ -108,7 +127,7 @@ describe('encaminhador com o núcleo no ar', () => {
 });
 
 describe('encaminhador com o núcleo fora', () => {
-  test('núcleo desligado: sai 0 na hora e registra', async () => {
+  test('núcleo desligado: sai 0 sem esperar o prazo e registra', async () => {
     const probe = createServer();
     const port = await listen(probe);
     await new Promise((r) => probe.close(r));
@@ -116,22 +135,27 @@ describe('encaminhador com o núcleo fora', () => {
     const r = await runHook('PreToolUse', HOOK_PAYLOADS.PreToolUse, { AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}` });
     assert.equal(r.code, 0);
     assert.equal(r.stdout, '');
-    assert.ok(r.ms < 2000, `demorou ${r.ms} ms`);
+    // ECONNREFUSED, e não TimeoutError, prova que desistiu na recusa, sem esperar os FOLGA_MS.
     assert.match(r.log, /PreToolUse não enviado a http:\/\/127\.0\.0\.1:\d+: ECONNREFUSED/);
   });
 
   test('núcleo travado: desiste no timeout e sai 0', async () => {
+    let arrived = 0;
     const hung = createServer(() => {
-      // aceita e nunca responde
+      arrived++; // aceita e nunca responde
     });
     const port = await listen(hung);
     try {
+      // O prazo cobre leitura e envio. O stdin já está escrito e fechado quando o script carrega, então
+      // a leitura leva poucos milissegundos; 1 s deixa margem para ela e ainda vence no envio.
       const r = await runHook('Stop', HOOK_PAYLOADS.Stop, {
         AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}`,
-        AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300',
+        AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '1000',
       });
+      // Sair com o servidor ainda calado já é a prova de que desistiu: sem prazo, o fetch esperaria
+      // para sempre e o runHook cairia no LIMITE_MS.
       assert.equal(r.code, 0);
-      assert.ok(r.ms < 2000, `demorou ${r.ms} ms`);
+      assert.equal(arrived, 1, `o pedido não chegou ao núcleo: ${r.log}`);
       assert.match(r.log, /Stop não enviado .*TimeoutError/);
     } finally {
       hung.closeAllConnections();
@@ -156,7 +180,7 @@ describe('encaminhador com o núcleo fora', () => {
 
   test('núcleo fora da máquina: recusa sem enviar nada', async () => {
     for (const url of ['http://192.0.2.10:4720', 'http://127.0.0.1.example.test:4720', 'file:///tmp/x', 'não é url']) {
-      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: url, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' });
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_URL: url });
       assert.equal(r.code, 0, url);
       assert.equal(r.stdout, '', url);
       assert.match(r.log, /SessionStart não enviado: AHRENA_CONSOLE_URL precisa ser 127\.0\.0\.1, localhost ou ::1/, url);
@@ -181,9 +205,9 @@ describe('encaminhador com o núcleo fora', () => {
   });
 
   test('stdin que não fecha não prende o hook', async () => {
+    // Com o stdin aberto, só o prazo encerra a leitura; sair já prova que ele valeu.
     const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' }, { keepStdinOpen: true });
     assert.equal(r.code, 0);
-    assert.ok(r.ms < 2000, `demorou ${r.ms} ms`);
     assert.match(r.log, /SessionStart não enviado: stdin não fechou a tempo/);
   });
 });
@@ -239,11 +263,12 @@ describe('encaminhador manda a pasta e a conta do ambiente', () => {
     const store = openSqliteStorage({ path: ':memory:' });
     const receiver = await startHookReceiver({ storage: store, port: 0, log: () => {} });
     try {
-      await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, {
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, {
         AHRENA_CONSOLE_URL: receiver.url,
         CLAUDE_CODE_ACCOUNT_UUID: CONTA,
         CLAUDE_CODE_ORGANIZATION_UUID: ORG,
       });
+      assert.equal(r.log, '');
       const s = await store.getSession('sess-hooks-1');
       assert.equal(s?.accountId, `${CONTA}/${ORG}`);
       assert.equal(s?.accountSource, 'env');

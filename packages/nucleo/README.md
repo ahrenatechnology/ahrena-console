@@ -24,6 +24,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
 | [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
+| [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
 | [src/config/](src/config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
 
@@ -53,7 +54,9 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
 | `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
+| `GET /api/historico?antes=<AAAA-MM-DD>&dias=<N>&busca=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?antes=` na próxima página. `dias` padrão 7, máximo 31; `busca` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
+| `GET /api/kanban?visao=sessoes\|agentes&coluna=<id>&pagina=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `coluna`, todas na página 1; com ela, só aquela, na `pagina` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
 | `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
 | `GET /api/config/skill?raiz=<id>&nome=<nome>` | O `SKILL.md` de uma skill, com a `versao` |
 | `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `criar: true`, só cria (409 se já existe) |
@@ -69,6 +72,8 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`), esforço (`effort`), arquivada e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
+| [historico.ts](src/api/historico.ts) | `GET /api/historico`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
+| [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
 | [config.ts](src/api/config.ts) | As rotas da tela Agent Config, sobre [src/config/](src/config/) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
