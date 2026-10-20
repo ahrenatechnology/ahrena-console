@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -32,6 +32,11 @@ const GUARD_MS = 2 * SLACK_MS;
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-hooks-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 let logN = 0;
+/**
+ * The default console home of every run: empty, so no test ever reaches a core of the machine through
+ * the real registry. The fan-out tests pass their own.
+ */
+const EMPTY_HOME = join(dir, 'empty-home');
 
 interface Run {
   code: number | null;
@@ -57,6 +62,7 @@ function runHook(event: string, payload: unknown, env: Record<string, string>, o
         CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
         AHRENA_CONSOLE_HOOK_LOG: logPath,
         AHRENA_CONSOLE_HOOK_TIMEOUT_MS: String(SLACK_MS),
+        AHRENA_CONSOLE_HOME: EMPTY_HOME,
         ...env,
       },
     });
@@ -172,7 +178,7 @@ describe('forwarder with the core away', () => {
     try {
       const r = await runHook('Notification', HOOK_PAYLOADS.Notification, { AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}` });
       assert.equal(r.code, 0);
-      assert.match(r.log, /Notification recusado pelo núcleo: HTTP 500 quebrado/);
+      assert.match(r.log, new RegExp(`Notification recusado pelo núcleo http://127\\.0\\.0\\.1:${port}: HTTP 500 quebrado`));
     } finally {
       await new Promise((r) => angry.close(r));
     }
@@ -206,7 +212,12 @@ describe('forwarder with the core away', () => {
 
   test('stdin that never closes does not hold the hook', async () => {
     // Com o stdin aberto, só o prazo encerra a leitura; sair já prova que ele valeu.
-    const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' }, { keepStdinOpen: true });
+    const r = await runHook(
+      'SessionStart',
+      HOOK_PAYLOADS.SessionStart,
+      { AHRENA_CONSOLE_URL: 'http://127.0.0.1:9', AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '300' },
+      { keepStdinOpen: true },
+    );
     assert.equal(r.code, 0);
     assert.match(r.log, /SessionStart não enviado: stdin não fechou a tempo/);
   });
@@ -275,6 +286,217 @@ describe("forwarder sends the environment's folder and account", () => {
     } finally {
       await receiver.close();
       await store.close();
+    }
+  });
+});
+
+describe('forwarder fans out to every live core in the registry (decision 0010, item 4)', () => {
+  interface Hit {
+    deliveryId: string | undefined;
+    host: string | undefined;
+    body: string;
+  }
+  interface FakeCore {
+    port: number;
+    hits: Hit[];
+    close(): Promise<void>;
+  }
+
+  /** A core that answers 202 to every hook, or that accepts and never answers (`hang`). */
+  async function fakeCore(o: { hang?: boolean } = {}): Promise<FakeCore> {
+    const hits: Hit[] = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        hits.push({ deliveryId: req.headers['x-ahrena-delivery-id'] as string | undefined, host: req.headers.host, body });
+        if (o.hang) return;
+        res.writeHead(202);
+        res.end('{}');
+      });
+    });
+    const port = await listen(server);
+    return {
+      port,
+      hits,
+      close: async () => {
+        server.closeAllConnections();
+        await new Promise((r) => server.close(r));
+      },
+    };
+  }
+
+  let homeN = 0;
+  /** A fresh console home, with an empty `instances` folder. */
+  function newHome(): string {
+    const home = join(dir, `home-${homeN++}`);
+    mkdirSync(join(home, 'instances'), { recursive: true });
+    return home;
+  }
+
+  /** Writes a registry entry the way the core does: `<id>.json` with the `Instance` fields. */
+  function register(home: string, installation: string, pid: number, port: number, file = `${installation}-${pid}.json`): void {
+    const entry = { id: `${installation}-${pid}`, installation, pid, port, version: '0.0.0', commit: null, dataDir: home, startedAt: new Date().toISOString() };
+    writeFileSync(join(home, 'instances', file), JSON.stringify(entry));
+  }
+
+  /** The pid of a process that has already exited. */
+  async function deadPid(): Promise<number> {
+    const child = spawn(process.execPath, ['-e', '']);
+    await new Promise((r) => child.on('exit', r));
+    assert.ok(child.pid);
+    return child.pid;
+  }
+
+  const live = process.pid;
+
+  test('two live cores both get the event, as one delivery with the same body', async () => {
+    const a = await fakeCore();
+    const b = await fakeCore();
+    try {
+      const home = newHome();
+      register(home, 'dev', live, a.port);
+      register(home, 'app', live, b.port);
+      const r = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOME: home });
+      assert.equal(r.code, 0);
+      assert.equal(r.stdout, '');
+      assert.equal(r.log, '');
+      assert.equal(a.hits.length, 1);
+      assert.equal(b.hits.length, 1);
+      assert.match(a.hits[0].deliveryId ?? '', /^[0-9a-f-]{36}$/);
+      assert.equal(a.hits[0].deliveryId, b.hits[0].deliveryId);
+      assert.equal(a.hits[0].body, b.hits[0].body);
+      assert.equal(a.hits[0].host, `127.0.0.1:${a.port}`);
+      assert.equal(b.hits[0].host, `127.0.0.1:${b.port}`);
+      const { ahrena_console: _context, ...payload } = JSON.parse(a.hits[0].body) as Record<string, unknown>;
+      assert.deepEqual(payload, HOOK_PAYLOADS.SessionStart);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test('end to end, the event lands in the database of both cores', async () => {
+    const stores = [openSqliteStorage({ path: ':memory:' }), openSqliteStorage({ path: ':memory:' })];
+    const receivers = await Promise.all(stores.map((storage) => startHookReceiver({ storage, port: 0, log: () => {} })));
+    try {
+      const home = newHome();
+      register(home, 'dev', live, Number(new URL(receivers[0].url).port));
+      register(home, 'app', live, Number(new URL(receivers[1].url).port));
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home });
+      assert.equal(r.log, '');
+      for (const store of stores) assert.deepEqual((await store.listEvents('sess-hooks-1')).items.map((e) => e.type), ['Stop']);
+    } finally {
+      await Promise.all(receivers.map((rc) => rc.close()));
+      await Promise.all(stores.map((s) => s.close()));
+    }
+  });
+
+  test('dead-pid, malformed and foreign files are skipped and left in place', async () => {
+    const core = await fakeCore();
+    const decoy = await fakeCore();
+    try {
+      const home = newHome();
+      const instances = join(home, 'instances');
+      register(home, 'dev', live, core.port);
+      register(home, 'app', await deadPid(), decoy.port);
+      writeFileSync(join(instances, 'mcpb-7.json'), '{ not json');
+      writeFileSync(join(instances, 'mcpb-8.json'), JSON.stringify({ id: 'mcpb-8', installation: 'mcpb', pid: live, port: 0 }));
+      register(home, 'dev', live, decoy.port, 'notes.json');
+      register(home, 'dev', live, decoy.port, `app-${live}.json`); // its id says dev
+      register(home, 'dev', live, decoy.port, '.dev-1.json.tmp');
+      mkdirSync(join(instances, 'dev-9.json'));
+      const before = readdirSync(instances).sort();
+
+      const r = await runHook('PostToolUse', HOOK_PAYLOADS.PostToolUse, { AHRENA_CONSOLE_HOME: home });
+      assert.equal(r.code, 0);
+      assert.equal(r.stdout, '');
+      assert.equal(r.log, '');
+      assert.equal(core.hits.length, 1);
+      assert.equal(decoy.hits.length, 0);
+      assert.deepEqual(readdirSync(instances).sort(), before, 'the hook never deletes registry files');
+    } finally {
+      await core.close();
+      await decoy.close();
+    }
+  });
+
+  test('AHRENA_CONSOLE_URL or AHRENA_CONSOLE_PORT sends to that core only', async () => {
+    const a = await fakeCore();
+    const b = await fakeCore();
+    const forced = await fakeCore();
+    try {
+      const home = newHome();
+      register(home, 'dev', live, a.port);
+      register(home, 'app', live, b.port);
+      const byUrl = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_URL: `http://127.0.0.1:${forced.port}/` });
+      assert.equal(byUrl.log, '');
+      assert.deepEqual([forced.hits.length, a.hits.length, b.hits.length], [1, 0, 0]);
+      const byPort = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_PORT: String(forced.port) });
+      assert.equal(byPort.log, '');
+      assert.deepEqual([forced.hits.length, a.hits.length, b.hits.length], [2, 0, 0]);
+    } finally {
+      await a.close();
+      await b.close();
+      await forced.close();
+    }
+  });
+
+  test('no live core: exits 0 at once, with no request, no stdout and no log line', async () => {
+    const decoy = await fakeCore();
+    try {
+      const home = newHome();
+      register(home, 'dev', await deadPid(), decoy.port);
+      for (const env of [{ AHRENA_CONSOLE_HOME: home }, {}, { AHRENA_CONSOLE_HOME: join(dir, 'no-such-home') }]) {
+        const started = Date.now();
+        const r = await runHook('UserPromptSubmit', HOOK_PAYLOADS.UserPromptSubmit, env);
+        assert.equal(r.code, 0);
+        assert.equal(r.stdout, '');
+        assert.equal(r.log, '');
+        // Far below SLACK_MS: it did not wait for a deadline.
+        assert.ok(Date.now() - started < SLACK_MS / 3, `took ${Date.now() - started} ms`);
+      }
+      assert.equal(decoy.hits.length, 0);
+    } finally {
+      await decoy.close();
+    }
+  });
+
+  test('without AHRENA_CONSOLE_HOME, the registry is ~/.ahrena-console/instances', async () => {
+    const core = await fakeCore();
+    try {
+      const fakeHomeDir = join(dir, `user-${homeN++}`);
+      const home = join(fakeHomeDir, '.ahrena-console');
+      mkdirSync(join(home, 'instances'), { recursive: true });
+      register(home, 'dev', live, core.port);
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: '', HOME: fakeHomeDir });
+      assert.equal(r.log, '');
+      assert.equal(core.hits.length, 1);
+    } finally {
+      await core.close();
+    }
+  });
+
+  test('a hung core does not hold the others, and the deadline still holds', async () => {
+    const hung = await fakeCore({ hang: true });
+    const ok = await fakeCore();
+    try {
+      const home = newHome();
+      register(home, 'dev', live, hung.port);
+      register(home, 'app', live, ok.port);
+      const started = Date.now();
+      const r = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_HOOK_TIMEOUT_MS: '1000' });
+      assert.equal(r.code, 0);
+      assert.equal(r.stdout, '');
+      assert.ok(Date.now() - started < SLACK_MS / 3, `took ${Date.now() - started} ms`);
+      assert.equal(ok.hits.length, 1);
+      assert.equal(hung.hits.length, 1, `the request did not reach the hung core: ${r.log}`);
+      assert.equal(ok.hits[0].deliveryId, hung.hits[0].deliveryId);
+      assert.match(r.log, new RegExp(`Stop não enviado a http://127\\.0\\.0\\.1:${hung.port}: TimeoutError`));
+      assert.doesNotMatch(r.log, new RegExp(`:${ok.port}\\b`));
+    } finally {
+      await hung.close();
+      await ok.close();
     }
   });
 });
