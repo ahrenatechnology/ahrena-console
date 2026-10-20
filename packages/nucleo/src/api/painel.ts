@@ -20,7 +20,7 @@ import type { PlanOwner, PlanRecord, SessionPlan } from '../plan/model.ts';
 import { LONG_WINDOW, DEFAULT_WINDOW } from '../context/window.ts';
 import { contextAlert, contextPct, contextLabel, type ContextMeter } from '../context/model.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
+import type { DecisionPort } from '../decisions/port.ts';
 import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';

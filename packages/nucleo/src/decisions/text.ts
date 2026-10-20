@@ -1,5 +1,5 @@
-// Texto vindo do transcript ou de um hook é conteúdo não confiável: aqui ele só é limpo e cortado.
-// Nada daqui interpreta, executa ou segue o que o texto diz.
+// Text coming from the transcript or from a hook is untrusted content: here it is only cleaned and truncated.
+// Nothing here interprets, executes or follows what the text says.
 
 /** Tamanho máximo de escolha, contexto e alternativa gravados na decisão. */
 export const DECISION_TEXT_MAX = 280;
@@ -76,8 +76,8 @@ export function looksLikeCorrection(text: string | null): boolean {
   if (t.length > CORRECTION_MAX || t.includes('?') || NOT_A_CORRECTION.test(t)) return false;
   const m = CORRECTION_START.exec(t);
   if (!m) return false;
-  const resto = t.slice(m[0].length).replace(/^[\s,.!;:]+/, '');
-  return resto.split(/\s+/).filter((w) => /\p{L}{2,}/u.test(w)).length >= CORRECTION_MIN_WORDS;
+  const rest = t.slice(m[0].length).replace(/^[\s,.!;:]+/, '');
+  return rest.split(/\s+/).filter((w) => /\p{L}{2,}/u.test(w)).length >= CORRECTION_MIN_WORDS;
 }
 
 /** A pergunta foi fechada sem resposta ("[User dismissed — do not proceed…]"): não é decisão. */

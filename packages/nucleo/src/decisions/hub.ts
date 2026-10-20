@@ -1,8 +1,8 @@
-// O que uma decisão leva para o hub (épico 7). Por padrão só metadados: nenhum texto que veio da
-// conversa (assunto, contexto, escolha, alternativas) nem caminho local da máquina. O texto só sai
-// quando a pessoa libera aquela decisão (`releaseDecisionText`).
+// What a decision carries to the hub (epic 7). By default only metadata: no text that came from the
+// conversation (topic, context, choice, alternatives) and no local path of the machine. The text only
+// goes out when the person releases that decision (`releaseDecisionText`).
 
-import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from './modelo.ts';
+import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from './model.ts';
 
 export interface DecisionHubText {
   topic: string | null;

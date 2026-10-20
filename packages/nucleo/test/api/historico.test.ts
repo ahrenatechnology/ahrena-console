@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { SessionHistory, type HistoryResponse } from '../../src/history/reading.ts';
 import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
 import { SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';

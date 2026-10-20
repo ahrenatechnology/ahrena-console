@@ -1,5 +1,5 @@
-// Regras das decisões sobre a porta: registrar sem duplicar, numerar na família, substituir pelo
-// assunto, confirmar, descartar, reverter, ligar sessões e consultar a cadeia nos dois sentidos.
+// Decision rules over the port: register without duplicates, number within the family, replace by
+// topic, confirm, discard, revert, link sessions and walk the chain in both directions.
 
 import { createHash } from 'node:crypto';
 import { InvalidModelError, type Metadata } from '../model.ts';
@@ -14,8 +14,8 @@ import {
   type MessageRef,
   type SessionLink,
   type SessionLinkReason,
-} from './modelo.ts';
-import type { DecisionPort, ListDecisionsQuery } from './porta.ts';
+} from './model.ts';
+import type { DecisionPort, ListDecisionsQuery } from './port.ts';
 
 /** O que uma captura produz. O registro completa id, família, número e cadeia. */
 export interface DecisionDraft {

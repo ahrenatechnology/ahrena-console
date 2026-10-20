@@ -1,12 +1,12 @@
-// CA3: cada decisão guarda contexto, escolha, alternativas, quem decidiu, origem, link, escopo e estado.
-// E a porta consulta por sessão, família e branch, paginando por cursor.
+// CA3: each decision keeps context, choice, alternatives, who decided, origin, link, scope and state.
+// And the port queries by session, family and branch, paginating by cursor.
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS, migrate, schemaVersion } from '../../src/adapters/sqlite/migrations.ts';
-import { DECISION_STATES, type Decision } from '../../src/decisoes/modelo.ts';
-import { registerDecision } from '../../src/decisoes/registro.ts';
+import { DECISION_STATES, type Decision } from '../../src/decisions/model.ts';
+import { registerDecision } from '../../src/decisions/registry.ts';
 import { InvalidModelError } from '../../src/model.ts';
 import { at, draft, openCtx, type Ctx } from './helpers.ts';
 
@@ -41,7 +41,7 @@ function decision(over: Partial<Decision> = {}): Decision {
   };
 }
 
-describe('decisões: modelo e porta', () => {
+describe('decisions: model and port', () => {
   let ctx: Ctx;
   beforeEach(async () => {
     ctx = await openCtx();
@@ -50,7 +50,7 @@ describe('decisões: modelo e porta', () => {
     await ctx.storage.close();
   });
 
-  test('a migração das decisões é aditiva', () => {
+  test('the decisions migration is additive', () => {
     const m = MIGRATIONS.find((x) => x.sql.includes('CREATE TABLE decisions'));
     assert.ok(m);
     assert.equal(m.version, 4);
@@ -58,7 +58,7 @@ describe('decisões: modelo e porta', () => {
     assert.doesNotMatch(m.sql, /\b(DROP|ALTER)\b/);
   });
 
-  test('banco da versão 3 ganha as tabelas decisions e session_links', () => {
+  test('a version 3 database gains the decisions and session_links tables', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, MIGRATIONS.filter((m) => m.version <= 3));
     assert.equal(schemaVersion(db), 3);
@@ -68,13 +68,13 @@ describe('decisões: modelo e porta', () => {
     db.close();
   });
 
-  test('CA3: grava e lê a decisão inteira', async () => {
+  test('CA3: writes and reads the whole decision', async () => {
     const d = decision();
     await ctx.decisions.putDecision(d);
     assert.deepEqual(await ctx.decisions.getDecision('dec:1'), d);
   });
 
-  test('CA3: aceita os estados do wireframe e o descartar', async () => {
+  test('CA3: accepts the wireframe states and discard', async () => {
     for (const [i, state] of DECISION_STATES.entries()) {
       const d = decision({ id: `dec:${i}`, state, supersededBy: state === 'substituida' ? 'dec:x' : null });
       await ctx.decisions.putDecision(d);
@@ -82,7 +82,7 @@ describe('decisões: modelo e porta', () => {
     }
   });
 
-  test('recusa decisão incoerente', async () => {
+  test('rejects an inconsistent decision', async () => {
     const bad: Partial<Decision>[] = [
       { choice: '' },
       { origin: 'chute' as never },
@@ -100,7 +100,7 @@ describe('decisões: modelo e porta', () => {
     }
   });
 
-  test('consulta por sessão, família e branch, mais recentes primeiro', async () => {
+  test('queries by session, family and branch, newest first', async () => {
     await ctx.decisions.putDecision(decision({ id: 'a', decidedAt: at(1) }));
     await ctx.decisions.putDecision(decision({ id: 'b', sessionId: 's2', decidedAt: at(2), seq: 2 }));
     await ctx.decisions.putDecision(decision({ id: 'c', sessionId: 's3', familyId: 's3', decidedAt: at(3) }));
@@ -116,7 +116,7 @@ describe('decisões: modelo e porta', () => {
     assert.deepEqual(await ids({ branch: 'feat/42-kanban', states: [] }), []);
   });
 
-  test('filtra por estado e pagina por cursor', async () => {
+  test('filters by state and paginates by cursor', async () => {
     for (let i = 0; i < 5; i++) {
       await ctx.decisions.putDecision(decision({ id: `d${i}`, seq: i + 1, decidedAt: at(i), state: i % 2 ? 'a_confirmar' : 'vigente' }));
     }
@@ -126,12 +126,12 @@ describe('decisões: modelo e porta', () => {
     const p3 = await ctx.decisions.listDecisions({ familyId: 's1', limit: 2, cursor: p2.nextCursor });
     assert.deepEqual([...p2.items, ...p3.items].map((d) => d.id), ['d2', 'd1', 'd0']);
     assert.equal(p3.nextCursor, null);
-    const confirmar = await ctx.decisions.listDecisions({ familyId: 's1', states: ['a_confirmar'] });
-    assert.deepEqual(confirmar.items.map((d) => d.id), ['d3', 'd1']);
+    const toConfirm = await ctx.decisions.listDecisions({ familyId: 's1', states: ['a_confirmar'] });
+    assert.deepEqual(toConfirm.items.map((d) => d.id), ['d3', 'd1']);
     await assert.rejects(ctx.decisions.listDecisions({ familyId: 's1', cursor: 'lixo' }), RangeError);
   });
 
-  test('lastSeq e ligação de sessões', async () => {
+  test('lastSeq and session links', async () => {
     assert.equal(await ctx.decisions.lastSeq('s1'), 0);
     await ctx.decisions.putDecision(decision({ seq: 7 }));
     assert.equal(await ctx.decisions.lastSeq('s1'), 7);
@@ -142,7 +142,7 @@ describe('decisões: modelo e porta', () => {
     await assert.rejects(ctx.decisions.putSessionLink({ ...link, parentSessionId: 's2' }), InvalidModelError);
   });
 
-  test('CA3: o registro preenche família, número, escopo padrão e o link para a mensagem', async () => {
+  test('CA3: the registry fills in family, number, default scope and the message link', async () => {
     const { decision: d } = await registerDecision(
       ctx.decisions,
       draft({ message: { uuid: 'u-9', toolUseId: 'toolu_9' } }),

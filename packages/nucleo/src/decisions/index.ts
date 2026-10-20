@@ -1,5 +1,5 @@
-export * from './modelo.ts';
-export type { DecisionFilter, DecisionPort, ListDecisionsQuery } from './porta.ts';
+export * from './model.ts';
+export type { DecisionFilter, DecisionPort, ListDecisionsQuery } from './port.ts';
 export { SqliteDecisionStore } from './sqlite.ts';
 export {
   DecisionStateError,
@@ -22,14 +22,14 @@ export {
   type DecisionLevel,
   type LinkSessionInput,
   type RegisterResult,
-} from './registro.ts';
-export { HookDecisionCapture, type HookCaptureOptions } from './captura-hooks.ts';
+} from './registry.ts';
+export { HookDecisionCapture, type HookCaptureOptions } from './capture-hooks.ts';
 export {
   captureTranscriptFile,
   extractTranscriptDecisions,
   type TranscriptCaptureReport,
   type TranscriptExtractOptions,
-} from './captura-transcript.ts';
+} from './capture-transcript.ts';
 export {
   captureSuggestions,
   noInference,
@@ -37,5 +37,5 @@ export {
   type DecisionInferrer,
   type InferenceInput,
   type SuggestedDecision,
-} from './inferencia.ts';
+} from './inference.ts';
 export { HUB_METADATA_FIELDS, decisionForHub, type DecisionHubRecord, type DecisionHubText } from './hub.ts';

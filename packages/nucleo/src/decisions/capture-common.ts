@@ -1,8 +1,8 @@
-// Montagem das decisões capturadas, igual para o hook e para o transcript: os dois caminhos
-// produzem a mesma chave de origem para a mesma chamada, e o registro não duplica.
+// Building the captured decisions, the same for the hook and for the transcript: both paths
+// produce the same source key for the same call, and the registry does not duplicate.
 
-import type { DecisionDraft } from './registro.ts';
-import { DECISION_LIST_MAX, cleanList, cleanText, isDismissedAnswer, planTitle, shortChoice, toolSubject, topicKey } from './texto.ts';
+import type { DecisionDraft } from './registry.ts';
+import { DECISION_LIST_MAX, cleanList, cleanText, isDismissedAnswer, planTitle, shortChoice, toolSubject, topicKey } from './text.ts';
 
 /** Onde a decisão aconteceu. */
 export interface CaptureBase {

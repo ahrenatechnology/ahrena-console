@@ -1,9 +1,9 @@
-// Porta das decisões. Fica ao lado da porta de armazenamento, com as mesmas regras para caber no
-// DynamoDB do hub sem mudar quem usa: tudo assíncrono, "put" do registro inteiro, consultas por
-// padrão de acesso (sessão, família, branch) e paginação por cursor opaco.
+// Decisions port. It sits next to the storage port, with the same rules so it fits the hub's
+// DynamoDB without changing its callers: everything async, "put" of the whole record, queries by
+// access pattern (session, family, branch) and pagination by opaque cursor.
 
 import type { Page } from '../storage-port.ts';
-import type { Decision, DecisionState, SessionLink } from './modelo.ts';
+import type { Decision, DecisionState, SessionLink } from './model.ts';
 
 /** Um dos três escopos de consulta. Branch sem `repo` junta o mesmo branch de todos os repositórios. */
 export type DecisionFilter =

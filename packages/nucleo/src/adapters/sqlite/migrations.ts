@@ -3,7 +3,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { CONTEXT_MIGRATION_DESCRIPTION, CONTEXT_MIGRATION_SQL } from '../../context/migration.ts';
-import { DECISOES_MIGRATION_DESCRIPTION, DECISOES_MIGRATION_SQL } from '../../decisoes/migracao.ts';
+import { DECISIONS_MIGRATION_DESCRIPTION, DECISIONS_MIGRATION_SQL } from '../../decisions/migration.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
 export interface Migration {
@@ -141,8 +141,8 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
-  // O esquema das decisões fica na pasta delas (src/decisoes/migracao.ts).
-  { version: 4, description: DECISOES_MIGRATION_DESCRIPTION, sql: DECISOES_MIGRATION_SQL },
+  // The decisions schema lives in their own folder (src/decisions/migration.ts).
+  { version: 4, description: DECISIONS_MIGRATION_DESCRIPTION, sql: DECISIONS_MIGRATION_SQL },
   {
     version: 5,
     description: 'histórico dos planos da sessão (issue #131)',

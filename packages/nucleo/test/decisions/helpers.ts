@@ -1,9 +1,9 @@
-// Banco em memória, rascunhos e transcripts sintéticos para os testes das decisões.
-// Nada aqui vem de conversa real: textos, ids e caminhos são inventados.
+// In-memory database, drafts and synthetic transcripts for the decision tests.
+// Nothing here comes from a real conversation: texts, ids and paths are made up.
 
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
-import type { DecisionDraft } from '../../src/decisoes/registro.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
+import type { DecisionDraft } from '../../src/decisions/registry.ts';
 import { normalizeHook } from '../../src/ingest/hooks/normalize.ts';
 import type { SessionEvent } from '../../src/model.ts';
 import { at } from '../fixtures.ts';

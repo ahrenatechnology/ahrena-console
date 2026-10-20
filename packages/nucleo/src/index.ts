@@ -20,7 +20,7 @@ export * from './states/index.ts';
 export * from './cost/index.ts';
 export * from './plan/index.ts';
 export * from './context/index.ts';
-export * from './decisoes/index.ts';
+export * from './decisions/index.ts';
 export * from './profiles/index.ts';
 export * from './changes/index.ts';
 export * from './telemetry/index.ts';

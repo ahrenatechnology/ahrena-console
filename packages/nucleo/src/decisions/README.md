@@ -4,22 +4,22 @@ O núcleo registra o que foi decidido em cada sessão: o que se decidiu, o que f
 
 | Arquivo | O quê |
 | --- | --- |
-| [modelo.ts](modelo.ts) | `Decision` e `SessionLink`, os estados, origens e escopos, e os validadores |
-| [porta.ts](porta.ts) | `DecisionPort`: grava e consulta por sessão, família e branch |
-| [migracao.ts](migracao.ts) | O esquema SQLite, a migração 4 da lista do adaptador |
+| [model.ts](model.ts) | `Decision` e `SessionLink`, os estados, origens e escopos, e os validadores |
+| [port.ts](port.ts) | `DecisionPort`: grava e consulta por sessão, família e branch |
+| [migration.ts](migration.ts) | O esquema SQLite, a migração 4 da lista do adaptador |
 | [sqlite.ts](sqlite.ts) | `SqliteDecisionStore`, sobre o mesmo banco do `SqliteStorage` |
-| [registro.ts](registro.ts) | Registrar sem duplicar, cadeia de substituição, confirmar, descartar, reverter, ligar sessões e consultar |
-| [captura-hooks.ts](captura-hooks.ts) | `HookDecisionCapture`, pendurada no `onEvent` do receptor de hooks |
-| [captura-transcript.ts](captura-transcript.ts) | `extractTranscriptDecisions` (função pura) e `captureTranscriptFile` |
-| [inferencia.ts](inferencia.ts) | A interface do inferidor por modelo pequeno, sem implementação |
+| [registry.ts](registry.ts) | Registrar sem duplicar, cadeia de substituição, confirmar, descartar, reverter, ligar sessões e consultar |
+| [capture-hooks.ts](capture-hooks.ts) | `HookDecisionCapture`, pendurada no `onEvent` do receptor de hooks |
+| [capture-transcript.ts](capture-transcript.ts) | `extractTranscriptDecisions` (função pura) e `captureTranscriptFile` |
+| [inference.ts](inference.ts) | A interface do inferidor por modelo pequeno, sem implementação |
 | [hub.ts](hub.ts) | O que sai para o hub: só metadados, salvo texto liberado |
 
 ```ts
 import { SqliteDecisionStore, HookDecisionCapture, captureTranscriptFile } from '@ahrena-console/nucleo';
 
 const decisions = new SqliteDecisionStore(storage.db);
-const captura = new HookDecisionCapture({ decisions });
-await startHookReceiver({ storage, onEvent: (r) => captura.onEvent(r.event) });
+const capture = new HookDecisionCapture({ decisions });
+await startHookReceiver({ storage, onEvent: (r) => capture.onEvent(r.event) });
 await captureTranscriptFile(decisions, transcriptPath, new Date().toISOString());
 ```
 
@@ -44,7 +44,7 @@ Cada decisão tem um assunto (`topic`). Na mesma família, as decisões vigentes
 
 `linkSession(port, { sessionId, parentSessionId, reason })` liga uma sessão à anterior. Os motivos são `clear`, `compact`, `resume` e `filha`. A sessão entra na família da mãe, e o que ela já tinha decidido vai junto, com número novo. Quem descobre a mãe é a ligação de sessões do histórico (#33). A compactação mantém o `session_id`, então nada muda nela.
 
-`currentDecisionsFor(port, { sessionId, branch, repo }, nivel)` devolve as vigentes que valem para a sessão. É o que a injeção (#100) e a ferramenta MCP (#101) consultam.
+`currentDecisionsFor(port, { sessionId, branch, repo }, level)` devolve as vigentes que valem para a sessão. É o que a injeção (#100) e a ferramenta MCP (#101) consultam.
 
 ## Captura
 

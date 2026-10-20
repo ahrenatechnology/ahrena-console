@@ -3,8 +3,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { clearNeighbours, linkSession } from '../../src/decisoes/registro.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { clearNeighbours, linkSession } from '../../src/decisions/registry.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { at } from '../fixtures.ts';
 
 test('previous and next across /clear; compaction and child do not count', async () => {

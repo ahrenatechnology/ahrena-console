@@ -5,8 +5,8 @@
 
 import { dayOf } from '../cost/aggregation.ts';
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { decisionLabel } from '../decisoes/registro.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { decisionLabel } from '../decisions/registry.ts';
 import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
 import { ESTADOS_VIVOS, minutosDesde, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
 import type { Session } from '../model.ts';

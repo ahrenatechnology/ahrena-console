@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { SessionStateMachine } from '../../src/states/machine.ts';
@@ -28,8 +28,8 @@ import {
   type WaitResult,
 } from '../../src/changes/index.ts';
 import { T0, account, agent, session } from '../fixtures.ts';
-import { draft } from '../decisoes/helpers.ts';
-import { registerDecision } from '../../src/decisoes/registro.ts';
+import { draft } from '../decisions/helpers.ts';
+import { registerDecision } from '../../src/decisions/registry.ts';
 import { ErroDaFerramenta, ErroDeArgumento } from '../../src/mcp/protocolo.ts';
 
 /** Manual clock: `advance(ms)` fires, in order, the timers that are due. */

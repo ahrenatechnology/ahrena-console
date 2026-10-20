@@ -1,9 +1,9 @@
-// Esquema SQLite das decisões. Entra na lista de migrações do adaptador (adapters/sqlite/migrations.ts)
-// como uma migração própria, aditiva: não toca nas tabelas que já existem.
+// SQLite schema of the decisions. It goes into the adapter's migration list (adapters/sqlite/migrations.ts)
+// as a migration of its own, additive: it does not touch the tables that already exist.
 
-export const DECISOES_MIGRATION_DESCRIPTION = 'decisões da sessão e ligação de sessões em família (#99)';
+export const DECISIONS_MIGRATION_DESCRIPTION = 'decisões da sessão e ligação de sessões em família (#99)';
 
-export const DECISOES_MIGRATION_SQL = `
+export const DECISIONS_MIGRATION_SQL = `
   CREATE TABLE decisions (
     id TEXT PRIMARY KEY,
     source_key TEXT NOT NULL,

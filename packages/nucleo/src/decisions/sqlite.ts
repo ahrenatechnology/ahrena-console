@@ -1,10 +1,10 @@
-// Adaptador SQLite da porta das decisões. Usa o mesmo banco do adaptador de armazenamento
-// (`SqliteStorage.db`), que já aplicou a migração das decisões.
+// SQLite adapter of the decisions port. It uses the same database as the storage adapter
+// (`SqliteStorage.db`), which has already applied the decisions migration.
 
 import type { DatabaseSync } from 'node:sqlite';
 import { pageSize, type Page } from '../storage-port.ts';
-import { validateDecision, validateSessionLink, type Decision, type SessionLink } from './modelo.ts';
-import type { DecisionPort, ListDecisionsQuery } from './porta.ts';
+import { validateDecision, validateSessionLink, type Decision, type SessionLink } from './model.ts';
+import type { DecisionPort, ListDecisionsQuery } from './port.ts';
 
 type Row = Record<string, unknown>;
 
