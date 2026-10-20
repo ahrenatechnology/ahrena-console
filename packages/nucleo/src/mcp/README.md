@@ -1,6 +1,6 @@
 # Servidor MCP
 
-O servidor MCP de produção do Ahrena Console (épico 2, a partir da 2.1). Responde **no mesmo processo da API local**, em `POST http://127.0.0.1:4720/mcp`, e também por stdio. Só de leitura, sem sessão (stateless), com no máximo 10 ferramentas e respostas paginadas por tamanho ([proposta 0.0.1](../../../../docs/proposta-0.0.1.md), feature 9).
+O servidor MCP de produção do Ahrena Console (épico 2, a partir da 2.1). Responde **no mesmo processo da API local**, em `POST http://127.0.0.1:<porta>/mcp`, e também por stdio. Desde a #221 ([decisão 0010](../../../../docs/decisoes/0010-core-per-installation.md)) a porta é aleatória, e o caminho para registrar o MCP é a ponte stdio, que acha o núcleo pelo registro de instâncias. Só de leitura, sem sessão (stateless), com no máximo 10 ferramentas e respostas paginadas por tamanho ([proposta 0.0.1](../../../../docs/proposta-0.0.1.md), feature 9).
 
 | Ferramenta | Pergunta | Item |
 | --- | --- | --- |
@@ -10,28 +10,55 @@ O servidor MCP de produção do Ahrena Console (épico 2, a partir da 2.1). Resp
 
 ## Como registrar
 
-Suba o núcleo (`npm run api` em `packages/nucleo`, ou `npm run api -- --demo` para dados sintéticos) e registre o servidor.
+Registre a **ponte stdio** ([cli.ts](cli.ts)). Ela acha o núcleo sozinha e, se não houver nenhum, sobe um; não precisa subir o núcleo antes.
 
-**Claude Code**, por HTTP:
+**Claude Code**, por stdio (Node 24 ou mais novo):
 
 ```bash
-claude mcp add --transport http ahrena-console http://127.0.0.1:4720/mcp
+claude mcp add ahrena-console -- node <checkout>/packages/nucleo/src/mcp/cli.ts
 ```
 
-**Claude Desktop**, por stdio, no `claude_desktop_config.json` (Configurações › Desenvolvedor › Editar configuração). O `command` é o caminho absoluto do Node 24 ou mais novo, porque o Desktop não herda o `PATH` do shell:
+**Claude Desktop**, no `claude_desktop_config.json` (Configurações › Desenvolvedor › Editar configuração). O `command` é o caminho absoluto do Node 24 ou mais novo, porque o Desktop não herda o `PATH` do shell:
 
 ```json
 {
   "mcpServers": {
     "ahrena-console": {
       "command": "/opt/homebrew/bin/node",
-      "args": ["--disable-warning=ExperimentalWarning", "/caminho/do/ahrena-console/packages/nucleo/src/mcp/cli.ts"]
+      "args": ["--disable-warning=ExperimentalWarning", "<checkout>/packages/nucleo/src/mcp/cli.ts"]
     }
   }
 }
 ```
 
-O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e um só processo lendo o banco. Com o núcleo fora do ar, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta o núcleo de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar. Sem `--port`, a ponte usa o dono único ([src/owner](../owner/README.md)): adota o núcleo da trava `~/.ahrena-console/nucleo.json` ou, se não há, sobe um em segundo plano na `AHRENA_CONSOLE_PORT` (ou 4720) com `--parent` nela, e se registra como cliente quando adota. O núcleo sai quando a ponte e todos os clientes registrados saem. `--no-start` só adota. `--port` fala só com aquela porta, sem adotar nem subir. Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
+**Extensão `.mcpb`:** o manifesto da extensão roda a mesma ponte com `--installation mcpb` (e, se quiser a pasta dela, `--data-dir`). Hoje o repositório só tem o spike [spikes/extensao-teste](../../../../spikes/extensao-teste/), que empacota outro servidor (`nucleo-teste`); a extensão de verdade (6.1) passa `--installation mcpb` quando for empacotada.
+
+**Transição:** o registro antigo por HTTP, `claude mcp add --transport http ahrena-console http://127.0.0.1:4720/mcp`, só funciona com um núcleo subido com a porta forçada (`npm run core -- start --port 4720`). Com a porta aleatória, troque pelo stdio acima: `claude mcp remove ahrena-console` e o `claude mcp add` de cima.
+
+### Qual núcleo a ponte usa
+
+O stdio é uma ponte para o `/mcp` de um núcleo que já roda: o mesmo servidor, e um só processo lendo cada banco. A cada pedido, a ponte lê o registro de instâncias (`~/.ahrena-console/instances/`, [src/owner](../owner/README.md)) e escolhe, pela regra de [target.ts](target.ts):
+
+1. o núcleo vivo mais antigo **da instalação dela** (`--installation app|dev|mcpb`, padrão `dev`, o checkout);
+2. o núcleo da instalação dela que ela mesma subiu ou adotou pela trava, se ainda não está no registro (um núcleo de antes da #221);
+3. senão, o núcleo vivo mais antigo de **qualquer** instalação;
+4. sem nenhum da instalação dela, ela pode subir o próprio (`--installation` dela, porta `0` e `--parent` na ponte), em segundo plano:
+   - **`mcpb`** sobe o próprio sempre que não há um da instalação dela: a extensão é autônoma. Enquanto ele sobe, responde pelo item 3;
+   - **`dev`** e **`app`** sobem o próprio só quando **nenhum** núcleo está vivo: um checkout que acha o núcleo do app usa esse, em vez de abrir um segundo banco.
+
+Antes do primeiro pedido a um núcleo, a ponte confere que a porta responde com o pid da entrada (`verifyInstance`): um pid vivo pode ser um número reaproveitado. Um núcleo que não responde é pulado no mesmo pedido, e a ponte tenta o seguinte; como ela lê o registro a cada pedido, segue um núcleo que reiniciou noutra porta. Do núcleo da própria pasta de dados, a ponte se registra como cliente: ele não sai enquanto ela estiver de pé. O núcleo que ela sobe sai quando a ponte e todos os clientes registrados saem.
+
+Com nenhum núcleo respondendo, a ponte responde sozinha `initialize`, `ping` e `tools/list` (as mesmas ferramentas e esquemas), e cada `tools/call` volta com `isError` dizendo como subir o núcleo; o pedido seguinte já tenta de novo. Uma ferramenta registrada só no núcleo (como a da 2.4) aparece na lista quando o cliente reconecta com o núcleo no ar.
+
+| Opção | O quê |
+| --- | --- |
+| `--installation <i>` | `app`, `dev` ou `mcpb` (padrão `dev`): de qual instalação é a ponte |
+| `--data-dir <pasta>` | A pasta de dados do núcleo que ela sobe (padrão: a da instalação) |
+| `--no-start` | Usa um núcleo vivo do registro, mas nunca sobe um |
+| `--port <n>` | Fala só com aquela porta: sem registro, sem subir (o modo antigo) |
+| `AHRENA_CONSOLE_CORE_PORT` ou `AHRENA_CONSOLE_PORT` | A porta forçada do núcleo que ela sobe, em vez da aleatória. A ponte não tem mais a 4720 como padrão |
+
+Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
 
 ## Protocolo
 
@@ -93,9 +120,10 @@ O servidor recusa nome repetido, nome fora do padrão e a 11ª ferramenta. Toda 
 | [protocol.ts](protocol.ts) | `McpServer`: JSON-RPC, negociação de versão, registro e chamada de ferramentas |
 | [http.ts](http.ts) | A rota `/mcp` que o servidor da API monta |
 | [stdio.ts](stdio.ts) | Uma mensagem por linha, e a ponte para o HTTP |
-| [cli.ts](cli.ts) | `npm run mcp`: o stdio para o Claude Desktop |
+| [cli.ts](cli.ts) | `npm run mcp`: a ponte stdio, para o Claude Code, o Claude Desktop e a extensão |
+| [target.ts](target.ts) | Qual núcleo a ponte usa: a regra sobre o registro de instâncias, e quando ela sobe o próprio |
 | [fleet.ts](fleet.ts) | O que as ferramentas leem: vivas com estado e conta, encerradas hoje, custo de hoje, e o motivo de cada espera |
 | [output.ts](output.ts) | Argumentos comuns, paginação por tamanho e limpeza do texto |
 | [tools/](tools/) | Uma ferramenta por arquivo |
 
-Testes em [test/mcp](../../test/mcp/), com fixtures e o cenário do simulador. O [sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts) liga o cliente oficial (`@modelcontextprotocol/sdk` 1.20.2) por HTTP e por stdio e valida cada saída contra o `outputSchema`; ele pede `npm install` em `packages/nucleo` antes do `npm test`.
+Testes em [test/mcp](../../test/mcp/), com fixtures e o cenário do simulador. O [sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts) liga o cliente oficial (`@modelcontextprotocol/sdk` 1.20.2) por HTTP e por stdio e valida cada saída contra o `outputSchema`; ele pede `npm install` em `packages/nucleo` antes do `npm test`. O [bridge.test.ts](../../test/mcp/bridge.test.ts) prova a regra da ponte com um `HOME` falso: a instalação dela primeiro, o vivo mais antigo como reserva, entradas de pid morto ou de pid reaproveitado ignoradas, a `mcpb` subindo o próprio núcleo, e o núcleo que reiniciou noutra porta.
