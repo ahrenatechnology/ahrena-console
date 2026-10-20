@@ -5,6 +5,10 @@ import { describe, test } from 'node:test';
 import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, normalizeLegacyQuery, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
 import { TIPOS_DE_MUDANCA } from '../../src/mudancas/cursor.ts';
 import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
+import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
+import { BUSCA_MAXIMA as HISTORY_SEARCH_MAX, DIAS_MAXIMO } from '../../src/historico/modelo.ts';
+import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
+import { AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -113,7 +117,7 @@ describe('#173 phase 2b: the back-translator', () => {
 
   test('a route whose spec is still empty gives its body back as it is', () => {
     const body = { sessao: 's', texto: 't', itens: [{ estado: 'a_confirmar' }] };
-    for (const path of ['/api/eventos', '/api/projeto/mover']) {
+    for (const path of ['/abrir/x', '/api/projeto/mover']) {
       assert.equal(legacyResponseFor(path)!(body), body, path);
       assert.equal(legacyRequestBody(path, body), body, path);
     }
@@ -346,5 +350,136 @@ describe('every union member of the installed app and the live group answers the
         history,
       );
     }
+  });
+});
+
+// Phase 2b layer 4: the activity feed, the Sessions list and the History, new → the old body on the
+// old route, for every value of their unions and every error that cites a parameter.
+describe('every union member of the feed, the Sessions list and the History answers the old value on the old route', () => {
+  test('events: every status, the main agent and the subagent without a type; a subagent type stays', () => {
+    const route = legacyResponseFor('/api/eventos')!;
+    const AGENT = { [MAIN_AGENT]: 'principal', [SUBAGENT]: 'subagente', 'test-runner': 'test-runner' };
+    for (const status of STATUS_DO_EVENTO)
+      for (const [name, oldName] of Object.entries(AGENT)) {
+        const session = { id: 's', title: 't', project: 'p' };
+        const event = { id: 'e', createdAt: 'c', type: 'Stop', status, tool: null, summary: 'x', session, agent: { id: null, name }, detail: { callId: null, input: 'i' } };
+        assert.equal(
+          JSON.stringify(route({ events: [event], cursor: 'k', older: 'o', options: { types: ['Stop'], tools: ['Bash'], sessions: [session] } })),
+          JSON.stringify({
+            eventos: [{ id: 'e', criadoEm: 'c', tipo: 'Stop', status, ferramenta: null, resumo: 'x', sessao: { id: 's', titulo: 't', projeto: 'p' }, agente: { id: null, nome: oldName }, detalhe: { callId: null, entrada: 'i' } }],
+            cursor: 'k',
+            anteriores: 'o',
+            opcoes: { tipos: ['Stop'], ferramentas: ['Bash'], sessoes: [{ id: 's', titulo: 't', projeto: 'p' }] },
+          }),
+          `${status} ${name}`,
+        );
+      }
+  });
+
+  test('events: every error that cites a parameter cites the old one on the old route', () => {
+    const route = legacyResponseFor('/api/eventos')!;
+    const errors = {
+      [`limit: um inteiro de 1 a ${LIMITE_MAXIMO}`]: `limite: um inteiro de 1 a ${LIMITE_MAXIMO}`,
+      'after e before não se combinam': 'depois e antes não se combinam',
+      'after: cursor inválido': 'depois: cursor inválido',
+      'before: cursor inválido': 'antes: cursor inválido',
+      'type: só letras, números e _, até 64': 'tipo: só letras, números e _, até 64',
+      'session: id de sessão inválido': 'sessao: id de sessão inválido',
+      'tool: nome de ferramenta inválido': 'ferramenta: nome de ferramenta inválido',
+      'status: um de active, waiting, error, completed': 'status: um de active, waiting, error, completed',
+      'search: sem quebras de linha nem caracteres de controle': 'busca: sem quebras de linha nem caracteres de controle',
+      [`search: até ${SEARCH_MAX} caracteres`]: `busca: até ${SEARCH_MAX} caracteres`,
+      'from: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'de: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
+      'to: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)': 'ate: use uma data ISO 8601 (2026-11-02 ou 2026-11-02T12:00:00Z)',
+      'from: depois do to': 'de: depois do ate',
+      'cursor inválido': 'cursor inválido',
+    };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('sessions: every status and reason pass, the row and the page in the old keys and order', () => {
+    const route = legacyResponseFor('/api/sessoes')!;
+    for (const status of [...SESSION_STATUSES, 'waiting'])
+      for (const reason of [...AWAITING_REASONS, null]) {
+        const row = { id: 'i', title: 't', status, reason, lastActivity: 'u', start: 's', running: true, durationMs: 1, agents: 2, costUsd: null, cwd: '/d', account: { label: 'L', color: '#fff' } };
+        assert.equal(
+          JSON.stringify(route({ total: 1, registered: 3, page: 1, perPage: 10, pages: 1, directories: ['/d'], items: [row] })),
+          JSON.stringify({
+            total: 1, registradas: 3, pagina: 1, porPagina: 10, paginas: 1, diretorios: ['/d'],
+            itens: [{ id: 'i', titulo: 't', status, motivo: reason, ultimaAtividade: 'u', inicio: 's', rodando: true, duracaoMs: 1, agentes: 2, custoUsd: null, cwd: '/d', conta: { rotulo: 'L', cor: '#fff' } }],
+          }),
+          `${status} ${reason}`,
+        );
+      }
+  });
+
+  test('sessions: the old `?status=` and `?order=` values become the new ones; the new ones pass', () => {
+    const STATUS = { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' };
+    const ORDER = { atividade: 'activity', duracao: 'duration', custo: 'cost' };
+    assert.deepEqual(Object.values(STATUS), [...FILTROS_DE_STATUS], 'every status filter');
+    assert.deepEqual(Object.values(ORDER), [...ORDENS], 'every order');
+    for (const [old, status] of Object.entries(STATUS)) {
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`), '/api/sessions').get('status'), status, old);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${status}`), '/api/sessions').get('status'), status, status);
+      // Only on the sessions list: elsewhere (`/api/events?status=`) the old value reaches the handler as it came.
+      for (const path of ['', '/api/events', '/api/sessions/s1/events'])
+        assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`), path).get('status'), old, `${path} ${old}`);
+    }
+    for (const [old, order] of Object.entries(ORDER)) {
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`ordem=${old}`), '/api/sessions').get('order'), order, old);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`order=${order}`), '/api/sessions').get('order'), order, order);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`ordem=${old}`), '/api/events').get('order'), old, old);
+    }
+  });
+
+  test('sessions: every error that cites a parameter cites the old one, with the old values', () => {
+    const route = legacyResponseFor('/api/sessoes')!;
+    const errors = {
+      [`status: um de ${FILTROS_DE_STATUS.join(', ')}`]: 'status: um de todas, ativas, esperando, concluidas, erro, abandonadas',
+      [`order: um de ${ORDENS.join(', ')}`]: 'ordem: um de atividade, duracao, custo',
+      'direction: um de desc, asc': 'sentido: um de desc, asc',
+      'page: um inteiro a partir de 1': 'pagina: um inteiro a partir de 1',
+      'search grande demais': 'busca grande demais',
+      'dir: um caminho absoluto': 'dir: um caminho absoluto',
+    };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('history: every final status, the day and the session in the old keys and order, with the /clear neighbours', () => {
+    const route = legacyResponseFor('/api/historico')!;
+    for (const status of SESSION_STATUSES)
+      for (const [previous, next] of [[null, null], [{ id: 'a', title: 'A' }, { id: 'b', title: null }]] as const) {
+        const session = { id: 'i', title: 't', project: 'p', model: 'm', status, start: 's', end: 'e', durationMs: 1, costUsd: 0.5, previous, next };
+        const old = (n: { id: string; title: string | null } | null) => (n ? { id: n.id, titulo: n.title } : null);
+        assert.equal(
+          JSON.stringify(route({ days: [{ day: '2026-10-20', sessions: [session] }], next: '2026-10-19' })),
+          JSON.stringify({
+            dias: [{ dia: '2026-10-20', sessoes: [{ id: 'i', titulo: 't', projeto: 'p', modelo: 'm', status, inicio: 's', fim: 'e', duracaoMs: 1, custoUsd: 0.5, anterior: old(previous), seguinte: old(next) }] }],
+            proximo: '2026-10-19',
+          }),
+          `${status} ${previous?.id ?? 'no neighbours'}`,
+        );
+      }
+  });
+
+  test('history: every error that cites a parameter cites the old one', () => {
+    const route = legacyResponseFor('/api/historico')!;
+    const errors = {
+      'before: um dia AAAA-MM-DD': 'antes: um dia AAAA-MM-DD',
+      [`days: um inteiro de 1 a ${DIAS_MAXIMO}`]: `dias: um inteiro de 1 a ${DIAS_MAXIMO}`,
+      [`search: até ${HISTORY_SEARCH_MAX} caracteres`]: `busca: até ${HISTORY_SEARCH_MAX} caracteres`,
+      'o núcleo subiu sem o histórico': 'o núcleo subiu sem o histórico',
+    };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('the error texts with a limit in them follow the limit: the spec holds the exact current message', () => {
+    // legacy-routes.ts imports nothing, so its keys spell the numbers out; a limit that moves fails here.
+    const has = (route: 'events' | 'history', message: string) =>
+      assert.ok(Object.hasOwn(LEGACY_BODIES[route].response?.values?.['.error'] ?? {}, message), `${route}: ${message}`);
+    has('events', `limit: um inteiro de 1 a ${LIMITE_MAXIMO}`);
+    has('events', `search: até ${SEARCH_MAX} caracteres`);
+    has('history', `days: um inteiro de 1 a ${DIAS_MAXIMO}`);
+    has('history', `search: até ${HISTORY_SEARCH_MAX} caracteres`);
   });
 });

@@ -1,4 +1,4 @@
-// O feed de atividade (#94): GET /api/eventos. Fixtures sintéticas e o simulador, nunca dados reais.
+// O feed de atividade (#94): GET /api/events. Fixtures sintéticas e o simulador, nunca dados reais.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -27,7 +27,7 @@ async function ok(busca = ''): Promise<RespostaDoFeed> {
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   return r.corpo;
 }
-const ids = (r: RespostaDoFeed) => r.eventos.map((e) => e.id);
+const ids = (r: RespostaDoFeed) => r.events.map((e) => e.id);
 
 async function semear() {
   await storage.putSession(session({ id: 's1', name: 'ajuste do login', cwd: '/repo/app' }));
@@ -78,7 +78,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
     await storage.appendEvent(event({ id: 'n', sessionId: 's1', agentId: null, createdAt: em(11), type: 'Notification', toolName: null, summary: 'precisa de permissão', data: { notification_type: 'permission_prompt' } }));
     await storage.appendEvent(event({ id: 's', sessionId: 's1', agentId: null, createdAt: em(38.2), type: 'Stop', toolName: null, summary: null, data: {} }));
     await storage.appendEvent(event({ id: 'e', sessionId: 's1', agentId: null, createdAt: em(40), type: 'StopFailure', toolName: null, summary: 'API Error: 529 {"type":"overloaded_error","message":"segredo"}', data: {} }));
-    const resumo = Object.fromEntries((await ok()).eventos.map((e) => [e.id, e.resumo]));
+    const resumo = Object.fromEntries((await ok()).events.map((e) => [e.id, e.summary]));
     assert.deepEqual(resumo, {
       p: 'Prompt: "rode os testes"',
       f: 'Bash: npm run build',
@@ -92,69 +92,69 @@ describe('#94 GET /api/eventos: a montagem', () => {
     await semear();
     const r = await ok();
     assert.deepEqual(ids(r), ['e6', 'e5', 'e4', 'e3', 'e2', 'e1']);
-    const porId = new Map(r.eventos.map((e) => [e.id, e]));
+    const porId = new Map(r.events.map((e) => [e.id, e]));
     assert.deepEqual(porId.get('e2'), {
       id: 'e2',
-      criadoEm: at(2),
-      tipo: 'PreToolUse',
+      createdAt: at(2),
+      type: 'PreToolUse',
       status: 'active',
-      ferramenta: 'Bash',
-      resumo: 'Bash: npm test',
-      sessao: { id: 's2', titulo: null, projeto: 'api' },
-      agente: { id: null, nome: 'principal' },
-      detalhe: { callId: 'toolu_1', entrada: 'npm test' },
+      tool: 'Bash',
+      summary: 'Bash: npm test',
+      session: { id: 's2', title: null, project: 'api' },
+      agent: { id: null, name: 'main' },
+      detail: { callId: 'toolu_1', input: 'npm test' },
     } satisfies EventoDoFeed);
-    assert.deepEqual(porId.get('e3')?.agente, { id: 's1:main', nome: 'principal' });
-    assert.deepEqual(porId.get('e3')?.detalhe, { callId: 'toolu_2', entrada: '/repo/app/a.ts' });
-    assert.deepEqual(porId.get('e3')?.sessao, { id: 's1', titulo: 'ajuste do login', projeto: 'app' });
-    assert.deepEqual(porId.get('e4')?.agente, { id: 's1:sub1', nome: 'revisor' }, 'o agent_id do hook acha o subagente <sessão>:<id>');
+    assert.deepEqual(porId.get('e3')?.agent, { id: 's1:main', name: 'main' });
+    assert.deepEqual(porId.get('e3')?.detail, { callId: 'toolu_2', input: '/repo/app/a.ts' });
+    assert.deepEqual(porId.get('e3')?.session, { id: 's1', title: 'ajuste do login', project: 'app' });
+    assert.deepEqual(porId.get('e4')?.agent, { id: 's1:sub1', name: 'revisor' }, 'o agent_id do hook acha o subagente <sessão>:<id>');
     assert.equal(porId.get('e4')?.status, 'waiting');
     assert.equal(porId.get('e5')?.status, 'error');
     assert.equal(porId.get('e6')?.status, 'completed');
-    assert.deepEqual(porId.get('e1')?.detalhe, { callId: null, entrada: null });
+    assert.deepEqual(porId.get('e1')?.detail, { callId: null, input: null });
     assert.ok(r.cursor);
-    assert.equal(r.anteriores, null);
+    assert.equal(r.older, null);
   });
 
   test('sem evento nenhum: lista vazia, e o cursor do ao vivo já no começo', async () => {
     const r = await ok();
-    assert.deepEqual(r.eventos, []);
+    assert.deepEqual(r.events, []);
     assert.ok(r.cursor);
-    assert.equal(r.anteriores, null);
-    assert.deepEqual(r.opcoes, { tipos: [], ferramentas: [], sessoes: [] });
+    assert.equal(r.older, null);
+    assert.deepEqual(r.options, { types: [], tools: [], sessions: [] });
   });
 
   test('as opções só vêm no primeiro pedido', async () => {
     await semear();
     const r = await ok('limite=2');
-    assert.deepEqual(r.opcoes?.tipos, ['APIError', 'Notification', 'PreToolUse', 'SessionEnd', 'ToolUse', 'UserPromptSubmit']);
-    assert.deepEqual(r.opcoes?.ferramentas, ['Bash', 'Read']);
+    assert.deepEqual(r.options?.types, ['APIError', 'Notification', 'PreToolUse', 'SessionEnd', 'ToolUse', 'UserPromptSubmit']);
+    assert.deepEqual(r.options?.tools, ['Bash', 'Read']);
     assert.deepEqual(
-      r.opcoes?.sessoes.map((s) => s.id).sort(),
+      r.options?.sessions.map((s) => s.id).sort(),
       ['s1', 's2'],
     );
-    assert.deepEqual(r.opcoes?.sessoes.find((s) => s.id === 's1'), { id: 's1', titulo: 'ajuste do login', projeto: 'app' });
-    assert.equal((await ok(`antes=${r.anteriores}`)).opcoes, null);
-    assert.equal((await ok(`depois=${r.cursor}`)).opcoes, null);
+    assert.deepEqual(r.options?.sessions.find((s) => s.id === 's1'), { id: 's1', title: 'ajuste do login', project: 'app' });
+    assert.equal((await ok(`antes=${r.older}`)).options, null);
+    assert.equal((await ok(`depois=${r.cursor}`)).options, null);
   });
 
   test('paginação por antes, até acabar', async () => {
     await semear();
     const p1 = await ok('limite=4');
     assert.deepEqual(ids(p1), ['e6', 'e5', 'e4', 'e3']);
-    assert.ok(p1.anteriores);
-    const p2 = await ok(`limite=4&antes=${p1.anteriores}`);
+    assert.ok(p1.older);
+    const p2 = await ok(`limite=4&antes=${p1.older}`);
     assert.deepEqual(ids(p2), ['e2', 'e1']);
-    assert.equal(p2.anteriores, null);
+    assert.equal(p2.older, null);
   });
 
   test('ao vivo por depois: o novo e o atrasado (createdAt mais velho), e o cursor repete sem nada novo', async () => {
     await semear();
     const p = await ok();
     const nada = await ok(`depois=${p.cursor}`);
-    assert.deepEqual(nada.eventos, []);
+    assert.deepEqual(nada.events, []);
     assert.equal(nada.cursor, p.cursor);
-    assert.equal(nada.anteriores, null);
+    assert.equal(nada.older, null);
 
     await storage.appendEvent(event({ id: 'novo', sessionId: 's1', agentId: null, createdAt: at(10), type: 'Stop', toolName: null, summary: null, data: {} }));
     await storage.appendEvent(event({ id: 'atrasado', sessionId: 's1', agentId: null, createdAt: at(0), type: 'ToolResult', toolName: 'Read', summary: 'ok', data: {} }));
@@ -199,7 +199,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
       'limite=201',
       'limite=abc',
       'limite=1.5',
-      `depois=${p.cursor}&antes=${p.anteriores}`,
+      `depois=${p.cursor}&antes=${p.older}`,
       'depois=lixo',
       'antes=lixo',
       `depois=${'a'.repeat(600)}`,
@@ -247,17 +247,17 @@ describe('#94 GET /api/eventos: a montagem', () => {
       }),
     );
     const r = await ok();
-    const [e] = r.eventos;
+    const [e] = r.events;
     const tam = (s: string | null) => Array.from(s ?? '').length;
-    assert.equal(tam(e.resumo), 300);
-    assert.ok(e.resumo?.endsWith('…'));
-    assert.equal(tam(e.detalhe.entrada), 300);
-    assert.ok(!e.detalhe.entrada?.includes('\n'));
-    assert.equal(tam(e.detalhe.callId), 64);
-    assert.equal(tam(e.sessao.titulo), 120);
-    assert.ok(!e.sessao.titulo?.includes('\n'));
-    assert.equal(tam(e.sessao.projeto), 120);
-    assert.equal(tam(e.agente.nome), 60);
+    assert.equal(tam(e.summary), 300);
+    assert.ok(e.summary?.endsWith('…'));
+    assert.equal(tam(e.detail.input), 300);
+    assert.ok(!e.detail.input?.includes('\n'));
+    assert.equal(tam(e.detail.callId), 64);
+    assert.equal(tam(e.session.title), 120);
+    assert.ok(!e.session.title?.includes('\n'));
+    assert.equal(tam(e.session.project), 120);
+    assert.equal(tam(e.agent.name), 60);
     const texto = JSON.stringify(r);
     assert.ok(!texto.includes(segredo), 'o data cru não sai');
     assert.ok(!('data' in e));
@@ -287,17 +287,18 @@ describe('#94 GET /api/eventos: a rota HTTP, ponta a ponta', () => {
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
     const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, eventos: feed });
     try {
-      const r = await fetch(`${api.url}/api/eventos?limite=5`);
+      const r = await fetch(`${api.url}/api/events?limit=5`);
       assert.equal(r.status, 200);
       assert.match(r.headers.get('content-type') ?? '', /application\/json/);
       const corpo = (await r.json()) as RespostaDoFeed;
-      assert.equal(corpo.eventos.length, 5);
+      assert.equal(corpo.events.length, 5);
       assert.ok(corpo.cursor);
-      assert.ok(corpo.opcoes);
-      for (let i = 1; i < corpo.eventos.length; i++) assert.ok(corpo.eventos[i - 1].criadoEm >= corpo.eventos[i].criadoEm);
-      const mais = (await (await fetch(`${api.url}/api/eventos?limite=5&antes=${corpo.anteriores}`)).json()) as RespostaDoFeed;
-      assert.equal(mais.opcoes, null);
-      assert.ok(mais.eventos.every((e) => !corpo.eventos.some((x) => x.id === e.id)));
+      assert.ok(corpo.options);
+      for (let i = 1; i < corpo.events.length; i++) assert.ok(corpo.events[i - 1].createdAt >= corpo.events[i].createdAt);
+      const mais = (await (await fetch(`${api.url}/api/events?limit=5&before=${corpo.older}`)).json()) as RespostaDoFeed;
+      assert.equal(mais.options, null);
+      assert.ok(mais.events.every((e) => !corpo.events.some((x) => x.id === e.id)));
+      assert.deepEqual(await (await fetch(`${api.url}/api/events?limit=0`)).json(), { error: 'limit: um inteiro de 1 a 200' }, 'the error cites the new parameter');
 
       assert.equal((await fetch(`${api.url}/api/eventos?limite=0`)).status, 400);
       assert.equal((await fetch(`${api.url}/api/eventos`, { method: 'POST' })).status, 405);

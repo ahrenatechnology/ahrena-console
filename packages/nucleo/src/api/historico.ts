@@ -6,7 +6,8 @@
 // - `days` (opcional, padrão 7, máximo 31): quantos dias com sessão encerrada por página.
 // - `search` (opcional, até 100 caracteres): substring sem diferenciar maiúsculas no título, no id e no projeto.
 // - Parâmetro inválido: 400 `{ error }`. Sem o histórico ligado na API: 404.
-// Resposta 200: `{ dias: [{ dia, sessoes: ItemDoHistorico[] }], proximo }` (src/historico/leitura.ts).
+// Resposta 200: `{ days: [{ day, sessions: ItemDoHistorico[] }], next }` (src/historico/leitura.ts);
+// the old route `/api/historico` answers it in the old keys (src/api/legacy-routes.ts).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';

@@ -14,7 +14,10 @@
 // O cursor do ao vivo segue a ordem de GRAVAÇÃO (ver `ListRecentEventsQuery` na porta): o evento
 // que o transcript grava atrasado, com `createdAt` mais velho, também chega. O lote do ao vivo vem
 // ordenado por `createdAt` como o resto; quem mostra decide onde encaixá-lo. Se o lote veio cheio
-// (`eventos.length === limit`), há mais: peça de novo com o `cursor` novo.
+// (`events.length === limit`), há mais: peça de novo com o `cursor` novo.
+//
+// The body is English since phase 2b of #173 (`{ events, cursor, older, options }`); the old route
+// `/api/eventos` answers it in the old keys (src/api/legacy-routes.ts).
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
@@ -52,42 +55,48 @@ export function statusDoEvento(tipo: string): StatusDoEvento {
 
 export interface SessaoDoFeed {
   id: string;
-  titulo: string | null;
-  projeto: string | null;
+  title: string | null;
+  project: string | null;
 }
+
+/** The agent of an event: `main` for the main agent; a subagent by its type, or `subagent` without one. */
+export const MAIN_AGENT = 'main';
+export const SUBAGENT = 'subagent';
 
 export interface EventoDoFeed {
   id: string;
-  criadoEm: string;
-  tipo: string;
+  createdAt: string;
+  type: string;
   status: StatusDoEvento;
-  ferramenta: string | null;
-  resumo: string | null;
-  sessao: SessaoDoFeed;
-  agente: { id: string | null; nome: string };
-  detalhe: { callId: string | null; entrada: string | null };
+  tool: string | null;
+  summary: string | null;
+  session: SessaoDoFeed;
+  agent: { id: string | null; name: string };
+  detail: { callId: string | null; input: string | null };
 }
 
 export interface OpcoesDoFeed {
-  tipos: string[];
-  ferramentas: string[];
-  sessoes: SessaoDoFeed[];
+  types: string[];
+  tools: string[];
+  sessions: SessaoDoFeed[];
 }
 
 export interface RespostaDoFeed {
-  eventos: EventoDoFeed[];
-  /** Para `depois` no próximo pedido do ao vivo. */
+  events: EventoDoFeed[];
+  /** Para `after` no próximo pedido do ao vivo. */
   cursor: string | null;
-  /** Para `antes`; `null` quando acabou. */
-  anteriores: string | null;
-  /** Só no pedido sem `depois` e sem `antes`. */
-  opcoes: OpcoesDoFeed | null;
+  /** Para `before`; `null` quando acabou. */
+  older: string | null;
+  /** Só no pedido sem `after` e sem `before`. */
+  options: OpcoesDoFeed | null;
 }
 
 export const LIMITE_PADRAO = 50;
 export const LIMITE_MAXIMO = 200;
 const MAX_OPCOES = 100;
-const MAX = { id: 128, tipo: 64, ferramenta: 128, resumo: 300, titulo: 120, projeto: 120, agente: 60, callId: 64, entrada: 300, busca: 100 };
+/** The longest `?search=` the feed takes. */
+export const SEARCH_MAX = 100;
+const MAX = { id: 128, tipo: 64, ferramenta: 128, resumo: 300, titulo: 120, projeto: 120, agente: 60, callId: 64, entrada: 300, busca: SEARCH_MAX };
 
 const TIPO = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
@@ -138,7 +147,7 @@ function entradaDe(data: Json | null): string | null {
   return null;
 }
 
-function dataDoParametro(nome: 'de' | 'ate', v: string): { inicio: number; dia: boolean } {
+function dataDoParametro(nome: 'from' | 'to', v: string): { inicio: number; dia: boolean } {
   const dia = DATA.test(v);
   const ms = dia || DATA_HORA.test(v) ? Date.parse(v) : Number.NaN;
   // `Date.parse` aceita 2026-02-30 (vira março): a data sem hora tem de voltar igual.
@@ -163,29 +172,29 @@ function lerPedido(p: URLSearchParams): Pedido {
   const limite = v('limit');
   if (limite !== null) {
     const n = NUMERO.test(limite) ? Number(limite) : 0;
-    if (n < 1 || n > LIMITE_MAXIMO) throw new ErroDoPedido(`limite: um inteiro de 1 a ${LIMITE_MAXIMO}`);
+    if (n < 1 || n > LIMITE_MAXIMO) throw new ErroDoPedido(`limit: um inteiro de 1 a ${LIMITE_MAXIMO}`);
     query.limit = n;
   }
 
   const depois = v('after');
   const antes = v('before');
-  if (depois !== null && antes !== null) throw new ErroDoPedido('depois e antes não se combinam');
-  for (const [nome, c] of [['depois', depois], ['antes', antes]] as const) {
+  if (depois !== null && antes !== null) throw new ErroDoPedido('after e before não se combinam');
+  for (const [nome, c] of [['after', depois], ['before', antes]] as const) {
     if (c !== null && !CURSOR.test(c)) throw new ErroDoPedido(`${nome}: cursor inválido`);
   }
   if (depois !== null) query.after = depois;
   if (antes !== null) query.before = antes;
 
   const tipo = v('type');
-  if (tipo !== null && !TIPO.test(tipo)) throw new ErroDoPedido('tipo: só letras, números e _, até 64');
+  if (tipo !== null && !TIPO.test(tipo)) throw new ErroDoPedido('type: só letras, números e _, até 64');
   const sessao = v('session');
   if (sessao !== null) {
-    if (!ID.test(sessao)) throw new ErroDoPedido('sessao: id de sessão inválido');
+    if (!ID.test(sessao)) throw new ErroDoPedido('session: id de sessão inválido');
     query.sessionId = sessao;
   }
   const ferramenta = v('tool');
   if (ferramenta !== null) {
-    if (!FERRAMENTA.test(ferramenta)) throw new ErroDoPedido('ferramenta: nome de ferramenta inválido');
+    if (!FERRAMENTA.test(ferramenta)) throw new ErroDoPedido('tool: nome de ferramenta inválido');
     query.toolName = ferramenta;
   }
 
@@ -205,21 +214,21 @@ function lerPedido(p: URLSearchParams): Pedido {
 
   const busca = p.get('search');
   if (busca !== null) {
-    if (CONTROLES.test(busca)) throw new ErroDoPedido('busca: sem quebras de linha nem caracteres de controle');
+    if (CONTROLES.test(busca)) throw new ErroDoPedido('search: sem quebras de linha nem caracteres de controle');
     const t = busca.trim();
-    if ([...t].length > MAX.busca) throw new ErroDoPedido(`busca: até ${MAX.busca} caracteres`);
+    if ([...t].length > MAX.busca) throw new ErroDoPedido(`search: até ${MAX.busca} caracteres`);
     if (t) query.text = t;
   }
 
   const de = v('from');
   const ate = v('to');
-  const inicio = de === null ? null : dataDoParametro('de', de).inicio;
+  const inicio = de === null ? null : dataDoParametro('from', de).inicio;
   let fim: number | null = null;
   if (ate !== null) {
-    const d = dataDoParametro('ate', ate);
+    const d = dataDoParametro('to', ate);
     fim = d.dia ? d.inicio + DIA_MS : d.inicio + 1;
   }
-  if (inicio !== null && fim !== null && inicio >= fim) throw new ErroDoPedido('de: depois do ate');
+  if (inicio !== null && fim !== null && inicio >= fim) throw new ErroDoPedido('from: depois do to');
   if (inicio !== null) query.createdFrom = new Date(inicio).toISOString();
   if (fim !== null) query.createdUntil = new Date(fim).toISOString();
 
@@ -237,8 +246,8 @@ export interface OpcoesDoFeedDeEventos {
 
 const sessaoDoFeed = (id: string, s: Session | null): SessaoDoFeed => ({
   id: textoDeUmaLinha(id, MAX.id) ?? '',
-  titulo: textoDeUmaLinha(s?.name, MAX.titulo),
-  projeto: s?.cwd ? textoDeUmaLinha(basename(s.cwd), MAX.projeto) : null,
+  title: textoDeUmaLinha(s?.name, MAX.titulo),
+  project: s?.cwd ? textoDeUmaLinha(basename(s.cwd), MAX.projeto) : null,
 });
 
 /** Monta a resposta do feed. Sessões e agentes do lote são lidos uma vez por pedido. */
@@ -266,7 +275,7 @@ export class FeedDeEventos {
     }
     const eventos = await this.montar(pagina.items);
     const opcoes = pedido.inicial ? await this.opcoes() : null;
-    return { status: 200, corpo: { eventos, cursor: pagina.liveCursor, anteriores: pagina.nextCursor, opcoes } };
+    return { status: 200, corpo: { events: eventos, cursor: pagina.liveCursor, older: pagina.nextCursor, options: opcoes } };
   }
 
   private async montar(items: SessionEvent[]): Promise<EventoDoFeed[]> {
@@ -314,20 +323,20 @@ export class FeedDeEventos {
         const principal = e.agentId === null || a?.type === 'main' || (!a && e.agentId.endsWith(':main'));
         return {
           id: textoDeUmaLinha(e.id, MAX.id) ?? '',
-          criadoEm: e.createdAt,
-          tipo: textoDeUmaLinha(e.type, MAX.tipo) ?? '',
+          createdAt: e.createdAt,
+          type: textoDeUmaLinha(e.type, MAX.tipo) ?? '',
           status: statusDoEvento(e.type),
-          ferramenta: textoDeUmaLinha(e.toolName, MAX.ferramenta),
+          tool: textoDeUmaLinha(e.toolName, MAX.ferramenta),
           // A frase legível; sem uma, o resumo cru do evento, e por fim o tipo.
-          resumo: textoDeUmaLinha(fraseDoEvento(e, ctx) ?? e.summary ?? e.type, MAX.resumo),
-          sessao: sessaoDoFeed(e.sessionId, s),
-          agente: {
+          summary: textoDeUmaLinha(fraseDoEvento(e, ctx) ?? e.summary ?? e.type, MAX.resumo),
+          session: sessaoDoFeed(e.sessionId, s),
+          agent: {
             id: textoDeUmaLinha(a?.id ?? e.agentId, MAX.id),
-            nome: principal ? 'principal' : (textoDeUmaLinha(a?.subagentType ?? a?.name, MAX.agente) ?? 'subagente'),
+            name: principal ? MAIN_AGENT : (textoDeUmaLinha(a?.subagentType ?? a?.name, MAX.agente) ?? SUBAGENT),
           },
-          detalhe: {
+          detail: {
             callId: textoDeUmaLinha(data?.tool_use_id ?? data?.toolUseId, MAX.callId),
-            entrada: entradaDe(data),
+            input: entradaDe(data),
           },
         };
       }),
@@ -338,9 +347,9 @@ export class FeedDeEventos {
     const [facetas, sessoes] = await Promise.all([this.storage.listEventFacets(MAX_OPCOES), this.storage.listSessions({ limit: MAX_OPCOES })]);
     const lista = (vs: string[], max: number) => vs.map((x) => textoDeUmaLinha(x, max)).filter((x): x is string => x !== null);
     return {
-      tipos: lista(facetas.types, MAX.tipo),
-      ferramentas: lista(facetas.toolNames, MAX.ferramenta),
-      sessoes: sessoes.items.map((s) => sessaoDoFeed(s.id, s)),
+      types: lista(facetas.types, MAX.tipo),
+      tools: lista(facetas.toolNames, MAX.ferramenta),
+      sessions: sessoes.items.map((s) => sessaoDoFeed(s.id, s)),
     };
   }
 }

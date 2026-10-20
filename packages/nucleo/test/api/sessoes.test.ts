@@ -1,4 +1,4 @@
-// A tela Sessões (C3, #28): a rota `GET /api/sessoes` (filtros, ordem e página no servidor) com
+// A tela Sessões (C3, #28): a rota `GET /api/sessions` (filtros, ordem e página no servidor) com
 // dados do simulador, e as peças da tela que não precisam de navegador.
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromS
 import { findScreen } from '../../ui/screens.js';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
-const PADRAO: PedidoDeSessoes = { status: 'todas', busca: null, dir: null, ordem: 'atividade', sentido: 'desc', pagina: 1 };
+const PADRAO: PedidoDeSessoes = { status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1 };
 
 function pedir(url: string, caminho: string, headers: Record<string, string> = {}): Promise<{ status: number; corpo: string }> {
   const { hostname, port } = new URL(url);
@@ -32,7 +32,7 @@ function pedir(url: string, caminho: string, headers: Record<string, string> = {
   });
 }
 
-describe('#28 GET /api/sessoes com o simulador', () => {
+describe('#28 GET /api/sessions com o simulador', () => {
   let storage: SqliteStorage;
   let lista: ListaDeSessoes;
   let sessoes: Session[];
@@ -41,8 +41,8 @@ describe('#28 GET /api/sessoes com o simulador', () => {
   // Todas as páginas de um pedido, juntas.
   const tudo = async (p: Partial<PedidoDeSessoes> = {}) => {
     const primeira = await listar(p);
-    const itens = [...primeira.itens];
-    for (let pagina = 2; pagina <= primeira.paginas; pagina++) itens.push(...(await listar({ ...p, pagina })).itens);
+    const itens = [...primeira.items];
+    for (let pagina = 2; pagina <= primeira.pages; pagina++) itens.push(...(await listar({ ...p, pagina })).items);
     return { primeira, itens };
   };
 
@@ -69,28 +69,28 @@ describe('#28 GET /api/sessoes com o simulador', () => {
 
   test('10 por página: a segunda traz o resto, sem repetir; página além do fim cai na última', async () => {
     const p1 = await listar();
-    assert.equal(p1.porPagina, 10);
-    assert.equal(p1.itens.length, 10);
+    assert.equal(p1.perPage, 10);
+    assert.equal(p1.items.length, 10);
     assert.equal(p1.total, sessoes.length);
-    assert.equal(p1.registradas, sessoes.length);
-    assert.equal(p1.paginas, Math.ceil(sessoes.length / 10));
+    assert.equal(p1.registered, sessoes.length);
+    assert.equal(p1.pages, Math.ceil(sessoes.length / 10));
     const { itens } = await tudo();
     assert.equal(itens.length, sessoes.length);
     assert.equal(new Set(itens.map((s) => s.id)).size, sessoes.length);
     const alem = await listar({ pagina: 99 });
-    assert.equal(alem.pagina, p1.paginas);
-    assert.ok(alem.itens.length > 0);
+    assert.equal(alem.page, p1.pages);
+    assert.ok(alem.items.length > 0);
   });
 
   test('cada pílula traz só o seu status, e as cinco somam o total', async () => {
-    const DO_FILTRO = { ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' } as const;
     let soma = 0;
-    for (const [filtro, status] of Object.entries(DO_FILTRO)) {
+    for (const status of ['active', 'waiting', 'completed', 'error', 'abandoned'] as const) {
+      const filtro = status;
       const { primeira, itens } = await tudo({ status: filtro as PedidoDeSessoes['status'] });
       assert.ok(itens.length > 0, filtro);
       for (const s of itens) assert.equal(s.status, status, `${filtro}: ${s.id}`);
       assert.equal(primeira.total, sessoes.filter((s) => displayStatus(s) === status).length, filtro);
-      assert.equal(primeira.registradas, sessoes.length, 'o total registrado não depende do filtro');
+      assert.equal(primeira.registered, sessoes.length, 'o total registrado não depende do filtro');
       soma += primeira.total;
     }
     assert.equal(soma, sessoes.length);
@@ -99,50 +99,50 @@ describe('#28 GET /api/sessoes com o simulador', () => {
   test('esperando traz o motivo; as outras não', async () => {
     const { itens } = await tudo();
     for (const s of itens) {
-      if (s.status === 'waiting') assert.ok(['notification', 'interrupted', 'stop', 'session_start'].includes(s.motivo!), s.id);
-      else assert.equal(s.motivo, null, s.id);
-      assert.equal(s.rodando, s.status === 'active' || s.status === 'waiting');
+      if (s.status === 'waiting') assert.ok(['notification', 'interrupted', 'stop', 'session_start'].includes(s.reason!), s.id);
+      else assert.equal(s.reason, null, s.id);
+      assert.equal(s.running, s.status === 'active' || s.status === 'waiting');
     }
   });
 
   test('a busca acha pelo título, pelo id e pelo diretório, sem diferença de caixa', async () => {
     const porTitulo = await listar({ busca: 'SEPARAR PAGAMENTOS' });
-    assert.deepEqual(porTitulo.itens.map((s) => s.id), [SESSAO_DO_PAINEL]);
+    assert.deepEqual(porTitulo.items.map((s) => s.id), [SESSAO_DO_PAINEL]);
     const alvo = sessoes.find((s) => s.id !== SESSAO_DO_PAINEL)!;
-    assert.ok((await listar({ busca: alvo.id })).itens.some((s) => s.id === alvo.id));
+    assert.ok((await listar({ busca: alvo.id })).items.some((s) => s.id === alvo.id));
     const porDir = await tudo({ busca: 'vitrine-demo' });
-    assert.ok(porDir.itens.length > 0 && porDir.itens.every((s) => s.cwd?.includes('vitrine-demo') || s.titulo.toLowerCase().includes('vitrine-demo')));
+    assert.ok(porDir.itens.length > 0 && porDir.itens.every((s) => s.cwd?.includes('vitrine-demo') || s.title.toLowerCase().includes('vitrine-demo')));
     assert.equal((await listar({ busca: 'nada-com-isso-aqui' })).total, 0);
   });
 
   test('o filtro por diretório usa a lista que a própria resposta traz', async () => {
-    const { diretorios } = await listar();
-    assert.deepEqual(diretorios, [...diretorios].sort());
-    assert.equal(diretorios.length, new Set(sessoes.map((s) => s.cwd).filter(Boolean)).size);
-    for (const dir of diretorios) {
+    const { directories } = await listar();
+    assert.deepEqual(directories, [...directories].sort());
+    assert.equal(directories.length, new Set(sessoes.map((s) => s.cwd).filter(Boolean)).size);
+    for (const dir of directories) {
       const { primeira, itens } = await tudo({ dir });
       assert.ok(itens.every((s) => s.cwd === dir), dir);
       assert.equal(primeira.total, sessoes.filter((s) => s.cwd === dir).length, dir);
     }
     // Combinado com o status.
     const dir = sessoes.find((s) => displayStatus(s) === 'completed')!.cwd!;
-    const { itens } = await tudo({ dir, status: 'concluidas' });
+    const { itens } = await tudo({ dir, status: 'completed' });
     assert.ok(itens.length > 0 && itens.every((s) => s.cwd === dir && s.status === 'completed'));
   });
 
   test('ordem por atividade, duração e custo, nos dois sentidos', async () => {
     const ordenado = (xs: number[], sentido: 'desc' | 'asc') => xs.every((x, i) => i === 0 || (sentido === 'desc' ? xs[i - 1]! >= x : xs[i - 1]! <= x));
     for (const sentido of ['desc', 'asc'] as const) {
-      const atividade = (await tudo({ ordem: 'atividade', sentido })).itens.map((s) => Date.parse(s.ultimaAtividade));
+      const atividade = (await tudo({ ordem: 'activity', sentido })).itens.map((s) => Date.parse(s.lastActivity));
       assert.ok(ordenado(atividade, sentido), `atividade ${sentido}`);
-      const dur = (await tudo({ ordem: 'duracao', sentido })).itens.map((s) => s.duracaoMs);
+      const dur = (await tudo({ ordem: 'duration', sentido })).itens.map((s) => s.durationMs);
       assert.ok(ordenado(dur, sentido), `duração ${sentido}`);
-      const usd = (await tudo({ ordem: 'custo', sentido })).itens.map((s) => s.custoUsd ?? -1);
+      const usd = (await tudo({ ordem: 'cost', sentido })).itens.map((s) => s.costUsd ?? -1);
       assert.ok(ordenado(usd, sentido), `custo ${sentido}`);
     }
     // O simulador grava preços: há sessão com custo, e a mais cara vem primeiro.
-    const caras = await listar({ ordem: 'custo' });
-    assert.ok(caras.itens[0]!.custoUsd! > 0);
+    const caras = await listar({ ordem: 'cost' });
+    assert.ok(caras.items[0]!.costUsd! > 0);
   });
 
   test('duração: a ativa corre até agora; a encerrada para no fim', async () => {
@@ -150,15 +150,15 @@ describe('#28 GET /api/sessoes com o simulador', () => {
     for (const s of itens) {
       const sessao = sessoes.find((x) => x.id === s.id)!;
       const fim = sessao.status === 'active' ? AGORA : Date.parse(sessao.endedAt ?? sessao.updatedAt);
-      assert.equal(s.duracaoMs, Math.max(0, fim - Date.parse(sessao.startedAt)), s.id);
+      assert.equal(s.durationMs, Math.max(0, fim - Date.parse(sessao.startedAt)), s.id);
     }
   });
 
   test('a conta sai com rótulo e cor, nunca o id (decisão 0006)', async () => {
     const { itens } = await tudo();
-    const comConta = itens.filter((s) => s.conta);
+    const comConta = itens.filter((s) => s.account);
     assert.ok(comConta.length > 0);
-    for (const s of comConta) assert.deepEqual(Object.keys(s.conta!).sort(), ['cor', 'rotulo']);
+    for (const s of comConta) assert.deepEqual(Object.keys(s.account!).sort(), ['color', 'label']);
     const contas = await storage.listAccounts();
     const json = JSON.stringify(itens);
     for (const c of contas) {
@@ -168,10 +168,26 @@ describe('#28 GET /api/sessoes com o simulador', () => {
   });
 
   test('HTTP: a rota responde, recusa parâmetro inválido com 400 e aceita a própria /ui lendo', async () => {
-    const ok = await pedir(api.url, '/api/sessoes?status=esperando&ordem=custo&sentido=asc&pagina=1');
+    const ok = await pedir(api.url, '/api/sessions?status=waiting&order=cost&direction=asc&page=1');
     assert.equal(ok.status, 200);
     const corpo = JSON.parse(ok.corpo) as ListaDeSessoesHttp;
-    assert.ok(corpo.itens.every((s) => s.status === 'waiting'));
+    assert.ok(corpo.items.every((s) => s.status === 'waiting'));
+    // The old values are still accepted (ENGLISH_VALUES_BY_PATH), on the new route too.
+    assert.equal((await pedir(api.url, '/api/sessions?status=esperando&order=custo&direction=asc&page=1')).corpo, ok.corpo);
+    const erros: Record<string, string> = {
+      'status=nenhuma': 'status: um de all, active, waiting, completed, error, abandoned',
+      'order=nome': 'order: um de activity, duration, cost',
+      'direction=lado': 'direction: um de desc, asc',
+      'page=0': 'page: um inteiro a partir de 1',
+      'page=1.5': 'page: um inteiro a partir de 1',
+      'dir=relativo': 'dir: um caminho absoluto',
+      [`search=${'x'.repeat(201)}`]: 'search grande demais',
+    };
+    for (const [q, error] of Object.entries(erros)) {
+      const r = await pedir(api.url, `/api/sessions?${q}`);
+      assert.equal(r.status, 400, q);
+      assert.deepEqual(JSON.parse(r.corpo), { error }, q);
+    }
     for (const q of ['status=nenhuma', 'ordem=nome', 'sentido=lado', 'pagina=0', 'pagina=1.5', 'dir=relativo', `busca=${'x'.repeat(201)}`]) {
       const r = await pedir(api.url, `/api/sessoes?${q}`);
       assert.equal(r.status, 400, q);
@@ -199,18 +215,20 @@ describe('#28 a tela Sessões', () => {
   });
 
   test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = stateFromQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2');
-    assert.deepEqual(e, { status: 'esperando', search: 'oi', dir: '/simulacao/x', order: 'custo', direction: 'asc', page: 2 });
+    const e = stateFromQuery('?status=waiting&search=oi&dir=/simulacao/x&order=cost&direction=asc&page=2');
+    assert.deepEqual(e, { status: 'waiting', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
     assert.deepEqual(stateFromQuery(queryFromState(e)), e);
+    assert.equal(queryFromState(e), '?status=waiting&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
+    // An old bookmark's values (`esperando`, `custo`) are the shell's job (legacyUrl, ui.test.ts).
     assert.equal(queryFromState(stateFromQuery('')), '');
     assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });
 
   test('a rota da API leva os filtros que o servidor entende', () => {
-    const rota = listRoute({ status: 'erro', search: ' a b ', dir: '/d', order: 'duracao', direction: 'desc', page: 2 });
+    const rota = listRoute({ status: 'error', search: ' a b ', dir: '/d', order: 'duration', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
-    assert.deepEqual(pedidoDeSessoes(url), { status: 'erro', busca: 'a b', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
+    assert.deepEqual(pedidoDeSessoes(url), { status: 'error', busca: 'a b', dir: '/d', ordem: 'duration', sentido: 'desc', pagina: 2 });
     assert.ok(!new URL(listRoute(stateFromQuery('')), 'http://x').searchParams.has('search'));
   });
 
@@ -228,9 +246,9 @@ describe('#28 a tela Sessões', () => {
     assert.equal(cost(1.84), '~US$ 1,84');
     assert.equal(cost(0), '~US$ 0,00');
     assert.equal(cost(null), 'sem preço');
-    assert.equal(band({ total: 12, pagina: 1, porPagina: 10 }), '1–10 de 12');
-    assert.equal(band({ total: 12, pagina: 2, porPagina: 10 }), '11–12 de 12');
-    assert.equal(band({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
+    assert.equal(band({ total: 12, page: 1, perPage: 10 }), '1–10 de 12');
+    assert.equal(band({ total: 12, page: 2, perPage: 10 }), '11–12 de 12');
+    assert.equal(band({ total: 0, page: 1, perPage: 10 }), '0 de 0');
     assert.equal(shortId('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
     assert.equal(shortId('sim-painel-esta'), 'sim-painel-esta');
   });

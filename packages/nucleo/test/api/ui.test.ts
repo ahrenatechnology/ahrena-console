@@ -399,7 +399,11 @@ describe('registro das telas', () => {
       ['/ui/sessoes/a#decisoes', '/ui/sessions/a#decisions'],
       ['/ui/sessoes/a#workflow', '/ui/sessions/a#workflow'],
       ['/ui/sessions/a#decisoes', '/ui/sessions/a#decisions'],
-      ['/ui/sessoes?status=esperando&busca=oi&ordem=custo&sentido=asc&pagina=2', '/ui/sessions?status=esperando&search=oi&order=custo&direction=asc&page=2'],
+      ['/ui/sessoes?status=esperando&busca=oi&ordem=custo&sentido=asc&pagina=2', '/ui/sessions?status=waiting&search=oi&order=cost&direction=asc&page=2'],
+      ...(
+        [['todas', 'all'], ['ativas', 'active'], ['esperando', 'waiting'], ['concluidas', 'completed'], ['erro', 'error'], ['abandonadas', 'abandoned']] as const
+      ).map(([old, status]): [string, string] => [`/ui/sessions?status=${old}`, `/ui/sessions?status=${status}`]),
+      ...([['atividade', 'activity'], ['duracao', 'duration'], ['custo', 'cost']] as const).map(([old, order]): [string, string] => [`/ui/sessoes?ordem=${old}`, `/ui/sessions?order=${order}`]),
       ['/ui/historico', '/ui/history'],
       ['/ui/mural', '/ui/wall'],
       ['/ui/projeto', '/ui/project'],
