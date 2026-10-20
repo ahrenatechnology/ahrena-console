@@ -4,6 +4,7 @@
 // | ----------------------------- | --------------------------------------------------------- |
 // | `GET /api/overview`           | Saúde: o painel e o script de carga esperam por ela        |
 // | `GET /api/painel/<sessão>`    | Tudo o que o painel desenha, num pedido (api/tipos.ts)     |
+// | `GET /api/mural`              | Um card por sessão aberta, para o "Mural ao vivo" (api/mural.ts, #34) |
 // | `GET /api/sessao/<sessão>`    | O mesmo, no caminho que o script de carga já usa           |
 // | `GET /api/carga`              | Contadores para a medição de carga                         |
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
@@ -42,6 +43,7 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
@@ -157,6 +159,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const mural = muralDoPainel(opts.montador);
   const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
   let port = 0;
 
@@ -247,6 +250,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === ROTA_DO_MURAL) return responderMural(res, mural);
     if (url.pathname === ROTA_DOS_EVENTOS && opts.eventos) return responderEventos(res, url, opts.eventos);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));

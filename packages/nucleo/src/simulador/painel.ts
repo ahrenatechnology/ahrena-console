@@ -77,6 +77,8 @@ interface Esta {
   branch: string;
   semPush?: boolean;
   issue?: Issue;
+  /** O esforço da sessão (`low`, `medium`, `high`…); sem ele, o do modelo (esforcoDe). */
+  esforco?: string;
 }
 
 interface Outra {
@@ -91,16 +93,22 @@ interface Outra {
   erro?: string;
   relacao?: 'mae' | 'filha';
   updatedMin?: number;
+  /** O branch da sessão, como o wireframe C2 mostra no mural. */
+  branch?: string;
+  esforco?: string;
 }
 
+/** O esforço que o simulador grava quando o cenário não diz: alto no Opus, médio no resto (como o C2). */
+const esforcoDe = (modelo: string) => (modelo === OPUS ? 'high' : 'medium');
+
 const PERMISSAO: Outra = {
-  slug: 'motor-de-regras', modelo: OPUS, conta: 'equipe', status: 'active', espera: { motivo: 'notification', haMin: 2 },
+  slug: 'motor-de-regras', modelo: OPUS, conta: 'equipe', status: 'active', espera: { motivo: 'notification', haMin: 2 }, branch: 'feat/58-pedidos',
   ferramenta: { nome: 'Bash', resumo: 'npm run migrate' }, texto: 'Claude needs your permission to use Bash',
 };
-const INTERROMPIDA: Outra = { slug: 'app-receitas', modelo: SONNET, conta: 'cliente', status: 'active', espera: { motivo: 'interrupted', haMin: 6 } };
-const COM_ERRO: Outra = { slug: 'painel-de-metricas', modelo: OPUS, conta: 'cliente', status: 'error', erro: 'API 529 · overloaded_error', updatedMin: 3 };
+const INTERROMPIDA: Outra = { slug: 'app-receitas', modelo: SONNET, conta: 'cliente', status: 'active', espera: { motivo: 'interrupted', haMin: 6 }, branch: 'feat/12-filtro' };
+const COM_ERRO: Outra = { slug: 'painel-de-metricas', modelo: OPUS, conta: 'cliente', status: 'error', erro: 'API 529 · overloaded_error', updatedMin: 3, branch: 'perf/47-relatorio' };
 const SUA_VEZ: Outra = {
-  slug: 'fila-de-tarefas', modelo: SONNET, conta: 'equipe', status: 'active', espera: { motivo: 'stop', haMin: 1 },
+  slug: 'fila-de-tarefas', modelo: SONNET, conta: 'equipe', status: 'active', espera: { motivo: 'stop', haMin: 1 }, branch: 'feat/9-retry',
   texto: 'Terminei a migração. Rodo os testes?',
 };
 
@@ -214,7 +222,7 @@ const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
   p1: [PERMISSAO, INTERROMPIDA],
   p2: [],
   p3: [{ ...INTERROMPIDA, relacao: 'mae' }],
-  p4: [{ ...SUA_VEZ, relacao: 'filha' }, { slug: 'catalogo-exemplo', modelo: SONNET, conta: 'equipe', status: 'active', relacao: 'filha', updatedMin: 6 }, { slug: 'blog-estatico', modelo: SONNET, conta: 'equipe', status: 'completed', relacao: 'filha', updatedMin: 20 }],
+  p4: [{ ...SUA_VEZ, relacao: 'filha' }, { slug: 'catalogo-exemplo', modelo: SONNET, conta: 'equipe', status: 'active', relacao: 'filha', updatedMin: 6, branch: 'feat/31-csv' }, { slug: 'blog-estatico', modelo: SONNET, conta: 'equipe', status: 'completed', relacao: 'filha', updatedMin: 20, branch: 'fix/5-paginacao' }],
   p5: [PERMISSAO, INTERROMPIDA],
   p6: [PERMISSAO, INTERROMPIDA, COM_ERRO],
   p7: [{ ...PERMISSAO, relacao: 'mae' }, COM_ERRO, { ...SUA_VEZ, relacao: 'filha' }],
@@ -306,6 +314,8 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
   s.accountSource = CONTAS.equipe.source;
   s.metadata = {
     simulado: true,
+    branch: e.branch,
+    esforco: e.esforco ?? esforcoDe(e.modelo),
     familia: { filhas: filhas.map((slug) => `sim-painel-${slug}`) },
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.erro ? iso(agora, e.erro.haMin) : null, delegacoes: {}, background },
   };
@@ -366,6 +376,8 @@ async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
   s.accountSource = CONTAS[o.conta].source;
   s.metadata = {
     simulado: true,
+    ...(o.branch ? { branch: o.branch } : {}),
+    esforco: o.esforco ?? esforcoDe(o.modelo),
     familia: o.relacao === 'filha' ? { mae: SESSAO_DO_PAINEL } : {},
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? atualizada : null, delegacoes: {}, background: {} },
   };
