@@ -502,7 +502,7 @@ describe('Kanban do projeto (C11)', () => {
     const achada = acharTela('/ui/projeto');
     assert.equal(achada.tela.id, 'projeto');
     assert.equal(achada.tela.arquivo, '/ui/telas/projeto.js');
-    assert.deepEqual(TELAS.find((t: { id: string }) => t.id === 'projeto').item, { rotulo: 'Kanban do projeto', icone: 'github' });
+    assert.deepEqual(TELAS.find((t: { id: string }) => t.id === 'projeto').item, { rotulo: 'Kanban do projeto', icone: 'github', section: 'main' });
   });
 
   // O CSS de cada tela fica na página depois que ela abre: uma classe de nome igual em duas telas quebra a outra.

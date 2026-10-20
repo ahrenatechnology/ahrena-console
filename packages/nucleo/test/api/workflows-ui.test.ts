@@ -220,7 +220,7 @@ describe('formatos e registro', () => {
     assert.deepEqual(t, {
       id: 'workflows',
       rota: '/ui/workflows',
-      item: { rotulo: 'Workflows', icone: 'workflows' },
+      item: { rotulo: 'Workflows', icone: 'workflows', section: 'main' },
       titulo: 'Workflows',
       sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
       icone: 'workflows',

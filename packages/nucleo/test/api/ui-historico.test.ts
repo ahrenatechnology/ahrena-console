@@ -16,7 +16,7 @@ const { rotaDoHistorico, rotuloDoDia, formatarCusto, formatarDuracao, idCurto, j
 interface Tela {
   id: string;
   rota: string;
-  item?: { rotulo: string; icone: string };
+  item?: { rotulo: string; icone: string; section: string };
   arquivo: string | null;
 }
 
@@ -50,7 +50,7 @@ describe('Histórico: registro e arquivo', () => {
     }
     const h = telas.find((t) => t.id === 'historico')!;
     assert.equal(h.rota, '/ui/historico');
-    assert.deepEqual(h.item, { rotulo: 'Histórico', icone: 'historico' });
+    assert.deepEqual(h.item, { rotulo: 'Histórico', icone: 'historico', section: 'main' });
     assert.equal(h.arquivo, '/ui/telas/historico.js');
   });
 
