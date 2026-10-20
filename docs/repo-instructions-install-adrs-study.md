@@ -316,7 +316,7 @@ Bastidores em inglês, inclusive variáveis de ambiente; tela em pt-BR.
   - `packages/nucleo/src/agent-instructions/` com a leitura e os imports (`read.ts`, `imports.ts`), usando `src/agent-config/parse.ts`;
   - `packages/nucleo/src/framework-install/` com a detecção, o plano, a mescla e o diff (`detect.ts`, `plan.ts`, `merge.ts`, `diff.ts`) e o catálogo do framework, lido do `marketplace.json` e das regras pelo mesmo cache (TTL de 1 h).
 - **Fonte:** `packages/nucleo/src/github/repo-files-source.ts`, com a descoberta comum, a árvore com ETag e os lotes de blob. Usa o mesmo `githubGraphql`, o `rest` com ETag de `repos-source.ts` e o cache único do `cli.ts`. As escritas ficam em `packages/nucleo/src/github/pull-request-writer.ts`, com as quatro operações da porta do spike.
-- **Configuração:** `AHRENA_FRAMEWORK_REPO` troca o repositório do framework, para um fork ou para os testes. O padrão é `ahrenatechnology/ahrena-framework`, o marketplace público do framework, não um recurso interno.
+- **Configuração:** `AHRENA_CONSOLE_FRAMEWORK_REPO` troca o repositório do framework, para um fork ou para os testes. O padrão é `ahrenatechnology/ahrena-framework`, o marketplace público do framework, não um recurso interno.
 - **API:**
   - `GET /api/adrs?q=&status=&repo=`: a lista de todos os repositórios, sem o texto;
   - `GET /api/adrs/<owner>/<repo>`: a lista de um repositório, a pasta e a hora da leitura;
