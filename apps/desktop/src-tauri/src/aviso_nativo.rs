@@ -28,18 +28,25 @@ use objc2_user_notifications::{
 };
 use tauri::AppHandle;
 
-use crate::notificacoes::Aviso;
+use crate::notificacoes::{self, Action, Aviso, Origin};
 
 const CATEGORIA: &str = "sessao";
+/// A machine alert (#180): only "Abrir", the machine has no Claude Desktop conversation to open
+/// nor a session to silence.
+const MACHINE_CATEGORY: &str = "machine";
+/// A remote session (#180): "Abrir" and "Silenciar", no "Abrir no Claude Desktop".
+const REMOTE_SESSION_CATEGORY: &str = "remote-session";
 const ACAO_ABRIR: &str = "abrir";
 const ACAO_NO_DESKTOP: &str = "abrir-no-desktop";
 const ACAO_SILENCIAR: &str = "silenciar";
 const CHAVE_SESSAO: &str = "sessao";
 const CHAVE_LOCAL: &str = "local";
+/// The `/ui` path "Abrir" leads to (#180); without it, the session's screen.
+const PATH_KEY: &str = "path";
 
 /// O que cada resposta faz; vem do main.rs, que tem o estado e a janela.
 pub struct Acoes {
-    /// Clique na notificação ou "Abrir": a janela do app no detalhe da sessão.
+    /// Clique na notificação ou "Abrir": a janela do app no caminho do aviso (a sessão ou a máquina).
     pub abrir: fn(&AppHandle, &str),
     /// "Abrir no Claude Desktop", com o `local_…` do aviso (sem ele, o console).
     pub no_desktop: fn(&AppHandle, Option<String>),
@@ -111,13 +118,20 @@ pub fn iniciar(app: &AppHandle, acoes: Acoes, _principal: MainThreadMarker) -> b
     DELEGADO.with(|d| *d.borrow_mut() = Some(delegado));
 
     let acao = |id: &str, titulo: &str, opcoes| UNNotificationAction::actionWithIdentifier_title_options(&NSString::from_str(id), &NSString::from_str(titulo), opcoes);
-    let acoes = NSArray::from_retained_slice(&[
-        acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground),
-        acao(ACAO_NO_DESKTOP, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
-        acao(ACAO_SILENCIAR, "Silenciar", UNNotificationActionOptions::empty()),
-    ]);
-    let categoria = UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(CATEGORIA), &acoes, &NSArray::new(), UNNotificationCategoryOptions::empty());
-    centro.setNotificationCategories(&NSSet::from_retained_slice(&[categoria]));
+    let botao = |a: Action| match a {
+        Action::Open => acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground),
+        Action::OpenInDesktop => acao(ACAO_NO_DESKTOP, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
+        Action::Silence => acao(ACAO_SILENCIAR, "Silenciar", UNNotificationActionOptions::empty()),
+    };
+    // One category per kind of notice, with the actions `Origin::actions` gives it.
+    let categorias: Vec<_> = [Origin::Session, Origin::RemoteSession, Origin::Machine]
+        .into_iter()
+        .map(|o| {
+            let acoes = NSArray::from_retained_slice(&o.actions().iter().map(|a| botao(*a)).collect::<Vec<_>>());
+            UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(category(o)), &acoes, &NSArray::new(), UNNotificationCategoryOptions::empty())
+        })
+        .collect();
+    centro.setNotificationCategories(&NSSet::from_retained_slice(&categorias));
 
     let ao_autorizar = RcBlock::new(|ok: Bool, erro: *mut NSError| {
         // Negadas (ou um bundle sem assinatura que o macOS recusa): cai no plugin, que ainda mostra o aviso.
@@ -141,13 +155,13 @@ pub fn enviar(a: &Aviso) {
     let conteudo = UNMutableNotificationContent::new();
     conteudo.setTitle(&NSString::from_str(&a.titulo));
     conteudo.setBody(&NSString::from_str(&a.corpo));
-    conteudo.setCategoryIdentifier(&NSString::from_str(CATEGORIA));
+    conteudo.setCategoryIdentifier(&NSString::from_str(category(a.origin)));
     conteudo.setThreadIdentifier(&NSString::from_str(&a.sessao));
     if a.som {
         conteudo.setSound(Some(&UNNotificationSound::defaultSound()));
     }
-    let mut chaves = vec![NSString::from_str(CHAVE_SESSAO)];
-    let mut valores = vec![NSString::from_str(&a.sessao)];
+    let mut chaves = vec![NSString::from_str(CHAVE_SESSAO), NSString::from_str(PATH_KEY)];
+    let mut valores = vec![NSString::from_str(&a.sessao), NSString::from_str(&a.path)];
     if let Some(local) = &a.local {
         chaves.push(NSString::from_str(CHAVE_LOCAL));
         valores.push(NSString::from_str(local));
@@ -166,6 +180,15 @@ pub fn enviar(a: &Aviso) {
         }
     });
     UNUserNotificationCenter::currentNotificationCenter().addNotificationRequest_withCompletionHandler(&pedido, Some(&ao_enviar));
+}
+
+/// The notification category of each kind of notice.
+fn category(o: Origin) -> &'static str {
+    match o {
+        Origin::Session => CATEGORIA,
+        Origin::RemoteSession => REMOTE_SESSION_CATEGORY,
+        Origin::Machine => MACHINE_CATEGORY,
+    }
 }
 
 fn descrever(erro: *mut NSError) -> String {
@@ -188,13 +211,15 @@ fn responder(resposta: &UNNotificationResponse) {
     let info = resposta.notification().request().content().userInfo();
     let Some(sessao) = ler(&info, CHAVE_SESSAO) else { return };
     let local = ler(&info, CHAVE_LOCAL);
+    // A notice from before #180 has no path: the session's screen, as then.
+    let path = ler(&info, PATH_KEY).unwrap_or_else(|| notificacoes::caminho_da_sessao(&sessao));
     let acao = resposta.actionIdentifier();
     // SAFETY: constante do UserNotifications, lida depois de o framework carregar.
     let padrao = unsafe { UNNotificationDefaultActionIdentifier };
     let (abrir, no_desktop, silenciar) = (acoes.abrir, acoes.no_desktop, acoes.silenciar);
     let handle = app.clone();
     let trabalho: Box<dyn FnOnce() + Send> = if acao.isEqualToString(padrao) || acao.isEqualToString(&NSString::from_str(ACAO_ABRIR)) {
-        Box::new(move || abrir(&handle, &sessao))
+        Box::new(move || abrir(&handle, &path))
     } else if acao.isEqualToString(&NSString::from_str(ACAO_NO_DESKTOP)) {
         Box::new(move || no_desktop(&handle, local))
     } else if acao.isEqualToString(&NSString::from_str(ACAO_SILENCIAR)) {
