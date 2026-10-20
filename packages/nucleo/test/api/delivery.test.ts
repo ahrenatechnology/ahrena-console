@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Accounts, normalizeLegacyUrl } from '../../src/api/index.ts';
+import { Accounts } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, type DeliveryOptions } from '../../src/api/analytics-route.ts';
 import { activeHoursPerDay, GROUP_BY_ERROR, KEY_ERROR, openItemState, OPEN_ITEM_STATES, type DeliveryGithubRead } from '../../src/api/delivery.ts';
 import { createCoreDelivery, DELIVERY_TTL_MS, DeliveryGithub, latestProjects, projectGroupOf, RETRY_AFTER_FAILURE_MS } from '../../src/api/delivery-github.ts';
@@ -111,7 +111,7 @@ function route(storage: SqliteStorage, over: Partial<DeliveryOptions> = {}, with
   };
   return new RotaAnalytics({ storage, contas: new Accounts({ storage, file: null }), agora: () => NOW, ...(withDelivery ? { delivery } : {}) });
 }
-const ask = async (r: RotaAnalytics, path: string) => r.responder(normalizeLegacyUrl(new URL(path, 'http://127.0.0.1')));
+const ask = async (r: RotaAnalytics, path: string) => r.responder(new URL(path, 'http://127.0.0.1'));
 const body = async (r: RotaAnalytics, path: string) => {
   const res = await ask(r, path);
   assert.equal(res.status, 200, JSON.stringify(res.corpo));
