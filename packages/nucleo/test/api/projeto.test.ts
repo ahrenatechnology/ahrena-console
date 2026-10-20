@@ -458,8 +458,9 @@ describe('origem do mover (decisão 0003)', () => {
     try {
       const escritas = [
         '/api/hooks',
-        '/api/decisoes/d1/confirmar',
-        '/api/decisoes/d1/descartar',
+        // As decisões têm a exceção delas (#103), só com o caminho exato: com query, não.
+        '/api/decisoes/d1/confirmar?x=1',
+        '/api/decisoes/d1/descartar/',
         '/mcp',
         '/api/projeto',
         '/api/projeto/mover/',

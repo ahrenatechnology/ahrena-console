@@ -1,6 +1,7 @@
 // Um DOM mínimo para montar as telas da /ui no node, sem dependência: só o que `dom.js`, `estados.js`
 // e as telas usam (criar nós, atributos, classes, eventos com bolha e um `querySelector` de seletores
-// simples: tag, `.classe`, `[atributo]`, `[atributo="valor"]` e descendente).
+// simples: tag, `.classe`, `[atributo]`, `[atributo="valor"]` e descendente). Também `closest`,
+// `contains`, `firstChild`, `style.setProperty` (variável CSS por CSSOM) e um `document.head`.
 
 type Ouvinte = (ev: EventoFalso) => void;
 
@@ -49,6 +50,26 @@ export class ElementoFalso extends NoFalso {
   }
   get lastChild(): NoFalso | null {
     return this.childNodes.at(-1) ?? null;
+  }
+  get firstChild(): NoFalso | null {
+    return this.childNodes[0] ?? null;
+  }
+  /** As propriedades postas por CSSOM (`style.setProperty('--w', '40%')`). */
+  readonly style = (() => {
+    const props = new Map<string, string>();
+    return {
+      setProperty: (k: string, v: string) => void props.set(k, String(v)),
+      getPropertyValue: (k: string) => props.get(k) ?? '',
+      removeProperty: (k: string) => (props.delete(k), ''),
+    };
+  })();
+  contains(no: unknown): boolean {
+    for (let n = no as NoFalso | null; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  }
+  closest(seletor: string): ElementoFalso | null {
+    for (let n: ElementoFalso | null = this; n; n = n.parentNode) if (casaSimples(n, seletor.trim())) return n;
+    return null;
   }
   setAttribute(k: string, v: unknown): void {
     this.atributos.set(k, String(v));
@@ -190,16 +211,20 @@ function casa(no: ElementoFalso, partes: string[], raiz: ElementoFalso): boolean
   return i < 0;
 }
 
+const cabecaFalsa = new ElementoFalso('head');
+
 export const documentoFalso = {
   activeElement: null as ElementoFalso | null,
+  head: cabecaFalsa,
+  querySelector: (seletor: string) => cabecaFalsa.querySelector(seletor),
   createElement: (tag: string) => new ElementoFalso(tag),
   createElementNS: (_ns: string, tag: string) => new ElementoFalso(tag),
   createTextNode: (texto: string) => new TextoFalso(texto),
 };
 
-/** Põe o DOM falso no global (`document` e `Node`), como o navegador. */
+/** Põe o DOM falso no global (`document`, `Node` e `Element`), como o navegador. */
 export function instalarDomFalso(): void {
-  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso });
+  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso, Element: ElementoFalso });
 }
 
 /** Todo o texto de um nó, um pedaço por nó de texto, com espaços normalizados. */

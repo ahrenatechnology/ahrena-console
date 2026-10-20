@@ -6,8 +6,8 @@
 // e a versão e sai com 0) em vez de subir outro.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -32,9 +32,10 @@ import { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
 import { waitForChanges } from '../mudancas/mcp.ts';
 import {
+  apelidoDaDemo,
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
-  SESSAO_DO_PAINEL,
+  pastasDosRegistrosDaDemo,
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
@@ -45,7 +46,10 @@ import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
+import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
+import { DecisoesDaUi } from './decisoes-ui.ts';
 import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
@@ -60,6 +64,7 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessamento.ts';
+import { criarReposDoNucleo } from './repos.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
@@ -74,12 +79,15 @@ const AJUDA = `Uso: npm run api -- [opções]
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
-  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, e o kanban do
-                      projeto (/api/projeto) responde 503
+  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
+                      projeto (/api/projeto) responde 503 e os repositórios (/api/repos)
+                      respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
-                      wireframe C11, num GitHub falso (mover vale em memória)
+                      wireframe C11, num GitHub falso (mover vale em memória). A tela
+                      Agent Config lê uma pasta de configuração e um projeto fictícios
+                      num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
                       (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
@@ -195,9 +203,11 @@ const maquina = new MaquinaDeEstados({
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+// Um cache do GitHub só, no banco, para o trabalho e os repositórios: a pausa por limite vale para os dois.
+const cacheDoGithub = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const trabalho = new TrabalhoPorBranch({
   fonte,
-  cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
+  cache: cacheDoGithub,
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
@@ -250,7 +260,22 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),
+  ...(demo ? { apelido: apelidoDaDemo } : {}),
+});
+
+// A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
+// agora e apagada na saída, no lugar de /simulacao; fora da demo, no próprio repositório da decisão.
+const pastaDaDemo = demo ? mkdtempSync(join(tmpdir(), 'ahrena-console-demo-')) : null;
+const decisoesUi = new DecisoesDaUi({
+  decisions: decisoes,
+  storage,
+  // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
+  alvoDe: (id) => montador.alvoDaSessao(id),
+  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  localDe: async (id) => {
+    await desktop?.atualizar();
+    return desktop?.sessaoPorCli(id)?.localId ?? null;
+  },
 });
 
 if (demo) {
@@ -278,12 +303,19 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+// The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
+const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
+if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
+const agentConfig = demoAgentConfig
+  ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
+  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
 let historicoPronto = false;
 const follower =
@@ -317,6 +349,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  decisoesUi,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
   eventos: new FeedDeEventos({ storage }),
@@ -325,6 +358,8 @@ const api: ApiLocal = await iniciarApiLocal({
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
+  repos: repos.rota,
+  agentConfig,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -399,6 +434,7 @@ async function desligar() {
   await follower?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
+  if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
 process.on('SIGINT', () => void desligar());
