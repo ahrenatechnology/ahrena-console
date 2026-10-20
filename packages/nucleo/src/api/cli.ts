@@ -51,6 +51,7 @@ import {
   reprocessarHistorico,
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
+import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
@@ -275,6 +276,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   eventos: new FeedDeEventos({ storage }),
   frota: mcp.frota,
+  sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

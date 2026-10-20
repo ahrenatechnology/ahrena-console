@@ -17,6 +17,7 @@
 // | `GET /api/eventos`            | O feed de atividade, todas as sessões (api/eventos.ts, #94) |
 // | `GET /api/atencao`            | Quem precisa de você, em todas as contas (a bandeja, #87)  |
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
+// | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
@@ -38,6 +39,7 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
@@ -70,6 +72,8 @@ export interface OpcoesDaApi {
   eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/atencao`. */
   frota?: LeituraDaFrota;
+  /** A lista da tela Sessões; liga `GET /api/sessoes`. */
+  sessoes?: ListaDeSessoes;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -227,6 +231,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === ROTA_DOS_EVENTOS && opts.eventos) return responderEventos(res, url, opts.eventos);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
+    if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,
