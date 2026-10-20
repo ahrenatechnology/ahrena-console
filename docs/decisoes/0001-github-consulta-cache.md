@@ -101,3 +101,20 @@ O GitHub documenta que um 304 com autenticação não consome o limite primário
 - Expandir um card pela primeira vez tem uma espera de cerca de 0,5 s. Depois, sai do cache.
 - Mudanças só de Status no Project aparecem em até 2 min para quem não fez a mudança. Quem mudou vê na hora.
 - O núcleo de teste não muda: é descartável. A decisão vale para o código de 5.2 e 5.3.
+
+## Repositórios (#104, #105)
+
+As telas de repositórios (`/api/repos`, `packages/nucleo/src/api/repos.ts`) seguem esta decisão pelo mesmo `GithubCache` do trabalho, sobre o banco do núcleo: a pausa por limite vale para os dois. Todas as chamadas, de qualquer montagem, passam por uma fila só, uma de cada vez (item 6). O pedido nunca espera o GitHub: serve o que está montado (validade de 60 s) e monta por trás.
+
+| Chave | TTL | O que guarda |
+| --- | --- | --- |
+| `repos:lista` | 5 min | `ReposLista`: até 500 repositórios da conta e das orgs |
+| `repos:resumo` | 5 min | `ReposResumo`: PRs esperando review e issues fechadas na semana (`issueCount`) |
+| `repos:detalhe:<dono/repo>:<período>` | 5 min | `RepoDetalhe` e as páginas seguintes das buscas |
+| `repos:rest:<dono/repo>:commit_activity`, `code_frequency`, `contributors` | 1 h | estatísticas do REST, com ETag; 202 é "calculando" |
+| `repos:rest:<dono/repo>:languages`, `community` | 1 h | REST, com ETag |
+| `repos:rest:<dono/repo>:runs7`, `runs:<período>` | 10 min | workflow runs concluídos, 100 mais recentes |
+| `repos:rest:<dono/repo>:traffic_*` | 1 h | só com escrita no repositório |
+| `repos:rest:<dono/repo>:dependabot`, `code_scanning` | 10 min | só com escrita no repositório |
+
+`<dono/repo>` vai em minúsculas. **Orçamento por montagem:** a lista custa de 2 a 11 pontos de GraphQL (1 a 2 por página de 100 repositórios, até 5 páginas, mais 1 do resumo) e até 60 leituras REST (as estatísticas e os runs dos 30 repositórios com push mais recente); as métricas de um repositório custam cerca de 4 pontos no `RepoDetalhe`, mais cerca de 2 por página seguinte das buscas (até 10), e de 6 a 11 leituras REST. Dentro do TTL nada sai; fora dele, o 304 do REST não gasta o limite primário. O 202 é tentado de novo em 3, 6, 12, 30 e 60 s só enquanto alguém leu a resposta nos últimos 5 minutos.

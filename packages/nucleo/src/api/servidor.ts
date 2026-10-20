@@ -28,6 +28,7 @@
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
 // | `GET /api/decisoes`, `GET /api/sessoes/<id>/decisoes` e `POST /api/decisoes/<id>/promover` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
+// | `GET /api/repos` e `/api/repos/<dono>/<repo>` | Repositórios do GitHub e métricas (api/repos.ts, #104, #105) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -67,6 +68,7 @@ import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
+import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
 
 export { VERSAO_DA_API };
 
@@ -108,6 +110,8 @@ export interface OpcoesDaApi {
   kanban?: QuadroKanban;
   /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */
   decisoesUi?: DecisoesDaUi;
+  /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
+  repos?: RotaDosRepos;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -294,6 +298,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
     if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
     if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
+    if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,

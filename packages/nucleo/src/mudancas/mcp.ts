@@ -5,6 +5,10 @@
 // Como as outras ferramentas: a conta sai como rótulo e cor, nunca o id (que tem os UUIDs da conta e
 // da org); o filtro `account` aceita rótulo, id ou "none". Não sai texto de conversa: só tipo, id da
 // sessão e id da decisão. A espera ouve `ctx.sinal`, que aborta quando o cliente fecha a conexão.
+//
+// O tipo `repos` (#104, #105) é só da tela, pela rota HTTP: aqui ele não está no enum e a espera
+// sempre filtra pelos tipos do MCP, para que uma montagem de repositórios não acorde quem espera
+// sem filtro nem com `account: "none"` (as mudanças `repos` não têm conta).
 
 import type { Contas } from '../api/contas.ts';
 import { casaConta } from '../mcp/frota.ts';
@@ -24,11 +28,15 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
+/** Os tipos que o MCP expõe: todos menos `repos`. */
+export const TIPOS_DO_MCP = TIPOS_DE_MUDANCA.filter((t): t is Exclude<TipoDeMudanca, 'repos'> => t !== 'repos');
+export type TipoDoMcp = (typeof TIPOS_DO_MCP)[number];
+
 const PERMITIDOS = ['cursor', 'timeout', 'sessions', 'account', 'types'] as const;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 export interface MudancaDeSaida {
-  type: TipoDeMudanca;
+  type: TipoDoMcp;
   sessionId: string | null;
   decisionId: string | null;
   account: { label: string; color: string } | null;
@@ -42,7 +50,7 @@ export interface SaidaDoWaitForChanges {
 }
 
 const ESQUEMA_DA_MUDANCA = objeto({
-  type: { type: 'string', enum: [...TIPOS_DE_MUDANCA] },
+  type: { type: 'string', enum: [...TIPOS_DO_MCP] },
   sessionId: ouNulo(T.texto),
   decisionId: ouNulo(T.texto),
   account: ouNulo(objeto({ label: T.texto, color: T.texto })),
@@ -82,7 +90,7 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
         description: 'Só estas contas do Claude: o rótulo ou o id, um ou vários; "none" pede as sessões "Sem conta".',
         anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, maxItems: 20 }],
       },
-      types: { type: 'array', items: { type: 'string', enum: [...TIPOS_DE_MUDANCA] }, description: 'Só estes tipos de mudança.' },
+      types: { type: 'array', items: { type: 'string', enum: [...TIPOS_DO_MCP] }, description: 'Só estes tipos de mudança.' },
     }),
     saida: objeto({
       cursor: T.texto,
@@ -106,14 +114,14 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
         cursor: r.cursor,
         reset: r.reiniciar,
         timedOut: r.expirou,
-        changes: r.mudancas.map((m) => saida(m, conta(m.accountId))),
+        changes: r.mudancas.flatMap((m) => (m.tipo === 'repos' ? [] : [saida(m as MudancaRegistrada & { tipo: TipoDoMcp }, conta(m.accountId))])),
       };
       return { texto: texto(dados), dados: dados as unknown as ObjetoJson };
     },
   };
 }
 
-function saida(m: MudancaRegistrada, c: { rotulo: string; cor: string } | null): MudancaDeSaida {
+function saida(m: MudancaRegistrada & { tipo: TipoDoMcp }, c: { rotulo: string; cor: string } | null): MudancaDeSaida {
   return {
     type: m.tipo,
     sessionId: m.sessionId,
@@ -164,11 +172,13 @@ function lerArgumentos(args: ObjetoJson): Pedido {
     contasPedidas = (l as string[]).map((x) => x.trim());
   }
   if (types != null) {
-    if (!Array.isArray(types) || !types.every((t) => typeof t === 'string' && (TIPOS_DE_MUDANCA as readonly string[]).includes(t))) {
-      throw new ErroDeArgumento(`types: uma lista com ${TIPOS_DE_MUDANCA.join(', ')}`);
+    if (!Array.isArray(types) || !types.every((t) => typeof t === 'string' && (TIPOS_DO_MCP as readonly string[]).includes(t))) {
+      throw new ErroDeArgumento(`types: uma lista com ${TIPOS_DO_MCP.join(', ')}`);
     }
-    if (types.length) filtros.tipos = types as TipoDeMudanca[];
+    if (types.length) filtros.tipos = types as TipoDoMcp[];
   }
+  // Sem `types`, todos os do MCP: uma mudança `repos` não passa no filtro e não acorda a espera.
+  filtros.tipos ??= TIPOS_DO_MCP;
   return {
     cursor: typeof cursor === 'string' && cursor ? cursor : null,
     timeoutMs: typeof timeout === 'number' ? timeout * 1000 : undefined,
