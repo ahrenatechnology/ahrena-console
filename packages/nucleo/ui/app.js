@@ -109,6 +109,7 @@ iniciarAoVivo({
 let saida = null;
 let telaComErro = false;
 
+// `rota` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
 function navegar(rota) {
   if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();
