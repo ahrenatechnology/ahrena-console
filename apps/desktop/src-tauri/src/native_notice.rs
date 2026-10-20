@@ -28,7 +28,7 @@ use objc2_user_notifications::{
 };
 use tauri::AppHandle;
 
-use crate::notificacoes::{self, Action, Aviso, Origin};
+use crate::notifications::{self, Action, Aviso, Origin};
 
 const CATEGORIA: &str = "sessao";
 /// A machine alert (#180): only "Abrir", the machine has no Claude Desktop conversation to open
@@ -212,7 +212,7 @@ fn responder(resposta: &UNNotificationResponse) {
     let Some(sessao) = ler(&info, CHAVE_SESSAO) else { return };
     let local = ler(&info, CHAVE_LOCAL);
     // A notice from before #180 has no path: the session's screen, as then.
-    let path = ler(&info, PATH_KEY).unwrap_or_else(|| notificacoes::caminho_da_sessao(&sessao));
+    let path = ler(&info, PATH_KEY).unwrap_or_else(|| notifications::caminho_da_sessao(&sessao));
     let acao = resposta.actionIdentifier();
     // SAFETY: constante do UserNotifications, lida depois de o framework carregar.
     let padrao = unsafe { UNNotificationDefaultActionIdentifier };

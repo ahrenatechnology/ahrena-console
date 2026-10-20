@@ -59,7 +59,7 @@ fn o_updater_busca_nas_releases_deste_repositorio() {
 #[test]
 fn a_chave_publica_e_texto_e_os_artefatos_do_updater_ficam_para_o_ci() {
     let conf = conf();
-    // Vazia até o projeto ter a chave; o app só liga o updater com ela (atualizacao.rs).
+    // Vazia até o projeto ter a chave; o app só liga o updater com ela (updater.rs).
     assert!(conf["plugins"]["updater"]["pubkey"].is_string(), "plugins.updater.pubkey tem de ser texto");
     // Ligado aqui, toda build local pediria a chave privada; o CI liga com `--config`.
     let artefatos = &conf["bundle"]["createUpdaterArtifacts"];

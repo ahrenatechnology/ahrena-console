@@ -3,31 +3,31 @@
 // Ao abrir:
 // 1. corrige o PATH com o do shell de login, para achar o `node`;
 // 2. starts its own core (or adopts it, within the app's installation), on a random port and in
-//    the app's data folder (nucleo.rs); it never uses another installation's core;
+//    the app's data folder (core.rs); it never uses another installation's core;
 // 3. lê `GET /api/attention` e espera mudanças em `GET /api/changes` (long polling), e monta o menu
 //    dos wireframes A1, A2 e A4 (menu.rs), com o número ao lado do ícone;
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /open/<local_…>`); "Abrir o console"
 //    abre a `/ui` do núcleo numa janela;
-// 5. avisa por notificação do sistema quem passa a precisar de você (A3, notificacoes.rs);
+// 5. avisa por notificação do sistema quem passa a precisar de você (A3, notifications.rs);
 // 5a. reads the machines and their telemetry (`/api/machines`, `/api/telemetry`) for the "Máquinas"
 //     block (A6, A7, machines.rs) and notifies, silently, a new machine alert (#180);
 // 6. com a chave do updater no tauri.conf.json, procura versão nova ao abrir e a cada 6 h
-//    (atualizacao.rs) e a oferece no menu;
+//    (updater.rs) e a oferece no menu;
 // 7. aberto à mão, abre também o console; aberto pelo login, fica só na bandeja (login.rs).
 // O app não grava hooks nem configuração do Claude, não embute Node e não tem telas próprias.
 
-mod atualizacao;
-#[cfg(target_os = "macos")]
-mod aviso_nativo;
+mod core;
 mod http;
 mod login;
 mod machines;
 mod menu;
 #[cfg(target_os = "macos")]
-mod nativo;
-mod notificacoes;
-mod nucleo;
+mod native;
+#[cfg(target_os = "macos")]
+mod native_notice;
+mod notifications;
 mod shell_path;
+mod updater;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -43,11 +43,11 @@ use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, Wind
 use login::Registro;
 use machines::Machine;
 use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
-use notificacoes::{Aviso, Avisos};
+use notifications::{Aviso, Avisos};
 
 const BANDEJA: &str = "ahrena";
-const ICONE: &[u8] = include_bytes!("../icons/bandeja.png");
-const ICONE_2X: &[u8] = include_bytes!("../icons/bandeja@2x.png");
+const ICONE: &[u8] = include_bytes!("../icons/tray.png");
+const ICONE_2X: &[u8] = include_bytes!("../icons/tray@2x.png");
 
 /// O que a bandeja mostra; o menu é refeito quando muda.
 struct Estado {
@@ -108,13 +108,13 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                nativo::ouvir();
+                native::ouvir();
             }
-            estado.lock().unwrap().avisos = Avisos::abrir(notificacoes::caminho(app.path().app_data_dir().ok()));
+            estado.lock().unwrap().avisos = Avisos::abrir(notifications::caminho(app.path().app_data_dir().ok()));
             #[cfg(target_os = "macos")]
             {
                 let principal = objc2::MainThreadMarker::new().expect("o setup do Tauri roda na thread principal");
-                aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: open_window_at, no_desktop: abrir_no_desktop, silenciar }, principal);
+                native_notice::iniciar(app.handle(), native_notice::Acoes { abrir: open_window_at, no_desktop: abrir_no_desktop, silenciar }, principal);
             }
             TrayIconBuilder::with_id(BANDEJA)
                 .icon(Image::from_bytes(ICONE)?)
@@ -126,20 +126,20 @@ fn main() {
             if let Some(b) = app.tray_by_id(BANDEJA) {
                 let _ = b.with_inner_tray_icon(|t| {
                     if let Some(item) = t.ns_status_item() {
-                        nativo::icone_template(&item, &[ICONE, ICONE_2X]);
+                        native::icone_template(&item, &[ICONE, ICONE_2X]);
                     }
                 });
             }
             redesenhar(app.handle(), &estado);
             let para_o_menu = estado.clone();
-            if let Err(e) = atualizacao::vigiar(app.handle(), move |app, versao| mudar(app, &para_o_menu, |e| e.atualizacao = Some(versao))) {
+            if let Err(e) = updater::vigiar(app.handle(), move |app, versao| mudar(app, &para_o_menu, |e| e.atualizacao = Some(versao))) {
                 eprintln!("[ahrena-console] updater: {e}");
             }
 
             let recursos = app.path().resource_dir().ok();
             let data_dir = app.path().app_data_dir().ok();
             let handle = app.handle().clone();
-            std::thread::spawn(move || acompanhar(handle, estado, nucleo::core_dir(recursos), data_dir, sinais, abrir_na_partida));
+            std::thread::spawn(move || acompanhar(handle, estado, core::core_dir(recursos), data_dir, sinais, abrir_na_partida));
             abrir_o_menu_depois(app.handle());
             Ok(())
         })
@@ -178,7 +178,7 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: O
             e.avisos.detector.zerar();
             e.avisos.machines.reset();
         });
-        let outcome = nucleo::start_own_core(&pasta, data_dir.as_deref());
+        let outcome = core::start_own_core(&pasta, data_dir.as_deref());
         let abrir = std::mem::take(&mut abrir_na_partida);
         let core = match outcome.core {
             Some(core) => {
@@ -222,7 +222,7 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: O
 }
 
 /// Lê `/api/attention` e espera em `/api/changes` até o núcleo parar de responder.
-fn seguir(app: &AppHandle, estado: &Compartilhado, core: &nucleo::Core, sinais: &std::sync::mpsc::Receiver<()>) {
+fn seguir(app: &AppHandle, estado: &Compartilhado, core: &core::Core, sinais: &std::sync::mpsc::Receiver<()>) {
     let porta = core.port;
     let mut cursor: Option<String> = None;
     loop {
@@ -393,7 +393,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
             Ok(m) => {
                 let _ = bandeja.set_menu(Some(m));
                 #[cfg(target_os = "macos")]
-                nativo::ajustar("Ahrena Console", &ajustes(&itens));
+                native::ajustar("Ahrena Console", &ajustes(&itens));
             }
             Err(err) => eprintln!("[ahrena-console] menu: {err}"),
         }
@@ -443,8 +443,8 @@ fn nativo_do_menu(app: &AppHandle, itens: &[Item]) -> tauri::Result<Menu<Wry>> {
 }
 
 #[cfg(target_os = "macos")]
-fn ajustes(itens: &[Item]) -> Vec<nativo::Ajuste> {
-    use nativo::Ajuste;
+fn ajustes(itens: &[Item]) -> Vec<native::Ajuste> {
+    use native::Ajuste;
     let mut a = Vec::new();
     for i in itens {
         match i {
@@ -517,7 +517,7 @@ fn clique(app: &AppHandle, id: &str) {
             // O clique já inverteu a marca nativa: refaz o menu mesmo sem mudança (erro, aprovação).
             mudar(app, &estado, |e| e.ultimo = None);
         }
-        menu::ID_ATUALIZAR => atualizacao::instalar(app),
+        menu::ID_ATUALIZAR => updater::instalar(app),
         menu::ID_PROCURAR => {
             let _ = app.state::<Laco>().0.lock().unwrap().send(());
         }
@@ -550,7 +550,7 @@ fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
         _ => return,
     };
     let Some(local) = local else { return abrir_console(app) };
-    if !notificacoes::local_valido(&local) {
+    if !notifications::local_valido(&local) {
         eprintln!("[ahrena-console] abrir: local inválido {local:?}, abrindo o console");
         return abrir_console(app);
     }
@@ -627,8 +627,8 @@ fn avisar(app: &AppHandle, avisos: &[Aviso]) {
     use tauri_plugin_notification::NotificationExt;
     for a in avisos {
         #[cfg(target_os = "macos")]
-        if aviso_nativo::ativo() {
-            aviso_nativo::enviar(a);
+        if native_notice::ativo() {
+            native_notice::enviar(a);
             continue;
         }
         let mut n = app.notification().builder().title(&a.titulo).body(&a.corpo);

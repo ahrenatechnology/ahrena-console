@@ -22,7 +22,7 @@ const LEGACY_FILE = join(HERE, 'english-internals.legacy.json')
 // confirmation of what the rule says about documentation (decision 0009).
 const SKIPPED_TREES = ['plugins/', 'docs/']
 // Where routes and /ui URLs are written.
-const ROUTE_SOURCES = ['packages/nucleo/src/', 'packages/nucleo/ui/', 'apps/desktop/src-tauri/src/', 'apps/desktop/pagina/']
+const ROUTE_SOURCES = ['packages/nucleo/src/', 'packages/nucleo/ui/', 'apps/desktop/src-tauri/src/', 'apps/desktop/page/']
 const CSS_SOURCES = /\.(css|html)$/
 const CODE = /\.(ts|js|mjs|cjs|rs|json|ya?ml|sh|toml)$/
 
