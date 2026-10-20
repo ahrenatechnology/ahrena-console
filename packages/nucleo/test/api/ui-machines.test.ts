@@ -235,6 +235,21 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.ok(part(m.area, 'ports')!.classList.contains('tm-span-full'));
   });
 
+  test('#255 rule 9: without a tunnel reading nothing stacks; the alerts take one column and the Claude processes the other two', async () => {
+    const noTunnel = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, tunnels: null } } : r;
+    };
+    const m = mount(null, noTunnel);
+    await m.ready;
+    assert.equal(part(m.area, 'tunnel'), null);
+    assert.equal(m.area.querySelector('.card-column'), null);
+    const grid = m.area.querySelector('.tm-grid')!;
+    assert.ok(grid.children.some((c) => c.querySelector('.tm-alerts')), 'O que pede atenção is a plain grid item');
+    assert.equal(part(m.area, 'claude')!.parentNode, grid);
+    assert.ok(part(m.area, 'claude')!.classList.contains('tm-span-wide'));
+  });
+
   test('12 h: the toggle reads hours=12, keeps it in the URL and the axis follows', async () => {
     const m = mount(null);
     await m.ready;

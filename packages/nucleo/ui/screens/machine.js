@@ -209,7 +209,7 @@ function tunnelCard(tunnels, machines, remoteReadings, now) {
 
 const percent = (n) => (n === null ? DASH : `${String(Math.round(n * 10) / 10).replace('.', ',')}%`);
 
-function claudeCard(claude, top) {
+function claudeCard(claude, top, { wide = false } = {}) {
   const rows = [
     ['claude (CLI)', claude.cli],
     ['Claude Desktop', claude.desktop],
@@ -218,7 +218,7 @@ function claudeCard(claude, top) {
     .map(([name, g]) => el('tr', {}, td(name), td(String(g.count), 'mono'), td(percent(g.cpuPct), 'mono'), td(g.memoryBytes === null ? DASH : bytes(g.memoryBytes), 'mono')));
   return el(
     'section',
-    { class: 'card tm-card tm-span-half', 'data-part': 'claude' },
+    { class: `card tm-card ${wide ? 'tm-span-wide' : 'tm-span-half'}`, 'data-part': 'claude' },
     el('h2', { class: 'tm-title' }, icon('bot'), el('span', {}, 'Processos do Claude')),
     table(['Processo', 'Qtde', 'CPU', 'Memória'], rows),
     top?.length ? el('div', { class: 'eyebrow tm-sub-eyebrow' }, 'Os que mais usam CPU') : null,
@@ -332,7 +332,11 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     if (reading.tunnels) grid.push(tunnelCard(reading.tunnels, machines, remoteReadings, now));
     // The two short cards stack beside the tunnel (rule 9, issue 255): the long port list goes below, on
     // its own row, instead of next to the Claude processes with a hole under them.
-    grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), reading.claude ? claudeCard(reading.claude, reading.topProcesses) : null));
+    // Without a tunnel reading (a Linux core, a failed probe) there is nothing to stack beside: the
+    // alerts take one column and the Claude processes the other two, so the row stays full.
+    const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses, { wide: !reading.tunnels }) : null;
+    if (reading.tunnels) grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), claude));
+    else grid.push(alertsCard(alerts, now), ...(claude ? [claude] : []));
     if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter }));
     if (!machines.some((m) => m.id !== LOCAL_ID)) grid.push(el('div', { class: 'tm-span-full' }, noRemoteCard()));
   } else {
