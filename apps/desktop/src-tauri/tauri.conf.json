@@ -25,7 +25,8 @@
       "../../../packages/marca/gerado/": "packages/marca/gerado/"
     },
     "macOS": {
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-"
     }
   }
 }
