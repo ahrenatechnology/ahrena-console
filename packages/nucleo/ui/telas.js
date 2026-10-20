@@ -71,6 +71,7 @@ export const TELAS = [
     icone: 'analytics',
     arquivo: '/ui/telas/analytics.js',
   },
+  { id: 'config', rota: '/ui/config', item: { rotulo: 'Agent Config', icone: 'bot' }, titulo: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icone: 'bot', arquivo: '/ui/telas/config.js' }, // #63
 ];
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
