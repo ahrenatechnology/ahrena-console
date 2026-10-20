@@ -1,18 +1,18 @@
 // Servidor MCP do núcleo (épico 2). Veja README.md nesta pasta.
 
 import { VERSAO_DA_API } from '../api/versao.ts';
-import { fleetOverview } from './ferramentas/frota.ts';
-import { sessionsNeedingAttention } from './ferramentas/atencao.ts';
-import { LeituraDaFrota, type OpcoesDaFrota } from './frota.ts';
-import { ErroDaFerramenta, ServidorMcp, type Ferramenta } from './protocolo.ts';
+import { fleetOverview } from './tools/fleet.ts';
+import { sessionsNeedingAttention } from './tools/attention.ts';
+import { LeituraDaFrota, type OpcoesDaFrota } from './fleet.ts';
+import { ErroDaFerramenta, ServidorMcp, type Ferramenta } from './protocol.ts';
 
-export * from './protocolo.ts';
+export * from './protocol.ts';
 export { CAMINHO_DO_MCP, criarRotaMcp, type RotaMcp } from './http.ts';
 export { atenderPorStdio, ponteHttp, type Atender, type OpcoesDoStdio } from './stdio.ts';
-export { LeituraDaFrota, classificar, casaConta, type Atencao, type Grupo, type Motivo, type OpcoesDaFrota, type SessaoDaFrota } from './frota.ts';
-export { ARGS_COMUNS, BYTES_POR_PAGINA, LIMITE_MAXIMO, LIMITE_PADRAO, esquema, lerComuns, paginar, tituloSeguro } from './saida.ts';
-export { sessionsNeedingAttention, type ItemDeAtencao } from './ferramentas/atencao.ts';
-export { fleetOverview } from './ferramentas/frota.ts';
+export { LeituraDaFrota, classificar, casaConta, type Atencao, type Grupo, type Motivo, type OpcoesDaFrota, type SessaoDaFrota } from './fleet.ts';
+export { ARGS_COMUNS, BYTES_POR_PAGINA, LIMITE_MAXIMO, LIMITE_PADRAO, esquema, lerComuns, paginar, tituloSeguro } from './output.ts';
+export { sessionsNeedingAttention, type ItemDeAtencao } from './tools/attention.ts';
+export { fleetOverview } from './tools/fleet.ts';
 
 export const INSTRUCOES_DO_MCP =
   'Ahrena Console: lê as sessões do Claude Code desta máquina, em todas as contas do Claude. Só leitura. ' +

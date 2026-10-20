@@ -12,9 +12,9 @@
 // whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
 
 import type { Contas } from '../api/contas.ts';
-import { casaConta } from '../mcp/frota.ts';
-import { ErroDaFerramenta, ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../mcp/protocolo.ts';
-import { esquema, lista, objeto, ouNulo, T } from '../mcp/saida.ts';
+import { casaConta } from '../mcp/fleet.ts';
+import { ErroDaFerramenta, ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../mcp/protocol.ts';
+import { esquema, lista, objeto, ouNulo, T } from '../mcp/output.ts';
 import {
   TooManyWaitersError,
   MAX_WAIT_MS,

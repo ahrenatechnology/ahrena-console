@@ -1,5 +1,5 @@
-// A conta como as ferramentas mostram: o rótulo e a cor, nunca o id (que tem os UUIDs da conta
-// e da org). O filtro `account` aceita o id, para quem o tiver de outra fonte.
+// The account as the tools show it: the label and the color, never the id (which carries the
+// account and org UUIDs). The `account` filter takes the id, for whoever has it from another source.
 
 import type { ContaDoPainel } from '../../api/tipos.ts';
 

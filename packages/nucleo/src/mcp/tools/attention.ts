@@ -1,17 +1,17 @@
-// `sessions_needing_attention`: quem precisa de mim, em todas as contas (2.1 e decisão 0006).
+// `sessions_needing_attention`: who needs me, across every account (2.1 and decision 0006).
 //
-// Dois grupos, como o dono pediu:
-// - `blocking`: a sessão está travada até você agir (permissão, pergunta, plano para aprovar,
-//   decisão pedida no fechamento do turno, erro);
-// - `your_turn`: a vez é sua no bate-bola (o turno acabou, Esc, sessão nova no prompt).
-// A divisão é a mesma do "precisam de você" do painel (`atencaoDe`, #140).
-// Travadas primeiro; dentro do grupo, quem espera há mais tempo primeiro.
+// Two groups, as the owner asked:
+// - `blocking`: the session is stuck until you act (permission, question, plan to approve,
+//   decision asked at the turn's wrap-up, error);
+// - `your_turn`: it is your turn in the back-and-forth (the turn ended, Esc, a new session at the prompt).
+// The split is the same as the panel's "precisam de você" (`atencaoDe`, #140).
+// Blocking first; within a group, whoever has waited longest first.
 
-import { ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../protocolo.ts';
-import { casaConta, minutosDesde, MOTIVOS, projetoDe, type Atencao, type Grupo, type LeituraDaFrota, type Motivo, type SessaoDaFrota } from '../frota.ts';
+import { ErroDeArgumento, type Ferramenta, type ObjetoJson } from '../protocol.ts';
+import { casaConta, minutosDesde, MOTIVOS, projetoDe, type Atencao, type Grupo, type LeituraDaFrota, type Motivo, type SessaoDaFrota } from '../fleet.ts';
 import { LOCAL_DO_DESKTOP } from '../../api/servidor.ts';
-import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../saida.ts';
-import { contaDeSaida, linhaDeConta, type ContaDeSaida } from './comum.ts';
+import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../output.ts';
+import { contaDeSaida, linhaDeConta, type ContaDeSaida } from './common.ts';
 
 export interface ItemDeAtencao {
   sessionId: string;

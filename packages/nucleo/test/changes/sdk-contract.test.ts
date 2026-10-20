@@ -1,5 +1,5 @@
 // Contract of `wait_for_changes` with the official MCP client (@modelcontextprotocol/sdk, the same
-// devDependency as test/mcp/contrato-sdk.test.ts): it validates each `structuredContent` against the
+// devDependency as test/mcp/sdk-contract.test.ts): it validates each `structuredContent` against the
 // `outputSchema` and fails the call if a field is extra or missing. Over HTTP (/mcp) and over stdio (the
 // Desktop bridge), with synthetic data and a wait that only the change wakes up.
 

@@ -13,7 +13,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readBody, send } from '../ingest/hooks/receiver.ts';
-import { ERROS, erro, VERSOES_DO_PROTOCOLO, type ServidorMcp } from './protocolo.ts';
+import { ERROS, erro, VERSOES_DO_PROTOCOLO, type ServidorMcp } from './protocol.ts';
 
 export const CAMINHO_DO_MCP = '/mcp';
 

@@ -16,8 +16,8 @@
 // `GET /api/changes?since=<cursor>&wait=25`, a partir do `cursor` daqui; com `reset: true`,
 // relê tudo.
 
-import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
-import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
+import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/fleet.ts';
+import { precisamDeVoce } from '../mcp/tools/attention.ts';
 import type { PrecisaDeVoce } from './tipos.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 

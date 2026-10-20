@@ -1,14 +1,14 @@
-// `fleet_overview`: a visão geral da máquina (2.1 e decisão 0006). Totais por estado e por conta,
-// quem precisa de você, o custo de hoje (estimativa, 1.6) e as sessões vivas, paginadas.
-// Custo e contagens somam entre contas; limites de uso nunca entram aqui.
+// `fleet_overview`: the machine overview (2.1 and decision 0006). Totals by state and by account,
+// who needs you, today's cost (estimate, 1.6) and the live sessions, paginated.
+// Cost and counts add up across accounts; usage limits never come in here.
 
 import type { InboxState } from '../../states/inbox.ts';
 import type { ContaDoPainel } from '../../api/tipos.ts';
-import type { Ferramenta, ObjetoJson } from '../protocolo.ts';
-import { casaConta, ESTADOS_VIVOS, minutosDesde, projetoDe, type LeituraDaFrota } from '../frota.ts';
-import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../saida.ts';
-import { precisamDeVoce } from './atencao.ts';
-import { contaDeSaida, dolares, linhaDeConta, type ContaDeSaida } from './comum.ts';
+import type { Ferramenta, ObjetoJson } from '../protocol.ts';
+import { casaConta, ESTADOS_VIVOS, minutosDesde, projetoDe, type LeituraDaFrota } from '../fleet.ts';
+import { ARGS_COMUNS, ESQUEMA_DA_CONTA, esquema, haQuanto, lerComuns, lista, objeto, ouNulo, paginar, T } from '../output.ts';
+import { precisamDeVoce } from './attention.ts';
+import { contaDeSaida, dolares, linhaDeConta, type ContaDeSaida } from './common.ts';
 
 type PorEstado = Record<'active' | 'waiting' | 'delegating' | 'background' | 'error', number>;
 

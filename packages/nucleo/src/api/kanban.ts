@@ -28,7 +28,7 @@ import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import { DEFAULT_PRICES } from '../cost/default-prices.ts';
 import { currentPrices } from '../cost/table.ts';
-import { tituloSeguro } from '../mcp/saida.ts';
+import { tituloSeguro } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
