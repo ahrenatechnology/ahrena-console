@@ -126,7 +126,8 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.equal(blocks.indexOf('decisions'), blocks.indexOf('delivery') + 1);
     assert.ok(blocks.indexOf('decisions') < blocks.indexOf('machines'));
     const { screen: tela } = findScreen('/ui/decisions');
-    assert.equal(tela.item.label, 'Decisões');
+    assert.equal(tela.item.label, 'Das sessões', 'o bloco já se chama Decisões: o item não repete o nome');
+    assert.equal(tela.title, 'Decisões', 'a tela continua com o título dela');
     assert.equal(tela.item.section, 'decisions', 'no bloco Decisões, onde as ADRs vão entrar');
     assert.equal(tela.item.icon, 'decision', 'o desenho do main (git-commit-horizontal), não um nome novo');
     assert.equal(tela.icon, 'decision');
