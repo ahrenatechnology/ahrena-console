@@ -38,7 +38,7 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
   --json              One JSON line on stdout, for the app and the extension
   --help
 
-After --, options go to the API (npm run api -- --help), for example -- --sem-github.
+After --, options go to the API (npm run api -- --help), for example -- --no-github.
 The old names (subir, parar, --porta, --pai, --substituir) are accepted until phase 6.
 `;
 
