@@ -1330,9 +1330,7 @@ function telaAdrs(larga) {
 // Aba ADRs na tela do repositório (C23).
 function telaRepoAdrs() {
   const l = [...ADRS[0][3], ['0004', 'Regras escritas em YAML', 'accepted', '02/02/2026', '', ''], ['0003', 'Testes de regra por tabela', 'accepted', '15/01/2026', '', ''], ['0002', 'Node 24 no serviço', 'accepted', '10/01/2026', '', ''], ['0001', 'Registrar decisões em MADR', 'accepted', '08/01/2026', '', '']]
-  return `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>exemplo-labs/motor-de-regras</h4><span class="pill b-waiting">CI …</span><span class="chip" style="font-family:var(--font-sans)">privado</span><span style="margin-left:auto"><span class="btn contorno">${ic('external-link')}Abrir no GitHub</span></span></div>
-    <div class="chips"><span class="chip">${ic('git-branch')}main</span><span class="chip">${ic('star')}12</span><span class="chip">${ic('tag')}v1.8.0 · há 3 dias</span></div></div>
-  <div class="abas"><span>${ic('bar-chart-3')}Métricas</span><span>${ic('circle-dot')}Issues (9)</span><span>${ic('git-pull-request')}PRs (5)</span><span>${ic('play-circle')}CI</span><span>${ic('folder-open')}Sessões (3)</span><span>${ic('git-commit-horizontal')}Decisões</span><span class="on">${ic('scroll-text')}ADRs (9)</span></div>
+  return `${repoCab('adrs')}
   <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="flex:1">${ic('search')}Buscar nas ADRs deste repositório…</span><div class="seg"><span class="on">Todas</span><span>Aceitas</span><span>Propostas</span><span>Substituídas</span></div></div>
   <div style="display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px;align-items:start">
     <div class="cartao" style="overflow:hidden">${l.map(a => adrLinha(a, false)).join('')}</div>
@@ -1394,6 +1392,85 @@ function telaAdrsEstados() {
       <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('scale')}Consequências<span class="r">não estão no texto</span></div></div>
       <div class="cartao" style="padding:10px 12px;background:var(--bg);border-style:dashed"><div class="ttl" style="font-size:12.5px;color:var(--muted)">${ic('git-fork')}Alternativas<span class="r">não estão no texto</span></div></div>
       <span class="c-muted" style="font-size:11.5px">Sem status e sem data no texto: a lista mostra "Sem status" e ordena pelo número do arquivo.</span>
+    </div>
+  </div>`
+}
+
+// ---------- Instruções dos agentes do repositório (issue 183) ----------
+// O que um agente herda ao trabalhar em exemplo-labs/motor-de-regras: CLAUDE.md e AGENTS.md (raiz e
+// subpastas, com os @imports) e o que .claude/ traz. Dados sintéticos.
+const repoCab = (aba) => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>exemplo-labs/motor-de-regras</h4><span class="pill b-waiting">CI …</span><span class="chip" style="font-family:var(--font-sans)">privado</span><span style="margin-left:auto"><span class="btn contorno">${ic('external-link')}Abrir no GitHub</span></span></div>
+    <div class="chips"><span class="chip">${ic('git-branch')}main</span><span class="chip">${ic('star')}12</span><span class="chip">${ic('tag')}v1.8.0 · há 3 dias</span></div></div>
+  <div class="abas"><span>${ic('bar-chart-3')}Métricas</span><span>${ic('circle-dot')}Issues (9)</span><span>${ic('git-pull-request')}PRs (5)</span><span>${ic('play-circle')}CI</span><span>${ic('folder-open')}Sessões (3)</span><span>${ic('git-commit-horizontal')}Decisões</span><span class="${aba === 'adrs' ? 'on' : ''}">${ic('scroll-text')}ADRs (9)</span><span class="${aba === 'instr' ? 'on' : ''}">${ic('book-open-check')}Instruções</span></div>`
+const INSTR_ARQ = [
+  ['CLAUDE.md', 'raiz', 'Claude Code', 3, ''],
+  ['AGENTS.md', 'raiz', 'agentes em geral', 0, 'importado pelo CLAUDE.md'],
+  ['packages/cobranca/CLAUDE.md', 'subpasta', 'Claude Code, ao mexer na pasta', 1, ''],
+]
+const instrItem = (ic1, nome, extra, on, sub) => `<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:7px;font-size:12px;${on ? 'background:var(--raised);box-shadow:inset 2px 0 0 var(--accent);' : ''}${sub ? 'padding-left:24px;' : ''}"><span class="${on ? 'c-accent' : 'c-muted'}">${ic(ic1)}</span><span class="trunc ${sub ? 'mono' : ''}" style="${sub ? 'font-size:11px;' : ''}flex:1">${nome}</span>${extra}</div>`
+function instrNav() {
+  const conta = n => `<span class="mono c-muted" style="font-size:11px">${n}</span>`
+  return `<div class="cartao" style="padding:10px 8px;display:flex;flex-direction:column;gap:2px">
+    <div class="olhinho" style="padding:4px 8px">Arquivos de instrução</div>
+    ${instrItem('file-text', 'CLAUDE.md', '<span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans)">raiz</span>', true)}
+    ${instrItem('corner-down-right', '@AGENTS.md', '', false, true)}
+    ${instrItem('corner-down-right', '@docs/estilo.md', '', false, true)}
+    ${instrItem('corner-down-right', '@~/.claude/meu.md', `<span class="c-muted" title="fora do repositório">${ic('circle-slash')}</span>`, false, true)}
+    ${instrItem('file-text', 'AGENTS.md', '<span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans)">raiz</span>')}
+    ${instrItem('file-text', 'packages/cobranca/CLAUDE.md', '')}
+    <div class="olhinho" style="padding:10px 8px 4px">.claude</div>
+    ${[['scale', 'Regras', 2], ['sparkles', 'Skills', 3], ['users', 'Agentes', 2], ['slash', 'Comandos', 4], ['webhook', 'Hooks', 2], ['plug', 'Plugins', 2], ['server', 'MCP', 2]].map(([i, n, q]) => instrItem(i, n, conta(q))).join('')}
+  </div>`
+}
+// O arquivo aberto, renderizado; cada @import vira um bloco que abre no lugar.
+function instrVisor() {
+  const h = (t, n = 2) => `<div style="font-size:${n === 1 ? 17 : 14}px;font-weight:600;margin:${n === 1 ? 0 : 6}px 0 2px">${t}</div>`
+  const li = l => `<ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${l.map(x => `<li>${x}</li>`).join('')}</ul>`
+  const imp = (ref, estado, miolo, fechado) => `<div style="border-left:2px solid ${estado === 'ok' ? 'var(--accent)' : 'var(--border)'};padding:6px 0 6px 12px;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;gap:8px;align-items:center;font-size:12px"><span class="${estado === 'ok' ? 'c-accent' : 'c-muted'}">${ic(estado !== 'ok' ? 'circle-slash' : fechado ? 'chevron-right' : 'chevron-down')}</span><span class="mono">@${ref}</span>${estado === 'ok' ? '' : `<span class="c-muted">${estado}</span>`}</div>${miolo || ''}</div>`
+  return `<div class="cartao" style="padding:14px 18px;display:flex;flex-direction:column;gap:10px;min-width:0">
+    <div style="display:flex;gap:8px;align-items:center"><span class="c-accent">${ic('file-text')}</span><b class="mono" style="font-size:13px">CLAUDE.md</b><span class="c-muted" style="font-size:12px">raiz · carregado em toda sessão do Claude Code</span><span style="margin-left:auto;display:flex;gap:8px"><span class="seg"><span class="on">Renderizado</span><span>Markdown</span></span><span class="btn contorno" style="height:28px">${ic('external-link')}</span></span></div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px">
+      ${h('motor-de-regras', 1)}
+      <p style="margin:0;font-size:12.5px;line-height:1.6">O motor avalia as regras de preço a partir de uma tabela versionada (ADR 0008).</p>
+      ${imp('AGENTS.md', 'ok', `${h('Como trabalhar aqui')}${li(['Bastidores em inglês; a tela em pt-BR.', 'Rode <code>npm test</code> antes de abrir o PR.', 'Nada de nome de cliente nos dados de teste.'])}`)}
+      ${imp('docs/estilo.md', 'ok', `<span class="c-muted" style="font-size:12px">18 linhas · clique para abrir</span>`, true)}
+      ${imp('~/.claude/meu.md', 'fora do repositório: vem da máquina de quem roda o agente')}
+      ${h('Testes')}
+      ${li(['Use o GitHub falso; nunca a API real.', 'Uma regra nova traz o seu caso na tabela de testes.'])}
+    </div></div>`
+}
+function instrClaude(cols) {
+  const card = (i, t, q, linhas) => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0"><div class="ttl">${ic(i)}${t}<span class="r">${q}</span></div>${linhas.map(([a, b]) => `<div style="display:flex;gap:8px;align-items:baseline;font-size:12px;min-width:0"><span class="mono" style="font-size:11.5px;white-space:nowrap">${a}</span><span class="c-muted trunc">${b}</span></div>`).join('')}</div>`
+  return `<div style="display:grid;grid-template-columns:repeat(${cols},minmax(0,1fr));gap:12px">
+    ${card('scale', 'Regras', '2', [['testes', 'só em test/**'], ['sql', 'só em src/db/**']])}
+    ${card('sparkles', 'Skills', '3', [['release', 'Publica uma versão do motor'], ['nova-regra', 'Cria a regra e o teste'], ['migracao', 'Escreve a migração do banco']])}
+    ${card('users', 'Agentes', '2', [['revisor', 'Revisa o diff contra as regras'], ['tabela', 'Confere a tabela de decisão']])}
+    ${card('slash', 'Comandos', '4', [['/release', ''], ['/nova-regra', ''], ['/pr:abrir', ''], ['/pr:revisar', '']])}
+    ${card('webhook', 'Hooks', '2 eventos', [['PostToolUse', 'Edit|Write · 1 comando'], ['Stop', '1 comando']])}
+    ${card('plug', 'Plugins habilitados', '2', [['revisao', '@ferramentas-do-time'], ['commit-commands', '@claude-plugins-oficial']])}
+    ${card('server', 'MCP', '2', [['github', '.mcp.json'], ['banco-de-teste', '.mcp.json']])}
+  </div>`
+}
+function telaRepoInstr(larga) {
+  return `${repoCab('instr')}
+  <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="flex:1">${ic('search')}Buscar nas instruções deste repositório: "inglês", "npm test"…</span><span class="c-muted" style="font-size:12px;white-space:nowrap">${ic('clock')} lido há 3 min · do cache</span></div>
+  <div style="display:grid;grid-template-columns:${larga ? 270 : 240}px minmax(0,1fr)${larga ? ' 300px' : ''};gap:12px;align-items:start">
+    ${instrNav()}
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">${instrVisor()}${larga ? '' : `<div class="olhinho">${ic('folder')}O que .claude/ traz</div>${instrClaude(2)}`}</div>
+    ${larga ? `<div style="display:flex;flex-direction:column;gap:12px"><div class="olhinho">${ic('folder')}O que .claude/ traz</div>${instrClaude(1)}</div>` : ''}
+  </div>`
+}
+function telaInstrEstados() {
+  return `${repoCab('instr').replace('exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox')}
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">Repositório sem nenhuma instrução</div><div class="cartao vazio"><span class="ic">${ic('book-dashed')}</span><b>Nenhuma instrução para agentes neste repositório</b><span>Procuramos <code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code> e <code>AGENTS.md</code> na raiz e nas subpastas, e <code>.claude/</code> e <code>.mcp.json</code> na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.</span><span class="btn contorno">${ic('external-link')}Como escrever um CLAUDE.md</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:12px"><div class="olhinho" style="margin-bottom:-4px">Avisos, em outros repositórios</div>
+      <div class="faixa"><span class="ic">${ic('folder-tree')}</span><div><b>Árvore grande demais.</b> O GitHub cortou a lista em 100 mil arquivos: as instruções da raiz e de <code>.claude/</code> estão aqui, mas subpastas podem faltar.</div></div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('file-text')}<span class="mono" style="font-size:13px">AGENTS.md</span><span class="r">raiz</span></div>
+        <span class="c-muted" style="font-size:12px">Nenhum <code>CLAUDE.md</code> deste repositório importa este arquivo.</span>
+        <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-error">${ic('file-x')}</span><span class="mono">@docs/antigo.md</span><span class="c-muted">não existe mais no repositório</span></div>
+        <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-muted">${ic('file-warning')}</span><span class="mono">.claude/settings.json</span><span class="c-muted">JSON inválido: hooks e plugins não foram lidos</span></div></div>
     </div>
   </div>`
 }
@@ -2098,6 +2175,10 @@ const TELAS = [
     n: N(['O cabeçalho com chips do Session Detail e a coluna lateral de Decisões (C20).'], ['"Markdown" troca para o texto do arquivo, para quando o extrator errar; o padrão é a estruturada.', 'Seções que o extrator não reconhece ficam em "Outras seções do texto", fechadas, e nada do arquivo some.', 'MADR 4 traz decisores, consultados e informados; Nygard e os livres mostram só o que tiverem.']) },
   { id: 'console-adrs-estados', cod: 'C31', nome: 'ADRs · vazio, cache e incompleta', sub: 'Nenhum repositório com ADR, o GitHub limitando (mostra o cache e a hora dele) e uma ADR sem status, data, alternativas e consequências. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'adrs', telaAdrsEstados())}</div>`,
     n: N(['EmptyState e a faixa de erro de C19.'], ['O que falta na ADR aparece como seção tracejada "não está no texto", em vez de sumir: quem lê sabe que o autor não escreveu.']) },
+  { id: 'console-repo-instr', cod: 'C32', nome: 'Repositório · Instruções dos agentes', sub: 'A aba Instruções na tela de um repositório: os arquivos de instrução (CLAUDE.md e AGENTS.md da raiz e das subpastas), cada um renderizado com os @imports abertos no lugar, e o que .claude/ traz (regras, skills, agentes, hooks, plugins habilitados e MCP). Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaRepoInstr(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaRepoInstr(true))}</div>`,
+    n: N(['A lista e o editor do Agent Config (C16 e C17), que lê o .claude/ desta máquina; aqui o mesmo conteúdo vem do repositório, pelo GitHub, e só se lê.'], ['A aba se chama "Instruções" para caber em 1100 ao lado de ADRs; o título "Instruções dos agentes" fica no índice.', 'O @import abre no lugar, com a borda laranja; o que fica fora do repositório (@~/…) é dito, não escondido.', 'Hooks mostram o evento, o matcher e quantos comandos; nunca o comando, como o Agent Config.', 'Em 1440, o que .claude/ traz vai para uma coluna à direita; em 1100, desce para baixo do arquivo.']) },
+  { id: 'console-repo-instr-estados', cod: 'C33', nome: 'Instruções · vazio e avisos', sub: 'Um repositório sem nenhuma instrução para agentes, a árvore cortada pelo GitHub, um AGENTS.md que nenhum CLAUDE.md importa, um @import que não existe e um settings.json quebrado. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstrEstados())}</div>`,
+    n: N(['EmptyState e a faixa de C19.'], ['O aviso diz onde procuramos e o que o agente leva no lugar.']) },
 ]
 
 // =====================================================================

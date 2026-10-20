@@ -4,7 +4,7 @@ Wireframes de todas as telas da 0.0.1, para aprovação antes de construir:
 
 - **Painel lateral** (mod do Claude Code, decisão [0004](../decisoes/0004-painel-da-sessao.md)): P0 a P13, em 38 e 121 colunas, com as decisões da sessão (P9 e P10) e o grafo da sessão com os subagentes (P11 a P13, issue #146).
 - **App de bandeja** (Tauri, decisão [0005](../decisoes/0005-app-desktop.md)): A1 a A5, e A6 e A7 com o bloco Máquinas (decisão [0008](../decisoes/0008-machine-telemetry-and-dev-console.md)).
-- **Console** (artefato, que também é a janela do app): C1 a C23, com Feed, Analytics, Workflows (grafo de agentes e o laço dev/review), Agent Config, Rodar agente, Decisões (C20 e C21), Repositórios (C22 e C23), as máquinas (C24 Esta máquina, C25 Workstation, C26 sem conexão) o Dev Console (C27) e as ADRs dos repositórios (C28 a C31, issue #174, com o [estudo](../adr-viewer-study.md)). As telas novas aparecem em 1100 px, a largura da janela do app, e em 1440 px.
+- **Console** (artefato, que também é a janela do app): C1 a C23, com Feed, Analytics, Workflows (grafo de agentes e o laço dev/review), Agent Config, Rodar agente, Decisões (C20 e C21), Repositórios (C22 e C23), as máquinas (C24 Esta máquina, C25 Workstation, C26 sem conexão) o Dev Console (C27) e as ADRs dos repositórios (C28 a C31, issue #174) e as instruções dos agentes de cada repositório (C32 e C33, issue #183), com o [estudo](../repo-adrs-and-instructions-study.md). As telas novas aparecem em 1100 px, a largura da janela do app, e em 1440 px.
 
 A referência é o Claude Code Agent Monitor. Cada tela diz o que veio dele e onde diverge.
 
