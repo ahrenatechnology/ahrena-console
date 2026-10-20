@@ -16,7 +16,7 @@
 
 import type { StateChange } from '../states/machine.ts';
 import type { InboxState } from '../states/inbox.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
+import type { DecisionPort } from '../decisions/port.ts';
 import type { Agent, Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { ChangeCursor } from './cursor.ts';

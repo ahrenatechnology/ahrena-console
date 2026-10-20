@@ -15,11 +15,11 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { rebuildContextMeters } from '../context/recording.ts';
-import { captureTranscriptFile } from '../decisoes/captura-transcript.ts';
-import type { Decision } from '../decisoes/modelo.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { markNoise } from '../decisoes/registro.ts';
-import { isDismissedAnswer, looksLikeCorrection, shortChoice } from '../decisoes/texto.ts';
+import { captureTranscriptFile } from '../decisions/capture-transcript.ts';
+import type { Decision } from '../decisions/model.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { markNoise } from '../decisions/registry.ts';
+import { isDismissedAnswer, looksLikeCorrection, shortChoice } from '../decisions/text.ts';
 import { eventosDoTranscript, type SessaoImportada } from '../ingest/historico/importer.ts';
 import type { Session, SessionEvent } from '../model.ts';
 import { isPlanEvent } from '../plan/extraction.ts';

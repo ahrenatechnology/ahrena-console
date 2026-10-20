@@ -4,8 +4,8 @@
 
 import { emptyTokenCounts, type Session, type SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { linkSession } from '../decisoes/registro.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { linkSession } from '../decisions/registry.ts';
 import type { CenarioDoPainel } from './painel.ts';
 import { RAIZ } from './vocabulario.ts';
 

@@ -1,22 +1,22 @@
-// Captura das decisões pelos hooks do Claude Code, a partir do evento já normalizado
-// (src/ingest/hooks). Pendura-se no `onEvent` do receptor:
+// Decision capture through Claude Code hooks, from the already normalized event
+// (src/ingest/hooks). It hangs on the receiver's `onEvent`:
 //
-//   const captura = new HookDecisionCapture({ decisions });
-//   startHookReceiver({ storage, onEvent: (r) => captura.onEvent(r.event) });
+//   const capture = new HookDecisionCapture({ decisions });
+//   startHookReceiver({ storage, onEvent: (r) => capture.onEvent(r.event) });
 //
-// - pergunta: `PostToolUse` do `AskUserQuestion`, com as perguntas na entrada e as respostas na resposta;
-// - plano: `PostToolUse` do `ExitPlanMode` (o plano recusado não chega aqui: fica com o transcript);
-// - permissão: `PreToolUse`, depois a notificação `permission_prompt` (ou um `PermissionRequest`),
-//   depois `PostToolUse` da mesma chamada (permitiu) ou nada dela até o próximo `Stop` ou prompt (negou).
-// A chave de origem é a do `tool_use_id`, a mesma do transcript, então os dois caminhos não duplicam.
+// - question: `PostToolUse` of `AskUserQuestion`, with the questions in the input and the answers in the response;
+// - plan: `PostToolUse` of `ExitPlanMode` (a rejected plan does not arrive here: the transcript handles it);
+// - permission: `PreToolUse`, then the `permission_prompt` notification (or a `PermissionRequest`),
+//   then `PostToolUse` of the same call (allowed) or nothing from it until the next `Stop` or prompt (denied).
+// The source key is the `tool_use_id` one, the same as the transcript's, so the two paths do not duplicate.
 
 import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
 import type { SessionEvent } from '../model.ts';
-import type { Decision } from './modelo.ts';
-import type { DecisionPort } from './porta.ts';
-import { registerDecision, type DecisionDraft } from './registro.ts';
-import { DECISION_TOOLS, permissionDraft, planDraft, questionDrafts, type CaptureBase } from './captura-comum.ts';
-import { isRejection } from './texto.ts';
+import type { Decision } from './model.ts';
+import type { DecisionPort } from './port.ts';
+import { registerDecision, type DecisionDraft } from './registry.ts';
+import { DECISION_TOOLS, permissionDraft, planDraft, questionDrafts, type CaptureBase } from './capture-common.ts';
+import { isRejection } from './text.ts';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

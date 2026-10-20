@@ -11,7 +11,7 @@ import { Contas, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPai
 import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
 import { DecisoesDaUi } from '../../src/api/decisoes-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { GithubProject } from '../../src/github/project.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';

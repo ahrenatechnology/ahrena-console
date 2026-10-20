@@ -1,24 +1,24 @@
-// Captura das decisões pelo transcript JSONL do Claude Code. O transcript é conteúdo não confiável:
-// cada linha é só decodificada com JSON.parse e lida campo a campo; nada nela é executado, seguido
-// ou interpretado como instrução, e todo texto passa por `cleanText` (uma linha, sem controles, cortado).
+// Decision capture from the Claude Code JSONL transcript. The transcript is untrusted content:
+// each line is only decoded with JSON.parse and read field by field; nothing in it is executed, followed
+// or taken as an instruction, and all text goes through `cleanText` (one line, no control chars, truncated).
 //
-// O que sai daqui:
-// - pergunta: `tool_use` do `AskUserQuestion` e o `tool_result` dele, com `toolUseResult.answers`;
-// - plano: o `tool_result` do `ExitPlanMode` aprovado; os recusados antes viram as alternativas;
-// - correção (determinística): a recusa de um plano com o que a pessoa escreveu;
-// - permissão negada: a recusa de qualquer outra ferramenta (o "permitir" só os hooks enxergam,
-//   porque o transcript não diz quando houve pedido de permissão);
-// - correção (inferida, a confirmar): uma resposta curta da pessoa que começa contrariando a
-//   pergunta que o agente acabou de fazer. Entra na cadeia do assunto só quando o turno teve uma decisão só.
+// What comes out of here:
+// - question: the `tool_use` of `AskUserQuestion` and its `tool_result`, with `toolUseResult.answers`;
+// - plan: the `tool_result` of an approved `ExitPlanMode`; the ones rejected before become the alternatives;
+// - correction (deterministic): rejecting a plan with what the person wrote;
+// - permission denied: rejecting any other tool (only the hooks see "allow",
+//   because the transcript does not say when there was a permission request);
+// - correction (inferred, to confirm): a short reply from the person that starts by contradicting the
+//   question the agent just asked. It joins the topic's chain only when the turn had a single decision.
 
 import { readFile } from 'node:fs/promises';
 import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
 import { isoTimestamp } from '../ingest/historico/transcript.ts';
-import type { Decision } from './modelo.ts';
-import type { DecisionPort } from './porta.ts';
-import { registerDecision, type DecisionDraft } from './registro.ts';
-import { correctionDraft, permissionDraft, planDraft, questionDrafts, type CaptureBase } from './captura-comum.ts';
-import { cleanText, isRejection, looksLikeCorrection, planTitle, rejectionFeedback } from './texto.ts';
+import type { Decision } from './model.ts';
+import type { DecisionPort } from './port.ts';
+import { registerDecision, type DecisionDraft } from './registry.ts';
+import { correctionDraft, permissionDraft, planDraft, questionDrafts, type CaptureBase } from './capture-common.ts';
+import { cleanText, isRejection, looksLikeCorrection, planTitle, rejectionFeedback } from './text.ts';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

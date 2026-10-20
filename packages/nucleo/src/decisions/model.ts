@@ -1,6 +1,6 @@
-// Modelo das decisões da sessão (issue #99): o que foi decidido, o que foi descartado, quem decidiu,
-// de onde veio, o link para a mensagem, o escopo e o estado, com a cadeia de substituição.
-// Datas são strings ISO 8601 em UTC, como no resto do modelo.
+// Session decisions model (issue #99): what was decided, what was discarded, who decided,
+// where it came from, the link to the message, the scope and the state, with the replacement chain.
+// Dates are ISO 8601 strings in UTC, as in the rest of the model.
 
 import { InvalidModelError, type Metadata } from '../model.ts';
 

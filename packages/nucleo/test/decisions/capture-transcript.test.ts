@@ -1,13 +1,13 @@
-// CA1 e CA2 pelo transcript: pergunta, plano, permissão negada e correção sua.
-// CA6: o transcript é conteúdo não confiável; a extração nunca executa nada.
+// CA1 and CA2 through the transcript: question, plan, permission denied and the person's correction.
+// CA6: the transcript is untrusted content; extraction never executes anything.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, afterEach, beforeEach, describe, test } from 'node:test';
-import { captureTranscriptFile, extractTranscriptDecisions } from '../../src/decisoes/captura-transcript.ts';
-import { confirmDecision, currentDecisionsFor } from '../../src/decisoes/registro.ts';
+import { captureTranscriptFile, extractTranscriptDecisions } from '../../src/decisions/capture-transcript.ts';
+import { confirmDecision, currentDecisionsFor } from '../../src/decisions/registry.ts';
 import { ASK_ANSWERS, ASK_INPUT, PLAN, PLAN_REJECTED, REJECT, at, jsonl, openCtx, rejectWith, tx, type Ctx } from './helpers.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-decisoes-'));
@@ -24,7 +24,7 @@ const ask = [
   ),
 ];
 
-describe('decisões: captura pelo transcript', () => {
+describe('decisions: capture through the transcript', () => {
   let ctx: Ctx;
   beforeEach(async () => {
     ctx = await openCtx();
@@ -33,25 +33,25 @@ describe('decisões: captura pelo transcript', () => {
     await ctx.storage.close();
   });
 
-  test('CA1: pergunta respondida, com branch, repositório e a linha da resposta', () => {
-    const [banco, telas] = extractTranscriptDecisions(jsonl(ask), { transcriptPath: '/t/s1.jsonl' });
-    assert.equal(banco.origin, 'pergunta');
-    assert.equal(banco.choice, 'Postgres no Docker');
-    assert.deepEqual(banco.alternatives, ['SQLite em memória']);
-    assert.equal(banco.branch, 'feat/42-kanban');
-    assert.equal(banco.repo, '/repo/app');
-    assert.deepEqual(banco.message, { uuid: 'u2', toolUseId: 'toolu_ask', transcriptPath: '/t/s1.jsonl' });
-    assert.equal(banco.decidedAt, at(2));
-    assert.equal(telas.choice, 'Kanban, Feed');
+  test('CA1: answered question, with branch, repository and the answer line', () => {
+    const [database, screens] = extractTranscriptDecisions(jsonl(ask), { transcriptPath: '/t/s1.jsonl' });
+    assert.equal(database.origin, 'pergunta');
+    assert.equal(database.choice, 'Postgres no Docker');
+    assert.deepEqual(database.alternatives, ['SQLite em memória']);
+    assert.equal(database.branch, 'feat/42-kanban');
+    assert.equal(database.repo, '/repo/app');
+    assert.deepEqual(database.message, { uuid: 'u2', toolUseId: 'toolu_ask', transcriptPath: '/t/s1.jsonl' });
+    assert.equal(database.decidedAt, at(2));
+    assert.equal(screens.choice, 'Kanban, Feed');
   });
 
-  test('CA1: sem toolUseResult, as respostas saem do texto do tool_result', () => {
+  test('CA1: without toolUseResult, the answers come from the tool_result text', () => {
     const lines = [ask[1], tx.toolResult({ uuid: 'u2', minute: 2 }, 'toolu_ask', (ask[2] as { message: { content: { content: string }[] } }).message.content[0].content)];
     const d = extractTranscriptDecisions(jsonl(lines));
     assert.deepEqual(d.map((x) => x.choice), ['Postgres no Docker', 'Kanban, Feed']);
   });
 
-  test('CA1 e CA2: plano recusado com texto é correção; o aprovado depois tem o recusado como alternativa', () => {
+  test('CA1 and CA2: a plan rejected with text is a correction; the one approved later has the rejected one as an alternative', () => {
     const d = extractTranscriptDecisions(
       jsonl([
         tx.toolUse({ uuid: 'p1', minute: 1 }, 'toolu_p1', 'ExitPlanMode', { plan: PLAN_REJECTED }),
@@ -69,7 +69,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(d[0].topic, 'plano');
   });
 
-  test('plano recusado sem texto não é decisão', () => {
+  test('a plan rejected without text is not a decision', () => {
     const d = extractTranscriptDecisions(
       jsonl([
         tx.toolUse({ uuid: 'p1', minute: 1 }, 'toolu_p1', 'ExitPlanMode', { plan: PLAN_REJECTED }),
@@ -79,7 +79,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.deepEqual(d, []);
   });
 
-  test('CA1: ferramenta recusada é permissão negada; erro comum não é', () => {
+  test('CA1: a rejected tool is a denied permission; an ordinary error is not', () => {
     const d = extractTranscriptDecisions(
       jsonl([
         tx.toolUse({ uuid: 'b1', minute: 1 }, 'toolu_b1', 'Bash', { command: 'git push --force' }),
@@ -94,7 +94,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(d[0].message?.uuid, 'b2');
   });
 
-  test('CA2: o "não, …" a uma pergunta do agente é correção inferida, a confirmar, e entra na cadeia do assunto', async () => {
+  test('CA2: a "não, …" to an agent question is an inferred correction, to confirm, and joins the topic chain', async () => {
     const one = { questions: [ASK_INPUT.questions[0]] };
     const lines = [
       tx.prompt({ uuid: 'u0', minute: 0 }, 'Monte o kanban de sessões'),
@@ -110,7 +110,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(corr.state, 'a_confirmar');
     assert.equal(corr.choice, 'Não, use SQLite em memória nos testes');
     assert.deepEqual(corr.alternatives, ['Subo o Postgres no Docker para os testes?']);
-    assert.equal(corr.topic, d[0].topic, 'o assunto é o da única decisão do turno');
+    assert.equal(corr.topic, d[0].topic, 'the topic is the one of the turn\'s only decision');
     assert.equal(corr.message?.uuid, 'c1');
 
     const path = join(dir, 'correcao.jsonl');
@@ -121,18 +121,18 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(c.state, 'a_confirmar');
     assert.equal(c.message.transcriptPath, path);
 
-    // Só vale depois de confirmada; aí substitui a resposta anterior sobre o mesmo assunto.
-    const antes = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao');
-    assert.ok(!antes.some((x) => x.id === c.id));
+    // It only counts once confirmed; then it replaces the previous answer on the same topic.
+    const before = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao');
+    assert.ok(!before.some((x) => x.id === c.id));
     await confirmDecision(ctx.decisions, c.id, at(11));
-    const banco = rep.created[0];
-    assert.equal((await ctx.decisions.getDecision(banco.id))?.supersededBy, c.id);
+    const database = rep.created[0];
+    assert.equal((await ctx.decisions.getDecision(database.id))?.supersededBy, c.id);
 
-    // Rodar de novo não duplica.
+    // Running again does not duplicate.
     assert.equal((await captureTranscriptFile(ctx.decisions, path, at(12))).created.length, 0);
   });
 
-  test('CA2: com várias decisões no turno, a correção não adivinha o assunto', () => {
+  test('CA2: with several decisions in the turn, the correction does not guess the topic', () => {
     const d = extractTranscriptDecisions(
       jsonl([...ask, tx.say({ uuid: 'a1', minute: 3 }, 'Vou com Postgres?'), tx.prompt({ uuid: 'c1', minute: 4 }, 'na verdade, use SQLite em memória')]),
     );
@@ -141,28 +141,28 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(d[2].topic, null);
   });
 
-  test('conservador (#131): afirmação do agente, reação curta, dúvida, pergunta ou mensagem longa não são correção', () => {
-    const casos = [
+  test('conservative (#131): an agent statement, a short reaction, a doubt, a question or a long message are not corrections', () => {
+    const cases = [
       ['Vou subir o Postgres no Docker.', 'Não, use SQLite em memória nos testes'],
       ['Subo o Postgres?', 'Não, calma.'],
       ['Subo o Postgres?', 'Não sei se é possível, mas seria legal marcar os planos já executados'],
       ['Subo o Postgres?', 'Não, por que Postgres?'],
       ['Subo o Postgres?', `Não, ${'e depois a gente vê isso com calma '.repeat(6)}`],
     ];
-    for (const [i, [fala, resposta]] of casos.entries()) {
-      const d = extractTranscriptDecisions(jsonl([tx.say({ uuid: `a${i}`, minute: 1 }, fala), tx.prompt({ uuid: `p${i}`, minute: 2 }, resposta)]));
-      assert.deepEqual(d, [], resposta);
+    for (const [i, [said, reply]] of cases.entries()) {
+      const d = extractTranscriptDecisions(jsonl([tx.say({ uuid: `a${i}`, minute: 1 }, said), tx.prompt({ uuid: `p${i}`, minute: 2 }, reply)]));
+      assert.deepEqual(d, [], reply);
     }
   });
 
-  test('a correção tem o título curto e o texto inteiro no detalhe', () => {
-    const resposta = 'Não, use SQLite em memória nos testes. Postgres fica para o ambiente de staging.';
-    const [d] = extractTranscriptDecisions(jsonl([tx.say({ uuid: 'a1', minute: 1 }, 'Subo o Postgres?'), tx.prompt({ uuid: 'p1', minute: 2 }, resposta)]));
+  test('the correction has the short title and the whole text in the detail', () => {
+    const reply = 'Não, use SQLite em memória nos testes. Postgres fica para o ambiente de staging.';
+    const [d] = extractTranscriptDecisions(jsonl([tx.say({ uuid: 'a1', minute: 1 }, 'Subo o Postgres?'), tx.prompt({ uuid: 'p1', minute: 2 }, reply)]));
     assert.equal(d.choice, 'Não, use SQLite em memória nos testes.');
-    assert.equal(d.metadata?.texto, resposta);
+    assert.equal(d.metadata?.texto, reply);
   });
 
-  test('CA2: conservador: sem proposta antes, ou sem tom de correção, não é correção', () => {
+  test('CA2: conservative: without a proposal before, or without a correcting tone, it is not a correction', () => {
     const d = extractTranscriptDecisions(
       jsonl([
         tx.prompt({ uuid: 'x1', minute: 0 }, 'Não sei por onde começar'),
@@ -176,13 +176,13 @@ describe('decisões: captura pelo transcript', () => {
     assert.deepEqual(d, []);
   });
 
-  test('subagente: a decisão é do agente da linha', () => {
+  test('subagent: the decision belongs to the line\'s agent', () => {
     const lines = ask.map((l) => ({ ...l, agentId: 'a1111', isSidechain: true }));
     const d = extractTranscriptDecisions(jsonl(lines));
     assert.equal(d[0].agentId, 's1:a1111');
   });
 
-  test('linhas quebradas, desconhecidas ou sem sessão são ignoradas', () => {
+  test('broken, unknown or sessionless lines are ignored', () => {
     const d = extractTranscriptDecisions([
       '{ quebrada',
       '',
@@ -194,7 +194,7 @@ describe('decisões: captura pelo transcript', () => {
     assert.equal(d.length, 2);
   });
 
-  test('CA6: texto hostil é só texto: limpo, cortado e nunca executado', async () => {
+  test('CA6: hostile text is only text: cleaned, truncated and never executed', async () => {
     const sentinel = join(dir, 'executou');
     const hostile = {
       questions: [
@@ -210,7 +210,7 @@ describe('decisões: captura pelo transcript', () => {
     const lines = [
       tx.toolUse({ uuid: 'h1', minute: 1 }, 'toolu_h', 'AskUserQuestion', hostile),
       tx.toolResult({ uuid: 'h2', minute: 2 }, 'toolu_h', 'answered', { toolUseResult: { answers, __proto__: { polluted: true } } }),
-      // Um tool_use com nome de ferramenta e comando: a extração só lê.
+      // A tool_use with a tool name and a command: extraction only reads.
       tx.toolUse({ uuid: 'h3', minute: 3 }, 'toolu_b', 'Bash', { command: `touch ${sentinel}` }),
       tx.toolResult({ uuid: 'h4', minute: 4 }, 'toolu_b', REJECT, { isError: true }),
     ];
@@ -218,8 +218,8 @@ describe('decisões: captura pelo transcript', () => {
     writeFileSync(path, jsonl(lines).join('\n'));
     const rep = await captureTranscriptFile(ctx.decisions, path, at(10));
 
-    assert.equal(existsSync(sentinel), false, 'nada foi executado');
-    assert.equal(({} as Record<string, unknown>).polluted, undefined, 'sem poluição de protótipo');
+    assert.equal(existsSync(sentinel), false, 'nothing was executed');
+    assert.equal(({} as Record<string, unknown>).polluted, undefined, 'no prototype pollution');
     const [q, perm] = rep.created;
     assert.doesNotMatch(q.context!, /[\u0000-\u001f\u007f‮]/);
     assert.ok(q.choice.length <= 280);

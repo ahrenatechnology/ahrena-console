@@ -8,8 +8,8 @@
 
 import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
 import { currentPrices } from '../cost/table.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { clearNeighbours } from '../decisoes/registro.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { clearNeighbours } from '../decisions/registry.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { endedSessionOf, historyPage, type HistoryPage, type HistoryRequest, type EndedSession } from './model.ts';

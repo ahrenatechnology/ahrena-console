@@ -1,11 +1,11 @@
-// Inferência de decisões por um modelo pequeno: só a interface. Nenhuma implementação daqui chama
-// API de modelo; quem quiser ligar uma passa o inferidor. Tudo que um inferidor devolve entra como
-// "sugerida", do agente, "a confirmar", e só vale depois que a pessoa confirma.
+// Decision inference by a small model: the interface only. Nothing here calls a model API;
+// whoever wants one passes the inferrer. Everything an inferrer returns comes in as
+// "sugerida", from the agent, "a confirmar", and only counts after the person confirms it.
 
-import type { Decision } from './modelo.ts';
-import type { DecisionPort } from './porta.ts';
-import { registerDecision } from './registro.ts';
-import { cleanList, cleanText, topicKey } from './texto.ts';
+import type { Decision } from './model.ts';
+import type { DecisionPort } from './port.ts';
+import { registerDecision } from './registry.ts';
+import { cleanList, cleanText, topicKey } from './text.ts';
 
 /** Um trecho da conversa entregue ao inferidor. É texto não confiável: o inferidor não age sobre ele. */
 export interface ConversationExcerpt {

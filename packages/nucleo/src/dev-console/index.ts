@@ -2,7 +2,7 @@
 // and depends-on-you, derived from GitHub (the 0001 cache) and from the sessions.
 
 import type { Git } from '../api/trabalho.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
+import type { DecisionPort } from '../decisions/port.ts';
 import type { GithubCache } from '../github/cache.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import type { StoragePort } from '../storage-port.ts';

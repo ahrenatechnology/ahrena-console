@@ -1,14 +1,14 @@
-// CA6: para o hub só saem metadados, salvo se a pessoa liberar o texto.
-// CA2: a decisão inferida por um modelo pequeno entra a confirmar e só vale depois de confirmada.
+// CA6: only metadata goes to the hub, unless the person releases the text.
+// CA2: a decision inferred by a small model comes in to confirm and only counts after it is confirmed.
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { HUB_METADATA_FIELDS, decisionForHub } from '../../src/decisoes/hub.ts';
-import { captureSuggestions, noInference, type DecisionInferrer, type InferenceInput } from '../../src/decisoes/inferencia.ts';
-import { confirmDecision, currentDecisionsFor, registerDecision, releaseDecisionText } from '../../src/decisoes/registro.ts';
+import { HUB_METADATA_FIELDS, decisionForHub } from '../../src/decisions/hub.ts';
+import { captureSuggestions, noInference, type DecisionInferrer, type InferenceInput } from '../../src/decisions/inference.ts';
+import { confirmDecision, currentDecisionsFor, registerDecision, releaseDecisionText } from '../../src/decisions/registry.ts';
 import { at, draft, openCtx, type Ctx } from './helpers.ts';
 
-describe('decisões: hub e inferência', () => {
+describe('decisions: hub and inference', () => {
   let ctx: Ctx;
   beforeEach(async () => {
     ctx = await openCtx();
@@ -17,7 +17,7 @@ describe('decisões: hub e inferência', () => {
     await ctx.storage.close();
   });
 
-  test('CA6: sem liberar, o hub recebe só metadados: nenhum texto da conversa nem caminho local', async () => {
+  test('CA6: without release, the hub gets only metadata: no conversation text and no local path', async () => {
     const { decision } = await registerDecision(
       ctx.decisions,
       draft({ message: { uuid: 'u1', toolUseId: 't1', transcriptPath: '/home/dev/.claude/projects/-repo-app/s1.jsonl' } }),
@@ -27,13 +27,13 @@ describe('decisões: hub e inferência', () => {
     assert.deepEqual(Object.keys(out).sort(), [...HUB_METADATA_FIELDS].sort());
     const json = JSON.stringify(out);
     for (const secret of [decision.choice, decision.context!, ...decision.alternatives, decision.topic!, '/repo/app', '/home/dev']) {
-      assert.ok(!json.includes(secret), `vazou ${secret}`);
+      assert.ok(!json.includes(secret), `leaked ${secret}`);
     }
     assert.deepEqual(out.message, { uuid: 'u1', toolUseId: 't1' });
     assert.equal(out.alternativesCount, 1);
   });
 
-  test('CA6: liberado, o texto vai junto (e o caminho local continua de fora)', async () => {
+  test('CA6: once released, the text goes along (and the local path stays out)', async () => {
     const { decision } = await registerDecision(ctx.decisions, draft({}), at(2));
     const released = await releaseDecisionText(ctx.decisions, decision.id, at(3));
     const out = decisionForHub(released);
@@ -43,12 +43,12 @@ describe('decisões: hub e inferência', () => {
     assert.equal((await ctx.decisions.getDecision(decision.id))?.textReleased, true);
   });
 
-  test('CA2: o inferidor padrão não infere nada', async () => {
+  test('CA2: the default inferrer infers nothing', async () => {
     const input: InferenceInput = { sessionId: 's1', agentId: null, repo: null, branch: null, transcriptPath: null, excerpts: [] };
     assert.deepEqual(await captureSuggestions(ctx.decisions, noInference, input, at(1)), []);
   });
 
-  test('CA2: sugestão de um modelo pequeno entra a confirmar e só vale depois de confirmada', async () => {
+  test('CA2: a small model\'s suggestion comes in to confirm and only counts after it is confirmed', async () => {
     const seen: InferenceInput[] = [];
     const fake: DecisionInferrer = {
       infer: async (input) => {
@@ -80,11 +80,11 @@ describe('decisões: hub e inferência', () => {
 
     await confirmDecision(ctx.decisions, s.id, at(7));
     assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'familia')).map((d) => d.id), [s.id]);
-    // Repetir a inferência não duplica.
+    // Repeating the inference does not duplicate.
     assert.deepEqual(await captureSuggestions(ctx.decisions, fake, input, at(8)), []);
   });
 
-  test('CA2: nem um registro direto consegue fazer sugestão valer sem confirmar', async () => {
+  test('CA2: not even a direct registration can make a suggestion count without confirming', async () => {
     const { decision } = await registerDecision(ctx.decisions, draft({ origin: 'sugerida', decidedBy: 'usuario', inferred: false, state: 'vigente' }), at(1));
     assert.equal(decision.state, 'a_confirmar');
     assert.equal(decision.decidedBy, 'agente');
