@@ -1,16 +1,18 @@
-// As notificações do sistema (wireframe A3, issue #88) como dados: quando avisar, o quê e quem cala.
+// The system notifications (wireframe A3, issue #88) as data: when to notify, what, and who is
+// silenced.
 //
-// Fica separado do Tauri para ser testado sem abrir o app. A bandeja relê `/api/attention` a cada
-// mudança e a cada 25 s; avisar a cada leitura seria barulho. O `Detector` guarda o motivo de cada
-// sessão na leitura anterior e só avisa quem entrou na lista ou trocou de motivo. A primeira
-// leitura (ao abrir, ou depois de perder o núcleo) só grava: quem já esperava não vira aviso.
+// Kept apart from Tauri so it is tested without opening the app. The tray rereads `/api/attention`
+// on every change and every 25 s; notifying on every read would be noise. The `Detector` keeps each
+// session's reason from the previous read and only notifies a session that entered the list or
+// changed reason. The first read (on opening, or after losing the core) only records: whoever was
+// already waiting does not become a notice.
 //
 // Machine alerts (#180, decision 0008 sections 3 and 5) follow the same rule with their own
 // detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
 // on the transition, without sound; the first read and a rediscovery of the core only record.
 //
-// O silêncio é do app, não do núcleo: um JSON pequeno no diretório de dados do app, com a chave
-// geral do menu ("Notificações") e as sessões caladas pela ação "Silenciar" da notificação.
+// The silence belongs to the app, not to the core: a small JSON in the app's data folder, with the
+// menu's main switch ("Notificações") and the sessions silenced by the notification's "Silenciar".
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Write};
@@ -20,20 +22,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::http;
 use crate::machines;
-use crate::menu::{Atencao, ItemDaAtencao};
+use crate::menu::{Attention, AttentionItem};
 
-/// O nome do arquivo do silêncio no diretório de dados do app.
-pub const ARQUIVO: &str = "notificacoes.json";
+/// The name of the silence file in the app's data folder.
+pub const FILE: &str = "notificacoes.json";
 
-/// Uma notificação a mostrar.
+/// A notification to show.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Aviso {
-    pub titulo: String,
-    pub corpo: String,
-    /// Só nos urgentes: pede permissão, interrompida e com erro.
-    pub som: bool,
-    pub sessao: String,
-    /// O `local_…` do Claude Desktop, para "Abrir no Claude Desktop".
+pub struct Notice {
+    pub title: String,
+    pub body: String,
+    /// Only on the urgent ones: asks for permission, interrupted and with an error.
+    pub sound: bool,
+    pub session: String,
+    /// Claude Desktop's `local_…`, for "Abrir no Claude Desktop".
     pub local: Option<String>,
     /// Where the click and "Abrir" take the app window: the session's or the machine's screen.
     pub path: String,
@@ -74,30 +76,30 @@ impl Origin {
     }
 }
 
-impl Aviso {
-    pub fn do_item(i: &ItemDaAtencao) -> Aviso {
-        Aviso {
-            titulo: titulo(i),
-            corpo: i.long_reason.clone(),
-            som: com_som(&i.reason),
-            sessao: i.session.clone(),
+impl Notice {
+    pub fn from_item(i: &AttentionItem) -> Notice {
+        Notice {
+            title: title(i),
+            body: i.long_reason.clone(),
+            sound: has_sound(&i.reason),
+            session: i.session.clone(),
             local: i.local.clone(),
-            path: caminho_da_sessao(&i.session),
+            path: session_path(&i.session),
             origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
         }
     }
 
     /// A machine alert as a notification, silent: "Workstation: CPU saturada", "Workstation sem
-    /// conexão". `sessao` carries the alert key, the notification's identifier.
-    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert) -> Aviso {
+    /// conexão". `session` carries the alert key, the notification's identifier.
+    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert) -> Notice {
         let label = machines::display_label(m);
-        let (titulo, corpo) = match a.kind.as_str() {
+        let (title, body) = match a.kind.as_str() {
             machines::UNREACHABLE_KIND => (format!("{label} sem conexão"), a.detail.clone().unwrap_or_default()),
             "load-high" => (format!("{label}: CPU saturada"), a.message.clone()),
             "volume-full" => (format!("{label}: disco quase cheio"), a.message.clone()),
             _ => (format!("{label}: {}", a.message), a.detail.clone().unwrap_or_default()),
         };
-        Aviso { titulo, corpo, som: false, sessao: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin: Origin::Machine }
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin: Origin::Machine }
     }
 }
 
@@ -115,7 +117,7 @@ pub struct MachineAlertDetector {
 }
 
 impl MachineAlertDetector {
-    pub fn observe(&mut self, ms: &[machines::Machine]) -> Vec<Aviso> {
+    pub fn observe(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
         let mut now: HashSet<String> = HashSet::new();
         let mut notices = Vec::new();
         for m in ms {
@@ -128,7 +130,7 @@ impl MachineAlertDetector {
             for a in &t.alerts {
                 let key = alert_key(&m.summary.id, &a.id);
                 if self.previous.as_ref().is_some_and(|p| !p.contains(&key)) {
-                    notices.push(Aviso::from_machine_alert(&m.summary, a));
+                    notices.push(Notice::from_machine_alert(&m.summary, a));
                 }
                 now.insert(key);
             }
@@ -143,8 +145,8 @@ impl MachineAlertDetector {
     }
 }
 
-/// O título do A3: a sessão e o motivo ("motor-de-regras pede permissão").
-pub fn titulo(i: &ItemDaAtencao) -> String {
+/// The A3 title: the session and the reason ("motor-de-regras pede permissão").
+pub fn title(i: &AttentionItem) -> String {
     // A remote session carries its machine's label (#180): "motor-de-regras · Workstation pede permissão".
     let t = match &i.machine {
         Some(m) => format!("{} · {}", i.title, m.label),
@@ -163,252 +165,252 @@ pub fn titulo(i: &ItemDaAtencao) -> String {
     }
 }
 
-fn com_som(motivo: &str) -> bool {
-    matches!(motivo, "permission" | "interrupted" | "error")
+fn has_sound(reason: &str) -> bool {
+    matches!(reason, "permission" | "interrupted" | "error")
 }
 
-/// Quem entrou na lista ou trocou de motivo desde a leitura anterior.
+/// Who entered the list or changed reason since the previous read.
 #[derive(Debug, Default)]
 pub struct Detector {
-    /// `sessão` → `motivo` da leitura anterior; `None` antes da primeira (ou depois de `zerar`).
-    anterior: Option<HashMap<String, String>>,
+    /// `session` → `reason` of the previous read; `None` before the first (or after `reset`).
+    previous: Option<HashMap<String, String>>,
 }
 
 impl Detector {
-    pub fn observar(&mut self, a: &Atencao) -> Vec<Aviso> {
-        let agora: HashMap<String, String> = a.items.iter().map(|i| (i.session.clone(), i.reason.clone())).collect();
-        let avisos = match &self.anterior {
+    pub fn observe(&mut self, a: &Attention) -> Vec<Notice> {
+        let now: HashMap<String, String> = a.items.iter().map(|i| (i.session.clone(), i.reason.clone())).collect();
+        let notices = match &self.previous {
             None => Vec::new(),
-            Some(antes) => a.items.iter().filter(|i| antes.get(&i.session) != Some(&i.reason)).map(Aviso::do_item).collect(),
+            Some(before) => a.items.iter().filter(|i| before.get(&i.session) != Some(&i.reason)).map(Notice::from_item).collect(),
         };
-        self.anterior = Some(agora);
-        avisos
+        self.previous = Some(now);
+        notices
     }
 
-    /// Esquece a leitura anterior: a próxima só grava. Ao perder o núcleo ou a lista.
-    pub fn zerar(&mut self) {
-        self.anterior = None;
+    /// Forgets the previous read: the next one only records. On losing the core or the list.
+    pub fn reset(&mut self) {
+        self.previous = None;
     }
 }
 
-/// A chave geral e as sessões caladas, como vão no JSON.
+/// The main switch and the silenced sessions, as they go in the JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Silencio {
-    /// A marca de "Notificações" no menu; desligada, nada avisa.
-    #[serde(default = "ligadas")]
-    pub ligadas: bool,
-    #[serde(default)]
-    pub sessoes: BTreeSet<String>,
+pub struct Silence {
+    /// The "Notificações" check in the menu; off, nothing notifies.
+    #[serde(rename = "ligadas", default = "enabled_by_default")]
+    pub enabled: bool,
+    #[serde(rename = "sessoes", default)]
+    pub sessions: BTreeSet<String>,
 }
 
-fn ligadas() -> bool {
+fn enabled_by_default() -> bool {
     true
 }
 
-impl Default for Silencio {
+impl Default for Silence {
     fn default() -> Self {
-        Silencio { ligadas: true, sessoes: BTreeSet::new() }
+        Silence { enabled: true, sessions: BTreeSet::new() }
     }
 }
 
-impl Silencio {
-    pub fn filtrar(&self, avisos: Vec<Aviso>) -> Vec<Aviso> {
-        if !self.ligadas {
+impl Silence {
+    pub fn filter(&self, notices: Vec<Notice>) -> Vec<Notice> {
+        if !self.enabled {
             return Vec::new();
         }
-        avisos.into_iter().filter(|a| !self.sessoes.contains(&a.sessao)).collect()
+        notices.into_iter().filter(|n| !self.sessions.contains(&n.session)).collect()
     }
 
-    /// Ausente ou ilegível: o padrão (ligadas, ninguém calado).
-    pub fn carregar(caminho: &Path) -> Silencio {
-        std::fs::read_to_string(caminho).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    /// Missing or unreadable: the default (on, nobody silenced).
+    pub fn load(path: &Path) -> Silence {
+        std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
     }
 
-    /// Grava num temporário ao lado e renomeia, para não deixar meio arquivo.
-    pub fn gravar(&self, caminho: &Path) -> io::Result<()> {
-        if let Some(pasta) = caminho.parent() {
-            std::fs::create_dir_all(pasta)?;
+    /// Writes to a temporary file next to it and renames, so as not to leave half a file.
+    pub fn save(&self, path: &Path) -> io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
         }
-        let texto = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
-        let tmp = caminho.with_extension("json.tmp");
+        let text = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
+        let tmp = path.with_extension("json.tmp");
         let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(texto.as_bytes())?;
+        f.write_all(text.as_bytes())?;
         f.sync_all()?;
         drop(f);
-        std::fs::rename(&tmp, caminho)
+        std::fs::rename(&tmp, path)
     }
 }
 
-/// O detector, o silêncio e onde ele é gravado: o que o app guarda das notificações.
+/// The detector, the silence and where it is saved: what the app keeps of the notifications.
 #[derive(Debug, Default)]
-pub struct Avisos {
+pub struct Notices {
     pub detector: Detector,
     /// The machine alerts' detector (#180), behind the same switch.
     pub machines: MachineAlertDetector,
-    pub silencio: Silencio,
-    /// `None` quando o app não tem diretório de dados: o silêncio vale só até sair.
-    pub arquivo: Option<PathBuf>,
+    pub silence: Silence,
+    /// `None` when the app has no data folder: the silence only lasts until it quits.
+    pub file: Option<PathBuf>,
 }
 
-impl Avisos {
-    pub fn abrir(arquivo: Option<PathBuf>) -> Avisos {
-        let silencio = arquivo.as_deref().map(Silencio::carregar).unwrap_or_default();
-        Avisos { detector: Detector::default(), machines: MachineAlertDetector::default(), silencio, arquivo }
+impl Notices {
+    pub fn open(file: Option<PathBuf>) -> Notices {
+        let silence = file.as_deref().map(Silence::load).unwrap_or_default();
+        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
     }
 
-    /// Os avisos desta leitura que passam pelo silêncio.
-    pub fn ler(&mut self, a: &Atencao) -> Vec<Aviso> {
-        let novos = self.detector.observar(a);
-        self.silencio.filtrar(novos)
+    /// The notices of this read that pass the silence.
+    pub fn read(&mut self, a: &Attention) -> Vec<Notice> {
+        let new = self.detector.observe(a);
+        self.silence.filter(new)
     }
 
     /// The machine notices of this read that pass the silence (#180).
-    pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Aviso> {
+    pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
         let new = self.machines.observe(ms);
-        self.silencio.filtrar(new)
+        self.silence.filter(new)
     }
 
-    /// O clique em "Notificações". Devolve o novo estado da chave.
-    pub fn alternar(&mut self) -> bool {
-        self.silencio.ligadas = !self.silencio.ligadas;
-        self.gravar();
-        self.silencio.ligadas
+    /// The click on "Notificações". Returns the switch's new state.
+    pub fn toggle(&mut self) -> bool {
+        self.silence.enabled = !self.silence.enabled;
+        self.save();
+        self.silence.enabled
     }
 
-    /// A ação "Silenciar" da notificação.
-    pub fn silenciar(&mut self, sessao: &str) {
-        if self.silencio.sessoes.insert(sessao.to_string()) {
-            self.gravar();
+    /// The notification's "Silenciar" action.
+    pub fn silence_session(&mut self, session: &str) {
+        if self.silence.sessions.insert(session.to_string()) {
+            self.save();
         }
     }
 
-    fn gravar(&self) {
-        let Some(arquivo) = &self.arquivo else { return };
-        if let Err(err) = self.silencio.gravar(arquivo) {
-            eprintln!("[ahrena-console] gravar {}: {err}", arquivo.display());
+    fn save(&self) {
+        let Some(file) = &self.file else { return };
+        if let Err(err) = self.silence.save(file) {
+            eprintln!("[ahrena-console] save {}: {err}", file.display());
         }
     }
 }
 
-/// A tela de detalhe da sessão na `/ui` do núcleo, aonde "Abrir" leva. Vazia, "." ou ".." não
-/// formam um segmento de caminho: aí, a `/ui`.
-pub fn caminho_da_sessao(sessao: &str) -> String {
-    if matches!(sessao, "" | "." | "..") {
+/// The session's detail screen in the core's `/ui`, where "Abrir" leads. Empty, "." or ".." do not
+/// make a path segment: then, the `/ui`.
+pub fn session_path(session: &str) -> String {
+    if matches!(session, "" | "." | "..") {
         return "/ui".into();
     }
-    format!("/ui/sessions/{}", http::encode(sessao))
+    format!("/ui/sessions/{}", http::encode(session))
 }
 
-/// O `local_…` que o `POST /open/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.
-pub fn local_valido(local: &str) -> bool {
-    let Some(resto) = local.strip_prefix("local_") else { return false };
-    (8..=64).contains(&resto.len()) && resto.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+/// The `local_…` the core's `POST /open/` accepts: `local_` and 8 to 64 of `[0-9a-fA-F-]`.
+pub fn valid_local(local: &str) -> bool {
+    let Some(rest) = local.strip_prefix("local_") else { return false };
+    (8..=64).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
-/// Onde fica o JSON: em `AHRENA_DADOS_DIR`, se houver, ou no diretório de dados do app.
-pub fn caminho(dados_do_app: Option<PathBuf>) -> Option<PathBuf> {
-    let pasta = std::env::var_os("AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(dados_do_app)?;
-    Some(pasta.join(ARQUIVO))
+/// Where the JSON lives: in `AHRENA_DADOS_DIR`, if set, or in the app's data folder.
+pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
+    let dir = std::env::var_os("AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
+    Some(dir.join(FILE))
 }
 
 #[cfg(test)]
-mod testes {
+mod tests {
     use super::*;
 
-    fn item(sessao: &str, titulo: &str, motivo: &str) -> ItemDaAtencao {
-        ItemDaAtencao {
-            session: sessao.into(),
-            title: titulo.into(),
+    fn item(session: &str, title: &str, reason: &str) -> AttentionItem {
+        AttentionItem {
+            session: session.into(),
+            title: title.into(),
             account: None,
-            level: if motivo == "your-turn" { "your-turn" } else { "needs" }.into(),
-            reason: motivo.into(),
-            short_reason: format!("curto de {motivo}"),
-            long_reason: format!("longo de {motivo}"),
+            level: if reason == "your-turn" { "your-turn" } else { "needs" }.into(),
+            reason: reason.into(),
+            short_reason: format!("curto de {reason}"),
+            long_reason: format!("longo de {reason}"),
             minutes: 1,
             local: None,
             machine: None,
         }
     }
 
-    fn atencao(itens: Vec<ItemDaAtencao>) -> Atencao {
-        Atencao { cursor: None, total: itens.len() as u64, active: 0, with_error: 0, items: itens }
+    fn attention(items: Vec<AttentionItem>) -> Attention {
+        Attention { cursor: None, total: items.len() as u64, active: 0, with_error: 0, items }
     }
 
-    fn sessoes(avisos: &[Aviso]) -> Vec<&str> {
-        avisos.iter().map(|a| a.sessao.as_str()).collect()
+    fn sessions(notices: &[Notice]) -> Vec<&str> {
+        notices.iter().map(|n| n.session.as_str()).collect()
     }
 
-    /// Uma pasta só deste teste em `temp_dir`, apagada ao fim.
-    struct Pasta(PathBuf);
+    /// A folder of this test alone in `temp_dir`, deleted at the end.
+    struct TempDir(PathBuf);
 
-    impl Pasta {
-        fn nova(nome: &str) -> Pasta {
-            let p = std::env::temp_dir().join(format!("ahrena-console-teste-{nome}-{}", std::process::id()));
+    impl TempDir {
+        fn new(name: &str) -> TempDir {
+            let p = std::env::temp_dir().join(format!("ahrena-console-test-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&p);
-            Pasta(p)
+            TempDir(p)
         }
     }
 
-    impl Drop for Pasta {
+    impl Drop for TempDir {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 
     #[test]
-    fn primeira_leitura_nao_avisa() {
+    fn first_read_does_not_notify() {
         let mut d = Detector::default();
-        assert!(d.observar(&atencao(vec![item("s1", "a", "permission"), item("s2", "b", "error")])).is_empty());
+        assert!(d.observe(&attention(vec![item("s1", "a", "permission"), item("s2", "b", "error")])).is_empty());
     }
 
     #[test]
-    fn entrada_avisa_uma_vez() {
+    fn entering_notifies_once() {
         let mut d = Detector::default();
-        d.observar(&atencao(vec![]));
-        let lista = atencao(vec![item("s1", "a", "permission")]);
-        assert_eq!(sessoes(&d.observar(&lista)), ["s1"]);
-        assert!(d.observar(&lista).is_empty(), "a leitura repetida não avisa");
-        assert!(d.observar(&lista).is_empty());
+        d.observe(&attention(vec![]));
+        let list = attention(vec![item("s1", "a", "permission")]);
+        assert_eq!(sessions(&d.observe(&list)), ["s1"]);
+        assert!(d.observe(&list).is_empty(), "the repeated read does not notify");
+        assert!(d.observe(&list).is_empty());
     }
 
     #[test]
-    fn troca_de_motivo_avisa() {
+    fn reason_change_notifies() {
         let mut d = Detector::default();
-        d.observar(&atencao(vec![item("s1", "a", "your-turn"), item("s2", "b", "question")]));
-        let avisos = d.observar(&atencao(vec![item("s1", "a", "permission"), item("s2", "b", "question")]));
-        assert_eq!(sessoes(&avisos), ["s1"]);
-        assert_eq!(avisos[0].titulo, "a pede permissão");
+        d.observe(&attention(vec![item("s1", "a", "your-turn"), item("s2", "b", "question")]));
+        let notices = d.observe(&attention(vec![item("s1", "a", "permission"), item("s2", "b", "question")]));
+        assert_eq!(sessions(&notices), ["s1"]);
+        assert_eq!(notices[0].title, "a pede permissão");
     }
 
     #[test]
-    fn saiu_e_voltou_avisa() {
+    fn left_and_came_back_notifies() {
         let mut d = Detector::default();
-        d.observar(&atencao(vec![item("s1", "a", "permission")]));
-        assert!(d.observar(&atencao(vec![])).is_empty());
-        assert_eq!(sessoes(&d.observar(&atencao(vec![item("s1", "a", "permission")]))), ["s1"]);
+        d.observe(&attention(vec![item("s1", "a", "permission")]));
+        assert!(d.observe(&attention(vec![])).is_empty());
+        assert_eq!(sessions(&d.observe(&attention(vec![item("s1", "a", "permission")]))), ["s1"]);
     }
 
     #[test]
-    fn reconexao_nao_avisa() {
+    fn reconnection_does_not_notify() {
         let mut d = Detector::default();
-        d.observar(&atencao(vec![]));
-        d.zerar();
-        assert!(d.observar(&atencao(vec![item("s1", "a", "error")])).is_empty());
-        assert_eq!(sessoes(&d.observar(&atencao(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
+        d.observe(&attention(vec![]));
+        d.reset();
+        assert!(d.observe(&attention(vec![item("s1", "a", "error")])).is_empty());
+        assert_eq!(sessions(&d.observe(&attention(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
     }
 
     #[test]
-    fn som_so_nos_urgentes() {
-        let com: Vec<_> = ["permission", "question", "plan", "decision", "error", "your-turn", "interrupted", "no-prompt", "outro"]
+    fn sound_only_on_the_urgent_ones() {
+        let with: Vec<_> = ["permission", "question", "plan", "decision", "error", "your-turn", "interrupted", "no-prompt", "outro"]
             .into_iter()
-            .filter(|m| Aviso::do_item(&item("s", "t", m)).som)
+            .filter(|r| Notice::from_item(&item("s", "t", r)).sound)
             .collect();
-        assert_eq!(com, ["permission", "error", "interrupted"]);
+        assert_eq!(with, ["permission", "error", "interrupted"]);
     }
 
     #[test]
-    fn titulos_do_a3() {
-        let a = |t: &str, m: &str| titulo(&item("s", t, m));
+    fn a3_titles() {
+        let a = |t: &str, r: &str| title(&item("s", t, r));
         assert_eq!(a("motor-de-regras", "permission"), "motor-de-regras pede permissão");
         assert_eq!(a("painel-de-metricas", "error"), "painel-de-metricas parou com erro");
         assert_eq!(a("fila-de-tarefas", "your-turn"), "fila-de-tarefas: sua vez");
@@ -417,84 +419,84 @@ mod testes {
     }
 
     #[test]
-    fn corpo_e_local() {
+    fn body_and_local() {
         let mut i = item("s1", "a", "permission");
         i.local = Some("local_1".into());
-        let av = Aviso::do_item(&i);
-        assert_eq!((av.corpo.as_str(), av.local.as_deref()), ("longo de permission", Some("local_1")));
+        let n = Notice::from_item(&i);
+        assert_eq!((n.body.as_str(), n.local.as_deref()), ("longo de permission", Some("local_1")));
     }
 
     #[test]
-    fn caminho_da_tela_da_sessao() {
-        assert_eq!(caminho_da_sessao("c3f09b52"), "/ui/sessions/c3f09b52");
-        assert_eq!(caminho_da_sessao("a:b/c"), "/ui/sessions/a%3Ab%2Fc");
-        for vazia in ["", ".", ".."] {
-            assert_eq!(caminho_da_sessao(vazia), "/ui", "{vazia:?}");
+    fn session_screen_path() {
+        assert_eq!(session_path("c3f09b52"), "/ui/sessions/c3f09b52");
+        assert_eq!(session_path("a:b/c"), "/ui/sessions/a%3Ab%2Fc");
+        for empty in ["", ".", ".."] {
+            assert_eq!(session_path(empty), "/ui", "{empty:?}");
         }
     }
 
     #[test]
-    fn local_como_o_nucleo() {
-        assert!(local_valido("local_716ecd97-6a9b-4452-9770-e2c155279784"));
-        assert!(local_valido("local_ABCDEF01"));
-        assert!(local_valido(&format!("local_{}", "a".repeat(64))));
-        assert!(!local_valido("local_1234567"), "menos de 8");
-        assert!(!local_valido(&format!("local_{}", "a".repeat(65))), "mais de 64");
-        assert!(!local_valido("local_1234567g"));
-        assert!(!local_valido("local_12345678/../x"));
-        assert!(!local_valido("remoto_12345678"));
-        assert!(!local_valido(""));
+    fn local_like_the_core() {
+        assert!(valid_local("local_716ecd97-6a9b-4452-9770-e2c155279784"));
+        assert!(valid_local("local_ABCDEF01"));
+        assert!(valid_local(&format!("local_{}", "a".repeat(64))));
+        assert!(!valid_local("local_1234567"), "fewer than 8");
+        assert!(!valid_local(&format!("local_{}", "a".repeat(65))), "more than 64");
+        assert!(!valid_local("local_1234567g"));
+        assert!(!valid_local("local_12345678/../x"));
+        assert!(!valid_local("remoto_12345678"));
+        assert!(!valid_local(""));
     }
 
     #[test]
-    fn silencio_global() {
-        let avisos = vec![Aviso::do_item(&item("s1", "a", "error"))];
-        let s = Silencio { ligadas: false, ..Silencio::default() };
-        assert!(s.filtrar(avisos.clone()).is_empty());
-        assert_eq!(Silencio::default().filtrar(avisos.clone()), avisos);
+    fn global_silence() {
+        let notices = vec![Notice::from_item(&item("s1", "a", "error"))];
+        let s = Silence { enabled: false, ..Silence::default() };
+        assert!(s.filter(notices.clone()).is_empty());
+        assert_eq!(Silence::default().filter(notices.clone()), notices);
     }
 
     #[test]
-    fn silencio_por_sessao() {
-        let avisos = vec![Aviso::do_item(&item("s1", "a", "error")), Aviso::do_item(&item("s2", "b", "error"))];
-        let mut s = Silencio::default();
-        s.sessoes.insert("s1".into());
-        assert_eq!(sessoes(&s.filtrar(avisos)), ["s2"]);
+    fn per_session_silence() {
+        let notices = vec![Notice::from_item(&item("s1", "a", "error")), Notice::from_item(&item("s2", "b", "error"))];
+        let mut s = Silence::default();
+        s.sessions.insert("s1".into());
+        assert_eq!(sessions(&s.filter(notices)), ["s2"]);
     }
 
     #[test]
-    fn avisos_le_e_filtra() {
-        let mut a = Avisos::abrir(None);
-        a.ler(&atencao(vec![]));
-        a.silenciar("s1");
-        assert_eq!(sessoes(&a.ler(&atencao(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
-        assert!(!a.alternar());
-        assert!(a.ler(&atencao(vec![item("s3", "c", "error")])).is_empty());
+    fn notices_read_and_filter() {
+        let mut n = Notices::open(None);
+        n.read(&attention(vec![]));
+        n.silence_session("s1");
+        assert_eq!(sessions(&n.read(&attention(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
+        assert!(!n.toggle());
+        assert!(n.read(&attention(vec![item("s3", "c", "error")])).is_empty());
     }
 
     #[test]
-    fn silencio_global_nao_para_o_detector() {
-        let p = Pasta::nova("global-desligado");
-        let mut a = Avisos::abrir(Some(p.0.join(ARQUIVO)));
-        a.ler(&atencao(vec![]));
-        assert!(!a.alternar());
-        assert!(a.ler(&atencao(vec![item("s1", "a", "error")])).is_empty(), "desligado não avisa");
-        assert!(a.alternar());
-        assert!(a.ler(&atencao(vec![item("s1", "a", "error")])).is_empty(), "religar não avisa quem já estava");
+    fn global_silence_does_not_stop_the_detector() {
+        let p = TempDir::new("global-off");
+        let mut n = Notices::open(Some(p.0.join(FILE)));
+        n.read(&attention(vec![]));
+        assert!(!n.toggle());
+        assert!(n.read(&attention(vec![item("s1", "a", "error")])).is_empty(), "off does not notify");
+        assert!(n.toggle());
+        assert!(n.read(&attention(vec![item("s1", "a", "error")])).is_empty(), "turning back on does not notify who was already there");
     }
 
     #[test]
-    fn persistencia_ida_e_volta() {
-        let p = Pasta::nova("ida-e-volta");
-        let arquivo = p.0.join("sub").join(ARQUIVO);
-        let mut a = Avisos::abrir(Some(arquivo.clone()));
-        assert_eq!(a.silencio, Silencio::default());
-        a.silenciar("s1");
-        a.alternar();
-        let lido = Silencio::carregar(&arquivo);
-        assert_eq!(lido, Silencio { ligadas: false, sessoes: ["s1".to_string()].into() });
-        assert_eq!(Avisos::abrir(Some(arquivo.clone())).silencio, lido);
-        assert!(!arquivo.with_extension("json.tmp").exists());
+    fn persistence_round_trip() {
+        let p = TempDir::new("round-trip");
+        let file = p.0.join("sub").join(FILE);
+        let mut n = Notices::open(Some(file.clone()));
+        assert_eq!(n.silence, Silence::default());
+        n.silence_session("s1");
+        n.toggle();
+        let read = Silence::load(&file);
+        assert_eq!(read, Silence { enabled: false, sessions: ["s1".to_string()].into() });
+        assert_eq!(Notices::open(Some(file.clone())).silence, read);
+        assert!(!file.with_extension("json.tmp").exists());
     }
 
     // ---- #180: machine alerts ----
@@ -518,8 +520,8 @@ mod testes {
         alert("machine-unreachable", "machine-unreachable", "Workstation sem conexão", Some("A porta 14720 deste Mac não aceita conexão: o túnel está caído"))
     }
 
-    fn ids(avisos: &[Aviso]) -> Vec<&str> {
-        avisos.iter().map(|a| a.sessao.as_str()).collect()
+    fn ids(notices: &[Notice]) -> Vec<&str> {
+        notices.iter().map(|n| n.session.as_str()).collect()
     }
 
     #[test]
@@ -533,12 +535,12 @@ mod testes {
         let mut d = MachineAlertDetector::default();
         d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
         let with = [machine("workstation", "Workstation", "connected", Some(vec![load()]))];
-        let avisos = d.observe(&with);
-        assert_eq!(ids(&avisos), ["machine:workstation:load-high"]);
-        let a = &avisos[0];
-        assert_eq!((a.titulo.as_str(), a.corpo.as_str()), ("Workstation: CPU saturada", "CPU saturada: carga de 24,6 em 16 núcleos"));
-        assert!(!a.som, "machine notifications are silent");
-        assert_eq!((a.path.as_str(), a.origin, a.local.as_deref()), ("/ui/machines/workstation", Origin::Machine, None));
+        let notices = d.observe(&with);
+        assert_eq!(ids(&notices), ["machine:workstation:load-high"]);
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Workstation: CPU saturada", "CPU saturada: carga de 24,6 em 16 núcleos"));
+        assert!(!n.sound, "machine notifications are silent");
+        assert_eq!((n.path.as_str(), n.origin, n.local.as_deref()), ("/ui/machines/workstation", Origin::Machine, None));
         assert!(d.observe(&with).is_empty(), "the repeated read does not notify");
     }
 
@@ -547,11 +549,11 @@ mod testes {
         let mut d = MachineAlertDetector::default();
         d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "connected", Some(vec![]))]);
         let gone = [machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "unreachable", Some(vec![down()]))];
-        let avisos = d.observe(&gone);
-        assert_eq!(ids(&avisos), ["machine:workstation:machine-unreachable"]);
-        assert_eq!(avisos[0].titulo, "Workstation sem conexão");
-        assert_eq!(avisos[0].corpo, "A porta 14720 deste Mac não aceita conexão: o túnel está caído");
-        assert!(!avisos[0].som);
+        let notices = d.observe(&gone);
+        assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"]);
+        assert_eq!(notices[0].title, "Workstation sem conexão");
+        assert_eq!(notices[0].body, "A porta 14720 deste Mac não aceita conexão: o túnel está caído");
+        assert!(!notices[0].sound);
         assert!(d.observe(&gone).is_empty());
     }
 
@@ -559,9 +561,9 @@ mod testes {
     fn criterion_5_this_mac_is_named_este_mac() {
         let mut d = MachineAlertDetector::default();
         d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![]))]);
-        let avisos = d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![load()]))]);
-        assert_eq!(avisos[0].titulo, "Este Mac: CPU saturada");
-        assert_eq!(avisos[0].path, "/ui/machines/local");
+        let notices = d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![load()]))]);
+        assert_eq!(notices[0].title, "Este Mac: CPU saturada");
+        assert_eq!(notices[0].path, "/ui/machines/local");
     }
 
     #[test]
@@ -581,65 +583,65 @@ mod testes {
     }
 
     #[test]
-    fn criterion_5_respects_the_notificacoes_switch() {
-        let mut a = Avisos::abrir(None);
-        a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
-        assert!(!a.alternar());
-        assert!(a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "off: nothing");
-        assert!(a.alternar());
-        let avisos = a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
-        assert_eq!(ids(&avisos), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
+    fn criterion_5_respects_the_notifications_switch() {
+        let mut n = Notices::open(None);
+        n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        assert!(!n.toggle());
+        assert!(n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "off: nothing");
+        assert!(n.toggle());
+        let notices = n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
+        assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
     }
 
-    fn remote(sessao: &str, titulo: &str, motivo: &str) -> ItemDaAtencao {
-        ItemDaAtencao { machine: Some(crate::menu::SessionMachine { id: "workstation".into(), label: "Workstation".into() }), ..item(sessao, titulo, motivo) }
+    fn remote(session: &str, title: &str, reason: &str) -> AttentionItem {
+        AttentionItem { machine: Some(crate::menu::SessionMachine { id: "workstation".into(), label: "Workstation".into() }), ..item(session, title, reason) }
     }
 
     #[test]
     fn remote_session_title_carries_the_machine_label() {
-        let av = Aviso::do_item(&remote("s1", "motor-de-regras", "permission"));
-        assert_eq!(av.titulo, "motor-de-regras · Workstation pede permissão");
-        assert_eq!(titulo(&remote("s3", "fila-de-tarefas", "your-turn")), "fila-de-tarefas · Workstation: sua vez");
+        let n = Notice::from_item(&remote("s1", "motor-de-regras", "permission"));
+        assert_eq!(n.title, "motor-de-regras · Workstation pede permissão");
+        assert_eq!(title(&remote("s3", "fila-de-tarefas", "your-turn")), "fila-de-tarefas · Workstation: sua vez");
     }
 
     #[test]
     fn remote_session_has_no_desktop_action() {
-        let av = Aviso::do_item(&remote("s1", "motor-de-regras", "permission"));
-        assert_eq!(av.origin, Origin::RemoteSession);
-        assert_eq!(av.origin.actions(), [Action::Open, Action::Silence], "Silenciar stays, Abrir no Claude Desktop goes");
-        assert_eq!((av.path.as_str(), av.sessao.as_str(), av.local.as_deref()), ("/ui/sessions/s1", "s1", None), "the click opens the session screen");
-        let mut a = Avisos::abrir(None);
-        a.ler(&atencao(vec![]));
-        a.silenciar("s1");
-        assert!(a.ler(&atencao(vec![remote("s1", "motor-de-regras", "permission")])).is_empty(), "Silenciar works as for a local session");
+        let notice = Notice::from_item(&remote("s1", "motor-de-regras", "permission"));
+        assert_eq!(notice.origin, Origin::RemoteSession);
+        assert_eq!(notice.origin.actions(), [Action::Open, Action::Silence], "Silenciar stays, Abrir no Claude Desktop goes");
+        assert_eq!((notice.path.as_str(), notice.session.as_str(), notice.local.as_deref()), ("/ui/sessions/s1", "s1", None), "the click opens the session screen");
+        let mut n = Notices::open(None);
+        n.read(&attention(vec![]));
+        n.silence_session("s1");
+        assert!(n.read(&attention(vec![remote("s1", "motor-de-regras", "permission")])).is_empty(), "Silenciar works as for a local session");
     }
 
     #[test]
     fn local_session_notice_is_unchanged() {
         let mut i = item("s1", "motor-de-regras", "permission");
         i.local = Some("local_00000000-0000-4000-8000-000000000001".into());
-        let av = Aviso::do_item(&i);
-        assert_eq!(av.titulo, "motor-de-regras pede permissão");
-        assert_eq!(av.origin, Origin::Session);
-        assert_eq!(av.origin.actions(), [Action::Open, Action::OpenInDesktop, Action::Silence]);
+        let n = Notice::from_item(&i);
+        assert_eq!(n.title, "motor-de-regras pede permissão");
+        assert_eq!(n.origin, Origin::Session);
+        assert_eq!(n.origin.actions(), [Action::Open, Action::OpenInDesktop, Action::Silence]);
         assert_eq!(Origin::Machine.actions(), [Action::Open]);
     }
 
     #[test]
     fn session_notices_open_the_session_screen() {
-        let av = Aviso::do_item(&item("c3f09b52", "a", "permission"));
-        assert_eq!((av.path.as_str(), av.origin), ("/ui/sessions/c3f09b52", Origin::Session));
+        let n = Notice::from_item(&item("c3f09b52", "a", "permission"));
+        assert_eq!((n.path.as_str(), n.origin), ("/ui/sessions/c3f09b52", Origin::Session));
     }
 
     #[test]
-    fn arquivo_ruim_ou_ausente_e_padrao() {
-        let p = Pasta::nova("ruim");
-        assert_eq!(Silencio::carregar(&p.0.join(ARQUIVO)), Silencio::default());
+    fn bad_or_missing_file_is_the_default() {
+        let p = TempDir::new("bad");
+        assert_eq!(Silence::load(&p.0.join(FILE)), Silence::default());
         std::fs::create_dir_all(&p.0).unwrap();
-        let ruim = p.0.join(ARQUIVO);
-        std::fs::write(&ruim, "não é json").unwrap();
-        assert_eq!(Silencio::carregar(&ruim), Silencio::default());
-        std::fs::write(&ruim, r#"{ "sessoes": ["s9"] }"#).unwrap();
-        assert_eq!(Silencio::carregar(&ruim), Silencio { ligadas: true, sessoes: ["s9".to_string()].into() });
+        let bad = p.0.join(FILE);
+        std::fs::write(&bad, "não é json").unwrap();
+        assert_eq!(Silence::load(&bad), Silence::default());
+        std::fs::write(&bad, r#"{ "sessoes": ["s9"] }"#).unwrap();
+        assert_eq!(Silence::load(&bad), Silence { enabled: true, sessions: ["s9".to_string()].into() });
     }
 }
