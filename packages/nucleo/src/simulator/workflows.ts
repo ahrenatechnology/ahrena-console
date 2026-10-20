@@ -1,5 +1,5 @@
 // Synthetic sessions for the Workflows screens (#96, C14) and the detail's Workflow tab (#97, C7), in
-// the demo `npm run api -- --demo --cenario p4`. All made up, with the simulator's vocabulary
+// the demo `npm run api -- --demo --scenario p4`. All made up, with the simulator's vocabulary
 // (projects under /simulacao, all-zero UUID accounts). The representation follows api/workflows.ts:
 // the loop comes from the subagents' types and order and from each review's last message ("3 ajustes
 // pedidos"); the Workflow tool runs, from the main agent's `Workflow` call and `Agent.metadata.workflow`.
@@ -168,11 +168,10 @@ async function writeDemo(storage: StoragePort, d: Demo, now: number) {
     id: d.id, name: d.title, status: d.status, cwd: `${ROOT}/${d.project}`, model: d.model, source: d.source, startedAt: at(0), endedAt: sessionEnd,
     awaitingInputSince: null, awaitingReason: null, updatedAt: sessionEnd ?? new Date(now - 0.1 * MIN).toISOString(),
     accountId: account.id, accountSource: account.source,
-    // Persisted metadata keys stay as they are (phase 5).
     metadata: {
-      simulado: true,
+      simulated: true,
       ...(d.branch ? { branch: d.branch } : {}),
-      ...(d.compacted ? { contexto: { usados: 82_000, limite: 200_000, estouros: 1 } } : {}),
+      ...(d.compacted ? { context: { used: 82_000, limit: 200_000, overflows: 1 } } : {}),
     },
   };
   await storage.putSession(session);
@@ -187,8 +186,7 @@ async function writeDemo(storage: StoragePort, d: Demo, now: number) {
   await addEvent(null, at(0), 'UserPromptSubmit', null, 'prompt');
   if (d.compacted) await addEvent(main, at((d.durationMin ?? d.minAgo) / 2), 'Compaction', null, 'compactou', { trigger: 'auto' });
   if (d.run) {
-    // The Workflow tool input keeps its keys (`fases`, `volta`): api/workflows.ts reads them.
-    const input = { name: d.run.name, fases: d.run.phases, ...(d.run.loopBack ? { volta: d.run.loopBack } : {}), model: d.model };
+    const input = { name: d.run.name, phases: d.run.phases, ...(d.run.loopBack ? { loop: d.run.loopBack } : {}), model: d.model };
     await addEvent(main, at(d.run.startMin), 'PreToolUse', 'Workflow', d.run.name, { tool_name: 'Workflow', tool_use_id: d.run.id, tool_input: input });
   }
 
@@ -196,11 +194,11 @@ async function writeDemo(storage: StoragePort, d: Demo, now: number) {
   for (const s of d.subs) {
     const id = `${d.id}:${s.id}`;
     const status = s.status ?? (s.end === null ? 'working' : 'completed');
-    // `Agent.metadata.workflow` keeps its keys (`fase`, `rotulo`, `papel`): api/workflows.ts reads them.
-    const wf = s.wf && d.run ? { workflow: { run: d.run.id, fase: s.wf.phase, ...(s.wf.label ? { rotulo: s.wf.label } : {}), ...(s.wf.role ? { papel: s.wf.role } : {}) } } : {};
+    // `Agent.metadata.workflow`: api/workflows.ts reads it.
+    const wf = s.wf && d.run ? { workflow: { run: d.run.id, phase: s.wf.phase, ...(s.wf.label ? { label: s.wf.label } : {}), ...(s.wf.role ? { role: s.wf.role } : {}) } } : {};
     await storage.putAgent({
       ...makeAgent(id, d.id, 'subagent', at(s.start), s.end === null ? null : at(s.end), status),
-      subagentType: s.type, name: s.task, parentAgentId: s.parent ? `${d.id}:${s.parent}` : main, metadata: { simulado: true, ...wf },
+      subagentType: s.type, name: s.task, parentAgentId: s.parent ? `${d.id}:${s.parent}` : main, metadata: { simulated: true, ...wf },
     });
     // The tools and the messages with usage, spread over the subagent's time.
     const until = s.end ?? Math.min(nowMin - 0.05, s.start + 10);
@@ -230,6 +228,6 @@ async function writeDemo(storage: StoragePort, d: Demo, now: number) {
 function makeAgent(id: string, sessionId: string, type: Agent['type'], start: string, end: string | null, status: AgentStatus): Agent {
   return {
     id, sessionId, name: null, type, subagentType: null, status, task: null, currentTool: null, parentAgentId: null,
-    startedAt: start, endedAt: end, updatedAt: end ?? start, metadata: { simulado: true },
+    startedAt: start, endedAt: end, updatedAt: end ?? start, metadata: { simulated: true },
   };
 }

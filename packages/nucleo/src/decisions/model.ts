@@ -5,32 +5,32 @@
 import { InvalidModelError, type Metadata } from '../model.ts';
 
 /**
- * De onde veio a decisão:
- * - `pergunta`: resposta a uma pergunta do agente (`AskUserQuestion`);
- * - `plano`: aprovação de um plano (`ExitPlanMode`);
- * - `permissao`: permitir ou negar uma ferramenta;
- * - `correcao`: a pessoa contrariou uma proposta do agente;
- * - `sugerida`: o agente (ou um modelo pequeno) propôs; só vale depois de confirmada.
+ * Where the decision came from:
+ * - `question`: answer to a question from the agent (`AskUserQuestion`);
+ * - `plan`: approval of a plan (`ExitPlanMode`);
+ * - `permission`: allowing or denying a tool;
+ * - `correction`: the person went against a proposal from the agent;
+ * - `suggested`: the agent (or a small model) proposed it; it only counts once confirmed.
  */
-export const DECISION_ORIGINS = ['pergunta', 'plano', 'permissao', 'correcao', 'sugerida'] as const;
+export const DECISION_ORIGINS = ['question', 'plan', 'permission', 'correction', 'suggested'] as const;
 export type DecisionOrigin = (typeof DECISION_ORIGINS)[number];
 
 /**
- * Estado da decisão. `descartada` é o "Descartar" de uma decisão a confirmar: fica no histórico,
- * fora das listas de vigentes, em vez de ser apagada.
+ * State of the decision. `dismissed` is the "Descartar" of a decision to confirm: it stays in the
+ * history, out of the lists of current ones, instead of being deleted.
  */
-export const DECISION_STATES = ['vigente', 'substituida', 'revertida', 'a_confirmar', 'descartada'] as const;
+export const DECISION_STATES = ['current', 'superseded', 'reverted', 'to_confirm', 'dismissed'] as const;
 export type DecisionState = (typeof DECISION_STATES)[number];
 
-/** Até onde a decisão vale: a sessão, a família (sessões ligadas por /clear, compactação ou filha) ou o branch. */
-export const DECISION_SCOPES = ['sessao', 'familia', 'branch'] as const;
+/** How far the decision reaches: the session, the family (sessions linked by /clear, compaction or a child session) or the branch. */
+export const DECISION_SCOPES = ['session', 'family', 'branch'] as const;
 export type DecisionScope = (typeof DECISION_SCOPES)[number];
 
-export const DECIDERS = ['usuario', 'agente'] as const;
+export const DECIDERS = ['user', 'agent'] as const;
 export type Decider = (typeof DECIDERS)[number];
 
-/** Por que uma sessão foi ligada à anterior. */
-export const SESSION_LINK_REASONS = ['clear', 'compact', 'resume', 'filha'] as const;
+/** Why a session was linked to the previous one. */
+export const SESSION_LINK_REASONS = ['clear', 'compact', 'resume', 'child'] as const;
 export type SessionLinkReason = (typeof SESSION_LINK_REASONS)[number];
 
 /** O "ver na conversa": onde está a mensagem que originou a decisão. Nunca o texto dela. */
@@ -45,7 +45,7 @@ export interface MessageRef {
 export interface Decision {
   /** Estável: vem da sessão e da chave de origem, então capturar duas vezes não duplica. */
   id: string;
-  /** Chave de origem, ex.: `tool:<tool_use_id>:q0`, `prompt:<uuid>`, `inferida:<id>`. */
+  /** Chave de origem, ex.: `tool:<tool_use_id>:q0`, `prompt:<uuid>`, `inferred:<id>`. */
   sourceKey: string;
   sessionId: string;
   agentId: string | null;
@@ -141,10 +141,10 @@ export function validateDecision(d: Decision): void {
   optionalText(e, 'supersedes', d.supersedes);
   optionalText(e, 'supersededBy', d.supersededBy);
   if (d.supersedes === d.id || d.supersededBy === d.id) fail(e, 'uma decisão não substitui a si mesma');
-  if ((d.state === 'substituida') !== (d.supersededBy !== null)) {
+  if ((d.state === 'superseded') !== (d.supersededBy !== null)) {
     fail(e, 'substituida e supersededBy andam juntos');
   }
-  if (d.origin === 'sugerida' && d.decidedBy !== 'agente') fail(e, 'decisão sugerida é do agente');
+  if (d.origin === 'suggested' && d.decidedBy !== 'agent') fail(e, 'decisão sugerida é do agente');
   if (!d.message || typeof d.message !== 'object') fail(e, 'message é obrigatório');
   optionalText(e, 'message.uuid', d.message.uuid);
   optionalText(e, 'message.toolUseId', d.message.toolUseId);
@@ -167,5 +167,5 @@ export function validateSessionLink(l: SessionLink): void {
 
 /** Decisão que entra nas listas de "vigentes" e na injeção do início da sessão (#100). */
 export function isCurrent(d: Pick<Decision, 'state'>): boolean {
-  return d.state === 'vigente';
+  return d.state === 'current';
 }

@@ -47,8 +47,11 @@ export function createNav({ nav, read, screens = SCREENS }) {
     lit = id;
     for (const [k, { a }] of items) {
       a.classList.toggle('on', k === id);
-      if (k === id) a.setAttribute('aria-current', 'page');
-      else a.removeAttribute('aria-current');
+      if (k === id) {
+        a.setAttribute('aria-current', 'page');
+        // On a short window the list scrolls: the lit item must not stay out of sight.
+        a.scrollIntoView?.({ block: 'nearest' });
+      } else a.removeAttribute('aria-current');
     }
   }
 

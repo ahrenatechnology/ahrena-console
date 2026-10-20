@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { atencaoDe } from '../../src/api/attention.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
 import { aplicarEvento, resumoVazio } from '../../src/api/summary.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { T0, at, event } from '../fixtures.ts';
@@ -69,7 +69,7 @@ describe('#140 CA3: PRs aguardando aprovação', () => {
       const agora = Date.parse(T0);
       await seedPanelScenario(storage, nome, agora);
       const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => agora });
-      const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => agora, apelido: () => PANEL_SESSION });
+      const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => agora, apelido: () => PANEL_SESSION });
       await montador.montar({ sessionId: 'qualquer' });
       await trabalho.esperar();
       const p = await montador.montar({ sessionId: 'qualquer' });

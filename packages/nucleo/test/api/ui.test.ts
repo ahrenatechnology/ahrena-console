@@ -1,67 +1,67 @@
-// A interface do console em /ui (#26): o servidor serve a página e as sub-rotas, recusa Origin e Host
-// estranhos (decisão 0003), e a camada de leitura e o "Ao vivo" funcionam contra a API com dados do
-// simulador.
+// The console interface at /ui (#26): the server serves the page and the sub-routes, refuses a foreign
+// Origin and Host (decision 0003), and the read layer and the "Ao vivo" (live) work against the API with
+// simulator data.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { withChanges, ChangeCursor } from '../../src/changes/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
-// @ts-expect-error: módulos do navegador, em JavaScript puro
+// @ts-expect-error: browser modules, in plain JavaScript
 import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
-// @ts-expect-error: idem
+// @ts-expect-error: same
 import { startLive } from '../../ui/live.js';
-// @ts-expect-error: idem
+// @ts-expect-error: same
 import { findScreen, legacyUrl, litItem, machineItems, MACHINES_ROUTE, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
-// @ts-expect-error: idem
+// @ts-expect-error: same
 import * as agentConfigScreen from '../../ui/screens/agent-config.js';
 
-interface Resposta {
+interface Reply {
   status: number;
   headers: Record<string, string | string[] | undefined>;
-  corpo: string;
+  body: string;
 }
 
-function pedir(url: string, caminho: string, { method = 'GET', headers = {} as Record<string, string>, corpo = '' } = {}): Promise<Resposta> {
+function fetchPath(url: string, path: string, { method = 'GET', headers = {} as Record<string, string>, body = '' } = {}): Promise<Reply> {
   const { hostname, port } = new URL(url);
   return new Promise((resolve, reject) => {
-    const req = request({ hostname, port, path: caminho, method, headers }, (res) => {
-      let texto = '';
+    const req = request({ hostname, port, path, method, headers }, (res) => {
+      let text = '';
       res.setEncoding('utf8');
-      res.on('data', (p: string) => (texto += p));
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, corpo: texto }));
+      res.on('data', (p: string) => (text += p));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }));
     });
     req.on('error', reject);
-    req.end(corpo);
+    req.end(body);
   });
 }
 
-const ate = async (cond: () => boolean, ms = 3000) => {
-  const fim = Date.now() + ms;
+const until = async (cond: () => boolean, ms = 3000) => {
+  const deadline = Date.now() + ms;
   while (!cond()) {
-    if (Date.now() > fim) throw new Error('não aconteceu a tempo');
+    if (Date.now() > deadline) throw new Error('não aconteceu a tempo');
     await new Promise((r) => setTimeout(r, 10));
   }
 };
 
-describe('/ui no núcleo', () => {
+describe('/ui in the core', () => {
   let sqlite: SqliteStorage;
   let cursor: ChangeCursor;
-  let api: ApiLocal;
+  let api: LocalApi;
   let host: string;
   before(async () => {
     cursor = new ChangeCursor({ batchMs: 0, minIntervalMs: 0 });
     sqlite = openSqliteStorage({ path: ':memory:' });
     const storage = withChanges(sqlite, cursor);
     await seedPanelScenario(storage, 'p1');
-    const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
+    const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
+    const builder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: work });
+    api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
     host = new URL(api.url).host;
   });
   after(async () => {
@@ -70,61 +70,61 @@ describe('/ui no núcleo', () => {
   });
 
   test('/ui, /ui/sessions and /ui/sessions/<id> (and the old /ui/sessoes/<id>) return the same page, with the content policy', async () => {
-    const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
-    for (const caminho of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${PANEL_SESSION}`, '/ui/sessoes', `/ui/sessoes/${PANEL_SESSION}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
-      const r = await pedir(api.url, caminho);
-      assert.equal(r.status, 200, caminho);
+    const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
+    for (const path of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${PANEL_SESSION}`, '/ui/sessoes', `/ui/sessoes/${PANEL_SESSION}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
+      const r = await fetchPath(api.url, path);
+      assert.equal(r.status, 200, path);
       assert.match(String(r.headers['content-type']), /^text\/html/);
-      assert.equal(r.corpo, pagina, caminho);
+      assert.equal(r.body, page, path);
       assert.match(String(r.headers['content-security-policy']), /connect-src 'self'/);
       assert.match(String(r.headers['content-security-policy']), /default-src 'none'/);
       assert.equal(r.headers['x-content-type-options'], 'nosniff');
     }
   });
 
-  test('os arquivos da página saem com o tipo certo; o que não existe ou está fora da pasta dá 404', async () => {
-    const js = await pedir(api.url, '/ui/app.js');
+  test('the page files go out with the right type; what does not exist or is outside the folder gives 404', async () => {
+    const js = await fetchPath(api.url, '/ui/app.js');
     assert.equal(js.status, 200);
     assert.match(String(js.headers['content-type']), /^text\/javascript/);
-    assert.match(String((await pedir(api.url, '/ui/brand.css')).headers['content-type']), /^text\/css/);
+    assert.match(String((await fetchPath(api.url, '/ui/brand.css')).headers['content-type']), /^text\/css/);
     // The Agent Config screen (#63): the module in screens/ and its own CSS.
-    const screen = await pedir(api.url, '/ui/screens/agent-config.js');
+    const screen = await fetchPath(api.url, '/ui/screens/agent-config.js');
     assert.equal(screen.status, 200);
     assert.match(String(screen.headers['content-type']), /^text\/javascript/);
-    assert.match(screen.corpo, /export async function mount/);
+    assert.match(screen.body, /export async function mount/);
     // The old folder (`/ui/telas/`) serves the same file until the aliases leave (#173).
-    const legacy = await pedir(api.url, '/ui/telas/agent-config.js');
+    const legacy = await fetchPath(api.url, '/ui/telas/agent-config.js');
     assert.equal(legacy.status, 200);
     assert.match(String(legacy.headers['content-type']), /^text\/javascript/);
-    assert.equal(legacy.corpo, screen.corpo);
-    assert.equal((await pedir(api.url, '/ui/telas/nada.js')).status, 404);
-    const css = await pedir(api.url, '/ui/agent-config.css');
+    assert.equal(legacy.body, screen.body);
+    assert.equal((await fetchPath(api.url, '/ui/telas/nada.js')).status, 404);
+    const css = await fetchPath(api.url, '/ui/agent-config.css');
     assert.equal(css.status, 200);
     assert.match(String(css.headers['content-type']), /^text\/css/);
-    for (const caminho of ['/ui/nada.js', '/ui/screens/nada.js', '/ui/index.html', '/ui/README.md', '/ui/%2e%2e/src/api/ui.ts', '/ui/..%2fpackage.json']) {
-      const r = await pedir(api.url, caminho);
-      assert.ok(r.status === 404 || r.corpo.startsWith('<!doctype html>'), `${caminho}: ${r.status}`);
-      assert.doesNotMatch(r.corpo, /import \{ readFile \}|"name": "@ahrena-console/, caminho);
+    for (const path of ['/ui/nada.js', '/ui/screens/nada.js', '/ui/index.html', '/ui/README.md', '/ui/%2e%2e/src/api/ui.ts', '/ui/..%2fpackage.json']) {
+      const r = await fetchPath(api.url, path);
+      assert.ok(r.status === 404 || r.body.startsWith('<!doctype html>'), `${path}: ${r.status}`);
+      assert.doesNotMatch(r.body, /import \{ readFile \}|"name": "@ahrena-console/, path);
     }
   });
 
-  test('Origin estranho dá 403, na página e na API; a própria página pode ler', async () => {
+  test('a foreign Origin gives 403, on the page and on the API; the page itself can read', async () => {
     for (const origin of ['https://exemplo.com', 'null', `http://localhost:1`, `https://${host}`]) {
-      assert.equal((await pedir(api.url, '/ui', { headers: { origin } })).status, 403, origin);
-      assert.equal((await pedir(api.url, '/api/mudancas?desde=&espera=0', { headers: { origin } })).status, 403, origin);
+      assert.equal((await fetchPath(api.url, '/ui', { headers: { origin } })).status, 403, origin);
+      assert.equal((await fetchPath(api.url, '/api/mudancas?desde=&espera=0', { headers: { origin } })).status, 403, origin);
     }
-    assert.equal((await pedir(api.url, '/ui', { headers: { host: `exemplo.com:${new URL(api.url).port}` } })).status, 403);
-    // Navegador lendo da mesma origem: aceito.
-    assert.equal((await pedir(api.url, '/api/overview', { headers: { origin: `http://${host}` } })).status, 200);
-    // Escrita com Origin, mesmo o nosso: recusada.
+    assert.equal((await fetchPath(api.url, '/ui', { headers: { host: `exemplo.com:${new URL(api.url).port}` } })).status, 403);
+    // A browser reading from the same origin: accepted.
+    assert.equal((await fetchPath(api.url, '/api/overview', { headers: { origin: `http://${host}` } })).status, 200);
+    // A write with Origin, even ours: refused.
     const hook = JSON.stringify({ session_id: 'x', hook_event_name: 'SessionStart' });
-    assert.equal((await pedir(api.url, '/api/hooks', { method: 'POST', headers: { origin: `http://${host}`, 'content-type': 'application/json' }, corpo: hook })).status, 403);
+    assert.equal((await fetchPath(api.url, '/api/hooks', { method: 'POST', headers: { origin: `http://${host}`, 'content-type': 'application/json' }, body: hook })).status, 403);
   });
 
-  // Endereços que só viram `href` de link aberto pela pessoa (nova aba, `noopener`), nunca chamada:
-  // a aba Instruções (#183) aponta para o arquivo no GitHub e para a documentação do CLAUDE.md.
-  // Cada um é o trecho exato que a busca de URL pega e aparece exatamente uma vez no arquivo: o
-  // template de `blobUrl` não abre a porta para outro endereço do github.com.
+  // Addresses that only become the `href` of a link the person opens (new tab, `noopener`), never a call:
+  // the Instructions tab (#183) points to the file on GitHub and to the CLAUDE.md documentation.
+  // Each is the exact piece the URL search catches and appears exactly once in the file: the
+  // `blobUrl` template does not open the door to another github.com address.
   const LINK_TARGETS: Record<string, string[]> = {
     'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
@@ -132,51 +132,51 @@ describe('/ui no núcleo', () => {
   const externalUrls = (file: string, text: string) => {
     const allowed = LINK_TARGETS[file] ?? [];
     const found = text.match(/https?:\/\/[^\s"'`)]+/g) ?? [];
-    for (const l of allowed) assert.equal(found.filter((u) => u === l).length, 1, `${file}: ${l} deve aparecer exatamente uma vez`);
+    for (const l of allowed) assert.equal(found.filter((u) => u === l).length, 1, `${file}: ${l} must appear exactly once`);
     return found.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.includes(u));
   };
-  test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
-    // A pasta e as telas (`screens/`): as regras valem para todo arquivo servido.
-    const arquivos = readdirSync(PASTA_DA_UI, { recursive: true })
+  test('the page calls nothing outside its own origin and writes no color by hand', () => {
+    // The folder and the screens (`screens/`): the rules hold for every served file.
+    const files = readdirSync(UI_FOLDER, { recursive: true })
       .map(String)
       .filter((a) => /\.(js|css|html)$/.test(a) && a !== 'brand.css');
-    assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('screens/repos.js'));
-    for (const a of arquivos) {
-      const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
-      const urls = externalUrls(a, texto);
+    assert.ok(files.includes('index.html') && files.includes('app.js') && files.includes('screens/repos.js'));
+    for (const a of files) {
+      const text = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
+      const urls = externalUrls(a, text);
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
-      assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
-      assert.doesNotMatch(texto, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
-      if (a !== 'api.js') assert.doesNotMatch(texto, /\bfetch\(/, `${a} chama fetch: só api.js fala com o núcleo`);
-      // `innerHTML` só nos ícones (constantes de dom.js), nunca com dado.
-      if (a !== 'dom.js') assert.doesNotMatch(texto, /innerHTML|outerHTML|insertAdjacentHTML/, `${a} monta HTML com texto`);
+      assert.doesNotMatch(text, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
+      assert.doesNotMatch(text, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
+      if (a !== 'api.js') assert.doesNotMatch(text, /\bfetch\(/, `${a} chama fetch: só api.js fala com o núcleo`);
+      // `innerHTML` only in the icons (dom.js constants), never with data.
+      if (a !== 'dom.js') assert.doesNotMatch(text, /innerHTML|outerHTML|insertAdjacentHTML/, `${a} monta HTML com texto`);
     }
-    // As telas, em ui/screens/: a mesma regra, e nada de estilo inline, innerHTML ou fetch direto.
-    const telas = readdirSync(`${PASTA_DA_UI}screens`).filter((a) => /\.(js|css)$/.test(a));
-    for (const a of telas) {
-      const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
-      const urls = externalUrls(`screens/${a}`, texto);
+    // The screens, in ui/screens/: the same rule, and no inline style, innerHTML or direct fetch.
+    const screens = readdirSync(`${UI_FOLDER}screens`).filter((a) => /\.(js|css)$/.test(a));
+    for (const a of screens) {
+      const text = readFileSync(`${UI_FOLDER}screens/${a}`, 'utf8');
+      const urls = externalUrls(`screens/${a}`, text);
       assert.deepEqual(urls, [], `screens/${a} cita endereço externo`);
-      assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `screens/${a} escreve cor à mão`);
+      assert.doesNotMatch(text, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `screens/${a} escreve cor à mão`);
       if (a.endsWith('.js')) {
-        // O que a CSP (`style-src 'self'`) bloqueia é o atributo `style`: `{ style: … }` no el(),
-        // `style="…"` e `setAttribute('style', …)`. O CSSOM (`x.style.setProperty`) ela deixa passar.
-        assert.doesNotMatch(texto, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `screens/${a} usa estilo inline, HTML ou fetch`);
-        for (const [, css] of texto.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(telas.includes(css!), `screens/${a} carrega ${css}, que não existe`);
+        // What the CSP (`style-src 'self'`) blocks is the `style` attribute: `{ style: … }` in el(),
+        // `style="…"` and `setAttribute('style', …)`. It lets the CSSOM (`x.style.setProperty`) through.
+        assert.doesNotMatch(text, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `screens/${a} usa estilo inline, HTML ou fetch`);
+        for (const [, css] of text.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(screens.includes(css!), `screens/${a} carrega ${css}, que não existe`);
       }
     }
-    const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
-    for (const [, ref] of pagina.matchAll(/(?:href|src)="\/ui\/([^"]+)"/g)) assert.ok(readdirSync(PASTA_DA_UI).includes(ref!), `index.html cita ${ref}, que não existe`);
+    const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
+    for (const [, ref] of page.matchAll(/(?:href|src)="\/ui\/([^"]+)"/g)) assert.ok(readdirSync(UI_FOLDER).includes(ref!), `index.html cita ${ref}, que não existe`);
   });
 
-  test('ler(rota) lê a API por HTTP e só a API do núcleo local', async () => {
+  test('read(route) reads the API over HTTP and only the local core API', async () => {
     const read = httpReader({ base: api.url });
     const overview = await read('/api/overview');
     assert.equal(overview.name, 'ahrena-console');
     // `nome` stays beside `name` until phase 6 of #173: the installed app reads it.
     assert.equal(overview.nome, 'ahrena-console');
-    const painel = await read(`/api/painel/${PANEL_SESSION}`);
-    assert.ok(JSON.stringify(painel).includes(PANEL_SESSION), 'o painel da sessão do simulador');
+    const panel = await read(`/api/painel/${PANEL_SESSION}`);
+    assert.ok(JSON.stringify(panel).includes(PANEL_SESSION), 'o painel da sessão do simulador');
 
     await assert.rejects(read('/api/nao-existe'), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 404);
     await assert.rejects(read('/ui'), /rota fora da API/);
@@ -185,75 +185,75 @@ describe('/ui no núcleo', () => {
     assert.throws(() => httpReader({ base: 'http://exemplo.com:4720' }), /só lê o núcleo local/);
     assert.throws(() => httpReader({ base: 'https://127.0.0.1:4720' }), /só lê o núcleo local/);
 
-    const fechado = httpReader({ base: 'http://127.0.0.1:1' });
-    await assert.rejects(fechado('/api/overview'), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
+    const closed = httpReader({ base: 'http://127.0.0.1:1' });
+    await assert.rejects(closed('/api/overview'), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 
-  test('Ao vivo: conecta com reset, entrega a mudança de um hook e para', async () => {
-    const estados: string[] = [];
-    const mudancas: { type: string; key: string }[][] = [];
-    let reiniciou = 0;
-    const vivo = startLive({
+  test('live: connects with reset, delivers a hook change and stops', async () => {
+    const states: string[] = [];
+    const changes: { type: string; key: string }[][] = [];
+    let restarts = 0;
+    const live = startLive({
       read: httpReader({ base: api.url }),
       wait: 5,
-      onState: ({ state }: { state: string }) => estados.push(state),
-      onRestart: () => reiniciou++,
-      onChange: (m: { type: string; key: string }[]) => mudancas.push(m),
+      onState: ({ state }: { state: string }) => states.push(state),
+      onRestart: () => restarts++,
+      onChange: (m: { type: string; key: string }[]) => changes.push(m),
     });
-    await ate(() => reiniciou === 1 && cursor.openWaits === 1);
-    assert.deepEqual(estados, ['live']);
+    await until(() => restarts === 1 && cursor.openWaits === 1);
+    assert.deepEqual(states, ['live']);
 
     const hook = { session_id: 'sess-ui', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
     const h = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
     assert.equal(h.status, 202);
-    await ate(() => mudancas.flat().some((m) => m.type === 'session' && m.key === 'sess-ui'));
-    assert.equal(reiniciou, 1, 'mudança comum não pede releitura');
+    await until(() => changes.flat().some((m) => m.type === 'session' && m.key === 'sess-ui'));
+    assert.equal(restarts, 1, 'mudança comum não pede releitura');
 
-    await vivo.stop();
-    await ate(() => cursor.openWaits === 0);
+    await live.stop();
+    await until(() => cursor.openWaits === 0);
   });
 
-  test('Ao vivo: sem o núcleo mostra a falha, tenta de novo e relê quando volta', async () => {
-    const estados: string[] = [];
-    const esperas: number[] = [];
-    let reiniciou = 0;
-    let fora = 3;
+  test('live: without the core shows the failure, retries and re-reads when it is back', async () => {
+    const states: string[] = [];
+    const waits: number[] = [];
+    let restarts = 0;
+    let offline = 3;
     const real = httpReader({ base: api.url });
-    const vivo = startLive({
-      read: (rota: string, o: unknown) => (fora-- > 0 ? httpReader({ base: 'http://127.0.0.1:1' })(rota, o) : real(rota, o)),
+    const live = startLive({
+      read: (route: string, o: unknown) => (offline-- > 0 ? httpReader({ base: 'http://127.0.0.1:1' })(route, o) : real(route, o)),
       wait: 5,
       delays: [10, 20],
-      sleep: (ms: number) => (esperas.push(ms), Promise.resolve()),
-      onState: ({ state }: { state: string }) => estados.push(state),
-      onRestart: () => reiniciou++,
+      sleep: (ms: number) => (waits.push(ms), Promise.resolve()),
+      onState: ({ state }: { state: string }) => states.push(state),
+      onRestart: () => restarts++,
     });
-    await ate(() => reiniciou === 1);
-    assert.deepEqual(esperas, [10, 20, 20]);
-    assert.equal(estados[0], 'offline');
-    assert.equal(estados.at(-1), 'live');
-    assert.ok(vivo.state === 'live');
-    await vivo.stop();
+    await until(() => restarts === 1);
+    assert.deepEqual(waits, [10, 20, 20]);
+    assert.equal(states[0], 'offline');
+    assert.equal(states.at(-1), 'live');
+    assert.ok(live.state === 'live');
+    await live.stop();
   });
 
-  test('Ao vivo: 503 com Retry-After espera o que o núcleo pediu', async () => {
-    const esperas: number[] = [];
+  test('live: 503 with Retry-After waits what the core asked for', async () => {
+    const waits: number[] = [];
     let n = 0;
-    const vivo = startLive({
+    const live = startLive({
       read: async () => {
         if (n++ === 0) throw new ReadError('lotado', { status: 503, retryIn: 5000 });
         await new Promise((r) => setTimeout(r, 5));
         return { cursor: 'c', changes: [], reset: true, timedOut: false };
       },
-      sleep: (ms: number) => (esperas.push(ms), Promise.resolve()),
+      sleep: (ms: number) => (waits.push(ms), Promise.resolve()),
     });
-    await ate(() => n >= 2);
-    assert.deepEqual(esperas, [5000]);
-    await vivo.stop();
+    await until(() => n >= 2);
+    assert.deepEqual(waits, [5000]);
+    await live.stop();
   });
 });
 
-describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Das sessões; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+describe('screen registry', () => {
+  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões; under Máquinas Esta máquina and, under Controle, Agent Config; the Detail opens by a session and lights Sessões', () => {
     assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
@@ -285,7 +285,7 @@ describe('registro das telas', () => {
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);
   });
 
-  test('a barra tem as seções: as telas do dia a dia sem título, Entrega, Decisões, Máquinas e Controle; seção vazia não aparece', () => {
+  test('the sidebar has the sections: the everyday screens without a title, Entrega, Decisões, Máquinas and Controle; an empty section does not show', () => {
     assert.deepEqual(SECTIONS, [
       { id: 'main', label: null },
       { id: 'delivery', label: 'Entrega' },
@@ -294,29 +294,47 @@ describe('registro das telas', () => {
       { id: 'control', label: 'Controle' },
     ]);
     for (const t of SCREENS.filter((x: { item?: unknown }) => x.item)) assert.ok(SECTIONS.some((s: { id: string }) => s.id === t.item.section), t.id);
-    // Um item de Controle registrado antes dos do dia a dia ainda sai no bloco dele, depois de Máquinas.
-    const telas = [
+    // A Controle item registered before the everyday ones still goes in its block, after Máquinas.
+    const screens = [
       { id: 'config', item: { label: 'Agent Config', icon: 'x', section: 'control' } },
       { id: 'dashboard', item: { label: 'Dashboard', icon: 'x', section: 'main' } },
       { id: 'session-detail', highlights: 'dashboard' },
       { id: 'local', item: { label: 'Esta máquina', icon: 'x', section: 'machines' } },
       { id: 'dev', item: { label: 'Dev Console', icon: 'x', section: 'main' } },
     ];
-    const ver = (ts: unknown[]) => sidebarSections(ts).map((s: { id: string; items: { id: string }[] }) => [s.id, s.items.map((t) => t.id)]);
-    assert.deepEqual(ver(telas), [['main', ['dashboard', 'dev']], ['machines', ['local']], ['control', ['config']]]);
-    assert.deepEqual(ver(telas.filter((t) => t.id !== 'local')), [['main', ['dashboard', 'dev']], ['control', ['config']]]);
-    // Um item com seção errada não some: cai no bloco de cima (e o laço acima recusa o registro).
-    assert.deepEqual(ver([{ id: 'x', item: { label: 'X', icon: 'x', section: 'unknown' } }]), [['main', ['x']]]);
+    const sectionsOf = (ts: unknown[]) => sidebarSections(ts).map((s: { id: string; items: { id: string }[] }) => [s.id, s.items.map((t) => t.id)]);
+    assert.deepEqual(sectionsOf(screens), [['main', ['dashboard', 'dev']], ['machines', ['local']], ['control', ['config']]]);
+    assert.deepEqual(sectionsOf(screens.filter((t) => t.id !== 'local')), [['main', ['dashboard', 'dev']], ['control', ['config']]]);
+    // An item with a wrong section does not vanish: it falls in the top block (and the loop above refuses the registration).
+    assert.deepEqual(sectionsOf([{ id: 'x', item: { label: 'X', icon: 'x', section: 'unknown' } }]), [['main', ['x']]]);
   });
 
-  test('a moldura desenha o título de cada seção com as classes da moldura, sem estilo inline', () => {
-    const app = readFileSync(`${PASTA_DA_UI}nav.js`, 'utf8');
+  test('the shell draws each section title with the shell classes, without inline style', () => {
+    const app = readFileSync(`${UI_FOLDER}nav.js`, 'utf8');
     assert.match(app, /sidebarSections\(\[\.\.\.screens, \.\.\.remoteItems\]\)/);
     assert.match(app, /'cc-nav-section'/);
     assert.match(app, /'cc-nav-title eyebrow'/);
-    const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-section \{/);
     assert.match(css, /\.cc-nav-title \{/);
+  });
+
+  test('sidebar breathing: items keep their height and only the item list scrolls on a short window', () => {
+    const css = readFileSync(`${UI_FOLDER}shell.css`, 'utf8');
+    const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.#]/g, '\\$&')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+    // The wireframe item is about 34 px tall; it never shrinks to fit the window.
+    assert.match(rule('.cc-nav'), /min-height: 34px/);
+    assert.match(rule('.cc-nav'), /flex: none/);
+    assert.match(rule('.cc-nav-title'), /padding: 18px 12px 8px/);
+    // The list scrolls; the brand and the footer stay put.
+    assert.match(rule('#nav'), /overflow-y: auto/);
+    assert.match(rule('#nav'), /min-height: 0/);
+    assert.match(rule('.cc-side'), /overflow: hidden/);
+    assert.match(rule('.cc-brand'), /flex: none/);
+    assert.match(rule('.cc-foot'), /flex: none/);
+    assert.match(rule('.cc-foot'), /padding-top: 16px/);
+    // The lit item is brought into view when the list scrolls.
+    assert.match(readFileSync(`${UI_FOLDER}nav.js`, 'utf8'), /scrollIntoView\?\.\(\{ block: 'nearest' \}\)/);
   });
 
   // Issue 178, criterion 1: the remote machines are not in the static registry; the shell reads
@@ -362,16 +380,16 @@ describe('registro das telas', () => {
 
   // The drawing itself (nav.js) is tested on the fake DOM in ui-machines.test.ts; here, the wiring.
   test('#178 criterion 1: the shell draws the sidebar through nav.js and re-reads the machines on an alert', () => {
-    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
+    const app = readFileSync(`${UI_FOLDER}app.js`, 'utf8');
     assert.match(app, /createNav\(\{ nav, read \}\)/);
     assert.match(app, /highlight\(litItem\(screen, params\)\)/);
     assert.match(app, /changes\.some\(\(c\) => c\.type === 'alert'\)\) readMachines\(\)/);
-    const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-dot \{/);
     assert.match(css, /\.cc-nav-dot\[data-state="connected"\]/);
   });
 
-  test('#104 critério 1: /ui/repos abre a lista de repositórios, com item na barra', () => {
+  test('#104 criterion 1: /ui/repos opens the repository list, with a sidebar item', () => {
     const r = findScreen('/ui/repos');
     assert.equal(r.screen.id, 'repos');
     assert.equal(r.screen.item.label, 'Repositórios');
@@ -379,23 +397,23 @@ describe('registro das telas', () => {
     assert.equal(findScreen('/ui/repos/').screen.id, 'repos');
   });
 
-  test('#105: /ui/repos/<owner>/<repo> abre o repositório e acende Repositórios', () => {
+  test('#105: /ui/repos/<owner>/<repo> opens the repository and lights Repositórios', () => {
     const r = findScreen('/ui/repos/exemplo-labs/vitrine-demo');
     assert.equal(r.screen.id, 'repo');
     assert.equal(r.screen.highlights, 'repos');
     assert.deepEqual(r.params, { owner: 'exemplo-labs', repo: 'vitrine-demo' });
-    // Nomes do GitHub com ponto e sublinhado.
+    // GitHub names with a dot and an underscore.
     assert.deepEqual(findScreen('/ui/repos/meu_org/site.github.io').params, { owner: 'meu_org', repo: 'site.github.io' });
     assert.deepEqual(findScreen('/ui/repos/meu_org/site.github.io/').params, { owner: 'meu_org', repo: 'site.github.io' });
   });
 
-  test('#105: caminho de repositório estranho não casa nada', () => {
-    for (const caminho of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c/d', '/ui/repos/a/b/..', '/ui/sessions/..']) {
-      assert.equal(findScreen(caminho), null, caminho);
+  test('#105: a strange repository path matches nothing', () => {
+    for (const path of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c/d', '/ui/repos/a/b/..', '/ui/sessions/..']) {
+      assert.equal(findScreen(path), null, path);
     }
   });
 
-  test('#183: a aba Instruções tem URL própria, na mesma tela do repositório', () => {
+  test('#183: the Instructions tab has its own URL, on the same screen as the repository', () => {
     const found = findScreen('/ui/repos/exemplo-labs/vitrine-demo/instructions');
     assert.equal(found?.screen.id, 'repo-tab');
     assert.equal(found?.screen.file, '/ui/screens/repo.js');
@@ -403,11 +421,11 @@ describe('registro das telas', () => {
     assert.equal(litItem(found!.screen, found!.params), 'repos');
   });
 
-  test('toda tela com arquivo aponta para um arquivo que existe em ui/screens/', () => {
+  test('every screen with a file points to a file that exists in ui/screens/', () => {
     for (const t of SCREENS as { id: string; file?: string | null }[]) {
       if (!t.file) continue;
       assert.match(t.file, /^\/ui\/screens\/[a-z0-9-]+\.js$/, t.id);
-      readFileSync(`${PASTA_DA_UI}${t.file.slice('/ui/'.length)}`);
+      readFileSync(`${UI_FOLDER}${t.file.slice('/ui/'.length)}`);
     }
   });
 
@@ -450,13 +468,13 @@ describe('registro das telas', () => {
   });
 
   test('the shell swaps an old URL for the new one with replaceState before routing', () => {
-    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
+    const app = readFileSync(`${UI_FOLDER}app.js`, 'utf8');
     assert.match(app, /const next = legacyUrl\(location\);\n\s+if \(next\) history\.replaceState\(history\.state, '', next\);\n\s+const found = findScreen\(location\.pathname\);/);
   });
 });
 
-describe('escrever(rota, corpo): the /ui write (#63)', () => {
-  test('POSTs JSON to its own origin; an error becomes ErroDeLeitura with the status; only the local core API', async () => {
+describe('write(route, body): the /ui write (#63)', () => {
+  test('POSTs JSON to its own origin; an error becomes ReadError with the status; only the local core API', async () => {
     const requests: { url: string; init: RequestInit }[] = [];
     const responses = [new Response(JSON.stringify({ ok: true, backup: '/b/x' }), { status: 200 }), new Response(JSON.stringify({ error: 'a skill mudou desde a leitura' }), { status: 409 })];
     const write = httpWriter({ base: 'http://127.0.0.1:4720', fetch: async (url: URL, init: RequestInit) => (requests.push({ url: String(url), init }), responses.shift()!) });
@@ -478,7 +496,7 @@ describe('Agent Config screen (#63): registration and pure functions', () => {
   // Each screen's CSS stays loaded after it opens once: a selector without the screen's own class
   // (`ac-…`) would leak into the other screens (/ui rules, item 1).
   test('every selector in agent-config.css goes through an ac- class', () => {
-    const css = readFileSync(`${PASTA_DA_UI}agent-config.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = readFileSync(`${UI_FOLDER}agent-config.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1]!.split(',')).map((s) => s.trim()).filter((s) => s && !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s));
     assert.ok(selectors.length > 20);
     assert.deepEqual(selectors.filter((s) => !s.includes('.ac-')), []);

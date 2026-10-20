@@ -19,7 +19,7 @@ import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
 import { minutesSince, projectOf, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
 import type { StoragePort } from '../storage-port.ts';
 
-export const ROTA_DO_DASHBOARD = '/api/dashboard';
+export const DASHBOARD_ROUTE = '/api/dashboard';
 
 /** O status que o badge mostra (os cinco do wireframe). */
 export type StatusDoBadge = 'active' | 'waiting' | 'completed' | 'error' | 'abandoned';

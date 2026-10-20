@@ -35,10 +35,10 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
-npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
+npm run api -- --demo --scenario p4      # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
                                          # o Detalhe da /ui: /ui/sessions/sim-detail-orders (pede permissão) e /ui/sessions/sim-panel-current
                                          # os ids antigos (sim-painel-esta, sim-detalhe-pedidos…) abrem a mesma sessão até a fase 6 da #173 (src/simulator/legacy-ids.ts)
-npm run api -- --help
+npm run api -- --help                    # os nomes antigos (--porta, --banco, --cenario, --sem-github…) valem até a fase 6 da #173
 npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
 
@@ -97,7 +97,7 @@ As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>
 | [legacy-routes.ts](src/api/legacy-routes.ts) | As rotas e os parâmetros antigos, em português, como alias das novas (#173) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
-**Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
+**Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--scan-interval`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
 
 ```bash
 node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
@@ -227,7 +227,7 @@ Issue #131. A sessão abre vários planos; cada um fica guardado como `PlanRecor
 - **TaskCreate depois das tarefas feitas:** as tarefas antigas continuam na lista da ferramenta, mas são do plano anterior; o novo leva só as novas.
 - **Plano gravado antes da #131:** vira o primeiro do histórico na próxima mudança. O estado fica em `metadata.historico`.
 - **`wrap_up`:** no Claude Desktop, o fechamento do turno dá por feita a lista do `update_plan`. O `wrap_up` do principal marca os passos que faltam; sem isso, quase todo plano do Desktop ficava abandonado.
-- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`rebuildPlan`, em [src/api/reprocessing.ts](src/api/reprocessing.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessamentos` (migração 6).
+- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`rebuildPlan`, em [src/api/reprocessing.ts](src/api/reprocessing.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessings` (migração 6, renomeada na 10).
 
 ## Contas
 
@@ -237,7 +237,9 @@ A precedência fica em `accountSourceOverrides(nova, gravada)` e `applySessionAc
 
 ## Migrações
 
-Cada mudança de esquema é uma migração nova no fim de `MIGRATIONS`. A versão aplicada fica em `PRAGMA user_version`; cada migração roda na própria transação e, se falhar, o banco fica na versão anterior.
+Cada mudança de esquema é uma migração nova no fim de `MIGRATIONS`. A versão aplicada fica em `PRAGMA user_version`; cada migração roda na própria transação e, se falhar, o banco fica na versão anterior. O que SQL sozinho não faz (hash, JSON) vai no `up(db)` da migração, na mesma transação.
+
+A migração 10 (#173, decisão 0009) passa o esquema para o inglês: `reprocessamentos(nome, feito_em)` vira `reprocessings(name, done_at)`, o gatilho `events_seq_faltando` vira `events_seq_missing`, e os valores gravados em `context_meters`, `decisions` e `session_links` passam para o inglês. Como o SQLite não muda um CHECK, essas tabelas são recriadas (tabela nova, cópia com os valores mapeados, `DROP`, `RENAME`, índices de volta). A migração 11 faz o mesmo com o JSON das colunas `metadata` e `data`: a memória da máquina de estados (`estados` → `states`), o cursor da importação (`importacao` → `import`), a extração e o histórico do plano, o registro do painel numa decisão (`painel` → `panel`, com `action`/`by`/`at`), o evento sintético (`sintetico` → `synthetic`, id `estado:` → `state:`) e o que o simulador grava. A prova está em [test/migration/](test/migration/): um banco da versão 9 com todos os valores antigos passa pelas duas migrações sem perder linha.
 
 ## Trabalho do GitHub
 

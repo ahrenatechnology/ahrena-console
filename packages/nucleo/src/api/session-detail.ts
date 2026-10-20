@@ -20,12 +20,10 @@ import type { Agent, DisplayStatus, Session, SessionEvent } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
-import type { CustoDoPainel, PlanoDoPainel, SessaoDoPainel } from './types.ts';
+import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_DETALHE = /^\/api\/sessoes\/([^/]+)(?:\/(agentes|conversa|eventos))?$/;
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const LOCAL = /^local_[0-9a-f-]{36}$/;
@@ -45,8 +43,8 @@ const MAX_FERRAMENTAS = 8;
 export interface CabecaDoDetalhe {
   version: 1;
   generatedAt: string;
-  session: SessaoDoPainel;
-  cost: CustoDoPainel | null;
+  session: PanelSession;
+  cost: PanelCost | null;
   /** O branch: o do Desktop ou do hook, senão o do git da pasta. */
   branch: string | null;
   /** `local_…` do Claude Desktop, para o "Abrir no Claude Desktop"; `null` na sessão só de terminal. */
@@ -92,7 +90,7 @@ export interface AgentesDoDetalhe {
   };
   /** As mais usadas, até 8, da mais para a menos usada. */
   tools: { name: string; n: number }[];
-  tasks: PlanoDoPainel | null;
+  tasks: PanelPlan | null;
   tokens: { cacheRead: number; cacheWrite: number; input: number; output: number; total: number } | null;
   agents: AgenteDoDetalhe[];
 }

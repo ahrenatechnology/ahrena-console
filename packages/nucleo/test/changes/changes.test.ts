@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
@@ -351,8 +351,8 @@ describe('HTTP route', () => {
     const sqlite = openSqliteStorage({ path: ':memory:' });
     const storage = withChanges(sqlite, cursor);
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
-    const builder = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: work });
-    const api = await iniciarApiLocal({ montador: builder, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
+    const builder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: work });
+    const api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
     try {
       const start = (await (await fetch(`${api.url}/api/changes`)).json()) as WaitResult;
       assert.equal(start.reset, true);
@@ -400,7 +400,7 @@ describe('MCP tool wait_for_changes', () => {
     const client = account({ n: 2, label: 'cliente' });
     await storage.putAccount(team);
     await storage.putAccount(client);
-    const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
+    const f = waitForChanges({ changes: cursor, accounts: new Accounts({ storage, file: null }) });
     assert.equal(f.name, WAIT_FOR_CHANGES);
 
     const first = await f.execute({}, ctx());
@@ -430,7 +430,7 @@ describe('MCP tool wait_for_changes', () => {
   test('#173 phase 2b: `types` takes the English names and still the old ones; the answer is English', async () => {
     const { cursor } = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
+    const f = waitForChanges({ changes: cursor, accounts: new Accounts({ storage, file: null }) });
     const c = cursor.current;
     cursor.record({ type: 'plan', key: 's1', sessionId: 's1', accountId: null });
     cursor.record({ type: 'needs-you', key: 's2', sessionId: 's2', accountId: null });
@@ -448,7 +448,7 @@ describe('MCP tool wait_for_changes', () => {
   test('a `repos` change neither wakes the wait nor shows up, without a filter or with account "none"; and it is not a valid type', async () => {
     const { cursor } = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
+    const f = waitForChanges({ changes: cursor, accounts: new Accounts({ storage, file: null }) });
     const c = cursor.current;
     const noFilter = observe(f.execute({ cursor: c, timeout: 30 }, ctx()).then((r) => r.data as unknown as WaitResult));
     const noAccount = observe(f.execute({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.data as unknown as WaitResult));
@@ -472,7 +472,7 @@ describe('MCP tool wait_for_changes', () => {
   test('a wrong argument and a full cursor come back as a tool error; the signal releases the wait', async () => {
     const { cursor } = setup({ maxWaiters: 1 });
     const storage = openSqliteStorage({ path: ':memory:' });
-    const f = waitForChanges({ changes: cursor, accounts: new Contas({ storage, arquivo: null }) });
+    const f = waitForChanges({ changes: cursor, accounts: new Accounts({ storage, file: null }) });
     for (const args of [{ types: ['x'] }, { timeout: -1 }, { sessions: ['a b'] }, { account: [] }, { outro: 1 }]) {
       await assert.rejects(f.execute(args as never, ctx()), ArgumentError, JSON.stringify(args));
     }

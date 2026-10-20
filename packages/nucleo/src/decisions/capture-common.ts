@@ -52,12 +52,12 @@ export function questionDrafts(base: CaptureBase, input: unknown, answers: unkno
     out.push({
       ...common(base),
       sourceKey: `tool:${base.toolUseId}:q${i}`,
-      topic: topicKey('pergunta', question),
+      topic: topicKey('question', question),
       context: question,
       choice,
       alternatives: labels.filter((l) => !chosen.includes(l)),
-      decidedBy: 'usuario',
-      origin: 'pergunta',
+      decidedBy: 'user',
+      origin: 'question',
       inferred: false,
       metadata: {
         header: cleanText(q.header, 60),
@@ -76,12 +76,12 @@ export function planDraft(base: CaptureBase, input: unknown, rejected: readonly 
   return {
     ...common(base),
     sourceKey: `tool:${base.toolUseId}`,
-    topic: 'plano',
+    topic: 'plan',
     context: 'Plano aprovado',
     choice: planTitle(plan) ?? 'Plano aprovado',
     alternatives: cleanList(rejected),
-    decidedBy: 'usuario',
-    origin: 'plano',
+    decidedBy: 'user',
+    origin: 'plan',
     inferred: false,
     metadata: { steps: typeof plan === 'string' ? (plan.match(/^\s*(\d+\.|[-*])\s+/gm) ?? []).length : 0 },
   };
@@ -93,12 +93,12 @@ export function permissionDraft(base: CaptureBase, toolName: string, input: unkn
   return {
     ...common(base),
     sourceKey: `tool:${base.toolUseId}`,
-    topic: topicKey('permissao', subject),
+    topic: topicKey('permission', subject),
     context: `Pedido de permissão: ${subject}`,
     choice: `${allowed ? 'Permitir' : 'Negar'} ${subject}`,
     alternatives: [allowed ? 'negar' : 'permitir'],
-    decidedBy: 'usuario',
-    origin: 'permissao',
+    decidedBy: 'user',
+    origin: 'permission',
     inferred: false,
     metadata: { tool: cleanText(toolName, 60), allowed },
   };
@@ -120,10 +120,10 @@ export function correctionDraft(
     // O título é a primeira frase; o que a pessoa escreveu inteiro fica no detalhe.
     choice: shortChoice(opts.text),
     alternatives: opts.proposal ? [opts.proposal] : [],
-    decidedBy: 'usuario',
-    origin: 'correcao',
+    decidedBy: 'user',
+    origin: 'correction',
     inferred: opts.inferred,
-    state: opts.inferred ? 'a_confirmar' : 'vigente',
-    metadata: { texto: opts.text },
+    state: opts.inferred ? 'to_confirm' : 'current',
+    metadata: { text: opts.text },
   };
 }

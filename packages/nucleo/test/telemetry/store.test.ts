@@ -72,7 +72,7 @@ describe('#175/AC-2 samples table migration', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, MIGRATIONS.filter((m) => m.version <= 8));
     assert.throws(() => new SqliteTelemetryStore(db), /without the telemetry table/);
-    assert.deepEqual(migrate(db), [9]);
+    assert.deepEqual(migrate(db, MIGRATIONS.filter((m) => m.version <= 9)), [9]);
     assert.equal(schemaVersion(db), 9);
     const cols = (db.prepare('PRAGMA table_info(telemetry_samples)').all() as { name: string }[]).map((c) => c.name);
     assert.deepEqual(cols, ['machine_id', 'taken_at', 'cpu_used_pct', 'load1', 'cores', 'memory_used_bytes', 'swap_used_bytes', 'rx_bytes_per_sec', 'tx_bytes_per_sec', 'gpu_used_pct', 'reading']);

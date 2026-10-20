@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 
 // ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
@@ -416,7 +416,7 @@ test('a tela está registrada em /ui/wall, na barra como "Mural ao vivo"', () =>
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem HTML ou estilo inline', () => {
   for (const arquivo of ['screens/wall.js', 'wall.css']) {
-    const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+    const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     assert.doesNotMatch(texto, /https?:\/\//, `${arquivo} chama endereço de fora`);
     assert.doesNotMatch(texto, /innerHTML|style=|\.style\b/, `${arquivo} põe HTML ou estilo inline`);
@@ -431,12 +431,12 @@ test('a rota da tela é a do núcleo', async () => {
 // O CSS de cada tela fica carregado quando se troca de tela: classe com o mesmo nome em duas telas
 // desmonta a outra. As do mural levam `wall-`; em comum só a moldura e os selos de status.
 test('o wall.css não estiliza classe de outra tela: as próprias levam wall-', () => {
-  const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+  const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
   const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
   const daMoldura = classes('shell.css');
   const minhas = [...classes('wall.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
   assert.deepEqual(minhas.filter((c) => !c.startsWith('wall-')), [], 'classe própria sem o prefixo wall-');
-  const css = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)];
+  const css = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)];
   for (const outra of css.filter((a) => a.endsWith('.css') && !['wall.css', 'shell.css', 'brand.css'].includes(a))) {
     assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `wall.css e ${outra} estilizam as mesmas classes`);
   }

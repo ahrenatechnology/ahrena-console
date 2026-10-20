@@ -1,291 +1,291 @@
-// Contrato do painel do Ahrena Console: a resposta de `GET /api/painel/<sessão>` e o estado
+// Contrato do painel do Ahrena Console: a resposta de `GET /api/panel/<session>` e o estado
 // que o mod guarda. Os tipos da resposta repetem packages/nucleo/src/api/tipos.ts; mudar um é
 // mudar os dois (o teste do núcleo confere os nomes dos campos).
 
 export type DisplayStatus = 'active' | 'completed' | 'error' | 'abandoned' | 'waiting'
-export type EstadoDoInbox = DisplayStatus | 'delegating' | 'background'
+export type InboxState = DisplayStatus | 'delegating' | 'background'
 export type AwaitingReason = 'notification' | 'interrupted' | 'stop' | 'session_start'
-/** `cor` em hex; `fonte` pela ordem da decisão 0006. */
-export type ContaDoPainel = { id: string; rotulo: string; cor: string; fonte: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
+/** `color` em hex; `source` pela ordem da decisão 0006. */
+export type PanelAccount = { id: string; label: string; color: string; source: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
 
-export type AtividadeDaSessao = {
-  tipo: 'ferramenta' | 'delegando' | 'pergunta' | 'permissao' | 'erro' | 'prompt' | 'sua-vez' | 'interrompida' | 'concluida' | 'abandonada' | 'ociosa'
-  texto: string
+export type SessionActivity = {
+  type: 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle'
+  text: string
 }
 
-export type FaixaDaSessao = { tipo: 'pergunta' | 'permissao' | 'erro'; texto: string; rodape: string; desde: string }
+export type SessionBanner = { type: 'question' | 'permission' | 'error'; text: string; footer: string; since: string }
 
-export type SessaoDoPainel = {
+export type PanelSession = {
   id: string
-  titulo: string
-  modelo: string | null
-  iniciadaEm: string
+  title: string
+  model: string | null
+  startedAt: string
   status: DisplayStatus
-  estado: EstadoDoInbox
-  motivo: AwaitingReason | null
-  urgente: boolean
-  desde: string
-  turno: number
-  atividade: AtividadeDaSessao
-  faixa: FaixaDaSessao | null
-  conta: ContaDoPainel | null
+  state: InboxState
+  reason: AwaitingReason | null
+  urgent: boolean
+  since: string
+  turn: number
+  activity: SessionActivity
+  banner: SessionBanner | null
+  account: PanelAccount | null
   branch: string | null
   cwd: string | null
 }
 
-export type PlanoDoPainel = {
-  feitos: number
+export type PanelPlan = {
+  done: number
   total: number
-  atual: string | null
-  proximo: string | null
-  restantes: number
+  current: string | null
+  next: string | null
+  remaining: number
   /** Item 1.9: quem faz o item em andamento, a hora da última mudança e os passos com o dono. */
-  atualDono?: DonoDoPasso | null
-  mudouEm?: string | null
-  passos?: PassoDoPainel[]
+  currentOwner?: StepOwner | null
+  changedAt?: string | null
+  steps?: PanelStep[]
 }
 
 /** Um plano do histórico da sessão (issue #131): o atual, ou um anterior concluído ou abandonado (X de Y). */
-export type PlanoDaSessao = {
-  numero: number
-  resultado: 'atual' | 'concluido' | 'abandonado'
+export type SessionPlan = {
+  number: number
+  outcome: 'current' | 'completed' | 'abandoned'
   /** O primeiro passo do plano. */
-  resumo: string
-  feitos: number
+  summary: string
+  done: number
   total: number
   /** O passo em andamento, só no atual. */
-  atual: string | null
-  inicio: string
-  fim: string | null
+  current: string | null
+  start: string
+  end: string | null
 }
 
-export type DonoDoPasso = { tipo: 'principal' | 'subagente' | 'sessao'; nome: string | null; agenteId: string | null }
+export type StepOwner = { type: 'main' | 'subagent' | 'session'; name: string | null; agentId: string | null }
 
-export type PassoDoPainel = {
+export type PanelStep = {
   id: string
-  texto: string
-  textoAtivo: string | null
-  estado: 'pending' | 'in_progress' | 'completed'
-  dono: DonoDoPasso
+  text: string
+  activeText: string | null
+  state: 'pending' | 'in_progress' | 'completed'
+  owner: StepOwner
 }
 
-export type SubagenteDoPainel = {
+export type PanelSubagent = {
   id: string
-  nome: string
-  tarefa: string | null
+  name: string
+  task: string | null
   status: 'working' | 'waiting' | 'completed' | 'error'
-  desde: string
-  ate: string | null
+  since: string
+  until: string | null
   /** #146: o subagente que disparou este; `null` quando foi a própria sessão. Núcleo antigo não manda. */
-  pai?: string | null
+  parent?: string | null
   /** #146: o turno da sessão em que foi disparado (o aninhado herda o de cima); `null`: sem os prompts. */
-  onda?: number | null
+  wave?: number | null
 }
 
-export type FilhaDoPainel = {
+export type PanelChild = {
   id: string
   local?: string | null
-  titulo: string
-  estado: EstadoDoInbox | 'desconhecido'
-  motivo: AwaitingReason | null
-  desde: string | null
+  title: string
+  state: InboxState | 'unknown'
+  reason: AwaitingReason | null
+  since: string | null
   /** #131: o que a filha trabalhando faz ("pensando", "rodando Bash"); ausente no núcleo antigo. */
-  fazendo?: string | null
+  doing?: string | null
   /** #145: arquivada no Claude Desktop; ausente no núcleo antigo. */
-  arquivada?: boolean
+  archived?: boolean
 }
 
-export type TrabalhoDoPainel = {
+export type PanelWork = {
   branch: string
   repo: string | null
-  issue: { numero: number; titulo: string; url: string; subIssues: { feitas: number; total: number } | null } | null
+  issue: { number: number; title: string; url: string; subIssues: { done: number; total: number } | null } | null
   pr: {
-    numero: number
+    number: number
     url: string
-    estado: 'rascunho' | 'aberto' | 'mergeado' | 'fechado'
-    ci: 'ok' | 'falhou' | 'rodando' | null
+    state: 'draft' | 'open' | 'merged' | 'closed'
+    ci: 'ok' | 'failed' | 'running' | null
     /** As checagens do último commit, contadas ("CI ✓ 6/6"); ausente no núcleo antigo. */
-    checks?: { total: number; ok: number; falhas: number; rodando: number } | null
-    review: 'aprovado' | 'ajustes' | 'pendente' | null
+    checks?: { total: number; ok: number; failed: number; running: number } | null
+    review: 'approved' | 'changes-requested' | 'pending' | null
   } | null
-  semPush: boolean
-  erro: string | null
+  notPushed: boolean
+  error: string | null
 }
 
-export type PrecisaDeVoce = {
+export type NeedsYou = {
   id: string
-  /** #140: `precisa`, bloqueada até você agir, com destaque; `sua-vez`, o bate-bola comum, neutra. Núcleo antigo: ausente (conta como `precisa`). */
-  nivel?: 'precisa' | 'sua-vez'
-  porque?: 'permissao' | 'pergunta' | 'plano' | 'decisao' | 'erro' | 'sua-vez' | 'interrompida' | 'no-prompt'
+  /** #140: `needs`, bloqueada até você agir, com destaque; `your-turn`, o bate-bola comum, neutra. Núcleo antigo: ausente (conta como `needs`). */
+  level?: 'needs' | 'your-turn'
+  why?: 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'your-turn' | 'interrupted' | 'no-prompt'
   /** `local_…` do Claude Desktop, para abrir a conversa; sem ele, a sessão é só de terminal. */
   local?: string | null
-  titulo: string
-  estado: 'waiting' | 'error'
-  motivo: AwaitingReason | null
-  urgente: boolean
-  desde: string
-  texto: string
-  modelo: string | null
-  relacao: 'mae' | 'filha' | 'irma' | null
-  mesmoProjeto: boolean
-  conta: ContaDoPainel | null
+  title: string
+  state: 'waiting' | 'error'
+  reason: AwaitingReason | null
+  urgent: boolean
+  since: string
+  text: string
+  model: string | null
+  relation: 'parent' | 'child' | 'sibling' | null
+  sameProject: boolean
+  account: PanelAccount | null
 }
 
-export type PrecisamDoPainel = {
+export type PanelNeedYou = {
   /** Só as que precisam de você. */
   total: number
   /** As que só estão na sua vez: fora da contagem. */
-  suaVez?: number
-  porConta: { conta: ContaDoPainel | null; n: number }[]
-  familia: PrecisaDeVoce[]
-  maquina: PrecisaDeVoce[]
+  yourTurn?: number
+  byAccount: { account: PanelAccount | null; n: number }[]
+  family: NeedsYou[]
+  machine: NeedsYou[]
 }
 
 /** O escopo da lista de decisões (o Select do P9). */
-export type EscopoDasDecisoes = 'sessao' | 'familia' | 'branch'
+export type DecisionScope = 'session' | 'family' | 'branch'
 
 /** Uma decisão no card 34 × 6 (P9). */
-export type DecisaoDoPainel = {
+export type PanelDecision = {
   id: string
   /** "D4": o número na família. */
-  rotulo: string
-  origem: 'pergunta' | 'plano' | 'permissao' | 'correcao' | 'sugerida'
+  label: string
+  origin: 'question' | 'plan' | 'permission' | 'correction' | 'suggested'
   /** A descartada só volta como resposta do Descartar. */
-  estado: 'vigente' | 'substituida' | 'a_confirmar' | 'descartada'
+  state: 'current' | 'superseded' | 'to_confirm' | 'dismissed'
   /** Numa frase. */
-  titulo: string
+  title: string
   /** #131: o texto inteiro e o contexto, para o detalhe, e a ação do painel que o Desfazer volta. */
-  texto?: string
-  contexto?: string | null
-  desfazer?: 'confirmar' | 'descartar' | 'ajustar' | null
+  text?: string
+  context?: string | null
+  undo?: 'confirm' | 'dismiss' | 'adjust' | null
   /** O que foi descartado ("não: …"). */
-  nao: string[]
-  decididaPor: 'usuario' | 'agente'
-  decididaEm: string
-  confirmadaEm: string | null
+  rejected: string[]
+  decidedBy: 'user' | 'agent'
+  decidedAt: string
+  confirmedAt: string | null
   /** O "D4" da decisão que substituiu esta. */
-  substituidaPor: string | null
-  sessao: 'esta' | 'mae' | 'familia' | 'branch'
+  supersededBy: string | null
+  session: 'this' | 'parent' | 'family' | 'branch'
   /** Para o "ver na conversa", quando a mensagem é desta sessão. */
   toolUseId: string | null
 }
 
-export type ListaDeDecisoes = {
-  escopo: EscopoDasDecisoes
-  vigentes: number
-  aConfirmar: number
-  itens: DecisaoDoPainel[]
+export type DecisionList = {
+  scope: DecisionScope
+  current: number
+  toConfirm: number
+  items: PanelDecision[]
   /** Vigentes e a confirmar em cada escopo, para o seletor; ausente no núcleo antigo. */
-  porEscopo?: Record<EscopoDasDecisoes, number>
+  byScope?: Record<DecisionScope, number>
 }
 
 /** A faixa do P10, depois de um /clear; vem com a reinjeição (#100). */
-export type RetomadaDoPainel = { n: number; tokens: number | null; de: string | null }
+export type PanelResume = { n: number; tokens: number | null; from: string | null }
 
-export type DecisoesDoPainel = {
+export type PanelDecisions = {
   /** Vigentes no escopo família: a linha "N decisões vigentes". */
-  vigentes: number
-  aConfirmar: number
-  retomada: RetomadaDoPainel | null
-  /** A lista aberta, só quando o painel pede (`?decisoes=<escopo>`). */
-  lista: ListaDeDecisoes | null
+  current: number
+  toConfirm: number
+  resume: PanelResume | null
+  /** A lista aberta, só quando o painel pede (`?decisions=<scope>`). */
+  list: DecisionList | null
 }
 
 /** Um PR aberto por uma sessão que aguarda a sua aprovação (#140). */
-export type PrAguardando = { numero: number; url: string; repo: string | null; titulo: string; sessao: { id: string; titulo: string; local: string | null } }
+export type WaitingPr = { number: number; url: string; repo: string | null; title: string; session: { id: string; title: string; local: string | null } }
 
-/** Medidor de contexto (item 1.7). `estouros`: compactações automáticas; `alerta`: a partir de 2; as manuais à parte. */
-export type ContextoDoPainel = {
-  usados: number
-  limite: number
+/** Medidor de contexto (item 1.7). `overflows`: compactações automáticas; `alert`: a partir de 2; as manuais à parte. */
+export type PanelContext = {
+  used: number
+  limit: number
   pct: number
-  estouros: number
-  alerta: boolean
-  compactacoesManuais: number
-  rotulo: string
-  agentes: { agenteId: string; usados: number; limite: number; pct: number; estouros: number; alerta: boolean }[]
+  overflows: number
+  alert: boolean
+  manualCompactions: number
+  label: string
+  agents: { agentId: string; used: number; limit: number; pct: number; overflows: number; alert: boolean }[]
 }
 
-export type Painel = {
-  versao: 1
+export type Panel = {
+  version: 1
   /**
    * A versão da API, o commit do código que ela carregou e o da pasta agora (diferentes: reiniciar
-   * a API), e se ela abre a sessão no Claude Desktop (`POST /abrir/<local_…>`, no macOS).
+   * a API), e se ela abre a sessão no Claude Desktop (`POST /open/<local_…>`, no macOS).
    */
-  api?: { versao: string; commit: string | null; pasta?: string | null; abreSessao?: boolean }
-  geradoEm: string
-  sessao: SessaoDoPainel | null
-  contexto: ContextoDoPainel | null
-  custo: { usd: number | null; serie: number[]; estimativa: true } | null
-  tokens: { entrada: number; saida: number } | null
-  background: { total: number; primeiro: string | null }
-  plano: PlanoDoPainel | null
+  api?: { version: string; commit: string | null; folder?: string | null; opensSession?: boolean }
+  generatedAt: string
+  session: PanelSession | null
+  context: PanelContext | null
+  cost: { usd: number | null; series: number[]; estimate: true } | null
+  tokens: { input: number; output: number } | null
+  background: { total: number; first: string | null }
+  plan: PanelPlan | null
   /** Do mais recente para o mais antigo. Núcleo anterior à #131 não manda. */
-  planos?: PlanoDaSessao[]
-  subagentes: { ativos: number; itens: SubagenteDoPainel[] }
-  filhas: FilhaDoPainel[]
-  trabalho: TrabalhoDoPainel | null
-  precisam: PrecisamDoPainel
+  plans?: SessionPlan[]
+  subagents: { active: number; items: PanelSubagent[] }
+  children: PanelChild[]
+  work: PanelWork | null
+  needYou: PanelNeedYou
   /** #140: os PRs aguardando a sua aprovação; núcleo antigo não manda. */
-  prs?: { total: number; itens: PrAguardando[] }
+  prs?: { total: number; items: WaitingPr[] }
   /** `null`: o núcleo subiu sem as decisões (ou é de antes delas). */
-  decisoes?: DecisoesDoPainel | null
+  decisions?: PanelDecisions | null
 }
 
 /** A última leitura do núcleo e como ela foi. */
-export type Leitura = {
-  painel: Painel | null
+export type Reading = {
+  panel: Panel | null
   /** Quando a última leitura boa chegou (ms desde a época). */
-  lidoEm: number | null
+  readAt: number | null
   /** A última tentativa falhou: o núcleo está fora. */
   offline: boolean
-  erro: string | null
+  error: string | null
   /** Quando a próxima tentativa sai (ms desde a época). */
-  proximaEm: number | null
+  nextAt: number | null
   /**
    * O contexto desta sessão lido do engine (`$.session.usage()`), o mesmo da barra do Claude Code:
    * acompanha a compactação na hora. Sem ele, vale o do núcleo.
    */
-  contextoAoVivo?: { usados: number | null; limite: number; pct: number } | null
+  liveContext?: { used: number | null; limit: number; pct: number } | null
 }
 
 /** O que a pessoa abriu no painel. */
-export type Vista = {
-  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131); `subagentes`: o grafo da sessão (#146). */
-  tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas' | 'prs'
-  /** `decisao`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
-  decisao?: DecisaoDoPainel | null
+export type View = {
+  /** `need-you`: a lista de "precisam de você" (P7); `decisions`: as decisões (P9); `plans`: os planos da sessão (#131); `subagents`: o grafo da sessão (#146). */
+  screen: 'session' | 'need-you' | 'decisions' | 'plans' | 'decision' | 'subagents' | 'children' | 'prs'
+  /** `decision`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
+  decision?: PanelDecision | null
   /** O detalhe com o campo do Ajustar aberto. */
-  ajustando?: boolean
+  adjusting?: boolean
   /** A última ação do painel numa decisão, para o "Desfazer" de alguns segundos. */
-  ultimaAcao?: { id: string; rotulo: string; acao: 'confirmar' | 'descartar' | 'ajustar'; em: number } | null
+  lastAction?: { id: string; label: string; action: 'confirm' | 'dismiss' | 'adjust'; at: number } | null
   /**
    * Os `tool_use_id` das decisões abertas cuja mensagem ainda está na conversa (`$.session.messages()`):
    * só elas têm "ver na conversa". As de antes de uma compactação mostram o trecho original no detalhe.
    */
-  alcancaveis?: string[]
+  reachable?: string[]
   /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
-  compactar?: 'confirmar' | 'compactando' | null
+  compact?: 'confirm' | 'compacting' | null
   /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
-  escopo: 'familia' | 'maquina' | null
+  scope: 'family' | 'machine' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */
-  escopoDecisoes?: EscopoDasDecisoes | null
-  /** #146: o grafo da sessão (tela `subagentes`): a página, as ondas abertas e fechadas, o filtro. */
-  grafo?: { pagina: number; abertas: number[]; fechadas: number[]; filtro: 'todos' | 'ativos' }
+  decisionsScope?: DecisionScope | null
+  /** #146: o grafo da sessão (tela `subagents`): a página, as ondas abertas e fechadas, o filtro. */
+  graph?: { page: number; opened: number[]; closed: number[]; filter: 'all' | 'active' }
 }
 
 /**
  * #140 (critérios 6 e 7): a pergunta com que esta sessão terminou o turno, capturada no próprio mod.
- * - `fechamento`: a caixa de próximo passo do Desktop (`wrap_up` com `ask`); cada ação com mensagem
+ * - `wrap-up`: a caixa de próximo passo do Desktop (`wrap_up` com `ask`); cada ação com mensagem
  *   vira um botão que manda a mensagem ao chat; as ações do app (commit, criar PR) ficam no chat;
- * - `pergunta`: o AskUserQuestion, com as perguntas e as opções inteiras; responde-se no chat.
+ * - `question`: o AskUserQuestion, com as perguntas e as opções inteiras; responde-se no chat.
  */
-export type PerguntaDaSessao =
-  | { tipo: 'fechamento'; texto: string; acoes: { rotulo: string; mensagem: string | null; doApp: boolean }[]; em: number }
-  | { tipo: 'pergunta'; perguntas: { texto: string; cabecalho: string | null; opcoes: { rotulo: string; descricao: string | null }[]; varias: boolean }[]; em: number }
+export type SessionQuestion =
+  | { type: 'wrap-up'; text: string; actions: { label: string; message: string | null; fromApp: boolean }[]; at: number }
+  | { type: 'question'; questions: { text: string; header: string | null; options: { label: string; description: string | null }[]; multiple: boolean }[]; at: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'ahrena-console': { leitura: Leitura; vista: Vista; pergunta: PerguntaDaSessao | null }
+    'ahrena-console': { reading: Reading; view: View; question: SessionQuestion | null }
   }
 }

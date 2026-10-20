@@ -100,27 +100,27 @@ function taskIdOf(response: Json | null, text: string | null): string | null {
   return m ? m[1] : null;
 }
 
-/** Internal extraction state, kept in `metadata.extracao`. The fields are persisted: they keep their names. */
+/** Internal extraction state, kept in `metadata.extraction`. The field names are persisted data. */
 interface ExtractionState {
   /** `tool_use_id` of the calls already applied (the last `MAX_APPLIED`). */
-  aplicadas: string[];
+  applied: string[];
   /** The last applied call and the plan before it, to undo if the result comes with an error. */
-  ultima: { toolUseId: string; antes: PlanStep[]; source: PlanSource } | null;
+  last: { toolUseId: string; before: PlanStep[]; source: PlanSource } | null;
   /** Task created with a provisional id, waiting for the result's id. */
-  provisorias: Record<string, string>;
+  provisional: Record<string, string>;
   /** Next task id, if the TaskCreate result does not arrive. */
-  proximaTarefa: number;
+  nextTask: number;
 }
 
 const MAX_APPLIED = 500;
 
 function extractionStateOf(plan: SessionPlan | null): ExtractionState {
-  const m = obj(plan?.metadata?.extracao);
+  const m = obj(plan?.metadata?.extraction);
   return {
-    aplicadas: Array.isArray(m?.aplicadas) ? (m.aplicadas as string[]) : [],
-    ultima: (obj(m?.ultima) as ExtractionState['ultima']) ?? null,
-    provisorias: (obj(m?.provisorias) as Record<string, string>) ?? {},
-    proximaTarefa: typeof m?.proximaTarefa === 'number' ? m.proximaTarefa : 1,
+    applied: Array.isArray(m?.applied) ? (m.applied as string[]) : [],
+    last: (obj(m?.last) as ExtractionState['last']) ?? null,
+    provisional: (obj(m?.provisional) as Record<string, string>) ?? {},
+    nextTask: typeof m?.nextTask === 'number' ? m.nextTask : 1,
   };
 }
 
@@ -155,10 +155,10 @@ export function applyToPlan(plan: SessionPlan | null, sessionId: string, e: Sess
 
   if (c.kind === 'clear') {
     if (!plan || plan.steps.length === 0) return null;
-    return build(plan, sessionId, source, [], c.at, { ...state, ultima: null, provisorias: {}, proximaTarefa: 1 });
+    return build(plan, sessionId, source, [], c.at, { ...state, last: null, provisional: {}, nextTask: 1 });
   }
 
-  const seen = c.toolUseId !== null && state.aplicadas.includes(c.toolUseId);
+  const seen = c.toolUseId !== null && state.applied.includes(c.toolUseId);
   let changed = false;
 
   // The call: the first time it shows up counts (PreToolUse, PostToolUse or the transcript).
@@ -169,37 +169,37 @@ export function applyToPlan(plan: SessionPlan | null, sessionId: string, e: Sess
       steps = r;
       source = planToolSource(c.tool)!;
       changed = true;
-      if (c.toolUseId) state.ultima = { toolUseId: c.toolUseId, antes: before, source: plan?.source ?? source };
+      if (c.toolUseId) state.last = { toolUseId: c.toolUseId, before, source: plan?.source ?? source };
     }
-    if (c.toolUseId) state.aplicadas = [...state.aplicadas, c.toolUseId].slice(-MAX_APPLIED);
+    if (c.toolUseId) state.applied = [...state.applied, c.toolUseId].slice(-MAX_APPLIED);
   }
 
   if (c.kind === 'result' && c.toolUseId) {
     // An error in the last applied call: back to the plan before it.
-    if (c.error && state.ultima?.toolUseId === c.toolUseId) {
-      steps = state.ultima.antes;
-      source = state.ultima.source;
-      state.ultima = null;
-      delete state.provisorias[c.toolUseId];
+    if (c.error && state.last?.toolUseId === c.toolUseId) {
+      steps = state.last.before;
+      source = state.last.source;
+      state.last = null;
+      delete state.provisional[c.toolUseId];
       changed = true;
     }
     // TaskCreate: swaps the provisional id for the result's.
-    const provisional = state.provisorias[c.toolUseId];
+    const provisional = state.provisional[c.toolUseId];
     if (!c.error && provisional !== undefined) {
-      delete state.provisorias[c.toolUseId];
+      delete state.provisional[c.toolUseId];
       if (c.taskId && c.taskId !== provisional && !steps.some((s) => s.id === c.taskId)) {
         steps = steps.map((s) => (s.id === provisional ? { ...s, id: c.taskId! } : s));
         changed = true;
       }
       const n = Number(c.taskId);
-      if (Number.isInteger(n)) state.proximaTarefa = Math.max(state.proximaTarefa, n + 1);
+      if (Number.isInteger(n)) state.nextTask = Math.max(state.nextTask, n + 1);
     }
   }
 
   if (!changed) {
     // Nothing changed in the plan, but the extraction state did (call seen): write it if the plan exists.
     if (!plan || seen) return null;
-    return { ...plan, metadata: { ...plan.metadata, extracao: state } };
+    return { ...plan, metadata: { ...plan.metadata, extraction: state } };
   }
   return build(plan, sessionId, source, steps, c.at, state);
 }
@@ -240,9 +240,9 @@ function applyCall(
   if (c.tool === 'TaskCreate') {
     const text = str(input.subject) ?? str(input.description);
     if (!text) return null;
-    const id = String(state.proximaTarefa);
-    state.proximaTarefa++;
-    if (c.toolUseId) state.provisorias[c.toolUseId] = id;
+    const id = String(state.nextTask);
+    state.nextTask++;
+    if (c.toolUseId) state.provisional[c.toolUseId] = id;
     const owner = str(input.owner)
       ? { kind: 'subagent' as const, agentId: null, name: str(input.owner) }
       : ownerOf(sessionId, c.agentId);
@@ -329,6 +329,6 @@ function build(
     total: steps.length,
     currentStepId: steps.find((s) => s.status === 'in_progress')?.id ?? null,
     changedAt: plan && plan.changedAt > at ? plan.changedAt : at,
-    metadata: { ...(plan?.metadata ?? {}), extracao: state },
+    metadata: { ...(plan?.metadata ?? {}), extraction: state },
   };
 }

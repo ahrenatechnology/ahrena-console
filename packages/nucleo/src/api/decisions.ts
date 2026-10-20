@@ -8,31 +8,21 @@
 // the branch is not, and it is what this filter protects.
 
 import type { Page, StoragePort } from '../storage-port.ts';
-import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from '../decisions/model.ts';
+import type { Decision, DecisionState } from '../decisions/model.ts';
 import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
 import { confirmDecision, decisionId, decisionLabel, discardDecision, familyOf, registerDecision, reopenDecision, revertDecision } from '../decisions/registry.ts';
 import { cleanText, shortChoice } from '../decisions/text.ts';
-import type { DecisaoDoPainel, DecisoesDoPainel, EscopoDasDecisoes, ListaDeDecisoes } from './types.ts';
+import type { PanelDecision, PanelDecisions, PanelDecisionScope, PanelDecisionList } from './types.ts';
 
-export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'family', 'branch'];
+export const ESCOPOS_DAS_DECISOES: readonly PanelDecisionScope[] = ['session', 'family', 'branch'];
 
-// The decision model (src/decisions) and its database keep the Portuguese values; the API answers
-// English ones since #173 phase 2b. These tables are the only crossing.
+// The decision model (src/decisions), its database and the API share the English values since #173
+// phase 5. The one difference: a reverted decision is shown as `current` (it never reaches the list).
 
-/** The scope of a decision in the model → the API's (the item's `scope`, the list's, the counts). */
-export const API_SCOPE: Readonly<Record<DecisionScope, EscopoDasDecisoes>> = { sessao: 'session', familia: 'family', branch: 'branch' };
-const API_ORIGIN: Readonly<Record<DecisionOrigin, DecisaoDoPainel['origin']>> = {
-  pergunta: 'question',
-  plano: 'plan',
-  permissao: 'permission',
-  correcao: 'correction',
-  sugerida: 'suggested',
-};
-const API_STATE = { vigente: 'current', substituida: 'superseded', a_confirmar: 'to_confirm', descartada: 'dismissed' } as const satisfies Partial<Record<DecisionState, DecisaoDoPainel['state']>>;
-const API_DECIDER: Readonly<Record<Decider, DecisaoDoPainel['decidedBy']>> = { usuario: 'user', agente: 'agent' };
-const API_ACTION: Readonly<Record<Exclude<AcaoNaDecisao, 'desfazer'>, NonNullable<DecisaoDoPainel['undo']>>> = { confirmar: 'confirm', descartar: 'dismiss', ajustar: 'adjust' };
+/** The state of a decision as the API shows it. */
+const apiState = (s: DecisionState): PanelDecision['state'] => (s === 'reverted' ? 'current' : s);
 /** O que a lista mostra; descartada e revertida ficam no histórico. */
-const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
+const NA_LISTA: readonly DecisionState[] = ['current', 'to_confirm', 'superseded'];
 /** Cards na lista: o largo mostra até 4 linhas de 3; o estreito, menos. */
 const MAX_ITENS = 12;
 
@@ -45,19 +35,19 @@ export interface AlvoDasDecisoes {
   contaId: string | null;
 }
 
-export type AcaoNaDecisao = 'confirmar' | 'descartar' | 'ajustar' | 'desfazer';
+export type AcaoNaDecisao = 'confirm' | 'dismiss' | 'adjust' | 'undo';
 
-/** Quem decidiu pelo painel e quando: fica em `metadata.painel` da decisão. */
+/** Who decided through the panel and when: kept in the decision's `metadata.panel`. */
 export interface RegistroDoPainel {
-  acao: Exclude<AcaoNaDecisao, 'desfazer'>;
-  por: 'usuario';
-  sessao: string;
-  conta: string | null;
-  em: string;
-  /** O estado antes da ação, para o Desfazer voltar a ele. */
-  antes?: Decision['state'];
-  /** No Ajustar: a decisão nova, com o texto da pessoa. */
-  nova?: string;
+  action: Exclude<AcaoNaDecisao, 'undo'>;
+  by: 'user';
+  session: string;
+  account: string | null;
+  at: string;
+  /** The state before the action, for Undo to go back to. */
+  before?: Decision['state'];
+  /** On Adjust: the new decision, with the person's text. */
+  new?: string;
 }
 
 export class ErroDaDecisao extends Error {
@@ -81,7 +71,7 @@ async function todas(port: DecisionPort, query: ListDecisionsQuery): Promise<Dec
 }
 
 /** Vigentes e a confirmar: o que as contagens por escopo somam. */
-const CONTAVEIS: readonly DecisionState[] = ['vigente', 'a_confirmar'];
+const CONTAVEIS: readonly DecisionState[] = ['current', 'to_confirm'];
 const contaveis = (ds: readonly Decision[]) => ds.filter((d) => CONTAVEIS.includes(d.state)).length;
 
 /** O rótulo ("D2") de uma decisão pelo id: das já lidas, ou da porta; `null` sem id ou sem a decisão. */
@@ -123,12 +113,12 @@ export class DecisoesDaSessao {
    * - `family`: as desta sessão e as de escopo família ou branch das outras da família;
    * - `branch`: as da família e as de escopo branch de outras famílias no mesmo branch e pasta.
    */
-  async doEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, states: readonly DecisionState[] = NA_LISTA): Promise<Decision[]> {
+  async doEscopo(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope, states: readonly DecisionState[] = NA_LISTA): Promise<Decision[]> {
     const porId = new Map<string, Decision>();
     for (const d of await todas(this.port, { sessionId: alvo.sessionId, states })) porId.set(d.id, d);
     if (escopo !== 'session') {
       const familyId = await familyOf(this.port, alvo.sessionId);
-      for (const d of await todas(this.port, { familyId, states })) if (d.scope !== 'sessao') porId.set(d.id, d);
+      for (const d of await todas(this.port, { familyId, states })) if (d.scope !== 'session') porId.set(d.id, d);
     }
     if (escopo === 'branch' && alvo.branch) {
       for (const d of await todas(this.port, { branch: alvo.branch, repo: alvo.repo, states })) if (d.scope === 'branch') porId.set(d.id, d);
@@ -142,8 +132,8 @@ export class DecisoesDaSessao {
    * Vigentes e a confirmar em cada escopo. As do escopo pedido já vieram lidas (`doEscopo`, em
    * qualquer estado) e não são consultadas de novo.
    */
-  async porEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, doEscopo: readonly Decision[]): Promise<Record<EscopoDasDecisoes, number>> {
-    const out = {} as Record<EscopoDasDecisoes, number>;
+  async porEscopo(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope, doEscopo: readonly Decision[]): Promise<Record<PanelDecisionScope, number>> {
+    const out = {} as Record<PanelDecisionScope, number>;
     for (const e of ESCOPOS_DAS_DECISOES) out[e] = e === escopo ? contaveis(doEscopo) : (await this.doEscopo(alvo, e, CONTAVEIS)).length;
     return out;
   }
@@ -159,29 +149,29 @@ export class DecisoesDaSessao {
   }
 
   /** A linha do painel e, quando pedida, a lista aberta. */
-  async doPainel(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes | null): Promise<DecisoesDoPainel> {
-    const familia = await this.doEscopo(alvo, 'family', ['vigente', 'a_confirmar']);
+  async doPainel(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope | null): Promise<PanelDecisions> {
+    const familia = await this.doEscopo(alvo, 'family', ['current', 'to_confirm']);
     return {
-      current: familia.filter((d) => d.state === 'vigente').length,
-      toConfirm: familia.filter((d) => d.state === 'a_confirmar').length,
+      current: familia.filter((d) => d.state === 'current').length,
+      toConfirm: familia.filter((d) => d.state === 'to_confirm').length,
       // A reinjeição (#100) ainda não grava o que injetou: a faixa do P10 acende com ela.
       resume: null,
       list: escopo ? await this.lista(alvo, escopo) : null,
     };
   }
 
-  async lista(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes): Promise<ListaDeDecisoes> {
+  async lista(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope): Promise<PanelDecisionList> {
     const todasDoEscopo = await this.doEscopo(alvo, escopo);
     const familyId = await familyOf(this.port, alvo.sessionId);
     const mae = (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null;
     const lidas = new Map(todasDoEscopo.map((d) => [d.id, d]));
-    const itens: DecisaoDoPainel[] = [];
+    const itens: PanelDecision[] = [];
     for (const d of todasDoEscopo.slice(0, MAX_ITENS)) itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, await rotuloPorId(this.port, d.supersededBy, lidas)));
     const porEscopo = await this.porEscopo(alvo, escopo, todasDoEscopo);
     return {
       scope: escopo,
-      current: todasDoEscopo.filter((d) => d.state === 'vigente').length,
-      toConfirm: todasDoEscopo.filter((d) => d.state === 'a_confirmar').length,
+      current: todasDoEscopo.filter((d) => d.state === 'current').length,
+      toConfirm: todasDoEscopo.filter((d) => d.state === 'to_confirm').length,
       items: itens,
       byScope: porEscopo,
     };
@@ -189,29 +179,29 @@ export class DecisoesDaSessao {
 
   /**
    * Confirma, descarta, ajusta ou desfaz, numa decisão que esta sessão enxerga (no escopo branch,
-   * o mais largo), e registra quem decidiu e quando em `metadata.painel`:
+   * o mais largo), e registra quem decidiu e quando em `metadata.panel`:
    * - Confirmar e Descartar: só a sugerida (a confirmar);
    * - Ajustar: a sugerida ou a vigente ganha uma decisão nova, "correção sua", com o texto da pessoa,
    *   que a substitui no mesmo assunto;
    * - Desfazer: volta a decisão ao estado de antes da última ação do painel.
    */
-  async decidir(alvo: AlvoDasDecisoes, id: string, acao: AcaoNaDecisao, agora: string, texto: string | null = null): Promise<DecisaoDoPainel> {
+  async decidir(alvo: AlvoDasDecisoes, id: string, acao: AcaoNaDecisao, agora: string, texto: string | null = null): Promise<PanelDecision> {
     const d = await this.port.getDecision(id);
-    const visivel = d && (await this.doEscopo(alvo, 'branch', ['a_confirmar', d.state])).some((x) => x.id === id);
+    const visivel = d && (await this.doEscopo(alvo, 'branch', ['to_confirm', d.state])).some((x) => x.id === id);
     if (!d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
     let feita: Decision;
-    if (acao === 'desfazer') feita = await this.desfazer(d, agora);
-    else if (acao === 'ajustar') feita = await this.ajustar(alvo, d, texto, agora);
+    if (acao === 'undo') feita = await this.desfazer(d, agora);
+    else if (acao === 'adjust') feita = await this.ajustar(alvo, d, texto, agora);
     else {
-      if (d.state !== 'a_confirmar') throw new ErroDaDecisao(409, `a decisão já não está a confirmar (${d.state})`);
-      const registro: RegistroDoPainel = { acao, por: 'usuario', sessao: alvo.sessionId, conta: alvo.contaId, em: agora, antes: d.state };
-      await this.port.putDecision({ ...d, metadata: { ...d.metadata, painel: registro }, updatedAt: agora });
-      feita = acao === 'confirmar' ? await confirmDecision(this.port, id, agora) : await discardDecision(this.port, id, agora);
+      if (d.state !== 'to_confirm') throw new ErroDaDecisao(409, `a decisão já não está a confirmar (${d.state})`);
+      const registro: RegistroDoPainel = { action: acao, by: 'user', session: alvo.sessionId, account: alvo.contaId, at: agora, before: d.state };
+      await this.port.putDecision({ ...d, metadata: { ...d.metadata, panel: registro }, updatedAt: agora });
+      feita = acao === 'confirm' ? await confirmDecision(this.port, id, agora) : await discardDecision(this.port, id, agora);
     }
     return this.paraOPainel(alvo, feita);
   }
 
-  private async paraOPainel(alvo: AlvoDasDecisoes, d: Decision): Promise<DecisaoDoPainel> {
+  private async paraOPainel(alvo: AlvoDasDecisoes, d: Decision): Promise<PanelDecision> {
     const familyId = await familyOf(this.port, alvo.sessionId);
     const mae = (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null;
     const nova = d.supersededBy ? await this.port.getDecision(d.supersededBy) : null;
@@ -221,14 +211,15 @@ export class DecisoesDaSessao {
   private async ajustar(alvo: AlvoDasDecisoes, d: Decision, texto: string | null, agora: string): Promise<Decision> {
     const escrito = cleanText(texto);
     if (!escrito) throw new ErroDaDecisao(400, 'escreva o ajuste: { "text": "…" }');
-    if (d.state !== 'a_confirmar' && d.state !== 'vigente') throw new ErroDaDecisao(409, `só a sugerida ou a vigente é ajustada (${d.state})`);
+    if (d.state !== 'to_confirm' && d.state !== 'current') throw new ErroDaDecisao(409, `só a sugerida ou a vigente é ajustada (${d.state})`);
     // A original e o ajuste ficam no mesmo assunto: o ajuste a substitui, e o Desfazer a devolve.
-    const topic = d.topic ?? `ajuste:${d.id}`;
+    const topic = d.topic ?? `adjust:${d.id}`;
+    // The `painel:` prefix stays: the source key is hashed into the new decision's id, which the API answers.
     const sourceKey = `painel:${d.id}:${agora}`;
     const registro: RegistroDoPainel = {
-      acao: 'ajustar', por: 'usuario', sessao: alvo.sessionId, conta: alvo.contaId, em: agora, antes: d.state, nova: decisionId(alvo.sessionId, sourceKey),
+      action: 'adjust', by: 'user', session: alvo.sessionId, account: alvo.contaId, at: agora, before: d.state, new: decisionId(alvo.sessionId, sourceKey),
     };
-    await this.port.putDecision({ ...d, topic, metadata: { ...d.metadata, painel: registro }, updatedAt: agora });
+    await this.port.putDecision({ ...d, topic, metadata: { ...d.metadata, panel: registro }, updatedAt: agora });
     await registerDecision(
       this.port,
       {
@@ -241,57 +232,57 @@ export class DecisoesDaSessao {
         context: d.choice,
         choice: shortChoice(escrito),
         alternatives: [d.choice],
-        decidedBy: 'usuario',
-        origin: 'correcao',
+        decidedBy: 'user',
+        origin: 'correction',
         inferred: false,
         scope: d.scope,
         message: { uuid: null, toolUseId: null, transcriptPath: null },
         decidedAt: agora,
-        metadata: { texto: escrito, ajusteDe: d.id },
+        metadata: { text: escrito, adjustedFrom: d.id },
       },
       agora,
     );
     // A sugerida entra na cadeia já com o ajuste depois dela: fica substituída por ele.
-    if (d.state === 'a_confirmar') await confirmDecision(this.port, d.id, agora);
+    if (d.state === 'to_confirm') await confirmDecision(this.port, d.id, agora);
     return (await this.port.getDecision(d.id)) ?? d;
   }
 
   private async desfazer(d: Decision, agora: string): Promise<Decision> {
-    const feito = d.metadata?.painel as RegistroDoPainel | undefined;
-    if (!feito?.acao) throw new ErroDaDecisao(409, 'nada a desfazer nesta decisão');
-    if (feito.acao === 'ajustar' && feito.nova) {
-      const nova = await this.port.getDecision(feito.nova);
-      if (nova?.state === 'vigente') await revertDecision(this.port, nova.id, agora);
+    const feito = d.metadata?.panel as RegistroDoPainel | undefined;
+    if (!feito?.action) throw new ErroDaDecisao(409, 'nada a desfazer nesta decisão');
+    if (feito.action === 'adjust' && feito.new) {
+      const nova = await this.port.getDecision(feito.new);
+      if (nova?.state === 'current') await revertDecision(this.port, nova.id, agora);
     }
     const atual = (await this.port.getDecision(d.id)) ?? d;
-    if (feito.antes === 'a_confirmar' && atual.state !== 'a_confirmar') {
-      if (atual.state !== 'vigente' && atual.state !== 'descartada') throw new ErroDaDecisao(409, `já não dá para desfazer (${atual.state})`);
+    if (feito.before === 'to_confirm' && atual.state !== 'to_confirm') {
+      if (atual.state !== 'current' && atual.state !== 'dismissed') throw new ErroDaDecisao(409, `já não dá para desfazer (${atual.state})`);
       await reopenDecision(this.port, d.id, agora);
     }
     const depois = (await this.port.getDecision(d.id)) ?? atual;
-    const { painel: _, ...metadata } = depois.metadata ?? {};
-    const desfeita = { ...depois, metadata: { ...metadata, painelDesfeito: { ...feito, desfeitoEm: agora } }, updatedAt: agora };
+    const { panel: _, ...metadata } = depois.metadata ?? {};
+    const desfeita = { ...depois, metadata: { ...metadata, panelUndone: { ...feito, undoneAt: agora } }, updatedAt: agora };
     await this.port.putDecision(desfeita);
     return desfeita;
   }
 }
 
 /** A decisão como o card a desenha, relativa à sessão `sessionId` (a aba e a página da /ui também usam). */
-export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): DecisaoDoPainel {
-  const painel = d.metadata?.painel as Partial<RegistroDoPainel> | undefined;
+export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): PanelDecision {
+  const painel = d.metadata?.panel as Partial<RegistroDoPainel> | undefined;
   return {
     id: d.id,
     label: decisionLabel(d),
-    origin: API_ORIGIN[d.origin],
-    state: API_STATE[d.state === 'substituida' || d.state === 'a_confirmar' || d.state === 'descartada' ? d.state : 'vigente'],
+    origin: d.origin,
+    state: apiState(d.state),
     title: d.choice,
-    text: typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+    text: typeof d.metadata?.text === 'string' ? d.metadata.text : d.choice,
     context: d.context,
-    undo: painel?.acao ? API_ACTION[painel.acao] : null,
+    undo: painel?.action ?? null,
     rejected: d.alternatives,
-    decidedBy: API_DECIDER[d.decidedBy],
+    decidedBy: d.decidedBy,
     decidedAt: d.decidedAt,
-    confirmedAt: painel?.acao === 'confirmar' && typeof painel.em === 'string' ? painel.em : null,
+    confirmedAt: painel?.action === 'confirm' && typeof painel.at === 'string' ? painel.at : null,
     supersededBy: substituidaPor,
     session: d.sessionId === sessionId ? 'this' : d.sessionId === mae ? 'parent' : d.familyId === familyId ? 'family' : 'branch',
     toolUseId: d.sessionId === sessionId ? d.message.toolUseId : null,
