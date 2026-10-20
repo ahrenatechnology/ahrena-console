@@ -33,7 +33,7 @@ import type { Decision, DecisionScope, DecisionState } from '../decisoes/modelo.
 import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
 import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisoes/registro.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
-import { DecisoesDaSessao, ErroDaDecisao, ESCOPO_DA_API, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
+import { DecisoesDaSessao, ErroDaDecisao, API_SCOPE, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
 import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
@@ -259,7 +259,7 @@ export class DecisoesDaUi {
     return {
       ...paraOPainel(d, ref.sessionId, ref.familyId, ref.mae, await this.rotuloDe(d.supersededBy, lidas)),
       sessionId: d.sessionId,
-      scope: ESCOPO_DA_API[d.scope],
+      scope: API_SCOPE[d.scope],
       supersedes: await this.rotuloDe(d.supersedes, lidas),
       promotedTo: d.promotedTo,
       branch: d.branch,
@@ -376,7 +376,7 @@ export class DecisoesDaUi {
       porEscopo,
       total: porEscopo[p.escopo],
       itens,
-      injecao: { ligada: this.injecaoLigada, escopo: ESCOPO_DA_API[nivel], decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
+      injecao: { ligada: this.injecaoLigada, escopo: API_SCOPE[nivel], decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
       mcp: {
         ferramenta: 'session_decisions',
         existe: this.mcpExiste,

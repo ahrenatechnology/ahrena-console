@@ -1,5 +1,7 @@
 // O contrato de `GET /api/panel/<session>`: tudo o que o painel lateral desenha, num pedido só.
-// O plugin (plugins/ahrena-console/types) repete estes tipos; mudar um é mudar os dois.
+// The plugin's types (plugins/ahrena-console/types) are the old Portuguese shape, served by the old
+// route `/api/painel/<id>` and kept by the back-translator of src/api/legacy-routes.ts; changing these
+// types does not change the plugin's.
 // Since #173 phase 2b the keys and fixed values are English. The mod migrates on its own: until it
 // does, it reads the old route (`/api/painel/<id>`), which answers the old Portuguese body through the
 // back-translator of src/api/legacy-routes.ts (the `panel` spec, with the key table at its top).
@@ -341,7 +343,6 @@ export interface DecisoesDoPainel {
   /** A lista aberta, só quando o painel pede (`?decisions=<scope>`). */
   list: ListaDeDecisoes | null;
 }
-
 
 /**
  * O contrato de `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): um card por sessão aberta nesta

@@ -47,8 +47,8 @@ export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): 'apr
   return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
 }
 
-const CI_DO_PAINEL = { ok: 'ok', falhou: 'failed', rodando: 'running' } as const satisfies Record<string, PrDoPainel['ci']>;
-const REVIEW_DO_PAINEL = { aprovado: 'approved', ajustes: 'changes-requested', pendente: 'pending' } as const satisfies Record<string, PrDoPainel['review']>;
+const PANEL_CI = { ok: 'ok', falhou: 'failed', rodando: 'running' } as const satisfies Record<string, PrDoPainel['ci']>;
+const PANEL_REVIEW = { aprovado: 'approved', ajustes: 'changes-requested', pendente: 'pending' } as const satisfies Record<string, PrDoPainel['review']>;
 
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
@@ -57,7 +57,7 @@ function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const ci = ciDoPr(p);
   const review = reviewDoPr(p);
   const checks = p.checks ? { total: p.checks.total, ok: p.checks.ok, failed: p.checks.falhas, running: p.checks.rodando } : null;
-  return { number: p.number, url: p.url, state, ci: ci && CI_DO_PAINEL[ci], checks, review: review && REVIEW_DO_PAINEL[review] };
+  return { number: p.number, url: p.url, state, ci: ci && PANEL_CI[ci], checks, review: review && PANEL_REVIEW[review] };
 }
 
 interface Entrada {

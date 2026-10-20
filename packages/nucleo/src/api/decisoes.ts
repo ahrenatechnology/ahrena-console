@@ -20,17 +20,17 @@ export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'f
 // English ones since #173 phase 2b. These tables are the only crossing.
 
 /** The scope of a decision in the model → the API's (the item's `scope`, the list's, the counts). */
-export const ESCOPO_DA_API: Readonly<Record<DecisionScope, EscopoDasDecisoes>> = { sessao: 'session', familia: 'family', branch: 'branch' };
-const ORIGEM_DA_API: Readonly<Record<DecisionOrigin, DecisaoDoPainel['origin']>> = {
+export const API_SCOPE: Readonly<Record<DecisionScope, EscopoDasDecisoes>> = { sessao: 'session', familia: 'family', branch: 'branch' };
+const API_ORIGIN: Readonly<Record<DecisionOrigin, DecisaoDoPainel['origin']>> = {
   pergunta: 'question',
   plano: 'plan',
   permissao: 'permission',
   correcao: 'correction',
   sugerida: 'suggested',
 };
-const ESTADO_DA_API = { vigente: 'current', substituida: 'superseded', a_confirmar: 'to_confirm', descartada: 'dismissed' } as const satisfies Partial<Record<DecisionState, DecisaoDoPainel['state']>>;
-const QUEM_DA_API: Readonly<Record<Decider, DecisaoDoPainel['decidedBy']>> = { usuario: 'user', agente: 'agent' };
-const ACAO_DA_API: Readonly<Record<Exclude<AcaoNaDecisao, 'desfazer'>, NonNullable<DecisaoDoPainel['undo']>>> = { confirmar: 'confirm', descartar: 'dismiss', ajustar: 'adjust' };
+const API_STATE = { vigente: 'current', substituida: 'superseded', a_confirmar: 'to_confirm', descartada: 'dismissed' } as const satisfies Partial<Record<DecisionState, DecisaoDoPainel['state']>>;
+const API_DECIDER: Readonly<Record<Decider, DecisaoDoPainel['decidedBy']>> = { usuario: 'user', agente: 'agent' };
+const API_ACTION: Readonly<Record<Exclude<AcaoNaDecisao, 'desfazer'>, NonNullable<DecisaoDoPainel['undo']>>> = { confirmar: 'confirm', descartar: 'dismiss', ajustar: 'adjust' };
 /** O que a lista mostra; descartada e revertida ficam no histórico. */
 const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
 /** Cards na lista: o largo mostra até 4 linhas de 3; o estreito, menos. */
@@ -282,14 +282,14 @@ export function paraOPainel(d: Decision, sessionId: string, familyId: string, ma
   return {
     id: d.id,
     label: decisionLabel(d),
-    origin: ORIGEM_DA_API[d.origin],
-    state: ESTADO_DA_API[d.state === 'substituida' || d.state === 'a_confirmar' || d.state === 'descartada' ? d.state : 'vigente'],
+    origin: API_ORIGIN[d.origin],
+    state: API_STATE[d.state === 'substituida' || d.state === 'a_confirmar' || d.state === 'descartada' ? d.state : 'vigente'],
     title: d.choice,
     text: typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
     context: d.context,
-    undo: painel?.acao ? ACAO_DA_API[painel.acao] : null,
+    undo: painel?.acao ? API_ACTION[painel.acao] : null,
     rejected: d.alternatives,
-    decidedBy: QUEM_DA_API[d.decidedBy],
+    decidedBy: API_DECIDER[d.decidedBy],
     decidedAt: d.decidedAt,
     confirmedAt: painel?.acao === 'confirmar' && typeof painel.em === 'string' ? painel.em : null,
     supersededBy: substituidaPor,

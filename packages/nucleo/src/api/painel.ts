@@ -117,8 +117,8 @@ export interface LeituraDaSessao {
 }
 
 /** The attention level and reason of `atencaoDe` (still Portuguese inside the core) as the panel answers them. */
-const NIVEL_DO_PAINEL: Readonly<Record<NivelDeAtencao, PrecisaDeVoce['level']>> = { precisa: 'needs', 'sua-vez': 'your-turn' };
-const PORQUE_DO_PAINEL: Readonly<Record<MotivoDaAtencao, PrecisaDeVoce['why']>> = {
+const PANEL_LEVEL: Readonly<Record<NivelDeAtencao, PrecisaDeVoce['level']>> = { precisa: 'needs', 'sua-vez': 'your-turn' };
+const PANEL_WHY: Readonly<Record<MotivoDaAtencao, PrecisaDeVoce['why']>> = {
   permissao: 'permission',
   pergunta: 'question',
   plano: 'plan',
@@ -513,8 +513,8 @@ export class MontadorDoPainel {
       const { nivel, porque } = atencaoDe(c.inbox, r);
       itens.push({
         id: c.session.id,
-        level: NIVEL_DO_PAINEL[nivel],
-        why: PORQUE_DO_PAINEL[porque],
+        level: PANEL_LEVEL[nivel],
+        why: PANEL_WHY[porque],
         local: c.desktop?.localId ?? null,
         title: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
         state: c.inbox.status === 'error' ? 'error' : 'waiting',
