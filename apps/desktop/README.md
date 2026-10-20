@@ -8,7 +8,8 @@ A bandeja do Ahrena Console na barra de menus do macOS, em Tauri 2 ([decisão 00
 - **Menu**, como os wireframes A1, A2 e A4 (`docs/wireframes/index.html`, ids `app-bandeja-0`, `app-bandeja-3` e `app-parado`): o estado do núcleo, "N precisam de você" com o motivo e o tempo de cada sessão (as que travam primeiro), "N ativas", "Abrir o console ⌘O", Notificações, Abrir no login, a versão e Sair.
 - **Clique numa sessão:** por enquanto abre a conversa no Claude Desktop (`POST /abrir/<local_…>` do núcleo). Com ⌥, cada item vira "Abrir no Claude Desktop" (item alternativo nativo do macOS). Quando a janela do app mostrar a sessão (A5), o clique sem ⌥ passa a abrir lá.
 - **Abrir o console:** uma janela com `http://127.0.0.1:<porta>/ui`. Fechar a janela não fecha o app.
-- **Notificações e Abrir no login** só marcam, sem efeito: o efeito é das issues #88 e #89.
+- **Notificações** (A3, issue #88): uma notificação do sistema quando uma sessão **passa** a precisar de você (entra na lista ou troca de motivo), nunca a cada leitura; ao abrir e ao reencontrar o núcleo, quem já esperava não avisa. Título com a sessão e o motivo ("motor-de-regras pede permissão"), corpo com o que ela pede, som só em Pede permissão, Interrompida e Com erro. O clique e "Abrir" levam a janela a `/ui/sessoes/<id>`; "Abrir no Claude Desktop" faz o `POST /abrir/<local_…>`; "Silenciar" cala só aquela sessão. A marca "Notificações" do menu liga e desliga tudo. As duas coisas ficam no app, não no núcleo: `notificacoes.json` no diretório de dados do app (`~/Library/Application Support/dev.ahrena.console/`). Fora de um bundle (`cargo run`), o `UNUserNotificationCenter` não pode ser usado e o aviso sai pelo plugin do Tauri, sem clique nem ações.
+- **Abrir no login** só marca, sem efeito: o efeito é da issue #89.
 - Sem ícone no Dock, instância única (abrir de novo abre o console).
 
 ## O núcleo
@@ -27,6 +28,8 @@ A bandeja lê `GET /api/atencao` e espera mudanças em `GET /api/mudancas?desde=
 | [src-tauri/src/main.rs](src-tauri/src/main.rs) | A bandeja, o laço do núcleo, os cliques e a janela |
 | [src-tauri/src/menu.rs](src-tauri/src/menu.rs) | O menu como dados, montado do JSON de `/api/atencao` (testado sem abrir o app) |
 | [src-tauri/src/nucleo.rs](src-tauri/src/nucleo.rs) | A escolha entre adotar, subir e o A4, e a leitura do `subir --json` |
+| [src-tauri/src/notificacoes.rs](src-tauri/src/notificacoes.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
+| [src-tauri/src/aviso_nativo.rs](src-tauri/src/aviso_nativo.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
 | [src-tauri/src/nativo.rs](src-tauri/src/nativo.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
 | [src-tauri/src/http.rs](src-tauri/src/http.rs) | HTTP/1.0 cru com `127.0.0.1` |
 | [src-tauri/src/shell_path.rs](src-tauri/src/shell_path.rs) | O PATH do shell de login, para achar o `node` aberto pelo Finder |
@@ -63,6 +66,7 @@ cd apps/desktop/src-tauri && cargo test
 | `AHRENA_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4) |
 | `AHRENA_NUCLEO_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app |
 | `AHRENA_ABRIR_MENU=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
+| `AHRENA_DADOS_DIR=<pasta>` | Grava e lê o `notificacoes.json` nesta pasta em vez do diretório de dados do app |
 
 Pelo Finder, `open --env` passa as variáveis:
 
@@ -72,5 +76,5 @@ open --env AHRENA_NODE= --env AHRENA_NUCLEO_PORTA=4797 "src-tauri/target/release
 
 ## O que falta
 
-- Notificações (#88), abrir no login (#89), build no CI e release (#90).
+- Abrir no login (#89), build no CI e release (#90).
 - A janela no detalhe da sessão (A5), quando a `/ui` (#26) tiver as telas.

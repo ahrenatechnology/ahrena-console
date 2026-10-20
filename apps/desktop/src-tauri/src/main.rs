@@ -6,13 +6,17 @@
 // 3. lê `GET /api/atencao` e espera mudanças em `GET /api/mudancas` (long polling), e monta o menu
 //    dos wireframes A1, A2 e A4 (menu.rs), com o número ao lado do ícone;
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /abrir/<local_…>`); "Abrir o console"
-//    abre a `/ui` do núcleo numa janela.
+//    abre a `/ui` do núcleo numa janela;
+// 5. avisa por notificação do sistema quem passa a precisar de você (A3, notificacoes.rs).
 // O app não grava hooks nem configuração do Claude, não embute Node e não tem telas próprias.
 
+#[cfg(target_os = "macos")]
+mod aviso_nativo;
 mod http;
 mod menu;
 #[cfg(target_os = "macos")]
 mod nativo;
+mod notificacoes;
 mod nucleo;
 mod shell_path;
 
@@ -28,6 +32,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
 use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
+use notificacoes::{Aviso, Avisos};
 
 const BANDEJA: &str = "ahrena";
 const ICONE: &[u8] = include_bytes!("../icons/bandeja.png");
@@ -37,8 +42,9 @@ struct Estado {
     nucleo: EstadoDoNucleo,
     atencao: Option<Atencao>,
     sem_atencao: bool,
-    // Nesta etapa só marcam: o efeito é das issues #88 (notificações) e #89 (abrir no login).
-    notificacoes: bool,
+    /// O detector e o silêncio das notificações; a marca "Notificações" é `avisos.silencio.ligadas`.
+    avisos: Avisos,
+    // Nesta etapa só marca: o efeito é da issue #89 (abrir no login).
     login: bool,
     /// `id da sessão` → `local_…` do Claude Desktop, do último menu.
     locais: HashMap<String, Option<String>>,
@@ -57,7 +63,7 @@ fn main() {
         nucleo: EstadoDoNucleo::Procurando,
         atencao: None,
         sem_atencao: false,
-        notificacoes: true,
+        avisos: Avisos::default(),
         login: false,
         locais: HashMap::new(),
         ultimo: None,
@@ -76,6 +82,9 @@ fn main() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 nativo::ouvir();
             }
+            estado.lock().unwrap().avisos = Avisos::abrir(notificacoes::caminho(app.path().app_data_dir().ok()));
+            #[cfg(target_os = "macos")]
+            aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: abrir_console_na_sessao, no_desktop: abrir_no_desktop, silenciar });
             TrayIconBuilder::with_id(BANDEJA)
                 .icon(Image::from_bytes(ICONE)?)
                 .icon_as_template(true)
@@ -112,6 +121,7 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
             e.nucleo = EstadoDoNucleo::Procurando;
             e.atencao = None;
             e.sem_atencao = false;
+            e.avisos.detector.zerar();
         });
         let r = nucleo::adotar_ou_subir(&pasta);
         let porta = match r.estado {
@@ -143,16 +153,20 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
             Some(r) if r.status == 200 => {
                 let Some(atencao) = Atencao::do_json(&r.corpo) else { return };
                 cursor = atencao.cursor.clone().or(cursor);
+                let mut novos = Vec::new();
                 mudar(app, estado, |e| {
+                    novos = e.avisos.ler(&atencao);
                     e.atencao = Some(atencao);
                     e.sem_atencao = false;
                 });
+                avisar(app, &novos);
             }
             // Um núcleo de antes da #87: de pé, mas sem a lista. Relê a cada 30 s.
             Some(r) if r.status == 404 => {
                 mudar(app, estado, |e| {
                     e.atencao = None;
                     e.sem_atencao = true;
+                    e.avisos.detector.zerar();
                 });
                 let _ = sinais.recv_timeout(Duration::from_secs(30));
                 if !nucleo::responde(porta) {
@@ -193,7 +207,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
     let _ = app.run_on_main_thread(move || {
         let mut e = estado.lock().unwrap();
         let versao = handle.package_info().version.to_string();
-        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.notificacoes, login: e.login, versao: &versao });
+        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.avisos.silencio.ligadas, login: e.login, versao: &versao });
         let titulo = menu::titulo_da_bandeja(&e.nucleo, e.atencao.as_ref());
         if e.ultimo.as_ref() == Some(&(itens.clone(), titulo.clone())) {
             return;
@@ -309,7 +323,9 @@ fn clique(app: &AppHandle, id: &str) {
     match id {
         menu::ID_ABRIR => abrir_console(app),
         menu::ID_SAIR => app.exit(0),
-        menu::ID_NOTIFICACOES => mudar(app, &estado, |e| e.notificacoes = !e.notificacoes),
+        menu::ID_NOTIFICACOES => mudar(app, &estado, |e| {
+            e.avisos.alternar();
+        }),
         menu::ID_LOGIN => mudar(app, &estado, |e| e.login = !e.login),
         menu::ID_PROCURAR => {
             let _ = app.state::<Laco>().0.lock().unwrap().send(());
@@ -328,13 +344,15 @@ fn clique(app: &AppHandle, id: &str) {
 
 /// Por enquanto, as duas formas abrem no Claude Desktop; a janela do app (A5) vem com a #26.
 fn abrir_sessao(app: &AppHandle, estado: &Compartilhado, sessao: &str) {
-    let (local, porta) = {
-        let e = estado.lock().unwrap();
-        let porta = match e.nucleo {
-            EstadoDoNucleo::DePe { porta } => porta,
-            _ => return,
-        };
-        (e.locais.get(sessao).cloned().flatten(), porta)
+    let local = estado.lock().unwrap().locais.get(sessao).cloned().flatten();
+    abrir_no_desktop(app, local);
+}
+
+/// `POST /abrir/<local_…>` no núcleo; sem `local`, o console.
+fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
+    let porta = match app.state::<Compartilhado>().lock().unwrap().nucleo {
+        EstadoDoNucleo::DePe { porta } => porta,
+        _ => return,
     };
     let Some(local) = local else { return abrir_console(app) };
     std::thread::spawn(move || {
@@ -346,18 +364,58 @@ fn abrir_sessao(app: &AppHandle, estado: &Compartilhado, sessao: &str) {
 }
 
 fn abrir_console(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("console") {
-        let _ = w.show();
-        let _ = w.set_focus();
-        return;
-    }
+    abrir_janela(app, None);
+}
+
+/// O clique na notificação: a janela no detalhe da sessão, navegando a que já estiver aberta.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn abrir_console_na_sessao(app: &AppHandle, sessao: &str) {
+    abrir_janela(app, Some(&notificacoes::caminho_da_sessao(sessao)));
+}
+
+fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
     let porta = match app.state::<Compartilhado>().lock().unwrap().nucleo {
         EstadoDoNucleo::DePe { porta } => porta,
         _ => nucleo::PORTA_PADRAO,
     };
-    let Ok(url) = format!("http://127.0.0.1:{porta}/ui").parse() else { return };
+    let Ok(url) = format!("http://127.0.0.1:{porta}{}", caminho.unwrap_or("/ui")).parse::<tauri::Url>() else { return };
+    if let Some(w) = app.get_webview_window("console") {
+        if caminho.is_some() {
+            let _ = w.navigate(url);
+        }
+        let _ = w.show();
+        let _ = w.set_focus();
+        return;
+    }
     let janela = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url)).title("Ahrena Console").inner_size(1100.0, 760.0).build();
     if let Ok(w) = janela {
         let _ = w.set_focus();
+    }
+}
+
+/// A ação "Silenciar" da notificação: cala a sessão e grava.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn silenciar(app: &AppHandle, sessao: &str) {
+    app.state::<Compartilhado>().lock().unwrap().avisos.silenciar(sessao);
+}
+
+/// Mostra os avisos: pelo `UNUserNotificationCenter` (com clique e ações) quando ele liga; senão
+/// pelo plugin do Tauri, sem clique.
+fn avisar(app: &AppHandle, avisos: &[Aviso]) {
+    use tauri_plugin_notification::NotificationExt;
+    for a in avisos {
+        #[cfg(target_os = "macos")]
+        if aviso_nativo::ativo() {
+            aviso_nativo::enviar(a);
+            continue;
+        }
+        let mut n = app.notification().builder().title(&a.titulo).body(&a.corpo);
+        if a.som {
+            // No macOS o plugin passa o nome ao `NSUserNotification`, que só reconhece este.
+            n = n.sound(if cfg!(target_os = "macos") { "NSUserNotificationDefaultSoundName" } else { "default" });
+        }
+        if let Err(err) = n.show() {
+            eprintln!("[ahrena-console] notificação: {err}");
+        }
     }
 }
