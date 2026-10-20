@@ -2,7 +2,9 @@
 // card e as rotas que a página (C21) e a aba (C20) leem. O DOM fica para o navegador; aqui vão as
 // funções puras e as travas.
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
+import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ErroDeLeitura, escritorHttp } from '../../ui/ler.js';
 // @ts-expect-error: idem
@@ -154,5 +156,128 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.deepEqual(lidas, ['/api/sessoes/s1/decisoes?escopo=familia'], 'o escopo padrão é a família');
     assert.deepEqual(rotulos, ['4'], 'o texto entre parênteses');
     assert.equal(ouvintes.length, 1, 'a aba escuta as mudanças de decisão');
+  });
+});
+
+// O estilo das Decisões, lido como texto: o navegador fica com o dono; aqui vão as travas que um
+// arquivo .css e o JS que o usa conseguem provar sozinhos.
+const TELA = 'decisoes.css';
+const PREFIXO = 'dec-';
+const JS_DA_TELA = ['telas/decisoes.js', 'telas/detalhe-decisoes.js', 'telas/decisoes-comum.js'];
+// Igual ao `classes()` e ao `SELOS` de test/api/sessoes.test.ts (no main), para os dois testes andarem juntos.
+const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+const permitida = (c: string, daMoldura: Set<string>) => c.startsWith(PREFIXO) || daMoldura.has(c) || SELOS.has(c);
+
+/**
+ * As classes que o JS põe num `class:`. Cada valor é lido até a vírgula ou a chave que fecha o objeto;
+ * dele saem as strings, menos as que são comparadas (`g.tipo === 'branch' ? … : …`). Num template, o
+ * pedaço antes de `${…}` tem de ser a classe inteira até ali (`dec-e-${estado}` conta como `dec-e-`).
+ */
+function classesDoJs(texto: string): string[] {
+  const achadas: string[] = [];
+  for (const m of texto.matchAll(/\bclass:\s*/g)) {
+    let i = m.index! + m[0].length;
+    let fundo = 0;
+    let expr = '';
+    for (; i < texto.length; i++) {
+      const ch = texto[i]!;
+      if (ch === "'" || ch === '"' || ch === '`') {
+        const fim = texto.indexOf(ch, i + 1);
+        expr += texto.slice(i, fim + 1);
+        i = fim;
+        continue;
+      }
+      if ('([{'.includes(ch)) fundo++;
+      if (')]}'.includes(ch)) {
+        if (fundo === 0) break;
+        fundo--;
+      }
+      if (ch === ',' && fundo === 0) break;
+      expr += ch;
+    }
+    for (const s of expr.matchAll(/(===|!==)?\s*(['"`])([^'"`]*)\2/g)) {
+      if (s[1]) continue;
+      for (const nome of s[3]!.split(/\s+/).filter(Boolean)) achadas.push(nome.includes('${') ? nome.slice(0, nome.indexOf('${')) : nome);
+    }
+  }
+  return achadas;
+}
+
+describe('o estilo das Decisões (ui/decisoes.css)', () => {
+  test('o CSS fica na raiz de ui/, como o das outras telas, e as duas telas carregam de lá', () => {
+    assert.ok(readdirSync(PASTA_DA_UI).includes(TELA));
+    assert.ok(!readdirSync(`${PASTA_DA_UI}telas`).includes(TELA), 'nada de cópia em telas/');
+    assert.match(readFileSync(`${PASTA_DA_UI}telas/decisoes-comum.js`, 'utf8'), /href: '\/ui\/decisoes\.css'/);
+  });
+
+  // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
+  // telas desmonta a outra. Mesmo teste do sessoes.test.ts do main, para o decisoes.css.
+  test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
+    const daMoldura = classes('moldura.css');
+    const minhas = new Set([...classes(TELA)].filter((c) => !daMoldura.has(c)));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && ![TELA, 'moldura.css', 'marca.css'].includes(a));
+    for (const outra of outras) {
+      const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
+      assert.deepEqual(comuns, [], `${TELA} e ${outra} estilizam as mesmas classes`);
+    }
+  });
+
+  test('toda classe do CSS e do JS das Decisões é dec-*, da moldura ou dos selos', () => {
+    const daMoldura = classes('moldura.css');
+    assert.deepEqual([...classes(TELA)].filter((c) => !permitida(c, daMoldura)), [], `${TELA} tem classe sem o prefixo ${PREFIXO}`);
+    for (const js of JS_DA_TELA) {
+      const usadas = classesDoJs(readFileSync(`${PASTA_DA_UI}${js}`, 'utf8'));
+      assert.ok(usadas.length > 0, `${js}: nenhuma classe lida (o leitor de class: quebrou?)`);
+      assert.deepEqual(usadas.filter((c) => !permitida(c, daMoldura)), [], `${js} usa classe sem o prefixo ${PREFIXO}`);
+    }
+  });
+
+  test('o leitor de class: do teste acima', () => {
+    assert.deepEqual(classesDoJs("el('a', { class: 'mono dec-x', href: y })"), ['mono', 'dec-x']);
+    assert.deepEqual(classesDoJs("el('a', { class: g.tipo === 'branch' ? 'mono dec-n' : 'dec-n' })"), ['mono', 'dec-n', 'dec-n']);
+    assert.deepEqual(classesDoJs('el(\'a\', { class: `cartao dec-e-${d.estado}` })'), ['cartao', 'dec-e-']);
+    assert.deepEqual(classesDoJs("el('a', { class: v === w ? 'on' : null })"), ['on'], 'e acha a que não tem prefixo');
+  });
+
+  // A janela abre com 1100 × 760 (#150) e vai a 1440: a área da tela é a janela menos a barra (220) e o
+  // respiro (2 × 24). Nada pode rolar na horizontal.
+  test('nada rola na horizontal: sem overflow-x auto, pre com pre-wrap, e as larguras declaradas cabem', () => {
+    const css = readFileSync(`${PASTA_DA_UI}${TELA}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const area = (janela: number) => janela - 220 - 2 * 24;
+    const FOLGA = 15; // a barra de rolagem da área, quando o sistema não a esconde
+
+    assert.doesNotMatch(css, /overflow(-x)?\s*:\s*(auto|scroll)\b/, 'nada rola na horizontal');
+    assert.doesNotMatch(css, /white-space:\s*pre\s*;/, 'pre sem quebra');
+
+    // Todo <pre> das telas quebra a linha.
+    const pres = JS_DA_TELA.flatMap((js) => [...readFileSync(`${PASTA_DA_UI}${js}`, 'utf8').matchAll(/el\('pre', \{ class: '([^']+)'/g)].flatMap((m) => m[1]!.split(' ').filter((c) => c.startsWith(PREFIXO))));
+    assert.ok(pres.length >= 2, 'a injeção e o rascunho são <pre>');
+    for (const c of pres) {
+      const regra = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, sel]) => sel!.split(',').some((s) => s.trim() === `.${c}`));
+      assert.ok(regra, `.${c} sem regra`);
+      assert.match(regra![2]!, /white-space:\s*pre-wrap/, `.${c} sem pre-wrap`);
+      assert.match(regra![2]!, /overflow-wrap:\s*anywhere/, `.${c} sem overflow-wrap`);
+    }
+
+    // C20: lista e coluna lateral lado a lado só enquanto cabem com o mínimo das duas.
+    const grade = /\.dec-grade \{[^}]*grid-template-columns: minmax\((\d+)px, 1fr\) minmax\((\d+)px, (\d+)px\); gap: (\d+)px;/.exec(css);
+    assert.ok(grade, 'a grade da aba declara os mínimos em px');
+    const [lista, lado, ladoMax, gap] = grade!.slice(1).map(Number) as [number, number, number, number];
+    const corte = /@media \(max-width: (\d+)px\) \{\s*\.dec-grade \{ grid-template-columns: minmax\(0, 1fr\); \}/.exec(css);
+    assert.ok(corte, 'abaixo de uma largura a coluna lateral empilha');
+    const empilha = Number(corte![1]);
+    assert.ok(lista + gap + lado + FOLGA <= area(empilha + 1), `lado a lado em ${empilha + 1}: ${lista + gap + lado + FOLGA} > ${area(empilha + 1)}`);
+    for (const janela of [1100, 1440]) {
+      assert.ok(janela > empilha, `em ${janela} a aba tem a coluna lateral`);
+      assert.ok(lista + gap + lado <= area(janela), `${janela}: a grade não cabe`);
+    }
+    assert.ok(area(1440) - gap - ladoMax >= lista, 'em 1440 a lista fica com o resto');
+
+    // Largura fixa maior que um botão só no diálogo, e ele com max-width relativo à janela.
+    const largas = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, , corpo]) => [...corpo!.matchAll(/(?:^|[;\s])(?:min-)?width:\s*(\d+)px/g)].some((w) => Number(w[1]) > 120));
+    assert.deepEqual(largas.map(([, sel]) => sel!.trim()), ['.dec-dlg'], 'largura fixa fora do diálogo');
+    assert.match(largas[0]![2]!, /max-width:\s*calc\(100vw - \d+px\)/, 'o diálogo encolhe com a janela');
+    assert.doesNotMatch(css, /min-width:\s*[1-9]\d*px/, 'min-width em px empurra a linha para fora');
   });
 });

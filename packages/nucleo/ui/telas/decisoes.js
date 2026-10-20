@@ -25,7 +25,7 @@ export function resumoDoGrupo(g) {
 }
 
 function numero({ rotulo, valor, detalhe, icone: nome, cor }) {
-  return el('div', { class: 'cartao dec-numero' }, el('div', { class: 'olhinho' }, rotulo), el('span', { class: `dec-numero-ico c-${cor}` }, icone(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
+  return el('div', { class: 'cartao dec-numero' }, el('div', { class: 'olhinho' }, rotulo), el('span', { class: `dec-numero-ico dec-cor-${cor}` }, icone(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
 }
 
 export async function montar(area, ctx) {
@@ -60,8 +60,8 @@ export async function montar(area, ctx) {
       'div',
       { class: 'dec-grupo-cab' },
       icone(g.tipo === 'branch' ? 'branch' : 'sessoes'),
-      el('span', { class: g.tipo === 'branch' ? 'mono nome' : 'nome' }, g.titulo),
-      el('span', { class: 'resumo' }, resumoDoGrupo(g)),
+      el('span', { class: g.tipo === 'branch' ? 'mono dec-nome' : 'dec-nome' }, g.titulo),
+      el('span', { class: 'dec-resumo' }, resumoDoGrupo(g)),
       filtros.grupo
         ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, '‹ Todos os grupos')
         : g.mais > 0

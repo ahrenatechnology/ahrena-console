@@ -11,11 +11,11 @@ import { escrever } from '../ler.js';
 // ---------- Estilo ----------
 
 let cssCarregado = false;
-/** As duas telas usam o mesmo `decisoes.css`; a primeira que abrir o põe no `<head>`. */
+/** As duas telas usam o mesmo `ui/decisoes.css` (na raiz, como o das outras telas); a primeira que abrir o põe no `<head>`. */
 export function carregarCssDasDecisoes() {
   if (cssCarregado || typeof document === 'undefined' || document.querySelector('link[data-tela="decisoes"]')) return;
   cssCarregado = true;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/telas/decisoes.css', 'data-tela': 'decisoes' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/decisoes.css', 'data-tela': 'decisoes' }));
 }
 
 // ---------- Rótulos (funções puras) ----------
@@ -91,7 +91,7 @@ export const linkDaConversa = (d) => (typeof d.conversa === 'string' && /^\/ui\/
 // ---------- Peças ----------
 
 export function pilulaDeEstado(estado) {
-  return el('span', { class: `dec-pilula e-${estado}` }, rotuloDoEstado(estado));
+  return el('span', { class: `dec-pilula dec-e-${estado}` }, rotuloDoEstado(estado));
 }
 
 /** Alternador em segmentos (Sessão/Família/Branch, Todas/Vigentes/A confirmar). */
@@ -100,7 +100,7 @@ export function alternador({ rotulo, opcoes, atual, aoTrocar }) {
   const desenhar = (valor) => {
     grupo.replaceChildren(
       ...opcoes.map(([v, r]) =>
-        el('button', { type: 'button', class: v === valor ? 'on' : null, 'aria-pressed': v === valor ? 'true' : 'false', aoClicar: () => v !== valor && (desenhar(v), aoTrocar(v)) }, r),
+        el('button', { type: 'button', class: v === valor ? 'dec-on' : null, 'aria-pressed': v === valor ? 'true' : 'false', aoClicar: () => v !== valor && (desenhar(v), aoTrocar(v)) }, r),
       ),
     );
   };
@@ -160,7 +160,7 @@ export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, a
 
   return el(
     'article',
-    { class: `cartao dec-card e-${d.estado}`, 'data-decisao': d.id },
+    { class: `cartao dec-card dec-e-${d.estado}`, 'data-decisao': d.id },
     el('span', { class: 'dec-ico' }, icone(iconeDoTipo(d.origem))),
     el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-rot' }, d.rotulo), el('b', { class: 'dec-titulo', title: d.titulo }, d.titulo), pilulaDeEstado(d.estado)),
     el('time', { class: 'dec-quando', datetime: d.decididaEm, title: new Date(d.decididaEm).toLocaleString('pt-BR') }, haQuanto(d.decididaEm, agora)),
@@ -212,7 +212,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
     });
     const pode = !!rascunho.podeGravar;
     const confirmo = el('input', { type: 'checkbox', disabled: !pode });
-    const gravar = el('button', { type: 'button', class: 'btn cheio', disabled: true, title: pode ? null : rascunho.motivo ?? 'Não dá para gravar daqui' }, `Gravar em ${rascunho.caminho}`);
+    const gravar = el('button', { type: 'button', class: 'btn cheio dec-gravar', disabled: true, title: pode ? null : rascunho.motivo ?? 'Não dá para gravar daqui' }, `Gravar em ${rascunho.caminho}`);
     confirmo.addEventListener('change', () => (gravar.disabled = !confirmo.checked));
     gravar.addEventListener('click', async () => {
       if (!confirmo.checked) return;
@@ -237,7 +237,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
       el(
         'div',
         { class: 'dec-dlg-gravar' },
-        el('label', { class: pode ? null : 'off' }, confirmo, el('span', {}, pode ? `Confirmo: gravar ${rascunho.caminho} no repositório.` : `Não dá para gravar: ${rascunho.motivo ?? 'sem motivo informado'}.`)),
+        el('label', { class: pode ? null : 'dec-off' }, confirmo, el('span', {}, pode ? `Confirmo: gravar ${rascunho.caminho} no repositório.` : `Não dá para gravar: ${rascunho.motivo ?? 'sem motivo informado'}.`)),
         gravar,
       ),
       aviso,

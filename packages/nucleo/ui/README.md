@@ -13,7 +13,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
-| `telas/` | As telas, uma por arquivo. Uma tela com estilo próprio põe o `<link>` do seu `telas/<nome>.css` no `<head>` ao montar (as Decisões: `decisoes.css`, de `decisoes-comum.js`) |
+| `decisoes.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisoes-comum.js` põe o `<link>` no `<head>` ao montar |
+| `telas/` | As telas, uma por arquivo. Uma tela com estilo próprio tem o seu `ui/<nome>.css`, na raiz, e põe o `<link>` no `<head>` ao montar |
 
 ## Registrar uma tela
 
@@ -69,3 +70,5 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe.
+- **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.mot`, `.leve`, `.p`).
+- **Nada rola na horizontal** em 1100 nem em 1440 de janela: `min-width: 0` nos filhos de flex e grid, `overflow-wrap: anywhere` em título, branch, caminho e mono, `pre` com `white-space: pre-wrap`, sem `overflow-x: auto`.
