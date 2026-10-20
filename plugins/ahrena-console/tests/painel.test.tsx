@@ -515,43 +515,26 @@ function carregado(): Painel {
   }
 }
 
-test('altura: em toda altura e nas duas larguras, o painel cabe na janela sem rolagem', async ($, on) => {
-  const painel = carregado()
-  for (const cols of [38, 121]) {
-    // Abaixo de ~44 linhas no estreito, a sessão e o Contexto (cards de 8) e as linhas fixas já passam da altura.
-    for (const linhas of [45, 50, 60, 75, 90, 120, 200]) {
-      const usadas = linhasDaVisao({ agora: AGORA, nucleo: '127.0.0.1:4720', linhas, cols, acoes: {} } as any, painel)
-      // Com a folga: zero rolagem.
-      expect(usadas).toBeLessThanOrEqual(linhas - 2)
-    }
-  }
-})
-
-test('altura: todo card tem a mesma altura (P1); sem altura, os de menor prioridade vão para o card de resumos', async ($, on) => {
+test('altura: os seis cards do P1 aparecem sempre, inteiros e do mesmo tamanho, em qualquer altura; sem card de resumos', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   f.estado.painel = carregado()
   await f.relogio.advance(5_000)
   for (const base of [PANE, LARGO]) {
-    // Pouca altura: a sessão e o Contexto ficam, inteiros; o resto, no card de resumos.
-    let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, base === PANE ? 40 : 26) })
-    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(9)
-    // No card de altura fixa, o título e a atividade cortam com reticências, como no P1.
-    expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
-    expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
-    await ui.press({ key: 'resumo-subagentes' })
-    expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
-    await ui.press({ key: 'voltar-sessao' })
-    await ui.unmount()
-
-    // Muita altura: os seis cards, todos do mesmo tamanho; a altura que sobra fica vazia embaixo.
-    ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
-    for (const key of CARDS) {
-      const card = await ui.find({ key })
-      expect([card?.props.width, card?.props.height]).toEqual([34, 9])
+    for (const linhas of [30, 60, 400]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+      for (const key of CARDS) {
+        const card = await ui.find({ key })
+        expect([card?.props.width, card?.props.height]).toEqual([34, 9])
+      }
+      expect(await ui.find({ key: 'resumos' })).toBeUndefined()
+      // No card de altura fixa, o título corta com reticências, como no P1.
+      expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
+      await ui.unmount()
     }
-    expect(await ui.find({ key: 'resumos' })).toBeUndefined()
-    await ui.unmount()
   }
+  // A altura que a visão pede (para saber a partir de quantas linhas o pane não rola).
+  const painel = carregado()
+  for (const cols of [38, 121]) expect(linhasDaVisao({ agora: AGORA, nucleo: '127.0.0.1:4720', cols, acoes: {} } as any, painel)).toBeGreaterThan(0)
 })
 
 test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que abre a lista com "← voltar"', async ($, on) => {
@@ -590,7 +573,7 @@ test('altura: as telas que tomam o lugar da sessão também cabem, com "+N que n
   f.estado.painel = painel
   await f.relogio.advance(5_000)
   let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 50) })
-  await ui.press({ key: (await ui.find({ key: 'card-plano' })) ? 'ver-planos' : 'resumo-plano' })
+  await ui.press({ key: 'ver-planos' })
   const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
   expect(linhas).toBeGreaterThan(0)
   expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${painel.planos.length - linhas} que não cabem nesta altura`) })).toBeDefined()
@@ -646,7 +629,7 @@ test('#131: nas listas dos cards, cada item é uma linha com reticências e o te
     await ui.unmount()
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
-  await ui.press({ key: (await ui.find({ key: 'ver-subagentes' })) ? 'ver-subagentes' : 'resumo-subagentes' }).catch(() => undefined)
+  await ui.press({ key: 'ver-subagentes' })
   if (await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })) {
     const inteiros = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
     expect(inteiros.some((t) => t.props.wrap === 'wrap')).toBe(true)

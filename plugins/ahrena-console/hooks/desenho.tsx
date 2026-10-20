@@ -4,8 +4,8 @@
 //
 // Grade (P1, `.pc`): todo card tem CARD_W colunas e CARD_H linhas, fixas e iguais. A largura do
 // painel decide quantos cabem por linha (1 no estreito de 38 colunas, 3 no largo de 121). Dentro do
-// card, cada linha é uma só, com reticências, como no P1; o inteiro fica no detalhe. A altura que
-// sobra fica vazia embaixo; sem altura, os cards de menor prioridade vão para o card de resumos.
+// card, cada linha é uma só, com reticências, como no P1; o inteiro fica no detalhe. Os seis cards
+// aparecem sempre; a altura que sobra fica vazia embaixo, e a que falta o corpo do pane rola.
 // Cabeçalho, faixa e linhas de baixo ocupam a largura da grade.
 
 import type { RenderElement } from 'claude-code'
@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.18'
+export const VERSAO_DO_PLUGIN = '0.0.19'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -1761,15 +1761,6 @@ function voltar(c: Contexto, largura: number, para: () => void = c.acoes.fechar,
   )
 }
 
-/** A ordem em que os cards recebem altura (pedido do dono): o que importa mais fica inteiro. */
-/**
- * A ordem em que os cards recebem altura: o que importa mais fica inteiro. O Contexto vem logo
- * depois da sessão (0.0.13): os quatro tiles do P1 nas duas larguras, nunca o resumo de uma linha
- * enquanto a sessão e ele couberem.
- */
-export const PRIORIDADE_DA_ALTURA = ['sessao', 'contexto', 'plano', 'trabalho', 'subagentes', 'filhas'] as const
-
-
 /**
  * As linhas do painel fora da grade de cards: o respiro, o topo, o rótulo, as faixas, as linhas
  * de decisões e de "precisam de você", o rodapé e o espaço entre eles.
@@ -1796,98 +1787,18 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   return 2 * ESPACO + partes.reduce((a, b) => a + b, 0) + (partes.length - 1) * ESPACO
 }
 
-/** O resumo de um card que não coube na grade, para a faixa de resumos. */
-function resumoDoCard(c: Contexto, p: Painel, id: string): { texto: string; abrir?: () => void } {
-  switch (id) {
-    case 'contexto':
-      // O "Compactar" sempre existe: aqui, o próprio resumo o abre.
-      return { texto: `◠ ${contextoDaSessao(c, p)?.pct ?? 0}% · compactar`, abrir: () => c.acoes.compactar('pedir') }
-    case 'trabalho': {
-      const t = p.trabalho
-      return { texto: `⎇ ${t?.issue ? `#${t.issue.numero}${t.pr ? ` · PR #${t.pr.numero}` : ''}` : t ? t.branch : '…'}` }
-    }
-    case 'plano':
-      return { texto: `☰ ${p.plano ? `${p.plano.feitos}/${p.plano.total}` : '0/0'}`, abrir: (p.planos ?? []).length ? c.acoes.verPlanos : undefined }
-    case 'subagentes':
-      return { texto: `⑂ ${plural(p.subagentes.ativos, 'ativo', 'ativos')}`, abrir: p.subagentes.itens.length ? c.acoes.verSubagentes : undefined }
-    default:
-      return { texto: `⑃ ${plural(p.filhas.length, 'filha', 'filhas')}`, abrir: p.filhas.length ? c.acoes.verFilhas : undefined }
-  }
-}
-
-/** Os cards fora da grade, numa faixa: o resumo de cada um; os de lista abrem a tela própria. */
-function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura: number) {
-  if (!ids.length) return null
-  const { Box, Button, Text } = c.el
-  const n = ids.length
-  // Um card da largura da grade: a borda, o cabeçalho e os resumos, que quebram linha.
-  return (
-    <Box
-      key="resumos"
-      flexDirection="column"
-      width={largura}
-      flexShrink={0}
-      borderStyle="round"
-      borderColor={BORDA}
-      backgroundColor={FUNDO_CARTAO}
-      paddingX={1}
-    >
-      {cabecalho(c, '☷', 'EM RESUMO', `${n} ${n === 1 ? 'card' : 'cards'} sem altura`)}
-      <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-        {ids.map((id) => {
-          const r = resumoDoCard(c, p, id)
-          const texto = (
-            <Text mono size="footnote" color={r.abrir ? LARANJA : undefined} dimColor={!r.abrir} underline={!!r.abrir}>
-              {r.texto}
-            </Text>
-          )
-          return r.abrir ? (
-            <Button key={`resumo-${id}`} plain label={r.texto} onPress={r.abrir} />
-          ) : (
-            <Box key={`resumo-${id}`}>{texto}</Box>
-          )
-        })}
-      </Box>
-    </Box>
-  )
-}
-
-/** Linhas dentro do card de resumos: o cabeçalho e os resumos, quebrando na largura útil. */
-const linhasInternasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  1 + linhasDoTexto(ids.map((id) => resumoDoCard(c, p, id).texto.replace(/\s/g, '\u00a0')).join('  '), largura - 4)
-
-/** Linhas do card de resumos, com o espaço antes dele: a borda fina conta uma linha, como nas faixas. */
-const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  ids.length ? ESPACO + (LINHA_SOLTA - 1) + linhasInternasDosResumos(c, p, ids, largura) : 0
-
 /** Os cards da grade, na ordem do P1. */
 const CARDS_DA_GRADE = ['sessao', 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'] as const
 
 /**
- * Quais cards ficam fora da grade, pela altura do painel e pela prioridade. Todo card tem a mesma
- * altura (P1): ou aparece inteiro, ou vai para o card de resumos, os de menor prioridade primeiro.
- * A sessão e o Contexto ficam sempre (decisão do Fernando para o estreito baixo).
+ * A altura estimada da visão da sessão, em linhas: o que fica fora da grade e a grade, com os seis
+ * cards sempre inteiros (P1). Quando o pane é mais baixo que isso, o corpo dele rola. Para os testes.
  */
-function cardsFora(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean): string[] {
-  const fora: string[] = []
-  if (c.linhas === undefined) return fora
-  const base = c.linhas - linhasForaDaGrade(p, g, estreito, c.vista?.compactar) - linhasDaPergunta(c, g.largura) - FOLGA
-  for (;;) {
-    const dentro = CARDS_DA_GRADE.filter((id) => (id !== 'sessao' || p.sessao) && !fora.includes(id))
-    const altura = alturaDaGrade(dentro.map(() => LINHAS_DO_CARD), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
-    const proximo = [...PRIORIDADE_DA_ALTURA].reverse().find((id) => id !== 'sessao' && id !== 'contexto' && dentro.includes(id))
-    if (altura <= base || !proximo) return PRIORIDADE_DA_ALTURA.filter((id) => fora.includes(id))
-    fora.push(proximo)
-  }
-}
-
-/** A altura estimada da visão da sessão, em linhas: o que fica fora da grade, a grade e o card de resumos. Para os testes. */
 export function linhasDaVisao(c: Contexto, p: Painel): number {
   const g = grade(c.cols)
   const estreito = g.porLinha === 1
-  const fora = cardsFora(c, p, g, estreito)
-  const dentro = CARDS_DA_GRADE.filter((id) => (id !== 'sessao' || p.sessao) && !fora.includes(id))
-  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + linhasDaPergunta(c, g.largura) + alturaDaGrade(dentro.map(() => LINHAS_DO_CARD), g.porLinha) + linhasDosResumos(c, p, fora, g.largura)
+  const dentro = CARDS_DA_GRADE.filter((id) => id !== 'sessao' || p.sessao)
+  return linhasForaDaGrade(p, g, estreito, c.vista?.compactar) + linhasDaPergunta(c, g.largura) + alturaDaGrade(dentro.map(() => LINHAS_DO_CARD), g.porLinha)
 }
 
 /** O painel inteiro, no desktop. */
@@ -1918,15 +1829,14 @@ export function desenhar(c: Contexto): RenderElement {
   } else if (c.vista.tela === 'subagentes' || c.vista.tela === 'filhas') {
     corpo = [voltar(c, g.largura), ...telaLista(c, p, g, c.vista.tela)]
   } else {
-    const fora = cardsFora(c, p, g, estreito)
-    const na = (id: string) => !fora.includes(id)
+    // Os seis cards do P1, sempre inteiros e no lugar deles.
     const cards = [
       s ? cardSessao(c, s) : null,
-      na('contexto') ? cardContexto(c, p) : null,
-      na('trabalho') ? cardTrabalho(c, p.trabalho) : null,
-      na('plano') ? cardPlano(c, p.plano, p.planos ?? []) : null,
-      na('subagentes') ? cardSubagentes(c, p.subagentes) : null,
-      na('filhas') ? cardFilhas(c, p.filhas) : null,
+      cardContexto(c, p),
+      cardTrabalho(c, p.trabalho),
+      cardPlano(c, p.plano, p.planos ?? []),
+      cardSubagentes(c, p.subagentes),
+      cardFilhas(c, p.filhas),
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
       rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chipDaSecao(c, g.largura, estreito, s?.conta), s?.conta),
@@ -1937,7 +1847,6 @@ export function desenhar(c: Contexto): RenderElement {
       <Box key="cards" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
         {cards}
       </Box>,
-      faixaDeResumos(c, p, fora, g.largura),
       linhaDecisoes(c, p, g.largura, estreito),
       linhaPrecisam(c, p, g.largura, estreito),
       linhaPrs(c, p, g.largura, estreito),
