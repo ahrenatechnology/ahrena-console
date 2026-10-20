@@ -20,6 +20,7 @@ import {
   comMudancas,
   decisoesComMudancas,
   lerPedidoDeMudancas,
+  NO_ACCOUNT,
   waitForChanges,
   type NovaMudanca,
   type Relogio,
@@ -333,6 +334,11 @@ describe('rota HTTP', () => {
       timeoutMs: 5000,
       filtros: { sessionIds: ['s1', 's2'], accountIds: ['a', null], tipos: ['plan'] },
     });
+    // "No account" is `no-account` on the new route; the old `sem-conta` is still accepted on both.
+    const novo = (q: string) => lerPedidoDeMudancas(normalizeLegacyUrl(new URL(`http://x/api/changes?${q}`)));
+    for (const q of ['account=a,no-account', 'account=a,sem-conta'])
+      assert.deepEqual((novo(q) as { filtros: { accountIds: (string | null)[] } }).filtros.accountIds, ['a', null], q);
+    assert.equal(NO_ACCOUNT, 'no-account');
     assert.equal((p('') as { timeoutMs: number }).timeoutMs, ESPERA_PADRAO_MS);
     assert.equal(typeof p('tipo=outro'), 'string');
     assert.equal(typeof p('espera=-1'), 'string');

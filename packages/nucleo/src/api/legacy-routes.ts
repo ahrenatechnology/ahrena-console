@@ -177,6 +177,9 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
       concluidos: 'done',
     },
   },
+  // Phase 2b layer 7: the "no account" filter of `/api/changes?account=` (old alias `/api/mudancas`)
+  // is `no-account`; the other values are account ids (`<uuid>/<uuid>`), never these words.
+  '/api/changes': { account: { 'sem-conta': 'no-account' } },
   // Phase 2b layer 6: the decision state filter is English on the Decisions page and the Detail's
   // decisions tab (`?state=`; old aliases `/api/decisoes` and `/api/sessoes/<id>/decisoes`).
   '/api/decisions': { state: DECISION_STATE_FILTER_VALUES },
