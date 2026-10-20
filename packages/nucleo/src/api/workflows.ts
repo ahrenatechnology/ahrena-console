@@ -442,11 +442,12 @@ export const GRAPH_NODE_LABELS: Readonly<Record<string, string>> = {
 };
 const RESULTADO: Record<SessionStatus, string> = { completed: 'outcome:completed', error: 'outcome:error', active: 'outcome:active', abandoned: 'outcome:abandoned' };
 /** The node of a subagent with no type: its label stays the screen's "subagente". */
-const SEM_TIPO = 'subagent';
+// A subagent with no type and one whose type is literally `subagent` share the node `subagent:subagent` (accepted edge; before it was `subagente`).
+const UNTYPED_SUBAGENT = 'subagent';
 
 const origemDe = (s: Session) => (s.source === 'resume' ? 'origin:resume' : 'origin:prompt');
 const compactacaoDe = (x: SessaoDosWorkflows) => (x.compactou ? 'compaction:compacted' : 'compaction:none');
-const tipoDe = (a: Agent) => `subagent:${a.subagentType ?? SEM_TIPO}`;
+const tipoDe = (a: Agent) => `subagent:${a.subagentType ?? UNTYPED_SUBAGENT}`;
 
 /** Os nós do grafo por onde a sessão passa. */
 export function nosDaSessao(x: SessaoDosWorkflows): Set<string> {
@@ -663,9 +664,9 @@ export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestr
   const ordem = Object.keys(GRAPH_NODE_LABELS);
   const coluna = (id: string): ColunaDoGrafo => (id === 'main' ? 'main' : (id.split(':')[0] as ColunaDoGrafo));
   const pos = (id: string) => COLUNAS.findIndex((c) => c.id === coluna(id));
-  const rotuloDoTipo = (id: string) => (id === `subagent:${SEM_TIPO}` ? 'subagente' : id.slice('subagent:'.length));
+  const typeLabel = (id: string) => (id === `subagent:${UNTYPED_SUBAGENT}` ? 'subagente' : id.slice('subagent:'.length));
   const nos = [...volume]
-    .map(([id, v]) => ({ id, column: coluna(id), label: GRAPH_NODE_LABELS[id] ?? rotuloDoTipo(id), volume: v }))
+    .map(([id, v]) => ({ id, column: coluna(id), label: GRAPH_NODE_LABELS[id] ?? typeLabel(id), volume: v }))
     .sort((a, b) => pos(a.id) - pos(b.id) || (a.column === 'subagent' ? b.volume - a.volume || a.label.localeCompare(b.label) : ordem.indexOf(a.id) - ordem.indexOf(b.id)));
   return {
     columns: COLUNAS.map((c) => ({ ...c })),
