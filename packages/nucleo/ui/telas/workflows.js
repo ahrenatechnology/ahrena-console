@@ -9,7 +9,7 @@
 // Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
 
 import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro } from '../estados.js';
+import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 import { decimal, duracao, nomeDoModelo, num, porcento, quando, tokens } from './workflow-formato.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -74,30 +74,36 @@ export function espessura(volume, maior) {
 }
 
 const LARGURA = 960;
-const NO_L = 152;
 const NO_A = 30;
 const PASSO = 42;
+const LETRA = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
 
 /**
- * O desenho do grafo de orquestração: colunas na ordem da API, nós empilhados no meio de cada coluna,
- * arestas em curva da direita de um nó à esquerda do outro, com espessura pelo volume.
+ * O desenho do grafo de orquestração na `largura` do painel, em px, sem escala: as colunas, na ordem da
+ * API, dividem a largura; os nós ficam empilhados no meio de cada coluna; as arestas vão em curva da
+ * direita de um nó à esquerda do outro, com espessura pelo volume. O rótulo que não cabe no nó encolhe
+ * com reticências (`texto`); o inteiro fica em `rotulo`.
  */
-export function layoutDaOrquestracao(grafo) {
+export function layoutDaOrquestracao(grafo, largura = LARGURA) {
   const colunas = grafo.colunas;
-  const passoX = colunas.length > 1 ? (LARGURA - 20 - NO_L) / (colunas.length - 1) : 0;
-  const porColuna = colunas.map((c) => grafo.nos.filter((n) => n.coluna === c.id));
+  const n = Math.max(1, colunas.length);
+  const NO_L = Math.round(Math.min(152, Math.max(104, (largura - 20) / n - 18)));
+  const passoX = colunas.length > 1 ? (largura - 20 - NO_L) / (colunas.length - 1) : 0;
+  const porColuna = colunas.map((c) => grafo.nos.filter((no) => no.coluna === c.id));
   const altura = Math.max(1, ...porColuna.map((l) => l.length)) * PASSO;
   const pos = new Map();
   const nos = [];
   porColuna.forEach((lista, i) => {
-    const x = 10 + i * passoX;
-    const n = lista.length;
-    const s = n > 1 ? Math.min(70, (altura - NO_A) / (n - 1)) : 0;
-    const topo = (altura - (NO_A + s * (n - 1))) / 2;
-    lista.forEach((no, k) => {
-      const y = Math.round(topo + k * s);
+    const x = Math.round(10 + i * passoX);
+    const k = lista.length;
+    const s = k > 1 ? Math.min(70, (altura - NO_A) / (k - 1)) : 0;
+    const topo = (altura - (NO_A + s * (k - 1))) / 2;
+    lista.forEach((no, j) => {
+      const y = Math.round(topo + j * s);
+      const volume = num(no.volume);
+      const cabe = Math.max(4, Math.floor((NO_L - 22 - volume.length * LETRA) / LETRA));
       pos.set(no.id, { x, y });
-      nos.push({ ...no, x, y });
+      nos.push({ ...no, x, y, texto: no.rotulo.length > cabe ? `${no.rotulo.slice(0, cabe - 1)}…` : no.rotulo, volumeEscrito: volume });
     });
   });
   const maior = Math.max(0, ...grafo.arestas.map((a) => a.volume));
@@ -114,9 +120,9 @@ export function layoutDaOrquestracao(grafo) {
       return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: espessura(a.volume, maior), erro: a.para === 'resultado:erro' };
     });
   return {
-    largura: LARGURA,
+    largura,
     altura,
-    colunas: colunas.map((c, i) => ({ ...c, x: 10 + i * passoX + NO_L / 2 })),
+    colunas: colunas.map((c, i) => ({ ...c, x: Math.round(10 + i * passoX + NO_L / 2) })),
     nos,
     arestas,
     no: { largura: NO_L, altura: NO_A },
@@ -143,7 +149,7 @@ function carregarCss() {
 }
 
 function selo(texto, cor) {
-  return el('span', { class: `wf-selo e-${cor}` }, texto);
+  return el('span', { class: `badge b-${cor}` }, el('span', { class: 'p' }), texto);
 }
 
 function kpis(k) {
@@ -153,18 +159,18 @@ function kpis(k) {
     ...kpisEscritas(k).map((c) =>
       el(
         'div',
-        { class: `cartao wf-kpi k-${c.id}` },
-        el('span', { class: 'rot' }, c.rotulo),
-        el('span', { class: `ic k-${c.cor}` }, icone(c.icone)),
-        el('span', { class: 'v mono' }, c.valor),
-        el('span', { class: 's' }, c.sub ?? ''),
+        { class: `cartao wf-kpi wf-kpi-${c.id}` },
+        el('span', { class: 'wf-kpi-rot' }, c.rotulo),
+        el('span', { class: `wf-kpi-ic wf-cor-${c.cor}` }, icone(c.icone)),
+        el('span', { class: 'wf-kpi-v mono' }, c.valor),
+        el('span', { class: 'wf-kpi-s' }, c.sub ?? ''),
       ),
     ),
   );
 }
 
 function painel(titulo, direita, ...corpo) {
-  return el('section', { class: 'cartao wf-painel' }, el('div', { class: 'wf-ttl' }, ...titulo, el('span', { class: 'r' }, direita)), ...corpo);
+  return el('section', { class: 'cartao wf-painel' }, el('div', { class: 'wf-ttl' }, ...titulo, el('span', { class: 'wf-ttl-r' }, direita)), ...corpo);
 }
 
 function chip(texto, extra = '') {
@@ -188,10 +194,10 @@ function linhaDoRun(run, aberto, alternar, ctx) {
     el(
       'button',
       { type: 'button', class: 'wf-run-abrir', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', aoClicar: alternar },
-      el('span', { class: 'wf-mudo' }, icone(aberto ? 'seta-baixo' : 'seta-direita')),
+      el('span', { class: 'wf-mudo' }, icone(aberto ? 'chevron-baixo' : 'chevron-direita')),
       el('b', {}, run.nome),
       selo(rotulo, cor),
-      aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' mono') : null,
+      aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' wf-chip-modelo mono') : null,
       el('span', { class: 'wf-meta' }, metaDoRun(run)),
     ),
     link,
@@ -203,7 +209,7 @@ function linhaDoRun(run, aberto, alternar, ctx) {
         'div',
         { class: 'wf-fases' },
         el('span', { class: 'wf-mudo' }, icone('camadas')),
-        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mudo' }, icone('seta')) : null, chip(f.nome)]),
+        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mudo' }, icone('seta-direita')) : null, chip(f.nome)]),
         run.volta ? el('span', { class: 'wf-volta' }, run.volta) : null,
       )
     : null;
@@ -211,7 +217,8 @@ function linhaDoRun(run, aberto, alternar, ctx) {
   const tabela = el(
     'table',
     { class: 'wf-tabela' },
-    el('thead', {}, el('tr', {}, el('th', {}, 'Agente'), el('th', {}, 'Fase'), el('th', {}, 'Estado'), el('th', { class: 'n' }, 'Tokens'), el('th', { class: 'n' }, 'Ferramentas'), el('th', { class: 'n' }, 'Duração'))),
+    el('colgroup', {}, ...['agente', 'fase', 'estado', 'tokens', 'ferramentas', 'duracao'].map((c) => el('col', { class: `wf-col-${c}` }))),
+    el('thead', {}, el('tr', {}, el('th', {}, 'Agente'), el('th', {}, 'Fase'), el('th', {}, 'Estado'), el('th', { class: 'wf-num' }, 'Tokens'), el('th', { class: 'wf-num' }, 'Ferramentas'), el('th', { class: 'wf-num' }, 'Duração'))),
     el(
       'tbody',
       {},
@@ -220,34 +227,34 @@ function linhaDoRun(run, aberto, alternar, ctx) {
         return el(
           'tr',
           {},
-          el('td', {}, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-tipo' }, `· ${a.tipo}`) : null),
+          el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-tipo' }, `· ${a.tipo}`) : null),
           el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mudo' }, '—')),
-          el('td', {}, el('span', { class: `wf-pilula e-${c}` }, texto)),
-          el('td', { class: 'n mono' }, tokens(a.tokens)),
-          el('td', { class: 'n mono' }, num(a.ferramentas)),
-          el('td', { class: 'n mono' }, duracao(a.duracaoMs)),
+          el('td', {}, el('span', { class: `wf-pilula b-${c}` }, texto)),
+          el('td', { class: 'wf-num mono' }, tokens(a.tokens)),
+          el('td', { class: 'wf-num mono' }, num(a.ferramentas)),
+          el('td', { class: 'wf-num mono' }, duracao(a.duracaoMs)),
         );
       }),
     ),
   );
-  return el('div', { class: 'wf-run aberto' }, cab, fases, el('div', { class: 'wf-rolar' }, tabela));
+  return el('div', { class: 'wf-run wf-run-aberto' }, cab, fases, el('div', { class: 'wf-tabela-caixa' }, tabela));
 }
 
-function grafoSvg(grafo, selecionado, escolher) {
-  const g = layoutDaOrquestracao(grafo);
+function grafoSvg(grafo, largura, selecionado, escolher) {
+  const g = layoutDaOrquestracao(grafo, largura);
   const { largura: W, altura: H } = g.no;
   const raiz = svg('svg', { class: 'wf-orq', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
   for (const c of g.colunas) raiz.append(svg('text', { class: 'wf-orq-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
-  for (const a of g.arestas) raiz.append(svg('path', { class: `wf-aresta${a.erro ? ' erro' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
+  for (const a of g.arestas) raiz.append(svg('path', { class: `wf-aresta${a.erro ? ' wf-aresta-erro' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
   for (const n of g.nos) {
-    const cls = ['wf-no', n.id === 'resultado:concluida' ? 'r-ok' : '', n.id === 'resultado:erro' ? 'r-erro' : '', n.id === selecionado ? 'sel' : ''].filter(Boolean).join(' ');
+    const cls = ['wf-no', n.id === 'resultado:concluida' ? 'wf-no-ok' : '', n.id === 'resultado:erro' ? 'wf-no-erro' : '', n.id === selecionado ? 'wf-no-sel' : ''].filter(Boolean).join(' ');
     const grupo = svg(
       'g',
       { class: cls, 'data-no': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selecionado ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selecionado ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
-      svg('title', {}, n.id === selecionado ? 'Clique para limpar o filtro' : 'Clique para filtrar a tela'),
+      svg('title', {}, `${n.rotulo} · ${n.id === selecionado ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
       svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 7 }),
-      svg('text', { class: 'rot', x: n.x + 9, y: n.y + 19 }, n.rotulo.length > 18 ? `${n.rotulo.slice(0, 17)}…` : n.rotulo),
-      svg('text', { class: 'vol', x: n.x + W - 10, y: n.y + 19, 'text-anchor': 'end' }, num(n.volume)),
+      svg('text', { class: 'wf-no-rot', x: n.x + 8, y: n.y + 19 }, n.texto),
+      svg('text', { class: 'wf-no-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
     );
     grupo.addEventListener('click', () => escolher(n.id));
     grupo.addEventListener('keydown', (ev) => {
@@ -257,7 +264,7 @@ function grafoSvg(grafo, selecionado, escolher) {
     });
     raiz.append(grupo);
   }
-  return el('div', { class: 'wf-rolar' }, raiz);
+  return raiz;
 }
 
 // ---------- A tela ----------
@@ -296,11 +303,33 @@ export async function montar(area, ctx) {
     ler();
   }
 
+  const caixaDoGrafo = el('div', { class: 'wf-orq-caixa' });
+  let larguraDoGrafo = 0;
+  function desenharGrafo() {
+    const largura = Math.floor(caixaDoGrafo.clientWidth);
+    if (!dados || !caixaDoGrafo.isConnected || largura <= 0) return;
+    larguraDoGrafo = largura;
+    caixaDoGrafo.replaceChildren(grafoSvg(dados.grafo, largura, dados.no, escolherNo));
+  }
+  const observador = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    if (Math.floor(caixaDoGrafo.clientWidth) !== larguraDoGrafo) desenharGrafo();
+  }) : null;
+  observador?.observe(caixaDoGrafo);
+
   function desenhar() {
     const d = dados;
+    // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
+    if (!d.sessoes && d.filtro === 'todas' && !d.no) {
+      area.replaceChildren(
+        ...[cab, falha ? faixaDeErro({ titulo: 'Não deu para atualizar.', texto: falha, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null].filter(Boolean),
+        vazio({ icone: 'workflows', titulo: 'Nenhuma sessão ainda', texto: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
+      );
+      return;
+    }
     if (abertos === null) abertos = new Set(d.runs.length ? [d.runs[0].id] : []);
     const rotuloDoNo = no ? (d.grafo.nos.find((n) => n.id === no)?.rotulo ?? no) : null;
-    const resumo = FILTROS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões';
+    // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
+    const resumo = `${FILTROS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? ', das 500 mais recentes' : ''}`;
 
     const runs = d.runs.length
       ? d.runs.map((r) =>
@@ -310,10 +339,11 @@ export async function montar(area, ctx) {
             [...area.querySelectorAll('.wf-run-abrir')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
           }, ctx),
         )
-      : [el('p', { class: 'wf-nada' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão para mostrar.')];
+      : [el('p', { class: 'wf-nada' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
 
+    // O grafo é desenhado depois, na largura que o painel tem na tela (e de novo quando ela muda).
     const grafo = d.grafo.nos.length
-      ? grafoSvg(d.grafo, d.no, escolherNo)
+      ? caixaDoGrafo
       : el(
           'div',
           { class: 'wf-nada' },
@@ -333,6 +363,7 @@ export async function montar(area, ctx) {
       ),
     ];
     area.replaceChildren(...partes.filter(Boolean));
+    if (d.grafo.nos.length) desenharGrafo();
     if (foco) {
       [...area.querySelectorAll('.wf-no')].find((g) => g.getAttribute('data-no') === foco)?.focus();
       foco = null;
@@ -370,5 +401,6 @@ export async function montar(area, ctx) {
   return () => {
     clearTimeout(timer);
     clearTimeout(espera);
+    observador?.disconnect();
   };
 }

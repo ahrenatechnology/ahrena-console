@@ -107,7 +107,7 @@ describe('front de Workflows contra a demonstração do p4', () => {
 
   test('C14: o grafo de orquestração põe todo nó na sua coluna e engrossa a aresta pelo volume', async () => {
     const d = await pedir(api.url, '/api/workflows?filtro=todas');
-    const g = layoutDaOrquestracao(d.grafo);
+    const g = layoutDaOrquestracao(d.grafo, 960);
     assert.deepEqual(g.colunas.map((c: any) => c.rotulo), ['Origem', 'Agente principal', 'Tipos de subagente', 'Compactação', 'Resultado']);
     assert.equal(g.nos.length, d.grafo.nos.length);
     const xDaColuna = new Map(d.grafo.colunas.map((c: any, i: number) => [c.id, i]));
@@ -122,6 +122,21 @@ describe('front de Workflows contra a demonstração do p4', () => {
     }
     assert.equal(Math.max(...g.arestas.map((a: any) => a.espessura)), 22);
     assert.ok(g.arestas.filter((a: any) => a.erro).every((a: any) => a.para === 'resultado:erro'));
+    // Na janela de 1100 px o painel tem ~800 px: as 5 colunas dividem a largura e nada passa dela.
+    for (const largura of [802, 1100, 640]) {
+      const h = layoutDaOrquestracao(d.grafo, largura);
+      assert.equal(h.largura, largura);
+      assert.ok(h.no.largura >= 104 && h.no.largura <= 152, `nó com ${h.no.largura} px`);
+      for (const n of h.nos) {
+        assert.ok(n.x >= 0 && n.x + h.no.largura <= largura, `${n.id} sai de ${largura} px`);
+        assert.ok((n.texto.length + n.volumeEscrito.length) * 5.8 + 22 <= h.no.largura + 6, `${n.id}: "${n.texto}" não cabe`);
+      }
+    }
+    // Em 1100 px os rótulos cabem inteiros; mais estreito, encolhem com reticências.
+    assert.ok(layoutDaOrquestracao(d.grafo, 787).nos.every((n: any) => n.texto === n.rotulo));
+    const estreito = layoutDaOrquestracao(d.grafo, 640).nos.find((n: any) => n.id === 'compactacao:sem');
+    assert.match(estreito.texto, /…$/);
+    assert.equal(estreito.rotulo, 'Sem compactação');
     assert.equal(espessura(0, 10), 1.2);
     assert.equal(espessura(5, 0), 1.2);
   });
@@ -221,5 +236,13 @@ describe('formatos e registro', () => {
       for (const [, nome] of texto.matchAll(/icone: '([a-z-]+)'/g)) usados.add(nome!);
     }
     for (const nome of usados) assert.ok(NOMES_DOS_ICONES.includes(nome), `falta o ícone ${nome}`);
+    // Sem desenho repetido com outro nome: `grafo` é o mesmo de `workflows`, por referência.
+    const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
+    assert.match(dom, /ICONES\.grafo = ICONES\.workflows;/);
+    const desenhos = [...dom.matchAll(/^\s+'?([\w-]+)'?: '(<[^']*)',$/gm)];
+    for (const nome of ['workflows', 'usuarios', 'repetir', 'gantt']) {
+      const meu = desenhos.find((m) => m[1] === nome)![2];
+      assert.deepEqual(desenhos.filter((m) => m[2] === meu).map((m) => m[1]), [nome], `o desenho de ${nome} se repete`);
+    }
   });
 });

@@ -122,7 +122,9 @@ describe('/ui no núcleo', () => {
       assert.deepEqual(urls, [], `telas/${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `telas/${a} escreve cor à mão`);
       if (a.endsWith('.js')) {
-        assert.doesNotMatch(texto, /\bstyle\s*[=:.[]|'style'|innerHTML|insertAdjacentHTML|\bfetch\(/, `telas/${a} usa estilo inline, HTML ou fetch`);
+        // O que a CSP (`style-src 'self'`) bloqueia é o atributo `style`: `{ style: … }` no el(),
+        // `style="…"` e `setAttribute('style', …)`. O CSSOM (`x.style.setProperty`) ela deixa passar.
+        assert.doesNotMatch(texto, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `telas/${a} usa estilo inline, HTML ou fetch`);
         for (const [, css] of texto.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(telas.includes(css!), `telas/${a} carrega ${css}, que não existe`);
       }
     }

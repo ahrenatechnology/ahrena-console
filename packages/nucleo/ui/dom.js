@@ -74,13 +74,12 @@ const ICONES = {
   circulo: '<circle cx="12" cy="12" r="10"/>',
   // Workflows (issue 96) e a aba Workflow do detalhe (issue 97)
   workflows: '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
-  grafo: '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
   usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   repetir: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
-  'seta-baixo': '<path d="m6 9 6 6 6-6"/>',
-  seta: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
   gantt: '<path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/>',
 };
+// A aba Workflow do detalhe registra o ícone como `grafo`: o mesmo desenho de `workflows`.
+ICONES.grafo = ICONES.workflows;
 
 /** Os nomes dos ícones que existem (o teste confere os que as telas usam). */
 export const NOMES_DOS_ICONES = Object.keys(ICONES);
