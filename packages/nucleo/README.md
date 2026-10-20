@@ -24,6 +24,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
 | [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
+| [src/config/](src/config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
 
 ## API local
@@ -53,8 +54,11 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
 | `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
+| `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração (#63, seção abaixo) |
+| `GET /api/config/skill?raiz=<id>&nome=<nome>` | O `SKILL.md` de uma skill, com a `versao` |
+| `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes |
 
-`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa.
+`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa, e o `POST /api/config/skill` vindo dela.
 
 | Arquivo | O quê |
 | --- | --- |
@@ -66,6 +70,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`), esforço (`effort`), arquivada e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
+| [config.ts](src/api/config.ts) | As rotas da tela Agent Config, sobre [src/config/](src/config/) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
 **Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
@@ -86,6 +91,39 @@ node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 - **Consumo:** o custo sai do mesmo cache do painel (por sessão, a cada 30 s ou quando ela muda), os eventos pelo resumo incremental, e a resposta inteira fica guardada por 2 s, com pedidos ao mesmo tempo esperando a mesma montagem. Duas consultas por índice (vivas e as concluídas recentes); nada varre transcripts.
 
 O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das ferramentas do plano (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `update_plan`), cortada como os outros textos; a de nenhuma outra.
+
+## Agent Config (#63)
+
+A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem configurado nesta máquina e edita skills. A leitura mora em [src/config/](src/config/), as rotas em [src/api/config.ts](src/api/config.ts); o contrato está em [src/config/modelo.ts](src/config/modelo.ts).
+
+**De onde lê.** As raízes de usuário são todas as pastas de configuração que os perfis conhecem (decisão [0006](../../docs/decisoes/0006-multiplas-contas.md): `~/.claude`, as `~/.claude-*`, as de `perfis.json` e as que os hooks revelaram), cada uma com o seu `.claude.json` (`~/.claude.json` para a padrão, `<pasta>/.claude.json` para as outras). A raiz do projeto é `<projeto>/.claude`. De cada uma:
+
+| O quê | Onde | O que sai |
+| --- | --- | --- |
+| Skills | `skills/*/SKILL.md` | O nome da pasta (a chave da edição), `name` e `description` do frontmatter, a data |
+| Subagentes | `agents/*.md` | `name` (ou o nome do arquivo) e `description` |
+| Comandos | `commands/**/*.md` | O caminho sem `.md`, com `:` no lugar de `/` (`git/limpar.md` é `git:limpar`) |
+| Memória | `CLAUDE.md` da pasta de usuário; `CLAUDE.md`, `CLAUDE.local.md` e `.claude/CLAUDE.md` do projeto; os `.md` de `<pasta>/projects/<cwd codificado>/memory` | Nome e caminho, nunca o conteúdo |
+| Hooks | `settings.json` e `settings.local.json` | O nome do evento e quantos hooks ele tem. Nenhum comando |
+| MCP | `mcpServers` do `.claude.json` (topo: usuário; `projects[<projeto>]`: projeto) e do `.mcp.json` do projeto | Só o nome do servidor |
+| Plugins | `enabledPlugins` dos settings | As chaves ligadas (`nome@marketplace`) |
+| Configurações | `settings.json`, `settings.local.json` e o `.claude.json` | Quais existem, com o caminho |
+
+Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta.
+
+**O projeto.** `projetos` são os `cwd` das sessões que o núcleo já viu, das mais recentes para as mais velhas, sem repetir, até 50, só pastas que existem nesta máquina ([projetos.ts](src/config/projetos.ts)). Sem `?projeto=`, vale o primeiro (ou nenhum, com `projeto: null`); `?projeto=` fora da lista dá 400, para o pedido nunca escolher uma pasta qualquer do disco. As rotas da skill aceitam o mesmo `projeto` (na query do `GET`, no corpo do `POST`) para a raiz `p`.
+
+**As raízes.** Ids opacos: `u0`, `u1`… para cada pasta de configuração de usuário (`home`), `c0`, `c1`… para o `.claude.json` dela (`configuracao`, só se existe), `p` para `<projeto>/.claude` (`claude-projeto`) e `r` para o projeto (`projeto`). Só `home` e `claude-projeto` recebem skill.
+
+**A edição de uma skill.** `GET /api/config/skill?raiz=&nome=` devolve `{ raiz, nome, escopo, caminho, conteudo, versao, editadoEm }`, com `versao` = sha256 do conteúdo. `POST /api/config/skill` com `{ raiz, nome, conteudo, versao? }` grava:
+
+- skill que existe: copia o `SKILL.md` atual para `~/.ahrena-console/backups/<aaaa-mm-dd>/<pasta>-<hash>/<nome>/SKILL.md.bak-<data>` e só então troca, por um temporário na mesma pasta e `rename`;
+- skill que não existe: cria `skills/<nome>/SKILL.md` (o botão "Nova"), com `backup: null`; na raiz `p`, cria a `.claude` do projeto se faltar;
+- `versao` que não bate com a atual, ou que veio para uma skill que não existe: 409, nada gravado.
+
+Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `raiz` só um id conhecido de tipo `home` ou `claude-projeto` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz, e o `SKILL.md` gravado não pode ser symlink (403); só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
+
+**Na `--demo`.** Nada da `~/.claude` real é lido: a API monta num temporário do sistema uma pasta de configuração e um projeto fictícios (`motor-de-regras`), com as skills do wireframe, agentes, comandos, `CLAUDE.md`, settings com hooks e plugins, `.claude.json` e `.mcp.json` ([demo.ts](src/config/demo.ts)). Os backups também ficam lá, e a pasta é apagada quando a API sai.
 
 ## Importação do histórico
 
