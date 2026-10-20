@@ -1,4 +1,4 @@
-// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral) e `GET /api/analytics/custo` (Custo),
+// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral) e `GET /api/analytics/cost` (Custo; a rota antiga `/api/analytics/custo` responde o corpo antigo),
 // com fixtures sintéticas, relógio fixo e o histórico simulado da --demo.
 
 import assert from 'node:assert/strict';
@@ -6,7 +6,7 @@ import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
+import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/rota-analytics.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { semearHistorico } from '../../src/simulador/historico.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
@@ -84,61 +84,61 @@ describe('GET /api/analytics (Visão geral)', () => {
     const { status, corpo } = await pedirRota(rota(storage), '/api/analytics');
     const v = corpo as Json;
     assert.equal(status, 200);
-    assert.equal(v.fusoHorario, 'UTC');
-    assert.equal(v.hoje, '2026-10-20');
-    assert.equal(v.desde, '2026-09-21');
-    assert.equal(v.ate, '2026-10-20');
-    assert.deepEqual(v.contas.map((c: Json) => [c.rotulo, c.id === null]), [['Conta 1', false], ['Conta 2', false], ['Sem conta', true]]);
+    assert.equal(v.timeZone, 'UTC');
+    assert.equal(v.today, '2026-10-20');
+    assert.equal(v.since, '2026-09-21');
+    assert.equal(v.until, '2026-10-20');
+    assert.deepEqual(v.accounts.map((c: Json) => [c.label, c.id === null]), [['Conta 1', false], ['Conta 2', false], ['Sem conta', true]]);
 
-    assert.deepEqual(v.numeros.sessoes, { total: 3, ativas: 1 });
-    assert.deepEqual(v.numeros.agentes, { total: 3, ativos: 1 });
-    assert.equal(v.numeros.tokens.total, 5000 + 2500 + 600 + 12_000);
-    assert.equal(v.numeros.tokens.cachePct, 18.2); // 3000 / (1000 + 3000 + 2000 + 500 + 10000)
-    perto(v.numeros.custo.usd, OPUS + SONNET + HAIKU);
-    assert.equal(v.numeros.custo.dias, 30);
-    assert.deepEqual(v.numeros.custo.semPreco, ['modelo-sem-preco']);
-    const porConta = v.numeros.custo.porConta;
+    assert.deepEqual(v.numbers.sessions, { total: 3, active: 1 });
+    assert.deepEqual(v.numbers.agents, { total: 3, active: 1 });
+    assert.equal(v.numbers.tokens.total, 5000 + 2500 + 600 + 12_000);
+    assert.equal(v.numbers.tokens.cachePct, 18.2); // 3000 / (1000 + 3000 + 2000 + 500 + 10000)
+    perto(v.numbers.cost.usd, OPUS + SONNET + HAIKU);
+    assert.equal(v.numbers.cost.days, 30);
+    assert.deepEqual(v.numbers.cost.unpriced, ['modelo-sem-preco']);
+    const porConta = v.numbers.cost.byAccount;
     perto(porConta[0].usd, OPUS + SONNET);
     assert.equal(porConta[1].usd, null, 'só sem preço: null, nunca zero');
-    assert.deepEqual([porConta[2].conta, porConta[2].usd], [null, HAIKU]);
-    assert.deepEqual(v.numeros.eventos, { total: 11, porSessao: 3.7 });
+    assert.deepEqual([porConta[2].account, porConta[2].usd], [null, HAIKU]);
+    assert.deepEqual(v.numbers.events, { total: 11, perSession: 3.7 });
   });
 
   test('ferramentas: Pre do hook e ToolUse do transcript com o mesmo id contam uma vez; Post não conta', async () => {
     const v = (await pedirRota(rota(storage), '/api/analytics')).corpo as Json;
-    assert.deepEqual(v.ferramentas, [{ nome: 'Grep', usos: 2 }, { nome: 'Read', usos: 2 }, { nome: 'Bash', usos: 1 }]);
-    assert.deepEqual(v.tokensPorModelo.map((m: Json) => m.modelo), ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5', 'modelo-sem-preco']);
+    assert.deepEqual(v.tools, [{ name: 'Grep', uses: 2 }, { name: 'Read', uses: 2 }, { name: 'Bash', uses: 1 }]);
+    assert.deepEqual(v.tokensByModel.map((m: Json) => m.model), ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5', 'modelo-sem-preco']);
   });
 
   test('últimos 30 dias, dia da semana e o heatmap de 52 semanas alinhado à segunda', async () => {
     const v = (await pedirRota(rota(storage), '/api/analytics')).corpo as Json;
-    const u = v.ultimos30;
-    assert.equal(u.dias.length, 30);
-    assert.equal(u.dias.at(-1).dia, '2026-10-20');
-    const de = (dia: string) => u.dias.find((d: Json) => d.dia === dia)?.sessoes;
+    const u = v.last30;
+    assert.equal(u.days.length, 30);
+    assert.equal(u.days.at(-1).day, '2026-10-20');
+    const de = (dia: string) => u.days.find((d: Json) => d.day === dia)?.sessions;
     assert.equal(de('2026-10-20'), 2); // s1 e s4
     assert.equal(de('2026-10-18'), 1);
     assert.equal(de('2026-10-15'), 1);
     assert.equal(u.total, 4);
-    assert.deepEqual(u.pico, { dia: '2026-10-20', sessoes: 2 });
-    assert.deepEqual(v.diaDaSemana.map((d: Json) => d.dia), ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']);
-    assert.equal(v.diaDaSemana.reduce((s: number, d: Json) => s + d.sessoes, 0), u.total);
-    assert.equal(v.diaDaSemana[1].sessoes, 2); // terça
+    assert.deepEqual(u.peak, { day: '2026-10-20', sessions: 2 });
+    assert.deepEqual(v.weekday.map((d: Json) => d.day), ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+    assert.equal(v.weekday.reduce((s: number, d: Json) => s + d.sessions, 0), u.total);
+    assert.equal(v.weekday[1].sessions, 2); // terça
 
-    const a = v.atividade;
-    assert.equal(a.semanas, 52);
-    assert.equal(a.desde, '2025-10-27');
-    assert.equal(new Date(`${a.dias[0].dia}T00:00:00Z`).getUTCDay(), 1, 'começa numa segunda');
-    assert.equal(a.dias.length, 51 * 7 + 2);
-    assert.equal(a.dias.at(-1).dia, '2026-10-20');
-    assert.equal(a.dias.find((d: Json) => d.dia === diasAtras(100).slice(0, 10)).eventos, 1);
-    assert.equal(a.dias.find((d: Json) => d.dia === '2026-10-20').eventos, 6);
+    const a = v.activity;
+    assert.equal(a.weeks, 52);
+    assert.equal(a.since, '2025-10-27');
+    assert.equal(new Date(`${a.days[0].day}T00:00:00Z`).getUTCDay(), 1, 'começa numa segunda');
+    assert.equal(a.days.length, 51 * 7 + 2);
+    assert.equal(a.days.at(-1).day, '2026-10-20');
+    assert.equal(a.days.find((d: Json) => d.day === diasAtras(100).slice(0, 10)).events, 1);
+    assert.equal(a.days.find((d: Json) => d.day === '2026-10-20').events, 6);
   });
 
   test('?fuso= muda o dia: 01:30 UTC de hoje é ontem em São Paulo', async () => {
     const v = (await pedirRota(rota(storage), '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
-    assert.equal(v.fusoHorario, 'America/Sao_Paulo');
-    const de = (dia: string) => v.ultimos30.dias.find((d: Json) => d.dia === dia)?.sessoes;
+    assert.equal(v.timeZone, 'America/Sao_Paulo');
+    const de = (dia: string) => v.last30.days.find((d: Json) => d.day === dia)?.sessions;
     assert.equal(de('2026-10-20'), 1);
     assert.equal(de('2026-10-19'), 1);
   });
@@ -156,15 +156,15 @@ describe('GET /api/analytics (Visão geral)', () => {
     await storage.appendEvent(ferramenta('s1-e9', 's1', diasAtras(0, '14:00:00'), 'PreToolUse', 'Edit', { tool_use_id: 't9' }));
     relogio.agora += 5_000;
     const b = (await pedirRota(r, '/api/analytics')).corpo as Json;
-    assert.equal(b.geradoEm, a.geradoEm);
-    assert.equal(b.numeros.eventos.total, 11);
+    assert.equal(b.generatedAt, a.generatedAt);
+    assert.equal(b.numbers.events.total, 11);
     const outroFuso = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
-    assert.notEqual(outroFuso.geradoEm, a.geradoEm);
+    assert.notEqual(outroFuso.generatedAt, a.generatedAt);
     relogio.agora += 20_000;
-    assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, '25 s: ainda a mesma');
+    assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, a.generatedAt, '25 s: ainda a mesma');
     relogio.agora += 6_000;
     const c = (await pedirRota(r, '/api/analytics')).corpo as Json;
-    assert.equal(c.numeros.eventos.total, 12);
+    assert.equal(c.numbers.events.total, 12);
   });
 
   test('com o cursor de mudanças, vale enquanto nada muda (até 5 min) e refaz quando muda', async () => {
@@ -175,15 +175,15 @@ describe('GET /api/analytics (Visão geral)', () => {
       const r = new RotaAnalytics({ storage: s, agora: () => relogio.agora, versao: () => cursor.atual });
       const a = (await pedirRota(r, '/api/analytics')).corpo as Json;
       relogio.agora += 4 * 60_000;
-      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, 'sem mudança, 4 min');
+      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, a.generatedAt, 'sem mudança, 4 min');
       cursor.atual = 'g:2';
-      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, 'mudou e já passou de 30 s');
+      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, a.generatedAt, 'mudou e já passou de 30 s');
       const b = (await pedirRota(r, '/api/analytics')).corpo as Json;
       relogio.agora += 10_000;
       cursor.atual = 'g:3';
-      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, b.geradoEm, 'mudou, mas a resposta tem só 10 s');
+      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, b.generatedAt, 'mudou, mas a resposta tem só 10 s');
       relogio.agora += 6 * 60_000;
-      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, b.geradoEm, 'passou de 5 min');
+      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, b.generatedAt, 'passou de 5 min');
     } finally {
       await s.close();
     }
@@ -192,73 +192,73 @@ describe('GET /api/analytics (Visão geral)', () => {
   test('o fuso volta na forma canônica, na resposta e na chave do cache', async () => {
     const r = rota(storage);
     const a = (await pedirRota(r, '/api/analytics?fuso=america/sao_paulo')).corpo as Json;
-    assert.equal(a.fusoHorario, 'America/Sao_Paulo');
+    assert.equal(a.timeZone, 'America/Sao_Paulo');
     const b = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
     assert.equal(b, a, 'a mesma entrada do cache');
   });
 
   test('o custo por conta traz os modelos sem preço de cada conta', async () => {
     const v = (await pedirRota(rota(storage), '/api/analytics')).corpo as Json;
-    assert.deepEqual(v.numeros.custo.porConta.map((c: Json) => c.semPreco), [[], ['modelo-sem-preco'], []]);
+    assert.deepEqual(v.numbers.cost.byAccount.map((c: Json) => c.unpriced), [[], ['modelo-sem-preco'], []]);
   });
 });
 
-describe('GET /api/analytics/custo (Custo)', () => {
+describe('GET /api/analytics/cost (Custo)', () => {
   let storage: SqliteStorage;
   before(async () => (storage = await fixtures()));
   after(() => storage.close());
 
   test('7 dias: hoje, período, por dia, por modelo, por projeto e por conta', async () => {
-    const { status, corpo } = await pedirRota(rota(storage), '/api/analytics/custo?dias=7');
+    const { status, corpo } = await pedirRota(rota(storage), '/api/analytics/cost?days=7');
     const c = corpo as Json;
     assert.equal(status, 200);
-    assert.deepEqual([c.dias, c.hoje, c.desde, c.ate, c.estimativa, c.moeda], [7, '2026-10-20', '2026-10-14', '2026-10-20', true, 'USD']);
-    perto(c.resumoDeHoje.usd, OPUS + HAIKU);
-    assert.equal(c.resumoDeHoje.sessoes, 2);
-    const hoje = c.resumoDeHoje.porConta;
-    assert.deepEqual(hoje.map((x: Json) => [x.rotulo, x.semPreco]), [['Conta 1', []], ['Conta 2', []], ['Sem conta', []]]);
+    assert.deepEqual([c.days, c.today, c.since, c.until, c.estimate, c.currency], [7, '2026-10-20', '2026-10-14', '2026-10-20', true, 'USD']);
+    perto(c.todaySummary.usd, OPUS + HAIKU);
+    assert.equal(c.todaySummary.sessions, 2);
+    const hoje = c.todaySummary.byAccount;
+    assert.deepEqual(hoje.map((x: Json) => [x.label, x.unpriced]), [['Conta 1', []], ['Conta 2', []], ['Sem conta', []]]);
     perto(hoje[0].usd, OPUS);
     assert.equal(hoje[1].usd, 0, 'conta 2 sem uso hoje');
     perto(hoje[2].usd, HAIKU);
-    assert.equal(hoje[0].cor, c.contas[0].cor);
-    perto(c.periodo.usd, OPUS + SONNET + HAIKU);
-    perto(c.periodo.mediaPorDia, (OPUS + SONNET + HAIKU) / 7);
+    assert.equal(hoje[0].color, c.accounts[0].color);
+    perto(c.period.usd, OPUS + SONNET + HAIKU);
+    perto(c.period.dailyAverage, (OPUS + SONNET + HAIKU) / 7);
     assert.equal(c.cache.pct, 18.2);
-    assert.deepEqual(c.semPreco, { modelos: ['modelo-sem-preco'], totalDeTokens: 600 });
+    assert.deepEqual(c.unpriced, { models: ['modelo-sem-preco'], totalTokens: 600 });
 
-    assert.equal(c.porDia.length, 7);
-    const dia = (d: string) => c.porDia.find((x: Json) => x.dia === d)?.usd;
+    assert.equal(c.byDay.length, 7);
+    const dia = (d: string) => c.byDay.find((x: Json) => x.day === d)?.usd;
     perto(dia('2026-10-15'), SONNET);
     assert.equal(dia('2026-10-18'), null, 'dia só com uso sem preço');
     assert.equal(dia('2026-10-17'), 0, 'dia sem uso');
-    assert.deepEqual(c.pico.dia, '2026-10-20');
+    assert.deepEqual(c.peak.day, '2026-10-20');
 
-    assert.deepEqual(c.porModelo.map((m: Json) => m.modelo), ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'modelo-sem-preco']);
-    assert.equal(c.porModelo.at(-1).usd, null);
-    assert.equal(c.porModelo.at(-1).pct, null);
-    assert.equal(c.porModelo[0].pct, Math.round((OPUS / (OPUS + SONNET + HAIKU)) * 1000) / 10);
+    assert.deepEqual(c.byModel.map((m: Json) => m.model), ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'modelo-sem-preco']);
+    assert.equal(c.byModel.at(-1).usd, null);
+    assert.equal(c.byModel.at(-1).pct, null);
+    assert.equal(c.byModel[0].pct, Math.round((OPUS / (OPUS + SONNET + HAIKU)) * 1000) / 10);
 
-    assert.deepEqual(c.porProjeto.map((p: Json) => p.projeto), ['vitrine-demo', '(sem pasta)', 'app-receitas']);
-    assert.equal(c.porProjeto.at(-1).usd, null);
+    assert.deepEqual(c.byProject.map((p: Json) => p.project), ['vitrine-demo', '(sem pasta)', 'app-receitas']);
+    assert.equal(c.byProject.at(-1).usd, null);
 
-    assert.deepEqual(c.porConta.map((x: Json) => x.rotulo), ['Conta 1', 'Conta 2', 'Sem conta']);
-    perto(c.porConta[0].usd, OPUS + SONNET);
-    assert.deepEqual([c.porConta[1].usd, c.porConta[1].semPreco], [null, ['modelo-sem-preco']]);
-    for (const x of c.porConta) assert.equal(x.porDia.length, 7);
+    assert.deepEqual(c.byAccount.map((x: Json) => x.label), ['Conta 1', 'Conta 2', 'Sem conta']);
+    perto(c.byAccount[0].usd, OPUS + SONNET);
+    assert.deepEqual([c.byAccount[1].usd, c.byAccount[1].unpriced], [null, ['modelo-sem-preco']]);
+    for (const x of c.byAccount) assert.equal(x.byDay.length, 7);
   });
 
   test('em São Paulo, o haiku de 01:30 UTC sai de hoje e vai para ontem', async () => {
-    const c = (await pedirRota(rota(storage), '/api/analytics/custo?dias=30&fuso=America/Sao_Paulo')).corpo as Json;
-    assert.equal(c.porDia.length, 30);
-    perto(c.resumoDeHoje.usd, OPUS);
-    perto(c.porDia.find((x: Json) => x.dia === '2026-10-19').usd, HAIKU);
+    const c = (await pedirRota(rota(storage), '/api/analytics/cost?days=30&tz=America/Sao_Paulo')).corpo as Json;
+    assert.equal(c.byDay.length, 30);
+    perto(c.todaySummary.usd, OPUS);
+    perto(c.byDay.find((x: Json) => x.day === '2026-10-19').usd, HAIKU);
   });
 
   test('dias fora de 7, 30 ou 90 dá 400', async () => {
     const r = rota(storage);
-    for (const d of ['8', '0', 'trinta', '-7', '']) assert.equal((await pedirRota(r, `/api/analytics/custo?dias=${d}`)).status, 400, d);
-    assert.equal((await pedirRota(r, '/api/analytics/custo')).status, 200, 'sem dias: 30');
-    assert.equal((await pedirRota(r, '/api/analytics/custo?dias=90')).status, 200);
+    for (const d of ['8', '0', 'trinta', '-7', '']) assert.equal((await pedirRota(r, `/api/analytics/cost?days=${d}`)).status, 400, d);
+    assert.equal((await pedirRota(r, '/api/analytics/cost')).status, 200, 'sem days: 30');
+    assert.equal((await pedirRota(r, '/api/analytics/cost?days=90')).status, 200);
   });
 });
 
@@ -293,11 +293,15 @@ describe('as rotas no servidor', () => {
   test('GET responde JSON; parâmetro inválido dá 400; Origin de fora dá 403, a própria /ui lê', async () => {
     const ok = await pedir(api.url, '/api/analytics');
     assert.equal(ok.status, 200);
-    assert.equal(JSON.parse(ok.corpo).hoje, '2026-10-20');
-    assert.equal((await pedir(api.url, '/api/analytics/custo?dias=30')).status, 200);
-    const ruim = await pedir(api.url, '/api/analytics/custo?dias=12');
+    assert.equal(JSON.parse(ok.corpo).today, '2026-10-20');
+    assert.equal((await pedir(api.url, '/api/analytics/cost?days=30')).status, 200);
+    const ruim = await pedir(api.url, '/api/analytics/cost?days=12');
     assert.equal(ruim.status, 400);
-    assert.match(JSON.parse(ruim.corpo).error, /dias/);
+    assert.equal(JSON.parse(ruim.corpo).error, DAYS_ERROR);
+    // The old route answers the old error, naming the old parameter.
+    const antiga = await pedir(api.url, '/api/analytics/custo?dias=12');
+    assert.equal(JSON.parse(antiga.corpo).error, 'dias: 7, 30 ou 90');
+    assert.equal(JSON.parse((await pedir(api.url, '/api/analytics/cost?tz=nada')).corpo).error, TZ_ERROR);
     assert.equal((await pedir(api.url, '/api/analytics', { origin: 'http://outro.example' })).status, 403);
     const host = new URL(api.url).host;
     assert.equal((await pedir(api.url, '/api/analytics', { origin: `http://${host}` })).status, 200);
@@ -349,16 +353,16 @@ describe('histórico simulado da --demo', () => {
   test('com o p4, os gráficos têm dados: vários dias, mais de uma conta, modelos e projetos', async () => {
     const r = rota(storage);
     const v = (await pedirRota(r, '/api/analytics')).corpo as Json;
-    assert.ok(v.contas.length >= 2);
-    assert.ok(v.ultimos30.dias.filter((d: Json) => d.sessoes > 0).length >= 15);
-    assert.ok(v.atividade.dias.filter((d: Json) => d.eventos > 0).length >= 60);
-    assert.ok(v.tokensPorModelo.length >= 2);
-    assert.equal(v.ferramentas.length, 5);
-    assert.ok(v.numeros.sessoes.ativas >= 1, 'as do painel');
-    const c = (await pedirRota(r, '/api/analytics/custo?dias=90')).corpo as Json;
-    assert.ok(c.porProjeto.length >= 3);
-    assert.ok(c.porConta.length >= 2);
-    assert.ok(c.periodo.usd > 0);
-    assert.deepEqual(c.semPreco.modelos, []);
+    assert.ok(v.accounts.length >= 2);
+    assert.ok(v.last30.days.filter((d: Json) => d.sessions > 0).length >= 15);
+    assert.ok(v.activity.days.filter((d: Json) => d.events > 0).length >= 60);
+    assert.ok(v.tokensByModel.length >= 2);
+    assert.equal(v.tools.length, 5);
+    assert.ok(v.numbers.sessions.active >= 1, 'as do painel');
+    const c = (await pedirRota(r, '/api/analytics/cost?days=90')).corpo as Json;
+    assert.ok(c.byProject.length >= 3);
+    assert.ok(c.byAccount.length >= 2);
+    assert.ok(c.period.usd > 0);
+    assert.deepEqual(c.unpriced.models, []);
   });
 });

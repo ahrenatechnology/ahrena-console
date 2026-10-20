@@ -16,6 +16,7 @@ import { ESCOPOS_DAS_DECISOES } from '../../src/api/decisoes.ts';
 import { PROJECT_ERROR_CODES } from '../../src/api/projeto.ts';
 import { ciDoPr, reviewDoPr } from '../../src/api/trabalho.ts';
 import { COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, VISOES } from '../../src/api/kanban.ts';
+import { DAYS_ERROR, DIAS_DO_CUSTO, TZ_ERROR } from '../../src/api/rota-analytics.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -124,7 +125,7 @@ describe('#173 phase 2b: the back-translator', () => {
 
   test('a route whose spec is still empty gives its body back as it is', () => {
     const body = { sessao: 's', texto: 't', itens: [{ estado: 'a_confirmar' }] };
-    for (const path of ['/abrir/x', '/api/analytics/custo']) {
+    for (const path of ['/abrir/x']) {
       assert.equal(legacyResponseFor(path)!(body), body, path);
       assert.equal(legacyRequestBody(path, body), body, path);
     }
@@ -789,5 +790,49 @@ describe('every union member of the Decisions of the /ui and the project kanban 
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`column=${column}`), '/api/kanban').get('column'), column);
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`column=${old}`), '/api/sessions').get('column'), old, 'only on /api/kanban');
     }
+  });
+  test('analytics cost: every key back in the old names and order; dates, models and projects untouched', () => {
+    const route = legacyResponseFor('/api/analytics/custo')!;
+    const row = (usd: number | null) => ({ account: 'a/o', label: 'equipe', color: '#df285d', usd, unpriced: ['m-x'] });
+    const oldRow = (usd: number | null) => ({ conta: 'a/o', rotulo: 'equipe', cor: '#df285d', usd, semPreco: ['m-x'] });
+    for (const peak of [{ day: '2026-10-20', usd: 1 }, null]) {
+      const body = {
+        generatedAt: 'g', timeZone: 'UTC', days: 7, today: '2026-10-20', since: '2026-10-14', until: '2026-10-20', estimate: true, currency: 'USD',
+        accounts: [{ id: 'a/o', label: 'equipe', color: '#df285d' }, { id: null, label: 'Sem conta', color: null }],
+        todaySummary: { usd: 1, sessions: 2, byAccount: [row(1), row(null)] },
+        period: { usd: 3, dailyAverage: null },
+        cache: { pct: 58.7 },
+        unpriced: { models: ['m-x'], totalTokens: 9 },
+        byDay: [{ day: '2026-10-20', usd: 1 }],
+        peak,
+        byModel: [{ model: 'claude-opus-5-5', usd: 1, pct: 100, totalTokens: 5 }, { model: 'm-x', usd: null, pct: null, totalTokens: 9 }],
+        byProject: [{ project: 'day', usd: 1 }, { project: '(sem pasta)', usd: null }],
+        byAccount: [{ ...row(3), byDay: [{ day: '2026-10-20', usd: 1 }] }],
+      };
+      const old = {
+        geradoEm: 'g', fusoHorario: 'UTC', dias: 7, hoje: '2026-10-20', desde: '2026-10-14', ate: '2026-10-20', estimativa: true, moeda: 'USD',
+        contas: [{ id: 'a/o', rotulo: 'equipe', cor: '#df285d' }, { id: null, rotulo: 'Sem conta', cor: null }],
+        resumoDeHoje: { usd: 1, sessoes: 2, porConta: [oldRow(1), oldRow(null)] },
+        periodo: { usd: 3, mediaPorDia: null },
+        cache: { pct: 58.7 },
+        semPreco: { modelos: ['m-x'], totalDeTokens: 9 },
+        porDia: [{ dia: '2026-10-20', usd: 1 }],
+        pico: peak && { dia: peak.day, usd: peak.usd },
+        porModelo: [{ modelo: 'claude-opus-5-5', usd: 1, pct: 100, totalDeTokens: 5 }, { modelo: 'm-x', usd: null, pct: null, totalDeTokens: 9 }],
+        porProjeto: [{ projeto: 'day', usd: 1 }, { projeto: '(sem pasta)', usd: null }],
+        porConta: [{ ...oldRow(3), porDia: [{ dia: '2026-10-20', usd: 1 }] }],
+      };
+      assert.equal(JSON.stringify(route(body)), JSON.stringify(old), String(peak));
+    }
+  });
+
+  test('analytics cost: the errors cite `days:`/`tz:` and the old route `dias:`/`fuso:`, with the limits of `DIAS_DO_CUSTO`', () => {
+    const days = `${DIAS_DO_CUSTO.slice(0, -1).join(', ')} ou ${DIAS_DO_CUSTO.at(-1)}`;
+    assert.equal(DAYS_ERROR, `days: ${days}`);
+    assert.match(TZ_ERROR, /^tz: /);
+    const route = legacyResponseFor('/api/analytics/custo')!;
+    assert.deepEqual(route({ error: DAYS_ERROR }), { error: `dias: ${days}` });
+    assert.deepEqual(route({ error: TZ_ERROR }), { error: TZ_ERROR.replace(/^tz:/, 'fuso:') });
+    assert.equal(legacyResponseFor('/api/analytics/cost'), null, 'the new route is not translated');
   });
 });
