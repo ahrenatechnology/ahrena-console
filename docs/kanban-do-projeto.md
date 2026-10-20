@@ -60,19 +60,19 @@ Os erros têm o corpo `{ "error": "...", "codigo": "..." }`:
 | 422 | `raia-desconhecida` | A opção não existe no campo Status |
 | 429 | `limitado` | O GitHub limitou e não há cache; com `Retry-After` |
 | 502 | `github-fora` / `github-recusou` | O GitHub falhou sem nada no cache (GET), ou recusou a mutação (mover) |
-| 503 | `desligado` | O núcleo subiu com `--sem-github` |
+| 503 | `desligado` | O núcleo subiu com `--no-github` |
 
 Com o GitHub fora e o quadro no cache, o GET responde 200 com `desatualizado: true` e o `motivo`.
 
 **Origem.** Como as outras rotas, o núcleo recusa `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>` ([decisão 0003](decisoes/0003-responder-sessao.md)). O mover é a única escrita que aceita `Origin`, e só o da própria `/ui` (`http://<Host>`). Pede ainda `Content-Type: application/json` (415 sem ele) e corpo de até 4096 bytes (413).
 
-**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número`, com o token do `gh` e o cache no banco do núcleo. Sem a variável, as rotas respondem 503 `sem-projeto` e a tela mostra como escolher o Project. `--sem-github` desliga o quadro (503 `desligado`).
+**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número`, com o token do `gh` e o cache no banco do núcleo. Sem a variável, as rotas respondem 503 `sem-projeto` e a tela mostra como escolher o Project. `--no-github` desliga o quadro (503 `desligado`).
 
 **Demo.** A `--demo` traz um GitHub falso com o quadro do wireframe C11: o Project "Ahrena Console", as raias Backlog, Ready, In Progress, In Review e Done, e os 11 cards. Mover funciona em memória, até o processo sair:
 
 ```bash
 cd packages/nucleo
-npm run api -- --demo --cenario p4 --porta 4794
+npm run api -- --demo --scenario p4 --port 4794
 curl -s http://127.0.0.1:4794/api/projeto
 curl -s -X POST -H 'content-type: application/json' \
   -d '{"itemId":"PVTI_simulado80","optionId":"e4f5a6b7"}' http://127.0.0.1:4794/api/projeto/mover

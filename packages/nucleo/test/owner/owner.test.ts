@@ -318,7 +318,7 @@ describe('start or adopt', { timeout: 60_000 }, () => {
 });
 
 describe('version', { timeout: 60_000 }, () => {
-  test('older core: warns and adopts; with --substituir, replaces', async () => {
+  test('older core: warns and adopts; with --replace, replaces', async () => {
     const port = await freePort();
     const old = api(port);
     const t = await liveLock();
@@ -326,9 +326,9 @@ describe('version', { timeout: 60_000 }, () => {
 
     const warned = await api(port).done;
     assert.equal(warned.code, 0);
-    assert.match(warned.stderr, new RegExp(`versão 0\\.0\\.0, mais velha que esta \\(${VERSION}\\).*--substituir`));
+    assert.match(warned.stderr, new RegExp(`versão 0\\.0\\.0, mais velha que esta \\(${VERSION}\\).*--replace`));
     assert.match(warned.stdout, /\(adotado\)/);
-    assert.ok(isPidAlive(t.pid), 'without --substituir, the old one stays');
+    assert.ok(isPidAlive(t.pid), 'without --replace, the old one stays');
 
     const fresh = api(port, '--replace');
     await until(() => old.proc.exitCode !== null || old.proc.signalCode !== null);
@@ -454,7 +454,7 @@ describe('ownership and code', { timeout: 60_000 }, () => {
     assert.ok(isPidAlive(t.pid), 'other code is never replaced on its own');
 
     const withoutReplace = await planStart({ ...mine, commit: 'f00dfeed', isOlderCommit: () => true });
-    assert.match(withoutReplace.action === 'adopt' ? (withoutReplace.warning ?? '') : '', /mais velho que este \(f00dfeed\).*--substituir/);
+    assert.match(withoutReplace.action === 'adopt' ? (withoutReplace.warning ?? '') : '', /mais velho que este \(f00dfeed\).*--replace/);
 
     const same = await planStart({ ...mine, commit: codeCommit() });
     assert.deepEqual(same.action === 'adopt' && same.warning, null);

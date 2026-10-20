@@ -59,10 +59,10 @@ export function codeWarning(running: { version: string; commit: string | null; p
   const c = compareCode(running, mine);
   const who = `o núcleo de pé${running.pid ? ` (pid ${running.pid})` : ''}`;
   if (c === 'older' && compareVersions(running.version, mine.version) < 0) {
-    return `${who} é a versão ${running.version}, mais velha que esta (${mine.version}). Ele continua servindo; para trocar, suba com --substituir`;
+    return `${who} é a versão ${running.version}, mais velha que esta (${mine.version}). Ele continua servindo; para trocar, suba com --replace`;
   }
   if (c === 'older') {
-    return `${who} roda o commit ${running.commit}, mais velho que este (${mine.commit}). Ele continua servindo; para trocar, suba com --substituir`;
+    return `${who} roda o commit ${running.commit}, mais velho que este (${mine.commit}). Ele continua servindo; para trocar, suba com --replace`;
   }
   if (c === 'other-code') {
     return `${who} roda o commit ${running.commit}, que não é este (${mine.commit}) nem um ancestral dele. Ele continua servindo; pare-o (npm run core -- stop) para subir este`;
