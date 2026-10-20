@@ -62,3 +62,45 @@ export function ler(rota, opcoes) {
   atual ??= leitorHttp();
   return atual(rota, opcoes);
 }
+
+// ---------- As escritas das Decisões (issue 103) ----------
+//
+// Confirmar, Descartar e Promover a registro: `POST /api/decisoes/<id>/<acao>` na própria origem, em
+// JSON. Mesmas travas do leitor (só /api/, só o núcleo local, `credentials: 'omit'`), e o núcleo só
+// aceita esse POST com o `Origin` da página (servidor.ts). O artefato troca o transporte com
+// `usarEscritor()`. As telas não chamam `fetch`: chamam `escrever(rota, corpo)`.
+
+const ROTA_DE_ESCRITA = /^\/api\/decisoes\/[A-Za-z0-9_.:-]{1,128}\/(confirmar|descartar|ajustar|desfazer|promover)$/;
+
+export function escritorHttp({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
+  const origem = new URL(base);
+  if (origem.protocol !== 'http:' || !LOCAIS.has(origem.hostname)) throw new ErroDeLeitura(`o console só fala com o núcleo local, não ${origem.origin}`);
+  return async function escreverPorHttp(rota, corpo = {}, { signal } = {}) {
+    if (typeof rota !== 'string' || !ROTA_DE_ESCRITA.test(rota)) throw new ErroDeLeitura(`escrita fora das decisões: ${rota}`, { rota });
+    const url = new URL(rota, origem);
+    if (url.origin !== origem.origin || url.pathname !== rota) throw new ErroDeLeitura(`rota fora do núcleo: ${rota}`, { rota });
+    let resposta;
+    try {
+      resposta = await fetch(url, { method: 'POST', signal, headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(corpo ?? {}), credentials: 'omit', cache: 'no-store' });
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      throw new ErroDeLeitura(`O núcleo em ${origem.host} não respondeu`, { rota });
+    }
+    const dados = await resposta.json().catch(() => null);
+    if (!resposta.ok) throw new ErroDeLeitura(dados?.error ?? `O núcleo respondeu ${resposta.status}`, { status: resposta.status, rota });
+    return dados;
+  };
+}
+
+let escritor = null;
+
+/** Troca o transporte das escritas (o artefato passa o do `host:`). */
+export function usarEscritor(f) {
+  escritor = f;
+}
+
+/** `POST` em JSON numa rota de escrita das decisões; devolve o JSON da resposta. */
+export function escrever(rota, corpo, opcoes) {
+  escritor ??= escritorHttp();
+  return escritor(rota, corpo, opcoes);
+}
