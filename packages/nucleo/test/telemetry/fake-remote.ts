@@ -68,29 +68,6 @@ export function remoteItem(session: string, over: Record<string, unknown> = {}) 
   };
 }
 
-/** The same answer from a remote núcleo released before #173 phase 2b: Portuguese keys and values. */
-export function oldAttentionBody(items: unknown[], over: Record<string, unknown> = {}) {
-  return { geradoEm: '2026-11-02T12:00:00.000Z', cursor: 'g.1', total: items.length, precisam: items.length, suaVez: 0, ativas: 1, comErro: 0, itens: items, ...over };
-}
-
-export function oldRemoteItem(sessao: string, over: Record<string, unknown> = {}) {
-  return {
-    sessao,
-    titulo: `Sessão ${sessao}`,
-    projeto: 'projeto-exemplo',
-    conta: { rotulo: 'equipe', cor: '#3366ff' },
-    nivel: 'precisa',
-    motivo: 'permissao',
-    motivoCurto: 'Pede permissão',
-    motivoLongo: 'pede permissão para usar Bash',
-    desde: '2026-11-02T11:55:00.000Z',
-    minutos: 5,
-    local: 'local_00000000-0000-4000-8000-000000000009',
-    machine: null,
-    ...over,
-  };
-}
-
 /** A fake remote núcleo. `port` reuses a port (to bring the "same" remote back up). */
 export async function startFakeRemote(state: Partial<FakeRemoteState> = {}, port = 0): Promise<FakeRemote> {
   const requests: RecordedRequest[] = [];

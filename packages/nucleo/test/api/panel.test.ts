@@ -318,8 +318,8 @@ describe('servidor da API local', () => {
       assert.equal(r.status, 202);
       const depois = (await (await fetch(`${api.url}/api/panel/sess-api-1`)).json()) as Panel;
       assert.equal(depois.session?.cwd, '/repo/app');
-      const carga = (await (await fetch(`${api.url}/api/carga`)).json()) as { painel: number };
-      assert.equal(carga.painel, 2);
+      const carga = (await (await fetch(`${api.url}/api/load`)).json()) as { panel: number };
+      assert.equal(carga.panel, 2);
     } finally {
       await api.close();
     }

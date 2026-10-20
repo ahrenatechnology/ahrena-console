@@ -58,7 +58,6 @@ import { SessionHistory } from '../history/reading.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
-import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Accounts } from './accounts.ts';
@@ -114,8 +113,8 @@ const installation = parseInstallation(o.installation);
 const dataDir = resolveDataDir({ installation, dataDir: o.dataDir });
 const demo = o.demo;
 const parent = o.parent === undefined ? null : Number(o.parent);
-if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent/--pai: a pid');
-if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent/--pai: pid ${parent} does not exist`);
+if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
+if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
@@ -164,7 +163,7 @@ if (useLock) {
 async function adoptPortHolder(): Promise<never> {
   const v = await waitForCore(port, 30_000);
   if (v && !useLock) {
-    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
+    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --no-lock'} precisa de uma porta livre: use --port`);
     process.exit(1);
   }
   if (v) {
@@ -179,7 +178,7 @@ async function adoptPortHolder(): Promise<never> {
       log(`port ${port} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
       process.exit(1);
     }
-    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
+    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --no-lock ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
     adopt(port, v.version, warning.filter(Boolean).join('; ') || null);
   }
   log(`port ${port} is in use and does not answer as a core`);
@@ -502,8 +501,6 @@ const api: LocalApi = await startLocalApi({
   agentInstructions: agentInstructions.route,
   frameworkInstall: frameworkInstall.route,
   decisions: recordDecisions.route,
-  // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
-  ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
   agentConfig,
   telemetry: telemetryService,

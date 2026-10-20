@@ -38,9 +38,9 @@ const SEM_PASTA = '(sem pasta)';
 /** The weekday keys of `weekday[].day`, Monday first; the /ui writes them in pt-BR. */
 const DIAS_DA_SEMANA = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const FUSO = /^[A-Za-z0-9_+\-/]{1,64}$/;
-/** The 400 of a bad `?tz=` (the old route answers it with `fuso:`, src/api/legacy-routes.ts). */
+/** The 400 of a bad `?tz=`. */
 export const TZ_ERROR = 'tz: um fuso IANA, como America/Sao_Paulo';
-/** The 400 of a bad `?days=` (the old route answers it with `dias:`). */
+/** The 400 of a bad `?days=`. */
 export const DAYS_ERROR = `days: ${DIAS_DO_CUSTO.slice(0, -1).join(', ')} ou ${DIAS_DO_CUSTO.at(-1)}`;
 
 type Porta = Pick<StoragePort, 'listSessions' | 'listAgents' | 'listEvents' | 'listTokenUsage' | 'listModelPricing'>;

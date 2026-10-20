@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Accounts, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, normalizeLegacyUrl } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, TrabalhoPorBranch, startLocalApi } from '../../src/api/index.ts';
 import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
@@ -328,22 +328,22 @@ describe('change sources', () => {
 
 describe('HTTP route', () => {
   test('reads and validates the parameters', () => {
-    // The old parameter names pass through the alias map, as on the server.
-    const p = (q: string) => parseChangesRequest(normalizeLegacyUrl(new URL(`http://x/api/mudancas?${q}`)));
-    assert.deepEqual(p('desde=g1.3&espera=5&sessao=s1,s2&conta=a&conta=sem-conta&tipo=plano'), {
+    const p = (q: string) => parseChangesRequest(new URL(`http://x/api/changes?${q}`));
+    assert.deepEqual(p('since=g1.3&wait=5&session=s1,s2&account=a&account=no-account&type=plan'), {
       cursor: 'g1.3',
       timeoutMs: 5000,
       filters: { sessionIds: ['s1', 's2'], accountIds: ['a', null], types: ['plan'] },
     });
-    // "No account" is `no-account` on the new route; the old `sem-conta` is still accepted on both.
-    const parseNew = (q: string) => parseChangesRequest(normalizeLegacyUrl(new URL(`http://x/api/changes?${q}`)));
-    for (const q of ['account=a,no-account', 'account=a,sem-conta'])
-      assert.deepEqual((parseNew(q) as Exclude<ReturnType<typeof parseNew>, string>).filters.accountIds, ['a', null], q);
+    // "No account" is `no-account`; the old `sem-conta` is an account id like any other (#173, phase 6),
+    // and the old type names are refused.
+    assert.deepEqual((p('account=a,no-account') as Exclude<ReturnType<typeof p>, string>).filters.accountIds, ['a', null]);
+    assert.deepEqual((p('account=a,sem-conta') as Exclude<ReturnType<typeof p>, string>).filters.accountIds, ['a', 'sem-conta']);
+    assert.equal(typeof p('type=plano'), 'string');
     assert.equal(NO_ACCOUNT, 'no-account');
     assert.equal((p('') as { timeoutMs: number }).timeoutMs, DEFAULT_WAIT_MS);
-    assert.equal(typeof p('tipo=outro'), 'string');
-    assert.equal(typeof p('espera=-1'), 'string');
-    assert.equal(typeof p('sessao=a b'), 'string');
+    assert.equal(typeof p('type=outro'), 'string');
+    assert.equal(typeof p('wait=-1'), 'string');
+    assert.equal(typeof p('session=a b'), 'string');
   });
 
   test('GET /api/changes holds until the change and releases when the client gives up', async () => {
@@ -407,7 +407,7 @@ describe('MCP tool wait_for_changes', () => {
     assert.equal(first.data.reset, true);
     const c = first.data.cursor as string;
 
-    const pending = f.execute({ cursor: c, timeout: 30, account: 'cliente', types: ['plano', 'decisao'] }, ctx());
+    const pending = f.execute({ cursor: c, timeout: 30, account: 'cliente', types: ['plan', 'decision'] }, ctx());
     cursor.record({ type: 'plan', key: 's1', sessionId: 's1', accountId: team.id });
     cursor.record(sessionChange('s2', { accountId: client.id }));
     cursor.record({ type: 'decision', key: 'd9', sessionId: 's2', accountId: client.id });
@@ -427,7 +427,7 @@ describe('MCP tool wait_for_changes', () => {
     await storage.close();
   });
 
-  test('#173 phase 2b: `types` takes the English names and still the old ones; the answer is English', async () => {
+  test('#173 phase 6: `types` takes only the English names; the old ones are refused', async () => {
     const { cursor } = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
     const f = waitForChanges({ changes: cursor, accounts: new Accounts({ storage, file: null }) });
@@ -437,10 +437,11 @@ describe('MCP tool wait_for_changes', () => {
     cursor.record(sessionChange('s3'));
     const typesOf = async (types: string[]) => ((await f.execute({ cursor: c, timeout: 0, types }, ctx())).data.changes as { type: string }[]).map((m) => m.type);
     assert.deepEqual(await typesOf(['plan', 'needs-you']), ['plan', 'needs-you']);
-    assert.deepEqual(await typesOf(['plano', 'precisa-de-voce']), ['plan', 'needs-you'], 'the old names');
-    assert.deepEqual(await typesOf(['sessao', 'state']), ['session'], 'a mix');
+    for (const old of [['plano'], ['precisa-de-voce'], ['sessao', 'state']]) {
+      await assert.rejects(f.execute({ cursor: c, timeout: 0, types: old }, ctx()), /types: uma lista com/, old.join(','));
+    }
     const typeEnum = ((f.inputSchema as any).properties.types.items.enum as string[]).sort();
-    assert.deepEqual(typeEnum, ['account', 'alert', 'conta', 'decisao', 'decision', 'estado', 'needs-you', 'plan', 'plano', 'precisa-de-voce', 'sessao', 'session', 'state']);
+    assert.deepEqual(typeEnum, ['account', 'alert', 'decision', 'needs-you', 'plan', 'session', 'state']);
     assert.deepEqual((f.outputSchema as any).properties.changes.items.properties.type.enum, ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'alert']);
     await storage.close();
   });

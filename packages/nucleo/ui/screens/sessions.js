@@ -33,14 +33,14 @@ export const STATUS = {
   abandoned: 'Abandonada',
 };
 
-/** An old bookmark's `?status=waiting` (or `esperando`) opens the ones that need you. */
+/** An old bookmark's `?status=waiting` opens the ones that need you. */
 const STATUS_ALIASES = { waiting: 'blocked' };
 
 const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
 /**
  * The screen state from the query (`?status=waiting&page=2`); what is not valid falls back to the
- * default. An old bookmark's values (`esperando`, `custo`) were swapped by the shell (`legacyUrl`).
+ * default.
  */
 export function stateFromQuery(query) {
   const p = new URLSearchParams(query);

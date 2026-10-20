@@ -1,6 +1,6 @@
 // #245: every English route that feeds a /ui screen with a session's state answers the same
 // `attention: { level: 'blocked' | 'idle', reason } | null`, from `atencaoDe` only, and the counts split
-// blocked from idle where the screen shows counts. The old Portuguese routes answer their old bodies.
+// blocked from idle where the screen shows counts. The old Portuguese routes are gone (#173 phase 6).
 // Synthetic data: the MCP seed (5 blocked, 3 idle, working, delegating, completed, abandoned).
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
@@ -87,12 +87,13 @@ describe('#245 attention on every /ui route', () => {
     assert.deepEqual((await read<ListaDeSessoesHttp>('/api/sessions?status=idle&search=fila')).counts, { all: 1, active: 0, waiting: 1, blocked: 0, idle: 1, completed: 0, error: 0, abandoned: 0 });
   });
 
-  test('GET /api/sessions: the old route answers neither `counts` nor `attention`, and its errors stay', async () => {
-    const old = await read<Record<string, unknown> & { itens: Record<string, unknown>[] }>('/api/sessoes');
-    assert.deepEqual(Object.keys(old), ['total', 'registradas', 'pagina', 'porPagina', 'paginas', 'diretorios', 'itens']);
-    for (const i of old.itens) assert.ok(!('attention' in i));
-    const bad = await fetch(`${api.url}/api/sessoes?status=nada`);
-    assert.deepEqual(await bad.json(), { error: 'status: um de todas, ativas, esperando, concluidas, erro, abandonadas' });
+  test('GET /api/sessions: a bad status answers 400, and the old /api/sessoes is gone', async () => {
+    const bad = await fetch(`${api.url}/api/sessions?status=nada`);
+    assert.equal(bad.status, 400);
+    assert.deepEqual(await bad.json(), { error: 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned' });
+    const old = await fetch(`${api.url}/api/sessoes`);
+    assert.equal(old.status, 404);
+    assert.deepEqual(await old.json(), { error: 'não encontrado' });
   });
 
   test('#245/AC-4 GET /api/sessions/<id> and GET /api/panel/<id>: the session card carries `attention`', async () => {
@@ -104,11 +105,11 @@ describe('#245 attention on every /ui route', () => {
     assert.deepEqual((await read<Panel>('/api/panel/never-seen')).session.attention, { level: 'idle', reason: 'first_prompt' });
   });
 
-  test('the old /api/sessoes/<id>, /api/painel/<id> and /api/sessao/<id> answer the card without `attention`', async () => {
+  test('the old /api/sessoes/<id>, /api/painel/<id> and /api/sessao/<id> are gone', async () => {
     for (const path of ['/api/sessoes/permissao', '/api/painel/permissao', '/api/sessao/permissao']) {
-      const old = await read<{ sessao: Record<string, unknown> }>(path);
-      assert.ok(old.sessao && !('attention' in old.sessao), path);
-      assert.equal(old.sessao.estado, 'waiting', path);
+      const old = await fetch(`${api.url}${path}`);
+      assert.equal(old.status, 404, path);
+      assert.deepEqual(await old.json(), { error: 'não encontrado' }, path);
     }
   });
 
@@ -119,9 +120,7 @@ describe('#245 attention on every /ui route', () => {
     // Blocked first, then idle, then the rest.
     const rank = (c: Wall['cards'][number]) => (c.attention?.level === 'blocked' ? 0 : c.attention?.level === 'idle' ? 1 : 2);
     assert.deepEqual(wall.cards.map(rank), [...wall.cards.map(rank)].sort());
-    const old = await read<{ contagem: Record<string, number>; cards: Record<string, unknown>[] }>('/api/mural');
-    assert.deepEqual(Object.keys(old.contagem), ['todas', 'esperando', 'ativas']);
-    for (const c of old.cards) assert.ok(!('attention' in c));
+    assert.equal((await fetch(`${api.url}/api/mural`)).status, 404, 'the old route is gone');
   });
 
   test('#245/AC-3 #245/AC-4 GET /api/kanban: the sessions board has the approved columns, blocked with the errors', async () => {
@@ -181,8 +180,7 @@ describe('#245 attention on every /ui route', () => {
     assert.deepEqual(of('permissao', 'Notification').attention, { level: 'blocked', reason: 'permission' });
     assert.deepEqual(of('erro', 'APIError').attention, { level: 'blocked', reason: 'error' });
     assert.equal(of('permissao', 'PreToolUse').attention, null);
-    const old = await read<{ eventos: Record<string, unknown>[] }>('/api/eventos?limite=200');
-    for (const e of old.eventos) assert.ok(!('attention' in e));
+    assert.equal((await fetch(`${api.url}/api/eventos?limite=200`)).status, 404, 'the old route is gone');
   });
 
   test('#245/AC-3 #245/AC-4 GET /api/dashboard: the session numbers split blocked from idle, and each card carries `attention`', async () => {

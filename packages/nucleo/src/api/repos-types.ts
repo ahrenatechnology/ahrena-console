@@ -75,7 +75,7 @@ export interface ListaDeRepos {
   groups: GrupoDeRepos[];
 }
 
-/** `?period=`: `1y` is the year (the old value `1a` is still accepted, src/api/legacy-routes.ts). */
+/** `?period=`: `1y` is the year. */
 export const PERIODOS = ['30d', '90d', '1y'] as const;
 export type Periodo = (typeof PERIODOS)[number];
 export const PERIODO_PADRAO: Periodo = '90d';
