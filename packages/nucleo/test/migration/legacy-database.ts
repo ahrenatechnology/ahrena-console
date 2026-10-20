@@ -29,7 +29,15 @@ export const TOPICS = {
 } as const;
 
 /** GitHub cache keys: the Portuguese ones go, the rest stays. */
-export const CACHE_KEYS_DROPPED = ['repos:lista', 'repos:resumo', 'repos:detalhe:dono/repo:90d', 'painel:issue:dono/repo#3', 'repos:rest:dono/repo:runs:1a'];
+/** The GitHub cache keys with a Portuguese segment and the English key each one moves to. */
+export const CACHE_KEYS_RENAMED: Record<string, string> = {
+  'repos:lista': 'repos:list',
+  'repos:resumo': 'repos:summary',
+  'repos:detalhe:dono/repo:90d': 'repos:detail:dono/repo:90d',
+  'repos:detalhe:dono/repo:1a': 'repos:detail:dono/repo:1y',
+  'painel:issue:dono/repo#3': 'panel:issue:dono/repo#3',
+  'repos:rest:dono/repo:runs:1a': 'repos:rest:dono/repo:runs:1y',
+};
 export const CACHE_KEYS_KEPT = ['github:issues:is:open', 'repos:rest:dono/repo:languages', 'dev-console:issues:dono/repo'];
 
 export const INFERRED_SESSION = 's-inf';
@@ -166,7 +174,10 @@ export function writeLegacyDatabase(path: string): void {
   run(`INSERT INTO telemetry_samples VALUES ('local', 1, 10, 1.5, 8, 1000, NULL, NULL, NULL, NULL, '{}')`);
   // The GitHub cache creates its own table, outside the migrations.
   db.exec('CREATE TABLE github_cache (key TEXT PRIMARY KEY, value_json TEXT NOT NULL, fetched_at INTEGER NOT NULL, etag TEXT) STRICT');
-  for (const key of [...CACHE_KEYS_DROPPED, ...CACHE_KEYS_KEPT]) run('INSERT INTO github_cache VALUES (?, ?, 1, NULL)', key, '{}');
+  // Each row has its own value, time and etag, so the test can tell that the row moved whole.
+  for (const [i, key] of [...Object.keys(CACHE_KEYS_RENAMED), ...CACHE_KEYS_KEPT].entries()) {
+    run('INSERT INTO github_cache VALUES (?, ?, ?, ?)', key, JSON.stringify({ from: key }), 1000 + i, `etag-${i}`);
+  }
   db.close();
 }
 
