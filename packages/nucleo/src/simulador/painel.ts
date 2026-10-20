@@ -3,13 +3,15 @@
 // vocabulário do simulador: projetos sob /simulacao, repositório `exemplo/simulacao` e duas
 // contas sintéticas (UUIDs de zeros). A sessão do painel, seja qual for o id que ele mande, vira `sim-painel-esta`.
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AccountSource, Agent, AwaitingReason, Session, SessionStatus, TokenUsage } from '../model.ts';
 import { claudeAccountId, emptyTokenCounts } from '../model.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 import { atualizarPlano } from '../plano/gravacao.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
-import { linkSession, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
+import { linkSession, markPromoted, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
@@ -177,7 +179,8 @@ const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
   p5: [PERMISSAO, INTERROMPIDA],
   p6: [PERMISSAO, INTERROMPIDA, COM_ERRO],
   p7: [{ ...PERMISSAO, relacao: 'mae' }, COM_ERRO, { ...SUA_VEZ, relacao: 'filha' }],
-  p9: [PERMISSAO, INTERROMPIDA],
+  // As duas últimas só existem para a página Decisões (C21): sessões encerradas, fora do "precisam de você".
+  p9: [PERMISSAO, INTERROMPIDA, { slug: 'vitrine-demo', titulo: 'Kanban da vitrine', modelo: OPUS, conta: 'equipe', status: 'completed', updatedMin: 7 }, { ...COM_ERRO, titulo: 'Relatório mensal mais rápido', status: 'completed', erro: undefined, updatedMin: 39 }],
 };
 
 /** O que o git e o GitHub falsos respondem no cenário em uso. */
@@ -394,7 +397,7 @@ export const MAE_DO_P9 = 'sim-painel-kanban-ontem';
 /**
  * As decisões do P9, pela porta das decisões e pelas regras de lá (número, cadeia, família):
  * a sessão mãe decidiu ontem; esta, ligada a ela por /clear, decidiu o resto. Textos sintéticos.
- * Nos outros cenários, nada.
+ * Com elas, as outras três famílias da página Decisões (C21). Nos outros cenários, nada.
  */
 export async function semearDecisoesDoPainel(porta: DecisionPort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
   if (cenario !== 'p9') return;
@@ -420,5 +423,105 @@ export async function semearDecisoesDoPainel(porta: DecisionPort, cenario: Cenar
   await decidir(SESSAO_DO_PAINEL, 6, {
     origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:cards por coluna',
     choice: '10 cards por coluna, com "mostrar mais"', alternatives: ['20 por coluna', 'rolagem infinita'],
+  });
+  await semearDecisoesDaPagina(porta, agora);
+}
+
+/** Os registros a que a demonstração já promoveu decisões, por pasta sob /simulacao. */
+const REGISTROS_DA_DEMO = {
+  'vitrine-demo': ['0003-kanban-por-long-polling.md'],
+  'motor-de-regras': ['0004-cobranca-em-servico-a-parte.md', '0005-contrato-da-cobranca-primeiro.md'],
+  'painel-de-metricas': ['0006-cache-do-total-do-mes.md'],
+  'ahrena-demo': [],
+} as const;
+const registro = (pasta: keyof typeof REGISTROS_DA_DEMO, i: number) => `docs/decisoes/${REGISTROS_DA_DEMO[pasta][i]}`;
+
+/**
+ * Para o "Promover a registro" da --demo gravar de verdade sem tocar em nada da máquina: uma pasta
+ * por repositório sintético, sob `base` (uma pasta temporária), com `docs/decisoes` e os registros
+ * já promovidos (só o título). Devolve a troca de `/simulacao/<pasta>` pela pasta de verdade.
+ */
+export function pastasDosRegistrosDaDemo(base: string): (repo: string) => string | null {
+  for (const [pasta, nomes] of Object.entries(REGISTROS_DA_DEMO)) {
+    const dir = join(base, pasta, 'docs', 'decisoes');
+    mkdirSync(dir, { recursive: true });
+    for (const nome of nomes) writeFileSync(join(dir, nome), `# ${nome.slice(0, 4)} · registro sintético da demonstração\n`);
+  }
+  return (repo) => {
+    const pasta = repo.startsWith(`${RAIZ}/`) ? repo.slice(RAIZ.length + 1) : null;
+    return pasta && pasta in REGISTROS_DA_DEMO ? join(base, pasta) : null;
+  };
+}
+
+/** A sessão mãe da vitrine: a de ontem, antes do /clear. Só existe na porta das decisões. */
+export const MAE_DA_VITRINE = 'sim-painel-vitrine-ontem';
+
+type Rascunho = Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft> & { haMin: number; promovida?: string };
+
+/**
+ * As outras três famílias da página Decisões (C21, docs/wireframes/capturas/console-decisoes.png),
+ * cada uma num branch e numa pasta: `feat/42-kanban` (vitrine-demo, com a mãe de ontem),
+ * `refactor/pagamentos` (motor-de-regras) e `perf/47-relatorio` (painel-de-metricas), com vigentes,
+ * substituídas, promovidas a registro e a confirmar. Em ordem de `decidedAt`, para o número
+ * na família (D1, D2…) seguir o tempo. Os caminhos dos registros são fictícios, como as pastas.
+ */
+async function semearDecisoesDaPagina(porta: DecisionPort, agora: number): Promise<void> {
+  const agoraIso = iso(agora, 0);
+  let n = 0;
+  const decidir = async (sessionId: string, repo: string, branch: string, d: Rascunho) => {
+    const { haMin, promovida, ...resto } = d;
+    const { decision } = await registerDecision(
+      porta,
+      {
+        sourceKey: `sim:c21:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
+        message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(agora, haMin), metadata: { simulado: true }, ...resto,
+      },
+      agoraIso,
+    );
+    if (promovida) await markPromoted(porta, decision.id, promovida, agoraIso);
+  };
+
+  const vitrine = (sessionId: string, d: Rascunho) => decidir(sessionId, `${RAIZ}/vitrine-demo`, 'feat/42-kanban', d);
+  const kanban = 'sim-painel-vitrine-demo';
+  await vitrine(MAE_DA_VITRINE, { haMin: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await linkSession(porta, { sessionId: kanban, parentSessionId: MAE_DA_VITRINE, reason: 'clear', linkedAt: iso(agora, 60) }, agoraIso);
+  await vitrine(kanban, { haMin: 50, origin: 'plano', topic: 'plano', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'sessao' });
+  await vitrine(kanban, { haMin: 45, origin: 'pergunta', topic: 'kanban:banco', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'], scope: 'sessao' });
+  await vitrine(kanban, { haMin: 30, origin: 'permissao', topic: 'permissao:Bash npm run build', choice: 'Permitir npm run build sem perguntar', alternatives: ['perguntar a cada vez'], scope: 'sessao' });
+  await vitrine(kanban, {
+    haMin: 25, origin: 'pergunta', topic: 'kanban:atualizar', choice: 'Kanban atualiza por long polling', alternatives: ['recarregar a cada 5 s'], scope: 'branch',
+    promovida: registro('vitrine-demo', 0),
+  });
+  await vitrine(kanban, { haMin: 20, origin: 'pergunta', topic: 'kanban:card', choice: 'Card com 3 linhas: título, branch e PR', alternatives: ['card com o resumo da conversa'] });
+  await vitrine(kanban, { haMin: 16, origin: 'correcao', topic: 'kanban:banco', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'], scope: 'sessao' });
+  await vitrine(kanban, {
+    haMin: 8, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:encerradas', scope: 'sessao',
+    choice: 'Esconder sessões encerradas há mais de 7 dias', alternatives: ['mostrar todas'],
+  });
+
+  const pagamentos = (d: Rascunho) => decidir('sim-painel-motor-de-regras', `${RAIZ}/motor-de-regras`, 'refactor/pagamentos', d);
+  await pagamentos({
+    haMin: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
+    promovida: registro('motor-de-regras', 0),
+  });
+  await pagamentos({ haMin: 50, origin: 'pergunta', topic: 'pagamentos:pr', choice: 'Abrir o PR direto', alternatives: ['review antes do PR'] });
+  await pagamentos({
+    haMin: 40, origin: 'plano', topic: 'plano', choice: 'Contrato da API de cobrança antes do código', alternatives: ['começar pelo código'],
+    promovida: registro('motor-de-regras', 1),
+  });
+  await pagamentos({ haMin: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
+  await pagamentos({ haMin: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
+
+  const relatorio = (d: Rascunho) => decidir('sim-painel-painel-de-metricas', `${RAIZ}/painel-de-metricas`, 'perf/47-relatorio', d);
+  await relatorio({ haMin: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
+  await relatorio({ haMin: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
+  await relatorio({ haMin: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });
+  await relatorio({
+    haMin: 45, origin: 'pergunta', topic: 'relatorio:cache', choice: 'Cachear o total do mês por 5 min', alternatives: ['sem cache'], scope: 'branch',
+    promovida: registro('painel-de-metricas', 0),
+  });
+  await relatorio({
+    haMin: 40, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'relatorio:indice', scope: 'sessao',
+    choice: 'Índice composto em (mes, conta)', alternatives: ['view materializada'],
   });
 }
