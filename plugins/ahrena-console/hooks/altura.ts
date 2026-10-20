@@ -10,12 +10,18 @@ export const BORDA_DO_CARD = 2
  */
 export const LINHAS_DO_CARD = 5
 
+/**
+ * Um espaço de 1 (`gap`, `rowGap`, `paddingY`), em linhas do corpo. Medido no Desktop: um card de
+ * 7 linhas tem ~133 px (19 px por linha) e o espaço entre dois cards, ~10 px.
+ */
+export const ESPACO = 0.5
+
 /** Linhas que a grade ocupa: por linha da grade, a borda mais o card mais alto; e o espaço entre elas. */
 export function alturaDaGrade(linhas: readonly number[], porLinha: number): number {
   let total = 0
   for (let i = 0; i < linhas.length; i += porLinha) total += BORDA_DO_CARD + Math.max(...linhas.slice(i, i + porLinha))
   const fileiras = Math.ceil(linhas.length / porLinha)
-  return total + Math.max(0, fileiras - 1)
+  return total + Math.max(0, fileiras - 1) * ESPACO
 }
 
 /** Linhas que um texto ocupa numa largura, quebrando por palavra (estimativa conservadora). */

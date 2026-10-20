@@ -55,7 +55,7 @@ import {
   tokens,
   usd,
 } from './formato'
-import { alturaDaGrade, BORDA_DO_CARD, LINHAS_DO_CARD, linhasDoTexto } from './altura'
+import { alturaDaGrade, BORDA_DO_CARD, ESPACO, LINHAS_DO_CARD, linhasDoTexto } from './altura'
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
@@ -242,28 +242,19 @@ function pilulaDeMotivo(c: Contexto, key: string, motivo: NonNullable<SessaoDoPa
 
 /**
  * Cabeçalho de card (`.pc .t` do P1): ícone e título em versalete à esquerda; à direita um valor
- * pequeno, em cor neutra e sem caixa alta (`.pc .t .r`). Com `abrir`, o valor abre o detalhe.
+ * pequeno, em cor neutra e sem caixa alta (`.pc .t .r`). Não é clicável: no Desktop, todo Button é
+ * o botão nativo, no tamanho do corpo, e quebraria o cabeçalho.
  */
-function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, opcoes: { cor?: string; abrir?: (() => void) | null; key?: string } = {}) {
-  const { Box, Button, Text } = c.el
-  const valor = (
-    <Text mono size="caption" tabular color={opcoes.cor} dimColor={!opcoes.cor} wrap="truncate-end">
-      {direita}
-      {opcoes.abrir ? ' ›' : ''}
-    </Text>
-  )
+function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, opcoes: { cor?: string } = {}) {
+  const { Box, Text } = c.el
   return (
     <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
       <Text mono size="caption" weight="semibold" dimColor wrap="truncate-end">
         {icone} {titulo}
       </Text>
-      {opcoes.abrir ? (
-        <Button key={opcoes.key} plain onPress={opcoes.abrir}>
-          {valor}
-        </Button>
-      ) : (
-        valor
-      )}
+      <Text mono size="caption" tabular color={opcoes.cor} dimColor={!opcoes.cor} wrap="truncate-end">
+        {direita}
+      </Text>
     </Box>
   )
 }
@@ -290,16 +281,13 @@ function link(c: Contexto, key: string, href: string, texto: string) {
   )
 }
 
-/** Um texto que abre algo: no estilo do `pn-link`, ou neutro (`.ln mut` do P1, como o "+N concluídos"). */
+/**
+ * Um texto que abre algo, numa linha própria do card. No Desktop todo Button é nativo e ignora o
+ * estilo do Text de dentro: o rótulo vai em `label`, sem moldura (`plain`), e neutro com `dimColor`.
+ */
 function abre(c: Contexto, key: string, texto: string, acao: () => void, neutro = false) {
-  const { Button, Text } = c.el
-  return (
-    <Button key={key} plain onPress={acao}>
-      <Text mono size="footnote" color={neutro ? undefined : LARANJA} dimColor={neutro} underline={!neutro} wrap="truncate-end">
-        {texto}
-      </Text>
-    </Button>
-  )
+  const { Button } = c.el
+  return <Button key={key} plain dimColor={neutro} label={texto} onPress={acao} />
 }
 
 /** Colunas de texto dentro de um card: a largura menos a borda e o respiro. */
@@ -469,24 +457,14 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
   )
 }
 
-/** Um tile do P1 (`.tile`): o rótulo pequeno, o valor e, embaixo, a barra ou a linha. Com `abrir`, o rótulo abre o detalhe. */
-function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | string, rodape?: RenderElement | null, corValor?: string, abrir?: () => void) {
-  const { Box, Button, Text } = c.el
-  const titulo = (
-    <Text mono size="caption" weight="semibold" dimColor>
-      {rotulo}
-      {abrir ? ' ›' : ''}
-    </Text>
-  )
+/** Um tile do P1 (`.tile`): o rótulo pequeno, o valor e, embaixo, a barra ou a linha. */
+function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | string, rodape?: RenderElement | null, corValor?: string) {
+  const { Box, Text } = c.el
   return (
     <Box key={key} flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_KPI} paddingX={1}>
-      {abrir ? (
-        <Button key={`${key}-abrir`} plain onPress={abrir}>
-          {titulo}
-        </Button>
-      ) : (
-        titulo
-      )}
+      <Text mono size="caption" weight="semibold" dimColor>
+        {rotulo}
+      </Text>
       <Text mono size="footnote" weight="bold" color={corValor} wrap="truncate-end">
         {valor}
       </Text>
@@ -522,8 +500,8 @@ function tileCompactar(c: Contexto) {
 
 /**
  * O card Contexto e custo (pnMetricas do P1): "estimativa" à direita do cabeçalho e os quatro
- * tiles em 2×2. Até 79%, o Compactar fica no detalhe: o rótulo do tile Contexto abre a confirmação.
- * A partir de 80%, o "Compactar agora" toma o lugar do tile Background.
+ * tiles em 2×2. Até 79%, o card não tem Compactar (o P1 não tem, e o Desktop não desenha texto
+ * pequeno clicável); a partir de 80%, o "Compactar agora" toma o lugar do tile Background.
  */
 function cardContexto(c: Contexto, p: Painel | null) {
   const { Box, Svg } = c.el
@@ -534,11 +512,10 @@ function cardContexto(c: Contexto, p: Painel | null) {
   const erro = p?.sessao?.status === 'error'
   const bg = p?.background ?? { total: 0, primeiro: null }
   const tk = p?.tokens
-  const pedir = () => c.acoes.compactar('pedir')
   return cartao(c, 'card-contexto', [
     cabecalho(c, '◠', 'CONTEXTO E CUSTO', 'estimativa'),
     <Box flexDirection="row" gap={1}>
-      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined, alto ? undefined : pedir)}
+      {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
       {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
     </Box>,
     <Box flexDirection="row" gap={1}>
@@ -768,62 +745,90 @@ function linhaDePlano(c: Contexto, p: PlanoDaSessao, detalhe = false) {
   )
 }
 
+/** Quantos passos o card do Plano destaca ao lado do anel. */
+const PASSOS_NO_CARD = 3
+
 /**
- * O card Plano (pnPlano do P1): o anel com o % à esquerda e, à direita, "✓ N feitas", o passo atual
- * em negrito e "○ próximo · +N". A lista dos passos e os planos anteriores ficam no detalhe, que o
- * "N/M ›" do cabeçalho abre.
+ * Os passos que o card destaca: em volta do atual (o último feito, o atual e os próximos); sem
+ * atual, os primeiros pendentes; tudo feito, os últimos.
+ */
+export function passosEmDestaque(passos: readonly PassoDoPainel[]): PassoDoPainel[] {
+  if (passos.length <= PASSOS_NO_CARD) return [...passos]
+  const atual = passos.findIndex((x) => x.estado === 'in_progress')
+  const pendente = passos.findIndex((x) => x.estado === 'pending')
+  const foco = atual >= 0 ? atual : pendente >= 0 ? pendente : passos.length - 1
+  const inicio = Math.max(0, Math.min(foco - 1, passos.length - PASSOS_NO_CARD))
+  return passos.slice(inicio, inicio + PASSOS_NO_CARD)
+}
+
+/**
+ * O card Plano (pnPlano do P1, com a área útil): o anel com o % à esquerda e, à direita, três
+ * passos do plano em destaque (✓ feito, ● o atual em negrito, ○ pendente). Os outros passos e os
+ * planos anteriores ficam no detalhe, que a última linha abre.
  */
 function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
   const { Box, Text, Svg } = c.el
   const anteriores = planos.filter((x) => x.resultado !== 'atual')
-  const abrir = p || anteriores.length ? c.acoes.verPlanos : null
   const valor = p ? `${p.feitos}/${p.total}` : '0/0'
-  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '☰', 'PLANO', valor, { cor: LARANJA, abrir, key: 'ver-planos' })]
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '☰', 'PLANO', valor, { cor: LARANJA })]
   if (!p) {
     corpo.push(
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {anteriores.length ? 'nenhum plano em andamento' : 'sem plano nesta sessão'}
       </Text>,
-      anteriores.length ? abre(c, 'ver-planos-anteriores', `${planosAnteriores(anteriores.length)} ›`, c.acoes.verPlanos) : null,
+      anteriores.length ? abre(c, 'ver-planos', `${planosAnteriores(anteriores.length)} ›`, c.acoes.verPlanos, true) : null,
     )
     return cartao(c, 'card-plano', corpo)
   }
   const pct = p.total ? Math.round((p.feitos / p.total) * 100) : 0
-  // O que vem depois do atual: o próximo e quantos ainda faltam depois dele.
-  const depois = p.atual ? p.proximo : null
+  const passos = p.passos ?? []
+  const destaque = passosEmDestaque(passos)
+  const linha = (x: PassoDoPainel) => {
+    const feito = x.estado === 'completed'
+    const atual = x.estado === 'in_progress'
+    return (
+      <Text key={`passo-${x.id}`} mono size="footnote" wrap="truncate-end" dimColor={!feito && !atual}>
+        <Text color={feito ? VERDE : atual ? LARANJA : undefined}>{feito ? '✓' : atual ? '●' : '○'} </Text>
+        <Text weight={atual ? 'bold' : undefined}>{atual ? (x.textoAtivo ?? x.texto) : x.texto}</Text>
+      </Text>
+    )
+  }
+  // Sem os passos (núcleo antigo): o resumo do P1, "✓ N feitas", o atual e o próximo.
+  const resumo = [
+    <Text key="feitas" mono size="footnote" color={VERDE} wrap="truncate-end">
+      ✓ {p.feitos} {p.feitos === 1 ? 'feita' : 'feitas'}
+    </Text>,
+    <Text key="atual" mono size="footnote" wrap="truncate-end">
+      {p.atual ? (
+        <Text>
+          <Text color={LARANJA}>● </Text>
+          <Text weight="bold">{p.atual}</Text>
+        </Text>
+      ) : (
+        <Text color={VERDE} weight="semibold">
+          concluído ✓
+        </Text>
+      )}
+    </Text>,
+    p.atual && p.proximo ? (
+      <Text key="proximo" mono size="footnote" dimColor wrap="truncate-end">
+        ○ {p.proximo}
+        {p.restantes ? ` · +${p.restantes}` : ''}
+      </Text>
+    ) : null,
+  ]
   corpo.push(
     <Box flexDirection="row" gap={2} alignItems="center">
       <Svg source={anelSvg(pct)} alt={`plano ${pct}% feito, ${p.feitos} de ${p.total}`} width={50} height={50} />
       <Box flexDirection="column" flexShrink={1} minWidth={0}>
-        <Text mono size="footnote" color={VERDE} wrap="truncate-end">
-          ✓ {p.feitos} {p.feitos === 1 ? 'feita' : 'feitas'}
-        </Text>
-        <Text mono size="footnote" wrap="truncate-end">
-          {p.atual ? (
-            <Text>
-              <Text color={LARANJA}>● </Text>
-              <Text weight="bold">{p.atual}</Text>
-            </Text>
-          ) : p.proximo ? (
-            <Text>
-              <Text dimColor>○ </Text>
-              <Text weight="bold">Próximo: {p.proximo}</Text>
-            </Text>
-          ) : (
-            <Text color={VERDE} weight="semibold">
-              concluído ✓
-            </Text>
-          )}
-        </Text>
-        {depois ? (
-          <Text mono size="footnote" dimColor wrap="truncate-end">
-            ○ {depois}
-            {p.restantes ? ` · +${p.restantes}` : ''}
-          </Text>
-        ) : null}
+        {destaque.length ? destaque.map(linha) : resumo}
       </Box>
     </Box>,
   )
+  // O resto dos passos e os planos anteriores, no detalhe.
+  const fora = Math.max(0, passos.length - destaque.length)
+  const partes = [fora ? `+${fora} ${fora === 1 ? 'passo' : 'passos'}` : null, anteriores.length ? planosAnteriores(anteriores.length).slice(1) : null].filter(Boolean)
+  corpo.push(abre(c, 'ver-planos', partes.length ? `${partes.join(' · ')} ›` : 'ver o plano ›', c.acoes.verPlanos, true))
   return cartao(c, 'card-plano', corpo)
 }
 
@@ -851,18 +856,6 @@ function linhaDeSubagente(c: Contexto, s: SubagenteDoPainel, inteiro = false) {
   )
 }
 
-/** "+N", que abre a lista completa. */
-/** "ver todas as 15 sessões filhas": abre a lista completa, dizendo do que é e quantas são. */
-function maisItens(c: Contexto, key: string, texto: string, abrir: () => void) {
-  const { Button, Text } = c.el
-  return (
-    <Button key={key} plain onPress={abrir}>
-      <Text mono size="footnote" color={LARANJA} underline wrap="truncate-end">
-        {texto}
-      </Text>
-    </Button>
-  )
-}
 
 /** Os ativos primeiro; depois os encerrados, mais recentes antes. */
 function subagentesEmOrdem(s: Painel['subagentes']) {
@@ -907,8 +900,7 @@ function subagentesFora(fora: SubagenteDoPainel[]): string {
  */
 function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const { Text, Svg } = c.el
-  const abrir = s.itens.length ? c.acoes.verSubagentes : null
-  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑂', 'SUBAGENTES', plural(s.ativos, 'ativo', 'ativos'), { abrir, key: 'ver-subagentes' })]
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑂', 'SUBAGENTES', plural(s.ativos, 'ativo', 'ativos'))]
   if (s.itens.length === 0) {
     corpo.push(
       <Text mono size="footnote" dimColor>
@@ -923,7 +915,7 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
     // Sem `width`, a barra ocupa a largura do card, de borda a borda (P1).
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} />,
     ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
-    fora.length > 0 && abre(c, 'mais-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true),
+    fora.length > 0 && abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true),
   )
   return cartao(c, 'card-subagentes', corpo)
 }
@@ -939,13 +931,8 @@ function nomeDaSessao(c: Contexto, key: string, titulo: string, local: string | 
     </Text>
   )
   // No macOS, a API abre a conversa direto; fora dele, o link de reserva passa pelo navegador.
-  if (abreDireto(c, local)) {
-    return (
-      <Button key={key} plain onPress={() => c.acoes.abrirSessao(local!, titulo)}>
-        {texto}
-      </Button>
-    )
-  }
+  // No Desktop o Button é nativo e ignora o Text de dentro: o nome vai no `label`.
+  if (abreDireto(c, local)) return <Button key={key} plain label={rotulo} onPress={() => c.acoes.abrirSessao(local!, titulo)} />
   const href = enderecoDaSessao(c, local)
   if (href) return comoNoCard ? <Link key={key} href={href}>{texto}</Link> : <Link key={key} href={href} label={rotulo} />
   return (
@@ -1025,8 +1012,7 @@ const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
 function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   const filhas = filhasEmOrdem(todasAsFilhas)
   const { Text } = c.el
-  const abrir = filhas.length ? c.acoes.verFilhas : null
-  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length), { abrir, key: 'ver-filhas' })]
+  const corpo: (RenderElement | false | null)[] = [cabecalho(c, '⑃', 'SESSÕES FILHAS', String(filhas.length))]
   if (filhas.length === 0) {
     corpo.push(
       <Text mono size="footnote" dimColor>
@@ -1038,7 +1024,7 @@ function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   corpo.push(
     // O nome no card é cortado só no link (que não quebra linha); o resto corta com reticências.
     ...filhas.slice(0, LINHAS_DA_LISTA).map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3, false, false)),
-    abre(c, 'todas-as-filhas', `ver todas as ${filhas.length} ›`, c.acoes.verFilhas),
+    abre(c, 'ver-filhas', `ver todas as ${filhas.length} ›`, c.acoes.verFilhas, true),
   )
   return cartao(c, 'card-filhas', corpo)
 }
@@ -1790,7 +1776,8 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   const util = g.largura - 4
   // No desktop a borda é um traço fino, não uma linha: o topo (logo e duas linhas de texto) ocupa
   // 3, e cada faixa de uma linha com borda (decisões, precisam, PRs) ocupa 2, com o botão.
-  const partes = [3, 1]
+  // O topo ocupa 3; o rótulo da seção, 2 (o chip com borda é mais alto que uma linha).
+  const partes = [3, 2]
   if (compactar === 'confirmar') partes.push(4)
   const r = p.decisoes?.retomada
   if (r && r.n > 0) partes.push(2 + 1 + (estreito ? 3 : 2) + 1)
@@ -1801,7 +1788,7 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   partes.push(linhasDePrecisam(p, util, estreito))
   if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDePrs(p.prs!.total, estreito), util - BOTAO_VER))
   partes.push(linhasDoRodape(p))
-  return 2 + partes.reduce((a, b) => a + b, 0) + (partes.length - 1)
+  return 2 * ESPACO + partes.reduce((a, b) => a + b, 0) + (partes.length - 1) * ESPACO
 }
 
 /** O resumo de um card que não coube na grade, para a faixa de resumos. */
@@ -1850,9 +1837,7 @@ function faixaDeResumos(c: Contexto, p: Painel, ids: readonly string[], largura:
             </Text>
           )
           return r.abrir ? (
-            <Button key={`resumo-${id}`} plain onPress={r.abrir}>
-              {texto}
-            </Button>
+            <Button key={`resumo-${id}`} plain label={r.texto} onPress={r.abrir} />
           ) : (
             <Box key={`resumo-${id}`}>{texto}</Box>
           )
@@ -1868,7 +1853,7 @@ const linhasInternasDosResumos = (c: Contexto, p: Painel, ids: readonly string[]
 
 /** Linhas do card de resumos, com o espaço antes dele: a borda fina conta uma linha, como nas faixas. */
 const linhasDosResumos = (c: Contexto, p: Painel, ids: readonly string[], largura: number) =>
-  ids.length ? 1 + (LINHA_SOLTA - 1) + linhasInternasDosResumos(c, p, ids, largura) : 0
+  ids.length ? ESPACO + (LINHA_SOLTA - 1) + linhasInternasDosResumos(c, p, ids, largura) : 0
 
 /** Os cards da grade, na ordem do P1. */
 const CARDS_DA_GRADE = ['sessao', 'contexto', 'trabalho', 'plano', 'subagentes', 'filhas'] as const
