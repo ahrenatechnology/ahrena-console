@@ -32,7 +32,7 @@ export const TELAS = [
     titulo: 'Sessão',
     sub: null,
     icone: 'sessoes',
-    arquivo: null, // #29 e #30
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
   },
   {
     id: 'analytics',
