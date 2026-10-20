@@ -1,0 +1,55 @@
+# Update channel of the desktop app: the app reads its `latest.json` from the fixed release
+# `app-updates` (plugins.updater.endpoints in apps/desktop/src-tauri/tauri.conf.json), not from
+# the repository's Latest release, which belongs to the plugin releases (v*).
+#
+# When an `app-v*` release is published (the draft from app-release.yml, published by hand), this
+# copies its `latest.json` to `app-updates`. A draft never reaches the channel. "Run workflow" with
+# a tag puts that version back on the channel (to roll back, or to retry a failed copy).
+
+name: app-updates
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published app-v… release whose latest.json goes to the channel
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-updates
+  cancel-in-progress: false
+
+jobs:
+  channel:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'app-v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      CHANNEL: app-updates
+    steps:
+      - name: Fetch latest.json from the release
+        run: |
+          case "$TAG" in app-v*) ;; *) echo "::error::$TAG is not an app-v… tag"; exit 1 ;; esac
+          [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = false ] || { echo "::error::$TAG is still a draft"; exit 1; }
+          gh release download "$TAG" -p latest.json -D out
+          version=$(jq -r .version out/latest.json)
+          [ "app-v$version" = "$TAG" ] || { echo "::error::latest.json says $version, the tag is $TAG"; exit 1; }
+          for p in darwin-aarch64 darwin-x86_64; do
+            jq -e --arg p "$p" '.platforms[$p].signature | length > 0' out/latest.json >/dev/null \
+              || { echo "::error::latest.json of $TAG has no signed $p"; exit 1; }
+          done
+      - name: Put it on the channel
+        run: |
+          if ! gh release view "$CHANNEL" >/dev/null 2>&1; then
+            gh release create "$CHANNEL" --title "Canal de atualização do app desktop" --latest=false --prerelease \
+              --notes "Só guarda o latest.json que o app desktop lê para se atualizar. As versões estão nas releases app-v…."
+          fi
+          gh release upload "$CHANNEL" out/latest.json --clobber
+          echo "Channel $CHANNEL now offers $TAG" >> "$GITHUB_STEP_SUMMARY"

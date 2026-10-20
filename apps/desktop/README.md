@@ -130,7 +130,7 @@ O app só se atualiza com uma chave própria, que assina cada versão. Uma vez:
 
 Sem o segredo, a build sai sem updater e o workflow avisa; com o segredo e a pública vazia, falha. **Perder a chave privada impede atualizar quem já instalou:** cada um teria de baixar o DMG de novo. Guarde-a também fora do GitHub.
 
-O app procura a versão nova em `releases/latest/download/latest.json`, isto é, na release marcada como **Latest** do repositório. A release do app tem de ser a Latest; qualquer outra release deste repositório deve sair sem marcar Latest, senão o app deixa de achar as atualizações.
+O app procura a versão nova em `releases/download/app-updates/latest.json`: a release fixa `app-updates`, que é só o canal de atualização. Quando um rascunho `app-v…` é publicado, o [app-updates.yml](../../.github/workflows/app-updates.yml) copia o `latest.json` dele para lá; rascunho nunca chega ao canal. Por isso não importa qual release é a **Latest** do repositório (a Latest é das releases do plugin). Para voltar o canal a uma versão anterior, rode o `app-updates` com a tag dela.
 
 ### Notarização
 
