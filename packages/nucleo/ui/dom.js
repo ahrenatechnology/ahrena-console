@@ -39,6 +39,10 @@ const ICONES = {
   'mural-interrompida': '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
   'mural-sua-vez': '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
   'mural-prompt': '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  // Sessões (C3, #28)
+  buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'abrir-lista': '<path d="m6 9 6 6 6-6"/>',
+  inverter: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
 };
 
 const SVG = 'http://www.w3.org/2000/svg';
