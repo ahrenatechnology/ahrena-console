@@ -44,6 +44,54 @@ export interface ListEventsQuery {
   cursor?: string | null;
 }
 
+/**
+ * Os eventos de todas as sessões, para o feed (#94). Os filtros se somam (E).
+ * Duas posições, num cursor opaco só:
+ * - `before` pagina para trás por `createdAt` (depois `id`), entre os eventos que já existiam no
+ *   primeiro pedido: o que foi gravado depois não entra, para não repetir o que veio pelo ao vivo;
+ * - `after` é o ao vivo: o que foi GRAVADO depois da posição, pela ordem de gravação, não pelo
+ *   `createdAt`. Assim entra o evento atrasado (backfill do transcript) com `createdAt` mais velho.
+ *   Cada adaptador guarda essa ordem (SQLite: a coluna `seq`; DynamoDB: um contador por item).
+ */
+export interface ListRecentEventsQuery {
+  /** Padrão 50, máximo 500. */
+  limit?: number;
+  /** Ao vivo: só os gravados depois desta posição (o `liveCursor` de uma resposta). Não combina com `before`. */
+  after?: string | null;
+  /** Página mais velha: o `nextCursor` de uma resposta. */
+  before?: string | null;
+  sessionId?: string;
+  /** Só estes tipos; lista vazia não traz nada. */
+  types?: readonly string[];
+  /** Fora estes tipos. */
+  excludeTypes?: readonly string[];
+  toolName?: string;
+  /** Contém este texto no `summary` ou no `toolName`, sem diferenciar maiúsculas (ASCII), sem curinga. */
+  text?: string;
+  /** `createdAt` maior ou igual (ISO 8601 UTC). */
+  createdFrom?: string;
+  /** `createdAt` menor que (ISO 8601 UTC). */
+  createdUntil?: string;
+}
+
+export interface RecentEventsPage {
+  /** Mais novos primeiro, por `createdAt` e depois `id`. No ao vivo, o lote mais antigo gravado vem primeiro. */
+  items: SessionEvent[];
+  /**
+   * Para `after` no próximo pedido do ao vivo. Sem nada gravado desde o `after`, é o mesmo `after`;
+   * `null` só quando não há evento nenhum.
+   */
+  liveCursor: string | null;
+  /** Para `before`; `null` quando acabou (e sempre no ao vivo). */
+  nextCursor: string | null;
+}
+
+/** Os valores distintos para as opções dos filtros do feed, em ordem alfabética. */
+export interface EventFacets {
+  types: string[];
+  toolNames: string[];
+}
+
 export interface StoragePort {
   /** Grava a sessão inteira (cria ou substitui). */
   putSession(session: Session): Promise<void>;
@@ -66,6 +114,10 @@ export interface StoragePort {
   appendEvent(event: SessionEvent): Promise<boolean>;
   /** Em ordem cronológica. */
   listEvents(sessionId: string, query?: ListEventsQuery): Promise<Page<SessionEvent>>;
+  /** Todas as sessões, mais novos primeiro, com filtros e o ao vivo (feed, #94). */
+  listRecentEvents(query?: ListRecentEventsQuery): Promise<RecentEventsPage>;
+  /** Tipos e ferramentas distintos dos eventos, até `limit` de cada (padrão 100). */
+  listEventFacets(limit?: number): Promise<EventFacets>;
 
   /** Grava o bucket inteiro, substituindo o anterior com a mesma chave. */
   putTokenUsage(usage: TokenUsage): Promise<void>;

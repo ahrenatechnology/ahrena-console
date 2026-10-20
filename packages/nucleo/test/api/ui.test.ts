@@ -200,9 +200,10 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, Kanban, o Kanban do projeto, Analytics e Histórico; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'kanban', 'projeto', 'analytics', 'historico']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics e Histórico; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'historico']);
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
+    assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');

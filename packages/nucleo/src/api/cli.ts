@@ -61,6 +61,7 @@ import {
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
+import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -316,6 +317,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
+  eventos: new FeedDeEventos({ storage }),
   frota: mcp.frota,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),

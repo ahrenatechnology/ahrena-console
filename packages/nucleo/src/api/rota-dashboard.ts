@@ -14,6 +14,7 @@
 
 import { agregarCusto, diaDe, type RelatorioDeCusto } from '../custo/agregacao.ts';
 import type { EstadoDoInbox } from '../estados/leitura.ts';
+import { fraseDoEvento } from './frase-do-evento.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
 import { minutosDesde, projetoDe, type LeituraDaFrota, type SessaoDaFrota } from '../mcp/frota.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -357,40 +358,32 @@ function aplicar(l: Leitura, e: SessionEvent, agora: number): void {
       if (!principal) return;
       l.ultimaFerramenta = { nome: e.toolName, resumo: e.summary };
       if (e.toolName === 'Agent' || e.toolName === 'Task') {
-        const tipo = str(obj(d?.tool_input)?.subagent_type);
-        anotar(l, `Subagente ${tipo ?? ''} iniciado`.replace(/\s+/g, ' '), 'active', e.createdAt);
+        anotar(l, fraseDoEvento(e)!, 'active', e.createdAt);
       }
       return;
     }
     case 'SubagentStop':
-      anotar(l, `Subagente ${e.summary ?? ''} terminou`.replace(/\s+/g, ' '), 'active', e.createdAt);
+      anotar(l, fraseDoEvento(e)!, 'active', e.createdAt);
       return;
     case 'Notification': {
       const tipo = str(d?.notification_type);
-      if (tipo === 'elicitation_dialog') anotar(l, 'Fez uma pergunta', 'waiting', e.createdAt);
-      else if (tipo === 'permission_prompt') {
-        const f = l.ultimaFerramenta;
-        const qual = f?.nome ? [f.nome, f.resumo && f.resumo !== f.nome ? f.resumo : null].filter(Boolean).join(' ') : null;
-        anotar(l, qual ? `Pede permissão: ${qual}` : 'Pede permissão', 'waiting', e.createdAt);
+      if (tipo === 'elicitation_dialog' || tipo === 'permission_prompt') {
+        anotar(l, fraseDoEvento(e, { ultimaFerramenta: l.ultimaFerramenta })!, 'waiting', e.createdAt);
       }
       return;
     }
-    case 'Stop': {
-      const s = l.ultimoPrompt !== null && Number.isFinite(t) ? (t - l.ultimoPrompt) / 1000 : null;
-      anotar(l, s !== null && s >= 0 && s < 24 * 3600 ? `Turno concluído em ${duracao(s)}` : 'Turno concluído', 'active', e.createdAt);
+    case 'Stop':
+      anotar(l, fraseDoEvento(e, { ultimoPrompt: l.ultimoPrompt })!, 'active', e.createdAt);
       return;
-    }
     case 'APIError':
-    case 'StopFailure': {
-      const codigo = codigoDoErro(e.summary ?? str(d?.error) ?? str(d?.message));
-      anotar(l, codigo ? `Erro de API ${codigo}` : 'Erro de API', 'error', e.createdAt);
+    case 'StopFailure':
+      anotar(l, fraseDoEvento(e)!, 'error', e.createdAt);
       return;
-    }
     case 'SessionStart':
-      anotar(l, e.summary === 'resume' ? 'Sessão retomada' : e.summary === 'compact' ? 'Contexto compactado' : 'Sessão iniciada', 'active', e.createdAt);
+      anotar(l, fraseDoEvento(e)!, 'active', e.createdAt);
       return;
     case 'SessionEnd':
-      anotar(l, 'Sessão encerrada', 'completed', e.createdAt);
+      anotar(l, fraseDoEvento(e)!, 'completed', e.createdAt);
       return;
   }
 }
@@ -412,19 +405,6 @@ export function badgeDe(estado: EstadoDoInbox): StatusDoBadge {
   if (estado === 'error') return 'error';
   if (estado === 'completed' || estado === 'abandoned') return estado;
   return 'active';
-}
-
-/** Só o código: o status HTTP e o tipo do erro da API, nunca a mensagem. */
-function codigoDoErro(texto: string | null): string | null {
-  if (!texto) return null;
-  const partes = [/\b([45]\d\d)\b/.exec(texto)?.[1], /\b([a-z]+(?:_[a-z]+)*_error)\b/.exec(texto)?.[1]].filter(Boolean);
-  return partes.length > 0 ? partes.join(' · ') : null;
-}
-
-function duracao(s: number): string {
-  if (s < 60) return `${s.toFixed(1).replace('.', ',')} s`;
-  const m = Math.round(s / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
 /** Uma linha só, sem quebra, cortada com reticências. */
