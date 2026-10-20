@@ -35,15 +35,6 @@ export const TELAS = [
     arquivo: '/ui/telas/sessoes.js', // #28
   },
   {
-    id: 'detalhe',
-    rota: '/ui/sessoes/:id',
-    acende: 'sessoes',
-    titulo: 'Sessão',
-    sub: null,
-    icone: 'sessoes',
-    arquivo: '/ui/telas/detalhe.js', // #29 e #30
-  },
-  {
     id: 'feed',
     rota: '/ui/feed',
     item: { rotulo: 'Feed de atividade', icone: 'atividade' },
@@ -51,6 +42,24 @@ export const TELAS = [
     sub: 'Todos os eventos das sessões, ao vivo',
     icone: 'atividade',
     arquivo: '/ui/telas/feed.js', // #94
+  },
+  {
+    id: 'kanban',
+    rota: '/ui/kanban',
+    item: { rotulo: 'Kanban', icone: 'kanban' },
+    titulo: 'Kanban',
+    sub: 'As sessões por status, só leitura',
+    icone: 'kanban',
+    arquivo: '/ui/telas/kanban.js', // #31
+  },
+  {
+    id: 'detalhe',
+    rota: '/ui/sessoes/:id',
+    acende: 'sessoes',
+    titulo: 'Sessão',
+    sub: null,
+    icone: 'sessoes',
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
   },
   {
     id: 'projeto',
