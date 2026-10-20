@@ -13,7 +13,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
-| `telas/` | As telas, uma por arquivo |
+| `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mu-`), para não disputar `moldura.css` |
+| `telas/` | As telas, uma por arquivo. `mural.js` (C2, #34) lê `GET /api/mural`; o filtro Todas/Esperando/Ativas é no cliente |
 
 ## Registrar uma tela
 
@@ -68,4 +69,4 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 - **Toda leitura passa por `ler()`**, nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
-- **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe.
+- **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
