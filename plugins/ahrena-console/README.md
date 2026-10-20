@@ -4,7 +4,7 @@ Plugin do Claude Code com o painel da sessão (`/console`), construído sobre os
 
 O painel olha a sessão em que está aberto:
 
-- **Esta sessão:** status com motivo e tempo, modelo, turno, o que ela faz agora e, quando ela espera por você, a faixa com a pergunta, a permissão ou o erro inteiros (P1 a P6);
+- **Esta sessão:** status com motivo e tempo, modelo, turno (a linha do modelo nunca corta: sem caber, "Opus 5.5" vira "Opus", depois "turno 262" vira "t262" e, por último, ela quebra), o que ela faz agora e, quando ela espera por você, a faixa com a pergunta, a permissão ou o erro inteiros (P1 a P6);
 - **Contexto e custo:** contexto usado, custo estimado com a curva da sessão, tokens e processos em background;
 - **Trabalho:** a issue e o PR achados pelo branch, com sub-issues, CI com contagem ("CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7") e review;
 - **Plano, subagentes e sessões filhas:** o que roda dentro dela (P4). O card Plano é o do P1: o anel com o % à esquerda e, à direita, "✓ N feitas", o passo atual em negrito e "○ próximo · +N". O "N/M ›" do cabeçalho abre o detalhe, com os passos do plano atual e os anteriores com ✓ (concluído) ou ◐ (abandonado), o resumo e a duração (#131);
@@ -17,7 +17,7 @@ O painel olha a sessão em que está aberto:
 - **Compactar (0.0.9):** fora do cabeçalho do card, que diz "estimativa", como no P1. Até 79%, o rótulo "CONTEXTO ›" do tile abre a confirmação; a partir de 80%, o "Compactar agora" toma o lugar do tile Background, e a grade 2×2 fica. Pede confirmação, compacta só esta sessão (`$.session.compact()`, o mesmo do `/compact`), mostra "compactando…" até terminar e diz o resultado, ou o motivo quando o engine recusa (no meio de um turno);
 - **A pergunta desta sessão no topo (#140):** quando o turno termina com a caixa de próximo passo do Desktop (`wrap_up` com `ask`) ou com um AskUserQuestion, a pergunta aparece no topo, inteira e em destaque. Na caixa de próximo passo, cada resposta com mensagem é um botão que a manda ao chat (`$.prompt.submit`, como a pessoa); as ações do app (commit, criar PR) e o AskUserQuestion se respondem no chat ("responder no chat ↓"). O mod captura a pergunta direto do engine (`tool.call`), sem passar pelo núcleo. Ela fica no `$.state` (sobrevive a reload) e só sai quando a pessoa responde (um prompt dela, no Desktop, no terminal ou pelo celular, ou o clique no botão); uma mensagem automática (outra sessão, notificação, gatilho, plugin) não a tira;
 - **Um redesenho só quando a tela muda (0.0.14):** cada redesenho troca os handles dos botões, e um clique com o handle antigo se perde. O polling compara o desenho, não os dados: o que muda nos dados sem mudar a tela não redesenha; o que troca os botões redesenha na hora; números e textos, no máximo a cada 15 s;
-- **Rodapé:** "plugin 0.0.29 · api 0.0.1 (<commit>)", com o commit do código que a API carregou. Se a pasta da API já está em outro commit, uma segunda linha pede para reiniciar a API;
+- **Rodapé:** "plugin 0.0.30 · api 0.0.1 (<commit>)", com o commit do código que a API carregou. Se a pasta da API já está em outro commit, uma segunda linha pede para reiniciar a API;
 - **De fora, uma linha:** "N precisam de você", somando todas as contas, com a divisão por conta ao passar o mouse; "Ver" abre a lista, só a família ou a máquina inteira (P7);
 - **Sua vez × precisa de você × PRs (#140):** "N precisam de você" conta só as sessões bloqueadas até você agir: permissão, pergunta com opções, plano para aprovar, decisão pedida no fechamento do turno e erro. A sua vez no bate-bola (o turno acabou, Esc, sessão nova) aparece ao lado em cor neutra, "M na sua vez", sem somar; na tela "Ver", fica num grupo à parte. Com zero, "○ ninguém mais precisa de você" em cor neutra e sem "Ver" (P1). Os PRs abertos pelas sessões que aguardam aprovação (review pendente no GitHub) têm um indicador próprio, em laranja, "N PRs aguardando sua aprovação" (no estreito, "N PRs p/ aprovar"), com a lista de links;
 - **Sem o núcleo:** a última leitura, o aviso e uma nova tentativa a cada 5 s (P8).
@@ -28,9 +28,17 @@ A conta da sessão aparece ao lado de "ESTA SESSÃO", com o rótulo e a cor que 
 
 O plugin é por pasta de configuração (decisão 0006): instale em cada `CLAUDE_CONFIG_DIR` que usar.
 
+No Claude Code:
+
 ```
-/plugin install ahrena-console --marketplace ahrenatechnology/ahrena-console
+/plugin marketplace add ahrenatechnology/ahrena-console
 ```
+
+```
+/plugin install ahrena-console@ahrena-console
+```
+
+Depois, `/reload-plugins` e `/console`. Para atualizar, `/plugin marketplace update ahrena-console`.
 
 Pelo terminal, o mesmo em dois passos (para testar um branch, acrescente `@<branch>` ao repositório):
 
