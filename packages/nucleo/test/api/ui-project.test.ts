@@ -15,77 +15,78 @@ import { findScreen, SCREENS } from '../../ui/screens.js';
 
 instalarDomFalso();
 
-type Card = Record<string, unknown> & { itemId: string; raiaId: string | null; marco: string | null };
-type Raia = { id: string | null; nome: string; cor: string | null; cards: Card[] };
-type Quadro = { projeto: Record<string, unknown>; raias: Raia[]; marcos: string[]; total: number; lidoEm: number; desatualizado: boolean; reason: string | null; fonte: string };
+// The board as the API answers it (English since issue 173, phase 2b).
+type Card = Record<string, unknown> & { itemId: string; laneId: string | null; milestone: string | null };
+type Lane = { id: string | null; name: string; color: string | null; cards: Card[] };
+type Quadro = { project: Record<string, unknown>; lanes: Lane[]; milestones: string[]; total: number; fetchedAt: number; stale: boolean; reason: string | null; source: string };
 
-const card = (itemId: string, raiaId: string | null, extra: Record<string, unknown>): Card => ({
+const card = (itemId: string, laneId: string | null, extra: Record<string, unknown>): Card => ({
   itemId,
-  tipo: 'Issue',
-  tipoDaIssue: null,
-  numero: null,
-  titulo: '',
+  type: 'Issue',
+  issueType: null,
+  number: null,
+  title: '',
   url: null,
   repo: 'dono/repo',
-  estado: 'OPEN',
-  marco: null,
+  state: 'OPEN',
+  milestone: null,
   subIssues: null,
   pr: null,
-  raiaId,
+  laneId,
   ...extra,
 });
 
 function quadroFalso(): Quadro {
   return {
-    projeto: { dono: 'dono', numero: 3, titulo: 'Ahrena Console', url: null, campo: 'Status' },
-    raias: [
-      { id: null, nome: 'Sem status', cor: null, cards: [card('I-1', null, { tipoDaIssue: 'Epic', numero: 1, titulo: 'Épico solto' })] },
-      { id: 'bk', nome: 'Backlog', cor: 'GRAY', cards: [card('I-80', 'bk', { tipoDaIssue: 'Tech Task', numero: 80, titulo: 'Kanban do projeto no artefato', marco: 'M2 · Artefato' })] },
-      { id: 'rd', nome: 'Ready', cor: 'BLUE', cards: [card('I-35', 'rd', { tipoDaIssue: 'Story', numero: 35, titulo: 'Esta sessão: estado, contexto e custo', marco: 'M1 · Local' })] },
+    project: { owner: 'dono', number: 3, title: 'Ahrena Console', url: null, field: 'Status' },
+    lanes: [
+      { id: null, name: 'Sem status', color: null, cards: [card('I-1', null, { issueType: 'Epic', number: 1, title: 'Épico solto' })] },
+      { id: 'bk', name: 'Backlog', color: 'GRAY', cards: [card('I-80', 'bk', { issueType: 'Tech Task', number: 80, title: 'Kanban do projeto no artefato', milestone: 'M2 · Artefato' })] },
+      { id: 'rd', name: 'Ready', color: 'BLUE', cards: [card('I-35', 'rd', { issueType: 'Story', number: 35, title: 'Esta sessão: estado, contexto e custo', milestone: 'M1 · Local' })] },
       {
         id: 'ip',
-        nome: 'In Progress',
-        cor: 'YELLOW',
-        cards: [card('I-42', 'ip', { tipoDaIssue: 'User Story', numero: 42, titulo: 'Kanban de sessões', marco: 'M1 · Local', subIssues: { feitas: 2, total: 4 }, pr: { numero: 78, url: null, ci: 'rodando', review: null } })],
+        name: 'In Progress',
+        color: 'YELLOW',
+        cards: [card('I-42', 'ip', { issueType: 'User Story', number: 42, title: 'Kanban de sessões', milestone: 'M1 · Local', subIssues: { done: 2, total: 4 }, pr: { number: 78, url: null, ci: 'running', review: null } })],
       },
       {
         id: 'rv',
-        nome: 'In Review',
-        cor: 'PURPLE',
+        name: 'In Review',
+        color: 'PURPLE',
         cards: [
-          card('I-92', 'rv', { tipoDaIssue: 'Task', numero: 92, titulo: 'Wireframes do painel e da bandeja', marco: 'M1 · Local', pr: { numero: 93, url: null, ci: 'ok', review: 'pendente' } }),
-          card('I-64', 'rv', { tipoDaIssue: 'Bug', numero: 64, titulo: 'Paleta: cor de erro', marco: 'M1 · Local', pr: { numero: 69, url: null, ci: 'falhou', review: 'ajustes' } }),
+          card('I-92', 'rv', { issueType: 'Task', number: 92, title: 'Wireframes do painel e da bandeja', milestone: 'M1 · Local', pr: { number: 93, url: null, ci: 'ok', review: 'pending' } }),
+          card('I-64', 'rv', { issueType: 'Bug', number: 64, title: 'Paleta: cor de erro', milestone: 'M1 · Local', pr: { number: 69, url: null, ci: 'failed', review: 'changes-requested' } }),
         ],
       },
-      { id: 'dn', nome: 'Done', cor: 'GREEN', cards: [card('I-40', 'dn', { tipoDaIssue: 'Spike', numero: 40, titulo: 'Spike: consulta ao GitHub', marco: 'M1 · Local', pr: { numero: 67, url: null, ci: 'ok', review: 'aprovado' } })] },
+      { id: 'dn', name: 'Done', color: 'GREEN', cards: [card('I-40', 'dn', { issueType: 'Spike', number: 40, title: 'Spike: consulta ao GitHub', milestone: 'M1 · Local', pr: { number: 67, url: null, ci: 'ok', review: 'approved' } })] },
     ],
-    marcos: ['M1 · Local', 'M2 · Artefato'],
+    milestones: ['M1 · Local', 'M2 · Artefato'],
     total: 7,
-    lidoEm: Date.UTC(2026, 9, 20, 13, 5),
-    desatualizado: false,
-    motivo: null,
-    fonte: 'demo',
+    fetchedAt: Date.UTC(2026, 9, 20, 13, 5),
+    stale: false,
+    reason: null,
+    source: 'demo',
   };
 }
 
-/** O que o núcleo faria com um mover: o mesmo quadro, com o card na raia nova. */
+/** O que o núcleo faria com um mover: o mesmo quadro, com o card na raia nova (`{ board, moved }`). */
 function moverNoQuadro(q: Quadro, itemId: string, para: string) {
   const copia: Quadro = JSON.parse(JSON.stringify(q));
   let de: string | null = null;
-  for (const r of copia.raias) {
+  for (const r of copia.lanes) {
     const i = r.cards.findIndex((c) => c.itemId === itemId);
     if (i >= 0) {
       de = r.id;
       const [c] = r.cards.splice(i, 1);
-      c!.raiaId = para;
-      copia.raias.find((x) => x.id === para)!.cards.push(c!);
+      c!.laneId = para;
+      copia.lanes.find((x) => x.id === para)!.cards.push(c!);
       break;
     }
   }
-  return { quadro: copia, movido: { itemId, de, para } };
+  return { board: copia, moved: { itemId, from: de, to: para } };
 }
 
-const erroDoNucleo = (Classe: typeof ReadError, status: number, corpo: Record<string, unknown>) => new Classe(String(corpo.error), { status, route: '/api/projeto', body: corpo });
+const erroDoNucleo = (Classe: typeof ReadError, status: number, corpo: Record<string, unknown>) => new Classe(String(corpo.error), { status, route: '/api/project', body: corpo });
 
 interface Montada {
   area: ElementoFalso;
@@ -184,11 +185,11 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('o tipo do GitHub vira o rótulo do wireframe', () => {
-    const r = (tipoDaIssue: string | null, tipo = 'Issue') => cardType({ tipoDaIssue, tipo }).rotulo;
+    const r = (issueType: string | null, type = 'Issue') => cardType({ issueType, type }).label;
     assert.deepEqual(['Story', 'User Story', 'Tech Task', 'Task', 'Spike', 'Bug', 'Epic'].map((t) => r(t)), ['História', 'História', 'Tarefa técnica', 'Tarefa técnica', 'Spike', 'Bug', 'Epic']);
     assert.equal(r(null, 'DraftIssue'), 'Rascunho');
-    assert.equal(cardType({ tipoDaIssue: 'Spike' }).classe, 'spike');
-    assert.equal(filter([{ marco: 'a' }, { marco: 'b' }], 'a').length, 1);
+    assert.equal(cardType({ issueType: 'Spike' }).className, 'spike');
+    assert.equal(filter([{ milestone: 'a' }, { milestone: 'b' }], 'a').length, 1);
   });
 
   test('o filtro Marco mostra só os cards do marco, e "Todos os marcos" volta tudo', async () => {
@@ -220,7 +221,7 @@ describe('Kanban do projeto (C11)', () => {
       write: async (_rota, { itemId, optionId }) => {
         await new Promise<void>((r) => (soltar = r));
         const r = moverNoQuadro(quadro, itemId, optionId);
-        quadro = r.quadro;
+        quadro = r.board;
         return r;
       },
     });
@@ -249,7 +250,7 @@ describe('Kanban do projeto (C11)', () => {
     tela = await montarTela({
       read: async () => quadroFalso(),
       write: async () => {
-        throw erroDoNucleo(WriteError, 502, { error: 'O GitHub recusou a mudança.', codigo: 'github-recusou' });
+        throw erroDoNucleo(WriteError, 502, { error: 'O GitHub recusou a mudança.', code: 'github-refused' });
       },
     });
     arrastar(tela, 'I-92', 'Done');
@@ -265,7 +266,7 @@ describe('Kanban do projeto (C11)', () => {
     tela = await montarTela({
       read: async () => quadroFalso(),
       write: async () => {
-        throw erroDoNucleo(WriteError, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
+        throw erroDoNucleo(WriteError, 401, { error: 'O token do gh não tem o escopo project.', code: 'no-scope', command: 'gh auth refresh -s project' });
       },
     });
     arrastar(tela, 'I-35', 'In Progress');
@@ -289,7 +290,7 @@ describe('Kanban do projeto (C11)', () => {
       read: async () => quadro,
       write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
-        quadro = r.quadro;
+        quadro = r.board;
         return r;
       },
     });
@@ -312,7 +313,7 @@ describe('Kanban do projeto (C11)', () => {
   test('401 sem escopo: o estado de erro mostra o comando gh auth refresh -s project', async () => {
     tela = await montarTela({
       read: async () => {
-        throw erroDoNucleo(ReadError, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
+        throw erroDoNucleo(ReadError, 401, { error: 'O token do gh não tem o escopo project.', code: 'no-scope', command: 'gh auth refresh -s project' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -325,7 +326,7 @@ describe('Kanban do projeto (C11)', () => {
   test('503 desligado: estado vazio explicando que o núcleo subiu sem GitHub', async () => {
     tela = await montarTela({
       read: async () => {
-        throw erroDoNucleo(ReadError, 503, { error: 'Sem GitHub.', codigo: 'desligado' });
+        throw erroDoNucleo(ReadError, 503, { error: 'Sem GitHub.', code: 'off' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -336,7 +337,7 @@ describe('Kanban do projeto (C11)', () => {
   test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
     tela = await montarTela({
       read: async () => {
-        throw erroDoNucleo(ReadError, 503, { error: 'Nenhum Project.', codigo: 'sem-projeto' });
+        throw erroDoNucleo(ReadError, 503, { error: 'Nenhum Project.', code: 'no-project' });
       },
     });
     const caixa = tela.area.querySelector('section.state')!;
@@ -349,7 +350,7 @@ describe('Kanban do projeto (C11)', () => {
     let n = 0;
     tela = await montarTela({
       read: async () => {
-        if (n++ === 0) throw erroDoNucleo(ReadError, 502, { error: 'O GitHub não respondeu.', codigo: 'github-fora' });
+        if (n++ === 0) throw erroDoNucleo(ReadError, 502, { error: 'O GitHub não respondeu.', code: 'github-down' });
         return quadroFalso();
       },
     });
@@ -360,7 +361,7 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('desatualizado: o quadro fica na tela com a faixa e o motivo', async () => {
-    tela = await montarTela({ read: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'O GitHub limitou as consultas.' }) });
+    tela = await montarTela({ read: async () => ({ ...quadroFalso(), stale: true, reason: 'O GitHub limitou as consultas.' }) });
     assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
     assert.match(texto(tela.area.querySelector('.error-band')), /GitHub indisponível\. Mostrando o quadro em cache, de .*\. O GitHub limitou as consultas\./);
   });
@@ -392,7 +393,7 @@ describe('Kanban do projeto (C11)', () => {
       },
       write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
-        quadro = r.quadro;
+        quadro = r.board;
         return r;
       },
     });
@@ -415,7 +416,7 @@ describe('Kanban do projeto (C11)', () => {
       read: async () => quadro,
       write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
-        quadro = r.quadro;
+        quadro = r.board;
         await new Promise<void>((ok) => respostas.push(ok));
         return r;
       },
@@ -451,7 +452,7 @@ describe('Kanban do projeto (C11)', () => {
       read: async () => quadro,
       write: async (_r, { itemId, optionId }) => {
         const r = moverNoQuadro(quadro, itemId, optionId);
-        quadro = r.quadro;
+        quadro = r.board;
         await new Promise<void>((ok) => (responder = ok));
         return r;
       },
@@ -470,7 +471,7 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('o foco fica no card numa releitura, e a faixa de aviso não é refeita sem mudar', async () => {
-    tela = await montarTela({ read: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
+    tela = await montarTela({ read: async () => ({ ...quadroFalso(), stale: true, reason: 'Limitado.' }) });
     const band = tela.area.querySelector('.error-band');
     tela.area.querySelector('[data-item="I-92"]')!.focus();
     for (const f of tela.onRestart) f();
@@ -481,8 +482,8 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('tipo com nome de Object.prototype não derruba o card', () => {
-    assert.deepEqual(cardType({ tipoDaIssue: 'Constructor' }), { rotulo: 'Constructor', classe: 'other' });
-    assert.deepEqual(cardType({ tipoDaIssue: '__proto__' }), { rotulo: '__proto__', classe: 'other' });
+    assert.deepEqual(cardType({ issueType: 'Constructor' }), { label: 'Constructor', className: 'other' });
+    assert.deepEqual(cardType({ issueType: '__proto__' }), { label: '__proto__', className: 'other' });
   });
 
   test('sair da tela cancela a releitura do "Ao vivo" que estava marcada', async () => {
@@ -552,14 +553,14 @@ describe('a camada de escrita', () => {
   test('erro do núcleo vira WriteError com status, body e Retry-After', async () => {
     const write = httpWriter({
       base: 'http://localhost:4720',
-      fetch: async () => new Response(JSON.stringify({ error: 'Calma.', codigo: 'limitado' }), { status: 429, headers: { 'retry-after': '7' } }),
+      fetch: async () => new Response(JSON.stringify({ error: 'Calma.', code: 'rate-limited' }), { status: 429, headers: { 'retry-after': '7' } }),
     });
     await assert.rejects(write('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => {
       assert.ok(e instanceof ReadError, 'é também um ReadError');
       assert.equal(e.name, 'WriteError');
       assert.equal(e.status, 429);
       assert.equal(e.retryIn, 7000);
-      assert.deepEqual(e.body, { error: 'Calma.', codigo: 'limitado' });
+      assert.deepEqual(e.body, { error: 'Calma.', code: 'rate-limited' });
       assert.equal(e.message, 'Calma.');
       return true;
     });

@@ -2,34 +2,34 @@
 // só importar. Lê `GET /api/sessions/<id>/decisions?scope=&state=&q=` (src/api/decisoes-ui.ts).
 //
 // Contrato com o session-detail.js, igual às outras abas:
-//   const aba = criar(ctx, base, { cabeca: () => cabeca, rotular: (texto) => … });
-//   aba.mostrar(corpo); aba.esconder(); aba.atualizar();
-// `rotular(texto)` recebe o que vai entre parênteses na aba (o total do escopo, "4"), ou `null` para tirar
-// o número; o session-detail.js redesenha as abas. O escopo padrão é a família, como o da API.
-// `atualizar()` também serve com a aba escondida: lê e só rotula.
+//   const tab = create(ctx, base, { head: () => head, setLabel: (text) => … });
+//   tab.show(node); tab.hide(); tab.refresh();
+// `setLabel(text)` recebe o que vai entre parênteses na aba (o total do escopo, "4"), ou `null` para tirar
+// o número; o session-detail.js redesenha as abas. A aba abre em Sessão (a API, sem `?scope=`, usa a família).
+// `refresh()` também serve com a aba escondida: lê e só rotula.
 
 import { el, icon } from '../dom.js';
 import { error } from '../states.js';
-import { toggle, searchField, loadDecisionsCss, decisionCard, API_VALUE } from './decisions-common.js';
+import { toggle, searchField, loadDecisionsCss, decisionCard } from './decisions-common.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);
 
-// The scope is the API's value (English since issue 173, phase 2b); an old one still maps through `API_VALUE`.
+// The scope and the state filter are the API's values (English since issue 173, phase 2b).
 const SCOPE_OPTIONS = { session: 'Sessão', family: 'Família', branch: 'Branch' };
 
 /** A rota da leitura da aba. */
-export function tabRoute(base, { escopo: scope = 'session', estado: state = 'todas', q = '' } = {}) {
-  const p = new URLSearchParams({ scope: API_VALUE[scope] ?? scope });
-  if (state !== 'todas') p.set('state', state);
+export function tabRoute(base, { scope = 'session', state = 'all', q = '' } = {}) {
+  const p = new URLSearchParams({ scope });
+  if (state !== 'all') p.set('state', state);
   if (q) p.set('q', q.slice(0, 200));
   return `${base}/decisions?${p}`;
 }
 
 /** A chamada do MCP em duas partes: o nome da ferramenta (em destaque) e os argumentos. */
 export function callParts(mcp) {
-  const call = String(mcp?.chamada ?? '');
-  const name = String(mcp?.ferramenta ?? '');
+  const call = String(mcp?.call ?? '');
+  const name = String(mcp?.tool ?? '');
   return name && call.startsWith(name) ? [name, call.slice(name.length).trim()] : [name, call];
 }
 
@@ -37,16 +37,16 @@ function injectionCard(i) {
   return el(
     'section',
     { class: 'card dec-side' },
-    el('div', { class: 'dec-side-ttl' }, icon('start'), el('h3', {}, 'No início de cada sessão'), i.ligada ? el('span', { class: 'dec-pill dec-e-current' }, 'Ligado') : el('span', { class: 'dec-pill dec-e-superseded' }, 'Ainda não ligado')),
+    el('div', { class: 'dec-side-ttl' }, icon('start'), el('h3', {}, 'No início de cada sessão'), i.enabled ? el('span', { class: 'dec-pill dec-e-current' }, 'Ligado') : el('span', { class: 'dec-pill dec-e-superseded' }, 'Ainda não ligado')),
     el(
       'p',
       {},
-      i.ligada
+      i.enabled
         ? 'Uma sessão nova neste branch já começa sabendo das decisões vigentes.'
         : 'A injeção ainda não está ligada. Quando estiver, uma sessão nova neste branch vai começar sabendo destas decisões vigentes, com este texto:',
     ),
-    el('div', { class: 'dec-leg' }, el('span', {}, 'Escopo ', el('b', {}, SCOPE_OPTIONS[i.escopo] ?? i.escopo)), el('span', {}, 'Decisões ', el('b', {}, num(i.decisoes))), el('span', {}, 'Custo ', el('b', {}, `~${num(i.tokens)} tokens`))),
-    el('pre', { class: 'mono dec-injection' }, i.texto || 'Nenhuma decisão vigente para injetar.'),
+    el('div', { class: 'dec-leg' }, el('span', {}, 'Escopo ', el('b', {}, SCOPE_OPTIONS[i.scope] ?? i.scope)), el('span', {}, 'Decisões ', el('b', {}, num(i.decisions))), el('span', {}, 'Custo ', el('b', {}, `~${num(i.tokens)} tokens`))),
+    el('pre', { class: 'mono dec-injection' }, i.text || 'Nenhuma decisão vigente para injetar.'),
   );
 }
 
@@ -56,9 +56,9 @@ function mcpCard(m) {
     'section',
     { class: 'card dec-side' },
     el('div', { class: 'dec-side-ttl' }, icon('mcp'), el('h3', {}, 'Quando o agente perguntar'), el('span', { class: 'dec-r' }, 'MCP')),
-    el('div', { class: 'dec-call mono', title: m.chamada }, icon('chevron-right'), el('span', { class: 'dec-n' }, name), el('span', { class: 'dec-cmd' }, args)),
-    el('p', {}, m.resposta),
-    m.existe ? null : el('p', { class: 'dec-note' }, `A ferramenta ${name} ainda não existe no MCP do núcleo: esta é a chamada que ela vai responder.`),
+    el('div', { class: 'dec-call mono', title: m.call }, icon('chevron-right'), el('span', { class: 'dec-n' }, name), el('span', { class: 'dec-cmd' }, args)),
+    el('p', {}, m.response),
+    m.exists ? null : el('p', { class: 'dec-note' }, `A ferramenta ${name} ainda não existe no MCP do núcleo: esta é a chamada que ela vai responder.`),
   );
 }
 
@@ -73,7 +73,7 @@ function promoteCard() {
 
 export function create(ctx, base, { head: headEl = () => null, setLabel = () => {} } = {}) {
   // Abre em Sessão, como o C20; Família e Branch somam as das outras sessões.
-  const filters = { escopo: 'session', estado: 'todas', q: '' };
+  const filters = { scope: 'session', state: 'all', q: '' };
   let target = null;
   let last = null;
   let request = 0;
@@ -85,27 +85,27 @@ export function create(ctx, base, { head: headEl = () => null, setLabel = () => 
     const bar = el(
       'div',
       { class: 'dec-bar' },
-      toggle({ rotulo: 'Escopo', opcoes: [['session', 'Sessão'], ['family', 'Família'], ['branch', 'Branch']], atual: filters.escopo, aoTrocar: (v) => ((filters.escopo = v), draw()) }),
-      toggle({ rotulo: 'Estado', opcoes: [['todas', 'Todas'], ['vigentes', 'Vigentes'], ['a_confirmar', 'A confirmar']], atual: filters.estado, aoTrocar: (v) => ((filters.estado = v), draw()) }),
-      searchField({ placeholder: 'Buscar nas decisões…', aoBuscar: (q) => ((filters.q = q), draw()) }),
+      toggle({ label: 'Escopo', options: [['session', 'Sessão'], ['family', 'Família'], ['branch', 'Branch']], current: filters.scope, onSwitch: (v) => ((filters.scope = v), draw()) }),
+      toggle({ label: 'Estado', options: [['all', 'Todas'], ['current', 'Vigentes'], ['to_confirm', 'A confirmar']], current: filters.state, onSwitch: (v) => ((filters.state = v), draw()) }),
+      searchField({ placeholder: 'Buscar nas decisões…', onSearch: (q) => ((filters.q = q), draw()) }),
     );
     const list = el('div', { class: 'dec-list', 'aria-live': 'polite' });
     const side = el('div', { class: 'dec-sides' });
-    els = { barra: bar, lista: list, lado: side, grade: el('div', { class: 'dec-grid' }, list, side) };
+    els = { bar, list, side, grid: el('div', { class: 'dec-grid' }, list, side) };
     return els;
   }
 
   function nothing(r) {
-    const text = filters.q ? `Nenhuma decisão fala de "${filters.q}".` : filters.estado !== 'todas' ? 'Troque o filtro de estado para ver as outras.' : `Nenhuma decisão no escopo ${SCOPE_OPTIONS[filters.escopo].toLowerCase()} ainda.`;
-    return el('div', { class: 'card dec-none' }, el('b', {}, r.total || filters.q || filters.estado !== 'todas' ? 'Nada com esses filtros' : 'Nenhuma decisão ainda'), el('p', {}, text));
+    const text = filters.q ? `Nenhuma decisão fala de "${filters.q}".` : filters.state !== 'all' ? 'Troque o filtro de estado para ver as outras.' : `Nenhuma decisão no escopo ${SCOPE_OPTIONS[filters.scope].toLowerCase()} ainda.`;
+    return el('div', { class: 'card dec-none' }, el('b', {}, r.total || filters.q || filters.state !== 'all' ? 'Nada com esses filtros' : 'Nenhuma decisão ainda'), el('p', {}, text));
   }
 
   function paint(r) {
-    const { barra: bar, lista: list, lado: side, grade: grid } = pieces();
-    const session = r.sessao ?? headEl()?.session?.id;
+    const { bar, list, side, grid } = pieces();
+    const session = r.session ?? headEl()?.session?.id;
     const now = Date.now();
-    list.replaceChildren(...(r.itens.length ? r.itens.map((d) => decisionCard(d, { sessao: session, aoMudar: draw, agora: now })) : [nothing(r)]));
-    side.replaceChildren(injectionCard(r.injecao), mcpCard(r.mcp), promoteCard());
+    list.replaceChildren(...(r.items.length ? r.items.map((d) => decisionCard(d, { session, onChange: draw, now })) : [nothing(r)]));
+    side.replaceChildren(injectionCard(r.injection), mcpCard(r.mcp), promoteCard());
     target?.replaceChildren(bar, grid);
   }
 

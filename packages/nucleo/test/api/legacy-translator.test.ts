@@ -11,6 +11,11 @@ import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
 import { AGENT_STATUSES, AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
 import { DETAIL_AGENT_TYPES, MESSAGE_ROLES, TOOL_STATES } from '../../src/api/detalhe.ts';
 import { EDGE_TYPES, FILTROS_DOS_WORKFLOWS, GRAPH_NODE_LABELS, NODE_STATES, NO_DO_GRAFO } from '../../src/api/workflows.ts';
+import { DECISION_GROUPINGS, DECISION_STATE_FILTERS, GROUPING_ERROR, PROMOTE_PATH_ERROR, PROMOTE_SESSION_ERROR, STATE_FILTER_ERROR } from '../../src/api/decisoes-ui.ts';
+import { ESCOPOS_DAS_DECISOES } from '../../src/api/decisoes.ts';
+import { PROJECT_ERROR_CODES } from '../../src/api/projeto.ts';
+import { ciDoPr, reviewDoPr } from '../../src/api/trabalho.ts';
+import { COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, VISOES } from '../../src/api/kanban.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -119,7 +124,7 @@ describe('#173 phase 2b: the back-translator', () => {
 
   test('a route whose spec is still empty gives its body back as it is', () => {
     const body = { sessao: 's', texto: 't', itens: [{ estado: 'a_confirmar' }] };
-    for (const path of ['/abrir/x', '/api/projeto/mover']) {
+    for (const path of ['/abrir/x', '/api/analytics/custo']) {
       assert.equal(legacyResponseFor(path)!(body), body, path);
       assert.equal(legacyRequestBody(path, body), body, path);
     }
@@ -635,6 +640,154 @@ describe('every union member of the session Detail and the workflows answers the
       for (const name of ['no', 'node']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/workflows').get('node'), node, `${name}=${old}`);
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`node=${node}`), '/api/workflows').get('node'), node, node);
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`node=${old}`), '/api/events').get('node'), old, 'only on /api/workflows');
+    }
+  });
+});
+
+// Phase 2b layer 6: every member of the unions of the Decisions page and tab, the promote, the project
+// board and its errors, new → the old value on the old route; and the old query values of these routes
+// and of the Kanban (no old path) → the new ones (the goldens only see what the demo emits).
+describe('every union member of the Decisions of the /ui and the project kanban answers the old value on the old route', () => {
+  const GROUPING = { branch: 'branch', family: 'familia', session: 'sessao' };
+  const STATE_FILTER = { all: 'todas', current: 'vigentes', to_confirm: 'a_confirmar' };
+  const SCOPE = { session: 'sessao', family: 'familia', branch: 'branch' };
+  const card = { id: 'd', label: 'D1', origin: 'suggested', state: 'to_confirm', session: 'this', sessionId: 's', scope: 'family', supersedes: null, promotedTo: null, conversation: '/ui/sessions/s' };
+  const oldCard = { id: 'd', rotulo: 'D1', origem: 'sugerida', estado: 'a_confirmar', sessao: 'esta', sessionId: 's', escopo: 'familia', substitui: null, promovidaPara: null, conversa: '/ui/sessions/s' };
+
+  test('decisions page: every grouping and state filter, the counts and a group in the old keys and order', () => {
+    assert.deepEqual(Object.keys(GROUPING), [...DECISION_GROUPINGS]);
+    assert.deepEqual(Object.keys(STATE_FILTER), [...DECISION_STATE_FILTERS]);
+    const route = legacyResponseFor('/api/decisoes')!;
+    for (const [groupBy, oldGroupBy] of Object.entries(GROUPING))
+      for (const [state, oldState] of Object.entries(STATE_FILTER)) {
+        const body = {
+          groupBy, state, q: null,
+          counts: { current: 1, branches: 2, toConfirm: 3, superseded30d: 4, promoted: 5 },
+          groups: [{ key: 'b.x', type: groupBy, title: 't', repo: '/r', folder: 'r', current: 1, toConfirm: 1, total: 2, items: [card], more: 0 }],
+        };
+        const old = {
+          agrupar: oldGroupBy, estado: oldState, q: null,
+          contagens: { vigentes: 1, branches: 2, aConfirmar: 3, substituidas30d: 4, promovidas: 5 },
+          grupos: [{ chave: 'b.x', tipo: oldGroupBy, titulo: 't', repo: '/r', pasta: 'r', vigentes: 1, aConfirmar: 1, total: 2, itens: [oldCard], mais: 0 }],
+        };
+        assert.equal(JSON.stringify(route(body)), JSON.stringify(old), `${groupBy} ${state}`);
+      }
+    const errors = { [STATE_FILTER_ERROR]: 'estado: todas, vigentes ou a_confirmar', [GROUPING_ERROR]: 'agrupar: branch, familia ou sessao', 'group inválido': 'grupo inválido', 'busca de até 200 caracteres': 'busca de até 200 caracteres' };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('decisions tab: every scope and state filter, the injection and the MCP card in the old keys and order', () => {
+    assert.deepEqual(Object.keys(SCOPE), [...ESCOPOS_DAS_DECISOES]);
+    const route = legacyResponseFor('/api/sessoes/s/decisoes')!;
+    for (const [scope, oldScope] of Object.entries(SCOPE))
+      for (const [state, oldState] of Object.entries(STATE_FILTER)) {
+        const body = {
+          session: 's', scope, state, q: 'x', byScope: { session: 1, family: 2, branch: 3 }, total: 2, items: [card],
+          injection: { enabled: false, scope, decisions: 1, tokens: 4, text: 'Decisões vigentes' },
+          mcp: { tool: 'session_decisions', exists: false, call: 'session_decisions sessao: "s"', response: 'Responde' },
+        };
+        const old = {
+          sessao: 's', escopo: oldScope, estado: oldState, q: 'x', porEscopo: { sessao: 1, familia: 2, branch: 3 }, total: 2, itens: [oldCard],
+          injecao: { ligada: false, escopo: oldScope, decisoes: 1, tokens: 4, texto: 'Decisões vigentes' },
+          mcp: { ferramenta: 'session_decisions', existe: false, chamada: 'session_decisions sessao: "s"', resposta: 'Responde' },
+        };
+        assert.equal(JSON.stringify(route(body)), JSON.stringify(old), `${scope} ${state}`);
+      }
+    for (const [error, old] of Object.entries({ [STATE_FILTER_ERROR]: 'estado: todas, vigentes ou a_confirmar', 'scope: session, family ou branch': 'escopo: sessao, familia ou branch' }))
+      assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('promote: the old body becomes the new one; the draft, the promoted card and the errors in the old keys', () => {
+    assert.deepEqual(legacyRequestBody('/api/decisoes/d/promover', { sessao: 's', confirmar: true, caminho: 'docs/decisoes/0001-x.md', hash: 'h' }), { session: 's', confirm: true, path: 'docs/decisoes/0001-x.md', hash: 'h' });
+    assert.deepEqual(legacyRequestBody('/api/decisions/d/promote', { sessao: 's' }), { sessao: 's' }, 'the new route takes the body as it comes (and reads both)');
+    const route = legacyResponseFor('/api/decisoes/d/promover')!;
+    for (const canWrite of [true, false]) {
+      const draft = { path: 'docs/decisoes/0001-x.md', markdown: '# 0001', hash: 'h', repo: null, canWrite, reason: canWrite ? null : 'sem pasta' };
+      const old = { caminho: 'docs/decisoes/0001-x.md', markdown: '# 0001', hash: 'h', repo: null, podeGravar: canWrite, motivo: canWrite ? null : 'sem pasta' };
+      assert.equal(JSON.stringify(route({ draft })), JSON.stringify({ rascunho: old }), String(canWrite));
+    }
+    assert.equal(JSON.stringify(route({ decision: card, path: 'p' })), JSON.stringify({ decisao: oldCard, caminho: 'p' }));
+    const errors = { [PROMOTE_SESSION_ERROR]: 'informe a sessão: { "sessao": "<id>" }', [PROMOTE_PATH_ERROR]: 'informe o caminho: "docs/decisoes/NNNN-slug.md"', 'caminho com ".."': 'caminho com ".."' };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  // The CI and review of a PR, every value `ciDoPr`/`reviewDoPr` give, with the old project value.
+  const CI = [[ciDoPr({ ci: 'SUCCESS' }), 'ok'], [ciDoPr({ ci: 'FAILURE' }), 'falhou'], [ciDoPr({ ci: 'ERROR' }), 'falhou'], [ciDoPr({ ci: 'PENDING' }), 'rodando'], [ciDoPr({ ci: null }), null]] as const;
+  const REVIEW = [[reviewDoPr({ review: 'APPROVED', state: 'OPEN' }), 'aprovado'], [reviewDoPr({ review: 'CHANGES_REQUESTED', state: 'OPEN' }), 'ajustes'], [reviewDoPr({ review: null, state: 'OPEN' }), 'pendente'], [reviewDoPr({ review: null, state: 'MERGED' }), null]] as const;
+  const board = (ci: unknown, review: unknown) => ({
+    project: { owner: 'o', number: 3, title: 'P', url: 'u', field: 'Status' },
+    lanes: [{ id: 'l', name: 'Todo', color: 'GREEN', cards: [{ itemId: 'PVTI_x', type: 'Issue', issueType: 'Story', number: 1, title: 't', url: null, repo: 'o/r', state: 'OPEN', milestone: 'M1', subIssues: { done: 1, total: 2 }, pr: { number: 2, url: 'u', ci, review }, laneId: 'l' }] }],
+    milestones: ['M1'], total: 1, fetchedAt: 9, stale: true, reason: 'rede', source: 'github',
+  });
+  const oldBoard = (ci: unknown, review: unknown) => ({
+    projeto: { dono: 'o', numero: 3, titulo: 'P', url: 'u', campo: 'Status' },
+    raias: [{ id: 'l', nome: 'Todo', cor: 'GREEN', cards: [{ itemId: 'PVTI_x', tipo: 'Issue', tipoDaIssue: 'Story', numero: 1, titulo: 't', url: null, repo: 'o/r', estado: 'OPEN', marco: 'M1', subIssues: { feitas: 1, total: 2 }, pr: { numero: 2, url: 'u', ci, review }, raiaId: 'l' }] }],
+    marcos: ['M1'], total: 1, lidoEm: 9, desatualizado: true, motivo: 'rede', fonte: 'github',
+  });
+
+  test('project: every CI and review of a card, the board, the lanes and the card in the old keys and order', () => {
+    assert.deepEqual(CI.map(([v]) => v), ['ok', 'failed', 'failed', 'running', null]);
+    assert.deepEqual(REVIEW.map(([v]) => v), ['approved', 'changes-requested', 'pending', null]);
+    const route = legacyResponseFor('/api/projeto')!;
+    for (const [ci, oldCi] of CI)
+      for (const [review, oldReview] of REVIEW) assert.equal(JSON.stringify(route(board(ci, review))), JSON.stringify(oldBoard(oldCi, oldReview)), `${ci} ${review}`);
+  });
+
+  test('project move: `{ board, moved }` in the old keys and order; the body was English already', () => {
+    const route = legacyResponseFor('/api/projeto/mover')!;
+    for (const [ci, oldCi] of CI) {
+      const body = { board: board(ci, 'pending'), moved: { itemId: 'PVTI_x', from: null, to: 'l' } };
+      assert.equal(JSON.stringify(route(body)), JSON.stringify({ quadro: oldBoard(oldCi, 'pendente'), movido: { itemId: 'PVTI_x', de: null, para: 'l' } }), String(ci));
+    }
+    const moveBody = { itemId: 'PVTI_x', optionId: 'l' };
+    assert.deepEqual(legacyRequestBody('/api/projeto/mover', moveBody), moveBody);
+  });
+
+  test('project errors: every code on both routes, with the command and the variable in the old keys', () => {
+    const CODES = {
+      invalid: 'invalido',
+      'no-scope': 'sem-escopo',
+      'rate-limited': 'limitado',
+      'unknown-lane': 'raia-desconhecida',
+      'unknown-item': 'item-desconhecido',
+      'github-down': 'github-fora',
+      'github-refused': 'github-recusou',
+      off: 'desligado',
+      'no-project': 'sem-projeto',
+    };
+    assert.deepEqual(Object.keys(CODES), [...PROJECT_ERROR_CODES]);
+    for (const path of ['/api/projeto', '/api/projeto/mover'])
+      for (const [code, old] of Object.entries(CODES)) {
+        const body = { error: 'e', code, command: 'gh auth refresh -s project', variable: 'AHRENA_CONSOLE_PROJECT' };
+        assert.equal(JSON.stringify(legacyResponseFor(path)!(body)), JSON.stringify({ error: 'e', codigo: old, comando: 'gh auth refresh -s project', variavel: 'AHRENA_CONSOLE_PROJECT' }), `${path} ${code}`);
+      }
+  });
+
+  test('query: the old `?state=` values become the new ones only on the decisions page and tab; `?groupBy=` and `?view=` everywhere', () => {
+    for (const [state, old] of Object.entries(STATE_FILTER)) {
+      for (const path of ['/api/decisions', '/api/sessions/s1/decisions']) {
+        for (const name of ['estado', 'state']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), path).get('state'), state, `${path} ${name}=${old}`);
+        assert.equal(normalizeLegacyQuery(new URLSearchParams(`state=${state}`), path).get('state'), state);
+      }
+      for (const path of ['/api/sessions/s1/events', '/api/decisions/s1', '/api/sessions'])
+        assert.equal(normalizeLegacyQuery(new URLSearchParams(`state=${old}`), path).get('state'), old, `only on the decisions page and tab: ${path}`);
+    }
+    for (const [groupBy, old] of Object.entries(GROUPING)) assert.equal(normalizeLegacyQuery(new URLSearchParams(`agrupar=${old}`)).get('groupBy'), groupBy, old);
+    const VIEW = { sessions: 'sessoes', agents: 'agentes' };
+    assert.deepEqual(Object.keys(VIEW), [...VISOES]);
+    for (const [view, old] of Object.entries(VIEW))
+      for (const name of ['visao', 'view']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/kanban').get('view'), view, `${name}=${old}`);
+  });
+
+  test('query: every old Kanban column becomes the new one, only on /api/kanban', () => {
+    const SESSION_COLUMNS = { ativa: 'active', esperando: 'waiting', concluida: 'completed', erro: 'error', abandonada: 'abandoned' };
+    const AGENT_COLUMNS = { trabalhando: 'working', esperando: 'waiting', concluidos: 'done', erro: 'error' };
+    assert.deepEqual(Object.values(SESSION_COLUMNS), COLUNAS_DAS_SESSOES.map((c) => c.id));
+    assert.deepEqual(Object.values(AGENT_COLUMNS), COLUNAS_DOS_AGENTES.map((c) => c.id));
+    for (const [old, column] of [...Object.entries(SESSION_COLUMNS), ...Object.entries(AGENT_COLUMNS)]) {
+      for (const name of ['coluna', 'column']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/kanban').get('column'), column, `${name}=${old}`);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`column=${column}`), '/api/kanban').get('column'), column);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`column=${old}`), '/api/sessions').get('column'), old, 'only on /api/kanban');
     }
   });
 });

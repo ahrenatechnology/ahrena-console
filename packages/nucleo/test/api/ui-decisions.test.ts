@@ -100,22 +100,23 @@ describe('o card de uma decisão', () => {
   });
 
   test('os pedidos de escrita: Confirmar, Descartar e as duas fases do Promover', () => {
-    assert.deepEqual(actionRequest('d1', 'confirmar', { session: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { session: 's1' } });
+    assert.deepEqual(actionRequest('d1', 'confirm', { session: 's1' }), { route: '/api/decisions/d1/confirm', body: { session: 's1' } });
     // O id do núcleo tem `:` ("dec:…"): vai cru, como a regra de origem do servidor espera.
-    assert.equal(actionRequest('dec:4b1f', 'confirmar', { session: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
-    assert.deepEqual(actionRequest('d1', 'descartar', { session: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { session: 's1' } });
-    assert.deepEqual(promoteRequest('d1', 's1'), { rota: '/api/decisions/d1/promote', corpo: { sessao: 's1' } });
-    assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md' }), {
-      rota: '/api/decisions/d1/promote',
-      corpo: { sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md' },
+    assert.equal(actionRequest('dec:4b1f', 'confirm', { session: 's1' }).route, '/api/decisions/dec:4b1f/confirm');
+    assert.deepEqual(actionRequest('d1', 'dismiss', { session: 's1' }), { route: '/api/decisions/d1/dismiss', body: { session: 's1' } });
+    assert.deepEqual(promoteRequest('d1', 's1'), { route: '/api/decisions/d1/promote', body: { session: 's1' } });
+    assert.deepEqual(promoteRequest('d1', 's1', { path: 'docs/decisoes/0008-x.md' }), {
+      route: '/api/decisions/d1/promote',
+      body: { session: 's1', confirm: true, path: 'docs/decisoes/0008-x.md' },
     });
-    assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
-      sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32),
+    assert.deepEqual(promoteRequest('d1', 's1', { path: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).body, {
+      session: 's1', confirm: true, path: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32),
     }, 'o hash do rascunho vai junto no confirmar');
-    assert.throws(() => actionRequest('../x', 'confirmar', { session: 's1' }), /id de decisão/);
+    assert.throws(() => actionRequest('../x', 'confirm', { session: 's1' }), /id de decisão/);
     assert.throws(() => actionRequest('d1', 'apagar', { session: 's1' }), /ação desconhecida/);
-    assert.throws(() => actionRequest('d1', 'confirmar', {}), /precisa da sessão/);
-    assert.throws(() => actionRequest('d1', 'confirmar', { sessao: 's1' }), /precisa da sessão/, 'Confirmar e Descartar mandam `{ session }`');
+    assert.throws(() => actionRequest('d1', 'confirmar', { session: 's1' }), /ação desconhecida/, 'the actions are the English route segments');
+    assert.throws(() => actionRequest('d1', 'confirm', {}), /precisa da sessão/);
+    assert.throws(() => actionRequest('d1', 'promote', { sessao: 's1' }), /precisa da sessão/, 'every write sends `{ session }`');
   });
 });
 
@@ -132,18 +133,19 @@ describe('a página (C21) e a aba (C20)', () => {
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {
     assert.equal(decisionsRoute(), '/api/decisions?groupBy=branch');
-    assert.equal(decisionsRoute({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisions?groupBy=family&state=a_confirmar&q=banco+de+testes&group=b%3Aabc');
+    assert.equal(decisionsRoute({ groupBy: 'family', state: 'to_confirm', q: 'banco de testes', group: 'b:abc' }), '/api/decisions?groupBy=family&state=to_confirm&q=banco+de+testes&group=b%3Aabc');
+    assert.equal(decisionsRoute({ state: 'all' }), '/api/decisions?groupBy=branch', 'all is the default');
     assert.equal(decisionsRoute({ q: 'x'.repeat(500) }).length, '/api/decisions?groupBy=branch&q='.length + 200);
     assert.equal(tabRoute('/api/sessions/s1'), '/api/sessions/s1/decisions?scope=session');
-    assert.equal(tabRoute('/api/sessions/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessions/s1/decisions?scope=branch&state=vigentes&q=kanban');
+    assert.equal(tabRoute('/api/sessions/s1', { scope: 'branch', state: 'current', q: 'kanban' }), '/api/sessions/s1/decisions?scope=branch&state=current&q=kanban');
   });
 
   test('o resumo do grupo e a chamada do MCP', () => {
-    assert.equal(groupSummary({ tipo: 'branch', pasta: 'vitrine-demo', vigentes: 6, aConfirmar: 1 }), 'vitrine-demo · 6 vigentes · 1 a confirmar');
-    assert.equal(groupSummary({ tipo: 'branch', pasta: 'motor-de-regras', vigentes: 1, aConfirmar: 0 }), 'motor-de-regras · 1 vigente');
-    assert.equal(groupSummary({ tipo: 'familia', titulo: 'Kanban da vitrine', pasta: 'vitrine-demo', vigentes: 2, aConfirmar: 0 }), 'vitrine-demo · 2 vigentes');
-    assert.equal(groupSummary({ tipo: 'familia', titulo: 'motor-de-regras', pasta: 'motor-de-regras', vigentes: 2, aConfirmar: 0 }), '2 vigentes');
-    assert.deepEqual(callParts({ ferramenta: 'session_decisions', chamada: 'session_decisions branch: "feat/42-kanban"' }), ['session_decisions', 'branch: "feat/42-kanban"']);
+    assert.equal(groupSummary({ type: 'branch', folder: 'vitrine-demo', current: 6, toConfirm: 1 }), 'vitrine-demo · 6 vigentes · 1 a confirmar');
+    assert.equal(groupSummary({ type: 'branch', folder: 'motor-de-regras', current: 1, toConfirm: 0 }), 'motor-de-regras · 1 vigente');
+    assert.equal(groupSummary({ type: 'family', title: 'Kanban da vitrine', folder: 'vitrine-demo', current: 2, toConfirm: 0 }), 'vitrine-demo · 2 vigentes');
+    assert.equal(groupSummary({ type: 'family', title: 'motor-de-regras', folder: 'motor-de-regras', current: 2, toConfirm: 0 }), '2 vigentes');
+    assert.deepEqual(callParts({ tool: 'session_decisions', call: 'session_decisions branch: "feat/42-kanban"' }), ['session_decisions', 'branch: "feat/42-kanban"']);
   });
 
   test('a aba lê a rota dela e rotula com o total, mesmo escondida', async () => {
@@ -151,7 +153,7 @@ describe('a página (C21) e a aba (C20)', () => {
     const rotulos: (string | null)[] = [];
     const ouvintes: ((m: { tipo: string }[]) => void)[] = [];
     const ctx = {
-      read: async (rota: string) => (lidas.push(rota), { sessao: 's1', total: 4, itens: [], porEscopo: { sessao: 4, familia: 5, branch: 6 }, injecao: {}, mcp: {} }),
+      read: async (rota: string) => (lidas.push(rota), { session: 's1', total: 4, items: [], byScope: { session: 4, family: 5, branch: 6 }, injection: {}, mcp: {} }),
       onChange: (f: (m: { tipo: string }[]) => void) => ouvintes.push(f),
     };
     const aba = create(ctx, '/api/sessions/s1', { head: () => null, setLabel: (t: string | null) => rotulos.push(t) });
