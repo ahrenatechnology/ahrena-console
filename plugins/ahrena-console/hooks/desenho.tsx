@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.19'
+export const VERSAO_DO_PLUGIN = '0.0.20'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -188,6 +188,10 @@ function anelSvg(pct: number) {
   )
 }
 
+/** A barra dos Subagentes, em px: a largura útil do card (30 colunas × ~7,9 px) e uma linha fina. */
+const BARRA_W = 236
+const BARRA_H = 5
+
 function subagentesSvg(itens: SubagenteDoPainel[]) {
   const total = Math.max(1, itens.length)
   const partes: [number, string][] = [
@@ -205,8 +209,8 @@ function subagentesSvg(itens: SubagenteDoPainel[]) {
       return r
     })
     .join('')
-  // Largura de 100%, esticada sem manter a proporção: a barra vai de borda a borda do card.
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 5" width="100%" height="5" preserveAspectRatio="none"><clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g></svg>`
+  // Esticada sem manter a proporção, no tamanho que o Svg dá (BARRA_W × BARRA_H).
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 5" preserveAspectRatio="none"><clipPath id="b"><rect width="200" height="5" rx="2.5"/></clipPath><g clip-path="url(#b)"><rect width="200" height="5" fill="${BORDA}"/>${rects}</g></svg>`
 }
 
 function semConexaoSvg() {
@@ -917,8 +921,10 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const todos = subagentesEmOrdem(s)
   const fora = todos.slice(LINHAS_DA_LISTA)
   corpo.push(
-    // Sem `width`, a barra ocupa a largura do card, de borda a borda (P1).
-    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} />,
+    // Largura e altura explícitas: sem elas, o Desktop dá ao Svg a altura do próprio desenho na
+    // largura que sobra, e a barra virava um bloco do tamanho do card. BARRA_W é a largura útil do
+    // card no Desktop (~7,9 px por coluna), de borda a borda.
+    <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={BARRA_W} height={BARRA_H} />,
     ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
     fora.length > 0 && abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true),
   )
@@ -1012,7 +1018,7 @@ const filhasEmOrdem = (filhas: FilhaDoPainel[]) =>
 
 /**
  * O card Sessões filhas (pnFilhas do P1): a contagem à direita do cabeçalho, até 3 linhas, as que
- * trabalham primeiro, e "ver todas as N ›" na última. Nunca só o cabeçalho.
+ * trabalham primeiro, e "ver todas as N ›" na última quando há mais do que cabe. Nunca só o cabeçalho.
  */
 function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   const filhas = filhasEmOrdem(todasAsFilhas)
@@ -1029,7 +1035,8 @@ function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   corpo.push(
     // O nome no card é cortado só no link (que não quebra linha); o resto corta com reticências.
     ...filhas.slice(0, LINHAS_DA_LISTA).map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3, false, false)),
-    abre(c, 'ver-filhas', `ver todas as ${filhas.length} ›`, c.acoes.verFilhas, true),
+    // Só quando há mais filhas do que as linhas do card: com todas à vista, o link é redundante.
+    filhas.length > LINHAS_DA_LISTA && abre(c, 'ver-filhas', `ver todas as ${filhas.length} ›`, c.acoes.verFilhas, true),
   )
   return cartao(c, 'card-filhas', corpo)
 }

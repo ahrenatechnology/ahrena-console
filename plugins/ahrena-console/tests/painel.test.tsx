@@ -174,7 +174,8 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas', 'filha-sim-painel-blog-estatico'])
   const suaVez = await ui.find({ type: 'Text', text: 'Sua vez' })
   expect(suaVez?.props.color).toBe(paleta.yellow['500'])
-  expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe('ver todas as 3 ›')
+  // Com as 3 à vista, sem "ver todas": o link seria redundante.
+  expect(await ui.find({ key: 'ver-filhas' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /CI … 3\/7/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /aprovado/ })).toBeDefined()
   await ui.unmount()
@@ -254,6 +255,49 @@ test('0.0.15: o nome da conta nunca corta ao lado de "ESTA SESSÃO"; no estreito
   await ui.unmount()
 })
 
+test('0.0.20: todo Svg do painel tem largura e altura explícitas e limitadas (o Desktop estica o que não tem)', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const LIMITE: Record<string, number> = { 'Ahrena Console': 28, 'sem conexão': 24 }
+  for (const painel of [CENARIOS.p1, CENARIOS.p4, CENARIOS.p6, carregado()]) {
+    f.estado.painel = painel
+    await f.relogio.advance(15_000)
+    for (const base of [PANE, LARGO]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
+      const svgs = await ui.findAll({ type: 'Svg' })
+      expect(svgs.length).toBeGreaterThan(0)
+      for (const svg of svgs) {
+        const { width, height, alt } = svg.props as { width?: number; height?: number; alt: string }
+        expect([alt, typeof width, typeof height]).toEqual([alt, 'number', 'number'])
+        // As barras e a linha do custo são finas; o anel do plano e o logo, quadrados pequenos.
+        const max = LIMITE[alt] ?? (/^plano /.test(alt) ? 50 : 10)
+        expect([alt, height! <= max]).toEqual([alt, true])
+        expect([alt, width! <= 240]).toEqual([alt, true])
+      }
+      await ui.unmount()
+    }
+  }
+})
+
+test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "+17 concluídos ›"', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const base = p4.subagentes.itens.find((i) => i.status === 'completed')!
+  const itens = Array.from({ length: 20 }, (_, i) => ({ ...base, id: `sim-sub-${i}`, nome: 'general-purpose', tarefa: `Revisar a parte ${i}`, ate: new Date(AGORA - i * 60_000).toISOString() }))
+  f.estado.painel = { ...p4, subagentes: { ativos: 0, itens } }
+  await f.relogio.advance(15_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const card = await ui.find({ key: 'card-subagentes' })
+    expect(card?.text).toMatch(/SUBAGENTES\s*0 ativos/)
+    const barra = (await ui.findAll({ type: 'Svg' })).find((x) => x.props.alt === '0 ativos de 20')
+    expect([barra?.props.width, barra?.props.height]).toEqual([236, 5])
+    const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
+    expect(linhas.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', 'sub-sim-sub-2'])
+    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+17 concluídos ›')
+    await ui.unmount()
+  }
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
@@ -329,7 +373,8 @@ test('Plano: o anel com o % e três passos em destaque em volta do atual; o rest
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     const card = await ui.find({ key: 'card-plano' })
     expect(card?.props.height).toBe(9)
-    expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
+    const anel = (await ui.findAll({ type: 'Svg' })).find((x) => /plano 50% feito, 3 de 6/.test(String(x.props.alt)))
+    expect([anel?.props.width, anel?.props.height]).toEqual([50, 50])
     expect(card?.text).toMatch(/PLANO\s*3\/6/)
     // O último feito, o atual (em negrito) e o próximo.
     expect(card?.text).toMatch(/✓ Ligar ao núcleo● Rodando a bateria|✓ Ligar ao núcleo● Rodar a bateria/)
