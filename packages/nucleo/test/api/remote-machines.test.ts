@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, remoteAttentionItems, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
+import { Contas, startLocalApi, montarAtencao, MontadorDoPainel, remoteAttentionItems, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
@@ -23,7 +23,7 @@ const READ_AT = NOW - 30_000;
 const READ_AT_ISO = new Date(NOW).toISOString();
 
 let storage: SqliteStorage;
-let api: ApiLocal | null = null;
+let api: LocalApi | null = null;
 let remoteCore: FakeRemote | null = null;
 afterEach(async () => {
   await api?.close();
@@ -64,7 +64,7 @@ async function boot() {
   });
   const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote], now: () => NOW });
   const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-  api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor, telemetry, frota, remoteAttention: [remote] });
+  api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, fleet: frota, remoteAttention: [remote] });
   const url = api.url;
   return { remote, frota, get: (path: string) => fetch(`${url}${path}`) };
 }

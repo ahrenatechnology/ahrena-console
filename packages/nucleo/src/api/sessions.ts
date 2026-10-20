@@ -30,8 +30,6 @@ import type { Contas } from './accounts.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './desktop-index.ts';
 
 export const SESSIONS_ROUTE = '/api/sessions';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DAS_SESSOES = '/api/sessoes';
 export const POR_PAGINA = 10;
 
 /** `all`, or one `DisplayStatus`. */

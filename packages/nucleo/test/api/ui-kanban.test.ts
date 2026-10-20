@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI, responderUi } from '../../src/api/ui.ts';
+import { UI_FOLDER, respondUi } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { findScreen, SCREENS } from '../../ui/screens.js';
 import {
@@ -109,12 +109,12 @@ describe('Kanban: registro e arquivos', () => {
     assert.equal(tela.id, 'kanban');
     assert.equal(tela.file, '/ui/screens/kanban.js');
     assert.deepEqual(tela.item, { label: 'Kanban', icon: 'kanban', section: 'main' });
-    assert.match(readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8'), /\n {2}kanban: '/);
+    assert.match(readFileSync(`${UI_FOLDER}dom.js`, 'utf8'), /\n {2}kanban: '/);
   });
 
   test('os arquivos da tela não chamam nada de fora, não escrevem cor nem estilo inline', () => {
     for (const a of ARQUIVOS) {
-      const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
+      const texto = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
@@ -125,17 +125,17 @@ describe('Kanban: registro e arquivos', () => {
   // O CSS de cada tela fica carregado depois que ela abre: classe com o mesmo nome em duas telas
   // desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões). Tudo do Kanban é `kb-`.
   test('o CSS do Kanban só estiliza classe kb- ou da moldura, e nenhuma de outra tela', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const daMoldura = classes('shell.css');
     const minhas = [...classes('kanban.css')].filter((c) => !daMoldura.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('kb-')), [], 'classe própria sem o prefixo kb-');
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['kanban.css', 'shell.css', 'brand.css'].includes(a));
+    const outras = readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['kanban.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const delas = classes(outra);
       assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `kanban.css e ${outra} estilizam as mesmas classes`);
     }
     // E a tela só usa classes que existem (as kb- do CSS, as da moldura e o `cartao`).
-    const js = readFileSync(`${PASTA_DA_UI}screens/kanban.js`, 'utf8');
+    const js = readFileSync(`${UI_FOLDER}screens/kanban.js`, 'utf8');
     const usadas = new Set([...js.matchAll(/\bkb-[a-z0-9-]+/g)].map((m) => m[0]).filter((c) => !c.endsWith('-')));
     for (const c of usadas) assert.ok(minhas.includes(c), `${c} não está no kanban.css`);
   });
@@ -156,10 +156,10 @@ describe('Kanban: registro e arquivos', () => {
           corpo = String(b ?? '');
         },
       } as unknown as ServerResponse;
-      await responderUi(res, `/ui/${a}`);
+      await respondUi(res, `/ui/${a}`);
       assert.equal(status, 200, a);
       assert.match(String(headers['content-type']), tipo, a);
-      assert.equal(corpo, readFileSync(`${PASTA_DA_UI}${a}`, 'utf8'), a);
+      assert.equal(corpo, readFileSync(`${UI_FOLDER}${a}`, 'utf8'), a);
     }
   });
 });

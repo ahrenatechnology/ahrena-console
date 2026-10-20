@@ -13,8 +13,8 @@ import {
   Contas,
   DecisoesDaUi,
   MontadorDoPainel,
-  iniciarApiLocal,
-  type ApiLocal,
+  startLocalApi,
+  type LocalApi,
   type DecisaoDaUi,
   type DecisoesDaAba,
   type DecisoesDaPagina,
@@ -39,7 +39,7 @@ interface Cenario {
   montador: MontadorDoPainel;
   /** As opções da `DecisoesDaUi` da API, para montar outra igual. */
   opcoes: ConstructorParameters<typeof DecisoesDaUi>[0];
-  api: ApiLocal;
+  api: LocalApi;
   host: string;
   ler<T>(caminho: string, headers?: Record<string, string>): Promise<{ status: number; corpo: T }>;
   postar<T>(caminho: string, corpo: unknown, headers?: Record<string, string>): Promise<{ status: number; corpo: T }>;
@@ -54,7 +54,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
   const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
-  const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, decisoesUi });
+  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, decisionsUi: decisoesUi });
   const host = new URL(api.url).host;
   const ler = async <T>(caminho: string, headers: Record<string, string> = {}) => {
     const r = await fetch(`${api.url}${caminho}`, { headers });

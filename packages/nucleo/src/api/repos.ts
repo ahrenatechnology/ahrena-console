@@ -554,15 +554,15 @@ export function metricasVazias(estado: MetricasDoRepo['state'], periodo: Periodo
   };
 }
 
-/** A rota de `/api/repos`, registrada no servidor (`OpcoesDaApi.repos`). Responde só a `GET`. */
+/** A rota de `/api/repos`, registrada no servidor (`ApiOptions.repos`). Responde só a `GET`. */
 export type RotaDosRepos = (res: ServerResponse, url: URL) => Promise<void>;
 
-export const ROTA_DOS_REPOS = '/api/repos';
+export const REPOS_ROUTE = '/api/repos';
 
 export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
   return async (res, url) => {
     const atualizar = url.searchParams.get('refresh') === '1';
-    if (url.pathname === ROTA_DOS_REPOS || url.pathname === `${ROTA_DOS_REPOS}/`) return send(res, 200, await repos.lista({ atualizar }));
+    if (url.pathname === REPOS_ROUTE || url.pathname === `${REPOS_ROUTE}/`) return send(res, 200, await repos.lista({ atualizar }));
     const m = /^\/api\/repos\/([^/]+)\/([^/]+)\/?$/.exec(url.pathname);
     if (!m) return send(res, 404, { error: 'não encontrado' });
     let dono: string;

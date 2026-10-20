@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
+import { Contas, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
@@ -352,7 +352,7 @@ describe('HTTP route', () => {
     const storage = withChanges(sqlite, cursor);
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const builder = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: work });
-    const api = await iniciarApiLocal({ montador: builder, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
+    const api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
     try {
       const start = (await (await fetch(`${api.url}/api/changes`)).json()) as WaitResult;
       assert.equal(start.reset, true);

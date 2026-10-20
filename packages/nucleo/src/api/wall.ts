@@ -43,8 +43,6 @@ import type { LeituraDaSessao, MontadorDoPainel } from './panel.ts';
 import type { CardDoMural, Mural } from './types.ts';
 
 export const WALL_ROUTE = '/api/wall';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_MURAL = '/api/mural';
 /** Quanto tempo a sessão encerrada continua no mural depois da última atividade: o abandono do vigia. */
 export const RECENTE_DO_MURAL_MS = DEFAULT_LIMITS.abandonMs;
 const PAGINA = 200;

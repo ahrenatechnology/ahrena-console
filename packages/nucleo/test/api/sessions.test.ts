@@ -5,8 +5,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type ApiLocal, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { Contas, startLocalApi, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type LocalApi, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { simulate } from '../../src/simulator/index.ts';
@@ -36,7 +36,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
   let storage: SqliteStorage;
   let lista: ListaDeSessoes;
   let sessoes: Session[];
-  let api: ApiLocal;
+  let api: LocalApi;
   const listar = (p: Partial<PedidoDeSessoes> = {}) => lista.listar({ ...PADRAO, ...p });
   // Todas as páginas de um pedido, juntas.
   const tudo = async (p: Partial<PedidoDeSessoes> = {}) => {
@@ -54,7 +54,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
     const contas = new Contas({ storage, arquivo: null });
     lista = new ListaDeSessoes({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, sessoes: lista });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, sessions: lista });
   });
   after(async () => {
     await api.close();
@@ -208,8 +208,8 @@ describe('#28 a tela Sessões', () => {
   test('está registrada em /ui/sessions, e o arquivo existe', () => {
     const { screen: tela } = findScreen('/ui/sessions');
     assert.equal(tela.file, '/ui/screens/sessions.js');
-    assert.ok(existsSync(`${PASTA_DA_UI}screens/sessions.js`));
-    assert.ok(existsSync(`${PASTA_DA_UI}sessions.css`));
+    assert.ok(existsSync(`${UI_FOLDER}screens/sessions.js`));
+    assert.ok(existsSync(`${UI_FOLDER}sessions.css`));
     // A linha leva ao Detalhe, que casa o id do simulador.
     assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(PANEL_SESSION)}`).screen.id, 'session-detail');
   });
@@ -257,7 +257,7 @@ describe('#28 a tela Sessões', () => {
   // a tabela tem 830 px; abaixo de 900 px de janela, 610 px e sem o Diretório. Cada coluna precisa
   // do mínimo que o texto mais largo dela pede (medido no navegador), senão corta ou rola.
   test('a tabela cabe em 1100 px sem rolagem horizontal, e abaixo de 900 px sem o Diretório', () => {
-    const css = readFileSync(`${PASTA_DA_UI}sessions.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}sessions.css`, 'utf8');
     const corte = css.indexOf('@media (max-width: 900px)');
     assert.ok(corte > 0, 'falta a faixa de 900 px');
     const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.table \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
@@ -282,12 +282,12 @@ describe('#28 a tela Sessões', () => {
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
   // telas desmonta a outra (o `.row` do Dashboard, que é flex, desmontava as linhas desta tabela).
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     // As da moldura (`.icone`, `.btn`) são de todas as telas.
     const daMoldura = classes('shell.css');
     const minhas = new Set([...classes('sessions.css')].filter((c) => !daMoldura.has(c)));
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessions.css', 'shell.css', 'brand.css'].includes(a));
+    const outras = readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['sessions.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
       assert.deepEqual(comuns, [], `sessions.css e ${outra} estilizam as mesmas classes`);
@@ -297,10 +297,10 @@ describe('#28 a tela Sessões', () => {
   // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97), o Dev Console (#179)
   // e as Máquinas (#178), contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
   test('o CSS de Workflows, da aba Workflow, do Dev Console e das Máquinas (#178) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
-    const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
+    const todos = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     // The machine screens (issue 178): `tm-`.
     for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));

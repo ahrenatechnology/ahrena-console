@@ -1,6 +1,6 @@
 // The core's MCP server (epic 2). See README.md in this folder.
 
-import { VERSAO_DA_API } from '../api/version.ts';
+import { API_VERSION } from '../api/version.ts';
 import { fleetOverview } from './tools/fleet.ts';
 import { sessionsNeedingAttention } from './tools/attention.ts';
 import { FleetReader, type FleetOptions } from './fleet.ts';
@@ -28,7 +28,7 @@ export interface McpOptions extends FleetOptions {
 /** The server with epic 2's default tools. */
 export function createMcpServer(opts: McpOptions): { server: McpServer; fleet: FleetReader } {
   const fleet = new FleetReader(opts);
-  const server = new McpServer({ version: VERSAO_DA_API, instructions: MCP_INSTRUCTIONS, log: opts.log });
+  const server = new McpServer({ version: API_VERSION, instructions: MCP_INSTRUCTIONS, log: opts.log });
   server.register(sessionsNeedingAttention(fleet)).register(fleetOverview(fleet));
   for (const t of opts.extras ?? []) server.register(t);
   return { server, fleet };
@@ -39,7 +39,7 @@ export function createMcpServer(opts: McpOptions): { server: McpServer; fleet: F
  * the same schema, and every call comes back with `isError` and `reason`.
  */
 export function serverWithoutCore(reason: string): McpServer {
-  const server = new McpServer({ version: VERSAO_DA_API, instructions: MCP_INSTRUCTIONS });
+  const server = new McpServer({ version: API_VERSION, instructions: MCP_INSTRUCTIONS });
   // The factories only keep the reader; nothing is read before `execute`, which is swapped here.
   const none = null as unknown as FleetReader;
   for (const t of [sessionsNeedingAttention(none), fleetOverview(none)]) {
