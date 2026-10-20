@@ -512,9 +512,10 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .dl-none { color: var(--muted); font-family: var(--font-mono); padding-right: 20px !important; }
 .dl-open-bar { display: flex; gap: 10px; align-items: center; }
 .dl-open { display: flex; flex-direction: column; }
-.dl-open-row { display: grid; grid-template-columns: 18px 52px minmax(0, 1fr) 150px 128px 44px; gap: 10px; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.dl-open-row { display: grid; grid-template-columns: 18px 52px minmax(0, 1fr) minmax(0, 240px) 128px 44px; gap: 10px; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
 .dl-open-row .pill { justify-self: start; }
 .dl-age { text-align: right; color: var(--muted); }
+.dl-hm span { min-width: 48px; text-align: center; } .dl-zero { color: var(--muted); }
 .dl-faded > .cartao:nth-child(-n+2) { opacity: .55; }
 /* ---------- modo captura ---------- */
 body.captura .topo, body.captura .indice, body.captura .notas, body.captura .capitulo, body.captura .tela:not(.alvo), body.captura .perguntas, body.captura #perguntas { display: none !important; }
@@ -1129,10 +1130,23 @@ const DL_OPEN = [
   ['pr', 455, 'Cache das consultas do catálogo', 'catalogo-exemplo', 'esperando review', 'b-waiting', '4 d'],
   ['pr', 1211, 'Migração do esquema de pedidos', 'motor-de-regras', 'aprovado', 'b-completed', '2 d'],
 ]
-function dlOpen(w) {
+// Closed issues and reviews per repository, for the contribution heatmap (rows = repositories or projects, never people).
+const DL_EXTRA = { 'motor-de-regras': [21, 52], 'vitrine-demo': [12, 30], 'painel-de-metricas': [9, 18], 'gateway-sandbox': [6, 14], 'catalogo-exemplo': [4, 9], 'app-receitas': [3, 5], 'fila-de-tarefas': [1, 3] }
+const dlProjectOf = repo => DL_PROJECTS.find(p => p[1].includes(repo))[0]
+function dlContrib(byProject) {
+  const repo = n => DL_REPOS.find(r => r[0] === n)
+  const rows = byProject
+    ? DL_PROJECTS.map(([n, repos]) => [n, ...[r => r[5], r => r[3], r => r[6], r => DL_EXTRA[r[0]][0], r => DL_EXTRA[r[0]][1]].map(f => repos.reduce((a, x) => a + f(repo(x)), 0))])
+    : DL_REPOS.map(r => [r[0], r[5], r[3], r[6], DL_EXTRA[r[0]][0], DL_EXTRA[r[0]][1]])
+  const cell = (v, max) => `<td class="dl-heat dl-hm">${v ? `<span style="background:color-mix(in srgb, var(--accent) ${Math.round(14 + v / max * 70)}%, var(--surface))">${v}</span>` : '<span class="dl-zero">·</span>'}</td>`
+  return `<div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Contribuições por tipo<span class="r">a cor mostra o peso de cada tipo dentro do próprio ${byProject ? 'projeto' : 'repositório'}</span></div>
+    <table class="tabela dl-table"><thead><tr><th>${byProject ? 'Projeto' : 'Repositório'}</th><th class="n">PRs abertos</th><th class="n">PRs mesclados</th><th class="n">Issues abertas</th><th class="n">Issues fechadas</th><th class="n">Revisões</th></tr></thead><tbody>
+    ${rows.map(([n, ...v]) => { const max = Math.max(...v, 1); return `<tr><td class="nm"><b>${n}</b></td>${v.map(x => cell(x, max)).join('')}</tr>` }).join('')}</tbody></table></div>`
+}
+function dlOpen(w, byProject) {
   return `<div class="cartao dl-card"><div class="ttl">Em andamento<span class="r">55 abertos · os mais antigos primeiro</span></div>
     <div class="dl-open-bar"><span class="campo" style="flex:1">${ic('search')}Buscar por título, repositório ou número</span><div class="seg"><span class="on">Todos</span><span>PRs</span><span>Issues</span></div></div>
-    <div class="dl-open">${DL_OPEN.map(([k, n, t, repo, st, cls, age]) => `<div class="dl-open-row"><span class="c-muted">${ic(k === 'pr' ? 'git-pull-request' : 'circle-dot')}</span><span class="mono c-muted">#${n}</span><span class="trunc">${t}</span><span class="mono c-muted trunc">${repo}</span><span class="pill ${cls}">${st}</span><span class="mono dl-age">${age}</span></div>`).join('')}</div>
+    <div class="dl-open">${DL_OPEN.map(([k, n, t, repo, st, cls, age]) => `<div class="dl-open-row"><span class="c-muted">${ic(k === 'pr' ? 'git-pull-request' : 'circle-dot')}</span><span class="mono c-muted">#${n}</span><span class="trunc">${t}</span><span class="mono c-muted trunc">${byProject ? `${dlProjectOf(repo)} · ${repo}` : repo}</span><span class="pill ${cls}">${st}</span><span class="mono dl-age">${age}</span></div>`).join('')}</div>
     <div class="leg"><span>Mais 49 · role para ver</span></div></div>`
 }
 function telaEntregas(w, byProject = false) {
@@ -1150,12 +1164,13 @@ function telaEntregas(w, byProject = false) {
     ${stat('Custo', '~US$ 329', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
     ${stat('Custo por PR', '~US$ 3,32', 'custo ÷ PRs mesclados', 'scale', 'var(--accent-text)')}
   </div>
+  ${dlContrib(byProject)}
   <div class="cartao dl-card"><div class="ttl">Ritmo de entrega<span class="r">PRs mesclados por dia · últimos 30 dias</span></div>
     <div class="leg"><span><i class="dl-key-bar"></i>PRs mesclados</span><span><i class="dl-key-line"></i>horas do Claude</span><span>Cada gráfico tem escala própria: o pico de cada ${byProject ? 'projeto' : 'repositório'} está no canto.</span></div>
     <div class="dl-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${smalls.join('')}</div></div>
   <div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Esforço e entrega<span class="r">${byProject ? 'o esforço do projeto é a soma dos repositórios dele' : 'a cor mostra o peso de cada valor na coluna'}</span></div>
     ${dlTable(byProject ? DL_PROJECTS : DL_REPOS, byProject)}</div>
-  ${dlOpen(w)}`
+  ${dlOpen(w, byProject)}`
 }
 function telaEntregasEstados() {
   return `${cab('bar-chart-3', 'Analytics', 'O ritmo de entrega de cada repositório no GitHub, com o esforço do Claude no mesmo repositório', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div>`)}
@@ -2590,9 +2605,9 @@ const TELAS = [
     n: N(['Analytics: 5 StatCards, Event Activity de 52 semanas, Last 30 Days, abas Cost / Token / Productivity, barras horizontais.'], ['O heatmap usa o laranja em 4 tons, sem o índigo do CCAM.', 'Custo virou a aba "Custo" desta tela (3.7); o resto entra a pedido do dono.']) },
   { id: 'console-custo', cod: 'C13', nome: 'Analytics · Custo', sub: 'Custo por dia, por modelo e por projeto (3.7).', html: () => `<div class="fila">${cc('analytics', telaCusto())}</div>`,
     n: N(['Analytics · Cost Analytics: linha diária com pico e total, donut por modelo, barras horizontais.'], ['Gráficos no laranja e nos seus tons, sem uma cor por série.', 'Custo sempre com "~" e "estimativa".']) },
-  { id: 'console-delivery', cod: 'C54', nome: 'Analytics · Entregas, por repositório', sub: 'Feature Entregas (#266): o ritmo de entrega de cada repositório no GitHub e o esforço do Claude no mesmo repositório, nunca por pessoa. Números do período, um gráfico pequeno por repositório com os PRs mesclados por dia (escala própria, pico e total no canto, horas do Claude tracejadas atrás), a tabela Esforço e entrega com o custo por PR mesclado, e o que está aberto, dos mais antigos primeiro, com busca. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px · a janela do app</div>${frameAt(1100, 'analytics', telaEntregas(1100))}<div class="rotulo">1440 px</div>${frameAt(1440, 'analytics', telaEntregas(1440))}</div>`,
-    n: N(['Nada do CCAM: ele não lê o GitHub. As formas vêm de um painel de entregas que já usamos: os gráficos pequenos com pico e total, a tabela com a cor pelo peso e a lista dos abertos com busca.'], ['A unidade é o repositório ou o projeto: sem autor, responsável ou divisão por pessoa.', 'O repositório de uma sessão vem do cwd, como na tela Repositórios; sem sessão no período, horas e custo são "—", nunca zero.', 'Custo por PR é custo ÷ PRs mesclados: uma ponte entre os dois lados, não uma meta.']) },
-  { id: 'console-delivery-projects', cod: 'C55', nome: 'Analytics · Entregas, por projeto', sub: 'A mesma aba agrupada pelos GitHub Projects que o console já lê (Kanban do projeto, C11). Cada gráfico diz os repositórios do projeto; o esforço do Claude de um projeto é a soma das sessões desses repositórios. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregas(1100, true))}</div>`,
+  { id: 'console-delivery', cod: 'C54', nome: 'Analytics · Entregas, por repositório', sub: 'Feature Entregas (#266): o ritmo de entrega de cada repositório no GitHub e o esforço do Claude no mesmo repositório, nunca por pessoa. O seletor Por repositório · Por projeto troca o eixo de tudo. Números do período, as contribuições por tipo (PRs abertos e mesclados, issues abertas e fechadas, revisões: linhas são repositórios, a cor é o peso dentro da linha), um gráfico pequeno por repositório com os PRs mesclados por dia (escala própria, pico e total no canto, horas do Claude tracejadas atrás), a tabela Esforço e entrega com o custo por PR mesclado, e o que está aberto, dos mais antigos primeiro, com busca. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px · a janela do app</div>${frameAt(1100, 'analytics', telaEntregas(1100))}<div class="rotulo">1440 px</div>${frameAt(1440, 'analytics', telaEntregas(1440))}</div>`,
+    n: N(['Nada do CCAM: ele não lê o GitHub. As formas vêm de um painel de entregas que já usamos: os gráficos pequenos com pico e total, a tabela com a cor pelo peso e a lista dos abertos com busca.'], ['As linhas são repositórios ou projetos, nunca pessoas: no painel de referência as linhas são pessoas; aqui não há autor, responsável nem eixo por pessoa.', 'O repositório de uma sessão vem do cwd, como na tela Repositórios; sem sessão no período, horas e custo são "—", nunca zero.', 'Custo por PR é custo ÷ PRs mesclados: uma ponte entre os dois lados, não uma meta.']) },
+  { id: 'console-delivery-projects', cod: 'C55', nome: 'Analytics · Entregas, por projeto', sub: 'Por projeto: o mesmo seletor troca o eixo de toda a aba para os GitHub Projects que o console já lê (Kanban do projeto, C11), e um projeto junta issues e PRs de vários repositórios. As contribuições, o ritmo, o esforço e o custo do Claude e o Em andamento passam a ter uma linha por projeto. Cada gráfico diz os repositórios do projeto; o esforço do Claude de um projeto é a soma das sessões desses repositórios. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregas(1100, true))}</div>`,
     n: N(['—'], ['Um repositório em dois projetos conta nos dois; a soma dos projetos pode passar do total da aba.', 'Os itens de um projeto que não são de repositório (rascunhos do Project) não entram.']) },
   { id: 'console-delivery-states', cod: 'C56', nome: 'Analytics · Entregas, estados', sub: 'Sem GitHub conectado: o estado vazio explica como conectar, sem escolher repositório por você (regra 5). GitHub fora ou limitando: o cache com a hora, e as horas e o custo do Claude em dia, que vêm das sessões. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregasEstados())}</div>`,
     n: N(['Os estados do C19.'], ['Só o lado do GitHub desbota: o lado do Claude é local e continua ao vivo.']) },
