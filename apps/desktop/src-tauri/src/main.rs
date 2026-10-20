@@ -2,7 +2,8 @@
 //
 // Ao abrir:
 // 1. corrige o PATH com o do shell de login, para achar o `node`;
-// 2. adota o núcleo de pé ou sobe um pelo dono único (nucleo.rs);
+// 2. starts its own core (or adopts it, within the app's installation), on a random port and in
+//    the app's data folder (nucleo.rs); it never uses another installation's core;
 // 3. lê `GET /api/attention` e espera mudanças em `GET /api/changes` (long polling), e monta o menu
 //    dos wireframes A1, A2 e A4 (menu.rs), com o número ao lado do ícone;
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /open/<local_…>`); "Abrir o console"
@@ -66,6 +67,8 @@ struct Estado {
     ultimo: Option<(Vec<Item>, Option<String>)>,
     /// A versão nova que o updater achou.
     atualizacao: Option<String>,
+    /// "Abrir o console" was clicked while the core was not up: open it once the core is.
+    open_when_up: bool,
 }
 
 type Compartilhado = Arc<Mutex<Estado>>;
@@ -87,6 +90,7 @@ fn main() {
         locais: HashMap::new(),
         ultimo: None,
         atualizacao: None,
+        open_when_up: false,
     }));
     let (acordar, sinais) = channel::<()>();
 
@@ -133,8 +137,9 @@ fn main() {
             }
 
             let recursos = app.path().resource_dir().ok();
+            let data_dir = app.path().app_data_dir().ok();
             let handle = app.handle().clone();
-            std::thread::spawn(move || acompanhar(handle, estado, nucleo::pasta_do_nucleo(recursos), sinais, abrir_na_partida));
+            std::thread::spawn(move || acompanhar(handle, estado, nucleo::core_dir(recursos), data_dir, sinais, abrir_na_partida));
             abrir_o_menu_depois(app.handle());
             Ok(())
         })
@@ -159,10 +164,11 @@ fn main() {
     });
 }
 
-/// O laço do núcleo: adota ou sobe, lê a atenção e espera mudanças. Roda numa thread à parte.
+/// The core loop: starts the app's own core, reads the attention and waits for changes. Runs on its
+/// own thread. `data_dir`: the app's data folder, where its core keeps database, log and clients.
 /// `abrir_na_partida`: abre o console se o núcleo fica de pé já na primeira tentativa (partida à
 /// mão); se ele só sobe depois (falta Node, "Procurar de novo"), o console não aparece sozinho.
-fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std::sync::mpsc::Receiver<()>, mut abrir_na_partida: bool) {
+fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: Option<PathBuf>, sinais: std::sync::mpsc::Receiver<()>, mut abrir_na_partida: bool) {
     loop {
         mudar(&app, &estado, |e| {
             e.nucleo = EstadoDoNucleo::Procurando;
@@ -172,13 +178,21 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
             e.avisos.detector.zerar();
             e.avisos.machines.reset();
         });
-        let r = nucleo::adotar_ou_subir(&pasta);
+        let outcome = nucleo::start_own_core(&pasta, data_dir.as_deref());
         let abrir = std::mem::take(&mut abrir_na_partida);
-        let porta = match r.estado {
-            EstadoDoNucleo::DePe { porta } => porta,
-            ref parado => {
-                let parado = parado.clone();
-                mudar(&app, &estado, |e| e.nucleo = parado);
+        let core = match outcome.core {
+            Some(core) => {
+                eprintln!("[ahrena-console] core on port {} (pid {:?}, {})", core.port, core.pid, if outcome.started { "started" } else { "adopted" });
+                core
+            }
+            None => {
+                let parado = outcome.state;
+                // A click on "Abrir o console" waited for this start; it failed, so it is dropped
+                // instead of opening the console by surprise when a core comes up much later.
+                mudar(&app, &estado, |e| {
+                    e.nucleo = parado;
+                    e.open_when_up = false;
+                });
                 // Tenta de novo a cada 30 s, ou já, no "Procurar o núcleo de novo".
                 if let Err(RecvTimeoutError::Disconnected) = sinais.recv_timeout(Duration::from_secs(30)) {
                     return;
@@ -186,13 +200,21 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
                 continue;
             }
         };
-        mudar(&app, &estado, |e| e.nucleo = EstadoDoNucleo::DePe { porta });
-        if abrir {
-            eprintln!("[ahrena-console] partida à mão: abre o console");
+        let mut asked = false;
+        mudar(&app, &estado, |e| {
+            e.nucleo = EstadoDoNucleo::DePe { porta: core.port };
+            asked = std::mem::take(&mut e.open_when_up);
+        });
+        // A new core has a new port: a console window left on the old one follows it.
+        let port = core.port;
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || follow_core_port(&handle, port));
+        if abrir || asked {
+            eprintln!("[ahrena-console] {}: abre o console", if asked { "pedido pelo menu" } else { "partida à mão" });
             let handle = app.clone();
             let _ = app.run_on_main_thread(move || abrir_console(&handle));
         }
-        seguir(&app, &estado, porta, &sinais);
+        seguir(&app, &estado, &core, &sinais);
         // O núcleo parou de responder: procura (e sobe) de novo.
         while sinais.try_recv().is_ok() {}
         std::thread::sleep(Duration::from_secs(3));
@@ -200,7 +222,8 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
 }
 
 /// Lê `/api/attention` e espera em `/api/changes` até o núcleo parar de responder.
-fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::sync::mpsc::Receiver<()>) {
+fn seguir(app: &AppHandle, estado: &Compartilhado, core: &nucleo::Core, sinais: &std::sync::mpsc::Receiver<()>) {
+    let porta = core.port;
     let mut cursor: Option<String> = None;
     loop {
         let resposta = http::get_com_status(porta, "/api/attention", Duration::from_secs(15));
@@ -252,7 +275,7 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
                     e.avisos.machines.reset();
                 });
                 let _ = sinais.recv_timeout(Duration::from_secs(30));
-                if !nucleo::responde(porta) {
+                if !core.answers() {
                     return;
                 }
                 continue;
@@ -270,7 +293,7 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
         // o que também atualiza os minutos de espera. Sem `/api/changes` (núcleo antigo), relê a cada 25 s.
         if http::get(porta, &caminho, Duration::from_secs(40)).is_none() {
             let resto = Duration::from_secs(25).saturating_sub(inicio.elapsed());
-            if !nucleo::responde(porta) {
+            if !core.answers() {
                 return;
             }
             let _ = sinais.recv_timeout(resto);
@@ -550,13 +573,25 @@ fn open_window_at(app: &AppHandle, path: &str) {
 }
 
 fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
-    let porta = match app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).nucleo {
-        EstadoDoNucleo::DePe { porta } => porta,
-        _ => nucleo::PORTA_PADRAO,
+    // Only the app's own core: with it not up, look for it again (and open once it is) instead of
+    // opening another one.
+    let shared = app.state::<Compartilhado>().inner().clone();
+    let porta = {
+        let mut e = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match e.nucleo {
+            EstadoDoNucleo::DePe { porta } => porta,
+            _ => {
+                e.open_when_up = true;
+                drop(e);
+                let _ = app.state::<Laco>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).send(());
+                return;
+            }
+        }
     };
     let Ok(url) = format!("http://127.0.0.1:{porta}{}", caminho.unwrap_or("/ui")).parse::<tauri::Url>() else { return };
     if let Some(w) = app.get_webview_window("console") {
-        if caminho.is_some() {
+        // The port is random: a window still on another port (an old core) is moved to this one.
+        if caminho.is_some() || w.url().ok().and_then(|u| u.port()) != Some(porta) {
             let _ = w.navigate(url);
         }
         let _ = w.show();
@@ -566,6 +601,17 @@ fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
     let janela = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url)).title("Ahrena Console").inner_size(1100.0, 760.0).build();
     if let Ok(w) = janela {
         let _ = w.set_focus();
+    }
+}
+
+/// Moves an existing console window to the `/ui` of the core on `port`, if it shows another port.
+fn follow_core_port(app: &AppHandle, port: u16) {
+    let Some(w) = app.get_webview_window("console") else { return };
+    if w.url().ok().and_then(|u| u.port()) == Some(port) {
+        return;
+    }
+    if let Ok(url) = format!("http://127.0.0.1:{port}/ui").parse::<tauri::Url>() {
+        let _ = w.navigate(url);
     }
 }
 

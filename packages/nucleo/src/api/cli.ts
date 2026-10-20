@@ -3,16 +3,20 @@
 // the state machine and answers the panel, all on 127.0.0.1. `npm run api -- --help`; the options are
 // in cli-options.ts (the old Portuguese names still work until phase 6 of #173).
 //
-// One core per machine (#86, src/owner/): if one is already up, this process adopts it (prints the
-// port and version and exits 0) instead of starting another.
+// One core per installation (#221, decision 0010, src/owner/): if this installation's core is
+// already up (the lock in its data folder), this process adopts it (prints the port and version and
+// exits 0) instead of starting another. A core of another installation is never adopted. By default
+// the port is 0: the system picks a free one, and the core announces it in the log, in the lock and
+// in the instance registry (~/.ahrena-console/instances/).
 //
 // The adoption lines (`… (adotado)`, `atenção: …`, the port that already has a core, `…; saindo`) stay in
 // pt-BR for now: test/owner asserts them, and that layer renames them.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
@@ -31,7 +35,10 @@ import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
-import { readLock, releaseLock, defaultDir, prepareDir } from '../owner/lock.ts';
+import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
+import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
+import { instanceId, listInstances, removeInstance, writeInstance } from '../owner/registry.ts';
+import { acquireStartGuard, type StartGuard } from '../owner/start-guard.ts';
 import { ChangeCursor } from '../changes/cursor.ts';
 import { onMachineChange, withChanges, SessionAccounts, decisionsWithChanges } from '../changes/sources.ts';
 import { waitForChanges } from '../changes/mcp.ts';
@@ -94,7 +101,10 @@ if (o.help) {
 }
 
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
-const port = Number(o.port ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
+// The port asked for; 0 (the default) lets the system pick. `boundPort`, below, is the one it got.
+const port = resolvePort(o.port);
+const installation = parseInstallation(o.installation);
+const dataDir = resolveDataDir({ installation, dataDir: o.dataDir });
 const demo = o.demo;
 const parent = o.parent === undefined ? null : Number(o.parent);
 if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
@@ -102,19 +112,44 @@ if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${par
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
+/** The start guard of the data folder, held from before the database opens until the lock is written. */
+let startGuard: StartGuard | null = null;
+// Until the shutdown below is ready, a signal still exits through `exit`, whose handlers release the
+// start guard and the registry entry.
+const exitOnSignal = (signal: NodeJS.Signals) => process.exit(signal === 'SIGINT' ? 130 : 143);
+process.on('SIGINT', exitOnSignal);
+process.on('SIGTERM', exitOnSignal);
 
 function adopt(p: number, version: string, warning: string | null = null): never {
   if (warning) log(`atenção: ${warning}`);
-  if (parent !== null && useLock) registerClient(parent);
+  if (parent !== null && useLock) registerClient(parent, dataDir);
+  startGuard?.release();
   process.stdout.write(`núcleo de pé em http://127.0.0.1:${p} · versão ${version} (adotado)\n`);
   process.exit(0);
 }
 
-// Before opening the database: adopts the live core of the lock, or recovers the lock if it is an orphan.
-if (useLock) {
-  const plan = await planStart({ ...code, replace: o.replace, log });
+// Before opening the database: adopts the live core of this installation's lock, or recovers the lock
+// if it is an orphan.
+async function planOrAdopt(): Promise<void> {
+  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log });
   if (plan.action === 'adopt') adopt(plan.lock.port, plan.lock.version, plan.warning);
   if (plan.recovered) log(`orphan lock recovered: ${plan.recovered}`);
+}
+if (useLock) await planOrAdopt();
+// With port 0 two starts of this installation get different ports, and a port-0 start and a
+// forced-port start of the same folder do too: the port no longer decides who opens the database.
+// The start guard of the data folder does. Whoever holds it looks at the lock again (another start
+// may have finished between the first look and the guard), and adopts the core it finds.
+if (useLock) {
+  process.once('exit', () => startGuard?.release());
+  try {
+    startGuard = await acquireStartGuard(dataDir);
+  } catch (e) {
+    await planOrAdopt();
+    throw e;
+  }
+  await planOrAdopt();
+  log(`start guard taken for ${dataDir}`);
 }
 
 // The port has a single owner: whoever does not get it waits for the core that did and adopts it.
@@ -132,6 +167,11 @@ async function adoptPortHolder(): Promise<never> {
       if (i === 20) lockless = true;
       else await new Promise((r) => setTimeout(r, 100));
     }
+    // A core of another installation is never adopted (decision 0010): it has its own database.
+    if (lockless && isOtherInstallation(v.pid)) {
+      log(`port ${port} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
+      process.exit(1);
+    }
     const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
     adopt(port, v.version, warning.filter(Boolean).join('; ') || null);
   }
@@ -140,15 +180,40 @@ async function adoptPortHolder(): Promise<never> {
 }
 /** The pid in the lock, when the lock is for this port. */
 function lockPidOfPort(): number | null {
-  const t = readLock();
+  const t = readLock(dataDir);
   return t && t !== 'invalid' && t.port === port ? t.pid : null;
 }
-const reservation = await reservePort(port);
-if (reservation === 'in-use') await adoptPortHolder();
-const dbPath = demo ? ':memory:' : (o.db ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
+/** The same folder, even through a symbolic link (/tmp and /private/tmp on macOS). */
+function sameDir(a: string, b: string): boolean {
+  const real = (d: string) => {
+    try {
+      return realpathSync(d);
+    } catch {
+      return resolve(d);
+    }
+  };
+  return real(a) === real(b);
+}
+/** The pid is the core of another data folder: in the registry, or holding the `dev` folder's lock. */
+function isOtherInstallation(pid: number | null): boolean {
+  if (pid === null) return false;
+  const registered = listInstances().find((i) => i.pid === pid);
+  if (registered) return !sameDir(registered.dataDir, dataDir);
+  const devDir = defaultDataDir('dev');
+  if (sameDir(devDir, dataDir)) return false;
+  const t = readLock(devDir);
+  return t !== null && t !== 'invalid' && t.pid === pid;
+}
+const reserved = await reservePort(port);
+const reservation = reserved === 'in-use' ? await adoptPortHolder() : reserved;
+const boundPort = (reservation.address() as AddressInfo).port;
+const dbPath = demo ? ':memory:' : resolve(o.db ?? process.env.AHRENA_CONSOLE_DB ?? join(dataDir, 'nucleo.sqlite'));
+// AHRENA_CONSOLE_DB applies to any installation: two installations with it exported would share a
+// database under two locks. Say so.
+if (dbPath !== ':memory:' && !sameDir(dirname(dbPath), dataDir)) log(`warning: the database ${dbPath} is outside the data folder ${dataDir} (--db or AHRENA_CONSOLE_DB); another installation must not use the same file`);
 if (dbPath !== ':memory:') {
-  // The core's folder is closed to 0700 (the database lives in it); another folder given in --db stays as it is.
-  if (dirname(dbPath) === defaultDir()) prepareDir();
+  // The data folder is closed to 0700 (the database lives in it); another folder given in --db stays as it is.
+  if (sameDir(dirname(dbPath), dataDir)) prepareDir(dataDir);
   else mkdirSync(dirname(dbPath), { recursive: true });
 }
 
@@ -317,7 +382,7 @@ if (demo) {
   const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
   for (const config of machinesConfig.machines) {
-    if (config.port === port) {
+    if (config.port === boundPort) {
       log(`machines: ${config.id} uses port ${config.port}, this core's own; skipped`);
       continue;
     }
@@ -350,8 +415,10 @@ const follower =
         onError: (e) => log(`follower: ${(e as Error).message}`),
       });
 
-if (reservation !== 'in-use') await releasePort(reservation);
+// The API takes over the socket reserved above: the port is never free in between (with port 0,
+// the one the system assigned stays this core's).
 const api: LocalApi = await startLocalApi({
+  listenOn: reservation,
   panelBuilder,
   hooks: {
     storage,
@@ -363,7 +430,7 @@ const api: LocalApi = await startLocalApi({
     },
     log,
   },
-  port,
+  port: boundPort,
   log,
   openInDesktop,
   mcp: mcp.server,
@@ -391,18 +458,42 @@ const api: LocalApi = await startLocalApi({
     desktopRead: desktop?.filesRead ?? 0,
     work: work.chamadas,
   }),
-}).catch(async (e: NodeJS.ErrnoException) => {
-  if (e.code !== 'EADDRINUSE') throw e;
-  await storage.close();
-  return adoptPortHolder();
+}).catch(async (e: unknown) => {
+  await releasePort(reservation).catch(() => undefined);
+  throw e;
 });
+const apiPort = (api.server.address() as AddressInfo).port;
 
-const lock = useLock ? await claimLock({ port, version: API_VERSION, parent }) : null;
+const lock = useLock ? await claimLock({ dir: dataDir, port: apiPort, version: API_VERSION, parent }) : null;
 if (lock && 'conflict' in lock) {
   await api.close().catch(() => undefined);
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
 }
+startGuard?.release();
+// The instance registry (decision 0010, item 3): only cores with a lock. A --demo or a --no-lock
+// core is not this installation's core, so nobody should find it there.
+const instance = lock
+  ? { id: instanceId(installation), installation, pid: process.pid, port: apiPort, version: API_VERSION, commit, dataDir, startedAt: lock.startedAt }
+  : null;
+const unregister = () => {
+  if (!instance) return;
+  try {
+    removeInstance(instance.id, { pid: process.pid });
+  } catch (e) {
+    log(`registry: ${(e as Error).message}`);
+  }
+};
+if (instance) {
+  process.once('exit', unregister);
+  // The registry is only for finding the core: a failure here is logged, it does not stop the core.
+  try {
+    writeInstance(instance);
+  } catch (e) {
+    log(`registry: could not write ${instance.id}: ${(e as Error).message}`);
+  }
+}
+log(`listening on port ${apiPort} · installation ${installation} · data ${demo ? '(demo, in memory)' : dataDir}${instance ? ` · instance ${instance.id}` : ''}`);
 log(`local API at ${api.url} · MCP at ${api.url}/mcp${demo ? ` (demo ${o.scenario}: synthetic simulator data)` : ` · database ${dbPath}`}`);
 
 const stopWatchingParent =
@@ -410,6 +501,7 @@ const stopWatchingParent =
     ? () => {}
     : watchParent({
         parent,
+        dir: dataDir,
         onGone: (reason) => {
           log(`${reason}; saindo`);
           void shutdown();
@@ -457,7 +549,8 @@ async function shutdown() {
   stopWatcher();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();
-  if (lock && !('conflict' in lock)) releaseLock(lock.token);
+  unregister();
+  if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);
@@ -465,5 +558,7 @@ async function shutdown() {
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });
   process.exit(0);
 }
+process.off('SIGINT', exitOnSignal);
+process.off('SIGTERM', exitOnSignal);
 process.on('SIGINT', () => void shutdown());
 process.on('SIGTERM', () => void shutdown());

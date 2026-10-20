@@ -92,8 +92,7 @@ interface Run {
 
 function envWithoutCoreVars(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
-  delete env.AHRENA_CONSOLE_PORT;
-  delete env.AHRENA_CONSOLE_DB;
+  for (const name of ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME']) delete env[name];
   return env;
 }
 
