@@ -1,5 +1,5 @@
 // Repositórios (C22, issue 104): as organizações e os repositórios da conta do GitHub, com atividade,
-// issues, PRs, CI e as sessões que mexem em cada um. Lê `GET /api/repos` (src/api/repos-tipos.ts).
+// issues, PRs, CI e as sessões que mexem em cada um. Lê `GET /api/repos` (src/api/repos-types.ts).
 //
 // - Os filtros ficam montados entre as releituras: só a lista e os cards são redesenhados, e a busca
 //   não perde o foco enquanto a pessoa digita.

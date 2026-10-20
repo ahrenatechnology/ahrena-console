@@ -8,7 +8,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
 const STYLE = '/ui/dashboard.css';
-// As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/rota-atencao.ts (#87):
+// As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/attention-route.ts (#87):
 // se o nome mudar lá, muda aqui.
 export const DASHBOARD_ROUTE = '/api/dashboard';
 export const ATTENTION_ROUTE = '/api/attention';

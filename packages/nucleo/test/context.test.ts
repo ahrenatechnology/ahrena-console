@@ -11,7 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate, schemaVersion } from '../src/adapters/sqlite/migrations.ts';
 import { Contas, MontadorDoPainel } from '../src/api/index.ts';
-import { reprocessarContexto } from '../src/api/reprocessamento.ts';
+import { reprocessarContexto } from '../src/api/reprocessing.ts';
 import {
   LONG_WINDOW,
   DEFAULT_WINDOW,

@@ -4,7 +4,7 @@
 // - `?context=<id>`: the scoreboard, depends-on-you, the queue and the not-ready PRs, the issue
 //   board in six columns and the PRs merged in the last 24 h, with GitHub's `readAt` and `stale`.
 //
-// `GET` only, behind the same Origin and Host defenses as the other routes (servidor.ts, decision 0003).
+// `GET` only, behind the same Origin and Host defenses as the other routes (server.ts, decision 0003).
 // Error messages stay pt-BR, like the other routes'.
 
 import type { ServerResponse } from 'node:http';

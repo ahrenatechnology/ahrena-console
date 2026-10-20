@@ -94,7 +94,7 @@ export class SessionHistory {
     return { days, next: page.next };
   }
 
-  // The same number as the panel (custoDe in api/painel.ts); with no usage, `null` instead of zero.
+  // The same number as the panel (custoDe in api/panel.ts); with no usage, `null` instead of zero.
   private async costOf(s: Session, prices: Awaited<ReturnType<typeof currentPrices>>): Promise<number | null> {
     const kept = this.costs.get(s.id);
     if (kept && kept.updatedAt === s.updatedAt) return kept.usd;

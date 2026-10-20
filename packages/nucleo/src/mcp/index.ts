@@ -1,6 +1,6 @@
 // The core's MCP server (epic 2). See README.md in this folder.
 
-import { VERSAO_DA_API } from '../api/versao.ts';
+import { VERSAO_DA_API } from '../api/version.ts';
 import { fleetOverview } from './tools/fleet.ts';
 import { sessionsNeedingAttention } from './tools/attention.ts';
 import { FleetReader, type FleetOptions } from './fleet.ts';

@@ -57,13 +57,13 @@ import { demoLocal, seedDetail } from '../simulator/detail.ts';
 import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
-import { Contas } from './contas.ts';
-import { DecisoesDaUi } from './decisoes-ui.ts';
+import { Contas } from './accounts.ts';
+import { DecisoesDaUi } from './decisions-ui.ts';
 import { QuadroKanban } from './kanban.ts';
-import { LeiturasDoDetalhe } from './detalhe.ts';
-import { IndiceDoDesktop } from './indice-desktop.ts';
-import { RotaAnalytics } from './rota-analytics.ts';
-import { MontadorDoPainel } from './painel.ts';
+import { LeiturasDoDetalhe } from './session-detail.ts';
+import { IndiceDoDesktop } from './desktop-index.ts';
+import { RotaAnalytics } from './analytics-route.ts';
+import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
   LIMPEZA_DAS_DECISOES,
@@ -72,13 +72,13 @@ import {
   REPROCESSAMENTO_DO_CONTEXTO,
   reprocessarContexto,
   reprocessarHistorico,
-} from './reprocessamento.ts';
+} from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
-import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
-import { ListaDeSessoes } from './sessoes.ts';
-import { FeedDeEventos } from './eventos.ts';
-import { TrabalhoPorBranch } from './trabalho.ts';
+import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './server.ts';
+import { ListaDeSessoes } from './sessions.ts';
+import { FeedDeEventos } from './events.ts';
+import { TrabalhoPorBranch } from './work.ts';
 import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
 import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';

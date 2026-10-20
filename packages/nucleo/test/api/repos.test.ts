@@ -6,7 +6,7 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
-import { SessoesPorRepo } from '../../src/api/repos-sessoes.ts';
+import { SessoesPorRepo } from '../../src/api/repos-sessions.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
 import { FleetReader } from '../../src/mcp/fleet.ts';
