@@ -215,7 +215,7 @@ describe('formatos e registro', () => {
     assert.equal(rotaDosWorkflows('ativas', 'subagente:code-reviewer'), '/api/workflows?filtro=ativas&no=subagente%3Acode-reviewer');
   });
 
-  test('Workflows está na barra depois de Sessões, e todo ícone usado existe', () => {
+  test('Workflows está na barra depois de Analytics, como no wireframe, e todo ícone usado existe', () => {
     const t = TELAS.find((x: any) => x.id === 'workflows');
     assert.deepEqual(t, {
       id: 'workflows',
@@ -227,7 +227,7 @@ describe('formatos e registro', () => {
       arquivo: '/ui/telas/workflows.js',
     });
     const ids = TELAS.map((x: any) => x.id);
-    assert.equal(ids.indexOf('workflows'), ids.indexOf('sessoes') + 1);
+    assert.equal(ids.indexOf('workflows'), ids.indexOf('analytics-aba') + 1);
     assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
     const usados = new Set<string>(['workflows', 'grafo']);
     for (const a of ['workflows.js', 'detalhe-workflow.js']) {

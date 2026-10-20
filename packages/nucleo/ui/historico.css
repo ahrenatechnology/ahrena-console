@@ -1,0 +1,53 @@
+/* O estilo do Histórico (C15, #33). A tela carrega este arquivo; toda classe própria leva `hist-`. */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+.hist-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hist-muted { color: var(--muted); }
+.hist-accent { color: var(--accent-text); }
+
+/* Busca: ícone e entrada sem borda própria. */
+.hist-busca { display: flex; align-items: center; gap: 8px; width: 220px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.hist-busca:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hist-busca input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.hist-busca input::placeholder { color: var(--muted); opacity: 1; }
+
+.hist-corpo { display: flex; flex-direction: column; gap: 16px; }
+.hist-regiao { display: flex; flex-direction: column; gap: 16px; }
+.hist-grupo { display: flex; flex-direction: column; gap: 8px; }
+.hist-dia { display: flex; align-items: center; gap: 6px; margin: 0; line-height: normal; }
+.hist-n { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: var(--weight-regular); }
+
+/* As linhas do dia, dentro de um cartão. */
+.hist-linhas { display: flex; flex-direction: column; overflow: hidden; }
+.hist-linha { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; min-width: 0; }
+.hist-linha:last-child { border-bottom: 0; }
+.hist-linha:hover { background: var(--raised); }
+.hist-o { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.hist-bloco { flex: 1; }
+.hist-titulo { font-weight: var(--weight-medium); }
+/* A linha inteira leva à sessão: o ::after do link do título cobre a linha (sem link dentro de link). */
+.hist-alvo::after { content: ""; position: absolute; inset: 0; }
+.hist-alvo:focus-visible { outline: 0; }
+.hist-alvo:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hist-continuou .icone { vertical-align: -0.14em; }
+.hist-anterior { position: relative; z-index: 1; }
+.hist-anterior:hover { text-decoration: underline; }
+.hist-anterior:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.hist-projeto { width: 140px; flex: none; }
+.hist-modelo { width: 80px; flex: none; }
+.hist-duracao { width: 64px; flex: none; }
+.hist-custo { width: 80px; flex: none; text-align: right; white-space: nowrap; }
+.hist-seta { display: inline-flex; flex: none; }
+.hist-sentinela { height: 1px; }
+
+@media (max-width: 900px) {
+  .hist-projeto { width: 110px; }
+}
+@media (max-width: 640px) {
+  .hist-busca { width: 140px; }
+  .hist-projeto, .hist-modelo, .hist-duracao { display: none; }
+}

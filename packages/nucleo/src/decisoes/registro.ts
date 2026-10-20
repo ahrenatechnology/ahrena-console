@@ -300,6 +300,16 @@ export async function linkSession(port: DecisionPort, input: LinkSessionInput, n
   return link;
 }
 
+/**
+ * As vizinhas da sessão pelo /clear, para o histórico (#33): a anterior é a mãe quando a ligação é
+ * `clear`; a seguinte, a primeira sessão ligada a esta por `clear`. Compactação, resume e filha não contam.
+ */
+export async function clearNeighbours(port: Pick<DecisionPort, 'getSessionLink' | 'listSessionLinks'>, sessionId: string): Promise<{ previous: string | null; next: string | null }> {
+  const link = await port.getSessionLink(sessionId);
+  const next = (await port.listSessionLinks(link?.familyId ?? sessionId)).find((l) => l.parentSessionId === sessionId && l.reason === 'clear');
+  return { previous: link?.reason === 'clear' ? link.parentSessionId : null, next: next?.sessionId ?? null };
+}
+
 /** Nível de consulta das decisões que valem para uma sessão. */
 export type DecisionLevel = DecisionScope;
 
