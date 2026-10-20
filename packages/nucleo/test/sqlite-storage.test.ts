@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, test } from 'node:test';
 import { MIGRATIONS, migrate, schemaVersion, type Migration } from '../src/adapters/sqlite/migrations.ts';
 import { openSqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
-import { T0, account, session } from './fixtures.ts';
+import { T0, account, event, session } from './fixtures.ts';
 import { storageContract } from './storage-contract.ts';
 
 storageContract('SQLite em memória', async () => openSqliteStorage({ path: ':memory:' }));
@@ -140,5 +140,33 @@ describe('migração 2: contas (decisão 0006)', () => {
                   VALUES ('x', 'active', 'a', 'b', 'u/o', 'palpite')`)
         .run(),
     );
+  });
+});
+
+describe('migração 8: ordem de gravação dos eventos (feed, #94)', () => {
+  test('banco da versão 7 com eventos ganha o seq na ordem em que entraram, e o próximo vem depois', async () => {
+    const path = join(dir, 'v7-com-eventos.sqlite');
+    const v7 = new DatabaseSync(path);
+    migrate(v7, MIGRATIONS.filter((m) => m.version <= 7));
+    const inserir = v7.prepare(`INSERT INTO events (id, session_id, type, created_at) VALUES (?, 's1', 'PreToolUse', ?)`);
+    inserir.run('primeiro', T0);
+    inserir.run('segundo', '2026-11-01T00:00:00.000Z'); // gravado depois, com createdAt mais velho
+    v7.close();
+
+    const store = openSqliteStorage({ path });
+    const seqs = store.db.prepare('SELECT id, seq FROM events ORDER BY seq').all() as { id: string; seq: number }[];
+    assert.deepEqual(seqs.map((r) => r.id), ['primeiro', 'segundo']);
+    const p = await store.listRecentEvents();
+    assert.deepEqual(p.items.map((e) => e.id), ['primeiro', 'segundo']);
+    await store.appendEvent(event({ id: 'terceiro', createdAt: '2026-10-01T00:00:00.000Z' }));
+    assert.deepEqual((await store.listRecentEvents({ after: p.liveCursor })).items.map((e) => e.id), ['terceiro']);
+    await store.close();
+  });
+
+  test('a página do feed usa o índice por createdAt, e o ao vivo o de seq', () => {
+    const store = openSqliteStorage({ path: ':memory:' });
+    const plano = (sql: string) => JSON.stringify(store.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all());
+    assert.match(plano('SELECT * FROM events WHERE seq <= 9 ORDER BY created_at DESC, id DESC LIMIT 51'), /events_by_created/);
+    assert.match(plano('SELECT * FROM events WHERE seq > 9 ORDER BY seq LIMIT 51'), /events_by_seq/);
   });
 });

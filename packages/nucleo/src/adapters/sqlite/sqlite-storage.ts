@@ -19,9 +19,12 @@ import { validatePlan, validatePlanRecord, type PlanRecord, type SessionPlan } f
 import { validateContextMeter, type ContextMeter } from '../../contexto/modelo.ts';
 import {
   pageSize,
+  type EventFacets,
   type ListEventsQuery,
+  type ListRecentEventsQuery,
   type ListSessionsQuery,
   type Page,
+  type RecentEventsPage,
   type StoragePort,
 } from '../../storage-port.ts';
 import { MIGRATIONS, migrate, schemaVersion, type Migration } from './migrations.ts';
@@ -50,6 +53,66 @@ function decodeCursor(cursor: string, size: number): string[] {
 }
 
 const json = (v: unknown): string => JSON.stringify(v ?? {});
+
+/**
+ * Cursor do feed (#94): a posição `seq` de gravação e, na página para trás, o último `createdAt`/`id`
+ * mostrado. No ao vivo vale só o `seq`; na página para trás, o `seq` é o maior que existia no
+ * primeiro pedido (o que entrou depois vem pelo ao vivo).
+ */
+interface PosicaoDoFeed {
+  seq: number;
+  createdAt: string | null;
+  id: string | null;
+}
+
+const encodeFeedCursor = (seq: number, createdAt: string | null = null, id: string | null = null): string =>
+  encodeCursor(['f', String(seq), createdAt ?? '', id ?? '']);
+
+function decodeFeedCursor(cursor: string): PosicaoDoFeed {
+  const [marca, seq, createdAt, id] = decodeCursor(cursor, 4);
+  if (marca !== 'f' || !/^\d{1,15}$/.test(seq) || (createdAt === '') !== (id === '')) throw new RangeError('cursor inválido');
+  return { seq: Number(seq), createdAt: createdAt || null, id: id || null };
+}
+
+/** `%`, `_` e `\` viram literais no LIKE (com `ESCAPE '\'`). */
+const literalNoLike = (texto: string): string => `%${texto.replace(/[\\%_]/g, '\\$&')}%`;
+
+function filtrosDoFeed(q: ListRecentEventsQuery): { where: string[]; params: string[] } {
+  const where: string[] = [];
+  const params: string[] = [];
+  if (q.sessionId !== undefined) {
+    where.push('session_id = ?');
+    params.push(q.sessionId);
+  }
+  if (q.types) {
+    where.push(q.types.length ? `type IN (${q.types.map(() => '?').join(', ')})` : '0');
+    params.push(...q.types);
+  }
+  if (q.excludeTypes?.length) {
+    where.push(`type NOT IN (${q.excludeTypes.map(() => '?').join(', ')})`);
+    params.push(...q.excludeTypes);
+  }
+  if (q.toolName !== undefined) {
+    where.push('tool_name = ?');
+    params.push(q.toolName);
+  }
+  if (q.text) {
+    where.push(`(summary LIKE ? ESCAPE '\\' OR tool_name LIKE ? ESCAPE '\\')`);
+    params.push(literalNoLike(q.text), literalNoLike(q.text));
+  }
+  if (q.createdFrom !== undefined) {
+    where.push('created_at >= ?');
+    params.push(q.createdFrom);
+  }
+  if (q.createdUntil !== undefined) {
+    where.push('created_at < ?');
+    params.push(q.createdUntil);
+  }
+  return { where, params };
+}
+
+const maisNovoPrimeiro = (a: SessionEvent, b: SessionEvent): number =>
+  a.createdAt === b.createdAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.createdAt < b.createdAt ? 1 : -1;
 
 function toSession(r: Row): Session {
   return {
@@ -360,8 +423,8 @@ export class SqliteStorage implements StoragePort {
     validateEvent(e);
     const result = this.db
       .prepare(
-        `INSERT INTO events (id, session_id, agent_id, type, tool_name, summary, data, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+        `INSERT INTO events (id, session_id, agent_id, type, tool_name, summary, data, created_at, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM events)) ON CONFLICT (id) DO NOTHING`,
       )
       .run(
         e.id, e.sessionId, e.agentId, e.type, e.toolName, e.summary,
@@ -385,6 +448,53 @@ export class SqliteStorage implements StoragePort {
     const items = rows.slice(0, limit).map(toEvent);
     const last = items.at(-1);
     return { items, nextCursor: rows.length > limit && last ? encodeCursor([last.createdAt, last.id]) : null };
+  }
+
+  // Tudo síncrono, sem `await` no meio: o maior `seq` e a página saem do mesmo instante do banco.
+  async listRecentEvents(query: ListRecentEventsQuery = {}): Promise<RecentEventsPage> {
+    const limit = pageSize(query.limit);
+    if (query.after && query.before) throw new RangeError('after e before não combinam');
+    const after = query.after ? decodeFeedCursor(query.after) : null;
+    const before = query.before ? decodeFeedCursor(query.before) : null;
+    const { where, params } = filtrosDoFeed(query);
+    const maior = (this.db.prepare('SELECT MAX(seq) AS m FROM events').get() as { m: number | null }).m;
+
+    if (after && query.after) {
+      if (maior === null || maior <= after.seq) return { items: [], liveCursor: query.after, nextCursor: null };
+      const rows = this.db
+        .prepare(`SELECT * FROM events WHERE ${['seq > ?', ...where].join(' AND ')} ORDER BY seq LIMIT ?`)
+        .all(after.seq, ...params, limit + 1);
+      const lote = rows.slice(0, limit);
+      // Mais novos que o limite: o cursor para no último entregue e o próximo pedido busca o resto.
+      const ate = rows.length > limit ? (lote.at(-1)?.seq as number) : maior;
+      return { items: lote.map(toEvent).sort(maisNovoPrimeiro), liveCursor: encodeFeedCursor(ate), nextCursor: null };
+    }
+
+    if (maior === null) return { items: [], liveCursor: null, nextCursor: null };
+    const retrato = before ? before.seq : maior;
+    const todos = ['seq <= ?', ...where];
+    const antes: string[] = [];
+    if (before?.createdAt && before.id) {
+      todos.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      antes.push(before.createdAt, before.createdAt, before.id);
+    }
+    const rows = this.db
+      .prepare(`SELECT * FROM events WHERE ${todos.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`)
+      .all(retrato, ...params, ...antes, limit + 1);
+    const items = rows.slice(0, limit).map(toEvent);
+    const ultimo = items.at(-1);
+    return {
+      items,
+      liveCursor: encodeFeedCursor(retrato),
+      nextCursor: rows.length > limit && ultimo ? encodeFeedCursor(retrato, ultimo.createdAt, ultimo.id) : null,
+    };
+  }
+
+  async listEventFacets(limit = 100): Promise<EventFacets> {
+    const n = pageSize(limit);
+    const types = this.db.prepare('SELECT DISTINCT type AS v FROM events ORDER BY type LIMIT ?').all(n);
+    const tools = this.db.prepare('SELECT DISTINCT tool_name AS v FROM events WHERE tool_name IS NOT NULL ORDER BY tool_name LIMIT ?').all(n);
+    return { types: types.map((r) => r.v as string), toolNames: tools.map((r) => r.v as string) };
   }
 
   async putTokenUsage(u: TokenUsage): Promise<void> {
