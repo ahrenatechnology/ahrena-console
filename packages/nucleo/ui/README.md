@@ -33,6 +33,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | Analytics · Custo (C13) | `/ui/analytics/custo` | `GET /api/analytics/cost?days=7\|30\|90&tz=` | `telas/analytics.js` |
 | Repositórios (C22) | `/ui/repos` | `GET /api/repos` | `telas/repos.js` |
 | Repositório (C23) | `/ui/repos/:dono/:repo` | `GET /api/repos/<dono>/<repo>?period=30d\|90d\|1y` | `telas/repo.js` |
+| Dev Console (C27) | `/ui/dev-console` (`?context=<id>`, `?tab=merge-queue`) | `GET /api/dev-console` e `GET /api/dev-console?context=<id>` | `telas/dev-console.js` e `telas/dev-console.css` (classes `dev-`) |
 
 O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `analytics` (item da barra) e a `analytics-aba` (`/ui/analytics/:aba`, acende Analytics). A tela lê `ctx.params.aba`: só `custo` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
 | `decisoes.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisoes-comum.js` põe o `<link>` no `<head>` ao montar |

@@ -3,6 +3,7 @@
 // suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
+import { diaDe } from '../custo/agregacao.ts';
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { decisionLabel } from '../decisoes/registro.ts';
@@ -74,11 +75,25 @@ export interface SuggestedDecisionItem {
 
 export type DependsOnYouItem = WaitingSessionItem | SuggestedDecisionItem;
 
+/** A decision in force taken today (the machine's day) in one of the context's live sessions: the C27 "Decisões tomadas hoje". */
+export interface DecisionTodayItem {
+  decisionId: string;
+  /** The UI's "D4". */
+  label: string;
+  choice: string;
+  sessionId: string;
+  repo: string;
+  decidedAt: string;
+  minutes: number;
+}
+
 export interface SessionsOfContexts {
   /** The live sessions of each repository. */
   byRepo: Map<string, ContextSession[]>;
   /** The depends-on-you items of each repository. */
   dependsOnYou: Map<string, DependsOnYouItem[]>;
+  /** The decisions in force taken today, per repository. */
+  decisionsToday: Map<string, DecisionTodayItem[]>;
 }
 
 export interface DevConsoleSessionsOptions {
@@ -112,6 +127,8 @@ export class DevConsoleSessions {
     const now = this.frota.agora();
     const byRepo = new Map<string, ContextSession[]>();
     const dependsOnYou = new Map<string, DependsOnYouItem[]>();
+    const decisionsToday = new Map<string, DecisionTodayItem[]>();
+    const today = this.frota.hoje();
     const push = <T>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
 
     const waiting = new Map((await precisamDeVoce(this.frota, null)).map((i) => [i.sessionId, i]));
@@ -151,9 +168,23 @@ export class DevConsoleSessions {
           minutes: minutosDesde(d.decidedAt, now),
         });
       }
+      // Most recent first: the first decision from another day ends the scan.
+      const inForce = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['vigente'], limit: 50 });
+      for (const d of inForce.items) {
+        if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
+        push(decisionsToday, repo, {
+          decisionId: d.id,
+          label: decisionLabel(d),
+          choice: d.choice.slice(0, MAX_CHOICE),
+          sessionId: s.session.id,
+          repo,
+          decidedAt: d.decidedAt,
+          minutes: minutosDesde(d.decidedAt, now),
+        });
+      }
     }
     for (const list of dependsOnYou.values()) list.sort((a, b) => a.since.localeCompare(b.since));
-    return { byRepo, dependsOnYou };
+    return { byRepo, dependsOnYou, decisionsToday };
   }
 }
 

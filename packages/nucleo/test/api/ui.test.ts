@@ -231,12 +231,12 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico, Decisões e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Dev Console, Analytics, Workflows, Histórico, Decisões e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'dev-console', 'analytics', 'workflows', 'historico', 'decisoes', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
-        ['main', null, ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes']],
+        ['main', null, ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'dev-console', 'analytics', 'workflows', 'historico', 'decisoes']],
         ['control', 'Controle', ['agent-config']],
       ],
     );
@@ -254,6 +254,7 @@ describe('registro das telas', () => {
     assert.deepEqual(d.params, { id: 'b91d04aa-4e1' });
     assert.equal(acharTela('/ui/sessoes/a%20b'), null);
     assert.equal(acharTela('/ui/kanban').tela.id, 'kanban');
+    assert.equal(acharTela('/ui/dev-console').tela.arquivo, '/ui/telas/dev-console.js');
     assert.equal(acharTela('/ui/nao-existe'), null);
   });
 

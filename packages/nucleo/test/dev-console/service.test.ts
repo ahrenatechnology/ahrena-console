@@ -188,6 +188,30 @@ describe('Dev Console of one context', () => {
     assert.equal(v.scoreboard.sessionsWorking, 1);
   });
 
+  test('#179 decisions taken today: the ones in force from the context sessions, most recent first; yesterday and outside the context stay out', async () => {
+    const decide = (sessionId: string, key: string, choice: string, minutesAgo: number) =>
+      registerDecision(
+        decisions,
+        { sourceKey: key, sessionId, topic: key, context: null, choice, alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-minutesAgo) },
+        at(-minutesAgo),
+      );
+    await decide('trabalhando', 'q1', 'SQLite em memória nos testes', 14);
+    await decide('plano', 'q2', 'Cobrança vira um serviço à parte', 25);
+    await decide('fora', 'q3', 'Fora do contexto', 5);
+    // T0 is 12:00 UTC: 13 h ago is yesterday.
+    await decide('trabalhando', 'q4', 'De ontem', 13 * 60);
+    const v = (await devConsole.view('loja'))!;
+    assert.deepEqual(
+      v.decisionsToday.map((d) => [d.sessionId, d.choice, d.minutes]),
+      [
+        ['trabalhando', 'SQLite em memória nos testes', 14],
+        ['plano', 'Cobrança vira um serviço à parte', 25],
+      ],
+    );
+    assert.match(v.decisionsToday[0].label, /^D\d+$/);
+    assert.equal(v.decisionsToday[1].repo, DEV_CONSOLE_SIMULATOR_RULES);
+  });
+
   test('unknown context: null', async () => {
     assert.equal(await devConsole.view('nenhum'), null);
   });
@@ -223,7 +247,7 @@ describe('GET /api/dev-console', () => {
     const res = await fetch(`${api.url}/api/dev-console?context=loja`);
     assert.equal(res.status, 200);
     const v = (await res.json()) as DevConsoleView;
-    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason', 'truncated']);
+    assert.deepEqual(Object.keys(v).sort(), ['board', 'context', 'decisionsToday', 'dependsOnYou', 'generatedAt', 'mergeQueue', 'mergedLast24h', 'notReady', 'readAt', 'scoreboard', 'stale', 'staleReason', 'truncated']);
     assert.equal(v.scoreboard.ready, 3);
   });
 

@@ -98,6 +98,15 @@ export const TELAS = [
     arquivo: '/ui/telas/repo.js', // C23
   },
   {
+    id: 'dev-console',
+    rota: '/ui/dev-console',
+    item: { rotulo: 'Dev Console', icone: 'gauge', section: 'main' },
+    titulo: 'Dev Console',
+    sub: 'PRs, issues e sessões dos repositórios do contexto',
+    icone: 'gauge',
+    arquivo: '/ui/telas/dev-console.js', // C27, issue 179
+  },
+  {
     id: 'analytics',
     rota: '/ui/analytics',
     item: { rotulo: 'Analytics', icone: 'analytics', section: 'main' },
