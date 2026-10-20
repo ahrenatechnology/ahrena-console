@@ -2,7 +2,9 @@
 // card e as rotas que a página (C21) e a aba (C20) leem. O DOM fica para o navegador; aqui vão as
 // funções puras e as travas.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
@@ -166,9 +168,28 @@ const TELA = 'decisoes.css';
 const PREFIXO = 'dec-';
 const JS_DA_TELA = ['telas/decisoes.js', 'telas/detalhe-decisoes.js', 'telas/decisoes-comum.js'];
 // Igual ao `classes()` e ao `SELOS` de test/api/sessoes.test.ts (no main), para os dois testes andarem juntos.
-const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+const classesDoCss = (caminho: string) => new Set([...readFileSync(caminho, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+const classes = (arquivo: string) => classesDoCss(`${PASTA_DA_UI}${arquivo}`);
 const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 const permitida = (c: string, daMoldura: Set<string>) => c.startsWith(PREFIXO) || daMoldura.has(c) || SELOS.has(c);
+
+/** Os css das outras telas: `ui/*.css` e `ui/telas/*.css`, fora a moldura, a marca e o desta tela. */
+function outrosCss(): string[] {
+  const fora = new Set([TELA, 'moldura.css', 'marca.css']);
+  return ['', 'telas/'].flatMap((sub) => readdirSync(`${PASTA_DA_UI}${sub}`).filter((a) => a.endsWith('.css') && !fora.has(a)).map((a) => `${PASTA_DA_UI}${sub}${a}`));
+}
+
+/** As classes que `tela` e cada css de `outras` estilizam em comum, fora a moldura e os selos. */
+function repetidas(tela: string, outras: string[]): Record<string, string[]> {
+  const daMoldura = classes('moldura.css');
+  const minhas = new Set([...classesDoCss(tela)].filter((c) => !daMoldura.has(c)));
+  const out: Record<string, string[]> = {};
+  for (const outra of outras) {
+    const comuns = [...classesDoCss(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
+    if (comuns.length) out[outra] = comuns;
+  }
+  return out;
+}
 
 /**
  * As classes que o JS põe num `class:`. Cada valor é lido até a vírgula ou a chave que fecha o objeto;
@@ -225,13 +246,20 @@ describe('o estilo das Decisões (ui/decisoes.css)', () => {
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
   // telas desmonta a outra. Mesmo teste do sessoes.test.ts do main, para o decisoes.css.
-  test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
-    const daMoldura = classes('moldura.css');
-    const minhas = new Set([...classes(TELA)].filter((c) => !daMoldura.has(c)));
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && ![TELA, 'moldura.css', 'marca.css'].includes(a));
-    for (const outra of outras) {
-      const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
-      assert.deepEqual(comuns, [], `${TELA} e ${outra} estilizam as mesmas classes`);
+  test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', (t) => {
+    const outras = outrosCss();
+    if (outras.length === 0) return t.skip('sem outro css até o rebase');
+    assert.deepEqual(repetidas(`${PASTA_DA_UI}${TELA}`, outras), {});
+  });
+
+  test('a comparação acima pega a classe repetida num css de outra tela', () => {
+    const pasta = mkdtempSync(join(tmpdir(), 'ui-decisoes-'));
+    try {
+      const outra = join(pasta, 'outra.css');
+      writeFileSync(outra, '.dec-seg { color: red; }\n.badge { color: blue; }\n.so-dela { margin: 0; }\n');
+      assert.deepEqual(repetidas(`${PASTA_DA_UI}${TELA}`, [outra]), { [outra]: ['dec-seg'] }, 'a repetida entra; o selo e a só dela, não');
+    } finally {
+      rmSync(pasta, { recursive: true, force: true });
     }
   });
 
