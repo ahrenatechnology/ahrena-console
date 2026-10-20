@@ -32,6 +32,8 @@ import {
 
 const CSS = '/ui/feed.css';
 const RELOGIO_MS = 5000;
+/** O `limite` padrão de `/api/eventos`: um lote do ao vivo com esse tamanho diz que há mais. */
+const LOTE_DO_AO_VIVO = 50;
 const DIGITANDO_MS = 300;
 
 function ligarCss() {
@@ -304,6 +306,8 @@ export async function montar(area, ctx) {
       atualizarOpcoes(r.opcoes);
       desenharNovos(receberNovos(estado, r));
       desenharPausa();
+      // Lote cheio: há mais gravado depois deste cursor; pede de novo na hora.
+      if ((r.eventos?.length ?? 0) >= LOTE_DO_AO_VIVO) deNovo = true;
     } catch (e) {
       if (ehAbort(e) || g !== geracao) return;
       mostrarFaixa('O ao vivo do feed falhou.', e?.message);
@@ -337,7 +341,10 @@ export async function montar(area, ctx) {
   ctx.aoMudar(() => buscarNovos());
   ctx.aoReiniciar(() => recarregar({ manterLista: true }));
 
+  // Evento novo sozinho não é mudança no long polling (só estado, plano, decisão...): o relógio também
+  // pergunta pelos novos, para o feed não esperar a próxima mudança de estado.
   const relogio = setInterval(() => {
+    if (ctx.aoVivo?.() !== 'sem-conexao') buscarNovos();
     const agora = Date.now();
     for (const { no, ev } of itens.values()) {
       const rel = no.querySelector('.feed-rel');
