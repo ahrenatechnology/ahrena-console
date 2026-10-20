@@ -13,4 +13,4 @@ export { LeiturasDoDetalhe, ROTA_DO_DETALHE, filtroDe, type CabecaDoDetalhe, typ
 export { montarAtencao, MOTIVO_CURTO, ROTA_DA_ATENCAO, type ItemDaAtencao, type RespostaDaAtencao } from './rota-atencao.ts';
 export { montarDashboard, MontadorDoDashboard, ROTA_DO_DASHBOARD, type RespostaDoDashboard, type AgenteDoDashboard, type AtividadeDoDashboard, type NumerosDoDashboard } from './rota-dashboard.ts';
 export { ListaDeSessoes, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessoes.ts';
-export { criarRotaDaConfig, escritaDaConfigNaMesmaOrigem, ROTA_DA_CONFIG, ROTA_DA_SKILL, type OpcoesDaConfig, type RotaDaConfig } from './config.ts';
+export { criarRotaDaConfig, escritaDaConfigNaMesmaOrigem, MAX_CORPO_DA_SKILL, ROTA_DA_CONFIG, ROTA_DA_SKILL, type OpcoesDaConfig, type RotaDaConfig } from './config.ts';

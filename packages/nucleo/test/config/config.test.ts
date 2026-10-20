@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, criarRotaDaConfig, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { ErroDaConfig, escolherProjeto, lerConfigDoAgente, lerFrontmatter, MAX_CONTEUDO, montarConfigDaDemo, pastaDaMemoriaAutomatica, projetosConhecidos, versaoDe } from '../../src/config/index.ts';
+import { Contas, criarRotaDaConfig, iniciarApiLocal, MAX_CORPO_DA_SKILL, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RotaDaConfig } from '../../src/api/index.ts';
+import { ErroDaConfig, escolherProjeto, lerConfigDoAgente, lerFrontmatter, MAX_CONTEUDO, montarConfigDaDemo, pastaDaMemoriaAutomatica, projetosConhecidos, raizDeSkill, versaoDe } from '../../src/config/index.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { pastaDeConfiguracao } from '../../src/perfis/descoberta.ts';
@@ -197,6 +197,36 @@ describe('#63 GET /api/config: a leitura', () => {
     const r = await lerConfigDoAgente({ pastas: [pasta], projetos: [] });
     assert.deepEqual(r.skills.map((s) => [s.nome, s.editavel]), [['link', false]]);
   });
+
+  test('SKILL.md e agents/*.md como symlink para outro arquivo da raiz: listados, sem ler nada do alvo', async () => {
+    const home = tmp();
+    const pasta = pastaDeConfiguracao(join(home, '.claude'), 'padrao', home);
+    // Conteúdo fictício com cara de frontmatter: se o alvo fosse lido, sairia na `descricao`.
+    escrever(join(pasta.dir, '.credentials.json'), '---\nname: seg\ndescription: segredo-ficticio-abc\n---\n');
+    mkdirSync(join(pasta.dir, 'skills', 'seg'), { recursive: true });
+    symlinkSync(join(pasta.dir, '.credentials.json'), join(pasta.dir, 'skills', 'seg', 'SKILL.md'));
+    mkdirSync(join(pasta.dir, 'agents'));
+    symlinkSync(join(pasta.dir, '.credentials.json'), join(pasta.dir, 'agents', 'seg.md'));
+    const r = await lerConfigDoAgente({ pastas: [pasta], projetos: [] });
+    assert.deepEqual(r.skills.map((s) => [s.nome, s.descricao, s.nomeDeclarado, s.editavel]), [['seg', null, null, false]]);
+    assert.deepEqual(r.subagentes.map((s) => [s.nome, s.descricao]), [['seg', null]]);
+    assert.ok(!JSON.stringify(r).includes('segredo-ficticio-abc'));
+  });
+
+  test('projeto = a pasta pai de uma home ($HOME): sem a raiz p, nada em dobro como projeto', async () => {
+    const t = tmp();
+    const pasta = montarHome(t, t);
+    const r = await lerConfigDoAgente({ pastas: [pasta], projetos: [t] });
+    assert.equal(r.projeto, t);
+    assert.deepEqual(r.raizes.map((x) => x.id), ['u0', 'c0', 'r']);
+    assert.deepEqual(r.skills.map((s) => [s.nome, s.raiz]).sort(), [['Maiuscula', 'u0'], ['revisar-pr', 'u0']]);
+    assert.ok(r.subagentes.every((s) => s.escopo === 'usuario'));
+    assert.equal(r.resumo.skills.projeto, 0);
+    assert.equal(r.resumo.hooks.projeto, 0);
+    assert.deepEqual(r.memoria.filter((m) => m.nome.endsWith('CLAUDE.md')).map((m) => [m.nome, m.escopo]), [['CLAUDE.md', 'usuario']]);
+    // A raiz `p` não existe: a gravação nela é 400 (nunca cai na home).
+    assert.throws(() => raizDeSkill('p', r.raizes), (e) => e instanceof ErroDaConfig && e.status === 400);
+  });
 });
 
 describe('#63 projetos conhecidos', () => {
@@ -261,6 +291,41 @@ function pedir(url: string, caminho: string, { method = 'GET', headers = {} as R
   });
 }
 
+/** Uma API local só com a rota da config dada, para os casos que pedem outras pastas. */
+async function comApi(rota: RotaDaConfig, fn: (url: string) => Promise<void>): Promise<void> {
+  const s = openSqliteStorage({ path: ':memory:' });
+  const montador = new MontadorDoPainel({ storage: s, contas: new Contas({ storage: s, arquivo: null }), desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(s.db) }) }) });
+  const a = await iniciarApiLocal({ montador, hooks: { storage: s }, port: 0, log: () => {}, config: rota });
+  try {
+    await fn(a.url);
+  } finally {
+    await a.close();
+    await s.close();
+  }
+}
+
+/**
+ * Um POST com o corpo em pedaços (chunked), sem nunca terminar: resolve com o status da resposta,
+ * que só chega se o servidor responder sem esperar o fim do corpo.
+ */
+function postarSemFim(url: string, pedaco: Buffer, vezes: number): Promise<number> {
+  const { hostname, port } = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = request({ hostname, port, path: '/api/config/skill', method: 'POST', headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' } }, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+      req.destroy();
+    });
+    req.on('error', () => {});
+    const espera = setTimeout(() => {
+      req.destroy();
+      reject(new Error('sem resposta: o servidor esperou o corpo inteiro'));
+    }, 5000);
+    req.on('response', () => clearTimeout(espera));
+    for (let i = 0; i < vezes; i++) req.write(pedaco);
+  });
+}
+
 describe('#63 /api/config e /api/config/skill', () => {
   let sqlite: SqliteStorage;
   let api: ApiLocal;
@@ -287,6 +352,10 @@ describe('#63 /api/config e /api/config/skill', () => {
     symlinkSync(join(fora, 'alvo'), join(home.dir, 'skills', 'link-pasta'));
     mkdirSync(join(home.dir, 'skills', 'link-arquivo'));
     symlinkSync(join(fora, 'alvo', 'SKILL.md'), join(home.dir, 'skills', 'link-arquivo', 'SKILL.md'));
+    // Symlink para dentro da raiz: o SKILL.md apontando para o `.credentials.json` da home.
+    escrever(join(home.dir, '.credentials.json'), '{"token":"segredo-ficticio-abc"}');
+    mkdirSync(join(home.dir, 'skills', 'seg'));
+    symlinkSync(join(home.dir, '.credentials.json'), join(home.dir, 'skills', 'seg', 'SKILL.md'));
 
     sqlite = openSqliteStorage({ path: ':memory:' });
     const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
@@ -335,6 +404,17 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal((await pedir(api.url, '/api/config/skill?raiz=u0&nome=link-arquivo')).status, 403);
   });
 
+  test('GET da skill cujo SKILL.md é symlink para dentro da raiz (o .credentials.json): 403, sem o segredo', async () => {
+    const r = await pedir(api.url, '/api/config/skill?raiz=u0&nome=seg');
+    assert.equal(r.status, 403, r.corpo);
+    assert.ok(!r.corpo.includes('segredo-ficticio-abc'));
+    const lista = await pedir(api.url, '/api/config');
+    assert.ok(!lista.corpo.includes('segredo-ficticio-abc'));
+    assert.equal((lista.json.skills as { nome: string; editavel: boolean }[]).find((s) => s.nome === 'seg')?.editavel, false);
+    assert.equal((await postar({ raiz: 'u0', nome: 'seg', conteudo: 'invadiu' })).status, 403);
+    assert.equal(readFileSync(join(home.dir, '.credentials.json'), 'utf8'), '{"token":"segredo-ficticio-abc"}');
+  });
+
   test('POST troca a skill: backup com o conteúdo antigo antes, gravação atômica, nova versão', async () => {
     const antes = await pedir(api.url, '/api/config/skill?raiz=u0&nome=revisar-pr');
     const r = await postar({ raiz: 'u0', nome: 'revisar-pr', conteudo: 'versão nova\n', versao: antes.json.versao });
@@ -380,6 +460,18 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal(readFileSync(join(home.dir, 'skills', 'so-cria', 'SKILL.md'), 'utf8'), 'um');
   });
 
+  test('dois "Nova" juntos com o mesmo nome: um cria, o outro dá 409; o arquivo é o do que venceu', async () => {
+    const [a, b] = await Promise.all([
+      postar({ raiz: 'u0', nome: 'corrida', conteudo: 'aba A', criar: true }),
+      postar({ raiz: 'u0', nome: 'corrida', conteudo: 'aba B', criar: true }),
+    ]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+    const venceu = a.status === 200 ? 'aba A' : 'aba B';
+    assert.equal(readFileSync(join(home.dir, 'skills', 'corrida', 'SKILL.md'), 'utf8'), venceu);
+    assert.equal((a.status === 200 ? a : b).json.backup, null);
+    assert.deepEqual(readdirSync(join(home.dir, 'skills', 'corrida')), ['SKILL.md']);
+  });
+
   test('a própria /ui grava (Origin igual a http://<Host>); Origin de outro site e Host estranho dão 403', async () => {
     const ok = await postar({ raiz: 'u0', nome: 'pela-ui', conteudo: 'x' }, { ...json, origin: `http://${host}` });
     assert.equal(ok.status, 200, ok.corpo);
@@ -389,6 +481,11 @@ describe('#63 /api/config e /api/config/skill', () => {
     const porta = new URL(api.url).port;
     assert.equal((await postar({ raiz: 'u0', nome: 'de-fora', conteudo: 'x' }, { ...json, host: `exemplo.com:${porta}` })).status, 403);
     assert.equal((await postar({ raiz: 'u0', nome: 'de-fora', conteudo: 'x' }, { ...json, host: `exemplo.com:${porta}`, origin: `http://exemplo.com:${porta}` })).status, 403);
+    assert.ok(!existsSync(join(home.dir, 'skills', 'de-fora')));
+    // `localhost` também é Host nosso: com ele, só a Origin `http://localhost:<porta>` passa.
+    const local = await postar({ raiz: 'u0', nome: 'pelo-localhost', conteudo: 'x' }, { ...json, host: `localhost:${porta}`, origin: `http://localhost:${porta}` });
+    assert.equal(local.status, 200, local.corpo);
+    assert.equal((await postar({ raiz: 'u0', nome: 'de-fora', conteudo: 'x' }, { ...json, host: `localhost:${porta}`, origin: `http://127.0.0.1:${porta}` })).status, 403);
     assert.ok(!existsSync(join(home.dir, 'skills', 'de-fora')));
     // A exceção é só desta rota: outra escrita com Origin continua recusada.
     assert.equal((await pedir(api.url, '/api/decisoes/x/confirmar', { method: 'POST', headers: { ...json, origin: `http://${host}` }, corpo: '{}' })).status, 403);
@@ -419,6 +516,35 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal((await postar({ raiz: 'u0', nome: 'ok', conteudo: 42 })).status, 400);
     assert.equal((await postar({ raiz: 'u0', nome: 'grande', conteudo: 'a'.repeat(MAX_CONTEUDO + 1) })).status, 413);
     assert.equal((await postar({ raiz: 'u0', nome: 'no-limite', conteudo: 'a'.repeat(MAX_CONTEUDO) })).status, 200);
+  });
+
+  test('corpo do POST acima de MAX_CORPO_DA_SKILL: 413 sem ler o resto', async () => {
+    // O conteúdo cabe em MAX_CONTEUDO; o que passa do limite é o corpo (um campo a mais).
+    const corpo = JSON.stringify({ raiz: 'u0', nome: 'corpo-grande', conteudo: 'x', sobra: 'a'.repeat(MAX_CORPO_DA_SKILL) });
+    assert.equal((await postar(corpo)).status, 413, 'com Content-Length');
+    // Sem Content-Length (chunked) e sem nunca terminar o corpo: o 413 chega mesmo assim.
+    const pedaco = Buffer.alloc(64 * 1024, 'a');
+    assert.equal(await postarSemFim(api.url, pedaco, Math.ceil(MAX_CORPO_DA_SKILL / pedaco.length) + 2), 413);
+    assert.ok(!existsSync(join(home.dir, 'skills', 'corpo-grande')));
+    // O servidor segue de pé.
+    assert.equal((await pedir(api.url, '/api/config/skill?raiz=u0&nome=revisar-pr')).status, 200);
+  });
+
+  test('projeto = a pasta pai da home: POST na raiz p dá 400 e nada cai na home', async () => {
+    const t4 = mkdtempSync(join(tmpdir(), 'config-projeto-home-'));
+    try {
+      const h4 = pastaDeConfiguracao(join(t4, '.claude'), 'padrao', t4);
+      mkdirSync(h4.dir);
+      await comApi(criarRotaDaConfig({ pastas: async () => [h4], projetos: async () => [t4], backups: join(t4, 'b') }), async (url) => {
+        const r = await pedir(url, '/api/config/skill', { method: 'POST', headers: json, corpo: JSON.stringify({ raiz: 'p', nome: 'nova', conteudo: 'x', criar: true }) });
+        assert.equal(r.status, 400, r.corpo);
+        assert.ok(!existsSync(join(h4.dir, 'skills', 'nova')));
+        const lista = await pedir(url, '/api/config');
+        assert.ok(!(lista.json.raizes as { id: string }[]).some((x) => x.id === 'p'));
+      });
+    } finally {
+      rmSync(t4, { recursive: true, force: true });
+    }
   });
 
   test('duas gravações juntas com a mesma versão: uma passa, a outra dá 409', async () => {

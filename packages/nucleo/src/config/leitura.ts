@@ -3,10 +3,11 @@
 // `.claude` do projeto. Lê só o que o contrato pede (modelo.ts): o frontmatter das skills e dos
 // subagentes, os nomes de evento dos hooks, as chaves de `mcpServers` e de `enabledPlugins`. Nunca
 // abre `.credentials.json`, nunca devolve valor de settings e não lê o conteúdo da memória. Arquivo
-// ilegível ou JSON quebrado tira só aquela parte da resposta.
+// ilegível ou JSON quebrado tira só aquela parte da resposta. O frontmatter de um `.md` que é symlink
+// para fora da própria pasta não é lido: a `descricao` sairia com o texto do alvo.
 
-import { open, readdir, readFile, stat } from 'node:fs/promises';
-import { basename, join, relative, sep } from 'node:path';
+import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import type { PastaDeConfiguracao } from '../perfis/descoberta.ts';
 import { lerFrontmatter } from './frontmatter.ts';
 import {
@@ -52,7 +53,11 @@ export function escolherProjeto(pedido: string | null | undefined, projetos: rea
   return pedido;
 }
 
-/** Os cartões de raiz, com os ids opacos do contrato. */
+/**
+ * Os cartões de raiz, com os ids opacos do contrato. O projeto que é a pasta pai de uma home (o
+ * projeto aberto no próprio `$HOME`) não ganha a raiz `p`: `<projeto>/.claude` seria a home outra
+ * vez, tudo sairia em dobro como Projeto e o "Nova → Projeto" gravaria no usuário.
+ */
 export async function raizesDa(pastas: PedidoDaConfig['pastas'], projeto: string | null): Promise<RaizDaConfig[]> {
   const varias = pastas.length > 1;
   const raizes: RaizDaConfig[] = [];
@@ -62,7 +67,10 @@ export async function raizesDa(pastas: PedidoDaConfig['pastas'], projeto: string
     if (await ehArquivo(p.claudeJson)) raizes.push({ id: `c${i}`, escopo: 'usuario', tipo: 'configuracao', rotulo: `.claude.json${sufixo}`, caminho: p.claudeJson });
   }
   if (projeto) {
-    raizes.push({ id: 'p', escopo: 'projeto', tipo: 'claude-projeto', rotulo: '.claude do projeto', caminho: join(projeto, '.claude') });
+    const claudeDoProjeto = join(projeto, '.claude');
+    const real = await caminhoReal(claudeDoProjeto);
+    const ehHome = (await Promise.all(pastas.map((p) => caminhoReal(p.dir)))).includes(real);
+    if (!ehHome) raizes.push({ id: 'p', escopo: 'projeto', tipo: 'claude-projeto', rotulo: '.claude do projeto', caminho: claudeDoProjeto });
     raizes.push({ id: 'r', escopo: 'projeto', tipo: 'projeto', rotulo: `Projeto · ${basename(projeto)}`, caminho: projeto });
   }
   return raizes;
@@ -127,7 +135,9 @@ export async function lerConfigDoAgente(pedido: PedidoDaConfig): Promise<ConfigD
   }
 
   if (projeto) {
-    for (const caminho of [join(projeto, 'CLAUDE.md'), join(projeto, 'CLAUDE.local.md'), join(projeto, '.claude', 'CLAUDE.md')]) {
+    // Sem a raiz `p` (a `.claude` do projeto é uma home), o `.claude/CLAUDE.md` já entrou como do usuário.
+    const temClaudeDoProjeto = raizes.some((x) => x.id === 'p');
+    for (const caminho of [join(projeto, 'CLAUDE.md'), join(projeto, 'CLAUDE.local.md'), ...(temClaudeDoProjeto ? [join(projeto, '.claude', 'CLAUDE.md')] : [])]) {
       if (await ehArquivo(caminho)) r.memoria.push({ nome: relative(projeto, caminho), escopo: 'projeto', caminho, tipo: 'instrucoes' });
     }
     const mcpJson = await lerJsonSemValores(join(projeto, '.mcp.json'));
@@ -166,7 +176,7 @@ async function lerSkills(raiz: RaizDaConfig): Promise<SkillListada[]> {
     const caminho = join(pasta, nome, 'SKILL.md');
     const info = await stat(caminho).catch(() => null);
     if (!info?.isFile()) continue;
-    const fm = lerFrontmatter(await comecoDe(caminho));
+    const fm = lerFrontmatter(await comecoDeDentro(caminho));
     const declarado = texto(fm.name);
     skills.push({
       nome,
@@ -188,7 +198,7 @@ async function lerSubagentes(raiz: RaizDaConfig): Promise<SubagenteListado[]> {
   for (const arquivo of (await entradas(pasta)).filter((a) => a.endsWith('.md')).sort()) {
     const caminho = join(pasta, arquivo);
     if (!(await ehArquivo(caminho))) continue;
-    const fm = lerFrontmatter(await comecoDe(caminho));
+    const fm = lerFrontmatter(await comecoDeDentro(caminho));
     lista.push({ nome: texto(fm.name) ?? arquivo.slice(0, -3), descricao: texto(fm.description), escopo: raiz.escopo, raiz: raiz.id, caminho });
   }
   return lista;
@@ -291,6 +301,28 @@ async function entradas(pasta: string): Promise<string[]> {
 
 async function ehArquivo(caminho: string): Promise<boolean> {
   return (await stat(caminho).catch(() => null))?.isFile() ?? false;
+}
+
+/** O caminho real; o próprio caminho, absoluto, se não existe. */
+async function caminhoReal(caminho: string): Promise<string> {
+  return realpath(caminho).catch(() => resolve(caminho));
+}
+
+/**
+ * O começo do arquivo, como `comecoDe`, só se ele não é symlink para fora da pasta onde está
+ * (`skills/<nome>/` ou `agents/`); senão `''`. Um `SKILL.md -> ../../.credentials.json` continua
+ * listado, mas sem nada do alvo.
+ */
+async function comecoDeDentro(caminho: string): Promise<string> {
+  try {
+    if ((await lstat(caminho)).isSymbolicLink()) {
+      const [real, pasta] = await Promise.all([realpath(caminho), realpath(dirname(caminho))]);
+      if (!real.startsWith(pasta + sep)) return '';
+    }
+  } catch {
+    return '';
+  }
+  return comecoDe(caminho);
 }
 
 /** O começo do arquivo, onde o frontmatter mora; `''` se ilegível. */

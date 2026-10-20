@@ -4,17 +4,21 @@
 // - o nome passa em `NOME_DE_SKILL` e não tem `..`: nunca é um caminho;
 // - a raiz é um id conhecido, de tipo `home` ou `claude-projeto` (nunca um caminho do pedido);
 // - a pasta `skills`, a pasta da skill e o `SKILL.md` que existirem têm o `realpath` dentro do
-//   `realpath` da raiz: um symlink para fora é recusado (403), e o `SKILL.md` gravado nunca é
-//   symlink;
+//   `realpath` da raiz: um symlink para fora é recusado (403);
+// - o `SKILL.md` que é symlink é recusado (403) na leitura e na gravação, mesmo apontando para
+//   dentro da raiz (um link para o `.credentials.json` da home sairia pelo GET), e o `realpath`
+//   dele fica dentro do da pasta da skill; a leitura abre com `O_NOFOLLOW`;
 // - só se escreve um arquivo chamado `SKILL.md`, com no máximo `MAX_CONTEUDO` bytes, pelo caminho
-//   atômico (temporário na mesma pasta + `rename`);
+//   atômico (temporário na mesma pasta + `rename`; no `criar`, `link`, que não passa por cima);
 // - a skill que existe ganha um backup antes, na pasta de backups do núcleo; a `versao` que veio e
-//   não bate com a atual dá 409 sem gravar (alguém editou por fora).
+//   não bate com a atual dá 409 sem gravar (alguém editou por fora); `criar` com a skill existindo
+//   também dá 409, conferido dentro da fila do arquivo.
 //
 // Apagar fica fora (#63): arriscado demais para esta entrega.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { link, lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
 import { ErroDaConfig, type EscopoDaConfig, type RaizDaConfig } from './modelo.ts';
@@ -52,6 +56,8 @@ export interface PedidoDeGravacao {
   nome: unknown;
   conteudo: unknown;
   versao?: unknown;
+  /** Só cria (o "Nova" da tela): a skill que já existe dá 409 em vez de ser trocada. */
+  criar?: boolean;
   /** A pasta de backups (padrão `~/.ahrena-console/backups`). */
   backups: string;
   agora?: () => Date;
@@ -123,12 +129,10 @@ async function caminhosDaSkill(raiz: RaizDaConfig, nome: string, criar: boolean)
   }
   const arquivo = join(pasta, 'SKILL.md');
   const info = await lstat(arquivo).catch(() => null);
-  if (info?.isSymbolicLink()) {
-    if (criar) throw new ErroDaConfig(403, 'SKILL.md é um symlink: edite o arquivo de destino');
-    await realDentro(realRaiz, arquivo);
-  } else if (info && !info.isFile()) {
-    throw new ErroDaConfig(400, 'SKILL.md não é um arquivo');
-  }
+  if (info?.isSymbolicLink()) throw new ErroDaConfig(403, 'SKILL.md é um symlink: edite o arquivo de destino');
+  if (info && !info.isFile()) throw new ErroDaConfig(400, 'SKILL.md não é um arquivo');
+  // O arquivo fica dentro da pasta da skill, e não só da raiz.
+  if (info) await realDentro(await realpath(pasta), arquivo);
   return { pasta, arquivo };
 }
 
@@ -139,8 +143,7 @@ async function caminhosDaSkill(raiz: RaizDaConfig, nome: string, criar: boolean)
 export async function skillEditavel(raiz: RaizDaConfig, nome: string): Promise<boolean> {
   try {
     validarNome(nome);
-    const c = await caminhosDaSkill(raiz, nome, false);
-    return c !== null && !(await lstat(c.arquivo)).isSymbolicLink();
+    return (await caminhosDaSkill(raiz, nome, false)) !== null;
   } catch {
     return false;
   }
@@ -153,14 +156,25 @@ export async function lerSkill(raiz: RaizDaConfig, nomePedido: unknown): Promise
   const nome = validarNome(nomePedido);
   const c = await caminhosDaSkill(raiz, nome, false);
   if (!c) return null;
-  let bytes: Buffer;
+  // `O_NOFOLLOW`: um symlink posto entre a conferência e a abertura não é seguido (ELOOP).
+  let f: Awaited<ReturnType<typeof open>>;
   try {
-    bytes = await readFile(c.arquivo);
+    f = await open(c.arquivo, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null;
+    if (code === 'ELOOP') throw new ErroDaConfig(403, 'SKILL.md é um symlink: edite o arquivo de destino');
     throw e;
   }
-  const info = await stat(c.arquivo);
+  let bytes: Buffer;
+  let info: Awaited<ReturnType<typeof f.stat>>;
+  try {
+    info = await f.stat();
+    if (!info.isFile()) throw new ErroDaConfig(400, 'SKILL.md não é um arquivo');
+    bytes = await f.readFile();
+  } finally {
+    await f.close();
+  }
   return { raiz: raiz.id, nome, escopo: raiz.escopo, caminho: c.arquivo, conteudo: bytes.toString('utf8'), versao: versaoDe(bytes), editadoEm: Math.round(info.mtimeMs) };
 }
 
@@ -178,6 +192,8 @@ export async function gravarSkill(p: PedidoDeGravacao): Promise<SkillGravada> {
 
   const { pasta, arquivo } = (await caminhosDaSkill(p.raiz, nome, true))!;
   const anterior = filas.get(arquivo) ?? Promise.resolve();
+  // A conferência do `criar` mora em `gravarAgora`, já na fila: fora dela, dois "Nova" juntos
+  // passariam os dois pela conferência e o segundo trocaria o primeiro.
   const feito = anterior.catch(() => undefined).then(() => gravarAgora(p, nome, pasta, arquivo, versaoPedida, p.conteudo as string));
   const fim = feito.catch(() => undefined);
   filas.set(arquivo, fim);
@@ -192,6 +208,7 @@ async function gravarAgora(p: PedidoDeGravacao, nome: string, pasta: string, arq
     if (e.code === 'ENOENT') return null;
     throw e;
   });
+  if (p.criar && atual) throw new ErroDaConfig(409, 'a skill já existe');
   if (versaoPedida !== null && (!atual || versaoDe(atual) !== versaoPedida)) {
     throw new ErroDaConfig(409, atual ? 'a skill mudou desde a leitura: releia antes de gravar' : 'a skill não existe mais');
   }
@@ -208,10 +225,15 @@ async function gravarAgora(p: PedidoDeGravacao, nome: string, pasta: string, arq
   const tmp = join(pasta, `.SKILL.md.tmp-${process.pid}-${randomBytes(6).toString('hex')}`);
   try {
     await writeFile(tmp, conteudo, { flag: 'wx', mode: 0o644 });
-    await rename(tmp, arquivo);
-  } catch (e) {
+    // No `criar`, `link` em vez de `rename`: falha (EEXIST) se outro processo criou a skill
+    // depois da conferência, em vez de passar por cima.
+    if (p.criar) {
+      await link(tmp, arquivo).catch((e: NodeJS.ErrnoException) => {
+        throw e.code === 'EEXIST' ? new ErroDaConfig(409, 'a skill já existe') : e;
+      });
+    } else await rename(tmp, arquivo);
+  } finally {
     await rm(tmp, { force: true }).catch(() => undefined);
-    throw e;
   }
   const info = await stat(arquivo);
   return { ok: true, caminho: arquivo, backup, versao: versaoDe(conteudo), editadoEm: Math.round(info.mtimeMs) };

@@ -13,7 +13,8 @@
 // Origem (decisão 0003): como as outras escritas, o POST sem `Origin` vale de 127.0.0.1. A tela
 // `/ui` manda `Origin`, então este POST, e só ele, também aceita `Origin` exatamente igual a
 // `http://<Host>`, com o Host nosso (`escritaDaConfigNaMesmaOrigem`, chamada no `handle`). Pede
-// `Content-Type: application/json` (415) e tem limite de corpo próprio, maior que o das decisões.
+// `Content-Type: application/json` (415) e tem limite de corpo próprio, maior que o das decisões:
+// passou dele, 413 na hora, sem ler o resto, e a conexão fecha.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -25,7 +26,7 @@ import { gravarSkill, lerSkill, MAX_CONTEUDO, pastaPadraoDeBackups, raizDeSkill 
 export const ROTA_DA_CONFIG = '/api/config';
 export const ROTA_DA_SKILL = '/api/config/skill';
 /** O corpo do POST: o conteúdo em JSON, com folga para os escapes. */
-const MAX_CORPO_DA_SKILL = 4 * MAX_CONTEUDO + 4096;
+export const MAX_CORPO_DA_SKILL = 4 * MAX_CONTEUDO + 4096;
 
 export interface OpcoesDaConfig {
   /** As pastas de configuração de usuário (perfis), relidas a cada pedido. */
@@ -50,20 +51,30 @@ export function escritaDaConfigNaMesmaOrigem(req: IncomingMessage, port: number)
   return origem === `http://${host}`;
 }
 
+/** O corpo, ou `null` assim que passa de `max`: aí para de ler (o resto nem chega a ser consumido). */
 function lerCorpo(req: IncomingMessage, max: number): Promise<string | null> {
   return new Promise((resolve, reject) => {
+    if (Number(req.headers['content-length']) > max) return resolve(null);
     const partes: Buffer[] = [];
     let tamanho = 0;
-    let grande = Number(req.headers['content-length']) > max;
-    req.on('data', (parte: Buffer) => {
-      if (grande) return;
+    const aoLer = (parte: Buffer) => {
       tamanho += parte.length;
-      if (tamanho > max) grande = true;
-      else partes.push(parte);
-    });
-    req.on('end', () => resolve(grande ? null : Buffer.concat(partes).toString('utf8')));
+      if (tamanho <= max) return void partes.push(parte);
+      req.off('data', aoLer);
+      req.pause();
+      resolve(null);
+    };
+    req.on('data', aoLer);
+    req.on('end', () => resolve(Buffer.concat(partes).toString('utf8')));
     req.on('error', reject);
   });
+}
+
+/** 413 sem ler o resto do corpo: a resposta sai com `Connection: close` e o pedido é destruído depois dela. */
+function grandeDemais(req: IncomingMessage, res: ServerResponse): void {
+  res.setHeader('connection', 'close');
+  res.on('finish', () => req.destroy());
+  send(res, 413, { error: 'corpo grande demais' });
 }
 
 export function criarRotaDaConfig(opts: OpcoesDaConfig): RotaDaConfig {
@@ -80,7 +91,7 @@ export function criarRotaDaConfig(opts: OpcoesDaConfig): RotaDaConfig {
   async function gravar(req: IncomingMessage, res: ServerResponse) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     const texto = await lerCorpo(req, MAX_CORPO_DA_SKILL);
-    if (texto === null) return send(res, 413, { error: 'corpo grande demais' });
+    if (texto === null) return grandeDemais(req, res);
     let corpo: Record<string, unknown>;
     try {
       const o: unknown = JSON.parse(texto);
@@ -91,9 +102,9 @@ export function criarRotaDaConfig(opts: OpcoesDaConfig): RotaDaConfig {
     }
     const { raizes } = await contexto(corpo.projeto);
     const raiz = raizDeSkill(corpo.raiz, raizes);
-    // `criar: true` (o "Nova" da tela): só cria; se a skill já existe, 409 em vez de trocar com backup.
-    if (corpo.criar === true && (await lerSkill(raiz, corpo.nome))) return send(res, 409, { error: 'a skill já existe' });
-    const r = await gravarSkill({ raiz, nome: corpo.nome, conteudo: corpo.conteudo, versao: corpo.versao, backups, agora: opts.agora });
+    // `criar: true` (o "Nova" da tela): só cria; se a skill já existe, 409 em vez de trocar com
+    // backup. Conferido em `gravarSkill`, dentro da fila do arquivo.
+    const r = await gravarSkill({ raiz, nome: corpo.nome, conteudo: corpo.conteudo, versao: corpo.versao, criar: corpo.criar === true, backups, agora: opts.agora });
     log(`skill ${String(corpo.nome)} gravada em ${raiz.id}${r.backup ? ' (com backup)' : ' (nova)'}`);
     send(res, 200, r);
   }
