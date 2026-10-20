@@ -4,7 +4,7 @@
 // `/api/mudancas`. The server is the --demo one (scenario p4), assembled in `legacy-demo.ts`.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { LEGACY_BODIES, normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal, type LegacyRouteSpec } from '../../src/api/index.ts';
+import { LEGACY_BODIES, legacyResponseFor, normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal, type LegacyRouteSpec } from '../../src/api/index.ts';
 import { DEMO_SESSION, LOCAL, startLegacyDemo, type LegacyDemo } from './legacy-demo.ts';
 
 describe('#173 phase 1: English routes, Portuguese aliases', () => {
@@ -17,8 +17,8 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
   before(async () => {
     demo = await startLegacyDemo();
     ({ api, host, opened } = demo);
-    const lista = (await (await fetch(`${api.url}/api/decisions/${DEMO_SESSION}?scope=family`)).json()) as { itens: { id: string; estado: string }[] };
-    decisionId = lista.itens.find((d) => d.estado === 'a_confirmar')!.id;
+    const lista = (await (await fetch(`${api.url}/api/decisions/${DEMO_SESSION}?scope=family`)).json()) as { items: { id: string; state: string }[] };
+    decisionId = lista.items.find((d) => d.state === 'to_confirm')!.id;
   });
   after(async () => {
     await demo.close();
@@ -35,13 +35,22 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     return { status: r.status, location: r.headers.get('location'), body };
   }
 
-  /** The new and the old path answer the same: status, redirect and body. */
+  /**
+   * The answer of a new path as the old path gives it: since phase 2b the old route back-translates
+   * the body (src/api/legacy-routes.ts), so the new body goes through the same translator.
+   */
+  function asOld(old: string, r: Awaited<ReturnType<typeof call>>) {
+    const toOld = legacyResponseFor(new URL(old, 'http://127.0.0.1').pathname);
+    return toOld && typeof r.body !== 'string' ? { ...r, body: toOld(r.body) } : r;
+  }
+
+  /** The new and the old path answer the same: status, redirect and body (the old one in its old keys). */
   async function same(next: string, old: string, init: RequestInit = {}) {
     // A first read warms the caches (the GitHub of a branch answers from the second read on).
     if (!init.method || init.method === 'GET') await call(next, init);
     const a = await call(next, init);
     const b = await call(old, init);
-    assert.deepEqual(b, a, `${old} ≠ ${next}`);
+    assert.deepEqual(b, asOld(old, a), `${old} ≠ ${next}`);
     return a;
   }
 
@@ -79,7 +88,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       assert.equal(normalizeLegacyPath(p), p, p);
 
     const q = normalizeLegacyQuery(new URLSearchParams('desde=c1&espera=0&conta=a&conta=b&escopo=familia&visao=agents&busca=x&since=c2'));
-    assert.deepEqual([...q], [['wait', '0'], ['account', 'a'], ['account', 'b'], ['scope', 'familia'], ['view', 'agentes'], ['search', 'x'], ['since', 'c2']], 'the new one wins; English values map to the ones the handlers read');
+    assert.deepEqual([...q], [['wait', '0'], ['account', 'a'], ['account', 'b'], ['scope', 'family'], ['view', 'agentes'], ['search', 'x'], ['since', 'c2']], 'the new one wins; values map to the ones the handlers read (the scope is English since phase 2b)');
     assert.equal(normalizeLegacyUrl(new URL('http://x/api/hooks?tipo=1')).search, '?tipo=1', 'the hooks are not touched');
     assert.equal(normalizeLegacyUrl(new URL('http://x/ui/kanban?visao=agentes')).search, '?visao=agentes', 'the /ui URLs are phase 2');
   });
@@ -191,10 +200,11 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     const self = { ...json, origin: `http://${host}` };
     for (const [next, old] of [['confirm', 'confirmar'], ['dismiss', 'descartar'], ['adjust', 'ajustar'], ['undo', 'desfazer'], ['promote', 'promover']]) {
       const [n, o] = [`/api/decisions/nao-existe/${next}`, `/api/decisoes/nao-existe/${old}`];
-      assert.deepEqual(await post(n, { sessao: DEMO_SESSION }), await post(o, { sessao: DEMO_SESSION }), n);
-      assert.deepEqual(await post(n, {}), await post(o, {}), `${n} without the session`);
+      // The new route reads the old body `{ sessao }` too, so both get the same one.
+      assert.deepEqual(await post(o, { sessao: DEMO_SESSION }), asOld(o, await post(n, { sessao: DEMO_SESSION })), n);
+      assert.deepEqual(await post(o, {}), asOld(o, await post(n, {})), `${n} without the session`);
       // The page's own Origin passes on both (#103); another site's, or a query, does not.
-      assert.deepEqual(await post(n, { sessao: DEMO_SESSION }, self), await post(o, { sessao: DEMO_SESSION }, self), `${n}: page Origin`);
+      assert.deepEqual(await post(o, { sessao: DEMO_SESSION }, self), asOld(o, await post(n, { sessao: DEMO_SESSION }, self)), `${n}: page Origin`);
       assert.notEqual((await post(n, { sessao: DEMO_SESSION }, self)).status, 403, n);
       for (const path of [n, o]) {
         assert.equal((await post(path, { sessao: DEMO_SESSION }, { ...json, origin: 'https://exemplo.com' })).status, 403, path);
@@ -203,7 +213,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       assert.equal((await call(n)).status, 405, `${n}: GET`);
     }
     // A real one: confirm on the new route, undo on the old one.
-    const confirmed = await post(`/api/decisions/${encodeURIComponent(decisionId)}/confirm`, { sessao: DEMO_SESSION });
+    const confirmed = await post(`/api/decisions/${encodeURIComponent(decisionId)}/confirm`, { session: DEMO_SESSION });
     assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
     const undone = await post(`/api/decisoes/${encodeURIComponent(decisionId)}/desfazer`, { sessao: DEMO_SESSION });
     assert.equal(undone.status, 200, JSON.stringify(undone.body));
@@ -234,7 +244,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       assert.deepEqual((await call(`/api/painel/${DEMO_SESSION}`, { headers: { origin: 'https://exemplo.com' } })).body, { erro: 'origem não permitida' });
 
       // Request bodies, old → new, on the three readers: the decisions, the promote and the project move.
-      specs['decision/confirm'] = { request: { keys: { quem: 'sessao' } } };
+      specs['decision/confirm'] = { ...saved.confirm, request: { keys: { quem: 'sessao' } } };
       const confirm = (path: string) => call(path, { method: 'POST', headers: json, body: JSON.stringify({ quem: 'a b' }) });
       assert.deepEqual((await confirm('/api/decisoes/nao-existe/confirmar')).body, { error: 'informe a sessão: { "sessao": "<id>" }' }, 'the body was read as { sessao }');
       specs['decision/confirm'] = { request: { keys: { quem: 'sessao' } }, response: { keys: { error: 'erro' } } };

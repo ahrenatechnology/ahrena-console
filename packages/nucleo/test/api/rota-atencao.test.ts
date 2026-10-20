@@ -76,9 +76,10 @@ describe('montarAtencao', () => {
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => AGORA });
     const painel = await montador.montar({ sessionId: 'nenhuma' });
     assert.ok(r.total > 0);
-    assert.equal(r.precisam, painel.precisam.total);
-    assert.equal(r.suaVez, painel.precisam.suaVez);
-    const doPainel = new Map(painel.precisam.maquina.map((i) => [i.id, i.nivel]));
+    assert.equal(r.precisam, painel.needYou.total);
+    assert.equal(r.suaVez, painel.needYou.yourTurn);
+    // The attention route still answers the Portuguese level (its layer of #173 phase 2b comes later).
+    const doPainel = new Map(painel.needYou.machine.map((i) => [i.id, i.level === 'needs' ? 'precisa' : 'sua-vez']));
     for (const i of r.itens) if (doPainel.has(i.sessao)) assert.equal(i.nivel, doPainel.get(i.sessao), i.sessao);
   });
 

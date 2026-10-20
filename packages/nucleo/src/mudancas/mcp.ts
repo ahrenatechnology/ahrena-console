@@ -121,12 +121,12 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
   };
 }
 
-function saida(m: MudancaRegistrada & { tipo: TipoDoMcp }, c: { rotulo: string; cor: string } | null): MudancaDeSaida {
+function saida(m: MudancaRegistrada & { tipo: TipoDoMcp }, c: { label: string; color: string } | null): MudancaDeSaida {
   return {
     type: m.tipo,
     sessionId: m.sessionId,
     decisionId: m.tipo === 'decisao' ? m.chave : null,
-    account: c ? { label: c.rotulo, color: c.cor } : null,
+    account: c ? { label: c.label, color: c.color } : null,
   };
 }
 

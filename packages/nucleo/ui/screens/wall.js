@@ -62,11 +62,11 @@ export function cardContent(c) {
   const plan = c.plano ?? { feitos: 0, total: 0 };
   const pct = c.contexto ? limit(c.contexto.pct) : null;
   let row;
-  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.motivo] ?? null, texto: c.atividade?.texto ?? '' };
-  else if (c.status === 'error') row = { tipo: 'erro', texto: c.atividade?.texto ?? '' };
+  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.motivo] ?? null, texto: c.atividade?.text ?? '' };
+  else if (c.status === 'error') row = { tipo: 'erro', texto: c.atividade?.text ?? '' };
   else if (c.status === 'completed') row = { tipo: 'concluida', texto: 'Terminou sem erro' };
-  else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.atividade?.texto ?? '' };
-  else row = { tipo: 'fazendo', texto: c.atividade?.texto ?? '' };
+  else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.atividade?.text ?? '' };
+  else row = { tipo: 'fazendo', texto: c.atividade?.text ?? '' };
   return {
     id: c.id,
     href: `/ui/sessions/${encodeURIComponent(c.id)}`,

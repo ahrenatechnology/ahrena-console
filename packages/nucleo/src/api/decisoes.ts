@@ -8,13 +8,29 @@
 // o branch não, e é ele que este filtro protege.
 
 import type { Page, StoragePort } from '../storage-port.ts';
-import type { Decision, DecisionState } from '../decisoes/modelo.ts';
+import type { Decision, DecisionOrigin, DecisionScope, DecisionState, Decider } from '../decisoes/modelo.ts';
 import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
 import { confirmDecision, decisionId, decisionLabel, discardDecision, familyOf, registerDecision, reopenDecision, revertDecision } from '../decisoes/registro.ts';
 import { cleanText, shortChoice } from '../decisoes/texto.ts';
 import type { DecisaoDoPainel, DecisoesDoPainel, EscopoDasDecisoes, ListaDeDecisoes } from './tipos.ts';
 
-export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['sessao', 'familia', 'branch'];
+export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'family', 'branch'];
+
+// The decision model (src/decisoes) and its database keep the Portuguese values; the API answers
+// English ones since #173 phase 2b. These tables are the only crossing.
+
+/** The scope of a decision in the model → the API's (the item's `scope`, the list's, the counts). */
+export const API_SCOPE: Readonly<Record<DecisionScope, EscopoDasDecisoes>> = { sessao: 'session', familia: 'family', branch: 'branch' };
+const API_ORIGIN: Readonly<Record<DecisionOrigin, DecisaoDoPainel['origin']>> = {
+  pergunta: 'question',
+  plano: 'plan',
+  permissao: 'permission',
+  correcao: 'correction',
+  sugerida: 'suggested',
+};
+const API_STATE = { vigente: 'current', substituida: 'superseded', a_confirmar: 'to_confirm', descartada: 'dismissed' } as const satisfies Partial<Record<DecisionState, DecisaoDoPainel['state']>>;
+const API_DECIDER: Readonly<Record<Decider, DecisaoDoPainel['decidedBy']>> = { usuario: 'user', agente: 'agent' };
+const API_ACTION: Readonly<Record<Exclude<AcaoNaDecisao, 'desfazer'>, NonNullable<DecisaoDoPainel['undo']>>> = { confirmar: 'confirm', descartar: 'dismiss', ajustar: 'adjust' };
 /** O que a lista mostra; descartada e revertida ficam no histórico. */
 const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
 /** Cards na lista: o largo mostra até 4 linhas de 3; o estreito, menos. */
@@ -103,14 +119,14 @@ export class DecisoesDaSessao {
 
   /**
    * As decisões do escopo, nos estados pedidos, mais recentes primeiro:
-   * - `sessao`: as desta sessão;
-   * - `familia`: as desta sessão e as de escopo família ou branch das outras da família;
+   * - `session`: as desta sessão;
+   * - `family`: as desta sessão e as de escopo família ou branch das outras da família;
    * - `branch`: as da família e as de escopo branch de outras famílias no mesmo branch e pasta.
    */
   async doEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, states: readonly DecisionState[] = NA_LISTA): Promise<Decision[]> {
     const porId = new Map<string, Decision>();
     for (const d of await todas(this.port, { sessionId: alvo.sessionId, states })) porId.set(d.id, d);
-    if (escopo !== 'sessao') {
+    if (escopo !== 'session') {
       const familyId = await familyOf(this.port, alvo.sessionId);
       for (const d of await todas(this.port, { familyId, states })) if (d.scope !== 'sessao') porId.set(d.id, d);
     }
@@ -144,13 +160,13 @@ export class DecisoesDaSessao {
 
   /** A linha do painel e, quando pedida, a lista aberta. */
   async doPainel(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes | null): Promise<DecisoesDoPainel> {
-    const familia = await this.doEscopo(alvo, 'familia', ['vigente', 'a_confirmar']);
+    const familia = await this.doEscopo(alvo, 'family', ['vigente', 'a_confirmar']);
     return {
-      vigentes: familia.filter((d) => d.state === 'vigente').length,
-      aConfirmar: familia.filter((d) => d.state === 'a_confirmar').length,
+      current: familia.filter((d) => d.state === 'vigente').length,
+      toConfirm: familia.filter((d) => d.state === 'a_confirmar').length,
       // A reinjeição (#100) ainda não grava o que injetou: a faixa do P10 acende com ela.
-      retomada: null,
-      lista: escopo ? await this.lista(alvo, escopo) : null,
+      resume: null,
+      list: escopo ? await this.lista(alvo, escopo) : null,
     };
   }
 
@@ -163,11 +179,11 @@ export class DecisoesDaSessao {
     for (const d of todasDoEscopo.slice(0, MAX_ITENS)) itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, await rotuloPorId(this.port, d.supersededBy, lidas)));
     const porEscopo = await this.porEscopo(alvo, escopo, todasDoEscopo);
     return {
-      escopo,
-      vigentes: todasDoEscopo.filter((d) => d.state === 'vigente').length,
-      aConfirmar: todasDoEscopo.filter((d) => d.state === 'a_confirmar').length,
-      itens,
-      porEscopo,
+      scope: escopo,
+      current: todasDoEscopo.filter((d) => d.state === 'vigente').length,
+      toConfirm: todasDoEscopo.filter((d) => d.state === 'a_confirmar').length,
+      items: itens,
+      byScope: porEscopo,
     };
   }
 
@@ -204,7 +220,7 @@ export class DecisoesDaSessao {
 
   private async ajustar(alvo: AlvoDasDecisoes, d: Decision, texto: string | null, agora: string): Promise<Decision> {
     const escrito = cleanText(texto);
-    if (!escrito) throw new ErroDaDecisao(400, 'escreva o ajuste: { "texto": "…" }');
+    if (!escrito) throw new ErroDaDecisao(400, 'escreva o ajuste: { "text": "…" }');
     if (d.state !== 'a_confirmar' && d.state !== 'vigente') throw new ErroDaDecisao(409, `só a sugerida ou a vigente é ajustada (${d.state})`);
     // A original e o ajuste ficam no mesmo assunto: o ajuste a substitui, e o Desfazer a devolve.
     const topic = d.topic ?? `ajuste:${d.id}`;
@@ -265,19 +281,19 @@ export function paraOPainel(d: Decision, sessionId: string, familyId: string, ma
   const painel = d.metadata?.painel as Partial<RegistroDoPainel> | undefined;
   return {
     id: d.id,
-    rotulo: decisionLabel(d),
-    origem: d.origin,
-    estado: d.state === 'substituida' || d.state === 'a_confirmar' || d.state === 'descartada' ? d.state : 'vigente',
-    titulo: d.choice,
-    texto: typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
-    contexto: d.context,
-    desfazer: painel?.acao ?? null,
-    nao: d.alternatives,
-    decididaPor: d.decidedBy,
-    decididaEm: d.decidedAt,
-    confirmadaEm: painel?.acao === 'confirmar' && typeof painel.em === 'string' ? painel.em : null,
-    substituidaPor,
-    sessao: d.sessionId === sessionId ? 'esta' : d.sessionId === mae ? 'mae' : d.familyId === familyId ? 'familia' : 'branch',
+    label: decisionLabel(d),
+    origin: API_ORIGIN[d.origin],
+    state: API_STATE[d.state === 'substituida' || d.state === 'a_confirmar' || d.state === 'descartada' ? d.state : 'vigente'],
+    title: d.choice,
+    text: typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+    context: d.context,
+    undo: painel?.acao ? API_ACTION[painel.acao] : null,
+    rejected: d.alternatives,
+    decidedBy: API_DECIDER[d.decidedBy],
+    decidedAt: d.decidedAt,
+    confirmedAt: painel?.acao === 'confirmar' && typeof painel.em === 'string' ? painel.em : null,
+    supersededBy: substituidaPor,
+    session: d.sessionId === sessionId ? 'this' : d.sessionId === mae ? 'parent' : d.familyId === familyId ? 'family' : 'branch',
     toolUseId: d.sessionId === sessionId ? d.message.toolUseId : null,
   };
 }

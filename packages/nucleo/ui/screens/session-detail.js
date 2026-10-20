@@ -76,9 +76,9 @@ function statusPill(status, label = STATUS[status] ?? status) {
 /** O motivo da espera, como no A5: "Pede permissão", "Pergunta", "Sua vez"… */
 function reasonOf(session) {
   if (session.status === 'error') return null;
-  if (session.faixa?.tipo === 'permissao') return 'Pede permissão';
-  if (session.faixa?.tipo === 'pergunta') return 'Pergunta';
-  return { interrupted: 'Interrompida', stop: 'Sua vez', session_start: 'No prompt', notification: 'Pede permissão' }[session.motivo] ?? null;
+  if (session.banner?.type === 'permission') return 'Pede permissão';
+  if (session.banner?.type === 'question') return 'Pergunta';
+  return { interrupted: 'Interrompida', stop: 'Sua vez', session_start: 'No prompt', notification: 'Pede permissão' }[session.reason] ?? null;
 }
 
 /** Texto com `código` entre crases: cada pedaço vira nó de texto ou `<code>`, nunca HTML. */
@@ -171,7 +171,7 @@ export async function mount(area, ctx) {
   async function readHead() {
     try {
       headData = await ctx.read(base);
-      ctx.title(headData.sessao.titulo);
+      ctx.title(headData.sessao.title);
       top.replaceChildren(...drawTop(headData, refreshAll));
       drawTabs();
       return true;
@@ -226,27 +226,27 @@ function drawTop(c, refresh) {
   const s = c.sessao;
   const now = Date.now();
   const reason = reasonOf(s);
-  const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.encerradaEm ?? s.desde);
+  const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.encerradaEm ?? s.since);
   const row1 = el(
     'div',
     { class: 'sd-row' },
     el('a', { class: 'sd-back', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icon('back')),
-    el('h1', {}, s.titulo),
+    el('h1', {}, s.title),
     statusPill(s.status),
-    reason && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgente ? ' sd-urgent' : ''}` }, s.faixa?.tipo === 'permissao' ? icon('shield') : null, reason) : null,
+    reason && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgent ? ' sd-urgent' : ''}` }, s.banner?.type === 'permission' ? icon('shield') : null, reason) : null,
     el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: refresh }, icon('refresh')),
   );
   const pills = el(
     'div',
     { class: 'sd-pills' },
     pill(null, s.id.slice(0, 12), copyButton(s.id, 'o id da sessão')),
-    s.modelo ? pill('port', modelName(s.modelo)) : null,
-    pill('clock', `${when(s.iniciadaEm)} (${duration(end - Date.parse(s.iniciadaEm))})`),
+    s.model ? pill('port', modelName(s.model)) : null,
+    pill('clock', `${when(s.startedAt)} (${duration(end - Date.parse(s.startedAt))})`),
     c.custo ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.custo.usd)) : null,
     c.branch ? pill('branch', c.branch) : null,
   );
   const folder = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), copyButton(s.cwd, 'a pasta')) : null;
-  return [row1, pills, folder, s.faixa ? band(c) : null].filter(Boolean);
+  return [row1, pills, folder, s.banner ? band(c) : null].filter(Boolean);
 }
 
 /** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
@@ -256,13 +256,12 @@ function withCommand(text, command) {
   return [text.slice(0, i), el('code', { class: 'sd-code' }, command), text.slice(i + command.length)];
 }
 
-// The class of each band type and tool state (the API value stays as it comes).
-const BAND_CLASS = { permissao: 'permission', pergunta: 'question', erro: 'error' };
+// The class of each tool state (the API value stays as it comes); the band's type is its class.
 const TOOL_STATE_CLASS = { ok: 'ok', erro: 'error', permissao: 'permission', rodando: 'running' };
-const BAND_TITLE = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
+const BAND_TITLE = { permission: 'Esperando você · Pede permissão.', question: 'Esperando você · Pergunta.', error: 'Erro.' };
 
 function band(c) {
-  const f = c.sessao.faixa;
+  const f = c.sessao.banner;
   const notice = el('span', { class: 'sd-notice', role: 'status' });
   const button = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
   button.addEventListener('click', async () => {
@@ -277,9 +276,9 @@ function band(c) {
   });
   return el(
     'section',
-    { class: `sd-band sd-t-${BAND_CLASS[f.tipo] ?? f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
-    icon(f.tipo === 'erro' ? 'error' : 'shield'),
-    el('p', {}, el('b', {}, BAND_TITLE[f.tipo] ?? ''), ' ', ...withCommand(f.texto, c.comando), `. Há ${ago(f.desde).replace('agora', 'menos de 1 min')}.`, notice),
+    { class: `sd-band sd-t-${f.type}`, role: f.type === 'error' ? 'alert' : 'status' },
+    icon(f.type === 'error' ? 'error' : 'shield'),
+    el('p', {}, el('b', {}, BAND_TITLE[f.type] ?? ''), ' ', ...withCommand(f.text, c.comando), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
     button,
   );
 }
@@ -369,7 +368,7 @@ function agents(a) {
 }
 
 function progress(t) {
-  const pct = Math.round((t.feitos / t.total) * 100);
+  const pct = Math.round((t.done / t.total) * 100);
   const r = 26;
   const back = 2 * Math.PI * r;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -381,19 +380,19 @@ function progress(t) {
     for (const [k, v] of Object.entries({ cx: 32, cy: 32, r, class: cls, 'stroke-dasharray': dash, transform: 'rotate(-90 32 32)' })) c.setAttribute(k, String(v));
     svg.append(c);
   }
-  const inProgress = t.passos.filter((p) => p.estado === 'in_progress').length;
-  const pending = t.passos.filter((p) => p.estado === 'pending').length;
+  const inProgress = t.steps.filter((p) => p.state === 'in_progress').length;
+  const pending = t.steps.filter((p) => p.state === 'pending').length;
   const show = 4;
-  const steps = t.passos.slice(0, show);
-  const rest = t.passos.length - steps.length;
+  const steps = t.steps.slice(0, show);
+  const rest = t.steps.length - steps.length;
   return el(
     'div',
     { class: 'sd-tasks' },
-    el('div', { class: 'sd-ring-box' }, svg, el('b', { class: 'sd-pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.feitos} / ${t.total} concluídas`), t.atual ? el('div', { class: 'sd-current' }, `Atual: ${t.atual}`) : null)),
+    el('div', { class: 'sd-ring-box' }, svg, el('b', { class: 'sd-pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.done} / ${t.total} concluídas`), t.current ? el('div', { class: 'sd-current' }, `Atual: ${t.current}`) : null)),
     el(
       'div',
       { class: 'sd-legend' },
-      el('span', { class: 'sd-l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
+      el('span', { class: 'sd-l-ok' }, 'Concluídas ', el('b', {}, num(t.done))),
       el('span', { class: 'sd-l-progress' }, 'Em andamento ', el('b', {}, num(inProgress))),
       el('span', { class: 'sd-l-pending' }, 'Pendentes ', el('b', {}, num(pending))),
     ),
@@ -401,7 +400,7 @@ function progress(t) {
       'ul',
       { class: 'sd-steps' },
       ...steps.map((p, i) =>
-        el('li', { class: `sd-p-${p.estado}` }, icon(p.estado === 'completed' ? 'done' : 'circle'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === steps.length - 1 && rest > 0 ? el('span', { class: 'sd-more' }, ` · +${rest}`) : null),
+        el('li', { class: `sd-p-${p.state}` }, icon(p.state === 'completed' ? 'done' : 'circle'), p.state === 'in_progress' ? (p.activeText ?? p.text) : p.text, i === steps.length - 1 && rest > 0 ? el('span', { class: 'sd-more' }, ` · +${rest}`) : null),
       ),
     ),
   );

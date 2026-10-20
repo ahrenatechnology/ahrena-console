@@ -234,7 +234,7 @@ export class RotaAnalytics {
   private contaDe(s: Session): ContaDoAnalytics {
     if (!this.contas) return s.accountId ? { id: s.accountId, rotulo: s.accountId, cor: null } : { id: null, rotulo: SEM_CONTA, cor: null };
     const c = this.contas.daSessao(s, null);
-    return c ? { id: c.id, rotulo: c.rotulo, cor: c.cor } : { id: null, rotulo: SEM_CONTA, cor: null };
+    return c ? { id: c.id, rotulo: c.label, cor: c.color } : { id: null, rotulo: SEM_CONTA, cor: null };
   }
 
   /**

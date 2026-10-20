@@ -212,7 +212,7 @@ export const ESTADOS_VIVOS: readonly EstadoDoInbox[] = ['active', 'waiting', 'de
  */
 export function casaConta(conta: ContaDoPainel | null, filtro: readonly string[] | null): boolean {
   if (!filtro) return true;
-  return filtro.some((f) => (f.toLowerCase() === 'none' ? conta === null : conta !== null && (conta.id === f || conta.rotulo.toLowerCase() === f.toLowerCase())));
+  return filtro.some((f) => (f.toLowerCase() === 'none' ? conta === null : conta !== null && (conta.id === f || conta.label.toLowerCase() === f.toLowerCase())));
 }
 
 export function minutosDesde(iso: string, agora: number): number {

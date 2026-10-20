@@ -25,7 +25,7 @@ import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao, iniciosDosTurnos, type ResumoDosEventos } from './resumo.ts';
-import { atencaoDe } from './atencao.ts';
+import { atencaoDe, type MotivoDaAtencao, type NivelDeAtencao } from './atencao.ts';
 import type {
   AtividadeDaSessao,
   ContaDoPainel,
@@ -113,8 +113,21 @@ export interface LeituraDaSessao {
   custo: CustoDoPainel | null;
   plano: PlanoDoPainel | null;
   contexto: ContextoDoPainel | null;
-  subagentes: { ativos: number; itens: SubagenteDoPainel[] };
+  subagentes: { active: number; items: SubagenteDoPainel[] };
 }
+
+/** The attention level and reason of `atencaoDe` (still Portuguese inside the core) as the panel answers them. */
+const PANEL_LEVEL: Readonly<Record<NivelDeAtencao, PrecisaDeVoce['level']>> = { precisa: 'needs', 'sua-vez': 'your-turn' };
+const PANEL_WHY: Readonly<Record<MotivoDaAtencao, PrecisaDeVoce['why']>> = {
+  permissao: 'permission',
+  pergunta: 'question',
+  plano: 'plan',
+  decisao: 'decision',
+  erro: 'error',
+  'sua-vez': 'your-turn',
+  interrompida: 'interrupted',
+  'no-prompt': 'no-prompt',
+};
 
 function minutos(desde: string, agora: number): string {
   const m = Math.max(0, Math.round((agora - Date.parse(desde)) / UM_MIN));
@@ -220,22 +233,22 @@ export class MontadorDoPainel {
     const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
 
     return {
-      versao: 1,
-      api: { versao: VERSAO_DA_API, commit: this.commit, pasta: this.commitDaPasta(), abreSessao: this.abreSessao },
-      geradoEm: new Date(agora).toISOString(),
-      sessao,
-      contexto: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
-      custo,
+      version: 1,
+      api: { version: VERSAO_DA_API, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      generatedAt: new Date(agora).toISOString(),
+      session: sessao,
+      context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
+      cost: custo,
       tokens,
-      background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
-      plano: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
-      planos: planos.map(planoDaLista),
-      subagentes: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
-      filhas: await this.filhasDe(session, desktop),
-      trabalho,
-      precisam: await this.precisamDe(pedido.sessionId, session, desktop),
+      background: { total: bg.length, first: bg[0]?.comando ?? null },
+      plan: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
+      plans: planos.map(planoDaLista),
+      subagents: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
+      children: await this.filhasDe(session, desktop),
+      work: trabalho,
+      needYou: await this.precisamDe(pedido.sessionId, session, desktop),
       prs: await this.prsAguardando(),
-      decisoes: this.decisoes
+      decisions: this.decisoes
         ? await this.decisoes.doPainel(await this.alvoDe(pedido.sessionId, session, pedido.cwd ?? null, desktop, conta), pedido.decisoes ?? null)
         : null,
     };
@@ -320,18 +333,18 @@ export class MontadorDoPainel {
     const { atividade, faixa } = atividadeDe(session, agentes, inbox, r, desde, agora);
     return {
       id: session.id,
-      titulo: desktop?.titulo ?? session.name ?? (session.cwd ? basename(session.cwd) : 'Sessão sem título'),
-      modelo: session.model,
-      iniciadaEm: session.startedAt,
+      title: desktop?.titulo ?? session.name ?? (session.cwd ? basename(session.cwd) : 'Sessão sem título'),
+      model: session.model,
+      startedAt: session.startedAt,
       status: inbox.status,
-      estado: inbox.estado,
-      motivo: inbox.motivo,
-      urgente: inbox.urgente,
-      desde,
-      turno: Math.max(r.promptsHook, r.promptsTranscript),
-      atividade,
-      faixa,
-      conta,
+      state: inbox.estado,
+      reason: inbox.motivo,
+      urgent: inbox.urgente,
+      since: desde,
+      turn: Math.max(r.promptsHook, r.promptsTranscript),
+      activity: atividade,
+      banner: faixa,
+      account: conta,
       branch: desktop?.branch ?? (session.metadata?.branch as string | undefined) ?? null,
       cwd: session.cwd,
     };
@@ -342,18 +355,18 @@ export class MontadorDoPainel {
     const iso = new Date(agora).toISOString();
     return {
       id: pedido.sessionId,
-      titulo: desktop?.titulo ?? 'Sessão nova, sem transcript',
-      modelo: pedido.modelo ?? null,
-      iniciadaEm: iso,
+      title: desktop?.titulo ?? 'Sessão nova, sem transcript',
+      model: pedido.modelo ?? null,
+      startedAt: iso,
       status: 'waiting',
-      estado: 'waiting',
-      motivo: 'session_start',
-      urgente: false,
-      desde: iso,
-      turno: 0,
-      atividade: { tipo: 'prompt', texto: 'esperando o primeiro prompt' },
-      faixa: null,
-      conta,
+      state: 'waiting',
+      reason: 'session_start',
+      urgent: false,
+      since: iso,
+      turn: 0,
+      activity: { type: 'prompt', text: 'esperando o primeiro prompt' },
+      banner: null,
+      account: conta,
       branch: desktop?.branch ?? null,
       cwd: pedido.cwd ?? desktop?.cwd ?? null,
     };
@@ -380,8 +393,8 @@ export class MontadorDoPainel {
     const valor = {
       em: agora,
       updatedAt: session.updatedAt,
-      custo: { usd: relatorio.total.custoUsd ?? (relatorio.total.totalDeTokens === 0 ? 0 : null), serie, estimativa: true as const },
-      tokens: buckets.length ? { entrada, saida } : null,
+      custo: { usd: relatorio.total.custoUsd ?? (relatorio.total.totalDeTokens === 0 ? 0 : null), series: serie, estimate: true as const },
+      tokens: buckets.length ? { input: entrada, output: saida } : null,
     };
     this.custos.set(session.id, valor);
     return valor;
@@ -403,7 +416,7 @@ export class MontadorDoPainel {
     for (const [id, { titulo, local, arquivada }] of ids) {
       const s = await this.storage.getSession(id);
       if (!s) {
-        out.push({ id, local, titulo: titulo ?? id.slice(0, 8), estado: 'desconhecido', motivo: null, desde: null, arquivada });
+        out.push({ id, local, title: titulo ?? id.slice(0, 8), state: 'unknown', reason: null, since: null, archived: arquivada });
         continue;
       }
       const agentes = await this.storage.listAgents(id);
@@ -412,12 +425,12 @@ export class MontadorDoPainel {
       out.push({
         id,
         local,
-        titulo: titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : id.slice(0, 8)),
-        estado: inbox.estado,
-        motivo: inbox.motivo,
-        desde: f ? f.desde : (s.awaitingInputSince ?? s.updatedAt),
-        fazendo: f?.texto ?? null,
-        arquivada,
+        title: titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : id.slice(0, 8)),
+        state: inbox.estado,
+        reason: inbox.motivo,
+        since: f ? f.desde : (s.awaitingInputSince ?? s.updatedAt),
+        doing: f?.texto ?? null,
+        archived: arquivada,
       });
     }
     return out;
@@ -459,7 +472,7 @@ export class MontadorDoPainel {
    * cache e busca por trás, nunca no caminho do pedido; a lista de sessões é refeita a cada 30 s.
    */
   private async prsAguardando(): Promise<PrsDoPainel> {
-    if (!this.trabalho) return { total: 0, itens: [] };
+    if (!this.trabalho) return { total: 0, items: [] };
     const agora = this.agora();
     if (!this.sessoesRecentes || agora - this.sessoesRecentes.em > 30_000) {
       const page = await this.storage.listSessions({ limit: 200 });
@@ -472,17 +485,17 @@ export class MontadorDoPainel {
       const d = this.desktop?.sessaoPorCli(s.id) ?? null;
       const t = this.trabalho.ler(s.cwd ?? d?.cwd ?? null, d?.branch ?? (s.metadata?.branch as string | undefined) ?? null);
       const pr = t?.pr;
-      if (!t || !pr || pr.estado !== 'aberto' || pr.review !== 'pendente' || porUrl.has(pr.url)) continue;
+      if (!t || !pr || pr.state !== 'open' || pr.review !== 'pending' || porUrl.has(pr.url)) continue;
       porUrl.set(pr.url, {
-        numero: pr.numero,
+        number: pr.number,
         url: pr.url,
         repo: t.repo,
-        titulo: t.issue ? `#${t.issue.numero} ${t.issue.titulo}` : t.branch,
-        sessao: { id: s.id, titulo: d?.titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : s.id.slice(0, 8)), local: d?.localId ?? null },
+        title: t.issue ? `#${t.issue.number} ${t.issue.title}` : t.branch,
+        session: { id: s.id, title: d?.titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : s.id.slice(0, 8)), local: d?.localId ?? null },
       });
     }
-    const itens = [...porUrl.values()].sort((a, b) => b.numero - a.numero);
-    return { total: itens.length, itens };
+    const items = [...porUrl.values()].sort((a, b) => b.number - a.number);
+    return { total: items.length, items };
   }
 
   private async precisamDe(sessionId: string, session: Session | null, desktop: SessaoDoDesktop | null): Promise<PrecisamDoPainel> {
@@ -494,44 +507,44 @@ export class MontadorDoPainel {
       const r = await this.resumos.ler(c.session.id, c.session.updatedAt);
       const delas = familiaDe(c.session, c.desktop);
       const relacao =
-        delas.eu && minhaFamilia.mae === delas.eu ? 'mae' : minhaFamilia.eu && delas.mae === minhaFamilia.eu ? 'filha' : minhaFamilia.mae && delas.mae === minhaFamilia.mae ? 'irma' : null;
+        delas.eu && minhaFamilia.mae === delas.eu ? 'parent' : minhaFamilia.eu && delas.mae === minhaFamilia.eu ? 'child' : minhaFamilia.mae && delas.mae === minhaFamilia.mae ? 'sibling' : null;
       const desde = c.session.awaitingInputSince ?? c.session.updatedAt;
       const { atividade, faixa } = atividadeDe(c.session, c.agentes, c.inbox, r, desde, agora);
       const { nivel, porque } = atencaoDe(c.inbox, r);
       itens.push({
         id: c.session.id,
-        nivel,
-        porque,
+        level: PANEL_LEVEL[nivel],
+        why: PANEL_WHY[porque],
         local: c.desktop?.localId ?? null,
-        titulo: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
-        estado: c.inbox.status === 'error' ? 'error' : 'waiting',
-        motivo: c.inbox.motivo,
-        urgente: c.inbox.urgente || c.inbox.status === 'error',
-        desde,
-        texto: faixa?.tipo === 'erro' ? faixa.texto : atividade.texto,
-        modelo: c.session.model,
-        relacao,
-        mesmoProjeto: !!session?.cwd && c.session.cwd === session.cwd,
-        conta: this.contas.daSessao(c.session, c.desktop),
+        title: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
+        state: c.inbox.status === 'error' ? 'error' : 'waiting',
+        reason: c.inbox.motivo,
+        urgent: c.inbox.urgente || c.inbox.status === 'error',
+        since: desde,
+        text: faixa?.type === 'error' ? faixa.text : atividade.text,
+        model: c.session.model,
+        relation: relacao,
+        sameProject: !!session?.cwd && c.session.cwd === session.cwd,
+        account: this.contas.daSessao(c.session, c.desktop),
       });
     }
     // Quem precisa de você antes de quem só está na sua vez (#140); dentro de cada nível, as urgentes
     // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
-    const peso = (i: PrecisaDeVoce) => (i.nivel === 'precisa' ? 1 : 0)
-    itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgente) - Number(a.urgente) || b.desde.localeCompare(a.desde));
+    const peso = (i: PrecisaDeVoce) => (i.level === 'needs' ? 1 : 0)
+    itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgent) - Number(a.urgent) || b.since.localeCompare(a.since));
     // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
-    const precisam = itens.filter((i) => i.nivel === 'precisa');
-    const porConta = new Map<string, { conta: ContaDoPainel | null; n: number }>();
+    const precisam = itens.filter((i) => i.level === 'needs');
+    const porConta = new Map<string, { account: ContaDoPainel | null; n: number }>();
     for (const i of precisam) {
-      const k = i.conta?.id ?? '';
-      porConta.set(k, { conta: i.conta, n: (porConta.get(k)?.n ?? 0) + 1 });
+      const k = i.account?.id ?? '';
+      porConta.set(k, { account: i.account, n: (porConta.get(k)?.n ?? 0) + 1 });
     }
     return {
       total: precisam.length,
-      suaVez: itens.length - precisam.length,
-      porConta: [...porConta.values()].sort((a, b) => b.n - a.n),
-      familia: itens.filter((i) => i.relacao !== null),
-      maquina: itens.slice(0, MAX_MAQUINA),
+      yourTurn: itens.length - precisam.length,
+      byAccount: [...porConta.values()].sort((a, b) => b.n - a.n),
+      family: itens.filter((i) => i.relation !== null),
+      machine: itens.slice(0, MAX_MAQUINA),
     };
   }
 }
@@ -555,20 +568,20 @@ export function contextoDe(
 ): ContextoDoPainel | null {
   const agentes = medidores
     .filter((m) => m.agentId !== null && m.measuredAt !== null)
-    .map((m) => ({ agenteId: m.agentId!, usados: m.usedTokens, limite: m.windowTokens, pct: pctDoContexto(m), estouros: m.compactions, alerta: alertaDeContexto(m) }));
+    .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: pctDoContexto(m), overflows: m.compactions, alert: alertaDeContexto(m) }));
   // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
   const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
   const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
   if (principal && typeof sim?.usados !== 'number') {
     return {
-      usados: principal.usedTokens,
-      limite: principal.windowTokens,
+      used: principal.usedTokens,
+      limit: principal.windowTokens,
       pct: pctDoContexto(principal),
-      estouros: principal.compactions,
-      alerta: alertaDeContexto(principal),
-      compactacoesManuais: principal.manualCompactions,
-      rotulo: rotuloDoContexto(principal),
-      agentes,
+      overflows: principal.compactions,
+      alert: alertaDeContexto(principal),
+      manualCompactions: principal.manualCompactions,
+      label: rotuloDoContexto(principal),
+      agents: agentes,
     };
   }
   let usados = typeof sim?.usados === 'number' ? sim.usados : r.contexto;
@@ -584,25 +597,23 @@ export function contextoDe(
   const total = Math.max(estouros, contado?.compactions ?? 0);
   const c = { usedTokens: usados, windowTokens: limite, compactions: total };
   return {
-    usados, limite, pct: pctDoContexto(c), estouros: total, alerta: alertaDeContexto(c),
-    compactacoesManuais: contado?.manualCompactions ?? 0, rotulo: rotuloDoContexto(c), agentes,
+    used: usados, limit: limite, pct: pctDoContexto(c), overflows: total, alert: alertaDeContexto(c),
+    manualCompactions: contado?.manualCompactions ?? 0, label: rotuloDoContexto(c), agents: agentes,
   };
 }
 
 type PlanoGravado = Pick<SessionPlan, 'steps' | 'total' | 'changedAt' | 'currentStepId'>;
 
-const RESULTADO = { current: 'atual', completed: 'concluido', abandoned: 'abandonado' } as const;
-
 function planoDaLista(r: PlanRecord): PlanoDaSessao {
   return {
-    numero: r.seq,
-    resultado: RESULTADO[r.result],
-    resumo: r.steps[0]?.text ?? '',
-    feitos: r.done,
+    number: r.seq,
+    outcome: r.result,
+    summary: r.steps[0]?.text ?? '',
+    done: r.done,
     total: r.total,
-    atual: r.result === 'current' ? (r.steps.find((s) => s.id === r.currentStepId)?.text ?? null) : null,
-    inicio: r.startedAt,
-    fim: r.endedAt,
+    current: r.result === 'current' ? (r.steps.find((s) => s.id === r.currentStepId)?.text ?? null) : null,
+    start: r.startedAt,
+    end: r.endedAt,
   };
 }
 
@@ -610,35 +621,35 @@ function planoDaLista(r: PlanRecord): PlanoDaSessao {
 function planoDe(plano: PlanoGravado | null, r: ResumoDosEventos, agentes: Agent[]): PlanoDoPainel | null {
   if (plano) {
     if (plano.total === 0) return null;
-    const passos = plano.steps.map((s) => ({ id: s.id, texto: s.text, textoAtivo: s.activeText, estado: s.status, dono: donoDe(s.owner, agentes) }));
+    const passos = plano.steps.map((s) => ({ id: s.id, text: s.text, activeText: s.activeText, state: s.status, owner: donoDe(s.owner, agentes) }));
     return resumirPlano(passos, plano.changedAt, plano.currentStepId);
   }
   if (!r.plano || r.plano.length === 0) return null;
-  const principal: DonoDoPasso = { tipo: 'principal', nome: null, agenteId: null };
-  const passos = r.plano.map((i, n) => ({ id: String(n + 1), texto: i.texto, textoAtivo: null, estado: i.status, dono: principal }));
+  const principal: DonoDoPasso = { type: 'main', name: null, agentId: null };
+  const passos = r.plano.map((i, n) => ({ id: String(n + 1), text: i.texto, activeText: null, state: i.status, owner: principal }));
   return resumirPlano(passos, null, null);
 }
 
-function resumirPlano(passos: PlanoDoPainel['passos'], mudouEm: string | null, atualId: string | null): PlanoDoPainel {
-  const atual = passos.find((p) => p.id === atualId) ?? passos.find((p) => p.estado === 'in_progress') ?? null;
-  const pendentes = passos.filter((p) => p.estado === 'pending');
+function resumirPlano(passos: PlanoDoPainel['steps'], mudouEm: string | null, atualId: string | null): PlanoDoPainel {
+  const atual = passos.find((p) => p.id === atualId) ?? passos.find((p) => p.state === 'in_progress') ?? null;
+  const pendentes = passos.filter((p) => p.state === 'pending');
   return {
-    feitos: passos.filter((p) => p.estado === 'completed').length,
+    done: passos.filter((p) => p.state === 'completed').length,
     total: passos.length,
-    atual: atual?.texto ?? null,
-    proximo: pendentes[0]?.texto ?? null,
-    restantes: Math.max(0, pendentes.length - 1),
-    atualDono: atual?.dono ?? null,
-    mudouEm,
-    passos,
+    current: atual?.text ?? null,
+    next: pendentes[0]?.text ?? null,
+    remaining: Math.max(0, pendentes.length - 1),
+    currentOwner: atual?.owner ?? null,
+    changedAt: mudouEm,
+    steps: passos,
   };
 }
 
 function donoDe(o: PlanOwner, agentes: Agent[]): DonoDoPasso {
-  if (o.kind === 'main') return { tipo: 'principal', nome: null, agenteId: o.agentId };
-  if (o.kind === 'session') return { tipo: 'sessao', nome: o.name, agenteId: null };
+  if (o.kind === 'main') return { type: 'main', name: null, agentId: o.agentId };
+  if (o.kind === 'session') return { type: 'session', name: o.name, agentId: null };
   const a = o.agentId ? agentes.find((x) => x.id === o.agentId) : undefined;
-  return { tipo: 'subagente', nome: o.name ?? a?.subagentType ?? a?.name ?? null, agenteId: o.agentId };
+  return { type: 'subagent', name: o.name ?? a?.subagentType ?? a?.name ?? null, agentId: o.agentId };
 }
 
 /**
@@ -646,7 +657,7 @@ function donoDe(o: PlanOwner, agentes: Agent[]): DonoDoPasso {
  * chamada que o abriu; a sessão principal não conta como pai. A onda é o turno da sessão em que o
  * subagente de cima foi disparado: quantos turnos tinham começado até ele começar.
  */
-export function subagentesDe(agentes: Agent[], inicios: readonly string[] = []): { ativos: number; itens: SubagenteDoPainel[] } {
+export function subagentesDe(agentes: Agent[], inicios: readonly string[] = []): { active: number; items: SubagenteDoPainel[] } {
   const subs = agentes.filter((a) => a.type === 'subagent');
   const porId = new Map(subs.map((a) => [a.id, a]));
   const pai = (a: Agent) => (a.parentAgentId && porId.has(a.parentAgentId) ? a.parentAgentId : null);
@@ -671,16 +682,16 @@ export function subagentesDe(agentes: Agent[], inicios: readonly string[] = []):
   const itens = subs
     .map((a) => ({
       id: a.id,
-      nome: a.subagentType ?? 'subagente',
-      tarefa: a.name ?? a.task,
+      name: a.subagentType ?? 'subagente',
+      task: a.name ?? a.task,
       status: a.status,
-      desde: a.startedAt,
-      ate: a.endedAt,
-      pai: pai(a),
-      onda: ondaDe(a),
+      since: a.startedAt,
+      until: a.endedAt,
+      parent: pai(a),
+      wave: ondaDe(a),
     }))
-    .sort((a, b) => ordem[a.status] - ordem[b.status] || b.desde.localeCompare(a.desde));
-  return { ativos: subs.filter((a) => a.status === 'working').length, itens };
+    .sort((a, b) => ordem[a.status] - ordem[b.status] || b.since.localeCompare(a.since));
+  return { active: subs.filter((a) => a.status === 'working').length, items: itens };
 }
 
 /** "Bash quer rodar npm run migrate em /projeto", pela última ferramenta do principal. */
@@ -728,39 +739,39 @@ export function atividadeDe(
         if (pergunta && r.ultimaPergunta) {
           const n = r.ultimaPergunta.opcoes;
           return {
-            atividade: { tipo: 'pergunta', texto: 'pergunta pendente' },
-            faixa: { tipo: 'pergunta', texto: r.ultimaPergunta.texto, rodape: `${n ? `${n} opções · ` : ''}responda na conversa ao lado`, desde },
+            atividade: { type: 'question', text: 'pergunta pendente' },
+            faixa: { type: 'question', text: r.ultimaPergunta.texto, footer: `${n ? `${n} opções · ` : ''}responda na conversa ao lado`, since: desde },
           };
         }
         const texto = ferramenta?.nome && ferramenta.resumo ? `${ferramenta.nome}: ${ferramenta.resumo}` : (r.ultimoPedido?.texto ?? 'pedido de permissão');
         return {
-          atividade: { tipo: 'permissao', texto },
-          faixa: { tipo: 'permissao', texto: pedidoDePermissao(r, session.cwd), rodape: 'permitir ou negar na conversa ao lado', desde },
+          atividade: { type: 'permission', text: texto },
+          faixa: { type: 'permission', text: pedidoDePermissao(r, session.cwd), footer: 'permitir ou negar na conversa ao lado', since: desde },
         };
       }
-      if (inbox.motivo === 'interrupted') return { atividade: { tipo: 'interrompida', texto: 'Esc no meio do turno' }, faixa: null };
-      if (inbox.motivo === 'session_start') return { atividade: { tipo: 'prompt', texto: 'esperando o primeiro prompt' }, faixa: null };
-      return { atividade: { tipo: 'sua-vez', texto: r.ultimaMensagem ? `"${r.ultimaMensagem}"` : 'o turno terminou' }, faixa: null };
+      if (inbox.motivo === 'interrupted') return { atividade: { type: 'interrupted', text: 'Esc no meio do turno' }, faixa: null };
+      if (inbox.motivo === 'session_start') return { atividade: { type: 'prompt', text: 'esperando o primeiro prompt' }, faixa: null };
+      return { atividade: { type: 'your-turn', text: r.ultimaMensagem ? `"${r.ultimaMensagem}"` : 'o turno terminou' }, faixa: null };
     }
     case 'error': {
       const erro = r.ultimoErro?.texto ?? 'a sessão parou num erro';
       return {
-        atividade: { tipo: 'erro', texto: erro },
-        faixa: { tipo: 'erro', texto: erro, rodape: 'mande uma mensagem na conversa para retomar', desde },
+        atividade: { type: 'error', text: erro },
+        faixa: { type: 'error', text: erro, footer: 'mande uma mensagem na conversa para retomar', since: desde },
       };
     }
     case 'delegating':
-      return { atividade: { tipo: 'delegando', texto: `esperando ${inbox.subagentesAtivos || 1} subagente${inbox.subagentesAtivos === 1 ? '' : 's'}` }, faixa: null };
+      return { atividade: { type: 'delegating', text: `esperando ${inbox.subagentesAtivos || 1} subagente${inbox.subagentesAtivos === 1 ? '' : 's'}` }, faixa: null };
     case 'background':
-      return { atividade: { tipo: 'ferramenta', texto: `${inbox.processosEmBackground} em background` }, faixa: null };
+      return { atividade: { type: 'tool', text: `${inbox.processosEmBackground} em background` }, faixa: null };
     case 'completed':
-      return { atividade: { tipo: 'concluida', texto: 'terminou sem erro' }, faixa: null };
+      return { atividade: { type: 'completed', text: 'terminou sem erro' }, faixa: null };
     case 'abandoned':
-      return { atividade: { tipo: 'abandonada', texto: `${minutos(session.updatedAt, agora)} sem sinal` }, faixa: null };
+      return { atividade: { type: 'abandoned', text: `${minutos(session.updatedAt, agora)} sem sinal` }, faixa: null };
     default: {
       const tool = principal?.currentTool ?? null;
-      if (tool) return { atividade: { tipo: 'ferramenta', texto: `rodando ${tool}${ferramenta?.nome === tool && ferramenta.resumo ? ` · ${ferramenta.resumo}` : ''}` }, faixa: null };
-      return { atividade: { tipo: 'ferramenta', texto: 'pensando' }, faixa: null };
+      if (tool) return { atividade: { type: 'tool', text: `rodando ${tool}${ferramenta?.nome === tool && ferramenta.resumo ? ` · ${ferramenta.resumo}` : ''}` }, faixa: null };
+      return { atividade: { type: 'tool', text: 'pensando' }, faixa: null };
     }
   }
 }

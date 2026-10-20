@@ -20,12 +20,13 @@ export function loadDecisionsCss() {
 
 // ---------- Rótulos (funções puras) ----------
 
+// The decision card's values are the API's, English since issue 173, phase 2b (origin, state, scope…).
 const TYPES = {
-  sugerida: { rotulo: 'Sugerida', icone: 'suggested' },
-  correcao: { rotulo: 'Correção sua', icone: 'continued' },
-  permissao: { rotulo: 'Permissão', icone: 'permission' },
-  pergunta: { rotulo: 'Pergunta', icone: 'question' },
-  plano: { rotulo: 'Plano', icone: 'plan' },
+  suggested: { rotulo: 'Sugerida', icone: 'suggested' },
+  correction: { rotulo: 'Correção sua', icone: 'continued' },
+  permission: { rotulo: 'Permissão', icone: 'permission' },
+  question: { rotulo: 'Pergunta', icone: 'question' },
+  plan: { rotulo: 'Plano', icone: 'plan' },
 };
 
 /** A pílula de tipo: "Sugerida", "Correção sua", "Permissão", "Pergunta", "Plano". */
@@ -34,22 +35,22 @@ export const typeIcon = (origin) => TYPES[origin]?.icone ?? 'decision';
 
 /** Quem decidiu, como o card escreve. */
 export function whoDecided(d) {
-  if (d.origem === 'sugerida') return 'agente propôs';
-  if (d.origem === 'correcao') return 'você corrigiu';
-  if (d.origem === 'plano') return 'você aprovou';
-  return d.decididaPor === 'agente' ? 'agente' : 'você';
+  if (d.origin === 'suggested') return 'agente propôs';
+  if (d.origin === 'correction') return 'você corrigiu';
+  if (d.origin === 'plan') return 'você aprovou';
+  return d.decidedBy === 'agent' ? 'agente' : 'você';
 }
 
-const STATES = { vigente: 'Vigente', a_confirmar: 'A confirmar', substituida: 'Substituída', descartada: 'Descartada' };
+const STATES = { current: 'Vigente', to_confirm: 'A confirmar', superseded: 'Substituída', dismissed: 'Descartada' };
 export const stateLabel = (state) => STATES[state] ?? state;
 
-const SCOPE_OPTIONS = { sessao: 'sessão', familia: 'família', branch: 'branch' };
-const SOURCES = { mae: 'da sessão mãe', familia: 'de outra sessão da família', branch: 'de outra sessão do branch' };
+const SCOPE_OPTIONS = { session: 'sessão', family: 'família', branch: 'branch' };
+const SOURCES = { parent: 'da sessão mãe', family: 'de outra sessão da família', branch: 'de outra sessão do branch' };
 
 /** "escopo: família · da sessão mãe". A origem só aparece quando a decisão não é desta sessão. */
 export function scopeLabel(d) {
-  const from = SOURCES[d.sessao];
-  return `escopo: ${SCOPE_OPTIONS[d.escopo] ?? d.escopo}${from ? ` · ${from}` : ''}`;
+  const from = SOURCES[d.session];
+  return `escopo: ${SCOPE_OPTIONS[d.scope] ?? d.scope}${from ? ` · ${from}` : ''}`;
 }
 
 /** "agora", "há 14 min", "há 3 h", "ontem", "há 4 d". */
@@ -72,11 +73,16 @@ const SEGMENT = { confirmar: 'confirm', descartar: 'dismiss', promover: 'promote
 /** Scope and grouping values of the screen → the English values of the API. */
 export const API_VALUE = { sessao: 'session', familia: 'family', branch: 'branch' };
 
-/** O pedido de uma escrita: a rota e o corpo JSON. Id ou ação estranhos são recusados aqui. */
+/**
+ * O pedido de uma escrita: a rota e o corpo JSON. Id ou ação estranhos são recusados aqui. The
+ * Confirm and Dismiss body is `{ session }`; the promote one is still `{ sessao, … }` (its layer of
+ * issue 173, phase 2b comes later).
+ */
 export function actionRequest(id, action, body) {
   if (!ID.test(String(id))) throw new Error(`id de decisão inválido: ${id}`);
   if (!ACTIONS.has(action)) throw new Error(`ação desconhecida: ${action}`);
-  if (typeof body?.sessao !== 'string' || !ID.test(body.sessao)) throw new Error('a escrita precisa da sessão');
+  const session = action === 'promover' ? body?.sessao : body?.session;
+  if (typeof session !== 'string' || !ID.test(session)) throw new Error('a escrita precisa da sessão');
   return { rota: `/api/decisions/${id}/${SEGMENT[action]}`, corpo: body };
 }
 
@@ -90,12 +96,12 @@ export function promoteRequest(id, session, save = null) {
 }
 
 /** O "Ver na conversa" só vira link quando é uma rota da própria interface. */
-export const conversationLink = (d) => (typeof d.conversa === 'string' && /^\/ui\/sessions\/[A-Za-z0-9_.:%-]{1,200}$/.test(d.conversa) ? d.conversa : null);
+export const conversationLink = (d) => (typeof d.conversation === 'string' && /^\/ui\/sessions\/[A-Za-z0-9_.:%-]{1,200}$/.test(d.conversation) ? d.conversation : null);
 
 // ---------- Peças ----------
 
 // The class of each decision state (the API value stays as it comes): `dec-e-<state>`.
-const STATE_CLASS = { a_confirmar: 'to-confirm', vigente: 'current', descartada: 'dismissed', substituida: 'superseded' };
+const STATE_CLASS = { to_confirm: 'to-confirm', current: 'current', dismissed: 'dismissed', superseded: 'superseded' };
 export const stateClass = (state) => `dec-e-${STATE_CLASS[state] ?? state}`;
 
 export function statePill(state) {
@@ -134,19 +140,19 @@ export function searchField({ placeholder, aoBuscar: onSearch, espera: wait = 25
 export function decisionCard(d, { sessao: session = d.sessionId, aoMudar: onChange = () => {}, agora: now = Date.now() } = {}) {
   const notice = el('span', { class: 'dec-notice', role: 'status' });
   const trail = [
-    d.nao?.length ? `Descartado: ${d.nao.join('; ')}` : null,
-    d.substituidaPor ? ['substituída por ', el('b', {}, d.substituidaPor)] : d.substitui ? ['substitui ', el('b', {}, d.substitui)] : null,
+    d.rejected?.length ? `Descartado: ${d.rejected.join('; ')}` : null,
+    d.supersededBy ? ['substituída por ', el('b', {}, d.supersededBy)] : d.supersedes ? ['substitui ', el('b', {}, d.supersedes)] : null,
   ].filter(Boolean);
 
   const actions = el('div', { class: 'dec-actions' });
-  if (d.estado === 'a_confirmar') {
+  if (d.state === 'to_confirm') {
     const confirm = el('button', { type: 'button', class: 'btn filled' }, 'Confirmar');
     const dismiss = el('button', { type: 'button', class: 'btn outline' }, 'Descartar');
     const act = (action) => async () => {
       confirm.disabled = dismiss.disabled = true;
       notice.textContent = '';
       try {
-        const { rota: route, corpo: body } = actionRequest(d.id, action, { sessao: session });
+        const { rota: route, corpo: body } = actionRequest(d.id, action, { session });
         await write(route, body);
         onChange();
       } catch (e) {
@@ -160,20 +166,20 @@ export function decisionCard(d, { sessao: session = d.sessionId, aoMudar: onChan
   } else {
     const conversation = conversationLink(d);
     if (conversation) actions.append(el('a', { class: 'dec-link', href: conversation }, 'Ver na conversa'));
-    if (d.estado === 'vigente') {
-      if (d.promovidaPara) actions.append(el('span', { class: 'dec-promoted mono', title: d.promovidaPara }, icon('promote'), 'Promovida'));
+    if (d.state === 'current') {
+      if (d.promotedTo) actions.append(el('span', { class: 'dec-promoted mono', title: d.promotedTo }, icon('promote'), 'Promovida'));
       else actions.append(el('button', { type: 'button', class: 'dec-link', onClick: () => openPromote(d, session, { aoGravar: onChange }) }, 'Promover a registro'));
     }
   }
 
   return el(
     'article',
-    { class: `card dec-card ${stateClass(d.estado)}`, 'data-decision': d.id },
-    el('span', { class: 'dec-ico' }, icon(typeIcon(d.origem))),
-    el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-label' }, d.rotulo), el('b', { class: 'dec-title', title: d.titulo }, d.titulo), statePill(d.estado)),
-    el('time', { class: 'dec-when', datetime: d.decididaEm, title: new Date(d.decididaEm).toLocaleString('pt-BR') }, howLongAgo(d.decididaEm, now)),
+    { class: `card dec-card ${stateClass(d.state)}`, 'data-decision': d.id },
+    el('span', { class: 'dec-ico' }, icon(typeIcon(d.origin))),
+    el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-label' }, d.label), el('b', { class: 'dec-title', title: d.title }, d.title), statePill(d.state)),
+    el('time', { class: 'dec-when', datetime: d.decidedAt, title: new Date(d.decidedAt).toLocaleString('pt-BR') }, howLongAgo(d.decidedAt, now)),
     el('div', { class: 'dec-l2' }, ...trail.flatMap((r, i) => (i ? [' · ', r] : [r]))),
-    el('div', { class: 'dec-l3' }, el('span', { class: 'dec-type' }, typeLabel(d.origem)), el('span', {}, whoDecided(d)), el('span', {}, scopeLabel(d)), notice),
+    el('div', { class: 'dec-l3' }, el('span', { class: 'dec-type' }, typeLabel(d.origin)), el('span', {}, whoDecided(d)), el('span', {}, scopeLabel(d)), notice),
     actions,
   );
 }
@@ -189,8 +195,8 @@ export function openPromote(d, session, { aoGravar: onSave = () => {} } = {}) {
   const close = el('button', { type: 'button', class: 'btn outline', value: 'fechar' }, 'Fechar');
   const dialog = el(
     'dialog',
-    { class: 'dec-dlg', 'aria-label': `Promover ${d.rotulo} a registro` },
-    el('header', {}, icon('promote'), el('h2', {}, `Promover ${d.rotulo} a registro de decisão`)),
+    { class: 'dec-dlg', 'aria-label': `Promover ${d.label} a registro` },
+    el('header', {}, icon('promote'), el('h2', {}, `Promover ${d.label} a registro de decisão`)),
     body,
     el('footer', {}, close),
   );

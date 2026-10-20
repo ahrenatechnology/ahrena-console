@@ -27,36 +27,36 @@ describe('início dos turnos no resumo', () => {
 
 describe('subagentesDe: pai e onda', () => {
   test('o pai é o subagente que disparou; a sessão principal não conta como pai', () => {
-    const { itens } = subagentesDe([principal, sub('a', 2), sub('b', 3, { parentAgentId: 's1:a' }), sub('c', 4, { parentAgentId: 's1:b' })], [at(1)]);
+    const { items: itens } = subagentesDe([principal, sub('a', 2), sub('b', 3, { parentAgentId: 's1:a' }), sub('c', 4, { parentAgentId: 's1:b' })], [at(1)]);
     const de = (id: string) => itens.find((i) => i.id === `s1:${id}`)!;
-    assert.equal(de('a').pai, null);
-    assert.equal(de('b').pai, 's1:a');
-    assert.equal(de('c').pai, 's1:b');
+    assert.equal(de('a').parent, null);
+    assert.equal(de('b').parent, 's1:a');
+    assert.equal(de('c').parent, 's1:b');
   });
 
   test('a onda é o turno em que o subagente de cima começou; o aninhado herda a dele', () => {
     const turnos = [at(0), at(10), at(20)];
-    const { itens } = subagentesDe(
+    const { items: itens } = subagentesDe(
       [principal, sub('a', 2), sub('b', 3), sub('c', 12), sub('d', 25, { parentAgentId: 's1:c' }), sub('e', 21)],
       turnos,
     );
-    const onda = Object.fromEntries(itens.map((i) => [i.id.slice(3), i.onda]));
+    const onda = Object.fromEntries(itens.map((i) => [i.id.slice(3), i.wave]));
     assert.deepEqual(onda, { a: 1, b: 1, c: 2, d: 2, e: 3 });
   });
 
   test('sem os prompts da sessão, a onda fica nula (o painel agrupa pela sobreposição no tempo)', () => {
-    const { itens } = subagentesDe([principal, sub('a', 2)], []);
-    assert.equal(itens[0]!.onda, null);
+    const { items: itens } = subagentesDe([principal, sub('a', 2)], []);
+    assert.equal(itens[0]!.wave, null);
   });
 
   test('um pai que não está entre os subagentes (outra sessão, dado velho) vira a sessão', () => {
-    const { itens } = subagentesDe([principal, sub('a', 2, { parentAgentId: 's1:sumiu' })], [at(0)]);
-    assert.equal(itens[0]!.pai, null);
-    assert.equal(itens[0]!.onda, 1);
+    const { items: itens } = subagentesDe([principal, sub('a', 2, { parentAgentId: 's1:sumiu' })], [at(0)]);
+    assert.equal(itens[0]!.parent, null);
+    assert.equal(itens[0]!.wave, 1);
   });
 
   test('um ciclo nos dados não trava a conta da onda', () => {
-    const { itens } = subagentesDe([principal, sub('a', 2, { parentAgentId: 's1:b' }), sub('b', 3, { parentAgentId: 's1:a' })], [at(0)]);
+    const { items: itens } = subagentesDe([principal, sub('a', 2, { parentAgentId: 's1:b' }), sub('b', 3, { parentAgentId: 's1:a' })], [at(0)]);
     assert.equal(itens.length, 2);
   });
 });
@@ -72,10 +72,10 @@ describe('painel: o grafo montado dos eventos gravados', () => {
     for (const [i, m] of [0, 10].entries()) await storage.appendEvent(event({ id: `p${i}`, type: 'UserPromptSubmit', agentId: null, toolName: null, createdAt: at(m) }));
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(30)) });
     const p = await montador.montar({ sessionId: 's1' });
-    const de = (id: string) => p.subagentes.itens.find((i) => i.id === `s1:${id}`)!;
-    assert.deepEqual([de('plan').pai, de('plan').onda], [null, 1]);
-    assert.deepEqual([de('gp').pai, de('gp').onda], [null, 2]);
-    assert.deepEqual([de('explore').pai, de('explore').onda], ['s1:gp', 2]);
+    const de = (id: string) => p.subagents.items.find((i) => i.id === `s1:${id}`)!;
+    assert.deepEqual([de('plan').parent, de('plan').wave], [null, 1]);
+    assert.deepEqual([de('gp').parent, de('gp').wave], [null, 2]);
+    assert.deepEqual([de('explore').parent, de('explore').wave], ['s1:gp', 2]);
     await storage.close();
   });
 
@@ -85,16 +85,16 @@ describe('painel: o grafo montado dos eventos gravados', () => {
     await semearCenariosDoPainel(storage, 'p13', agora);
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => agora, apelido: () => SESSAO_DO_PAINEL });
     const p = await montador.montar({ sessionId: 'qualquer' });
-    const itens = p.subagentes.itens;
+    const itens = p.subagents.items;
     assert.equal(itens.length, 25);
-    assert.equal(p.subagentes.ativos, 4);
+    assert.equal(p.subagents.active, 4);
     assert.equal(itens.filter((i) => i.status === 'error').length, 1);
-    const porOnda = itens.reduce<Record<number, number>>((a, i) => ((a[i.onda!] = (a[i.onda!] ?? 0) + 1), a), {});
+    const porOnda = itens.reduce<Record<number, number>>((a, i) => ((a[i.wave!] = (a[i.wave!] ?? 0) + 1), a), {});
     assert.deepEqual(porOnda, { 1: 6, 2: 6, 3: 1, 4: 10, 5: 2 });
-    const gp = itens.find((i) => i.tarefa === 'migrar a cobrança')!;
-    const contratos = itens.find((i) => i.tarefa === 'contratos')!;
-    assert.equal(contratos.pai, gp.id);
-    assert.equal(itens.find((i) => i.tarefa === 'esquemas')!.pai, contratos.id);
+    const gp = itens.find((i) => i.task === 'migrar a cobrança')!;
+    const contratos = itens.find((i) => i.task === 'contratos')!;
+    assert.equal(contratos.parent, gp.id);
+    assert.equal(itens.find((i) => i.task === 'esquemas')!.parent, contratos.id);
     await storage.close();
   });
 });

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
+import { Contas, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, translateBody, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { registerDecision } from '../../src/decisoes/registro.ts';
 import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel, type CenarioDoPainel } from '../../src/simulador/painel.ts';
@@ -30,7 +30,7 @@ async function cenario(nome: CenarioDoPainel = 'p9') {
   return { storage, decisoes, montador };
 }
 
-const titulos = (l: ListaDeDecisoes) => l.itens.map((i) => `${i.rotulo} ${i.estado}`);
+const titulos = (l: ListaDeDecisoes) => l.items.map((i) => `${i.label} ${i.state}`);
 
 // Uma decisão de escopo branch de outra família, no mesmo branch e pasta, com a conta dada.
 async function deOutraSessao(storage: ReturnType<typeof openSqliteStorage>, decisoes: SqliteDecisionStore, id: string, conta: string | null, choice: string) {
@@ -49,33 +49,33 @@ describe('decisões no painel', () => {
   test('a linha conta as vigentes e as a confirmar da família; sem a porta, não vem', async () => {
     const { storage, montador } = await cenario();
     const p = await montador.montar({ sessionId: 'qualquer' });
-    assert.deepEqual(p.decisoes, { vigentes: 4, aConfirmar: 1, retomada: null, lista: null });
+    assert.deepEqual(p.decisions, { current: 4, toConfirm: 1, resume: null, list: null });
     await storage.close();
 
     const semPorta = openSqliteStorage({ path: ':memory:' });
     await semearCenariosDoPainel(semPorta, 'p1', AGORA);
     const m = new MontadorDoPainel({ storage: semPorta, contas: new Contas({ storage: semPorta, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
-    assert.equal((await m.montar({ sessionId: 'qualquer' })).decisoes, null);
+    assert.equal((await m.montar({ sessionId: 'qualquer' })).decisions, null);
     await semPorta.close();
   });
 
   test('P9: sessão, família e branch, mais recentes primeiro, com a substituída apontando a nova', async () => {
     const { storage, montador } = await cenario();
-    const sessao = (await montador.montar({ sessionId: 'qualquer', decisoes: 'sessao' })).decisoes!.lista!;
-    assert.deepEqual(titulos(sessao), ['D6 a_confirmar', 'D4 vigente', 'D5 vigente', 'D3 substituida', 'D2 vigente']);
-    assert.equal(sessao.vigentes, 3);
-    assert.equal(sessao.aConfirmar, 1);
+    const sessao = (await montador.montar({ sessionId: 'qualquer', decisoes: 'session' })).decisions!.list!;
+    assert.deepEqual(titulos(sessao), ['D6 to_confirm', 'D4 current', 'D5 current', 'D3 superseded', 'D2 current']);
+    assert.equal(sessao.current, 3);
+    assert.equal(sessao.toConfirm, 1);
 
-    const familia = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'familia'))!;
-    assert.deepEqual(titulos(familia), ['D6 a_confirmar', 'D4 vigente', 'D5 vigente', 'D3 substituida', 'D2 vigente', 'D1 vigente']);
-    const porRotulo = Object.fromEntries(familia.itens.map((i) => [i.rotulo, i])) as Record<string, DecisaoDoPainel>;
-    assert.equal(porRotulo.D3!.substituidaPor, 'D4');
-    assert.deepEqual(porRotulo.D6!.nao, ['20 por coluna', 'rolagem infinita']);
-    assert.equal(porRotulo.D6!.decididaPor, 'agente');
-    assert.equal(porRotulo.D1!.sessao, 'mae');
+    const familia = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'family'))!;
+    assert.deepEqual(titulos(familia), ['D6 to_confirm', 'D4 current', 'D5 current', 'D3 superseded', 'D2 current', 'D1 current']);
+    const porRotulo = Object.fromEntries(familia.items.map((i) => [i.label, i])) as Record<string, DecisaoDoPainel>;
+    assert.equal(porRotulo.D3!.supersededBy, 'D4');
+    assert.deepEqual(porRotulo.D6!.rejected, ['20 por coluna', 'rolagem infinita']);
+    assert.equal(porRotulo.D6!.decidedBy, 'agent');
+    assert.equal(porRotulo.D1!.session, 'parent');
     assert.equal(porRotulo.D1!.toolUseId, null, 'a mensagem da mãe não está nesta conversa');
     assert.equal(porRotulo.D4!.toolUseId, 'sim-toolu-p9-4');
-    assert.equal(familia.vigentes, 4);
+    assert.equal(familia.current, 4);
     await storage.close();
   });
 
@@ -85,19 +85,20 @@ describe('decisões no painel', () => {
     await deOutraSessao(storage, decisoes, 'sim-outra-cliente', CLIENTE, 'Segredo do cliente');
     await deOutraSessao(storage, decisoes, 'sim-outra-sem-conta', null, 'Raias com contador');
     const branch = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'branch'))!;
-    const nomes = branch.itens.map((i) => i.titulo);
+    const nomes = branch.items.map((i) => i.title);
     assert.ok(nomes.includes('Raias com cor por status'));
     assert.ok(nomes.includes('Raias com contador'), 'sem conta conhecida, não há como dizer que é de outra');
     assert.ok(!nomes.includes('Segredo do cliente'));
-    assert.equal(branch.itens.find((i) => i.titulo === 'Raias com cor por status')?.sessao, 'branch');
-    const familia = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'familia'))!;
-    assert.ok(!familia.itens.some((i) => i.sessao === 'branch'), 'a família não pega o branch');
+    assert.equal(branch.items.find((i) => i.title === 'Raias com cor por status')?.session, 'branch');
+    const familia = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'family'))!;
+    assert.ok(!familia.items.some((i) => i.session === 'branch'), 'a família não pega o branch');
     await storage.close();
   });
 
+  // #173 phase 2b: the published mod reads the old route, so its types cover the old body (back-translated).
   test('todo campo da resposta está nos tipos do plugin', async () => {
     const { storage, montador } = await cenario();
-    const painel = await montador.montar({ sessionId: 'qualquer', decisoes: 'familia' });
+    const painel = translateBody(LEGACY_BODIES.panel.response, await montador.montar({ sessionId: 'qualquer', decisoes: 'family' })) as { decisoes: unknown };
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');
     const chaves = new Set<string>();
     const juntar = (v: unknown) => {
@@ -128,11 +129,11 @@ describe('decisões no painel', () => {
     await gravar('sess-a', 'sessao', 'A própria');
     await gravar('sess-b', 'branch', 'De outra família');
 
-    const doPainel = (await montador.montar({ sessionId: 'sess-a', decisoes: 'branch' })).decisoes!.lista!;
+    const doPainel = (await montador.montar({ sessionId: 'sess-a', decisoes: 'branch' })).decisions!.list!;
     const daLista = (await montador.listaDeDecisoes({ sessionId: 'sess-a' }, 'branch'))!;
-    assert.deepEqual(doPainel.porEscopo, daLista.porEscopo);
-    assert.equal(doPainel.itens.length, daLista.itens.length);
-    assert.ok(daLista.itens.some((i) => i.titulo === 'De outra família'), 'o cenário tem a decisão de branch');
+    assert.deepEqual(doPainel.byScope, daLista.byScope);
+    assert.equal(doPainel.items.length, daLista.items.length);
+    assert.ok(daLista.items.some((i) => i.title === 'De outra família'), 'o cenário tem a decisão de branch');
     await storage.close();
   });
 });
@@ -144,32 +145,32 @@ describe('API das decisões em 127.0.0.1', () => {
     const post = (caminho: string, corpo: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
       fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: JSON.stringify(corpo) });
     try {
-      const familia = (await (await fetch(`${api.url}/api/decisoes/qualquer?escopo=familia`)).json()) as ListaDeDecisoes;
-      assert.equal(familia.itens.length, 6);
-      assert.equal((await fetch(`${api.url}/api/decisoes/qualquer?escopo=maquina`)).status, 400);
-      const noPainel = (await (await fetch(`${api.url}/api/painel/qualquer?decisoes=sessao`)).json()) as Painel;
-      assert.equal(noPainel.decisoes?.lista?.escopo, 'sessao');
+      const familia = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=family`)).json()) as ListaDeDecisoes;
+      assert.equal(familia.items.length, 6);
+      assert.equal((await fetch(`${api.url}/api/decisions/qualquer?scope=maquina`)).status, 400);
+      const noPainel = (await (await fetch(`${api.url}/api/panel/qualquer?decisions=session`)).json()) as Painel;
+      assert.equal(noPainel.decisions?.list?.scope, 'session');
 
-      const sugerida = familia.itens.find((i) => i.estado === 'a_confirmar')!;
-      const caminho = `/api/decisoes/${encodeURIComponent(sugerida.id)}/confirmar`;
+      const sugerida = familia.items.find((i) => i.state === 'to_confirm')!;
+      const caminho = `/api/decisions/${encodeURIComponent(sugerida.id)}/confirm`;
       assert.equal((await fetch(`${api.url}${caminho}`)).status, 405, 'GET não escreve');
-      assert.equal((await post(caminho, { sessao: 'qualquer' }, { 'content-type': 'text/plain' })).status, 415);
-      assert.equal((await post(caminho, { sessao: 'qualquer' }, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
+      assert.equal((await post(caminho, { session: 'qualquer' }, { 'content-type': 'text/plain' })).status, 415);
+      assert.equal((await post(caminho, { session: 'qualquer' }, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
       assert.equal((await post(caminho, {})).status, 400);
 
-      const r = await post(caminho, { sessao: 'qualquer' });
+      const r = await post(caminho, { session: 'qualquer' });
       assert.equal(r.status, 200);
-      const { decisao } = (await r.json()) as { decisao: DecisaoDoPainel };
-      assert.equal(decisao.estado, 'vigente');
-      assert.equal(decisao.confirmadaEm, T0);
+      const { decision: decisao } = (await r.json()) as { decision: DecisaoDoPainel };
+      assert.equal(decisao.state, 'current');
+      assert.equal(decisao.confirmedAt, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
       assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: SESSAO_DO_PAINEL, conta: EQUIPE, em: T0, antes: 'a_confirmar' });
       assert.equal(gravada?.decidedBy, 'agente', 'quem propôs continua sendo o agente');
-      assert.equal((await post(caminho, { sessao: 'qualquer' })).status, 409, 'já confirmada');
+      assert.equal((await post(caminho, { session: 'qualquer' })).status, 409, 'já confirmada');
 
-      const depois = (await (await fetch(`${api.url}/api/painel/qualquer`)).json()) as Painel;
-      assert.equal(depois.decisoes?.vigentes, 5);
-      assert.equal(depois.decisoes?.aConfirmar, 0);
+      const depois = (await (await fetch(`${api.url}/api/panel/qualquer`)).json()) as Painel;
+      assert.equal(depois.decisions?.current, 5);
+      assert.equal(depois.decisions?.toConfirm, 0);
 
       // Descartar: some da lista, fica no histórico com quem e quando.
       const { decision: outra } = await registerDecision(
@@ -180,11 +181,11 @@ describe('API das decisões em 127.0.0.1', () => {
         },
         T0,
       );
-      assert.equal((await post(`/api/decisoes/${encodeURIComponent(outra.id)}/descartar`, { sessao: 'qualquer' })).status, 200);
+      assert.equal((await post(`/api/decisions/${encodeURIComponent(outra.id)}/dismiss`, { session: 'qualquer' })).status, 200);
       assert.equal((await decisoes.getDecision(outra.id))?.state, 'descartada');
       assert.equal(((await decisoes.getDecision(outra.id))?.metadata.painel as { acao: string }).acao, 'descartar');
-      const semEla = (await (await fetch(`${api.url}/api/decisoes/qualquer?escopo=sessao`)).json()) as ListaDeDecisoes;
-      assert.ok(!semEla.itens.some((i) => i.id === outra.id));
+      const semEla = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
+      assert.ok(!semEla.items.some((i) => i.id === outra.id));
 
       // Uma sugerida que esta sessão não enxerga (outra família, outra conta) não é alcançável.
       await storage.putSession({ ...session({ id: 'sim-de-fora', cwd: '/simulacao/outro' }), accountId: CLIENTE, accountSource: 'env' });
@@ -196,9 +197,11 @@ describe('API das decisões em 127.0.0.1', () => {
         },
         T0,
       );
-      assert.equal((await post(`/api/decisoes/${encodeURIComponent(alheia.id)}/confirmar`, { sessao: 'qualquer' })).status, 404);
+      assert.equal((await post(`/api/decisions/${encodeURIComponent(alheia.id)}/confirm`, { session: 'qualquer' })).status, 404);
       assert.equal((await decisoes.getDecision(alheia.id))?.state, 'a_confirmar');
-      assert.equal((await post(`/api/decisoes/nao-existe/confirmar`, { sessao: 'qualquer' })).status, 404);
+      assert.equal((await post(`/api/decisions/nao-existe/confirm`, { session: 'qualquer' })).status, 404);
+      // The old body `{ sessao }` is read on the new route too.
+      assert.equal((await post(`/api/decisions/nao-existe/confirm`, { sessao: 'qualquer' })).status, 404);
     } finally {
       await api.close();
       await storage.close();
@@ -210,8 +213,8 @@ describe('API das decisões em 127.0.0.1', () => {
     const { storage, decisoes, montador } = await cenario();
     const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
     const post = async (id: string, acao: string, corpo: Record<string, unknown> = {}) => {
-      const r = await fetch(`${api.url}/api/decisoes/${encodeURIComponent(id)}/${acao}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessao: 'qualquer', ...corpo }) });
-      return { status: r.status, decisao: r.ok ? ((await r.json()) as { decisao: DecisaoDoPainel }).decisao : null };
+      const r = await fetch(`${api.url}/api/decisions/${encodeURIComponent(id)}/${acao}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: 'qualquer', ...corpo }) });
+      return { status: r.status, decisao: r.ok ? ((await r.json()) as { decision: DecisaoDoPainel }).decision : null };
     };
     const sugerida = async (n: number, topic: string | null) =>
       (
@@ -227,25 +230,25 @@ describe('API das decisões em 127.0.0.1', () => {
     try {
       // Descartar sem querer, e desfazer.
       const a = await sugerida(1, 'kanban:filtro-a');
-      assert.equal((await post(a.id, 'descartar')).decisao?.desfazer, 'descartar');
-      const volta = await post(a.id, 'desfazer');
+      assert.equal((await post(a.id, 'dismiss')).decisao?.undo, 'dismiss');
+      const volta = await post(a.id, 'undo');
       assert.equal(volta.status, 200);
-      assert.equal(volta.decisao?.estado, 'a_confirmar');
-      assert.equal(volta.decisao?.desfazer, null);
+      assert.equal(volta.decisao?.state, 'to_confirm');
+      assert.equal(volta.decisao?.undo, null);
       assert.equal((await decisoes.getDecision(a.id))?.state, 'a_confirmar');
-      assert.equal((await post(a.id, 'desfazer')).status, 409, 'nada mais a desfazer');
+      assert.equal((await post(a.id, 'undo')).status, 409, 'nada mais a desfazer');
 
       // Confirmar e desfazer.
-      await post(a.id, 'confirmar');
-      assert.equal((await post(a.id, 'desfazer')).decisao?.estado, 'a_confirmar');
+      await post(a.id, 'confirm');
+      assert.equal((await post(a.id, 'undo')).decisao?.state, 'to_confirm');
 
       // Ajustar: "sim, mas com tal ajuste" vira correção sua, que substitui a sugerida.
-      assert.equal((await post(a.id, 'ajustar', { texto: '   ' })).status, 400);
+      assert.equal((await post(a.id, 'adjust', { text: '   ' })).status, 400);
       const ajuste = 'Sim, filtro por conta no topo. Mas o de status fica na lateral.';
-      const ajustada = await post(a.id, 'ajustar', { texto: ajuste });
+      const ajustada = await post(a.id, 'adjust', { text: ajuste });
       assert.equal(ajustada.status, 200);
-      assert.equal(ajustada.decisao?.estado, 'substituida');
-      assert.equal(ajustada.decisao?.desfazer, 'ajustar');
+      assert.equal(ajustada.decisao?.state, 'superseded');
+      assert.equal(ajustada.decisao?.undo, 'adjust');
       const nova = (await decisoes.listDecisions({ sessionId: SESSAO_DO_PAINEL, states: ['vigente'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
       assert.equal(nova.origin, 'correcao');
       assert.equal(nova.inferred, false);
@@ -253,22 +256,22 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(nova.metadata.texto, ajuste);
       assert.deepEqual(nova.alternatives, ['Filtro 1 no topo']);
       assert.equal(nova.supersedes, a.id);
-      const lista = (await (await fetch(`${api.url}/api/decisoes/qualquer?escopo=sessao`)).json()) as ListaDeDecisoes;
-      const noPainel = lista.itens.find((i) => i.id === nova.id)!;
-      assert.equal(noPainel.texto, ajuste);
-      assert.equal(noPainel.contexto, 'Filtro 1 no topo');
+      const lista = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
+      const noPainel = lista.items.find((i) => i.id === nova.id)!;
+      assert.equal(noPainel.text, ajuste);
+      assert.equal(noPainel.context, 'Filtro 1 no topo');
 
       // Desfazer o ajuste: a correção sai, a sugerida volta a confirmar.
-      const desfeito = await post(a.id, 'desfazer');
-      assert.equal(desfeito.decisao?.estado, 'a_confirmar');
+      const desfeito = await post(a.id, 'undo');
+      assert.equal(desfeito.decisao?.state, 'to_confirm');
       assert.equal((await decisoes.getDecision(nova.id))?.state, 'revertida');
 
       // Ajustar uma vigente sem assunto: as duas ficam no mesmo assunto, a nova vale.
       const b = await sugerida(2, null);
-      await post(b.id, 'confirmar');
-      const b2 = await post(b.id, 'ajustar', { texto: 'Filtro 2 só no largo' });
-      assert.equal(b2.decisao?.estado, 'substituida');
-      assert.equal((await post(b.id, 'desfazer')).decisao?.estado, 'vigente', 'volta ao estado de antes do ajuste');
+      await post(b.id, 'confirm');
+      const b2 = await post(b.id, 'adjust', { text: 'Filtro 2 só no largo' });
+      assert.equal(b2.decisao?.state, 'superseded');
+      assert.equal((await post(b.id, 'undo')).decisao?.state, 'current', 'volta ao estado de antes do ajuste');
     } finally {
       await api.close();
       await storage.close();
@@ -319,7 +322,7 @@ describe('API das decisões em 127.0.0.1', () => {
     const semOpen = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${semOpen.url}/abrir/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
-      assert.equal(((await (await fetch(`${semOpen.url}/api/painel/qualquer`)).json()) as Painel).api.abreSessao, false);
+      assert.equal(((await (await fetch(`${semOpen.url}/api/panel/qualquer`)).json()) as Painel).api.opensSession, false);
     } finally {
       await semOpen.close();
       await storage.close();

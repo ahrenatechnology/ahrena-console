@@ -111,13 +111,16 @@ export const LEGACY_PARAMS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Fixed values that travel in the query, in English, translated to the values the handlers still
- * use (they also show up in the JSON, which changes in phase 2). The old values keep working as
- * they are.
+ * Fixed values that travel in the query, translated to the values the handlers read. Phase 1 mapped
+ * the English values to the Portuguese ones the handlers still used; when a handler switches to
+ * English (phase 2b), its entry flips and maps the old values to the new ones. Both are accepted on
+ * every route either way.
  */
 const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  scope: { session: 'sessao', family: 'familia' },
-  decisions: { session: 'sessao', family: 'familia' },
+  // Phase 2b layer 2: the decision scope is English in the handlers (`/api/decisions/<s>?scope=`,
+  // `/api/panel/<s>?decisions=`, `/api/sessions/<id>/decisions?scope=`).
+  scope: { sessao: 'session', familia: 'family' },
+  decisions: { sessao: 'session', familia: 'family' },
   view: { sessions: 'sessoes', agents: 'agentes' },
   groupBy: { family: 'familia', session: 'sessao' },
   period: { '1y': '1a' },
@@ -198,33 +201,345 @@ export interface LegacyRouteSpec {
   request?: LegacyBodySpec;
 }
 
+/** `{ k: v }` with every key scoped to `parent` (`'parent.k'`). */
+const scoped = <T>(parent: string, map: Readonly<Record<string, T>>): Record<string, T> =>
+  Object.fromEntries(Object.entries(map).map(([k, v]) => [`${parent}.${k}`, v]));
+
+/** Several specs as one (a later entry wins on the same selector). */
+function merge(...specs: LegacyBodySpec[]): LegacyBodySpec {
+  return {
+    keys: Object.assign({}, ...specs.map((s) => s.keys ?? {})),
+    values: Object.assign({}, ...specs.map((s) => s.values ?? {})),
+    dictKeys: specs.flatMap((s) => s.dictKeys ?? []),
+    opaque: specs.flatMap((s) => s.opaque ?? []),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The panel group (phase 2b layer 2): `GET /api/panel/<session>` (old `/api/painel/<id>` and
+// `/api/sessao/<id>`, what the published mod v0.0.30 reads), the decision list of a scope and the
+// writes on a decision, plus the old routes that embed one of their shapes (the wall's activity, the
+// Detail's session card, cost and plan, the decision cards of the Decisions page, tab and promote).
+//
+// Naming conventions, for the later layers to reuse:
+// - keys are camelCase English; a date `xxxEm` becomes `xxxAt` (`geradoEm` → `generatedAt`,
+//   `iniciadaEm` → `startedAt`, `decididaEm` → `decidedAt`, `mudouEm` → `changedAt`);
+// - a count of things in a state is named after the state: `vigentes` → `current`, `aConfirmar` →
+//   `toConfirm`, `suaVez` → `yourTurn`; `porX` → `byX` (`porConta` → `byAccount`, `porEscopo` → `byScope`);
+// - the recurring words: titulo → title, texto → text, rotulo → label, cor → color, fonte → source,
+//   desde → since, ate → until, motivo → reason, estado → state, tipo → type, nome → name, modelo →
+//   model, conta → account, sessao → session, itens → items, versao → version, pasta → folder,
+//   numero → number, feitos/feitas → done, atual → current, proximo → next, dono → owner, pai →
+//   parent, filhas → children, familia → family, erro → error (scoped: `error` at the top level is
+//   the error response);
+// - fixed values are lowercase English and keep the separator the old value had (`sua-vez` →
+//   `your-turn`, `a_confirmar` → `to_confirm`); values that were already English stay as they are;
+// - the decision scope is `session | family | branch`; a relation between sessions is `parent |
+//   child | sibling`, and a decision's own session `this | parent | family | branch`.
+//
+// `GET /api/panel` (Painel, src/api/tipos.ts), keys old → new:
+// - top: versao → version, geradoEm → generatedAt, sessao → session, contexto → context, custo →
+//   cost, plano → plan, planos → plans, subagentes → subagents, filhas → children, trabalho → work,
+//   precisam → needYou, decisoes → decisions (api, tokens, background, prs stay);
+// - api: versao → version, pasta → folder, abreSessao → opensSession (commit stays);
+//   tokens: entrada → input, saida → output; background: primeiro → first;
+// - session: titulo → title, modelo → model, iniciadaEm → startedAt, estado → state, motivo →
+//   reason, urgente → urgent, desde → since, turno → turn, atividade → activity, faixa → banner,
+//   conta → account; activity: tipo → type, texto → text; banner: also rodape → footer, desde → since;
+//   account: rotulo → label, cor → color, fonte → source;
+// - context: usados → used, limite → limit, estouros → overflows, alerta → alert,
+//   compactacoesManuais → manualCompactions, rotulo → label, agentes → agents (agenteId → agentId);
+//   cost: serie → series, estimativa → estimate;
+// - plan: feitos → done, atual → current, proximo → next, restantes → remaining, atualDono →
+//   currentOwner, mudouEm → changedAt, passos → steps; steps: texto → text, textoAtivo → activeText,
+//   estado → state, dono → owner; owner: tipo → type, nome → name, agenteId → agentId;
+// - plans: numero → number, resultado → outcome, resumo → summary, feitos → done, atual →
+//   current, inicio → start, fim → end;
+// - subagents: ativos → active, itens → items; items: nome → name, tarefa → task, desde → since,
+//   ate → until, pai → parent, onda → wave;
+// - children: titulo → title, estado → state, motivo → reason, desde → since, fazendo → doing,
+//   arquivada → archived;
+// - work: semPush → notPushed, erro → error; issue: numero → number, titulo → title,
+//   subIssues.feitas → done; pr: numero → number, estado → state, checks.falhas → failed,
+//   checks.rodando → running;
+// - needYou: suaVez → yourTurn, porConta → byAccount (conta → account), familia → family, maquina
+//   → machine; each one: nivel → level, porque → why, titulo → title, estado → state, motivo →
+//   reason, urgente → urgent, desde → since, texto → text, modelo → model, relacao → relation,
+//   mesmoProjeto → sameProject, conta → account;
+// - prs.itens → items: numero → number, titulo → title, sessao → session (titulo → title);
+// - decisions: vigentes → current, aConfirmar → toConfirm, retomada → resume (de → from), lista → list;
+// - the decision list (ListaDeDecisoes): escopo → scope, vigentes → current, aConfirmar →
+//   toConfirm, itens → items, porEscopo → byScope;
+// - a decision: rotulo → label, origem → origin, estado → state, titulo → title, texto → text,
+//   contexto → context, desfazer → undo, nao → rejected, decididaPor → decidedBy, decididaEm →
+//   decidedAt, confirmadaEm → confirmedAt, substituidaPor → supersededBy, sessao → session
+//   (toolUseId stays); the /ui's card adds escopo → scope, substitui → supersedes, promovidaPara →
+//   promotedTo, conversa → conversation (sessionId, branch, repo stay).
+//
+// Values, old → new:
+// - atividade.tipo: ferramenta → tool, delegando → delegating, pergunta → question, permissao →
+//   permission, erro → error, sua-vez → your-turn, interrompida → interrupted, concluida → completed,
+//   abandonada → abandoned, ociosa → idle (prompt stays); faixa.tipo: the same three;
+// - dono.tipo: principal → main, subagente → subagent, sessao → session;
+// - planos.resultado: atual → current, concluido → completed, abandonado → abandoned;
+// - filhas.estado: desconhecido → unknown (the inbox states were English already);
+// - trabalho.pr.estado: rascunho → draft, aberto → open, mergeado → merged, fechado → closed;
+//   ci: falhou → failed, rodando → running (ok stays); review: aprovado → approved, ajustes →
+//   changes-requested, pendente → pending;
+// - precisam.nivel: precisa → needs, sua-vez → your-turn; porque: permissao → permission, pergunta →
+//   question, plano → plan, decisao → decision, erro → error, sua-vez → your-turn, interrompida →
+//   interrupted (no-prompt stays); relacao: mae → parent, filha → child, irma → sibling;
+// - escopo (and the keys of porEscopo, the `?scope=` / `?decisions=` values): sessao → session,
+//   familia → family (branch stays);
+// - decisão: origem pergunta → question, plano → plan, permissao → permission, correcao →
+//   correction, sugerida → suggested; estado vigente → current, substituida → superseded,
+//   a_confirmar → to_confirm, descartada → dismissed; desfazer confirmar → confirm, descartar →
+//   dismiss, ajustar → adjust; decididaPor usuario → user, agente → agent; sessao esta → this,
+//   mae → parent, familia → family (branch stays).
+//
+// Decision writes, `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo)`: request `{ sessao, texto }`
+// → `{ session, text }` (the new route reads the old keys too); response `{ decisao }` → `{ decision }`.
+// `/open/<local>` answers `{ ok }` / `{ error }` as before: nothing to translate.
+// ---------------------------------------------------------------------------------------------
+
+const ACTIVITY_TYPES = {
+  tool: 'ferramenta',
+  delegating: 'delegando',
+  question: 'pergunta',
+  permission: 'permissao',
+  error: 'erro',
+  'your-turn': 'sua-vez',
+  interrupted: 'interrompida',
+  completed: 'concluida',
+  abandoned: 'abandonada',
+  idle: 'ociosa',
+};
+const OWNER_TYPES = { main: 'principal', subagent: 'subagente', session: 'sessao' };
+const SCOPES = { session: 'sessao', family: 'familia' };
+const SCOPE_ERRORS = { 'scope: session, family ou branch': 'escopo: sessao, familia ou branch' };
+
+const SESSION_CARD_KEYS = { title: 'titulo', model: 'modelo', startedAt: 'iniciadaEm', state: 'estado', reason: 'motivo', urgent: 'urgente', since: 'desde', turn: 'turno', activity: 'atividade', banner: 'faixa', account: 'conta' };
+const ACCOUNT_KEYS = { label: 'rotulo', color: 'cor', source: 'fonte' };
+
+/** The session card (`SessaoDoPainel`) held by `parent`, with its activity, banner and account. */
+const sessionCard = (parent: string): LegacyBodySpec => ({
+  keys: {
+    ...scoped(parent, SESSION_CARD_KEYS),
+    ...scoped('activity', { type: 'tipo', text: 'texto' }),
+    ...scoped('banner', { type: 'tipo', text: 'texto', footer: 'rodape', since: 'desde' }),
+    ...scoped('account', ACCOUNT_KEYS),
+  },
+  values: { 'activity.type': ACTIVITY_TYPES, 'banner.type': ACTIVITY_TYPES },
+});
+
+/** The plan (`PlanoDoPainel`) held by `parent`, with its steps and owners. */
+const plan = (parent: string): LegacyBodySpec => {
+  const owner = { type: 'tipo', name: 'nome', agentId: 'agenteId' };
+  return {
+    keys: {
+      ...scoped(parent, { done: 'feitos', current: 'atual', next: 'proximo', remaining: 'restantes', currentOwner: 'atualDono', changedAt: 'mudouEm', steps: 'passos' }),
+      ...scoped('steps', { text: 'texto', activeText: 'textoAtivo', state: 'estado', owner: 'dono' }),
+      ...scoped('owner', owner),
+      ...scoped('currentOwner', owner),
+    },
+    values: { 'owner.type': OWNER_TYPES, 'currentOwner.type': OWNER_TYPES },
+  };
+};
+
+const DECISION_KEYS = {
+  label: 'rotulo',
+  origin: 'origem',
+  state: 'estado',
+  title: 'titulo',
+  text: 'texto',
+  context: 'contexto',
+  undo: 'desfazer',
+  rejected: 'nao',
+  decidedBy: 'decididaPor',
+  decidedAt: 'decididaEm',
+  confirmedAt: 'confirmadaEm',
+  supersededBy: 'substituidaPor',
+  session: 'sessao',
+};
+/** What the /ui's decision card (`DecisaoDaUi`) adds to the panel's. */
+const DECISION_UI_KEYS = { scope: 'escopo', supersedes: 'substitui', promotedTo: 'promovidaPara', conversation: 'conversa' };
+
+/** A decision (`DecisaoDoPainel`, or with `ui` the /ui's `DecisaoDaUi`) held by `parent` (an object, or an array of them). */
+const decision = (parent: string, ui = false): LegacyBodySpec => ({
+  keys: scoped(parent, ui ? { ...DECISION_KEYS, ...DECISION_UI_KEYS } : DECISION_KEYS),
+  values: scoped<Readonly<Record<string, string>>>(parent, {
+    origin: { question: 'pergunta', plan: 'plano', permission: 'permissao', correction: 'correcao', suggested: 'sugerida' },
+    state: { current: 'vigente', superseded: 'substituida', to_confirm: 'a_confirmar', dismissed: 'descartada' },
+    undo: { confirm: 'confirmar', dismiss: 'descartar', adjust: 'ajustar' },
+    decidedBy: { user: 'usuario', agent: 'agente' },
+    session: { this: 'esta', parent: 'mae', family: 'familia' },
+    ...(ui ? { scope: SCOPES } : {}),
+  }),
+});
+
+/** The decision list of a scope (`ListaDeDecisoes`), held by `parent` (`''` at the top level). */
+const decisionList = (parent: string): LegacyBodySpec =>
+  merge(
+    {
+      keys: scoped(parent, { scope: 'escopo', current: 'vigentes', toConfirm: 'aConfirmar', items: 'itens', byScope: 'porEscopo' }),
+      values: { [`${parent}.scope`]: SCOPES, byScope: SCOPES },
+      dictKeys: ['byScope'],
+    },
+    decision('items'),
+  );
+
+/** The panel (`Painel`), new → old: the whole body. */
+const PANEL: LegacyBodySpec = merge(
+  {
+    keys: {
+      version: 'versao',
+      folder: 'pasta',
+      opensSession: 'abreSessao',
+      generatedAt: 'geradoEm',
+      session: 'sessao',
+      context: 'contexto',
+      cost: 'custo',
+      input: 'entrada',
+      output: 'saida',
+      first: 'primeiro',
+      plan: 'plano',
+      plans: 'planos',
+      subagents: 'subagentes',
+      children: 'filhas',
+      work: 'trabalho',
+      needYou: 'precisam',
+      decisions: 'decisoes',
+      // The context meter and the cost.
+      used: 'usados',
+      limit: 'limite',
+      overflows: 'estouros',
+      alert: 'alerta',
+      manualCompactions: 'compactacoesManuais',
+      agents: 'agentes',
+      agentId: 'agenteId',
+      series: 'serie',
+      estimate: 'estimativa',
+      // The plan history, the subagents and the children.
+      number: 'numero',
+      outcome: 'resultado',
+      summary: 'resumo',
+      done: 'feitos',
+      current: 'atual',
+      start: 'inicio',
+      end: 'fim',
+      active: 'ativos',
+      items: 'itens',
+      name: 'nome',
+      task: 'tarefa',
+      until: 'ate',
+      parent: 'pai',
+      wave: 'onda',
+      doing: 'fazendo',
+      archived: 'arquivada',
+      // Work by branch: only `work.error` is the old `erro` (the top-level `error` is an error response).
+      notPushed: 'semPush',
+      'work.error': 'erro',
+      'subIssues.done': 'feitas',
+      'checks.failed': 'falhas',
+      'checks.running': 'rodando',
+      // Who needs you and the PRs.
+      yourTurn: 'suaVez',
+      byAccount: 'porConta',
+      family: 'familia',
+      machine: 'maquina',
+      level: 'nivel',
+      why: 'porque',
+      relation: 'relacao',
+      sameProject: 'mesmoProjeto',
+      // The keys shared by the session card, the children, who needs you and the decisions.
+      title: 'titulo',
+      text: 'texto',
+      label: 'rotulo',
+      model: 'modelo',
+      state: 'estado',
+      reason: 'motivo',
+      urgent: 'urgente',
+      since: 'desde',
+      account: 'conta',
+      // The decisions line.
+      'decisions.current': 'vigentes',
+      toConfirm: 'aConfirmar',
+      resume: 'retomada',
+      from: 'de',
+      list: 'lista',
+    },
+    values: {
+      'children.state': { unknown: 'desconhecido' },
+      outcome: { current: 'atual', completed: 'concluido', abandoned: 'abandonado' },
+      'pr.state': { draft: 'rascunho', open: 'aberto', merged: 'mergeado', closed: 'fechado' },
+      'pr.ci': { failed: 'falhou', running: 'rodando' },
+      'pr.review': { approved: 'aprovado', 'changes-requested': 'ajustes', pending: 'pendente' },
+      level: { needs: 'precisa', 'your-turn': 'sua-vez' },
+      why: { permission: 'permissao', question: 'pergunta', plan: 'plano', decision: 'decisao', error: 'erro', 'your-turn': 'sua-vez', interrupted: 'interrompida' },
+      relation: { parent: 'mae', child: 'filha', sibling: 'irma' },
+    },
+  },
+  sessionCard('session'),
+  plan('plan'),
+  decisionList('list'),
+);
+
+/** A write on a decision: the response `{ decision }` and the old request body `{ sessao, texto }`. */
+const DECISION_WRITE: LegacyRouteSpec = {
+  response: merge(
+    {
+      keys: { '.decision': 'decisao' },
+      values: {
+        '.error': {
+          'informe a sessão: { "session": "<id>" }': 'informe a sessão: { "sessao": "<id>" }',
+          'escreva o ajuste: { "text": "…" }': 'escreva o ajuste: { "texto": "…" }',
+        },
+      },
+    },
+    decision('decision'),
+  ),
+  request: { keys: { '.sessao': 'session', '.texto': 'text' } },
+};
+
 /**
- * The spec of every old route. All empty in phase 2b layer 1 (identity): the layers that turn a
- * route's keys English fill its entry, and the goldens prove the old body did not move.
+ * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
+ * fill its entry, and the goldens prove the old body did not move.
  */
 export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
   attention: {},
   changes: {},
-  panel: {},
+  panel: { response: PANEL },
   open: {},
-  wall: {},
+  // The wall's card keeps its keys until its layer; only the activity line is the panel's.
+  wall: { response: { keys: scoped('atividade', { type: 'tipo', text: 'texto' }), values: { 'atividade.type': ACTIVITY_TYPES } } },
   events: {},
   load: {},
   sessions: {},
-  session: {},
-  'session/agents': {},
+  // The Detail's top: the session card and the cost are the panel's.
+  session: { response: merge(sessionCard('sessao'), { keys: scoped('custo', { series: 'serie', estimate: 'estimativa' }) }) },
+  // The Detail's agents tab: the task progress is the panel's plan.
+  'session/agents': { response: plan('tarefas') },
   'session/conversation': {},
   'session/events': {},
   'session/workflow': {},
-  'session/decisions': {},
+  // The Detail's decisions tab: its scope, the counts by scope and the /ui's decision cards.
+  'session/decisions': {
+    response: merge(
+      { values: { '.escopo': SCOPES, 'injecao.escopo': SCOPES, porEscopo: SCOPES, '.error': SCOPE_ERRORS }, dictKeys: ['porEscopo'] },
+      decision('itens', true),
+    ),
+  },
   history: {},
-  'decisions/scope': {},
-  decisions: {},
-  'decision/confirm': {},
-  'decision/dismiss': {},
-  'decision/adjust': {},
-  'decision/undo': {},
-  'decision/promote': {},
+  'decisions/scope': { response: merge(decisionList(''), { values: { '.error': SCOPE_ERRORS } }) },
+  // The Decisions page: only the cards (`grupos[].itens[]`) are the panel's.
+  decisions: { response: decision('itens', true) },
+  'decision/confirm': DECISION_WRITE,
+  'decision/dismiss': DECISION_WRITE,
+  'decision/adjust': DECISION_WRITE,
+  'decision/undo': DECISION_WRITE,
+  // The promote keeps its own keys (`{ decisao, caminho }`, `{ rascunho }`, the body `{ sessao, … }`)
+  // until its layer; the card inside is the /ui's decision.
+  'decision/promote': { response: decision('decisao', true) },
   project: {},
   'project/move': {},
   'analytics/cost': {},

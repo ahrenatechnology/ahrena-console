@@ -68,19 +68,19 @@ describe('escrever (api.js)', () => {
 
 describe('o card de uma decisão', () => {
   test('pílula de tipo, quem e estado como o wireframe escreve', () => {
-    assert.deepEqual(['sugerida', 'correcao', 'permissao', 'pergunta', 'plano'].map(typeLabel), ['Sugerida', 'Correção sua', 'Permissão', 'Pergunta', 'Plano']);
-    assert.equal(whoDecided({ origem: 'sugerida', decididaPor: 'agente' }), 'agente propôs');
-    assert.equal(whoDecided({ origem: 'correcao', decididaPor: 'usuario' }), 'você corrigiu');
-    assert.equal(whoDecided({ origem: 'plano', decididaPor: 'usuario' }), 'você aprovou');
-    assert.equal(whoDecided({ origem: 'pergunta', decididaPor: 'agente' }), 'agente');
-    assert.equal(whoDecided({ origem: 'pergunta', decididaPor: 'usuario' }), 'você');
-    assert.deepEqual(['vigente', 'a_confirmar', 'substituida'].map(stateLabel), ['Vigente', 'A confirmar', 'Substituída']);
+    assert.deepEqual(['suggested', 'correction', 'permission', 'question', 'plan'].map(typeLabel), ['Sugerida', 'Correção sua', 'Permissão', 'Pergunta', 'Plano']);
+    assert.equal(whoDecided({ origin: 'suggested', decidedBy: 'agent' }), 'agente propôs');
+    assert.equal(whoDecided({ origin: 'correction', decidedBy: 'user' }), 'você corrigiu');
+    assert.equal(whoDecided({ origin: 'plan', decidedBy: 'user' }), 'você aprovou');
+    assert.equal(whoDecided({ origin: 'question', decidedBy: 'agent' }), 'agente');
+    assert.equal(whoDecided({ origin: 'question', decidedBy: 'user' }), 'você');
+    assert.deepEqual(['current', 'to_confirm', 'superseded'].map(stateLabel), ['Vigente', 'A confirmar', 'Substituída']);
   });
 
   test('escopo, e de onde veio só quando não é desta sessão', () => {
-    assert.equal(scopeLabel({ escopo: 'sessao', sessao: 'esta' }), 'escopo: sessão');
-    assert.equal(scopeLabel({ escopo: 'familia', sessao: 'mae' }), 'escopo: família · da sessão mãe');
-    assert.equal(scopeLabel({ escopo: 'branch', sessao: 'branch' }), 'escopo: branch · de outra sessão do branch');
+    assert.equal(scopeLabel({ scope: 'session', session: 'this' }), 'escopo: sessão');
+    assert.equal(scopeLabel({ scope: 'family', session: 'parent' }), 'escopo: família · da sessão mãe');
+    assert.equal(scopeLabel({ scope: 'branch', session: 'branch' }), 'escopo: branch · de outra sessão do branch');
   });
 
   test('"há X min"', () => {
@@ -95,15 +95,15 @@ describe('o card de uma decisão', () => {
   });
 
   test('Ver na conversa só com rota da própria interface', () => {
-    assert.equal(conversationLink({ conversa: '/ui/sessions/sess-1' }), '/ui/sessions/sess-1');
-    for (const conversa of ['https://exemplo.com/ui/sessions/x', 'javascript:alert(1)', '/ui/sessions/x/../../api', null]) assert.equal(conversationLink({ conversa }), null, String(conversa));
+    assert.equal(conversationLink({ conversation: '/ui/sessions/sess-1' }), '/ui/sessions/sess-1');
+    for (const conversation of ['https://exemplo.com/ui/sessions/x', 'javascript:alert(1)', '/ui/sessions/x/../../api', null]) assert.equal(conversationLink({ conversation }), null, String(conversation));
   });
 
   test('os pedidos de escrita: Confirmar, Descartar e as duas fases do Promover', () => {
-    assert.deepEqual(actionRequest('d1', 'confirmar', { sessao: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { sessao: 's1' } });
+    assert.deepEqual(actionRequest('d1', 'confirmar', { session: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { session: 's1' } });
     // O id do núcleo tem `:` ("dec:…"): vai cru, como a regra de origem do servidor espera.
-    assert.equal(actionRequest('dec:4b1f', 'confirmar', { sessao: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
-    assert.deepEqual(actionRequest('d1', 'descartar', { sessao: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { sessao: 's1' } });
+    assert.equal(actionRequest('dec:4b1f', 'confirmar', { session: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
+    assert.deepEqual(actionRequest('d1', 'descartar', { session: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { session: 's1' } });
     assert.deepEqual(promoteRequest('d1', 's1'), { rota: '/api/decisions/d1/promote', corpo: { sessao: 's1' } });
     assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md' }), {
       rota: '/api/decisions/d1/promote',
@@ -112,9 +112,10 @@ describe('o card de uma decisão', () => {
     assert.deepEqual(promoteRequest('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
       sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32),
     }, 'o hash do rascunho vai junto no confirmar');
-    assert.throws(() => actionRequest('../x', 'confirmar', { sessao: 's1' }), /id de decisão/);
-    assert.throws(() => actionRequest('d1', 'apagar', { sessao: 's1' }), /ação desconhecida/);
+    assert.throws(() => actionRequest('../x', 'confirmar', { session: 's1' }), /id de decisão/);
+    assert.throws(() => actionRequest('d1', 'apagar', { session: 's1' }), /ação desconhecida/);
     assert.throws(() => actionRequest('d1', 'confirmar', {}), /precisa da sessão/);
+    assert.throws(() => actionRequest('d1', 'confirmar', { sessao: 's1' }), /precisa da sessão/, 'Confirmar e Descartar mandam `{ session }`');
   });
 });
 
@@ -281,7 +282,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     assert.deepEqual(classesDoJs('el(\'a\', { class: `card dec-e-${d.estado}` })'), ['card', 'dec-e-']);
     assert.deepEqual(classesDoJs('el(\'a\', { class: `card ${stateClass(d.estado)}` })'), ['card']);
     // The state classes are in English; the API value stays as it comes.
-    assert.deepEqual(['a_confirmar', 'vigente', 'descartada', 'substituida'].map(stateClass), ['dec-e-to-confirm', 'dec-e-current', 'dec-e-dismissed', 'dec-e-superseded']);
+    assert.deepEqual(['to_confirm', 'current', 'dismissed', 'superseded'].map(stateClass), ['dec-e-to-confirm', 'dec-e-current', 'dec-e-dismissed', 'dec-e-superseded']);
     assert.deepEqual(classesDoJs("el('a', { class: v === w ? 'on' : null })"), ['on'], 'e acha a que não tem prefixo');
   });
 

@@ -55,14 +55,15 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('o topo (A5): a sessão pedida, não a do apelido, com status, motivo, faixa, pílulas e o local', async () => {
-    const c = await read<CabecaDoDetalhe>(`/api/sessoes/${SESSAO_DO_DETALHE}`);
+    // The session card and the cost are the panel's, English since #173 phase 2b: read on the new route.
+    const c = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_DETALHE}`);
     assert.equal(c.sessao.id, SESSAO_DO_DETALHE);
-    assert.equal(c.sessao.titulo, 'Migração do esquema de pedidos');
+    assert.equal(c.sessao.title, 'Migração do esquema de pedidos');
     assert.equal(c.sessao.status, 'waiting');
-    assert.equal(c.sessao.motivo, 'notification');
-    assert.equal(c.sessao.faixa?.tipo, 'permissao');
-    assert.match(c.sessao.faixa!.texto, /npm run migrate/);
-    assert.equal(c.sessao.modelo, 'claude-opus-5-5');
+    assert.equal(c.sessao.reason, 'notification');
+    assert.equal(c.sessao.banner?.type, 'permission');
+    assert.match(c.sessao.banner!.text, /npm run migrate/);
+    assert.equal(c.sessao.model, 'claude-opus-5-5');
     assert.equal(c.sessao.cwd, '/simulacao/motor-de-regras');
     assert.equal(c.branch, 'feat/58-pedidos');
     assert.equal(c.local, LOCAL_DO_DETALHE);
@@ -71,10 +72,10 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     assert.equal(c.encerradaEm, null);
     assert.deepEqual(c.contagens, { agentes: 2, eventos: (await storage.listEvents(SESSAO_DO_DETALHE, { limit: 500 })).items.length });
 
-    const p4 = await read<CabecaDoDetalhe>(`/api/sessoes/${SESSAO_DO_PAINEL}`);
-    assert.equal(p4.sessao.titulo, 'Separar pagamentos em serviços');
+    const p4 = await read<CabecaDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}`);
+    assert.equal(p4.sessao.title, 'Separar pagamentos em serviços');
     assert.equal(p4.local, null, 'sessão sem Desktop: sem local');
-    assert.equal(p4.sessao.faixa, null);
+    assert.equal(p4.sessao.banner, null);
     assert.equal(p4.comando, null);
   });
 
@@ -87,7 +88,7 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   test('Agentes (C4): números, ferramentas contadas uma vez por chamada, tarefas, tokens e custo por nó', async () => {
-    const a = await read<AgentesDoDetalhe>(`/api/sessoes/${SESSAO_DO_PAINEL}/agentes`);
+    const a = await read<AgentesDoDetalhe>(`/api/sessions/${SESSAO_DO_PAINEL}/agents`);
     assert.equal(a.numeros.subagentes, 4);
     assert.equal(a.numeros.erros, 0);
     assert.ok(a.numeros.rodando);
@@ -97,7 +98,7 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     assert.equal(bash?.n, 15);
     assert.equal(a.ferramentas[0]!.nome, 'Bash', 'da mais usada para a menos usada');
     assert.equal(a.numeros.ferramentas, a.ferramentas.reduce((s, f) => s + f.n, 0));
-    assert.deepEqual(a.tarefas && { feitos: a.tarefas.feitos, total: a.tarefas.total, atual: a.tarefas.atual }, { feitos: 2, total: 6, atual: 'Extrair a cobrança' });
+    assert.deepEqual(a.tarefas && { done: a.tarefas.done, total: a.tarefas.total, current: a.tarefas.current }, { done: 2, total: 6, current: 'Extrair a cobrança' });
     assert.ok(a.tokens && a.tokens.cacheLido > 0 && a.tokens.saida > 0);
     assert.equal(a.tokens!.total, a.tokens!.cacheLido + a.tokens!.cacheGravado + a.tokens!.entrada + a.tokens!.saida);
 

@@ -191,7 +191,7 @@ describe('estouros pelo hook PreCompact', () => {
     const sid = 'sess-hook-2';
     await pre(sid, 1, 'auto', 'd5');
     const montador = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
-    assert.equal((await montador.montar({ sessionId: sid })).contexto, null);
+    assert.equal((await montador.montar({ sessionId: sid })).context, null);
   });
 
   test('hook e transcript veem a mesma compactação: vale o maior, nunca a soma', async () => {
@@ -268,17 +268,17 @@ describe('API do painel', () => {
     ], [mensagem(sid, 6, { input: 50, cacheRead: 20_000 }, { agentId: A })]);
     const montador = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
     const p = await montador.montar({ sessionId: sid });
-    assert.deepEqual(p.contexto, {
-      usados: 62_600,
-      limite: 200_000,
+    assert.deepEqual(p.context, {
+      used: 62_600,
+      limit: 200_000,
       pct: 31,
-      estouros: 2,
-      alerta: true,
-      compactacoesManuais: 1,
-      rotulo: '62.6k / 200k (31%)',
-      agentes: [{ agenteId: `${sid}:${A}`, usados: 20_050, limite: 200_000, pct: 10, estouros: 0, alerta: false }],
+      overflows: 2,
+      alert: true,
+      manualCompactions: 1,
+      label: '62.6k / 200k (31%)',
+      agents: [{ agentId: `${sid}:${A}`, used: 20_050, limit: 200_000, pct: 10, overflows: 0, alert: false }],
     });
-    assert.ok(p.subagentes.itens.some((s) => s.id === `${sid}:${A}`), 'agenteId é o id do subagente no card');
+    assert.ok(p.subagents.items.some((s) => s.id === `${sid}:${A}`), 'agentId é o id do subagente no card');
   });
 });
 

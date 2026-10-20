@@ -87,12 +87,12 @@ describe('mural ao vivo (#34)', () => {
     );
     assert.deepEqual(mural.contagem, { todas: 7, esperando: 4, ativas: 2 });
     const [permissao, erro, , suaVez] = mural.cards;
-    assert.deepEqual([permissao.status, permissao.estado, permissao.motivo, permissao.urgente, permissao.atividade.tipo], ['waiting', 'waiting', 'notification', true, 'permissao']);
-    assert.deepEqual([erro.status, erro.estado, erro.urgente, erro.atividade.tipo], ['error', 'error', true, 'erro']);
+    assert.deepEqual([permissao.status, permissao.estado, permissao.motivo, permissao.urgente, permissao.atividade.type], ['waiting', 'waiting', 'notification', true, 'permission']);
+    assert.deepEqual([erro.status, erro.estado, erro.urgente, erro.atividade.type], ['error', 'error', true, 'error']);
     assert.equal(erro.desde, iso(3));
-    assert.deepEqual([suaVez.urgente, suaVez.atividade], [false, { tipo: 'sua-vez', texto: '"Terminei a migração. Rodo os testes?"' }]);
+    assert.deepEqual([suaVez.urgente, suaVez.atividade], [false, { type: 'your-turn', text: '"Terminei a migração. Rodo os testes?"' }]);
     const concluida = mural.cards.at(-1)!;
-    assert.deepEqual([concluida.status, concluida.atividade.tipo], ['completed', 'concluida']);
+    assert.deepEqual([concluida.status, concluida.atividade.type], ['completed', 'completed']);
     await storage.close();
   });
 

@@ -312,7 +312,7 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
   };
 
   const subs = classificar(agentes);
-  const pais = new Map(subagentesDe([...agentes]).itens.map((i) => [i.id, i.pai]));
+  const pais = new Map(subagentesDe([...agentes]).items.map((i) => [i.id, i.parent]));
   const nos: NoDoWorkflow[] = [principal];
   for (const { a, papel, rodada } of subs) {
     nos.push({
@@ -452,12 +452,12 @@ const media = (xs: number[]) => (xs.length ? xs.reduce((t, x) => t + x, 0) / xs.
 
 /** Níveis de agente da sessão: o principal é 1, cada subagente pendurado soma um. */
 function profundidade(agentes: Agent[]): number {
-  const itens = subagentesDe(agentes).itens;
-  const pai = new Map(itens.map((i) => [i.id, i.pai]));
+  const itens = subagentesDe(agentes).items;
+  const pai = new Map(itens.map((i) => [i.id, i.parent]));
   let max = 1;
   for (const i of itens) {
     let n = 2;
-    for (let p = i.pai; p && n < 34; p = pai.get(p) ?? null) n++;
+    for (let p = i.parent; p && n < 34; p = pai.get(p) ?? null) n++;
     max = Math.max(max, n);
   }
   return max;
@@ -796,7 +796,7 @@ export async function responderWorkflows(res: ServerResponse, url: URL, fontes: 
   }
   const [agentes, eventos] = await Promise.all([fontes.storage.listAgents(id), todosOsEventos(fontes.storage, id)]);
   const branch = typeof session.metadata?.branch === 'string' ? session.metadata.branch : null;
-  const pr = fontes.trabalho?.ler(session.cwd, branch)?.pr?.numero ?? null;
+  const pr = fontes.trabalho?.ler(session.cwd, branch)?.pr?.number ?? null;
   send(res, 200, workflowDaSessao(session, agentes, eventos, { agora, pr }));
   return true;
 }

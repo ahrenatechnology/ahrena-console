@@ -109,7 +109,7 @@ export class MontadorDoMural {
     lidas.sort((a, b) => {
       const [x, y] = [a.leitura, b.leitura];
       if (precisa(x) !== precisa(y)) return precisa(x) ? -1 : 1;
-      if (precisa(x)) return Number(urgenteDe(y)) - Number(urgenteDe(x)) || y.sessao.desde.localeCompare(x.sessao.desde);
+      if (precisa(x)) return Number(urgenteDe(y)) - Number(urgenteDe(x)) || y.sessao.since.localeCompare(x.sessao.since);
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     const cards = lidas.map(({ leitura }) => cardDe(leitura));
@@ -162,21 +162,21 @@ function cardDe(leitura: LeituraDaSessao): CardDoMural {
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {
     id: sessao.id,
-    titulo: sessao.titulo,
+    titulo: sessao.title,
     projeto: pasta ? basename(pasta) : null,
     branch,
     status: sessao.status,
-    estado: sessao.estado,
-    motivo: sessao.motivo,
+    estado: sessao.state,
+    motivo: sessao.reason,
     urgente: urgenteDe(leitura),
-    desde: sessao.desde,
-    atividade: sessao.atividade,
-    modelo: sessao.modelo,
+    desde: sessao.since,
+    atividade: sessao.activity,
+    modelo: sessao.model,
     esforco: leitura.esforco,
-    agentes: { ativos: subagentes.ativos + (principalRodando(sessao.estado) ? 1 : 0), total: subagentes.itens.length + 1 },
+    agentes: { ativos: subagentes.active + (principalRodando(sessao.state) ? 1 : 0), total: subagentes.items.length + 1 },
     custo: { usd: custo?.usd ?? null, estimativa: true },
-    plano: plano ? { feitos: plano.feitos, total: plano.total, atual: plano.atual } : null,
-    contexto: contexto ? { pct: contexto.pct, usados: contexto.usados, limite: contexto.limite, rotulo: contexto.rotulo } : null,
+    plano: plano ? { feitos: plano.done, total: plano.total, atual: plano.current } : null,
+    contexto: contexto ? { pct: contexto.pct, usados: contexto.used, limite: contexto.limit, rotulo: contexto.label } : null,
   };
 }
 
