@@ -156,17 +156,17 @@ describe('ruído nas decisões (#131)', () => {
     const dispensada = await reg('q1', { choice: DISPENSADA, topic: 'question:qual banco' });
     const conversa = await reg('prompt:p1', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Vou subir o Postgres.', choice: 'Não sei se é possível, mas seria legal, né? A gente marcar os planos já executados' });
     const real = await reg('prompt:p2', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Sigo com o merge e crio a tag?', choice: 'Não, não solta a tag ainda. Espera o review do time.' });
-    const tocada = await reg('prompt:p3', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Vou subir o Postgres.', choice: 'Não, calma.', metadata: { painel: { acao: 'descartar' } } });
+    const tocada = await reg('prompt:p3', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Vou subir o Postgres.', choice: 'Não, calma.', metadata: { panel: { action: 'dismiss' } } });
 
     const r = await limparDecisoes(store, decisoes, at(5));
     assert.deepEqual(r, { ruido: 2, encurtadas: 1 });
     assert.equal((await decisoes.getDecision(dispensada.id))?.state, 'dismissed');
-    assert.equal((await decisoes.getDecision(dispensada.id))?.metadata.ruido, 'pergunta fechada sem resposta');
+    assert.equal((await decisoes.getDecision(dispensada.id))?.metadata.noise, 'pergunta fechada sem resposta');
     assert.equal((await decisoes.getDecision(conversa.id))?.state, 'dismissed');
     const ficou = (await decisoes.getDecision(real.id))!;
     assert.equal(ficou.state, 'to_confirm');
     assert.equal(ficou.choice, 'Não, não solta a tag ainda.');
-    assert.equal(ficou.metadata.texto, 'Não, não solta a tag ainda. Espera o review do time.');
+    assert.equal(ficou.metadata.text, 'Não, não solta a tag ainda. Espera o review do time.');
     assert.equal((await decisoes.getDecision(tocada.id))?.state, 'to_confirm', 'a que a pessoa já mexeu fica');
     assert.deepEqual(await limparDecisoes(store, decisoes, at(6)), { ruido: 0, encurtadas: 0 });
   });

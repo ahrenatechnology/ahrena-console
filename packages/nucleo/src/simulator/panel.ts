@@ -245,14 +245,14 @@ const iso = (now: number, minAgo: number) => new Date(now - minAgo * MIN).toISOS
 function baseSession(id: string, cwd: string, model: string, start: string, updated: string): Session {
   return {
     id, name: null, status: 'active', cwd, model, source: 'startup', startedAt: start, endedAt: null,
-    awaitingInputSince: null, awaitingReason: null, updatedAt: updated, accountId: null, accountSource: null, metadata: { simulado: true },
+    awaitingInputSince: null, awaitingReason: null, updatedAt: updated, accountId: null, accountSource: null, metadata: { simulated: true },
   };
 }
 
 function makeAgent(id: string, sessionId: string, type: Agent['type'], start: string, extra: Partial<Agent> = {}): Agent {
   return {
     id, sessionId, name: null, type, subagentType: null, status: 'working', task: null, currentTool: null,
-    parentAgentId: null, startedAt: start, endedAt: null, updatedAt: start, metadata: { simulado: true }, ...extra,
+    parentAgentId: null, startedAt: start, endedAt: null, updatedAt: start, metadata: { simulated: true }, ...extra,
   };
 }
 
@@ -315,16 +315,15 @@ async function writeThisSession(storage: StoragePort, e: ThisSession, now: numbe
     s.awaitingInputSince = iso(now, e.wait.minAgo);
     s.awaitingReason = e.wait.reason;
   }
-  const background = Object.fromEntries((e.background ?? []).map((c, i) => [`bg-${i}`, { desde: start, comando: c }]));
+  const background = Object.fromEntries((e.background ?? []).map((c, i) => [`bg-${i}`, { since: start, command: c }]));
   s.accountId = PANEL_ACCOUNTS.team.id;
   s.accountSource = PANEL_ACCOUNTS.team.source;
-  // Persisted metadata keys stay as they are (phase 5).
   s.metadata = {
-    simulado: true,
+    simulated: true,
     branch: e.branch,
-    esforco: e.effort ?? effortOf(e.model),
-    familia: { filhas: children.map((slug) => `sim-panel-${slug}`) },
-    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.error ? iso(now, e.error.minAgo) : null, delegacoes: {}, background },
+    effort: e.effort ?? effortOf(e.model),
+    family: { children: children.map((slug) => `sim-panel-${slug}`) },
+    states: { lastEvent: null, idsAtLastInstant: [], errorAt: e.error ? iso(now, e.error.minAgo) : null, delegations: {}, background },
   };
   if (e.startMin === 0 && e.turns === 0) return; // P6: the core has not seen the session yet
   await storage.putSession(s);
@@ -382,11 +381,11 @@ async function writeOtherSession(storage: StoragePort, o: OtherSession, now: num
   s.accountId = PANEL_ACCOUNTS[o.account].id;
   s.accountSource = PANEL_ACCOUNTS[o.account].source;
   s.metadata = {
-    simulado: true,
+    simulated: true,
     ...(o.branch ? { branch: o.branch } : {}),
-    esforco: o.effort ?? effortOf(o.model),
-    familia: o.relation === 'child' ? { mae: PANEL_SESSION } : {},
-    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? updated : null, delegacoes: {}, background: {} },
+    effort: o.effort ?? effortOf(o.model),
+    family: o.relation === 'child' ? { parent: PANEL_SESSION } : {},
+    states: { lastEvent: null, idsAtLastInstant: [], errorAt: o.status === 'error' ? updated : null, delegations: {}, background: {} },
   };
   await storage.putSession(s);
   await storage.putAgent(makeAgent(`${id}:main`, id, 'main', s.startedAt, { status: o.wait ? 'waiting' : o.status === 'completed' ? 'completed' : 'working' }));
@@ -403,7 +402,7 @@ export async function seedPanelScenario(storage: StoragePort, scenario: PanelSce
   for (const c of Object.values(PANEL_ACCOUNTS)) {
     await storage.putAccount({
       id: c.id, accountUuid: c.accountUuid, organizationUuid: c.organizationUuid, organizationName: null, organizationType: c.organizationType,
-      label: c.label, color: c.color, configDirs: [], firstSeenAt: iso(now, 60), lastSeenAt: iso(now, 0), metadata: { simulado: true },
+      label: c.label, color: c.color, configDirs: [], firstSeenAt: iso(now, 60), lastSeenAt: iso(now, 0), metadata: { simulated: true },
     });
   }
   const children = [...(e.children ?? []), ...others.filter((o) => o.relation === 'child' && !(e.children ?? []).includes(o.slug)).map((o) => o.slug)];
@@ -411,7 +410,7 @@ export async function seedPanelScenario(storage: StoragePort, scenario: PanelSce
   const parent = others.find((o) => o.relation === 'parent');
   if (parent) {
     const s = await storage.getSession(PANEL_SESSION);
-    if (s) await storage.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-panel-${parent.slug}` } } });
+    if (s) await storage.putSession({ ...s, metadata: { ...s.metadata, family: { ...(s.metadata.family as object), parent: `sim-panel-${parent.slug}` } } });
   }
   for (const o of others) await writeOtherSession(storage, o, now);
   current.cwd = `${ROOT}/${e.project}`;
@@ -479,7 +478,7 @@ export async function seedPanelDecisions(port: DecisionPort, scenario: PanelScen
       port,
       {
         sourceKey: `sim:p9:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'user', inferred: false,
-        message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...d,
+        message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulated: true }, ...d,
       },
       nowIso,
     );
@@ -550,7 +549,7 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
       port,
       {
         sourceKey: `sim:c21:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'user', inferred: false,
-        message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...rest,
+        message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulated: true }, ...rest,
       },
       nowIso,
     );

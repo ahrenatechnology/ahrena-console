@@ -174,7 +174,7 @@ async function todasDa(port: DecisionPort, query: ListDecisionsQuery): Promise<D
 
 function casa(d: Decision, q: string | null): boolean {
   if (!q) return true;
-  const texto = typeof d.metadata?.texto === 'string' ? d.metadata.texto : '';
+  const texto = typeof d.metadata?.text === 'string' ? d.metadata.text : '';
   return semAcento([d.choice, d.context ?? '', ...d.alternatives, texto, d.branch ?? '', decisionLabel(d)].join('\n')).includes(semAcento(q));
 }
 
@@ -452,7 +452,7 @@ export class DecisoesDaUi {
       '',
       '## Decisão',
       '',
-      typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+      typeof d.metadata?.text === 'string' ? d.metadata.text : d.choice,
       '',
       '## Alternativas consideradas',
       '',

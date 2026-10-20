@@ -159,7 +159,7 @@ describe('decisions: capture through the transcript', () => {
     const reply = 'Não, use SQLite em memória nos testes. Postgres fica para o ambiente de staging.';
     const [d] = extractTranscriptDecisions(jsonl([tx.say({ uuid: 'a1', minute: 1 }, 'Subo o Postgres?'), tx.prompt({ uuid: 'p1', minute: 2 }, reply)]));
     assert.equal(d.choice, 'Não, use SQLite em memória nos testes.');
-    assert.equal(d.metadata?.texto, reply);
+    assert.equal(d.metadata?.text, reply);
   });
 
   test('CA2: conservative: without a proposal before, or without a correcting tone, it is not a correction', () => {

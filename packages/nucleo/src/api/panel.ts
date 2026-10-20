@@ -108,7 +108,7 @@ export interface LeituraDaSessao {
   desktop: DesktopSession | null;
   /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git (só `git branch`, em cache). */
   branch: string | null;
-  /** O esforço: o `effort` do índice do Desktop e, sem ele, `metadata.esforco` (o simulador grava). */
+  /** O esforço: o `effort` do índice do Desktop e, sem ele, `metadata.effort` (o simulador grava). */
   esforco: string | null;
   custo: PanelCost | null;
   plano: PanelPlan | null;
@@ -202,7 +202,7 @@ export class MontadorDoPainel {
       // O que o trabalho por branch já sabe e, sem isso, só o `git branch` da pasta (em cache, nunca o
       // GitHub): o mural lê todas as abertas.
       branch: sessao.branch ?? this.trabalho?.espiar(pasta)?.branch ?? this.trabalho?.branchDaPasta(pasta) ?? null,
-      esforco: desktop?.effort ?? (typeof session.metadata?.esforco === 'string' ? session.metadata.esforco : null),
+      esforco: desktop?.effort ?? (typeof session.metadata?.effort === 'string' ? session.metadata.effort : null),
       custo: (await this.custoDe(session)).custo,
       plano: planoDe(await this.planoAtual(session.id, planos), resumo, agentes),
       contexto: contextoDe(session, resumo, await this.storage.listContextMeters(session.id)),
@@ -240,7 +240,7 @@ export class MontadorDoPainel {
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
       cost: custo,
       tokens,
-      background: { total: bg.length, first: bg[0]?.comando ?? null },
+      background: { total: bg.length, first: bg[0]?.command ?? null },
       plan: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
       plans: planos.map(planoDaLista),
       subagents: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
@@ -329,7 +329,7 @@ export class MontadorDoPainel {
   ): PanelSession {
     const inbox = readInbox(session, agentes);
     const memoria = readMemory(session);
-    const desde = session.awaitingInputSince ?? (inbox.status === 'error' ? memoria.erroEm : null) ?? session.updatedAt;
+    const desde = session.awaitingInputSince ?? (inbox.status === 'error' ? memoria.errorAt : null) ?? session.updatedAt;
     const { atividade, faixa } = atividadeDe(session, agentes, inbox, r, desde, agora);
     return {
       id: session.id,
@@ -404,9 +404,9 @@ export class MontadorDoPainel {
     const ids = new Map<string, { titulo: string | null; local: string | null; arquivada: boolean }>();
     // As arquivadas no Desktop vêm junto, marcadas (#145): o painel as conta e lista por último.
     for (const f of desktop ? (this.desktop?.childrenOf(desktop.localId) ?? []) : []) if (f.cliSessionId) ids.set(f.cliSessionId, { titulo: f.title, local: f.localId, arquivada: f.archived });
-    const familia = session?.metadata?.familia as { filhas?: unknown } | undefined;
-    if (Array.isArray(familia?.filhas)) {
-      for (const id of familia.filhas) {
+    const familia = session?.metadata?.family as { children?: unknown } | undefined;
+    if (Array.isArray(familia?.children)) {
+      for (const id of familia.children) {
         if (typeof id !== 'string' || ids.has(id)) continue;
         const noDesktop = this.desktop?.sessionByCli(id) ?? null;
         ids.set(id, { titulo: null, local: noDesktop?.localId ?? null, arquivada: noDesktop?.archived ?? false });
@@ -551,15 +551,15 @@ export class MontadorDoPainel {
 
 /** A sessão na família: o próprio id e o da mãe, pelo Desktop (`local_…`) ou pelo simulador. */
 function familiaDe(session: Session | null, desktop: DesktopSession | null): { eu: string | null; mae: string | null } {
-  const f = session?.metadata?.familia as { mae?: unknown } | undefined;
-  if (typeof f?.mae === 'string') return { eu: session!.id, mae: f.mae };
+  const f = session?.metadata?.family as { parent?: unknown } | undefined;
+  if (typeof f?.parent === 'string') return { eu: session!.id, mae: f.parent };
   if (desktop) return { eu: desktop.localId, mae: desktop.parentLocalId };
   return { eu: session?.id ?? null, mae: null };
 }
 
 /**
  * O medidor gravado pela porta (item 1.7). Sem medidor do principal, o contexto do simulador
- * (`metadata.contexto`) ou o último uso lido dos eventos, sem estouros.
+ * (`metadata.context`) ou o último uso lido dos eventos, sem estouros.
  */
 export function contextoDe(
   session: Pick<Session, 'metadata' | 'model'>,
@@ -571,8 +571,8 @@ export function contextoDe(
     .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: contextPct(m), overflows: m.compactions, alert: contextAlert(m) }));
   // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
   const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
-  const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
-  if (principal && typeof sim?.usados !== 'number') {
+  const sim = session.metadata?.context as { used?: unknown; limit?: unknown; overflows?: unknown } | undefined;
+  if (principal && typeof sim?.used !== 'number') {
     return {
       used: principal.usedTokens,
       limit: principal.windowTokens,
@@ -584,14 +584,14 @@ export function contextoDe(
       agents: agentes,
     };
   }
-  let usados = typeof sim?.usados === 'number' ? sim.usados : r.contexto;
+  let usados = typeof sim?.used === 'number' ? sim.used : r.contexto;
   if (usados === null) return null;
   // A janela longa, uma vez vista (ou pedida no modelo, `[1m]`), continua depois de compactar: o uso
   // cai abaixo de 200 mil, mas a janela não muda.
   const longa = r.janelaLonga || usados > LIMITE_PADRAO_DE_CONTEXTO || /\[1m\]/i.test(session.model ?? '');
-  const limite = typeof sim?.limite === 'number' && sim.limite > 0 ? sim.limite : longa ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
+  const limite = typeof sim?.limit === 'number' && sim.limit > 0 ? sim.limit : longa ? LIMITE_LONGO_DE_CONTEXTO : LIMITE_PADRAO_DE_CONTEXTO;
   usados = Math.max(0, usados);
-  const estouros = typeof sim?.estouros === 'number' && Number.isInteger(sim.estouros) && sim.estouros > 0 ? sim.estouros : 0;
+  const estouros = typeof sim?.overflows === 'number' && Number.isInteger(sim.overflows) && sim.overflows > 0 ? sim.overflows : 0;
   // Sem medição do principal, os estouros que o medidor já contou (pelo PreCompact) continuam valendo.
   const contado = medidores.find((x) => x.agentId === null);
   const total = Math.max(estouros, contado?.compactions ?? 0);

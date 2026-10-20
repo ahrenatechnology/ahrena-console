@@ -46,9 +46,9 @@ export async function capturarDoTranscript(decisoes: DecisionPort, s: ImportedSe
 
 /** O transcript principal da sessão: o que o hook mandou ou o do cursor da importação. */
 export function transcriptDe(s: Session, raiz: string): string | null {
-  const m = s.metadata as { transcriptPath?: unknown; importacao?: { file?: unknown } } | undefined;
+  const m = s.metadata as { transcriptPath?: unknown; import?: { file?: unknown } } | undefined;
   if (typeof m?.transcriptPath === 'string') return m.transcriptPath;
-  if (typeof m?.importacao?.file === 'string') return join(raiz, m.importacao.file);
+  if (typeof m?.import?.file === 'string') return join(raiz, m.import.file);
   return null;
 }
 
@@ -100,7 +100,7 @@ export const DECISION_NOISE_CLEANUP = 'decision-noise-1';
  * - "correção" inferida de uma mensagem que não responde "não, …" a uma pergunta do agente
  *   (longa, pergunta, dúvida, desabafo) sai das listas, se a pessoa ainda não mexeu nela;
  * - a correção que fica ganha o título curto, com o texto inteiro no detalhe.
- * O que sai fica `dismissed`, com o motivo em `metadata.ruido`: no histórico, fora das listas.
+ * O que sai fica `dismissed`, com o motivo em `metadata.noise`: no histórico, fora das listas.
  */
 export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPort, agora = new Date().toISOString()): Promise<{ ruido: number; encurtadas: number }> {
   const r = { ruido: 0, encurtadas: 0 };
@@ -123,16 +123,16 @@ export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPor
           continue;
         }
         if (d.origin !== 'correction') continue;
-        const texto = typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice;
+        const texto = typeof d.metadata?.text === 'string' ? d.metadata.text : d.choice;
         const respondePergunta = d.context?.trim().endsWith('?') === true;
-        if (d.inferred && d.state === 'to_confirm' && !d.metadata?.painel && (!respondePergunta || !looksLikeCorrection(texto))) {
+        if (d.inferred && d.state === 'to_confirm' && !d.metadata?.panel && (!respondePergunta || !looksLikeCorrection(texto))) {
           await markNoise(decisoes, d.id, 'mensagem que não contraria uma proposta', agora);
           r.ruido++;
           continue;
         }
         const curta = shortChoice(texto);
         if (curta !== d.choice) {
-          await decisoes.putDecision({ ...d, choice: curta, metadata: { ...d.metadata, texto }, updatedAt: agora });
+          await decisoes.putDecision({ ...d, choice: curta, metadata: { ...d.metadata, text: texto }, updatedAt: agora });
           r.encurtadas++;
         }
       }

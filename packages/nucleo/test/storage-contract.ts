@@ -448,7 +448,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         total: 2,
         currentStepId: '2',
         changedAt: at(2),
-        metadata: { extracao: { aplicadas: ['t1'] } },
+        metadata: { extraction: { applied: ['t1'] } },
         ...over,
       });
 

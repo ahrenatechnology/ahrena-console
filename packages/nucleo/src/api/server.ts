@@ -171,7 +171,7 @@ const DECISION_LIST = /^\/api\/decisions\/([^/]+)$/;
 const DECISION_ACTION = /^\/api\/decisions\/([^/]+)\/(confirm|dismiss|adjust|undo)$/;
 const DECISION_WRITE_FROM_UI = /^\/api\/decisions\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirm|dismiss|adjust|undo|promote)$/;
 /** The action in the URL → the action the panel builder still names in Portuguese (phase 3). */
-const DECISION_ACTIONS: Readonly<Record<string, AcaoNaDecisao>> = { confirm: 'confirmar', dismiss: 'descartar', adjust: 'ajustar', undo: 'desfazer' };
+const DECISION_ACTIONS: Readonly<Record<string, AcaoNaDecisao>> = { confirm: 'confirm', dismiss: 'dismiss', adjust: 'adjust', undo: 'undo' };
 
 export interface LocalApi {
   server: Server;
