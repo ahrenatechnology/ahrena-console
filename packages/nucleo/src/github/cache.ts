@@ -62,9 +62,10 @@ export class RateLimitedError extends Error {
   }
 }
 
+/** Nada no cache e o GitHub falhou; `cause` é o erro da fonte, quando houve um (permissão, limite, rede). */
 export class NoDataError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'NoDataError';
   }
 }
@@ -158,7 +159,7 @@ export class GithubCache {
     try {
       return await p;
     } catch (err) {
-      return this.fallback(hit, err instanceof Error ? err.message : String(err));
+      return this.fallback(hit, err instanceof Error ? err.message : String(err), err);
     }
   }
 
@@ -199,8 +200,8 @@ export class GithubCache {
     }
   }
 
-  private fallback<T>(hit: CacheEntry<T> | null, reason: string): CacheResult<T> {
-    if (!hit || this.now() - hit.fetchedAt > this.maxStaleMs) throw new NoDataError(`sem dados: ${reason}`);
+  private fallback<T>(hit: CacheEntry<T> | null, reason: string, cause?: unknown): CacheResult<T> {
+    if (!hit || this.now() - hit.fetchedAt > this.maxStaleMs) throw new NoDataError(`sem dados: ${reason}`, cause === undefined ? undefined : { cause });
     return { value: hit.value, fetchedAt: hit.fetchedAt, stale: true, staleReason: reason };
   }
 }

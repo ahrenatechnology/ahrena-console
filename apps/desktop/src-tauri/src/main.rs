@@ -7,9 +7,12 @@
 //    dos wireframes A1, A2 e A4 (menu.rs), com o número ao lado do ícone;
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /abrir/<local_…>`); "Abrir o console"
 //    abre a `/ui` do núcleo numa janela;
-// 5. aberto à mão, abre também o console; aberto pelo login, fica só na bandeja (login.rs).
+// 5. com a chave do updater no tauri.conf.json, procura versão nova ao abrir e a cada 6 h
+//    (atualizacao.rs) e a oferece no menu;
+// 6. aberto à mão, abre também o console; aberto pelo login, fica só na bandeja (login.rs).
 // O app não grava hooks nem configuração do Claude, não embute Node e não tem telas próprias.
 
+mod atualizacao;
 mod http;
 mod login;
 mod menu;
@@ -48,6 +51,8 @@ struct Estado {
     /// `id da sessão` → `local_…` do Claude Desktop, do último menu.
     locais: HashMap<String, Option<String>>,
     ultimo: Option<(Vec<Item>, Option<String>)>,
+    /// A versão nova que o updater achou.
+    atualizacao: Option<String>,
 }
 
 type Compartilhado = Arc<Mutex<Estado>>;
@@ -66,6 +71,7 @@ fn main() {
         login: false,
         locais: HashMap::new(),
         ultimo: None,
+        atualizacao: None,
     }));
     let (acordar, sinais) = channel::<()>();
 
@@ -100,6 +106,10 @@ fn main() {
                 });
             }
             redesenhar(app.handle(), &estado);
+            let para_o_menu = estado.clone();
+            if let Err(e) = atualizacao::vigiar(app.handle(), move |app, versao| mudar(app, &para_o_menu, |e| e.atualizacao = Some(versao))) {
+                eprintln!("[ahrena-console] updater: {e}");
+            }
 
             let recursos = app.path().resource_dir().ok();
             let handle = app.handle().clone();
@@ -226,7 +236,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
         // Relido sempre: o usuário pode tirar o item em Ajustes.
         e.login = login::marcado(login::DoSistema.status());
         let versao = handle.package_info().version.to_string();
-        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.notificacoes, login: e.login, versao: &versao });
+        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.notificacoes, login: e.login, versao: &versao, atualizacao: e.atualizacao.as_deref() });
         let titulo = menu::titulo_da_bandeja(&e.nucleo, e.atencao.as_ref());
         if e.ultimo.as_ref() == Some(&(itens.clone(), titulo.clone())) {
             return;
@@ -348,6 +358,7 @@ fn clique(app: &AppHandle, id: &str) {
             // O clique já inverteu a marca nativa: refaz o menu mesmo sem mudança (erro, aprovação).
             mudar(app, &estado, |e| e.ultimo = None);
         }
+        menu::ID_ATUALIZAR => atualizacao::instalar(app),
         menu::ID_PROCURAR => {
             let _ = app.state::<Laco>().0.lock().unwrap().send(());
         }
