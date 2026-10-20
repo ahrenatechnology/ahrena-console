@@ -15,7 +15,7 @@ import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisions/capture-hooks.ts';
 import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
-import { criarServidorMcp } from '../mcp/index.ts';
+import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
@@ -332,15 +332,15 @@ const agentConfig = demoAgentConfig
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
-// Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
-const mcp = criarServidorMcp({ storage, contas, desktop, log });
-mcp.servidor.registrar(waitForChanges({ changes: mudancas, accounts: contas }));
-const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
+// New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
+const mcp = createMcpServer({ storage, accounts: contas, desktop, log });
+mcp.server.register(waitForChanges({ changes: mudancas, accounts: contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
   storage,
-  frota: mcp.frota,
+  frota: mcp.fleet,
   decisions: decisoes,
   cache: cacheDoGithub,
   source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
@@ -421,14 +421,14 @@ const api: ApiLocal = await iniciarApiLocal({
   port: porta,
   log,
   abrirNoDesktop,
-  mcp: mcp.servidor,
+  mcp: mcp.server,
   commit,
   mudancas,
   decisoesUi,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
   eventos: new FeedDeEventos({ storage }),
-  frota: mcp.frota,
+  frota: mcp.fleet,
   remoteAttention: remoteMachines,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.current }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),

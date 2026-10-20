@@ -22,13 +22,13 @@
 // Tudo pela porta e por caches em memória (decisão 0004): os agentes de uma sessão encerrada são
 // relidos só quando o `updatedAt` dela muda; o custo e o último prompt, só para os cards das páginas
 // devolvidas. A conta sai com rótulo e cor, nunca o id (decisão 0006). O título passa por
-// `tituloSeguro`, como no MCP. Os itens vêm pela atividade mais recente, desempate pelo id.
+// `safeTitle`, como no MCP. Os itens vêm pela atividade mais recente, desempate pelo id.
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import { DEFAULT_PRICES } from '../cost/default-prices.ts';
 import { currentPrices } from '../cost/table.ts';
-import { tituloSeguro } from '../mcp/output.ts';
+import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
@@ -339,7 +339,7 @@ function subagenteDe(a: Agent, s: Session, agora: number): CardDeAgente {
     id: a.id.startsWith(`${s.id}:`) ? a.id : `${s.id}:${a.id}`,
     sessionId: s.id,
     main: false,
-    name: tituloSeguro(a.subagentType) ?? tituloSeguro(a.name) ?? 'Subagente',
+    name: safeTitle(a.subagentType) ?? safeTitle(a.name) ?? 'Subagente',
     description: umaLinha(a.task, TEXTO_MAXIMO) ?? '',
     status,
     reason: null,

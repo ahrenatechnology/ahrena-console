@@ -10,204 +10,204 @@
 // as the spec says. `structuredContent` and `outputSchema` are from 2025-06-18 on; an older client
 // ignores them and reads the text.
 
-export const VERSOES_DO_PROTOCOLO = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
-export type VersaoDoProtocolo = (typeof VERSOES_DO_PROTOCOLO)[number];
-export const VERSAO_MAIS_NOVA: VersaoDoProtocolo = VERSOES_DO_PROTOCOLO[0];
+export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
+export type ProtocolVersion = (typeof PROTOCOL_VERSIONS)[number];
+export const LATEST_PROTOCOL_VERSION: ProtocolVersion = PROTOCOL_VERSIONS[0];
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
-export type ObjetoJson = { [k: string]: Json };
+export type JsonObject = { [k: string]: Json };
 
-/** JSON Schema da entrada ou da saída de uma ferramenta (o subconjunto que usamos). */
-export type Esquema = ObjetoJson & { type: 'object' };
+/** JSON Schema of a tool's input or output (the subset we use). */
+export type Schema = JsonObject & { type: 'object' };
 
-export interface ContextoDaChamada {
-  /** Aborta quando o cliente desiste (a conexão HTTP fechou). Ferramenta longa deve ouvir. */
-  sinal: AbortSignal;
-  /** A versão negociada, quando o transporte a conhece (cabeçalho `MCP-Protocol-Version`). */
-  versao: string | null;
+export interface CallContext {
+  /** Aborts when the client gives up (the HTTP connection closed). A long tool should listen. */
+  signal: AbortSignal;
+  /** The negotiated version, when the transport knows it (`MCP-Protocol-Version` header). */
+  version: string | null;
 }
 
-/** O que a ferramenta devolve: um texto curto para o modelo e o mesmo dado estruturado. */
-export interface ResultadoDaFerramenta {
-  texto: string;
-  dados: ObjetoJson;
+/** What a tool returns: a short text for the model and the same data, structured. */
+export interface ToolResult {
+  text: string;
+  data: JsonObject;
 }
 
 /**
- * Uma ferramenta do servidor. Só de leitura (proposta 0.0.1): `annotations.readOnlyHint` sai
- * sempre `true`. Para acrescentar uma, veja src/mcp/README.md.
+ * A server tool. Read-only (proposal 0.0.1): `annotations.readOnlyHint` always goes out `true`.
+ * To add one, see src/mcp/README.md.
  */
-export interface Ferramenta {
-  nome: string;
-  titulo: string;
-  descricao: string;
-  entrada: Esquema;
-  saida?: Esquema;
-  /** Chamada só depois que `entrada` passou por `lerArgumentos` (validacao.ts) dentro dela. */
-  executar(args: ObjetoJson, ctx: ContextoDaChamada): Promise<ResultadoDaFerramenta>;
+export interface Tool {
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: Schema;
+  outputSchema?: Schema;
+  /** Called with the raw arguments: the tool validates them itself (`parseCommonArgs`, output.ts). */
+  execute(args: JsonObject, ctx: CallContext): Promise<ToolResult>;
 }
 
-/** Erro que a ferramenta quer mostrar ao modelo: volta como resultado com `isError`, não como erro de protocolo. */
-export class ErroDaFerramenta extends Error {
+/** Error the tool wants to show the model: goes back as a result with `isError`, not as a protocol error. */
+export class ToolError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ErroDaFerramenta';
+    this.name = 'ToolError';
   }
 }
 
-/** Erro de argumento: volta com `isError`, para o modelo corrigir e tentar de novo. */
-export class ErroDeArgumento extends ErroDaFerramenta {
+/** Argument error: goes back with `isError`, so the model can fix it and try again. */
+export class ArgumentError extends ToolError {
   constructor(message: string) {
     super(message);
-    this.name = 'ErroDeArgumento';
+    this.name = 'ArgumentError';
   }
 }
 
-export const ERROS = {
+export const RPC_ERRORS = {
   parse: -32700,
-  pedidoInvalido: -32600,
-  metodoDesconhecido: -32601,
-  parametrosInvalidos: -32602,
-  interno: -32603,
+  invalidRequest: -32600,
+  methodNotFound: -32601,
+  invalidParams: -32602,
+  internal: -32603,
 } as const;
 
 type Id = string | number | null;
-export interface RespostaJsonRpc {
+export interface JsonRpcResponse {
   jsonrpc: '2.0';
   id: Id;
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 }
 
-/** No máximo 10 ferramentas (proposta 0.0.1, feature 9). */
-export const MAXIMO_DE_FERRAMENTAS = 10;
-const NOME = /^[a-z][a-z0-9_]{0,63}$/;
+/** At most 10 tools (proposal 0.0.1, feature 9). */
+export const MAX_TOOLS = 10;
+const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
-export interface OpcoesDoServidorMcp {
-  nome?: string;
-  versao: string;
-  /** Texto para o modelo no `initialize`: o que o servidor responde e como ler. */
-  instrucoes?: string;
-  log?: (mensagem: string) => void;
+export interface McpServerOptions {
+  name?: string;
+  version: string;
+  /** Text for the model in `initialize`: what the server answers and how to read it. */
+  instructions?: string;
+  log?: (message: string) => void;
 }
 
-export class ServidorMcp {
-  private readonly ferramentas = new Map<string, Ferramenta>();
-  private readonly nome: string;
-  private readonly versao: string;
-  private readonly instrucoes: string | undefined;
-  private readonly log: (mensagem: string) => void;
+export class McpServer {
+  private readonly tools = new Map<string, Tool>();
+  private readonly name: string;
+  private readonly version: string;
+  private readonly instructions: string | undefined;
+  private readonly log: (message: string) => void;
 
-  constructor({ nome = 'ahrena-console', versao, instrucoes, log = () => {} }: OpcoesDoServidorMcp) {
-    this.nome = nome;
-    this.versao = versao;
-    this.instrucoes = instrucoes;
+  constructor({ name = 'ahrena-console', version, instructions, log = () => {} }: McpServerOptions) {
+    this.name = name;
+    this.version = version;
+    this.instructions = instructions;
     this.log = log;
   }
 
-  /** Acrescenta uma ferramenta. Nome repetido, fora do padrão ou além do limite é erro de quem registra. */
-  registrar(f: Ferramenta): this {
-    if (!NOME.test(f.nome)) throw new Error(`nome de ferramenta inválido: ${f.nome}`);
-    if (this.ferramentas.has(f.nome)) throw new Error(`ferramenta já registrada: ${f.nome}`);
-    if (this.ferramentas.size >= MAXIMO_DE_FERRAMENTAS) throw new Error(`no máximo ${MAXIMO_DE_FERRAMENTAS} ferramentas`);
-    this.ferramentas.set(f.nome, f);
+  /** Adds a tool. A repeated name, a name off the pattern or one past the limit is the registrant's error. */
+  register(t: Tool): this {
+    if (!TOOL_NAME.test(t.name)) throw new Error(`nome de ferramenta inválido: ${t.name}`);
+    if (this.tools.has(t.name)) throw new Error(`ferramenta já registrada: ${t.name}`);
+    if (this.tools.size >= MAX_TOOLS) throw new Error(`no máximo ${MAX_TOOLS} ferramentas`);
+    this.tools.set(t.name, t);
     return this;
   }
 
-  get nomes(): string[] {
-    return [...this.ferramentas.keys()];
+  get names(): string[] {
+    return [...this.tools.keys()];
   }
 
   /**
-   * Atende uma mensagem ou um lote (2025-03-26 aceita lote; as outras versões, não, mas aceitar
-   * não quebra ninguém). Devolve `null` quando não há o que responder (só notificações e respostas).
+   * Handles a message or a batch (2025-03-26 accepts batches; the other versions do not, but
+   * accepting breaks no one). Returns `null` when there is nothing to answer (only notifications and responses).
    */
-  async atender(mensagem: unknown, ctx: Partial<ContextoDaChamada> = {}): Promise<RespostaJsonRpc | RespostaJsonRpc[] | null> {
-    const c: ContextoDaChamada = { sinal: ctx.sinal ?? new AbortController().signal, versao: ctx.versao ?? null };
-    if (Array.isArray(mensagem)) {
-      if (mensagem.length === 0) return erro(null, ERROS.pedidoInvalido, 'lote vazio');
-      const respostas = (await Promise.all(mensagem.map((m) => this.uma(m, c)))).filter((r): r is RespostaJsonRpc => r !== null);
-      return respostas.length > 0 ? respostas : null;
+  async handle(message: unknown, ctx: Partial<CallContext> = {}): Promise<JsonRpcResponse | JsonRpcResponse[] | null> {
+    const c: CallContext = { signal: ctx.signal ?? new AbortController().signal, version: ctx.version ?? null };
+    if (Array.isArray(message)) {
+      if (message.length === 0) return rpcError(null, RPC_ERRORS.invalidRequest, 'lote vazio');
+      const responses = (await Promise.all(message.map((m) => this.handleOne(m, c)))).filter((r): r is JsonRpcResponse => r !== null);
+      return responses.length > 0 ? responses : null;
     }
-    return this.uma(mensagem, c);
+    return this.handleOne(message, c);
   }
 
-  private async uma(m: unknown, ctx: ContextoDaChamada): Promise<RespostaJsonRpc | null> {
-    if (!m || typeof m !== 'object' || (m as { jsonrpc?: unknown }).jsonrpc !== '2.0') return erro(null, ERROS.pedidoInvalido, 'não é JSON-RPC 2.0');
+  private async handleOne(m: unknown, ctx: CallContext): Promise<JsonRpcResponse | null> {
+    if (!m || typeof m !== 'object' || (m as { jsonrpc?: unknown }).jsonrpc !== '2.0') return rpcError(null, RPC_ERRORS.invalidRequest, 'não é JSON-RPC 2.0');
     const { id, method, params } = m as { id?: unknown; method?: unknown; params?: unknown };
-    const temId = id !== undefined;
-    if (temId && id !== null && typeof id !== 'string' && typeof id !== 'number') return erro(null, ERROS.pedidoInvalido, 'id inválido');
-    // Resposta do cliente (não pedimos nada) ou notificação: nada a responder.
-    if (typeof method !== 'string') return temId && ('result' in m || 'error' in m) ? null : erro((id as Id) ?? null, ERROS.pedidoInvalido, 'sem method');
-    if (!temId) return null;
+    const hasId = id !== undefined;
+    if (hasId && id !== null && typeof id !== 'string' && typeof id !== 'number') return rpcError(null, RPC_ERRORS.invalidRequest, 'id inválido');
+    // A response from the client (we ask nothing) or a notification: nothing to answer.
+    if (typeof method !== 'string') return hasId && ('result' in m || 'error' in m) ? null : rpcError((id as Id) ?? null, RPC_ERRORS.invalidRequest, 'sem method');
+    if (!hasId) return null;
     const rid = id as Id;
     try {
       switch (method) {
         case 'initialize':
-          return ok(rid, this.inicializar(params));
+          return ok(rid, this.initialize(params));
         case 'ping':
           return ok(rid, {});
         case 'tools/list':
-          return ok(rid, { tools: [...this.ferramentas.values()].map(descrever) });
+          return ok(rid, { tools: [...this.tools.values()].map(describeTool) });
         case 'tools/call':
-          return ok(rid, await this.chamar(params, ctx));
+          return ok(rid, await this.callTool(params, ctx));
         default:
-          return erro(rid, ERROS.metodoDesconhecido, `método desconhecido: ${method}`);
+          return rpcError(rid, RPC_ERRORS.methodNotFound, `método desconhecido: ${method}`);
       }
     } catch (e) {
-      if (e instanceof ErroDeProtocolo) return erro(rid, e.codigo, e.message);
-      this.log(`erro em ${method}: ${(e as Error).message}`);
-      return erro(rid, ERROS.interno, 'erro interno');
+      if (e instanceof ProtocolError) return rpcError(rid, e.code, e.message);
+      this.log(`error in ${method}: ${(e as Error).message}`);
+      return rpcError(rid, RPC_ERRORS.internal, 'erro interno');
     }
   }
 
-  private inicializar(params: unknown) {
-    const pedida = (params as { protocolVersion?: unknown } | null)?.protocolVersion;
-    const versao = typeof pedida === 'string' && (VERSOES_DO_PROTOCOLO as readonly string[]).includes(pedida) ? pedida : VERSAO_MAIS_NOVA;
+  private initialize(params: unknown) {
+    const requested = (params as { protocolVersion?: unknown } | null)?.protocolVersion;
+    const version = typeof requested === 'string' && (PROTOCOL_VERSIONS as readonly string[]).includes(requested) ? requested : LATEST_PROTOCOL_VERSION;
     return {
-      protocolVersion: versao,
+      protocolVersion: version,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: this.nome, title: 'Ahrena Console', version: this.versao },
-      ...(this.instrucoes ? { instructions: this.instrucoes } : {}),
+      serverInfo: { name: this.name, title: 'Ahrena Console', version: this.version },
+      ...(this.instructions ? { instructions: this.instructions } : {}),
     };
   }
 
-  private async chamar(params: unknown, ctx: ContextoDaChamada) {
+  private async callTool(params: unknown, ctx: CallContext) {
     const p = params as { name?: unknown; arguments?: unknown } | null;
-    const f = typeof p?.name === 'string' ? this.ferramentas.get(p.name) : undefined;
-    if (!f) throw new ErroDeProtocolo(ERROS.parametrosInvalidos, `ferramenta desconhecida: ${String(p?.name)}`);
+    const t = typeof p?.name === 'string' ? this.tools.get(p.name) : undefined;
+    if (!t) throw new ProtocolError(RPC_ERRORS.invalidParams, `ferramenta desconhecida: ${String(p?.name)}`);
     const args = p?.arguments ?? {};
     if (typeof args !== 'object' || args === null || Array.isArray(args)) {
       return { content: [{ type: 'text', text: 'arguments precisa ser um objeto' }], isError: true };
     }
     try {
-      const r = await f.executar(args as ObjetoJson, ctx);
-      return { content: [{ type: 'text', text: r.texto }], structuredContent: r.dados, isError: false };
+      const r = await t.execute(args as JsonObject, ctx);
+      return { content: [{ type: 'text', text: r.text }], structuredContent: r.data, isError: false };
     } catch (e) {
-      if (e instanceof ErroDaFerramenta) return { content: [{ type: 'text', text: e.message }], isError: true };
+      if (e instanceof ToolError) return { content: [{ type: 'text', text: e.message }], isError: true };
       throw e;
     }
   }
 }
 
-class ErroDeProtocolo extends Error {
-  readonly codigo: number;
-  constructor(codigo: number, message: string) {
+class ProtocolError extends Error {
+  readonly code: number;
+  constructor(code: number, message: string) {
     super(message);
-    this.codigo = codigo;
+    this.code = code;
   }
 }
 
-function descrever(f: Ferramenta) {
+function describeTool(t: Tool) {
   return {
-    name: f.nome,
-    title: f.titulo,
-    description: f.descricao,
-    inputSchema: f.entrada,
-    ...(f.saida ? { outputSchema: f.saida } : {}),
-    annotations: { title: f.titulo, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    inputSchema: t.inputSchema,
+    ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
+    annotations: { title: t.title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   };
 }
 
-const ok = (id: Id, result: unknown): RespostaJsonRpc => ({ jsonrpc: '2.0', id, result });
-export const erro = (id: Id, code: number, message: string): RespostaJsonRpc => ({ jsonrpc: '2.0', id, error: { code, message } });
+const ok = (id: Id, result: unknown): JsonRpcResponse => ({ jsonrpc: '2.0', id, result });
+export const rpcError = (id: Id, code: number, message: string): JsonRpcResponse => ({ jsonrpc: '2.0', id, error: { code, message } });

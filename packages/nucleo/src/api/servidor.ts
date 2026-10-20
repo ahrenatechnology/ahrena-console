@@ -66,7 +66,7 @@ import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
-import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
+import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './mural.ts';
@@ -76,10 +76,10 @@ import type { SessionHistory } from '../history/reading.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './eventos.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
-import type { ServidorMcp } from '../mcp/protocol.ts';
+import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './detalhe.ts';
-import type { LeituraDaFrota } from '../mcp/fleet.ts';
+import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
@@ -106,7 +106,7 @@ export interface OpcoesDaApi {
    */
   abrirNoDesktop?: ((url: string) => Promise<void>) | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
-  mcp?: ServidorMcp;
+  mcp?: McpServer;
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/changes`. */
@@ -118,7 +118,7 @@ export interface OpcoesDaApi {
   /** O feed de atividade; liga `GET /api/events` (#94). */
   eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/attention`. */
-  frota?: LeituraDaFrota;
+  frota?: FleetReader;
   /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
   remoteAttention?: readonly RemoteAttentionSource[];
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
@@ -234,7 +234,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
-  const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
   const mural = muralDoPainel(opts.montador);
   const contadores = { requests: 0, panel: 0, panelMs: 0 };
@@ -328,7 +328,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
       return decidir(req, res, decodeURIComponent(escrita[1]!), DECISION_ACTIONS[escrita[2]!]!, url);
     }
-    if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
+    if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });

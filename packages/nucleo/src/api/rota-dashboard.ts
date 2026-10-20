@@ -3,7 +3,7 @@
 // recente, num pedido.
 //
 // Tudo pela porta e por caches em memória (decisão 0004): nenhum transcript é lido.
-// - Sessões vivas e o estado delas: a `LeituraDaFrota` do MCP, a mesma da bandeja.
+// - Sessões vivas e o estado delas: a `FleetReader` do MCP, a mesma da bandeja.
 // - Eventos: cada sessão é lida uma vez e, depois, só do cursor em diante quando o `updatedAt`
 //   muda. A cada `releituraMs` a sessão é relida inteira, para pegar o evento que chegou atrasado.
 // - Cost: `aggregateCost` of the last 30 days and of the live sessions, at most every `custoMs`.
@@ -16,7 +16,7 @@ import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import type { InboxState } from '../states/inbox.ts';
 import { fraseDoEvento } from './frase-do-evento.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
-import { minutosDesde, projetoDe, type LeituraDaFrota, type SessaoDaFrota } from '../mcp/fleet.ts';
+import { minutesSince, projectOf, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
 import type { StoragePort } from '../storage-port.ts';
 
 export const ROTA_DO_DASHBOARD = '/api/dashboard';
@@ -81,7 +81,7 @@ export interface RespostaDoDashboard {
 }
 
 export interface OpcoesDoDashboard {
-  frota: LeituraDaFrota;
+  frota: FleetReader;
   cacheMs?: number;
   custoMs?: number;
   releituraMs?: number;
@@ -129,7 +129,7 @@ const novaLeitura = (updatedAt: string, agora: number): Leitura => ({
 });
 
 export class MontadorDoDashboard {
-  private readonly frota: LeituraDaFrota;
+  private readonly frota: FleetReader;
   private readonly storage: StoragePort;
   private readonly cacheMs: number;
   private readonly custoMs: number;
@@ -150,10 +150,10 @@ export class MontadorDoDashboard {
   }
 
   async montar(): Promise<RespostaDoDashboard> {
-    if (this.resposta && this.frota.agora() - this.resposta.em < this.cacheMs) return this.resposta.corpo;
+    if (this.resposta && this.frota.now() - this.resposta.em < this.cacheMs) return this.resposta.corpo;
     this.rodando ??= this.montarAgora()
       .then((corpo) => {
-        this.resposta = { em: this.frota.agora(), corpo };
+        this.resposta = { em: this.frota.now(), corpo };
         return corpo;
       })
       .finally(() => {
@@ -163,10 +163,10 @@ export class MontadorDoDashboard {
   }
 
   private async montarAgora(): Promise<RespostaDoDashboard> {
-    const agora = this.frota.agora();
-    const fuso = this.frota.fusoHorario;
-    const hoje = this.frota.hoje();
-    const vivas = await this.frota.vivas();
+    const agora = this.frota.now();
+    const fuso = this.frota.timeZone;
+    const hoje = this.frota.today();
+    const vivas = await this.frota.live();
 
     // Todas as sessões, mais recentes primeiro: os eventos de cada uma e a atividade das últimas.
     let totalDeSessoes = 0;
@@ -179,7 +179,7 @@ export class MontadorDoDashboard {
         totalDeSessoes++;
         vistas.add(s.id);
         await this.ler(s.id, s.updatedAt, agora);
-        if (recentes.length < SESSOES_NA_ATIVIDADE) recentes.push({ id: s.id, projeto: projetoDe(s), status: s.status === 'completed' ? 'completed' : s.status === 'abandoned' ? 'abandoned' : 'active' });
+        if (recentes.length < SESSOES_NA_ATIVIDADE) recentes.push({ id: s.id, projeto: projectOf(s), status: s.status === 'completed' ? 'completed' : s.status === 'abandoned' ? 'abandoned' : 'active' });
       }
       cursor = page.nextCursor;
     } while (cursor);
@@ -231,7 +231,7 @@ export class MontadorDoDashboard {
     // A interrupção (Esc) não deixa evento: ela vem do estado da sessão viva.
     for (const v of vivas) {
       if (v.session.awaitingReason === 'interrupted' && v.session.awaitingInputSince) {
-        atividade.push({ session: v.session.id, project: projetoDe(v.session), status: 'waiting', text: 'Interrompida (Esc)', at: v.session.awaitingInputSince });
+        atividade.push({ session: v.session.id, project: projectOf(v.session), status: 'waiting', text: 'Interrompida (Esc)', at: v.session.awaitingInputSince });
       }
     }
     atividade.sort((a, b) => b.at.localeCompare(a.at));
@@ -253,7 +253,7 @@ export class MontadorDoDashboard {
     };
   }
 
-  private async card(v: SessaoDaFrota, lista: Agent[], custoUsd: number | null, agora: number): Promise<AgenteDoDashboard> {
+  private async card(v: FleetSession, lista: Agent[], custoUsd: number | null, agora: number): Promise<AgenteDoDashboard> {
     const s = v.session;
     const l = this.leituras.get(s.id);
     const status = badgeDe(v.inbox.state);
@@ -264,14 +264,14 @@ export class MontadorDoDashboard {
       .map((a): SubagenteDoDashboard => ({ id: a.id, type: a.subagentType, task: cortar(a.name ?? a.task, MAX_TEXTO), status: a.status, since: a.startedAt, until: a.endedAt }));
     return {
       session: s.id,
-      title: v.titulo,
-      project: projetoDe(s),
+      title: v.title,
+      project: projectOf(s),
       status,
       state: v.inbox.state,
       model: s.model,
       costUsd: custoUsd === null ? null : Math.round(custoUsd * 100) / 100,
       lastActivity: s.updatedAt,
-      minutes: minutosDesde(s.updatedAt, agora),
+      minutes: minutesSince(s.updatedAt, agora),
       turns: l ? Math.max(l.promptsHook, l.promptsTranscript) : 0,
       messages: l?.mensagens ?? [],
       task: await this.tarefa(v, l),
@@ -279,7 +279,7 @@ export class MontadorDoDashboard {
     };
   }
 
-  private async tarefa(v: SessaoDaFrota, l: Leitura | undefined): Promise<string | null> {
+  private async tarefa(v: FleetSession, l: Leitura | undefined): Promise<string | null> {
     const f = l?.ultimaFerramenta;
     const ferramenta = f?.nome ? cortar(f.resumo && f.resumo !== f.nome ? `${f.nome}: ${f.resumo}` : f.nome, MAX_TEXTO) : null;
     if (v.inbox.state === 'waiting' && v.session.awaitingReason === 'notification') return ferramenta;
@@ -317,14 +317,14 @@ export class MontadorDoDashboard {
   private async custos(vivas: string[], hoje: string): Promise<{ mes: CostReport; vivas: CostReport }> {
     const chave = `${hoje}|${[...vivas].sort().join(',')}`;
     const c = this.custo;
-    if (c && c.chave === chave && this.frota.agora() - c.em < this.custoMs) return c;
-    const fusoHorario = this.frota.fusoHorario;
+    if (c && c.chave === chave && this.frota.now() - c.em < this.custoMs) return c;
+    const fusoHorario = this.frota.timeZone;
     const desde = dayOf(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
     const [mes, dasVivas] = await Promise.all([
       aggregateCost(this.storage, { since: desde, until: hoje, timeZone: fusoHorario }),
       aggregateCost(this.storage, { sessionIds: vivas, timeZone: fusoHorario }),
     ]);
-    this.custo = { em: this.frota.agora(), chave, mes, vivas: dasVivas };
+    this.custo = { em: this.frota.now(), chave, mes, vivas: dasVivas };
     return this.custo;
   }
 }
@@ -428,10 +428,10 @@ type Json = Record<string, unknown>;
 const obj = (v: unknown): Json | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : null);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
 
-const montadores = new WeakMap<LeituraDaFrota, MontadorDoDashboard>();
+const montadores = new WeakMap<FleetReader, MontadorDoDashboard>();
 
 /** A resposta da rota, com um montador (e os caches dele) por frota. */
-export function montarDashboard(frota: LeituraDaFrota): Promise<RespostaDoDashboard> {
+export function montarDashboard(frota: FleetReader): Promise<RespostaDoDashboard> {
   let m = montadores.get(frota);
   if (!m) montadores.set(frota, (m = new MontadorDoDashboard({ frota })));
   return m.montar();

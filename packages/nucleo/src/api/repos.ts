@@ -87,7 +87,7 @@ import {
 } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import type { LeituraDaFrota } from '../mcp/fleet.ts';
+import type { FleetReader } from '../mcp/fleet.ts';
 import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulador/github-falso.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
 import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
@@ -590,7 +590,7 @@ export interface OpcoesDosReposDoNucleo {
    * instância só, para a pausa por limite valer para as duas leituras.
    */
   cache: GithubCache;
-  frota: LeituraDaFrota;
+  frota: FleetReader;
   mudancas: ChangeCursor;
   /** As falhas fora do previsto das montagens. */
   log?: (mensagem: string) => void;
