@@ -237,12 +237,12 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico, Decisões e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'analytics', 'workflows', 'history', 'decisions', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Dev Console, Analytics, Workflows, Histórico, Decisões e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
-        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'analytics', 'workflows', 'history', 'decisions']],
+        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions']],
         ['control', 'Controle', ['agent-config']],
       ],
     );
@@ -260,6 +260,7 @@ describe('registro das telas', () => {
     assert.deepEqual(d.params, { id: 'b91d04aa-4e1' });
     assert.equal(findScreen('/ui/sessions/a%20b'), null);
     assert.equal(findScreen('/ui/kanban').screen.id, 'kanban');
+    assert.equal(findScreen('/ui/dev-console').screen.file, '/ui/screens/dev-console.js');
     assert.equal(findScreen('/ui/nao-existe'), null);
     // The old URLs match nothing: the shell swaps them for the new one first (legacyUrl).
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);
