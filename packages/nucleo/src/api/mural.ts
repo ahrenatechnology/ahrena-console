@@ -25,8 +25,12 @@
 // (decisão 0004). A resposta inteira fica guardada por `cacheMs` (2 s), e pedidos ao mesmo tempo
 // esperam a mesma montagem, como o "precisam de você" do painel.
 //
-// Esforço: o `effort` do índice do Claude Desktop (`local_*.json`, já lido pelo IndiceDoDesktop).
-// Sessão só de terminal, ou fora do índice: `null`.
+// Esforço: o `effort` do índice do Claude Desktop (`local_*.json`, já lido pelo IndiceDoDesktop) e,
+// sem ele, `metadata.esforco` (o simulador grava; a ingestão do terminal ainda não sabe o esforço).
+// Sessão só de terminal: `null`.
+//
+// Branch: o do Desktop ou da `metadata.branch`; sem eles, o que o trabalho por branch já sabe e, por
+// fim, só o `git branch --show-current` da pasta, em cache de 60 s, sem GitHub (`branchDaPasta`).
 
 import { basename } from 'node:path';
 import type { ServerResponse } from 'node:http';
@@ -166,7 +170,7 @@ function cardDe(leitura: LeituraDaSessao): CardDoMural {
     desde: sessao.desde,
     atividade: sessao.atividade,
     modelo: sessao.modelo,
-    esforco: desktop?.esforco ?? null,
+    esforco: leitura.esforco,
     agentes: { ativos: subagentes.ativos + (principalRodando(sessao.estado) ? 1 : 0), total: subagentes.itens.length + 1 },
     custo: { usd: custo?.usd ?? null, estimativa: true },
     plano: plano ? { feitos: plano.feitos, total: plano.total, atual: plano.atual } : null,

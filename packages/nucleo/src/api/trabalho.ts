@@ -63,6 +63,7 @@ export class TrabalhoPorBranch {
   private readonly validadeMs: number;
   private readonly agora: () => number;
   private readonly entradas = new Map<string, Entrada>();
+  private readonly branches = new Map<string, { valor: string | null; em: number; rodando: Promise<void> | null }>();
   /** Montagens que passaram pelo cache do GitHub e chamadas ao git (para a medição de carga). */
   chamadas = { github: 0, git: 0 };
 
@@ -104,9 +105,35 @@ export class TrabalhoPorBranch {
     return this.entradas.get(`${cwd ?? ''}\0${branchDoDesktop ?? ''}`)?.valor ?? null;
   }
 
+  /**
+   * Só o branch da pasta, pelo `git branch --show-current`: em cache, atualizado por trás quando vence,
+   * sem remote nem GitHub. Para o mural, que lê todas as sessões abertas.
+   */
+  branchDaPasta(cwd: string | null): string | null {
+    if (!cwd) return null;
+    let e = this.branches.get(cwd);
+    if (!e) {
+      e = { valor: null, em: -Infinity, rodando: null };
+      this.branches.set(cwd, e);
+    }
+    if (!e.rodando && this.agora() - e.em >= this.validadeMs) {
+      const alvo = e;
+      alvo.rodando = this.rodarGit(cwd, ['branch', '--show-current'])
+        .then((b) => {
+          alvo.valor = b;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          alvo.em = this.agora();
+          alvo.rodando = null;
+        });
+    }
+    return e.valor;
+  }
+
   /** Espera as atualizações em andamento (testes e o primeiro desenho). */
   async esperar(): Promise<void> {
-    await Promise.all([...this.entradas.values()].map((e) => e.rodando));
+    await Promise.all([...this.entradas.values(), ...this.branches.values()].map((e) => e.rodando));
   }
 
   private async rodarGit(cwd: string, args: string[]): Promise<string | null> {

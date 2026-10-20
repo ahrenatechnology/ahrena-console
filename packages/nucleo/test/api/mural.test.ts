@@ -25,7 +25,7 @@ const iso = (minAtras: number) => new Date(AGORA - minAtras * MIN).toISOString()
  * As sessões do simulador: o P4 (esta sessão delegando, uma na sua vez, uma ativa e uma concluída há
  * 20 min) e as outras do P6 (permissão, Esc e erro). Mais três que não estão abertas: abandonada,
  * concluída há 200 min e erro encerrado há 200 min (o abandono do vigia é 180 min). O P4 por último:
- * o git falso responde o branch dele.
+ * o git falso responde o branch dele. O simulador grava `metadata.branch` e `metadata.esforco`.
  */
 async function semear() {
   const storage = openSqliteStorage({ path: ':memory:' });
@@ -102,10 +102,10 @@ describe('mural ao vivo (#34)', () => {
     const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
     assert.equal(esta.titulo, 'Separar pagamentos em serviços');
     assert.equal(esta.projeto, 'vitrine-demo');
-    assert.equal(esta.branch, null, 'sem o Desktop nem metadata.branch, o núcleo não sabe o branch');
+    assert.equal(esta.branch, 'feat/63-separar-pagamentos', 'sem o Desktop, o branch da metadata');
     assert.equal(esta.estado, 'delegating');
     assert.equal(esta.modelo, 'claude-opus-5-5');
-    assert.equal(esta.esforco, null, 'sem o índice do Desktop, o esforço é null');
+    assert.equal(esta.esforco, 'high', 'sem o índice do Desktop, o esforço da metadata');
     assert.deepEqual(esta.agentes, { ativos: 4, total: 5 }, 'o principal conta');
     assert.deepEqual(esta.plano, { feitos: 2, total: 6, atual: 'Extrair a cobrança' });
     assert.equal(esta.contexto?.limite, 200_000);
@@ -125,7 +125,8 @@ describe('mural ao vivo (#34)', () => {
     assert.equal(catalogo.contexto, null);
     assert.deepEqual(catalogo.custo, { usd: 0, estimativa: true });
     assert.deepEqual(catalogo.agentes, { ativos: catalogo.estado === 'active' ? 1 : 0, total: 1 });
-    assert.equal(catalogo.esforco, null);
+    assert.equal(catalogo.esforco, 'medium');
+    assert.equal(catalogo.branch, 'feat/31-csv');
     await storage.close();
   });
 
@@ -159,33 +160,32 @@ describe('mural ao vivo (#34)', () => {
       localId: `local_${cli}`, cliSessionId: cli, titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: [], ...extra,
     });
     const doDesktop: Record<string, SessaoDoDesktop> = {
-      [SESSAO_DO_PAINEL]: sessao(SESSAO_DO_PAINEL, { esforco: 'high', branch: 'feat/63-separar-pagamentos' }),
+      [SESSAO_DO_PAINEL]: sessao(SESSAO_DO_PAINEL, { esforco: 'max', branch: 'feat/63-do-desktop' }),
       [sim('catalogo-exemplo')]: sessao(sim('catalogo-exemplo'), { arquivada: true }),
     };
     const desktop = { atualizar: async () => {}, sessaoPorCli: (id: string) => doDesktop[id] ?? null, sessaoPorLocal: () => null, filhasDe: () => [] } as unknown as IndiceDoDesktop;
     const mural = await muralDe(storage, desktop).montar();
     const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
-    assert.equal(esta.esforco, 'high');
-    assert.equal(esta.branch, 'feat/63-separar-pagamentos');
+    assert.equal(esta.esforco, 'max', 'o Desktop vale mais que a metadata');
+    assert.equal(esta.branch, 'feat/63-do-desktop');
     assert.equal(mural.cards.some((c) => c.id === sim('catalogo-exemplo')), false, 'a arquivada no Desktop sai do mural');
     assert.deepEqual(mural.contagem, { todas: 6, esperando: 4, ativas: 1 });
     await storage.close();
   });
 
-  test('sem o branch no Desktop nem na metadata, o do trabalho por branch, só do cache: o mural não dispara git', async () => {
+  test('sessão de terminal sem branch: o do git da pasta, em cache, sem GitHub', async () => {
     const storage = await semear();
-    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+    await storage.putSession(session({ id: 'sim-mural-terminal', cwd: '/simulacao/terminal', status: 'active', updatedAt: iso(1), metadata: { simulado: true } }));
+    const pastas: string[] = [];
+    const git = async (cwd: string, args: string[]) => (args[0] === 'branch' ? (pastas.push(cwd), cwd === '/simulacao/terminal' ? 'feat/7-terminal' : null) : null);
+    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git, agora: () => AGORA });
     const mural = muralDoPainel(painelDe(storage, null, trabalho), { cacheMs: 0 });
-    const antes = await mural.montar();
-    assert.equal(antes.cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, null, 'o primeiro pedido não espera o git');
+    const doTerminal = async () => (await mural.montar()).cards.find((c) => c.id === 'sim-mural-terminal')?.branch;
+    assert.equal(await doTerminal(), null, 'o primeiro pedido não espera o git');
     await trabalho.esperar();
-    assert.equal((await mural.montar()).cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, null, 'o mural não pôs o git para rodar');
-    // O painel (ou o "precisam de você") lê a pasta; dali em diante o mural mostra o branch.
-    const sessao = await storage.getSession(SESSAO_DO_PAINEL);
-    trabalho.ler(sessao!.cwd, null);
-    await trabalho.esperar();
-    const depois = await mural.montar();
-    assert.equal(depois.cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, 'feat/63-separar-pagamentos');
+    assert.equal(await doTerminal(), 'feat/7-terminal');
+    assert.deepEqual(pastas, ['/simulacao/terminal'], 'só a sessão sem branch roda git, uma vez (cache de 60 s)');
+    assert.deepEqual(trabalho.chamadas, { github: 0, git: 1 }, 'nunca o GitHub');
     await storage.close();
   });
 

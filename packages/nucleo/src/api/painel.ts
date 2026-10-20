@@ -106,8 +106,10 @@ export interface LeituraDaSessao {
   sessao: SessaoDoPainel;
   inbox: LeituraDoInbox;
   desktop: SessaoDoDesktop | null;
-  /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git pelo trabalho por branch (do cache). */
+  /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git (só `git branch`, em cache). */
   branch: string | null;
+  /** O esforço: o `effort` do índice do Desktop e, sem ele, `metadata.esforco` (o simulador grava). */
+  esforco: string | null;
   custo: CustoDoPainel | null;
   plano: PlanoDoPainel | null;
   contexto: ContextoDoPainel | null;
@@ -179,12 +181,15 @@ export class MontadorDoPainel {
     const conta = this.contas.daSessao(session, desktop);
     const planos = await this.storage.listPlanRecords(session.id);
     const sessao = this.sessaoDe(session, agentes, resumo, desktop, conta, agora);
+    const pasta = session.cwd ?? desktop?.cwd ?? null;
     return {
       sessao,
       inbox: lerInbox(session, agentes),
       desktop,
-      // Só o que o trabalho por branch já sabe: o mural lê todas as abertas e não dispara git nem GitHub.
-      branch: sessao.branch ?? this.trabalho?.espiar(session.cwd ?? desktop?.cwd ?? null)?.branch ?? null,
+      // O que o trabalho por branch já sabe e, sem isso, só o `git branch` da pasta (em cache, nunca o
+      // GitHub): o mural lê todas as abertas.
+      branch: sessao.branch ?? this.trabalho?.espiar(pasta)?.branch ?? this.trabalho?.branchDaPasta(pasta) ?? null,
+      esforco: desktop?.esforco ?? (typeof session.metadata?.esforco === 'string' ? session.metadata.esforco : null),
       custo: (await this.custoDe(session)).custo,
       plano: planoDe(await this.planoAtual(session.id, planos), resumo, agentes),
       contexto: contextoDe(session, resumo, await this.storage.listContextMeters(session.id)),
