@@ -5,16 +5,21 @@
 // sessão na leitura anterior e só avisa quem entrou na lista ou trocou de motivo. A primeira
 // leitura (ao abrir, ou depois de perder o núcleo) só grava: quem já esperava não vira aviso.
 //
+// Machine alerts (#180, decision 0008 sections 3 and 5) follow the same rule with their own
+// detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
+// on the transition, without sound; the first read and a rediscovery of the core only record.
+//
 // O silêncio é do app, não do núcleo: um JSON pequeno no diretório de dados do app, com a chave
 // geral do menu ("Notificações") e as sessões caladas pela ação "Silenciar" da notificação.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::http;
+use crate::machines;
 use crate::menu::{Atencao, ItemDaAtencao};
 
 /// O nome do arquivo do silêncio no diretório de dados do app.
@@ -30,11 +35,86 @@ pub struct Aviso {
     pub sessao: String,
     /// O `local_…` do Claude Desktop, para "Abrir no Claude Desktop".
     pub local: Option<String>,
+    /// Where the click and "Abrir" take the app window: the session's or the machine's screen.
+    pub path: String,
+    pub origin: Origin,
+}
+
+/// What a notice is about: it decides the actions the notification offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// "Abrir", "Abrir no Claude Desktop" and "Silenciar" (A3).
+    Session,
+    /// A machine alert (#180): only "Abrir".
+    Machine,
 }
 
 impl Aviso {
     pub fn do_item(i: &ItemDaAtencao) -> Aviso {
-        Aviso { titulo: titulo(i), corpo: i.motivo_longo.clone(), som: com_som(&i.motivo), sessao: i.sessao.clone(), local: i.local.clone() }
+        Aviso {
+            titulo: titulo(i),
+            corpo: i.motivo_longo.clone(),
+            som: com_som(&i.motivo),
+            sessao: i.sessao.clone(),
+            local: i.local.clone(),
+            path: caminho_da_sessao(&i.sessao),
+            origin: Origin::Session,
+        }
+    }
+
+    /// A machine alert as a notification, silent: "Workstation: CPU saturada", "Workstation sem
+    /// conexão". `sessao` carries the alert key, the notification's identifier.
+    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert) -> Aviso {
+        let label = machines::display_label(m);
+        let (titulo, corpo) = match a.kind.as_str() {
+            machines::UNREACHABLE_KIND => (format!("{label} sem conexão"), a.detail.clone().unwrap_or_default()),
+            "load-high" => (format!("{label}: CPU saturada"), a.message.clone()),
+            "volume-full" => (format!("{label}: disco quase cheio"), a.message.clone()),
+            _ => (format!("{label}: {}", a.message), a.detail.clone().unwrap_or_default()),
+        };
+        Aviso { titulo, corpo, som: false, sessao: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin: Origin::Machine }
+    }
+}
+
+/// The identity of a machine alert across reads, as `/api/changes` names it (`<machine>:<alert>`),
+/// with a prefix that never collides with a session id in the silence file or the notification center.
+fn alert_key(machine: &str, alert: &str) -> String {
+    format!("machine:{machine}:{alert}")
+}
+
+/// The machine alerts that opened since the previous read (#180).
+#[derive(Debug, Default)]
+pub struct MachineAlertDetector {
+    /// The alert keys of the previous read; `None` before the first (or after `reset`).
+    previous: Option<HashSet<String>>,
+}
+
+impl MachineAlertDetector {
+    pub fn observe(&mut self, ms: &[machines::Machine]) -> Vec<Aviso> {
+        let mut now: HashSet<String> = HashSet::new();
+        let mut notices = Vec::new();
+        for m in ms {
+            let Some(t) = &m.telemetry else {
+                // The telemetry read failed this time: keep what was open, so it does not notify again.
+                let prefix = alert_key(&m.summary.id, "");
+                now.extend(self.previous.iter().flatten().filter(|k| k.starts_with(&prefix)).cloned());
+                continue;
+            };
+            for a in &t.alerts {
+                let key = alert_key(&m.summary.id, &a.id);
+                if self.previous.as_ref().is_some_and(|p| !p.contains(&key)) {
+                    notices.push(Aviso::from_machine_alert(&m.summary, a));
+                }
+                now.insert(key);
+            }
+        }
+        self.previous = Some(now);
+        notices
+    }
+
+    /// Forgets the previous read: the next one only records. On losing the core or its telemetry.
+    pub fn reset(&mut self) {
+        self.previous = None;
     }
 }
 
@@ -134,6 +214,8 @@ impl Silencio {
 #[derive(Debug, Default)]
 pub struct Avisos {
     pub detector: Detector,
+    /// The machine alerts' detector (#180), behind the same switch.
+    pub machines: MachineAlertDetector,
     pub silencio: Silencio,
     /// `None` quando o app não tem diretório de dados: o silêncio vale só até sair.
     pub arquivo: Option<PathBuf>,
@@ -142,13 +224,19 @@ pub struct Avisos {
 impl Avisos {
     pub fn abrir(arquivo: Option<PathBuf>) -> Avisos {
         let silencio = arquivo.as_deref().map(Silencio::carregar).unwrap_or_default();
-        Avisos { detector: Detector::default(), silencio, arquivo }
+        Avisos { detector: Detector::default(), machines: MachineAlertDetector::default(), silencio, arquivo }
     }
 
     /// Os avisos desta leitura que passam pelo silêncio.
     pub fn ler(&mut self, a: &Atencao) -> Vec<Aviso> {
         let novos = self.detector.observar(a);
         self.silencio.filtrar(novos)
+    }
+
+    /// The machine notices of this read that pass the silence (#180).
+    pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Aviso> {
+        let new = self.machines.observe(ms);
+        self.silencio.filtrar(new)
     }
 
     /// O clique em "Notificações". Devolve o novo estado da chave.
@@ -209,6 +297,7 @@ mod testes {
             motivo_longo: format!("longo de {motivo}"),
             minutos: 1,
             local: None,
+            machine: None,
         }
     }
 
@@ -377,6 +466,106 @@ mod testes {
         assert_eq!(lido, Silencio { ligadas: false, sessoes: ["s1".to_string()].into() });
         assert_eq!(Avisos::abrir(Some(arquivo.clone())).silencio, lido);
         assert!(!arquivo.with_extension("json.tmp").exists());
+    }
+
+    // ---- #180: machine alerts ----
+
+    fn alert(id: &str, kind: &str, message: &str, detail: Option<&str>) -> machines::Alert {
+        machines::Alert { id: id.into(), kind: kind.into(), level: "error".into(), message: message.into(), detail: detail.map(Into::into), since: "2026-10-18T22:58:00.000Z".into() }
+    }
+
+    fn machine(id: &str, label: &str, state: &str, alerts: Option<Vec<machines::Alert>>) -> machines::Machine {
+        machines::Machine {
+            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None },
+            telemetry: alerts.map(|alerts| machines::Telemetry { current: None, alerts }),
+        }
+    }
+
+    fn load() -> machines::Alert {
+        alert("load-high", "load-high", "CPU saturada: carga de 24,6 em 16 núcleos", None)
+    }
+
+    fn down() -> machines::Alert {
+        alert("machine-unreachable", "machine-unreachable", "Workstation sem conexão", Some("A porta 14720 deste Mac não aceita conexão: o túnel está caído"))
+    }
+
+    fn ids(avisos: &[Aviso]) -> Vec<&str> {
+        avisos.iter().map(|a| a.sessao.as_str()).collect()
+    }
+
+    #[test]
+    fn criterion_5_first_read_of_machines_does_not_notify() {
+        let mut d = MachineAlertDetector::default();
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_new_alert_notifies_once_silently() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        let with = [machine("workstation", "Workstation", "connected", Some(vec![load()]))];
+        let avisos = d.observe(&with);
+        assert_eq!(ids(&avisos), ["machine:workstation:load-high"]);
+        let a = &avisos[0];
+        assert_eq!((a.titulo.as_str(), a.corpo.as_str()), ("Workstation: CPU saturada", "CPU saturada: carga de 24,6 em 16 núcleos"));
+        assert!(!a.som, "machine notifications are silent");
+        assert_eq!((a.path.as_str(), a.origin, a.local.as_deref()), ("/ui/machines/workstation", Origin::Machine, None));
+        assert!(d.observe(&with).is_empty(), "the repeated read does not notify");
+    }
+
+    #[test]
+    fn criterion_5_machine_going_down_notifies_once() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        let gone = [machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "unreachable", Some(vec![down()]))];
+        let avisos = d.observe(&gone);
+        assert_eq!(ids(&avisos), ["machine:workstation:machine-unreachable"]);
+        assert_eq!(avisos[0].titulo, "Workstation sem conexão");
+        assert_eq!(avisos[0].corpo, "A porta 14720 deste Mac não aceita conexão: o túnel está caído");
+        assert!(!avisos[0].som);
+        assert!(d.observe(&gone).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_this_mac_is_named_este_mac() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![]))]);
+        let avisos = d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![load()]))]);
+        assert_eq!(avisos[0].titulo, "Este Mac: CPU saturada");
+        assert_eq!(avisos[0].path, "/ui/machines/local");
+    }
+
+    #[test]
+    fn criterion_5_a_telemetry_read_that_failed_does_not_renotify() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]);
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", None)]).is_empty());
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "the alert never left");
+    }
+
+    #[test]
+    fn criterion_5_rediscovery_does_not_notify() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        d.reset();
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_respects_the_notificacoes_switch() {
+        let mut a = Avisos::abrir(None);
+        a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        assert!(!a.alternar());
+        assert!(a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "off: nothing");
+        assert!(a.alternar());
+        let avisos = a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
+        assert_eq!(ids(&avisos), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
+    }
+
+    #[test]
+    fn session_notices_open_the_session_screen() {
+        let av = Aviso::do_item(&item("c3f09b52", "a", "permissao"));
+        assert_eq!((av.path.as_str(), av.origin), ("/ui/sessions/c3f09b52", Origin::Session));
     }
 
     #[test]
