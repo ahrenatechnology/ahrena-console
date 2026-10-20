@@ -9,7 +9,7 @@ import {
   DECISIONS_MIGRATION_SQL,
   rekeyDecisions,
 } from '../../decisions/migration.ts';
-import { deleteLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
+import { renameLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
 import { migrateJsonToEnglish } from './english-json.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
@@ -251,7 +251,7 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: ENGLISH_SCHEMA_SQL,
     up: (db) => {
       rekeyDecisions(db);
-      deleteLegacyGithubCacheKeys(db);
+      renameLegacyGithubCacheKeys(db);
     },
   },
   {

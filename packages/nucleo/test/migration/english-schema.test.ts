@@ -17,7 +17,7 @@ import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import {
   ADJUSTED_ID,
-  CACHE_KEYS_DROPPED,
+  CACHE_KEYS_RENAMED,
   CACHE_KEYS_KEPT,
   DECIDERS,
   INFERRED_NEW_ID,
@@ -77,9 +77,8 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
     assert.equal(store.schemaVersion, LATEST);
   });
 
-  test('every table keeps its rows (the GitHub cache loses only the Portuguese keys)', () => {
+  test('every table keeps its rows, the GitHub cache included', () => {
     const expected = Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n]));
-    expected.github_cache -= CACHE_KEYS_DROPPED.length;
     assert.deepEqual(rowCounts(store.db), expected);
     for (const n of Object.values(countsBefore)) assert.ok(n > 0, 'the old database has rows in every table');
   });
@@ -167,10 +166,18 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
     assert.equal((await new SqliteTelemetryStore(store.db).latest('local')) !== null, true);
   });
 
-  test('the GitHub cache drops the Portuguese keys and keeps the others', async () => {
+  test('the GitHub cache moves each Portuguese key to its English key, with its value, time and etag', async () => {
     const cache = new SqliteCacheStore(store.db);
-    for (const key of CACHE_KEYS_DROPPED) assert.equal(await cache.get(key), null, key);
-    for (const key of CACHE_KEYS_KEPT) assert.notEqual(await cache.get(key), null, key);
+    const all = [...Object.keys(CACHE_KEYS_RENAMED), ...CACHE_KEYS_KEPT];
+    for (const [oldKey, newKey] of Object.entries(CACHE_KEYS_RENAMED)) {
+      const i = all.indexOf(oldKey);
+      assert.equal(await cache.get(oldKey), null, oldKey);
+      assert.deepEqual(await cache.get(newKey), { value: { from: oldKey }, fetchedAt: 1000 + i, etag: `etag-${i}` }, newKey);
+    }
+    for (const key of CACHE_KEYS_KEPT) {
+      const i = all.indexOf(key);
+      assert.deepEqual(await cache.get(key), { value: { from: key }, fetchedAt: 1000 + i, etag: `etag-${i}` }, key);
+    }
   });
 
   test('the renamed trigger still fills the seq of an event written without it', () => {
