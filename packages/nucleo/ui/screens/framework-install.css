@@ -1,0 +1,141 @@
+/* Instalar o Ahrena Framework pela aba Instruções (C34 a C37, issue 184). Toda classe própria tem o prefixo `fwi-`. */
+
+.fwi-muted { color: var(--muted); font-size: 12px; }
+.fwi-accent { color: var(--accent-text); display: inline-flex; }
+.fwi-ok { color: var(--status-completed-text); display: inline-flex; }
+.fwi-wait { color: var(--status-waiting-text); }
+.fwi-err { color: var(--status-error-text); }
+.fwi-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fwi-eyebrow { display: flex; gap: 6px; align-items: center; padding: 8px 0 2px; }
+.fwi-eyebrow-row > span { flex: 1; }
+
+/* ---------- selos ---------- */
+.fwi-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.fwi-pill-ok { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.fwi-pill-wait { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.fwi-pill-err { background: var(--status-error-badge); color: var(--status-error-text); }
+.fwi-pill-muted { background: var(--raised); color: var(--muted); }
+.fwi-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 10px; border-radius: 7px; font-size: 12px; background: var(--raised); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.fwi-note { align-self: flex-start; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 6px; font-size: 10.5px; color: var(--status-waiting-text); background: var(--status-waiting-badge); }
+
+/* ---------- o card do topo da aba (C34) ---------- */
+.fwi-top { padding: 14px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.fwi-top-ico { width: 38px; height: 38px; border-radius: 10px; background: var(--raised); display: grid; place-items: center; color: var(--accent-text); font-size: 18px; flex: none; }
+.fwi-top-ico.fwi-ok { color: var(--status-completed-text); }
+.fwi-top-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 320px; }
+.fwi-top-text > b { font-size: 14px; }
+.fwi-top-sub { color: var(--muted); font-size: 12.5px; line-height: 1.5; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fwi-top-sub.fwi-wait { color: var(--status-waiting-text); align-items: flex-start; flex-wrap: nowrap; }
+.fwi-top-sub.fwi-wait > .icon { flex: none; margin-top: 3px; }
+.fwi-top-sub.fwi-wait b { color: inherit; }
+.fwi-top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- o fluxo: cabeçalho com os passos ---------- */
+.fwi-flow { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fwi-head { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); min-width: 0; }
+.fwi-head-l1 { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.fwi-head-ico { font-size: 18px; }
+.fwi-head-title { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); }
+.fwi-head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fwi-head-actions .btn[disabled] { opacity: .55; cursor: default; }
+.fwi-steps { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.fwi-steps > li { display: inline-flex; align-items: center; }
+.fwi-step { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); white-space: nowrap; }
+.fwi-step[data-state="current"] { color: var(--text); font-weight: var(--weight-semibold); }
+.fwi-step-n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; border: 1px solid var(--border); flex: none; }
+.fwi-step[data-state="done"] .fwi-step-n { border-color: transparent; background: var(--status-completed-badge); color: var(--status-completed-text); }
+.fwi-step[data-state="current"] .fwi-step-n { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+.fwi-step-sep { color: var(--muted); display: inline-flex; }
+
+/* ---------- faixas: bloqueios e avisos ---------- */
+.fwi-band { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.5; min-width: 0; }
+.fwi-band > .icon { flex: none; font-size: 16px; margin-top: 2px; }
+.fwi-band p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fwi-band code { font-family: var(--font-mono); font-size: 11.5px; }
+.fwi-band-err { border: 1px solid var(--status-error-dot); background: var(--status-error-badge); }
+.fwi-band-err > .icon, .fwi-band-err b { color: var(--status-error-text); }
+.fwi-band-wait { border: 1px solid color-mix(in srgb, var(--status-waiting-text) 55%, var(--border)); background: var(--status-waiting-badge); }
+.fwi-band-wait > .icon, .fwi-band-wait b { color: var(--status-waiting-text); }
+
+/* ---------- passo 1 (C35) ---------- */
+.fwi-found { padding: 10px 14px; display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; font-size: 12px; min-width: 0; }
+.fwi-found-label { display: inline-flex; gap: 6px; align-items: center; }
+.fwi-choose { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .fwi-choose { grid-template-columns: minmax(0, 1fr); } }
+.fwi-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fwi-ttl { margin: 0 0 2px; font-size: 13px; font-weight: var(--weight-semibold); display: flex; gap: 8px; align-items: center; min-width: 0; }
+.fwi-ttl > .icon { color: var(--muted); flex: none; }
+.fwi-ttl-r { margin-left: auto; font-size: 11.5px; font-weight: var(--weight-medium); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fwi-foot { font-size: 11.5px; line-height: 1.5; }
+.fwi-box { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; flex: none; font-size: 11px; border: 1px solid var(--border); color: var(--on-accent); }
+.fwi-box[data-checked="true"] { background: var(--accent); border-color: transparent; }
+.fwi-box[data-checked="true"][data-locked="true"] { background: var(--muted); }
+.fwi-plat { display: flex; gap: 10px; align-items: flex-start; width: 100%; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fwi-plat[aria-checked="true"] { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.fwi-plat[disabled] { opacity: .6; border-style: dashed; cursor: not-allowed; }
+.fwi-plat-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fwi-plat-text > b { font-size: 13px; }
+.fwi-plat-detail { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.fwi-plug { display: flex; gap: 10px; align-items: center; width: 100%; min-width: 0; padding: 6px 4px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.fwi-plug:hover:not([aria-disabled="true"]) { background: var(--raised); }
+.fwi-plug[aria-disabled="true"] { cursor: default; }
+.fwi-plug-name { font-size: 12px; white-space: nowrap; flex: none; }
+.fwi-plug-why { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fwi-others { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.fwi-link { font: inherit; font-size: 11.5px; text-transform: none; letter-spacing: 0; font-weight: var(--weight-medium); color: var(--accent-text); background: none; border: 0; padding: 0; cursor: pointer; }
+.fwi-plat:focus-visible, .fwi-plug:focus-visible, .fwi-link:focus-visible, .fwi-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- passo 2 (C36) ---------- */
+.fwi-preview { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (min-width: 1300px) { .fwi-preview { grid-template-columns: 300px minmax(0, 1fr); } }
+@media (max-width: 900px) { .fwi-preview { grid-template-columns: minmax(0, 1fr); } }
+.fwi-preview-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fwi-files { padding: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fwi-files .fwi-eyebrow { padding: 4px 8px; }
+.fwi-file { display: flex; gap: 8px; align-items: center; width: 100%; min-width: 0; padding: 7px 8px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.fwi-file > .fwi-trunc { flex: 1; font-size: 11.5px; }
+.fwi-file:hover { background: var(--raised); }
+.fwi-file[aria-current="true"] { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+.fwi-action { flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 6px; font-size: 10.5px; color: var(--muted); background: var(--raised); border: 1px solid var(--border); white-space: nowrap; }
+.fwi-action[data-action="merge"] { color: var(--status-waiting-text); }
+.fwi-action[data-action="refused"] { color: var(--status-error-text); }
+.fwi-add { flex: none; font-size: 11px; color: var(--status-completed-text); }
+.fwi-pr-form { gap: 5px; font-size: 12px; }
+.fwi-branch { font-size: 11.5px; overflow-wrap: anywhere; }
+.fwi-label { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.fwi-input, .fwi-issue { height: 30px; padding: 0 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font: inherit; font-size: 12.5px; min-width: 0; width: 100%; box-sizing: border-box; }
+.fwi-issue { display: flex; gap: 4px; align-items: center; }
+.fwi-issue input { flex: 1; min-width: 0; height: 100%; padding: 0; background: none; border: 0; color: var(--text); font: inherit; outline: none; }
+.fwi-issue input::placeholder { color: var(--muted); }
+.fwi-input:focus-visible, .fwi-issue:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fwi-issue:has(input[aria-invalid="true"]) { border-color: var(--status-error-dot); }
+.fwi-hint { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.fwi-hint.fwi-err { color: var(--status-error-text); }
+.fwi-written { display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11.5px; }
+
+/* O diff: as linhas longas quebram dentro do bloco; nada rola na horizontal. */
+.fwi-diff { overflow: hidden; min-width: 0; }
+.fwi-diff-head { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); min-width: 0; }
+.fwi-diff-path { font-size: 12.5px; overflow-wrap: anywhere; }
+.fwi-diff-why { flex: 1 1 160px; min-width: 0; }
+.fwi-diff-body { padding: 8px 4px; min-width: 0; }
+.fwi-diff-empty { margin: 0; padding: 14px; font-size: 12.5px; }
+.fwi-line { display: grid; grid-template-columns: 34px 14px minmax(0, 1fr); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65; }
+.fwi-ln { color: var(--muted); text-align: right; padding-right: 8px; user-select: none; }
+.fwi-sign { color: var(--muted); user-select: none; }
+.fwi-code { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.fwi-line[data-kind="add"] { background: color-mix(in srgb, var(--status-completed-badge) 75%, transparent); }
+.fwi-line[data-kind="add"] .fwi-sign { color: var(--status-completed-text); }
+.fwi-line[data-kind="del"] { background: color-mix(in srgb, var(--status-error-badge) 75%, transparent); }
+.fwi-line[data-kind="del"] .fwi-sign { color: var(--status-error-text); }
+.fwi-line[data-kind="hunk"] { color: var(--muted); margin: 4px 0; }
+.fwi-line[data-kind="hunk"]:first-child { margin-top: 0; }
+
+/* ---------- passo 3 (C37) ---------- */
+.fwi-pr { gap: 10px; }
+.fwi-pr-l1 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.fwi-pr-ico { font-size: 18px; }
+.fwi-pr-title { font-size: 14px; overflow-wrap: anywhere; min-width: 0; }
+.fwi-pr-when { margin-left: auto; white-space: nowrap; }
+.fwi-legend { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.fwi-legend b { color: var(--text); font-weight: var(--weight-medium); overflow-wrap: anywhere; }

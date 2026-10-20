@@ -10,11 +10,15 @@
 // - Dos hooks, só o evento, o matcher e a quantidade: o núcleo nem manda o comando.
 // - A busca procura no texto dos arquivos deste repositório (e dos imports deles), na tela.
 // - O texto do repositório é dado: entra por `textContent`, nunca como HTML.
+// - Instalar o Ahrena Framework (C34 a C37, issue 184): lê também o plano de instalação
+//   (`GET /api/framework-install/<owner>/<repo>/plan`, framework-install.js). Sem o framework, o card
+//   "Sem Ahrena Framework" fica no topo, e "Instalar" troca o conteúdo da aba pelo fluxo em três passos.
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { ago, NO_GITHUB } from '../repos-format.js';
 import { blobUrl, IMPORT_ICON, IMPORT_STATUS, renderMarkdown } from './agent-instructions-markdown.js';
+import { canInstall, installCard, installChangeMatters, installEmptyButton, loadInstallStyle, mountInstallFlow, planRoute } from './framework-install.js';
 
 const REREAD_MS = 5000;
 const SEARCH_MIN = 2;
@@ -176,6 +180,7 @@ export function highlighted(text, query) {
 
 export async function mountInstructions(area, ctx, { owner, name }) {
   loadInstructionsStyle();
+  loadInstallStyle();
   const key = `${owner}/${name}`;
   const base = `/api/agent-instructions/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
   let data = null;
@@ -188,6 +193,10 @@ export async function mountInstructions(area, ctx, { owner, name }) {
   let query = '';
   let searchTimer = null;
   const views = new Map(); // path → { view } | { failure } | { promise }
+  let install = null; // o plano de instalação padrão (issue 184), ou null enquanto não leu / se falhou
+  let installTimer = null;
+  let installRequest = 0;
+  let flow = null; // o fluxo de instalação aberto na aba
 
   // ---------- as peças fixas ----------
   const band = el('div', { class: 'ins-bands' });
@@ -229,6 +238,43 @@ export async function mountInstructions(area, ctx, { owner, name }) {
     draw();
   }
 
+  /** O plano de instalação padrão; falhar não derruba a aba: o card só não aparece. */
+  async function readInstall({ refresh = false } = {}) {
+    clearTimeout(installTimer);
+    installTimer = null;
+    const n = ++installRequest;
+    try {
+      const d = await ctx.read(planRoute(owner, name, null, { refresh }));
+      if (n !== installRequest) return;
+      // Só um plano de instalação conta (o núcleo sem a rota responde outra coisa ou 404): senão, sem card.
+      install = d && (d.state !== 'ready' || typeof d.installed === 'boolean') ? d : null;
+      if (d?.state === 'loading') installTimer = setTimeout(() => readInstall(), REREAD_MS);
+    } catch (e) {
+      if (e?.name === 'AbortError' || n !== installRequest) return;
+      install = null;
+    }
+    if (!flow) draw();
+  }
+
+  function openFlow(step = 0) {
+    flow?.leave();
+    flow = mountInstallFlow(body, ctx, {
+      owner,
+      name,
+      plan: install,
+      step,
+      onClose: () => {
+        flow = null;
+        readInstall();
+        draw();
+      },
+    });
+  }
+
+  function topCard({ inEmpty = false } = {}) {
+    return installCard(install, { onInstall: () => openFlow(0), onFollow: () => openFlow(2), inEmpty });
+  }
+
   function loadFile(path) {
     const hit = views.get(path);
     if (hit) return hit.promise ?? Promise.resolve();
@@ -247,6 +293,7 @@ export async function mountInstructions(area, ctx, { owner, name }) {
   function draw() {
     clearTimeout(timer);
     timer = null;
+    if (flow) return;
     const hasData = data && data.state === 'ready';
     band.replaceChildren();
     if (failure && hasData) band.append(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
@@ -271,14 +318,16 @@ export async function mountInstructions(area, ctx, { owner, name }) {
       const nodes = [emptyCard()];
       if (!data.empty) nodes.push(drawSide(true));
       warnings.replaceChildren(...warningCard());
-      return body.replaceChildren(...warnings.children.length ? [warnings] : [], ...nodes);
+      const top = topCard({ inEmpty: true });
+      return body.replaceChildren(...(top ? [top] : []), ...(warnings.children.length ? [warnings] : []), ...nodes);
     }
     if (!openPath || !data.files.some((f) => f.path === openPath)) openPath = fileGroups(data.files).roots[0]?.path ?? data.files[0].path;
     warnings.replaceChildren(...warningCard());
     drawNav();
     drawSide();
     drawViewer();
-    body.replaceChildren(...(warnings.children.length ? [warnings] : []), toolbar, grid);
+    const top = topCard();
+    body.replaceChildren(...(top ? [top] : []), ...(warnings.children.length ? [warnings] : []), toolbar, grid);
   }
 
   function truncatedBand() {
@@ -332,7 +381,7 @@ export async function mountInstructions(area, ctx, { owner, name }) {
         el('code', {}, '.mcp.json'),
         ' na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.',
       ),
-      el('a', { class: 'btn outline', href: HOW_TO_CLAUDE_MD, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), 'Como escrever um CLAUDE.md'),
+      el('div', { class: 'ins-empty-actions' }, canInstall(install) ? installEmptyButton(() => openFlow(0)) : null, el('a', { class: 'btn outline', href: HOW_TO_CLAUDE_MD, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), 'Como escrever um CLAUDE.md')),
     );
   }
 
@@ -526,18 +575,28 @@ export async function mountInstructions(area, ctx, { owner, name }) {
       views.clear();
       read();
     }
+    if (installChangeMatters(changes, key)) {
+      readInstall();
+      flow?.live();
+    }
   });
   ctx.onRestart(() => {
     views.clear();
     read();
+    readInstall();
+    flow?.live();
   });
 
   body.replaceChildren(loading());
-  await read();
+  await Promise.all([read(), readInstall()]);
   return () => {
     clearTimeout(timer);
     clearTimeout(searchTimer);
+    clearTimeout(installTimer);
     timer = null;
     request++;
+    installRequest++;
+    flow?.leave();
+    flow = null;
   };
 }
