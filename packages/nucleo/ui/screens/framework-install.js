@@ -98,14 +98,6 @@ const BLOCKED_CODES = new Set([...FILE_BLOCKS, 'branch-exists', 'no-write', 'not
 /** A faixa de um bloqueio que impede abrir o PR (arquivo recusado ou branch que sobrou), ou `null`. */
 export function blockedBand(b) {
   if (!b) return null;
-  if (b.kind === 'invalid-json') {
-    return el(
-      'div',
-      { class: 'fwi-band fwi-band-err', role: 'alert', 'data-blocked': b.kind },
-      icon('error'),
-      el('p', {}, el('b', {}, 'Não dá para abrir o PR.'), ' O ', el('code', {}, b.path ?? '.claude/settings.json'), ' deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.'),
-    );
-  }
   if (FILE_BLOCKS.includes(b.kind)) {
     return el(
       'div',

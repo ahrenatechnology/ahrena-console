@@ -41,8 +41,8 @@
 // dá para mesclar; `unpaired-markers`: os marcadores do framework desemparelhados; `unreadable`: o
 // arquivo existe mas o GitHub não o entregou inteiro, binário ou cortado; `path` diz qual), `no-write`,
 // `empty-repository`, `nothing-to-do` e `branch-exists` (o branch `chore/install-ahrena-framework`
-// sobrou com commits e sem PR aberto; `url` é o link do branch no GitHub, para a pessoa apagá-lo ou
-// mesclá-lo). `url` é `null` nos outros. Um branch vazio no HEAD do padrão, deixado pelo próprio console
+// sobrou sem PR aberto e fora do HEAD do padrão; `url` é o link do branch no GitHub, para a pessoa
+// apagá-lo ou abrir um PR dele). `url` é `null` nos outros. Um branch vazio no HEAD do padrão, deixado pelo próprio console
 // numa falha, é reaproveitado e não bloqueia. O console nunca apaga nem força um branch.
 //
 // Os erros do `POST`, todos antes de qualquer escrita: 400 `bad-request` (corpo, título, plataforma

@@ -538,6 +538,27 @@ describe('#184 opening the pull request, through the service', () => {
     assert.deepEqual(s.gh().writes.map((w) => w.operation), ['createRef', 'createCommitOnBranch', 'createPullRequest'], 'no second createRef');
   });
 
+  test('a failure between the commit and the PR leaves a branch with our commit: it blocks like any leftover (branch-exists), nothing more is written', async () => {
+    const s = setup();
+    const p = await ready(s);
+    const mainBefore = s.gh().refs('org-a', 'py-app').main;
+    s.gh().failNext('OpenInstallPullRequest');
+    const failed = await install(s, p);
+    assert.equal(failed.status, 502, JSON.stringify(failed.body));
+    assert.equal((failed.body as { code: string }).code, 'github-error');
+    assert.deepEqual(s.gh().writes.map((w) => w.operation), ['createRef', 'createCommitOnBranch']);
+    assert.equal(s.gh().refs('org-a', 'py-app').main, mainBefore, 'the default branch did not move');
+    assert.notEqual(s.gh().refs('org-a', 'py-app')[INSTALL_BRANCH], mainBefore);
+    const preview = await ready(s);
+    assert.equal(preview.blocked!.kind, 'branch-exists');
+    assert.equal(preview.blocked!.url, `https://github.com/org-a/py-app/tree/${INSTALL_BRANCH}`);
+    const writes = s.gh().writes.length;
+    const again = await install(s, preview);
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal((again.body as { code: string }).code, 'branch-exists');
+    assert.equal(s.gh().writes.length, writes);
+  });
+
   test('a leftover install branch with commits and no open PR blocks the preview and is not overwritten: 409', async () => {
     const s = setup();
     const p = await ready(s);
@@ -547,7 +568,7 @@ describe('#184 opening the pull request, through the service', () => {
     const again = await ready(s);
     assert.equal(again.pullRequest!.state, 'closed');
     assert.equal(again.blocked!.kind, 'branch-exists');
-    assert.match(again.blocked!.message, /chore\/install-ahrena-framework.*apague-o ou mescle-o no GitHub/);
+    assert.match(again.blocked!.message, /chore\/install-ahrena-framework já existe no GitHub, sem PR aberto, e não está no HEAD do branch padrão: apague-o, ou abra um PR dele no GitHub/);
     assert.equal(again.blocked!.url, `https://github.com/org-a/py-app/tree/${INSTALL_BRANCH}`);
     const writes = s.gh().writes.length;
     const a = await install(s, again);

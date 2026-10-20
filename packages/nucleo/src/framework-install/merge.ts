@@ -60,7 +60,11 @@ export function claudeBlock(claudeMd: string | null | undefined): string {
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** Um número que o `JSON.parse` já arredondou (inteiro fora de `Number.isSafeInteger`, ou infinito): reescrever mudaria o valor. */
+/**
+ * Um número que o `JSON.parse` já arredondou (inteiro fora de `Number.isSafeInteger`, ou infinito):
+ * reescrever mudaria o valor. Um decimal com mais dígitos do que o double guarda (`0.1000000000000000001`)
+ * também seria reescrito arredondado e não é detectado aqui: raro num `settings.json`.
+ */
 function hasUnsafeNumber(v: unknown): boolean {
   if (typeof v === 'number') return !Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v));
   if (Array.isArray(v)) return v.some(hasUnsafeNumber);

@@ -462,7 +462,7 @@ describe('Install (C36): step 2, the diff preview', () => {
     });
     const { area } = await toPreview({ plan: () => blocked });
     const band = area.querySelector('[data-blocked="invalid-json"]')!;
-    assert.equal(texto(band), 'Não dá para abrir o PR. O .claude/settings.json deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.');
+    assert.equal(texto(band), 'Não dá para abrir o PR. .claude/settings.json: JSON inválido Arquivo: .claude/settings.json . Nada foi escrito.', 'the message of the plan, not a fixed text: the refusal can be other than invalid JSON');
     assert.equal(action(area, 'open-pr'), null);
     assert.match(texto(area.querySelector('.fwi-diff')), /recusado .*Este arquivo não entra no PR: JSON inválido/);
   });

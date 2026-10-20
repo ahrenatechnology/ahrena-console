@@ -52,9 +52,9 @@ export function pullRequestBody(files: readonly PlanFile[], plugins: readonly st
   return issue === null ? body : `${body}\n\nRefs #${issue}`;
 }
 
-/** O aviso do branch de instalação que sobrou com commits e sem PR aberto. */
+/** O aviso do branch de instalação que sobrou sem PR aberto e fora do HEAD do padrão (com commits, ou vazio e atrás do padrão). */
 export function branchExistsMessage(branch: string = INSTALL_BRANCH): string {
-  return `O branch ${branch} já existe no GitHub, com commits e sem PR aberto: apague-o ou mescle-o no GitHub antes de instalar de novo.`;
+  return `O branch ${branch} já existe no GitHub, sem PR aberto, e não está no HEAD do branch padrão: apague-o, ou abra um PR dele no GitHub, antes de instalar de novo.`;
 }
 
 /**
@@ -78,6 +78,9 @@ export async function openInstallPullRequest(
   // Um branch que sobrou com commits (PR fechado ou mergeado, ou criado à mão) não é sobrescrito: a
   // pessoa decide. Um branch vazio, no HEAD do padrão (deixado pelo próprio console numa falha entre o
   // branch e o commit), é reaproveitado. Nunca se apaga nem se força um branch.
+  // Uma falha entre o commit e o PR deixa o branch com o nosso commit e sem PR: ele bloqueia como
+  // qualquer outro (`branch-exists`), porque não sabemos verificar que aquele commit é o do plano. A
+  // pessoa apaga o branch, ou abre o PR dele no GitHub; o console não abre PR de um commit que não conferiu.
   const head = await port.branchHead(branch);
   if (head !== null && head !== base.oid) throw new InstallRefused('branch-exists', branchExistsMessage(branch));
   if (head === null) await port.createRef(branch, base.oid);
