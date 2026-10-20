@@ -34,6 +34,15 @@ export const TELAS = [
     icone: 'sessoes',
     arquivo: null, // #29 e #30
   },
+  {
+    id: 'feed',
+    rota: '/ui/feed',
+    item: { rotulo: 'Feed de atividade', icone: 'atividade' },
+    titulo: 'Feed de atividade',
+    sub: 'Todos os eventos das sessões, ao vivo',
+    icone: 'atividade',
+    arquivo: '/ui/telas/feed.js', // #94
+  },
 ];
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
