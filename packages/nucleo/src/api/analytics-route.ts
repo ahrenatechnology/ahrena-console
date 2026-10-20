@@ -61,6 +61,7 @@ const SEM_PASTA = '(sem pasta)';
 /** The weekday keys of `weekday[].day`, Monday first; the /ui writes them in pt-BR. */
 const DIAS_DA_SEMANA = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const FUSO = /^[A-Za-z0-9_+\-/]{1,64}$/;
+const isGroupBy = (v: string): v is GroupBy => (GROUP_BYS as readonly string[]).includes(v);
 /** The 400 of a bad `?tz=` (the old route answers it with `fuso:`, src/api/legacy-routes.ts). */
 export const TZ_ERROR = 'tz: um fuso IANA, como America/Sao_Paulo';
 /** The 400 of a bad `?days=` (the old route answers it with `dias:`). */
@@ -257,8 +258,8 @@ export class RotaAnalytics {
         // The same period rule as the cost route.
         const days = Number(url.searchParams.get('days') ?? 30);
         if (!DIAS_DO_CUSTO.includes(days as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);
-        const groupBy = (url.searchParams.get('groupBy') ?? 'repo') as GroupBy;
-        if (!GROUP_BYS.includes(groupBy)) throw new ParametroInvalido(GROUP_BY_ERROR);
+        const groupBy = url.searchParams.get('groupBy') ?? 'repo';
+        if (!isGroupBy(groupBy)) throw new ParametroInvalido(GROUP_BY_ERROR);
         const key = validKey(groupBy, url.searchParams.get('key'));
         if (key === undefined) throw new ParametroInvalido(KEY_ERROR);
         return { status: 200, corpo: await this.emCache(`delivery?${days}&${fuso}&${groupBy}&${key}&${hoje}`, this.cacheMs.delivery, () => this.delivery(days, fuso, groupBy, key)) };
