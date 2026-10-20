@@ -100,7 +100,7 @@ let saida = null;
 let telaComErro = false;
 
 function navegar(rota) {
-  if (rota !== location.pathname) history.pushState(null, '', rota);
+  if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();
 }
 
@@ -159,7 +159,7 @@ document.addEventListener('click', (ev) => {
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || !(url.pathname === '/ui' || url.pathname.startsWith('/ui/'))) return;
   ev.preventDefault();
-  navegar(url.pathname);
+  navegar(url.pathname + url.search);
 });
 addEventListener('popstate', abrir);
 
