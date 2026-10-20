@@ -64,7 +64,7 @@ O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `anal
    }
    ```
 
-2. Em `telas.js`, aponte o `arquivo` da entrada: `arquivo: '/ui/telas/<nome>.js'`. Uma tela nova ganha uma entrada com `rota`, `titulo`, `icone` e, se aparece na barra, `item: { rotulo, icone }`. Uma tela fora da barra usa `acende` para dizer qual item fica aceso (o Detalhe acende Sessões).
+2. Em `telas.js`, aponte o `arquivo` da entrada: `arquivo: '/ui/telas/<nome>.js'`. Uma tela nova ganha uma entrada com `rota`, `titulo`, `icone` e, se aparece na barra, `item: { rotulo, icone, section }`. `section` é o bloco da barra, um id de `SECTIONS` em `telas.js`: `main` (as telas do dia a dia, sem título), `machines` (Máquinas) ou `control` (Controle), na ordem do C24. Dentro do bloco, o item sai na posição da entrada no registro; um bloco sem item não aparece. Uma tela fora da barra usa `acende` para dizer qual item fica aceso (o Detalhe acende Sessões).
 
 3. Um ícone novo entra em `ICONES` (`dom.js`), copiado do Lucide, com `currentColor`.
 

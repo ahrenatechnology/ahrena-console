@@ -410,7 +410,7 @@ test('a tela está registrada em /ui/mural, na barra como "Mural ao vivo"', () =
   const { tela: t } = acharTela('/ui/mural');
   assert.equal(t.id, 'mural');
   assert.equal(t.arquivo, '/ui/telas/mural.js');
-  assert.deepEqual(t.item, { rotulo: 'Mural ao vivo', icone: 'mural' });
+  assert.deepEqual(t.item, { rotulo: 'Mural ao vivo', icone: 'mural', section: 'main' });
   assert.equal(t.sub, 'Um card por sessão aberta nesta máquina');
 });
 
