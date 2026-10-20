@@ -1,4 +1,6 @@
-// The Analytics screen (#95 and #32): `GET /api/analytics` (Overview, C12) and `GET /api/analytics/cost` (Cost, C13).
+// The Analytics screen (#95 and #32): `GET /api/analytics` (Overview, C12), `GET /api/analytics/cost` (Cost, C13)
+// and `GET /api/analytics/delivery` (Delivery, C54 to C56, #266: `?days=7|30|90&groupBy=repo|project&key=&tz=`;
+// the definitions are in src/api/delivery.ts, the GitHub read in src/api/delivery-github.ts).
 //
 // Everything comes from the storage port, read-only:
 // - cost and tokens from the slices and the cost report (src/cost/aggregation.ts), with the table
@@ -26,9 +28,30 @@ import { dayOf, sessionCostSlices, costReport, type CostLine, type CostSlice } f
 import { currentPrices } from '../cost/table.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from './accounts.ts';
+import {
+  activeHoursPerDay,
+  byDelivery,
+  DELIVERY_MAX_REPOS,
+  DELIVERY_ROUTE,
+  deliveryNumbers,
+  deliveryRow,
+  GROUP_BY_ERROR,
+  GROUP_BYS,
+  KEY_ERROR,
+  openItemsOf,
+  repoActivity,
+  validKey,
+  type DeliveryGithubRead,
+  type DeliveryGroup,
+  type GroupBy,
+  type RepoActivity,
+  type SessionEffort,
+} from './delivery.ts';
+import { chaveDoRepo } from './repos-sessions.ts';
 
 export const ANALYTICS_ROUTE = '/api/analytics';
 export const COST_ROUTE = '/api/analytics/cost';
+export { DELIVERY_ROUTE };
 export const DIAS_DO_CUSTO = [7, 30, 90] as const;
 /** Janela dos números da Visão geral. */
 export const DIAS_DA_VISAO = 30;
@@ -38,6 +61,7 @@ const SEM_PASTA = '(sem pasta)';
 /** The weekday keys of `weekday[].day`, Monday first; the /ui writes them in pt-BR. */
 const DIAS_DA_SEMANA = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const FUSO = /^[A-Za-z0-9_+\-/]{1,64}$/;
+const isGroupBy = (v: string): v is GroupBy => (GROUP_BYS as readonly string[]).includes(v);
 /** The 400 of a bad `?tz=`. */
 export const TZ_ERROR = 'tz: um fuso IANA, como America/Sao_Paulo';
 /** The 400 of a bad `?days=`. */
@@ -56,6 +80,23 @@ export interface OpcoesDoAnalytics {
   cacheMsDoCusto?: number;
   /** A posição do cursor de mudanças (`ChangeCursor.current`): sem mudança, a resposta vale até 5 min. */
   versao?: () => string;
+  /** The Delivery tab's sources (#266). Without them, the tab answers as with GitHub not connected. */
+  delivery?: DeliveryOptions | null;
+  /** How long the Delivery answer stays in memory even with changes. Default 5 s. */
+  deliveryCacheMs?: number;
+}
+
+/** Where the Delivery tab (#266) reads from, besides the storage. */
+export interface DeliveryOptions {
+  /** The GitHub side, from the cache (src/api/delivery-github.ts). */
+  github: { read(repos: readonly string[]): Promise<DeliveryGithubRead> };
+  /** The repository (`owner/name`) of a session's cwd: `null` with none, `undefined` while unknown (src/api/repos-sessions.ts). */
+  repoOfCwd: (cwd: string) => string | null | undefined;
+  /** The GitHub Projects the console reads, each with the repositories that have items in it (key `owner/number`). */
+  /** `pending`: the first read has not landed yet, so no Projects is not yet known to mean none. */
+  projects?: () => Promise<{ projects: DeliveryGroup[]; error: string | null; pending?: boolean }>;
+  /** The account's repositories (the Repositories screen's list), so a repository with no session shows too. */
+  accountRepos?: () => Promise<{ fullName: string; lastPush: string | null }[]>;
 }
 
 /** Quanto a resposta vale, sem mudança no cursor. */
@@ -185,15 +226,17 @@ export class RotaAnalytics {
   private readonly porta: Porta;
   private readonly contas: Pick<Accounts, 'refresh' | 'ofSession'> | null;
   private readonly agora: () => number;
-  private readonly cacheMs: { visao: number; custo: number };
+  private readonly cacheMs: { visao: number; custo: number; delivery: number };
+  private readonly deliverySources: DeliveryOptions | null;
   private readonly versao: (() => string) | null;
   private readonly cache = new Map<string, { em: number; versao: string | null; ttl: number; corpo: Promise<unknown> }>();
 
-  constructor({ storage, contas = null, agora = Date.now, cacheMsDaVisao = 30_000, cacheMsDoCusto = 10_000, versao }: OpcoesDoAnalytics) {
+  constructor({ storage, contas = null, agora = Date.now, cacheMsDaVisao = 30_000, cacheMsDoCusto = 10_000, versao, delivery = null, deliveryCacheMs = 5_000 }: OpcoesDoAnalytics) {
     this.porta = storage;
     this.contas = contas;
     this.agora = agora;
-    this.cacheMs = { visao: cacheMsDaVisao, custo: cacheMsDoCusto };
+    this.cacheMs = { visao: cacheMsDaVisao, custo: cacheMsDoCusto, delivery: deliveryCacheMs };
+    this.deliverySources = delivery;
     this.versao = versao ?? null;
   }
 
@@ -211,6 +254,16 @@ export class RotaAnalytics {
         const dias = Number(url.searchParams.get('days') ?? 30);
         if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);
         return { status: 200, corpo: await this.emCache(`custo?${dias}&${fuso}&${hoje}`, this.cacheMs.custo, () => this.custo(dias, fuso)) };
+      }
+      if (url.pathname === DELIVERY_ROUTE) {
+        // The same period rule as the cost route.
+        const days = Number(url.searchParams.get('days') ?? 30);
+        if (!DIAS_DO_CUSTO.includes(days as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);
+        const groupBy = url.searchParams.get('groupBy') ?? 'repo';
+        if (!isGroupBy(groupBy)) throw new ParametroInvalido(GROUP_BY_ERROR);
+        const key = validKey(groupBy, url.searchParams.get('key'));
+        if (key === undefined) throw new ParametroInvalido(KEY_ERROR);
+        return { status: 200, corpo: await this.emCache(`delivery?${days}&${fuso}&${groupBy}&${key}&${hoje}`, this.cacheMs.delivery, () => this.delivery(days, fuso, groupBy, key)) };
       }
       return { status: 404, corpo: { error: 'não encontrado' } };
     } catch (err) {
@@ -464,4 +517,124 @@ export class RotaAnalytics {
       })),
     };
   }
+  // ---- Delivery (#266) ------------------------------------------------------------------------
+
+  async delivery(days: number, timeZone: string, groupBy: GroupBy, key: string | null) {
+    const generatedAt = new Date(this.agora()).toISOString();
+    const today = dayOf(generatedAt, timeZone);
+    const since = somarDias(today, -(days - 1));
+    const calendar = diasEntre(since, today);
+    const head = { generatedAt, timeZone, days, today, since, until: today, calendar, groupBy, key };
+    const sources = this.deliverySources;
+    const disconnected = (projectsError: string | null = null, projectsPending = false) => ({
+      ...head,
+      github: { status: 'disconnected' as const, readAt: null, error: null, pending: 0, truncated: [] as string[] },
+      totals: emptyDeliveryTotals(),
+      rows: [],
+      openItems: [],
+      openItemsTotal: 0,
+      openItemsTruncated: false,
+      options: { repos: [], projects: [] },
+      projectsError,
+      projectsPending,
+    });
+    if (!sources) return disconnected();
+
+    // The Claude side: the sessions of the period, by the repository of their cwd.
+    const read = await this.lerJanela(since, since, timeZone);
+    const { porSessao } = await this.parcelasDaJanela(read, since, today, timeZone);
+    const efforts: SessionEffort[] = [];
+    for (const { sessao, eventos } of read) {
+      const repo = sessao.cwd ? sources.repoOfCwd(sessao.cwd) : null;
+      if (!repo) continue;
+      const times = eventos.map((e) => e.createdAt).filter((t) => {
+        const d = dayOf(t, timeZone);
+        return d >= since && d <= today;
+      });
+      const slices = porSessao.get(sessao.id) ?? [];
+      if (times.length === 0 && slices.length === 0) continue;
+      efforts.push({ repo: chaveDoRepo(repo), hoursPerDay: activeHoursPerDay(times, calendar, timeZone), slices });
+    }
+
+    // The projects and the repositories to read: with sessions first, then the projects', then the latest pushed.
+    let projectsError: string | null = null;
+    const projects = sources.projects
+      ? await sources.projects().catch((err: unknown) => ({ projects: [] as DeliveryGroup[], error: err instanceof Error ? err.message : String(err) }))
+      : { projects: [] as DeliveryGroup[], error: null };
+    projectsError = projects.error;
+    const projectsPending = 'pending' in projects && projects.pending === true;
+    const projectGroups = projects.projects.map((p) => ({ key: p.key, label: p.label, repos: [...new Set(p.repos.map(chaveDoRepo))] }));
+    const hours = new Map<string, number>();
+    for (const e of efforts) hours.set(e.repo, (hours.get(e.repo) ?? 0) + e.hoursPerDay.reduce((s, h) => s + h, 0));
+    const pushed = sources.accountRepos ? await sources.accountRepos().catch(() => []) : [];
+    const candidates = [
+      ...[...hours].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([r]) => r),
+      ...projectGroups.flatMap((p) => p.repos),
+      ...pushed
+        .filter((r) => r.lastPush && dayOf(r.lastPush, timeZone) >= since)
+        .sort((a, b) => Date.parse(b.lastPush!) - Date.parse(a.lastPush!))
+        .map((r) => chaveDoRepo(r.fullName)),
+    ];
+    const unique = [...new Set(candidates)];
+    const repos = unique.slice(0, DELIVERY_MAX_REPOS);
+    const github = await sources.github.read(repos);
+    if (unique.length > repos.length) github.truncated.push(`${unique.length - repos.length} repositórios de fora: o teto é ${DELIVERY_MAX_REPOS}`);
+    if (github.status === 'disconnected') return disconnected(projectsError, projectsPending);
+
+    const now = this.agora();
+    const activities = new Map<string, RepoActivity>();
+    for (const [k, raw] of github.repos) activities.set(k, repoActivity(raw, calendar, timeZone, now));
+    const repoGroups = [...activities.values()].map((a) => ({ key: a.key, label: a.repo, repos: [a.key] })).sort((a, b) => a.label.localeCompare(b.label));
+    const shownProjects = projectGroups.filter((p) => p.repos.some((r) => activities.has(r)));
+    const groups = groupBy === 'repo' ? repoGroups : shownProjects;
+    const selected = key === null ? groups : groups.filter((g) => g.key.toLowerCase() === key.toLowerCase());
+    const rows = selected.map((g) => deliveryRow(g, activities, efforts, days, timeZone)).sort(byDelivery);
+    const { reposWithClaude, repoCount, ...totals } = deliveryNumbers(
+      selected.flatMap((g) => g.repos),
+      activities,
+      efforts,
+      days,
+      timeZone,
+    );
+    const open = openItemsOf(selected, activities);
+    return {
+      ...head,
+      github: { status: github.status, readAt: github.readAt === null ? null : new Date(github.readAt).toISOString(), error: github.error, pending: github.pending, truncated: github.truncated },
+      totals: {
+        mergedPrs: totals.mergedPrs,
+        medianLeadTimeMs: totals.medianLeadTimeMs,
+        openPrs: totals.openPrs,
+        openIssues: totals.openIssues,
+        claudeHours: totals.claudeHours,
+        costUsd: totals.costUsd,
+        costPartial: totals.costPartial,
+        costPerMergedPr: totals.costPerMergedPr,
+        repos: repoCount,
+        reposWithClaude,
+      },
+      rows,
+      openItems: open.items,
+      openItemsTotal: open.total,
+      openItemsTruncated: open.total > open.items.length,
+      options: { repos: repoGroups.map((g) => ({ key: g.key, label: g.label })), projects: shownProjects.map((p) => ({ key: p.key, label: p.label, repos: p.repos })) },
+      projectsError,
+      projectsPending,
+    };
+  }
+}
+
+/** The Delivery totals with nothing known: GitHub not connected (#266 AC-8). */
+function emptyDeliveryTotals() {
+  return {
+    mergedPrs: null,
+    medianLeadTimeMs: null,
+    openPrs: null,
+    openIssues: null,
+    claudeHours: null,
+    costUsd: null,
+    costPartial: false,
+    costPerMergedPr: null,
+    repos: 0,
+    reposWithClaude: 0,
+  };
 }

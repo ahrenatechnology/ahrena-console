@@ -619,7 +619,7 @@ export interface OpcoesDosReposDoNucleo {
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos; sessions: SessoesPorRepo } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
     ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
@@ -632,5 +632,6 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
     ...(demo ? { git: demoGit(), extras: DEMO_EXTRA_SESSIONS } : {}),
   });
   const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log, ...(queue ? { queue } : {}) });
-  return { repos, rota: criarRotaDosRepos(repos) };
+  // `sessions` is also the Delivery tab's session → repository (#266, src/api/delivery-github.ts).
+  return { repos, rota: criarRotaDosRepos(repos), sessions: sessoes };
 }

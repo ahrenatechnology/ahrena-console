@@ -492,6 +492,31 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .janela .tb .nm { flex: 1; text-align: center; color: var(--text); }
 .janela .cc { width: 100%; border: 0; border-radius: 0; overflow: hidden; }
 
+/* ---------- Analytics · Entregas (C54 to C56, issue #266) ---------- */
+.dl-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dl-bar .campo { margin-left: auto; }
+.dl-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dl-grid { display: grid; gap: 10px; }
+.dl-small { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px 7px; background: var(--bg); min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dl-small-top { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.dl-small-top b { font-weight: 500; min-width: 0; }
+.dl-small-top span { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.dl-small-sub { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+.dl-svg { width: 100%; height: 56px; display: block; }
+.dl-axis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); font-family: var(--font-mono); }
+.dl-key-bar { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--accent); }
+.dl-key-line { display: inline-block; width: 14px; border-top: 1.5px dashed var(--muted); }
+.dl-table th.n, .dl-table td.n, .dl-table td.dl-heat { text-align: right; }
+.dl-table td { padding: 8px 12px; } .dl-table th { padding: 8px 12px; }
+.dl-heat span { display: inline-block; min-width: 64px; padding: 3px 8px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; text-align: right; }
+.dl-none { color: var(--muted); font-family: var(--font-mono); padding-right: 20px !important; }
+.dl-open-bar { display: flex; gap: 10px; align-items: center; }
+.dl-open { display: flex; flex-direction: column; }
+.dl-open-row { display: grid; grid-template-columns: 18px 52px minmax(0, 1fr) minmax(0, 240px) 128px 44px; gap: 10px; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.dl-open-row .pill { justify-self: start; }
+.dl-age { text-align: right; color: var(--muted); }
+.dl-hm span { min-width: 48px; text-align: center; } .dl-zero { color: var(--muted); }
+.dl-faded > .cartao:nth-child(-n+2) { opacity: .55; }
 /* ---------- modo captura ---------- */
 body.captura .topo, body.captura .indice, body.captura .notas, body.captura .capitulo, body.captura .tela:not(.alvo), body.captura .perguntas, body.captura #perguntas { display: none !important; }
 body.captura .pagina { display: block; } body.captura main { padding: 20px 24px; display: inline-block; } body.captura .tela { margin: 0; }
@@ -1046,6 +1071,120 @@ function telaAnalytics() {
   </div>`
 }
 
+// ---------- Analytics · Entregas (C54 to C56, issue #266) ----------
+// Per repository or per project, never per person: PRs merged per day (small multiples, each on its own scale),
+// lead time to merge, what is open and how old, and the Claude effort (session hours, estimated cost) of the same repository.
+const dlTabs = on => `<div class="seg" style="width:max-content">${['Visão geral', 'Custo', 'Entregas'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>`
+const dlRand = seed => { let s = seed; return () => (s = (s * 9301 + 49297) % 233280) / 233280 }
+// [name, merged-per-day weight, Claude hours per day weight, merged, median lead time, open PRs, open issues, hours, cost]
+const DL_REPOS = [
+  ['motor-de-regras', 0.55, 0.8, 38, '6 h', 4, 9, 64.2, 128.4],
+  ['vitrine-demo', 0.35, 0.5, 24, '11 h', 3, 6, 38.5, 52.1],
+  ['painel-de-metricas', 0.25, 0.6, 15, '1,8 d', 2, 11, 41.0, 74.9],
+  ['gateway-sandbox', 0.2, 0.3, 11, '9 h', 1, 3, 17.6, 33.6],
+  ['catalogo-exemplo', 0.12, 0.25, 7, '3,2 d', 2, 5, 12.4, 21.8],
+  ['app-receitas', 0.08, 0, 4, '2,1 d', 1, 2, null, null],
+  ['fila-de-tarefas', 0, 0.2, 0, null, 2, 4, 6.3, 18.2],
+]
+const DL_PROJECTS = [
+  ['Loja de exemplo', ['vitrine-demo', 'catalogo-exemplo', 'gateway-sandbox'], 0.6, 0.9, 42, '13 h', 6, 14, 68.5, 107.5],
+  ['Plataforma de regras', ['motor-de-regras', 'fila-de-tarefas'], 0.55, 0.9, 38, '6 h', 6, 13, 70.5, 146.6],
+  ['Métricas', ['painel-de-metricas', 'app-receitas'], 0.3, 0.6, 19, '1,9 d', 3, 13, 41.0, 74.9],
+]
+function dlSeries(seed, wMerged, wHours, total) {
+  const r = dlRand(seed), merged = [], hours = []
+  for (let d = 0; d < 30; d++) {
+    const weekend = d % 7 === 5 || d % 7 === 6
+    merged.push(wMerged && !weekend ? Math.floor(r() * 4 * wMerged + (r() < wMerged ? 1 : 0)) : 0)
+    hours.push(wHours && !weekend ? +(r() * 6 * wHours + 0.4).toFixed(1) : 0)
+  }
+  const sum = merged.reduce((a, b) => a + b, 0)
+  if (total && sum !== total) { let diff = total - sum, i = 29; while (diff !== 0) { if (i % 7 < 5) { const step = diff > 0 ? 1 : (merged[i] > 0 ? -1 : 0); merged[i] += step; diff -= step } i = (i + 7) % 30 } }
+  return { merged, hours }
+}
+function dlSmall(name, sub, seed, wMerged, wHours, total) {
+  const { merged, hours } = dlSeries(seed, wMerged, wHours, total)
+  const peak = Math.max(...merged), maxH = Math.max(...hours, 1), W = 300, H = 64, bw = W / 30
+  const bars = merged.map((n, i) => n ? `<rect x="${(i * bw + 1).toFixed(1)}" y="${(H - n / peak * (H - 6)).toFixed(1)}" width="${(bw - 2.5).toFixed(1)}" height="${(n / peak * (H - 6)).toFixed(1)}" rx="1.5" fill="var(--accent)"/>` : '').join('')
+  const line = wHours ? `<polyline points="${hours.map((h, i) => `${(i * bw + bw / 2).toFixed(1)},${(H - h / maxH * (H - 6)).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--muted)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>` : ''
+  return `<div class="dl-small"><div class="dl-small-top"><b class="trunc">${name}</b><span>${total ? `pico ${peak} · total ${total}` : 'total 0'}</span></div>${sub ? `<div class="dl-small-sub trunc">${sub}</div>` : ''}
+    <svg viewBox="0 0 ${W} ${H + 1}" preserveAspectRatio="none" class="dl-svg" aria-hidden="true">${bars}${line}<line x1="0" x2="${W}" y1="${H + 0.5}" y2="${H + 0.5}" stroke="var(--border)" vector-effect="non-scaling-stroke"/></svg>
+    <div class="dl-axis"><span>21/09</span><span>20/10</span></div></div>`
+}
+const dlHeat = (v, max, txt) => v == null ? `<td class="dl-heat dl-none">—</td>` : `<td class="dl-heat"><span style="background:color-mix(in srgb, var(--accent) ${Math.round(12 + v / max * 58)}%, var(--surface))">${txt}</span></td>`
+const usd = v => `~US$ ${v.toFixed(2).replace('.', ',')}`
+function dlTable(rows, byProject) {
+  const mx = i => Math.max(...rows.map(r => r[i] ?? 0))
+  const off = byProject ? 1 : 0
+  return `<table class="tabela dl-table"><thead><tr><th>${byProject ? 'Projeto' : 'Repositório'}</th><th class="n">PRs mesclados</th><th class="n">Até o merge</th><th class="n">Abertos</th><th class="n">Horas do Claude</th><th class="n">Custo</th><th class="n">Custo por PR</th></tr></thead><tbody>
+    ${rows.map(r => { const [name] = r, merged = r[3 + off], lead = r[4 + off], oPr = r[5 + off], oIs = r[6 + off], h = r[7 + off], c = r[8 + off], per = c != null && merged ? c / merged : null
+      return `<tr><td class="nm"><b>${name}</b>${byProject ? `<small>${r[1].length} repositórios</small>` : ''}</td>${dlHeat(merged, mx(3 + off), merged)}<td class="mono n">${lead ?? '—'}</td><td class="mono n">${oPr} PRs · ${oIs} issues</td>
+        ${dlHeat(h, mx(7 + off), h != null ? `${String(h).replace('.', ',')} h` : '')}${dlHeat(c, mx(8 + off), c != null ? usd(c) : '')}${per == null ? `<td class="dl-heat dl-none">—</td>` : dlHeat(per, 5, usd(per))}</tr>` }).join('')}
+  </tbody></table>`
+}
+const DL_OPEN = [
+  ['issue', 312, 'Exportar o relatório em CSV', 'painel-de-metricas', 'sem PR', 'b-abandoned', '41 d'],
+  ['pr', 298, 'Trocar o motor de templates', 'catalogo-exemplo', 'rascunho', 'b-abandoned', '23 d'],
+  ['issue', 87, 'Retry com backoff na fila', 'fila-de-tarefas', 'PR #91 aberto', 'b-waiting', '19 d'],
+  ['pr', 1204, 'Separar pagamentos em serviços', 'motor-de-regras', 'CI ✕', 'b-error', '6 d'],
+  ['pr', 455, 'Cache das consultas do catálogo', 'catalogo-exemplo', 'esperando review', 'b-waiting', '4 d'],
+  ['pr', 1211, 'Migração do esquema de pedidos', 'motor-de-regras', 'aprovado', 'b-completed', '2 d'],
+]
+// Closed issues and reviews per repository, for the contribution heatmap (rows = repositories or projects, never people).
+const DL_EXTRA = { 'motor-de-regras': [21, 52], 'vitrine-demo': [12, 30], 'painel-de-metricas': [9, 18], 'gateway-sandbox': [6, 14], 'catalogo-exemplo': [4, 9], 'app-receitas': [3, 5], 'fila-de-tarefas': [1, 3] }
+const dlProjectOf = repo => DL_PROJECTS.find(p => p[1].includes(repo))[0]
+function dlContrib(byProject) {
+  const repo = n => DL_REPOS.find(r => r[0] === n)
+  const rows = byProject
+    ? DL_PROJECTS.map(([n, repos]) => [n, ...[r => r[5], r => r[3], r => r[6], r => DL_EXTRA[r[0]][0], r => DL_EXTRA[r[0]][1]].map(f => repos.reduce((a, x) => a + f(repo(x)), 0))])
+    : DL_REPOS.map(r => [r[0], r[5], r[3], r[6], DL_EXTRA[r[0]][0], DL_EXTRA[r[0]][1]])
+  const cell = (v, max) => `<td class="dl-heat dl-hm">${v ? `<span style="background:color-mix(in srgb, var(--accent) ${Math.round(14 + v / max * 70)}%, var(--surface))">${v}</span>` : '<span class="dl-zero">·</span>'}</td>`
+  return `<div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Contribuições por tipo<span class="r">a cor mostra o peso de cada tipo dentro do próprio ${byProject ? 'projeto' : 'repositório'}</span></div>
+    <table class="tabela dl-table"><thead><tr><th>${byProject ? 'Projeto' : 'Repositório'}</th><th class="n">PRs abertos</th><th class="n">PRs mesclados</th><th class="n">Issues abertas</th><th class="n">Issues fechadas</th><th class="n">Revisões</th></tr></thead><tbody>
+    ${rows.map(([n, ...v]) => { const max = Math.max(...v, 1); return `<tr><td class="nm"><b>${n}</b></td>${v.map(x => cell(x, max)).join('')}</tr>` }).join('')}</tbody></table></div>`
+}
+function dlOpen(w, byProject) {
+  return `<div class="cartao dl-card"><div class="ttl">Em andamento<span class="r">55 abertos · os mais antigos primeiro</span></div>
+    <div class="dl-open-bar"><span class="campo" style="flex:1">${ic('search')}Buscar por título, repositório ou número</span><div class="seg"><span class="on">Todos</span><span>PRs</span><span>Issues</span></div></div>
+    <div class="dl-open">${DL_OPEN.map(([k, n, t, repo, st, cls, age]) => `<div class="dl-open-row"><span class="c-muted">${ic(k === 'pr' ? 'git-pull-request' : 'circle-dot')}</span><span class="mono c-muted">#${n}</span><span class="trunc">${t}</span><span class="mono c-muted trunc">${byProject ? `${dlProjectOf(repo)} · ${repo}` : repo}</span><span class="pill ${cls}">${st}</span><span class="mono dl-age">${age}</span></div>`).join('')}</div>
+    <div class="leg"><span>Mais 49 · role para ver</span></div></div>`
+}
+function telaEntregas(w, byProject = false) {
+  const cols = w === 1100 ? 3 : 4
+  const smalls = byProject
+    ? DL_PROJECTS.map(([n, repos, wm, wh, total], i) => dlSmall(n, repos.join(' · '), 11 + i * 7, wm, wh, total))
+    : DL_REPOS.map(([n, wm, wh, total], i) => dlSmall(n, '', 3 + i * 5, wm, wh, total))
+  return `${cab('bar-chart-3', 'Analytics', byProject ? 'O ritmo de entrega de cada GitHub Project, com o esforço do Claude nos repositórios dele' : 'O ritmo de entrega de cada repositório no GitHub, com o esforço do Claude no mesmo repositório', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div><span class="btn">${ic('download')}Exportar</span>`)}
+  <div class="dl-bar">${dlTabs(2)}<div class="seg"><span class="${byProject ? '' : 'on'}">Por repositório</span><span class="${byProject ? 'on' : ''}">Por projeto</span></div><span class="campo" style="width:220px">${byProject ? 'Todos os projetos' : 'Todos os repositórios'}<span style="margin-left:auto">${ic('chevron-down')}</span></span></div>
+  <div class="stats" style="${statCols(w)}">
+    ${stat('PRs mesclados', '99', '~3,3 por dia', 'git-merge', 'var(--status-completed-text)')}
+    ${stat('Até o merge', '9 h', 'mediana, do PR aberto ao merge', 'timer', 'var(--accent-text)')}
+    ${stat('Abertos', '55', '15 PRs · 40 issues', 'git-pull-request', 'var(--status-waiting-text)')}
+    ${stat('Horas do Claude', '180 h', 'em 6 dos 7 repositórios', 'clock', 'var(--accent-text)')}
+    ${stat('Custo', '~US$ 329', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
+    ${stat('Custo por PR', '~US$ 3,32', 'custo ÷ PRs mesclados', 'scale', 'var(--accent-text)')}
+  </div>
+  ${dlContrib(byProject)}
+  <div class="cartao dl-card"><div class="ttl">Ritmo de entrega<span class="r">PRs mesclados por dia · últimos 30 dias</span></div>
+    <div class="leg"><span><i class="dl-key-bar"></i>PRs mesclados</span><span><i class="dl-key-line"></i>horas do Claude</span><span>Cada gráfico tem escala própria: o pico de cada ${byProject ? 'projeto' : 'repositório'} está no canto.</span></div>
+    <div class="dl-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${smalls.join('')}</div></div>
+  <div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Esforço e entrega<span class="r">${byProject ? 'o esforço do projeto é a soma dos repositórios dele' : 'a cor mostra o peso de cada valor na coluna'}</span></div>
+    ${dlTable(byProject ? DL_PROJECTS : DL_REPOS, byProject)}</div>
+  ${dlOpen(w, byProject)}`
+}
+function telaEntregasEstados() {
+  return `${cab('bar-chart-3', 'Analytics', 'O ritmo de entrega de cada repositório no GitHub, com o esforço do Claude no mesmo repositório', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div>`)}
+  <div class="dl-bar">${dlTabs(2)}</div>
+  <div class="rotulo">1 · GitHub não conectado</div>
+  <div class="cartao vazio" style="height:230px"><span class="ic">${ic('github')}</span><b>Conecte o GitHub para ver as entregas</b><span>A aba conta PRs e issues dos repositórios das suas sessões. Nada aparece até você conectar uma conta; o console não escolhe repositório por você.</span><span class="btn cheio">${ic('plug')}Conectar o GitHub</span></div>
+  <div class="rotulo">2 · GitHub fora ou limitando</div>
+  <div class="faixa erro"><span class="ic">${ic('x-circle')}</span><div><b>O GitHub não respondeu.</b> Mostrando os PRs e as issues em cache, lidos às 22:41. Horas e custo do Claude estão em dia: vêm das sessões desta máquina.</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="stats dl-faded" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+    ${stat('PRs mesclados', '97', 'até 22:41', 'git-merge', 'var(--status-completed-text)')}
+    ${stat('Até o merge', '9 h', 'mediana, até 22:41', 'timer', 'var(--accent-text)')}
+    ${stat('Horas do Claude', '180 h', 'agora', 'clock', 'var(--accent-text)')}
+  </div>`
+}
 // ---------- Workflows ----------
 const fase = n => `<span class="chip" style="font-family:var(--font-sans);color:var(--text)">${n}</span>`
 function grafoOrquestracao() {
@@ -2466,6 +2605,12 @@ const TELAS = [
     n: N(['Analytics: 5 StatCards, Event Activity de 52 semanas, Last 30 Days, abas Cost / Token / Productivity, barras horizontais.'], ['O heatmap usa o laranja em 4 tons, sem o índigo do CCAM.', 'Custo virou a aba "Custo" desta tela (3.7); o resto entra a pedido do dono.']) },
   { id: 'console-custo', cod: 'C13', nome: 'Analytics · Custo', sub: 'Custo por dia, por modelo e por projeto (3.7).', html: () => `<div class="fila">${cc('analytics', telaCusto())}</div>`,
     n: N(['Analytics · Cost Analytics: linha diária com pico e total, donut por modelo, barras horizontais.'], ['Gráficos no laranja e nos seus tons, sem uma cor por série.', 'Custo sempre com "~" e "estimativa".']) },
+  { id: 'console-delivery', cod: 'C54', nome: 'Analytics · Entregas, por repositório', sub: 'Feature Entregas (#266): o ritmo de entrega de cada repositório no GitHub e o esforço do Claude no mesmo repositório, nunca por pessoa. O seletor Por repositório · Por projeto troca o eixo de tudo. Números do período, as contribuições por tipo (PRs abertos e mesclados, issues abertas e fechadas, revisões: linhas são repositórios, a cor é o peso dentro da linha), um gráfico pequeno por repositório com os PRs mesclados por dia (escala própria, pico e total no canto, horas do Claude tracejadas atrás), a tabela Esforço e entrega com o custo por PR mesclado, e o que está aberto, dos mais antigos primeiro, com busca. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px · a janela do app</div>${frameAt(1100, 'analytics', telaEntregas(1100))}<div class="rotulo">1440 px</div>${frameAt(1440, 'analytics', telaEntregas(1440))}</div>`,
+    n: N(['Nada do CCAM: ele não lê o GitHub. As formas vêm de um painel de entregas que já usamos: os gráficos pequenos com pico e total, a tabela com a cor pelo peso e a lista dos abertos com busca.'], ['As linhas são repositórios ou projetos, nunca pessoas: no painel de referência as linhas são pessoas; aqui não há autor, responsável nem eixo por pessoa.', 'O repositório de uma sessão vem do cwd, como na tela Repositórios; sem sessão no período, horas e custo são "—", nunca zero.', 'Custo por PR é custo ÷ PRs mesclados: uma ponte entre os dois lados, não uma meta.']) },
+  { id: 'console-delivery-projects', cod: 'C55', nome: 'Analytics · Entregas, por projeto', sub: 'Por projeto: o mesmo seletor troca o eixo de toda a aba para os GitHub Projects que o console já lê (Kanban do projeto, C11), e um projeto junta issues e PRs de vários repositórios. As contribuições, o ritmo, o esforço e o custo do Claude e o Em andamento passam a ter uma linha por projeto. Cada gráfico diz os repositórios do projeto; o esforço do Claude de um projeto é a soma das sessões desses repositórios. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregas(1100, true))}</div>`,
+    n: N(['—'], ['Um repositório em dois projetos conta nos dois; a soma dos projetos pode passar do total da aba.', 'Os itens de um projeto que não são de repositório (rascunhos do Project) não entram.']) },
+  { id: 'console-delivery-states', cod: 'C56', nome: 'Analytics · Entregas, estados', sub: 'Sem GitHub conectado: o estado vazio explica como conectar, sem escolher repositório por você (regra 5). GitHub fora ou limitando: o cache com a hora, e as horas e o custo do Claude em dia, que vêm das sessões. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregasEstados())}</div>`,
+    n: N(['Os estados do C19.'], ['Só o lado do GitHub desbota: o lado do Claude é local e continua ao vivo.']) },
   { id: 'console-workflows', cod: 'C14', nome: 'Workflows', sub: 'KPIs de orquestração, os workflows dinâmicos (dev-review aberto, com fases e agentes) e o grafo de orquestração de todas as sessões.', html: () => `<div class="fila">${cc('workflows', telaWorkflows())}</div>`,
     n: N(['Workflows: 6 KPIs (profundidade, subagentes por sessão, sucesso, fluxo mais comum), Dynamic Workflows com chips de fase e tabela Agent / Phase / State / Tokens / Tools / Duration, e o Agent Orchestration Graph em colunas com arestas de espessura pelo volume.'], ['KPI "Rodadas de review por PR" no lugar de "Avg Compactions": é o que mede o laço dev/review.', 'Só o grafo de orquestração das 11 seções; as outras ficam para depois.']) },
   { id: 'console-historico', cod: 'C15', nome: 'Histórico', sub: 'Sessões encerradas por dia, com a ligação depois do /clear (3.8).', html: () => `<div class="fila">${cc('historico', telaHistorico())}</div>`,
