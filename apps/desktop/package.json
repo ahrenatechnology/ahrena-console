@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "tauri": "tauri",
-    "icones": "tauri icon ../../docs/brand/logo-laranja.svg -o src-tauri/icons",
+    "icons": "tauri icon ../../docs/brand/logo-laranja.svg -o src-tauri/icons",
     "build": "tauri build --bundles app,dmg"
   },
   "devDependencies": {

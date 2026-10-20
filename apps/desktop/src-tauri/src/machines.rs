@@ -3,7 +3,7 @@
 // src/api/telemetry.ts and src/telemetry/model.ts).
 //
 // Kept apart from Tauri so it is tested without opening the app: this module only parses the core's
-// JSON and derives the short texts the menu (menu.rs) and the notifications (notificacoes.rs) show.
+// JSON and derives the short texts the menu (menu.rs) and the notifications (notifications.rs) show.
 // Only the fields the tray needs are read; extra fields are ignored.
 
 use serde::Deserialize;
@@ -121,7 +121,7 @@ pub fn machine_path(id: &str) -> String {
     if matches!(id, "" | "." | "..") {
         return "/ui".into();
     }
-    format!("/ui/machines/{}", http::codificar(id))
+    format!("/ui/machines/{}", http::encode(id))
 }
 
 /// A number the pt-BR way, with one decimal: `24,6`.
@@ -129,12 +129,12 @@ pub fn decimal(x: f64) -> String {
     format!("{x:.1}").replace('.', ",")
 }
 
-/// "há 12 min", from `tempo` in menu.rs, with "menos de 1 min" for zero.
+/// "há 12 min", from `elapsed` in menu.rs, with "menos de 1 min" for zero.
 pub fn ago(minutes: u64) -> String {
     if minutes == 0 {
         "há menos de 1 min".into()
     } else {
-        format!("há {}", crate::menu::tempo(minutes))
+        format!("há {}", crate::menu::elapsed(minutes))
     }
 }
 

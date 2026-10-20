@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, translateBody, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
+import { Contas, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions, type PanelScenario } from '../../src/simulator/panel.ts';
@@ -98,15 +98,15 @@ describe('decisões no painel', () => {
   // #173 phase 2b: the published mod reads the old route, so its types cover the old body (back-translated).
   test('todo campo da resposta está nos tipos do plugin', async () => {
     const { storage, montador } = await cenario();
-    const painel = translateBody(LEGACY_BODIES.panel.response, await montador.montar({ sessionId: 'qualquer', decisoes: 'family' })) as { decisoes: unknown };
+    const painel = await montador.montar({ sessionId: 'qualquer', decisoes: 'family' });
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');
     const chaves = new Set<string>();
     const juntar = (v: unknown) => {
       if (Array.isArray(v)) return v.forEach(juntar);
       if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) (chaves.add(k), juntar(x));
     };
-    juntar(painel.decisoes);
-    juntar({ retomada: { n: 1, tokens: 1, de: 'x' } });
+    juntar(painel.decisions);
+    juntar({ resume: { n: 1, tokens: 1, from: 'x' } });
     assert.deepEqual([...chaves].filter((k) => !new RegExp(`\\b${k}\\??:`).test(tipos)), []);
     await storage.close();
   });
