@@ -217,6 +217,13 @@ describe('#244 machine-format: the reconnect of GET /api/machines', () => {
     assert.equal(ok.text, '· a leitura voltou. O comando saiu com o código 0 depois de 1 min 26 s, e o núcleo leu a Workstation na hora.');
   });
 
+  test('a reconnect state change on /api/changes (`<id>:reconnect`) re-reads that machine\'s screen only', () => {
+    const change = [{ type: 'alert', key: `${WS.id}:reconnect` }];
+    assert.equal(format.touchesMachine(change, WS.id), true);
+    assert.equal(format.touchesMachine(change, 'outra'), false);
+    assert.equal(format.touchesMachine(change, 'local'), false);
+  });
+
   test('the setup example is this machine with a generic script', () => {
     const ex = format.reconnectExample({ id: WS.id, label: WS.label, port: WS.port });
     assert.match(ex, /^~\/\.ahrena-console\/machines\.json\n\{ "machines": \[ \{ "id": "ws-exemplo", "label": "Workstation", "port": 14720,\n/);
