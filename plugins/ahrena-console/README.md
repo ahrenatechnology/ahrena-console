@@ -27,9 +27,17 @@ A conta da sessão aparece ao lado de "ESTA SESSÃO", com o rótulo e a cor que 
 
 O plugin é por pasta de configuração (decisão 0006): instale em cada `CLAUDE_CONFIG_DIR` que usar.
 
+No Claude Code:
+
 ```
-/plugin install ahrena-console --marketplace ahrenatechnology/ahrena-console
+/plugin marketplace add ahrenatechnology/ahrena-console
 ```
+
+```
+/plugin install ahrena-console@ahrena-console
+```
+
+Depois, `/reload-plugins` e `/console`. Para atualizar, `/plugin marketplace update ahrena-console`.
 
 Pelo terminal, o mesmo em dois passos (para testar um branch, acrescente `@<branch>` ao repositório):
 
