@@ -145,3 +145,4 @@ button.ins-import-head { cursor: pointer; }
 .ins-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; min-width: 0; }
 .ins-row-name { font-size: 11.5px; white-space: nowrap; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
 .ins-row-desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ins-empty-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
