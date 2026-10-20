@@ -265,6 +265,17 @@ describe('start or adopt', { timeout: 60_000 }, () => {
     assert.equal((await core('status').done).code, 1);
   });
 
+  test('the new option names win over the old ones (--port over --porta, --parent over --pai)', async () => {
+    const [port, oldPort] = [await freePort(), await freePort()];
+    const parent = idle();
+    const r = await core('start', '--port', String(port), '--porta', String(oldPort), '--parent', String(parent.pid), '--pai', String(await deadPid()), '--json', '--', ...HOOKS_ONLY).done;
+    assert.equal(r.code, 0, r.stderr);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.porta, port);
+    assert.equal(j.pai, parent.pid);
+    assert.equal((await liveLock()).parent, parent.pid);
+  });
+
   test('an orphan lock with a dead pid is recovered', async () => {
     const port = await freePort();
     writeLock({ pid: await deadPid(), port, version: '0.0.1', startedAt: 'antes', token: 'velho', parent: null }, dir);

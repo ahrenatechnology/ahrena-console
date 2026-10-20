@@ -70,7 +70,7 @@ garantirNucleo();
 const comoSubir = fixa
   ? `Suba com \`npm run api -- --porta ${porta}\` em packages/nucleo e chame de novo.`
   : o['sem-subir']
-    ? 'Suba com `npm run core -- start` em packages/nucleo e chame de novo.'
+    ? 'Suba com `npm run nucleo -- subir` em packages/nucleo e chame de novo.'
     : 'A ponte está subindo o núcleo; chame de novo em alguns segundos.';
 await atenderPorStdio({
   atender: async (m) => {

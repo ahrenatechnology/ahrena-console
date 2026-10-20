@@ -3,7 +3,7 @@
 // only by the owner (0600). The core writes it, once the port is already its own.
 //
 // The file keeps its Portuguese keys (`porta`, `versao`, `inicio`, `pai`): other installed cores
-// (and the desktop app) read it. `Lock` is the in-memory shape; `toFile`/`fromFile` map the two.
+// read it. `Lock` is the in-memory shape; `toFile` and `readLockFile` map the two.
 
 import { randomBytes } from 'node:crypto';
 import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';

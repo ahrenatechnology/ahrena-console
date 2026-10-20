@@ -84,7 +84,7 @@ async function stop(): Promise<never> {
 
 async function start(): Promise<never> {
   const parent = parentOption === undefined ? null : Number(parentOption);
-  if (parent !== null && !(Number.isInteger(parent) && parent > 0 && isPidAlive(parent))) throw new Error('--parent: the pid of a live process');
+  if (parent !== null && !(Number.isInteger(parent) && parent > 0 && isPidAlive(parent))) throw new Error('--parent/--pai: the pid of a live process');
   const port = Number(portOption ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
   const s = await startOrAdopt({ dir, port, parent, replace, apiArgs, log });
   if (s.estado !== 'de-pe') finish(s, `the core did not start: ${s.motivo}`, 1);
