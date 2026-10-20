@@ -21,6 +21,7 @@ import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent } from '../model.ts';
 import type { ListRecentEventsQuery, RecentEventsPage, StoragePort } from '../storage-port.ts';
+import { fraseDoEvento, type ContextoDaFrase } from './frase-do-evento.ts';
 
 export const ROTA_DOS_EVENTOS = '/api/eventos';
 
@@ -223,6 +224,9 @@ function lerPedido(p: URLSearchParams): Pedido {
   return { query, inicial: depois === null && antes === null };
 }
 
+const TIPOS_DE_PROMPT = ['UserPromptSubmit', 'UserPrompt'] as const;
+const TIPOS_DE_FERRAMENTA = ['PreToolUse', 'ToolUse'] as const;
+
 export type PortaDoFeed = Pick<StoragePort, 'listRecentEvents' | 'listEventFacets' | 'listSessions' | 'getSession' | 'getAgent'>;
 
 export interface OpcoesDoFeedDeEventos {
@@ -281,9 +285,29 @@ export class FeedDeEventos {
       }
       return a;
     };
+    // O que a frase precisa de antes do evento: o último prompt (duração do turno) e a última ferramenta
+    // (o pedido de permissão diz qual). Uma consulta de um item por evento que precisa, só esses.
+    const anterior = async (e: SessionEvent, types: readonly string[]) =>
+      (await this.storage.listRecentEvents({ sessionId: e.sessionId, types, createdUntil: e.createdAt, limit: 1 })).items[0] ?? null;
+    const contexto = async (e: SessionEvent): Promise<ContextoDaFrase> => {
+      const d = objeto(e.data);
+      if (e.type === 'Stop' || (e.type === 'TurnDuration' && typeof d?.durationMs !== 'number')) {
+        const p = await anterior(e, TIPOS_DE_PROMPT);
+        return { ultimoPrompt: p ? Date.parse(p.createdAt) : null };
+      }
+      if ((e.type === 'Notification' && d?.notification_type === 'permission_prompt') || (e.type === 'PermissionRequest' && !e.toolName)) {
+        const f = await anterior(e, TIPOS_DE_FERRAMENTA);
+        return { ultimaFerramenta: f ? { nome: f.toolName, resumo: f.summary } : null };
+      }
+      return {};
+    };
     return Promise.all(
       items.map(async (e): Promise<EventoDoFeed> => {
-        const [s, a] = await Promise.all([sessao(e.sessionId), e.agentId === null ? null : agente(e as SessionEvent & { agentId: string })]);
+        const [s, a, ctx] = await Promise.all([
+          sessao(e.sessionId),
+          e.agentId === null ? null : agente(e as SessionEvent & { agentId: string }),
+          contexto(e),
+        ]);
         const data = objeto(e.data);
         const principal = e.agentId === null || a?.type === 'main' || (!a && e.agentId.endsWith(':main'));
         return {
@@ -292,7 +316,8 @@ export class FeedDeEventos {
           tipo: textoDeUmaLinha(e.type, MAX.tipo) ?? '',
           status: statusDoEvento(e.type),
           ferramenta: textoDeUmaLinha(e.toolName, MAX.ferramenta),
-          resumo: textoDeUmaLinha(e.summary, MAX.resumo),
+          // A frase legível; sem uma, o resumo cru do evento, e por fim o tipo.
+          resumo: textoDeUmaLinha(fraseDoEvento(e, ctx) ?? e.summary ?? e.type, MAX.resumo),
           sessao: sessaoDoFeed(e.sessionId, s),
           agente: {
             id: textoDeUmaLinha(a?.id ?? e.agentId, MAX.id),

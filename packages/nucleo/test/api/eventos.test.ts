@@ -67,6 +67,25 @@ describe('#94 o texto que sai é uma linha curta', () => {
 });
 
 describe('#94 GET /api/eventos: a montagem', () => {
+  test('o resumo é a frase do evento, com o turno medido e a permissão dizendo qual ferramenta', async () => {
+    await storage.putSession(session({ id: 's1', name: 'x', cwd: '/repo/app' }));
+    const t0 = Date.parse(at(1));
+    const em = (s: number) => new Date(t0 + s * 1000).toISOString();
+    await storage.appendEvent(event({ id: 'p', sessionId: 's1', agentId: null, createdAt: em(0), type: 'UserPromptSubmit', toolName: null, summary: 'rode os testes', data: {} }));
+    await storage.appendEvent(event({ id: 'f', sessionId: 's1', agentId: null, createdAt: em(10), type: 'PreToolUse', toolName: 'Bash', summary: 'npm run build', data: {} }));
+    await storage.appendEvent(event({ id: 'n', sessionId: 's1', agentId: null, createdAt: em(11), type: 'Notification', toolName: null, summary: 'precisa de permissão', data: { notification_type: 'permission_prompt' } }));
+    await storage.appendEvent(event({ id: 's', sessionId: 's1', agentId: null, createdAt: em(38.2), type: 'Stop', toolName: null, summary: null, data: {} }));
+    await storage.appendEvent(event({ id: 'e', sessionId: 's1', agentId: null, createdAt: em(40), type: 'StopFailure', toolName: null, summary: 'API Error: 529 {"type":"overloaded_error","message":"segredo"}', data: {} }));
+    const resumo = Object.fromEntries((await ok()).eventos.map((e) => [e.id, e.resumo]));
+    assert.deepEqual(resumo, {
+      p: 'Prompt: "rode os testes"',
+      f: 'Bash: npm run build',
+      n: 'Pede permissão: Bash npm run build',
+      s: 'Turno concluído em 38,2 s',
+      e: 'Erro de API 529 · overloaded_error',
+    });
+  });
+
   test('mais novo primeiro, com sessão, agente, status e detalhe', async () => {
     await semear();
     const r = await ok();
@@ -78,7 +97,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
       tipo: 'PreToolUse',
       status: 'active',
       ferramenta: 'Bash',
-      resumo: 'npm test',
+      resumo: 'Bash: npm test',
       sessao: { id: 's2', titulo: null, projeto: 'api' },
       agente: { id: null, nome: 'principal' },
       detalhe: { callId: 'toolu_1', entrada: 'npm test' },
@@ -213,7 +232,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
         id: 'grande',
         sessionId: 's1',
         agentId: 's1:sub',
-        type: 'PostToolUse',
+        type: 'PreToolUse',
         toolName: 'Bash',
         summary: grande,
         data: {
