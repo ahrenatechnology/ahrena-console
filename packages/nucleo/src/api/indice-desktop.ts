@@ -1,6 +1,7 @@
 // Índice de sessões do Claude Desktop: `claude-code-sessions/<conta>/<org>/local_*.json`.
 // Dá ao painel o que o transcript não tem: o título da barra lateral, o branch, a sessão mãe
-// (`spawnedFrom.sessionId`, para a família) e a conta pela pasta (ordem 4 da decisão 0006).
+// (`spawnedFrom.sessionId`, para a família), a conta pela pasta (ordem 4 da decisão 0006) e o
+// esforço escolhido no Desktop (`effort`, para o mural da #34).
 //
 // Consumo: a primeira leitura lê cada arquivo uma vez; depois, só o `stat` das pastas e dos
 // arquivos, no máximo a cada `intervaloMs`, e relê só o arquivo cujo mtime mudou. Nunca a
@@ -21,6 +22,8 @@ export interface SessaoDoDesktop {
   /** `local_…` da sessão que abriu esta, quando foi aberta por outra. */
   maeLocalId: string | null;
   arquivada: boolean;
+  /** O esforço (`effort`) da sessão no Desktop: `low`, `medium`, `high`…; ausente ou `null` quando não se sabe. */
+  esforco?: string | null;
   /** Pastas `<conta>/<org>` em que a sessão aparece. Mais de uma: a pasta não diz a conta. */
   contas: string[];
 }
@@ -133,6 +136,7 @@ export class IndiceDoDesktop {
         cwd: str(o.cwd),
         maeLocalId: mae,
         arquivada: o.isArchived === true,
+        esforco: str(o.effort),
         contas: [],
       };
     } catch {

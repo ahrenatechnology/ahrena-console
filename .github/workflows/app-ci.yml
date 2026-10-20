@@ -1,0 +1,65 @@
+# CI do app desktop (apps/desktop): testes e clippy do Rust e uma build de debug do .app, para
+# saber num PR que o app ainda compila e empacota. A release é o app-release.yml.
+
+name: app-ci
+
+on:
+  pull_request:
+    paths:
+      - apps/desktop/**
+      - packages/nucleo/**
+      - packages/marca/**
+      - .github/workflows/app-ci.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/desktop/**
+      - packages/nucleo/**
+      - packages/marca/**
+      - .github/workflows/app-ci.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Testes
+        run: cargo test
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Os recursos do bundle (packages/nucleo e packages/marca/gerado) já estão no repositório.
+      - name: Build de debug do .app
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npx tauri build --debug --bundles app

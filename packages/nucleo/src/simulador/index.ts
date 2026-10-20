@@ -11,4 +11,5 @@ export {
   type Roteiro,
   type TipoDeCaos,
 } from './cenario.ts';
+export { semearHistorico, type OpcoesDoHistorico, type ResumoDoHistorico } from './historico.ts';
 export { PRECOS_ILUSTRATIVOS, simular, type Modo, type OpcoesDaSimulacao, type Resumo } from './simulador.ts';

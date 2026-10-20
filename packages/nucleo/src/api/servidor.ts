@@ -4,6 +4,7 @@
 // | ----------------------------- | --------------------------------------------------------- |
 // | `GET /api/overview`           | Saúde: o painel e o script de carga esperam por ela        |
 // | `GET /api/painel/<sessão>`    | Tudo o que o painel desenha, num pedido (api/tipos.ts)     |
+// | `GET /api/mural`              | Um card por sessão aberta, para o "Mural ao vivo" (api/mural.ts, #34) |
 // | `GET /api/sessao/<sessão>`    | O mesmo, no caminho que o script de carga já usa           |
 // | `GET /api/carga`              | Contadores para a medição de carga                         |
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
@@ -14,14 +15,24 @@
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
+// | `GET /api/eventos`            | O feed de atividade, todas as sessões (api/eventos.ts, #94) |
 // | `GET /api/atencao`            | Quem precisa de você, em todas as contas (a bandeja, #87)  |
+// | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
+// | `GET /api/analytics` e `/api/analytics/custo` | A tela Analytics (api/rota-analytics.ts, #95 e #32) |
+// | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
+// | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
+// | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
+// | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada. A escrita nas
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo duas, só com `Origin`
+// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`, e
+// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -36,9 +47,17 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
+import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
+import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
+import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
+import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
+import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 
 export { VERSAO_DA_API };
 
@@ -62,8 +81,20 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** O kanban do GitHub Project (#80). Sem ele, `/api/projeto` responde 503. */
+  projeto?: OpcoesDoProjeto;
+  /** As leituras do Detalhe da sessão (`/api/sessoes/<id>…`); sem elas, 404. */
+  detalhe?: LeiturasDoDetalhe;
+  /** O feed de atividade; liga `GET /api/eventos` (#94). */
+  eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/atencao`. */
   frota?: LeituraDaFrota;
+  /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/custo`. */
+  analytics?: RotaAnalytics;
+  /** A lista da tela Sessões; liga `GET /api/sessoes`. */
+  sessoes?: ListaDeSessoes;
+  /** O Kanban (#31); liga `GET /api/kanban`. */
+  kanban?: QuadroKanban;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -80,14 +111,24 @@ const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 const MAX_CORPO = 4096;
 
-/** A própria `/ui` lendo: `GET` com `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
-function mesmaOrigemLendo(req: IncomingMessage, port: number): boolean {
+/** O pedido vem da própria `/ui`: `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
+function daPropriaUi(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
   const origem = req.headers.origin;
-  if (req.method !== 'GET' || typeof origem !== 'string') return false;
+  if (typeof origem !== 'string') return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
   return origem === `http://${host}`;
 }
+
+/** A própria `/ui` lendo: `GET` da mesma origem. */
+const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && daPropriaUi(req, port);
+
+/**
+ * O "Abrir no Claude Desktop" do Detalhe: só `POST /abrir/<local_…>` da mesma origem. O resto da
+ * decisão 0003 vale como nas outras escritas: JSON (o `abrirDireto` confere) e o id estrito.
+ */
+const mesmaOrigemAbrindo = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/abrir\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -128,6 +169,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
+  const mural = muralDoPainel(opts.montador);
   const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
   let port = 0;
 
@@ -200,7 +243,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -211,6 +254,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as AcaoNaDecisao, url);
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
+    if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
@@ -218,7 +262,16 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === ROTA_DO_MURAL) return responderMural(res, mural);
+    if (url.pathname === ROTA_DOS_EVENTOS && opts.eventos) return responderEventos(res, url, opts.eventos);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
+    if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
+    if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
+      const r = await opts.analytics.responder(url);
+      return send(res, r.status, r.corpo);
+    }
+    if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
+    if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,
@@ -231,6 +284,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (m) return painel(res, decodeURIComponent(m[1]), url);
     const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);
     if (d) return listaDeDecisoes(res, decodeURIComponent(d[1]), url);
+    const det = opts.detalhe && ROTA_DO_DETALHE.exec(url.pathname);
+    if (det) return opts.detalhe!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
     send(res, 404, { error: 'não encontrado' });
   }
 

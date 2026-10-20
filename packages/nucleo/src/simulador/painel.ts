@@ -22,7 +22,7 @@ const CHECKS_DO_P1: Record<string, CiCounts> = {
   FAILURE: { total: 7, ok: 5, falhas: 2, rodando: 0 },
 };
 
-export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9'] as const;
+export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9', 'p12', 'p13'] as const;
 export type CenarioDoPainel = (typeof CENARIOS_DO_PAINEL)[number];
 export const SESSAO_DO_PAINEL = 'sim-painel-esta';
 export const REPO_DO_SIMULADOR = 'exemplo/simulacao';
@@ -69,11 +69,16 @@ interface Esta {
   plano?: Passos;
   /** Planos que a sessão já fechou antes do atual (issue #131), do mais antigo para o mais novo. */
   anteriores?: { desdeMin: number; duracaoMin: number; passos: Passos }[];
-  subagentes?: { tipo: string; tarefa: string; status: Agent['status']; haMin: number; duracaoMin?: number }[];
+  /** `pai`: o índice, nesta lista, do subagente que disparou este (#146); sem ele, foi a sessão. */
+  subagentes?: { tipo: string; tarefa: string; status: Agent['status']; haMin: number; duracaoMin?: number; pai?: number }[];
+  /** #146: há quantos minutos começou cada turno; sem isso, os turnos ficam espalhados pela sessão. */
+  turnosMin?: number[];
   filhas?: string[];
   branch: string;
   semPush?: boolean;
   issue?: Issue;
+  /** O esforço da sessão (`low`, `medium`, `high`…); sem ele, o do modelo (esforcoDe). */
+  esforco?: string;
 }
 
 interface Outra {
@@ -88,20 +93,26 @@ interface Outra {
   erro?: string;
   relacao?: 'mae' | 'filha';
   updatedMin?: number;
+  /** O branch da sessão, como o wireframe C2 mostra no mural. */
+  branch?: string;
+  esforco?: string;
 }
 
+/** O esforço que o simulador grava quando o cenário não diz: alto no Opus, médio no resto (como o C2). */
+const esforcoDe = (modelo: string) => (modelo === OPUS ? 'high' : 'medium');
+
 const PERMISSAO: Outra = {
-  slug: 'motor-de-regras', modelo: OPUS, conta: 'equipe', status: 'active', espera: { motivo: 'notification', haMin: 2 },
+  slug: 'motor-de-regras', modelo: OPUS, conta: 'equipe', status: 'active', espera: { motivo: 'notification', haMin: 2 }, branch: 'feat/58-pedidos',
   ferramenta: { nome: 'Bash', resumo: 'npm run migrate' }, texto: 'Claude needs your permission to use Bash',
 };
-const INTERROMPIDA: Outra = { slug: 'app-receitas', modelo: SONNET, conta: 'cliente', status: 'active', espera: { motivo: 'interrupted', haMin: 6 } };
-const COM_ERRO: Outra = { slug: 'painel-de-metricas', modelo: OPUS, conta: 'cliente', status: 'error', erro: 'API 529 · overloaded_error', updatedMin: 3 };
+const INTERROMPIDA: Outra = { slug: 'app-receitas', modelo: SONNET, conta: 'cliente', status: 'active', espera: { motivo: 'interrupted', haMin: 6 }, branch: 'feat/12-filtro' };
+const COM_ERRO: Outra = { slug: 'painel-de-metricas', modelo: OPUS, conta: 'cliente', status: 'error', erro: 'API 529 · overloaded_error', updatedMin: 3, branch: 'perf/47-relatorio' };
 const SUA_VEZ: Outra = {
-  slug: 'fila-de-tarefas', modelo: SONNET, conta: 'equipe', status: 'active', espera: { motivo: 'stop', haMin: 1 },
+  slug: 'fila-de-tarefas', modelo: SONNET, conta: 'equipe', status: 'active', espera: { motivo: 'stop', haMin: 1 }, branch: 'feat/9-retry',
   texto: 'Terminei a migração. Rodo os testes?',
 };
 
-const ESTA: Record<Exclude<CenarioDoPainel, 'p9'>, Esta> = {
+const ESTA: Record<Exclude<CenarioDoPainel, 'p9' | 'p12' | 'p13'>, Esta> = {
   p1: {
     titulo: 'Kanban de sessões no artefato', projeto: 'ahrena-demo', modelo: OPUS, inicioMin: 12, status: 'active', turno: 18,
     contexto: 62_000, custo: 1.84, ferramenta: { nome: 'Bash', resumo: 'npm test' }, background: ['npm run dev', 'npm run watch'],
@@ -166,18 +177,58 @@ const ESTA: Record<Exclude<CenarioDoPainel, 'p9'>, Esta> = {
   },
 };
 
+/**
+ * #146: um subagente pelo minuto da sessão em que começou e terminou (`fim` nulo: ainda roda), no
+ * formato do cenário (há quantos minutos). `t` é a duração da sessão.
+ */
+const noMinuto = (t: number) => (tipo: string, tarefa: string, ini: number, fim: number | null, status: Agent['status'] = fim === null ? 'working' : 'completed', pai?: number) =>
+  fim === null ? { tipo, tarefa, status, haMin: t - ini, ...(pai === undefined ? {} : { pai }) } : { tipo, tarefa, status, haMin: t - fim, duracaoMin: fim - ini, ...(pai === undefined ? {} : { pai }) };
+const m12 = noMinuto(14);
+const m52 = noMinuto(52);
+
+/** P12 e P13 (#146): o grafo da sessão, simples e caótico, como nos wireframes. */
+const GRAFO: Record<'p12' | 'p13', Esta> = {
+  p12: {
+    titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 14, status: 'active', turno: 2, turnosMin: [13, 6],
+    contexto: 70_000, custo: 1.2, ferramenta: { nome: 'Agent', resumo: 'test-runner' },
+    subagentes: [m12('Plan', 'plano da extração', 2, 4), m12('Explore', 'achar usos', 9, 13), m12('test-runner', 'bateria', 11, null)],
+    branch: 'feat/63-separar-pagamentos', issue: { numero: 63, titulo: 'Separar pagamentos', sub: [2, 6], pr: { numero: 90, ci: 'PENDING', review: 'APPROVED' } },
+  },
+  p13: {
+    titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 52, status: 'active', turno: 5, turnosMin: [51.5, 42.5, 34.5, 19.5, 7.5],
+    contexto: 150_000, custo: 6.3, ferramenta: { nome: 'Agent', resumo: '4 subagentes em paralelo' },
+    subagentes: [
+      // Onda 1: seis Explore, todos concluídos.
+      m52('Explore', 'mapear módulos', 1, 9), m52('Explore', 'rotas', 1.5, 6), m52('Explore', 'modelos', 2, 7), m52('Explore', 'eventos', 2.5, 5), m52('Explore', 'filas', 3, 8), m52('Explore', 'configuração', 4, 9),
+      // Onda 2: cinco concluídos e um com erro.
+      m52('code-reviewer', 'diff inicial', 10, 14), m52('test-runner', 'lint e tipos', 11, 15, 'error'), m52('Explore', 'testes', 10, 12), m52('Explore', 'fixtures', 12, 16), m52('Explore', 'mocks', 13, 17), m52('Plan', 'fatias', 11, 16),
+      // Onda 3: um Plan.
+      m52('Plan', 'plano da migração', 18, 31),
+      // Onda 4: o general-purpose (13) disparou os seus; o de contratos (16), outros dois.
+      m52('general-purpose', 'migrar a cobrança', 33, null), m52('Explore', 'rotas de cobrança', 34, 36, 'completed', 13), m52('Explore', 'webhooks', 34, 37, 'completed', 13),
+      m52('general-purpose', 'contratos', 38, 46, 'completed', 13), m52('Explore', 'esquemas', 39, 41, 'completed', 16), m52('Explore', 'clientes', 41, 44, 'completed', 16),
+      m52('test-runner', 'api de cobrança', 47, null, 'working', 13), m52('code-reviewer', 'diff do serviço', 40, null), m52('test-runner', 'e2e', 44, null), m52('docs-writer', 'README do serviço', 35, 39),
+      // Onda 5: dois Explore.
+      m52('Explore', 'logs', 45, 47), m52('Explore', 'métricas', 46, 49),
+    ],
+    branch: 'feat/63-separar-pagamentos', issue: { numero: 63, titulo: 'Separar pagamentos', sub: [2, 6], pr: { numero: 90, ci: 'PENDING', review: 'APPROVED' } },
+  },
+};
+
 // P9: a sessão do P1, aberta há mais tempo, com as decisões dela e da sessão mãe (semearDecisoesDoPainel).
-const estaDo = (c: CenarioDoPainel): Esta => (c === 'p9' ? { ...ESTA.p1, inicioMin: 45 } : ESTA[c]);
+const estaDo = (c: CenarioDoPainel): Esta => (c === 'p9' ? { ...ESTA.p1, inicioMin: 45 } : c === 'p12' || c === 'p13' ? GRAFO[c] : ESTA[c]);
 
 const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
   p1: [PERMISSAO, INTERROMPIDA],
   p2: [],
   p3: [{ ...INTERROMPIDA, relacao: 'mae' }],
-  p4: [{ ...SUA_VEZ, relacao: 'filha' }, { slug: 'catalogo-exemplo', modelo: SONNET, conta: 'equipe', status: 'active', relacao: 'filha', updatedMin: 6 }, { slug: 'blog-estatico', modelo: SONNET, conta: 'equipe', status: 'completed', relacao: 'filha', updatedMin: 20 }],
+  p4: [{ ...SUA_VEZ, relacao: 'filha' }, { slug: 'catalogo-exemplo', modelo: SONNET, conta: 'equipe', status: 'active', relacao: 'filha', updatedMin: 6, branch: 'feat/31-csv' }, { slug: 'blog-estatico', modelo: SONNET, conta: 'equipe', status: 'completed', relacao: 'filha', updatedMin: 20, branch: 'fix/5-paginacao' }],
   p5: [PERMISSAO, INTERROMPIDA],
   p6: [PERMISSAO, INTERROMPIDA, COM_ERRO],
   p7: [{ ...PERMISSAO, relacao: 'mae' }, COM_ERRO, { ...SUA_VEZ, relacao: 'filha' }],
   p9: [PERMISSAO, INTERROMPIDA],
+  p12: [{ ...SUA_VEZ, relacao: 'filha' }],
+  p13: [COM_ERRO],
 };
 
 /** O que o git e o GitHub falsos respondem no cenário em uso. */
@@ -200,6 +251,13 @@ function agente(id: string, sessionId: string, tipo: Agent['type'], inicio: stri
 }
 
 let seq = 0;
+const PROMPTS_DE_EXEMPLO = [
+  'Separe o cálculo de pagamentos num serviço próprio',
+  'Rode os testes e me diga o que quebrou',
+  'Pode seguir com o plano',
+  'Ajuste o nome das variáveis para o padrão do projeto',
+];
+
 async function evento(porta: StoragePort, sessionId: string, agentId: string | null, createdAt: string, type: string, toolName: string | null, summary: string | null, data: unknown = null) {
   const e = { id: `${sessionId}-e${String(++seq).padStart(4, '0')}`, sessionId, agentId, type, toolName, summary, data, createdAt };
   await porta.appendEvent(e);
@@ -256,6 +314,8 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
   s.accountSource = CONTAS.equipe.source;
   s.metadata = {
     simulado: true,
+    branch: e.branch,
+    esforco: e.esforco ?? esforcoDe(e.modelo),
     familia: { filhas: filhas.map((slug) => `sim-painel-${slug}`) },
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.erro ? iso(agora, e.erro.haMin) : null, delegacoes: {}, background },
   };
@@ -269,12 +329,15 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
     await porta.putAgent(
       agente(`${id}:a${i}`, id, 'subagent', desde, {
         subagentType: sub.tipo, name: sub.tarefa, status: sub.status, endedAt: sub.status === 'working' ? null : iso(agora, sub.haMin),
+        parentAgentId: sub.pai === undefined ? `${id}:main` : `${id}:a${sub.pai}`,
       }),
     );
   }
 
   const t0 = Date.parse(inicio);
-  for (let i = 0; i < e.turno; i++) await evento(porta, id, null, new Date(t0 + (i * (agora - t0)) / (e.turno + 1)).toISOString(), 'UserPromptSubmit', null, 'prompt');
+  const turnos = e.turnosMin ? e.turnosMin.map((m) => iso(agora, m)) : Array.from({ length: e.turno }, (_, i) => new Date(t0 + (i * (agora - t0)) / (e.turno + 1)).toISOString());
+  // Prompts com cara de prompt: o Feed (#94) mostra o texto, e "prompt" sozinho não diz nada.
+  for (const [i, t] of turnos.entries()) await evento(porta, id, null, t, 'UserPromptSubmit', null, PROMPTS_DE_EXEMPLO[i % PROMPTS_DE_EXEMPLO.length]);
   await uso(porta, id, e.modelo, t0, agora - 0.5 * MIN, e.contexto, e.custo);
   if (e.plano) {
     // Cada plano anterior entra pendente e sai como acabou; o atual começa logo depois do último.
@@ -313,6 +376,8 @@ async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
   s.accountSource = CONTAS[o.conta].source;
   s.metadata = {
     simulado: true,
+    ...(o.branch ? { branch: o.branch } : {}),
+    esforco: o.esforco ?? esforcoDe(o.modelo),
     familia: o.relacao === 'filha' ? { mae: SESSAO_DO_PAINEL } : {},
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? atualizada : null, delegacoes: {}, background: {} },
   };

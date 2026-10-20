@@ -2,7 +2,7 @@
 
 Console para ver e controlar as sessões e os agentes do Claude Code, de dentro do Claude Desktop.
 
-**Versão 0.0.1, em concepção.** Ainda não tem código: este repositório começa pelo benchmark e pelas decisões.
+**Versão 0.0.1, em construção.** O núcleo local e o painel da sessão já funcionam; o app de bandeja vem em seguida.
 
 ## Premissas
 
@@ -14,13 +14,37 @@ Console para ver e controlar as sessões e os agentes do Claude Code, de dentro 
 
 ## Painel lateral
 
-O painel da sessão (`/console`) está em [plugins/ahrena-console](plugins/ahrena-console/), sobre a API local do núcleo ([packages/nucleo](packages/nucleo/#api-local)). Para instalar:
+O painel da sessão (`/console`) está em [plugins/ahrena-console](plugins/ahrena-console/), sobre a API local do núcleo ([packages/nucleo](packages/nucleo/#api-local)).
+
+### 1. Instalar o plugin
+
+No Claude Code:
 
 ```
-/plugin install ahrena-console --marketplace ahrenatechnology/ahrena-console
+/plugin marketplace add ahrenatechnology/ahrena-console
 ```
 
-Como subir o núcleo e o que cada tela mostra: [plugins/ahrena-console/README.md](plugins/ahrena-console/README.md).
+```
+/plugin install ahrena-console@ahrena-console
+```
+
+Depois, `/reload-plugins` e `/console` abre o painel.
+
+### 2. Subir o núcleo
+
+O painel lê a API local do núcleo em `127.0.0.1:4720`. Precisa do Node 24 ou mais novo e não tem dependências para instalar:
+
+```bash
+git clone https://github.com/ahrenatechnology/ahrena-console.git
+```
+
+```bash
+cd ahrena-console/packages/nucleo && npm run api
+```
+
+Ele importa o histórico de `~/.claude/projects`, recebe os hooks do plugin e responde ao painel; o banco fica em `~/.ahrena-console/nucleo.sqlite`. Para ver o painel com dados de exemplo, sem tocar em nada real: `npm run api -- --demo --cenario p1`.
+
+Outras opções (porta, sem GitHub, sem histórico) e o que cada tela mostra: [plugins/ahrena-console/README.md](plugins/ahrena-console/README.md).
 
 ## Em aberto
 

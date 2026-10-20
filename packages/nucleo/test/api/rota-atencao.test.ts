@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => storage.close());
 
 describe('montarAtencao', () => {
-  test('esperando e com erro, as que travam primeiro, depois quem espera há mais tempo', async () => {
+  test('urgentes primeiro (permissão, pergunta, plano, decisão), depois erro, depois a sua vez; no grupo, quem espera há mais tempo', async () => {
     await semear(storage);
     const r = await montarAtencao(frota, null);
     assert.deepEqual(
@@ -29,8 +29,8 @@ describe('montarAtencao', () => {
       [
         ['plano', 'precisa', 'plano'],
         ['permissao', 'precisa', 'permissao'],
-        ['erro', 'precisa', 'erro'],
         ['pergunta', 'precisa', 'pergunta'],
+        ['erro', 'precisa', 'erro'],
         ['sua-vez', 'sua-vez', 'sua-vez'],
         ['interrompida', 'sua-vez', 'interrompida'],
         ['abriu', 'sua-vez', 'no-prompt'],
@@ -43,10 +43,11 @@ describe('montarAtencao', () => {
     // Trabalhando e delegando; as que esperam você não contam como ativas.
     assert.equal(r.ativas, 2);
     assert.deepEqual(
-      r.itens.slice(0, 3).map((i) => [i.motivoCurto, i.minutos]),
+      r.itens.slice(0, 4).map((i) => [i.motivoCurto, i.minutos]),
       [
         ['Plano para aprovar', 8],
         ['Pede permissão', 5],
+        ['Fez uma pergunta', 3],
         ['Com erro', 4],
       ],
     );
@@ -79,6 +80,17 @@ describe('montarAtencao', () => {
     assert.equal(r.suaVez, painel.precisam.suaVez);
     const doPainel = new Map(painel.precisam.maquina.map((i) => [i.id, i.nivel]));
     for (const i of r.itens) if (doPainel.has(i.sessao)) assert.equal(i.nivel, doPainel.get(i.sessao), i.sessao);
+  });
+
+  test('A2 do wireframe: a permissão vem antes do erro mais antigo, e a sua vez por último', async () => {
+    await semearCenariosDoPainel(storage, 'p7', AGORA);
+    const r = await montarAtencao(frota, null);
+    assert.deepEqual(
+      r.itens.map((i) => i.motivo),
+      ['permissao', 'erro', 'sua-vez'],
+    );
+    // O erro espera há mais tempo que a permissão, e mesmo assim vem depois.
+    assert.ok(r.itens[1].minutos > r.itens[0].minutos);
   });
 
   test('ninguém esperando: lista vazia', async () => {

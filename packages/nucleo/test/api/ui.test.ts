@@ -106,7 +106,7 @@ describe('/ui no núcleo', () => {
   });
 
   test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
-    const arquivos = readdirSync(PASTA_DA_UI).filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
+    const arquivos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
@@ -200,8 +200,10 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem só Dashboard e Sessões; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'sessoes']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto e Analytics; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics']);
+    assert.equal(acharTela('/ui/mural').tela.id, 'mural');
+    assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');
@@ -210,6 +212,7 @@ describe('registro das telas', () => {
     assert.equal(d.tela.acende, 'sessoes');
     assert.deepEqual(d.params, { id: 'b91d04aa-4e1' });
     assert.equal(acharTela('/ui/sessoes/a%20b'), null);
-    assert.equal(acharTela('/ui/kanban'), null);
+    assert.equal(acharTela('/ui/kanban').tela.id, 'kanban');
+    assert.equal(acharTela('/ui/nao-existe'), null);
   });
 });

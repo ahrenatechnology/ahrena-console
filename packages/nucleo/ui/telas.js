@@ -14,7 +14,16 @@ export const TELAS = [
     titulo: 'Dashboard',
     sub: 'O agora das suas sessões',
     icone: 'dashboard',
-    arquivo: null, // #27
+    arquivo: '/ui/telas/dashboard.js',
+  },
+  {
+    id: 'mural',
+    rota: '/ui/mural',
+    item: { rotulo: 'Mural ao vivo', icone: 'mural' },
+    titulo: 'Mural ao vivo',
+    sub: 'Um card por sessão aberta nesta máquina',
+    icone: 'mural',
+    arquivo: '/ui/telas/mural.js', // #34
   },
   {
     id: 'sessoes',
@@ -23,7 +32,25 @@ export const TELAS = [
     titulo: 'Sessões',
     sub: 'As sessões registradas nesta máquina',
     icone: 'sessoes',
-    arquivo: null, // #28
+    arquivo: '/ui/telas/sessoes.js', // #28
+  },
+  {
+    id: 'feed',
+    rota: '/ui/feed',
+    item: { rotulo: 'Feed de atividade', icone: 'atividade' },
+    titulo: 'Feed de atividade',
+    sub: 'Todos os eventos das sessões, ao vivo',
+    icone: 'atividade',
+    arquivo: '/ui/telas/feed.js', // #94
+  },
+  {
+    id: 'kanban',
+    rota: '/ui/kanban',
+    item: { rotulo: 'Kanban', icone: 'kanban' },
+    titulo: 'Kanban',
+    sub: 'As sessões por status, só leitura',
+    icone: 'kanban',
+    arquivo: '/ui/telas/kanban.js', // #31
   },
   {
     id: 'detalhe',
@@ -32,7 +59,35 @@ export const TELAS = [
     titulo: 'Sessão',
     sub: null,
     icone: 'sessoes',
-    arquivo: null, // #29 e #30
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
+  },
+  {
+    id: 'projeto',
+    rota: '/ui/projeto',
+    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    titulo: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icone: 'github',
+    arquivo: '/ui/telas/projeto.js', // #80 (C11)
+  },
+  {
+    id: 'analytics',
+    rota: '/ui/analytics',
+    item: { rotulo: 'Analytics', icone: 'analytics' },
+    titulo: 'Analytics',
+    sub: 'Uso, custo e produtividade das sessões',
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js', // #95 e #32
+  },
+  {
+    // A aba Custo (/ui/analytics/custo): a mesma tela, que lê a aba de `params.aba`.
+    id: 'analytics-aba',
+    rota: '/ui/analytics/:aba',
+    acende: 'analytics',
+    titulo: 'Analytics',
+    sub: null,
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js',
   },
 ];
 

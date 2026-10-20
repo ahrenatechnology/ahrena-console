@@ -87,6 +87,8 @@ pub struct Entrada<'a> {
     pub notificacoes: bool,
     pub login: bool,
     pub versao: &'a str,
+    /// A versão nova que o updater achou e ainda não foi instalada.
+    pub atualizacao: Option<&'a str>,
 }
 
 pub const ID_ABRIR: &str = "abrir";
@@ -95,6 +97,7 @@ pub const ID_LOGIN: &str = "login";
 pub const ID_SAIR: &str = "sair";
 pub const ID_INSTALAR_NODE: &str = "instalar-node";
 pub const ID_PROCURAR: &str = "procurar";
+pub const ID_ATUALIZAR: &str = "atualizar";
 /// Prefixos dos ids das sessões: o principal e o alternativo (⌥).
 pub const SESSAO: &str = "sessao:";
 pub const SESSAO_NO_DESKTOP: &str = "desktop:";
@@ -155,6 +158,9 @@ pub fn montar(e: &Entrada) -> Vec<Item> {
     m.push(Item::Marcavel { id: ID_LOGIN, texto: "Abrir no login", marcado: e.login });
     m.push(Item::Separador);
     m.push(Item::Texto { texto: format!("Ahrena Console {}", e.versao), ponto: None });
+    if let Some(nova) = e.atualizacao {
+        m.push(Item::Acao { id: ID_ATUALIZAR, texto: format!("Atualizar para a versão {nova}"), atalho: None });
+    }
     m.push(Item::Acao { id: ID_SAIR, texto: "Sair do Ahrena Console".into(), atalho: Some("CmdOrCtrl+Q") });
     m
 }
@@ -165,9 +171,11 @@ fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
         return;
     };
     if a.itens.is_empty() {
+        // A1: dois itens, cada um com a sua bolinha (o menu nativo não põe duas na mesma linha).
+        // Com a lista vazia não há sessão com erro: uma com erro estaria na lista.
         m.push(Item::Texto { texto: "Ninguém precisa de você".into(), ponto: Some(Ponto::Vazio) });
-        let erro = if a.com_erro == 0 { " · nenhuma com erro".to_string() } else { String::new() };
-        m.push(Item::Texto { texto: format!("{}{erro}", ativas(a.ativas)), ponto: Some(Ponto::Laranja) });
+        m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
+        m.push(Item::Texto { texto: "nenhuma com erro".into(), ponto: Some(Ponto::Vermelho) });
         return;
     }
     let n = a.itens.len();
@@ -220,7 +228,7 @@ mod testes {
     const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "precisam": 0, "suaVez": 0, "ativas": 4, "comErro": 0, "itens": [] }"#;
 
     fn entrada<'a>(nucleo: &'a EstadoDoNucleo, atencao: Option<&'a Atencao>) -> Entrada<'a> {
-        Entrada { nucleo, atencao, sem_atencao: false, notificacoes: true, login: false, versao: "0.0.1" }
+        Entrada { nucleo, atencao, sem_atencao: false, notificacoes: true, login: false, versao: "0.0.1", atualizacao: None }
     }
 
     fn textos(m: &[Item]) -> Vec<String> {
@@ -292,8 +300,9 @@ mod testes {
         let a = Atencao::do_json(ZERO).unwrap();
         let n = EstadoDoNucleo::DePe { porta: 4720 };
         let m = montar(&entrada(&n, Some(&a)));
-        assert_eq!(&textos(&m)[..6], ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas · nenhuma com erro", "—"]);
-        assert!(matches!(m[3], Item::Texto { ponto: Some(Ponto::Vazio), .. }));
+        assert_eq!(&textos(&m)[..7], ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas", "nenhuma com erro", "—"]);
+        let pontos: Vec<_> = m[3..6].iter().map(|i| if let Item::Texto { ponto, .. } = i { *ponto } else { None }).collect();
+        assert_eq!(pontos, [Some(Ponto::Vazio), Some(Ponto::Laranja), Some(Ponto::Vermelho)]);
         assert_eq!(titulo_da_bandeja(&n, Some(&a)), None);
     }
 
@@ -341,6 +350,17 @@ mod testes {
         let n = EstadoDoNucleo::Procurando;
         let m = montar(&entrada(&n, None));
         assert_eq!(&textos(&m)[..4], ["Ahrena Console", "Procurando o núcleo…", "—", "Abrir o console"]);
+    }
+
+    #[test]
+    fn atualizacao_logo_abaixo_da_versao() {
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let sem = textos(&montar(&entrada(&n, None)));
+        assert!(!sem.iter().any(|t| t.starts_with("Atualizar")));
+        let m = montar(&Entrada { atualizacao: Some("0.0.2"), ..entrada(&n, None) });
+        let t = textos(&m);
+        assert_eq!(&t[t.len() - 4..], ["—", "Ahrena Console 0.0.1", "Atualizar para a versão 0.0.2", "Sair do Ahrena Console"]);
+        assert!(m.iter().any(|i| matches!(i, Item::Acao { id: ID_ATUALIZAR, .. })));
     }
 
     #[test]

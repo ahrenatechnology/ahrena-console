@@ -13,8 +13,9 @@ use std::ptr::NonNull;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2_app_kit::{NSEventModifierFlags, NSMenu, NSMenuDidAddItemNotification};
-use objc2_foundation::{NSNotification, NSNotificationCenter, NSObjectProtocol, NSString};
+use objc2::{AllocAnyThread, MainThreadMarker};
+use objc2_app_kit::{NSBitmapImageRep, NSEventModifierFlags, NSImage, NSMenu, NSMenuDidAddItemNotification, NSStatusItem};
+use objc2_foundation::{NSData, NSNotification, NSNotificationCenter, NSObjectProtocol, NSSize, NSString};
 
 thread_local! {
     static NOVOS: RefCell<Vec<Retained<NSMenu>>> = const { RefCell::new(Vec::new()) };
@@ -77,4 +78,22 @@ pub fn ajustar(marca: &str, ajustes: &[Ajuste]) {
             }
         }
     }
+}
+
+/// O ícone da bandeja como template, com as duas resoluções (18 px e 36 px para 18 pt): o
+/// `tray-icon` aceita uma imagem só, e o macOS escolhe a nítida para cada tela e a pinta conforme
+/// a barra.
+pub fn icone_template(item: &NSStatusItem, resolucoes: &[&[u8]]) {
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let Some(botao) = item.button(mtm) else { return };
+    let tamanho = NSSize::new(18.0, 18.0);
+    let imagem = NSImage::initWithSize(NSImage::alloc(), tamanho);
+    for png in resolucoes {
+        if let Some(rep) = NSBitmapImageRep::imageRepWithData(&NSData::with_bytes(png)) {
+            rep.setSize(tamanho);
+            imagem.addRepresentation(&rep);
+        }
+    }
+    imagem.setTemplate(true);
+    botao.setImage(Some(&imagem));
 }

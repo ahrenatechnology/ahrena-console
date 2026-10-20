@@ -24,7 +24,7 @@ import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
-import { ResumosDeSessao, type ResumoDosEventos } from './resumo.ts';
+import { ResumosDeSessao, iniciosDosTurnos, type ResumoDosEventos } from './resumo.ts';
 import { atencaoDe } from './atencao.ts';
 import type {
   AtividadeDaSessao,
@@ -101,6 +101,21 @@ interface Candidata {
 
 const UM_MIN = 60_000;
 
+/** O que o painel calcula de uma sessão já gravada, com os mesmos caches: o card do mural (#34) sai daqui. */
+export interface LeituraDaSessao {
+  sessao: SessaoDoPainel;
+  inbox: LeituraDoInbox;
+  desktop: SessaoDoDesktop | null;
+  /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git (só `git branch`, em cache). */
+  branch: string | null;
+  /** O esforço: o `effort` do índice do Desktop e, sem ele, `metadata.esforco` (o simulador grava). */
+  esforco: string | null;
+  custo: CustoDoPainel | null;
+  plano: PlanoDoPainel | null;
+  contexto: ContextoDoPainel | null;
+  subagentes: { ativos: number; itens: SubagenteDoPainel[] };
+}
+
 function minutos(desde: string, agora: number): string {
   const m = Math.max(0, Math.round((agora - Date.parse(desde)) / UM_MIN));
   if (m < 1) return 'agora';
@@ -109,11 +124,12 @@ function minutos(desde: string, agora: number): string {
 }
 
 export class MontadorDoPainel {
-  private readonly storage: Porta;
+  /** Público para o mural (#34), que lista as sessões pela mesma porta. */
+  readonly storage: Porta;
   private readonly contas: Contas;
   private readonly desktop: IndiceDoDesktop | null;
   private readonly trabalho: TrabalhoPorBranch | null;
-  private readonly agora: () => number;
+  readonly agora: () => number;
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
@@ -143,8 +159,47 @@ export class MontadorDoPainel {
     this.decisoes = decisoes ? new DecisoesDaSessao({ decisions: decisoes, storage }) : null;
   }
 
-  async montar(pedidoOriginal: PedidoDoPainel): Promise<Painel> {
-    const pedido = { ...pedidoOriginal, sessionId: this.apelido(pedidoOriginal.sessionId) };
+  /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
+  desktopDaSessao(sessionId: string): SessaoDoDesktop | null {
+    return this.desktop?.sessaoPorCli(sessionId) ?? null;
+  }
+
+  /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
+  async atualizarFontes(): Promise<void> {
+    await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
+  }
+
+  /**
+   * Uma sessão já gravada, como o painel a vê: o card "Esta sessão", o custo (pelo cache `custos`),
+   * o plano, o contexto e os subagentes. Para o mural (#34); quem chama faz `atualizarFontes()` antes.
+   */
+  async leituraDaSessao(session: Session): Promise<LeituraDaSessao> {
+    const agora = this.agora();
+    const desktop = this.desktopDaSessao(session.id);
+    const agentes = await this.storage.listAgents(session.id);
+    const resumo = await this.resumos.ler(session.id, session.updatedAt);
+    const conta = this.contas.daSessao(session, desktop);
+    const planos = await this.storage.listPlanRecords(session.id);
+    const sessao = this.sessaoDe(session, agentes, resumo, desktop, conta, agora);
+    const pasta = session.cwd ?? desktop?.cwd ?? null;
+    return {
+      sessao,
+      inbox: lerInbox(session, agentes),
+      desktop,
+      // O que o trabalho por branch já sabe e, sem isso, só o `git branch` da pasta (em cache, nunca o
+      // GitHub): o mural lê todas as abertas.
+      branch: sessao.branch ?? this.trabalho?.espiar(pasta)?.branch ?? this.trabalho?.branchDaPasta(pasta) ?? null,
+      esforco: desktop?.esforco ?? (typeof session.metadata?.esforco === 'string' ? session.metadata.esforco : null),
+      custo: (await this.custoDe(session)).custo,
+      plano: planoDe(await this.planoAtual(session.id, planos), resumo, agentes),
+      contexto: contextoDe(session, resumo, await this.storage.listContextMeters(session.id)),
+      subagentes: subagentesDe(agentes),
+    };
+  }
+
+  /** `literal`: o id pedido, sem o apelido da demonstração (o Detalhe da /ui lê qualquer sessão). */
+  async montar(pedidoOriginal: PedidoDoPainel, { literal = false }: { literal?: boolean } = {}): Promise<Painel> {
+    const pedido = { ...pedidoOriginal, sessionId: literal ? pedidoOriginal.sessionId : this.apelido(pedidoOriginal.sessionId) };
     const agora = this.agora();
     this.contas.informar(pedido.sessionId, pedido.conta ?? null, pedido.org ?? null);
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
@@ -175,7 +230,7 @@ export class MontadorDoPainel {
       background: { total: bg.length, primeiro: bg[0]?.comando ?? null },
       plano: session ? planoDe(await this.planoAtual(session.id, planos), resumo!, agentes) : null,
       planos: planos.map(planoDaLista),
-      subagentes: subagentesDe(agentes),
+      subagentes: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
       filhas: await this.filhasDe(session, desktop),
       trabalho,
       precisam: await this.precisamDe(pedido.sessionId, session, desktop),
@@ -219,6 +274,11 @@ export class MontadorDoPainel {
   private async planoAtual(sessionId: string, planos: PlanRecord[]): Promise<PlanoGravado | null> {
     if (planos.length) return planos.find((p) => p.result === 'current') ?? { steps: [], total: 0, changedAt: planos[0].changedAt, currentStepId: null };
     return this.storage.getPlan(sessionId);
+  }
+
+  /** O `local_…` da sessão no índice do Claude Desktop, para o "Abrir no Claude Desktop". */
+  localDe(sessionId: string): string | null {
+    return this.desktop?.sessaoPorCli(sessionId)?.localId ?? null;
   }
 
   private doDesktop(sessionId: string, local: string | null): SessaoDoDesktop | null {
@@ -561,8 +621,32 @@ function donoDe(o: PlanOwner, agentes: Agent[]): DonoDoPasso {
   return { tipo: 'subagente', nome: o.name ?? a?.subagentType ?? a?.name ?? null, agenteId: o.agentId };
 }
 
-function subagentesDe(agentes: Agent[]): { ativos: number; itens: SubagenteDoPainel[] } {
+/**
+ * Os subagentes da sessão, com quem disparou cada um e a onda (#146). O pai é o subagente dono da
+ * chamada que o abriu; a sessão principal não conta como pai. A onda é o turno da sessão em que o
+ * subagente de cima foi disparado: quantos turnos tinham começado até ele começar.
+ */
+export function subagentesDe(agentes: Agent[], inicios: readonly string[] = []): { ativos: number; itens: SubagenteDoPainel[] } {
   const subs = agentes.filter((a) => a.type === 'subagent');
+  const porId = new Map(subs.map((a) => [a.id, a]));
+  const pai = (a: Agent) => (a.parentAgentId && porId.has(a.parentAgentId) ? a.parentAgentId : null);
+  // O de cima da cadeia (com um limite, contra um ciclo nos dados).
+  const raiz = (a: Agent) => {
+    let r = a;
+    for (let i = 0; i < 32; i++) {
+      const p = pai(r);
+      if (!p) break;
+      r = porId.get(p)!;
+    }
+    return r;
+  };
+  const ordenados = [...inicios].sort();
+  const ondaDe = (a: Agent) => {
+    if (ordenados.length === 0) return null;
+    const desde = raiz(a).startedAt;
+    const n = ordenados.filter((t) => t <= desde).length;
+    return n > 0 ? n : null;
+  };
   const ordem = { working: 0, waiting: 1, error: 2, completed: 3 } as const;
   const itens = subs
     .map((a) => ({
@@ -572,6 +656,8 @@ function subagentesDe(agentes: Agent[]): { ativos: number; itens: SubagenteDoPai
       status: a.status,
       desde: a.startedAt,
       ate: a.endedAt,
+      pai: pai(a),
+      onda: ondaDe(a),
     }))
     .sort((a, b) => ordem[a.status] - ordem[b.status] || b.desde.localeCompare(a.desde));
   return { ativos: subs.filter((a) => a.status === 'working').length, itens };
