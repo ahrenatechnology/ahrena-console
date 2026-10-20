@@ -4,6 +4,7 @@
 - **Data:** 2026-10-20
 - **Issue:** a abrir no épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7) depois da aprovação
 - **Parte de:** [0005](0005-app-desktop.md) (o app é uma bandeja e a janela é a `/ui` do núcleo)
+- **Revista em parte por:** [0012](0012-remote-reconnect.md), que acrescenta o Reconectar com o comando que o usuário escreve no `machines.json` (seção 3, "Túnel caído", e seção 6, "Ações que mudam estado")
 
 > Estudado nos dois consoles antigos, que eram artefatos do claude.ai fora deste repositório: o painel de telemetria (um coletor em Python com LaunchAgent, um servidor MCP local e a página) e o console da workstation (uma página com os números escritos à mão a cada medição), mais as páginas do Dev Console (estado gravado no banco do artefato por uma sessão de PM). Li o código e as ferramentas do servidor MCP; não chamei nenhuma ferramenta que muda estado. Nada da infraestrutura de quem mantém o projeto entra aqui: máquina, porta e repositório chegam pela configuração de quem usa.
 
@@ -91,7 +92,7 @@ Sem arquivo, não há máquina remota e a barra lateral não mostra o item (regr
 
 | Situação | Como o núcleo sabe | O que a `/ui` e a bandeja mostram |
 | --- | --- | --- |
-| Túnel caído | a porta local não aceita conexão | Workstation "sem conexão", com a última leitura e a hora; a bandeja põe a linha em cinza. Não há botão de subir túnel: o app só mostra |
+| Túnel caído | a porta local não aceita conexão | Workstation "sem conexão", com a última leitura e a hora; a bandeja põe a linha em cinza. Não há botão de subir túnel: o app só mostra. Revisto pela [0012](0012-remote-reconnect.md): com um `reconnect` no `machines.json`, a tela e a bandeja oferecem Reconectar, que roda o comando do usuário |
 | Túnel de pé, núcleo remoto parado | a porta aceita e fecha (o `idle` do coletor antigo) ou não responde HTTP em 3 s | "O túnel está de pé, mas o núcleo de lá não respondeu", com o comando para subi-lo |
 | Versão diferente | o campo `version` de `/api/telemetry` | lê o que reconhece; avisa numa faixa |
 | Núcleo do Mac parado | a bandeja já trata (A4) | nada muda |
@@ -122,7 +123,7 @@ O menu ganha um bloco "Máquinas", entre quem precisa de você e o pé (A6 e A7)
 
 ### 6. O que fica de fora, de propósito
 
-- **Ações que mudam estado**: subir, parar ou reiniciar o túnel, encaminhar ou tirar portas, abrir login de nuvem, copiar sessões entre organizações. Continuam no servidor MCP e na skill de quem os tem. O app só mostra (0005), e cada uma dessas pede uma confirmação que não cabe numa bandeja.
+- **Ações que mudam estado** (exceto o Reconectar da [0012](0012-remote-reconnect.md), que roda só o comando que o usuário escreveu): subir, parar ou reiniciar o túnel, encaminhar ou tirar portas, abrir login de nuvem, copiar sessões entre organizações. Continuam no servidor MCP e na skill de quem os tem. O app só mostra (0005), e cada uma dessas pede uma confirmação que não cabe numa bandeja.
 - **Faturamento e créditos de nuvem**: dependem de credenciais e de uma conta específica.
 - **Worktrees** (tamanho e estado de cada uma): pede um `git` por pasta e um `du` caro; fica para uma issue depois desta, com amostragem própria.
 - **Push para o hub** ([0002](0002-hub-aws.md)): a telemetria fica na máquina; nada sai sem a 7.6.
