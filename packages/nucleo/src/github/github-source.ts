@@ -257,7 +257,7 @@ export async function githubGraphql<T>(
   operation: string,
   query: string,
   variables: Record<string, unknown>,
-  { tolerateNotFound = false } = {},
+  { tolerateNotFound = false, signal }: { tolerateNotFound?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const doFetch = opts.fetch ?? fetch;
   const now = opts.now ?? Date.now;
@@ -269,6 +269,7 @@ export async function githubGraphql<T>(
       'GraphQL-Features': 'sub_issues,issue_types',
     },
     body: JSON.stringify({ query, variables }),
+    ...(signal ? { signal } : {}),
   });
   const text = await res.text();
   let json: { data?: (T & { rateLimit?: { cost: number; remaining: number } }) | null; errors?: GraphqlError[]; message?: string } = {};

@@ -62,6 +62,7 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessamento.ts';
+import { criarReposDoNucleo } from './repos.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
@@ -76,8 +77,9 @@ const AJUDA = `Uso: npm run api -- [opções]
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
-  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, e o kanban do
-                      projeto (/api/projeto) responde 503
+  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
+                      projeto (/api/projeto) responde 503 e os repositórios (/api/repos)
+                      respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
@@ -197,9 +199,11 @@ const maquina = new MaquinaDeEstados({
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+// Um cache do GitHub só, no banco, para o trabalho e os repositórios: a pausa por limite vale para os dois.
+const cacheDoGithub = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const trabalho = new TrabalhoPorBranch({
   fonte,
-  cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
+  cache: cacheDoGithub,
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
@@ -301,6 +305,7 @@ relerPerfis?.unref();
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
 let historicoPronto = false;
 const follower =
@@ -343,6 +348,7 @@ const api: ApiLocal = await iniciarApiLocal({
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
+  repos: repos.rota,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
