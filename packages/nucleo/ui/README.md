@@ -13,8 +13,9 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
+| `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
-| `telas/` | As telas, uma por arquivo |
+| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `sessoes.js` (C3, #28) lê `GET /api/sessoes` |
 
 ## Registrar uma tela
 

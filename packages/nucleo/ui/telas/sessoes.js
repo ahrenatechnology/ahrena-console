@@ -35,7 +35,7 @@ export const MOTIVOS = {
   notification: { rotulo: 'Pede permissão', icone: 'permissao', urgente: true },
   interrupted: { rotulo: 'Interrompida', icone: 'interrompida', urgente: true },
   stop: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
-  session_start: { rotulo: 'No prompt', icone: 'terminal', urgente: false },
+  session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 
 const PADRAO = { status: 'todas', busca: '', dir: '', ordem: 'atividade', sentido: 'desc', pagina: 1 };
@@ -208,7 +208,7 @@ export async function montar(area, ctx) {
       el('td', { class: 'mono' }, custo(s.custoUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
-      el('td', { class: 'c-muted seta' }, icone('seguir')),
+      el('td', { class: 'c-muted seta' }, icone('chevron-direita')),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;

@@ -14,6 +14,8 @@
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
+// | `GET /api/atencao`            | Quem precisa de você, em todas as contas (a bandeja, #87)  |
+// | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 //
@@ -38,6 +40,9 @@ import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import type { LeituraDaFrota } from '../mcp/frota.ts';
+import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
+import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 
 export { VERSAO_DA_API };
 
@@ -61,6 +66,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** A leitura da frota do MCP; liga `GET /api/atencao`. */
+  frota?: LeituraDaFrota;
   /** A lista da tela Sessões; liga `GET /api/sessoes`. */
   sessoes?: ListaDeSessoes;
 }
@@ -217,6 +224,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
+    if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
