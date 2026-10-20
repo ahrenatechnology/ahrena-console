@@ -13,6 +13,8 @@ describe('API command line options (#173)', () => {
   test('the defaults', () => {
     assert.deepEqual(parseApiOptions([]), {
       port: undefined,
+      installation: undefined,
+      dataDir: undefined,
       db: undefined,
       projects: undefined,
       scanInterval: '30',
@@ -36,6 +38,8 @@ describe('API command line options (#173)', () => {
     assert.deepEqual(old, fresh);
     assert.deepEqual(fresh, {
       port: '4799',
+      installation: undefined,
+      dataDir: undefined,
       db: '/tmp/x.sqlite',
       projects: '/p',
       scanInterval: '5',
@@ -63,8 +67,14 @@ describe('API command line options (#173)', () => {
     }
   });
 
+  test('#221: --installation and --data-dir', () => {
+    const o = parseApiOptions(['--installation', 'app', '--data-dir', '/data/app']);
+    assert.equal(o.installation, 'app');
+    assert.equal(o.dataDir, '/data/app');
+  });
+
   test('the help lists the new names, hides the old ones and says they are accepted until phase 6', () => {
-    for (const name of ['--port <n>', '--db <file>', '--projects <folder>', '--scan-interval <s>', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario <p1..p13>', '--parent <pid>', '--replace', '--no-lock', '--no-telemetry', '--machines <file>', '--help']) assert.ok(HELP.includes(name), name);
+    for (const name of ['--port <n>', '--installation <i>', '--data-dir <folder>', '--db <file>', '--projects <folder>', '--scan-interval <s>', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario <p1..p13>', '--parent <pid>', '--replace', '--no-lock', '--no-telemetry', '--machines <file>', '--help']) assert.ok(HELP.includes(name), name);
     assert.doesNotMatch(HELP, /^\s+--(porta|banco|projetos|varredura|sem-historico|sem-desktop|sem-github|cenario|pai|substituir|sem-trava)\b/m);
     assert.match(HELP, /The old names \(--porta, --banco, --projetos, --varredura, --sem-historico, --sem-desktop, --sem-github, --cenario, --pai, --substituir, --sem-trava\) are accepted until phase 6\./);
     const out = execFileSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, '--help'], { encoding: 'utf8' });

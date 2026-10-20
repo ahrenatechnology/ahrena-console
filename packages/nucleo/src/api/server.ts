@@ -57,7 +57,7 @@
 // decision that session sees, from its account.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { AddressInfo, Server as NetServer } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
@@ -97,6 +97,12 @@ export interface ApiOptions {
   host?: string;
   /** 0 picks a free port (tests). Default 4720. */
   port?: number;
+  /**
+   * A socket already listening (the port the owner reserved before opening the database, issue
+   * #221): the API takes it over instead of binding `port`, so no other process can grab the port
+   * in between. With port 0, that is the only way to keep the port the system assigned.
+   */
+  listenOn?: NetServer;
   log?: (message: string) => void;
   /** Extra counters for `/api/load` (follower, Desktop index). */
   load?: () => Record<string, unknown>;
@@ -396,7 +402,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(opts.port ?? 4720, opts.host ?? '127.0.0.1', () => {
+    const listening = () => {
       server.off('error', reject);
       const { address, port: bound } = server.address() as AddressInfo;
       port = bound;
@@ -410,6 +416,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
             server.closeAllConnections();
           }),
       });
-    });
+    };
+    if (opts.listenOn) server.listen(opts.listenOn, listening);
+    else server.listen(opts.port ?? 4720, opts.host ?? '127.0.0.1', listening);
   });
 }
