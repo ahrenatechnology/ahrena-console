@@ -138,8 +138,10 @@ describe('sessions_needing_attention', () => {
     assert.equal(d.items.find((i: any) => i.sessionId === 'pergunta').questionOptions, 3);
     assert.equal(d.items.find((i: any) => i.sessionId === 'erro').errorCode, '529 overloaded_error');
     assert.equal(d.items.find((i: any) => i.sessionId === 'erro').account, null);
-    assert.match(r.content[0].text, /7 sessões precisam de você: 4 travando o agente, 3 na sua vez/);
-    assert.match(r.content[0].text, /Travando o agente:[\s\S]*Na sua vez:/);
+    // #245: "precisa de você" is only what blocks; the turn that ended is "ociosa".
+    assert.match(r.content[0].text, /^4 sessões precisam de você e 3 estão ociosas\./);
+    assert.match(r.content[0].text, /\nPrecisam de você:[\s\S]*\nOciosas:/);
+    assert.doesNotMatch(r.content[0].text, /esperando você|na sua vez|travando/i);
   });
 
   test('with the session in the Desktop index, open carries the link that opens the conversation', async () => {
@@ -226,6 +228,9 @@ describe('fleet_overview', () => {
     assert.equal(t.costEstimate, true);
     assert.equal(r.structuredContent.day, '2026-11-02');
     assert.match(r.content[0].text, /Custo de hoje \(estimativa\): US\$ \d+\.\d\d/);
+    // #245: the blocked ones need you; the idle ones are counted apart.
+    assert.match(r.content[0].text, /\nPrecisam de você: 4; ociosas: 3\./);
+    assert.doesNotMatch(r.content[0].text, /esperando você|na sua vez|travando/i);
   });
 
   test('split by account: each one’s cost and counts add up to the total', async () => {
