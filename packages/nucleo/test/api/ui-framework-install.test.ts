@@ -260,6 +260,20 @@ describe('Install (C34): the card on the Instructions tab', () => {
     assert.equal(action(area, 'install'), null);
   });
 
+  test('branch-exists: the card offers no Instalar and shows the notice with the link to the branch', async () => {
+    const url = 'https://github.example/exemplo-labs/painel-ficticio/tree/chore/install-ahrena-framework';
+    const blocked = { kind: 'branch-exists', message: 'O branch de instalação já existe sem PR aberto.', path: null, url } as Plan['blocked'];
+    const { area } = await mountTab({ plan: () => plan({ blocked }) });
+    const card = area.querySelector('[data-install="branch-exists"]')!;
+    assert.match(texto(card), /Sem Ahrena Framework Não dá para abrir o PR\. O branch de instalação já existe sem PR aberto\. Abrir o branch no GitHub/);
+    assert.equal(card.querySelector('a')!.getAttribute('href'), url);
+    assert.equal(card.querySelector('a')!.getAttribute('rel'), 'noopener noreferrer');
+    assert.equal(action(area, 'install'), null);
+    const empty = await mountTab({ instructions: EMPTY, plan: () => plan({ blocked }) });
+    assert.equal(action(empty.area, 'install'), null, 'nem no vazio');
+    assert.ok(empty.area.querySelector('[data-install="branch-exists"]'));
+  });
+
   test('the plan route failing does not break the tab: no card, instructions shown', async () => {
     const { area } = await mountTab({
       plan: () => {
@@ -435,9 +449,9 @@ describe('Install (C36): step 2, the diff preview', () => {
   });
 
   test('another write error shows the reason and stays on the preview', async () => {
-    const m = await toPreview({ write: () => new WriteFailure('o branch de instalação já existe', 409, { error: 'o branch de instalação já existe', code: 'branch-exists' }) });
+    const m = await toPreview({ write: () => new WriteFailure('o GitHub respondeu 500', 502, { error: 'o GitHub respondeu 500', code: 'github-error' }) });
     await click(action(m.area, 'open-pr'));
-    assert.match(texto(m.area.querySelector('.fwi-band')), /Não abrimos o PR\. o branch de instalação já existe\. Nada foi escrito\./);
+    assert.match(texto(m.area.querySelector('.fwi-band')), /Não abrimos o PR\. o GitHub respondeu 500\. Nada foi escrito\./);
     assert.equal(texto(m.area.querySelector('[aria-current="step"]')), '2 Prévia do diff');
   });
 
@@ -464,6 +478,63 @@ describe('Install (C36): step 2, the diff preview', () => {
     assert.equal(texto(m.area.querySelector('[data-blocked="no-write"]')), 'Sem permissão de escrita. só leitura');
     assert.equal(action(m.area, 'open-pr'), null);
   });
+
+  for (const kind of ['unpaired-markers', 'unreadable'] as const) {
+    test(`${kind} blocks like invalid JSON: the error band with the reason and the file, no Abrir PR`, async () => {
+      const message = kind === 'unpaired-markers' ? 'CLAUDE.md: os marcadores do framework estão desemparelhados; corrija antes de instalar.' : 'AGENTS.md: o arquivo não pôde ser lido do GitHub.';
+      const path = kind === 'unpaired-markers' ? 'CLAUDE.md' : 'AGENTS.md';
+      const { area } = await toPreview({ plan: () => plan({ blocked: { kind, message, path, url: null } as Plan['blocked'] }) });
+      const band = area.querySelector(`[data-blocked="${kind}"]`)!;
+      assert.equal(texto(band), `Não dá para abrir o PR. ${message} Arquivo: ${path} . Nada foi escrito.`);
+      assert.ok(band.classList.contains('fwi-band-err'));
+      assert.equal(action(area, 'open-pr'), null);
+    });
+  }
+
+  test('branch-exists blocks: the error band with the link to the branch, no Abrir PR', async () => {
+    const url = 'https://github.example/exemplo-labs/painel-ficticio/tree/chore/install-ahrena-framework';
+    const blocked = { kind: 'branch-exists', message: 'O branch chore/install-ahrena-framework já existe sem PR aberto: apague-o ou mescle-o.', path: null, url };
+    // O card não oferece Instalar com o branch sobrando: o branch aparece depois de abrir o fluxo (ao vivo).
+    let current = plan();
+    const m = await mountTab({ plan: () => current });
+    await click(action(m.area, 'install'));
+    current = plan({ blocked: blocked as Plan['blocked'] });
+    m.change([{ type: 'framework-install', key: 'exemplo-labs/painel-ficticio' }]);
+    await settle();
+    await click(action(m.area, 'preview'));
+    const area = m.area;
+    const band = area.querySelector('[data-blocked="branch-exists"]')!;
+    assert.match(texto(band), /^Não dá para abrir o PR\. O branch chore\/install-ahrena-framework já existe sem PR aberto/);
+    const link = band.querySelector('a')!;
+    assert.equal(texto(link), 'Abrir o branch no GitHub');
+    assert.equal(link.getAttribute('href'), url);
+    assert.equal(link.getAttribute('target'), '_blank');
+    assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
+    assert.equal(action(area, 'open-pr'), null);
+  });
+
+  for (const [code, status, kind] of [
+    ['unpaired-markers', 422, 'unpaired-markers'],
+    ['unreadable', 422, 'unreadable'],
+    ['branch-exists', 409, 'branch-exists'],
+  ] as const) {
+    test(`the POST answering ${status} ${code} reloads the preview, which shows the band`, async () => {
+      let refreshed = false;
+      const blocked = { kind, message: `motivo de ${kind}`, path: kind === 'branch-exists' ? null : 'CLAUDE.md', url: kind === 'branch-exists' ? 'https://github.example/b' : null };
+      const m = await toPreview({
+        plan: (route) => {
+          if (route.includes('refresh=1')) refreshed = true;
+          return refreshed ? plan({ blocked: blocked as Plan['blocked'] }) : plan();
+        },
+        write: () => new WriteFailure(`motivo de ${kind}`, status, { error: `motivo de ${kind}`, code }),
+      });
+      await click(action(m.area, 'open-pr'));
+      assert.ok(m.reads.at(-1)!.includes('refresh=1'));
+      assert.match(texto(m.area.querySelector(`[data-blocked="${kind}"]`)), new RegExp(`^Não dá para abrir o PR\\. motivo de ${kind}`));
+      assert.equal(action(m.area, 'open-pr'), null);
+      assert.equal(texto(m.area.querySelector('[aria-current="step"]')), '2 Prévia do diff');
+    });
+  }
 
   test('Voltar returns to step 1 with the choice kept', async () => {
     const m = await toPreview();

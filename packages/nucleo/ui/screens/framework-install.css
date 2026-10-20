@@ -28,6 +28,8 @@
 .fwi-top-sub.fwi-wait { color: var(--status-waiting-text); align-items: flex-start; flex-wrap: nowrap; }
 .fwi-top-sub.fwi-wait > .icon { flex: none; margin-top: 3px; }
 .fwi-top-sub.fwi-wait b { color: inherit; }
+.fwi-top-sub.fwi-err { color: var(--status-error-text); }
+.fwi-top-sub.fwi-err b { color: inherit; }
 .fwi-top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* ---------- o fluxo: cabeçalho com os passos ---------- */
@@ -48,9 +50,10 @@
 .fwi-step-sep { color: var(--muted); display: inline-flex; }
 
 /* ---------- faixas: bloqueios e avisos ---------- */
-.fwi-band { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.5; min-width: 0; }
+.fwi-band { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.5; min-width: 0; }
 .fwi-band > .icon { flex: none; font-size: 16px; margin-top: 2px; }
-.fwi-band p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fwi-band p { margin: 0; flex: 1 1 280px; min-width: 0; overflow-wrap: anywhere; }
+.fwi-band > .btn { flex: none; }
 .fwi-band code { font-family: var(--font-mono); font-size: 11.5px; }
 .fwi-band-err { border: 1px solid var(--status-error-dot); background: var(--status-error-badge); }
 .fwi-band-err > .icon, .fwi-band-err b { color: var(--status-error-text); }

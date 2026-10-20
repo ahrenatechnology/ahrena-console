@@ -90,11 +90,47 @@ export function pullRequestBadges(pr) {
 
 export const reviewLabel = (review) => (review === 'approved' ? 'aprovado' : review === 'changes_requested' ? 'mudanças pedidas' : 'esperando');
 
+/** Os bloqueios de arquivo: a faixa de erro com o motivo e o arquivo, sem Abrir PR. */
+export const FILE_BLOCKS = ['invalid-json', 'unpaired-markers', 'unreadable'];
+/** Os `code` do POST que são um `blocked` do plano: a tela recarrega a prévia e a faixa aparece. */
+const BLOCKED_CODES = new Set([...FILE_BLOCKS, 'branch-exists', 'no-write', 'nothing-to-do', 'empty-repository']);
+
+/** A faixa de um bloqueio que impede abrir o PR (arquivo recusado ou branch que sobrou), ou `null`. */
+export function blockedBand(b) {
+  if (!b) return null;
+  if (b.kind === 'invalid-json') {
+    return el(
+      'div',
+      { class: 'fwi-band fwi-band-err', role: 'alert', 'data-blocked': b.kind },
+      icon('error'),
+      el('p', {}, el('b', {}, 'Não dá para abrir o PR.'), ' O ', el('code', {}, b.path ?? '.claude/settings.json'), ' deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.'),
+    );
+  }
+  if (FILE_BLOCKS.includes(b.kind)) {
+    return el(
+      'div',
+      { class: 'fwi-band fwi-band-err', role: 'alert', 'data-blocked': b.kind },
+      icon('error'),
+      el('p', {}, el('b', {}, 'Não dá para abrir o PR.'), ` ${b.message}`, b.path ? [' Arquivo: ', el('code', {}, b.path), '.'] : null, ' Nada foi escrito.'),
+    );
+  }
+  if (b.kind === 'branch-exists') {
+    return el(
+      'div',
+      { class: 'fwi-band fwi-band-err', role: 'alert', 'data-blocked': b.kind },
+      icon('error'),
+      el('p', {}, el('b', {}, 'Não dá para abrir o PR.'), ` ${b.message}`),
+      b.url ? el('a', { class: 'btn outline', href: b.url, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), 'Abrir o branch no GitHub') : null,
+    );
+  }
+  return null;
+}
+
 /** O PR conta como instalação em andamento: aberto, ou mesclado e a leitura ainda sem o framework. */
 export const activePullRequest = (plan) => (plan?.pullRequest && plan.pullRequest.state !== 'closed' ? plan.pullRequest : null);
 
 /** Dá para instalar: plano pronto, sem o framework, sem PR em andamento e com escrita. */
-export const canInstall = (plan) => !!plan && plan.state === 'ready' && !plan.installed && !activePullRequest(plan) && plan.canWrite;
+export const canInstall = (plan) => !!plan && plan.state === 'ready' && !plan.installed && !activePullRequest(plan) && plan.canWrite && plan.blocked?.kind !== 'branch-exists';
 
 const pill = (b) => el('span', { class: `fwi-pill fwi-pill-${b.tone}` }, b.text);
 
@@ -135,6 +171,16 @@ export function installCard(plan, { onInstall, onFollow, inEmpty = false }) {
         el('b', {}, 'Sem Ahrena Framework'),
         el('span', { class: 'fwi-top-sub fwi-wait' }, icon('lock'), el('span', {}, el('b', {}, 'Sem permissão de escrita.'), ` ${plan.writeBlockedReason ?? 'Instalar abre um PR; sua conta só lê este repositório.'}`)),
       ),
+    );
+  }
+  if (plan.blocked?.kind === 'branch-exists') {
+    // O branch de instalação sobrou sem PR: instalar de novo esbarra nele; o card só avisa, com o link.
+    return el(
+      'section',
+      { class: 'card fwi-top', 'data-install': 'branch-exists', 'aria-label': 'Instalação do Ahrena Framework' },
+      el('span', { class: 'fwi-top-ico' }, icon('package-plus')),
+      el('div', { class: 'fwi-top-text' }, el('b', {}, 'Sem Ahrena Framework'), el('span', { class: 'fwi-top-sub fwi-err' }, el('span', {}, el('b', {}, 'Não dá para abrir o PR.'), ` ${plan.blocked.message}`))),
+      plan.blocked.url ? el('span', { class: 'fwi-top-actions' }, el('a', { class: 'btn outline', href: plan.blocked.url, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), 'Abrir o branch no GitHub')) : null,
     );
   }
   if (inEmpty) return null;
@@ -412,16 +458,9 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
   function stepPreview() {
     const parts = [];
     const b = plan.blocked;
-    if (b?.kind === 'invalid-json') {
-      parts.push(
-        el(
-          'div',
-          { class: 'fwi-band fwi-band-err', role: 'alert', 'data-blocked': 'invalid-json' },
-          icon('error'),
-          el('p', {}, el('b', {}, 'Não dá para abrir o PR.'), ' O ', el('code', {}, b.path ?? '.claude/settings.json'), ' deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.'),
-        ),
-      );
-    } else if (b?.kind === 'no-write' || !plan.canWrite) {
+    const hard = blockedBand(b);
+    if (hard) parts.push(hard);
+    else if (b?.kind === 'no-write' || !plan.canWrite) {
       parts.push(
         el(
           'div',
@@ -542,6 +581,16 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
         notice = { tone: 'wait', title: 'O repositório mudou desde a prévia.', text: 'Recarregamos a prévia com o que está no GitHub agora; confira e abra o PR de novo.' };
         sending = false;
         return reread({ refresh: true });
+      }
+      if (BLOCKED_CODES.has(code)) {
+        // O plano relido sem cache traz o `blocked` e a faixa; se não trouxer, o motivo do POST fica no aviso.
+        sending = false;
+        await reread({ refresh: true });
+        if (alive && !plan?.blocked) {
+          notice = { tone: 'err', title: 'Não abrimos o PR.', text: `${e?.message ?? e}. Nada foi escrito.` };
+          draw();
+        }
+        return;
       }
       if (code === 'invalid-issue') {
         issueError = 'Só o número da issue, como 42.';
