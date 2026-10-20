@@ -390,6 +390,12 @@ describe('origem do mover (decisão 0003)', () => {
       // O GET da mesma origem continua liberado; com outro Origin, não.
       assert.equal((await pedir(s.api, '/api/projeto', { headers: { origin: `http://${s.host}` } })).status, 200);
       assert.equal((await pedir(s.api, '/api/projeto', { headers: { origin: 'https://exemplo.com' } })).status, 403);
+      // Sem Origin, mas um navegador dizendo que outra página pede (`<img src=…?forcar=1>`): 403, e o GitHub não é chamado.
+      for (const site of ['cross-site', 'same-site']) {
+        assert.equal((await pedir(s.api, '/api/projeto?forcar=1', { headers: { 'sec-fetch-site': site } })).status, 403, site);
+      }
+      assert.equal((await pedir(s.api, '/api/projeto', { headers: { 'sec-fetch-site': 'same-origin', origin: `http://${s.host}` } })).status, 200);
+      assert.equal((await pedir(s.api, '/api/projeto', { headers: { 'sec-fetch-site': 'none' } })).status, 200, 'a URL digitada');
     } finally {
       await s.fechar();
     }
@@ -406,6 +412,26 @@ describe('origem do mover (decisão 0003)', () => {
       assert.equal((await mover(s.api, corpo, { 'content-type': 'application/x-www-form-urlencoded' })).status, 415);
       const grande = JSON.stringify({ ...corpo, sobra: 'x'.repeat(5000) });
       assert.equal((await mover(s.api, grande, { ...JSON_CT, origin })).status, 413);
+      assert.equal(fonte.chamadas.move, 0);
+    } finally {
+      await s.fechar();
+    }
+  });
+
+  test('corpo que não acaba: 413 assim que passa do limite, sem esperar o resto', async () => {
+    const { fonte, kanban } = doSimulador();
+    const s = await subir({ kanban, fonte: 'demo' });
+    const { hostname, port } = new URL(s.api.url);
+    try {
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = request({ hostname, port, path: '/api/projeto/mover', method: 'POST', headers: JSON_CT }, (res) => {
+          resolve(res.statusCode ?? 0);
+          res.resume();
+        });
+        req.on('error', (e: NodeJS.ErrnoException) => (e.code === 'ECONNRESET' || e.code === 'EPIPE' ? undefined : reject(e)));
+        req.write('{"sobra":"' + 'x'.repeat(5000)); // e nunca chama end()
+      });
+      assert.equal(status, 413);
       assert.equal(fonte.chamadas.move, 0);
     } finally {
       await s.fechar();

@@ -74,6 +74,7 @@ export async function montar(area, ctx) {
   let aviso = null; // movimento recusado: { titulo, texto, comando }
   let toast = null; // { card, nome, de }
   let arrastando = null; // { card, de }
+  let redesenhoPendente = false; // redesenho que esperou o arrasto terminar
   let emVoo = 0; // movimentos sem resposta
   let lendo = 0; // leituras sem resposta
   let leitura = 0; // a leitura mais nova; as outras são descartadas
@@ -152,6 +153,19 @@ export async function montar(area, ctx) {
     }
   }
 
+  /** O arrasto acabou (soltou fora de uma raia, ou na mesma): o redesenho e a leitura que esperaram. */
+  function fimDoArrasto() {
+    if (!arrastando && !redesenhoPendente) return lerAdiada();
+    arrastando = null;
+    if (redesenhoPendente) desenharQuadro();
+    lerAdiada();
+  }
+
+  // Rede de segurança: o fim do arrasto também é ouvido no documento.
+  const doc = globalThis.document;
+  doc?.addEventListener?.('dragend', fimDoArrasto);
+  doc?.addEventListener?.('drop', fimDoArrasto);
+
   /** Lê de novo o que ficou adiado, quando nada mais segura a leitura. */
   function lerAdiada() {
     if (!adiada || emVoo || arrastando) return;
@@ -213,6 +227,13 @@ export async function montar(area, ctx) {
 
   function desenharQuadro() {
     if (!quadro) return;
+    // Trocar os cards no meio de um arrasto tira do DOM o card que está no ar, e o `dragend` dele
+    // pode não chegar (Firefox): o redesenho espera o arrasto acabar.
+    if (arrastando) {
+      redesenhoPendente = true;
+      return;
+    }
+    redesenhoPendente = false;
     // Quem estava num card continua nele depois do redesenho (ou no card que acabou de mover).
     const ativo = globalThis.document?.activeElement;
     const itemAtivo = focar ?? ativo?.getAttribute?.('data-item') ?? null;
@@ -265,7 +286,7 @@ export async function montar(area, ctx) {
         const indo = arrastando;
         arrastando = null;
         if (indo && indo.de !== raia.id) mover(indo.card.itemId, raia.id);
-        else lerAdiada();
+        else fimDoArrasto();
       });
     }
     return col;
@@ -311,9 +332,8 @@ export async function montar(area, ctx) {
       no.classList.add('arrastando');
     });
     no.addEventListener('dragend', () => {
-      arrastando = null;
       no.classList.remove('arrastando');
-      lerAdiada();
+      fimDoArrasto();
     });
     no.addEventListener('keydown', (ev) => {
       if (!ev.altKey || (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft')) return;
@@ -433,6 +453,8 @@ export async function montar(area, ctx) {
   await desenhar();
 
   return () => {
+    doc?.removeEventListener?.('dragend', fimDoArrasto);
+    doc?.removeEventListener?.('drop', fimDoArrasto);
     clearTimeout(timerDoToast);
     clearTimeout(timerDoAoVivo);
     leitura++;

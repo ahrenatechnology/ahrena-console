@@ -432,6 +432,31 @@ describe('Kanban do projeto (C11)', () => {
     assert.equal(tela.leituras.length, 2);
   });
 
+  test('a resposta de um movimento no meio de outro arrasto não tira do DOM o card que está no ar', async () => {
+    let quadro = quadroFalso();
+    let responder: () => void = () => {};
+    tela = await montarTela({
+      ler: async () => quadro,
+      escrever: async (_r, { itemId, optionId }) => {
+        const r = moverNoQuadro(quadro, itemId, optionId);
+        quadro = r.quadro;
+        await new Promise<void>((ok) => (responder = ok));
+        return r;
+      },
+    });
+    tela.area.querySelector('[data-item="I-80"]')!.dispatchEvent({ type: 'keydown', key: 'ArrowRight', altKey: true });
+    const noAr = tela.area.querySelector('[data-item="I-35"]')!;
+    noAr.dispatchEvent({ type: 'dragstart' });
+    responder();
+    await esperar();
+    await esperar();
+    assert.equal(tela.area.querySelector('[data-item="I-35"]'), noAr, 'o card no ar continua o mesmo nó');
+    noAr.dispatchEvent({ type: 'dragend' });
+    await esperar();
+    assert.notEqual(tela.area.querySelector('[data-item="I-35"]'), noAr, 'o redesenho adiado acontece no fim do arrasto');
+    assert.deepEqual(tela.nomesNaRaia('Ready'), ['I-35', 'I-80']);
+  });
+
   test('o foco fica no card numa releitura, e a faixa de aviso não é refeita sem mudar', async () => {
     tela = await montarTela({ ler: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
     const faixa = tela.area.querySelector('.faixa-erro');

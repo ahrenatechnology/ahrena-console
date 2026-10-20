@@ -148,29 +148,36 @@ function enviarErro(res: ServerResponse, e: Erro): void {
 
 const DESLIGADO: Erro = { status: 503, codigo: 'desligado', error: 'o núcleo subiu sem o GitHub (--sem-github): não há quadro' };
 
+/** O corpo, ou `null` assim que passa do limite: não espera o resto chegar (quem responde fecha a conexão). */
 function lerCorpo(req: IncomingMessage): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    if (Number(req.headers['content-length']) > MAX_CORPO) {
-      req.resume();
-      req.on('end', () => resolve(null));
-      return;
-    }
+    if (Number(req.headers['content-length']) > MAX_CORPO) return resolve(null);
     let corpo = '';
-    let grande = false;
     req.setEncoding('utf8');
-    req.on('data', (parte: string) => {
-      if (grande) return;
-      corpo += parte;
-      if (Buffer.byteLength(corpo) > MAX_CORPO) grande = true;
-    });
-    req.on('end', () => resolve(grande ? null : corpo));
+    const parte = (p: string) => {
+      corpo += p;
+      if (Buffer.byteLength(corpo) <= MAX_CORPO) return;
+      req.off('data', parte);
+      req.pause();
+      resolve(null);
+    };
+    req.on('data', parte);
+    req.on('end', () => resolve(corpo));
     req.on('error', reject);
   });
 }
 
+/**
+ * Um navegador sempre manda `Sec-Fetch-Site`; `cross-site` ou `same-site` é outra página pedindo
+ * (um `<img>` ou `fetch` no-cors não manda `Origin`). Ler o quadro chama o GitHub e gasta a cota
+ * do token: só a própria `/ui` (`same-origin`), quem digita a URL (`none`) ou quem não é navegador.
+ */
+const deOutroSite = (req: IncomingMessage) => /^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''));
+
 /** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
 export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoProjeto) {
-  async function ler(res: ServerResponse, url: URL) {
+  async function ler(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (deOutroSite(req)) return send(res, 403, { error: 'origem não permitida' });
     if (!kanban) return enviarErro(res, DESLIGADO);
     const forcar = url.searchParams.get('forcar') === '1';
     try {
@@ -183,7 +190,12 @@ export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoPr
   async function mover(req: IncomingMessage, res: ServerResponse) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json', codigo: 'invalido' });
     const texto = await lerCorpo(req);
-    if (texto === null) return send(res, 413, { error: 'corpo grande demais', codigo: 'invalido' });
+    if (texto === null) {
+      // O resto do corpo não é lido: responde e fecha a conexão.
+      res.setHeader('connection', 'close');
+      res.on('finish', () => req.destroy());
+      return send(res, 413, { error: 'corpo grande demais', codigo: 'invalido' });
+    }
     let corpo: { itemId?: unknown; optionId?: unknown } | null;
     try {
       corpo = JSON.parse(texto) as typeof corpo;
@@ -210,6 +222,6 @@ export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoPr
       return mover(req, res);
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET', codigo: 'invalido' });
-    return ler(res, url);
+    return ler(req, res, url);
   };
 }
