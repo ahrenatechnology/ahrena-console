@@ -163,7 +163,6 @@
     "packages/nucleo/test/api/eventos.test.ts",
     "packages/nucleo/test/api/frase-do-evento.test.ts",
     "packages/nucleo/test/api/grafo.test.ts",
-    "packages/nucleo/test/api/gravar-cenarios.ts",
     "packages/nucleo/test/api/historico.test.ts",
     "packages/nucleo/test/api/mural.test.ts",
     "packages/nucleo/test/api/painel.test.ts",

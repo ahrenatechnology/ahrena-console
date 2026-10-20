@@ -1,10 +1,9 @@
 // O contrato de `GET /api/panel/<session>`: tudo o que o painel lateral desenha, num pedido só.
-// The plugin's types (plugins/ahrena-console/types) are the old Portuguese shape, served by the old
-// route `/api/painel/<id>` and kept by the back-translator of src/api/legacy-routes.ts; changing these
-// types does not change the plugin's.
-// Since #173 phase 2b the keys and fixed values are English. The mod migrates on its own: until it
-// does, it reads the old route (`/api/painel/<id>`), which answers the old Portuguese body through the
-// back-translator of src/api/legacy-routes.ts (the `panel` spec, with the key table at its top).
+// Since #173 phase 2b the keys and fixed values are English. The mod reads this route since 0.0.31
+// (#187), and its types (plugins/ahrena-console/types) repeat these: changing one is changing both
+// (test/api/painel.test.ts checks the field names). The old route (`/api/painel/<id>`) still answers
+// the old Portuguese body, for the published mod up to 0.0.30, through the back-translator of
+// src/api/legacy-routes.ts (the `panel` spec, with the key table at its top).
 // Datas em ISO 8601 (UTC); o painel calcula "há quanto tempo" com o próprio relógio.
 
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
