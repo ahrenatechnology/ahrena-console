@@ -520,6 +520,36 @@ body.captura .palco { overflow: visible; }
 .tm-states > .cartao { min-width: 0; }
 .tm-stack { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); }
 .tm-stack i { display: block; height: 100%; }
+/* ---------- reconnect the remote machine (C45 and A8, issue #244, decision 0012) ---------- */
+.tm-rc { display: flex; flex-direction: column; gap: 28px; }
+.tm-rc-row { display: flex; gap: 24px; align-items: flex-start; }
+.tm-rc-note { position: static; width: 300px; flex: none; padding-top: 22px; display: flex; flex-direction: column; gap: 12px; }
+.tm-rc-note code { font-size: 11px; }
+.faixa .tm-rc-actions { margin-left: auto; display: flex; gap: 8px; flex: none; align-items: center; }
+.faixa .tm-rc-actions .btn { margin-left: 0; }
+.faixa.tm-rc-band { align-items: flex-start; }
+.faixa.tm-rc-band .ic { margin-top: 1px; }
+.tm-rc-text { min-width: 0; flex: 1; }
+.tm-rc-cmd { margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.btn.tm-rc-off { opacity: .55; cursor: not-allowed; }
+.faixa.tm-rc-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); }
+.faixa.tm-rc-ok .ic, .faixa.tm-rc-ok b { color: var(--status-completed-text); }
+.tm-rc-steps { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; white-space: nowrap; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.tm-rc-steps > span { display: inline-flex; gap: 5px; align-items: center; }
+.tm-rc-steps .done { color: var(--status-completed-text); }
+.tm-rc-steps .on { color: var(--text); font-weight: 600; }
+.tm-rc-time { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tm-rc-time .tm-stack { width: 200px; height: 6px; }
+.tm-rc-clip { max-height: 520px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
+.tm-rc-out { font-family: var(--font-mono); font-size: 11px; line-height: 1.6; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-top: 8px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tm-rc-variant { border: 1px dashed var(--border); border-radius: 12px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tm-rc-variant > .olhinho { color: var(--status-waiting-text); }
+.tm-rc-setup { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.tm-rc-setup h5 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.tm-rc-setup ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.tm-rc-setup ol li > span { color: var(--muted); }
+.tm-rc-setup .tm-config { margin-top: 6px; }
+.tm-rc-setup .tm-legend { gap: 8px 18px; }
 /* ---------- Dev Console (C27) ---------- */
 .dev-queue { list-style: none; margin: 0; padding: 0; counter-reset: dev; }
 .dev-queue li { counter-increment: dev; display: grid; grid-template-columns: 26px 170px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
@@ -1736,10 +1766,94 @@ const machineStatesScreen = () => `${cab('server', 'Workstation', 'Os outros est
     <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/dono/cli.ts subir</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
     <div class="cartao vazio" style="min-height:300px"><span class="ic">${ic('plug')}</span><b>Nenhuma máquina remota</b><span>Sem configuração, só esta máquina aparece. Para acompanhar outra, rode o núcleo nela, encaminhe a 4720 de lá por um túnel e grave:</span><span class="tm-config">~/.ahrena-console/machines.json
 { "machines": [{ "id": "workstation",
-  "rotulo": "Workstation", "porta": 14720 }] }</span></div>
+  "label": "Workstation", "port": 14720 }] }</span></div>
     <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('git-compare')}</span><b>Versão diferente lá</b><span>O núcleo de lá é a 0.0.1 e este é a 0.0.2. Mostramos o que as duas entendem; os cards que faltam ficam de fora até atualizar lá.</span></div>
   </div>
-  <div class="faixa"><span class="ic">${ic('info')}</span><div>O app <b>não sobe nem derruba o túnel</b>: só mostra. Subir, parar e encaminhar portas continua com a ferramenta que você já usa (decisão 0008).</div></div>`
+  <div class="faixa"><span class="ic">${ic('info')}</span><div>O app <b>não monta nem conhece o túnel</b>: subir, parar e encaminhar portas continua com a ferramenta que você já usa (decisão 0008). Com <code>reconnect</code> no machines.json, ele roda o comando que você escreveu para reconectar (decisão 0012, C45).</div></div>`
+
+// =====================================================================
+// RECONNECT the remote machine (C45, issue #244, decision 0012)
+// =====================================================================
+// The core runs the list the user wrote in machines.json ("reconnect.command"), nothing else.
+const RC_COMMAND = '/caminho/para/conectar.sh tunnel restart'
+const rcBadge = state => state === 'ok' ? '<span class="badge b-completed"><span class="p"></span>Conectada</span>'
+  : state === 'running' ? '<span class="badge b-waiting"><span class="p"></span>Reconectando</span>'
+  : '<span class="badge b-error"><span class="p"></span>Sem conexão</span>'
+const rcHeader = (state, readAt) => cab('server', 'Workstation', `ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · T4 · porta 14720 do Mac · ${readAt}`, `${rcBadge(state)}${hourToggle}`)
+const rcOfflineText = '<b>Sem conexão com a Workstation.</b> A porta 14720 deste Mac não aceita conexão: o túnel parece caído. Abaixo, a última leitura, de 22:41 (há 14 min). Tentamos de novo a cada 30 s.'
+const rcCmdLine = `<div class="tm-rc-cmd">Roda: ${RC_COMMAND} · até 3 min</div>`
+const rcBody = (w, faded) => `<div class="tm-rc-clip"><div${faded ? ' class="tm-faded"' : ''}>${workstationBody(w)}</div></div>`
+const rcSteps = at => `<div class="tm-rc-steps">${['rodando o comando', 'aguardando o login', 'lendo a Workstation'].map((s, i) =>
+  `<span class="${i < at ? 'done' : i === at ? 'on' : ''}">${ic(i < at ? 'check-circle-2' : i === at ? 'loader-2' : 'circle-dot')}${s}</span>`).join('<span>→</span>')}</div>`
+const rcTime = (elapsed, pct) => `<div class="tm-rc-time"><span class="tm-stack"><i style="width:${pct}%;background:var(--status-waiting-dot)"></i></span><span>${elapsed} de 3:00</span></div>`
+const rcErrorBand = (title, text, extra = '') => `<div class="faixa erro tm-rc-band"><span class="ic">${ic('x-circle')}</span><div class="tm-rc-text"><b>${title}</b> ${text}
+  <div class="tm-rc-cmd">A saída ficou no log da instalação: ~/.ahrena-console/&lt;instalação&gt;/core.log</div>${extra}</div>
+  <div class="tm-rc-actions"><span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span></div></div>`
+
+// 1. Offline, with reconnect configured
+const rcOfferScreen = w => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro tm-rc-band"><span class="ic">${ic('wifi-off')}</span><div class="tm-rc-text">${rcOfflineText}${rcCmdLine}</div>
+    <div class="tm-rc-actions"><span class="btn contorno">Tentar agora</span><span class="btn cheio">${ic('plug')}Reconectar</span></div></div>
+  ${rcBody(w, true)}`
+// 2. Reconnecting (and 6: started from the tray)
+const rcRunningScreen = fromTray => `${rcHeader('running', 'última leitura às 22:41')}
+  <div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>${fromTray ? 'Reconectando, pela bandeja…' : 'Reconectando…'}</b> aguardando o login no navegador. Se o comando abriu uma página de login, ela é sua: entre por lá e o console segue sozinho.
+    ${rcSteps(1)}${fromTray ? rcTime('0:40', 22) : rcTime('1:12', 40)}${rcCmdLine}</div>
+    <div class="tm-rc-actions"><span class="btn contorno">${ic('x')}Cancelar</span><span class="btn cheio tm-rc-off">${ic('loader-2')}${fromTray ? 'Um por vez' : 'Reconectando…'}</span></div></div>
+  ${rcBody(1100, true)}`
+// 3. Reconnected
+const rcDoneScreen = () => `${rcHeader('ok', 'lido há 4 s')}
+  <div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>Reconectada às 22:58</b> · a leitura voltou. O comando saiu com o código 0 depois de 1 min 26 s, e o núcleo leu a Workstation na hora.</div></div>
+  ${rcBody(1100, false)}`
+// 4. Failed: exit code, timeout, and variant B with the last lines on screen
+const rcFailedScreen = () => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="olhinho">4a · o comando saiu com erro</div>
+  ${rcErrorBand('Não reconectou.', 'O comando saiu com o código 1 depois de 42 s. A Workstation continua sem conexão.')}
+  <div class="olhinho">4b · passou do tempo</div>
+  ${rcErrorBand('Não reconectou.', 'O comando passou de 3 min e foi encerrado. Se um login ficou aberto no navegador, ele não conta mais.')}
+  <div class="tm-rc-variant"><div class="olhinho">${ic('help-circle')}Variante B, a decidir · as últimas linhas na tela</div>
+  ${rcErrorBand('Não reconectou.', 'O comando saiu com o código 1 depois de 42 s. As últimas 3 linhas:', `<div class="tm-rc-out">Erro: a sessão de login expirou
+abrindo a página de login de novo…
+tente de novo em alguns segundos</div>`)}</div>
+  ${rcBody(1100, true)}`
+// 5. No reconnect configured
+const rcSetupScreen = () => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro"><span class="ic">${ic('wifi-off')}</span><div>${rcOfflineText}</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="cartao tm-rc-setup"><h5>${ic('plug')}Reconectar daqui</h5>
+    <span class="c-muted" style="font-size:12.5px">O console pode rodar, com um clique, o comando que você já usa para subir o túnel. Ele não sabe montar túnel nenhum: só roda o que você escrever.</span>
+    <ol><li><b>Tenha um comando que sobe o túnel.</b> <span>O seu script, o que você já roda no terminal.</span></li>
+      <li><b>Acrescente <code>reconnect</code> à máquina no machines.json.</b>
+        <div class="tm-config">~/.ahrena-console/machines.json
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720,
+    "reconnect": { "command": ["/caminho/para/conectar.sh", "tunnel", "restart"],
+                   "timeoutSeconds": 180 } } ] }</div></li>
+      <li><b>Pronto.</b> <span>O console relê o arquivo ao salvar, sem reiniciar, e o botão Reconectar aparece aqui e na bandeja.</span></li></ol>
+    <div class="tm-legend"><span>${ic('list')} Uma lista, sem shell: o console roda exatamente o que está no arquivo.</span><span>${ic('lock')} Nada da tela vira comando.</span></div></div>
+  ${rcBody(1100, true)}`
+
+const rcNote = items => `<div class="anota tm-rc-note">${items.map(x => `<div>${x}</div>`).join('')}</div>`
+const rcRow = (frames, note) => `<div class="tm-rc-row">${frames.map(([label, f]) => `<div class="width-col"><div class="rotulo">${label}</div>${f}</div>`).join('')}${note ? rcNote(note) : ''}</div>`
+const reconnectScreens = () => `<div class="tm-rc">
+  ${rcRow([['1 · sem conexão, com reconexão configurada · 1100 px', frameAt(1100, 'machine-ws', rcOfferScreen(1100), 'off')], ['1 · 1440 px', frameAt(1440, 'machine-ws', rcOfferScreen(1440), 'off')]], [
+    '<b>Só roda o que você escreveu</b>: a lista <code>reconnect.command</code> do machines.json, exatamente, sem shell e sem interpolação. Nada digitado na tela vira comando: o botão só manda o id da máquina.',
+    'A linha mono repete a lista do arquivo e o tempo limite (<code>timeoutSeconds</code>), para você saber o que vai rodar <b>antes</b> de clicar.',
+    'O clique é um <b>POST de mesma origem</b>, a exceção da decisão 0003; outro Origin é recusado.',
+    'Reconectar é o botão principal; Tentar agora continua só relendo a porta, sem rodar nada.'])}
+  ${rcRow([['2 · reconectando · 1100 px', frameAt(1100, 'machine-ws', rcRunningScreen(false), 'off')], ['6 · já reconectando, começou pela bandeja · 1100 px', frameAt(1100, 'machine-ws', rcRunningScreen(true), 'off')]], [
+    'O núcleo roda o comando como <b>processo filho</b>, com o PATH do shell de login e nada além disso.',
+    '<b>Um por vez</b> por máquina: o segundo clique, daqui ou da bandeja (6), encontra o botão desligado e a mesma contagem.',
+    'O núcleo não vê o navegador: enquanto o processo roda, a faixa diz "aguardando o login", que é o caso comum. "Rodando o comando" fica feito quando o processo sobe.',
+    '<b>Cancelar</b> encerra o processo filho. Uma página de login já aberta no navegador fica lá, e é sua.',
+    '<b>Tempo limite</b>: o <code>timeoutSeconds</code> do arquivo. Passou, o núcleo encerra o processo e mostra a falha (4b).'])}
+  ${rcRow([['3 · reconectada · 1100 px', frameAt(1100, 'machine-ws', rcDoneScreen(), 'ok')], ['5 · sem reconexão configurada · 1100 px', frameAt(1100, 'machine-ws', rcSetupScreen(), 'off')]], [
+    'Saiu com 0: o núcleo relê a Workstation <b>na hora</b>, sem esperar os 30 s, e a tela volta ao normal (C25), com a faixa verde dizendo a hora.',
+    'Saiu com 0 e a porta ainda não responde: a tela volta ao estado 1, e a faixa diz que o comando terminou bem mas a Workstation não respondeu.',
+    'Sem <code>reconnect</code>, <b>nenhum botão morto</b> (5): o card ensina a configurar, e a C26 continua igual para quem não quer.'])}
+  ${rcRow([['4 · falhou · 1100 px', frameAt(1100, 'machine-ws', rcFailedScreen(), 'off')]], [
+    '<b>A saída vai para o log da instalação</b>, nunca para a /ui: o que o comando imprime pode ter conta, host ou token (issue #244, item 3). A tela diz só o código de saída, o tempo e onde está o log.',
+    '<b>Variante B, a decidir</b>: as 3 últimas linhas da saída na faixa. Ajuda a ver o motivo sem abrir o log, mas leva para a tela o que o comando imprimiu. A variante A é a da issue.',
+    'Tentar de novo roda o mesmo comando outra vez; nada muda no arquivo.'])}
+</div>`
 
 // =====================================================================
 // DEV CONSOLE (C27)
@@ -2167,9 +2281,34 @@ const APP = {
     ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão: o túnel parece caído</span>`, 'off')}${msep}
     ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;top:56px;width:320px">Sem conexão, a Workstation fica em <b>cinza</b> com a idade da última leitura, e uma linha diz o que o núcleo viu (porta fechada, ou porta aberta sem núcleo do outro lado).<br><br>
-      Não há "Subir o túnel": o app só mostra (0005, 0008). Clicar abre a tela da Workstation com a última leitura (C26).<br><br>
+      Não há "Subir o túnel": o app não monta nem conhece o túnel (0005, 0008). Com <code>reconnect</code> configurado, a linha ganha Reconectar, que roda o comando que você escreveu (A8, decisão 0012). Clicar abre a tela da Workstation com a última leitura (C26).<br><br>
       As sessões de lá saem da lista de cima, porque não dá para saber se ainda esperam.</div>
     <div class="notif" style="top:330px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 14 min · sem som</span></div><div class="tit">Workstation sem conexão</div><div>A porta 14720 deste Mac parou de responder</div></div></div>`,
+  machinesReconnect: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`)}
+    ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão: o túnel parece caído</span>`, 'off')}
+    ${mi(`<span class="ck"></span>Reconectar a Workstation`, 'foco')}${msep}
+    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px"><b>a.</b> Com <code>reconnect</code> na máquina, a linha dela ganha <b>Reconectar a Workstation</b>. Clicar roda o comando do arquivo no núcleo, como o botão da C45; a bandeja não roda nada sozinha.</div>
+    <div class="notif" style="top:196px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 14 min · sem som</span></div><div class="tit">Workstation sem conexão</div><div>A porta 14720 deste Mac parou de responder</div></div>
+      <div class="acoes"><span>Reconectar</span><span>Abrir</span></div></div>
+    <div class="anota" style="left:28px;top:340px;width:320px"><b>c.</b> A notificação de "sem conexão" ganha a ação <b>Reconectar</b>, só quando há <code>reconnect</code>; sem ele, fica como na A7. <b>Abrir</b> leva à tela da Workstation (C45).</div>`,
+  machinesReconnecting: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`${ponto('waiting')}Workstation<span class="mt">· reconectando</span>`, 'foco')}
+    ${mi(`<span class="ck"></span>Reconectando… aguardando login · 1:12`, 'off')}${msep}
+    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px"><b>b.</b> Enquanto o comando roda, o item fica <b>cinza e sem clique</b>, com a contagem: um por vez, daqui ou da janela. Clicar na linha da Workstation abre a C45, onde está o Cancelar.</div>
+    <div class="menu" style="left:28px;top:200px;width:320px">${mi('Sem reconnect configurado', 'cab')}${msep}
+      ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`)}
+      ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão</span>`, 'off')}
+      ${mi(`<span class="ck"></span>Como reconectar daqui…`, 'foco')}</div>
+    <div class="anota" style="left:28px;top:330px;width:320px">Sem <code>reconnect</code>, nada de botão que não funciona: <b>Como reconectar daqui…</b> abre a C45 no estado 5, com o passo a passo do machines.json.</div>`,
   janela: () => mbar(3, false) + `<div class="janela"><div class="tb"><span class="sem"><i></i><i></i><i></i></span><span class="nm">Ahrena Console · motor-de-regras</span><span class="mono">127.0.0.1:4720/ui/sessoes/b91d04aa</span></div>${cc('sessoes', telaConversa())}</div>`,
 }
 
@@ -2228,7 +2367,9 @@ const TELAS = [
   { id: 'app-machines', cod: 'A6', nome: 'Bandeja com a Workstation conectada e um alerta', sub: 'O bloco Máquinas: esta máquina e a remota, com o número que mais importa e os alertas abertos. As sessões da Workstation que esperam entram na lista de cima, com o rótulo da máquina.', html: () => `<div class="fila"><div class="mac">${APP.machines()}</div></div>`,
     n: N(['O menu do A2, igual; o CCAM não tem telemetria de máquina.', 'Do painel de telemetria antigo: a linha do túnel e o alerta de porta.'], ['Telemetria no menu só como resumo: o detalhe é a janela.', 'Alerta de máquina não entra no número da barra, que é de sessões.', 'Sem ações de túnel, login ou portas: o app só mostra (0008).']) },
   { id: 'app-machines-offline', cod: 'A7', nome: 'Bandeja com a Workstation sem conexão', sub: 'O túnel caiu: a Workstation fica em cinza, com a idade da última leitura e o que o núcleo viu. Uma notificação, sem som, na passagem.', html: () => `<div class="fila"><div class="mac">${APP.machinesOffline()}</div></div>`,
-    n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não, porque mudar o túnel pede uma confirmação que não cabe numa bandeja.']) },
+    n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não: o app não conhece o túnel. Reconectar, quando configurado, roda só o comando que você escreveu (A8).']) },
+  { id: 'app-machines-reconnect', cod: 'A8', nome: 'Bandeja: Reconectar', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012). À esquerda, com reconnect configurado: o item Reconectar a Workstation e a notificação com a ação Reconectar. À direita, o comando rodando (cinza, sem clique) e, sem reconnect, o item que ensina a configurar.', html: () => `<div class="fila"><div class="mac">${APP.machinesReconnect()}</div><div class="mac">${APP.machinesReconnecting()}</div></div>`,
+    n: N(['Do painel de telemetria antigo: o "Subir o túnel" na linha da máquina; aqui o comando é o seu, não um que o app conhece.'], ['Só aparece com <code>reconnect</code> no machines.json; sem ele, um item leva ao passo a passo (C45, estado 5).', 'Um por vez: o item fica cinza com a contagem enquanto o comando roda, venha o clique daqui ou da janela.', 'Cancelar fica na janela: na bandeja não cabe confirmação.']) },
   { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
   { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc('dashboard', telaDashboard())}</div>`,
     n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Custo sempre com "~" e "estimativa".']) },
@@ -2281,7 +2422,9 @@ const TELAS = [
   { id: 'console-workstation', cod: 'C25', nome: 'Workstation', sub: 'A mesma tela para a máquina remota, lida do núcleo de lá pela porta que o túnel encaminha: carga contra os vCPUs, volumes, Docker com o recuperável, stacks com a sessão dona, as sessões do Claude de lá e as portas, com a porta do Mac que encaminha cada uma.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'machine-ws', workstationScreen(w)))}</div>`,
     n: N(['Do console da workstation antigo: volumes, recursos, Docker em uso e recuperável, stacks e a sessão dona, sessões do Claude lá, portas em escuta por interface e "o que pede atenção".'], ['Lido ao vivo do núcleo de lá, a cada 30 s; o antigo era escrito à mão a cada medição.', 'Fora: faturamento e créditos de nuvem (pedem credencial de uma conta), perfis de nuvem e worktrees (ficam para uma issue própria).', 'O nome da máquina e a porta vêm de ~/.ahrena-console/machines.json; nada aponta para uma máquina por padrão.']) },
   { id: 'console-workstation-offline', cod: 'C26', nome: 'Workstation sem conexão, e os outros estados', sub: 'Túnel caído: a faixa diz o que o núcleo viu e a tela mostra a última leitura, desbotada. Ao lado, o túnel de pé com o núcleo de lá parado, nenhuma máquina configurada e versão diferente.', html: () => `<div class="fila"><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', workstationOfflineScreen(), 'off')}</div><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', machineStatesScreen(), 'off')}</div></div>`,
-    n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o túnel nem o núcleo de lá: o app só mostra.', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
+    n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o núcleo de lá. O túnel continua seu; Reconectar só aparece com o comando que você escreveu no machines.json (C45).', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
+  { id: 'console-workstation-reconnect', cod: 'C45', nome: 'Reconectar a Workstation', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012): o console roda o comando de reconexão que você escreveu no machines.json. Os seis estados: com reconexão configurada (1, em 1100 e 1440), reconectando (2), reconectada (3), falhou (4, com a variante B a decidir), sem reconexão configurada (5) e já reconectando pela bandeja (6). A última leitura aparece cortada embaixo; é a mesma da C25.', html: () => reconnectScreens(),
+    n: N(['Do painel de telemetria antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo, como na C26.'], ['O console não sabe montar túnel nem fazer login: roda a lista do arquivo, sem shell, e só ela.', 'A saída do comando fica no log da instalação, nunca na tela (variante A); a B está desenhada para o dono escolher.', 'Um por vez por máquina, com tempo limite e Cancelar.']) },
   { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem espera; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
     n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
   { id: 'console-adrs', cod: 'C28', nome: 'ADR · decisões de arquitetura', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
@@ -2328,7 +2471,8 @@ function montar() {
     <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
     <li><b>Decisões da sessão:</b> o escopo tem os três níveis (sessão, família e branch), trocados no mesmo seletor; as decisões vigentes chegam à sessão nova pelos dois caminhos, injetadas no início e pelo MCP quando o agente perguntar (P9, P10, C20 e C21).</li>
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
-    <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
+    <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
+    <li><b>Reconectar a máquina remota (#244, decisão 0012, a aprovar):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C45, A8). Falta escolher: a saída só no log (variante A, a da issue) ou também as 3 últimas linhas na tela (variante B).</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
