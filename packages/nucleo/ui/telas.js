@@ -17,6 +17,15 @@ export const TELAS = [
     arquivo: '/ui/telas/dashboard.js',
   },
   {
+    id: 'mural',
+    rota: '/ui/mural',
+    item: { rotulo: 'Mural ao vivo', icone: 'mural' },
+    titulo: 'Mural ao vivo',
+    sub: 'Um card por sessão aberta nesta máquina',
+    icone: 'mural',
+    arquivo: '/ui/telas/mural.js', // #34
+  },
+  {
     id: 'sessoes',
     rota: '/ui/sessoes',
     item: { rotulo: 'Sessões', icone: 'sessoes' },
@@ -41,7 +50,35 @@ export const TELAS = [
     titulo: 'Sessão',
     sub: null,
     icone: 'sessoes',
-    arquivo: null, // #29 e #30
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
+  },
+  {
+    id: 'projeto',
+    rota: '/ui/projeto',
+    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    titulo: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icone: 'github',
+    arquivo: '/ui/telas/projeto.js', // #80 (C11)
+  },
+  {
+    id: 'analytics',
+    rota: '/ui/analytics',
+    item: { rotulo: 'Analytics', icone: 'analytics' },
+    titulo: 'Analytics',
+    sub: 'Uso, custo e produtividade das sessões',
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js', // #95 e #32
+  },
+  {
+    // A aba Custo (/ui/analytics/custo): a mesma tela, que lê a aba de `params.aba`.
+    id: 'analytics-aba',
+    rota: '/ui/analytics/:aba',
+    acende: 'analytics',
+    titulo: 'Analytics',
+    sub: null,
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js',
   },
 ];
 

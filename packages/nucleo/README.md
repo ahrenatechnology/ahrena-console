@@ -33,6 +33,7 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
+                                         # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
 npm run api -- --help
 ```
 
@@ -45,6 +46,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | Rota | O quê |
 | --- | --- |
 | `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
+| `GET /api/mural` | O "Mural ao vivo" (#34, wireframe C2): um card por sessão aberta nesta máquina, em todas as contas, e a contagem para o seletor Todas / Esperando / Ativas. Formato e critério na seção [Mural](#mural-ao-vivo) |
 | `GET /api/overview` | Saúde |
 | `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
@@ -58,10 +60,11 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | Arquivo | O quê |
 | --- | --- |
 | [painel.ts](src/api/painel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, plano atual e a lista dos planos da sessão (item 1.9 e #131, com o dono de cada passo), família, conta e "precisam de você" |
+| [mural.ts](src/api/mural.ts) | Monta o mural (#34): as sessões abertas, na ordem, cada card pela mesma leitura do painel (`leituraDaSessao`) |
 | [atencao.ts](src/api/atencao.ts) | Os níveis de atenção (#140): o que bloqueia a sessão até você agir (permissão, pergunta, plano, decisão pedida, erro) e o que é só a sua vez; os PRs aguardando aprovação saem do trabalho por branch |
 | [resumo.ts](src/api/resumo.ts) | Turno, plano (`TodoWrite`, só quando a sessão não tem plano gravado), pergunta, pedido de permissão, erro e contexto, lidos dos eventos de forma incremental |
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
-| [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`) e conta pela pasta, relido só quando muda |
+| [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`), esforço (`effort`), arquivada e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
 | [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
@@ -72,6 +75,17 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 ```bash
 node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 ```
+
+### Mural ao vivo
+
+`GET /api/mural` (#34) responde `{ versao: 1, geradoEm, contagem: { todas, esperando, ativas }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/tipos.ts](src/api/tipos.ts)). Cada card traz id (leva a `/ui/sessoes/<id>`), título, projeto (o nome da pasta), branch, status, estado, motivo, urgente, desde, a atividade (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), modelo, esforço, agentes (`ativos`/`total`, o principal mais os subagentes), custo (`usd: null` é "sem preço"), plano (`feitos`/`total`/`atual`) e contexto (`pct`/`usados`/`limite`/`rotulo`); plano e contexto são `null` quando a sessão não tem.
+
+- **Aberta:** não arquivada no Claude Desktop, e `active` (o que inclui esperando, delegando e em background) ou `error` sem `endedAt`; a `completed` (ou o erro já encerrado) só enquanto a última atividade estiver dentro do `abandonoMs` do vigia (180 min), o card "Terminou sem erro": fica pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada. `abandoned` nunca entra.
+- **Ordem e urgência:** `urgente` é a espera `notification` ou `interrupted` e também o erro, como no "precisam de você" do painel. Primeiro as que precisam de você (`waiting` e `error`), as urgentes antes, e entre elas o pedido mais recente; depois as outras, pela atividade mais recente.
+- **Contagem:** `esperando` são as `waiting` e `error`; `ativas`, as `active`, `delegating` e `background`; as concluídas só contam em `todas`.
+- **Esforço:** o `effort` do índice do Claude Desktop (`local_*.json`, o mesmo arquivo que já dá título e branch); sessão só de terminal ou fora do índice, `null`.
+- **Branch:** o do Desktop ou da metadata e, sem eles, o do git pelo trabalho por branch, que responde do cache (o primeiro pedido não espera o git).
+- **Consumo:** o custo sai do mesmo cache do painel (por sessão, a cada 30 s ou quando ela muda), os eventos pelo resumo incremental, e a resposta inteira fica guardada por 2 s, com pedidos ao mesmo tempo esperando a mesma montagem. Duas consultas por índice (vivas e as concluídas recentes); nada varre transcripts.
 
 O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das ferramentas do plano (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `update_plan`), cortada como os outros textos; a de nenhuma outra.
 
@@ -201,12 +215,17 @@ const kanban = createGithubProject({
 });
 const board = await kanban.board();           // raias com os cards; TTL de 2 min
 await kanban.board({ force: true });          // botão de atualizar (mínimo de 30 s)
-await kanban.move(card.itemId, lane.id);      // mutação; devolve o quadro já atualizado
+const r = await kanban.move(card.itemId, lane.id); // mutação; devolve o quadro já atualizado
+r.moved;                                      // { itemId, from, to }: de que raia para qual
 ```
 
-Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens por página, e custa 1 ponto; mover é uma mutação (`updateProjectV2ItemFieldValue`) que devolve o item, e o cache é atualizado com ela, sem reler o Project. Itens sem Status ficam numa raia "Sem status", a primeira, como no GitHub; itens arquivados ficam de fora.
+Cada card traz também `milestone` (o título do marco), `subIssues` (`{ total, completed }`) e `pullRequest` (o PR que fecha a issue, ou o próprio PR, com `ci` e `review`), `null` quando não há. Os três são opcionais no tipo: um quadro guardado antes deles continua válido.
 
-Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
+Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens por página, e custa ~3 pontos por página com o marco, as sub-issues e o PR (estimado pela regra do GitHub; sem o PR, 1); mover é uma mutação (`updateProjectV2ItemFieldValue`) que devolve o item, e o cache é atualizado com ela, sem reler o Project. Itens sem Status ficam numa raia "Sem status", a primeira, como no GitHub; itens arquivados ficam de fora.
+
+Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
+
+A API local expõe o quadro em `GET /api/projeto` e `POST /api/projeto/mover` (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
