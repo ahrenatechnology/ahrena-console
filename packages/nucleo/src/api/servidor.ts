@@ -14,10 +14,13 @@
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
+// | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
-// Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A escrita nas
+// Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
+// `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada. A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -31,6 +34,7 @@ import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
+import { ehDaUi, responderUi } from './ui.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 
 export { VERSAO_DA_API };
@@ -70,6 +74,15 @@ const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 const MAX_CORPO = 4096;
+
+/** A própria `/ui` lendo: `GET` com `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
+function mesmaOrigemLendo(req: IncomingMessage, port: number): boolean {
+  const host = req.headers.host;
+  const origem = req.headers.origin;
+  if (req.method !== 'GET' || typeof origem !== 'string') return false;
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
+  return origem === `http://${host}`;
+}
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -182,7 +195,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -194,6 +207,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+    if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]);
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
