@@ -52,7 +52,9 @@ const noStart = o['no-start'] || o['sem-subir'];
 const fixedPort = portOption !== undefined;
 const port = Number(portOption ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  process.stderr.write(`invalid --port: ${portOption}\n`);
+  // Names what was actually used: the new option, the old one or the env var.
+  const source = o.port !== undefined ? '--port' : o.porta !== undefined ? '--porta' : 'AHRENA_CONSOLE_PORT';
+  process.stderr.write(`invalid ${source}: ${portOption ?? process.env.AHRENA_CONSOLE_PORT}\n`);
   process.exit(2);
 }
 const log = (m: string): void => {

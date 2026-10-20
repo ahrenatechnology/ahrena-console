@@ -93,10 +93,10 @@ describe('protocol', () => {
       title: name,
       description: name,
       inputSchema: { type: 'object' },
-      execute: async (_args, ctx) => ({ text: 'ok', data: { abortado: ctx.signal.aborted } }),
+      execute: async (_args, ctx) => ({ text: 'ok', data: { aborted: ctx.signal.aborted } }),
     });
     server.register(tool('wait_for_changes'));
-    assert.deepEqual((await callTool('wait_for_changes')).structuredContent, { abortado: false });
+    assert.deepEqual((await callTool('wait_for_changes')).structuredContent, { aborted: false });
     assert.throws(() => server.register(tool('wait_for_changes')), /já registrada/);
     assert.throws(() => server.register(tool('Nome-Ruim')), /inválido/);
     for (let i = 0; i < 7; i++) server.register(tool(`extra_${i}`));
