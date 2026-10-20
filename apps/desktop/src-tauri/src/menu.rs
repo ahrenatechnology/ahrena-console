@@ -7,26 +7,36 @@
 use serde::Deserialize;
 
 /// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts). As chaves em inglês
-/// (#173 fase 2b): o app fala com o núcleo que vem com ele.
+/// (#173 fase 2b); o `alias` lê também as de um núcleo mais antigo, que o app pode adotar (o
+/// `/api/overview` dele ainda responde pelo `nome`, nucleo.rs), e `do_json` passa os valores dele
+/// para os novos.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ItemDaAtencao {
+    #[serde(alias = "sessao")]
     pub session: String,
+    #[serde(alias = "titulo")]
     pub title: String,
+    #[serde(alias = "conta")]
     pub account: Option<Conta>,
     /// `needs` (trava a sessão) ou `your-turn`.
+    #[serde(alias = "nivel")]
     pub level: String,
+    #[serde(alias = "motivo")]
     pub reason: String,
-    #[serde(rename = "shortReason")]
+    #[serde(rename = "shortReason", alias = "motivoCurto")]
     pub short_reason: String,
-    #[serde(rename = "longReason")]
+    #[serde(rename = "longReason", alias = "motivoLongo")]
     pub long_reason: String,
+    #[serde(alias = "minutos")]
     pub minutes: u64,
     pub local: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Conta {
+    #[serde(alias = "rotulo")]
     pub label: String,
+    #[serde(alias = "cor")]
     pub color: String,
 }
 
@@ -34,15 +44,50 @@ pub struct Conta {
 pub struct Atencao {
     pub cursor: Option<String>,
     pub total: u64,
+    #[serde(alias = "ativas")]
     pub active: u64,
-    #[serde(rename = "withError")]
+    #[serde(rename = "withError", alias = "comErro")]
     pub with_error: u64,
+    #[serde(alias = "itens")]
     pub items: Vec<ItemDaAtencao>,
 }
 
 impl Atencao {
     pub fn do_json(texto: &str) -> Option<Atencao> {
-        serde_json::from_str(texto).ok()
+        let mut a: Atencao = serde_json::from_str(texto).ok()?;
+        for i in &mut a.items {
+            if let Some(novo) = english_level(&i.level) {
+                i.level = novo.to_owned();
+            }
+            if let Some(novo) = english_reason(&i.reason) {
+                i.reason = novo.to_owned();
+            }
+        }
+        Some(a)
+    }
+}
+
+/// O `nivel` de um núcleo de antes da #173 (fase 2b) no valor novo; `None` se já é o novo.
+fn english_level(level: &str) -> Option<&'static str> {
+    match level {
+        "precisa" => Some("needs"),
+        "sua-vez" => Some("your-turn"),
+        _ => None,
+    }
+}
+
+/// O `motivo` de um núcleo de antes da #173 (fase 2b) no valor novo; `None` se já é o novo
+/// (`no-prompt` não mudou).
+fn english_reason(reason: &str) -> Option<&'static str> {
+    match reason {
+        "permissao" => Some("permission"),
+        "pergunta" => Some("question"),
+        "plano" => Some("plan"),
+        "decisao" => Some("decision"),
+        "erro" => Some("error"),
+        "sua-vez" => Some("your-turn"),
+        "interrompida" => Some("interrupted"),
+        _ => None,
     }
 }
 
@@ -362,6 +407,47 @@ mod testes {
         let t = textos(&m);
         assert_eq!(&t[t.len() - 4..], ["—", "Ahrena Console 0.0.1", "Atualizar para a versão 0.0.2", "Sair do Ahrena Console"]);
         assert!(m.iter().any(|i| matches!(i, Item::Acao { id: ID_ATUALIZAR, .. })));
+    }
+
+    #[test]
+    fn nucleo_antigo_com_chaves_e_valores_em_portugues() {
+        // O `/api/atencao` de um núcleo de antes da #173 (fase 2b): o app novo pode adotá-lo.
+        const ANTIGO: &str = r##"{
+          "geradoEm": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 2, "precisam": 1, "suaVez": 1,
+          "ativas": 4, "comErro": 1,
+          "itens": [
+            { "sessao": "s2", "titulo": "painel-de-metricas", "projeto": null, "conta": { "rotulo": "equipe", "cor": "#f47c20" },
+              "nivel": "precisa", "motivo": "erro", "motivoCurto": "Com erro", "motivoLongo": "parou num erro",
+              "desde": "2026-10-18T23:07:00.000Z", "minutos": 3, "local": null },
+            { "sessao": "s3", "titulo": "fila-de-tarefas", "projeto": null, "conta": null,
+              "nivel": "sua-vez", "motivo": "sua-vez", "motivoCurto": "Sua vez", "motivoLongo": "terminou o turno, sua vez",
+              "desde": "2026-10-18T23:09:00.000Z", "minutos": 1 }
+          ]
+        }"##;
+        let a = Atencao::do_json(ANTIGO).unwrap();
+        assert_eq!((a.total, a.active, a.with_error, a.items.len()), (2, 4, 1, 2));
+        let e = &a.items[0];
+        assert_eq!((e.session.as_str(), e.title.as_str(), e.level.as_str(), e.reason.as_str()), ("s2", "painel-de-metricas", "needs", "error"));
+        assert_eq!((e.short_reason.as_str(), e.long_reason.as_str(), e.minutes), ("Com erro", "parou num erro", 3));
+        assert_eq!(e.account, Some(Conta { label: "equipe".into(), color: "#f47c20".into() }));
+        assert_eq!(ponto_da_sessao(e), Ponto::Vermelho);
+        let v = &a.items[1];
+        assert_eq!((v.level.as_str(), v.reason.as_str(), v.local.as_deref()), ("your-turn", "your-turn", None));
+        for (antigo, novo) in [
+            ("permissao", "permission"),
+            ("pergunta", "question"),
+            ("plano", "plan"),
+            ("decisao", "decision"),
+            ("erro", "error"),
+            ("sua-vez", "your-turn"),
+            ("interrompida", "interrupted"),
+        ] {
+            assert_eq!(english_reason(antigo), Some(novo));
+            assert_eq!(english_reason(novo), None);
+        }
+        assert_eq!(english_reason("no-prompt"), None);
+        assert_eq!(english_level("precisa"), Some("needs"));
+        assert_eq!(english_level("needs"), None);
     }
 
     #[test]

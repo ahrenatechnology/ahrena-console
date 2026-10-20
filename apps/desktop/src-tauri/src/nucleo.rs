@@ -100,11 +100,11 @@ pub fn achar_node() -> Result<PathBuf, Option<String>> {
 pub fn responde(porta: u16) -> bool {
     http::get(porta, "/api/overview", Duration::from_secs(3))
         .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-        .is_some_and(|v| eh_o_nucleo(&v))
+        .is_some_and(|v| is_the_core(&v))
 }
 
 /// O `name` (#173 fase 2b) ou, num núcleo mais antigo, o `nome` é `ahrena-console`.
-fn eh_o_nucleo(v: &serde_json::Value) -> bool {
+fn is_the_core(v: &serde_json::Value) -> bool {
     let nome = v.get("name").or_else(|| v.get("nome")).and_then(|n| n.as_str());
     nome == Some("ahrena-console")
 }
@@ -200,13 +200,13 @@ mod testes {
     }
 
     #[test]
-    fn overview_pelo_name_ou_pelo_nome() {
+    fn overview_by_name_or_legacy_nome() {
         let v = |t: &str| serde_json::from_str::<serde_json::Value>(t).unwrap();
-        assert!(eh_o_nucleo(&v(r#"{"ok":true,"name":"ahrena-console","version":"0.2.0","nome":"ahrena-console","versao":"0.2.0"}"#)));
-        assert!(eh_o_nucleo(&v(r#"{"ok":true,"name":"ahrena-console"}"#)));
-        assert!(eh_o_nucleo(&v(r#"{"ok":true,"nome":"ahrena-console","versao":"0.1.0"}"#)), "um núcleo de antes da #173");
-        assert!(!eh_o_nucleo(&v(r#"{"name":"outro"}"#)));
-        assert!(!eh_o_nucleo(&v(r#"{"ok":true}"#)));
+        assert!(is_the_core(&v(r#"{"ok":true,"name":"ahrena-console","version":"0.2.0","nome":"ahrena-console","versao":"0.2.0"}"#)));
+        assert!(is_the_core(&v(r#"{"ok":true,"name":"ahrena-console"}"#)));
+        assert!(is_the_core(&v(r#"{"ok":true,"nome":"ahrena-console","versao":"0.1.0"}"#)), "um núcleo de antes da #173");
+        assert!(!is_the_core(&v(r#"{"name":"outro"}"#)));
+        assert!(!is_the_core(&v(r#"{"ok":true}"#)));
     }
 
     #[test]

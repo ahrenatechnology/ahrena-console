@@ -88,6 +88,7 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
       `ou depois de timeout segundos (padrão ${ESPERA_PADRAO_MS / 1000}, máximo ${ESPERA_MAXIMA_MS / 1000}). ` +
       'Chame sem cursor para receber o atual; depois passe sempre o cursor da última resposta. Com reset=true, releia tudo ' +
       '(sessions_needing_attention, fleet_overview) antes de continuar. O cursor devolvido pula as mudanças que os filtros deixaram de fora. ' +
+      'Desde a #173, o changes[].type da resposta vem em inglês; os nomes antigos em português ainda valem em types. ' +
       'Não devolve texto das conversas.',
     entrada: esquema({
       cursor: { type: 'string', description: 'O cursor da última resposta. Sem ele, volta na hora com o atual e reset=true.' },
@@ -189,11 +190,11 @@ function lerArgumentos(args: ObjetoJson): Pedido {
     contasPedidas = (l as string[]).map((x) => x.trim());
   }
   if (types != null) {
-    const novos = Array.isArray(types) ? types.map((t) => (typeof t === 'string' && Object.hasOwn(LEGACY_CHANGE_TYPES, t) ? LEGACY_CHANGE_TYPES[t] : t)) : null;
-    if (!novos || !novos.every((t) => typeof t === 'string' && (TIPOS_DO_MCP as readonly string[]).includes(t))) {
+    const normalized = Array.isArray(types) ? types.map((t) => (typeof t === 'string' && Object.hasOwn(LEGACY_CHANGE_TYPES, t) ? LEGACY_CHANGE_TYPES[t] : t)) : null;
+    if (!normalized || !normalized.every((t) => typeof t === 'string' && (TIPOS_DO_MCP as readonly string[]).includes(t))) {
       throw new ErroDeArgumento(`types: uma lista com ${TIPOS_DO_MCP.join(', ')}`);
     }
-    if (novos.length) filtros.tipos = novos as TipoDoMcp[];
+    if (normalized.length) filtros.tipos = normalized as TipoDoMcp[];
   }
   // Sem `types`, todos os do MCP: uma mudança `repos` não passa no filtro e não acorda a espera.
   filtros.tipos ??= TIPOS_DO_MCP;
