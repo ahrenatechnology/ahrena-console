@@ -537,9 +537,12 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
     'card-sessao',
     [
       cabecalho(c, '∿', 'ESTA SESSÃO', desde(s.iniciadaEm, c.agora)),
-      <Box flexDirection="row" gap={1}>
-        {pilulaDeStatus(c, 'status', s.estado)}
-        {st === 'waiting' && s.motivo && pilulaDeMotivo(c, 'motivo', s.motivo)}
+      // Uma linha só, em qualquer estado (ver pilulasDaSessao): duas pills largas quebravam a linha, e
+      // o card de altura fixa esmagava a linha do modelo.
+      <Box flexDirection="row" gap={1} flexWrap="nowrap">
+        {pilulasDaSessao(st === 'waiting' ? s.motivo : null, statusDe(s.estado)).map((x, i) =>
+          i === 0 ? pilula(c, 'status', x.texto, cor.cor, cor.fundo) : pilula(c, 'motivo', x.texto, AMARELO, BADGE.amarelo, MOTIVOS[s.motivo!].urgente),
+        )}
       </Box>,
       <Text mono weight="bold" wrap="truncate-end">
         {s.titulo}
@@ -558,6 +561,22 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
     cor.borda,
     tinta ? cor.fundo : FUNDO_CARTAO,
   )
+}
+
+/**
+ * As pills do card Esta sessão, numa linha que cabe em COLUNAS_SEM_CORTE. Cada pill ocupa o texto e
+ * um espaço de cada lado; entre elas, uma coluna. Sem caber, "Esperando você" vira "Esperando" e,
+ * por último, o status fica só com o glifo: o motivo, que diz por que a sessão espera, fica inteiro.
+ */
+export function pilulasDaSessao(motivo: SessaoDoPainel['motivo'] | null, st: ReturnType<typeof statusDe>): { texto: string }[] {
+  const status = `● ${STATUS[st].rotulo}`
+  if (!motivo) return [{ texto: status }]
+  const m = MOTIVOS[motivo]
+  const motivoInteiro = `${m.glifo} ${m.rotulo}`
+  const opcoes: [string, string][] = [[status, motivoInteiro], ['● Esperando', motivoInteiro], ['●', motivoInteiro]]
+  const largura = ([a, b]: [string, string]) => [...a].length + 2 + 1 + [...b].length + 2
+  const [a, b] = opcoes.find((o) => largura(o) <= COLUNAS_SEM_CORTE) ?? opcoes.at(-1)!
+  return [{ texto: a }, { texto: b }]
 }
 
 /**
