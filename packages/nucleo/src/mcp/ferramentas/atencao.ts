@@ -79,7 +79,7 @@ export async function precisamDeVoce(frota: LeituraDaFrota, contas: readonly str
   const agora = frota.agora();
   const itens: ItemDeAtencao[] = [];
   for (const s of await frota.vivas()) {
-    if (!s.inbox.precisaDeVoce || !casaConta(s.conta, contas)) continue;
+    if (!s.inbox.needsYou || !casaConta(s.conta, contas)) continue;
     itens.push(item(s, await frota.atencao(s), agora));
   }
   const peso = (g: Grupo) => (g === 'blocking' ? 0 : 1);

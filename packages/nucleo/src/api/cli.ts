@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisoes/captura-hooks.ts';
 import { SqliteDecisionStore } from '../decisoes/sqlite.ts';
-import { MaquinaDeEstados } from '../estados/maquina.ts';
+import { SessionStateMachine } from '../states/machine.ts';
 import { criarServidorMcp } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
@@ -215,11 +215,11 @@ const storage = comMudancas(sqlite, mudancas, contasDasSessoes);
 // As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
 const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
 const captura = new HookDecisionCapture({ decisions: decisoes });
-const maquina = new MaquinaDeEstados({
+const maquina = new SessionStateMachine({
   storage,
   log,
-  aoMudar: aoMudarDaMaquina(mudancas, contasDasSessoes),
-  ...(demo ? { sonda: null } : {}),
+  onChange: aoMudarDaMaquina(mudancas, contasDasSessoes),
+  ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
@@ -413,7 +413,7 @@ const api: ApiLocal = await iniciarApiLocal({
     // Os mesmos perfis: a pasta que um hook revela entra nas próximas listagens.
     perfis: perfis ?? undefined,
     onEvent: async (r) => {
-      await maquina.aoReceberHook(r);
+      await maquina.onHook(r);
       await captura.onEvent(r.event);
     },
     log,
@@ -470,7 +470,7 @@ const pararDeVigiarPai =
       });
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
-const pararVigia = demo ? () => {} : maquina.iniciar();
+const pararVigia = demo ? () => {} : maquina.start();
 for (const a of samplers) a.start();
 for (const m of remoteMachines) m.start();
 if (follower) {

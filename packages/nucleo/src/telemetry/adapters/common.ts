@@ -7,7 +7,7 @@
 // runner, and the group (or the field) comes out `null`. A group that throws is caught here and also
 // comes out `null`.
 
-import { ehClaude } from '../../estados/sonda.ts';
+import { isClaude } from '../../states/probe.ts';
 import type {
   ClaudeProcesses,
   CpuReading,
@@ -171,7 +171,7 @@ export function claudeOf(stats: PsRow[], args: PsArgsRow[]): ClaudeProcesses {
   const line = new Map(args.map((a) => [a.pid, a.args]));
   const desktop = stats.filter((r) => isClaudeDesktop(r.comm));
   // The npm package runs on node with `process.title = 'claude'`: `comm` says what the command line does not.
-  const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || ehClaude(line.get(r.pid) ?? r.comm)));
+  const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || isClaude(line.get(r.pid) ?? r.comm)));
   return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
 }
 

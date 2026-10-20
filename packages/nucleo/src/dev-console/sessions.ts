@@ -140,7 +140,7 @@ export class DevConsoleSessions {
       if (!repo || !repos.has(repo)) continue;
       const w = waiting.get(s.session.id);
       const reason = w && isDependsOnYouReason(w.reason) ? w.reason : null;
-      const estado = s.inbox.estado;
+      const estado = s.inbox.state;
       push(byRepo, repo, {
         id: s.session.id,
         title: s.titulo,

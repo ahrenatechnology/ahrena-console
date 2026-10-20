@@ -13,7 +13,7 @@
 // duas últimas mensagens do card, como o C1 pede. Nunca a resposta do agente.
 
 import { agregarCusto, diaDe, type RelatorioDeCusto } from '../custo/agregacao.ts';
-import type { EstadoDoInbox } from '../estados/leitura.ts';
+import type { InboxState } from '../states/inbox.ts';
 import { fraseDoEvento } from './frase-do-evento.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
 import { minutosDesde, projetoDe, type LeituraDaFrota, type SessaoDaFrota } from '../mcp/frota.ts';
@@ -50,7 +50,7 @@ export interface AgenteDoDashboard {
   title: string;
   project: string | null;
   status: StatusDoBadge;
-  state: EstadoDoInbox;
+  state: InboxState;
   model: string | null;
   costUsd: number | null;
   lastActivity: string;
@@ -203,7 +203,7 @@ export class MontadorDoDashboard {
     const subagentes = { active: 0, sessions: 0 };
     const cards: AgenteDoDashboard[] = [];
     for (const v of vivas) {
-      const estado = v.inbox.estado;
+      const estado = v.inbox.state;
       if (estado === 'waiting') sessoes.waiting++;
       else if (estado === 'error') sessoes.withError++;
       else sessoes.active++;
@@ -213,8 +213,8 @@ export class MontadorDoDashboard {
         agentes.active += principais;
         agentes.sessions++;
       }
-      if (v.inbox.subagentesAtivos > 0) {
-        subagentes.active += v.inbox.subagentesAtivos;
+      if (v.inbox.activeSubagents > 0) {
+        subagentes.active += v.inbox.activeSubagents;
         subagentes.sessions++;
       }
       cards.push(await this.card(v, lista, custoPorSessao.has(v.session.id) ? (custoPorSessao.get(v.session.id) ?? null) : 0, agora));
@@ -256,7 +256,7 @@ export class MontadorDoDashboard {
   private async card(v: SessaoDaFrota, lista: Agent[], custoUsd: number | null, agora: number): Promise<AgenteDoDashboard> {
     const s = v.session;
     const l = this.leituras.get(s.id);
-    const status = badgeDe(v.inbox.estado);
+    const status = badgeDe(v.inbox.state);
     const subs = lista
       .filter((a) => a.type === 'subagent')
       .sort((a, b) => Number(b.status === 'working') - Number(a.status === 'working') || b.startedAt.localeCompare(a.startedAt))
@@ -267,7 +267,7 @@ export class MontadorDoDashboard {
       title: v.titulo,
       project: projetoDe(s),
       status,
-      state: v.inbox.estado,
+      state: v.inbox.state,
       model: s.model,
       costUsd: custoUsd === null ? null : Math.round(custoUsd * 100) / 100,
       lastActivity: s.updatedAt,
@@ -282,7 +282,7 @@ export class MontadorDoDashboard {
   private async tarefa(v: SessaoDaFrota, l: Leitura | undefined): Promise<string | null> {
     const f = l?.ultimaFerramenta;
     const ferramenta = f?.nome ? cortar(f.resumo && f.resumo !== f.nome ? `${f.nome}: ${f.resumo}` : f.nome, MAX_TEXTO) : null;
-    if (v.inbox.estado === 'waiting' && v.session.awaitingReason === 'notification') return ferramenta;
+    if (v.inbox.state === 'waiting' && v.session.awaitingReason === 'notification') return ferramenta;
     const plano = await this.storage.getPlan(v.session.id);
     const passo = plano?.steps.find((p) => p.id === plano.currentStepId);
     return cortar(passo?.text ?? null, MAX_TEXTO) ?? ferramenta;
@@ -401,7 +401,7 @@ function guardarMensagem(l: Leitura, texto: string | null): void {
   if (l.mensagens.length > 2) l.mensagens.shift();
 }
 
-export function badgeDe(estado: EstadoDoInbox): StatusDoBadge {
+export function badgeDe(estado: InboxState): StatusDoBadge {
   if (estado === 'waiting') return 'waiting';
   if (estado === 'error') return 'error';
   if (estado === 'completed' || estado === 'abandoned') return estado;
