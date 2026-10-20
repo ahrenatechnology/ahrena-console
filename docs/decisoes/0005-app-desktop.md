@@ -1,6 +1,6 @@
 # 0005 · App desktop: uma bandeja em Tauri que complementa o Claude, sem duplicar
 
-- **Status:** aceita; revista no mesmo dia: o app entra na 0.0.1
+- **Status:** aceita; revista no mesmo dia: o app entra na 0.0.1. O "um núcleo por máquina" foi substituído pela [0010](0010-core-per-installation.md) (um núcleo por instalação, em porta aleatória)
 - **Data:** 2026-10-18
 - **Issue:** [#82](https://github.com/ahrenatechnology/ahrena-console/issues/82) (spike 6.5 do [backlog](../backlog-0.0.1.md), épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7))
 - **Parte de:** [0004](0004-painel-da-sessao.md), que abriu o spike
@@ -105,7 +105,7 @@ O Electron só ganharia se o núcleo precisasse rodar dentro do app. Não precis
 
 ### Como o app fala com o núcleo
 
-**Um núcleo por máquina; quem chegar primeiro serve, os outros adotam.**
+**Um núcleo por máquina; quem chegar primeiro serve, os outros adotam.** (Substituído pela [0010](0010-core-per-installation.md): um núcleo por instalação.)
 
 ```mermaid
 flowchart LR
