@@ -401,7 +401,7 @@ export function telaDaVisao(d) {
         'Por dia da semana',
         'sessões',
         lista(
-          (d.diaDaSemana ?? []).map((s) => ({ nome: s.dia, valor: s.sessoes, texto: inteiro.format(s.sessoes), dica: `${s.dia}: ${plural(s.sessoes, 'sessão', 'sessões')}` })),
+          (d.diaDaSemana ?? []).map((s) => ({ nome: rotuloDoDia(s.dia), valor: s.sessoes, texto: inteiro.format(s.sessoes), dica: `${rotuloDoDia(s.dia)}: ${plural(s.sessoes, 'sessão', 'sessões')}` })),
           'Nenhuma sessão ainda.',
         ),
       ),
@@ -507,6 +507,9 @@ function horaDe(iso, fuso) {
     return null;
   }
 }
+
+/** O dia da semana como a tela escreve: a API manda `sab`, a tela mostra `sáb`. */
+const rotuloDoDia = (dia) => (dia === 'sab' ? 'sáb' : dia);
 
 export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   carregarEstilo();
