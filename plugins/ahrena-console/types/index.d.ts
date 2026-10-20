@@ -169,6 +169,8 @@ export type ListaDeDecisoes = {
   vigentes: number
   aConfirmar: number
   itens: DecisaoDoPainel[]
+  /** Vigentes e a confirmar em cada escopo, para o seletor; ausente no núcleo antigo. */
+  porEscopo?: Record<EscopoDasDecisoes, number>
 }
 
 /** A faixa do P10, depois de um /clear; vem com a reinjeição (#100). */

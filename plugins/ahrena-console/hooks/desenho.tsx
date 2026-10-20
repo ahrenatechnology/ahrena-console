@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.22'
+export const VERSAO_DO_PLUGIN = '0.0.23'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -1426,11 +1426,15 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const { Box, Text, Button, Select } = c.el
   const escopo = escopoDasDecisoes(c.vista, c.cols)
   const lista = p.decisoes?.lista?.escopo === escopo ? p.decisoes.lista : null
+  const porEscopo = lista?.porEscopo ?? null
+  // Os três escopos com as mesmas decisões (todas desta sessão): a troca funciona, mas não muda nada.
+  const iguais = !!porEscopo && porEscopo.sessao === porEscopo.familia && porEscopo.familia === porEscopo.branch
   const select = (
     <Select
       key="escopo-decisoes"
       value={escopo}
-      options={ESCOPOS.map((e) => ({ value: e.valor, label: e.rotulo.toUpperCase() }))}
+      // Grafia normal, com a contagem de cada escopo quando o núcleo a manda: "Sessão 10".
+      options={ESCOPOS.map((e) => ({ value: e.valor, label: porEscopo ? `${e.rotulo} ${porEscopo[e.valor]}` : e.rotulo }))}
       onSelect={(v: string) => c.acoes.escopoDecisoes(v)}
     />
   )
@@ -1439,7 +1443,7 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   const itens = lista?.itens ?? []
   // Em volta: respiro, topo, voltar, rótulo, a barra do Desfazer, o rodapé com borda, versão e os espaços.
   const barra = c.vista.ultimaAcao && c.agora - c.vista.ultimaAcao.em <= DESFAZER_MS ? 4 : 0
-  const cabem = fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + barra + 3 + 1 + 5)) * g.porLinha
+  const cabem = fileirasQueCabem(livres(c, 2 + 4 + 1 + 1 + barra + 3 + 1 + 5 + (iguais ? 2 : 0))) * g.porLinha
   const mostrar = itens.slice(0, Math.min(cabem, estreito ? DECISOES_NO_ESTREITO : itens.length))
   const fora = itens.length - mostrar.length
   let conteudo: RenderElement[]
@@ -1470,6 +1474,11 @@ function telaDecisoes(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
   )
   return [
     rotuloDaSecao(c, g.largura, titulo, select),
+    iguais ? (
+      <Text key="escopos-iguais" mono size="footnote" dimColor wrap="wrap">
+        mesmo resultado em Sessão, Família e Branch: as decisões são todas desta sessão
+      </Text>
+    ) : null,
     barraDesfazer(c, g.largura),
     <Box key="lista-decisoes" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
       {conteudo}
@@ -1687,8 +1696,8 @@ function telaPrecisam(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estre
       key="escopo"
       value={escopo}
       options={[
-        { value: 'familia', label: 'FAMÍLIA' },
-        { value: 'maquina', label: 'MÁQUINA INTEIRA' },
+        { value: 'familia', label: 'Família' },
+        { value: 'maquina', label: 'Máquina inteira' },
       ]}
       onSelect={(v: string) => c.acoes.escopo(v)}
     />

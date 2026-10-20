@@ -90,7 +90,7 @@ function falsos(on: any, base: Painel = CENARIOS.p9, conversa: 'inteira' | 'comp
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('command.register', async () => ({ value: undefined }))
   on('session.start', async (_$: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
-  return { pedidos, toasts, rolagens, status, relogio, painel }
+  return { pedidos, toasts, rolagens, status, relogio, painel, listas }
 }
 
 async function abrir($: any, on: any, base?: Painel, conversa: 'inteira' | 'compactada' = 'inteira') {
@@ -359,4 +359,29 @@ test('0.0.13: decisão de antes da compactação não tem "ver na conversa"; o d
   expect(detalhe?.text).not.toMatch(/não está à vista|não está visível/)
   expect(await ui.find({ key: `conversa-${d.id}` })).toBeUndefined()
   await ui.unmount()
+})
+
+test('0.0.23: o seletor de escopo em grafia normal, com a contagem de cada escopo; com os três iguais, o aviso', async ($, on) => {
+  const f = await abrir($, on)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui.press({ key: 'ver-decisoes' })
+  const select = await ui.find({ key: 'escopo-decisoes' })
+  const p9 = LISTAS_DO_P9.familia.porEscopo!
+  expect(select?.props.options.map((o: { label: string }) => o.label)).toEqual([`Sessão ${p9.sessao}`, `Família ${p9.familia}`, `Branch ${p9.branch}`])
+  // Nos dados do P9 os escopos diferem: sem aviso.
+  expect(await ui.find({ type: 'Text', text: /mesmo resultado em Sessão/ })).toBeUndefined()
+  await ui.unmount()
+
+  // Todas as decisões desta sessão: os três escopos dão o mesmo, e o painel diz isso.
+  const iguais = { sessao: 10, familia: 10, branch: 10 }
+  f.listas.familia = { ...f.listas.familia, porEscopo: iguais }
+  f.listas.sessao = { ...f.listas.sessao, porEscopo: iguais }
+  f.listas.branch = { ...f.listas.branch, porEscopo: iguais }
+  const ui2 = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
+  await ui2.select({ key: 'escopo-decisoes', value: 'sessao' })
+  const aviso = () => ui2.find({ type: 'Text', text: /mesmo resultado em Sessão, Família e Branch/ })
+  for (let i = 0; i < 20 && !(await aviso()); i++) await f.relogio.advance(10)
+  expect(await aviso()).toBeDefined()
+  expect((await ui2.find({ key: 'escopo-decisoes' }))?.props.options.map((o: { label: string }) => o.label)).toEqual(['Sessão 10', 'Família 10', 'Branch 10'])
+  await ui2.unmount()
 })

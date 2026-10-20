@@ -301,6 +301,11 @@ export interface ListaDeDecisoes {
   aConfirmar: number;
   /** Mais recentes primeiro: vigentes, a confirmar e substituídas. */
   itens: DecisaoDoPainel[];
+  /**
+   * Quantas vigentes e a confirmar cada escopo tem: o seletor mostra as três contagens, e a pessoa
+   * vê quando a troca não muda nada (todas da própria sessão).
+   */
+  porEscopo?: Record<EscopoDasDecisoes, number>;
 }
 
 /**

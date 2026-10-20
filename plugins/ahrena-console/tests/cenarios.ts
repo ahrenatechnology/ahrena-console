@@ -2258,7 +2258,12 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "esta",
         "toolUseId": "sim-toolu-p9-2"
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   },
   "familia": {
     "escopo": "familia",
@@ -2380,7 +2385,12 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "mae",
         "toolUseId": null
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   },
   "branch": {
     "escopo": "branch",
@@ -2502,6 +2512,11 @@ export const LISTAS_DO_P9: Record<EscopoDasDecisoes, ListaDeDecisoes> = {
         "sessao": "mae",
         "toolUseId": null
       }
-    ]
+    ],
+    "porEscopo": {
+      "sessao": 4,
+      "familia": 5,
+      "branch": 5
+    }
   }
 }
