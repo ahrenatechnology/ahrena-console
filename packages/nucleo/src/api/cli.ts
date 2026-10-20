@@ -224,6 +224,7 @@ if (comTrava) {
     throw e;
   }
   await planOrAdopt();
+  log(`start guard taken for ${dataDir}`);
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
@@ -286,7 +287,7 @@ const banco = demo ? ':memory:' : resolve(o.db ?? o.banco ?? process.env.AHRENA_
 if (banco !== ':memory:' && !sameDir(dirname(banco), dataDir)) log(`warning: the database ${banco} is outside the data folder ${dataDir} (--db or AHRENA_CONSOLE_DB); another installation must not use the same file`);
 if (banco !== ':memory:') {
   // A pasta de dados fecha em 0700 (o banco mora nela); outra pasta dada em --db fica como está.
-  if (dirname(banco) === dataDir) prepareDir(dataDir);
+  if (sameDir(dirname(banco), dataDir)) prepareDir(dataDir);
   else mkdirSync(dirname(banco), { recursive: true });
 }
 
