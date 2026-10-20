@@ -258,8 +258,10 @@ function statusPill(c: DrawContext, key: string, state: PanelSession['state'] | 
 function statusLook(s: { state: PanelSession['state'] | PanelChild['state']; reason: PanelSession['reason']; attention?: SessionAttention | null }) {
   const st = statusOf(s.state)
   const attention = st === 'waiting' || st === 'error' ? attentionOf(s) : null
-  if (st === 'waiting' && attention?.level === 'idle') return { st, attention, pill: `${ATTENTION_STATUS.idle.pill} ${ATTENTION_STATUS.idle.label}`, color: IDLE_COLOR, tinted: false }
-  return { st, attention, pill: `● ${STATUS[st].label}`, color: STATUS_COLOR[st], tinted: st === 'waiting' || st === 'error' }
+  const idle = st === 'waiting' && attention?.level === 'idle'
+  if (idle) return { st, attention, idle, pill: `${ATTENTION_STATUS.idle.pill} ${ATTENTION_STATUS.idle.label}`, short: `${ATTENTION_STATUS.idle.pill} ${ATTENTION_STATUS.idle.short}`, color: IDLE_COLOR, tinted: false }
+  const short = st === 'waiting' ? `● ${ATTENTION_STATUS.blocked.short}` : `● ${STATUS[st].label}`
+  return { st, attention, idle, pill: `● ${STATUS[st].label}`, short, color: STATUS_COLOR[st], tinted: st === 'waiting' || st === 'error' }
 }
 
 /** #245: the reason chip: strong and yellow when it blocks, light and neutral when idle (P0). */
@@ -573,7 +575,7 @@ export function modelLine(s: Pick<PanelSession, 'model' | 'startedAt' | 'turn'>,
  */
 function sessionCard(c: DrawContext, s: PanelSession) {
   const { Box, Text } = c.el
-  const { st, attention, color, tinted, pill: statusText } = statusLook(s)
+  const { st, attention, color, tinted, pill: statusText, short } = statusLook(s)
   const a = s.activity
   const activityColor =
     a.type === 'error' ? RED_TEXT : a.type === 'tool' || a.type === 'delegating' ? ORANGE : a.type === 'completed' || a.type === 'abandoned' ? undefined : YELLOW
@@ -587,7 +589,7 @@ function sessionCard(c: DrawContext, s: PanelSession) {
       // Uma linha só, em qualquer estado (ver pilulasDaSessao): duas pills largas quebravam a linha, e
       // o card de altura fixa esmagava a linha do modelo.
       <Box flexDirection="row" gap={1} flexWrap="nowrap">
-        {sessionPills(statusText, st === 'waiting' ? attention : null).map((x, i) =>
+        {sessionPills(statusText, st === 'waiting' ? attention : null, short).map((x, i) =>
           i === 0 ? pill(c, 'status', x.text, color.color, color.background) : attentionPill(c, 'reason', attention!),
         )}
       </Box>,
@@ -618,12 +620,11 @@ function sessionCard(c: DrawContext, s: PanelSession) {
  * um espaço de cada lado; entre elas, uma coluna. Sem caber, "Precisa de você" vira "Precisa" e,
  * por último, o status fica só com o glifo: o motivo, que diz por que a sessão espera, fica inteiro.
  */
-export function sessionPills(status: string, attention: SessionAttention | null): { text: string }[] {
+export function sessionPills(status: string, attention: SessionAttention | null, short = status): { text: string }[] {
   if (!attention) return [{ text: status }]
   const m = ATTENTION_REASONS[attention.reason]
   const fullReason = `${m.glyph} ${m.label}`
-  const glyph = status.split(' ')[0]!
-  const options: [string, string][] = [[status, fullReason], [status.split(' ').slice(0, 2).join(' '), fullReason], [glyph, fullReason]]
+  const options: [string, string][] = [[status, fullReason], [short, fullReason], [ATTENTION_STATUS[attention.level].pill, fullReason]]
   const width = ([a, b]: [string, string]) => [...a].length + 2 + 1 + [...b].length + 2
   const [a, b] = options.find((o) => width(o) <= UNCUT_COLUMNS) ?? options.at(-1)!
   return [{ text: a }, { text: b }]
@@ -1493,7 +1494,8 @@ function graphScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
   )
   const look = s ? statusLook(s) : null
   const st = look?.st ?? 'active'
-  const idle = look?.attention?.level === 'idle' && st === 'waiting'
+  const idle = look?.idle ?? false
+  const color = look?.color ?? STATUS_COLOR.active
   const root = graphLine(
     c,
     'graph-root',
@@ -1503,8 +1505,8 @@ function graphScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
       <Text weight="bold">Esta sessão</Text>
       {wide && s?.model ? <Text dimColor> · {model(s.model)}</Text> : null}
     </Text>,
-    <Svg source={graphBarSvg(w, t0, c.now, t0, null, idle ? IDLE_COLOR.border : STATUS_COLOR[st].border)} alt="esta sessão" width={w} height={GRAPH_BAR_H} />,
-    { state: idle ? 'ociosa' : SESSION_STATE[st], stateColor: st === 'active' ? ORANGE : idle ? IDLE_COLOR.color : STATUS_COLOR[st].color, start: '0′', time: duration(c.now - t0) },
+    <Svg source={graphBarSvg(w, t0, c.now, t0, null, color.border)} alt="esta sessão" width={w} height={GRAPH_BAR_H} />,
+    { state: idle ? 'ociosa' : SESSION_STATE[st], stateColor: st === 'active' ? ORANGE : color.color, start: '0′', time: duration(c.now - t0) },
   )
   const lines = pg.lines.map((l) => (l.type === 'wave' ? waveLine(c, l, wide, t0, state) : nodeLine(c, l, wide, t0)))
   const after = pg.after ? (

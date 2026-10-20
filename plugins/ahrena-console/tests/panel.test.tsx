@@ -1440,12 +1440,12 @@ test('0.0.30: the largest real case (long model, "12 d", "turno 1234") fits whol
 test(`0.0.30: the This session card's pills fit on one line in every state and every reason`, () => {
   const width = (l: { text: string }[]) => l.reduce((a, x) => a + [...x.text].length + 2, 0) + (l.length - 1)
   // #245: blocked, "● Precisa de você" shortens to "● Precisa" and then to the dot; idle fits whole.
-  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'question' }).map((x) => x.text)).toEqual(['● Precisa', '? Pergunta'])
-  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'permission' }).map((x) => x.text)).toEqual(['●', '⛉ Pede permissão'])
+  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'question' }, '● Precisa').map((x) => x.text)).toEqual(['● Precisa', '? Pergunta'])
+  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'permission' }, '● Precisa').map((x) => x.text)).toEqual(['●', '⛉ Pede permissão'])
   expect(sessionPills('○ Ociosa', { level: 'idle', reason: 'first_prompt' }).map((x) => x.text)).toEqual(['○ Ociosa', '›_ No prompt'])
   for (const status of ['● Ativa', '● Concluída', '● Com erro', '● Abandonada']) expect(width(sessionPills(status, null))).toBeLessThanOrEqual(UNCUT_COLUMNS)
   for (const reason of ['permission', 'question', 'plan', 'decision', 'error'] as const) {
-    expect(width(sessionPills('● Precisa de você', { level: 'blocked', reason }))).toBeLessThanOrEqual(UNCUT_COLUMNS)
+    expect(width(sessionPills('● Precisa de você', { level: 'blocked', reason }, '● Precisa'))).toBeLessThanOrEqual(UNCUT_COLUMNS)
   }
   for (const reason of ['turn_ended', 'interrupted', 'first_prompt'] as const) {
     const pills = sessionPills('○ Ociosa', { level: 'idle', reason })

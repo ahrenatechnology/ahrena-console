@@ -66,13 +66,6 @@ export function clockTime(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export const REASONS: Record<AwaitingReason, { glyph: string; label: string; urgent: boolean }> = {
-  notification: { glyph: '⛉', label: 'Pede permissão', urgent: true },
-  interrupted: { glyph: '⏸', label: 'Interrompida', urgent: true },
-  stop: { glyph: '↵', label: 'Sua vez', urgent: false },
-  session_start: { glyph: '›_', label: 'No prompt', urgent: false },
-}
-
 /** Os 5 status do console (docs/brand/tokens.json): o rótulo e o glifo de cada um. */
 export const STATUS: Record<DisplayStatus, { glyph: string; label: string }> = {
   active: { glyph: '●', label: 'Ativa' },
@@ -84,9 +77,15 @@ export const STATUS: Record<DisplayStatus, { glyph: string; label: string }> = {
 }
 
 /** #245: the old waiting state split in two: blocked on you (yellow) and idle at the prompt (neutral). */
-export const ATTENTION_STATUS: Record<SessionAttention['level'], { glyph: string; pill: string; label: string }> = {
-  blocked: { glyph: '◐', pill: '●', label: 'Precisa de você' },
-  idle: { glyph: '◌', pill: '○', label: 'Ociosa' },
+export const ATTENTION_STATUS: Record<SessionAttention['level'], { glyph: string; pill: string; label: string; short: string }> = {
+  blocked: { glyph: '◐', pill: '●', label: 'Precisa de você', short: 'Precisa' },
+  idle: { glyph: '◌', pill: '○', label: 'Ociosa', short: 'Ociosa' },
+}
+
+/** The glyph of a session in text: its attention's when it waits (#245), its status's otherwise. */
+export function statusGlyph(s: { state: InboxState | 'unknown'; reason: AwaitingReason | null; attention?: SessionAttention | null }): string {
+  const attention = s.state === 'waiting' ? attentionOf(s) : null
+  return attention ? ATTENTION_STATUS[attention.level].glyph : STATUS[statusOf(s.state)].glyph
 }
 
 /** #245: the reasons of the core (P0), with the glyph of the chip. */

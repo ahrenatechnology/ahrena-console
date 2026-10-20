@@ -14,7 +14,7 @@ import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-c
 import type { PanelDecision, DecisionScope, Reading, Panel, SessionQuestion, NeedsYou, View } from '../types'
 import { draw, decisionScopeOf, type Actions, type Elements } from './render'
 import { GRAPH_STATE, type GraphState } from './graph'
-import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, STATUS, statusOf, tokens } from './format'
+import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, statusGlyph, tokens } from './format'
 import { LEGACY_CORE, discoverCore } from './discover'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
@@ -611,7 +611,7 @@ export const register: Register = (on, options) => {
           ) : (
             <Box flexDirection="column">
               <Text>
-                {s ? `${STATUS[statusOf(s.state)].glyph} ${s.title} · ${model(s.model)} · turno ${s.turn}` : 'Sessão nova'}
+                {s ? `${statusGlyph(s)} ${s.title} · ${model(s.model)} · turno ${s.turn}` : 'Sessão nova'}
               </Text>
               <Text dimColor>{s ? s.activity.text : ''}</Text>
               {l.panel.decisions?.current ? <Text>⊸ {decisionsText(l.panel.decisions.current)}</Text> : null}
