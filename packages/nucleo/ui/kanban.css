@@ -12,12 +12,13 @@
 /* ---------- o quadro ---------- */
 /* Colunas lado a lado; se não couberem, o quadro rola na horizontal. Ele ocupa o resto da altura e
    rola por dentro, para a barra de rolagem horizontal ficar sempre à vista. */
-.kanban { flex: 1 1 auto; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 12px; align-items: start; overflow: auto; padding-bottom: 4px; }
+.kanban { flex: 1 1 auto; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 10px; align-items: start; overflow: auto; padding-bottom: 4px; }
 .kanban:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
 
-.col { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.col { container-type: inline-size; background: color-mix(in srgb, var(--surface) 60%, var(--bg)); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .col .cab { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: var(--weight-semibold); padding: 2px 4px; }
-.col .cab .n { margin-left: auto; font-size: 11px; color: var(--muted); background: var(--raised); border-radius: 99px; padding: 0 8px; letter-spacing: 0; }
+.col .cab > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col .cab .n { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); background: var(--raised); border-radius: 99px; padding: 0 8px; letter-spacing: 0; }
 .col .cards { display: flex; flex-direction: column; gap: 10px; }
 .col .cards:empty { display: none; }
 
@@ -49,11 +50,22 @@
 .kc .tt, .kc small, .kc blockquote, .kc .cwd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .kc blockquote { margin: 0; padding-left: 9px; border-left: 2px solid var(--border); font-size: 11.5px; color: var(--muted); font-style: italic; }
 .kc .cwd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
-.kc .pe { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; white-space: nowrap; font-size: 11px; color: var(--muted); }
-.kc .pe span { display: inline-flex; gap: 4px; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kc .pe { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; white-space: nowrap; font-size: 11px; color: var(--muted); }
+.kc .pe > span { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.kc .pe > span > svg { flex: none; }
+.kc .pe .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* A duração fica sempre na coluna da direita, mesmo sem modelo ou custo. */
 .kc .pe .dur { grid-column: 2; }
 .kc .pe .rodando { color: var(--status-active-text); }
+
+/* Coluna estreita (a janela de 1100 px com as cinco colunas): o pé do card vira uma coluna só. */
+@container (max-width: 200px) {
+  .col .cab { gap: 4px; font-size: 10.5px; letter-spacing: .03em; padding: 2px 0; }
+  .col .cab .n { padding: 0 6px; }
+  .kc { padding: 10px; }
+  .kc .pe { grid-template-columns: 1fr; }
+  .kc .pe .dur { grid-column: auto; }
+}
 
 /* Selo de status e selo do motivo da espera. */
 .kc .selos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

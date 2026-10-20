@@ -153,7 +153,7 @@ function avatar(nome) {
 }
 
 function info(nomeDoIcone, texto, classe = null) {
-  return el('span', { class: classe }, icone(nomeDoIcone), texto);
+  return el('span', { class: classe }, icone(nomeDoIcone), el('span', { class: 't' }, texto));
 }
 
 function cardDeSessao(s) {
@@ -300,7 +300,7 @@ export async function montar(area, ctx) {
     return el(
       'section',
       { class: 'col', 'aria-label': `${c.rotulo}: ${c.total}` },
-      el('h2', { class: 'cab' }, el('span', { class: `ponto d-${cor}` }), el('span', { class: `c-${cor}` }, c.rotulo), contador),
+      el('h2', { class: 'cab' }, el('span', { class: `ponto d-${cor}` }), el('span', { class: `c-${cor}`, title: c.rotulo }, c.rotulo), contador),
       lista,
       mais,
     );
