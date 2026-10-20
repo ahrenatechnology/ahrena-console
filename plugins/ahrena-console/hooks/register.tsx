@@ -15,13 +15,29 @@ import type { PanelDecision, DecisionScope, Reading, Panel, SessionQuestion, Nee
 import { draw, decisionScopeOf, type Actions, type Elements } from './render'
 import { GRAPH_STATE, type GraphState } from './graph'
 import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, STATUS, statusOf, tokens } from './format'
+import { LEGACY_CORE, discoverCore } from './discover'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
 export const PANE = 'ahrena-console-sessao'
 const EVERY_MS = 5000
-// `127.0.0.1:<port>`; a porta vem da opção `port` do plugin (padrão 4720; `porta` até a 0.0.30).
-let core = '127.0.0.1:4720'
+// `127.0.0.1:<port>` of the core (#221, 5b). An explicit `port` option (`porta` up to 0.0.30) wins;
+// otherwise the core comes from the instance registry (hooks/discover.ts), and is looked up again
+// when it stops answering (a core restarted on a new port). No live core: 127.0.0.1:4720, as before.
+let core = LEGACY_CORE
+/** The address set by the `port` option, or `null` to discover through the registry. */
+let explicitCore: string | null = null
+/** Whether `core` came from a lookup that still holds (reset when the core stops answering). */
+let resolved = false
+
+async function resolveCore($: Engine): Promise<string> {
+  if (explicitCore) return (core = explicitCore)
+  if (!resolved) {
+    core = (await discoverCore($).catch(() => null)) ?? LEGACY_CORE
+    resolved = true
+  }
+  return core
+}
 
 const EMPTY_READING: Reading = { panel: null, readAt: null, offline: false, error: null, nextAt: null }
 const EMPTY_VIEW: View = { screen: 'session', scope: null, decisionsScope: null }
@@ -200,10 +216,11 @@ async function engineContext($: Engine): Promise<Reading['liveContext']> {
  * do desenho anterior é descartado (`ui_press not handled`). Gravar a cada tick de 5 s, com `readAt`
  * e `generatedAt` sempre novos, fazia o primeiro clique quase sempre cair num desenho já trocado.
  */
-async function refresh($: Engine, nextView?: Partial<View>) {
+async function refresh($: Engine, nextView?: Partial<View>, again = false) {
   const now = await $.clock.now()
   const v = { ...normalizeView(await read($, view)), ...nextView }
   try {
+    await resolveCore($)
     const res = await $.http.fetch(`http://${core}${await tickPath($, v)}`)
     const panel = res.ok && res.text ? (JSON.parse(res.text) as Panel) : null
     if (!panel || panel.version !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
@@ -225,6 +242,12 @@ async function refresh($: Engine, nextView?: Partial<View>) {
     }
     showStatus($, statusLine(panel, false))
   } catch (err) {
+    // The core stopped answering: look it up again in the registry; a different one is tried at once.
+    if (!explicitCore && resolved) {
+      const before = core
+      resolved = false
+      if (!again && (await resolveCore($)) !== before) return refresh($, nextView, true)
+    }
     if (nextView) await changeView($, nextView)
     // Sem núcleo: guarda a última leitura boa e tenta de novo no próximo tick, sem redesenhar a cada um.
     const current = normalizeReading(await read($, reading))
@@ -288,6 +311,7 @@ async function decide($: Engine, id: string, label: string, action: DecisionActi
   try {
     const base = await panelPath($)
     const query = base.includes('?') ? base.slice(base.indexOf('?')) : ''
+    await resolveCore($)
     const res = await $.http.fetch(`http://${core}/api/decisions/${encodeURIComponent(id)}/${action}${query}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -455,6 +479,7 @@ async function unarchive($: Engine, f: { title: string; local?: string | null })
 /** Pede à API local que abra a conversa no Claude Desktop (no macOS, `open claude://…`). */
 async function openSession($: Engine, local: string, title: string) {
   try {
+    await resolveCore($)
     const res = await $.http.fetch(`http://${core}/open/${encodeURIComponent(local)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -483,10 +508,12 @@ async function goTo($: Engine, i: NeedsYou, surface: Parameters<Engine['ui']['co
 }
 
 export const register: Register = (on, options) => {
-  // `porta`: o nome da opção até a 0.0.30, para quem já a tinha configurado.
+  // `porta`: the option's name up to 0.0.30, for whoever had set it. 0 or unset: the registry.
   const o = options as { port?: unknown; porta?: unknown } | undefined
-  const port = Number(o?.port ?? o?.porta)
-  core = `127.0.0.1:${Number.isInteger(port) && port > 0 && port < 65536 ? port : 4720}`
+  const port = Number(o?.port || o?.porta)
+  explicitCore = Number.isInteger(port) && port > 0 && port < 65536 ? `127.0.0.1:${port}` : null
+  core = explicitCore ?? LEGACY_CORE
+  resolved = false
 
   // A sessão começa sem consultar nada: só registra o /console. Se o painel já estava aberto
   // (o módulo recarregou com ele à vista), retoma o polling.
