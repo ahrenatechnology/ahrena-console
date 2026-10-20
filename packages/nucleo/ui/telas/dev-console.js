@@ -386,9 +386,11 @@ function truncatedNote(view) {
   return repos.length ? el('p', { class: 'dev-note' }, icone('info'), `O GitHub devolveu só a primeira página de ${repos.join(', ')}: o quadro pode estar incompleto.`) : null;
 }
 
-/** What identifies a focusable node across re-renders: tag, link and text. */
-// `data-focus` where the text changes between reads (minutes, counts); otherwise the link, and the
-// text only for what has neither (the Atualizar button). Never the text of a node that has an id.
+/**
+ * What identifies a focusable node across re-renders: its tag plus, in this order, `data-focus`
+ * (set where the text changes between reads, such as minutes and counts), the `href`, or, for what
+ * has neither (the Atualizar button), its text.
+ */
 const focusKey = (node) => (node ? `${node.tagName}|${node.getAttribute?.('data-focus') ?? node.getAttribute?.('href') ?? node.textContent}` : null);
 /** The focusable nodes of the screen, links then buttons then summaries: the same order before and after a re-render. */
 const focusables = (area) => [...area.querySelectorAll('a'), ...area.querySelectorAll('button'), ...area.querySelectorAll('summary')];
