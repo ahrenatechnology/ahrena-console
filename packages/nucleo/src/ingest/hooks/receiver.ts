@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import type { StoragePort } from '../../storage-port.ts';
 import { Profiles } from '../../profiles/profiles.ts';
-import type { PerfisDoHook } from './conta.ts';
+import type { HookProfiles } from './account.ts';
 import { ingestHook, type IngestResult } from './ingest.ts';
 import { InvalidHookError } from './normalize.ts';
 
@@ -26,7 +26,7 @@ export interface HookReceiverOptions {
   log?: (message: string) => void;
   now?: () => Date;
   /** Profiles (#109) for the sessions' account; defaults to a new one over the port. */
-  perfis?: PerfisDoHook;
+  profiles?: HookProfiles;
 }
 
 export interface HookReceiver {
@@ -96,7 +96,7 @@ export type HookRouteOptions = Omit<HookReceiverOptions, 'host' | 'port'>;
 export function createHookRoute(opts: HookRouteOptions): HookRoute {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console hooks] ${m}`));
   const now = opts.now ?? (() => new Date());
-  const perfis = opts.perfis ?? new Profiles({ storage: opts.storage });
+  const profiles = opts.profiles ?? new Profiles({ storage: opts.storage });
   // Uma gravação por vez: os hooks de uma sessão chegam em rajada e a leitura-e-gravação da sessão
   // não pode intercalar.
   let queue: Promise<unknown> = Promise.resolve();
@@ -130,7 +130,7 @@ export function createHookRoute(opts: HookRouteOptions): HookRoute {
           receivedAt: now().toISOString(),
           firedAt: header(req, 'x-ahrena-hook-at'),
           deliveryId: header(req, 'x-ahrena-delivery-id'),
-          perfis,
+          profiles,
         }),
       );
       send(res, 202, { id: result.event.id, duplicate: !result.appended });
@@ -138,12 +138,12 @@ export function createHookRoute(opts: HookRouteOptions): HookRoute {
         try {
           await opts.onEvent(result);
         } catch (err) {
-          log(`onEvent falhou para ${result.event.type}: ${(err as Error).message}`);
+          log(`onEvent failed for ${result.event.type}: ${(err as Error).message}`);
         }
       }
     } catch (err) {
       if (err instanceof InvalidHookError) return send(res, 400, { error: err.message });
-      log(`falha ao gravar hook: ${(err as Error).message}`);
+      log(`failed to write hook: ${(err as Error).message}`);
       send(res, 500, { error: 'falha ao gravar' });
     }
   };
@@ -167,7 +167,7 @@ export function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiv
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
-      log(`erro inesperado: ${(err as Error).message}`);
+      log(`unexpected error: ${(err as Error).message}`);
       if (!res.headersSent) send(res, 500, { error: 'erro interno' });
     });
   });

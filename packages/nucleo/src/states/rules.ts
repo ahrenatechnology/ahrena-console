@@ -4,7 +4,7 @@
 //
 // The machine (machine.ts) is what saves; nothing here reads the port or the clock.
 
-import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
+import { mainAgentId, subagentId } from '../ingest/history/importer.ts';
 import type { Agent, AwaitingReason, Session, SessionEvent } from '../model.ts';
 
 /**

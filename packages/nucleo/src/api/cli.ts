@@ -20,8 +20,8 @@ import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
-import { defaultProjectsRoot } from '../ingest/historico/files.ts';
-import { followTranscripts } from '../ingest/historico/follower.ts';
+import { defaultProjectsRoot } from '../ingest/history/files.ts';
+import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
@@ -411,7 +411,7 @@ const api: ApiLocal = await iniciarApiLocal({
   hooks: {
     storage,
     // Os mesmos perfis: a pasta que um hook revela entra nas próximas listagens.
-    perfis: perfis ?? undefined,
+    profiles: perfis ?? undefined,
     onEvent: async (r) => {
       await maquina.onHook(r);
       await captura.onEvent(r.event);

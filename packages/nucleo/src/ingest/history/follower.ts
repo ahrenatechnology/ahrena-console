@@ -1,17 +1,17 @@
-// Seguidor dos transcripts em tempo real (item 1.3): observa `~/.claude/projects` e importa só o
-// que mudou, reaproveitando o cursor e a idempotência do importador.
+// Real-time transcript follower (item 1.3): watches `~/.claude/projects` and imports only what
+// changed, reusing the importer's cursor and idempotence.
 //
-// Duas fontes de aviso:
-// - `fs.watch` recursivo, que dá o caminho que mudou e deixa a latência em poucas centenas de ms;
-// - varredura periódica, de reserva: o watch perde eventos no macOS (FSEvents junta ou descarta
-//   avisos, pastas criadas depois às vezes não avisam) e falha se a raiz ainda não existe.
+// Two sources of notice:
+// - recursive `fs.watch`, which gives the path that changed and keeps latency at a few hundred ms;
+// - a periodic scan, as a fallback: the watch loses events on macOS (FSEvents merges or drops
+//   notices, folders created later sometimes do not notify) and fails if the root does not exist yet.
 //
-// Custo: o seguidor guarda tamanho e mtime de cada arquivo em memória. Uma rodada só faz `stat`
-// (dos caminhos avisados, ou de todos na varredura) e chama o importador apenas com os arquivos
-// cujo `stat` mudou. Arquivo parado não custa leitura nem consulta ao banco.
+// Cost: the follower keeps each file's size and mtime in memory. A round only runs `stat` (on the
+// notified paths, or on all of them in a scan) and calls the importer only with the files whose
+// `stat` changed. An idle file costs no read and no database query.
 //
-// Linha pela metade, arquivo truncado ou reescrito e subagente novo são tratados pelo importador
-// (cursor com impressão digital) e pela descoberta; o seguidor só decide quando e o quê importar.
+// Half-written lines, truncated or rewritten files and new subagents are handled by the importer
+// (cursor with a fingerprint) and by discovery; the follower only decides when and what to import.
 
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { basename, dirname } from 'node:path';

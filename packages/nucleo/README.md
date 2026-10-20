@@ -15,7 +15,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/adapters/sqlite/](src/adapters/sqlite/) | Adaptador SQLite e as migrações do esquema |
 | [src/ingest/hooks/](src/ingest/hooks/) | Receptor dos hooks do Claude Code e a configuração de hooks do plugin (item 1.4) |
 | [test/storage-contract.ts](test/storage-contract.ts) | Contrato da porta. Todo adaptador roda a mesma bateria |
-| [src/ingest/historico/](src/ingest/historico/) | Importação do histórico de `~/.claude/projects` (item 1.2) e o seguidor em tempo real (item 1.3) |
+| [src/ingest/history/](src/ingest/history/) | Importação do histórico de `~/.claude/projects` (item 1.2) e o seguidor em tempo real (item 1.3) |
 | [src/github/](src/github/) | Trabalho do GitHub: hierarquia, PR, CI e review por item, e o kanban de um Project (seção abaixo) |
 | [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
 | [src/states/](src/states/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |

@@ -1,5 +1,5 @@
-// Importação do histórico (item 1.2) com transcripts sintéticos em test/fixtures/historico.
-// Nenhum transcript real entra no repositório.
+// History import (item 1.2) with synthetic transcripts in test/fixtures/history.
+// No real transcript goes into the repository.
 
 import assert from 'node:assert/strict';
 import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
@@ -7,14 +7,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { openSqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
-import { discoverTranscripts, readLinesFrom } from '../src/ingest/historico/files.ts';
-import { eventId, importHistory, mainAgentId, resumeOffset, subagentId } from '../src/ingest/historico/importer.ts';
-import { parseLine, parseUsage } from '../src/ingest/historico/transcript.ts';
-import { aggregateUsage, dedupeByMessage, type UsageSample } from '../src/ingest/historico/usage.ts';
+import { discoverTranscripts, readLinesFrom } from '../src/ingest/history/files.ts';
+import { eventId, importHistory, mainAgentId, resumeOffset, subagentId } from '../src/ingest/history/importer.ts';
+import { parseLine, parseUsage } from '../src/ingest/history/transcript.ts';
+import { aggregateUsage, dedupeByMessage, type UsageSample } from '../src/ingest/history/usage.ts';
 import type { SessionEvent, StoragePort, TokenUsage } from '../src/index.ts';
 import { session } from './fixtures.ts';
 
-const FIXTURES = join(import.meta.dirname, 'fixtures', 'historico', 'projects');
+const FIXTURES = join(import.meta.dirname, 'fixtures', 'history', 'projects');
 const S1 = '00000000-0000-4000-8000-000000000001';
 const S2 = '00000000-0000-4000-8000-000000000002';
 const A1 = 'a1111111111111111';
@@ -22,7 +22,7 @@ const A2 = 'a2222222222222222';
 const A3 = 'a3333333333333333';
 const MAIN_FILE = join('-repo-app', `${S1}.jsonl`);
 
-const tmp = mkdtempSync(join(tmpdir(), 'ahrena-historico-'));
+const tmp = mkdtempSync(join(tmpdir(), 'ahrena-ingest-history-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 let n = 0;
@@ -53,8 +53,8 @@ async function fresh() {
   return { root, store, report };
 }
 
-describe('importação do histórico: primeira passada', () => {
-  test('acha o principal, os subagentes do layout atual e os do layout antigo', async () => {
+describe('history import: first pass', () => {
+  test('finds the main agent, the current-layout subagents and the old-layout ones', async () => {
     const files = await discoverTranscripts(FIXTURES);
     assert.deepEqual(
       files.map((f) => [f.kind, f.sessionId, f.agentId, f.metaPath !== null]),
@@ -68,7 +68,7 @@ describe('importação do histórico: primeira passada', () => {
     );
   });
 
-  test('cria as sessões com título, diretório, modelo e datas do transcript', async () => {
+  test("creates the sessions with the transcript's title, directory, model and dates", async () => {
     const { store, report } = await fresh();
     assert.equal(report.filesFound, 5);
     assert.equal(report.filesRead, 5);
@@ -91,11 +91,11 @@ describe('importação do histórico: primeira passada', () => {
 
     const s2 = await store.getSession(S2);
     assert.equal(s2?.name, 'Revisão de custos');
-    assert.equal(s2?.cwd, '/repo/outro');
+    assert.equal(s2?.cwd, '/repo/other');
     await store.close();
   });
 
-  test('cria o agente principal e os subagentes, com tipo, tarefa e pai certo', async () => {
+  test('creates the main agent and the subagents, with the right type, task and parent', async () => {
     const { store } = await fresh();
     const agents = new Map((await store.listAgents(S1)).map((a) => [a.id, a]));
     assert.deepEqual([...agents.keys()].sort(), [mainAgentId(S1), subagentId(S1, A1), subagentId(S1, A2), subagentId(S1, A3)].sort());
@@ -128,7 +128,7 @@ describe('importação do histórico: primeira passada', () => {
     await store.close();
   });
 
-  test('grava um evento por linha relevante, no agente certo', async () => {
+  test('writes one event per relevant line, on the right agent', async () => {
     const { store, report } = await fresh();
     const events = await allEvents(store, S1);
     assert.equal(events.length, 15);
@@ -150,7 +150,7 @@ describe('importação do histórico: primeira passada', () => {
     await store.close();
   });
 
-  test('soma os tokens sem contar o streaming duas vezes, incluindo os subagentes', async () => {
+  test('sums the tokens without counting streaming twice, subagents included', async () => {
     const { store } = await fresh();
     const usage = byModel(await store.listTokenUsage(S1));
     assert.deepEqual([...usage.keys()].sort(), ['claude-haiku-5-5', 'claude-opus-5-5']);
@@ -179,8 +179,8 @@ describe('importação do histórico: primeira passada', () => {
   });
 });
 
-describe('importação do histórico: rodar de novo', () => {
-  test('não duplica nada e não relê arquivos sem mudança', async () => {
+describe('history import: running again', () => {
+  test('duplicates nothing and does not reread unchanged files', async () => {
     const { root, store } = await fresh();
     const before = { events: await allEvents(store, S1), usage: await store.listTokenUsage(S1), agents: await store.listAgents(S1) };
 
@@ -196,7 +196,7 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('retoma do cursor: lê só o que foi acrescentado', async () => {
+  test('resumes from the cursor: reads only what was appended', async () => {
     const { root, store } = await fresh();
     const file = join(root, MAIN_FILE);
     const line = (o: object) => `${JSON.stringify(o)}\n`;
@@ -228,7 +228,7 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('linha pela metade fica para a próxima rodada', async () => {
+  test('a half-written line waits for the next round', async () => {
     const { root, store } = await fresh();
     const file = join(root, MAIN_FILE);
     const full = JSON.stringify({
@@ -250,9 +250,9 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('mensagem que termina depois do cursor fica com o uso final, não somado', async () => {
+  test('a message that ends after the cursor keeps the final usage, not a sum', async () => {
     const { root, store } = await fresh();
-    const file = join(root, join('-repo-outro', `${S2}.jsonl`));
+    const file = join(root, join('-repo-other', `${S2}.jsonl`));
     const line = (uuid: string, output: number) =>
       `${JSON.stringify({
         sessionId: S2,
@@ -272,7 +272,7 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('arquivo reescrito menor é relido do início sem duplicar', async () => {
+  test('a file rewritten smaller is reread from the start without duplicating', async () => {
     const { root, store } = await fresh();
     const file = join(root, MAIN_FILE);
     const lines = readFileSync(file, 'utf8').split('\n');
@@ -286,7 +286,7 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('importação que caiu antes do cursor é refeita sem duplicar', async () => {
+  test('an import that stopped before the cursor is redone without duplicating', async () => {
     const root = projectsCopy();
     const store = openSqliteStorage({ path: ':memory:' });
     // Simula a queda: grava os eventos, mas a sessão (com o cursor) nunca chega a ser gravada.
@@ -305,7 +305,7 @@ describe('importação do histórico: rodar de novo', () => {
     await store.close();
   });
 
-  test('sessão que já existe (dos hooks) mantém status, espera e metadata', async () => {
+  test('a session that already exists (from the hooks) keeps status, wait and metadata', async () => {
     const root = projectsCopy();
     const store = openSqliteStorage({ path: ':memory:' });
     await store.putSession(
@@ -335,8 +335,8 @@ describe('importação do histórico: rodar de novo', () => {
   });
 });
 
-describe('leitura do transcript', () => {
-  test('lê as linhas completas a partir de um deslocamento', async () => {
+describe('transcript reading', () => {
+  test('reads the complete lines from an offset', async () => {
     const file = join(tmp, 'linhas.jsonl');
     writeFileSync(file, 'á\n\n{"b":1}\nmeio');
     const all = [];
@@ -351,23 +351,23 @@ describe('leitura do transcript', () => {
     truncateSync(file, 0);
   });
 
-  test('o cursor decide de onde continuar', () => {
+  test('the cursor decides where to continue', () => {
     const cursor = { file: 'p/s.jsonl', offset: 100, size: 120, mtimeMs: 5 };
     assert.equal(resumeOffset(null, 'p/s.jsonl', { size: 50, mtimeMs: 1 }), 0);
     assert.equal(resumeOffset(cursor, 'p/s.jsonl', { size: 120, mtimeMs: 5 }), null);
     assert.equal(resumeOffset(cursor, 'p/s.jsonl', { size: 150, mtimeMs: 6 }), 100);
     assert.equal(resumeOffset(cursor, 'p/s.jsonl', { size: 80, mtimeMs: 6 }), 0);
-    assert.equal(resumeOffset(cursor, 'outro/s.jsonl', { size: 120, mtimeMs: 5 }), 0);
+    assert.equal(resumeOffset(cursor, 'other/s.jsonl', { size: 120, mtimeMs: 5 }), 0);
   });
 
-  test('uso sem detalhe por TTL conta a escrita de cache como 5 minutos', () => {
+  test('usage without per-TTL detail counts the cache write as 5 minutes', () => {
     const u = parseUsage({ id: 'm', model: 'claude-x', usage: { input_tokens: 1, cache_creation_input_tokens: 70 } }, null)!;
     assert.equal(u.tokens.cacheWrite5m, 70);
     assert.equal(u.tokens.cacheWrite1h, 0);
     assert.equal(parseUsage({ model: '<synthetic>', usage: { input_tokens: 1 } }, null), null);
   });
 
-  test('linhas sem uuid ou de controle não viram evento', () => {
+  test('lines without a uuid, or control lines, do not become events', () => {
     const names = new Map<string, string>();
     assert.equal(parseLine('[1,2]', names), null);
     assert.deepEqual(parseLine('{"type":"queue-operation","sessionId":"s"}', names)?.events, []);
@@ -375,7 +375,7 @@ describe('leitura do transcript', () => {
     assert.deepEqual(parseLine('{"type":"summary","summary":"Resumo"}', names)?.title, { kind: 'summary', value: 'Resumo' });
   });
 
-  test('dedupe por mensagem fica com a entrada final e agrega por bucket', () => {
+  test('dedupe by message keeps the final entry and aggregates by bucket', () => {
     const sample = (eventId: string, messageId: string | null, output: number): UsageSample => ({
       eventId,
       agentId: 'a',

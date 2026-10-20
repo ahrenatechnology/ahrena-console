@@ -1,9 +1,9 @@
-// Soma do uso de tokens a partir dos eventos importados, sem contar duas vezes.
+// Sum of token usage from the imported events, without counting twice.
 //
-// O streaming grava a mesma mensagem do assistente em várias linhas (uma por bloco de conteúdo),
-// cada uma com o `usage` daquele momento: parcial nas primeiras, final na última. Por isso o uso
-// é deduplicado por `message.id` (ou `requestId`, ou o próprio evento) e fica a entrada com mais
-// tokens de saída, que é a final. Recalcular tudo a partir dos eventos torna a soma idempotente.
+// Streaming writes the same assistant message on several lines (one per content block), each with
+// the `usage` of that moment: partial on the first ones, final on the last. So usage is
+// deduplicated by `message.id` (or `requestId`, or the event itself) and the entry with the most
+// output tokens, the final one, is kept. Recomputing everything from the events makes the sum idempotent.
 
 import { emptyTokenCounts, type TokenCounts, type TokenUsage, type TokenUsageKey } from '../../model.ts';
 import type { MessageUsage } from './transcript.ts';

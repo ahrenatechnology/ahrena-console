@@ -9,7 +9,7 @@ import { after, beforeEach, describe, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate, schemaVersion } from '../src/adapters/sqlite/migrations.ts';
-import { importHistory } from '../src/ingest/historico/importer.ts';
+import { importHistory } from '../src/ingest/history/importer.ts';
 import { ingestHook } from '../src/ingest/hooks/index.ts';
 import { updatePlan, splitPlan, type PlanRecord, type PlanStep } from '../src/plan/index.ts';
 import { at, event } from './fixtures.ts';

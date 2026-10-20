@@ -8,8 +8,8 @@
 //   simulator) goes in as a slice with no agent, on the day of the bucket's last update.
 // So every grouping adds up to the same total. Everything is an estimate.
 
-import { dedupeByMessage, bucketKey, addCounts, type UsageSample } from '../ingest/historico/usage.ts';
-import type { MessageUsage } from '../ingest/historico/transcript.ts';
+import { dedupeByMessage, bucketKey, addCounts, type UsageSample } from '../ingest/history/usage.ts';
+import type { MessageUsage } from '../ingest/history/transcript.ts';
 import { emptyTokenCounts, type ModelPricing, type TokenCounts, type TokenUsage } from '../model.ts';
 import { contextSizeFor, estimateCost, type CostEstimate } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';

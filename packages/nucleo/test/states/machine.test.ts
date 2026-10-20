@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { SessionStateMachine, readInbox, readMemory, fixedProbe, type StateChange } from '../../src/states/index.ts';
-import { importHistory } from '../../src/ingest/historico/importer.ts';
+import { importHistory } from '../../src/ingest/history/importer.ts';
 import { ingestHook, startHookReceiver, type HookReceiver } from '../../src/ingest/hooks/index.ts';
 import { displayStatus } from '../../src/model.ts';
 import { at } from '../fixtures.ts';
@@ -175,7 +175,7 @@ describe('machine with SQLite', () => {
   });
 
   test('history backfill does not touch the live state nor reopen an imported session', async () => {
-    const root = join(import.meta.dirname, '..', 'fixtures', 'historico', 'projects');
+    const root = join(import.meta.dirname, '..', 'fixtures', 'history', 'projects');
     await importHistory({ storage: store, root });
     const imported = (await store.listSessions()).items;
     assert.ok(imported.length > 0);

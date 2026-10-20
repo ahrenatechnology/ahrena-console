@@ -17,7 +17,7 @@ import {
   restoreDefault,
   priceTable,
 } from '../src/cost/index.ts';
-import { importHistory, mainAgentId, subagentId } from '../src/ingest/historico/importer.ts';
+import { importHistory, mainAgentId, subagentId } from '../src/ingest/history/importer.ts';
 import { emptyTokenCounts, type TokenCounts } from '../src/model.ts';
 import { estimateCost, resolvePricing } from '../src/pricing.ts';
 import { agent, at, event, pricing, session, T0, usage } from './fixtures.ts';
@@ -220,7 +220,7 @@ describe('end-to-end cost with the imported history', () => {
 
   test('imports, prices by the table in force and splits among agents', async () => {
     const root = join(tmp, 'projects');
-    cpSync(join(import.meta.dirname, 'fixtures', 'historico', 'projects'), root, { recursive: true });
+    cpSync(join(import.meta.dirname, 'fixtures', 'history', 'projects'), root, { recursive: true });
     const store = openSqliteStorage({ path: ':memory:' });
     await importHistory({ storage: store, root });
 

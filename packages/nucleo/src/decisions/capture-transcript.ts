@@ -12,8 +12,8 @@
 //   question the agent just asked. It joins the topic's chain only when the turn had a single decision.
 
 import { readFile } from 'node:fs/promises';
-import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
-import { isoTimestamp } from '../ingest/historico/transcript.ts';
+import { mainAgentId, subagentId } from '../ingest/history/importer.ts';
+import { isoTimestamp } from '../ingest/history/transcript.ts';
 import type { Decision } from './model.ts';
 import type { DecisionPort } from './port.ts';
 import { registerDecision, type DecisionDraft } from './registry.ts';

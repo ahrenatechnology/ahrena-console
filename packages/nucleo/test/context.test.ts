@@ -23,7 +23,7 @@ import {
   validateContextMeter,
   type ContextMeter,
 } from '../src/context/index.ts';
-import { importHistory } from '../src/ingest/historico/importer.ts';
+import { importHistory } from '../src/ingest/history/importer.ts';
 import { ingestHook } from '../src/ingest/hooks/index.ts';
 import { at, event } from './fixtures.ts';
 

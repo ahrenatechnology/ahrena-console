@@ -20,7 +20,7 @@ import type { Decision } from '../decisions/model.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import { markNoise } from '../decisions/registry.ts';
 import { isDismissedAnswer, looksLikeCorrection, shortChoice } from '../decisions/text.ts';
-import { eventosDoTranscript, type SessaoImportada } from '../ingest/historico/importer.ts';
+import { transcriptEvents, type ImportedSession } from '../ingest/history/importer.ts';
 import type { Session, SessionEvent } from '../model.ts';
 import { isPlanEvent } from '../plan/extraction.ts';
 import { rebuildPlan } from '../plan/recording.ts';
@@ -39,7 +39,7 @@ export function eventoDeDecisao(e: SessionEvent): boolean {
 }
 
 /** Na importação: captura as decisões do transcript da sessão quando os eventos novos podem trazer alguma. */
-export async function capturarDoTranscript(decisoes: DecisionPort, s: SessaoImportada, agora = new Date().toISOString()): Promise<number> {
+export async function capturarDoTranscript(decisoes: DecisionPort, s: ImportedSession, agora = new Date().toISOString()): Promise<number> {
   if (!s.transcriptPath || !s.added.some(eventoDeDecisao)) return 0;
   return (await captureTranscriptFile(decisoes, s.transcriptPath, agora)).created.length;
 }
@@ -78,7 +78,7 @@ export async function reprocessarHistorico(o: {
       try {
         const t = transcriptDe(s, o.raiz);
         const arquivo = t && existsSync(t) ? t : null;
-        const relidos = arquivo ? await eventosDoTranscript(arquivo, s.id, isPlanEvent) : [];
+        const relidos = arquivo ? await transcriptEvents(arquivo, s.id, isPlanEvent) : [];
         const n = await rebuildPlan(o.storage, s.id, relidos);
         if (n > 0) (r.comPlano++, (r.planos += n));
         if (o.decisoes && arquivo) r.decisoes += (await captureTranscriptFile(o.decisoes, arquivo, agora())).created.length;
@@ -167,7 +167,7 @@ export async function reprocessarContexto(o: { storage: StoragePort; raiz: strin
         const t = transcriptDe(s, o.raiz);
         const arquivos = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
         const relidos: SessionEvent[] = [];
-        for (const a of arquivos) relidos.push(...(await eventosDoTranscript(a, s.id, (e) => e.type === 'Compaction')));
+        for (const a of arquivos) relidos.push(...(await transcriptEvents(a, s.id, (e) => e.type === 'Compaction')));
         r.medidores += await rebuildContextMeters(o.storage, s.id, relidos);
       } catch (err) {
         o.log?.(`medidor de contexto de ${s.id}: ${(err as Error).message}`);
