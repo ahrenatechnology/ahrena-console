@@ -1,0 +1,22 @@
+{
+  "name": "promote-suggested",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{decision}/promover",
+    "body": {
+      "sessao": "sim-painel-esta"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "rascunho": {
+      "caminho": "docs/decisoes/0001-10-cards-por-coluna-com-mostrar.md",
+      "markdown": "# 0001 · 10 cards por coluna, com \"mostrar mais\"\n\n- **Status:** proposta\n- **Data:** 2026-10-20\n- **Origem:** D6 da sessão `sim-painel-esta` (Sugerida, agente propôs), escopo família, branch `feat/42-kanban-de-sessoes`\n- **Conversa:** `/ui/sessions/sim-painel-esta` no console\n\n## Contexto\n\nA captura não registrou a pergunta ou o pedido que levou a esta decisão.\n\n## Decisão\n\n10 cards por coluna, com \"mostrar mais\"\n\n## Alternativas consideradas\n\n- 20 por coluna\n- rolagem infinita\n\n## Consequências\n\n- No console, a decisão tem escopo família: segue a sessão pelo /clear, pela compactação e nas sessões filhas. Aqui, ela passa a valer pelo repositório, sem depender do banco local.\n- O que fica mais fácil e o que fica mais difícil: a completar por quem promoveu, antes do merge.\n",
+      "hash": "27a0f68f26d190ee0a42ccfeaa9f2ed995ae1bb29be2dcc130e1c36030a0b38f",
+      "repo": "/simulacao/ahrena-demo",
+      "podeGravar": false,
+      "motivo": "a pasta /simulacao/ahrena-demo não existe nesta máquina"
+    }
+  }
+}

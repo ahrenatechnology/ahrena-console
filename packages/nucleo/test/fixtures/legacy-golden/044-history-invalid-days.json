@@ -1,0 +1,12 @@
+{
+  "name": "history-invalid-days",
+  "request": {
+    "method": "GET",
+    "path": "/api/historico?dias=99"
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "dias: um inteiro de 1 a 31"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "decisions-page-invalid-group",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisoes?agrupar=nada"
+  },
+  "status": 400,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "agrupar: branch, familia ou sessao"
+  }
+}

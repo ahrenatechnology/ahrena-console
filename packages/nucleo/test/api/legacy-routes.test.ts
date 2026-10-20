@@ -1,100 +1,28 @@
 // Issue #173, phase 1: the API answers in English, and every old Portuguese route and query parameter
 // answers as an alias of the new one, with the same status and the same body. The published mod
 // (v0.0.30) calls `/api/painel/<id>` and `/abrir/<id>`; the installed app calls `/api/atencao` and
-// `/api/mudancas`. The server is the --demo one (scenario p4), assembled here with synthetic data.
+// `/api/mudancas`. The server is the --demo one (scenario p4), assembled in `legacy-demo.ts`.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import {
-  Contas,
-  FeedDeEventos,
-  LeiturasDoDetalhe,
-  ListaDeSessoes,
-  MontadorDoPainel,
-  QuadroKanban,
-  TrabalhoPorBranch,
-  iniciarApiLocal,
-  normalizeLegacyPath,
-  normalizeLegacyQuery,
-  normalizeLegacyUrl,
-  type ApiLocal,
-} from '../../src/api/index.ts';
-import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
-import { DecisoesDaUi } from '../../src/api/decisoes-ui.ts';
-import { criarReposDoNucleo } from '../../src/api/repos.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
-import { GithubCache } from '../../src/github/cache.ts';
-import { GithubProject } from '../../src/github/project.ts';
-import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
-import { HistoricoDeSessoes } from '../../src/historico/leitura.ts';
-import { criarServidorMcp } from '../../src/mcp/index.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
-import { comMudancas, ContasDasSessoes, decisoesComMudancas } from '../../src/mudancas/fontes.ts';
-import { localDaDemo, semearDetalhe } from '../../src/simulador/detalhe.ts';
-import { semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulador/projeto.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
-
-const AGORA = Date.parse('2026-10-20T15:00:00Z');
-const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
+import { normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal } from '../../src/api/index.ts';
+import { DEMO_SESSION, LOCAL, startLegacyDemo, type LegacyDemo } from './legacy-demo.ts';
 
 describe('#173 phase 1: English routes, Portuguese aliases', () => {
-  let sqlite: SqliteStorage;
+  let demo: LegacyDemo;
   let api: ApiLocal;
   let host: string;
   let decisionId: string;
-  const opened: string[] = [];
+  let opened: string[];
 
   before(async () => {
-    const mudancas = new CursorDeMudancas();
-    sqlite = openSqliteStorage({ path: ':memory:' });
-    const contasDasSessoes = new ContasDasSessoes(sqlite);
-    const storage = comMudancas(sqlite, mudancas, contasDasSessoes);
-    const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
-    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
-    const contas = new Contas({ storage, arquivo: null });
-    const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
-    // The decisions of the p9 scenario (p4 has none): a suggested one to confirm and undo.
-    await semearDecisoesDoPainel(decisoes, 'p9', AGORA);
-    await semearWorkflowsDoDemo(storage, AGORA);
-    await semearDetalhe(storage, AGORA);
-    await semearHistoricoDoPainel(storage, decisoes, 'p4', AGORA);
-    const mcp = criarServidorMcp({ storage, contas, desktop: null, log: () => {} });
-    const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }), frota: mcp.frota, mudancas, log: () => {} });
-    const decisoesUi = new DecisoesDaUi({ decisions: decisoes, storage, alvoDe: (id) => montador.alvoDaSessao(id), localDe: async () => null });
-    const kanban = new GithubProject({ source: new ProjetoDoSimulador(), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }), project: PROJECT_DO_SIMULADOR });
-    api = await iniciarApiLocal({
-      montador,
-      hooks: { storage },
-      port: 0,
-      log: () => {},
-      abrirNoDesktop: async (url) => void opened.push(url),
-      mudancas,
-      projeto: { kanban, fonte: 'demo', log: () => {} },
-      detalhe: new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: localDaDemo }),
-      eventos: new FeedDeEventos({ storage }),
-      frota: mcp.frota,
-      analytics: new RotaAnalytics({ storage, contas, agora: () => AGORA }),
-      sessoes: new ListaDeSessoes({ storage, contas, agora: () => AGORA }),
-      historico: new HistoricoDeSessoes({ storage, decisoes, fusoHorario: 'UTC' }),
-      kanban: new QuadroKanban({ storage, contas, agora: () => AGORA }),
-      decisoesUi,
-      repos: repos.rota,
-    });
-    host = new URL(api.url).host;
-    const lista = (await (await fetch(`${api.url}/api/decisions/${SESSAO_DO_PAINEL}?scope=family`)).json()) as { itens: { id: string; estado: string }[] };
+    demo = await startLegacyDemo();
+    ({ api, host, opened } = demo);
+    const lista = (await (await fetch(`${api.url}/api/decisions/${DEMO_SESSION}?scope=family`)).json()) as { itens: { id: string; estado: string }[] };
     decisionId = lista.itens.find((d) => d.estado === 'a_confirmar')!.id;
   });
   after(async () => {
-    await api.close();
-    sqlite.close();
+    await demo.close();
   });
-
-  /** `geradoEm` is the clock of the request, not part of the answer being compared. */
-  const withoutClock = (v: unknown): unknown =>
-    Array.isArray(v) ? v.map(withoutClock) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'geradoEm').map(([k, x]) => [k, withoutClock(x)])) : v;
 
   /** Status, redirect and body (JSON parsed) of a request. */
   async function call(path: string, init: RequestInit = {}) {
@@ -104,7 +32,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     try {
       body = JSON.parse(text);
     } catch {}
-    return { status: r.status, location: r.headers.get('location'), body: withoutClock(body) };
+    return { status: r.status, location: r.headers.get('location'), body };
   }
 
   /** The new and the old path answer the same: status, redirect and body. */
@@ -157,7 +85,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
   });
 
   test('GET routes: the new path answers like the old one, with new and old parameters', async () => {
-    const s = SESSAO_DO_PAINEL;
+    const s = DEMO_SESSION;
     const pairs: [string, string][] = [
       ['/api/attention', '/api/atencao'],
       ['/api/changes?wait=0', '/api/mudancas?espera=0'],
@@ -263,21 +191,21 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     const self = { ...json, origin: `http://${host}` };
     for (const [next, old] of [['confirm', 'confirmar'], ['dismiss', 'descartar'], ['adjust', 'ajustar'], ['undo', 'desfazer'], ['promote', 'promover']]) {
       const [n, o] = [`/api/decisions/nao-existe/${next}`, `/api/decisoes/nao-existe/${old}`];
-      assert.deepEqual(await post(n, { sessao: SESSAO_DO_PAINEL }), await post(o, { sessao: SESSAO_DO_PAINEL }), n);
+      assert.deepEqual(await post(n, { sessao: DEMO_SESSION }), await post(o, { sessao: DEMO_SESSION }), n);
       assert.deepEqual(await post(n, {}), await post(o, {}), `${n} without the session`);
       // The page's own Origin passes on both (#103); another site's, or a query, does not.
-      assert.deepEqual(await post(n, { sessao: SESSAO_DO_PAINEL }, self), await post(o, { sessao: SESSAO_DO_PAINEL }, self), `${n}: page Origin`);
-      assert.notEqual((await post(n, { sessao: SESSAO_DO_PAINEL }, self)).status, 403, n);
+      assert.deepEqual(await post(n, { sessao: DEMO_SESSION }, self), await post(o, { sessao: DEMO_SESSION }, self), `${n}: page Origin`);
+      assert.notEqual((await post(n, { sessao: DEMO_SESSION }, self)).status, 403, n);
       for (const path of [n, o]) {
-        assert.equal((await post(path, { sessao: SESSAO_DO_PAINEL }, { ...json, origin: 'https://exemplo.com' })).status, 403, path);
-        assert.equal((await post(`${path}?x=1`, { sessao: SESSAO_DO_PAINEL }, self)).status, 403, `${path}?x=1`);
+        assert.equal((await post(path, { sessao: DEMO_SESSION }, { ...json, origin: 'https://exemplo.com' })).status, 403, path);
+        assert.equal((await post(`${path}?x=1`, { sessao: DEMO_SESSION }, self)).status, 403, `${path}?x=1`);
       }
       assert.equal((await call(n)).status, 405, `${n}: GET`);
     }
     // A real one: confirm on the new route, undo on the old one.
-    const confirmed = await post(`/api/decisions/${encodeURIComponent(decisionId)}/confirm`, { sessao: SESSAO_DO_PAINEL });
+    const confirmed = await post(`/api/decisions/${encodeURIComponent(decisionId)}/confirm`, { sessao: DEMO_SESSION });
     assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
-    const undone = await post(`/api/decisoes/${encodeURIComponent(decisionId)}/desfazer`, { sessao: SESSAO_DO_PAINEL });
+    const undone = await post(`/api/decisoes/${encodeURIComponent(decisionId)}/desfazer`, { sessao: DEMO_SESSION });
     assert.equal(undone.status, 200, JSON.stringify(undone.body));
   });
 

@@ -1,0 +1,203 @@
+{
+  "name": "session-agents",
+  "request": {
+    "method": "GET",
+    "path": "/api/sessoes/sim-painel-esta/agentes"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "numeros": {
+      "eventos": 118,
+      "porMinuto": 4,
+      "ferramentas": 53,
+      "ferramentasUnicas": 6,
+      "subagentes": 4,
+      "compactacoes": 0,
+      "erros": 0,
+      "duracaoMin": 28,
+      "rodando": true
+    },
+    "ferramentas": [
+      {
+        "nome": "Bash",
+        "n": 15
+      },
+      {
+        "nome": "Read",
+        "n": 13
+      },
+      {
+        "nome": "Edit",
+        "n": 9
+      },
+      {
+        "nome": "TodoWrite",
+        "n": 8
+      },
+      {
+        "nome": "Grep",
+        "n": 7
+      },
+      {
+        "nome": "Agent",
+        "n": 1
+      }
+    ],
+    "tarefas": {
+      "feitos": 2,
+      "total": 6,
+      "atual": "Extrair a cobrança",
+      "proximo": "Migrar os testes",
+      "restantes": 2,
+      "atualDono": {
+        "tipo": "principal",
+        "nome": null,
+        "agenteId": "sim-painel-esta:main"
+      },
+      "mudouEm": "2026-10-20T14:59:30.000Z",
+      "passos": [
+        {
+          "id": "1",
+          "texto": "Mapear o módulo",
+          "textoAtivo": "Mapear o módulo",
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "2",
+          "texto": "Desenhar os serviços",
+          "textoAtivo": "Desenhar os serviços",
+          "estado": "completed",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "3",
+          "texto": "Extrair a cobrança",
+          "textoAtivo": "Extrair a cobrança",
+          "estado": "in_progress",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "4",
+          "texto": "Migrar os testes",
+          "textoAtivo": "Migrar os testes",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "5",
+          "texto": "Ajustar o deploy",
+          "textoAtivo": "Ajustar o deploy",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        },
+        {
+          "id": "6",
+          "texto": "Remover o código velho",
+          "textoAtivo": "Remover o código velho",
+          "estado": "pending",
+          "dono": {
+            "tipo": "principal",
+            "nome": null,
+            "agenteId": "sim-painel-esta:main"
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "cacheLido": 957561,
+      "cacheGravado": 0,
+      "entrada": 24000,
+      "saida": 159024,
+      "total": 1140585
+    },
+    "agentes": [
+      {
+        "id": "sim-painel-esta:main",
+        "tipo": "principal",
+        "nome": "Agente principal",
+        "tarefa": null,
+        "modelo": "claude-opus-5-5",
+        "turnos": 9,
+        "status": "working",
+        "inicio": "2026-10-20T14:32:00.000Z",
+        "fim": null,
+        "custoUsd": 3.4679922000000003,
+        "pai": null
+      },
+      {
+        "id": "sim-painel-esta:a3",
+        "tipo": "subagente",
+        "nome": "Plan",
+        "tarefa": "plano",
+        "modelo": null,
+        "turnos": null,
+        "status": "completed",
+        "inicio": "2026-10-20T14:37:00.000Z",
+        "fim": "2026-10-20T14:40:00.000Z",
+        "custoUsd": 0.042,
+        "pai": "sim-painel-esta:main"
+      },
+      {
+        "id": "sim-painel-esta:a0",
+        "tipo": "subagente",
+        "nome": "Explore",
+        "tarefa": "achar usos",
+        "modelo": null,
+        "turnos": null,
+        "status": "working",
+        "inicio": "2026-10-20T14:59:00.000Z",
+        "fim": null,
+        "custoUsd": 0.062,
+        "pai": "sim-painel-esta:main"
+      },
+      {
+        "id": "sim-painel-esta:a1",
+        "tipo": "subagente",
+        "nome": "code-reviewer",
+        "tarefa": "diff",
+        "modelo": null,
+        "turnos": null,
+        "status": "working",
+        "inicio": "2026-10-20T14:59:18.000Z",
+        "fim": null,
+        "custoUsd": 0.082,
+        "pai": "sim-painel-esta:main"
+      },
+      {
+        "id": "sim-painel-esta:a2",
+        "tipo": "subagente",
+        "nome": "test-runner",
+        "tarefa": "bateria",
+        "modelo": null,
+        "turnos": null,
+        "status": "working",
+        "inicio": "2026-10-20T14:59:48.000Z",
+        "fim": null,
+        "custoUsd": 0.102,
+        "pai": "sim-painel-esta:main"
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "changes-after-writes",
+  "request": {
+    "method": "GET",
+    "path": "/api/mudancas?desde={cursor}&espera=0"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "cursor": "golden.139",
+    "mudancas": [
+      {
+        "tipo": "decisao",
+        "chave": "dec:e3832f8ee7da26e500dfd0e1985021a9",
+        "sessionId": "sim-painel-esta",
+        "accountId": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "seq": 131
+      },
+      {
+        "tipo": "decisao",
+        "chave": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "sessionId": "sim-painel-esta",
+        "accountId": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "seq": 138
+      },
+      {
+        "tipo": "decisao",
+        "chave": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "sessionId": "sim-painel-esta",
+        "accountId": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "seq": 139
+      }
+    ],
+    "reiniciar": false,
+    "expirou": false
+  }
+}

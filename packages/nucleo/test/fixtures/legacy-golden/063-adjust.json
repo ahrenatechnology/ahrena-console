@@ -1,0 +1,35 @@
+{
+  "name": "adjust",
+  "request": {
+    "method": "POST",
+    "path": "/api/decisoes/{decision}/ajustar",
+    "body": {
+      "sessao": "sim-painel-esta",
+      "texto": "Oito cards por coluna, com \"mostrar mais\""
+    }
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "decisao": {
+      "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+      "rotulo": "D6",
+      "origem": "sugerida",
+      "estado": "substituida",
+      "titulo": "10 cards por coluna, com \"mostrar mais\"",
+      "texto": "10 cards por coluna, com \"mostrar mais\"",
+      "contexto": null,
+      "desfazer": "ajustar",
+      "nao": [
+        "20 por coluna",
+        "rolagem infinita"
+      ],
+      "decididaPor": "agente",
+      "decididaEm": "2026-10-20T14:54:00.000Z",
+      "confirmadaEm": null,
+      "substituidaPor": "D7",
+      "sessao": "esta",
+      "toolUseId": "sim-toolu-p9-6"
+    }
+  }
+}
