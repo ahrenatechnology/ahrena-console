@@ -328,7 +328,7 @@ test('Plano: o anel com o % e três passos em destaque em volta do atual; o rest
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     const card = await ui.find({ key: 'card-plano' })
-    expect(card?.props.height).toBe(7)
+    expect(card?.props.height).toBe(9)
     expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
     expect(card?.text).toMatch(/PLANO\s*3\/6/)
     // O último feito, o atual (em negrito) e o próximo.
@@ -534,7 +534,7 @@ test('altura: todo card tem a mesma altura (P1); sem altura, os de menor priorid
   for (const base of [PANE, LARGO]) {
     // Pouca altura: a sessão e o Contexto ficam, inteiros; o resto, no card de resumos.
     let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, base === PANE ? 40 : 26) })
-    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(7)
+    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(9)
     // No card de altura fixa, o título e a atividade cortam com reticências, como no P1.
     expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
     expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
@@ -547,7 +547,7 @@ test('altura: todo card tem a mesma altura (P1); sem altura, os de menor priorid
     ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
     for (const key of CARDS) {
       const card = await ui.find({ key })
-      expect([card?.props.width, card?.props.height]).toEqual([34, 7])
+      expect([card?.props.width, card?.props.height]).toEqual([34, 9])
     }
     expect(await ui.find({ key: 'resumos' })).toBeUndefined()
     await ui.unmount()
@@ -940,7 +940,7 @@ test('"Compactar agora" não quebra a grade 2×2: toma o lugar do tile Backgroun
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-compactar']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
     const card = await ui.find({ key: 'card-contexto' })
-    expect(card?.props.height).toBe(7)
+    expect(card?.props.height).toBe(9)
     // O cabeçalho continua o do P1.
     expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
     await ui.unmount()
@@ -1094,7 +1094,7 @@ test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, mesmo c
   await abrir($, on, { cenario: 'p1' })
   for (const [base, linhas] of [[PANE, 45], [LARGO, 30]] as const) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(7)
+    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(9)
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
     await ui.unmount()

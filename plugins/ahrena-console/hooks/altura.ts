@@ -5,10 +5,11 @@
 /** Borda de cima e de baixo de um card. */
 export const BORDA_DO_CARD = 2
 /**
- * Linhas internas de todo card (o `.pc` do P1, 10,2em): o cabeçalho e mais 5. A borda do desktop é
- * um traço fino, então o card inteiro fica com a altura do P1; a altura é fixa e igual em todos.
+ * Linhas internas de todo card: a mesma altura para todos, a que o Contexto e custo precisa para
+ * os quatro tiles com borda inteiros. No Desktop, um tile com borda tem ~55 px (o Box com borda
+ * ganha respiro vertical); o cabeçalho e as duas fileiras pedem ~150 px, e cada linha tem ~19 px.
  */
-export const LINHAS_DO_CARD = 5
+export const LINHAS_DO_CARD = 7
 
 /**
  * Um espaço de 1 (`gap`, `rowGap`, `paddingY`), em linhas do corpo. Medido no Desktop: um card de
