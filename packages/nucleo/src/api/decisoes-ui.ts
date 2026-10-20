@@ -220,7 +220,11 @@ export class DecisoesDaUi {
     this.mcpExiste = o.mcpExiste ?? false;
   }
 
-  /** Todas as decisões que a máquina conhece: as das famílias de cada sessão da porta de armazenamento. */
+  /**
+   * Todas as decisões que a máquina conhece: as das famílias de cada sessão da porta de armazenamento.
+   * Limite conhecido: cada GET faz uma consulta de família por sessão e uma lista por família, sem
+   * cache. Serve ao console local (uma pessoa, centenas de sessões); com milhares, pede um cache.
+   */
   private async todas(): Promise<{ decisoes: Decision[]; sessoes: Map<string, Session> }> {
     const sessoes = new Map<string, Session>();
     let cursor: string | null = null;
@@ -545,7 +549,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-/** O `q`, o `estado` e o escopo ou o agrupamento: `null` + a mensagem quando algum não vale. */
+/** O `estado` e o `q` da busca; quando algum não vale, a mensagem de erro (uma string) no lugar deles. */
 function filtrosDe(url: URL): { estado: FiltroDeEstado; q: string | null } | string {
   const estado = (url.searchParams.get('estado') ?? 'todas') as FiltroDeEstado;
   if (!FILTROS.includes(estado)) return 'estado: todas, vigentes ou a_confirmar';
