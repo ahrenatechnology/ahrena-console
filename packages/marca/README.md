@@ -8,6 +8,7 @@ A fonte é uma só: [docs/brand/tokens.json](../../docs/brand/tokens.json). O ge
 | --- | --- | --- |
 | [gerado/marca.ts](gerado/marca.ts) | o painel (mod do Claude Code) e o núcleo | cores como strings hex: `paleta`, `ci`, `temas`, `ordemStatus`, `status`, `tipografia` |
 | [gerado/marca.css](gerado/marca.css) | o artefato HTML | variáveis CSS: escuro no `:root`, claro por `prefers-color-scheme` ou `data-theme="light"` |
+| [packages/nucleo/ui/marca.css](../nucleo/ui/marca.css) | a interface que o núcleo serve em `/ui` | cópia do `marca.css`, para o núcleo levar a paleta quando é empacotado sozinho (no app desktop) |
 | [spikes/painel-teste/hooks/marca.ts](../../spikes/painel-teste/hooks/marca.ts) | o painel de teste | cópia do `marca.ts`, porque um módulo de hooks só importa arquivos de dentro do próprio plugin |
 
 Ficam de fora o roxo e o rosa antigo, que o `tokens.json` guarda só como histórico. As notas (`_nota`) e os motivos dos status também não entram.

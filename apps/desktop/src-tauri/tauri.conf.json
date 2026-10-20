@@ -20,6 +20,7 @@
     "resources": {
       "../../../packages/nucleo/package.json": "packages/nucleo/package.json",
       "../../../packages/nucleo/src/": "packages/nucleo/src/",
+      "../../../packages/nucleo/ui/": "packages/nucleo/ui/",
       "../../../packages/marca/package.json": "packages/marca/package.json",
       "../../../packages/marca/gerado/": "packages/marca/gerado/"
     },
