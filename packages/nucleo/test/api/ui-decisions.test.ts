@@ -16,7 +16,7 @@ import { groupSummary, decisionsRoute } from '../../ui/screens/decisions.js';
 // @ts-expect-error: idem
 import { create, callParts, tabRoute } from '../../ui/screens/session-detail-decisions.js';
 // @ts-expect-error: idem
-import { findScreen, SCREENS } from '../../ui/screens.js';
+import { findScreen, sidebarSections } from '../../ui/screens.js';
 
 interface Pedido {
   url: string;
@@ -121,12 +121,13 @@ describe('o card de uma decisão', () => {
 });
 
 describe('a página (C21) e a aba (C20)', () => {
-  test('a página está registrada na barra, depois de Analytics', () => {
-    const ids = SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
-    assert.ok(ids.indexOf('decisions') > ids.indexOf('analytics'));
+  test('a página está registrada na barra, no bloco Decisões, depois de Entrega e antes de Máquinas', () => {
+    const blocks = sidebarSections().map((s: { id: string }) => s.id);
+    assert.equal(blocks.indexOf('decisions'), blocks.indexOf('delivery') + 1);
+    assert.ok(blocks.indexOf('decisions') < blocks.indexOf('machines'));
     const { screen: tela } = findScreen('/ui/decisions');
     assert.equal(tela.item.label, 'Decisões');
-    assert.equal(tela.item.section, 'main', 'nas telas do dia a dia, antes de Máquinas e Controle');
+    assert.equal(tela.item.section, 'decisions', 'no bloco Decisões, onde as ADRs vão entrar');
     assert.equal(tela.item.icon, 'decision', 'o desenho do main (git-commit-horizontal), não um nome novo');
     assert.equal(tela.icon, 'decision');
   });

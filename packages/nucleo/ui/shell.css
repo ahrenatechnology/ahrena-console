@@ -24,7 +24,7 @@ button { font: inherit; cursor: pointer; }
 #nav { display: flex; flex-direction: column; gap: 2px; }
 /* As seções da barra (C24): o título é um olhinho com respiro em cima; a de cima não tem título. */
 .cc-nav-section { display: flex; flex-direction: column; gap: 2px; }
-.cc-nav-title { padding: 12px 10px 4px; }
+.cc-nav-title { padding: 10px 10px 4px; }
 .cc-nav { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); }
 .cc-nav .icon { font-size: 16px; }
 .cc-nav:hover { color: var(--text); }
@@ -38,7 +38,7 @@ button { font: inherit; cursor: pointer; }
 .cc-nav .q { margin-left: auto; font-size: 10.5px; font-weight: var(--weight-semibold); padding: 0 7px; border-radius: 99px; background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .cc-nav:focus-visible, .btn:focus-visible, .cc-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.cc-foot { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+.cc-foot { margin-top: auto; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .cc-foot .card { padding: 8px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .cc-foot .card b { font-weight: var(--weight-medium); }
 #live .version { margin-left: auto; }

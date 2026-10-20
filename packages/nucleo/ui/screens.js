@@ -8,10 +8,12 @@
 // - `file`: the screen module in `ui/screens/`. Without it, the shell shows the header and the empty state.
 // - `title`, `sub` and `icon`: the header of the empty state and the window title.
 
-// The sidebar blocks, in C24 order: the everyday screens (no title), Machines and Control. A block
-// without items does not show.
+// The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
+// Control. A block without items does not show.
 export const SECTIONS = [
   { id: 'main', label: null },
+  { id: 'delivery', label: 'Entrega' },
+  { id: 'decisions', label: 'Decisões' },
   { id: 'machines', label: 'Máquinas' },
   { id: 'control', label: 'Controle' },
 ];
@@ -72,18 +74,9 @@ export const SCREENS = [
     file: '/ui/screens/session-detail.js', // #29 and #30
   },
   {
-    id: 'project',
-    route: '/ui/project',
-    item: { label: 'Kanban do projeto', icon: 'github', section: 'main' },
-    title: 'Kanban do projeto',
-    sub: 'O GitHub Project por Status',
-    icon: 'github',
-    file: '/ui/screens/project.js', // #80 (C11)
-  },
-  {
     id: 'repos',
     route: '/ui/repos',
-    item: { label: 'Repositórios', icon: 'repos', section: 'main' },
+    item: { label: 'Repositórios', icon: 'repos', section: 'delivery' },
     title: 'Repositórios',
     sub: 'Organizações e repositórios da sua conta do GitHub',
     icon: 'repos',
@@ -99,9 +92,18 @@ export const SCREENS = [
     file: '/ui/screens/repo.js', // C23
   },
   {
+    id: 'project',
+    route: '/ui/project',
+    item: { label: 'Kanban do projeto', icon: 'github', section: 'delivery' },
+    title: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icon: 'github',
+    file: '/ui/screens/project.js', // #80 (C11)
+  },
+  {
     id: 'dev-console',
     route: '/ui/dev-console',
-    item: { label: 'Dev Console', icon: 'gauge', section: 'main' },
+    item: { label: 'Dev Console', icon: 'gauge', section: 'delivery' },
     title: 'Dev Console',
     sub: 'PRs, issues e sessões dos repositórios do contexto',
     icon: 'gauge',
@@ -147,7 +149,7 @@ export const SCREENS = [
   {
     id: 'decisions',
     route: '/ui/decisions',
-    item: { label: 'Decisões', icon: 'decision', section: 'main' },
+    item: { label: 'Decisões', icon: 'decision', section: 'decisions' },
     title: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     icon: 'decision',
