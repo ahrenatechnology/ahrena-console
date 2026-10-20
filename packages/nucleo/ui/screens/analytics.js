@@ -112,14 +112,14 @@ function splitByAccount(rows) {
     'ul',
     { class: 'an-accounts', 'aria-label': 'Divisão por conta' },
     ...rows.map((l) => {
-      const className = accountClass(l.cor);
+      const className = accountClass(l.color);
       // Com preço só para parte dos modelos, o valor é parcial: a dica diz quais ficaram de fora.
-      const partial = l.usd !== null && l.usd !== undefined && (l.semPreco ?? []).length > 0;
+      const partial = l.usd !== null && l.usd !== undefined && (l.unpriced ?? []).length > 0;
       return el(
         'li',
-        { 'data-account': l.conta ?? 'no-account', title: partial ? `Parcial: sem preço para ${l.semPreco.map(modelName).join(', ')}` : null },
+        { 'data-account': l.account ?? 'no-account', title: partial ? `Parcial: sem preço para ${l.unpriced.map(modelName).join(', ')}` : null },
         el('span', { class: className ? `an-dot ${className}` : 'an-dot', 'aria-hidden': 'true' }),
-        el('span', { class: 'an-trunc' }, l.rotulo),
+        el('span', { class: 'an-trunc' }, l.label),
         el('b', {}, usd(l.usd), partial ? el('span', { class: 'an-partial' }, ' · parcial') : null),
       );
     }),
@@ -128,19 +128,19 @@ function splitByAccount(rows) {
 
 /** As linhas da divisão por conta do C12, ou `null` com uma conta só. */
 export function overviewAccounts(data) {
-  const accounts = data?.contas ?? [];
-  const by = data?.numeros?.custo?.porConta ?? [];
+  const accounts = data?.accounts ?? [];
+  const by = data?.numbers?.cost?.byAccount ?? [];
   if (accounts.length < 2 || by.length < 2) return null;
   return by.map((p) => {
-    const c = accounts.find((x) => x.id === p.conta);
-    return { conta: p.conta, rotulo: c?.rotulo ?? 'Sem conta', cor: c?.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] };
+    const c = accounts.find((x) => x.id === p.account);
+    return { account: p.account, label: c?.label ?? 'Sem conta', color: c?.color ?? null, usd: p.usd, unpriced: p.unpriced ?? [] };
   });
 }
 
 /** As linhas da divisão por conta do C13 (do período, ou de hoje com `por`), ou `null` com uma conta só. */
-export function costAccounts(data, by = data?.porConta ?? []) {
-  if ((data?.contas ?? []).length < 2 || (by ?? []).length < 2) return null;
-  return by.map((p) => ({ conta: p.conta, rotulo: p.rotulo ?? 'Sem conta', cor: p.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] }));
+export function costAccounts(data, by = data?.byAccount ?? []) {
+  if ((data?.accounts ?? []).length < 2 || (by ?? []).length < 2) return null;
+  return by.map((p) => ({ account: p.account, label: p.label ?? 'Sem conta', color: p.color ?? null, usd: p.usd, unpriced: p.unpriced ?? [] }));
 }
 
 // ---------- SVG ----------
@@ -177,17 +177,17 @@ export function heatmap(days) {
   const LEFT = 30;
   const TOP = 14;
   const dow = (day) => (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const shift = days.length ? dow(days[0].dia) : 0;
+  const shift = days.length ? dow(days[0].day) : 0;
   const columns = Math.max(1, Math.ceil((days.length + shift) / 7));
-  const max = Math.max(0, ...days.map((d) => d.eventos ?? 0));
+  const max = Math.max(0, ...days.map((d) => d.events ?? 0));
   const level = (v) => (v > 0 && max > 0 ? Math.min(4, Math.max(1, Math.ceil((v / max) * 4))) : 0);
   const children = [];
   let lastColumnWithMonth = -10;
   days.forEach((d, i) => {
     const p = i + shift;
     const col = Math.floor(p / 7);
-    if (d.dia.slice(8) === '01' && col - lastColumnWithMonth >= 3) {
-      children.push(svg('text', { x: LEFT + col * STEP, y: 9 }, MONTHS[Number(d.dia.slice(5, 7)) - 1]));
+    if (d.day.slice(8) === '01' && col - lastColumnWithMonth >= 3) {
+      children.push(svg('text', { x: LEFT + col * STEP, y: 9 }, MONTHS[Number(d.day.slice(5, 7)) - 1]));
       lastColumnWithMonth = col;
     }
   });
@@ -195,7 +195,7 @@ export function heatmap(days) {
   days.forEach((d, i) => {
     const p = i + shift;
     children.push(
-      svg('rect', { class: `an-cell an-n${level(d.eventos)}`, x: LEFT + Math.floor(p / 7) * STEP, y: TOP + (p % 7) * STEP, width: CELL, height: CELL, rx: 2 }, tip(`${shortDate(d.dia)}: ${plural(d.eventos ?? 0, 'evento', 'eventos')}`)),
+      svg('rect', { class: `an-cell an-n${level(d.events)}`, x: LEFT + Math.floor(p / 7) * STEP, y: TOP + (p % 7) * STEP, width: CELL, height: CELL, rx: 2 }, tip(`${shortDate(d.day)}: ${plural(d.events ?? 0, 'evento', 'eventos')}`)),
     );
   });
   return [
@@ -211,15 +211,15 @@ export function bars30(days) {
   const H = 100;
   const step = W / Math.max(1, days.length);
   const width = r1(step * 0.7);
-  const max = Math.max(1, ...days.map((d) => d.sessoes ?? 0));
+  const max = Math.max(1, ...days.map((d) => d.sessions ?? 0));
   const children = days.map((d, i) => {
-    const h = r1(((d.sessoes ?? 0) / max) * (H - 4));
-    return svg('rect', { class: `an-col${i === days.length - 1 ? ' an-current' : ''}`, x: r1(i * step), y: r1(H - h), width: width, height: h }, tip(`${shortDate(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
+    const h = r1(((d.sessions ?? 0) / max) * (H - 4));
+    return svg('rect', { class: `an-col${i === days.length - 1 ? ' an-current' : ''}`, x: r1(i * step), y: r1(H - h), width: width, height: h }, tip(`${shortDate(d.day)}: ${plural(d.sessions ?? 0, 'sessão', 'sessões')}`));
   });
   children.push(svg('line', { class: 'an-axis', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
   return [
     svg('svg', { class: 'an-chart an-columns', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Sessões por dia nos últimos 30 dias' }, children),
-    days.length ? el('div', { class: 'an-leg an-tips an-dates' }, el('span', {}, shortDate(days[0].dia)), el('span', {}, shortDate(days.at(-1).dia))) : null,
+    days.length ? el('div', { class: 'an-leg an-tips an-dates' }, el('span', {}, shortDate(days[0].day)), el('span', {}, shortDate(days.at(-1).day))) : null,
   ];
 }
 
@@ -263,8 +263,8 @@ export function costRow(byDay) {
   if (end) children.push(svg('circle', { class: 'an-tip', cx: end[0], cy: end[1], r: 4 }));
   // Alvos de passar o mouse, um por dia, maiores que a linha.
   const middle = n > 1 ? (W - P - 10) / (n - 1) / 2 : 10;
-  byDay.forEach((d, i) => children.push(svg('rect', { class: 'an-target', x: r1(x(i) - middle), y: 8, width: r1(middle * 2), height: H - 28 }, tip(`${shortDate(d.dia)}: ${usd(d.usd)}`))));
-  if (n) children.push(svg('text', { x: P, y: H - 4 }, shortDate(byDay[0].dia)), svg('text', { x: W - 10, y: H - 4, 'text-anchor': 'end' }, shortDate(byDay.at(-1).dia)));
+  byDay.forEach((d, i) => children.push(svg('rect', { class: 'an-target', x: r1(x(i) - middle), y: 8, width: r1(middle * 2), height: H - 28 }, tip(`${shortDate(d.day)}: ${usd(d.usd)}`))));
+  if (n) children.push(svg('text', { x: P, y: H - 4 }, shortDate(byDay[0].day)), svg('text', { x: W - 10, y: H - 4, 'text-anchor': 'end' }, shortDate(byDay.at(-1).day)));
   return svg('svg', { class: 'an-chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Custo estimado por dia, em dólares' }, children);
 }
 
@@ -272,12 +272,12 @@ export function costRow(byDay) {
 export function slicesByModel(byModel) {
   const withValue = byModel.filter((m) => m.usd !== null && m.usd !== undefined);
   const without = byModel.filter((m) => m.usd === null || m.usd === undefined);
-  const slices = withValue.slice(0, withValue.length > 4 ? 3 : 4).map((m) => ({ nome: modelName(m.modelo), classe: modelClass(m.modelo), usd: m.usd, pct: m.pct }));
+  const slices = withValue.slice(0, withValue.length > 4 ? 3 : 4).map((m) => ({ nome: modelName(m.model), classe: modelClass(m.model), usd: m.usd, pct: m.pct }));
   if (withValue.length > 4) {
     const rest = withValue.slice(3);
     slices.push({ nome: `Outros (${rest.length})`, classe: 'an-others', usd: rest.reduce((s, m) => s + m.usd, 0), pct: rest.reduce((s, m) => s + (m.pct ?? 0), 0) });
   }
-  return [...slices, ...without.map((m) => ({ nome: modelName(m.modelo), classe: null, usd: null, pct: null }))];
+  return [...slices, ...without.map((m) => ({ nome: modelName(m.model), classe: null, usd: null, pct: null }))];
 }
 
 function donut(byModel, total, days) {
@@ -352,37 +352,37 @@ function footer(left, right) {
 // ---------- Visão geral (C12) ----------
 
 export function overviewScreen(d) {
-  const n = d.numeros;
-  const noPrice = n.custo.semPreco ?? [];
-  const u30 = d.ultimos30 ?? { dias: [], pico: null, total: 0 };
+  const n = d.numbers;
+  const noPrice = n.cost.unpriced ?? [];
+  const u30 = d.last30 ?? { days: [], peak: null, total: 0 };
   return [
     el(
       'div',
       { class: 'an-stats an-five' },
-      stat({ id: 'sessions', rotulo: 'Sessões', valor: quantity(n.sessoes.total), sub: plural(n.sessoes.ativas, 'ativa', 'ativas'), icone: 'sessions', cor: 'accent' }),
-      stat({ id: 'agents', rotulo: 'Agentes', valor: quantity(n.agentes.total), sub: plural(n.agentes.ativos, 'ativo', 'ativos'), icone: 'an-bot', cor: 'active' }),
+      stat({ id: 'sessions', rotulo: 'Sessões', valor: quantity(n.sessions.total), sub: plural(n.sessions.active, 'ativa', 'ativas'), icone: 'sessions', cor: 'accent' }),
+      stat({ id: 'agents', rotulo: 'Agentes', valor: quantity(n.agents.total), sub: plural(n.agents.active, 'ativo', 'ativos'), icone: 'an-bot', cor: 'active' }),
       stat({ id: 'tokens', rotulo: 'Tokens', valor: quantity(n.tokens.total), sub: n.tokens.cachePct === null ? 'cache sem dado' : `${percent(n.tokens.cachePct)} de cache`, icone: 'port', cor: 'accent' }),
       stat({
         id: 'cost',
         rotulo: 'Custo',
-        valor: usd(n.custo.usd, { curto: true }),
-        sub: `estimativa · ${n.custo.dias ?? 30} dias${noPrice.length ? ` · ${plural(noPrice.length, 'modelo', 'modelos')} sem preço` : ''}`,
+        valor: usd(n.cost.usd, { curto: true }),
+        sub: `estimativa · ${n.cost.days ?? 30} dias${noPrice.length ? ` · ${plural(noPrice.length, 'modelo', 'modelos')} sem preço` : ''}`,
         icone: 'an-dollar',
         cor: 'completed',
         contas: overviewAccounts(d),
       }),
-      stat({ id: 'events', rotulo: 'Eventos', valor: quantity(n.eventos.total), sub: n.eventos.porSessao === null ? 'por sessão: —' : `~${quantity(Math.round(n.eventos.porSessao))} por sessão`, icone: 'an-bolt', cor: 'waiting' }),
+      stat({ id: 'events', rotulo: 'Eventos', valor: quantity(n.events.total), sub: n.events.perSession === null ? 'por sessão: —' : `~${quantity(Math.round(n.events.perSession))} por sessão`, icone: 'an-bolt', cor: 'waiting' }),
     ),
     tabs('overview'),
     el(
       'div',
       { class: 'an-grid-2 an-wide' },
-      card(`Atividade · últimas ${d.atividade?.semanas ?? 52} semanas`, 'eventos por dia', ...heatmap(d.atividade?.dias ?? [])),
+      card(`Atividade · últimas ${d.activity?.weeks ?? 52} semanas`, 'eventos por dia', ...heatmap(d.activity?.days ?? [])),
       card(
         'Últimos 30 dias',
         'sessões por dia',
-        ...bars30(u30.dias),
-        footer(u30.pico ? ['Pico ', el('b', {}, integer.format(u30.pico.sessoes)), ` em ${shortDate(u30.pico.dia)}`] : ['Sem sessões no período'], ['Total ', el('b', {}, integer.format(u30.total ?? 0))]),
+        ...bars30(u30.days),
+        footer(u30.peak ? ['Pico ', el('b', {}, integer.format(u30.peak.sessions)), ` em ${shortDate(u30.peak.day)}`] : ['Sem sessões no período'], ['Total ', el('b', {}, integer.format(u30.total ?? 0))]),
       ),
     ),
     el(
@@ -392,7 +392,7 @@ export function overviewScreen(d) {
         'Tokens por modelo',
         'milhões',
         list(
-          (d.tokensPorModelo ?? []).map((m) => ({ nome: modelName(m.modelo), nomeLongo: m.modelo, valor: m.tokens, texto: millions(m.tokens), classe: modelClass(m.modelo), dica: `${modelName(m.modelo)}: ${quantity(m.tokens)} tokens` })),
+          (d.tokensByModel ?? []).map((m) => ({ nome: modelName(m.model), nomeLongo: m.model, valor: m.tokens, texto: millions(m.tokens), classe: modelClass(m.model), dica: `${modelName(m.model)}: ${quantity(m.tokens)} tokens` })),
           'Nenhum token no período.',
         ),
       ),
@@ -400,7 +400,7 @@ export function overviewScreen(d) {
         'Ferramentas',
         '30 dias',
         list(
-          (d.ferramentas ?? []).slice(0, 5).map((f) => ({ nome: f.nome, valor: f.usos, texto: integer.format(f.usos), dica: `${f.nome}: ${plural(f.usos, 'uso', 'usos')}` })),
+          (d.tools ?? []).slice(0, 5).map((f) => ({ nome: f.name, valor: f.uses, texto: integer.format(f.uses), dica: `${f.name}: ${plural(f.uses, 'uso', 'usos')}` })),
           'Nenhuma ferramenta usada no período.',
         ),
       ),
@@ -408,7 +408,7 @@ export function overviewScreen(d) {
         'Por dia da semana',
         'sessões',
         list(
-          (d.diaDaSemana ?? []).map((s) => ({ nome: dayLabel(s.dia), valor: s.sessoes, texto: integer.format(s.sessoes), dica: `${dayLabel(s.dia)}: ${plural(s.sessoes, 'sessão', 'sessões')}` })),
+          (d.weekday ?? []).map((s) => ({ nome: dayLabel(s.day), valor: s.sessions, texto: integer.format(s.sessions), dica: `${dayLabel(s.day)}: ${plural(s.sessions, 'sessão', 'sessões')}` })),
           'Nenhuma sessão ainda.',
         ),
       ),
@@ -418,24 +418,24 @@ export function overviewScreen(d) {
 
 // ---------- Custo (C13) ----------
 
-/** O custo de hoje: `resumoDeHoje` (`hoje` é o dia, "AAAA-MM-DD"). */
-const todayCost = (d) => d.resumoDeHoje ?? { usd: null, sessoes: 0 };
+/** O custo de hoje: `todaySummary` (`today` é o dia, "AAAA-MM-DD"). */
+const todayCost = (d) => d.todaySummary ?? { usd: null, sessions: 0 };
 
 export function costScreen(d) {
   const today = todayCost(d);
-  const noPrice = d.semPreco?.modelos ?? [];
-  const max = Math.max(0, ...(d.porProjeto ?? []).map((p) => p.usd ?? 0)) || 1;
+  const noPrice = d.unpriced?.models ?? [];
+  const max = Math.max(0, ...(d.byProject ?? []).map((p) => p.usd ?? 0)) || 1;
   return [
     tabs('cost'),
     el(
       'div',
       { class: 'an-stats an-four' },
-      stat({ id: 'today', rotulo: 'Hoje', valor: usd(today.usd), sub: plural(today.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dollar', cor: 'completed', contas: costAccounts(d, today.porConta) }),
+      stat({ id: 'today', rotulo: 'Hoje', valor: usd(today.usd), sub: plural(today.sessions ?? 0, 'sessão', 'sessões'), icone: 'an-dollar', cor: 'completed', contas: costAccounts(d, today.byAccount) }),
       stat({
         id: 'period',
-        rotulo: `${d.dias} dias`,
-        valor: usd(d.periodo?.usd, { curto: true }),
-        sub: d.periodo?.mediaPorDia === null || d.periodo?.mediaPorDia === undefined ? 'média: sem preço' : `média ${usd(d.periodo.mediaPorDia)} por dia`,
+        rotulo: `${d.days} dias`,
+        valor: usd(d.period?.usd, { curto: true }),
+        sub: d.period?.dailyAverage === null || d.period?.dailyAverage === undefined ? 'média: sem preço' : `média ${usd(d.period.dailyAverage)} por dia`,
         icone: 'an-calendar',
         cor: 'accent',
         contas: costAccounts(d),
@@ -457,19 +457,19 @@ export function costScreen(d) {
       card(
         'Custo por dia',
         'US$',
-        costRow(d.porDia ?? []),
-        footer(d.pico ? ['Pico ', el('b', {}, usd(d.pico.usd)), ` em ${shortDate(d.pico.dia)}`] : ['Sem custo no período'], ['Total ', el('b', {}, usd(d.periodo?.usd, { curto: true }))]),
+        costRow(d.byDay ?? []),
+        footer(d.peak ? ['Pico ', el('b', {}, usd(d.peak.usd)), ` em ${shortDate(d.peak.day)}`] : ['Sem custo no período'], ['Total ', el('b', {}, usd(d.period?.usd, { curto: true }))]),
       ),
-      card('Por modelo', null, donut(d.porModelo ?? [], d.periodo?.usd, d.dias)),
+      card('Por modelo', null, donut(d.byModel ?? [], d.period?.usd, d.days)),
     ),
     card(
       'Por projeto',
-      `${d.dias} dias`,
-      (d.porProjeto ?? []).length
+      `${d.days} dias`,
+      (d.byProject ?? []).length
         ? el(
             'ul',
             { class: 'an-list an-projects' },
-            ...d.porProjeto.map((p) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: p.projeto }, p.projeto), bar(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.projeto}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
+            ...d.byProject.map((p) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: p.project }, p.project), bar(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.project}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
           )
         : el('p', { class: 'an-none' }, 'Nenhum projeto com custo no período.'),
     ),
@@ -480,7 +480,7 @@ export function costScreen(d) {
 
 /** Baixa o JSON já lido (o que está na tela), sem ir ao núcleo de novo. */
 export function fileName(tab, data, days) {
-  const day = typeof data?.ate === 'string' ? data.ate : typeof data?.hoje === 'string' ? data.hoje : 'hoje';
+  const day = typeof data?.until === 'string' ? data.until : typeof data?.today === 'string' ? data.today : 'hoje';
   return tab === 'cost' ? `ahrena-analytics-cost-${days}d-${day}.json` : `ahrena-analytics-${day}.json`;
 }
 
@@ -515,8 +515,9 @@ function timeOf(iso, timeZone) {
   }
 }
 
-/** O dia da semana como a tela escreve: a API manda `sab`, a tela mostra `sáb`. */
-const dayLabel = (day) => (day === 'sab' ? 'sáb' : day);
+/** O dia da semana como a tela escreve: a API manda `mon`…`sun`, a tela mostra `seg`…`dom`. */
+const WEEKDAY_LABELS = { mon: 'seg', tue: 'ter', wed: 'qua', thu: 'qui', fri: 'sex', sat: 'sáb', sun: 'dom' };
+export const dayLabel = (day) => WEEKDAY_LABELS[day] ?? day;
 
 export async function mount(area, ctx, { releituraMs: rereadMs = REREAD_MS } = {}) {
   loadStyle();
@@ -558,13 +559,13 @@ export async function mount(area, ctx, { releituraMs: rereadMs = REREAD_MS } = {
 
   function actions(data) {
     if (tab === 'cost') return [selector(), exportButton()];
-    const hour = timeOf(data?.geradoEm, timeZone);
+    const hour = timeOf(data?.generatedAt, timeZone);
     return [hour ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icon('an-clock'), hour) : null, exportButton()].filter(Boolean);
   }
 
   function withNothing(data) {
-    if (tab === 'overview') return (data?.numeros?.sessoes?.total ?? 0) === 0;
-    return (data?.porModelo ?? []).length === 0 && (data?.porProjeto ?? []).length === 0;
+    if (tab === 'overview') return (data?.numbers?.sessions?.total ?? 0) === 0;
+    return (data?.byModel ?? []).length === 0 && (data?.byProject ?? []).length === 0;
   }
 
   async function draw({ silencioso: quiet = false } = {}) {

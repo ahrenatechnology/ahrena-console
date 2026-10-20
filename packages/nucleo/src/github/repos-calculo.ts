@@ -9,7 +9,7 @@ import type { ContagensCruas, InfoCrua, IssueCrua, ListaCrua, PrCru, RepoCru, Re
 
 export const DIA_MS = 24 * 60 * 60_000;
 export const SEMANA_MS = 7 * DIA_MS;
-const DIAS_DO_PERIODO: Record<Periodo, number> = { '30d': 30, '90d': 90, '1a': 365 };
+const DIAS_DO_PERIODO: Record<Periodo, number> = { '30d': 30, '90d': 90, '1y': 365 };
 
 // Formas cruas do REST.
 export interface SemanaDeCommits {
@@ -49,8 +49,8 @@ export const diaIso = (ms: number): string => new Date(ms).toISOString().slice(0
 export function ciDoRollup(state: string | null | undefined): CiDoRepo {
   if (!state) return null;
   if (state === 'SUCCESS') return 'ok';
-  if (state === 'FAILURE' || state === 'ERROR') return 'falhou';
-  return 'rodando';
+  if (state === 'FAILURE' || state === 'ERROR') return 'failed';
+  return 'running';
 }
 
 export const temEscrita = (permissao: string | null | undefined): boolean => permissao === 'ADMIN' || permissao === 'MAINTAIN' || permissao === 'WRITE';
@@ -78,11 +78,11 @@ export function commits12(atividade: readonly SemanaDeCommits[] | null): number[
 export function commitsDoPeriodo(atividade: readonly SemanaDeCommits[], desde: number): NonNullable<MetricasDoRepo['commits']> {
   const semanas = [...atividade].sort((a, b) => a.week - b.week).filter((s) => naJanela(s.week, desde)).map((s) => s.total);
   const total = semanas.reduce((s, x) => s + x, 0);
-  return { total, porSemana: semanas.length ? arred(total / semanas.length, 1) : 0, semanas };
+  return { total, perWeek: semanas.length ? arred(total / semanas.length, 1) : 0, weeks: semanas };
 }
 
 /** Linhas de código: a soma de adições menos remoções desde o primeiro commit; o saldo do período. */
-export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['linhas']> {
+export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['lines']> {
   let total = 0;
   let noPeriodo = 0;
   for (const [semana, adicionadas, removidas] of frequencia) {
@@ -91,48 +91,48 @@ export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): 
     total += saldo;
     if (naJanela(semana, desde)) noPeriodo += saldo;
   }
-  return { total, noPeriodo };
+  return { total, inPeriod: noPeriodo };
 }
 
-export function frequenciaDoPeriodo(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['frequencia']> {
+export function frequenciaDoPeriodo(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['frequency']> {
   const semanas: SemanaDeFrequencia[] = [...frequencia]
     .sort((a, b) => a[0] - b[0])
     .filter(([s]) => naJanela(s, desde))
-    .map(([s, a, d]) => ({ semana: new Date(s * 1000).toISOString(), adicionadas: a, removidas: Math.abs(d) }));
+    .map(([s, a, d]) => ({ week: new Date(s * 1000).toISOString(), added: a, removed: Math.abs(d) }));
   return {
-    semanas,
-    adicionadas: semanas.reduce((s, x) => s + x.adicionadas, 0),
-    removidas: semanas.reduce((s, x) => s + x.removidas, 0),
+    weeks: semanas,
+    added: semanas.reduce((s, x) => s + x.added, 0),
+    removed: semanas.reduce((s, x) => s + x.removed, 0),
   };
 }
 
-export function contribuidoresDoPeriodo(contribuidores: readonly ContribuidorCru[], desde: number): NonNullable<MetricasDoRepo['contribuidores']> {
+export function contribuidoresDoPeriodo(contribuidores: readonly ContribuidorCru[], desde: number): NonNullable<MetricasDoRepo['contributors']> {
   return contribuidores
     .map((c) => {
       const semanas = c.weeks.filter((w) => naJanela(w.w, desde));
       return {
         login: c.author?.login ?? 'desconhecido',
         commits: semanas.reduce((s, w) => s + w.c, 0),
-        adicionadas: semanas.reduce((s, w) => s + w.a, 0),
-        removidas: semanas.reduce((s, w) => s + w.d, 0),
+        added: semanas.reduce((s, w) => s + w.a, 0),
+        removed: semanas.reduce((s, w) => s + w.d, 0),
       };
     })
-    .filter((c) => c.commits > 0 || c.adicionadas > 0 || c.removidas > 0)
-    .sort((a, b) => b.commits - a.commits || b.adicionadas - a.adicionadas || a.login.localeCompare(b.login));
+    .filter((c) => c.commits > 0 || c.added > 0 || c.removed > 0)
+    .sort((a, b) => b.commits - a.commits || b.added - a.added || a.login.localeCompare(b.login));
 }
 
-export function linguagensDe(bytes: Record<string, number>): NonNullable<MetricasDoRepo['linguagens']> {
+export function linguagensDe(bytes: Record<string, number>): NonNullable<MetricasDoRepo['languages']> {
   const total = Object.values(bytes).reduce((s, x) => s + x, 0);
   return Object.entries(bytes)
     .sort((a, b) => b[1] - a[1])
-    .map(([nome, b]) => ({ nome, bytes: b, fatia: total ? arred(b / total, 4) : 0 }));
+    .map(([name, b]) => ({ name, bytes: b, share: total ? arred(b / total, 4) : 0 }));
 }
 
 // Conclusões que contam na taxa: o que passou e o que falhou. Cancelado, pulado e neutro ficam de fora.
 const RUN_VERDE = new Set(['success']);
 const RUN_VERMELHO = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
 
-/** Taxa verde e duração média dos runs concluídos da amostra; `execucoes` é o `total_count` do GitHub. */
+/** Taxa verde e duração média dos runs concluídos da amostra; `runs` é o `total_count` do GitHub. */
 export function ciDosRuns(runs: RunsCrus): NonNullable<MetricasDoRepo['ci']> {
   const concluidos = runs.workflow_runs.filter((r) => r.status === 'completed' && r.conclusion && (RUN_VERDE.has(r.conclusion) || RUN_VERMELHO.has(r.conclusion)));
   const verdes = concluidos.filter((r) => RUN_VERDE.has(r.conclusion!)).length;
@@ -141,38 +141,39 @@ export function ciDosRuns(runs: RunsCrus): NonNullable<MetricasDoRepo['ci']> {
     .filter((d) => Number.isFinite(d) && d >= 0);
   const duracao = media(duracoes);
   return {
-    taxaVerde: concluidos.length ? arred(verdes / concluidos.length, 4) : null,
-    execucoes: runs.total_count,
-    duracaoMediaMs: duracao === null ? null : Math.round(duracao),
+    greenRate: concluidos.length ? arred(verdes / concluidos.length, 4) : null,
+    runs: runs.total_count,
+    averageDurationMs: duracao === null ? null : Math.round(duracao),
   };
 }
 
+/** The `type` of an issue without one: screen text, next to GitHub's own type names. */
 export const SEM_TIPO = 'Sem tipo';
 
 /** A amostra contra o total; sem total (cache antigo), o total é o que se leu. */
 export function amostraDe(lidos: number, total: number | undefined): Amostra {
   const t = Math.max(lidos, total ?? lidos);
-  return { lidos, total: t, truncado: lidos < t };
+  return { read: lidos, total: t, truncated: lidos < t };
 }
 
-/** Totais pelo `issueCount` (`contagens`); `porTipo` e a mediana pela amostra lida. */
+/** Totais pelo `issueCount` (`contagens`); `byType` e a mediana pela amostra lida. */
 export function issuesDoPeriodo(fechadas: readonly IssueCrua[], abertas: readonly IssueCrua[], contagens?: Pick<ContagensCruas, 'fechadas' | 'abertas'>): NonNullable<MetricasDoRepo['issues']> {
-  const porTipo = new Map<string, { tipo: string; fechadas: number; abertas: number }>();
+  const porTipo = new Map<string, { type: string; closed: number; open: number }>();
   const de = (i: IssueCrua) => {
     const tipo = i.issueType?.name ?? SEM_TIPO;
     let t = porTipo.get(tipo);
-    if (!t) porTipo.set(tipo, (t = { tipo, fechadas: 0, abertas: 0 }));
+    if (!t) porTipo.set(tipo, (t = { type: tipo, closed: 0, open: 0 }));
     return t;
   };
-  for (const i of fechadas) de(i).fechadas++;
-  for (const i of abertas) de(i).abertas++;
+  for (const i of fechadas) de(i).closed++;
+  for (const i of abertas) de(i).open++;
   const tempos = fechadas.map((i) => Date.parse(i.closedAt ?? '') - Date.parse(i.createdAt ?? '')).filter((d) => Number.isFinite(d) && d >= 0);
   return {
-    porTipo: [...porTipo.values()].sort((a, b) => b.fechadas + b.abertas - (a.fechadas + a.abertas) || a.tipo.localeCompare(b.tipo)),
-    fechadas: contagens?.fechadas ?? fechadas.length,
-    abertas: contagens?.abertas ?? abertas.length,
-    medianaAteFecharMs: mediana(tempos),
-    amostra: amostraDe(fechadas.length + abertas.length, contagens ? contagens.fechadas + contagens.abertas : undefined),
+    byType: [...porTipo.values()].sort((a, b) => b.closed + b.open - (a.closed + a.open) || a.type.localeCompare(b.type)),
+    closed: contagens?.fechadas ?? fechadas.length,
+    open: contagens?.abertas ?? abertas.length,
+    medianTimeToCloseMs: mediana(tempos),
+    sample: amostraDe(fechadas.length + abertas.length, contagens ? contagens.fechadas + contagens.abertas : undefined),
   };
 }
 
@@ -205,15 +206,15 @@ export function prsDoPeriodo(prs: readonly PrCru[], abertosAgora: number, desde:
   const removidas = mediana(mergeados.map((p) => p.deletions));
   const rodadas = media(mergeadosComReview.map((p) => (p.pedidosDeMudanca?.totalCount ?? 0) + 1));
   return {
-    mergeados: contagens?.mergeados ?? mergeados.length,
-    fechadosSemMerge: contagens?.fechadosSemMerge ?? fechados.length,
-    abertos: abertosAgora,
-    medianaAteMergeMs: mediana(mergeados.map((p) => em(p.mergedAt) - em(p.createdAt)).filter((d) => d >= 0)),
-    medianaAtePrimeiroReviewMs: mediana(primeiroReview),
-    tamanhoMediano: adicionadas === null || removidas === null ? null : { adicionadas, removidas },
-    rodadasDeReview: rodadas === null ? null : arred(rodadas, 1),
-    fatiaPorAgentes: criados.length ? arred(criados.filter(abertoPorAgente).length / criados.length, 4) : null,
-    amostra: amostraDe(prs.length, contagens?.prs),
+    merged: contagens?.mergeados ?? mergeados.length,
+    closedUnmerged: contagens?.fechadosSemMerge ?? fechados.length,
+    open: abertosAgora,
+    medianTimeToMergeMs: mediana(mergeados.map((p) => em(p.mergedAt) - em(p.createdAt)).filter((d) => d >= 0)),
+    medianTimeToFirstReviewMs: mediana(primeiroReview),
+    medianSize: adicionadas === null || removidas === null ? null : { added: adicionadas, removed: removidas },
+    reviewRounds: rodadas === null ? null : arred(rodadas, 1),
+    agentShare: criados.length ? arred(criados.filter(abertoPorAgente).length / criados.length, 4) : null,
+    sample: amostraDe(prs.length, contagens?.prs),
   };
 }
 
@@ -226,36 +227,36 @@ export function releasesDoPeriodo(info: Pick<InfoCrua, 'releases'>, desde: numbe
 
 export function repoDoDetalhe(info: InfoCrua): NonNullable<MetricasDoRepo['repo']> {
   return {
-    completo: info.nameWithOwner,
+    fullName: info.nameWithOwner,
     url: info.url,
-    visibilidade: info.isPrivate ? 'privado' : 'publico',
+    visibility: info.isPrivate ? 'private' : 'public',
     ci: ciDoRollup(info.defaultBranchRef?.target?.statusCheckRollup?.state),
-    branchPadrao: info.defaultBranchRef?.name ?? null,
-    estrelas: info.stargazerCount,
+    defaultBranch: info.defaultBranchRef?.name ?? null,
+    stars: info.stargazerCount,
     forks: info.forkCount,
-    observadores: info.watchers.totalCount,
-    release: info.latestRelease ? { tag: info.latestRelease.tagName, em: info.latestRelease.publishedAt ?? '' } : null,
-    licenca: info.licenseInfo?.spdxId && info.licenseInfo.spdxId !== 'NOASSERTION' ? info.licenseInfo.spdxId : (info.licenseInfo?.name ?? null),
+    watchers: info.watchers.totalCount,
+    release: info.latestRelease ? { tag: info.latestRelease.tagName, at: info.latestRelease.publishedAt ?? '' } : null,
+    license: info.licenseInfo?.spdxId && info.licenseInfo.spdxId !== 'NOASSERTION' ? info.licenseInfo.spdxId : (info.licenseInfo?.name ?? null),
   };
 }
 
-export const SESSOES_VAZIAS = { ativas: 0, precisam: 0, noMes: 0 } as const;
+export const SESSOES_VAZIAS = { active: 0, needYou: 0, thisMonth: 0 } as const;
 
 export function repoDaLista(r: RepoCru, commits: number[]): RepoDaLista {
-  const [dono, nome] = r.nameWithOwner.split('/');
+  const [owner, name] = r.nameWithOwner.split('/');
   return {
-    dono,
-    nome,
-    completo: r.nameWithOwner,
+    owner,
+    name,
+    fullName: r.nameWithOwner,
     url: r.url,
-    visibilidade: r.isPrivate ? 'privado' : 'publico',
-    linguagem: r.primaryLanguage?.name ?? null,
+    visibility: r.isPrivate ? 'private' : 'public',
+    language: r.primaryLanguage?.name ?? null,
     commits12: commits,
-    issuesAbertas: r.issues.totalCount,
-    prsAbertos: r.pullRequests.totalCount,
+    openIssues: r.issues.totalCount,
+    openPrs: r.pullRequests.totalCount,
     ci: ciDoRollup(r.defaultBranchRef?.target?.statusCheckRollup?.state),
-    sessoes: { ...SESSOES_VAZIAS },
-    ultimoPush: r.pushedAt,
+    sessions: { ...SESSOES_VAZIAS },
+    lastPush: r.pushedAt,
   };
 }
 
@@ -267,41 +268,41 @@ export function montarLista(
   crua: ListaCrua,
   resumo: ResumoCru | null,
   commits: ReadonlyMap<string, number[]>,
-  ci: { taxaVerde: number | null; execucoes: number },
-): { conta: string; resumo: ResumoDosRepos; grupos: GrupoDeRepos[] } {
+  ci: { greenRate: number | null; runs: number },
+): { account: string; summary: ResumoDosRepos; groups: GrupoDeRepos[] } {
   const porDono = new Map<string, GrupoDeRepos>();
   for (const r of crua.repos) {
     const linha = repoDaLista(r, commits.get(r.nameWithOwner) ?? []);
-    let g = porDono.get(linha.dono);
-    if (!g) porDono.set(linha.dono, (g = { dono: linha.dono, tipo: linha.dono === crua.login ? 'pessoal' : 'org', repos: [] }));
+    let g = porDono.get(linha.owner);
+    if (!g) porDono.set(linha.owner, (g = { owner: linha.owner, type: linha.owner === crua.login ? 'personal' : 'org', repos: [] }));
     g.repos.push(linha);
   }
-  const push = (r: RepoDaLista) => (r.ultimoPush ? Date.parse(r.ultimoPush) : 0);
+  const push = (r: RepoDaLista) => (r.lastPush ? Date.parse(r.lastPush) : 0);
   const grupos = [...porDono.values()];
-  for (const g of grupos) g.repos.sort((a, b) => push(b) - push(a) || a.nome.localeCompare(b.nome));
-  grupos.sort((a, b) => (a.tipo === b.tipo ? push(b.repos[0]) - push(a.repos[0]) || a.dono.localeCompare(b.dono) : a.tipo === 'pessoal' ? 1 : -1));
+  for (const g of grupos) g.repos.sort((a, b) => push(b) - push(a) || a.name.localeCompare(b.name));
+  grupos.sort((a, b) => (a.type === b.type ? push(b.repos[0]) - push(a.repos[0]) || a.owner.localeCompare(b.owner) : a.type === 'personal' ? 1 : -1));
   const todos = grupos.flatMap((g) => g.repos);
   return {
-    conta: crua.login,
-    resumo: {
-      organizacoes: new Set([...crua.organizacoes, ...grupos.filter((g) => g.tipo === 'org').map((g) => g.dono)]).size,
-      repositorios: todos.length,
-      comSessoesNoMes: 0,
-      prsAbertos: todos.reduce((s, r) => s + r.prsAbertos, 0),
-      prsEsperandoReview: resumo?.esperandoReview ?? 0,
-      issuesAbertas: todos.reduce((s, r) => s + r.issuesAbertas, 0),
-      issuesFechadasNaSemana: resumo?.fechadasNaSemana ?? 0,
-      ci: { taxaVerde: ci.taxaVerde, execucoes: ci.execucoes, dias: 7 },
+    account: crua.login,
+    summary: {
+      organizations: new Set([...crua.organizacoes, ...grupos.filter((g) => g.type === 'org').map((g) => g.owner)]).size,
+      repositories: todos.length,
+      withSessionsThisMonth: 0,
+      openPrs: todos.reduce((s, r) => s + r.openPrs, 0),
+      prsAwaitingReview: resumo?.esperandoReview ?? 0,
+      openIssues: todos.reduce((s, r) => s + r.openIssues, 0),
+      issuesClosedThisWeek: resumo?.fechadasNaSemana ?? 0,
+      ci: { greenRate: ci.greenRate, runs: ci.runs, days: 7 },
     },
-    grupos,
+    groups: grupos,
   };
 }
 
 /** Junta a taxa de vários repositórios, ponderada pelas execuções concluídas da amostra. */
-export function somarCi(partes: readonly { verdes: number; concluidos: number; execucoes: number }[]): { taxaVerde: number | null; execucoes: number } {
+export function somarCi(partes: readonly { verdes: number; concluidos: number; execucoes: number }[]): { greenRate: number | null; runs: number } {
   const verdes = partes.reduce((s, p) => s + p.verdes, 0);
   const concluidos = partes.reduce((s, p) => s + p.concluidos, 0);
-  return { taxaVerde: concluidos ? arred(verdes / concluidos, 4) : null, execucoes: partes.reduce((s, p) => s + p.execucoes, 0) };
+  return { greenRate: concluidos ? arred(verdes / concluidos, 4) : null, runs: partes.reduce((s, p) => s + p.execucoes, 0) };
 }
 
 /** Verdes e concluídos de uma amostra de runs (para `somarCi`). */

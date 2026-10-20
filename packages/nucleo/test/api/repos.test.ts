@@ -94,7 +94,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   const frota = new LeituraDaFrota({ storage, contas: new Contas({ storage, arquivo: null }), agora, fusoHorario: 'UTC' });
   const cursor = new CursorDeMudancas({ geracao: 'g', agruparMs: 0, intervaloMinimoMs: 0 });
   const inicio = cursor.atual;
-  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ type: 'repos', key: 'lista', sessionId: null, accountId: null }) });
+  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
   const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
   const logs: string[] = [];
@@ -128,14 +128,14 @@ async function listaPronta(m: Montagem): Promise<ListaDeRepos> {
   return m.repos.lista();
 }
 
-async function metricasProntas(m: Montagem, dono: string, nome: string, periodo?: '30d' | '90d' | '1a'): Promise<MetricasDoRepo> {
+async function metricasProntas(m: Montagem, dono: string, nome: string, periodo?: '30d' | '90d' | '1y'): Promise<MetricasDoRepo> {
   await m.repos.metricas(dono, nome, periodo);
   await m.repos.esperar();
   return m.repos.metricas(dono, nome, periodo);
 }
 
 const linha = (l: ListaDeRepos, completo: string): RepoDaLista => {
-  const r = l.grupos.flatMap((g) => g.repos).find((x) => x.completo === completo);
+  const r = l.groups.flatMap((g) => g.repos).find((x) => x.fullName === completo);
   assert.ok(r, `sem ${completo}`);
   return r;
 };
@@ -148,17 +148,17 @@ describe('#104 CA1: repositórios agrupados por organização e pela conta pesso
   test('orgs primeiro, pela atividade; a conta pessoal por último; o login no topo', async () => {
     const m = await montar();
     const l = await listaPronta(m);
-    assert.equal(l.estado, 'pronto');
-    assert.equal(l.conta, 'dev-sintetico');
-    assert.deepEqual(l.grupos.map((g) => [g.dono, g.tipo, g.repos.map((r) => r.nome)]), [
+    assert.equal(l.state, 'ready');
+    assert.equal(l.account, 'dev-sintetico');
+    assert.deepEqual(l.groups.map((g) => [g.owner, g.type, g.repos.map((r) => r.name)]), [
       ['org-a', 'org', ['motor-de-regras', 'app-receitas']],
       ['org-b', 'org', ['antigo']],
-      ['dev-sintetico', 'pessoal', ['cli-de-notas']],
+      ['dev-sintetico', 'personal', ['cli-de-notas']],
     ]);
     // Visibilidade e dono vêm em cada linha: busca, filtros e ordenação ficam no cliente.
-    assert.deepEqual(l.grupos[0].repos.map((r) => [r.dono, r.visibilidade]), [['org-a', 'privado'], ['org-a', 'publico']]);
-    assert.equal(l.resumo.organizacoes, 2);
-    assert.equal(l.resumo.repositorios, 4);
+    assert.deepEqual(l.groups[0].repos.map((r) => [r.owner, r.visibility]), [['org-a', 'private'], ['org-a', 'public']]);
+    assert.equal(l.summary.organizations, 2);
+    assert.equal(l.summary.repositories, 4);
   });
 });
 
@@ -167,35 +167,35 @@ describe('#104 CA2: o que cada linha mostra', () => {
     const m = await montar();
     const l = await listaPronta(m);
     const motor = linha(l, 'org-a/motor-de-regras');
-    assert.equal(motor.linguagem, 'TypeScript');
+    assert.equal(motor.language, 'TypeScript');
     assert.equal(motor.commits12.length, 12);
     assert.ok(motor.commits12.some((c) => c > 0));
-    assert.deepEqual([motor.issuesAbertas, motor.prsAbertos, motor.ci], [4, 2, 'falhou']);
-    assert.equal(motor.ultimoPush, new Date(T0 - 5 * MIN).toISOString());
-    assert.equal(linha(l, 'org-a/app-receitas').ci, 'rodando');
+    assert.deepEqual([motor.openIssues, motor.openPrs, motor.ci], [4, 2, 'failed']);
+    assert.equal(motor.lastPush, new Date(T0 - 5 * MIN).toISOString());
+    assert.equal(linha(l, 'org-a/app-receitas').ci, 'running');
     assert.equal(linha(l, 'dev-sintetico/cli-de-notas').ci, 'ok');
     // Sem push nas 12 semanas: sem commits e sem chamada.
     assert.deepEqual(linha(l, 'org-b/antigo').commits12, []);
     assert.equal(linha(l, 'org-b/antigo').ci, null);
     assert.ok(!m.chamadas.some((c) => c.includes('org-b/antigo')));
-    assert.equal(l.resumo.prsAbertos, 3);
-    assert.equal(l.resumo.issuesAbertas, 7);
-    assert.equal(l.resumo.prsEsperandoReview, 3);
-    assert.equal(l.resumo.issuesFechadasNaSemana, 9);
-    assert.equal(l.resumo.ci.dias, 7);
-    assert.ok(l.resumo.ci.execucoes > 0 && l.resumo.ci.taxaVerde !== null && l.resumo.ci.taxaVerde > 0 && l.resumo.ci.taxaVerde <= 1);
+    assert.equal(l.summary.openPrs, 3);
+    assert.equal(l.summary.openIssues, 7);
+    assert.equal(l.summary.prsAwaitingReview, 3);
+    assert.equal(l.summary.issuesClosedThisWeek, 9);
+    assert.equal(l.summary.ci.days, 7);
+    assert.ok(l.summary.ci.runs > 0 && l.summary.ci.greenRate !== null && l.summary.ci.greenRate > 0 && l.summary.ci.greenRate <= 1);
   });
 
   test('sessões ativas e as que precisam de você saem das sessões do núcleo, pelo critério do #140', async () => {
     const m = await montar();
     const l = await listaPronta(m);
     // motor-de-regras: viva, esperando permissão (precisa). app-receitas: viva, interrompida (sua vez, não conta).
-    assert.deepEqual(linha(l, 'org-a/motor-de-regras').sessoes, { ativas: 1, precisam: 1, noMes: 1 });
-    assert.deepEqual(linha(l, 'org-a/app-receitas').sessoes, { ativas: 1, precisam: 0, noMes: 1 });
-    assert.deepEqual(linha(l, 'dev-sintetico/cli-de-notas').sessoes, { ativas: 0, precisam: 0, noMes: 0 });
-    assert.equal(l.resumo.comSessoesNoMes, 2);
+    assert.deepEqual(linha(l, 'org-a/motor-de-regras').sessions, { active: 1, needYou: 1, thisMonth: 1 });
+    assert.deepEqual(linha(l, 'org-a/app-receitas').sessions, { active: 1, needYou: 0, thisMonth: 1 });
+    assert.deepEqual(linha(l, 'dev-sintetico/cli-de-notas').sessions, { active: 0, needYou: 0, thisMonth: 0 });
+    assert.equal(l.summary.withSessionsThisMonth, 2);
     // A descoberta do repositório de um cwd novo avisa a tela.
-    assert.ok((await m.mudancas()).some((x) => x.type === 'repos' && x.key === 'lista'));
+    assert.ok((await m.mudancas()).some((x) => x.type === 'repos' && x.key === 'list'));
   });
 });
 
@@ -204,10 +204,10 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     const m = await montar();
     m.modo.atual = 'pendurado';
     const l = await semEsperar(m.repos.lista());
-    assert.equal(l.estado, 'carregando');
-    assert.deepEqual(l.grupos, []);
+    assert.equal(l.state, 'loading');
+    assert.deepEqual(l.groups, []);
     const d = await semEsperar(m.repos.metricas('org-a', 'motor-de-regras'));
-    assert.equal(d.estado, 'carregando');
+    assert.equal(d.state, 'loading');
     // Um segundo pedido também volta na hora e não dispara outra leitura.
     await semEsperar(m.repos.lista());
     assert.equal(m.repos.chamadas.fonte, 2);
@@ -250,30 +250,30 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     m.modo.atual = 'falha';
     m.relogio.agora += TTL_DOS_REPOS.lista + MIN;
     const velha = await listaPronta(m);
-    assert.equal(velha.estado, 'pronto');
-    assert.match(velha.erro ?? '', /rede fora/);
-    assert.equal(velha.grupos.length, 3);
+    assert.equal(velha.state, 'ready');
+    assert.match(velha.error ?? '', /rede fora/);
+    assert.equal(velha.groups.length, 3);
 
     const vazia = await montar();
     vazia.modo.atual = 'falha';
     const l = await listaPronta(vazia);
-    assert.equal(l.estado, 'erro');
-    assert.match(l.erro ?? '', /rede fora/);
+    assert.equal(l.state, 'error');
+    assert.match(l.error ?? '', /rede fora/);
   });
 
   test('sem GitHub (desligado ou sem token do gh): estado "sem-github"', async () => {
     const desligado = await montar({ fonteNula: true });
-    assert.equal((await desligado.repos.lista()).estado, 'sem-github');
-    assert.equal((await desligado.repos.metricas('org-a', 'x')).estado, 'sem-github');
+    assert.equal((await desligado.repos.lista()).state, 'no-github');
+    assert.equal((await desligado.repos.metricas('org-a', 'x')).state, 'no-github');
     const semToken = await montar({ token: () => Promise.reject(new Error('sem token do GitHub: rode `gh auth login`')) });
     const l = await listaPronta(semToken);
-    assert.equal(l.estado, 'sem-github');
+    assert.equal(l.state, 'no-github');
   });
 
   test('o 202 só é tentado de novo enquanto alguém leu a resposta nos últimos 5 min; o próximo pedido retoma', async () => {
     const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['contributors'] } }) });
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.deepEqual(d.calculando, ['contribuidores']);
+    assert.deepEqual(d.computing, ['contributors']);
     assert.equal(m.agendados.length, 1);
     m.relogio.agora += 5 * MIN + 1;
     const antes = m.repos.chamadas.fonte;
@@ -286,8 +286,8 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     await m.repos.esperar();
     const depois = await m.repos.metricas('org-a', 'motor-de-regras');
     assert.ok(m.repos.chamadas.fonte > antes);
-    assert.deepEqual(depois.calculando, []);
-    assert.ok(depois.contribuidores);
+    assert.deepEqual(depois.computing, []);
+    assert.ok(depois.contributors);
   });
 
   test('a pausa por limite passa pelo ReposDoGithub: depois do 429 nenhuma chamada sai até o retry-after, e o dado velho fica', async () => {
@@ -298,8 +298,8 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     const antes = m.pedidos.total;
     const limitada = await listaPronta(m);
     assert.equal(m.pedidos.total - antes, 1, 'só a primeira chamada sai; as outras param na pausa');
-    assert.equal(limitada.estado, 'pronto');
-    assert.match(limitada.erro ?? '', /limitou/);
+    assert.equal(limitada.state, 'ready');
+    assert.match(limitada.error ?? '', /limitou/);
     assert.ok(m.cache.pauseLeftMs() > 0);
     // Vencida a resposta (60 s) e ainda na pausa (120 s): nada sai, mesmo com o GitHub de volta.
     m.modo.atual = 'ok';
@@ -310,7 +310,7 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     m.relogio.agora += 60_000;
     const volta = await listaPronta(m);
     assert.ok(m.pedidos.total - antes > 1);
-    assert.equal(volta.erro, null);
+    assert.equal(volta.error, null);
   });
 
   test('a pausa de quem divide o cache (o trabalho, no núcleo) também segura os repositórios', async () => {
@@ -318,8 +318,8 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     m.cache.pause(60_000);
     const l = await listaPronta(m);
     assert.equal(m.pedidos.total, 0);
-    assert.equal(l.estado, 'erro');
-    assert.match(l.erro ?? '', /limitou/);
+    assert.equal(l.state, 'error');
+    assert.match(l.error ?? '', /limitou/);
   });
 
   test('o GitHub ainda calcula (202): as 12 semanas ficam vazias e o núcleo tenta de novo em 3 s', async () => {
@@ -337,7 +337,7 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     const m = await montar();
     await listaPronta(m);
     const repos = (await m.mudancas()).filter((x) => x.type === 'repos');
-    assert.ok(repos.some((x) => x.key === 'lista' && x.sessionId === null));
+    assert.ok(repos.some((x) => x.key === 'list' && x.sessionId === null));
   });
 });
 
@@ -345,47 +345,47 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
   test('linhas, commits, frequência, issues por tipo, PRs, CI, linguagens, contribuidores, releases e comunidade', async () => {
     const m = await montar();
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.equal(d.estado, 'pronto');
-    assert.deepEqual(d.calculando, []);
-    assert.equal(d.periodo, '90d');
-    assert.equal(d.repo?.completo, 'org-a/motor-de-regras');
-    assert.deepEqual([d.repo?.visibilidade, d.repo?.ci, d.repo?.branchPadrao, d.repo?.licenca, d.repo?.release?.tag], ['privado', 'falhou', 'main', 'MIT', 'v1.0.0']);
-    assert.deepEqual(d.abas, { issues: 4, prs: 2, sessoes: 1 });
+    assert.equal(d.state, 'ready');
+    assert.deepEqual(d.computing, []);
+    assert.equal(d.period, '90d');
+    assert.equal(d.repo?.fullName, 'org-a/motor-de-regras');
+    assert.deepEqual([d.repo?.visibility, d.repo?.ci, d.repo?.defaultBranch, d.repo?.license, d.repo?.release?.tag], ['private', 'failed', 'main', 'MIT', 'v1.0.0']);
+    assert.deepEqual(d.tabs, { issues: 4, prs: 2, sessions: 1 });
     // CA1
-    assert.ok(d.linhas && d.linhas.total > d.linhas.noPeriodo && d.linhas.noPeriodo > 0);
-    assert.ok(d.commits && d.commits.total === d.commits.semanas.reduce((s, x) => s + x, 0) && d.commits.semanas.length >= 13);
-    assert.ok(d.frequencia && d.frequencia.semanas.length === d.commits.semanas.length && d.frequencia.adicionadas > 0);
+    assert.ok(d.lines && d.lines.total > d.lines.inPeriod && d.lines.inPeriod > 0);
+    assert.ok(d.commits && d.commits.total === d.commits.weeks.reduce((s, x) => s + x, 0) && d.commits.weeks.length >= 13);
+    assert.ok(d.frequency && d.frequency.weeks.length === d.commits.weeks.length && d.frequency.added > 0);
     // CA2
-    assert.ok(d.issues && d.issues.fechadas > 0 && d.issues.medianaAteFecharMs !== null);
-    assert.equal(d.issues.porTipo.reduce((s, t) => s + t.abertas, 0), 4);
+    assert.ok(d.issues && d.issues.closed > 0 && d.issues.medianTimeToCloseMs !== null);
+    assert.equal(d.issues.byType.reduce((s, t) => s + t.open, 0), 4);
     // CA3
-    assert.ok(d.prs && d.prs.mergeados > 0 && d.prs.abertos === 2);
-    assert.ok(d.prs.medianaAteMergeMs !== null && d.prs.medianaAtePrimeiroReviewMs !== null && d.prs.tamanhoMediano !== null);
-    assert.ok(d.prs.fatiaPorAgentes !== null && d.prs.fatiaPorAgentes > 0 && d.prs.fatiaPorAgentes < 1);
+    assert.ok(d.prs && d.prs.merged > 0 && d.prs.open === 2);
+    assert.ok(d.prs.medianTimeToMergeMs !== null && d.prs.medianTimeToFirstReviewMs !== null && d.prs.medianSize !== null);
+    assert.ok(d.prs.agentShare !== null && d.prs.agentShare > 0 && d.prs.agentShare < 1);
     // CA4
-    assert.ok(d.ci && d.ci.execucoes > 0 && d.ci.taxaVerde !== null && d.ci.duracaoMediaMs !== null);
-    assert.equal(d.linguagens?.[0].nome, 'TypeScript');
-    assert.ok(Math.abs((d.linguagens ?? []).reduce((s, l) => s + l.fatia, 0) - 1) < 0.01);
-    assert.ok((d.contribuidores ?? []).length > 0);
+    assert.ok(d.ci && d.ci.runs > 0 && d.ci.greenRate !== null && d.ci.averageDurationMs !== null);
+    assert.equal(d.languages?.[0].name, 'TypeScript');
+    assert.ok(Math.abs((d.languages ?? []).reduce((s, l) => s + l.share, 0) - 1) < 0.01);
+    assert.ok((d.contributors ?? []).length > 0);
     // Releases: as publicadas no período (90 dias: 2, 42 e 82 dias atrás) e o total desde sempre.
     assert.equal(d.releases, 3);
-    assert.equal(d.releasesNoTotal, 7);
+    assert.equal(d.releasesTotal, 7);
     // Os totais vêm do `issueCount`; aqui a amostra cobre tudo.
-    assert.deepEqual([d.issues.amostra.truncado, d.prs.amostra.truncado], [false, false]);
-    assert.equal(d.issues.abertas, 4);
-    assert.equal(typeof d.comunidade, 'number');
+    assert.deepEqual([d.issues.sample.truncated, d.prs.sample.truncated], [false, false]);
+    assert.equal(d.issues.open, 4);
+    assert.equal(typeof d.community, 'number');
   });
 
   test('a leitura que muda as métricas registra `repos`/`<dono>/<repo>`, em minúsculas seja qual for a caixa da rota', async () => {
     const m = await montar();
     const d = await metricasProntas(m, 'Org-A', 'Motor-de-Regras');
-    assert.equal(d.repo?.completo, 'org-a/motor-de-regras');
+    assert.equal(d.repo?.fullName, 'org-a/motor-de-regras');
     const chaves = (await m.mudancas()).filter((x) => x.type === 'repos').map((x) => x.key);
     assert.ok(chaves.includes('org-a/motor-de-regras'));
     assert.ok(!chaves.some((c) => c !== c.toLowerCase()), chaves.join(','));
     // A mesma entrada para as duas caixas: dentro da validade, nenhuma chamada nova.
     const antes = m.repos.chamadas.fonte;
-    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).state, 'ready');
     assert.equal(m.repos.chamadas.fonte, antes);
   });
 
@@ -395,7 +395,7 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     await m.repos.esperar();
     assert.ok(m.pedidos.total > 10, `só ${m.pedidos.total} pedidos`);
     assert.equal(m.pedidos.maximoEmVoo, 1);
-    assert.equal((await m.repos.metricas('dev-sintetico', 'cli-de-notas')).estado, 'pronto');
+    assert.equal((await m.repos.metricas('dev-sintetico', 'cli-de-notas')).state, 'ready');
   });
 
   test('um pedido pendurado não trava a fila: estourado o teto, vira `erro` e a próxima chamada sai', async () => {
@@ -417,10 +417,10 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     tetos[0].abort(new DOMException('tempo', 'TimeoutError'));
     await m.repos.esperar();
     const l = await m.repos.lista();
-    assert.equal(l.estado, 'erro');
-    assert.match(l.erro ?? '', /não respondeu em 20 s/);
+    assert.equal(l.state, 'error');
+    assert.match(l.error ?? '', /não respondeu em 20 s/);
     const d = await m.repos.metricas('org-a', 'motor-de-regras');
-    assert.equal(d.estado, 'pronto');
+    assert.equal(d.state, 'ready');
     assert.ok(m.pedidos.total > 1);
   });
 
@@ -433,13 +433,13 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     };
     const m = await montar({ fonte: quebrada });
     const l = await listaPronta(m);
-    assert.equal(l.estado, 'erro');
-    assert.match(l.erro ?? '', /\w/);
+    assert.equal(l.state, 'error');
+    assert.match(l.error ?? '', /\w/);
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.equal(d.estado, 'erro');
-    assert.ok(d.erro);
+    assert.equal(d.state, 'error');
+    assert.ok(d.error);
     assert.equal(m.logs.length, 2);
-    assert.match(m.logs[0], /^repos: a montagem de lista falhou: /);
+    assert.match(m.logs[0], /^repos: a montagem de list falhou: /);
     assert.match(m.logs[1], /^repos: a montagem de org-a\/motor-de-regras falhou: /);
     assert.ok((await m.mudancas()).some((x) => x.type === 'repos' && x.key === 'org-a/motor-de-regras'));
   });
@@ -450,33 +450,33 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     for (let i = 0; i < 49; i++) await m.repos.metricas('org-a', `outro-${i}`);
     await m.repos.esperar();
     // 50 entradas: a primeira ainda está.
-    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).state, 'ready');
     // Lida agora, ela é a mais nova; a 51ª tira `outro-0`, e `outro-0` volta do zero.
     await m.repos.metricas('org-a', 'mais-um');
     await m.repos.esperar();
-    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).estado, 'pronto');
-    assert.equal((await m.repos.metricas('org-a', 'outro-0')).estado, 'carregando');
+    assert.equal((await m.repos.metricas('org-a', 'motor-de-regras')).state, 'ready');
+    assert.equal((await m.repos.metricas('org-a', 'outro-0')).state, 'loading');
     await m.repos.esperar();
   });
 
   test('estatística em 202: o campo vem nulo, o nome entra em `calculando`, e a nova tentativa preenche', async () => {
     const m = await montar({ base: dados({ 'motor-de-regras': { calcularPrimeiro: ['contributors', 'code_frequency'] } }) });
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.deepEqual(d.calculando, ['frequencia', 'linhas', 'contribuidores']);
-    assert.equal(d.contribuidores, null);
-    assert.equal(d.linhas, null);
+    assert.deepEqual(d.computing, ['frequency', 'lines', 'contributors']);
+    assert.equal(d.contributors, null);
+    assert.equal(d.lines, null);
     assert.ok(d.commits !== null);
     assert.deepEqual(m.agendados.map((a) => a.ms), [3_000]);
     m.agendados[0].fn();
     await m.repos.esperar();
     const depois = await m.repos.metricas('org-a', 'motor-de-regras');
-    assert.deepEqual(depois.calculando, []);
-    assert.ok(depois.contribuidores && depois.linhas);
+    assert.deepEqual(depois.computing, []);
+    assert.ok(depois.contributors && depois.lines);
   });
 
   test('repositório que não existe: "nao-encontrado"', async () => {
     const m = await montar();
-    assert.equal((await metricasProntas(m, 'org-a', 'nao-existe')).estado, 'nao-encontrado');
+    assert.equal((await metricasProntas(m, 'org-a', 'nao-existe')).state, 'not-found');
   });
 });
 
@@ -484,19 +484,19 @@ describe('#105 CA5: tráfego e alertas só com escrita', () => {
   test('com escrita, tráfego, Dependabot e code scanning vêm', async () => {
     const m = await montar();
     const d = await metricasProntas(m, 'org-a', 'motor-de-regras');
-    assert.equal(d.escrita, true);
-    assert.ok(d.trafego && d.trafego.visitas > 0 && d.trafego.dias === 14 && d.trafego.origens.length > 0);
-    assert.deepEqual(d.seguranca, { dependabot: 3, codeScanning: 1 });
+    assert.equal(d.canWrite, true);
+    assert.ok(d.traffic && d.traffic.views > 0 && d.traffic.days === 14 && d.traffic.referrers.length > 0);
+    assert.deepEqual(d.security, { dependabot: 3, codeScanning: 1 });
   });
 
   test('sem escrita, as chaves não vêm e o núcleo nem chama esses endpoints', async () => {
     const m = await montar();
     const d = await metricasProntas(m, 'org-a', 'app-receitas');
-    assert.equal(d.estado, 'pronto');
-    assert.equal(d.escrita, false);
-    assert.ok(!('trafego' in d));
-    assert.ok(!('seguranca' in d));
-    assert.ok(!JSON.stringify(d).includes('trafego'));
+    assert.equal(d.state, 'ready');
+    assert.equal(d.canWrite, false);
+    assert.ok(!('traffic' in d));
+    assert.ok(!('security' in d));
+    assert.ok(!JSON.stringify(d).includes('traffic'));
     assert.deepEqual(m.chamadas.filter((c) => /traffic|dependabot|code-scanning/.test(c)), []);
   });
 });
@@ -506,18 +506,18 @@ describe('#105 CA6: o período vale para a tela inteira', () => {
     const m = await montar();
     const padrao = await metricasProntas(m, 'org-a', 'motor-de-regras');
     const mes = await metricasProntas(m, 'org-a', 'motor-de-regras', '30d');
-    const ano = await metricasProntas(m, 'org-a', 'motor-de-regras', '1a');
-    assert.deepEqual([padrao.periodo, mes.periodo, ano.periodo], ['90d', '30d', '1a']);
-    assert.ok(mes.commits!.semanas.length < padrao.commits!.semanas.length && padrao.commits!.semanas.length < ano.commits!.semanas.length);
+    const ano = await metricasProntas(m, 'org-a', 'motor-de-regras', '1y');
+    assert.deepEqual([padrao.period, mes.period, ano.period], ['90d', '30d', '1y']);
+    assert.ok(mes.commits!.weeks.length < padrao.commits!.weeks.length && padrao.commits!.weeks.length < ano.commits!.weeks.length);
     assert.ok(mes.commits!.total < ano.commits!.total);
-    assert.ok(mes.linhas!.noPeriodo < ano.linhas!.noPeriodo);
-    assert.equal(mes.linhas!.total, ano.linhas!.total);
-    assert.ok(mes.prs!.mergeados < ano.prs!.mergeados);
-    assert.ok(mes.issues!.fechadas < ano.issues!.fechadas);
-    assert.ok(mes.ci!.execucoes < ano.ci!.execucoes);
+    assert.ok(mes.lines!.inPeriod < ano.lines!.inPeriod);
+    assert.equal(mes.lines!.total, ano.lines!.total);
+    assert.ok(mes.prs!.merged < ano.prs!.merged);
+    assert.ok(mes.issues!.closed < ano.issues!.closed);
+    assert.ok(mes.ci!.runs < ano.ci!.runs);
     assert.deepEqual([mes.releases, padrao.releases, ano.releases], [1, 3, 7]);
-    assert.deepEqual([mes.releasesNoTotal, ano.releasesNoTotal], [7, 7]);
-    const commitsDe = (d: MetricasDoRepo) => d.contribuidores!.reduce((s, c) => s + c.commits, 0);
+    assert.deepEqual([mes.releasesTotal, ano.releasesTotal], [7, 7]);
+    const commitsDe = (d: MetricasDoRepo) => d.contributors!.reduce((s, c) => s + c.commits, 0);
     assert.ok(commitsDe(mes) < commitsDe(ano));
     // As estatísticas do REST não dependem do período: trocar de período não as relê.
     assert.equal(m.chamadas.filter((c) => c.endsWith('/stats/commit_activity')).length, 1);
@@ -543,11 +543,14 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
   test('GET /api/repos e /api/repos/<dono>/<repo> respondem 200 com o contrato', async () => {
     const l = await get('/api/repos');
     assert.equal(l.status, 200);
-    assert.ok(['carregando', 'pronto'].includes(l.corpo.estado as string));
+    assert.ok(['loading', 'ready'].includes(l.corpo.state as string));
     const d = await get('/api/repos/org-a/motor-de-regras');
     assert.equal(d.status, 200);
-    assert.equal(d.corpo.periodo, '90d');
-    assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=1a')).corpo.periodo, '1a');
+    assert.equal(d.corpo.period, '90d');
+    assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=1a')).corpo.period, '1y');
+    // The year is `1y`; the old value `1a` is still accepted under either parameter name.
+    assert.equal((await get('/api/repos/org-a/motor-de-regras?period=1y')).corpo.period, '1y');
+    assert.equal((await get('/api/repos/org-a/motor-de-regras?period=1a')).corpo.period, '1y');
   });
 
   test('dono, repo e período fora do padrão dão 400, e nada do pedido chega ao GitHub', async () => {
@@ -557,7 +560,9 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     for (const ruim of ['-org/x', 'org-/x', 'a--b/x', 'org/a%20b', 'org/a%3Bb', 'a%2Fb/c', `${'a'.repeat(40)}/x`, `org/${'r'.repeat(101)}`, 'org/%E0%A4%A']) {
       assert.equal((await get(`/api/repos/${ruim}`)).status, 400, ruim);
     }
-    assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=2a')).status, 400);
+    const ruim = await get('/api/repos/org-a/motor-de-regras?periodo=2a');
+    assert.equal(ruim.status, 400);
+    assert.equal(ruim.corpo.error, 'period: um de 30d, 90d, 1y');
     assert.equal((await get('/api/repos/org-a/motor-de-regras/issues')).status, 404);
     await m.repos.esperar();
     assert.equal(m.chamadas.length, antes);
@@ -611,9 +616,9 @@ describe('#104 e #105: o serviço como o núcleo monta', () => {
       await repos.esperar();
       const l = await repos.lista();
       const d = await repos.metricas('exemplo-labs', 'vitrine-demo');
-      assert.equal(l.estado, 'pronto');
-      assert.equal(l.conta, 'dev-sintetico');
-      assert.equal(d.estado, 'pronto');
+      assert.equal(l.state, 'ready');
+      assert.equal(l.account, 'dev-sintetico');
+      assert.equal(d.state, 'ready');
       assert.deepEqual(fora, []);
       assert.deepEqual(logs, []);
       await storage.close();

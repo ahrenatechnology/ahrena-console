@@ -4,7 +4,7 @@
 // - Os filtros ficam montados entre as releituras: só a lista e os cards são redesenhados, e a busca
 //   não perde o foco enquanto a pessoa digita.
 // - `carregando` do núcleo (o GitHub ainda não respondeu): relê a cada 5 s, além da mudança
-//   `repos`/`lista` do Ao vivo. O que a tela desenha sai de `estadoDaTela` (repos-format.js).
+//   `repos`/`list` do Ao vivo. O que a tela desenha sai de `estadoDaTela` (repos-format.js).
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
@@ -20,8 +20,8 @@ export function loadStyle() {
 
 const CI = {
   ok: ['b-completed', 'CI ✓', 'CI passou'],
-  rodando: ['b-waiting', 'CI …', 'CI rodando'],
-  falhou: ['b-error', 'CI ✕', 'CI falhou'],
+  running: ['b-waiting', 'CI …', 'CI rodando'],
+  failed: ['b-error', 'CI ✕', 'CI falhou'],
 };
 
 /** A pílula do CI do branch padrão, ou o traço sem CI. O leitor de tela ouve "CI passou". */
@@ -59,7 +59,7 @@ function stat(label, value, sub, iconName, color) {
   );
 }
 
-function sessions({ ativas: activeOnes, precisam: needing }) {
+function sessions({ active: activeOnes, needYou: needing }) {
   if (!activeOnes) return el('span', { class: 'repo-muted' }, DASH);
   return el(
     'span',
@@ -138,42 +138,42 @@ export async function mount(area, ctx) {
   const list = el('div', { class: 'repo-groups' });
 
   function fillOrgs() {
-    const owners = data.grupos.map((g) => g.dono);
+    const owners = data.groups.map((g) => g.owner);
     if (selectOwners && selectOwners.join('\n') === owners.join('\n')) return;
     selectOwners = owners;
     if (filter.dono && !owners.includes(filter.dono)) filter.dono = '';
     orgs.replaceChildren(
       el('option', { value: '' }, 'Todas as organizações'),
-      ...data.grupos.map((g) => el('option', { value: g.dono }, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono)),
+      ...data.groups.map((g) => el('option', { value: g.owner }, g.type === 'personal' ? 'você (pessoal)' : g.owner)),
     );
     orgs.value = filter.dono;
   }
 
   function drawStats() {
-    const r = data.resumo;
+    const r = data.summary;
     stats.replaceChildren(
-      stat('Organizações', integer(r.organizacoes), '+ a conta pessoal', 'organization', 'repo-c-accent'),
-      stat('Repositórios', integer(r.repositorios), `${integer(r.comSessoesNoMes)} com sessões este mês`, 'repos', 'repo-c-accent'),
-      stat('PRs abertos', integer(r.prsAbertos), `${integer(r.prsEsperandoReview)} esperando review`, 'git-pull-request', 'repo-c-wait'),
-      stat('Issues abertas', integer(r.issuesAbertas), `${integer(r.issuesFechadasNaSemana)} fechadas na semana`, 'dot', 'repo-c-accent'),
-      stat('CI', percentage(r.ci.taxaVerde), r.ci.taxaVerde === null ? `sem execuções · ${r.ci.dias} dias` : `de execuções verdes · ${r.ci.dias} dias`, 'ok', 'repo-c-ok'),
+      stat('Organizações', integer(r.organizations), '+ a conta pessoal', 'organization', 'repo-c-accent'),
+      stat('Repositórios', integer(r.repositories), `${integer(r.withSessionsThisMonth)} com sessões este mês`, 'repos', 'repo-c-accent'),
+      stat('PRs abertos', integer(r.openPrs), `${integer(r.prsAwaitingReview)} esperando review`, 'git-pull-request', 'repo-c-wait'),
+      stat('Issues abertas', integer(r.openIssues), `${integer(r.issuesClosedThisWeek)} fechadas na semana`, 'dot', 'repo-c-accent'),
+      stat('CI', percentage(r.ci.greenRate), r.ci.greenRate === null ? `sem execuções · ${r.ci.days} dias` : `de execuções verdes · ${r.ci.days} dias`, 'ok', 'repo-c-ok'),
     );
   }
 
   function row(r, now) {
-    const href = repoRoute(r.dono, r.nome);
-    const complete = `${r.completo} · ${r.visibilidade === 'publico' ? 'público' : 'privado'}`;
+    const href = repoRoute(r.owner, r.name);
+    const complete = `${r.fullName} · ${r.visibility === 'public' ? 'público' : 'privado'}`;
     const tr = el(
       'tr',
       { class: 'repo-row' },
-      el('td', { class: 'repo-name' }, el('a', { href, title: r.nome }, r.nome), el('small', { title: complete }, complete)),
-      el('td', { title: r.linguagem }, r.linguagem ?? el('span', { class: 'repo-muted' }, DASH)),
+      el('td', { class: 'repo-name' }, el('a', { href, title: r.name }, r.name), el('small', { title: complete }, complete)),
+      el('td', { title: r.language }, r.language ?? el('span', { class: 'repo-muted' }, DASH)),
       el('td', {}, spark(r.commits12)),
-      el('td', { class: 'repo-num' }, integer(r.issuesAbertas)),
-      el('td', { class: 'repo-num' }, integer(r.prsAbertos)),
+      el('td', { class: 'repo-num' }, integer(r.openIssues)),
+      el('td', { class: 'repo-num' }, integer(r.openPrs)),
       el('td', {}, ciPill(r.ci)),
-      el('td', { class: 'repo-sessions' }, sessions(r.sessoes)),
-      el('td', { class: 'repo-muted', title: r.ultimoPush ? new Date(r.ultimoPush).toLocaleString('pt-BR') : null }, relative(r.ultimoPush, now)),
+      el('td', { class: 'repo-sessions' }, sessions(r.sessions)),
+      el('td', { class: 'repo-muted', title: r.lastPush ? new Date(r.lastPush).toLocaleString('pt-BR') : null }, relative(r.lastPush, now)),
       el('td', { class: 'repo-arrow' }, icon('chevron-right')),
     );
     // A linha inteira leva ao repositório; o link do nome é o caminho pelo teclado.
@@ -190,7 +190,7 @@ export async function mount(area, ctx) {
     return el(
       'section',
       { class: 'repo-group' },
-      el('div', { class: 'repo-group-head' }, icon(g.tipo === 'pessoal' ? 'person' : 'organization'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
+      el('div', { class: 'repo-group-head' }, icon(g.type === 'personal' ? 'person' : 'organization'), el('h2', {}, g.type === 'personal' ? 'você (pessoal)' : g.owner), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
       el(
         'div',
         { class: 'card' },
@@ -209,7 +209,7 @@ export async function mount(area, ctx) {
     if (!data) return;
     // Quem estava com o foco num link da lista continua nele depois do redesenho.
     const focused = list.contains(document.activeElement) ? document.activeElement.getAttribute('href') : null;
-    const groups = filterRepos(data.grupos, filter);
+    const groups = filterRepos(data.groups, filter);
     const now = Date.now();
     list.replaceChildren(...(groups.length ? groups.map((g) => group(g, now)) : [empty({ icon: 'search', title: 'Nenhum repositório com esse filtro', text: 'Mude a busca, a organização ou a visibilidade.' })]));
     if (focused) [...list.querySelectorAll('a[href]')].find((a) => a.getAttribute('href') === focused)?.focus();
@@ -221,25 +221,25 @@ export async function mount(area, ctx) {
   function draw() {
     clearTimeout(timer);
     timer = null;
-    accountChip.hidden = !data?.conta;
-    accountChip.replaceChildren(icon('github'), `conta: ${data?.conta ?? ''}`);
+    accountChip.hidden = !data?.account;
+    accountChip.replaceChildren(icon('github'), `conta: ${data?.account ?? ''}`);
 
     const e = screenState({ dados: data, falha: failure, temDado: hasList(data) });
     if (e.reler) timer = setTimeout(read, REREAD_MS);
-    if (e.tela === 'erro') return area.replaceChildren(head, failure ? error({ text: failure.message, retry }) : error({ title: 'O GitHub não respondeu', text: data.erro ?? 'A leitura dos repositórios falhou.', retry: () => (area.replaceChildren(head, loading()), read({ forcar: true })) }));
-    if (e.tela === 'carregando') return area.replaceChildren(head, loading());
-    if (e.tela === 'lendo') return area.replaceChildren(head, loading({ label: 'Lendo o GitHub…' }));
-    if (e.tela === 'sem-github') return area.replaceChildren(head, empty({ icon: 'github', ...NO_GITHUB }));
-    if (e.tela !== 'dados') return area.replaceChildren(head, none());
+    if (e.tela === 'error') return area.replaceChildren(head, failure ? error({ text: failure.message, retry }) : error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura dos repositórios falhou.', retry: () => (area.replaceChildren(head, loading()), read({ forcar: true })) }));
+    if (e.tela === 'loading') return area.replaceChildren(head, loading());
+    if (e.tela === 'reading') return area.replaceChildren(head, loading({ label: 'Lendo o GitHub…' }));
+    if (e.tela === 'no-github') return area.replaceChildren(head, empty({ icon: 'github', ...NO_GITHUB }));
+    if (e.tela !== 'data') return area.replaceChildren(head, none());
 
     if (!area.contains(filters)) area.replaceChildren(head, band, stats, filters, list);
-    const when = data.atualizadoEm ? new Date(data.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
-    if (e.faixa === 'conexao') band.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura${when ? `, de ${when}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
-    else if (e.faixa === 'github') band.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${data.erro}. Mostrando os repositórios${when ? ` de ${when}` : ' da última leitura'}.` }));
+    const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+    if (e.faixa === 'connection') band.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura${when ? `, de ${when}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
+    else if (e.faixa === 'github') band.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${data.error}. Mostrando os repositórios${when ? ` de ${when}` : ' da última leitura'}.` }));
     else band.replaceChildren();
     band.hidden = !band.firstChild;
 
-    if (data.grupos.length === 0) {
+    if (data.groups.length === 0) {
       stats.replaceChildren();
       list.replaceChildren(none());
       return;

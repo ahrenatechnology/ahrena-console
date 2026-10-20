@@ -98,80 +98,80 @@ function diasAte(ate: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => new Date(fim - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10));
 }
 
-const CONTA_A = { id: 'conta-a/org-a', rotulo: 'pessoal', cor: null };
-const CONTA_B = { id: 'conta-b/org-b', rotulo: 'equipe', cor: null };
+const CONTA_A = { id: 'conta-a/org-a', label: 'pessoal', color: null };
+const CONTA_B = { id: 'conta-b/org-b', label: 'equipe', color: null };
 
 function visao({ contas = [CONTA_A], sessoes = 412 } = {}) {
   const dias = diasAte('2026-10-18', 364);
-  const ultimos = diasAte('2026-10-18', 30).map((dia, i) => ({ dia, sessoes: i === 24 ? 47 : (i * 7) % 30 }));
+  const ultimos = diasAte('2026-10-18', 30).map((day, i) => ({ day, sessions: i === 24 ? 47 : (i * 7) % 30 }));
   return {
-    geradoEm: '2026-10-18T23:12:40.000Z',
-    fusoHorario: 'UTC',
-    hoje: '2026-10-18',
-    desde: dias[0],
-    ate: '2026-10-18',
-    contas,
-    numeros: {
-      sessoes: { total: sessoes, ativas: 4 },
-      agentes: { total: 1086, ativos: 7 },
+    generatedAt: '2026-10-18T23:12:40.000Z',
+    timeZone: 'UTC',
+    today: '2026-10-18',
+    since: dias[0],
+    until: '2026-10-18',
+    accounts: contas,
+    numbers: {
+      sessions: { total: sessoes, active: 4 },
+      agents: { total: 1086, active: 7 },
       tokens: { total: 1_900_000_000, cachePct: 71 },
-      custo: { usd: 341.2, dias: 30, semPreco: [], porConta: contas.length > 1 ? [{ conta: CONTA_A.id, usd: 300, semPreco: [] as string[] }, { conta: CONTA_B.id, usd: 41.2, semPreco: ['modelo-novo'] }] : [{ conta: CONTA_A.id, usd: 341.2, semPreco: [] as string[] }] },
-      eventos: { total: 48_100, porSessao: 116.7 },
+      cost: { usd: 341.2, days: 30, unpriced: [], byAccount: contas.length > 1 ? [{ account: CONTA_A.id, usd: 300, unpriced: [] as string[] }, { account: CONTA_B.id, usd: 41.2, unpriced: ['modelo-novo'] }] : [{ account: CONTA_A.id, usd: 341.2, unpriced: [] as string[] }] },
+      events: { total: 48_100, perSession: 116.7 },
     },
-    atividade: { semanas: 52, dias: dias.map((dia, i) => ({ dia, eventos: i % 5 === 0 ? 0 : (i * 13) % 97 })) },
-    ultimos30: { dias: ultimos, pico: { dia: ultimos[24]!.dia, sessoes: 47 }, total: 742 },
-    tokensPorModelo: [
-      { modelo: 'claude-opus-5-5', tokens: 1_180_000_000 },
-      { modelo: 'claude-sonnet-5-5', tokens: 610_000_000 },
-      { modelo: 'claude-haiku-5-5', tokens: 128_000_000 },
+    activity: { weeks: 52, days: dias.map((day, i) => ({ day, events: i % 5 === 0 ? 0 : (i * 13) % 97 })) },
+    last30: { days: ultimos, peak: { day: ultimos[24]!.day, sessions: 47 }, total: 742 },
+    tokensByModel: [
+      { model: 'claude-opus-5-5', tokens: 1_180_000_000 },
+      { model: 'claude-sonnet-5-5', tokens: 610_000_000 },
+      { model: 'claude-haiku-5-5', tokens: 128_000_000 },
     ],
-    ferramentas: [
-      { nome: 'Bash', usos: 4100 },
-      { nome: 'Edit', usos: 2542 },
-      { nome: 'Read', usos: 2255 },
-      { nome: 'Grep', usos: 861 },
-      { nome: 'Agent', usos: 492 },
-      { nome: 'Write', usos: 100 },
+    tools: [
+      { name: 'Bash', uses: 4100 },
+      { name: 'Edit', uses: 2542 },
+      { name: 'Read', uses: 2255 },
+      { name: 'Grep', uses: 861 },
+      { name: 'Agent', uses: 492 },
+      { name: 'Write', uses: 100 },
     ],
-    diaDaSemana: ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((dia, i) => ({ dia, sessoes: [58, 71, 64, 80, 52, 14, 9][i] })),
+    weekday: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day, i) => ({ day, sessions: [58, 71, 64, 80, 52, 14, 9][i] })),
   };
 }
 
 function cost(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio: empty = false } = {}) {
   const lista = diasAte('2026-10-18', dias);
-  const porDia = lista.map((dia, i) => ({ dia, usd: semPrecoNoDia && i === 3 ? null : 5 + (i % 7) }));
+  const porDia = lista.map((day, i) => ({ day, usd: semPrecoNoDia && i === 3 ? null : 5 + (i % 7) }));
   return {
-    geradoEm: '2026-10-18T23:12:40.000Z',
-    fusoHorario: 'UTC',
-    dias,
-    desde: lista[0],
-    ate: '2026-10-18',
-    estimativa: true,
-    moeda: 'USD',
-    contas,
-    hoje: '2026-10-18',
-    resumoDeHoje: { usd: 12.4 as number | null, sessoes: 9, porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 9.3 : (null as number | null), semPreco: i === 0 ? [] : ['modelo-novo'] })) },
-    periodo: { usd: empty ? null : 341.2, mediaPorDia: empty ? null : 11.4 },
+    generatedAt: '2026-10-18T23:12:40.000Z',
+    timeZone: 'UTC',
+    days: dias,
+    since: lista[0],
+    until: '2026-10-18',
+    estimate: true,
+    currency: 'USD',
+    accounts: contas,
+    today: '2026-10-18',
+    todaySummary: { usd: 12.4 as number | null, sessions: 9, byAccount: contas.map((c, i) => ({ account: c.id, label: c.label, color: c.color, usd: i === 0 ? 9.3 : (null as number | null), unpriced: i === 0 ? [] : ['modelo-novo'] })) },
+    period: { usd: empty ? null : 341.2, dailyAverage: empty ? null : 11.4 },
     cache: { pct: 71 },
-    semPreco: { modelos: ['modelo-novo'], totalDeTokens: 1000 },
-    porDia: empty ? [] : porDia,
-    pico: empty ? null : { dia: lista.at(-2), usd: 18.4 },
-    porModelo: empty
+    unpriced: { models: ['modelo-novo'], totalTokens: 1000 },
+    byDay: empty ? [] : porDia,
+    peak: empty ? null : { day: lista.at(-2), usd: 18.4 },
+    byModel: empty
       ? []
       : [
-          { modelo: 'claude-opus-5-5', usd: 211.5, pct: 62, totalDeTokens: 1 },
-          { modelo: 'claude-sonnet-5-5', usd: 105.8, pct: 31, totalDeTokens: 1 },
-          { modelo: 'claude-haiku-5-5', usd: 23.9, pct: 7, totalDeTokens: 1 },
-          { modelo: 'modelo-novo', usd: null, pct: null, totalDeTokens: 1000 },
+          { model: 'claude-opus-5-5', usd: 211.5, pct: 62, totalTokens: 1 },
+          { model: 'claude-sonnet-5-5', usd: 105.8, pct: 31, totalTokens: 1 },
+          { model: 'claude-haiku-5-5', usd: 23.9, pct: 7, totalTokens: 1 },
+          { model: 'modelo-novo', usd: null, pct: null, totalTokens: 1000 },
         ],
-    porProjeto: empty
+    byProject: empty
       ? []
       : [
-          { projeto: 'motor-de-regras', usd: 128.4 },
-          { projeto: 'painel-de-metricas', usd: 74.9 },
-          { projeto: 'sem-tabela', usd: null },
+          { project: 'motor-de-regras', usd: 128.4 },
+          { project: 'painel-de-metricas', usd: 74.9 },
+          { project: 'sem-tabela', usd: null },
         ],
-    porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 300 : 41.2, semPreco: i === 0 ? [] : ['modelo-novo'], porDia: [] })),
+    byAccount: contas.map((c, i) => ({ account: c.id, label: c.label, color: c.color, usd: i === 0 ? 300 : 41.2, unpriced: i === 0 ? [] : ['modelo-novo'], byDay: [] })),
   };
 }
 
@@ -246,7 +246,7 @@ describe('Analytics: formatação', () => {
     assert.equal(modelName(null), null);
   });
   test('rosca: até quatro modelos; mais que isso vira "Outros"; sem preço fica fora do arco', () => {
-    const m = (modelo: string, v: number | null, pct: number | null) => ({ modelo, usd: v, pct, totalDeTokens: 1 });
+    const m = (model: string, v: number | null, pct: number | null) => ({ model, usd: v, pct, totalTokens: 1 });
     const cinco = slicesByModel([m('claude-opus-5-5', 50, 50), m('claude-sonnet-5-5', 20, 20), m('claude-haiku-5-5', 10, 10), m('a', 10, 10), m('b', 10, 10), m('c', null, null)]);
     assert.deepEqual(
       cinco.map((f: { nome: string; pct: number | null }) => [f.nome, f.pct]),
@@ -267,8 +267,8 @@ describe('Analytics: formatação', () => {
     }
   });
   test('o nome do arquivo exportado', () => {
-    assert.equal(fileName('overview', { ate: '2026-10-18' }, 30), 'ahrena-analytics-2026-10-18.json');
-    assert.equal(fileName('cost', { ate: '2026-10-18' }, 7), 'ahrena-analytics-cost-7d-2026-10-18.json');
+    assert.equal(fileName('overview', { until: '2026-10-18' }, 30), 'ahrena-analytics-2026-10-18.json');
+    assert.equal(fileName('cost', { until: '2026-10-18' }, 7), 'ahrena-analytics-cost-7d-2026-10-18.json');
   });
 });
 
@@ -339,9 +339,9 @@ describe('Analytics: Visão geral', () => {
   });
 
   test('conta sem dono (id null) entra na divisão; heatmap que começa na segunda tem uma célula por dia', async () => {
-    const d = visao({ contas: [CONTA_A, { id: null, rotulo: 'Sem conta', cor: null }] as never });
-    d.numeros.custo.porConta = [{ conta: CONTA_A.id, usd: 300, semPreco: [] }, { conta: null as never, usd: null as never, semPreco: ['modelo-novo'] }];
-    d.atividade.dias = d.atividade.dias.slice(6); // 358 dias, de uma segunda até hoje
+    const d = visao({ contas: [CONTA_A, { id: null, label: 'Sem conta', color: null }] as never });
+    d.numbers.cost.byAccount = [{ account: CONTA_A.id, usd: 300, unpriced: [] }, { account: null as never, usd: null as never, unpriced: ['modelo-novo'] }];
+    d.activity.days = d.activity.days.slice(6); // 358 dias, de uma segunda até hoje
     const { area, limpar } = await montarTela({ read: async () => d });
     try {
       const linhas = porTag(comClasse(area, 'an-accounts')[0]!, 'li');
@@ -470,8 +470,8 @@ describe('Analytics: Custo', () => {
 
   test('custo sem preço no período mostra "sem preço", não US$ 0', async () => {
     const d = cost(30);
-    d.periodo = { usd: null, mediaPorDia: null };
-    d.resumoDeHoje = { usd: null, sessoes: 2, porConta: [] };
+    d.period = { usd: null, dailyAverage: null };
+    d.todaySummary = { usd: null, sessions: 2, byAccount: [] };
     const { area, limpar } = await montarTela({ aba: 'cost', read: async () => d });
     try {
       const textos = comClasse(area, 'an-stat').map((s) => s.textContent);

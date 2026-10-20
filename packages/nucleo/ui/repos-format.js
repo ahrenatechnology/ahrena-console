@@ -96,19 +96,15 @@ export function ago(iso, now = Date.now()) {
 export const PERIODS = [
   ['30d', '30 dias'],
   ['90d', '90 dias'],
-  ['1a', '1 ano'],
+  ['1y', '1 ano'],
 ];
 export const DEFAULT_PERIOD = '90d';
 
-/** The period of `?period=` (`1y` in the URL is `1a`, the API value), or the default when it is missing or odd. */
+/** The period of `?period=` (the API value, also the one in the URL), or the default when it is missing or odd. */
 export function periodFrom(search) {
-  const q = new URLSearchParams(search ?? '').get('period');
-  const p = q === '1y' ? '1a' : q;
+  const p = new URLSearchParams(search ?? '').get('period');
   return PERIODS.some(([v]) => v === p) ? p : DEFAULT_PERIOD;
 }
-
-/** The period as the URL writes it: `1y` for the year, the others as they are. */
-export const periodInUrl = (p) => (p === '1a' ? '1y' : p);
 
 export const periodLabel = (p) => (PERIODS.find(([v]) => v === p) ?? PERIODS[1])[1];
 
@@ -123,7 +119,7 @@ export const SORTS = [
 ];
 
 /**
- * "Com sessões" é o repositório com sessão viva ou com sessão no mês (`ativas > 0 || noMes > 0`):
+ * "Com sessões" é o repositório com sessão viva ou com sessão no mês (`active > 0 || thisMonth > 0`):
  * o card do resumo conta "com sessões este mês", e uma sessão viva sempre conta.
  */
 export const VISIBILITIES = [
@@ -140,26 +136,26 @@ export const withoutAccent = (s) =>
     .replace(/\p{M}/gu, '')
     .toLowerCase();
 
-const hasSession = (r) => r.sessoes.ativas > 0 || r.sessoes.noMes > 0;
+const hasSession = (r) => r.sessions.active > 0 || r.sessions.thisMonth > 0;
 const VIS = {
   todos: () => true,
   'com-sessoes': hasSession,
-  publicos: (r) => r.visibilidade === 'publico',
-  privados: (r) => r.visibilidade === 'privado',
+  publicos: (r) => r.visibility === 'public',
+  privados: (r) => r.visibility === 'private',
 };
 
-const byName = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR');
-const pushOf = (r) => (r.ultimoPush ? Date.parse(r.ultimoPush) || 0 : -Infinity);
+const byName = (a, b) => a.name.localeCompare(b.name, 'pt-BR');
+const pushOf = (r) => (r.lastPush ? Date.parse(r.lastPush) || 0 : -Infinity);
 const ORDER = {
   recente: (a, b) => pushOf(b) - pushOf(a) || byName(a, b),
   nome: byName,
-  issues: (a, b) => b.issuesAbertas - a.issuesAbertas || byName(a, b),
-  prs: (a, b) => b.prsAbertos - a.prsAbertos || byName(a, b),
-  sessoes: (a, b) => b.sessoes.ativas - a.sessoes.ativas || b.sessoes.noMes - a.sessoes.noMes || byName(a, b),
+  issues: (a, b) => b.openIssues - a.openIssues || byName(a, b),
+  prs: (a, b) => b.openPrs - a.openPrs || byName(a, b),
+  sessoes: (a, b) => b.sessions.active - a.sessions.active || b.sessions.thisMonth - a.sessions.thisMonth || byName(a, b),
 };
 
 /**
- * Os grupos depois da busca (nome ou `dono/nome`, sem acento nem caixa), da organização (`dono`,
+ * Os grupos depois da busca (nome ou `owner/name`, sem acento nem caixa), da organização (`owner`,
  * vazio = todas), da visibilidade e da ordenação. Grupo que ficou sem repositório some; a ordem dos
  * grupos é a que veio do núcleo.
  */
@@ -169,8 +165,8 @@ export function filterRepos(groups, { busca: search = '', dono: owner = '', vis 
   const compare = ORDER[order] ?? ORDER.recente;
   const output = [];
   for (const g of groups ?? []) {
-    if (owner && g.dono !== owner) continue;
-    const repos = g.repos.filter((r) => passes(r) && (!term || withoutAccent(r.nome).includes(term) || withoutAccent(r.completo).includes(term))).sort(compare);
+    if (owner && g.owner !== owner) continue;
+    const repos = g.repos.filter((r) => passes(r) && (!term || withoutAccent(r.name).includes(term) || withoutAccent(r.fullName).includes(term))).sort(compare);
     if (repos.length) output.push({ ...g, repos });
   }
   return output;
@@ -205,11 +201,11 @@ export function bars(values, width = 520, base = 90) {
  */
 export function frequency(weeks, width = 520, middle = 64, topHeight = 58, bottomHeight = 52) {
   if (!weeks?.length) return [];
-  const max = Math.max(...weeks.map((s) => Math.max(s.adicionadas, s.removidas))) || 1;
+  const max = Math.max(...weeks.map((s) => Math.max(s.added, s.removed))) || 1;
   const slot = width / weeks.length;
   return weeks.map((s, i) => {
-    const top = (s.adicionadas / max) * topHeight;
-    const bottom = (s.removidas / max) * bottomHeight;
+    const top = (s.added / max) * topHeight;
+    const bottom = (s.removed / max) * bottomHeight;
     return { x: one(i * slot + 1), largura: one(Math.max(1, slot - 4)), cima: { y: one(middle - top), altura: one(top) }, baixo: { y: middle, altura: one(bottom) } };
   });
 }
@@ -225,7 +221,7 @@ export function languages(list, max = 4) {
   if (!list?.length) return [];
   const sorted = [...list].sort((a, b) => b.bytes - a.bytes);
   const total = sorted.reduce((s, l) => s + l.bytes, 0) || 1;
-  const topLanguages = sorted.slice(0, max).map((l) => ({ nome: l.nome, pct: (l.bytes / total) * 100 }));
+  const topLanguages = sorted.slice(0, max).map((l) => ({ nome: l.name, pct: (l.bytes / total) * 100 }));
   const rest = sorted.slice(max).reduce((s, l) => s + l.bytes, 0);
   if (rest > 0) topLanguages.push({ nome: 'Outras', pct: (rest / total) * 100 });
   return topLanguages;
@@ -233,7 +229,7 @@ export function languages(list, max = 4) {
 
 // ---------- o que a tela mostra ----------
 
-/** O texto do estado `sem-github`, igual nas duas telas. */
+/** O texto do estado `no-github`, igual nas duas telas. */
 export const NO_GITHUB = {
   titulo: 'O núcleo está sem o GitHub',
   texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --sem-github.',
@@ -242,7 +238,7 @@ export const NO_GITHUB = {
 export const COMPUTING = 'calculando…';
 
 /** A lista tem dado: já veio do GitHub alguma vez ou tem grupos. */
-export const hasList = (data) => Boolean(data && (data.atualizadoEm !== null || data.grupos?.length));
+export const hasList = (data) => Boolean(data && (data.updatedAt !== null || data.groups?.length));
 /** As métricas têm dado: o cabeçalho do repositório já veio. */
 export const hasRepo = (data) => Boolean(data?.repo);
 
@@ -250,28 +246,28 @@ export const hasRepo = (data) => Boolean(data?.repo);
  * O que a tela desenha a partir da última resposta (`dados`), da última falha de leitura (`falha`)
  * e de se há dado para mostrar (`temDado`, de `temLista` ou `temRepo`):
  *
- * - `tela`: `carregando` (a primeira leitura não voltou), `lendo` (o núcleo ainda lê o GitHub),
- *   `sem-github`, `nao-encontrado`, `erro`, `vazio` (pronto e sem nada) ou `dados`.
- * - `faixa`: com dado na tela, `conexao` (a leitura falhou) ou `github` (o núcleo mandou `erro`).
+ * - `tela`: `loading` (a primeira leitura não voltou), `reading` (o núcleo ainda lê o GitHub),
+ *   `no-github`, `not-found`, `error`, `empty` (pronto e sem nada) ou `data`.
+ * - `faixa`: com dado na tela, `connection` (a leitura falhou) ou `github` (o núcleo mandou `error`).
  * - `reler`: o núcleo ainda monta ou o GitHub ainda calcula; a tela relê em 5 s.
  */
 export function screenState({ dados: data = null, falha: failure = null, temDado: hasData = false }) {
   if (!hasData) {
-    if (failure) return { tela: 'erro', faixa: null, reler: false };
-    if (!data) return { tela: 'carregando', faixa: null, reler: false };
-    if (data.estado === 'sem-github' || data.estado === 'nao-encontrado' || data.estado === 'erro') return { tela: data.estado, faixa: null, reler: false };
-    if (data.estado === 'carregando') return { tela: 'lendo', faixa: null, reler: true };
-    return { tela: 'vazio', faixa: null, reler: false };
+    if (failure) return { tela: 'error', faixa: null, reler: false };
+    if (!data) return { tela: 'loading', faixa: null, reler: false };
+    if (data.state === 'no-github' || data.state === 'not-found' || data.state === 'error') return { tela: data.state, faixa: null, reler: false };
+    if (data.state === 'loading') return { tela: 'reading', faixa: null, reler: true };
+    return { tela: 'empty', faixa: null, reler: false };
   }
   return {
-    tela: 'dados',
-    faixa: failure ? 'conexao' : data.erro ? 'github' : null,
-    reler: data.estado === 'carregando' || Boolean(data.calculando?.length),
+    tela: 'data',
+    faixa: failure ? 'connection' : data.error ? 'github' : null,
+    reler: data.state === 'loading' || Boolean(data.computing?.length),
   };
 }
 
-/** O campo ainda vai chegar: o núcleo monta (`carregando`) ou o GitHub calcula (`calculando`). */
-export const pending = (data, field) => data?.estado === 'carregando' || Boolean(data?.calculando?.includes(field));
+/** O campo ainda vai chegar: o núcleo monta (`loading`) ou o GitHub calcula (`computing`). */
+export const pending = (data, field) => data?.state === 'loading' || Boolean(data?.computing?.includes(field));
 
 /** O valor formatado, ou "calculando…" se pendente, ou "—". Número nenhum é inventado. */
 export function valueOrPending(value, data, field, format = (v) => String(v)) {
@@ -281,16 +277,16 @@ export function valueOrPending(value, data, field, format = (v) => String(v)) {
 }
 
 /**
- * A mudança do Ao vivo que pede releitura: `repos`/`lista` sempre; nas métricas, também a chave do
- * repositório (`dono/repo`), comparada sem caixa.
+ * A mudança do Ao vivo que pede releitura: `repos`/`list` sempre; nas métricas, também a chave do
+ * repositório (`owner/repo`), comparada sem caixa.
  */
 export function changeMatters(changes, key = null) {
   const mine = key ? key.toLowerCase() : null;
-  return (changes ?? []).some((m) => m.type === 'repos' && (m.key === 'lista' || (mine !== null && String(m.key).toLowerCase() === mine)));
+  return (changes ?? []).some((m) => m.type === 'repos' && (m.key === 'list' || (mine !== null && String(m.key).toLowerCase() === mine)));
 }
 
-/** O card do fim das métricas: com escrita, `trafego` ("Tráfego e segurança"); sem, `comunidade`. */
-export const trafficCardKind = (data) => (data?.escrita ? 'trafego' : 'comunidade');
+/** O card do fim das métricas: com escrita, `traffic` ("Tráfego e segurança"); sem, `community`. */
+export const trafficCardKind = (data) => (data?.canWrite ? 'traffic' : 'community');
 
 /** Endereço do GitHub vindo do dado, só se for https em github.com; fora disso, `null` (sem link). */
 export function githubUrl(url) {

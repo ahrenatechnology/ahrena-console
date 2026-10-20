@@ -125,7 +125,9 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   // (`/api/decisions?groupBy=`) are English in the handlers; each parameter has only that one reader.
   view: { sessoes: 'sessions', agentes: 'agents' },
   groupBy: { familia: 'family', sessao: 'session' },
-  period: { '1y': '1a' },
+  // Phase 2b layer 7: the repository period is English in `/api/repos/<owner>/<repo>?period=` (no old
+  // path; the old name `periodo` is global), and the year is `1y`.
+  period: { '1a': '1y' },
   // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
 };
@@ -175,6 +177,9 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
       concluidos: 'done',
     },
   },
+  // Phase 2b layer 7: the "no account" filter of `/api/changes?account=` (old alias `/api/mudancas`)
+  // is `no-account`; the other values are account ids (`<uuid>/<uuid>`), never these words.
+  '/api/changes': { account: { 'sem-conta': 'no-account' } },
   // Phase 2b layer 6: the decision state filter is English on the Decisions page and the Detail's
   // decisions tab (`?state=`; old aliases `/api/decisoes` and `/api/sessoes/<id>/decisoes`).
   '/api/decisions': { state: DECISION_STATE_FILTER_VALUES },
@@ -654,6 +659,12 @@ const CHANGES: LegacyBodySpec = {
   },
   values: {
     'changes.type': CHANGE_TYPES,
+    // Phase 2b layer 7: the `repos` change of the repository list. `key` mixes this fixed value with
+    // data (session, decision and account ids, `<machine>:<alert>`, a repo's `owner/repo`), and the
+    // value map rewrites any key that is exactly `list`. The accepted edge: a session whose id is
+    // exactly `list` would read `lista` on the old route. Real session ids are UUIDs, alerts carry a
+    // `:` and repos a `/`, so only a hand-made id can hit it.
+    'changes.key': { list: 'lista' },
     '.error': {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
@@ -1171,6 +1182,64 @@ const PROJECT_MOVE: LegacyBodySpec = merge(
   PROJECT_ERRORS,
 );
 
+// ---------------------------------------------------------------------------------------------
+// The Analytics cost (phase 2b layer 7): `GET /api/analytics/cost` (old `/api/analytics/custo`).
+// `/api/analytics` (the Overview) has no old path, so its body is simply English.
+//
+// Keys old → new: geradoEm → generatedAt, fusoHorario → timeZone, dias → days, hoje → today, desde →
+// since, ate → until, estimativa → estimate, moeda → currency, contas → accounts (rotulo → label, cor →
+// color), resumoDeHoje → todaySummary (sessoes → sessions, porConta → byAccount), periodo → period
+// (mediaPorDia → dailyAverage), semPreco → unpriced ({ modelos → models, totalDeTokens → totalTokens }
+// at the top, the list of models in an account row), porDia → byDay, pico → peak (dia → day), porModelo
+// → byModel (modelo → model, totalDeTokens → totalTokens), porProjeto → byProject (projeto → project),
+// porConta → byAccount (conta → account, rotulo → label, cor → color, semPreco → unpriced, porDia →
+// byDay). Dates, model names and projects are data and never translated. The errors cite `days:`/`tz:`.
+// ---------------------------------------------------------------------------------------------
+
+/** The account split row of the cost, in `todaySummary.byAccount` and the top `byAccount`. */
+const COST_ACCOUNT_ROW = { account: 'conta', label: 'rotulo', color: 'cor', unpriced: 'semPreco', byDay: 'porDia' };
+
+/** `GET /api/analytics/cost`, new → old. */
+const ANALYTICS_COST: LegacyBodySpec = {
+  keys: {
+    ...scoped('', {
+      generatedAt: 'geradoEm',
+      timeZone: 'fusoHorario',
+      days: 'dias',
+      today: 'hoje',
+      since: 'desde',
+      until: 'ate',
+      estimate: 'estimativa',
+      currency: 'moeda',
+      accounts: 'contas',
+      todaySummary: 'resumoDeHoje',
+      period: 'periodo',
+      unpriced: 'semPreco',
+      byDay: 'porDia',
+      peak: 'pico',
+      byModel: 'porModelo',
+      byProject: 'porProjeto',
+      byAccount: 'porConta',
+    }),
+    ...scoped('accounts', { label: 'rotulo', color: 'cor' }),
+    ...scoped('todaySummary', { sessions: 'sessoes', byAccount: 'porConta' }),
+    ...scoped('byAccount', COST_ACCOUNT_ROW),
+    ...scoped('period', { dailyAverage: 'mediaPorDia' }),
+    ...scoped('unpriced', { models: 'modelos', totalTokens: 'totalDeTokens' }),
+    ...scoped('byDay', { day: 'dia' }),
+    ...scoped('peak', { day: 'dia' }),
+    ...scoped('byModel', { model: 'modelo', totalTokens: 'totalDeTokens' }),
+    ...scoped('byProject', { project: 'projeto' }),
+  },
+  values: {
+    '.error': {
+      // `DAYS_ERROR` and `TZ_ERROR` of src/api/rota-analytics.ts (a test derives them from `DIAS_DO_CUSTO`).
+      'days: 7, 30 ou 90': 'dias: 7, 30 ou 90',
+      'tz: um fuso IANA, como America/Sao_Paulo': 'fuso: um fuso IANA, como America/Sao_Paulo',
+    },
+  },
+};
+
 /**
  * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
  * fill its entry, and the goldens prove the old body did not move.
@@ -1200,7 +1269,7 @@ export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
   'decision/promote': DECISION_PROMOTE,
   project: { response: PROJECT },
   'project/move': { response: PROJECT_MOVE },
-  'analytics/cost': {},
+  'analytics/cost': { response: ANALYTICS_COST },
 };
 
 /** The old route a raw path (as it came, without the query) belongs to; null for any other path. */

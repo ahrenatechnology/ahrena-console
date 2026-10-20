@@ -8,7 +8,7 @@
 // - A resposta: `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`
 //   (#173 phase 2b; the old route answers `{ cursor, mudancas: [{ tipo, chave, … }], reiniciar, expirou }`).
 // - `wait` em segundos (padrão 25, máximo 110; 0 não espera).
-// - `session`, `account` e `type` aceitam vírgula ou repetição; `account=sem-conta` pede "Sem conta".
+// - `session`, `account` e `type` aceitam vírgula ou repetição; `account=no-account` pede "Sem conta" (o antigo `sem-conta` ainda vale, src/api/legacy-routes.ts).
 // - O cliente que fecha a conexão libera a espera na hora.
 // - Esperas abertas demais: 503 com `Retry-After`.
 
@@ -19,7 +19,8 @@ import { ErroDeLotacao, ESPERA_PADRAO_MS, TIPOS_DE_MUDANCA, type CursorDeMudanca
 export const CHANGES_ROUTE = '/api/changes';
 /** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DAS_MUDANCAS = '/api/mudancas';
-export const SEM_CONTA = 'sem-conta';
+/** `?account=` for the sessions without an account. */
+export const NO_ACCOUNT = 'no-account';
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
@@ -39,7 +40,7 @@ export function lerPedidoDeMudancas(url: URL): { cursor: string | null; timeoutM
   const contas = lista(url, 'account');
   if (contas) {
     if (!contas.every((c) => ID.test(c))) return 'account inválida';
-    filtros.accountIds = contas.map((c) => (c === SEM_CONTA ? null : c));
+    filtros.accountIds = contas.map((c) => (c === NO_ACCOUNT ? null : c));
   }
   const tipos = lista(url, 'type');
   if (tipos) {
