@@ -168,7 +168,7 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /3 ativos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /code-reviewer/ })).toBeDefined()
   // P1: até 3 linhas, os ativos primeiro; o concluído vai para o "+1 concluído", que abre a lista.
-  expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+1 concluído ›')
+  expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('1 subagente concluído ›')
   // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; "Sua vez" em âmbar à direita; "ver todas".
   const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).map((b) => b.key)
   expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas', 'filha-sim-painel-blog-estatico'])
@@ -278,7 +278,7 @@ test('0.0.20: todo Svg do painel tem largura e altura explícitas e limitadas (o
   }
 })
 
-test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "+17 concluídos ›"', async ($, on) => {
+test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "17 subagentes concluídos ›"', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const p4 = CENARIOS.p4
   const base = p4.subagentes.itens.find((i) => i.status === 'completed')!
@@ -293,7 +293,7 @@ test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "+17 conclu
     expect([barra?.props.width, barra?.props.height]).toEqual([236, 5])
     const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
     expect(linhas.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', 'sub-sim-sub-2'])
-    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+17 concluídos ›')
+    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('17 subagentes concluídos ›')
     await ui.unmount()
   }
 })
@@ -485,7 +485,7 @@ test('Plano: o anel com o % e três passos em destaque em volta do atual; o rest
     expect(card?.text).toMatch(/○ Abrir o PR/)
     expect(card?.text).not.toMatch(/Ler o artefato|Pedir review/)
     // O resto dos passos e os planos anteriores, numa linha própria que abre o detalhe.
-    expect((await ui.find({ key: 'ver-planos' }))?.props.label).toBe('+3 passos · 2 planos anteriores ›')
+    expect((await ui.find({ key: 'ver-planos' }))?.props.label).toBe('6 passos · 2 planos anteriores ›')
     expect(await ui.find({ key: 'plano-2' })).toBeUndefined()
     await ui.unmount()
   }
@@ -524,7 +524,7 @@ test('#131 depois do /clear: sem plano em andamento, os anteriores abrem pelo ca
   await f.relogio.advance(15_000)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
   expect(await ui.find({ type: 'Text', text: /nenhum plano em andamento/ })).toBeDefined()
-  expect((await ui.find({ key: 'ver-planos' }))?.props.label).toBe('+3 planos anteriores ›')
+  expect((await ui.find({ key: 'ver-planos' }))?.props.label).toBe('3 planos anteriores ›')
   await ui.press({ key: 'ver-planos' })
   for (const n of [3, 2, 1]) expect(await ui.find({ key: `plano-${n}` })).toBeDefined()
   await ui.unmount()
@@ -696,11 +696,11 @@ test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que
     // Os ativos primeiro; o que não cabe nas 3 linhas soma o total no "+N".
     const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
     expect(subs.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', `sub-${CENARIOS.p4.subagentes.itens[0]!.id}`])
-    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+2 ativos · +10 concluídos ›')
+    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('2 subagentes ativos · 10 concluídos ›')
     expect((await ui.find({ key: 'card-subagentes' }))?.text).toMatch(/SUBAGENTES\s*5 ativos/)
     // As filhas: até 3 linhas e "ver todas as N ›".
     expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))).toHaveLength(3)
-    expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe(`ver todas as ${painel.filhas.length} ›`)
+    expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe(`${painel.filhas.length} sessões filhas ›`)
     await ui.unmount()
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 400) })
@@ -887,7 +887,7 @@ test('P1: as filhas que trabalham vêm primeiro, depois as que precisam e as da 
     expect((await ui.find({ key: 'card-filhas' }))?.text).toMatch(/SESSÕES FILHAS\s*15/)
     // À direita, o tempo; ou, em âmbar, o que pede você.
     expect((await ui.find({ type: 'Text', text: 'Precisa' }))?.props.color).toBe(paleta.yellow['500'])
-    expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe('ver todas as 15 ›')
+    expect((await ui.find({ key: 'ver-filhas' }))?.props.label).toBe('15 sessões filhas ›')
     // Na lista completa, a ordem inteira e o que cada uma que trabalha está fazendo.
     await ui.press({ key: 'ver-filhas' })
     const todas = (await ui.findAll({ type: 'Box' })).filter((x) => x.key?.startsWith('filha-')).map((x) => x.key)
@@ -901,7 +901,7 @@ test('P1: as filhas que trabalham vêm primeiro, depois as que precisam e as da 
   }
 })
 
-test('Compactar: a partir de 80%, no lugar do tile Background; pede confirmação; compacta só esta sessão e diz o resultado', async ($, on) => {
+test('Compactar: a partir de 80%, no pé do card Contexto, à direita; pede confirmação; compacta só esta sessão e diz o resultado', async ($, on) => {
   let chamadas = 0
   let soltar: (() => void) | null = null
   let recusar: string | null = null
@@ -930,9 +930,9 @@ test('Compactar: a partir de 80%, no lugar do tile Background; pede confirmaçã
   const agora = await ui.find({ key: 'compactar' })
   expect(agora?.props.label).toBe('Compactar agora')
   expect(agora?.props.variant).toBe('primary')
-  // No lugar do tile Background: a grade 2×2 fica.
-  expect(await ui.find({ key: 'kpi-background' })).toBeUndefined()
-  expect(await ui.find({ key: 'kpi-compactar' })).toBeDefined()
+  // No pé do card, à direita; os quatro tiles ficam.
+  expect(await ui.find({ key: 'kpi-background' })).toBeDefined()
+  expect((await ui.find({ key: 'pe-do-card' }))?.props.justifyContent).toBe('flex-end')
 
   // Cancelar não compacta.
   await ui.press({ key: 'compactar' })
@@ -1064,18 +1064,53 @@ test('contexto: vale o do engine (o da barra do Claude Code), que já caiu depoi
   await ui.unmount()
 })
 
-test('"Compactar agora" não quebra a grade 2×2: toma o lugar do tile Background, nas duas larguras e com pouca altura', async ($, on) => {
+test('0.0.25: o "Compactar agora" fica no pé do Contexto, à direita, só a partir de 80%; os quatro tiles ficam', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p1' })
-  f.estado.painel = { ...CENARIOS.p1, contexto: { usados: 172_000, limite: 200_000, pct: 86 }, custo: { usd: 155.32, serie: [0, 155.32], estimativa: true } }
-  await f.relogio.advance(5_000)
-  for (const [base, linhas] of [[LARGO, 120], [PANE, 45]] as const) {
-    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-    for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-compactar']) expect(await ui.find({ key: kpi })).toBeDefined()
-    expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
-    const card = await ui.find({ key: 'card-contexto' })
-    expect(card?.props.height).toBe(9.5)
-    // O cabeçalho continua o do P1.
-    expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
+  for (const [pct, aparece] of [[79, false], [80, true], [86, true]] as const) {
+    f.estado.painel = { ...CENARIOS.p1, contexto: { ...CENARIOS.p1.contexto!, usados: pct * 2000, limite: 200_000, pct } }
+    await f.relogio.advance(15_000)
+    for (const [base, linhas] of [[LARGO, 120], [PANE, 45]] as const) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+      const card = await ui.find({ key: 'card-contexto' })
+      for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
+      expect(card?.props.height).toBe(9.5)
+      expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
+      expect([pct, !!(await ui.find({ key: 'compactar' }))]).toEqual([pct, aparece])
+      if (aparece) {
+        // O pé: o último filho do card, depois do espaçador, alinhado à direita.
+        const filhos = ((card as any).children as any[]).filter(Boolean)
+        expect(filhos.at(-1)?.props.key).toBe('pe-do-card')
+        expect(filhos.at(-2)?.props.key).toBe('espaco-do-pe')
+        expect(filhos.at(-1)?.props.justifyContent).toBe('flex-end')
+      }
+      await ui.unmount()
+    }
+  }
+})
+
+test('0.0.25: os "ver mais" no pé dos cards, no padrão "N coisa estado ›", com o singular, depois do espaçador', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  const p4 = CENARIOS.p4
+  const sub = p4.subagentes.itens.find((i) => i.status === 'completed')!
+  const subs = (n: number) => Array.from({ length: n }, (_, i) => ({ ...sub, id: `sim-sub-${i}`, ate: new Date(AGORA - i * 60_000).toISOString() }))
+  const filha = p4.filhas[0]!
+  const filhas = (n: number) => Array.from({ length: n }, (_, i) => ({ ...filha, id: `sim-filha-${i}` }))
+  const ant = (p4.planos ?? []).find((x) => x.resultado !== 'atual')!
+  const casos: [Painel, Record<string, string>][] = [
+    [{ ...p4, plano: null, planos: [ant], subagentes: { ativos: 0, itens: subs(4) }, filhas: filhas(4) }, { 'ver-planos': '1 plano anterior ›', 'ver-subagentes': '1 subagente concluído ›', 'ver-filhas': '4 sessões filhas ›' }],
+    [{ ...p4, plano: null, planos: [ant, { ...ant, numero: 99 }], subagentes: { ativos: 0, itens: subs(20) }, filhas: filhas(15) }, { 'ver-planos': '2 planos anteriores ›', 'ver-subagentes': '17 subagentes concluídos ›', 'ver-filhas': '15 sessões filhas ›' }],
+  ]
+  for (const [painel, esperado] of casos) {
+    f.estado.painel = painel
+    await f.relogio.advance(15_000)
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 200) })
+    for (const [key, texto] of Object.entries(esperado)) {
+      expect((await ui.find({ key }))?.props.label).toBe(texto)
+      // O pé é o último filho do card, logo depois do espaçador: a mesma altura em todos.
+      const card = await ui.find({ key: key === 'ver-planos' ? 'card-plano' : key === 'ver-subagentes' ? 'card-subagentes' : 'card-filhas' })
+      const filhos = ((card as any).children as any[]).filter(Boolean)
+      expect([key, filhos.at(-1)?.props.key, filhos.at(-2)?.props.key]).toEqual([key, 'pe-do-card', 'espaco-do-pe'])
+    }
     await ui.unmount()
   }
 })

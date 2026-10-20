@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.24'
+export const VERSAO_DO_PLUGIN = '0.0.25'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -270,15 +270,37 @@ function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, 
  */
 export const RESPIRO_DO_CARD = { paddingX: 1, paddingBottom: 1 } as const
 
-/** Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda, o mesmo raio e o mesmo respiro. */
-function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO) {
+/**
+ * Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda, o mesmo raio e o mesmo
+ * respiro. Com `pe`, um espaçador empurra o pé para o fundo do card, logo acima do respiro de baixo,
+ * na mesma altura em todos os cards.
+ */
+function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO, pe: RenderElement | null = null) {
   const { Box } = c.el
   return (
     <Box key={key} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} {...RESPIRO_DO_CARD} gap="xs">
       {filhos.filter(Boolean)}
+      {pe ? <Box key="espaco-do-pe" flexGrow={1} /> : null}
+      {pe}
     </Box>
   )
 }
+
+/**
+ * O pé do card: uma linha só, ancorada no fundo (ver `cartao`), à esquerda (os "ver mais": "93
+ * planos anteriores ›") ou à direita (o "Compactar agora" do Contexto).
+ */
+function peDoCard(c: Contexto, conteudo: RenderElement, alinhamento: 'esquerda' | 'direita' = 'esquerda') {
+  const { Box } = c.el
+  return (
+    <Box key="pe-do-card" flexDirection="row" flexShrink={0} justifyContent={alinhamento === 'direita' ? 'flex-end' : 'flex-start'}>
+      {conteudo}
+    </Box>
+  )
+}
+
+/** "1 plano anterior", "93 planos anteriores": o número primeiro, por extenso, com a concordância. */
+const contagem = (n: number, umSingular: string, varios: string) => `${n} ${n === 1 ? umSingular : varios}`
 
 /** O link do P1 (`pn-link`): laranja e sublinhado. */
 function link(c: Contexto, key: string, href: string, texto: string) {
@@ -530,35 +552,28 @@ function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | st
   )
 }
 
-/** A partir daqui, o "Compactar agora" aparece no card, no lugar do tile Background. */
+/** A partir daqui, o "Compactar agora" aparece no pé do card Contexto. */
 export const CONTEXTO_ALTO = 80
 
 /** O contexto desta sessão: o do engine (acompanha a compactação na hora) ou, sem ele, o do núcleo. */
 const contextoDaSessao = (c: Pick<Contexto, 'leitura'>, p: Painel | null) => c.leitura?.contextoAoVivo ?? p?.contexto ?? null
 
-/** O tile do "Compactar agora", do tamanho de um tile, no lugar do Background (a partir de 80%). */
-function tileCompactar(c: Contexto) {
-  const { Box, Button, Text } = c.el
-  return (
-    <Box key="kpi-compactar" flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={VERMELHO} backgroundColor={BADGE.vermelho} paddingX={1}>
-      <Text mono size="caption" weight="semibold" color={VERMELHO_TEXTO}>
-        CONTEXTO ALTO
-      </Text>
-      {c.vista.compactar === 'compactando' ? (
-        <Text mono size="footnote" color={AMARELO}>
-          compactando…
-        </Text>
-      ) : (
-        <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
-      )}
-    </Box>
+/** O "Compactar agora" do pé do card Contexto (a partir de 80%), ou "compactando…" enquanto o engine compacta. */
+function botaoCompactar(c: Contexto) {
+  const { Button, Text } = c.el
+  return c.vista.compactar === 'compactando' ? (
+    <Text key="compactando" mono size="footnote" color={AMARELO}>
+      compactando…
+    </Text>
+  ) : (
+    <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
   )
 }
 
 /**
  * O card Contexto e custo (pnMetricas do P1): "estimativa" à direita do cabeçalho e os quatro
- * tiles em 2×2. Até 79%, o card não tem Compactar (o P1 não tem, e o Desktop não desenha texto
- * pequeno clicável); a partir de 80%, o "Compactar agora" toma o lugar do tile Background.
+ * tiles em 2×2. Até 79%, como no P1, sem Compactar; a partir de 80%, o "Compactar agora" no pé do
+ * card, à direita: o card se basta sozinho.
  */
 function cardContexto(c: Contexto, p: Painel | null) {
   const { Box, Svg } = c.el
@@ -577,9 +592,9 @@ function cardContexto(c: Contexto, p: Painel | null) {
     </Box>,
     <Box flexDirection="row" gap={1} flexShrink={0}>
       {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
-      {alto ? tileCompactar(c) : kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
+      {kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
     </Box>,
-  ])
+  ], BORDA, FUNDO_CARTAO, alto ? peDoCard(c, botaoCompactar(c), 'direita') : null)
 }
 
 /**
@@ -779,7 +794,6 @@ function linhaDeLista(c: Contexto, key: string, texto: (RenderElement | string |
   )
 }
 
-const planosAnteriores = (n: number) => `+${n} ${n === 1 ? 'plano anterior' : 'planos anteriores'}`
 
 /** Quanto o plano durou; o atual, até agora. */
 const duracaoDoPlano = (p: PlanoDaSessao, agora: number) => duracao((p.fim ? Date.parse(p.fim) : agora) - Date.parse(p.inicio))
@@ -836,9 +850,9 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
       <Text mono size="footnote" dimColor wrap="truncate-end">
         {anteriores.length ? 'nenhum plano em andamento' : 'sem plano nesta sessão'}
       </Text>,
-      anteriores.length ? abre(c, 'ver-planos', `${planosAnteriores(anteriores.length)} ›`, c.acoes.verPlanos, true) : null,
     )
-    return cartao(c, 'card-plano', corpo)
+    const pe = anteriores.length ? peDoCard(c, abre(c, 'ver-planos', `${contagem(anteriores.length, 'plano anterior', 'planos anteriores')} ›`, c.acoes.verPlanos, true)) : null
+    return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, pe)
   }
   const pct = p.total ? Math.round((p.feitos / p.total) * 100) : 0
   const passos = p.passos ?? []
@@ -885,11 +899,10 @@ function cardPlano(c: Contexto, p: Painel['plano'], planos: PlanoDaSessao[]) {
       </Box>
     </Box>,
   )
-  // O resto dos passos e os planos anteriores, no detalhe.
-  const fora = Math.max(0, passos.length - destaque.length)
-  const partes = [fora ? `+${fora} ${fora === 1 ? 'passo' : 'passos'}` : null, anteriores.length ? planosAnteriores(anteriores.length).slice(1) : null].filter(Boolean)
-  corpo.push(abre(c, 'ver-planos', partes.length ? `${partes.join(' · ')} ›` : 'ver o plano ›', c.acoes.verPlanos, true))
-  return cartao(c, 'card-plano', corpo)
+  // O plano inteiro (os passos) e os anteriores, no detalhe: "6 passos · 2 planos anteriores ›".
+  const partes = [passos.length ? contagem(passos.length, 'passo', 'passos') : null, anteriores.length ? contagem(anteriores.length, 'plano anterior', 'planos anteriores') : null].filter(Boolean)
+  const pe = peDoCard(c, abre(c, 'ver-planos', partes.length ? `${partes.join(' · ')} ›` : 'ver o plano ›', c.acoes.verPlanos, true))
+  return cartao(c, 'card-plano', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
 /** Colunas do texto de uma linha de lista no card: a largura útil menos a coluna de tempo e o espaço. */
@@ -948,13 +961,19 @@ function quantosCabem(alturas: number[], linhas: number): number {
 /** No card (P1), até 3 linhas: os ativos primeiro, e os encerrados mais recentes até completar. */
 const LINHAS_DA_LISTA = 3
 
-/** O que ficou fora do card: "+17 concluídos", "+1 ativo · +5 concluídos". */
+/**
+ * O que ficou fora do card, no padrão dos pés ("N coisa estado"): "17 subagentes concluídos",
+ * "1 subagente concluído", "2 subagentes ativos · 10 concluídos". O substantivo vai só na primeira parte.
+ */
 function subagentesFora(fora: SubagenteDoPainel[]): string {
-  const ativos = fora.filter(subagenteAtivo).length
-  const concluidos = fora.filter((i) => i.status === 'completed').length
-  const erro = fora.filter((i) => i.status === 'error').length
-  return [ativos && `+${plural(ativos, 'ativo', 'ativos')}`, concluidos && `+${plural(concluidos, 'concluído', 'concluídos')}`, erro && `+${erro} com erro`]
-    .filter(Boolean)
+  const partes: [number, string, string][] = [
+    [fora.filter(subagenteAtivo).length, 'ativo', 'ativos'],
+    [fora.filter((i) => i.status === 'completed').length, 'concluído', 'concluídos'],
+    [fora.filter((i) => i.status === 'error').length, 'com erro', 'com erro'],
+  ]
+  return partes
+    .filter(([n]) => n > 0)
+    .map(([n, um, varios], i) => (i === 0 ? `${contagem(n, 'subagente', 'subagentes')} ${n === 1 ? um : varios}` : `${n} ${n === 1 ? um : varios}`))
     .join(' · ')
 }
 
@@ -982,9 +1001,9 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
     // card no Desktop (~7,9 px por coluna), de borda a borda.
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={BARRA_W} height={BARRA_H} />,
     ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
-    fora.length > 0 && abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true),
   )
-  return cartao(c, 'card-subagentes', corpo)
+  const pe = fora.length > 0 ? peDoCard(c, abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true)) : null
+  return cartao(c, 'card-subagentes', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
 /** O nome da sessão: um link que abre a conversa no Claude Desktop, quando ela está no índice dele. */
@@ -1091,10 +1110,10 @@ function cardFilhas(c: Contexto, todasAsFilhas: FilhaDoPainel[]) {
   corpo.push(
     // O nome no card é cortado só no link (que não quebra linha); o resto corta com reticências.
     ...filhas.slice(0, LINHAS_DA_LISTA).map((f) => linhaDeFilha(c, f, UTIL - TEMPO_W - 3, false, false)),
-    // Só quando há mais filhas do que as linhas do card: com todas à vista, o link é redundante.
-    filhas.length > LINHAS_DA_LISTA && abre(c, 'ver-filhas', `ver todas as ${filhas.length} ›`, c.acoes.verFilhas, true),
   )
-  return cartao(c, 'card-filhas', corpo)
+  // O pé ("N sessões filhas ›") só quando há mais filhas do que as linhas do card.
+  const pe = filhas.length > LINHAS_DA_LISTA ? peDoCard(c, abre(c, 'ver-filhas', `${contagem(filhas.length, 'sessão filha', 'sessões filhas')} ›`, c.acoes.verFilhas, true)) : null
+  return cartao(c, 'card-filhas', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
 /**
