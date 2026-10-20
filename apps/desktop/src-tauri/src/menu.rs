@@ -22,7 +22,8 @@ pub struct AttentionItem {
     pub title: String,
     #[serde(alias = "conta")]
     pub account: Option<Account>,
-    /// `needs` (the session is blocked) or `your-turn`.
+    /// `needs` (the session is blocked) or `your-turn` (idle): the level from before #245, which
+    /// `from_json` turns into `attention` when the core does not send it.
     #[serde(alias = "nivel")]
     pub level: String,
     #[serde(alias = "motivo")]
@@ -38,7 +39,36 @@ pub struct AttentionItem {
     /// from before the remote machines.
     #[serde(default)]
     pub machine: Option<SessionMachine>,
+    /// #245: `blocked` (it waits on you or stopped on an error) or `idle` (the turn ended and nothing
+    /// blocks it). A core from before #245 does not send it: `from_json` derives it from `level`.
+    #[serde(default)]
+    pub attention: Option<ItemAttention>,
 }
+
+impl AttentionItem {
+    /// Needs you (#245): the only sessions that get a menu item, the bar's number and a notice.
+    pub fn is_blocked(&self) -> bool {
+        self.attention.as_ref().is_some_and(|a| a.level == BLOCKED)
+    }
+
+    #[cfg(test)]
+    pub fn is_idle(&self) -> bool {
+        self.attention.as_ref().is_some_and(|a| a.level == IDLE)
+    }
+}
+
+/// `attention: { level, reason }` of an item (#245).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ItemAttention {
+    /// `blocked` or `idle`.
+    pub level: String,
+    /// `permission`, `question`, `plan`, `decision`, `error` (blocked); `turn_ended`, `interrupted`,
+    /// `first_prompt` (idle).
+    pub reason: String,
+}
+
+pub const BLOCKED: &str = "blocked";
+pub const IDLE: &str = "idle";
 
 /// `machine: { id, label }` of a remote session in `/api/attention`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -65,6 +95,18 @@ pub struct Attention {
     pub with_error: u64,
     #[serde(alias = "itens")]
     pub items: Vec<AttentionItem>,
+    /// #245: the sessions that need you, the bar's number. A core from before #245 does not send
+    /// it: `from_json` fills it from `needs` or from the items.
+    #[serde(default)]
+    pub blocked: Option<u64>,
+    /// #245: the idle sessions, only a grey count in the menu. Filled like `blocked`.
+    #[serde(default)]
+    pub idle: Option<u64>,
+    /// The counts from before #245 (`blocked` and `idle` under their old names).
+    #[serde(default, alias = "precisam")]
+    pub needs: Option<u64>,
+    #[serde(default, rename = "yourTurn", alias = "suaVez")]
+    pub your_turn: Option<u64>,
 }
 
 impl Attention {
@@ -77,9 +119,51 @@ impl Attention {
             if let Some(new) = english_reason(&i.reason) {
                 i.reason = new.to_owned();
             }
+            if i.attention.is_none() {
+                i.attention = attention_from_level(&i.level, &i.reason);
+            }
+        }
+        let count = |level: &str| a.items.iter().filter(|i| i.attention.as_ref().is_some_and(|x| x.level == level)).count() as u64;
+        if a.blocked.is_none() {
+            a.blocked = Some(a.needs.unwrap_or_else(|| count(BLOCKED)));
+        }
+        if a.idle.is_none() {
+            a.idle = Some(a.your_turn.unwrap_or_else(|| count(IDLE)));
         }
         Some(a)
     }
+
+    /// The sessions that need you, whoever waits the longest first (#245): the menu list and the
+    /// notices. The idle ones are left out.
+    pub fn blocked_items(&self) -> Vec<&AttentionItem> {
+        let mut items: Vec<&AttentionItem> = self.items.iter().filter(|i| i.is_blocked()).collect();
+        items.sort_by_key(|i| std::cmp::Reverse(i.minutes));
+        items
+    }
+
+    pub fn blocked_count(&self) -> u64 {
+        self.blocked.unwrap_or_default()
+    }
+
+    pub fn idle_count(&self) -> u64 {
+        self.idle.unwrap_or_default()
+    }
+}
+
+/// The #245 attention of an item from a core that only sends `level`: `needs` is blocked and
+/// `your-turn` idle, with the reason in the #245 names. `None` for an unknown level.
+fn attention_from_level(level: &str, reason: &str) -> Option<ItemAttention> {
+    let level = match level {
+        "needs" => BLOCKED,
+        "your-turn" => IDLE,
+        _ => return None,
+    };
+    let reason = match reason {
+        "your-turn" => "turn_ended",
+        "no-prompt" => "first_prompt",
+        r => r,
+    };
+    Some(ItemAttention { level: level.into(), reason: reason.into() })
 }
 
 /// The `nivel` of a core from before #173 (phase 2b) as the new value; `None` if it already is.
@@ -173,10 +257,11 @@ pub const SESSION_IN_DESKTOP: &str = "desktop:";
 /// Prefix of the ids of the machine rows and alerts (#180).
 pub const MACHINE: &str = "machine:";
 
-/// The number next to the icon: waiting and with an error. Zero or a stopped core: only the icon.
+/// The number next to the icon: only the sessions that need you (blocked or with an error, #245);
+/// the idle ones never count. Zero or a stopped core: only the icon.
 pub fn tray_title(core: &CoreState, attention: Option<&Attention>) -> Option<String> {
     match (core, attention) {
-        (CoreState::Up { .. }, Some(a)) if a.total > 0 => Some(a.total.to_string()),
+        (CoreState::Up { .. }, Some(a)) if a.blocked_count() > 0 => Some(a.blocked_count().to_string()),
         _ => None,
     }
 }
@@ -244,11 +329,12 @@ fn sessions(m: &mut Vec<Item>, attention: Option<&Attention>, machines: Vec<Item
         m.push(Item::Text { text: "Lendo as sessões…".into(), dot: None });
         return;
     };
-    if a.items.is_empty() {
-        // A1: two items, each with its own dot (the native menu does not put two on one line).
-        // With the list empty there is no session with an error: one would be in the list.
+    let blocked = a.blocked_items();
+    if blocked.is_empty() {
+        // A1: one item per dot (the native menu does not put two on one line). With the list
+        // empty there is no session with an error: one would be in the list.
         m.push(Item::Text { text: "Ninguém precisa de você".into(), dot: Some(Dot::Empty) });
-        m.push(Item::Text { text: active_count(a.active), dot: Some(Dot::Orange) });
+        summary(m, a);
         m.push(Item::Text { text: "nenhuma com erro".into(), dot: Some(Dot::Red) });
         if !machines.is_empty() {
             m.push(Item::Separator);
@@ -256,10 +342,10 @@ fn sessions(m: &mut Vec<Item>, attention: Option<&Attention>, machines: Vec<Item
         }
         return;
     }
-    let n = a.items.len();
+    let n = blocked.len();
     let who = if n == 1 { "1 precisa de você".to_string() } else { format!("{n} precisam de você") };
     m.push(Item::Header { text: format!("{who} · abrir na janela"), alternate: format!("{who} · abrir no Claude Desktop") });
-    for i in &a.items {
+    for i in blocked {
         let account = i.account.as_ref().map(|c| c.label.as_str()).unwrap_or("Sem conta");
         let (text, alternate) = match &i.machine {
             Some(machine) => (format!("{} · {} · {} · {}", i.title, machine.label, i.short_reason, elapsed(i.minutes)), None),
@@ -279,7 +365,18 @@ fn sessions(m: &mut Vec<Item>, attention: Option<&Attention>, machines: Vec<Item
         m.extend(machines);
         m.push(Item::Separator);
     }
+    summary(m, a);
+}
+
+/// The summary: the active count and, when there are idle sessions, their grey count with the
+/// hollow dot (#245), with no item to click and no number in the bar.
+fn summary(m: &mut Vec<Item>, a: &Attention) {
     m.push(Item::Text { text: active_count(a.active), dot: Some(Dot::Orange) });
+    match a.idle_count() {
+        0 => {}
+        1 => m.push(Item::Text { text: "1 ociosa".into(), dot: Some(Dot::Empty) }),
+        n => m.push(Item::Text { text: format!("{n} ociosas"), dot: Some(Dot::Empty) }),
+    }
 }
 
 /// The "Máquinas" block (A6, A7): a header, one row per machine and one item per open alert of a
@@ -329,24 +426,43 @@ fn active_count(n: u64) -> String {
 mod tests {
     use super::*;
 
-    // The JSON of `/api/attention`, in the route's format (extra fields are ignored).
+    // The JSON of `/api/attention` (#245), in the route's format (extra fields are ignored), in the
+    // core's order (the error after the other blocked ones, the idle ones last): wireframe A2, three
+    // that need you and two idle.
     const THREE: &str = r##"{
-      "generatedAt": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 3, "needs": 2, "yourTurn": 1,
+      "generatedAt": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 5, "needs": 3, "yourTurn": 2, "blocked": 3, "idle": 2,
       "active": 4, "withError": 1,
       "items": [
+        { "session": "s4", "title": "agenda-ficticia", "project": null, "account": { "label": "equipe", "color": "#f47c20" },
+          "level": "needs", "reason": "plan", "attention": { "level": "blocked", "reason": "plan" }, "shortReason": "Plano para aprovar",
+          "longReason": "tem um plano para aprovar", "since": "2026-10-18T23:03:00.000Z", "minutes": 7, "local": null },
         { "session": "s1", "title": "motor-de-regras", "project": null, "account": { "label": "equipe", "color": "#f47c20" },
-          "level": "needs", "reason": "permission", "shortReason": "Pede permissão", "longReason": "pede permissão para usar Bash",
-          "since": "2026-10-18T23:08:00.000Z", "minutes": 2, "local": "local_00000000-0000-4000-8000-000000000001" },
+          "level": "needs", "reason": "permission", "attention": { "level": "blocked", "reason": "permission" }, "shortReason": "Pede permissão",
+          "longReason": "pede permissão para usar Bash", "since": "2026-10-18T23:08:00.000Z", "minutes": 2, "local": "local_00000000-0000-4000-8000-000000000001" },
         { "session": "s2", "title": "painel-de-metricas", "project": null, "account": null,
-          "level": "needs", "reason": "error", "shortReason": "Com erro", "longReason": "parou num erro",
-          "since": "2026-10-18T23:07:00.000Z", "minutes": 3, "local": null },
+          "level": "needs", "reason": "error", "attention": { "level": "blocked", "reason": "error" }, "shortReason": "Com erro",
+          "longReason": "parou num erro", "since": "2026-10-18T23:07:00.000Z", "minutes": 3, "local": null },
         { "session": "s3", "title": "fila-de-tarefas", "project": null, "account": { "label": "cliente", "color": "#3b82f6" },
-          "level": "your-turn", "reason": "your-turn", "shortReason": "Sua vez", "longReason": "terminou o turno, sua vez",
-          "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null }
+          "level": "your-turn", "reason": "your-turn", "attention": { "level": "idle", "reason": "turn_ended" }, "shortReason": "Sua vez",
+          "longReason": "terminou o turno, sua vez", "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null },
+        { "session": "s5", "title": "catalogo-exemplo", "project": null, "account": null,
+          "level": "your-turn", "reason": "interrupted", "attention": { "level": "idle", "reason": "interrupted" }, "shortReason": "Interrompida",
+          "longReason": "foi interrompida", "since": "2026-10-18T23:00:00.000Z", "minutes": 10, "local": null }
       ]
     }"##;
 
-    const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "needs": 0, "yourTurn": 0, "active": 4, "withError": 0, "items": [] }"#;
+    const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "needs": 0, "yourTurn": 0, "blocked": 0, "idle": 0, "active": 4, "withError": 0, "items": [] }"#;
+
+    /// A1 with idle sessions (#245): nobody needs you, two idle.
+    const ONLY_IDLE: &str = r##"{
+      "cursor": "c2", "total": 2, "needs": 0, "yourTurn": 2, "blocked": 0, "idle": 2, "active": 4, "withError": 0,
+      "items": [
+        { "session": "s3", "title": "fila-de-tarefas", "account": null, "level": "your-turn", "reason": "your-turn",
+          "attention": { "level": "idle", "reason": "turn_ended" }, "shortReason": "Sua vez", "longReason": "terminou o turno", "minutes": 1, "local": null },
+        { "session": "s6", "title": "nova", "account": null, "level": "your-turn", "reason": "no-prompt",
+          "attention": { "level": "idle", "reason": "first_prompt" }, "shortReason": "No prompt", "longReason": "sessão nova", "minutes": 4, "local": null }
+      ]
+    }"##;
 
     fn input<'a>(core: &'a CoreState, attention: Option<&'a Attention>) -> Input<'a> {
         Input { core, attention, no_attention: false, notifications: true, login: false, version: "0.0.1", update: None, machines: None, now_ms: 0 }
@@ -375,11 +491,12 @@ mod tests {
                 "Núcleo de pé · 127.0.0.1:4720",
                 "—",
                 "3 precisam de você · abrir na janela",
-                "motor-de-regras · Pede permissão · 2 min",
+                "agenda-ficticia · Plano para aprovar · 7 min",
                 "painel-de-metricas · Com erro · 3 min",
-                "fila-de-tarefas · Sua vez · 1 min",
+                "motor-de-regras · Pede permissão · 2 min",
                 "—",
                 "4 ativas",
+                "2 ociosas",
                 "—",
                 "Abrir o console",
                 "✓ Notificações",
@@ -389,7 +506,32 @@ mod tests {
                 "Sair do Ahrena Console",
             ]
         );
-        assert_eq!(tray_title(&n, Some(&a)).as_deref(), Some("3"));
+        assert_eq!(tray_title(&n, Some(&a)).as_deref(), Some("3"), "only the blocked ones; the 2 idle do not count");
+        let idle = m.iter().find(|i| matches!(i, Item::Text { text, .. } if text == "2 ociosas"));
+        assert_eq!(idle, Some(&Item::Text { text: "2 ociosas".into(), dot: Some(Dot::Empty) }), "grey, hollow dot, no action");
+        assert!(!m.iter().any(|i| matches!(i, Item::Session { id, .. } if id == "s3" || id == "s5")), "no item for an idle session");
+    }
+
+    #[test]
+    fn a1_idle_only_in_the_summary() {
+        let a = Attention::from_json(ONLY_IDLE).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&input(&n, Some(&a)));
+        assert_eq!(&texts(&m)[..8], ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas", "2 ociosas", "nenhuma com erro", "—"]);
+        let dots: Vec<_> = m[3..7].iter().map(|i| if let Item::Text { dot, .. } = i { *dot } else { None }).collect();
+        assert_eq!(dots, [Some(Dot::Empty), Some(Dot::Orange), Some(Dot::Empty), Some(Dot::Red)]);
+        assert_eq!(tray_title(&n, Some(&a)), None, "idle sessions never put a number in the bar");
+        assert!(!m.iter().any(|i| matches!(i, Item::Session { .. } | Item::Header { .. })));
+    }
+
+    #[test]
+    fn error_counts_as_blocked() {
+        let a = Attention::from_json(THREE).unwrap();
+        let e = a.items.iter().find(|i| i.session == "s2").unwrap();
+        assert!(e.is_blocked());
+        assert_eq!(session_dot(e), Dot::Red);
+        assert!(a.blocked_items().iter().any(|i| i.session == "s2"));
+        assert_eq!(a.blocked_count(), 3);
     }
 
     #[test]
@@ -409,9 +551,9 @@ mod tests {
         assert_eq!(
             sessions,
             [
-                ("motor-de-regras · Abrir no Claude Desktop", Dot::Yellow, "equipe · pede permissão para usar Bash", true),
+                ("agenda-ficticia · Abrir no Claude Desktop", Dot::Yellow, "equipe · tem um plano para aprovar", false),
                 ("painel-de-metricas · Abrir no Claude Desktop", Dot::Red, "Sem conta · parou num erro", false),
-                ("fila-de-tarefas · Abrir no Claude Desktop", Dot::Yellow, "cliente · terminou o turno, sua vez", false),
+                ("motor-de-regras · Abrir no Claude Desktop", Dot::Yellow, "equipe · pede permissão para usar Bash", true),
             ]
         );
     }
@@ -451,11 +593,14 @@ mod tests {
         let mut a = Attention::from_json(THREE).unwrap();
         a.items.truncate(1);
         a.total = 1;
+        a.blocked = Some(1);
+        a.idle = Some(1);
         a.active = 1;
         let n = CoreState::Up { port: 4720 };
         let t = texts(&build(&input(&n, Some(&a))));
         assert!(t.contains(&"1 precisa de você · abrir na janela".to_string()));
         assert!(t.contains(&"1 ativa".to_string()));
+        assert!(t.contains(&"1 ociosa".to_string()));
         assert_eq!([elapsed(0), elapsed(59), elapsed(60), elapsed(150), elapsed(60 * 24 * 2)], ["agora", "59 min", "1 h", "2 h", "2 d"]);
     }
 
@@ -489,9 +634,11 @@ mod tests {
     /// 2026-10-18T23:10:00Z, the wireframes' clock.
     const NOW_MS: u64 = 1_792_365_000_000;
 
-    /// A2 with two of the three sessions on the remote Workstation (`machine` set, `local: null`).
+    /// A6: two of the three sessions that need you on the remote Workstation (`machine` set,
+    /// `local: null`), and two idle ones. In the format of a core from before #245 (no `attention`,
+    /// no `blocked`/`idle`): the tray derives them from `level` and `needs`/`yourTurn`.
     const REMOTE_THREE: &str = r##"{
-      "cursor": "c43", "total": 3, "needs": 2, "yourTurn": 1, "active": 4, "withError": 1,
+      "cursor": "c43", "total": 5, "needs": 3, "yourTurn": 2, "active": 4, "withError": 1,
       "items": [
         { "session": "s1", "title": "motor-de-regras", "project": null, "account": { "label": "equipe", "color": "#f47c20" },
           "level": "needs", "reason": "permission", "shortReason": "Pede permissão", "longReason": "pede permissão para usar Bash",
@@ -499,18 +646,31 @@ mod tests {
         { "session": "s2", "title": "painel-de-metricas", "project": null, "account": null,
           "level": "needs", "reason": "error", "shortReason": "Com erro", "longReason": "parou num erro",
           "since": "2026-10-18T23:07:00.000Z", "minutes": 3, "local": null, "machine": { "id": "workstation", "label": "Workstation" } },
-        { "session": "s3", "title": "fila-de-tarefas", "project": null, "account": { "label": "cliente", "color": "#3b82f6" },
+        { "session": "s4", "title": "agenda-ficticia", "project": null, "account": { "label": "cliente", "color": "#3b82f6" },
+          "level": "needs", "reason": "plan", "shortReason": "Plano para aprovar", "longReason": "tem um plano para aprovar",
+          "since": "2026-10-18T23:03:00.000Z", "minutes": 7, "local": "local_00000000-0000-4000-8000-000000000004", "machine": null },
+        { "session": "s3", "title": "fila-de-tarefas", "project": null, "account": null,
           "level": "your-turn", "reason": "your-turn", "shortReason": "Sua vez", "longReason": "terminou o turno, sua vez",
-          "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": "local_00000000-0000-4000-8000-000000000003", "machine": null }
+          "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null, "machine": null },
+        { "session": "s5", "title": "catalogo-exemplo", "project": null, "account": null,
+          "level": "your-turn", "reason": "interrupted", "shortReason": "Interrompida", "longReason": "foi interrompida",
+          "since": "2026-10-18T23:00:00.000Z", "minutes": 10, "local": null, "machine": null }
       ]
     }"##;
 
+    /// A7: one local session that needs you and two idle ones.
     const ONE_LOCAL: &str = r##"{
-      "cursor": "c44", "total": 1, "needs": 0, "yourTurn": 1, "active": 1, "withError": 0,
+      "cursor": "c44", "total": 3, "needs": 1, "yourTurn": 2, "blocked": 1, "idle": 2, "active": 1, "withError": 0,
       "items": [
+        { "session": "s4", "title": "agenda-ficticia", "project": null, "account": null,
+          "level": "needs", "reason": "plan", "attention": { "level": "blocked", "reason": "plan" }, "shortReason": "Plano para aprovar",
+          "longReason": "tem um plano para aprovar", "since": "2026-10-18T23:03:00.000Z", "minutes": 7, "local": null, "machine": null },
         { "session": "s3", "title": "fila-de-tarefas", "project": null, "account": null,
-          "level": "your-turn", "reason": "your-turn", "shortReason": "Sua vez", "longReason": "terminou o turno, sua vez",
-          "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null, "machine": null }
+          "level": "your-turn", "reason": "your-turn", "attention": { "level": "idle", "reason": "turn_ended" }, "shortReason": "Sua vez",
+          "longReason": "terminou o turno, sua vez", "since": "2026-10-18T23:09:00.000Z", "minutes": 1, "local": null, "machine": null },
+        { "session": "s5", "title": "catalogo-exemplo", "project": null, "account": null,
+          "level": "your-turn", "reason": "interrupted", "attention": { "level": "idle", "reason": "interrupted" }, "shortReason": "Interrompida",
+          "longReason": "foi interrompida", "since": "2026-10-18T23:00:00.000Z", "minutes": 10, "local": null, "machine": null }
       ]
     }"##;
 
@@ -584,9 +744,9 @@ mod tests {
                 "Núcleo de pé · 127.0.0.1:4720",
                 "—",
                 "3 precisam de você · abrir na janela",
-                "motor-de-regras · Workstation · Pede permissão · 2 min",
+                "agenda-ficticia · Plano para aprovar · 7 min",
                 "painel-de-metricas · Workstation · Com erro · 3 min",
-                "fila-de-tarefas · Sua vez · 1 min",
+                "motor-de-regras · Workstation · Pede permissão · 2 min",
                 "—",
                 "Máquinas",
                 "Este Mac · CPU 34% · disco 61%",
@@ -595,6 +755,7 @@ mod tests {
                 "Volume / em 86% · Workstation",
                 "—",
                 "4 ativas",
+                "2 ociosas",
                 "—",
             ])
         );
@@ -640,9 +801,9 @@ mod tests {
         assert_eq!(
             sessions,
             [
-                ("motor-de-regras · Workstation · Pede permissão · 2 min", None, "equipe · pede permissão para usar Bash"),
+                ("agenda-ficticia · Plano para aprovar · 7 min", Some("agenda-ficticia · Abrir no Claude Desktop"), "cliente · tem um plano para aprovar"),
                 ("painel-de-metricas · Workstation · Com erro · 3 min", None, "Sem conta · parou num erro"),
-                ("fila-de-tarefas · Sua vez · 1 min", Some("fila-de-tarefas · Abrir no Claude Desktop"), "cliente · terminou o turno, sua vez"),
+                ("motor-de-regras · Workstation · Pede permissão · 2 min", None, "equipe · pede permissão para usar Bash"),
             ]
         );
     }
@@ -669,7 +830,7 @@ mod tests {
                 "Núcleo de pé · 127.0.0.1:4720",
                 "—",
                 "1 precisa de você · abrir na janela",
-                "fila-de-tarefas · Sua vez · 1 min",
+                "agenda-ficticia · Plano para aprovar · 7 min",
                 "—",
                 "Máquinas",
                 "Este Mac · CPU 34% · disco 61%",
@@ -677,6 +838,7 @@ mod tests {
                 "  A porta 14720 não aceita conexão: o túnel parece caído",
                 "—",
                 "1 ativa",
+                "2 ociosas",
                 "—",
             ])
         );
@@ -736,6 +898,9 @@ mod tests {
         }"##;
         let a = Attention::from_json(OLD).unwrap();
         assert_eq!((a.total, a.active, a.with_error, a.items.len()), (2, 4, 1, 2));
+        assert_eq!((a.blocked_count(), a.idle_count()), (1, 1), "from `precisam` and `suaVez`");
+        assert_eq!(a.items[0].attention, Some(ItemAttention { level: BLOCKED.into(), reason: "error".into() }));
+        assert_eq!(a.items[1].attention, Some(ItemAttention { level: IDLE.into(), reason: "turn_ended".into() }));
         let e = &a.items[0];
         assert_eq!((e.session.as_str(), e.title.as_str(), e.level.as_str(), e.reason.as_str()), ("s2", "painel-de-metricas", "needs", "error"));
         assert_eq!((e.short_reason.as_str(), e.long_reason.as_str(), e.minutes), ("Com erro", "parou num erro", 3));
@@ -758,6 +923,47 @@ mod tests {
         assert_eq!(english_reason("no-prompt"), None);
         assert_eq!(english_level("precisa"), Some("needs"));
         assert_eq!(english_level("needs"), None);
+    }
+
+    #[test]
+    fn older_core_before_245_falls_back_to_level() {
+        let a = Attention::from_json(REMOTE_THREE).unwrap();
+        assert_eq!((a.blocked_count(), a.idle_count()), (3, 2), "from `needs` and `yourTurn`");
+        let levels: Vec<_> = a.items.iter().map(|i| (i.session.as_str(), i.is_blocked(), i.is_idle())).collect();
+        assert_eq!(levels, [("s1", true, false), ("s2", true, false), ("s4", true, false), ("s3", false, true), ("s5", false, true)]);
+        assert_eq!(a.items[4].attention.as_ref().map(|x| x.reason.as_str()), Some("interrupted"));
+        assert_eq!(tray_title(&CoreState::Up { port: 4720 }, Some(&a)).as_deref(), Some("3"));
+    }
+
+    #[test]
+    fn counts_from_the_items_without_any_count_key() {
+        const BARE: &str = r#"{ "cursor": "c1", "total": 2, "active": 1, "withError": 0, "items": [
+          { "session": "s1", "title": "a", "account": null, "level": "needs", "reason": "question", "shortReason": "Pergunta", "longReason": "pergunta", "minutes": 1, "local": null },
+          { "session": "s2", "title": "b", "account": null, "level": "your-turn", "reason": "no-prompt", "shortReason": "No prompt", "longReason": "sessão nova", "minutes": 1, "local": null } ] }"#;
+        let a = Attention::from_json(BARE).unwrap();
+        assert_eq!((a.blocked_count(), a.idle_count()), (1, 1));
+        assert_eq!(a.items[1].attention.as_ref().map(|x| x.reason.as_str()), Some("first_prompt"));
+        let t = texts(&build(&input(&CoreState::Up { port: 4720 }, Some(&a))));
+        assert!(t.contains(&"1 precisa de você · abrir na janela".to_string()));
+        assert!(t.contains(&"1 ociosa".to_string()));
+    }
+
+    #[test]
+    fn the_new_attention_wins_over_the_old_level() {
+        // `attention` is the #245 source of truth; `level` only fills it when it is missing.
+        const MIXED: &str = r#"{ "cursor": "c1", "total": 1, "blocked": 0, "idle": 1, "active": 1, "withError": 0, "items": [
+          { "session": "s1", "title": "a", "account": null, "level": "needs", "reason": "interrupted", "attention": { "level": "idle", "reason": "interrupted" },
+            "shortReason": "Interrompida", "longReason": "foi interrompida", "minutes": 1, "local": null } ] }"#;
+        let a = Attention::from_json(MIXED).unwrap();
+        assert!(a.blocked_items().is_empty());
+        assert_eq!(tray_title(&CoreState::Up { port: 4720 }, Some(&a)), None);
+    }
+
+    #[test]
+    fn no_waiting_you_text() {
+        let a = Attention::from_json(THREE).unwrap();
+        let t = texts(&build(&input(&CoreState::Up { port: 4720 }, Some(&a))));
+        assert!(!t.iter().any(|x| x.contains("Esperando")), "{t:?}");
     }
 
     #[test]

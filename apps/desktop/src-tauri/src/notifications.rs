@@ -5,7 +5,8 @@
 // on every change and every 25 s; notifying on every read would be noise. The `Detector` keeps each
 // session's reason from the previous read and only notifies a session that entered the list or
 // changed reason. The first read (on opening, or after losing the core) only records: whoever was
-// already waiting does not become a notice.
+// already waiting does not become a notice. Only the sessions that need you count (#245): an idle
+// one (Sua vez, Interrompida, No prompt) never notifies, nor does a blocked one turning idle.
 //
 // Machine alerts (#180, decision 0008 sections 3 and 5) follow the same rule with their own
 // detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
@@ -34,7 +35,7 @@ pub const LEGACY_FILE: &str = "notificacoes.json";
 pub struct Notice {
     pub title: String,
     pub body: String,
-    /// Only on the urgent ones: asks for permission, interrupted and with an error.
+    /// Every session notice has sound (A3, #245: only blocked sessions notify); machine alerts do not.
     pub sound: bool,
     pub session: String,
     /// Claude Desktop's `local_…`, for "Abrir no Claude Desktop".
@@ -83,7 +84,7 @@ impl Notice {
         Notice {
             title: title(i),
             body: i.long_reason.clone(),
-            sound: has_sound(&i.reason),
+            sound: true,
             session: i.session.clone(),
             local: i.local.clone(),
             path: session_path(&i.session),
@@ -160,18 +161,11 @@ pub fn title(i: &AttentionItem) -> String {
         "plan" => format!("{t} tem um plano para aprovar"),
         "decision" => format!("{t} pede uma decisão"),
         "error" => format!("{t} parou com erro"),
-        "your-turn" => format!("{t}: sua vez"),
-        "interrupted" => format!("{t} foi interrompida"),
-        "no-prompt" => format!("{t}: sessão nova"),
         _ => format!("{t}: {}", i.short_reason),
     }
 }
 
-fn has_sound(reason: &str) -> bool {
-    matches!(reason, "permission" | "interrupted" | "error")
-}
-
-/// Who entered the list or changed reason since the previous read.
+/// Who entered the "precisam de você" list (blocked, #245) or changed reason since the previous read.
 #[derive(Debug, Default)]
 pub struct Detector {
     /// `session` → `reason` of the previous read; `None` before the first (or after `reset`).
@@ -180,10 +174,11 @@ pub struct Detector {
 
 impl Detector {
     pub fn observe(&mut self, a: &Attention) -> Vec<Notice> {
-        let now: HashMap<String, String> = a.items.iter().map(|i| (i.session.clone(), i.reason.clone())).collect();
+        let blocked = a.blocked_items();
+        let now: HashMap<String, String> = blocked.iter().map(|i| (i.session.clone(), i.reason.clone())).collect();
         let notices = match &self.previous {
             None => Vec::new(),
-            Some(before) => a.items.iter().filter(|i| before.get(&i.session) != Some(&i.reason)).map(Notice::from_item).collect(),
+            Some(before) => blocked.into_iter().filter(|i| before.get(&i.session) != Some(&i.reason)).map(Notice::from_item).collect(),
         };
         self.previous = Some(now);
         notices
@@ -337,24 +332,29 @@ pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::menu::{ItemAttention, BLOCKED, IDLE};
+
+    const IDLE_REASONS: [&str; 3] = ["turn_ended", "interrupted", "first_prompt"];
 
     fn item(session: &str, title: &str, reason: &str) -> AttentionItem {
+        let idle = IDLE_REASONS.contains(&reason);
         AttentionItem {
             session: session.into(),
             title: title.into(),
             account: None,
-            level: if reason == "your-turn" { "your-turn" } else { "needs" }.into(),
+            level: if idle { "your-turn" } else { "needs" }.into(),
             reason: reason.into(),
             short_reason: format!("curto de {reason}"),
             long_reason: format!("longo de {reason}"),
             minutes: 1,
             local: None,
             machine: None,
+            attention: Some(ItemAttention { level: if idle { IDLE } else { BLOCKED }.into(), reason: reason.into() }),
         }
     }
 
     fn attention(items: Vec<AttentionItem>) -> Attention {
-        Attention { cursor: None, total: items.len() as u64, active: 0, with_error: 0, items }
+        Attention { cursor: None, total: items.len() as u64, active: 0, with_error: 0, items, blocked: None, idle: None, needs: None, your_turn: None }
     }
 
     fn sessions(notices: &[Notice]) -> Vec<&str> {
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn reason_change_notifies() {
         let mut d = Detector::default();
-        d.observe(&attention(vec![item("s1", "a", "your-turn"), item("s2", "b", "question")]));
+        d.observe(&attention(vec![item("s1", "a", "plan"), item("s2", "b", "question")]));
         let notices = d.observe(&attention(vec![item("s1", "a", "permission"), item("s2", "b", "question")]));
         assert_eq!(sessions(&notices), ["s1"]);
         assert_eq!(notices[0].title, "a pede permissão");
@@ -421,12 +421,51 @@ mod tests {
     }
 
     #[test]
-    fn sound_only_on_the_urgent_ones() {
-        let with: Vec<_> = ["permission", "question", "plan", "decision", "error", "your-turn", "interrupted", "no-prompt", "outro"]
-            .into_iter()
-            .filter(|r| Notice::from_item(&item("s", "t", r)).sound)
-            .collect();
-        assert_eq!(with, ["permission", "error", "interrupted"]);
+    fn every_session_notice_has_sound() {
+        for r in ["permission", "question", "plan", "decision", "error"] {
+            assert!(Notice::from_item(&item("s", "t", r)).sound, "{r}");
+        }
+    }
+
+    #[test]
+    fn idle_never_notifies() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![]));
+        let idle: Vec<_> = IDLE_REASONS.iter().enumerate().map(|(n, r)| item(&format!("s{n}"), "a", r)).collect();
+        assert!(d.observe(&attention(idle.clone())).is_empty(), "entering idle does not notify");
+        let mut with_blocked = idle;
+        with_blocked.push(item("s9", "b", "question"));
+        assert_eq!(sessions(&d.observe(&attention(with_blocked))), ["s9"], "only the blocked one");
+    }
+
+    #[test]
+    fn blocked_turning_idle_does_not_notify() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![item("s1", "a", "permission")]));
+        assert!(d.observe(&attention(vec![item("s1", "a", "turn_ended")])).is_empty(), "blocked to idle");
+        assert!(d.observe(&attention(vec![item("s1", "a", "interrupted")])).is_empty(), "idle to idle");
+        assert_eq!(sessions(&d.observe(&attention(vec![item("s1", "a", "question")]))), ["s1"], "idle to blocked notifies");
+    }
+
+    #[test]
+    fn error_notifies_like_blocked() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![item("s1", "a", "turn_ended")]));
+        let notices = d.observe(&attention(vec![item("s1", "a", "error")]));
+        assert_eq!(sessions(&notices), ["s1"]);
+        assert_eq!(notices[0].title, "a parou com erro");
+    }
+
+    #[test]
+    fn older_core_level_decides_who_notifies() {
+        // A core from before #245: no `attention`, only `level`.
+        const OLD: &str = r#"{ "cursor": "c1", "total": 2, "needs": 1, "yourTurn": 1, "active": 2, "withError": 0, "items": [
+          { "session": "s1", "title": "a", "account": null, "level": "needs", "reason": "permission", "shortReason": "Pede permissão", "longReason": "pede permissão", "minutes": 1, "local": null },
+          { "session": "s2", "title": "b", "account": null, "level": "your-turn", "reason": "your-turn", "shortReason": "Sua vez", "longReason": "terminou o turno", "minutes": 1, "local": null } ] }"#;
+        let mut d = Detector::default();
+        d.observe(&attention(vec![]));
+        let a = Attention::from_json(OLD).unwrap();
+        assert_eq!(sessions(&d.observe(&a)), ["s1"]);
     }
 
     #[test]
@@ -434,8 +473,7 @@ mod tests {
         let a = |t: &str, r: &str| title(&item("s", t, r));
         assert_eq!(a("motor-de-regras", "permission"), "motor-de-regras pede permissão");
         assert_eq!(a("painel-de-metricas", "error"), "painel-de-metricas parou com erro");
-        assert_eq!(a("fila-de-tarefas", "your-turn"), "fila-de-tarefas: sua vez");
-        assert_eq!(a("x", "interrupted"), "x foi interrompida");
+        assert_eq!(a("x", "question"), "x fez uma pergunta");
         assert_eq!(a("x", "motivo-novo"), "x: curto de motivo-novo");
     }
 
@@ -622,7 +660,7 @@ mod tests {
     fn remote_session_title_carries_the_machine_label() {
         let n = Notice::from_item(&remote("s1", "motor-de-regras", "permission"));
         assert_eq!(n.title, "motor-de-regras · Workstation pede permissão");
-        assert_eq!(title(&remote("s3", "fila-de-tarefas", "your-turn")), "fila-de-tarefas · Workstation: sua vez");
+        assert_eq!(title(&remote("s3", "fila-de-tarefas", "error")), "fila-de-tarefas · Workstation parou com erro");
     }
 
     #[test]
