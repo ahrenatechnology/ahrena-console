@@ -1,0 +1,7 @@
++-o AGXAcceleratorExemplo  <class AGXAcceleratorExemplo, id 0x100000abc, registered, matched, active, busy 0 (0 ms), retain 30>
+    {
+      "IOClass" = "AGXAcceleratorExemplo"
+      "model" = "Apple M-exemplo"
+      "gpu-core-count" = 16
+      "PerformanceStatistics" = {"In use system memory"=1932735283,"Tiler Utilization %"=8,"recoveryCount"=0,"Renderer Utilization %"=11,"Device Utilization %"=12,"Alloc system memory"=4294967296}
+    }
