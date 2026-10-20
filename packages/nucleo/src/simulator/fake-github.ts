@@ -466,7 +466,7 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
         viewer: {
           login: data.login,
           organizations: { nodes: data.organizations.map((login) => ({ login })) },
-          repositories: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
+          repositories: { totalCount: data.repos.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
         },
       };
     }

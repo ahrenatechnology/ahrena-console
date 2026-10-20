@@ -78,6 +78,7 @@ import {
 } from '../github/repos-calculo.ts';
 import {
   GithubReposSource,
+  incompleteListMessage,
   NOME_DO_DONO,
   NOME_DO_REPO,
   SemGithubError,
@@ -381,13 +382,23 @@ export class ReposDoGithub {
     const agora = this.agora();
     let crua: { value: ListaCrua; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, (f) => f.lista());
+      // A cut list never replaces a longer one already shown: it fails, and the cache keeps serving
+      // the old one with the reason (#269).
+      const shown = e.valor?.summary.repositories ?? 0;
+      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, async (f) => {
+        const list = await f.lista();
+        if (list.incomplete && list.repos.length < shown) throw new Error(incompleteListMessage(list.incomplete));
+        return list;
+      });
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : listaVazia(this.estadoDaFalha(), msg), LIST_CHANGE_KEY);
       return;
     }
     const erros: string[] = crua.stale && crua.staleReason ? [crua.staleReason] : [];
+    // A list cut by a page that failed says so first: how many came and why the rest did not.
+    const missing = crua.value.incomplete;
+    if (missing) erros.unshift(incompleteListMessage(missing));
     const commitsAntes = new Map((e.valor?.groups ?? []).flatMap((g) => g.repos.map((r) => [r.fullName, r.commits12] as const)));
     const ciAntes = e.valor?.summary.ci ?? { greenRate: null, runs: 0 };
     const montar = (resumo: ResumoCru | null, commits: ReadonlyMap<string, number[]>, ci: { greenRate: number | null; runs: number }): ListaDeRepos => ({
@@ -440,7 +451,13 @@ export class ReposDoGithub {
     const desde = inicioDoPeriodo(periodo, agora);
     let detalhe: { value: DetalheCru | null; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      detalhe = await this.graphql(`repos:detail:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
+      // A cut sample never replaces a longer one already shown, the same as the list.
+      const shownPrs = e.valor?.prs?.sample.read ?? 0;
+      detalhe = await this.graphql(`repos:detail:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, async (f) => {
+        const d = await f.detalhe(dono, nome, diaIso(desde));
+        if (d?.incomplete && d.prs.length < shownPrs) throw new Error(d.incomplete.join('; '));
+        return d;
+      });
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : metricasVazias(this.estadoDaFalha(), periodo, msg), chave);
@@ -454,7 +471,8 @@ export class ReposDoGithub {
     const completo = d.repo.nameWithOwner;
     const k = chaveDoRepo(completo);
     const escrita = temEscrita(d.repo.viewerPermission);
-    const erros: string[] = detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [];
+    // A sample page that failed comes first: it says which part of these numbers is missing.
+    const erros: string[] = [...(d.incomplete ?? []), ...(detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [])];
     const base: MetricasDoRepo = {
       ...metricasVazias('ready', periodo, null),
       updatedAt: new Date(detalhe.fetchedAt).toISOString(),
