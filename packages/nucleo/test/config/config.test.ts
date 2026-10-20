@@ -4,7 +4,7 @@
 // Content-Type, nome, raiz, symlink, versão). Tudo em pastas `mkdtemp`. Um arquivo só: cada
 // arquivo de teste é um processo a mais rodando junto com os testes de tempo curto do encaminhador.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -213,6 +213,17 @@ describe('#63 GET /api/config: a leitura', () => {
     assert.ok(!JSON.stringify(r).includes('segredo-ficticio-abc'));
   });
 
+  test('SKILL.md como hardlink para o .credentials.json: listado, sem ler nada do alvo', async () => {
+    const home = tmp();
+    const pasta = pastaDeConfiguracao(join(home, '.claude'), 'padrao', home);
+    escrever(join(pasta.dir, '.credentials.json'), '---\nname: duro\ndescription: segredo-ficticio-abc\n---\n');
+    mkdirSync(join(pasta.dir, 'skills', 'duro'), { recursive: true });
+    linkSync(join(pasta.dir, '.credentials.json'), join(pasta.dir, 'skills', 'duro', 'SKILL.md'));
+    const r = await lerConfigDoAgente({ pastas: [pasta], projetos: [] });
+    assert.deepEqual(r.skills.map((s) => [s.nome, s.descricao, s.editavel]), [['duro', null, false]]);
+    assert.ok(!JSON.stringify(r).includes('segredo-ficticio-abc'));
+  });
+
   test('projeto = a pasta pai de uma home ($HOME): sem a raiz p, nada em dobro como projeto', async () => {
     const t = tmp();
     const pasta = montarHome(t, t);
@@ -356,6 +367,9 @@ describe('#63 /api/config e /api/config/skill', () => {
     escrever(join(home.dir, '.credentials.json'), '{"token":"segredo-ficticio-abc"}');
     mkdirSync(join(home.dir, 'skills', 'seg'));
     symlinkSync(join(home.dir, '.credentials.json'), join(home.dir, 'skills', 'seg', 'SKILL.md'));
+    // Hardlink: passa no `lstat` e no `realpath`; só o `nlink` o denuncia.
+    mkdirSync(join(home.dir, 'skills', 'duro'));
+    linkSync(join(home.dir, '.credentials.json'), join(home.dir, 'skills', 'duro', 'SKILL.md'));
 
     sqlite = openSqliteStorage({ path: ':memory:' });
     const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
@@ -412,6 +426,18 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.ok(!lista.corpo.includes('segredo-ficticio-abc'));
     assert.equal((lista.json.skills as { nome: string; editavel: boolean }[]).find((s) => s.nome === 'seg')?.editavel, false);
     assert.equal((await postar({ raiz: 'u0', nome: 'seg', conteudo: 'invadiu' })).status, 403);
+    assert.equal(readFileSync(join(home.dir, '.credentials.json'), 'utf8'), '{"token":"segredo-ficticio-abc"}');
+  });
+
+  test('GET, listagem e POST de um SKILL.md que é hardlink para o .credentials.json: 403, sem o segredo', async () => {
+    const r = await pedir(api.url, '/api/config/skill?raiz=u0&nome=duro');
+    assert.equal(r.status, 403, r.corpo);
+    assert.match(String(r.json.error), /hardlink/);
+    assert.ok(!r.corpo.includes('segredo-ficticio-abc'));
+    const lista = await pedir(api.url, '/api/config');
+    assert.ok(!lista.corpo.includes('segredo-ficticio-abc'));
+    assert.equal((lista.json.skills as { nome: string; editavel: boolean }[]).find((s) => s.nome === 'duro')?.editavel, false);
+    assert.equal((await postar({ raiz: 'u0', nome: 'duro', conteudo: 'invadiu' })).status, 403);
     assert.equal(readFileSync(join(home.dir, '.credentials.json'), 'utf8'), '{"token":"segredo-ficticio-abc"}');
   });
 

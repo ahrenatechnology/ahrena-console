@@ -109,7 +109,7 @@ A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem config
 | Plugins | `enabledPlugins` dos settings | As chaves ligadas (`nome@marketplace`) |
 | Configurações | `settings.json`, `settings.local.json` e o `.claude.json` | Quais existem, com o caminho |
 
-Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta. Um `SKILL.md` ou `agents/*.md` que é symlink para fora da própria pasta continua listado, mas o frontmatter dele não é lido (`descricao: null`): um link para o `.credentials.json` não vaza pela descrição.
+Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta. Um `SKILL.md` ou `agents/*.md` que é symlink para fora da própria pasta continua listado, mas o frontmatter dele não é lido (`descricao: null`): um link (symlink ou hardlink) para o `.credentials.json` não vaza pela descrição.
 
 **O projeto.** `projetos` são os `cwd` das sessões que o núcleo já viu, das mais recentes para as mais velhas, sem repetir, até 50, só pastas que existem nesta máquina ([projetos.ts](src/config/projetos.ts)). Sem `?projeto=`, vale o primeiro (ou nenhum, com `projeto: null`); `?projeto=` fora da lista dá 400, para o pedido nunca escolher uma pasta qualquer do disco. As rotas da skill aceitam o mesmo `projeto` (na query do `GET`, no corpo do `POST`) para a raiz `p`.
 

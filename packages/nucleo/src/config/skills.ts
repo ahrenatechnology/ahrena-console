@@ -7,7 +7,8 @@
 //   `realpath` da raiz: um symlink para fora é recusado (403);
 // - o `SKILL.md` que é symlink é recusado (403) na leitura e na gravação, mesmo apontando para
 //   dentro da raiz (um link para o `.credentials.json` da home sairia pelo GET), e o `realpath`
-//   dele fica dentro do da pasta da skill; a leitura abre com `O_NOFOLLOW`;
+//   dele fica dentro do da pasta da skill; a leitura abre com `O_NOFOLLOW` (macOS e Linux; no
+//   Windows a flag não existe); o hardlink (`nlink > 1`) também é recusado (403);
 // - só se escreve um arquivo chamado `SKILL.md`, com no máximo `MAX_CONTEUDO` bytes, pelo caminho
 //   atômico (temporário na mesma pasta + `rename`; no `criar`, `link`, que não passa por cima);
 // - a skill que existe ganha um backup antes, na pasta de backups do núcleo; a `versao` que veio e
@@ -27,6 +28,8 @@ import { ErroDaConfig, type EscopoDaConfig, type RaizDaConfig } from './modelo.t
 export const NOME_DE_SKILL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 /** O maior `SKILL.md` aceito, em bytes. */
 export const MAX_CONTEUDO = 256 * 1024;
+/** Um hardlink passa no `lstat` e no `realpath`; só o `nlink` o denuncia (um link para o `.credentials.json`). */
+const HARDLINK = 'SKILL.md tem outro nome no disco (hardlink): edite o arquivo de origem';
 
 export function pastaPadraoDeBackups(home = homedir()): string {
   return join(home, '.ahrena-console', 'backups');
@@ -131,6 +134,7 @@ async function caminhosDaSkill(raiz: RaizDaConfig, nome: string, criar: boolean)
   const info = await lstat(arquivo).catch(() => null);
   if (info?.isSymbolicLink()) throw new ErroDaConfig(403, 'SKILL.md é um symlink: edite o arquivo de destino');
   if (info && !info.isFile()) throw new ErroDaConfig(400, 'SKILL.md não é um arquivo');
+  if (info && info.nlink > 1) throw new ErroDaConfig(403, HARDLINK);
   // O arquivo fica dentro da pasta da skill, e não só da raiz.
   if (info) await realDentro(await realpath(pasta), arquivo);
   return { pasta, arquivo };
@@ -171,6 +175,7 @@ export async function lerSkill(raiz: RaizDaConfig, nomePedido: unknown): Promise
   try {
     info = await f.stat();
     if (!info.isFile()) throw new ErroDaConfig(400, 'SKILL.md não é um arquivo');
+    if (info.nlink > 1) throw new ErroDaConfig(403, HARDLINK);
     bytes = await f.readFile();
   } finally {
     await f.close();

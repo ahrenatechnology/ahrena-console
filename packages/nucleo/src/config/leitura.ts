@@ -311,11 +311,14 @@ async function caminhoReal(caminho: string): Promise<string> {
 /**
  * O começo do arquivo, como `comecoDe`, só se ele não é symlink para fora da pasta onde está
  * (`skills/<nome>/` ou `agents/`); senão `''`. Um `SKILL.md -> ../../.credentials.json` continua
- * listado, mas sem nada do alvo.
+ * listado, mas sem nada do alvo; um hardlink também.
  */
 async function comecoDeDentro(caminho: string): Promise<string> {
   try {
-    if ((await lstat(caminho)).isSymbolicLink()) {
+    const info = await lstat(caminho);
+    // Um hardlink para o `.credentials.json` passa no `realpath`: só o `nlink` o denuncia.
+    if (info.isFile() && info.nlink > 1) return '';
+    if (info.isSymbolicLink()) {
       const [real, pasta] = await Promise.all([realpath(caminho), realpath(dirname(caminho))]);
       if (!real.startsWith(pasta + sep)) return '';
     }
