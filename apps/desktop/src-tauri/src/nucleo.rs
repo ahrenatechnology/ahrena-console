@@ -124,9 +124,11 @@ pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
         let other = s.installation.as_deref().unwrap_or("sem instalação");
         return Outcome::stopped(format!("O núcleo que respondeu não é o do app ({other})"));
     }
-    if let (Some(expected), Some(got)) = (data_dir, s.data_dir.as_deref()) {
-        if Path::new(got) != expected {
-            return Outcome::stopped(format!("O núcleo que respondeu usa outra pasta de dados ({got})"));
+    // Fails closed: knowing its folder, the app refuses a line that does not name the same one.
+    if let Some(expected) = data_dir {
+        match s.data_dir.as_deref() {
+            Some(got) if Path::new(got) == expected => {}
+            got => return Outcome::stopped(format!("O núcleo que respondeu usa outra pasta de dados ({})", got.unwrap_or("sem pasta"))),
         }
     }
     Outcome::up(Core { port, pid: s.pid }, s.subiu.unwrap_or(false))
@@ -299,6 +301,8 @@ mod tests {
         assert_eq!(read_start(old, Some(Path::new(DIR))).core, None, "a core from before #221 does not say it is the app's");
         let folder = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"/tmp/other"}"#;
         assert_eq!(read_start(folder, Some(Path::new(DIR))).core, None);
+        let no_folder = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app"}"#;
+        assert_eq!(read_start(no_folder, Some(Path::new(DIR))).core, None, "fails closed without dataDir");
     }
 
     #[test]

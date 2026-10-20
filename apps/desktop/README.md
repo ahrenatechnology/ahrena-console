@@ -37,13 +37,13 @@ Um núcleo por instalação, em porta aleatória ([decisão 0010](../../docs/dec
 
    ```bash
    node --disable-warning=ExperimentalWarning <núcleo>/src/owner/cli.ts start --installation app \
-     --data-dir "~/Library/Application Support/dev.ahrena.console" --port 0 --parent <pid do app> --json
+     --data-dir "$HOME/Library/Application Support/dev.ahrena.console" --port 0 --parent <pid do app> --json
    ```
 
    A pasta de dados vem do Tauri (`app_data_dir`, a do identificador `dev.ahrena.console`). O dono **sobe** o núcleo em segundo plano numa porta que o sistema escolhe, ou **adota** o que já roda naquela pasta de dados (só a do app). O app lê da linha `--json` a `porta`, o `pid`, o `subiu`, e confere `installation` (`app`) e `dataDir` (a pasta do app): se vier outra, recusa e mostra o núcleo parado. O app tira do ambiente do núcleo `AHRENA_CONSOLE_DB`, `AHRENA_CONSOLE_DATA_DIR`, `AHRENA_CONSOLE_CORE_PORT` e `AHRENA_CONSOLE_PORT`, que um shell pode exportar para o núcleo de desenvolvimento.
 2. **Pasta de dados:** `~/Library/Application Support/dev.ahrena.console/`, com o banco (`nucleo.sqlite`), o log (`nucleo.log`), os clientes (`clientes/`) e a trava (`nucleo.json`), além do `notificacoes.json` do app. O núcleo se registra em `~/.ahrena-console/instances/app-<pid>.json`, onde os hooks e o mod o acham.
 3. **Primeira vez:** com o banco do app vazio, o núcleo importa o histórico dos transcripts (`~/.claude/projects`) ao subir, como sempre fez; não precisa de opção.
-4. A bandeja, a janela (`/ui`) e todo pedido HTTP do app só falam com a porta do núcleo que ele subiu ou adotou, e cada conferência de que ele ainda responde olha também o `pid` do `/api/overview`. Com o núcleo parado, "Abrir o console" não abre outro: procura o próprio de novo.
+4. A bandeja, a janela (`/ui`) e todo pedido HTTP do app só falam com a porta do núcleo que ele subiu ou adotou, e cada conferência de que ele ainda responde olha também o `pid` do `/api/overview`. A porta muda a cada subida: se o núcleo cai e o app sobe outro, a janela aberta passa para a porta nova. Com o núcleo parado ou ainda subindo, "Abrir o console" não abre outro: procura o próprio de novo e abre a janela quando ele responder.
 5. Sem Node (ou com um Node velho): o menu A4, com "Como instalar o Node 24" e "Procurar o núcleo de novo". O app **não** procura núcleo em porta nenhuma e tenta de novo a cada 30 s.
 6. **Ao sair,** o app não sinaliza ninguém. O núcleo que ele subiu tem o app como `--parent` e sai sozinho em até 1 s, apagando a trava e a própria entrada do registro. Nenhum outro núcleo é tocado.
 

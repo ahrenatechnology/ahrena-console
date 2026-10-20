@@ -67,6 +67,8 @@ struct Estado {
     ultimo: Option<(Vec<Item>, Option<String>)>,
     /// A versão nova que o updater achou.
     atualizacao: Option<String>,
+    /// "Abrir o console" was clicked while the core was not up: open it once the core is.
+    open_when_up: bool,
 }
 
 type Compartilhado = Arc<Mutex<Estado>>;
@@ -88,6 +90,7 @@ fn main() {
         locais: HashMap::new(),
         ultimo: None,
         atualizacao: None,
+        open_when_up: false,
     }));
     let (acordar, sinais) = channel::<()>();
 
@@ -192,8 +195,16 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, data_dir: O
                 continue;
             }
         };
-        mudar(&app, &estado, |e| e.nucleo = EstadoDoNucleo::DePe { porta: core.port });
-        if abrir {
+        let mut asked = false;
+        mudar(&app, &estado, |e| {
+            e.nucleo = EstadoDoNucleo::DePe { porta: core.port };
+            asked = std::mem::take(&mut e.open_when_up);
+        });
+        // A new core has a new port: a console window left on the old one follows it.
+        let port = core.port;
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || follow_core_port(&handle, port));
+        if abrir || asked {
             eprintln!("[ahrena-console] partida à mão: abre o console");
             let handle = app.clone();
             let _ = app.run_on_main_thread(move || abrir_console(&handle));
@@ -557,17 +568,25 @@ fn open_window_at(app: &AppHandle, path: &str) {
 }
 
 fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
-    // Only the app's own core: with it stopped, look for it again instead of opening another one.
-    let porta = match app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).nucleo {
-        EstadoDoNucleo::DePe { porta } => porta,
-        _ => {
-            let _ = app.state::<Laco>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).send(());
-            return;
+    // Only the app's own core: with it not up, look for it again (and open once it is) instead of
+    // opening another one.
+    let shared = app.state::<Compartilhado>().inner().clone();
+    let porta = {
+        let mut e = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match e.nucleo {
+            EstadoDoNucleo::DePe { porta } => porta,
+            _ => {
+                e.open_when_up = true;
+                drop(e);
+                let _ = app.state::<Laco>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).send(());
+                return;
+            }
         }
     };
     let Ok(url) = format!("http://127.0.0.1:{porta}{}", caminho.unwrap_or("/ui")).parse::<tauri::Url>() else { return };
     if let Some(w) = app.get_webview_window("console") {
-        if caminho.is_some() {
+        // The port is random: a window still on another port (an old core) is moved to this one.
+        if caminho.is_some() || w.url().ok().and_then(|u| u.port()) != Some(porta) {
             let _ = w.navigate(url);
         }
         let _ = w.show();
@@ -577,6 +596,17 @@ fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
     let janela = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url)).title("Ahrena Console").inner_size(1100.0, 760.0).build();
     if let Ok(w) = janela {
         let _ = w.set_focus();
+    }
+}
+
+/// Moves an existing console window to the `/ui` of the core on `port`, if it shows another port.
+fn follow_core_port(app: &AppHandle, port: u16) {
+    let Some(w) = app.get_webview_window("console") else { return };
+    if w.url().ok().and_then(|u| u.port()) == Some(port) {
+        return;
+    }
+    if let Ok(url) = format!("http://127.0.0.1:{port}/ui").parse::<tauri::Url>() {
+        let _ = w.navigate(url);
     }
 }
 
