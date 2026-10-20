@@ -2,6 +2,7 @@
 // C20 do Detalhe (escopo, injeção e MCP), a exceção de origem da própria /ui escrevendo (decisão
 // 0003) e o "Promover a registro". Dados do simulador (P9) e pastas temporárias, nunca o repo real.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { request } from 'node:http';
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -514,6 +515,33 @@ describe('POST /api/decisoes/<id>/promover', () => {
       await assert.rejects(ui.promover(d.id, 'teste-marca', { confirmar: true, caminho: 'docs/decisoes/0008-indice.md' }), /a porta caiu/);
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
+    } finally {
+      await c.fechar();
+    }
+  });
+
+  test('o hash do rascunho: o confirmar com ele grava; se o registro mudou, 409; mal formado, 400', async () => {
+    const c = await cenario();
+    try {
+      const repo = await repoComRegistros();
+      const d = await comRepo(c, 'teste-hash', repo);
+      const rota = `/api/decisoes/${d.id}/promover`;
+      const { rascunho } = (await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-hash' })).corpo;
+      assert.equal(rascunho.hash, createHash('sha256').update(rascunho.markdown).digest('hex'));
+      const gravar = { sessao: 'teste-hash', confirmar: true, caminho: rascunho.caminho };
+      for (const hash of ['x', 42, 'AB'.repeat(32)]) assert.equal((await c.postar(rota, { ...gravar, hash })).status, 400, String(hash));
+
+      // A decisão mudou depois do rascunho: o markdown regerado não é o que a pessoa leu.
+      await c.decisoes.putDecision({ ...(await c.decisoes.getDecision(d.id))!, context: 'Outro contexto.' });
+      const mudou = await c.postar<{ error: string }>(rota, { ...gravar, hash: rascunho.hash });
+      assert.equal(mudou.status, 409);
+      assert.match(mudou.corpo.error, /o rascunho mudou, abra de novo/);
+      assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
+
+      const { rascunho: novo } = (await c.postar<{ rascunho: RascunhoDeRegistro }>(rota, { sessao: 'teste-hash' })).corpo;
+      assert.notEqual(novo.hash, rascunho.hash);
+      assert.equal((await c.postar(rota, { ...gravar, hash: novo.hash })).status, 201);
+      assert.equal(await readFile(join(repo, novo.caminho), 'utf8'), novo.markdown);
     } finally {
       await c.fechar();
     }

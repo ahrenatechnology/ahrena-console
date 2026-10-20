@@ -20,6 +20,7 @@
 // O Promover não grava nada sem `{ confirmar: true, caminho }`; grava só em `<repo>/docs/decisoes/`,
 // nunca por cima (flag `wx`), conferindo com `realpath` que a pasta não sai do repositório.
 
+import { createHash } from 'node:crypto';
 import { readdir, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, isAbsolute, join, posix } from 'node:path';
@@ -99,6 +100,8 @@ export interface DecisoesDaAba {
 export interface RascunhoDeRegistro {
   caminho: string;
   markdown: string;
+  /** sha256 (hex) do `markdown`: o confirmar que o manda recusa (409) se o registro mudou. */
+  hash: string;
   repo: string | null;
   podeGravar: boolean;
   /** Por que não dá para gravar, quando não dá. */
@@ -181,6 +184,9 @@ function caminhoValido(v: unknown): string {
   if (!CAMINHO_DO_REGISTRO.test(v)) throw new ErroDaDecisao(400, 'o registro fica em docs/decisoes/NNNN-slug.md');
   return v;
 }
+
+const HASH = /^[0-9a-f]{64}$/;
+const hashDe = (markdown: string) => createHash('sha256').update(markdown, 'utf8').digest('hex');
 
 const gravarSemSobrescrever = (destino: string, markdown: string) => writeFile(destino, markdown, { encoding: 'utf8', flag: 'wx' });
 
@@ -459,9 +465,11 @@ export class DecisoesDaUi {
       motivo ??= err.message;
     }
     const numero = pasta ? await this.proximoNumero(pasta) : '0001';
+    const markdown = await this.markdown(d, numero);
     return {
       caminho: `docs/decisoes/${numero}-${slugDaDecisao(d.choice)}.md`,
-      markdown: await this.markdown(d, numero),
+      markdown,
+      hash: hashDe(markdown),
       repo: d.repo,
       podeGravar: motivo === null,
       motivo,
@@ -470,9 +478,10 @@ export class DecisoesDaUi {
 
   /**
    * O Promover, em nome da sessão `sessao` (que precisa enxergar a decisão, no escopo branch):
-   * sem `confirmar: true`, só o rascunho (200); com ele e o `caminho`, grava e marca (201).
+   * sem `confirmar: true`, só o rascunho (200); com ele e o `caminho`, grava e marca (201). O markdown
+   * é regerado no confirmar; com o `hash` do rascunho, um registro que mudou desde então dá 409.
    */
-  async promover(id: string, sessao: string, corpo: { confirmar?: unknown; caminho?: unknown }): Promise<{ status: 200; corpo: { rascunho: RascunhoDeRegistro } } | { status: 201; corpo: { decisao: DecisaoDaUi; caminho: string } }> {
+  async promover(id: string, sessao: string, corpo: { confirmar?: unknown; caminho?: unknown; hash?: unknown }): Promise<{ status: 200; corpo: { rascunho: RascunhoDeRegistro } } | { status: 201; corpo: { decisao: DecisaoDaUi; caminho: string } }> {
     const alvo = await this.alvo(sessao);
     const d = await this.port.getDecision(id);
     const visivel = alvo && d && (await this.sessao.doEscopo(alvo, 'branch', [d.state])).some((x) => x.id === id);
@@ -482,14 +491,17 @@ export class DecisoesDaUi {
     if (corpo.confirmar !== true) return { status: 200, corpo: { rascunho: await this.rascunho(d) } };
 
     const caminho = caminhoValido(corpo.caminho);
+    if (corpo.hash !== undefined && (typeof corpo.hash !== 'string' || !HASH.test(corpo.hash))) throw new ErroDaDecisao(400, 'hash: o sha256 (hex) do markdown do rascunho');
     if (d.promotedTo) throw new ErroDaDecisao(409, `já promovida para ${d.promotedTo}`);
     const pasta = await this.pastaDosRegistros(d);
     const numero = CAMINHO_DO_REGISTRO.exec(caminho)![1]!;
     const mesmoNumero = (await readdir(pasta)).find((nome) => REGISTRO_NUMERADO.exec(nome)?.[1] === numero);
     if (mesmoNumero) throw new ErroDaDecisao(409, `o número ${numero} já existe: docs/decisoes/${mesmoNumero}`);
+    const markdown = await this.markdown(d, numero);
+    if (corpo.hash !== undefined && corpo.hash !== hashDe(markdown)) throw new ErroDaDecisao(409, 'o rascunho mudou, abra de novo');
     const destino = join(pasta, basename(caminho));
     try {
-      await this.escrever(destino, await this.markdown(d, numero));
+      await this.escrever(destino, markdown);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new ErroDaDecisao(409, `${caminho} já existe`);
       throw err;
@@ -585,7 +597,7 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (!id || !ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' }), true;
     const texto = await lerCorpo(req);
     if (texto === null) return send(res, 413, { error: 'corpo grande demais' }), true;
-    let corpo: { sessao?: unknown; confirmar?: unknown; caminho?: unknown } | null;
+    let corpo: { sessao?: unknown; confirmar?: unknown; caminho?: unknown; hash?: unknown } | null;
     try {
       corpo = JSON.parse(texto) as typeof corpo;
     } catch {

@@ -105,6 +105,9 @@ describe('o card de uma decisão', () => {
       rota: '/api/decisoes/d1/promover',
       corpo: { sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md' },
     });
+    assert.deepEqual(pedidoDePromover('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
+      sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32),
+    }, 'o hash do rascunho vai junto no confirmar');
     assert.throws(() => pedidoDaAcao('../x', 'confirmar', { sessao: 's1' }), /id de decisão/);
     assert.throws(() => pedidoDaAcao('d1', 'apagar', { sessao: 's1' }), /ação desconhecida/);
     assert.throws(() => pedidoDaAcao('d1', 'confirmar', {}), /precisa da sessão/);

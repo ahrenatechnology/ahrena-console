@@ -76,9 +76,13 @@ export function pedidoDaAcao(id, acao, corpo) {
   return { rota: `/api/decisoes/${id}/${acao}`, corpo };
 }
 
-/** O rascunho (`{ sessao }`) e a gravação (`{ sessao, confirmar: true, caminho }`) do Promover. */
+/**
+ * O rascunho (`{ sessao }`) e a gravação (`{ sessao, confirmar: true, caminho, hash }`) do Promover.
+ * O `hash` é o do rascunho que a pessoa leu: se o registro mudou desde então, a API recusa (409).
+ */
 export function pedidoDePromover(id, sessao, gravar = null) {
-  return pedidoDaAcao(id, 'promover', gravar ? { sessao, confirmar: true, caminho: gravar.caminho } : { sessao });
+  if (!gravar) return pedidoDaAcao(id, 'promover', { sessao });
+  return pedidoDaAcao(id, 'promover', { sessao, confirmar: true, caminho: gravar.caminho, ...(gravar.hash ? { hash: gravar.hash } : {}) });
 }
 
 /** O "Ver na conversa" só vira link quando é uma rota da própria interface. */
@@ -215,7 +219,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
       gravar.disabled = confirmo.disabled = true;
       aviso.textContent = 'Gravando…';
       try {
-        const { rota, corpo: pedido } = pedidoDePromover(d.id, sessao, { caminho: rascunho.caminho });
+        const { rota, corpo: pedido } = pedidoDePromover(d.id, sessao, { caminho: rascunho.caminho, hash: rascunho.hash });
         const r = await escrever(rota, pedido);
         aviso.textContent = `Gravado em ${r.caminho ?? rascunho.caminho}.`;
         gravar.hidden = true;
