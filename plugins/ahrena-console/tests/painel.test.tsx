@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import type { Painel } from '../types'
 import { paleta } from '../hooks/marca'
-import { linhasDaVisao, passosEmDestaque } from '../hooks/desenho'
+import { COLUNAS_SEM_CORTE, linhaDoModelo, linhasDaVisao, passosEmDestaque, pilulasDaSessao } from '../hooks/desenho'
+import { LINHAS_DO_CARD } from '../hooks/altura'
 import { AGORA, CENARIOS } from './cenarios'
 
 type Cenario = keyof typeof CENARIOS
@@ -167,8 +168,8 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /esperando 3 subagentes/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /3 ativos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /code-reviewer/ })).toBeDefined()
-  // P1: até 3 linhas, os ativos primeiro; o concluído vai para o "+1 concluído", que abre a lista.
-  expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('1 subagente concluído ›')
+  // P1: até 3 linhas, os ativos primeiro; o concluído fica fora, e o pé abre o grafo (P11).
+  expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+1 · grafo ›')
   // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; "Sua vez" em âmbar à direita; "ver todas".
   const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).map((b) => b.key)
   expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas', 'filha-sim-painel-blog-estatico'])
@@ -278,7 +279,7 @@ test('0.0.20: todo Svg do painel tem largura e altura explícitas e limitadas (o
   }
 })
 
-test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "17 subagentes concluídos ›"', async ($, on) => {
+test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "+17 · grafo ›"', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const p4 = CENARIOS.p4
   const base = p4.subagentes.itens.find((i) => i.status === 'completed')!
@@ -293,7 +294,7 @@ test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "17 subagen
     expect([barra?.props.width, barra?.props.height]).toEqual([236, 5])
     const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
     expect(linhas.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', 'sub-sim-sub-2'])
-    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('17 subagentes concluídos ›')
+    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+17 · grafo ›')
     await ui.unmount()
   }
 })
@@ -732,7 +733,7 @@ test('altura: os seis cards do P1 aparecem sempre, inteiros e do mesmo tamanho, 
   for (const cols of [38, 121]) expect(linhasDaVisao({ agora: AGORA, nucleo: '127.0.0.1:4720', cols, acoes: {} } as any, painel)).toBeGreaterThan(0)
 })
 
-test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que abre a lista com "← voltar"', async ($, on) => {
+test('P1: Subagentes e Sessões filhas têm até 3 linhas; o pé de Subagentes abre o grafo e o de filhas a lista, com "← voltar"', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const painel = carregado()
   f.estado.painel = painel
@@ -742,7 +743,7 @@ test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que
     // Os ativos primeiro; o que não cabe nas 3 linhas soma o total no "+N".
     const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
     expect(subs.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', `sub-${CENARIOS.p4.subagentes.itens[0]!.id}`])
-    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('2 subagentes ativos · 10 concluídos ›')
+    expect((await ui.find({ key: 'ver-subagentes' }))?.props.label).toBe('+12 · grafo ›')
     expect((await ui.find({ key: 'card-subagentes' }))?.text).toMatch(/SUBAGENTES\s*5 ativos/)
     // As filhas: até 3 linhas e "ver todas as N ›".
     expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))).toHaveLength(3)
@@ -751,7 +752,7 @@ test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 400) })
   await ui.press({ key: 'ver-subagentes' })
-  expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /GRAFO · 15 SUBAGENTES/ })).toBeDefined()
   await ui.press({ key: 'voltar-sessao' })
   await ui.press({ key: 'ver-filhas' })
   expect(await ui.find({ type: 'Text', text: new RegExp(`SESSÕES FILHAS · ${painel.filhas.length}`) })).toBeDefined()
@@ -825,10 +826,11 @@ test('#131: nas listas dos cards, cada item é uma linha com reticências e o te
   }
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
   await ui.press({ key: 'ver-subagentes' })
-  if (await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })) {
-    const inteiros = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
-    expect(inteiros.some((t) => t.props.wrap === 'wrap')).toBe(true)
-  }
+  // No grafo, cada linha é uma só, com reticências: o nome longo nunca quebra a linha.
+  expect(await ui.find({ type: 'Text', text: /GRAFO · 15 SUBAGENTES/ })).toBeDefined()
+  const nomes = (await ui.findAll({ type: 'Text' })).filter((t) => /revisor-sintetico-com-nome-longo-0/.test(t.text ?? ''))
+  expect(nomes.length).toBeGreaterThan(0)
+  expect(nomes.every((t) => t.props.wrap !== 'wrap')).toBe(true)
   await ui.unmount()
 })
 
@@ -1136,7 +1138,7 @@ test('0.0.25: o "Compactar agora" fica no pé do Contexto, à direita, só a par
   }
 })
 
-test('0.0.25: os "ver mais" no pé dos cards, no padrão "N coisa estado ›", com o singular, depois do espaçador', async ($, on) => {
+test('0.0.25: os "ver mais" no pé dos cards, com o singular, depois do espaçador; o de Subagentes abre o grafo (P11)', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const p4 = CENARIOS.p4
   const sub = p4.subagentes.itens.find((i) => i.status === 'completed')!
@@ -1145,8 +1147,8 @@ test('0.0.25: os "ver mais" no pé dos cards, no padrão "N coisa estado ›", c
   const filhas = (n: number) => Array.from({ length: n }, (_, i) => ({ ...filha, id: `sim-filha-${i}` }))
   const ant = (p4.planos ?? []).find((x) => x.resultado !== 'atual')!
   const casos: [Painel, Record<string, string>][] = [
-    [{ ...p4, plano: null, planos: [ant], subagentes: { ativos: 0, itens: subs(4) }, filhas: filhas(4) }, { 'ver-planos': '1 plano anterior ›', 'ver-subagentes': '1 subagente concluído ›', 'ver-filhas': '4 sessões filhas ›' }],
-    [{ ...p4, plano: null, planos: [ant, { ...ant, numero: 99 }], subagentes: { ativos: 0, itens: subs(20) }, filhas: filhas(15) }, { 'ver-planos': '2 planos anteriores ›', 'ver-subagentes': '17 subagentes concluídos ›', 'ver-filhas': '15 sessões filhas ›' }],
+    [{ ...p4, plano: null, planos: [ant], subagentes: { ativos: 0, itens: subs(4) }, filhas: filhas(4) }, { 'ver-planos': '1 plano anterior ›', 'ver-subagentes': '+1 · grafo ›', 'ver-filhas': '4 sessões filhas ›' }],
+    [{ ...p4, plano: null, planos: [ant, { ...ant, numero: 99 }], subagentes: { ativos: 0, itens: subs(20) }, filhas: filhas(15) }, { 'ver-planos': '2 planos anteriores ›', 'ver-subagentes': '+17 · grafo ›', 'ver-filhas': '15 sessões filhas ›' }],
   ]
   for (const [painel, esperado] of casos) {
     f.estado.painel = painel
@@ -1328,6 +1330,74 @@ test('P1: os cards de Subagentes e Sessões filhas nunca aparecem só com o cabe
         if (!(await ui.find({ key: card }))) continue
         expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith(prefixo)).length).toBeGreaterThan(0)
       }
+      await ui.unmount()
+    }
+  }
+})
+
+// --- 0.0.30: a linha do modelo no card Esta sessão nunca corta ---
+
+test('0.0.30: a linha do modelo encurta por etapas, sem reticências: "Opus 5.5" → "Opus", "turno 262" → "t262"', () => {
+  const dias = (d: number) => new Date(AGORA - d * 86_400_000).toISOString()
+  expect(linhaDoModelo({ modelo: 'claude-opus-5-5', iniciadaEm: new Date(AGORA - 12 * 60_000).toISOString(), turno: 18 }, AGORA)).toBe('Opus 5.5 · 12 min · turno 18')
+  expect(linhaDoModelo({ modelo: 'claude-opus-5-5[1m]', iniciadaEm: dias(2), turno: 262 }, AGORA)).toBe('Opus 1M · 2 d · turno 262')
+  expect(linhaDoModelo({ modelo: 'claude-sonnet-5-5[1m]', iniciadaEm: dias(12), turno: 1234 }, AGORA)).toBe('Sonnet 1M · 12 d · t1234')
+})
+
+test('0.0.30: o maior caso real (modelo longo, "12 d", "turno 1234") cabe inteiro no card, nas duas larguras', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  f.estado.painel = { ...p1, sessao: { ...p1.sessao!, modelo: 'claude-sonnet-5-5[1m]', iniciadaEm: new Date(AGORA - 12 * 86_400_000).toISOString(), turno: 1234 } }
+  await f.relogio.advance(15_000)
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const linha = await ui.find({ type: 'Text', text: /t1234/ })
+    expect(linha?.text).toBe('Sonnet 1M · 12 d · t1234')
+    expect([...(linha?.text ?? '')].length).toBeLessThanOrEqual(COLUNAS_SEM_CORTE)
+    // Nunca com reticências: o que não coube quebra a linha.
+    expect(linha?.props.wrap).toBe('wrap')
+    expect(linha?.text).not.toMatch(/…/)
+    await ui.unmount()
+  }
+})
+
+test('0.0.30: as pills do card Esta sessão cabem numa linha em todo estado e todo motivo', () => {
+  const largura = (l: { texto: string }[]) => l.reduce((a, x) => a + [...x.texto].length + 2, 0) + (l.length - 1)
+  expect(pilulasDaSessao('stop', 'waiting').map((x) => x.texto)).toEqual(['● Esperando', '↵ Sua vez'])
+  expect(pilulasDaSessao('notification', 'waiting').map((x) => x.texto)).toEqual(['●', '⛉ Pede permissão'])
+  for (const motivo of ['notification', 'interrupted', 'stop', 'session_start', null] as const) {
+    for (const st of ['active', 'waiting', 'error', 'completed', 'abandoned'] as const) expect(largura(pilulasDaSessao(motivo, st))).toBeLessThanOrEqual(COLUNAS_SEM_CORTE)
+  }
+})
+
+test('0.0.30: o card Esta sessão cabe na altura em cada estado, nas duas larguras, com a linha do modelo inteira', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const longa = { modelo: 'claude-opus-5-5', iniciadaEm: new Date(AGORA - 2 * 86_400_000).toISOString(), turno: 262 }
+  const estados: Partial<NonNullable<Painel['sessao']>>[] = [
+    { estado: 'active', status: 'active', motivo: null },
+    { estado: 'waiting', status: 'waiting', motivo: 'stop', atividade: { tipo: 'sua-vez', texto: `"Passei sua decisão para a sessão filha e ${'conferi tudo de novo '.repeat(4)}"` } },
+    { estado: 'waiting', status: 'waiting', motivo: 'notification', atividade: { tipo: 'permissao', texto: 'Bash: npm run migrate' } },
+    { estado: 'waiting', status: 'waiting', motivo: 'interrupted', atividade: { tipo: 'interrompida', texto: 'Esc no meio do turno' } },
+    { estado: 'error', status: 'error', motivo: null, atividade: { tipo: 'erro', texto: 'API 529. Parou.' } },
+    { estado: 'completed', status: 'completed', motivo: null, atividade: { tipo: 'concluida', texto: 'terminou sem erro' } },
+  ]
+  for (const e of estados) {
+    f.estado.painel = { ...p1, sessao: { ...p1.sessao!, ...longa, ...e } as NonNullable<Painel['sessao']> }
+    await f.relogio.advance(15_000)
+    for (const alvo of [PANE, LARGO]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+      const card = await ui.find({ key: 'card-sessao' })
+      const filhos = ((card as any).children as any[]).filter(Boolean)
+      // Cabeçalho, pills, título, modelo e atividade: cada um numa linha, dentro das linhas do card.
+      expect(filhos.length).toBeLessThanOrEqual(LINHAS_DO_CARD)
+      const pills = filhos[1]
+      const textoDasPills = (await ui.findAll({ type: 'Text' })).filter((t) => t.key === 'status' || t.key === 'motivo').map((t) => t.text ?? '')
+      expect(textoDasPills.join(' ').length).toBeLessThanOrEqual(COLUNAS_SEM_CORTE)
+      expect(pills?.props.flexWrap).toBe('nowrap')
+      const modelo = await ui.find({ type: 'Text', text: /turno 262|t262/ })
+      expect([...(modelo?.text ?? '')].length).toBeLessThanOrEqual(COLUNAS_SEM_CORTE)
+      expect(modelo?.text).not.toMatch(/…/)
       await ui.unmount()
     }
   }

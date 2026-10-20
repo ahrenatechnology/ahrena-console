@@ -19,6 +19,7 @@ import { criarServidorMcp } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import { Perfis } from '../perfis/perfis.ts';
@@ -39,9 +40,15 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
+import { semearHistorico } from '../simulador/historico.ts';
+import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
 import { DecisoesDaUi } from './decisoes-ui.ts';
+import { QuadroKanban } from './kanban.ts';
+import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
   capturarDoTranscript,
@@ -53,6 +60,8 @@ import {
   reprocessarHistorico,
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
+import { ListaDeSessoes } from './sessoes.ts';
+import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -64,17 +73,25 @@ const AJUDA = `Uso: npm run api -- [opções]
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
-  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub
+  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, e o kanban do
+                      projeto (/api/projeto) responde 503
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
-                      seja qual for, mostra o cenário
-  --cenario <p1..p9>  O cenário da demonstração (padrão p1), como nos wireframes
+                      seja qual for, mostra o cenário, e o kanban do projeto é o do
+                      wireframe C11, num GitHub falso (mover vale em memória)
+  --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
+                      A demo grava também o Detalhe da /ui: uma sessão que pede permissão
+                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
                       deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
+
+Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
+AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
+banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
 Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
 versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
@@ -182,6 +199,22 @@ const trabalho = new TrabalhoPorBranch({
   cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
+// O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
+// Sem a variável não há Project padrão: a tela explica como escolher um.
+function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? ''): ProjectRef | null {
+  if (!valor.trim()) return null;
+  const m = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/(\d{1,9})$/.exec(valor.trim());
+  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: dono/número, como minha-org/3 (veio "${valor}")`);
+  return { owner: m[1], number: Number(m[2]) };
+}
+const projetoEscolhido = demo || o['sem-github'] ? null : projetoDoAmbiente();
+const cacheDoProjeto = new GithubCache({ store: new SqliteCacheStore(storage.db) });
+const kanban = demo
+  ? new GithubProject({ source: new ProjetoDoSimulador(), cache: cacheDoProjeto, project: PROJECT_DO_SIMULADOR })
+  : projetoEscolhido
+    ? createGithubProject({ project: projetoEscolhido, cache: cacheDoProjeto, token: () => ghCliToken() })
+    : null;
+
 // O commit do checkout da API, para o rodapé do painel dizer qual versão está no ar.
 function commitDoCheckout(): string | null {
   try {
@@ -239,7 +272,11 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
+  await semearHistorico(storage);
+  await semearDetalhe(storage);
 }
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -290,6 +327,13 @@ const api: ApiLocal = await iniciarApiLocal({
   commit,
   mudancas,
   decisoesUi,
+  projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
+  detalhe,
+  eventos: new FeedDeEventos({ storage }),
+  frota: mcp.frota,
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
+  sessoes: new ListaDeSessoes({ storage, contas, desktop }),
+  kanban: new QuadroKanban({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

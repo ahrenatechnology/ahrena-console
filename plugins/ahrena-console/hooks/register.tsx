@@ -13,6 +13,7 @@ import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-c
 
 import type { DecisaoDoPainel, EscopoDasDecisoes, Leitura, Painel, PerguntaDaSessao, PrecisaDeVoce, Vista } from '../types'
 import { desenhar, escopoDasDecisoes, type Acoes, type Elementos } from './desenho'
+import { ESTADO_DO_GRAFO, type EstadoDoGrafo } from './grafo'
 import { DESFAZER_MS, decisoesTexto, linhaDeStatus, modelo, pedidoDeDesarquivar, precisamTexto, STATUS, statusDe, tokens } from './formato'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
@@ -66,6 +67,19 @@ function normalizarVista(v: unknown): Vista {
     alcancaveis: Array.isArray(r.alcancaveis) ? r.alcancaveis.filter((x): x is string => typeof x === 'string') : [],
     // "compactando" não sobrevive a um reload: a chamada que o mostrava acabou com o módulo.
     compactar: r.compactar === 'compactando' && compactando ? 'compactando' : r.compactar === 'confirmar' ? 'confirmar' : null,
+    grafo: normalizarGrafo(r.grafo),
+  }
+}
+
+/** #146: o estado do grafo salvo por outra versão vale só no que reconhecemos. */
+function normalizarGrafo(v: unknown): EstadoDoGrafo {
+  const r = (v ?? {}) as Partial<EstadoDoGrafo>
+  const numeros = (x: unknown) => (Array.isArray(x) ? x.filter((n): n is number => Number.isInteger(n) && n > 0) : [])
+  return {
+    pagina: Number.isInteger(r.pagina) && r.pagina! >= 0 ? r.pagina! : 0,
+    abertas: numeros(r.abertas),
+    fechadas: numeros(r.fechadas),
+    filtro: r.filtro === 'ativos' ? 'ativos' : 'todos',
   }
 }
 
@@ -605,7 +619,8 @@ export const register: Register = (on, options) => {
         desfazer: (id, rotulo) => void decidir($, id, rotulo, 'desfazer'),
         ajustar: (abrir) => void mudarVista($, { ajustando: abrir }),
         enviarAjuste: (d, texto) => void (texto.trim() ? decidir($, d.id, d.rotulo, 'ajustar', texto) : undefined),
-        verSubagentes: () => void mudarVista($, { tela: 'subagentes' }),
+        verSubagentes: () => void mudarVista($, { tela: 'subagentes', grafo: ESTADO_DO_GRAFO }),
+        grafo: (patch) => void update($, vista, (v) => { const atual = normalizarVista(v); return { ...atual, grafo: { ...atual.grafo!, ...patch } } }),
         verFilhas: () => void mudarVista($, { tela: 'filhas' }),
         verPrs: () => void mudarVista($, { tela: 'prs' }),
         responder: (mensagem) => void responder($, mensagem),

@@ -144,6 +144,13 @@ export interface SubagenteDoPainel {
   status: 'working' | 'waiting' | 'completed' | 'error';
   desde: string;
   ate: string | null;
+  /** #146: o subagente que disparou este; `null` quando foi a própria sessão. */
+  pai: string | null;
+  /**
+   * #146: a onda, o turno da sessão (1, 2, …) em que o subagente foi disparado; o aninhado herda a
+   * do subagente de cima. `null` sem os prompts da sessão: o painel agrupa pela sobreposição no tempo.
+   */
+  onda: number | null;
 }
 
 export interface FilhaDoPainel {
@@ -330,4 +337,49 @@ export interface DecisoesDoPainel {
   retomada: RetomadaDoPainel | null;
   /** A lista aberta, só quando o painel pede (`?decisoes=<escopo>`). */
   lista: ListaDeDecisoes | null;
+}
+
+/**
+ * O contrato de `GET /api/mural` (#34, wireframe C2 "Mural ao vivo"): um card por sessão aberta nesta
+ * máquina. "Aberta" e a ordem estão em api/mural.ts. Datas em ISO 8601 (UTC).
+ */
+export interface Mural {
+  versao: 1;
+  geradoEm: string;
+  /**
+   * Para o seletor Todas / Esperando / Ativas. `esperando`: estado `waiting` ou `error` (precisa de
+   * você); `ativas`: estado `active`, `delegating` ou `background`. As concluídas só contam em `todas`.
+   */
+  contagem: { todas: number; esperando: number; ativas: number };
+  /** Primeiro as que precisam de você (as urgentes antes), depois a atividade mais recente. */
+  cards: CardDoMural[];
+}
+
+export interface CardDoMural {
+  /** Id da sessão: o card leva a `/ui/sessoes/<id>`. */
+  id: string;
+  /** Como `SessaoDoPainel.titulo`. */
+  titulo: string;
+  /** O nome da pasta da sessão (basename do cwd); `null` sem pasta. */
+  projeto: string | null;
+  branch: string | null;
+  /** O badge. */
+  status: DisplayStatus;
+  estado: EstadoDoInbox;
+  motivo: AwaitingReason | null;
+  /** Espera `notification` ou `interrupted`, e o erro (como `PrecisaDeVoce.urgente`). */
+  urgente: boolean;
+  /** Desde quando está no estado atual (a espera, o erro, ou a última atividade). */
+  desde: string;
+  /** A linha do meio: o que pede (waiting), o erro, "terminou sem erro", ou o que está fazendo. */
+  atividade: AtividadeDaSessao;
+  modelo: string | null;
+  /** O esforço (`effort`) da sessão, do índice do Claude Desktop; `null` quando o núcleo não sabe. */
+  esforco: string | null;
+  /** Agentes: o principal mais os subagentes; os trabalhando agora e todos os que a sessão já teve. */
+  agentes: { ativos: number; total: number };
+  /** `usd: null`: há uso, mas sem preço ("sem preço", nunca zero). */
+  custo: { usd: number | null; estimativa: true };
+  plano: { feitos: number; total: number; atual: string | null } | null;
+  contexto: { pct: number; usados: number; limite: number; rotulo: string } | null;
 }

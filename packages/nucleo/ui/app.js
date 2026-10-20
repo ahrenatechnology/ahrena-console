@@ -1,7 +1,7 @@
 // A moldura do console (#26): barra lateral, roteamento no cliente, "Ao vivo" e a área da tela.
 // As telas se registram em telas.js; o contrato de uma tela está no README.md.
 
-import { ler } from './ler.js';
+import { escrever, ler } from './ler.js';
 import { iniciarAoVivo } from './ao-vivo.js';
 import { cabecalho, el, icone } from './dom.js';
 import { erro, vazio } from './estados.js';
@@ -100,7 +100,7 @@ let saida = null;
 let telaComErro = false;
 
 function navegar(rota) {
-  if (rota !== location.pathname) history.pushState(null, '', rota);
+  if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();
 }
 
@@ -130,6 +130,7 @@ async function abrir() {
   const ctx = {
     params,
     ler: (rota, opcoes) => ler(rota, { signal: sair.signal, ...opcoes }),
+    escrever: (rota, corpo, opcoes) => escrever(rota, corpo, { signal: sair.signal, ...opcoes }),
     sinal: sair.signal,
     navegar,
     contador,
@@ -159,7 +160,7 @@ document.addEventListener('click', (ev) => {
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || !(url.pathname === '/ui' || url.pathname.startsWith('/ui/'))) return;
   ev.preventDefault();
-  navegar(url.pathname);
+  navegar(url.pathname + url.search);
 });
 addEventListener('popstate', abrir);
 

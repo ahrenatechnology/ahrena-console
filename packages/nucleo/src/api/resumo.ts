@@ -14,6 +14,14 @@ export interface ResumoDosEventos {
   /** Prompts pelos hooks e pelo transcript; os dois contam o mesmo prompt, vale o maior. */
   promptsHook: number;
   promptsTranscript: number;
+  /**
+   * #146: quando começou cada turno, pelos hooks e pelo transcript (os dois veem o mesmo prompt; vale
+   * a lista mais longa). Dá a onda de cada subagente: o turno da sessão em que ele foi disparado.
+   */
+  iniciosHook: string[];
+  iniciosTranscript: string[];
+  /** O texto (já resumido no evento) do último prompt da pessoa ao principal; o Kanban (#31) mostra. */
+  ultimoPrompt: string | null;
   plano: ItemDoPlano[] | null;
   /** Última chamada de ferramenta do agente principal. */
   ultimaFerramenta: { nome: string | null; resumo: string | null; em: string; entrada: Record<string, unknown> | null } | null;
@@ -38,6 +46,9 @@ export function resumoVazio(): ResumoDosEventos {
   return {
     promptsHook: 0,
     promptsTranscript: 0,
+    iniciosHook: [],
+    iniciosTranscript: [],
+    ultimoPrompt: null,
     plano: null,
     ultimaFerramenta: null,
     ultimoPedido: null,
@@ -92,12 +103,16 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
       return;
     case 'UserPromptSubmit':
       r.promptsHook++;
+      r.iniciosHook.push(e.createdAt);
+      if (e.summary) r.ultimoPrompt = e.summary;
       r.pendentes = [];
       r.pedidoNoFechamento = null;
       return;
     case 'UserPrompt':
       if (doPrincipal(e)) {
         r.promptsTranscript++;
+        r.iniciosTranscript.push(e.createdAt);
+        if (e.summary) r.ultimoPrompt = e.summary;
         // A pessoa escreveu: o que estava pendente foi respondido ou deixado de lado.
         r.pendentes = [];
         r.pedidoNoFechamento = null;
@@ -148,6 +163,9 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
       return;
   }
 }
+
+/** #146: o início de cada turno da sessão, da fonte que viu mais prompts. */
+export const iniciosDosTurnos = (r: ResumoDosEventos): string[] => (r.iniciosHook.length >= r.iniciosTranscript.length ? r.iniciosHook : r.iniciosTranscript);
 
 interface Entrada {
   updatedAt: string;

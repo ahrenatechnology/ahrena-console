@@ -32,7 +32,7 @@ for (const nome of CENARIOS_DO_PAINEL) {
 const chaves = CENARIOS_DO_PAINEL.map((c) => `'${c}'`).join(' | ');
 process.stdout.write(
   `// Gerado por packages/nucleo/test/api/gravar-cenarios.ts: a resposta de /api/painel em cada cenário\n` +
-    `// do simulador (P1 a P7 e P9), com a hora fixa AGORA, e as listas de decisões do P9 por escopo.\n` +
+    `// do simulador (P1 a P7, P9, P12 e P13), com a hora fixa AGORA, e as listas de decisões do P9 por escopo.\n` +
     `// Não edite: rode o script de novo.\n` +
     `import type { EscopoDasDecisoes, ListaDeDecisoes, Painel } from '../types'\n\n` +
     `export const AGORA = ${AGORA}\n\n` +
