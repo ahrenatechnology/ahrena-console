@@ -660,8 +660,10 @@ const CHANGES: LegacyBodySpec = {
   values: {
     'changes.type': CHANGE_TYPES,
     // Phase 2b layer 7: the `repos` change of the repository list. `key` mixes this fixed value with
-    // data (session, decision and account ids, `<machine>:<alert>`, a repo's `owner/repo`); none of
-    // those is the bare word `list`.
+    // data (session, decision and account ids, `<machine>:<alert>`, a repo's `owner/repo`), and the
+    // value map rewrites any key that is exactly `list`. The accepted edge: a session whose id is
+    // exactly `list` would read `lista` on the old route. Real session ids are UUIDs, alerts carry a
+    // `:` and repos a `/`, so only a hand-made id can hit it.
     'changes.key': { list: 'lista' },
     '.error': {
       'session inválida': 'sessao inválida',

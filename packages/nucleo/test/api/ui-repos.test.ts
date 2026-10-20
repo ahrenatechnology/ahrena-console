@@ -281,7 +281,7 @@ describe('repos na /ui: as escalas dos gráficos', () => {
 
 describe('repos na /ui: o que a tela mostra', () => {
   const lista = (o = {}) => ({ state: 'ready', updatedAt: '2026-10-20T10:00:00Z', error: null, groups: [], ...o });
-  const metricas = (o = {}) => ({ state: 'ready', error: null, computing: [], repo: { fullName: 'a/b' }, ...o });
+  const metricas = (o: { traffic?: unknown; [k: string]: unknown } = {}) => ({ state: 'ready', error: null, computing: [], repo: { fullName: 'a/b' }, ...o });
 
   test('#104 critério 3: estado da tela sem dado (carregando, lendo, sem GitHub, erro)', () => {
     assert.deepEqual(screenState({}), { tela: 'loading', faixa: null, reler: false });

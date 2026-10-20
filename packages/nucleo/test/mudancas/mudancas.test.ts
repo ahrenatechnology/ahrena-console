@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
+import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
@@ -337,7 +338,7 @@ describe('rota HTTP', () => {
     // "No account" is `no-account` on the new route; the old `sem-conta` is still accepted on both.
     const novo = (q: string) => lerPedidoDeMudancas(normalizeLegacyUrl(new URL(`http://x/api/changes?${q}`)));
     for (const q of ['account=a,no-account', 'account=a,sem-conta'])
-      assert.deepEqual((novo(q) as { filtros: { accountIds: (string | null)[] } }).filtros.accountIds, ['a', null], q);
+      assert.deepEqual((novo(q) as Exclude<ReturnType<typeof novo>, string>).filtros.accountIds, ['a', null], q);
     assert.equal(NO_ACCOUNT, 'no-account');
     assert.equal((p('') as { timeoutMs: number }).timeoutMs, ESPERA_PADRAO_MS);
     assert.equal(typeof p('tipo=outro'), 'string');
@@ -451,7 +452,7 @@ describe('ferramenta MCP wait_for_changes', () => {
     const c = cursor.atual;
     const semFiltro = observar(f.executar({ cursor: c, timeout: 30 }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
     const semConta = observar(f.executar({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
-    cursor.registrar({ type: 'repos', key: 'lista', sessionId: null, accountId: null });
+    cursor.registrar({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null });
     cursor.registrar({ type: 'repos', key: 'org/repo', sessionId: null, accountId: null });
     await tique();
     assert.equal(semFiltro.valor, null, 'acordou com `repos`');

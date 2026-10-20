@@ -82,7 +82,7 @@ export function commitsDoPeriodo(atividade: readonly SemanaDeCommits[], desde: n
 }
 
 /** Linhas de código: a soma de adições menos remoções desde o primeiro commit; o saldo do período. */
-export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['linhas']> {
+export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['lines']> {
   let total = 0;
   let noPeriodo = 0;
   for (const [semana, adicionadas, removidas] of frequencia) {
@@ -94,7 +94,7 @@ export function linhasDe(frequencia: readonly SemanaDeCodigo[], desde: number): 
   return { total, inPeriod: noPeriodo };
 }
 
-export function frequenciaDoPeriodo(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['frequencia']> {
+export function frequenciaDoPeriodo(frequencia: readonly SemanaDeCodigo[], desde: number): NonNullable<MetricasDoRepo['frequency']> {
   const semanas: SemanaDeFrequencia[] = [...frequencia]
     .sort((a, b) => a[0] - b[0])
     .filter(([s]) => naJanela(s, desde))
@@ -106,7 +106,7 @@ export function frequenciaDoPeriodo(frequencia: readonly SemanaDeCodigo[], desde
   };
 }
 
-export function contribuidoresDoPeriodo(contribuidores: readonly ContribuidorCru[], desde: number): NonNullable<MetricasDoRepo['contribuidores']> {
+export function contribuidoresDoPeriodo(contribuidores: readonly ContribuidorCru[], desde: number): NonNullable<MetricasDoRepo['contributors']> {
   return contribuidores
     .map((c) => {
       const semanas = c.weeks.filter((w) => naJanela(w.w, desde));
@@ -121,7 +121,7 @@ export function contribuidoresDoPeriodo(contribuidores: readonly ContribuidorCru
     .sort((a, b) => b.commits - a.commits || b.added - a.added || a.login.localeCompare(b.login));
 }
 
-export function linguagensDe(bytes: Record<string, number>): NonNullable<MetricasDoRepo['linguagens']> {
+export function linguagensDe(bytes: Record<string, number>): NonNullable<MetricasDoRepo['languages']> {
   const total = Object.values(bytes).reduce((s, x) => s + x, 0);
   return Object.entries(bytes)
     .sort((a, b) => b[1] - a[1])
