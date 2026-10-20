@@ -262,8 +262,6 @@ describe('GET /api/analytics/delivery', () => {
     const project = await body(r, `/api/analytics/delivery?days=30&tz=${TZ}&groupBy=project&key=exemplo-labs/2`);
     assert.deepEqual(project.rows.map((x: Json) => x.key), ['exemplo-labs/2']);
     assert.equal(project.totals.claudeHours, 0.1);
-    // The old name of the time zone parameter goes through the global alias (src/api/legacy-routes.ts).
-    assert.equal((await body(r, `/api/analytics/delivery?days=30&fuso=${TZ}`)).timeZone, TZ);
   });
 
   test('#266/AC-6: an invalid period, grouping or key is a 400, like the cost route', async () => {

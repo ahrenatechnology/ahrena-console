@@ -13,7 +13,6 @@
 import type { Agent, SessionEvent, TokenCounts, TokenUsage } from '../model.ts';
 import { emptyTokenCounts } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { currentDemoId } from './legacy-ids.ts';
 import { PANEL_SESSION } from './panel.ts';
 import { ROOT } from './vocabulary.ts';
 
@@ -171,5 +170,5 @@ export async function seedDetail(storage: StoragePort, now = Date.now()): Promis
   await enrichPanelSession(storage, now);
 }
 
-/** The demo's `local_…`: only the Detail session has one (also under its old id, legacy-ids.ts). */
-export const demoLocal = (sessionId: string): string | null => (currentDemoId(sessionId) === DETAIL_SESSION ? DETAIL_LOCAL : null);
+/** The demo's `local_…`: only the Detail session has one. */
+export const demoLocal = (sessionId: string): string | null => (sessionId === DETAIL_SESSION ? DETAIL_LOCAL : null);

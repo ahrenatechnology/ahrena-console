@@ -34,17 +34,17 @@ function fetchFalso(status = 200, corpo: unknown = { ok: true }) {
 
 describe('escrever (api.js)', () => {
   test('POST em JSON na própria origem, sem credenciais', async () => {
-    const { f, pedidos } = fetchFalso(200, { decisao: { id: 'd1' } });
+    const { f, pedidos } = fetchFalso(200, { decision: { id: 'd1' } });
     const write = httpWriter({ base: 'http://127.0.0.1:4791', fetch: f });
-    const r = await write('/api/decisoes/d1/confirmar', { sessao: 's1' });
-    assert.deepEqual(r, { decisao: { id: 'd1' } });
+    const r = await write('/api/decisions/d1/confirm', { session: 's1' });
+    assert.deepEqual(r, { decision: { id: 'd1' } });
     assert.equal(pedidos.length, 1);
     const [p] = pedidos;
-    assert.equal(p!.url, 'http://127.0.0.1:4791/api/decisoes/d1/confirmar');
+    assert.equal(p!.url, 'http://127.0.0.1:4791/api/decisions/d1/confirm');
     assert.equal(p!.init.method, 'POST');
     assert.equal(p!.init.headers!['content-type'], 'application/json');
     assert.equal(p!.init.credentials, 'omit');
-    assert.deepEqual(JSON.parse(p!.init.body!), { sessao: 's1' });
+    assert.deepEqual(JSON.parse(p!.init.body!), { session: 's1' });
   });
 
   test('recusa host de fora, https e rota fora da API, antes de sair (quem restringe às decisões é o servidor)', async () => {
@@ -52,17 +52,17 @@ describe('escrever (api.js)', () => {
     assert.throws(() => httpWriter({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
     const { f, pedidos } = fetchFalso();
     const write = httpWriter({ base: 'http://localhost:4791', fetch: f });
-    for (const rota of ['/api/decisoes/../../hooks', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisions', '/abrir/x']) {
-      await assert.rejects(write(rota, { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e instanceof ReadError, rota);
+    for (const rota of ['/api/decisions/../../hooks', 'https://exemplo.com/api/decisions/d1/confirm', '/ui/decisions', '/open/x']) {
+      await assert.rejects(write(rota, { session: 's' }), (e: InstanceType<typeof ReadError>) => e instanceof ReadError, rota);
     }
     assert.equal(pedidos.length, 0, 'nada saiu');
   });
 
   test('a recusa do núcleo vira ErroDeLeitura com o status e a mensagem dele', async () => {
     const write = httpWriter({ base: 'http://127.0.0.1:4791', fetch: fetchFalso(409, { error: 'a decisão já não está a confirmar' }).f });
-    await assert.rejects(write('/api/decisoes/d1/descartar', { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 409 && /já não está/.test(e.message));
+    await assert.rejects(write('/api/decisions/d1/dismiss', { session: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 409 && /já não está/.test(e.message));
     const caido = httpWriter({ base: 'http://127.0.0.1:1' });
-    await assert.rejects(caido('/api/decisoes/d1/confirmar', { sessao: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
+    await assert.rejects(caido('/api/decisions/d1/confirm', { session: 's' }), (e: InstanceType<typeof ReadError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 });
 

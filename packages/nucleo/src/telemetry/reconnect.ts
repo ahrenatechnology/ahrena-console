@@ -47,14 +47,11 @@ export const RECONNECT_KILL_GRACE_MS = 5_000;
 /** What `lookup` answers while machines.json is invalid: nothing runs until it is fixed. */
 export const INVALID_MACHINES_FILE = 'invalid-file';
 
-/** The old names of the console's variables (decision 0009), still accepted somewhere in the repo. */
-const LEGACY_ENV = new Set(['AHRENA_ABRIR_MENU', 'AHRENA_DADOS_DIR', 'AHRENA_NODE', 'AHRENA_ORIGEM']);
-
 /** The environment for the user's command: the core's, minus the console's own variables. */
 export function reconnectEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(env)) {
-    if (k.startsWith('AHRENA_CONSOLE_') || k.startsWith('AHRENA_NUCLEO_') || LEGACY_ENV.has(k)) continue;
+    if (k.startsWith('AHRENA_CONSOLE_')) continue;
     out[k] = v;
   }
   return out;

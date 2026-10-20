@@ -1,5 +1,5 @@
 // The commit of this core's code, so whoever starts can compare it with the running one: the
-// `VERSAO_DA_API` changes rarely, and two checkouts of the same version can be very different code.
+// `API_VERSION` changes rarely, and two checkouts of the same version can be very different code.
 
 import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';

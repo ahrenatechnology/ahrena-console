@@ -96,73 +96,45 @@ impl Outcome {
 }
 
 /// The `--json` line of the owner's `start` (src/owner/start.ts, `StartOutput`), as the app reads
-/// it. The core emits the keys it had before #221 in Portuguese (`estado`, `porta`, `subiu`,
-/// `motivo`, state `de-pe`/`parado`); the app also accepts the English ones the core's phase of #173
-/// will emit (`state`, `port`, `started`, `reason`, state `up`/`stopped`). With both, English wins.
-/// `installation` and `dataDir` were born in English (#221).
-#[derive(Debug, PartialEq)]
+/// it: `state` (`up`/`stopped`), `port`, `pid`, `started`, `reason`, `installation` and `dataDir`.
+/// The Portuguese keys of the cores from before #173 (`estado`, `porta`, `subiu`, `motivo`) are not
+/// read since phase 6: the app always runs the core it bundles.
+#[derive(Debug, PartialEq, Deserialize)]
 struct StartLine {
+    #[serde(default, deserialize_with = "start_state")]
     state: StartState,
     port: Option<u16>,
     pid: Option<u32>,
     started: Option<bool>,
     reason: Option<String>,
     installation: Option<String>,
-    data_dir: Option<String>,
-}
-
-/// The `state` of the line.
-#[derive(Debug, PartialEq)]
-enum StartState {
-    /// `up`, or `de-pe` from the core of today.
-    Up,
-    /// `stopped`, or `parado`.
-    Stopped,
-    /// Any other value, or none: not up.
-    Unknown,
-}
-
-/// The line as JSON, each key under both names; `StartLine::from` keeps one of each.
-#[derive(Debug, Deserialize)]
-struct RawStartLine {
-    state: Option<String>,
-    estado: Option<String>,
-    port: Option<u16>,
-    porta: Option<u16>,
-    pid: Option<u32>,
-    started: Option<bool>,
-    subiu: Option<bool>,
-    reason: Option<String>,
-    motivo: Option<String>,
-    installation: Option<String>,
     #[serde(rename = "dataDir")]
     data_dir: Option<String>,
 }
 
-impl From<RawStartLine> for StartLine {
-    fn from(r: RawStartLine) -> Self {
-        let state = match r.state.or(r.estado).as_deref() {
-            Some("up" | "de-pe") => StartState::Up,
-            Some("stopped" | "parado") => StartState::Stopped,
-            _ => StartState::Unknown,
-        };
-        StartLine {
-            state,
-            port: r.port.or(r.porta),
-            pid: r.pid,
-            started: r.started.or(r.subiu),
-            reason: r.reason.or(r.motivo),
-            installation: r.installation,
-            data_dir: r.data_dir,
-        }
-    }
+/// The `state` of the line.
+#[derive(Debug, PartialEq, Default)]
+enum StartState {
+    Up,
+    Stopped,
+    /// Any other value, or none: not up.
+    #[default]
+    Unknown,
+}
+
+fn start_state<'de, D: serde::Deserializer<'de>>(d: D) -> Result<StartState, D::Error> {
+    Ok(match Option::<String>::deserialize(d)?.as_deref() {
+        Some("up") => StartState::Up,
+        Some("stopped") => StartState::Stopped,
+        _ => StartState::Unknown,
+    })
 }
 
 /// Reads the last JSON line of `start --json`. A core that is up but says it belongs to another
 /// installation, or to another data folder than `data_dir`, is refused: the app only uses its own.
 pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
     let line = output.lines().rev().find(|l| l.trim_start().starts_with('{')).unwrap_or("");
-    let Ok(s) = serde_json::from_str::<RawStartLine>(line).map(StartLine::from) else {
+    let Ok(s) = serde_json::from_str::<StartLine>(line) else {
         return Outcome::stopped("O núcleo não respondeu ao subir");
     };
     let port = match (&s.state, s.port) {
@@ -199,16 +171,16 @@ pub fn node_version_works(v: &str) -> bool {
     v.trim().trim_start_matches('v').split('.').next().and_then(|m| m.parse::<u32>().ok()).is_some_and(|m| m >= 24)
 }
 
-/// An environment variable by its new name, else by its old one (decision 0009: the new one wins).
-pub fn env_var(new: &str, old: &str) -> Option<String> {
-    std::env::var(new).or_else(|_| std::env::var(old)).ok()
+/// An environment variable, if set (decision 0009: `AHRENA_CONSOLE_*`; the old names left in phase 6).
+pub fn env_var(name: &str) -> Option<String> {
+    std::env::var(name).ok()
 }
 
 /// The first `node` on the PATH (already fixed from the login shell), if it is Node 24+.
-/// `AHRENA_CONSOLE_NODE` (old name `AHRENA_NODE`) sets the path; empty, pretends there is no Node
+/// `AHRENA_CONSOLE_NODE` sets the path; empty, pretends there is no Node
 /// (to see the A4).
 pub fn find_node() -> Result<PathBuf, Option<String>> {
-    let node = match env_var("AHRENA_CONSOLE_NODE", "AHRENA_NODE") {
+    let node = match env_var("AHRENA_CONSOLE_NODE") {
         Some(p) if p.is_empty() => return Err(None),
         Some(p) => PathBuf::from(p),
         None => {
@@ -225,10 +197,10 @@ pub fn find_node() -> Result<PathBuf, Option<String>> {
     }
 }
 
-/// `/api/overview` answers as the Ahrena Console core: `name` (#173 phase 2b) or, on an older
-/// core, `nome` is `ahrena-console`; with `pid`, the overview's `pid` must be that one.
+/// `/api/overview` answers as the Ahrena Console core: `name` is `ahrena-console`; with `pid`, the
+/// overview's `pid` must be that one.
 fn is_the_core(v: &serde_json::Value, pid: Option<u32>) -> bool {
-    let name = v.get("name").or_else(|| v.get("nome")).and_then(|n| n.as_str());
+    let name = v.get("name").and_then(|n| n.as_str());
     let same_pid = match pid {
         Some(pid) => v.get("pid").and_then(|p| p.as_u64()) == Some(u64::from(pid)),
         None => true,
@@ -236,10 +208,10 @@ fn is_the_core(v: &serde_json::Value, pid: Option<u32>) -> bool {
     name == Some("ahrena-console") && same_pid
 }
 
-/// Where the core is: `AHRENA_CONSOLE_CORE_DIR` (old name `AHRENA_NUCLEO_DIR`), else the app's
+/// Where the core is: `AHRENA_CONSOLE_CORE_DIR`, else the app's
 /// resources (`packages/nucleo`), else the checkout (in development, `cargo run`).
 pub fn core_dir(resources: Option<PathBuf>) -> PathBuf {
-    if let Some(p) = env_var("AHRENA_CONSOLE_CORE_DIR", "AHRENA_NUCLEO_DIR") {
+    if let Some(p) = env_var("AHRENA_CONSOLE_CORE_DIR") {
         return PathBuf::from(p);
     }
     if let Some(r) = resources.map(|r| r.join("packages/nucleo")).filter(|p| p.join(OWNER_CLI).is_file()) {
@@ -248,11 +220,11 @@ pub fn core_dir(resources: Option<PathBuf>) -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/nucleo"))
 }
 
-/// Debug override for the tray screenshots: `AHRENA_CONSOLE_DEMO_PORT` (old name
-/// `AHRENA_NUCLEO_PORTA`), the port of a simulator `--demo`. Set, the app starts no core and only
+/// Debug override for the tray screenshots: `AHRENA_CONSOLE_DEMO_PORT`, the port of a simulator
+/// `--demo`. Set, the app starts no core and only
 /// shows that one. Never set by the app itself.
 pub fn demo_port() -> Option<u16> {
-    env_var("AHRENA_CONSOLE_DEMO_PORT", "AHRENA_NUCLEO_PORTA").and_then(|p| p.parse().ok()).filter(|p| *p != 0)
+    env_var("AHRENA_CONSOLE_DEMO_PORT").and_then(|p| p.parse().ok()).filter(|p| *p != 0)
 }
 
 /// Starts (or, within its own installation, adopts) the app's core. `data_dir`: the app's data
@@ -332,62 +304,52 @@ mod tests {
 
     #[test]
     fn reads_the_start_line_of_the_own_core() {
-        let started = format!(r#"{{"estado":"de-pe","url":"http://127.0.0.1:53817","porta":53817,"pid":4242,"versao":"0.0.1","inicio":"x","pai":777,"subiu":true,"commit":null,"installation":"app","dataDir":"{DIR}"}}"#);
+        let started = format!(r#"{{"state":"up","url":"http://127.0.0.1:53817","port":53817,"pid":4242,"version":"0.0.1","startedAt":"x","parent":777,"started":true,"commit":null,"installation":"app","dataDir":"{DIR}"}}"#);
         assert_eq!(read_start(&started, Some(Path::new(DIR))), Outcome::up(Core { port: 53817, pid: Some(4242) }, true));
-        let adopted = format!(r#"{{"estado":"de-pe","porta":53900,"pid":5151,"subiu":false,"aviso":"versão mais velha","installation":"app","dataDir":"{DIR}/"}}"#);
+        let adopted = format!(r#"{{"state":"up","port":53900,"pid":5151,"started":false,"warning":"versão mais velha","installation":"app","dataDir":"{DIR}/"}}"#);
         assert_eq!(read_start(&format!("[log] something\n{adopted}\n"), Some(Path::new(DIR))), Outcome::up(Core { port: 53900, pid: Some(5151) }, false));
-        let no_dir_given = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"/elsewhere"}"#;
+        let no_dir_given = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app","dataDir":"/elsewhere"}"#;
         assert!(read_start(no_dir_given, None).core.is_some());
     }
 
     #[test]
     fn refuses_a_core_of_another_installation_or_folder() {
-        let dev = r#"{"estado":"de-pe","porta":4720,"pid":1,"subiu":false,"installation":"dev","dataDir":"/Users/x/.ahrena-console"}"#;
+        let dev = r#"{"state":"up","port":4720,"pid":1,"started":false,"installation":"dev","dataDir":"/Users/x/.ahrena-console"}"#;
         let r = read_start(dev, Some(Path::new(DIR)));
         assert_eq!(r.core, None);
         assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("dev")));
-        let old = r#"{"estado":"de-pe","porta":4720,"pid":1,"subiu":false}"#;
+        let old = r#"{"state":"up","port":4720,"pid":1,"started":false}"#;
         assert_eq!(read_start(old, Some(Path::new(DIR))).core, None, "a core from before #221 does not say it is the app's");
-        let folder = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"/tmp/other"}"#;
+        let folder = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app","dataDir":"/tmp/other"}"#;
         assert_eq!(read_start(folder, Some(Path::new(DIR))).core, None);
-        let no_folder = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app"}"#;
+        let no_folder = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app"}"#;
         assert_eq!(read_start(no_folder, Some(Path::new(DIR))).core, None, "fails closed without dataDir");
     }
 
     #[test]
     fn reads_a_failed_start() {
-        let stopped = r#"{"estado":"parado","motivo":"o núcleo saiu com código 1","installation":"app"}"#;
+        let stopped = r#"{"state":"stopped","reason":"o núcleo saiu com código 1","installation":"app"}"#;
         let r = read_start(stopped, Some(Path::new(DIR)));
         assert!(!r.started);
         assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("código 1")));
         assert!(matches!(read_start("", None).state, CoreState::Stopped { .. }));
-        assert_eq!(read_start(r#"{"estado":"de-pe","porta":0,"installation":"app"}"#, None).core, None);
-    }
-
-    #[test]
-    fn reads_the_english_start_line_of_a_newer_core() {
-        let started = format!(r#"{{"state":"up","url":"http://127.0.0.1:53817","port":53817,"pid":4242,"version":"0.0.1","started":true,"installation":"app","dataDir":"{DIR}"}}"#);
-        assert_eq!(read_start(&started, Some(Path::new(DIR))), Outcome::up(Core { port: 53817, pid: Some(4242) }, true));
-        let adopted = format!(r#"{{"state":"up","port":53900,"pid":5151,"started":false,"installation":"app","dataDir":"{DIR}"}}"#);
-        assert_eq!(read_start(&adopted, Some(Path::new(DIR))), Outcome::up(Core { port: 53900, pid: Some(5151) }, false));
-        let stopped = r#"{"state":"stopped","reason":"o núcleo saiu com código 1","installation":"app"}"#;
-        let r = read_start(stopped, Some(Path::new(DIR)));
-        assert_eq!(r.core, None);
-        assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("código 1")));
-    }
-
-    #[test]
-    fn english_wins_when_a_line_has_both_names() {
-        let both = format!(r#"{{"state":"up","estado":"parado","port":53817,"porta":1,"pid":1,"started":true,"subiu":false,"installation":"app","dataDir":"{DIR}"}}"#);
-        assert_eq!(read_start(&both, Some(Path::new(DIR))), Outcome::up(Core { port: 53817, pid: Some(1) }, true));
-        let line = |t: &str| StartLine::from(serde_json::from_str::<RawStartLine>(t).unwrap());
-        assert_eq!(line(r#"{"state":"stopped","estado":"de-pe"}"#).state, StartState::Stopped);
-        assert_eq!(line(r#"{"reason":"new","motivo":"old"}"#).reason.as_deref(), Some("new"));
-        assert_eq!(line(r#"{"estado":"de-pe"}"#).state, StartState::Up);
-        assert_eq!(line(r#"{"estado":"parado"}"#).state, StartState::Stopped);
-        assert_eq!(line(r#"{"state":"starting"}"#).state, StartState::Unknown);
-        assert_eq!(line("{}").state, StartState::Unknown);
+        assert_eq!(read_start(r#"{"state":"up","port":0,"installation":"app"}"#, None).core, None);
         assert_eq!(read_start(r#"{"state":"starting","port":53817,"installation":"app"}"#, None).core, None);
+    }
+
+    #[test]
+    fn the_portuguese_start_line_of_an_old_core_is_not_read() {
+        // #173 phase 6: `estado`/`porta`/`subiu` are not read; the app runs the core it bundles.
+        let old = format!(r#"{{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"{DIR}"}}"#);
+        let r = read_start(&old, Some(Path::new(DIR)));
+        assert_eq!(r.core, None);
+        assert!(matches!(r.state, CoreState::Stopped { .. }));
+        let line = |t: &str| serde_json::from_str::<StartLine>(t).unwrap();
+        assert_eq!(line(r#"{"state":"up"}"#).state, StartState::Up);
+        assert_eq!(line(r#"{"state":"stopped"}"#).state, StartState::Stopped);
+        assert_eq!(line(r#"{"estado":"de-pe"}"#).state, StartState::Unknown);
+        assert_eq!(line("{}").state, StartState::Unknown);
+        assert_eq!(line(r#"{"motivo":"old"}"#).reason, None);
     }
 
     #[test]
@@ -397,7 +359,7 @@ mod tests {
         assert!(!is_the_core(&v(r#"{"ok":true,"name":"ahrena-console","pid":43}"#), Some(42)), "another core reused the port");
         assert!(!is_the_core(&v(r#"{"ok":true,"name":"ahrena-console"}"#), Some(42)));
         assert!(is_the_core(&v(r#"{"ok":true,"name":"ahrena-console"}"#), None));
-        assert!(is_the_core(&v(r#"{"ok":true,"nome":"ahrena-console","versao":"0.1.0"}"#), None), "a core from before #173");
+        assert!(!is_the_core(&v(r#"{"ok":true,"nome":"ahrena-console","versao":"0.1.0"}"#), None), "a core from before #173 phase 2b is not read since phase 6");
         assert!(!is_the_core(&v(r#"{"name":"outro"}"#), None));
         assert!(!is_the_core(&v(r#"{"ok":true}"#), None));
     }

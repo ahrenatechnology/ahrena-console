@@ -2,11 +2,10 @@
 // artifact. A static page, with no build and no dependencies, in `packages/nucleo/ui/`.
 //
 // - `/ui`, `/ui/` and any other `/ui/<path>` that does not look like a file return `index.html`: the
-//   routing is in the client (`/ui/sessions`, `/ui/sessions/<id>`; the old `/ui/sessoes/<id>` too,
-//   which the client swaps for the new one).
+//   routing is in the client (`/ui/sessions`, `/ui/sessions/<id>`; an unknown one, like an old
+//   Portuguese URL, shows the client's "Página não encontrada").
 // - `/ui/<file>.<js|css|svg>` and `/ui/screens/<file>.<js|css>` return the file, if it exists; nothing
-//   outside the folder, nothing with `..`. `/ui/telas/` is the old name of the `screens/` folder and
-//   serves the same files until the aliases leave (decision 0009, issue #173).
+//   outside the folder, nothing with `..`.
 // - The content policy only lets the page talk to its own origin (127.0.0.1:<port>): no fonts, no
 //   scripts, no `fetch` going out.
 
@@ -26,8 +25,6 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const UI_FILE = /^\/ui\/((?:screens\/)?[a-z0-9-]+\.(js|css|svg))$/;
-// The old folder of the screens: the same files.
-const LEGACY_SCREENS = /^\/ui\/telas\//;
 // A file that does not exist gives 404, not the page: a session id never ends like this.
 const LOOKS_LIKE_FILE = /\.(js|mjs|css|svg|html?|json|map|png|ico|txt|woff2?)$/i;
 
@@ -48,7 +45,7 @@ export const isUiPath = (path: string): boolean => path === UI_ROUTE || path.sta
 
 /** Serves `index.html` or a file of the `/ui` folder, with the content policy. */
 export async function respondUi(res: ServerResponse, path: string, folder: string = UI_FOLDER): Promise<void> {
-  const file = UI_FILE.exec(path.replace(LEGACY_SCREENS, '/ui/screens/'));
+  const file = UI_FILE.exec(path);
   if (!file && LOOKS_LIKE_FILE.test(path)) return send(res, 404, { error: 'não encontrado' });
   const name = file ? file[1] : 'index.html';
   let body: Buffer;

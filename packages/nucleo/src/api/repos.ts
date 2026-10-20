@@ -5,7 +5,7 @@
 // | `GET /api/repos`                              | `ListaDeRepos`                    |
 // | `GET /api/repos/<dono>/<repo>?period=90d`     | `MetricasDoRepo`                  |
 //
-// `?period=` é `30d`, `90d` (padrão) ou `1y` (o antigo `1a` ainda vale, src/api/legacy-routes.ts), e vale para a resposta inteira (#105 critério 6);
+// `?period=` é `30d`, `90d` (padrão) ou `1y`, e vale para a resposta inteira (#105 critério 6);
 // outro valor dá 400. `?refresh=1` é o botão Atualizar: relê o GraphQL ignorando o TTL, com o
 // intervalo mínimo de 30 s do cache (decisão 0001). `<dono>` e `<repo>` passam pelo padrão de
 // nome do GitHub antes de qualquer coisa; fora dele, 400.
@@ -26,7 +26,7 @@
 // `MAXIMO_DE_ENTRADAS` combinações de repositório e período, as menos lidas saem primeiro.
 //
 // - `state`: `ready`; `loading` (sem dado ainda, ou a montagem parcial: o cabeçalho do repo já
-//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--sem-github`); `error`
+//   veio e os números ainda não); `no-github` (núcleo sem `gh` ou com `--no-github`); `error`
 //   (falhou e não há dado anterior); `not-found` (só nas métricas).
 // - `error`: o motivo do dado velho, do limite ou da falha (texto da tela); o último dado vem junto.
 // - `computing` (métricas): as estatísticas que o GitHub devolveu 202 (`commits`, `frequency`, `lines`, `contributors`). O campo fica `null`, e o
@@ -124,7 +124,7 @@ const CALCULANDO = 'o GitHub ainda está calculando (202)';
 
 /**
  * The key of the `repos` change for the list (`/api/changes`); a repository's own change has its
- * `owner/repo` in lower case. The old route `/api/mudancas` answers it as `lista`.
+ * `owner/repo` in lower case.
  */
 export const LIST_CHANGE_KEY = 'list';
 
@@ -603,7 +603,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
 export interface OpcoesDosReposDoNucleo {
   /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
-  /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
+  /** `--no-github`: as respostas vêm com `state: 'no-github'`. */
   semGithub: boolean;
   /**
    * O cache do GitHub do núcleo (no cli, o mesmo `GithubCache` do trabalho, sobre o banco): uma

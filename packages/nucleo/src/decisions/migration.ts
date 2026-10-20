@@ -135,8 +135,7 @@ export const DECISIONS_ENGLISH_SQL = `
 
 /**
  * Source key prefixes, old → new. The panel's Adjust (`painel:<id>:<time>`) keeps its prefix: the
- * source key only feeds the hash of the id, and the id of a new adjustment is part of the API answer
- * the legacy goldens freeze.
+ * source key only feeds the hash of the id, and changing it would change the id of a new adjustment.
  */
 export const SOURCE_KEY_PREFIXES: Readonly<Record<string, string>> = { 'inferida:': 'inferred:' };
 

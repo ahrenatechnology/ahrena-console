@@ -10,7 +10,6 @@ import {
   historyPage,
   type EndedSession,
 } from '../../src/history/model.ts';
-import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { session } from '../fixtures.ts';
 
 function ended(id: string, end: string, over: Partial<EndedSession> = {}): EndedSession {
@@ -113,21 +112,20 @@ describe('history: search', () => {
 });
 
 describe('history: the request', () => {
-  // The old parameter names pass through the alias map, as on the server.
-  const parse = (q: string) => parseHistoryRequest(normalizeLegacyQuery(new URLSearchParams(q)));
+  const parse = (q: string) => parseHistoryRequest(new URLSearchParams(q));
 
   test('no parameters: from the newest, 7 days, no search', () => {
     assert.deepEqual(parse(''), { ok: true, request: { before: null, days: 7, search: null } });
-    assert.deepEqual(parse('antes=2026-10-18&dias=31&busca=%20Pagamentos%20'), { ok: true, request: { before: '2026-10-18', days: 31, search: 'Pagamentos' } });
-    assert.deepEqual(parse('busca=%20%20'), { ok: true, request: { before: null, days: 7, search: null } });
+    assert.deepEqual(parse('before=2026-10-18&days=31&search=%20Pagamentos%20'), { ok: true, request: { before: '2026-10-18', days: 31, search: 'Pagamentos' } });
+    assert.deepEqual(parse('search=%20%20'), { ok: true, request: { before: null, days: 7, search: null } });
   });
 
   test('invalid says why', () => {
-    for (const q of ['antes=ontem', 'antes=2026-02-30', 'antes=2026-1-08', 'dias=0', 'dias=32', 'dias=1.5', 'dias=abc', 'dias=', `busca=${'x'.repeat(101)}`]) {
+    for (const q of ['before=ontem', 'before=2026-02-30', 'before=2026-1-08', 'days=0', 'days=32', 'days=1.5', 'days=abc', 'days=', `search=${'x'.repeat(101)}`]) {
       const r = parse(q);
       assert.equal(r.ok, false, q);
       if (!r.ok) assert.match(r.error, /^(before|days|search): /, q);
     }
-    assert.equal(parse(`busca=${'x'.repeat(100)}`).ok, true);
+    assert.equal(parse(`search=${'x'.repeat(100)}`).ok, true);
   });
 });

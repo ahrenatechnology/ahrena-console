@@ -1,9 +1,8 @@
-// The deterministic demo server the old-route tests run against (issue #173): the --demo of
-// scenario p4, the decisions of p9, the workflows, the Detail, the history, the repos and the
-// project of the demo, every clock fixed at NOW and the change cursor with a fixed generation.
-// Shared by `legacy-routes.test.ts`, `legacy-golden.test.ts` and `record-legacy-goldens.ts`, so the
-// goldens are recorded and replayed on the very same server.
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+// A deterministic demo server: the --demo of scenario p4, the decisions of p9, the workflows, the
+// Detail, the history, the repos and the project of the demo, every clock fixed at NOW and the change
+// cursor with a fixed generation. `old-routes.test.ts` proves on it that the old Portuguese routes
+// are gone (issue #173, phase 6) and `simulator-demo.test.ts` that the demo's old ids are too.
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -24,11 +23,10 @@ import { seedPanelHistory } from '../../src/simulator/history-ended.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../../src/simulator/project.ts';
 import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
-import { upgradeDemoUrl } from '../../src/simulator/legacy-ids.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
-/** The core's version when the goldens were recorded: it follows the app's releases since (#261). */
-const GOLDEN_VERSION = '0.0.1';
+/** A fixed core version, so the answers do not follow the app's releases (#261). */
+const DEMO_VERSION = '0.0.1';
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
 /** The "this session" of the demo panel (p4). */
 export const DEMO_SESSION = PANEL_SESSION;
@@ -37,34 +35,28 @@ export const DEMO_ALIAS = 'demo';
 /** The repository of the demo decisions (p9), whose records folder lives under the temp dir. */
 const DEMO_REPO = '/simulacao/ahrena-demo';
 
-export interface LegacyDemo {
+export interface DemoApi {
   api: LocalApi;
   /** `127.0.0.1:<port>`, for the page's own `Origin`. */
   host: string;
   /** The `claude://` addresses the server asked the Desktop to open. */
   opened: string[];
-  /**
-   * Creates the `docs/decisoes` folder of the demo repository, in a temp dir of this server: before
-   * it, the repository folder does not exist (the "Promover" draft says so); after it, the promote
-   * writes there.
-   */
-  createRecordsFolder(): void;
   close(): Promise<void>;
 }
 
-export async function startLegacyDemo(): Promise<LegacyDemo> {
+export async function startDemoApi(): Promise<DemoApi> {
   const clock = () => NOW;
   const opened: string[] = [];
-  const records = mkdtempSync(join(tmpdir(), 'ahrena-legacy-demo-'));
+  const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
   const repoFolder = join(records, 'ahrena-demo');
-  const changes = new ChangeCursor({ generation: 'golden' });
+  const changes = new ChangeCursor({ generation: 'demo' });
   const sqlite: SqliteStorage = openSqliteStorage({ path: ':memory:' });
   const sessionAccounts = new SessionAccounts(sqlite);
   const storage = withChanges(sqlite, changes, sessionAccounts);
   const decisions = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
   const work = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: clock });
   const accounts = new Accounts({ storage, file: null });
-  const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id), version: GOLDEN_VERSION });
+  const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id), version: DEMO_VERSION });
   await seedPanelScenario(storage, 'p4', NOW);
   // The decisions of the p9 scenario (p4 has none): a suggested one to confirm and undo.
   await seedPanelDecisions(decisions, 'p9', NOW);
@@ -99,14 +91,11 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
     decisionsUi,
     repos: repos.rota,
-    // As in the --demo: the old session ids (before #173) still open the session.
-    demoUrl: upgradeDemoUrl,
   });
   return {
     api,
     host: new URL(api.url).host,
     opened,
-    createRecordsFolder: () => mkdirSync(join(repoFolder, 'docs', 'decisoes'), { recursive: true }),
     close: async () => {
       await api.close();
       sqlite.close();

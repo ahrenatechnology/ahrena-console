@@ -5,9 +5,7 @@
 // | `GET /api/workflows`              | KPIs, runs do Workflow tool e o grafo de orquestração         |
 // | `GET /api/sessions/<id>/workflow` | O grafo dos agentes da sessão, o laço e a linha do tempo (404 sem a sessão) |
 //
-// `GET /api/workflows?filter=all|active|completed&node=<id do nó>`: o filtro vale para a tela inteira
-// (`filtro=` and `no=` with the old values `todas|ativas|concluidas` and node ids, and
-// `/api/sessoes/<id>/workflow`, are aliases: src/api/legacy-routes.ts).
+// `GET /api/workflows?filter=all|active|completed&node=<id do nó>`: o filtro vale para a tela inteira.
 // `active` são as sessões com status `active`; `completed`, as que terminaram (`completed`, `error`,
 // `abandoned`). `node` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
 // passam por aquele nó (`main` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
@@ -74,8 +72,7 @@ import type { TrabalhoPorBranch } from './work.ts';
 
 // ---------- Contrato ----------
 //
-// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5): `GET /api/workflows` has no
-// old alias, and the old `/api/sessoes/<id>/workflow` answers its old body through src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5).
 // The labels shown on the screen (`label`, the edge labels `plano`/`diff`/`ajustes`, the node names) stay pt-BR.
 
 export const FILTROS_DOS_WORKFLOWS = ['all', 'active', 'completed'] as const;

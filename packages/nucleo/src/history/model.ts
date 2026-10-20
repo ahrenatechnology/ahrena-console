@@ -7,7 +7,7 @@
 // - The cursor is a day: `before` returns the days strictly before it, and `next` is the page's last
 //   day while there are more.
 // - The shapes that reach the API (`EndedSession`, `HistoryDay`, `HistoryPage`) have
-//   English keys since phase 2b of #173; the old route answers in the old ones (src/api/legacy-routes.ts).
+//   English keys since phase 2b of #173.
 // - The search is a case-insensitive substring on the title, the id and the project, before paging.
 
 import { basename } from 'node:path';

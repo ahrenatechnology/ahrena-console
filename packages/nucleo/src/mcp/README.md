@@ -60,7 +60,7 @@ Com nenhum núcleo respondendo, a ponte responde sozinha `initialize`, `ping` e 
 | `--port <n>` | Fala só com aquela porta: sem registro, sem subir (o modo antigo) |
 | `AHRENA_CONSOLE_CORE_PORT` ou `AHRENA_CONSOLE_PORT` | A porta forçada do núcleo que ela sobe, em vez da aleatória. A ponte não tem mais a 4720 como padrão |
 
-Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
+Os nomes antigos (`--porta`, `--sem-subir`) saíram na fase 6 da #173: uma opção desconhecida é erro.
 
 ## Protocolo
 

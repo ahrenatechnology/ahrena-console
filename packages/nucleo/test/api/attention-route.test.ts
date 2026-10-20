@@ -123,13 +123,14 @@ describe('GET /api/attention', () => {
     assert.deepEqual(m.changes, []);
   });
 
-  test('a rota antiga responde as chaves e os valores antigos (#173 fase 2b)', async () => {
-    const novo = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
-    const antigo = (await (await fetch(`${api.url}/api/atencao`)).json()) as Record<string, unknown> & { itens: Record<string, unknown>[] };
-    assert.deepEqual(Object.keys(antigo), ['geradoEm', 'cursor', 'total', 'precisam', 'suaVez', 'ativas', 'comErro', 'itens']);
-    assert.equal(antigo.precisam, novo.needs);
-    assert.ok(antigo.itens.length > 0);
-    assert.deepEqual(Object.keys(antigo.itens[0]!), ['sessao', 'titulo', 'projeto', 'conta', 'nivel', 'motivo', 'motivoCurto', 'motivoLongo', 'desde', 'minutos', 'local', 'machine']);
+  test('responde as chaves em inglês que outro núcleo lê (src/telemetry/remote.ts); a rota antiga não existe mais (#173 fase 6)', async () => {
+    const r = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
+    assert.deepEqual(Object.keys(r), ['generatedAt', 'cursor', 'total', 'needs', 'yourTurn', 'blocked', 'idle', 'active', 'withError', 'items']);
+    assert.ok(r.items.length > 0);
+    assert.deepEqual(Object.keys(r.items[0]!), ['session', 'title', 'project', 'account', 'level', 'reason', 'attention', 'shortReason', 'longReason', 'since', 'minutes', 'local', 'machine']);
+    const antiga = await fetch(`${api.url}/api/atencao`);
+    assert.equal(antiga.status, 404);
+    assert.deepEqual(await antiga.json(), { error: 'não encontrado' });
   });
 
   test('pedido com Origin dá 403, como as outras rotas', async () => {
@@ -146,7 +147,7 @@ describe('GET /api/attention', () => {
 });
 
 describe('#245 GET /api/attention: blocked and idle', () => {
-  test('#245/AC-3 #245/AC-4 each item carries `attention`, and the counts split blocked from idle; the old keys stay', async () => {
+  test('#245/AC-3 #245/AC-4 each item carries `attention`, and the counts split blocked from idle; `needs` and `yourTurn` stay', async () => {
     await seed(storage);
     const r = await montarAtencao(frota, null);
     assert.deepEqual(
@@ -189,16 +190,14 @@ describe('#245 GET /api/attention: blocked and idle', () => {
     assert.deepEqual([r.blocked, r.idle], [1, 1]);
   });
 
-  test('the old route /api/atencao answers neither the new counts nor `attention`', async () => {
+  test('GET /api/attention answers the new counts and `attention` on each item', async () => {
     await seed(storage);
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
     const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota });
     try {
-      const old = (await (await fetch(`${api.url}/api/atencao`)).json()) as Record<string, unknown> & { itens: Record<string, unknown>[] };
-      assert.deepEqual(Object.keys(old), ['geradoEm', 'cursor', 'total', 'precisam', 'suaVez', 'ativas', 'comErro', 'itens']);
-      for (const i of old.itens) assert.ok(!('attention' in i));
       const fresh = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
       assert.deepEqual([fresh.blocked, fresh.idle], [4, 3]);
+      for (const i of fresh.items) assert.ok('attention' in i, i.session);
     } finally {
       await api.close();
     }
