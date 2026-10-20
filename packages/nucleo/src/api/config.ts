@@ -3,7 +3,7 @@
 //
 // | Rota                                   | O quê                                                     |
 // | -------------------------------------- | --------------------------------------------------------- |
-// | `GET /api/config?projeto=<abs>`        | Raízes, resumo e as listas (src/config/modelo.ts)          |
+// | `GET /api/config?projeto=<abs>`        | Raízes, resumo e as listas (src/config/modelo.ts), e `backups`: a pasta dos backups |
 // | `GET /api/config/skill?raiz=&nome=`    | O `SKILL.md` de uma skill, com a `versao` (sha256)         |
 // | `POST /api/config/skill`               | `{ raiz, nome, conteudo, versao?, projeto? }`: cria ou troca, com backup |
 //
@@ -100,7 +100,8 @@ export function criarRotaDaConfig(opts: OpcoesDaConfig): RotaDaConfig {
     if (url.pathname === ROTA_DA_CONFIG) {
       if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
       const [pastas, projetos] = await Promise.all([opts.pastas(), opts.projetos()]);
-      return send(res, 200, await lerConfigDoAgente({ pastas, projetos, projeto: url.searchParams.get('projeto') }));
+      // `backups`: a pasta onde a gravação guarda o que troca, para o botão "Backups" da tela.
+      return send(res, 200, { ...(await lerConfigDoAgente({ pastas, projetos, projeto: url.searchParams.get('projeto') })), backups });
     }
     if (url.pathname === ROTA_DA_SKILL) {
       if (req.method === 'POST') return gravar(req, res);

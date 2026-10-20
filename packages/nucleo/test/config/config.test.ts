@@ -308,6 +308,7 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal(r.json.projeto, projeto);
     assert.deepEqual(r.json.projetos, [projeto]);
     assert.equal(r.json.edicao, true);
+    assert.equal(r.json.backups, backups, 'a pasta dos backups, para o botão Backups da tela');
     for (const chave of ['raizes', 'resumo', 'skills', 'subagentes', 'comandos', 'memoria', 'mcp', 'plugins', 'hooks', 'configuracoes']) assert.ok(chave in r.json, chave);
     assert.ok(!r.corpo.includes('segredo-do-env-123') && !r.corpo.includes('pessoa@exemplo.com'));
     assert.equal((await pedir(api.url, `/api/config?projeto=${encodeURIComponent(projeto)}`)).status, 200);

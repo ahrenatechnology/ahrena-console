@@ -54,7 +54,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
 | `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
-| `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração (#63, seção abaixo) |
+| `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
 | `GET /api/config/skill?raiz=<id>&nome=<nome>` | O `SKILL.md` de uma skill, com a `versao` |
 | `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes |
 
