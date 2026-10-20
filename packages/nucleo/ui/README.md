@@ -14,7 +14,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `decisoes.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisoes-comum.js` põe o `<link>` no `<head>` ao montar |
-| `telas/` | As telas, uma por arquivo. Uma tela com estilo próprio tem o seu `ui/<nome>.css`, na raiz, e põe o `<link>` no `<head>` ao montar |
+| `telas/` | As telas, uma por arquivo. O CSS das Decisões fica em `ui/decisoes.css`, na raiz |
 
 ## Registrar uma tela
 
