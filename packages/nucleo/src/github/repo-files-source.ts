@@ -3,7 +3,7 @@
 //
 // | Leitura                | Como                                                                       | Custo |
 // | ---------------------- | -------------------------------------------------------------------------- | ----: |
-// | RepoFilesDiscovery     | GraphQL: o commit do HEAD e, um apelido por caminho, `CLAUDE.md`, `AGENTS.md`, `.claude/CLAUDE.md`, `.mcp.json` e `.claude/` em 3 níveis (`object(expression: "HEAD:…")`) | 1 |
+// | RepoFilesDiscovery     | GraphQL: até 20 repositórios por consulta (`r<i>`), cada um com o commit do HEAD e, um apelido por caminho, `CLAUDE.md`, `AGENTS.md`, `.claude/CLAUDE.md`, `.mcp.json`, `.claude/` em 3 níveis e as 23 pastas de decisão (14 de ADR e 9 de PDR, #174) (`object(expression: "HEAD:…")`) | 1 por lote |
 // | Árvore                 | REST `git/trees/HEAD?recursive=1`, com `If-None-Match` (o 304 não gasta o limite primário) | 1 requisição |
 // | RepoBlobs              | GraphQL: até 50 arquivos por consulta, por `oid` ou por `<commit>:<caminho>` | 1 por lote |
 //
@@ -11,10 +11,13 @@
 // aparece no que esta fonte devolve, nem nos erros.
 
 import { isInstructionFile } from '../agent-instructions/imports.ts';
+import { DECISION_DIRS, isDecisionFile } from '../adrs/parse.ts';
 import type { RespostaRest } from './repos-source.ts';
 
 /** Até quantos arquivos cabem numa consulta de conteúdo. */
 export const BLOB_BATCH = 50;
+/** Até quantos repositórios cabem numa consulta de descoberta: 1 ponto por lote (estudo, "Custo no GitHub"). */
+export const DISCOVERY_BATCH = 20;
 /** Até quantos caminhos da árvore a leitura guarda (os que interessam, não a árvore inteira). */
 export const MAX_TREE_PATHS = 5_000;
 
@@ -38,6 +41,13 @@ export interface RepoFilesDiscovery {
   tree: string | null;
   /** Os arquivos achados na raiz e em `.claude/` (até 3 níveis). */
   files: RepoFileEntry[];
+  /**
+   * Os registros de decisão (#174): os `.md` das pastas de ADR e de PDR (`DECISION_DIRS`), só o primeiro
+   * nível, sem índice nem modelo, na ordem das pastas. Ausente num valor guardado antes do #174.
+   */
+  decisions?: RepoFileEntry[];
+  /** As pastas de decisão que existem no repositório, na ordem de busca. */
+  decisionFolders?: string[];
 }
 
 /** O que a árvore recursiva traz e a leitura guarda: só os caminhos que interessam. */
@@ -67,16 +77,35 @@ const RATE = 'rateLimit { cost remaining resetAt }';
 const BLOB = '... on Blob { oid }';
 const ENTRY = 'name type oid';
 
-export const REPO_FILES_QUERIES = {
-  discovery: `query RepoFilesDiscovery($owner: String!, $name: String!) { ${RATE}
-  repository(owner: $owner, name: $name) { nameWithOwner
+/** O que a descoberta pede de cada repositório, sob o apelido `r<i>`; nenhum nome do repositório vai no texto. */
+function discoveryFields(i: number): string {
+  const dirs = DECISION_DIRS.map((d, k) => `dir${k}: object(expression: "HEAD:${d}") { ... on Tree { entries { ${ENTRY} } } }`).join('\n    ');
+  return `r${i}: repository(owner: $o${i}, name: $n${i}) { nameWithOwner
     head: object(expression: "HEAD") { oid ... on Commit { tree { oid } } }
     claudeMd: object(expression: "HEAD:CLAUDE.md") { ${BLOB} }
     agentsMd: object(expression: "HEAD:AGENTS.md") { ${BLOB} }
     dotClaudeMd: object(expression: "HEAD:.claude/CLAUDE.md") { ${BLOB} }
     mcpJson: object(expression: "HEAD:.mcp.json") { ${BLOB} }
-    claudeDir: object(expression: "HEAD:.claude") { ... on Tree { entries { ${ENTRY} object { ... on Tree { entries { ${ENTRY} object { ... on Tree { entries { ${ENTRY} } } } } } } } } } } }`,
-} as const;
+    claudeDir: object(expression: "HEAD:.claude") { ... on Tree { entries { ${ENTRY} object { ... on Tree { entries { ${ENTRY} object { ... on Tree { entries { ${ENTRY} } } } } } } } } }
+    ${dirs} }`;
+}
+
+/**
+ * A descoberta comum de até `DISCOVERY_BATCH` repositórios numa consulta (#183 e #174): `object` não é
+ * conexão paginada, então o custo fica em 1 ponto; cresce só o tempo de servidor. Dono e nome vão
+ * como variáveis (`$o<i>`, `$n<i>`).
+ */
+export function discoveryQuery(repos: readonly { owner: string; name: string }[]): { query: string; variables: Record<string, string> } {
+  if (repos.length < 1 || repos.length > DISCOVERY_BATCH) throw new Error(`descoberta: de 1 a ${DISCOVERY_BATCH} repositórios por consulta`);
+  const vars: string[] = [];
+  const variables: Record<string, string> = {};
+  repos.forEach((r, i) => {
+    vars.push(`$o${i}: String!`, `$n${i}: String!`);
+    variables[`o${i}`] = r.owner;
+    variables[`n${i}`] = r.name;
+  });
+  return { query: `query RepoFilesDiscovery(${vars.join(', ')}) { ${RATE}\n  ${repos.map((_r, i) => discoveryFields(i)).join('\n  ')} }`, variables };
+}
 
 /** A consulta de um lote: `b<i>` por `object(oid:)` ou `object(expression:)`, com variáveis (nada do repositório vai no texto da consulta). */
 export function blobsQuery(requests: readonly BlobRequest[]): { query: string; variables: Record<string, string> } {
@@ -115,17 +144,15 @@ interface RawEntry {
   object?: { entries?: RawEntry[] } | null;
 }
 
-interface RawDiscovery {
-  repository: {
-    nameWithOwner: string;
-    head: { oid: string; tree?: { oid: string } } | null;
-    claudeMd: { oid?: string } | null;
-    agentsMd: { oid?: string } | null;
-    dotClaudeMd: { oid?: string } | null;
-    mcpJson: { oid?: string } | null;
-    claudeDir: { entries?: RawEntry[] } | null;
-  } | null;
-}
+type RawRepository = {
+  nameWithOwner: string;
+  head: { oid: string; tree?: { oid: string } } | null;
+  claudeMd: { oid?: string } | null;
+  agentsMd: { oid?: string } | null;
+  dotClaudeMd: { oid?: string } | null;
+  mcpJson: { oid?: string } | null;
+  claudeDir: { entries?: RawEntry[] } | null;
+} & Record<string, unknown>;
 
 interface RawTree {
   sha?: string;
@@ -142,27 +169,25 @@ export class RepoFilesSource {
     this.transport = transport;
   }
 
-  /** O commit, a raiz e `.claude/`; `null` quando o repositório não existe ou não é visível. */
+  /** O commit, a raiz, `.claude/` e as pastas de decisão; `null` quando o repositório não existe ou não é visível. */
   async discover(owner: string, name: string): Promise<RepoFilesDiscovery | null> {
-    const data = await this.transport.query<RawDiscovery>('RepoFilesDiscovery', REPO_FILES_QUERIES.discovery, { owner, name });
-    const repo = data.repository;
-    if (!repo) return null;
-    const files: RepoFileEntry[] = [];
-    const add = (path: string, oid: string | undefined) => {
-      if (oid && OID.test(oid) && !files.some((f) => f.path === path)) files.push({ path, oid });
-    };
-    add('CLAUDE.md', repo.claudeMd?.oid);
-    add('AGENTS.md', repo.agentsMd?.oid);
-    add('.claude/CLAUDE.md', repo.dotClaudeMd?.oid);
-    add('.mcp.json', repo.mcpJson?.oid);
-    const walk = (entries: RawEntry[] | undefined, prefix: string) => {
-      for (const e of entries ?? []) {
-        if (e.type === 'blob') add(`${prefix}${e.name}`, e.oid);
-        else if (e.type === 'tree') walk(e.object?.entries, `${prefix}${e.name}/`);
-      }
-    };
-    walk(repo.claudeDir?.entries, '.claude/');
-    return { nameWithOwner: repo.nameWithOwner, commit: repo.head?.oid ?? null, tree: repo.head?.tree?.oid ?? null, files };
+    const [d] = await this.discoverMany([{ owner, name }]);
+    return d;
+  }
+
+  /**
+   * A descoberta de vários repositórios, em lotes de até `DISCOVERY_BATCH`, em série: um resultado por
+   * repositório pedido, na mesma ordem (`null` onde ele não existe ou não é visível).
+   */
+  async discoverMany(repos: readonly { owner: string; name: string }[]): Promise<(RepoFilesDiscovery | null)[]> {
+    const out: (RepoFilesDiscovery | null)[] = [];
+    for (let i = 0; i < repos.length; i += DISCOVERY_BATCH) {
+      const batch = repos.slice(i, i + DISCOVERY_BATCH);
+      const { query, variables } = discoveryQuery(batch);
+      const data = await this.transport.query<Record<string, RawRepository | null>>('RepoFilesDiscovery', query, variables);
+      batch.forEach((_r, j) => out.push(readDiscovery(data?.[`r${j}`] ?? null)));
+    }
+    return out;
   }
 
   /**
@@ -200,6 +225,37 @@ export class RepoFilesSource {
     }
     return out;
   }
+}
+
+/** Um repositório da resposta da descoberta, no formato que as leituras usam. */
+function readDiscovery(repo: RawRepository | null): RepoFilesDiscovery | null {
+  if (!repo || typeof repo.nameWithOwner !== 'string') return null;
+  const files: RepoFileEntry[] = [];
+  const add = (path: string, oid: string | undefined) => {
+    if (oid && OID.test(oid) && !files.some((f) => f.path === path)) files.push({ path, oid });
+  };
+  add('CLAUDE.md', repo.claudeMd?.oid);
+  add('AGENTS.md', repo.agentsMd?.oid);
+  add('.claude/CLAUDE.md', repo.dotClaudeMd?.oid);
+  add('.mcp.json', repo.mcpJson?.oid);
+  const walk = (entries: RawEntry[] | undefined, prefix: string) => {
+    for (const e of entries ?? []) {
+      if (e.type === 'blob') add(`${prefix}${e.name}`, e.oid);
+      else if (e.type === 'tree') walk(e.object?.entries, `${prefix}${e.name}/`);
+    }
+  };
+  walk(repo.claudeDir?.entries, '.claude/');
+  const decisions: RepoFileEntry[] = [];
+  const decisionFolders: string[] = [];
+  DECISION_DIRS.forEach((dir, k) => {
+    const tree = repo[`dir${k}`] as { entries?: RawEntry[] } | null | undefined;
+    if (!tree || !Array.isArray(tree.entries)) return;
+    decisionFolders.push(dir);
+    for (const e of tree.entries) {
+      if (e && e.type === 'blob' && typeof e.name === 'string' && isDecisionFile(e.name) && OID.test(e.oid) && validPath(`${dir}/${e.name}`)) decisions.push({ path: `${dir}/${e.name}`, oid: e.oid });
+    }
+  });
+  return { nameWithOwner: repo.nameWithOwner, commit: repo.head?.oid ?? null, tree: repo.head?.tree?.oid ?? null, files, decisions, decisionFolders };
 }
 
 /** Um caminho relativo do repositório, sem `..`, sem barra no começo e sem caractere de controle. */

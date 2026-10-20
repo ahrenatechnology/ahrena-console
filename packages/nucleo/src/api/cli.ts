@@ -76,6 +76,7 @@ import {
 import { criarReposDoNucleo } from './repos.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
+import { createCoreDecisions } from './adrs.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { FeedDeEventos } from './events.ts';
@@ -430,6 +431,19 @@ const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cach
 const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o['sem-github'], cache: cacheDoGithub, changes: mudancas, queue: githubQueue, log });
 // Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
 const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o['sem-github'], cache: cacheDoGithub, changes: mudancas, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
+// As ADRs e as PDRs (#174): a lista de repositórios da tela Repositórios, a descoberta comum, o cache da 0001 e a mesma fila.
+const decisions = createCoreDecisions({
+  demo,
+  noGithub: o['sem-github'],
+  cache: cacheDoGithub,
+  changes: mudancas,
+  queue: githubQueue,
+  log,
+  accountRepos: async () => {
+    const l = await repos.repos.lista();
+    return { state: l.state, error: l.error, account: l.account, repos: l.groups.flatMap((g) => g.repos.map((r) => ({ owner: r.owner, name: r.name, lastPush: r.lastPush }))) };
+  },
+});
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -533,6 +547,7 @@ const api: ApiLocal = await iniciarApiLocal({
   repos: repos.rota,
   agentInstructions: agentInstructions.route,
   frameworkInstall: frameworkInstall.route,
+  decisions: decisions.route,
   // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
   ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,

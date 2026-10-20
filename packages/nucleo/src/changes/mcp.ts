@@ -29,10 +29,9 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions` and `framework-install`). */
-export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter(
-  (t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install'> => t !== 'repos' && t !== 'agent-instructions' && t !== 'framework-install',
-);
+/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions`, `framework-install` and `adrs`). */
+const GITHUB_SCREEN_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs']);
+export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install' | 'adrs'> => !GITHUB_SCREEN_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 
 /**
@@ -135,7 +134,7 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): To
         cursor: r.cursor,
         reset: r.reset,
         timedOut: r.timedOut,
-        changes: r.changes.flatMap((m) => (m.type === 'repos' || m.type === 'agent-instructions' ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
+        changes: r.changes.flatMap((m) => (GITHUB_SCREEN_TYPES.has(m.type) ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
       };
       return { text: summaryText(data), data: data as unknown as JsonObject };
     },

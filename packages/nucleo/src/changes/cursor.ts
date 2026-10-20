@@ -25,13 +25,13 @@
 // with no session and no account.
 // The values are English since #173 phase 2b; the old ones (`sessao`, `estado`, `precisa-de-voce`, `plano`,
 // `decisao`, `conta`) are still accepted in `?type=` and answered on the old route (src/api/legacy-routes.ts).
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
   seq: number;
   type: ChangeType;
-  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions` and `framework-install`, `<owner>/<repo>`. */
+  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions` and `framework-install`, `<owner>/<repo>`; for `adrs`, `list` or `<owner>/<repo>`. */
   key: string;
   /** The session the change belongs to; `null` for account and repository changes (and for `alert`). */
   sessionId: string | null;
