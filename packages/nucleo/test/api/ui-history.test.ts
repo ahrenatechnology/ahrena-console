@@ -50,7 +50,7 @@ describe('Histórico: registro e arquivo', () => {
     }
     const h = telas.find((t) => t.id === 'history')!;
     assert.equal(h.route, '/ui/history');
-    assert.deepEqual(h.item, { label: 'Histórico', icon: 'historico', section: 'main' });
+    assert.deepEqual(h.item, { label: 'Histórico', icon: 'history', section: 'main' });
     assert.equal(h.file, '/ui/screens/history.js');
   });
 
@@ -80,14 +80,14 @@ describe('Histórico: registro e arquivo', () => {
     assert.doesNotMatch(texto, /\.seguinte\b/);
     assert.equal(BUSCA_MAXIMA, 100);
     assert.match(texto, /maxlength: BUSCA_MAXIMA/);
-    assert.match(texto, /el\('h2', \{ class: 'olhinho hist-dia' \}/);
+    assert.match(texto, /el\('h2', \{ class: 'eyebrow hist-day' \}/);
   });
 
-  test('history.css não escreve cor à mão, a tela o carrega e moldura.css não tem nada do histórico', () => {
+  test('history.css não escreve cor à mão, a tela o carrega e shell.css não tem nada do histórico', () => {
     const css = readFileSync(`${PASTA_DA_UI}history.css`, 'utf8');
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i);
-    for (const classe of ['.badge', '.b-completed', '.hist-busca', '.hist-linhas', '.hist-linha', '.hist-alvo::after', '.hist-anterior']) assert.ok(css.includes(classe), classe);
-    assert.match(readFileSync(`${PASTA_DA_UI}screens/history.js`, 'utf8'), /href: '\/ui\/history\.css', 'data-tela': 'historico'/);
+    for (const classe of ['.badge', '.b-completed', '.hist-search', '.hist-rows', '.hist-row', '.hist-target::after', '.hist-previous']) assert.ok(css.includes(classe), classe);
+    assert.match(readFileSync(`${PASTA_DA_UI}screens/history.js`, 'utf8'), /href: '\/ui\/history\.css', 'data-screen': 'history'/);
     assert.doesNotMatch(readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8'), /\.hist-/);
   });
 
@@ -95,7 +95,7 @@ describe('Histórico: registro e arquivo', () => {
   // telas desmonta a outra. Fora os selos de status, toda classe própria leva `hist-`.
   test('history.css só estiliza classes hist-, os selos em comum e as da moldura', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const minhas = [...classes('history.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('hist-')), [], 'classe própria sem o prefixo hist-');
@@ -108,7 +108,7 @@ describe('Histórico: registro e arquivo', () => {
 
   test('os ícones novos estão em dom.js', () => {
     const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
-    for (const nome of ['historico', 'calendario', 'continuou', "'chevron-direita'", 'buscar']) assert.match(dom, new RegExp(`^\\s+${nome}: '<`, 'm'), nome);
+    for (const nome of ['history', 'calendar', 'continued', "'chevron-right'", 'search']) assert.match(dom, new RegExp(`^\\s+${nome}: '<`, 'm'), nome);
   });
 });
 

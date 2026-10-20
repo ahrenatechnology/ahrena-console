@@ -21,10 +21,10 @@ const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
 
 // O tipo da issue no GitHub vira o rótulo do wireframe; a cor vem da classe.
 const TIPOS = new Map([
-  ['story', ['História', 'historia']],
-  ['user story', ['História', 'historia']],
-  ['tech task', ['Tarefa técnica', 'tarefa']],
-  ['task', ['Tarefa técnica', 'tarefa']],
+  ['story', ['História', 'story']],
+  ['user story', ['História', 'story']],
+  ['tech task', ['Tarefa técnica', 'task']],
+  ['task', ['Tarefa técnica', 'task']],
   ['spike', ['Spike', 'spike']],
   ['bug', ['Bug', 'bug']],
 ]);
@@ -33,23 +33,23 @@ const TIPOS = new Map([
 export function tipoDoCard(card) {
   const cru = typeof card?.tipoDaIssue === 'string' ? card.tipoDaIssue.trim() : '';
   if (cru) {
-    const [rotulo, classe] = TIPOS.get(cru.toLowerCase()) ?? [cru, 'outro'];
+    const [rotulo, classe] = TIPOS.get(cru.toLowerCase()) ?? [cru, 'other'];
     return { rotulo, classe };
   }
-  if (card?.tipo === 'PullRequest') return { rotulo: 'Pull request', classe: 'outro' };
-  if (card?.tipo === 'DraftIssue') return { rotulo: 'Rascunho', classe: 'outro' };
-  return { rotulo: 'Issue', classe: 'outro' };
+  if (card?.tipo === 'PullRequest') return { rotulo: 'Pull request', classe: 'other' };
+  if (card?.tipo === 'DraftIssue') return { rotulo: 'Rascunho', classe: 'other' };
+  return { rotulo: 'Issue', classe: 'other' };
 }
 
 const CI = new Map([
   ['ok', ['CI ✓', 'ok']],
-  ['falhou', ['CI ✕', 'falhou']],
-  ['rodando', ['CI …', 'rodando']],
+  ['falhou', ['CI ✕', 'failed']],
+  ['rodando', ['CI …', 'running']],
 ]);
 const REVIEW = new Map([
   ['aprovado', ['aprovado', 'ok']],
-  ['ajustes', ['ajustes', 'falhou']],
-  ['pendente', ['review', 'rodando']],
+  ['ajustes', ['ajustes', 'failed']],
+  ['pendente', ['review', 'running']],
 ]);
 
 /** Os cards de uma raia que passam no filtro de marco (`''` = todos). */
@@ -66,7 +66,7 @@ const codigoDe = (e) => e?.corpo?.codigo ?? null;
 const comandoDe = (e) => e?.corpo?.comando ?? (codigoDe(e) === 'sem-escopo' ? COMANDO_DO_ESCOPO : null);
 const nomeDoCard = (card) => (card.numero != null ? `#${card.numero}` : `“${card.titulo}”`);
 const esperaDe = (e) => (e?.tentarEm ? ` Tente de novo em ${Math.ceil(e.tentarEm / 1000)} s.` : '');
-const comComando = (no, comando) => (comando ? (no.querySelector('p')?.append(' ', el('code', { class: 'pj-comando mono' }, comando)), no) : no);
+const comComando = (no, comando) => (comando ? (no.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, comando)), no) : no);
 
 /** O CSS da tela, uma vez por página (fica carregado quando se troca de tela). */
 function carregarEstilo() {
@@ -95,29 +95,29 @@ export async function montar(area, ctx) {
 
   // ---------- a estrutura (fica de pé entre os redesenhos) ----------
 
-  const seletor = el('select', { class: 'pj-sel', 'aria-label': 'Filtrar por marco' });
+  const seletor = el('select', { class: 'prj-sel', 'aria-label': 'Filtrar por marco' });
   seletor.addEventListener('change', () => {
     marco = seletor.value;
     desenharQuadro();
   });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar({ forcar: true }) }, icone('atualizar'), 'Atualizar');
+  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar({ forcar: true }) }, icone('refresh'), 'Atualizar');
   // O cabeçalho fica: a pílula "Ao vivo" é dele, e a moldura a mantém em dia.
   const cab = cabecalho({
     icone: 'github',
     titulo: 'Kanban do projeto',
     sub: 'GitHub Project · por Status · arraste para mudar',
-    acoes: [el('label', { class: 'pj-marco' }, el('span', {}, 'Marco:'), seletor, icone('chevron-down')), botaoAtualizar],
+    acoes: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), seletor, icone('chevron-down')), botaoAtualizar],
   });
   const sub = cab.querySelector('.sub');
   // O toast mora numa região viva fixa, logo depois do cabeçalho: o leitor de tela anuncia o que entra
   // nela, e o Tab chega ao Desfazer sem atravessar o quadro. Foco ou mouse em cima seguram o tempo.
-  const caixaDoToast = el('div', { class: 'pj-toast-caixa', role: 'status', 'aria-live': 'polite' });
+  const caixaDoToast = el('div', { class: 'prj-toast-box', role: 'status', 'aria-live': 'polite' });
   caixaDoToast.addEventListener('focusin', () => clearTimeout(timerDoToast));
   caixaDoToast.addEventListener('mouseenter', () => clearTimeout(timerDoToast));
   caixaDoToast.addEventListener('focusout', () => armarToast());
   caixaDoToast.addEventListener('mouseleave', () => armarToast());
-  const caixaDasFaixas = el('div', { class: 'pj-faixas', hidden: true });
-  const caixaDoQuadro = el('div', { class: 'pj-quadro' });
+  const caixaDasFaixas = el('div', { class: 'prj-bands', hidden: true });
+  const caixaDoQuadro = el('div', { class: 'prj-board' });
   let estruturaNaTela = false;
 
   function desenharCabecalho() {
@@ -191,7 +191,7 @@ export async function montar(area, ctx) {
         titulo: 'Escolha o GitHub Project',
         texto: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
       });
-      caixa.append(el('code', { class: 'pj-comando mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
+      caixa.append(el('code', { class: 'prj-command mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
       trocarArea(caixa);
       return;
     }
@@ -207,7 +207,7 @@ export async function montar(area, ctx) {
     }
     if (e?.status === 401 || codigo === 'sem-escopo') {
       const caixa = erro({ titulo: 'Falta o escopo project no gh', texto: `${e.message} Rode o comando abaixo e tente de novo.`, tentar: () => desenhar({ forcar: true }) });
-      caixa.insertBefore(el('code', { class: 'pj-comando mono' }, comandoDe(e)), caixa.lastChild);
+      caixa.insertBefore(el('code', { class: 'prj-command mono' }, comandoDe(e)), caixa.lastChild);
       trocarArea(caixa);
       return;
     }
@@ -268,7 +268,7 @@ export async function montar(area, ctx) {
     const nos = new Map();
     caixaDoQuadro.replaceChildren(
       raias.length
-        ? el('div', { class: 'pj-colunas' }, ...raias.map((raia, i) => coluna(raia, i, raias, nos)))
+        ? el('div', { class: 'prj-columns' }, ...raias.map((raia, i) => coluna(raia, i, raias, nos)))
         : vazio({ icone: 'github', titulo: 'O projeto não tem raias', texto: `O campo ${quadro.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
     );
     if (itemAtivo && nos.has(itemAtivo)) nos.get(itemAtivo).focus();
@@ -279,8 +279,8 @@ export async function montar(area, ctx) {
     const aceita = raia.id !== null && raia.id !== undefined;
     const col = el(
       'section',
-      { class: 'pj-col', 'data-raia': aceita ? raia.id : 'sem-status', 'aria-label': `${raia.nome}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
-      el('div', { class: 'cab' }, el('span', { class: 'ponto' }), el('span', { class: 'nome' }, raia.nome), el('span', { class: 'n' }, String(cards.length))),
+      { class: 'prj-col', 'data-lane': aceita ? raia.id : 'sem-status', 'aria-label': `${raia.nome}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
+      el('div', { class: 'head' }, el('span', { class: 'dot' }), el('span', { class: 'name' }, raia.nome), el('span', { class: 'n' }, String(cards.length))),
       ...cards.map((card) => {
         const no = cartao(card, raia, indice, raias);
         nos.set(card.itemId, no);
@@ -292,16 +292,16 @@ export async function montar(area, ctx) {
         if (!arrastando || arrastando.de === raia.id) return;
         ev.preventDefault();
         if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
-        col.classList.add('alvo');
+        col.classList.add('target');
       });
       col.addEventListener('dragleave', (ev) => {
         // Passar de um card para outro dentro da raia não é sair dela.
         if (ev.relatedTarget && typeof col.contains === 'function' && col.contains(ev.relatedTarget)) return;
-        col.classList.remove('alvo');
+        col.classList.remove('target');
       });
       col.addEventListener('drop', (ev) => {
         ev.preventDefault();
-        col.classList.remove('alvo');
+        col.classList.remove('target');
         const indo = arrastando;
         arrastando = null;
         if (indo && indo.de !== raia.id) mover(indo.card.itemId, raia.id);
@@ -319,13 +319,13 @@ export async function montar(area, ctx) {
       pe.push(el('span', { title: 'Pull request' }, icone('git-pull-request'), `#${card.pr.numero}`));
       const ci = CI.get(card.pr.ci);
       const review = REVIEW.get(card.pr.review);
-      if (ci) pe.push(el('span', { class: `pj-pill ${ci[1]}` }, ci[0]));
-      if (review) pe.push(el('span', { class: `pj-pill ${review[1]}` }, review[0]));
+      if (ci) pe.push(el('span', { class: `prj-pill ${ci[1]}` }, ci[0]));
+      if (review) pe.push(el('span', { class: `prj-pill ${review[1]}` }, review[0]));
     }
     const no = el(
       'article',
       {
-        class: 'cartao pj-card',
+        class: 'card prj-card',
         draggable: 'true',
         tabindex: '0',
         'data-item': card.itemId,
@@ -334,13 +334,13 @@ export async function montar(area, ctx) {
       },
       el(
         'div',
-        { class: 'tipo' },
-        el('b', { class: `pj-tipo ${classe}` }, rotulo),
+        { class: 'type' },
+        el('b', { class: `prj-type ${classe}` }, rotulo),
         card.numero != null ? el('span', { class: 'num mono' }, `#${card.numero}`) : null,
         el('span', { class: 'grip', title: 'Arraste para outra raia (ou Alt+← / Alt+→)' }, icone('grip-vertical')),
       ),
       el('div', { class: 'tt' }, card.titulo),
-      pe.length ? el('div', { class: 'pe' }, ...pe) : null,
+      pe.length ? el('div', { class: 'foot' }, ...pe) : null,
     );
     no.addEventListener('dragstart', (ev) => {
       arrastando = { card, de: raia.id ?? null };
@@ -348,10 +348,10 @@ export async function montar(area, ctx) {
         ev.dataTransfer.effectAllowed = 'move';
         ev.dataTransfer.setData('text/plain', card.itemId);
       }
-      no.classList.add('arrastando');
+      no.classList.add('dragging');
     });
     no.addEventListener('dragend', () => {
-      no.classList.remove('arrastando');
+      no.classList.remove('dragging');
       fimDoArrasto();
     });
     no.addEventListener('keydown', (ev) => {
@@ -452,10 +452,10 @@ export async function montar(area, ctx) {
     caixaDoToast.replaceChildren(
       el(
         'div',
-        { class: 'pj-toast' },
+        { class: 'prj-toast' },
         icone('check-circle-2'),
         el('span', {}, el('b', {}, nomeDoCard(card)), ' movido para ', el('b', {}, nome), ' no GitHub'),
-        de !== null && de !== undefined ? el('button', { type: 'button', class: 'pj-desfazer', aoClicar: () => mover(card.itemId, de, { teclado: true }) }, 'Desfazer') : null,
+        de !== null && de !== undefined ? el('button', { type: 'button', class: 'prj-undo', aoClicar: () => mover(card.itemId, de, { teclado: true }) }, 'Desfazer') : null,
       ),
     );
     armarToast();

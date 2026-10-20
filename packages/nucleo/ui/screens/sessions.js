@@ -32,9 +32,9 @@ export const STATUS = {
 
 // Os motivos da espera, como no wireframe: os dois primeiros travam a sessão (urgentes).
 export const MOTIVOS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permissao', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrompida', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
+  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
+  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
+  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 
@@ -109,45 +109,45 @@ export function idCurto(id) {
 
 // As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
 export const COLUNAS = [
-  ['c-sessao', 'Sessão'],
+  ['c-session', 'Sessão'],
   ['c-status', 'Status'],
-  ['c-atividade', 'Última atividade'],
-  ['c-duracao', 'Duração'],
-  ['c-agentes', 'Agentes'],
-  ['c-custo', 'Custo'],
+  ['c-activity', 'Última atividade'],
+  ['c-duration', 'Duração'],
+  ['c-agents', 'Agentes'],
+  ['c-cost', 'Custo'],
   ['c-dir', 'Diretório'],
-  ['c-seta', ''],
+  ['c-arrow', ''],
 ];
 
 const COR = /^#[0-9a-f]{3,8}$/i;
 const ultimoPedaco = (cwd) => cwd.replace(/\/+$/, '').split('/').pop() || cwd;
 
 function seletor(rotulo, opcoes, valor, aoMudar) {
-  const s = el('select', { class: 'campo-sel', 'aria-label': rotulo });
+  const s = el('select', { class: 'field-sel', 'aria-label': rotulo });
   for (const [v, texto] of opcoes) s.append(el('option', { value: v, selected: v === valor }, texto));
   s.addEventListener('change', () => aoMudar(s.value));
-  return el('label', { class: 'campo' }, s, icone('abrir-lista'));
+  return el('label', { class: 'field' }, s, icone('open-list'));
 }
 
 function selo(status, motivo) {
   const m = motivo ? MOTIVOS[motivo] : null;
   return [
     el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status] ?? status),
-    m ? el('span', { class: m.urgente ? 'mot' : 'mot leve' }, icone(m.icone), m.rotulo) : null,
+    m ? el('span', { class: m.urgente ? 'reason' : 'reason soft' }, icone(m.icone), m.rotulo) : null,
   ];
 }
 
 function conta(c) {
   if (!c) return null;
-  const ponto = el('i', { class: 'ponto-conta' });
+  const ponto = el('i', { class: 'account-dot' });
   if (COR.test(c.cor)) ponto.style.setProperty('--cor-da-conta', c.cor);
-  return el('span', { class: 'conta' }, ponto, c.rotulo);
+  return el('span', { class: 'account' }, ponto, c.rotulo);
 }
 
 export async function montar(area, ctx) {
   // O estilo da tela, uma vez por página.
-  if (!document.querySelector('link[data-tela="sessoes"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-tela': 'sessoes' }));
+  if (!document.querySelector('link[data-screen="sessions"]')) {
+    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' }));
   }
 
   let estado = estadoDaQuery(location.search);
@@ -155,10 +155,10 @@ export async function montar(area, ctx) {
   let pedido = 0;
 
   const cab = cabecalho({
-    icone: 'sessoes',
+    icone: 'sessions',
     titulo: 'Sessões',
     sub: '…',
-    acoes: [el('button', { type: 'button', class: 'btn', aoClicar: () => ler() }, icone('atualizar'), 'Atualizar')],
+    acoes: [el('button', { type: 'button', class: 'btn', aoClicar: () => ler() }, icone('refresh'), 'Atualizar')],
   });
   const sub = cab.querySelector('.sub');
 
@@ -169,15 +169,15 @@ export async function montar(area, ctx) {
     clearTimeout(esperaDaBusca);
     esperaDaBusca = setTimeout(() => mudar({ search: busca.value, page: 1 }), 250);
   });
-  const campoBusca = el('label', { class: 'campo busca' }, icone('buscar'), busca);
-  const lugarDoDir = el('span', { class: 'lugar-dir' });
-  const lugarDaOrdem = el('span', { class: 'lugar-ordem' });
-  const inverter = el('button', { type: 'button', class: 'campo quadrado', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', aoClicar: () => mudar({ direction: estado.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icone('inverter'));
+  const campoBusca = el('label', { class: 'field search' }, icone('search'), busca);
+  const lugarDoDir = el('span', { class: 'dir-slot' });
+  const lugarDaOrdem = el('span', { class: 'order-slot' });
+  const inverter = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', aoClicar: () => mudar({ direction: estado.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icone('invert'));
   const pilulas = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
   for (const [v, rotulo] of PILULAS) pilulas.append(el('button', { type: 'button', 'data-status': v, aoClicar: () => mudar({ status: v, page: 1 }) }, rotulo));
-  const filtros = el('div', { class: 'cartao filtros' }, campoBusca, lugarDoDir, lugarDaOrdem, inverter, pilulas);
+  const filtros = el('div', { class: 'card filters' }, campoBusca, lugarDoDir, lugarDaOrdem, inverter, pilulas);
 
-  const corpo = el('div', { class: 'corpo-sessoes' }, carregando({ rotulo: 'Carregando as sessões' }));
+  const corpo = el('div', { class: 'sessions-body' }, carregando({ rotulo: 'Carregando as sessões' }));
   area.replaceChildren(cab, filtros, corpo);
 
   function desenharFiltros(diretorios) {
@@ -198,7 +198,7 @@ export async function montar(area, ctx) {
     const destino = `/ui/sessions/${encodeURIComponent(s.id)}`;
     const tr = el(
       'tr',
-      { class: 'linha-sessao' },
+      { class: 'session-row' },
       el('td', { class: 'nm' }, el('a', { href: destino, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, idCurto(s.id)), conta(s.conta))),
       el('td', { class: 'st' }, ...selo(s.status, s.motivo)),
       el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, idade(s.ultimaAtividade)),
@@ -208,7 +208,7 @@ export async function montar(area, ctx) {
       el('td', { class: 'mono' }, custo(s.custoUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
-      el('td', { class: 'c-muted seta' }, icone('chevron-direita')),
+      el('td', { class: 'c-muted arrow' }, icone('chevron-right')),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
@@ -220,21 +220,21 @@ export async function montar(area, ctx) {
   function tabela(lista) {
     return el(
       'div',
-      { class: 'cartao' },
-      el('table', { class: 'tabela' }, el('thead', {}, el('tr', {}, ...COLUNAS.map(([classe, c]) => el('th', { scope: 'col', class: classe }, c)))), el('tbody', {}, ...lista.itens.map(linha))),
+      { class: 'card' },
+      el('table', { class: 'table' }, el('thead', {}, el('tr', {}, ...COLUNAS.map(([classe, c]) => el('th', { scope: 'col', class: classe }, c)))), el('tbody', {}, ...lista.itens.map(linha))),
     );
   }
 
   function rodape(lista) {
     return el(
       'div',
-      { class: 'rodape-sessoes' },
+      { class: 'sessions-footer' },
       el('span', {}, faixa(lista)),
       el(
         'span',
-        { class: 'paginas' },
-        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina <= 1, aoClicar: () => mudar({ page: lista.pagina - 1 }) }, 'Anterior'),
-        el('button', { type: 'button', class: 'btn contorno', disabled: lista.pagina >= lista.paginas, aoClicar: () => mudar({ page: lista.pagina + 1 }) }, 'Próxima'),
+        { class: 'pages' },
+        el('button', { type: 'button', class: 'btn outline', disabled: lista.pagina <= 1, aoClicar: () => mudar({ page: lista.pagina - 1 }) }, 'Anterior'),
+        el('button', { type: 'button', class: 'btn outline', disabled: lista.pagina >= lista.paginas, aoClicar: () => mudar({ page: lista.pagina + 1 }) }, 'Próxima'),
       ),
     );
   }
@@ -252,7 +252,7 @@ export async function montar(area, ctx) {
     corpo.replaceChildren(
       filtrando
         ? vazio({ titulo: 'Nenhuma sessão com esses filtros', texto: 'Mude a busca, o diretório ou o status.', acao: { rotulo: 'Limpar os filtros', aoClicar: () => ((busca.value = ''), mudar({ status: 'todas', search: '', dir: '', page: 1 })) } })
-        : vazio({ icone: 'sessoes', titulo: 'Nenhuma sessão ainda', texto: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
+        : vazio({ icone: 'sessions', titulo: 'Nenhuma sessão ainda', texto: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
     );
   }
 
@@ -267,7 +267,7 @@ export async function montar(area, ctx) {
       if (e?.name === 'AbortError' || meu !== pedido) return;
       // Com uma lista na tela, ela fica e a faixa avisa; sem lista, o erro ocupa o lugar.
       if (ultima) {
-        corpo.querySelector('.faixa-erro')?.remove();
+        corpo.querySelector('.error-band')?.remove();
         corpo.prepend(faixaDeErro({ titulo: 'Não deu para atualizar.', texto: e.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }));
       } else corpo.replaceChildren(erro({ texto: e.message, tentar: () => ler() }));
     }

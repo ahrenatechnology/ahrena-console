@@ -206,7 +206,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       assert.match(agentes[0]!.textContent, /Opus 5\.5.*~US\$ 1,84.*Rodar a bateria/);
       assert.ok(agentes[1]!.classes.includes('st-waiting'));
 
-      const linhas = comClasse(area, 'linha');
+      const linhas = comClasse(area, 'row');
       assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
       assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
       assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
@@ -218,15 +218,15 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
   test('a árvore de subagentes abre e fecha pelo botão', async () => {
     const { area, sair } = await montarTela();
     try {
-      assert.equal(comClasse(area, 'arvore').length, 0);
+      assert.equal(comClasse(area, 'tree').length, 0);
       const botao = comClasse(area, 'subs')[0]!;
       assert.match(botao.textContent, /2 subagentes · 1 ativo/);
       botao.click();
-      const arvore = comClasse(area, 'arvore');
+      const arvore = comClasse(area, 'tree');
       assert.equal(arvore.length, 1);
-      assert.deepEqual(comClasse(arvore[0]!, 'filho').map((f) => f.textContent.replace(/\d+ (s|min)|agora/, '')), ['Explore · mapear usosAtiva', 'Plan · planoConcluída']);
+      assert.deepEqual(comClasse(arvore[0]!, 'child').map((f) => f.textContent.replace(/\d+ (s|min)|agora/, '')), ['Explore · mapear usosAtiva', 'Plan · planoConcluída']);
       comClasse(area, 'subs')[0]!.click();
-      assert.equal(comClasse(area, 'arvore').length, 0);
+      assert.equal(comClasse(area, 'tree').length, 0);
     } finally {
       sair();
     }
@@ -239,7 +239,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     });
     try {
       assert.equal(comClasse(area, 'inbox').length, 0);
-      assert.match(comClasse(area, 'faixa-erro')[0]!.textContent, /Não deu para ler quem precisa de você/);
+      assert.match(comClasse(area, 'error-band')[0]!.textContent, /Não deu para ler quem precisa de você/);
       assert.equal(comClasse(area, 'stat').length, 6);
     } finally {
       sair();

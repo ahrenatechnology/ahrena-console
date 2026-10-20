@@ -29,28 +29,28 @@ export const SCREENS = [
   {
     id: 'wall',
     route: '/ui/wall',
-    item: { label: 'Mural ao vivo', icon: 'mural', section: 'main' },
+    item: { label: 'Mural ao vivo', icon: 'wall', section: 'main' },
     title: 'Mural ao vivo',
     sub: 'Um card por sessão aberta nesta máquina',
-    icon: 'mural',
+    icon: 'wall',
     file: '/ui/screens/wall.js', // #34
   },
   {
     id: 'sessions',
     route: '/ui/sessions',
-    item: { label: 'Sessões', icon: 'sessoes', section: 'main' },
+    item: { label: 'Sessões', icon: 'sessions', section: 'main' },
     title: 'Sessões',
     sub: 'As sessões registradas nesta máquina',
-    icon: 'sessoes',
+    icon: 'sessions',
     file: '/ui/screens/sessions.js', // #28
   },
   {
     id: 'feed',
     route: '/ui/feed',
-    item: { label: 'Feed de atividade', icon: 'atividade', section: 'main' },
+    item: { label: 'Feed de atividade', icon: 'activity', section: 'main' },
     title: 'Feed de atividade',
     sub: 'Todos os eventos das sessões, ao vivo',
-    icon: 'atividade',
+    icon: 'activity',
     file: '/ui/screens/feed.js', // #94
   },
   {
@@ -68,7 +68,7 @@ export const SCREENS = [
     highlights: 'sessions',
     title: 'Sessão',
     sub: null,
-    icon: 'sessoes',
+    icon: 'sessions',
     file: '/ui/screens/session-detail.js', // #29 and #30
   },
   {
@@ -129,19 +129,19 @@ export const SCREENS = [
   {
     id: 'history',
     route: '/ui/history',
-    item: { label: 'Histórico', icon: 'historico', section: 'main' },
+    item: { label: 'Histórico', icon: 'history', section: 'main' },
     title: 'Histórico',
     sub: 'Sessões encerradas, por dia',
-    icon: 'historico',
+    icon: 'history',
     file: '/ui/screens/history.js', // #33
   },
   {
     id: 'decisions',
     route: '/ui/decisions',
-    item: { label: 'Decisões', icon: 'decisao', section: 'main' },
+    item: { label: 'Decisões', icon: 'decision', section: 'main' },
     title: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
-    icon: 'decisao',
+    icon: 'decision',
     file: '/ui/screens/decisions.js', // issue 103
   },
   { id: 'agent-config', route: '/ui/agent-config', item: { label: 'Agent Config', icon: 'bot', section: 'control' }, title: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icon: 'bot', file: '/ui/screens/agent-config.js' }, // #63

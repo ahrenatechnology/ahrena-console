@@ -10,7 +10,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ErroDeLeitura, escritorHttp } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo } from '../../ui/screens/decisions-common.js';
+import { haQuanto, linkDaConversa, pedidoDaAcao, pedidoDePromover, quemDecidiu, rotuloDoEscopo, rotuloDoEstado, rotuloDoTipo, stateClass } from '../../ui/screens/decisions-common.js';
 // @ts-expect-error: idem
 import { resumoDoGrupo, rotaDasDecisoes } from '../../ui/screens/decisions.js';
 // @ts-expect-error: idem
@@ -125,8 +125,8 @@ describe('a página (C21) e a aba (C20)', () => {
     const { screen: tela } = findScreen('/ui/decisions');
     assert.equal(tela.item.label, 'Decisões');
     assert.equal(tela.item.section, 'main', 'nas telas do dia a dia, antes de Máquinas e Controle');
-    assert.equal(tela.item.icon, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
-    assert.equal(tela.icon, 'decisao');
+    assert.equal(tela.item.icon, 'decision', 'o desenho do main (git-commit-horizontal), não um nome novo');
+    assert.equal(tela.icon, 'decision');
   });
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {
@@ -171,7 +171,7 @@ const JS_DA_TELA = ['screens/decisions.js', 'screens/session-detail-decisions.js
 // Igual ao `classes()` e ao `SELOS` de test/api/sessoes.test.ts (no main), para os dois testes andarem juntos.
 const classesDoCss = (caminho: string) => new Set([...readFileSync(caminho, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const classes = (arquivo: string) => classesDoCss(`${PASTA_DA_UI}${arquivo}`);
-const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 const permitida = (c: string, daMoldura: Set<string>) => c.startsWith(PREFIXO) || daMoldura.has(c) || SELOS.has(c);
 
 /** Os css das outras telas: `ui/*.css` e `ui/screens/*.css`, fora a moldura, a marca e o desta tela. */
@@ -221,7 +221,8 @@ function classesDoJs(texto: string): string[] {
     }
     for (const s of expr.matchAll(/(===|!==)?\s*(['"`])([^'"`]*)\2/g)) {
       if (s[1]) continue;
-      for (const nome of s[3]!.split(/\s+/).filter(Boolean)) achadas.push(nome.includes('${') ? nome.slice(0, nome.indexOf('${')) : nome);
+      // `${stateClass(…)}` alone is the state class (`dec-e-…`), checked on its own below.
+      for (const nome of s[3]!.split(/\s+/).filter(Boolean)) if (!nome.startsWith('${')) achadas.push(nome.includes('${') ? nome.slice(0, nome.indexOf('${')) : nome);
     }
   }
   return achadas;
@@ -277,7 +278,10 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
   test('o leitor de class: do teste acima', () => {
     assert.deepEqual(classesDoJs("el('a', { class: 'mono dec-x', href: y })"), ['mono', 'dec-x']);
     assert.deepEqual(classesDoJs("el('a', { class: g.tipo === 'branch' ? 'mono dec-n' : 'dec-n' })"), ['mono', 'dec-n', 'dec-n']);
-    assert.deepEqual(classesDoJs('el(\'a\', { class: `cartao dec-e-${d.estado}` })'), ['cartao', 'dec-e-']);
+    assert.deepEqual(classesDoJs('el(\'a\', { class: `card dec-e-${d.estado}` })'), ['card', 'dec-e-']);
+    assert.deepEqual(classesDoJs('el(\'a\', { class: `card ${stateClass(d.estado)}` })'), ['card']);
+    // The state classes are in English; the API value stays as it comes.
+    assert.deepEqual(['a_confirmar', 'vigente', 'descartada', 'substituida'].map(stateClass), ['dec-e-to-confirm', 'dec-e-current', 'dec-e-dismissed', 'dec-e-superseded']);
     assert.deepEqual(classesDoJs("el('a', { class: v === w ? 'on' : null })"), ['on'], 'e acha a que não tem prefixo');
   });
 
@@ -302,10 +306,10 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     }
 
     // C20: lista e coluna lateral lado a lado só enquanto cabem com o mínimo das duas.
-    const grade = /\.dec-grade \{[^}]*grid-template-columns: minmax\((\d+)px, 1fr\) minmax\((\d+)px, (\d+)px\); gap: (\d+)px;/.exec(css);
+    const grade = /\.dec-grid \{[^}]*grid-template-columns: minmax\((\d+)px, 1fr\) minmax\((\d+)px, (\d+)px\); gap: (\d+)px;/.exec(css);
     assert.ok(grade, 'a grade da aba declara os mínimos em px');
     const [lista, lado, ladoMax, gap] = grade!.slice(1).map(Number) as [number, number, number, number];
-    const corte = /@media \(max-width: (\d+)px\) \{\s*\.dec-grade \{ grid-template-columns: minmax\(0, 1fr\); \}/.exec(css);
+    const corte = /@media \(max-width: (\d+)px\) \{\s*\.dec-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/.exec(css);
     assert.ok(corte, 'abaixo de uma largura a coluna lateral empilha');
     const empilha = Number(corte![1]);
     assert.ok(lista + gap + lado + FOLGA <= area(empilha + 1), `lado a lado em ${empilha + 1}: ${lista + gap + lado + FOLGA} > ${area(empilha + 1)}`);

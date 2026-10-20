@@ -6,19 +6,19 @@ import { el, icone } from './dom.js';
 /** Esqueleto em blocos de três linhas, enquanto a primeira leitura não volta. */
 export function carregando({ rotulo = 'Carregando', blocos = 3 } = {}) {
   const linhas = [];
-  for (let i = 0; i < blocos; i++) linhas.push(el('div', { class: 'osso curto' }), el('div', { class: 'osso' }), el('div', { class: 'osso medio' }));
-  return el('section', { class: 'cartao estado carregando', 'aria-busy': 'true', 'aria-label': rotulo }, el('div', { class: 'olhinho' }, rotulo), ...linhas);
+  for (let i = 0; i < blocos; i++) linhas.push(el('div', { class: 'bone short' }), el('div', { class: 'bone' }), el('div', { class: 'bone medium' }));
+  return el('section', { class: 'card state loading', 'aria-busy': 'true', 'aria-label': rotulo }, el('div', { class: 'eyebrow' }, rotulo), ...linhas);
 }
 
 /** Nada para mostrar: ícone, título, texto e, se houver, uma ação em botão contornado. */
-export function vazio({ icone: nome = 'vazio', titulo, texto, acao = null }) {
+export function vazio({ icone: nome = 'empty', titulo, texto, acao = null }) {
   return el(
     'section',
-    { class: 'cartao estado centro' },
-    el('div', { class: 'selo' }, icone(nome)),
+    { class: 'card state center' },
+    el('div', { class: 'seal' }, icone(nome)),
     el('h2', {}, titulo),
     texto ? el('p', {}, texto) : null,
-    acao ? el('button', { type: 'button', class: 'btn contorno', aoClicar: acao.aoClicar }, acao.icone ? icone(acao.icone) : null, acao.rotulo) : null,
+    acao ? el('button', { type: 'button', class: 'btn outline', aoClicar: acao.aoClicar }, acao.icone ? icone(acao.icone) : null, acao.rotulo) : null,
   );
 }
 
@@ -26,11 +26,11 @@ export function vazio({ icone: nome = 'vazio', titulo, texto, acao = null }) {
 export function erro({ titulo = 'Sem conexão com o núcleo', texto, tentar = null }) {
   return el(
     'section',
-    { class: 'cartao estado centro', role: 'alert' },
-    el('div', { class: 'selo erro' }, icone('sem-conexao')),
+    { class: 'card state center', role: 'alert' },
+    el('div', { class: 'seal error' }, icone('offline')),
     el('h2', {}, titulo),
     texto ? el('p', {}, texto) : null,
-    tentar ? el('button', { type: 'button', class: 'btn cheio', aoClicar: tentar }, icone('atualizar'), 'Tentar de novo') : null,
+    tentar ? el('button', { type: 'button', class: 'btn filled', aoClicar: tentar }, icone('refresh'), 'Tentar de novo') : null,
   );
 }
 
@@ -38,9 +38,9 @@ export function erro({ titulo = 'Sem conexão com o núcleo', texto, tentar = nu
 export function faixaDeErro({ titulo, texto, acao = null }) {
   return el(
     'div',
-    { class: 'faixa-erro', role: 'alert' },
-    icone('erro'),
+    { class: 'error-band', role: 'alert' },
+    icone('error'),
     el('p', {}, el('b', {}, titulo), texto ? ` ${texto}` : null),
-    acao ? el('button', { type: 'button', class: 'btn contorno', aoClicar: acao.aoClicar }, acao.rotulo) : null,
+    acao ? el('button', { type: 'button', class: 'btn outline', aoClicar: acao.aoClicar }, acao.rotulo) : null,
   );
 }

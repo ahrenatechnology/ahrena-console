@@ -114,24 +114,24 @@ function linha(s) {
   const anterior = s.anterior
     ? el(
         'div',
-        { class: 'hist-o hist-trunc hist-continuou' },
-        icone('continuou'),
+        { class: 'hist-o hist-trunc hist-continued' },
+        icone('continued'),
         ' continuou depois do ',
         el('code', {}, '/clear'),
         ' em ',
-        el('a', { class: 'hist-accent hist-anterior', href: rotaDaSessao(String(s.anterior.id)) }, s.anterior.titulo || idCurto(s.anterior.id)),
+        el('a', { class: 'hist-accent hist-previous', href: rotaDaSessao(String(s.anterior.id)) }, s.anterior.titulo || idCurto(s.anterior.id)),
       )
     : null;
   return el(
     'div',
-    { class: 'hist-linha' },
+    { class: 'hist-row' },
     badge(s.status),
-    el('div', { class: 'hist-trunc hist-bloco' }, el('a', { class: 'hist-alvo', href: rotaDaSessao(id) }, el('b', { class: 'hist-titulo' }, s.titulo || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, idCurto(id)), anterior),
-    el('span', { class: 'hist-o mono hist-trunc hist-projeto' }, s.projeto || '—'),
-    el('span', { class: 'hist-o mono hist-trunc hist-modelo' }, s.modelo || '—'),
-    el('span', { class: 'hist-o mono hist-duracao' }, formatarDuracao(s.duracaoMs)),
-    el('span', { class: 'mono hist-custo' }, formatarCusto(s.custoUsd)),
-    el('span', { class: 'hist-muted hist-seta' }, icone('chevron-direita')),
+    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: rotaDaSessao(id) }, el('b', { class: 'hist-title' }, s.titulo || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, idCurto(id)), anterior),
+    el('span', { class: 'hist-o mono hist-trunc hist-project' }, s.projeto || '—'),
+    el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.modelo || '—'),
+    el('span', { class: 'hist-o mono hist-duration' }, formatarDuracao(s.duracaoMs)),
+    el('span', { class: 'mono hist-cost' }, formatarCusto(s.custoUsd)),
+    el('span', { class: 'hist-muted hist-arrow' }, icone('chevron-right')),
   );
 }
 
@@ -140,9 +140,9 @@ function grupo(dia, hoje) {
   const n = dia.sessoes.length;
   return el(
     'section',
-    { class: 'hist-grupo', 'aria-label': rotulo },
-    el('h2', { class: 'olhinho hist-dia' }, icone('calendario'), rotulo, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
-    el('div', { class: 'cartao hist-linhas' }, ...dia.sessoes.map(linha)),
+    { class: 'hist-group', 'aria-label': rotulo },
+    el('h2', { class: 'eyebrow hist-day' }, icone('calendar'), rotulo, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
+    el('div', { class: 'card hist-rows' }, ...dia.sessoes.map(linha)),
   );
 }
 
@@ -150,19 +150,19 @@ function grupo(dia, hoje) {
 
 export function montar(area, ctx) {
   // O estilo da tela, uma vez por página.
-  if (!document.querySelector('link[data-tela="historico"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/history.css', 'data-tela': 'historico' }));
+  if (!document.querySelector('link[data-screen="history"]')) {
+    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/history.css', 'data-screen': 'history' }));
   }
   const entrada = el('input', { type: 'search', placeholder: 'Buscar…', 'aria-label': 'Buscar no histórico', maxlength: BUSCA_MAXIMA, autocomplete: 'off', spellcheck: 'false' });
-  const campo = el('label', { class: 'hist-busca' }, icone('buscar'), entrada);
-  const cab = cabecalho({ icone: 'historico', titulo: 'Histórico', sub: 'Sessões encerradas, por dia', acoes: [campo] });
+  const campo = el('label', { class: 'hist-search' }, icone('search'), entrada);
+  const cab = cabecalho({ icone: 'history', titulo: 'Histórico', sub: 'Sessões encerradas, por dia', acoes: [campo] });
   // Três regiões: a faixa do ao vivo, a lista e o rodapé (faixa da página seguinte ou sentinela).
   // As faixas são nós estáveis: um redesenho da lista não as recria nem as anuncia de novo.
-  const topo = el('div', { class: 'hist-regiao', hidden: true });
-  const lista = el('div', { class: 'hist-regiao' });
-  const rodape = el('div', { class: 'hist-regiao', hidden: true });
-  const sentinela = el('div', { class: 'hist-sentinela', 'aria-hidden': 'true' });
-  const corpo = el('div', { class: 'hist-corpo' }, topo, lista, rodape);
+  const topo = el('div', { class: 'hist-region', hidden: true });
+  const lista = el('div', { class: 'hist-region' });
+  const rodape = el('div', { class: 'hist-region', hidden: true });
+  const sentinela = el('div', { class: 'hist-sentinel', 'aria-hidden': 'true' });
+  const corpo = el('div', { class: 'hist-body' }, topo, lista, rodape);
   area.replaceChildren(cab, corpo);
 
   let busca = '';
@@ -206,7 +206,7 @@ export function montar(area, ctx) {
 
   function focarDepoisDeTentar(link) {
     if (corpo.contains(document.activeElement)) return;
-    (link ?? lista.querySelector('a.hist-alvo') ?? entrada).focus();
+    (link ?? lista.querySelector('a.hist-target') ?? entrada).focus();
   }
 
   function desenharLista() {
@@ -289,10 +289,10 @@ export function montar(area, ctx) {
   }
 
   async function tentarMais() {
-    const antes = lista.querySelectorAll('a.hist-alvo').length;
+    const antes = lista.querySelectorAll('a.hist-target').length;
     await carregarMais();
     // Deu certo: o foco vai para a primeira sessão que chegou.
-    focarDepoisDeTentar(lista.querySelectorAll('a.hist-alvo')[antes]);
+    focarDepoisDeTentar(lista.querySelectorAll('a.hist-target')[antes]);
   }
 
   async function releer() {

@@ -69,10 +69,10 @@ export function rotuloAgentes(n) {
 
 /** O motivo da espera: rótulo, ícone e se é urgente (peso maior no selo). */
 const MOTIVOS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permissao', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrompida', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
-  session_start: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
+  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
+  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
+  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
+  session_start: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
 };
 
 export function motivo(m) {
@@ -142,9 +142,9 @@ function selos(st, mot) {
   const m = motivo(mot);
   return el(
     'div',
-    { class: 'kb-selos' },
-    el('span', { class: `kb-selo-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo),
-    m ? el('span', { class: `kb-selo-mot${m.urgente ? '' : ' kb-leve'}` }, icone(m.icone), m.rotulo) : null,
+    { class: 'kb-badges' },
+    el('span', { class: `kb-badge-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo),
+    m ? el('span', { class: `kb-badge-reason${m.urgente ? '' : ' kb-soft'}` }, icone(m.icone), m.rotulo) : null,
   );
 }
 
@@ -160,18 +160,18 @@ function cardDeSessao(s) {
   const custo = formatarCusto(s.custoUsd);
   return el(
     'a',
-    { class: `cartao kb-kc kb-st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
-    el('div', { class: 'kb-l1' }, avatar('pasta'), el('div', { class: 'kb-nome' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
+    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
+    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
     selos(s.status, s.motivo),
     s.ultimoPrompt ? el('blockquote', {}, s.ultimoPrompt) : null,
     s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
     el(
       'div',
-      { class: 'kb-pe' },
+      { class: 'kb-foot' },
       info('bot', rotuloAgentes(s.agentes)),
-      s.modelo ? info('modelo', s.modelo) : null,
-      custo ? info('moedas', custo) : null,
-      info('duracao', formatarDuracao(s.duracaoMs), s.rodando ? 'kb-dur kb-rodando' : 'kb-dur'),
+      s.modelo ? info('model', s.modelo) : null,
+      custo ? info('coins', custo) : null,
+      info('duration', formatarDuracao(s.duracaoMs), s.rodando ? 'kb-dur kb-running' : 'kb-dur'),
     ),
   );
 }
@@ -179,10 +179,10 @@ function cardDeSessao(s) {
 function cardDeAgente(a) {
   return el(
     'a',
-    { class: `cartao kb-kc kb-agente kb-st-${status(a.status).cor}`, href: hrefDaSessao(a.sessaoId), title: a.descricao || a.nome || null },
-    el('div', { class: 'kb-l1' }, avatar(a.principal ? 'bot' : 'subagente'), el('div', { class: 'kb-nome' }, el('div', { class: 'kb-tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
+    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: hrefDaSessao(a.sessaoId), title: a.descricao || a.nome || null },
+    el('div', { class: 'kb-l1' }, avatar(a.principal ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
     selos(a.status, a.motivo),
-    el('div', { class: 'kb-pe' }, a.modelo ? info('modelo', a.modelo) : null, info('duracao', formatarDuracao(a.duracaoMs), a.rodando ? 'kb-dur kb-rodando' : 'kb-dur')),
+    el('div', { class: 'kb-foot' }, a.modelo ? info('model', a.modelo) : null, info('duration', formatarDuracao(a.duracaoMs), a.rodando ? 'kb-dur kb-running' : 'kb-dur')),
   );
 }
 
@@ -199,7 +199,7 @@ export async function montar(area, ctx) {
     VISOES.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === visao), aoClicar: () => trocar(v) }, v === 'agentes' ? 'Agentes' : 'Sessões')]),
   );
   const alternador = el('div', { class: 'kb-seg', role: 'group', 'aria-label': 'Visão do Kanban' }, botoes.agentes, botoes.sessoes);
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar');
+  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
   const cab = cabecalho({ icone: 'kanban', titulo: 'Kanban', sub: SUB[visao], acoes: [alternador, atualizar] });
   const sub = cab.querySelector('.sub');
 
@@ -238,7 +238,7 @@ export async function montar(area, ctx) {
       const texto = e?.message ?? String(e);
       if (quadroNoAr) {
         // O quadro de antes fica; a faixa diz que esta leitura falhou.
-        area.querySelector('.faixa-erro')?.remove();
+        area.querySelector('.error-band')?.remove();
         cab.after(faixaDeErro({ titulo: 'O quadro não atualizou.', texto, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar() } }));
       } else {
         area.replaceChildren(cab, erro({ texto, tentar: () => desenhar() }));
@@ -263,7 +263,7 @@ export async function montar(area, ctx) {
     const vistos = new Set((c.itens ?? []).map((i) => i.id));
     let mostrados = vistos.size;
     let temMais = Boolean(c.temMais);
-    const mais = el('button', { type: 'button', class: 'kb-mais' });
+    const mais = el('button', { type: 'button', class: 'kb-more' });
 
     function rotular(texto = null) {
       const n = faltam({ total: Number(contador.textContent) }, mostrados);
@@ -300,7 +300,7 @@ export async function montar(area, ctx) {
     return el(
       'section',
       { class: 'kb-col', 'aria-label': `${c.rotulo}: ${c.total}` },
-      el('h2', { class: 'kb-cab' }, el('span', { class: `kb-ponto kb-d-${cor}` }), el('span', { class: `kb-c-${cor}`, title: c.rotulo }, c.rotulo), contador),
+      el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${cor}` }), el('span', { class: `kb-c-${cor}`, title: c.rotulo }, c.rotulo), contador),
       lista,
       mais,
     );
@@ -325,9 +325,9 @@ export async function montar(area, ctx) {
 
 /** Põe `kanban.css` no <head>, uma vez só; devolve o <link> para a limpeza. */
 function ligarFolha() {
-  const ja = document.head.querySelector('link[data-tela="kanban"]');
+  const ja = document.head.querySelector('link[data-screen="kanban"]');
   if (ja) return ja;
-  const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-tela': 'kanban' });
+  const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-screen': 'kanban' });
   document.head.append(link);
   return link;
 }

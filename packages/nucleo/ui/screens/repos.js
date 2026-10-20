@@ -15,7 +15,7 @@ const RELER_MS = 5000;
 
 /** O estilo das duas telas de repositórios, uma vez por página. */
 export function carregarEstilo() {
-  if (!document.querySelector('link[data-tela="repos"]')) document.head.append(el('link', { rel: 'stylesheet', href: '/ui/repos.css', 'data-tela': 'repos' }));
+  if (!document.querySelector('link[data-screen="repos"]')) document.head.append(el('link', { rel: 'stylesheet', href: '/ui/repos.css', 'data-screen': 'repos' }));
 }
 
 const CI = {
@@ -28,7 +28,7 @@ const CI = {
 export function pilulaDeCi(ci) {
   const c = CI[ci];
   if (!c) return el('span', { class: 'repo-muted' }, TRACO);
-  return el('span', { class: `repo-pill ${c[0]}` }, el('span', { 'aria-hidden': 'true' }, c[1]), el('span', { class: 'repo-so-leitor' }, c[2]));
+  return el('span', { class: `repo-pill ${c[0]}` }, el('span', { 'aria-hidden': 'true' }, c[1]), el('span', { class: 'repo-sr-only' }, c[2]));
 }
 
 /** `/ui/repos/<dono>/<repo>`, com os segmentos escapados. */
@@ -51,8 +51,8 @@ function spark(valores) {
 function stat(rotulo, valor, sub, nomeIcone, cor) {
   return el(
     'section',
-    { class: 'cartao repo-stat' },
-    el('span', { class: 'repo-stat-rot' }, rotulo),
+    { class: 'card repo-stat' },
+    el('span', { class: 'repo-stat-label' }, rotulo),
     el('span', { class: `repo-stat-ic ${cor}` }, icone(nomeIcone)),
     el('span', { class: 'repo-stat-v' }, valor),
     el('span', { class: 'repo-stat-s' }, sub),
@@ -63,20 +63,20 @@ function sessoes({ ativas, precisam }) {
   if (!ativas) return el('span', { class: 'repo-muted' }, TRACO);
   return el(
     'span',
-    { class: 'repo-sessoes-dentro' },
-    el('span', { class: 'badge b-active', title: `${ativas} ${ativas === 1 ? 'sessão viva' : 'sessões vivas'}` }, el('span', { class: 'p' }), String(ativas), el('span', { class: 'repo-so-leitor' }, ativas === 1 ? ' sessão viva' : ' sessões vivas')),
-    precisam ? el('span', { class: 'mot' }, `${precisam} ${precisam === 1 ? 'precisa' : 'precisam'} de você`) : null,
+    { class: 'repo-sessions-inner' },
+    el('span', { class: 'badge b-active', title: `${ativas} ${ativas === 1 ? 'sessão viva' : 'sessões vivas'}` }, el('span', { class: 'p' }), String(ativas), el('span', { class: 'repo-sr-only' }, ativas === 1 ? ' sessão viva' : ' sessões vivas')),
+    precisam ? el('span', { class: 'reason' }, `${precisam} ${precisam === 1 ? 'precisa' : 'precisam'} de você`) : null,
   );
 }
 
 const COLUNAS = [
-  ['repo-col-nome', 'Repositório'],
-  ['repo-col-ling', 'Linguagem'],
+  ['repo-col-name', 'Repositório'],
+  ['repo-col-lang', 'Linguagem'],
   ['repo-col-commits', 'Commits · 12 sem.'],
   ['repo-col-issues', 'Issues'],
   ['repo-col-prs', 'PRs'],
   ['repo-col-ci', 'CI'],
-  ['repo-col-sessoes', 'Sessões'],
+  ['repo-col-sessions', 'Sessões'],
   ['repo-col-push', 'Último push'],
 ];
 
@@ -90,7 +90,7 @@ export async function montar(area, ctx) {
 
   // ---------- cabeçalho ----------
   const chipConta = el('span', { class: 'repo-chip', hidden: true });
-  const atualizar = el('button', { type: 'button', class: 'btn' }, icone('atualizar'), 'Atualizar');
+  const atualizar = el('button', { type: 'button', class: 'btn' }, icone('refresh'), 'Atualizar');
   atualizar.addEventListener('click', async () => {
     atualizar.disabled = true;
     atualizar.setAttribute('aria-busy', 'true');
@@ -126,16 +126,16 @@ export async function montar(area, ctx) {
 
   const filtros = el(
     'div',
-    { class: 'cartao repo-filtros', role: 'search' },
-    el('label', { class: 'repo-campo repo-campo-busca' }, icone('busca'), busca),
-    el('label', { class: 'repo-campo repo-campo-lista' }, orgs, icone('chevron-baixo')),
-    el('label', { class: 'repo-campo repo-campo-lista' }, ordem, icone('chevron-baixo')),
+    { class: 'card repo-filters', role: 'search' },
+    el('label', { class: 'repo-field repo-field-search' }, icone('search'), busca),
+    el('label', { class: 'repo-field repo-field-list' }, orgs, icone('chevron-down')),
+    el('label', { class: 'repo-field repo-field-list' }, ordem, icone('chevron-down')),
     el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Visibilidade' }, ...botoesVis),
   );
 
   const faixa = el('div', { hidden: true });
   const stats = el('div', { class: 'repo-stats' });
-  const lista = el('div', { class: 'repo-grupos' });
+  const lista = el('div', { class: 'repo-groups' });
 
   function preencherOrgs() {
     const donos = dados.grupos.map((g) => g.dono);
@@ -152,10 +152,10 @@ export async function montar(area, ctx) {
   function desenharStats() {
     const r = dados.resumo;
     stats.replaceChildren(
-      stat('Organizações', inteiro(r.organizacoes), '+ a conta pessoal', 'organizacao', 'repo-c-accent'),
+      stat('Organizações', inteiro(r.organizacoes), '+ a conta pessoal', 'organization', 'repo-c-accent'),
       stat('Repositórios', inteiro(r.repositorios), `${inteiro(r.comSessoesNoMes)} com sessões este mês`, 'repos', 'repo-c-accent'),
-      stat('PRs abertos', inteiro(r.prsAbertos), `${inteiro(r.prsEsperandoReview)} esperando review`, 'git-pull-request', 'repo-c-espera'),
-      stat('Issues abertas', inteiro(r.issuesAbertas), `${inteiro(r.issuesFechadasNaSemana)} fechadas na semana`, 'ponto', 'repo-c-accent'),
+      stat('PRs abertos', inteiro(r.prsAbertos), `${inteiro(r.prsEsperandoReview)} esperando review`, 'git-pull-request', 'repo-c-wait'),
+      stat('Issues abertas', inteiro(r.issuesAbertas), `${inteiro(r.issuesFechadasNaSemana)} fechadas na semana`, 'dot', 'repo-c-accent'),
       stat('CI', porcentagem(r.ci.taxaVerde), r.ci.taxaVerde === null ? `sem execuções · ${r.ci.dias} dias` : `de execuções verdes · ${r.ci.dias} dias`, 'ok', 'repo-c-ok'),
     );
   }
@@ -165,16 +165,16 @@ export async function montar(area, ctx) {
     const completo = `${r.completo} · ${r.visibilidade === 'publico' ? 'público' : 'privado'}`;
     const tr = el(
       'tr',
-      { class: 'repo-linha' },
-      el('td', { class: 'repo-nome' }, el('a', { href, title: r.nome }, r.nome), el('small', { title: completo }, completo)),
+      { class: 'repo-row' },
+      el('td', { class: 'repo-name' }, el('a', { href, title: r.nome }, r.nome), el('small', { title: completo }, completo)),
       el('td', { title: r.linguagem }, r.linguagem ?? el('span', { class: 'repo-muted' }, TRACO)),
       el('td', {}, spark(r.commits12)),
       el('td', { class: 'repo-num' }, inteiro(r.issuesAbertas)),
       el('td', { class: 'repo-num' }, inteiro(r.prsAbertos)),
       el('td', {}, pilulaDeCi(r.ci)),
-      el('td', { class: 'repo-sessoes' }, sessoes(r.sessoes)),
+      el('td', { class: 'repo-sessions' }, sessoes(r.sessoes)),
       el('td', { class: 'repo-muted', title: r.ultimoPush ? new Date(r.ultimoPush).toLocaleString('pt-BR') : null }, relativo(r.ultimoPush, agora)),
-      el('td', { class: 'repo-seta' }, icone('chevron-direita')),
+      el('td', { class: 'repo-arrow' }, icone('chevron-right')),
     );
     // A linha inteira leva ao repositório; o link do nome é o caminho pelo teclado.
     tr.addEventListener('click', (ev) => {
@@ -189,15 +189,15 @@ export async function montar(area, ctx) {
     const n = g.repos.length;
     return el(
       'section',
-      { class: 'repo-grupo' },
-      el('div', { class: 'repo-grupo-cab' }, icone(g.tipo === 'pessoal' ? 'pessoa' : 'organizacao'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
+      { class: 'repo-group' },
+      el('div', { class: 'repo-group-head' }, icone(g.tipo === 'pessoal' ? 'person' : 'organization'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
       el(
         'div',
-        { class: 'cartao' },
+        { class: 'card' },
         el(
           'table',
-          { class: 'repo-tabela' },
-          el('colgroup', {}, ...COLUNAS.map(([c]) => el('col', { class: c })), el('col', { class: 'repo-col-seta' })),
+          { class: 'repo-table' },
+          el('colgroup', {}, ...COLUNAS.map(([c]) => el('col', { class: c })), el('col', { class: 'repo-col-arrow' })),
           el('thead', {}, el('tr', {}, ...COLUNAS.map(([, t]) => el('th', { scope: 'col' }, t)), el('th', { scope: 'col', 'aria-label': 'Abrir' }))),
           el('tbody', {}, ...g.repos.map((r) => linha(r, agora))),
         ),
@@ -211,7 +211,7 @@ export async function montar(area, ctx) {
     const focado = lista.contains(document.activeElement) ? document.activeElement.getAttribute('href') : null;
     const grupos = filtrarRepos(dados.grupos, filtro);
     const agora = Date.now();
-    lista.replaceChildren(...(grupos.length ? grupos.map((g) => grupo(g, agora)) : [vazio({ icone: 'busca', titulo: 'Nenhum repositório com esse filtro', texto: 'Mude a busca, a organização ou a visibilidade.' })]));
+    lista.replaceChildren(...(grupos.length ? grupos.map((g) => grupo(g, agora)) : [vazio({ icone: 'search', titulo: 'Nenhum repositório com esse filtro', texto: 'Mude a busca, a organização ou a visibilidade.' })]));
     if (focado) [...lista.querySelectorAll('a[href]')].find((a) => a.getAttribute('href') === focado)?.focus();
   }
 

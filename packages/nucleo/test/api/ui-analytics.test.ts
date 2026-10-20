@@ -258,8 +258,8 @@ describe('Analytics: formatação', () => {
     const vars: Record<string, string> = { '--rose-500': ' #df285d', '--green-500': '#1baf7a', '--yellow-500': '#ffc30a', '--gray-200': '#a6a6aa' };
     Object.assign(globalThis, { getComputedStyle: () => ({ getPropertyValue: (k: string) => vars[k] ?? '' }) });
     try {
-      assert.equal(classeDaConta('#DF285D'), 'an-conta-rosa');
-      assert.equal(classeDaConta('#1baf7a'), 'an-conta-verde');
+      assert.equal(classeDaConta('#DF285D'), 'an-account-pink');
+      assert.equal(classeDaConta('#1baf7a'), 'an-account-green');
       assert.equal(classeDaConta('#123456'), null);
       assert.equal(classeDaConta(null), null);
     } finally {
@@ -290,9 +290,9 @@ describe('Analytics: Visão geral', () => {
         stats.map((s) => s.textContent),
         ['Sessões4124 ativas', 'Agentes1.0867 ativos', 'Tokens1,9 B71% de cache', 'Custo~US$ 341estimativa · 30 dias', 'Eventos48,1 mil~117 por sessão'],
       );
-      assert.equal(comClasse(area, 'an-contas').length, 0, 'uma conta só: sem divisão');
+      assert.equal(comClasse(area, 'an-accounts').length, 0, 'uma conta só: sem divisão');
 
-      const abas = comClasse(area, 'an-abas');
+      const abas = comClasse(area, 'an-tabs');
       assert.equal(abas.length, 1);
       const links = porTag(abas[0]!, 'a');
       assert.deepEqual(links.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')]), [
@@ -300,24 +300,24 @@ describe('Analytics: Visão geral', () => {
         ['Custo', '/ui/analytics/cost', null],
       ]);
 
-      assert.equal(comClasse(area, 'an-cel').length, 364, 'heatmap: uma célula por dia');
-      assert.ok(comClasse(area, 'an-cel').every((c) => porTag(c, 'title').length === 1), 'toda célula tem <title>');
+      assert.equal(comClasse(area, 'an-cell').length, 364, 'heatmap: uma célula por dia');
+      assert.ok(comClasse(area, 'an-cell').every((c) => porTag(c, 'title').length === 1), 'toda célula tem <title>');
       assert.ok(comClasse(area, 'an-n4').length > 0 && comClasse(area, 'an-n0').length > 0);
       assert.match(texto, /seg.*qua.*sex/);
       assert.match(texto, /menos.*mais/);
 
       const colunas = comClasse(area, 'an-col');
       assert.equal(colunas.length, 30);
-      assert.ok(colunas.at(-1)!.classes.includes('an-atual'));
+      assert.ok(colunas.at(-1)!.classes.includes('an-current'));
       assert.match(texto, /Pico 47 em 13 out/);
       assert.match(texto, /Total 742/);
 
-      const listas = comClasse(area, 'an-lista');
+      const listas = comClasse(area, 'an-list');
       assert.equal(listas.length, 3);
-      assert.deepEqual(comClasse(listas[0]!, 'an-linha-lista').map(visivel), ['Opus 5.51.180', 'Sonnet 5.5610', 'Haiku 5.5128']);
-      assert.equal(comClasse(listas[1]!, 'an-linha-lista').length, 5, 'ferramentas: top 5');
-      assert.deepEqual(comClasse(listas[2]!, 'an-linha-lista').map((l) => l.textContent.slice(0, 3)), ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']);
-      for (const g of comClasse(area, 'an-graf')) assert.ok(g.getAttribute('aria-label'), 'todo gráfico tem aria-label');
+      assert.deepEqual(comClasse(listas[0]!, 'an-list-row').map(visivel), ['Opus 5.51.180', 'Sonnet 5.5610', 'Haiku 5.5128']);
+      assert.equal(comClasse(listas[1]!, 'an-list-row').length, 5, 'ferramentas: top 5');
+      assert.deepEqual(comClasse(listas[2]!, 'an-list-row').map((l) => l.textContent.slice(0, 3)), ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']);
+      for (const g of comClasse(area, 'an-chart')) assert.ok(g.getAttribute('aria-label'), 'todo gráfico tem aria-label');
       assert.match(texto, /\d{2}:\d{2}:\d{2}/, 'a hora em que os números foram calculados');
     } finally {
       limpar();
@@ -328,11 +328,11 @@ describe('Analytics: Visão geral', () => {
     const { area, limpar } = await montarTela({ ler: async () => visao({ contas: [CONTA_A, CONTA_B] }) });
     try {
       const custoCard = comClasse(area, 'an-stat').find((s) => s.getAttribute('data-card') === 'custo')!;
-      const linhas = porTag(comClasse(custoCard, 'an-contas')[0]!, 'li');
+      const linhas = porTag(comClasse(custoCard, 'an-accounts')[0]!, 'li');
       assert.deepEqual(linhas.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
       assert.equal(linhas[0]!.getAttribute('title'), null);
       assert.equal(linhas[1]!.getAttribute('title'), 'Parcial: sem preço para modelo-novo');
-      assert.equal(comClasse(area, 'an-contas').length, 1);
+      assert.equal(comClasse(area, 'an-accounts').length, 1);
     } finally {
       limpar();
     }
@@ -344,9 +344,9 @@ describe('Analytics: Visão geral', () => {
     d.atividade.dias = d.atividade.dias.slice(6); // 358 dias, de uma segunda até hoje
     const { area, limpar } = await montarTela({ ler: async () => d });
     try {
-      const linhas = porTag(comClasse(area, 'an-contas')[0]!, 'li');
-      assert.deepEqual(linhas.map((l) => [l.getAttribute('data-conta'), l.textContent]), [[CONTA_A.id, 'pessoal~US$ 300,00'], ['sem-conta', 'Sem contasem preço']]);
-      assert.equal(comClasse(area, 'an-cel').length, 358);
+      const linhas = porTag(comClasse(area, 'an-accounts')[0]!, 'li');
+      assert.deepEqual(linhas.map((l) => [l.getAttribute('data-account'), l.textContent]), [[CONTA_A.id, 'pessoal~US$ 300,00'], ['sem-conta', 'Sem contasem preço']]);
+      assert.equal(comClasse(area, 'an-cell').length, 358);
     } finally {
       limpar();
     }
@@ -396,7 +396,7 @@ describe('Analytics: Visão geral', () => {
       assert.equal(rotas.length, 2, 'uma releitura por rajada');
       falha = true;
       reiniciar.forEach((f) => f());
-      await ate(() => comClasse(area, 'faixa-erro').length === 1);
+      await ate(() => comClasse(area, 'error-band').length === 1);
       assert.equal(comClasse(area, 'an-stat').length, 5, 'os números da última leitura ficam');
     } finally {
       limpar();
@@ -413,35 +413,35 @@ describe('Analytics: Custo', () => {
       assert.match(rotas[0]!, /^\/api\/analytics\/cost\?days=30&tz=[^&]+$/);
       const texto = area.textContent;
       assert.match(texto, /Custo estimado pelo transcript, com o preço de cada modelo/);
-      const botoes = porTag(area, 'button').filter((b) => b.getAttribute('data-dias'));
+      const botoes = porTag(area, 'button').filter((b) => b.getAttribute('data-days'));
       assert.deepEqual(botoes.map((b) => [b.textContent, b.getAttribute('aria-pressed')]), [['7 dias', 'false'], ['30 dias', 'true'], ['90 dias', 'false']]);
-      assert.equal(porTag(comClasse(area, 'an-abas')[0]!, 'a').find((a) => a.getAttribute('aria-current') === 'page')!.textContent, 'Custo');
+      assert.equal(porTag(comClasse(area, 'an-tabs')[0]!, 'a').find((a) => a.getAttribute('aria-current') === 'page')!.textContent, 'Custo');
 
       assert.deepEqual(
         comClasse(area, 'an-stat').map((s) => s.textContent),
         ['Hoje~US$ 12,409 sessões', '30 dias~US$ 341média ~US$ 11,40 por dia', 'Cache71%dos tokens de entrada', 'Sem preço1modelo sem tabela'],
       );
-      assert.equal(comClasse(area, 'an-linha').length, 2, 'o dia sem preço interrompe a linha');
-      assert.equal(comClasse(area, 'an-alvo').length, 30);
-      assert.ok(comClasse(area, 'an-alvo').some((a) => /sem preço/.test(a.textContent)));
+      assert.equal(comClasse(area, 'an-row').length, 2, 'o dia sem preço interrompe a linha');
+      assert.equal(comClasse(area, 'an-target').length, 30);
+      assert.ok(comClasse(area, 'an-target').some((a) => /sem preço/.test(a.textContent)));
       assert.match(texto, /Pico ~US\$ 18,40 em 17 out/);
       assert.match(texto, /Total ~US\$ 341/);
 
-      assert.equal(comClasse(area, 'an-fatia').length, 3);
-      const legenda = porTag(comClasse(area, 'an-legenda')[0]!, 'li').map((l) => l.textContent);
+      assert.equal(comClasse(area, 'an-slice').length, 3);
+      const legenda = porTag(comClasse(area, 'an-legend')[0]!, 'li').map((l) => l.textContent);
       assert.deepEqual(legenda, ['Opus 5.562%', 'Sonnet 5.531%', 'Haiku 5.57%', 'modelo-novosem preço']);
-      assert.match(comClasse(area, 'an-rosca')[0]!.textContent, /~US\$ 34130 dias/);
+      assert.match(comClasse(area, 'an-donut')[0]!.textContent, /~US\$ 34130 dias/);
 
-      const projetos = comClasse(comClasse(area, 'an-projetos')[0]!, 'an-linha-lista').map(visivel);
+      const projetos = comClasse(comClasse(area, 'an-projects')[0]!, 'an-list-row').map(visivel);
       assert.deepEqual(projetos, ['motor-de-regras~US$ 128,40', 'painel-de-metricas~US$ 74,90', 'sem-tabelasem preço']);
       assert.doesNotMatch(texto, /US\$ 0[,.]00/, 'sem preço nunca vira US$ 0');
 
       botoes[0]!.click();
       await ate(() => rotas.length === 2);
       assert.match(rotas[1]!, /^\/api\/analytics\/cost\?days=7&tz=/);
-      await ate(() => comClasse(area, 'an-alvo').length === 7);
+      await ate(() => comClasse(area, 'an-target').length === 7);
       assert.match(area.textContent, /7 dias~US\$ 341/);
-      assert.equal(porTag(area, 'button').find((b) => b.getAttribute('data-dias') === '7')!.getAttribute('aria-pressed'), 'true');
+      assert.equal(porTag(area, 'button').find((b) => b.getAttribute('data-days') === '7')!.getAttribute('aria-pressed'), 'true');
     } finally {
       limpar();
     }
@@ -451,10 +451,10 @@ describe('Analytics: Custo', () => {
     const duas = await montarTela({ aba: 'cost', ler: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
     try {
       const card = (id: string) => comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === id)!;
-      const periodo = porTag(comClasse(card('periodo'), 'an-contas')[0]!, 'li');
+      const periodo = porTag(comClasse(card('periodo'), 'an-accounts')[0]!, 'li');
       assert.deepEqual(periodo.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
       assert.equal(periodo[1]!.getAttribute('title'), 'Parcial: sem preço para modelo-novo');
-      const hoje = porTag(comClasse(card('hoje'), 'an-contas')[0]!, 'li');
+      const hoje = porTag(comClasse(card('hoje'), 'an-accounts')[0]!, 'li');
       assert.deepEqual(hoje.map((l) => l.textContent), ['pessoal~US$ 9,30', 'equipesem preço'], 'usd null é "sem preço", não parcial');
       assert.equal(hoje[1]!.getAttribute('title'), null);
     } finally {
@@ -462,7 +462,7 @@ describe('Analytics: Custo', () => {
     }
     const uma = await montarTela({ aba: 'cost', ler: async () => custo(30) });
     try {
-      assert.equal(comClasse(uma.area, 'an-contas').length, 0);
+      assert.equal(comClasse(uma.area, 'an-accounts').length, 0);
     } finally {
       uma.limpar();
     }
@@ -486,7 +486,7 @@ describe('Analytics: Custo', () => {
     const { area, limpar } = await montarTela({ aba: 'cost', ler: async () => custo(7, { vazio: true }) });
     try {
       assert.match(area.textContent, /Nenhum custo nos últimos 30 dias/);
-      assert.equal(porTag(area, 'button').filter((b) => b.getAttribute('data-dias')).length, 3);
+      assert.equal(porTag(area, 'button').filter((b) => b.getAttribute('data-days')).length, 3);
     } finally {
       limpar();
     }

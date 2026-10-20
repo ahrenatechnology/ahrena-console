@@ -217,16 +217,16 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
   });
 
   // O CSS de cada tela fica carregado depois que ela abre uma vez: uma classe com o mesmo nome em
-  // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `det-` e as da moldura.
-  test('o CSS do Detalhe só estiliza classes `det-` e não toca as classes de outra tela', () => {
+  // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `sd-` e as da moldura.
+  test('o CSS do Detalhe só estiliza classes `sd-` e não toca as classes de outra tela', () => {
     const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const classes = (arquivo: string) => new Set([...semComentario(arquivo).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((m) => m[1]!));
     const daMoldura = classes('shell.css');
     const minhas = [...classes('screens/session-detail.css')].filter((c) => !daMoldura.has(c));
-    assert.deepEqual(minhas.filter((c) => !c.startsWith('det-')), [], 'classe sem o prefixo det-');
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('sd-')), [], 'classe sem o prefixo sd-');
     // Nenhum seletor de elemento solto (`code`, `pre`): eles pegariam as outras telas.
     const soltos = semComentario('screens/session-detail.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
-    assert.deepEqual(soltos.filter((l) => !/^select\.det-/.test(l)), [], 'seletor de elemento fora do Detalhe');
+    assert.deepEqual(soltos.filter((l) => !/^select\.sd-/.test(l)), [], 'seletor de elemento fora do Detalhe');
     const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['screens/session-detail.css', 'shell.css', 'brand.css'].includes(a));
     assert.ok(outras.length > 0);
     for (const outra of outras) {

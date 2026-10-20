@@ -229,18 +229,18 @@ describe('formatos e registro', () => {
     const ids = SCREENS.map((x: any) => x.id);
     assert.equal(ids.indexOf('workflows'), ids.indexOf('analytics-tab') + 1);
     assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');
-    const usados = new Set<string>(['workflows', 'grafo']);
+    const usados = new Set<string>(['workflows', 'graph']);
     for (const a of ['workflows.js', 'session-detail-workflow.js']) {
       const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
       for (const [, nome] of texto.matchAll(/icone\('([a-z-]+)'\)/g)) usados.add(nome!);
       for (const [, nome] of texto.matchAll(/icone: '([a-z-]+)'/g)) usados.add(nome!);
     }
     for (const nome of usados) assert.ok(NOMES_DOS_ICONES.includes(nome), `falta o ícone ${nome}`);
-    // Sem desenho repetido com outro nome: `grafo` é o mesmo de `workflows`, por referência.
+    // Sem desenho repetido com outro nome: `graph` é o mesmo de `workflows`, por referência.
     const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
-    assert.match(dom, /ICONES\.grafo = ICONES\.workflows;/);
+    assert.match(dom, /ICONES\.graph = ICONES\.workflows;/);
     const desenhos = [...dom.matchAll(/^\s+'?([\w-]+)'?: '(<[^']*)',$/gm)];
-    for (const nome of ['workflows', 'usuarios', 'repetir', 'gantt']) {
+    for (const nome of ['workflows', 'people', 'repeat', 'gantt']) {
       const meu = desenhos.find((m) => m[1] === nome)![2];
       assert.deepEqual(desenhos.filter((m) => m[2] === meu).map((m) => m[1]), [nome], `o desenho de ${nome} se repete`);
     }
