@@ -5,9 +5,13 @@
 //
 // It imitates what the screens depend on from GitHub: ETag and 304 with `If-None-Match`, 202 while a
 // statistic "computes" (`computeFirst`), 403 on traffic and on alerts without write access.
+// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`), the content
+// batches (`RepoBlobs`, by `oid` or by `<commit>:<path>`) and the recursive tree
+// (`git/trees/HEAD?recursive=1`), with Git's `oid` (SHA-1 of `blob <size>\0<text>`).
 // Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
 // `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
+import { createHash } from 'node:crypto';
 import { SeededRandom, hash32 } from './random.ts';
 import { ROOT } from './vocabulary.ts';
 
@@ -36,6 +40,10 @@ export interface FakeRepo {
   computeFirst?: string[];
   dependabot?: number;
   codeScanning?: number | null;
+  /** The default branch's files, path → text (#183). Without them, only a README. */
+  files?: Record<string, string>;
+  /** The recursive tree comes truncated (`truncated: true`), without files 3 or more folders deep. */
+  truncatedTree?: boolean;
 }
 
 export interface FakeGithubData {
@@ -232,6 +240,37 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
   };
   const find = (owner: string, name: string) => data.repos.find((x) => x.owner.toLowerCase() === owner.toLowerCase() && x.name.toLowerCase() === name.toLowerCase()) ?? null;
   const rateLimit = { cost: 1, remaining: 4999, resetAt: iso(t0 + 3_600_000) };
+  const gitsByRepo = new Map<string, GitFake>();
+  const gitOf = (repo: FakeRepo) => {
+    const k = `${repo.owner}/${repo.name}`;
+    let g = gitsByRepo.get(k);
+    if (!g) gitsByRepo.set(k, (g = buildGit(repo)));
+    return g;
+  };
+  /** The discovery: the commit, one alias per root file and `.claude/` 3 levels deep. */
+  const discovery = (repo: FakeRepo) => {
+    const g = gitOf(repo);
+    const blob = (path: string) => (g.oids.has(path) ? { oid: g.oids.get(path) } : g.folders.has(path) ? {} : null);
+    const entries = (folder: string, level: number): unknown[] => {
+      const names = new Set<string>();
+      for (const p of [...Object.keys(g.files), ...g.folders]) if (p.startsWith(`${folder}/`)) names.add(p.slice(folder.length + 1).split('/')[0]);
+      return [...names].sort().map((name) => {
+        const path = `${folder}/${name}`;
+        if (!g.folders.has(path)) return { name, type: 'blob', oid: g.oids.get(path) };
+        return { name, type: 'tree', oid: oidOf(`tree ${path}`), ...(level < 3 ? { object: { entries: entries(path, level + 1) } } : {}) };
+      });
+    };
+    return {
+      nameWithOwner: `${repo.owner}/${repo.name}`,
+      head: { oid: g.commit, tree: { oid: g.tree } },
+      claudeMd: blob('CLAUDE.md'),
+      agentsMd: blob('AGENTS.md'),
+      dotClaudeMd: blob('.claude/CLAUDE.md'),
+      mcpJson: blob('.mcp.json'),
+      claudeDir: g.folders.has('.claude') ? { entries: entries('.claude', 1) } : null,
+    };
+  };
+
 
   // The operation names, variables and response aliases (`fechadas`, `abertas`, `mergeados`,
   // `fechadosSemMerge`) are the ones src/github/repos-source.ts sends: they stay as they are.
@@ -248,6 +287,34 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
           repositories: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
         },
       };
+    }
+    if (op === 'RepoFilesDiscovery') {
+      const repo = find(v.owner, v.name);
+      return { rateLimit, repository: repo ? discovery(repo) : null };
+    }
+    if (op === 'RepoBlobs') {
+      const repo = find(v.owner, v.name);
+      if (!repo) return { rateLimit, repository: null };
+      const g = gitOf(repo);
+      const out: Record<string, unknown> = {};
+      for (const [k, value] of Object.entries(v)) {
+        const m = /^([oe])(\d+)$/.exec(k);
+        if (!m) continue;
+        let path: string | undefined;
+        if (m[1] === 'o') path = [...g.oids].find(([, oid]) => oid === value)?.[0];
+        else {
+          const [commit, ...rest] = value.split(':');
+          path = commit === g.commit ? rest.join(':') : undefined;
+        }
+        const text = path === undefined ? undefined : g.files[path];
+        out[`b${m[2]}`] =
+          text !== undefined
+            ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, text }
+            : path !== undefined && g.folders.has(path)
+              ? {}
+              : null;
+      }
+      return { rateLimit, repository: out };
     }
     if (op === 'ReposResumo') return { rateLimit, review: { issueCount: data.awaitingReview }, fechadas: { issueCount: data.closedThisWeek } };
     if (op === 'RepoDetalhe') {
@@ -295,6 +362,14 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     const resource = m[3];
     const s = seriesOf(repo);
     const k = `${repo.owner}/${repo.name}`;
+    if (resource === 'git/trees/HEAD') {
+      const g = gitOf(repo);
+      const all = [...g.folders].map((path) => ({ path, mode: '040000', type: 'tree', sha: oidOf(`tree ${k}:${path}`) }))
+        .concat(Object.keys(g.files).map((path) => ({ path, mode: '100644', type: 'blob', sha: g.oids.get(path)!, size: Buffer.byteLength(g.files[path]) })))
+        .sort((a, b) => a.path.localeCompare(b.path));
+      const tree = repo.truncatedTree ? all.filter((e) => e.path.split('/').length <= 2) : all;
+      return { status: 200, body: { sha: g.tree, truncated: repo.truncatedTree === true, tree } };
+    }
     const stat = /^stats\/(\w+)$/.exec(resource)?.[1];
     if (stat && repo.computeFirst?.includes(stat) && !alreadyComputed.has(`${k}:${stat}`)) {
       alreadyComputed.add(`${k}:${stat}`);
@@ -358,8 +433,122 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
   return { fetch: fake as typeof fetch, calls };
 }
 
+interface GitFake {
+  files: Record<string, string>;
+  oids: Map<string, string>;
+  folders: Set<string>;
+  tree: string;
+  commit: string;
+}
+
+const oidOf = (text: string) => createHash('sha1').update(text).digest('hex');
+
+/** A file's Git `oid`: SHA-1 of `blob <bytes>\0<text>`. */
+export function blobOid(text: string): string {
+  return createHash('sha1').update(`blob ${Buffer.byteLength(text)}\0`).update(text).digest('hex');
+}
+
+function buildGit(repo: FakeRepo): GitFake {
+  const files = repo.files ?? { 'README.md': `# ${repo.name}\n` };
+  const oids = new Map(Object.entries(files).map(([p, t]) => [p, blobOid(t)] as const));
+  const folders = new Set<string>();
+  for (const p of Object.keys(files)) {
+    const parts = p.split('/');
+    for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join('/'));
+  }
+  const tree = oidOf(`tree ${[...oids].sort().map(([p, o]) => `${p}:${o}`).join('\n')}`);
+  return { files, oids, folders, tree, commit: oidOf(`commit ${repo.owner}/${repo.name}:${tree}`) };
+}
+
 const empty = () => ({ issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] });
 const page = (nodes: unknown[]) => ({ issueCount: nodes.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes });
+
+/**
+ * The demo repositories' files in the Instructions tab (#183, C32 and C33). Synthetic.
+ * - `exemplo-labs/vitrine-demo`: everything the tab shows, no warning;
+ * - `exemplo-labs/motor-de-regras`: the four warnings (truncated tree, broken settings.json,
+ *   AGENTS.md without import and an import that does not exist);
+ * - `estudio-ficticio/app-receitas`: only AGENTS.md, brought in by CLAUDE.md;
+ * - the others (like `dev-sintetico/blog-estatico`): only a README, the empty case.
+ */
+export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, string>; truncatedTree?: boolean }> = {
+  'exemplo-labs/vitrine-demo': {
+    files: {
+      'README.md': '# vitrine-demo\n\nVitrine sintética da demonstração do Ahrena Console.\n',
+      'CLAUDE.md': [
+        '# vitrine-demo',
+        '',
+        'Leia as convenções do time antes de mudar qualquer coisa.',
+        '',
+        '@AGENTS.md',
+        '@docs/style.md',
+        '@~/.claude/personal-preferences.md',
+        '',
+        '## Exemplos',
+        '',
+        'Um `@` dentro de bloco de código não é import:',
+        '',
+        '```md',
+        '@docs/not-an-import.md',
+        '```',
+        '',
+        'Nem `@docs/inline.md` num trecho de código. Dúvidas sobre o design? Fale com @colega-a.',
+        '',
+      ].join('\n'),
+      'AGENTS.md': '# Convenções\n\n- Código, rotas e chaves JSON em inglês; a tela em pt-BR.\n- Rode `npm test` antes de abrir o PR.\n- Um assunto por commit.\n',
+      'docs/style.md': '# Guia de estilo\n\n- Componentes com o prefixo da tela.\n- Funções pequenas, nomes que dizem o que fazem.\n- Veja também @../README.md\n',
+      'packages/ui/CLAUDE.md': '# packages/ui\n\nClasses CSS com o prefixo da tela (`vit-`). Nada de cor solta: use os tokens.\n',
+      'packages/api/CLAUDE.md': '# packages/api\n\n@AGENTS.md\n',
+      'packages/api/AGENTS.md': '# packages/api\n\nRotas em inglês, mensagens de erro em pt-BR.\n',
+      '.claude/rules/tests.md': '---\npaths:\n  - "test/**"\n  - "**/*.test.ts"\n---\nUse o GitHub falso nos testes; nunca a API real.\n',
+      '.claude/rules/style.md': '---\ndescription: Estilo geral do código\n---\nPrefira funções pequenas e nomes em inglês.\n',
+      '.claude/skills/release/SKILL.md': '---\nname: release\ndescription: Publica uma versão do app, com changelog e tag.\n---\n\n# Release\n\n1. Atualize o changelog.\n2. Crie a tag.\n',
+      '.claude/skills/screenshots/SKILL.md': '---\nname: screenshots\ndescription: Tira as capturas das telas para o PR.\n---\n',
+      '.claude/agents/reviewer.md': '---\nname: reviewer\ndescription: Revisa o diff contra as regras do repositório.\n---\n\nVocê revisa diffs.\n',
+      '.claude/commands/pr/open.md': 'Abra o PR com o template do repositório.\n',
+      '.claude/commands/check.md': 'Rode os testes e o lint.\n',
+      '.claude/hooks/format.sh': '#!/bin/sh\nnpx prettier --write "$1"\n',
+      '.claude/settings.json': JSON.stringify(
+        {
+          permissions: { allow: ['Bash(npm test)'] },
+          enabledPlugins: { 'review-kit@team-tools': true, 'old-kit@team-tools': false },
+          extraKnownMarketplaces: { 'team-tools': { source: { source: 'github', repo: 'exemplo-labs/team-tools' } } },
+          hooks: {
+            PostToolUse: [{ matcher: 'Edit|Write', hooks: [{ type: 'command', command: 'sh .claude/hooks/format.sh' }] }],
+            Stop: [{ hooks: [{ type: 'command', command: 'echo pronto' }] }],
+          },
+        },
+        null,
+        2,
+      ),
+      '.mcp.json': JSON.stringify({ mcpServers: { tracker: { command: 'npx', args: ['-y', 'tracker-mcp-sintetico'] }, docs: { url: 'https://docs.example.invalid/mcp' } } }, null, 2),
+      'src/index.ts': 'export {};\n',
+    },
+  },
+  'exemplo-labs/motor-de-regras': {
+    truncatedTree: true,
+    files: {
+      'README.md': '# motor-de-regras\n',
+      'CLAUDE.md': '# motor-de-regras\n\n@docs/missing-guide.md\n\nRode `npm run check` antes do PR.\n',
+      'AGENTS.md': '# motor-de-regras\n\nO código novo em inglês; o legado fica como está.\n',
+      '.claude/settings.json': '{ "hooks": { "Stop": [ ] ,\n',
+      'src/rules/engine.ts': 'export {};\n',
+      'services/billing/workers/AGENTS.md': '# workers\n\nFilas idempotentes.\n',
+    },
+  },
+  'estudio-ficticio/app-receitas': {
+    files: {
+      'README.md': '# app-receitas\n',
+      'CLAUDE.md': '@AGENTS.md\n',
+      'AGENTS.md': '# app-receitas\n\n- Kotlin com coroutines; nada de bloqueio na thread principal.\n- Telas em pt-BR.\n',
+    },
+  },
+};
+
+const withFiles = (repo: FakeRepo): FakeRepo => {
+  const extra = DEMO_INSTRUCTION_FILES[`${repo.owner}/${repo.name}`];
+  return extra ? { ...repo, files: extra.files, ...(extra.truncatedTree ? { truncatedTree: true } : {}) } : repo;
+};
 
 /** The demo, as in wireframe C22: two orgs, the personal account and eight repositories. */
 export const DEMO_GITHUB_DATA: FakeGithubData = {
@@ -367,7 +556,7 @@ export const DEMO_GITHUB_DATA: FakeGithubData = {
   organizations: ['exemplo-labs', 'estudio-ficticio'],
   awaitingReview: 4,
   closedThisWeek: 17,
-  repos: [
+  repos: ([
     { owner: 'exemplo-labs', name: 'vitrine-demo', isPrivate: false, language: 'TypeScript', permission: 'ADMIN', pushMin: 2, issues: 14, prs: 3, ci: 'SUCCESS', commitsPerWeek: 14, stars: 128, forks: 14, watchers: 9, license: 'MIT', release: { tag: 'v0.4.2', daysAgo: 6 }, releases: 12, dependabot: 2, codeScanning: 0 },
     { owner: 'exemplo-labs', name: 'motor-de-regras', isPrivate: true, language: 'TypeScript', permission: 'WRITE', pushMin: 12, issues: 9, prs: 5, ci: 'PENDING', commitsPerWeek: 11, stars: 3, forks: 1, watchers: 4, license: null, release: { tag: 'v2.1.0', daysAgo: 20 }, releases: 31, dependabot: 5, codeScanning: 1 },
     { owner: 'exemplo-labs', name: 'painel-de-metricas', isPrivate: true, language: 'Python', permission: 'WRITE', pushMin: 3, issues: 6, prs: 2, ci: 'FAILURE', commitsPerWeek: 8, stars: 1, forks: 0, watchers: 3, license: null, release: null, releases: 0, dependabot: 1, codeScanning: null, computeFirst: ['contributors'] },
@@ -376,7 +565,7 @@ export const DEMO_GITHUB_DATA: FakeGithubData = {
     { owner: 'estudio-ficticio', name: 'catalogo-exemplo', isPrivate: false, language: 'TypeScript', permission: 'READ', pushMin: 4, issues: 3, prs: 1, ci: 'SUCCESS', commitsPerWeek: 6, stars: 42, forks: 7, watchers: 6, license: 'Apache-2.0', release: { tag: 'v3.0.0', daysAgo: 12 }, releases: 9 },
     { owner: 'dev-sintetico', name: 'cli-de-notas', isPrivate: false, language: 'Rust', permission: 'ADMIN', pushMin: 2 * 24 * 60, issues: 2, prs: 0, ci: 'SUCCESS', commitsPerWeek: 4, stars: 17, forks: 2, watchers: 1, license: 'MIT', release: { tag: 'v0.2.0', daysAgo: 30 }, releases: 4, dependabot: 0, codeScanning: 0 },
     { owner: 'dev-sintetico', name: 'blog-estatico', isPrivate: false, language: 'Astro', permission: 'ADMIN', pushMin: 60, issues: 1, prs: 1, ci: 'SUCCESS', commitsPerWeek: 3, stars: 5, forks: 1, watchers: 1, license: 'MIT', release: null, releases: 0, dependabot: 1, codeScanning: 0 },
-  ],
+  ] as FakeRepo[]).map(withFiles),
 };
 
 /** The demo's fake git: `/simulacao/<project>` is a clone of the repository with the same name, if there is one. */

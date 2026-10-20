@@ -4,7 +4,7 @@
 // and adoption only happens within it: `dir` is that folder.
 
 import { spawn } from 'node:child_process';
-import { openSync } from 'node:fs';
+import { closeSync, openSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VERSAO_DA_API } from '../api/version.ts';
@@ -102,6 +102,8 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
   let exitCode: number | null = null;
   child.on('exit', (c) => (exitCode = c ?? 1));
   child.unref();
+  // The child has its own copy of the log's descriptor.
+  closeSync(out);
 
   const end = Date.now() + (o.timeoutMs ?? 60_000);
   while (Date.now() < end) {

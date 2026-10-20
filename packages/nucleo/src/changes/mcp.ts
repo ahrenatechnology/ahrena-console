@@ -7,7 +7,7 @@
 // goes out: only the type, the session id and the decision id. The wait listens to `ctx.signal`, which
 // aborts when the client closes the connection.
 //
-// The `repos` type (#104, #105) is for the screen only, through the HTTP route: here it is not in the
+// The `repos` type (#104, #105), and `agent-instructions` (#183) with it, is for the screen only, through the HTTP route: here it is not in the
 // enum and the wait always filters by the MCP types, so that a repository build does not wake up
 // whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
 
@@ -29,8 +29,8 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but `repos`. */
-export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos'> => t !== 'repos');
+/** The types MCP exposes: all but the GitHub screens' ones (`repos` and `agent-instructions`). */
+export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions'> => t !== 'repos' && t !== 'agent-instructions');
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 
 /**
@@ -133,7 +133,7 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): To
         cursor: r.cursor,
         reset: r.reset,
         timedOut: r.timedOut,
-        changes: r.changes.flatMap((m) => (m.type === 'repos' ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
+        changes: r.changes.flatMap((m) => (m.type === 'repos' || m.type === 'agent-instructions' ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
       };
       return { text: summaryText(data), data: data as unknown as JsonObject };
     },
