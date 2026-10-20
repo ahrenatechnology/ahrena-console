@@ -1,6 +1,6 @@
 # adr-extractor
 
-Spike #174: lê uma pasta de registros de decisão (ADRs) em Markdown e devolve, de cada um, número, título, status, data, decisores, contexto, decisão (com a opção escolhida), alternativas, consequências, as outras seções e as ligações (substitui, é substituída por, emenda, relacionadas), com a volta criada quando só um lado escreve. O estudo está em [docs/repo-adrs-and-instructions-study.md](../../docs/repo-adrs-and-instructions-study.md).
+Spike #174: lê uma pasta de registros de decisão (ADRs) em Markdown e devolve, de cada um, número, título, status, data, decisores, contexto, decisão (com a opção escolhida), alternativas, consequências, as outras seções e as ligações (substitui, é substituída por, emenda, relacionadas), com a volta criada quando só um lado escreve. O estudo está em [docs/repo-instructions-install-adrs-study.md](../../docs/repo-instructions-install-adrs-study.md).
 
 | Arquivo | O quê |
 | --- | --- |

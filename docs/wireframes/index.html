@@ -1464,7 +1464,7 @@ function telaRepoInstr(larga) {
 function telaInstrEstados() {
   return `${repoCab('instr').replace('exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox')}
   <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
-    <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">Repositório sem nenhuma instrução</div><div class="cartao vazio"><span class="ic">${ic('book-dashed')}</span><b>Nenhuma instrução para agentes neste repositório</b><span>Procuramos <code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code> e <code>AGENTS.md</code> na raiz e nas subpastas, e <code>.claude/</code> e <code>.mcp.json</code> na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.</span><span class="btn contorno">${ic('external-link')}Como escrever um CLAUDE.md</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">Repositório sem nenhuma instrução</div><div class="cartao vazio"><span class="ic">${ic('book-dashed')}</span><b>Nenhuma instrução para agentes neste repositório</b><span>Procuramos <code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code> e <code>AGENTS.md</code> na raiz e nas subpastas, e <code>.claude/</code> e <code>.mcp.json</code> na raiz. Um agente que trabalhe aqui só leva as instruções do usuário, da máquina dele.</span><span style="display:flex;gap:8px"><span class="btn cheio">${ic('package-plus')}Instalar o Ahrena Framework</span><span class="btn contorno">${ic('external-link')}Como escrever um CLAUDE.md</span></span></div></div>
     <div style="display:flex;flex-direction:column;gap:12px"><div class="olhinho" style="margin-bottom:-4px">Avisos, em outros repositórios</div>
       <div class="faixa"><span class="ic">${ic('folder-tree')}</span><div><b>Árvore grande demais.</b> O GitHub cortou a lista em 100 mil arquivos: as instruções da raiz e de <code>.claude/</code> estão aqui, mas subpastas podem faltar.</div></div>
       <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('file-text')}<span class="mono" style="font-size:13px">AGENTS.md</span><span class="r">raiz</span></div>
@@ -1472,6 +1472,84 @@ function telaInstrEstados() {
         <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-error">${ic('file-x')}</span><span class="mono">@docs/antigo.md</span><span class="c-muted">não existe mais no repositório</span></div>
         <div class="cartao" style="padding:8px 10px;background:var(--bg);border-style:dashed;font-size:12px;display:flex;gap:8px;align-items:center"><span class="c-muted">${ic('file-warning')}</span><span class="mono">.claude/settings.json</span><span class="c-muted">JSON inválido: hooks e plugins não foram lidos</span></div></div>
     </div>
+  </div>`
+}
+
+// ---------- Instalar o Ahrena Framework pelo console (issue 184) ----------
+// exemplo-labs/painel-de-metricas: Python com FastAPI, testes e CI, um CLAUDE.md e um settings.json
+// que já existem. Os números de linhas vêm do planejador do spike, rodado sobre estes arquivos.
+const repoCabDe = (nome, aba) => repoCab(aba).replace('exemplo-labs/motor-de-regras', nome)
+const passos = on => `<div style="display:flex;gap:6px;align-items:center;font-size:12px">${['Plataformas e plugins', 'Prévia do diff', 'Pull request'].map((t, i) => `<span style="display:inline-flex;gap:6px;align-items:center;${i === on ? 'color:var(--text);font-weight:600' : 'color:var(--muted)'}"><span style="width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;${i < on ? 'background:var(--status-completed-badge);color:var(--status-completed-text)' : i === on ? 'background:var(--accent);color:var(--on-accent)' : 'border:1px solid var(--border)'}">${i < on ? '✓' : i + 1}</span>${t}</span>${i < 2 ? `<span class="c-muted">${ic('chevron-right')}</span>` : ''}`).join('')}</div>`
+const instCab = (on, acoes) => `<div class="cartao" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;border-color:color-mix(in srgb, var(--accent) 45%, var(--border))"><div style="display:flex;gap:12px;align-items:center"><span class="c-accent" style="font-size:18px">${ic('package-plus')}</span><b style="font-size:14px;white-space:nowrap">Instalar o Ahrena Framework</b><span style="margin-left:auto;display:flex;gap:8px">${acoes}</span></div>${passos(on)}</div>`
+const caixa = (on, trava) => `<span style="width:16px;height:16px;border-radius:4px;display:grid;place-items:center;flex:none;font-size:11px;${on ? `background:${trava ? 'var(--muted)' : 'var(--accent)'};color:var(--on-accent)` : 'border:1px solid var(--border)'}">${on ? '✓' : ''}</span>`
+
+// C34: a aba Instruções de um repositório que tem instruções, mas não o framework.
+function telaSemFramework() {
+  return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
+  <div class="cartao" style="padding:14px 16px;display:flex;gap:14px;align-items:center"><span class="av" style="width:38px;height:38px;border-radius:10px;background:var(--raised);display:grid;place-items:center;color:var(--accent-text);font-size:18px">${ic('package-plus')}</span>
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:14px">Sem Ahrena Framework</b><span class="c-muted" style="font-size:12.5px">Os agentes daqui só levam o CLAUDE.md abaixo. Instalar abre um PR com as regras, as skills e os agentes do framework para o Claude Code e o Codex.</span></div>
+    <span class="btn cheio" style="margin-left:auto">${ic('package-plus')}Instalar</span></div>
+  <div style="display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;align-items:start">
+    <div class="cartao" style="padding:10px 8px;display:flex;flex-direction:column;gap:2px"><div class="olhinho" style="padding:4px 8px">Arquivos de instrução</div>${instrItem('file-text', 'CLAUDE.md', '<span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans)">raiz</span>', true)}<div class="olhinho" style="padding:10px 8px 4px">.claude</div>${instrItem('settings', 'settings.json', '<span class="mono c-muted" style="font-size:11px">1 permissão</span>')}${[['sparkles', 'Skills'], ['users', 'Agentes'], ['plug', 'Plugins']].map(([i, n]) => instrItem(i, n, '<span class="mono c-muted" style="font-size:11px">0</span>')).join('')}</div>
+    <div class="cartao" style="padding:14px 18px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px;align-items:center"><span class="c-accent">${ic('file-text')}</span><b class="mono" style="font-size:13px">CLAUDE.md</b><span class="c-muted" style="font-size:12px">raiz · carregado em toda sessão do Claude Code</span></div>
+      <div style="border-top:1px solid var(--border);padding-top:10px"><div style="font-size:17px;font-weight:600">painel-de-metricas</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px;line-height:1.7"><li>Use uv para as dependências.</li><li>Testes com pytest; nada de banco real.</li></ul></div></div>
+  </div>`
+}
+
+// C35: passo 1, plataformas e plugins, com o que o repositório tem.
+const PLUG_OUTROS = [['typescript', 'TypeScript'], ['go', 'Go'], ['rust', 'Rust'], ['frontend', 'frontend de fora para dentro'], ['data', 'dados'], ['delivery', 'a agência (athena)'], ['quality', 'review e correções'], ['security', 'segurança'], ['reliability', 'confiabilidade'], ['observability', 'observabilidade'], ['code-review', 'roteia o review'], ['costs', 'custo por PR']]
+function telaInstalarEscolha() {
+  const plat = (on, n, arqs, nota) => `<div class="cartao" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;background:var(--bg);${on ? 'border-color:color-mix(in srgb, var(--accent) 50%, var(--border))' : ''}">${caixa(on)}<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="font-size:13px">${n}</b><span class="mono c-muted trunc" style="font-size:11px">${arqs}</span>${nota ? `<span style="font-size:11px" class="c-waiting">${nota}</span>` : ''}</div></div>`
+  const plug = (on, n, why, trava) => `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;font-size:12.5px;min-width:0">${caixa(on, trava)}<span class="mono" style="font-size:12px;white-space:nowrap">${n}</span><span class="c-muted trunc" style="font-size:11.5px">${why}</span></div>`
+  return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
+  ${instCab(0, `<span class="btn contorno">Cancelar</span><span class="btn cheio">Ver a prévia ${ic('arrow-right')}</span>`)}
+  <div class="cartao" style="padding:10px 14px;display:flex;gap:16px;align-items:center;font-size:12px;flex-wrap:wrap"><span class="c-muted">${ic('scan-search')} No repositório:</span><span class="chip" style="font-family:var(--font-sans)">Python · pyproject.toml</span><span class="chip" style="font-family:var(--font-sans)">FastAPI</span><span class="chip" style="font-family:var(--font-sans)">testes em tests/</span><span class="chip" style="font-family:var(--font-sans)">CI no GitHub Actions</span><span class="chip" style="font-family:var(--font-sans)">CLAUDE.md e .claude/settings.json já existem</span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:12px;align-items:start">
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="ttl">${ic('monitor-smartphone')}Plataformas</div>
+      ${plat(true, 'Claude Code', '.claude/settings.json · CLAUDE.md · AGENTS.md')}
+      ${plat(true, 'Codex', 'AGENTS.md · .codex/config.toml', 'plugins pelo config.toml do projeto: a confirmar')}
+      ${plat(false, 'Cursor', '.cursor/rules/ahrena-*.mdc · 13 regras')}
+      <span class="c-muted" style="font-size:11.5px">O Claude Code lê o AGENTS.md pelo import no CLAUDE.md; o Codex lê o AGENTS.md direto. Um índice só serve aos dois.</span></div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:4px"><div class="ttl">${ic('plug')}Plugins<span class="r">5 de 17 · marketplace ahrena</span></div>
+      <div class="olhinho" style="margin-top:6px">Base, sempre</div>
+      ${plug(true, 'foundation', 'o núcleo que os outros pedem', true)}${plug(true, 'contributing', 'issue, branch, commit e PR', true)}${plug(true, 'engineering-fundamentals', 'SOLID, KISS, YAGNI e afins', true)}
+      <div class="olhinho" style="margin-top:8px">Pelo que o repositório tem</div>
+      ${plug(true, 'engineering-python', 'achamos pyproject.toml')}${plug(true, 'engineering-backend', 'achamos FastAPI')}
+      <div class="olhinho" style="margin-top:8px;display:flex">Outros<span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500" class="c-accent">mostrar os 12</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">${PLUG_OUTROS.slice(0, 4).map(([n, w]) => plug(false, `engineering-${n}`, w)).join('')}</div></div>
+  </div>`
+}
+
+// C36: passo 2, a prévia do diff, arquivo por arquivo; nada foi escrito ainda.
+function telaInstalarPrevia(larga) {
+  const arqs = [['AGENTS.md', 'criar', 21, 0, false], ['CLAUDE.md', 'mesclar', 4, 0, false], ['.claude/settings.json', 'mesclar', 15, 0, true], ['.codex/config.toml', 'criar', 20, 0, false]]
+  const ln = (t, k) => `<div style="display:grid;grid-template-columns:34px 14px minmax(0,1fr);font-family:var(--font-mono);font-size:11.5px;line-height:1.65;${k === '+' ? 'background:color-mix(in srgb, var(--status-completed-badge) 75%, transparent)' : ''}"><span class="c-muted" style="text-align:right;padding-right:8px">${t[0]}</span><span class="${k === '+' ? 'c-completed' : 'c-muted'}">${k}</span><span style="white-space:pre;overflow:hidden;text-overflow:ellipsis">${t[1]}</span></div>`
+  const diff = [[1, '{'], [2, '  "permissions": {'], [3, '    "allow": ['], [4, '      "Bash(uv run pytest:*)"'], [5, '    ]'], ['+', '  },', '+'], ['+', '  "extraKnownMarketplaces": {', '+'], ['+', '    "ahrena": {', '+'], ['+', '      "source": { "source": "github", "repo": "ahrenatechnology/ahrena-framework" }', '+'], ['+', '    }', '+'], ['+', '  },', '+'], ['+', '  "enabledPlugins": {', '+'], ['+', '    "ahrena-foundation@ahrena": true,', '+'], ['+', '    "ahrena-contributing@ahrena": true,', '+'], ['+', '    "ahrena-engineering-fundamentals@ahrena": true,', '+'], ['+', '    "ahrena-engineering-python@ahrena": true,', '+'], ['+', '    "ahrena-engineering-backend@ahrena": true', '+'], [6, '  }'], [7, '}']]
+  return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
+  ${instCab(1, `<span class="btn contorno">${ic('arrow-left')}Voltar</span><span class="btn cheio">${ic('git-pull-request')}Abrir PR</span>`)}
+  <div style="display:grid;grid-template-columns:${larga ? 300 : 250}px minmax(0,1fr);gap:12px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="cartao" style="padding:8px;display:flex;flex-direction:column;gap:2px"><div class="olhinho" style="padding:4px 8px">4 arquivos · +60 −0</div>
+        ${arqs.map(([p, a, mais, menos, on]) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:7px;font-size:12px;${on ? 'background:var(--raised);box-shadow:inset 2px 0 0 var(--accent);' : ''}"><span class="mono trunc" style="font-size:11.5px;flex:1">${p}</span><span class="chip" style="height:18px;font-size:10px;font-family:var(--font-sans);${a === 'mesclar' ? 'color:var(--status-waiting-text)' : ''}">${a}</span><span class="mono c-completed" style="font-size:11px">+${mais}</span></div>`).join('')}</div>
+      <div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;font-size:12px"><div class="ttl">${ic('git-branch')}O PR</div>
+        <span class="c-muted">Branch novo</span><span class="mono" style="font-size:11.5px">chore/install-ahrena-framework</span><span class="c-muted">para <b class="mono" style="color:var(--text);font-weight:500">main</b>, um commit, sem tocar no main.</span>
+        <span class="c-muted">Título</span><span>chore: install the Ahrena Framework</span></div>
+    </div>
+    <div class="cartao" style="overflow:hidden;min-width:0"><div style="display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)"><b class="mono" style="font-size:12.5px">.claude/settings.json</b><span class="chip" style="height:20px;font-size:10.5px;font-family:var(--font-sans);color:var(--status-waiting-text)">mesclar</span><span class="c-muted" style="font-size:12px">a permissão que já existia fica; nada sai</span><span class="seg" style="margin-left:auto"><span class="on">Unificado</span><span>Lado a lado</span></span></div>
+      <div style="padding:8px 4px">${diff.map(([n, t, k]) => ln([typeof n === 'number' ? n : '', t], k || ' ')).join('')}</div></div>
+  </div>`
+}
+
+// C37: o PR aberto, na aba, com o estado dele.
+function telaInstalarPr() {
+  return `${repoCabDe('exemplo-labs/painel-de-metricas', 'instr')}
+  ${instCab(2, `<span class="btn contorno">${ic('external-link')}Abrir no GitHub</span>`)}
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span class="c-completed" style="font-size:18px">${ic('git-pull-request')}</span><b style="font-size:14px">PR 12 · chore: install the Ahrena Framework</b><span class="pill b-completed">Aberto</span><span class="pill b-waiting">CI …</span><span class="c-muted" style="margin-left:auto;font-size:12px">há 1 min</span></div>
+    <div class="leg"><span>Branch <b>chore/install-ahrena-framework</b> → <b>main</b></span><span>Arquivos <b>4</b></span><span>Linhas <b>+60 −0</b></span><span>Plugins <b>5</b></span><span>Review <b>esperando</b></span></div>
+    <span class="c-muted" style="font-size:12px">Depois do merge, quem abrir o repositório no Claude Code recebe a oferta de instalar os 5 plugins; no Codex, o AGENTS.md já vale.</span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+    <div class="faixa erro"><span class="ic">${ic('x-circle')}</span><div><b>Não abrimos o PR.</b> O <code>.claude/settings.json</code> deste repositório não é um JSON válido; corrija e tente de novo. Nada foi escrito.</div></div>
+    <div class="faixa"><span class="ic">${ic('lock')}</span><div><b>Sem permissão de escrita.</b> Instalar abre um PR; sua conta só lê este repositório. Peça a quem mantém ou abra a partir de um fork.</div></div>
   </div>`
 }
 
@@ -2179,6 +2257,14 @@ const TELAS = [
     n: N(['A lista e o editor do Agent Config (C16 e C17), que lê o .claude/ desta máquina; aqui o mesmo conteúdo vem do repositório, pelo GitHub, e só se lê.'], ['A aba se chama "Instruções" para caber em 1100 ao lado de ADRs; o título "Instruções dos agentes" fica no índice.', 'O @import abre no lugar, com a borda laranja; o que fica fora do repositório (@~/…) é dito, não escondido.', 'Hooks mostram o evento, o matcher e quantos comandos; nunca o comando, como o Agent Config.', 'Em 1440, o que .claude/ traz vai para uma coluna à direita; em 1100, desce para baixo do arquivo.']) },
   { id: 'console-repo-instr-estados', cod: 'C33', nome: 'Instruções · vazio e avisos', sub: 'Um repositório sem nenhuma instrução para agentes, a árvore cortada pelo GitHub, um AGENTS.md que nenhum CLAUDE.md importa, um @import que não existe e um settings.json quebrado. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstrEstados())}</div>`,
     n: N(['EmptyState e a faixa de C19.'], ['O aviso diz onde procuramos e o que o agente leva no lugar.']) },
+  { id: 'console-install-start', cod: 'C34', nome: 'Instruções · sem Ahrena Framework', sub: 'A aba Instruções de um repositório que tem instruções, mas não o framework: o card com Instalar fica no topo, e o que existe continua embaixo.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaSemFramework())}</div>`,
+    n: N(['A aba Instruções (C32).'], ['Instalar só aparece para quem pode escrever no repositório (permissão lida pela tela Repositórios); sem ela, o card diz por quê (C37).']) },
+  { id: 'console-install-choose', cod: 'C35', nome: 'Instalar · plataformas e plugins', sub: 'Passo 1: o que achamos no repositório, as plataformas (Claude Code e Codex marcados, Cursor opcional) e os plugins, com a base sempre, os sugeridos pelo que o repositório tem e os outros desmarcados. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarEscolha())}</div>`,
+    n: N(['Do instalador antigo: escolher a plataforma. Lá era manual (PLATFORM= e --clades); aqui os plugins vêm sugeridos pelo que o repositório tem, e a pessoa ajusta.'], ['A base (foundation, contributing, fundamentals) não desmarca: os outros dependem dela.', 'Cada sugestão diz o motivo: "achamos pyproject.toml".', 'O Codex leva o aviso "a confirmar" até provarmos que o config.toml do projeto habilita plugins.']) },
+  { id: 'console-install-preview', cod: 'C36', nome: 'Instalar · prévia do diff', sub: 'Passo 2: cada arquivo com a ação (criar ou mesclar) e o diff; o que já existia fica. Nada foi escrito ainda. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'repos', telaInstalarPrevia(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'repos', telaInstalarPrevia(true))}</div>`,
+    n: N(['O diff do GitHub, unificado ou lado a lado.'], ['Os números são os do planejador do spike sobre estes arquivos: AGENTS.md +21, CLAUDE.md +4, settings.json +15, config.toml +20.', 'Mesclar nunca apaga: no exemplo, a permissão que já existia continua.', 'O PR sai num branch novo, com um commit; o main não é tocado.']) },
+  { id: 'console-install-pr', cod: 'C37', nome: 'Instalar · PR aberto e o que impede', sub: 'Passo 3: o PR aberto, com CI e review, ao vivo. Embaixo, os dois casos em que o PR não sai: um settings.json quebrado e a falta de permissão de escrita. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarPr())}</div>`,
+    n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
 ]
 
 // =====================================================================

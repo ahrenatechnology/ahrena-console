@@ -7,7 +7,7 @@ Spike #183: o que um agente herda ao trabalhar num repositório. A partir da lis
 - os servidores de `.mcp.json`;
 - `empty: true` quando não há nada.
 
-A mesma função serve para o disco e para o GitHub: só muda o `read`. O estudo está em [docs/repo-adrs-and-instructions-study.md](../../docs/repo-adrs-and-instructions-study.md).
+A mesma função serve para o disco e para o GitHub: só muda o `read`. O estudo está em [docs/repo-instructions-install-adrs-study.md](../../docs/repo-instructions-install-adrs-study.md).
 
 | Arquivo | O quê |
 | --- | --- |

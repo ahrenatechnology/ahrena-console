@@ -13,8 +13,9 @@ Protótipos descartáveis das validações da 0.0.1. Os resultados estão em [do
 | [app-desktop](app-desktop/) | Spike #82: app Tauri na bandeja que adota ou sobe o núcleo ([decisão 0005](../docs/decisoes/0005-app-desktop.md)) |
 | [multiplas-contas](multiplas-contas/) | Spike #106: duas pastas de configuração do Claude Code ao mesmo tempo, com contas sintéticas, e a medição das contas no disco ([decisão 0006](../docs/decisoes/0006-multiplas-contas.md)) |
 | [chat-delegacao](chat-delegacao/) | Spike #120: o console conversa em `stream-json` com sessões reais do Claude Code, novas ou retomadas pelo id, por conta, e entrega prompt a uma sessão aberta noutro processo ([decisão 0007](../docs/decisoes/0007-chat-e-delegacao.md)) |
-| [adr-extractor](adr-extractor/) | Spike #174: extrai status, data, seções e ligações das ADRs (MADR, Nygard, Y-statement e livres em pt-BR), testado contra `docs/decisoes` ([estudo](../docs/repo-adrs-and-instructions-study.md)) |
-| [agent-instructions](agent-instructions/) | Spike #183: lê o que um agente herda de um repositório (CLAUDE.md e AGENTS.md com os `@imports`, e `.claude/`), sobre um `read(path)` que serve ao disco e ao GitHub ([estudo](../docs/repo-adrs-and-instructions-study.md)) |
+| [adr-extractor](adr-extractor/) | Spike #174: extrai status, data, seções e ligações das ADRs (MADR, Nygard, Y-statement e livres em pt-BR), testado contra `docs/decisoes` ([estudo](../docs/repo-instructions-install-adrs-study.md)) |
+| [agent-instructions](agent-instructions/) | Spike #183: lê o que um agente herda de um repositório (CLAUDE.md e AGENTS.md com os `@imports`, e `.claude/`), sobre um `read(path)` que serve ao disco e ao GitHub ([estudo](../docs/repo-instructions-install-adrs-study.md)) |
+| [framework-install](framework-install/) | Spike #184: o plano para instalar o Ahrena Framework num repositório (plugins pelo que ele tem, mescla com marcadores, diff) e o PR por um branch novo, contra um GitHub falso ([estudo](../docs/repo-instructions-install-adrs-study.md)) |
 | [.claude-plugin](.claude-plugin/) | Marketplace local para instalar o painel |
 
 ## Rodar
