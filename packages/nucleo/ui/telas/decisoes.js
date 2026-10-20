@@ -34,7 +34,7 @@ export async function montar(area, ctx) {
 
   const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar');
   const cab = cabecalho({
-    icone: 'decisoes',
+    icone: 'decisao',
     titulo: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     acoes: [
@@ -63,9 +63,9 @@ export async function montar(area, ctx) {
       el('span', { class: g.tipo === 'branch' ? 'mono dec-nome' : 'dec-nome' }, g.titulo),
       el('span', { class: 'dec-resumo' }, resumoDoGrupo(g)),
       filtros.grupo
-        ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, '‹ Todos os grupos')
+        ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, icone('voltar'), 'Todos os grupos')
         : g.mais > 0
-          ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)}) ›`)
+          ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)})`, icone('chevron-direita'))
           : null,
     );
     const agora = Date.now();
@@ -75,7 +75,7 @@ export async function montar(area, ctx) {
   function desenharDados(r) {
     const c = r.contagens;
     numeros.replaceChildren(
-      numero({ rotulo: 'Vigentes', valor: c.vigentes, detalhe: `em ${num(c.branches)} ${c.branches === 1 ? 'branch' : 'branches'}`, icone: 'vigente', cor: 'completed' }),
+      numero({ rotulo: 'Vigentes', valor: c.vigentes, detalhe: `em ${num(c.branches)} ${c.branches === 1 ? 'branch' : 'branches'}`, icone: 'ok', cor: 'completed' }),
       numero({ rotulo: 'A confirmar', valor: c.aConfirmar, detalhe: 'sugeridas pelo agente', icone: 'sugerida', cor: 'waiting' }),
       numero({ rotulo: 'Substituídas', valor: c.substituidas30d, detalhe: 'nos últimos 30 dias', icone: 'substituida', cor: 'muted' }),
       numero({ rotulo: 'Promovidas', valor: c.promovidas, detalhe: 'viraram registro em docs/decisoes', icone: 'promover', cor: 'accent' }),
@@ -83,8 +83,8 @@ export async function montar(area, ctx) {
     const total = c.vigentes + c.aConfirmar + c.substituidas30d;
     if (r.grupos.length) lista.replaceChildren(...r.grupos.map(grupo));
     else if (!total && !filtros.q && filtros.estado === 'todas')
-      lista.replaceChildren(vazio({ icone: 'decisoes', titulo: 'Nenhuma decisão ainda', texto: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
-    else lista.replaceChildren(vazio({ icone: 'busca', titulo: 'Nada com esses filtros', texto: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
+      lista.replaceChildren(vazio({ icone: 'decisao', titulo: 'Nenhuma decisão ainda', texto: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
+    else lista.replaceChildren(vazio({ icone: 'buscar', titulo: 'Nada com esses filtros', texto: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
   }
 
   async function desenhar() {

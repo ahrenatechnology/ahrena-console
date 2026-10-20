@@ -122,7 +122,8 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.deepEqual(ids.slice(ids.indexOf('sessoes')), ['sessoes', 'decisoes']);
     const { tela } = acharTela('/ui/decisoes');
     assert.equal(tela.item.rotulo, 'Decisões');
-    assert.equal(tela.item.icone, 'decisoes');
+    assert.equal(tela.item.icone, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
+    assert.equal(tela.icone, 'decisao');
   });
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {

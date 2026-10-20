@@ -55,7 +55,7 @@ function cartaoDoMcp(m) {
     'section',
     { class: 'cartao dec-lado' },
     el('div', { class: 'dec-lado-ttl' }, icone('mcp'), el('h3', {}, 'Quando o agente perguntar'), el('span', { class: 'dec-r' }, 'MCP')),
-    el('div', { class: 'dec-chamada mono', title: m.chamada }, icone('seta-direita'), el('span', { class: 'dec-n' }, nome), el('span', { class: 'dec-cmd' }, args)),
+    el('div', { class: 'dec-chamada mono', title: m.chamada }, icone('chevron-direita'), el('span', { class: 'dec-n' }, nome), el('span', { class: 'dec-cmd' }, args)),
     el('p', {}, m.resposta),
     m.existe ? null : el('p', { class: 'dec-nota' }, `A ferramenta ${nome} ainda não existe no MCP do núcleo: esta é a chamada que ela vai responder.`),
   );

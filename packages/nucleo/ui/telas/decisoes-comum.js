@@ -30,7 +30,7 @@ const TIPOS = {
 
 /** A pílula de tipo: "Sugerida", "Correção sua", "Permissão", "Pergunta", "Plano". */
 export const rotuloDoTipo = (origem) => TIPOS[origem]?.rotulo ?? 'Decisão';
-export const iconeDoTipo = (origem) => TIPOS[origem]?.icone ?? 'decisoes';
+export const iconeDoTipo = (origem) => TIPOS[origem]?.icone ?? 'decisao';
 
 /** Quem decidiu, como o card escreve. */
 export function quemDecidiu(d) {
@@ -116,7 +116,7 @@ export function campoDeBusca({ placeholder, aoBuscar, espera = 250 }) {
     clearTimeout(t);
     t = setTimeout(() => aoBuscar(campo.value.trim()), espera);
   });
-  return el('label', { class: 'dec-busca' }, icone('busca'), campo);
+  return el('label', { class: 'dec-busca' }, icone('buscar'), campo);
 }
 
 /**

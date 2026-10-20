@@ -37,10 +37,10 @@ export const TELAS = [
   {
     id: 'decisoes',
     rota: '/ui/decisoes',
-    item: { rotulo: 'Decisões', icone: 'decisoes' },
+    item: { rotulo: 'Decisões', icone: 'decisao' },
     titulo: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
-    icone: 'decisoes',
+    icone: 'decisao',
     arquivo: '/ui/telas/decisoes.js', // issue 103
   },
 ];
