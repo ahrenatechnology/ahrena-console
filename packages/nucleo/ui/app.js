@@ -17,7 +17,7 @@ port.textContent = location.host;
 
 // ---------- Sidebar ----------
 
-// One block per section (C1, C24): the everyday screens, then Machines and Control. The remote
+// One block per section (C1, C24): the everyday screens, then Delivery, Decisions, Machines and Control. The remote
 // machines (issue 178) come from `GET /api/machines` and are added by nav.js (`createNav`).
 const { readMachines, highlight, counter } = createNav({ nav, read });
 // A remote's state also changes without an alert (another version over there): re-read now and then.

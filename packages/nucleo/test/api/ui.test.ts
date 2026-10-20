@@ -239,12 +239,14 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Dev Console, Analytics, Workflows, Histórico, Decisões, em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Das sessões; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
-        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions']],
+        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'analytics', 'workflows', 'history']],
+        ['delivery', 'Entrega', ['repos', 'project', 'dev-console']],
+        ['decisions', 'Decisões', ['decisions']],
         ['machines', 'Máquinas', ['this-machine']],
         ['control', 'Controle', ['agent-config']],
       ],
@@ -269,9 +271,11 @@ describe('registro das telas', () => {
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);
   });
 
-  test('a barra tem as seções do C24: as telas do dia a dia sem título, Máquinas e Controle; seção vazia não aparece', () => {
+  test('a barra tem as seções: as telas do dia a dia sem título, Entrega, Decisões, Máquinas e Controle; seção vazia não aparece', () => {
     assert.deepEqual(SECTIONS, [
       { id: 'main', label: null },
+      { id: 'delivery', label: 'Entrega' },
+      { id: 'decisions', label: 'Decisões' },
       { id: 'machines', label: 'Máquinas' },
       { id: 'control', label: 'Controle' },
     ]);
@@ -322,7 +326,7 @@ describe('registro das telas', () => {
       ],
     );
     // The other blocks do not move.
-    assert.deepEqual(sidebarSections([...SCREENS, ...machineItems([local, ws])]).map((s: { id: string }) => s.id), ['main', 'machines', 'control']);
+    assert.deepEqual(sidebarSections([...SCREENS, ...machineItems([local, ws])]).map((s: { id: string }) => s.id), ['main', 'delivery', 'decisions', 'machines', 'control']);
     // What the core sends is checked: a bad id, a repeated one, `local` and junk are left out.
     assert.deepEqual(machineItems([ws, { ...ws }, { id: '../x', label: 'x' }, { id: 'local' }, 'junk', null, { id: 'sem-rotulo', state: 'weird' }]).map((t: { id: string; item: { label: string }; state: string }) => [t.id, t.item.label, t.state]), [
       ['machine-ws-exemplo', 'Workstation', 'unreachable'],
@@ -357,7 +361,7 @@ describe('registro das telas', () => {
     const r = findScreen('/ui/repos');
     assert.equal(r.screen.id, 'repos');
     assert.equal(r.screen.item.label, 'Repositórios');
-    assert.equal(r.screen.item.section, 'main');
+    assert.equal(r.screen.item.section, 'delivery');
     assert.equal(findScreen('/ui/repos/').screen.id, 'repos');
   });
 
