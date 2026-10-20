@@ -14,6 +14,38 @@ export const ADR_DIRS = [
   'adr', 'adrs', 'decisions', 'architecture/decisions',
 ];
 
+/** Pastas de decisões de produto (PDR). Uma pasta mista, como docs/decisoes, decide pelo campo de tipo. */
+export const PDR_DIRS = [
+  'docs/pdr', 'docs/pdrs', 'docs/product-decisions', 'docs/product/decisions', 'docs/decisoes-de-produto',
+  'doc/pdr', 'pdr', 'pdrs', 'product-decisions',
+];
+
+const PDR_FOLDER = /(^|\/)(pdrs?|product-decisions|product\/decisions|decisoes-de-produto)(\/|$)/i;
+const ADR_FOLDER = /(^|\/)(adrs?|architecture\/decisions|architecture\/adr|arch\/adr)(\/|$)/i;
+const PRODUCT = /^(pdr|produto|product|product decision|decisão de produto)$/i;
+const ARCHITECTURE = /^(adr|arquitetura|architecture|architectural|técnica|technical|architecture decision|decisão de arquitetura)$/i;
+
+/**
+ * ADR (arquitetura) ou PDR (produto), na ordem: o campo de tipo (front matter `type`, `kind` ou
+ * `category`, ou a linha "Tipo:"), o prefixo do arquivo ou do título (`PDR-`, `ADR-`), a pasta e,
+ * sem nenhum sinal, ADR. Devolve também o porquê, para a tela e para os testes.
+ */
+export function classify({ path = '', fm = null, meta = [], title = '' }) {
+  const field = [fm?.type, fm?.kind, fm?.category, ...meta.filter((m) => /^(tipo|type|kind|categoria|category)$/.test(m.key)).map((m) => m.value)]
+    .filter((v) => typeof v === 'string').map((v) => stripMd(v).trim());
+  for (const v of field) {
+    if (PRODUCT.test(v)) return { kind: 'pdr', why: 'campo de tipo' };
+    if (ARCHITECTURE.test(v)) return { kind: 'adr', why: 'campo de tipo' };
+  }
+  const name = basename(path);
+  if (/^PDR[-_ ]/i.test(name) || /^PDR[\s-]?\d/i.test(title)) return { kind: 'pdr', why: 'prefixo' };
+  if (/^ADR[-_ ]/i.test(name) || /^ADR[\s-]?\d/i.test(title)) return { kind: 'adr', why: 'prefixo' };
+  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+  if (PDR_FOLDER.test(dir)) return { kind: 'pdr', why: 'pasta' };
+  if (ADR_FOLDER.test(dir)) return { kind: 'adr', why: 'pasta' };
+  return { kind: 'adr', why: 'padrão' };
+}
+
 const NOT_ADR = /^(readme|index|template|adr-template|_template|toc)\.md$/i;
 
 /** Um arquivo da pasta é ADR se é Markdown e não é índice nem modelo. */
@@ -87,11 +119,11 @@ function frontMatter(text) {
 function titleAndNumber(heading, file) {
   let title = heading ?? '';
   let number = null;
-  const m = title.match(/^(?:ADR[\s-]?)?(\d{1,5})\s*(?:[.:·—–-]\s*)?(.*)$/i);
+  const m = title.match(/^(?:[AP]DR[\s-]?)?(\d{1,5})\s*(?:[.:·—–-]\s*)?(.*)$/i);
   if (m && m[2]) { number = Number(m[1]); title = m[2]; }
-  const f = basename(file).match(/^(\d{1,5})[-_ ]/);
+  const f = basename(file).match(/^(?:[AP]DR[-_])?(\d{1,5})[-_ ]/i);
   if (number === null && f && f[1].length < 8) number = Number(f[1]);
-  if (!title) title = basename(file, '.md').replace(/^\d+[-_ ]/, '').replace(/[-_]/g, ' ');
+  if (!title) title = basename(file, '.md').replace(/^(?:[AP]DR[-_])?\d+[-_ ]/i, '').replace(/[-_]/g, ' ');
   return { number, title: stripMd(title) };
 }
 
@@ -205,6 +237,9 @@ export function parseAdr(text, file = 'adr.md') {
   const metaOf = (re) => meta.find((m) => re.test(m.key))?.value ?? null;
 
   const out = { file: basename(file), id: basename(file).replace(/\.md$/i, ''), number, title, format: 'free', language: 'en' };
+  const kind = classify({ path: file, fm, meta, title: fm?.title ?? h1?.[1] ?? '' });
+  out.kind = kind.kind;
+  out.kindWhy = kind.why;
   const byKey = {};
   const other = [];
   for (const s of sections) {
@@ -228,7 +263,9 @@ export function parseAdr(text, file = 'adr.md') {
   out.options = listItems(byKey.options);
   if (!out.options.length && byKey.prosCons) out.options = listItems(byKey.prosCons);
   out.decision = byKey.decision ?? null;
-  out.chosen = out.decision?.match(/chosen option:\s*\**"?([^",*\n]+?)"?\**(?:,|\s+because|$)/im)?.[1]?.trim() ?? null;
+  // Entre aspas vale o texto inteiro, vírgula inclusive; sem aspas, até a vírgula ou o "because".
+  const chosen = out.decision?.match(/chosen option:\s*\**(?:"([^"\n]+)"|([^,*\n]+?))\**(?:,|\s+because|$)/im);
+  out.chosen = (chosen?.[1] ?? chosen?.[2])?.trim() ?? null;
   out.consequences = byKey.consequences ?? null;
   // Consequências dentro da Decision Outcome (MADR 3 e 4: "### Consequences").
   if (!out.consequences && out.decision) {
@@ -294,10 +331,11 @@ export function linkAll(adrs) {
 }
 
 /** Lê uma pasta inteira, como a tela faria com o conteúdo vindo do GitHub. */
-export async function readDir(dir) {
+export async function readDir(dir, repoPath = dir) {
   const names = (await readdir(dir)).filter(isAdrFile).sort();
   const adrs = [];
-  for (const n of names) adrs.push(parseAdr(await readFile(join(dir, n), 'utf8'), n));
+  // `repoPath` é a pasta como o repositório a chama (docs/pdr…): é ela que decide pela pasta.
+  for (const n of names) adrs.push(parseAdr(await readFile(join(dir, n), 'utf8'), `${repoPath}/${n}`));
   return linkAll(adrs);
 }
 
@@ -309,7 +347,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   else {
     for (const a of adrs) {
       const links = a.links.map((l) => `${l.kind}→${l.target ?? l.file ?? l.number}`).join(' ');
-      console.log([a.id.slice(0, 44).padEnd(44), a.format.padEnd(11), a.status.padEnd(10), (a.date ?? '—').padEnd(10), `opções ${a.options.length}`, a.missing.length ? `falta: ${a.missing.join(',')}` : 'completa', links].join('  '));
+      console.log([a.kind.toUpperCase(), a.id.slice(0, 44).padEnd(44), a.format.padEnd(11), a.status.padEnd(10), (a.date ?? '—').padEnd(10), `opções ${a.options.length}`, a.missing.length ? `falta: ${a.missing.join(',')}` : 'completa', links].join('  '));
     }
   }
 }

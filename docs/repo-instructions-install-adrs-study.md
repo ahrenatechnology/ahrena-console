@@ -3,9 +3,9 @@
 - **Issues, na ordem de prioridade:**
   - [#183](https://github.com/ahrenatechnology/ahrena-console/issues/183): instruções dos agentes;
   - [#184](https://github.com/ahrenatechnology/ahrena-console/issues/184): instalar o Ahrena Framework;
-  - [#174](https://github.com/ahrenatechnology/ahrena-console/issues/174): ADRs.
+  - [#174](https://github.com/ahrenatechnology/ahrena-console/issues/174): ADRs, e as PDRs, que entraram em 20/10.
 - **Data:** 20/10/2026
-- **Wireframes:** C28 a C37 em [docs/wireframes](wireframes/), para aprovação antes da implementação
+- **Wireframes:** C28 a C38 em [docs/wireframes](wireframes/), para aprovação antes da implementação
 - **Provas:** [spikes/agent-instructions](../spikes/agent-instructions/), [spikes/framework-install](../spikes/framework-install/) e [spikes/adr-extractor](../spikes/adr-extractor/)
 
 ## Resumo
@@ -19,7 +19,7 @@
    - `@AGENTS.md` no `CLAUDE.md`, sempre.
 
    O console monta o plano, mostra o diff e abre um PR num branch novo, sem tocar no branch padrão. O que já existe é mesclado por blocos com marcadores, e um JSON quebrado bloqueia a instalação em vez de virar `{}` (o erro do instalador antigo).
-5. **ADRs (#174):** cinco formatos cobrem o que se encontra. Faltar uma seção é comum: o próprio repositório do MADR não escreve status nem data. A tela diz "não está no texto" em vez de esconder a seção.
+5. **ADRs e PDRs (#174):** as PDRs (decisões de produto) usam o mesmo extrator e a mesma tela; o tipo vem do campo de tipo, do prefixo ou da pasta, e sem sinal fica ADR. Para as ADRs, cinco formatos cobrem o que se encontra. Faltar uma seção é comum: o próprio repositório do MADR não escreve status nem data. A tela diz "não está no texto" em vez de esconder a seção.
 6. **Este repositório não tem nenhuma instrução para agentes:** nem `CLAUDE.md`, nem `AGENTS.md`, nem `.claude/`. É o caso do aviso de C33, que agora oferece Instalar.
 
 ## Decisões de 20/10 (Fernando, pelo PM)
@@ -217,7 +217,7 @@ No exemplo de C36 (Python com FastAPI, `CLAUDE.md` e `settings.json` já existen
 
 Quando o Cursor for confirmado, entram mais 13 regras `.mdc`.
 
-## Parte 3 · ADRs (#174)
+## Parte 3 · ADRs e PDRs (#174)
 
 ### Formatos
 
@@ -271,6 +271,39 @@ A busca segue esta ordem: `docs/adr`, `docs/adrs`, `docs/decisions`, `docs/decis
 As 39 ADRs públicas foram lidas na hora, para o teste, e não entraram no repositório. O que faltou nelas falta no próprio texto, e na tela vira "não está no texto".
 
 Em `docs/decisoes`, as datas vêm em dois formatos (`18/10/2026` na 0001 e ISO nas outras), e o status da 0005 tem uma nota ("aceita; revista no mesmo dia: …"). As duas coisas saem normalizadas, com o original guardado.
+
+### PDRs: as decisões de produto
+
+Uma PDR (*product decision record*) registra uma decisão de produto: o que o produto faz, para quem e por quê. Por exemplo: "plano gratuito com até 3 projetos" ou "onboarding em três passos". Ela tem a mesma forma de uma ADR (status, data, contexto, decisão, alternativas, consequências e ligações), e os times escrevem PDRs com os mesmos modelos: MADR, Nygard ou livre. Por isso o extrator é o mesmo, e a tela de PDR (C38) é a de ADR (C28) com outro rótulo.
+
+**Pastas.** As PDRs ficam em `docs/pdr`, `docs/pdrs`, `docs/product-decisions`, `docs/product/decisions`, `docs/decisoes-de-produto`, `doc/pdr`, `pdr`, `pdrs` ou `product-decisions`. Também aparecem misturadas às ADRs numa pasta só, como `docs/decisoes`. Essas pastas entram na mesma descoberta comum da leitura: são 9 apelidos a mais na mesma consulta, e o custo continua em 1 ponto.
+
+**Como distinguir ADR de PDR**, na ordem, parando no primeiro sinal:
+
+| Sinal | Exemplo | Por quê vem nessa ordem |
+| --- | --- | --- |
+| 1. Campo de tipo | front matter `type: product` (ou `kind`, `category`), linha `- **Tipo:** produto` | É o único sinal que funciona numa pasta mista, e é o que o autor escreveu de propósito |
+| 2. Prefixo | arquivo `PDR-001-…md` ou título `# PDR-001: …` (e `ADR-` para ADR) | Quem numera por tipo já separa no nome |
+| 3. Pasta | `docs/pdr/…`, `docs/product-decisions/…` são PDR; `docs/adr/…`, `doc/architecture/decisions/…` são ADR | A pasta diz o tipo quando o arquivo não diz |
+| 4. Nenhum sinal | `docs/decisoes/0003-…md` sem campo | Fica ADR: é o uso mais comum. A tela mostra "tipo pelo padrão" para quem quiser escrever o campo |
+
+O extrator devolve `kind` (`adr` ou `pdr`) e o porquê (`campo de tipo`, `prefixo`, `pasta` ou `padrão`). Com isso, as duas telas leem a mesma lista, e uma pasta mista aparece nas duas: as ADRs numa e as PDRs na outra. A linha do grupo diz "separadas das ADRs pelo campo Tipo: produto" (C38).
+
+As 7 ADRs deste repositório não têm campo de tipo e estão em `docs/decisoes`: ficam ADR pelo padrão, como devem. Se um dia o repositório tiver decisões de produto, basta a linha `- **Tipo:** produto` nelas.
+
+**Teste.** Os 8 testes do extrator incluem o caso das PDRs:
+
+- uma pasta mista (`docs/decisoes`) com uma ADR pelo campo, uma PDR pelo campo e uma sem campo, que fica ADR;
+- uma pasta de PDR com um MADR 4 de prefixo `PDR-001` e um Nygard só pela pasta;
+- a mesma PDR sem campo nem prefixo numa pasta de ADR, que vira ADR, porque a pasta só decide sem sinal melhor.
+
+O teste também achou um erro real: a opção escolhida entre aspas que tinha vírgula ("Three steps, the rest deferred") era cortada na vírgula. Está corrigido.
+
+**Na barra**, o grupo Decisões tem três itens:
+
+- **Das sessões:** a tela atual de decisões, C20 e C21;
+- **ADR:** arquitetura, C28 a C31;
+- **PDR:** produto, C38. A PDR aberta e os estados usam C30 e C31 com o rótulo trocado.
 
 ## Custo no GitHub (leitura)
 
@@ -330,13 +363,14 @@ Bastidores em inglês, inclusive variáveis de ambiente; tela em pt-BR.
   - `GET /api/adrs?q=&status=&repo=`: a lista de todos os repositórios, sem o texto;
   - `GET /api/adrs/<owner>/<repo>`: a lista de um repositório, a pasta e a hora da leitura;
   - `GET /api/adrs/<owner>/<repo>/<id>`: a ADR estruturada e o Markdown original;
+  - `GET /api/pdrs`, `GET /api/pdrs/<owner>/<repo>` e `GET /api/pdrs/<owner>/<repo>/<id>`: as mesmas rotas, filtradas por `kind: pdr`;
   - `GET /api/repos/<owner>/<repo>/agent-instructions`: os arquivos com a árvore de imports e o que `.claude/` traz;
   - `GET /api/repos/<owner>/<repo>/agent-instructions/file?path=`: um arquivo, com os imports já lidos;
   - `GET /api/repos/<owner>/<repo>/framework-install/plan?platforms=&plugins=`: o que achamos, os plugins sugeridos, o plano e o diff de cada arquivo. Não escreve;
   - `POST /api/repos/<owner>/<repo>/framework-install`: abre o PR do plano que a tela mostrou. Recusa se o plano mudou desde a prévia, comparando o hash do plano;
   - `GET /api/repos/<owner>/<repo>/framework-install/pull-request`: o PR aberto e o estado dele.
 - **Telas:**
-  - `/ui/adrs` (C28) e `/ui/adrs/<owner>/<repo>/<id>` (C30);
+  - `/ui/adrs` (C28) e `/ui/adrs/<owner>/<repo>/<id>` (C30); `/ui/pdrs` (C38) e `/ui/pdrs/<owner>/<repo>/<id>`, com as mesmas telas;
   - as abas ADRs e Instruções em `/ui/repos/<owner>/<repo>` (C29 e C32), com o fluxo Instalar dentro da aba Instruções (C34 a C37);
   - CSS em `ui/adrs.css` (prefixo `adr-`) e `ui/agent-instructions.css` (prefixo `ins-`; o fluxo Instalar usa `ins-install-`).
 - **Mudança ao vivo:** `tipo: 'adrs'`, `tipo: 'agent-instructions'` e `tipo: 'framework-install'`, com a chave `<owner>/<repo>`.

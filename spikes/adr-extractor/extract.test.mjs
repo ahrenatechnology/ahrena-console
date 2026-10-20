@@ -97,3 +97,20 @@ test('normalização: datas, status e arquivos que não são ADR', () => {
   assert.equal(isAdrFile('adr-template.md'), false);
   assert.equal(isAdrFile('0001-x.md'), true);
 });
+
+test('ADR ou PDR: campo de tipo numa pasta mista, prefixo, pasta e o padrão', async () => {
+  const mista = byId(await readDir(here('fixtures/mixed-pt'), 'docs/decisoes'));
+  assert.deepEqual([mista['0001'].kind, mista['0001'].kindWhy], ['adr', 'campo de tipo']);
+  assert.deepEqual([mista['0002'].kind, mista['0002'].kindWhy], ['pdr', 'campo de tipo']);
+  assert.deepEqual([mista['0003'].kind, mista['0003'].kindWhy], ['adr', 'padrão']);
+  assert.deepEqual(mista['0002'].options, ['Teste de 14 dias', 'Um projeto só']);
+  assert.deepEqual(mista['0002'].deciders, ['produto-sintetico', 'dev-sintetico']);
+  const pdr = await readDir(here('fixtures/pdr'), 'docs/pdr');
+  const [a, b] = pdr;
+  assert.deepEqual([a.id, a.kind, a.kindWhy, a.number, a.title, a.format], ['0002-pricing-page-in-local-currency', 'pdr', 'pasta', 2, 'Pricing page in local currency', 'adr-tools']);
+  assert.deepEqual([b.kind, b.kindWhy, b.number, b.title, b.format, b.chosen], ['pdr', 'prefixo', 1, 'Onboarding in three steps', 'madr4', 'Three steps, the rest deferred']);
+  // As ADRs deste repositório não têm campo de tipo e estão numa pasta mista: ficam ADR pelo padrão.
+  assert.ok((await readDir(here('../../docs/decisoes'), 'docs/decisoes')).every((x) => x.kind === 'adr' && x.kindWhy === 'padrão'));
+  // A mesma PDR numa pasta de ADR, sem campo nem prefixo, vira ADR: a pasta só decide sem sinal melhor.
+  assert.equal((await readDir(here('fixtures/pdr'), 'docs/adr'))[0].kind, 'adr');
+});

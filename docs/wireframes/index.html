@@ -619,7 +619,7 @@ function lado(ativo, q = 4, ws = 'ok') {
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
     ['kanban', 'kanban', 'Kanban'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'],
     ['-', '', 'Entrega'], ['repos', 'folder-git-2', 'Repositórios'], ['projeto', 'github', 'Kanban do projeto'], ['dev', 'gauge', 'Dev Console'],
-    ['-', '', 'Decisões'], ['decisoes', 'git-commit-horizontal', 'Decisões'], ['adrs', 'scroll-text', 'ADRs'],
+    ['-', '', 'Decisões'], ['decisoes', 'git-commit-horizontal', 'Das sessões'], ['adrs', 'scroll-text', 'ADR'], ['pdrs', 'lightbulb', 'PDR'],
     ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
   ]
@@ -1312,22 +1312,50 @@ const adrLinha = ([n, t, st, d, lig, falta], larga) => `<div style="display:grid
     <span>${adrPill(st || 'unknown')}</span>
     ${larga ? `<span class="trunc c-muted" style="font-size:11.5px">${lig ? `<span class="c-accent">${ic('git-compare-arrows')}</span> ${lig}` : ''}${lig && falta ? ' · ' : ''}${falta}</span>` : ''}
     <span class="mono c-muted" style="font-size:11px;text-align:right">${d}</span><span class="c-muted">${ic('chevron-right')}</span></div>`
-const adrFiltros = `<div class="cartao filtros" style="flex-wrap:wrap"><span class="campo" style="flex:1 1 300px">${ic('search')}Buscar no título e no texto: "fila", "cache", "SQLite"…</span><span class="campo" style="width:190px">Todas as organizações<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo" style="width:190px">Todos os repositórios<span style="margin-left:auto">${ic('chevron-down')}</span></span>
+const adrFiltros = `<div class="cartao filtros" style="flex-wrap:wrap"><span class="campo" style="flex:1 1 300px;min-width:0;overflow:hidden">${ic('search')}Buscar no título e no texto: "fila", "cache", "SQLite"…</span><span class="campo" style="width:190px">Todas as organizações<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo" style="width:190px">Todos os repositórios<span style="margin-left:auto">${ic('chevron-down')}</span></span>
   <div style="display:flex;gap:10px;align-items:center;flex-basis:100%"><div class="seg"><span class="on">Todas 21</span><span>Aceitas 11</span><span>Propostas 3</span><span>Substituídas 4</span><span>Obsoletas 1</span><span>Rejeitadas 1</span><span>Sem status 1</span></div><span class="c-muted" style="margin-left:auto;font-size:12px;display:inline-flex;gap:6px;align-items:center">Mais recentes primeiro ${ic('chevron-down')}</span></div></div>`
-function telaAdrs(larga) {
-  return `${cab('scroll-text', 'ADRs', 'Os registros de decisão dos repositórios da sua conta, lidos das pastas de cada um', `<span class="chip">${ic('github')}conta: dev-sintetico</span>${atualizar}`)}
+// A tela geral de registros de decisão, a mesma para ADR (arquitetura) e PDR (produto): muda só
+// o rótulo, os números, a busca e os grupos. `R` traz o que muda.
+function telaRegistros(larga, R) {
+  return `${cab(R.ic, R.titulo, R.sub, `<span class="chip">${ic('github')}conta: dev-sintetico</span>${atualizar}`)}
   <div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr))">
-    ${stat('ADRs', '21', 'em 5 de 8 repositórios', 'scroll-text', 'var(--accent-text)')}
-    ${stat('Aceitas', '11', 'valem hoje', 'check-circle-2', 'var(--status-completed-text)')}
-    ${stat('Propostas', '3', 'esperando decisão', 'circle-dashed', 'var(--status-waiting-text)')}
-    ${stat('Substituídas', '5', 'substituídas ou obsoletas', 'git-compare-arrows', 'var(--muted)')}
-    ${stat('Incompletas', '6', 'sem status, data ou seção', 'file-warning', 'var(--muted)')}
+    ${stat(R.sigla + 's', R.n[0], R.n[1], R.ic, 'var(--accent-text)')}
+    ${stat('Aceitas', R.n[2], 'valem hoje', 'check-circle-2', 'var(--status-completed-text)')}
+    ${stat('Propostas', R.n[3], 'esperando decisão', 'circle-dashed', 'var(--status-waiting-text)')}
+    ${stat('Substituídas', R.n[4], 'substituídas ou obsoletas', 'git-compare-arrows', 'var(--muted)')}
+    ${stat('Incompletas', R.n[5], 'sem status, data ou seção', 'file-warning', 'var(--muted)')}
   </div>
-  ${adrFiltros}
-  ${ADRS.map(([repo, pasta, fmt, l, tot]) => `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('folder-git-2')}<span style="text-transform:none;letter-spacing:0;color:var(--text);font-size:12.5px" class="mono">${repo}</span><span style="text-transform:none;letter-spacing:0;font-weight:400">${pasta} · ${fmt} · ${tot} ADRs</span>${tot > l.length ? `<span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500" class="c-accent">Ver as ${tot} ›</span>` : ''}</div>
+  ${R.filtros}
+  ${R.grupos.map(([repo, pasta, fmt, l, tot, tipo]) => `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('folder-git-2')}<span style="text-transform:none;letter-spacing:0;color:var(--text);font-size:12.5px" class="mono">${repo}</span><span style="text-transform:none;letter-spacing:0;font-weight:400">${pasta} · ${fmt} · ${tot} ${R.sigla}s${tipo ? ` · ${tipo}` : ''}</span>${tot > l.length ? `<span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500" class="c-accent">Ver as ${tot} ›</span>` : ''}</div>
     <div class="cartao" style="overflow:hidden">${l.map(a => adrLinha(a, larga)).join('')}</div></div>`).join('')}
-  <div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)">${ic('folder-search')}<span class="trunc">Sem ADR em 3 repositórios: <b style="color:var(--text);font-weight:500">gateway-sandbox</b>, <b style="color:var(--text);font-weight:500">catalogo-exemplo</b> e <b style="color:var(--text);font-weight:500">blog-estatico</b>.</span><span class="c-accent" style="margin-left:auto;white-space:nowrap">Pastas procuradas</span></div>`
+  <div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)">${ic('folder-search')}<span class="trunc">${R.sem}</span><span class="c-accent" style="margin-left:auto;white-space:nowrap">Pastas procuradas</span></div>`
 }
+const b500 = t => `<b style="color:var(--text);font-weight:500">${t}</b>`
+const telaAdrs = larga => telaRegistros(larga, {
+  ic: 'scroll-text', sigla: 'ADR', titulo: 'ADR', sub: 'Decisões de arquitetura dos repositórios da sua conta, lidas das pastas de cada um',
+  n: ['21', 'em 5 de 8 repositórios', '11', '3', '5', '6'], filtros: adrFiltros, grupos: ADRS,
+  sem: `Sem ADR em 3 repositórios: ${b500('gateway-sandbox')}, ${b500('catalogo-exemplo')} e ${b500('blog-estatico')}.`,
+})
+// PDR: decisões de produto. Duas fontes: uma pasta só de PDR e uma pasta mista, separada pelo campo Tipo.
+const PDRS = [
+  ['estudio-ficticio/app-receitas', 'docs/product-decisions', 'MADR 4', [
+    ['0004', 'Receitas salvas funcionam sem conta', 'proposed', '16/10/2026', '', ''],
+    ['0003', 'Plano gratuito com até 3 coleções', 'accepted', '01/09/2026', 'substitui 0001', ''],
+    ['0002', 'Busca por ingrediente antes de busca por nome', 'accepted', '12/07/2026', '', ''],
+    ['0001', 'Teste grátis de 14 dias', 'superseded', '03/03/2026', 'substituída por 0003', ''],
+  ], 4, ''],
+  ['exemplo-labs/vitrine-demo', 'docs/decisoes', 'livre', [
+    ['0007', 'Kanban mostra só as sessões do usuário', 'accepted', '14/10/2026', '', 'sem alternativas'],
+    ['0002', 'Lista de espera antes do lançamento', 'rejected', '20/08/2026', '', ''],
+  ], 2, 'separadas das ADRs pelo campo Tipo: produto'],
+]
+const telaPdrs = larga => telaRegistros(larga, {
+  ic: 'lightbulb', sigla: 'PDR', titulo: 'PDR', sub: 'Decisões de produto dos repositórios da sua conta: o que o produto faz, para quem e por quê',
+  n: ['6', 'em 2 de 8 repositórios', '3', '1', '1', '1'],
+  filtros: adrFiltros.replace('"fila", "cache", "SQLite"', '"gratuito", "preço", "onboarding"').replace('Todas 21', 'Todas 6').replace('Aceitas 11', 'Aceitas 3').replace('Propostas 3', 'Propostas 1').replace('Substituídas 4', 'Substituídas 1').replace('Obsoletas 1', 'Obsoletas 0').replace('Sem status 1', 'Sem status 0'),
+  grupos: PDRS,
+  sem: `Sem PDR em 6 repositórios. Procuramos ${b500('docs/pdr')}, ${b500('docs/product-decisions')} e mais 7 pastas, e as decisões com Tipo: produto nas pastas de ADR.`,
+})
 
 // Aba ADRs na tela do repositório (C23).
 function telaRepoAdrs() {
@@ -2255,7 +2283,7 @@ const TELAS = [
     n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o túnel nem o núcleo de lá: o app só mostra.', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
   { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem espera; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
     n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
-  { id: 'console-adrs', cod: 'C28', nome: 'ADRs', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
+  { id: 'console-adrs', cod: 'C28', nome: 'ADR · decisões de arquitetura', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
     n: N(['A lista agrupada do Histórico e de Decisões (C21), os StatCards e os filtros de Sessões.'], ['O CCAM não lê ADRs. A tela lê as pastas de ADR que a varredura de Repositórios (C22) já conhece, com o cache da decisão 0001.', 'Em 1440 a linha ganha a coluna das ligações e do que falta; em 1100 isso desce para baixo do título.', 'Repositórios sem ADR ficam numa linha só, no fim, com as pastas procuradas.']) },
   { id: 'console-repo-adrs', cod: 'C29', nome: 'Repositório · ADRs', sub: 'A aba ADRs na tela de um repositório (C23): a lista do repositório, onde foi lida e a cadeia de substituições. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaRepoAdrs())}</div>`,
     n: N(['O cabeçalho e as abas do Session Detail, como em C23.'], ['A aba fica ao lado de Decisões: Decisões são as das sessões (C20 e C21); ADRs são os registros que estão no repositório.', 'A cadeia mostra quem substituiu quem, inclusive quando só um dos lados escreveu a ligação.']) },
@@ -2275,6 +2303,8 @@ const TELAS = [
     n: N(['O diff do GitHub, unificado ou lado a lado.'], ['Os números são os do planejador do spike sobre estes arquivos: AGENTS.md +21, CLAUDE.md +4, settings.json +15.', 'O campo de issue é opcional: vazio, o PR sai sem referência.', 'Mesclar nunca apaga: no exemplo, a permissão que já existia continua.', 'O PR sai num branch novo, com um commit; o main não é tocado.']) },
   { id: 'console-install-pr', cod: 'C37', nome: 'Instalar · PR aberto e o que impede', sub: 'Passo 3: o PR aberto, com CI e review, ao vivo. Embaixo, os dois casos em que o PR não sai: um settings.json quebrado e a falta de permissão de escrita. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'repos', telaInstalarPr())}</div>`,
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
+  { id: 'console-pdrs', cod: 'C38', nome: 'PDR · decisões de produto', sub: 'A irmã de ADR (C28): as decisões de produto dos repositórios, com a mesma lista, a mesma busca e o mesmo filtro por status. Vêm de pastas só de PDR (docs/product-decisions) e das pastas mistas, pelo campo Tipo. A PDR aberta é a C30, com outro rótulo. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'pdrs', telaPdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'pdrs', telaPdrs(true))}</div>`,
+    n: N(['A tela de ADR (C28), inteira: a mesma função desenha as duas.'], ['No grupo Decisões da barra ficam três itens: Das sessões (C20 e C21), ADR e PDR.', 'Numa pasta mista, como docs/decisoes, o campo Tipo separa: a linha do grupo diz isso.', 'Sem nenhum sinal, o registro fica como ADR.']) },
 ]
 
 // =====================================================================
