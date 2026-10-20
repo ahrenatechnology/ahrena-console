@@ -493,6 +493,47 @@ body.captura .palco { overflow: visible; }
 /* ---------- bothWidths da janela (1100 é a do app, 1440 a de um monitor largo) ---------- */
 .cc.w1100 { width: 1100px; } .cc.w1440 { width: 1440px; }
 .width-col { display: flex; flex-direction: column; gap: 6px; }
+/* ?width=1100 or ?width=1440 in capture mode keeps only that column (C45 to C47). */
+body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-width="1440"] .width-col[data-w="1100"] { display: none; }
+/* ---------- session message (C45 to C47, issue #61) ---------- */
+.sm-compose { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.sm-compose.sm-off { border-color: var(--border); border-style: dashed; }
+.sm-dest { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.sm-dest b { font-weight: 600; max-width: 320px; }
+.sm-dest .chip { height: 22px; font-family: var(--font-sans); }
+.sm-account { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.sm-account-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rose); display: inline-block; }
+.sm-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.sm-text { min-height: 74px; padding: 10px 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); font-size: 13px; line-height: 1.55; color: var(--text); position: relative; }
+.sm-text.sm-focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.sm-text.sm-faded { color: var(--muted); }
+.sm-text .sm-ph { color: var(--muted); }
+.sm-text .sm-caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--accent); vertical-align: -0.2em; margin-left: 1px; }
+.sm-text .sm-count { position: absolute; right: 10px; bottom: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.sm-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sm-note { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--muted); line-height: 1.45; flex: 1 1 260px; min-width: 0; }
+.sm-note svg { margin-top: 2px; }
+.sm-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.sm-cmd { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--border); font-family: var(--font-mono); font-size: 12px; color: var(--muted); opacity: .7; }
+.sm-why { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.sm-send.sm-disabled { opacity: .45; }
+.sm-kbd { font-family: var(--font-mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--on-accent) 14%, transparent); font-weight: 500; }
+.sm-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5; background: var(--raised); }
+.sm-status svg { margin-top: 2px; flex: none; }
+.sm-status.sm-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.sm-status.sm-ok b, .sm-status.sm-ok svg { color: var(--status-completed-text); }
+.sm-status.sm-wait { background: color-mix(in srgb, var(--status-waiting-badge) 70%, var(--surface)); }
+.sm-status.sm-wait b, .sm-status.sm-wait svg { color: var(--status-waiting-text); }
+.sm-status.sm-fail { background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); }
+.sm-status.sm-fail b, .sm-status.sm-fail svg { color: var(--status-error-text); }
+.sm-status.sm-busy b, .sm-status.sm-busy svg { color: var(--accent-text); }
+.sm-status .btn { margin-left: auto; height: 26px; }
+.sm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.sm-cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sm-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.sm-head b { font-weight: 600; }
+.sm-from { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: 500; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); font-family: var(--font-sans); }
+.sm-row-action { display: inline-flex; align-items: center; gap: 5px; color: var(--accent-text); font-weight: 600; }
 .cc-nav .tm-dot { margin-left: auto; }
 /* ---------- machines (C24 to C26, decision 0008) ---------- */
 .tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; }
@@ -2174,6 +2215,104 @@ const APP = {
 }
 
 // =====================================================================
+// Session message (C45 to C47, issue #61): a compose box in the Detail that sends text to the
+// live session through Claude Code's cross-session inbox. Synthetic data only.
+// =====================================================================
+const widthCol = (w, label, body) => `<div class="width-col" data-w="${w}"><div class="rotulo">${label}</div>${body}</div>`
+const smAccount = `<span class="sm-account"><i class="sm-account-dot"></i>Pessoal (simulada)</span>`
+const smDest = (s, where = 'Claude Desktop') => `<div class="sm-dest"><span class="c-muted">Para</span><b class="trunc">${s.nome}</b><span class="chip">${ic('monitor')}${where}</span>${smAccount}<span class="sm-live">${ponto('completed')}processo vivo nesta máquina</span></div>`
+const smNote = `<span class="sm-note">${ic('info')}<span>Chega à sessão como mensagem <b style="color:var(--text);font-weight:500">de outra sessão</b>: não aprova permissão, não roda comando e não muda configuração.</span></span>`
+const smCommands = `<span class="sm-cmd" title="/compact chegaria como texto: só o mod do painel roda comandos">/compact</span><span class="sm-cmd" title="/clear chegaria como texto: só o mod do painel roda comandos">/clear</span><span class="sm-why">${ic('lock')}dependem do mod</span>`
+const smSend = (label = 'Enviar', off = false, icon = 'corner-down-left') => `<span class="btn cheio sm-send${off ? ' sm-disabled' : ''}">${ic(icon)}${label}${label === 'Enviar' ? ' <span class="sm-kbd">⌘↵</span>' : ''}</span>`
+const smStatus = (kind, icon, html, action = '') => `<div class="sm-status sm-${kind}">${ic(icon)}<div>${html}</div>${action}</div>`
+
+/** The compose box. `text` is what the person typed; it only ever lives in the box, never comes back from a log. */
+function smCompose({ s, dest = true, text = '', focus = false, faded = false, status = '', send = smSend(), note = smNote, commands = true, off = false, placeholder = 'Escreva para a sessão… (⌘↵ envia)' }) {
+  const body = text ? `${text}${focus ? '<span class="sm-caret"></span>' : ''}<span class="sm-count">${text.length} / 16 KiB</span>` : `<span class="sm-ph">${placeholder}</span>`
+  return `<div class="cartao sm-compose${off ? ' sm-off' : ''}">
+    ${dest && s ? smDest(s) : ''}
+    <div class="sm-text${focus ? ' sm-focus' : ''}${faded ? ' sm-faded' : ''}">${body}</div>
+    ${status}
+    <div class="sm-foot">${note}<span class="sm-actions">${commands ? smCommands : ''}${send}</span></div>
+  </div>`
+}
+
+/** The Conversa tab of e04b7d93, idle in Claude Desktop after the last turn ("Sua vez"). */
+function smConversation(extra = '') {
+  return `<div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">22:51</span></div><div class="corpo">quebre o retry em uma função</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="chip">↓ 3,2 k · ↑ 840</span><span class="h">22:53</span></div>
+      <div class="corpo">Extraí <code>comBackoff(tarefa, tentativas)</code> em <code>src/fila/retry.ts</code>, com espera dobrando a partir de 200 ms e teto de 5 s.</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Edit</span><span class="cmd trunc">src/fila/retry.ts</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">22:58</span></div><div class="corpo">faz o commit</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="chip">↓ 1,1 k · ↑ 260</span><span class="h">22:59</span></div>
+      <div class="corpo">Commit feito em <code>feat/9-retry</code>. Rodo os testes?</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">git commit -m "fila: retry com backoff"</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
+    ${extra}
+  </div>`
+}
+const smBar = `<div style="display:flex;gap:10px;align-items:center"><span class="campo" style="width:260px">Agente principal<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="chip">${ic('message-square')}62 mensagens</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></div>`
+
+function sessionMessageScreen() {
+  const s = byId('e04b7d93')
+  return `${detCab(s)}${abas(1, 1, '96/640')}${smBar}${smConversation()}
+  ${smCompose({ s, text: 'sim, roda os testes da fila e me diz quais falharam', focus: true })}`
+}
+
+function sessionMessagePermissionScreen() {
+  const s = byId('b91d04aa')
+  return `${detCab(s)}
+  <div class="faixa"><span class="ic">${ic('shield-alert')}</span><div><b>Esperando você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span></div>
+  ${abas(1, 3, '240/1.877')}
+  <div class="cartao" style="padding:14px 18px;display:flex;flex-direction:column;gap:14px">
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Opus 5.5</span><span class="chip">↓ 2,3 k · ↑ 310</span><span class="h">23:02</span></div>
+      <div class="corpo">Vou aplicar a migração no banco local.</div>
+      <div class="ferrbloco">${ic('chevron-down')}<span class="n">Bash</span><span class="cmd trunc">npm run migrate</span><span class="esp">${ic('hourglass')}Aguardando permissão</span></div></div></div>
+  </div>
+  ${smCompose({ s, text: 'antes de migrar, confere se o banco local está vazio', status: smStatus('wait', 'shield-alert', '<b>Esta mensagem não responde à permissão.</b> Permitir ou negar o <code>npm run migrate</code> continua no Claude Desktop. A mensagem espera na caixa de entrada da sessão e o Claude lê quando a ferramenta voltar.') })}`
+}
+
+function sessionMessageStatesScreen() {
+  const s = byId('e04b7d93')
+  const typed = 'sim, roda os testes da fila e me diz quais falharam'
+  const cell = (n, title, html) => `<div class="sm-cell"><div class="olhinho">${n} · ${title}</div>${html}</div>`
+  const noCmd = { commands: false }
+  return `${detCab(s)}${abas(1, 1, '98/652')}
+  <div class="sm-grid">
+    ${cell(1, 'Enviando', smCompose({ ...noCmd, dest: false, text: typed, faded: true, send: smSend('Enviando…', true, 'loader-2'), status: smStatus('busy', 'loader-2', '<b>Enviando…</b> Entregando na caixa de entrada da sessão. A caixa fica travada até a resposta do núcleo.') }))}
+    ${cell(2, 'Entregue', smCompose({ ...noCmd, dest: false, send: `<span class="btn contorno">${ic('message-square')}Ver na conversa</span>${smSend('Enviar', true)}`, status: smStatus('ok', 'check-circle-2', '<b>Entregue às 23:14.</b> A sessão começou um turno novo às 23:14; a mensagem está na conversa, acima.') }))}
+    ${cell(3, 'Enviada, sem confirmação', smCompose({ ...noCmd, dest: false, send: smSend('Enviar', true), status: smStatus('wait', 'clock', '<b>Enviada às 23:14, sem confirmação.</b> Em 60 s a sessão não começou um turno novo. Ela pode estar segurando a mensagem pela política de mensagens entre sessões; entra quando a sessão aceitar. Mandar de novo duplica.') }))}
+    ${cell(4, 'Não entregue', smCompose({ ...noCmd, dest: false, text: typed, send: smSend('Tentar de novo', false, 'refresh-cw'), status: smStatus('fail', 'x-circle', '<b>Não entregue.</b> O processo da sessão recusou a conexão: ele pode ter saído agora. O texto continua na caixa.') }))}
+  </div>
+  <div class="cartao" style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+    <div class="olhinho">${ic('message-square')}Na conversa, depois de entregue</div>
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="sm-from">${ic('corner-down-left')}de outra sessão · pelo console</span><span class="h">23:14</span></div><div class="corpo">${typed}</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="h">23:14</span></div><div class="corpo">Rodando a bateria da fila…</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">npm test -- fila</span><span class="esp">${ic('loader-2')}Rodando</span></div></div></div>
+  </div>`
+}
+
+function sessionMessageUnavailableScreen(w) {
+  const off = (name, badgeHtml, where, statusHtml, action = '') => `<div class="sm-cell"><div class="sm-head"><b class="trunc">${name}</b>${badgeHtml}<span class="chip" style="font-family:var(--font-sans);height:22px">${ic(where[0])}${where[1]}</span></div>
+    ${smCompose({ off: true, dest: false, commands: false, placeholder: 'Mandar mensagem desligado nesta sessão', send: `${action}${smSend('Enviar', true)}`, status: smStatus('', 'info', statusHtml), note: '' })}</div>`
+  const need = PRECISAM.map(s => `<div class="cartao mini"><div style="display:flex;gap:6px;align-items:center">${s.mot ? motChip(s.mot) : badge('error')}<span style="margin-left:auto;font-size:11px" class="c-muted">${s.idade}</span></div>
+      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe">${s.id === '5a61c2bf' ? '<span class="c-muted">sem processo vivo</span>' : `<span class="sm-row-action">${ic('message-square')}Mandar mensagem</span>`}<b>Abrir ›</b></div></div>`).join('')
+  const rows = ['b91d04aa', 'e04b7d93', '0d7e81c4'].map(byId).map(s => `<tr><td class="nm"><b>${s.nome}</b><small>${s.id}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>${w === 1440 ? `<td class="dir">/simulacao/${s.pj}</td>` : ''}
+      <td>${s.st === 'waiting' ? `<span class="btn contorno" style="height:26px">${ic('message-square')}Mandar mensagem</span>` : '<span class="c-muted" style="font-size:11.5px">sem processo vivo</span>'}</td>${w === 1440 ? `<td class="c-muted">${ic('chevron-right')}</td>` : ''}</tr>`).join('')
+  return `${cab('message-square', 'Mandar mensagem · quando não dá', 'A caixa só liga para uma sessão com um processo vivo nesta máquina, e um só')}
+  <div class="sm-grid" style="${w === 1440 ? 'grid-template-columns:repeat(3,minmax(0,1fr))' : ''}">
+    ${off('Paginação da listagem', badge('completed'), ['monitor', 'Claude Desktop'], '<b>Sem processo vivo.</b> A sessão não está aberta nesta máquina, então não há para onde entregar. Abra no Claude Desktop; quando o processo voltar, a caixa liga sozinha.', `<span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span>`)}
+    ${off('Separar pagamentos em serviços', badge('active'), ['server', 'ws-exemplo'], '<b>A sessão roda em outra máquina.</b> Só o console de ws-exemplo entrega na caixa de entrada de lá; este console não repassa mensagens entre máquinas.')}
+    ${off('Endpoint de exportação em CSV', badge('active'), ['monitor', 'Claude Desktop'], '<b>Dois processos dizem ser esta sessão</b> (pid 4182 e 5307). Para não entregar no lugar errado, não mandamos. Feche um deles e a caixa volta.')}
+  </div>
+  <div class="cartao inbox">
+    <div class="ttl">${ic('bell')}<span class="c-waiting">4 precisam de você</span><span class="r">Dashboard · "Mandar mensagem" abre o Detalhe na Conversa, com a caixa em foco</span></div>
+    <div class="grade4">${need}</div>
+  </div>
+  <div class="cartao"><table class="tabela"><thead><tr><th>Sessão</th><th>Status</th><th>Última atividade</th>${w === 1440 ? '<th>Diretório</th>' : ''}<th>Mensagem</th>${w === 1440 ? '<th></th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>`
+}
+
+// =====================================================================
 // Catálogo de telas
 // =====================================================================
 const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do CCAM</h4><ul>${ccam.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Onde diverge, e por quê</h4><ul>${diverge.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
@@ -2306,6 +2445,12 @@ const TELAS = [
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
   { id: 'console-pdrs', cod: 'C38', nome: 'PDR · decisões de produto', sub: 'A irmã de ADR (C28): as decisões de produto dos repositórios, com a mesma lista, a mesma busca e o mesmo filtro por status. Vêm de pastas só de PDR (docs/product-decisions) e das pastas mistas, pelo campo Tipo. A PDR aberta é a C30, com outro rótulo. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'pdrs', telaPdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'pdrs', telaPdrs(true))}</div>`,
     n: N(['A tela de ADR (C28), inteira: a mesma função desenha as duas.'], ['No grupo Decisões da barra ficam três itens: Das sessões (C20 e C21), ADR e PDR.', 'Numa pasta mista, como docs/decisoes, o campo Tipo separa: a linha do grupo diz isso.', 'Sem nenhum sinal, o registro fica como ADR.']) },
+  { id: 'console-session-message', cod: 'C45', nome: 'Detalhe · Mandar mensagem', sub: 'Issue #61. A Conversa (C5) de uma sessão do Claude Desktop ociosa, com processo vivo nesta máquina, e a caixa de mensagem embaixo: para quem vai (sessão, Claude Desktop, conta), o texto, Enviar (⌘↵) e o aviso de que chega como mensagem de outra sessão. /compact e /clear aparecem desligados: dependem do mod. Embaixo, a variante de uma sessão que pede permissão. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px · sessão ociosa', frameAt(1100, 'sessoes', sessionMessageScreen()))}${widthCol(1440, '1440 px · sessão ociosa', frameAt(1440, 'sessoes', sessionMessageScreen()))}${widthCol(1100, '1100 px · variante: a sessão pede permissão', frameAt(1100, 'sessoes', sessionMessagePermissionScreen()))}</div>`,
+    n: N(['A aba Conversation do Session Detail (C5): seletor de agente, mensagens com modelo e tokens, blocos de ferramenta.', 'O cabeçalho do Session Detail com os chips; a faixa amarela de waiting na variante.'], ['O CCAM só lê; aqui a Conversa ganha a caixa de mensagem, como o Podium. Ela fica no pé da aba Conversa, onde a resposta vai aparecer; as outras abas não têm caixa.', 'Entrega pela caixa de entrada da mensageria entre sessões do Claude Code, só para a sessão escolhida (o mesmo <code>sessionId</code>, processo vivo, socket do próprio usuário). Vale para o Claude Desktop e para o <code>claude</code> no terminal.', 'A linha "Para" diz a sessão, onde ela roda e a conta, para ninguém mandar na sessão errada.', '"De outra sessão" está escrito na caixa: a mensagem não aprova permissão, não roda comando e não muda configuração.', '/compact e /clear ficam visíveis e desligados, com "dependem do mod": pela caixa de entrada eles chegariam como texto. Ligam quando o mod rodar a ordem (fora desta issue).', 'Na variante, a caixa avisa que a mensagem não responde à permissão: permitir continua no Claude Desktop.', 'Ícones reaproveitados de <code>ui/dom.js</code> (your-turn no Enviar, lock, info, shield, monitor); nenhum desenho novo.']) },
+  { id: 'console-session-message-states', cod: 'C46', nome: 'Mandar mensagem · estados da entrega', sub: 'Issue #61. Os quatro estados depois de Enviar: Enviando…; Entregue, confirmado quando a sessão começa um turno novo, com a hora; Enviada, sem confirmação, depois de 60 s; e Não entregue, com o motivo e Tentar de novo. Embaixo, como a mensagem aparece na Conversa. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px', frameAt(1100, 'sessoes', sessionMessageStatesScreen()))}${widthCol(1440, '1440 px', frameAt(1440, 'sessoes', sessionMessageStatesScreen()))}</div>`,
+    n: N(['Os estados de carregamento e de erro inline do C19, e o bloco de ferramenta "Rodando" da Conversa.'], ['O socket não responde nada: "Entregue" só vale quando o transcript mostra um turno novo depois do envio. Falha de conexão é "Não entregue" na hora.', 'Sem turno novo em 60 s, "Enviada, sem confirmação": a sessão pode estar segurando pela política de mensagens entre sessões. Não oferece reenviar, porque duplicaria.', 'O texto digitado só vive na caixa: na falha ele fica lá para tentar de novo; nunca volta de um log (a auditoria guarda o SHA-256, não o texto).', 'Na Conversa, a mensagem vem do próprio transcript, com a marca "de outra sessão · pelo console".']) },
+  { id: 'console-session-message-unavailable', cod: 'C47', nome: 'Mandar mensagem · quando não dá', sub: 'Issue #61. Os casos em que a caixa fica desligada e diz por quê: sessão sem processo vivo (com Abrir no Claude Desktop), sessão em outra máquina e mais de um processo dizendo ser a mesma sessão. Embaixo, "precisam de você" no Dashboard e as linhas de Sessões com a ação Mandar mensagem, que abre o Detalhe na Conversa com a caixa em foco. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px', frameAt(1100, 'sessoes', sessionMessageUnavailableScreen(1100)))}${widthCol(1440, '1440 px', frameAt(1440, 'sessoes', sessionMessageUnavailableScreen(1440)))}</div>`,
+    n: N(['O EmptyState com motivo e ação (C19).', 'O inbox "precisam de você" do Dashboard (C1) e a tabela de Sessões (C3).'], ['A caixa desligada fica no lugar, tracejada, com o motivo: quem procura o botão descobre por que não dá.', 'Sessão sem processo vivo não tem para onde entregar sem o núcleo retomar (9.8); a saída é abrir no Claude Desktop.', 'Outra máquina: só o console daquela máquina entrega. O hub nunca repassa mensagem.', 'Mais de um processo com o mesmo <code>sessionId</code> é recusa: entregar no errado é pior que não entregar.', '"Mandar mensagem" aparece só onde há um processo vivo aqui; numa sessão com erro sem processo, a linha diz "sem processo vivo". É um atalho para o Detalhe: nada é enviado da lista.']) },
 ]
 
 // =====================================================================
@@ -2344,4 +2489,5 @@ const q = new URLSearchParams(location.search)
 tema(q.get('tema') ?? salvo ?? 'dark')
 montar()
 if (q.get('captura')) { document.body.classList.add('captura'); document.getElementById(q.get('captura'))?.classList.add('alvo') }
+if (q.get('width')) document.body.dataset.width = q.get('width')
 </script>
