@@ -17,8 +17,8 @@ import { readMemory, mainAgentOf } from '../states/rules.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
 import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
-import { JANELA_LONGA, JANELA_PADRAO } from '../contexto/janela.ts';
-import { alertaDeContexto, pctDoContexto, rotuloDoContexto, type ContextMeter } from '../contexto/modelo.ts';
+import { LONG_WINDOW, DEFAULT_WINDOW } from '../context/window.ts';
+import { contextAlert, contextPct, contextLabel, type ContextMeter } from '../context/model.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Contas } from './contas.ts';
@@ -50,8 +50,8 @@ import type {
 import type { TrabalhoPorBranch } from './trabalho.ts';
 import { VERSAO_DA_API } from './versao.ts';
 
-export const LIMITE_PADRAO_DE_CONTEXTO = JANELA_PADRAO;
-const LIMITE_LONGO_DE_CONTEXTO = JANELA_LONGA;
+export const LIMITE_PADRAO_DE_CONTEXTO = DEFAULT_WINDOW;
+const LIMITE_LONGO_DE_CONTEXTO = LONG_WINDOW;
 const MAX_MAQUINA = 12;
 const MAX_SESSOES_DOS_PRS = 30;
 const PONTOS_DA_SERIE = 16;
@@ -568,7 +568,7 @@ export function contextoDe(
 ): ContextoDoPainel | null {
   const agentes = medidores
     .filter((m) => m.agentId !== null && m.measuredAt !== null)
-    .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: pctDoContexto(m), overflows: m.compactions, alert: alertaDeContexto(m) }));
+    .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: contextPct(m), overflows: m.compactions, alert: contextAlert(m) }));
   // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
   const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
   const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
@@ -576,11 +576,11 @@ export function contextoDe(
     return {
       used: principal.usedTokens,
       limit: principal.windowTokens,
-      pct: pctDoContexto(principal),
+      pct: contextPct(principal),
       overflows: principal.compactions,
-      alert: alertaDeContexto(principal),
+      alert: contextAlert(principal),
       manualCompactions: principal.manualCompactions,
-      label: rotuloDoContexto(principal),
+      label: contextLabel(principal),
       agents: agentes,
     };
   }
@@ -597,8 +597,8 @@ export function contextoDe(
   const total = Math.max(estouros, contado?.compactions ?? 0);
   const c = { usedTokens: usados, windowTokens: limite, compactions: total };
   return {
-    used: usados, limit: limite, pct: pctDoContexto(c), overflows: total, alert: alertaDeContexto(c),
-    manualCompactions: contado?.manualCompactions ?? 0, label: rotuloDoContexto(c), agents: agentes,
+    used: usados, limit: limite, pct: contextPct(c), overflows: total, alert: contextAlert(c),
+    manualCompactions: contado?.manualCompactions ?? 0, label: contextLabel(c), agents: agentes,
   };
 }
 

@@ -14,7 +14,7 @@
 
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { reconstruirContexto } from '../contexto/gravacao.ts';
+import { rebuildContextMeters } from '../context/recording.ts';
 import { captureTranscriptFile } from '../decisoes/captura-transcript.ts';
 import type { Decision } from '../decisoes/modelo.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
@@ -168,7 +168,7 @@ export async function reprocessarContexto(o: { storage: StoragePort; raiz: strin
         const arquivos = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
         const relidos: SessionEvent[] = [];
         for (const a of arquivos) relidos.push(...(await eventosDoTranscript(a, s.id, (e) => e.type === 'Compaction')));
-        r.medidores += await reconstruirContexto(o.storage, s.id, relidos);
+        r.medidores += await rebuildContextMeters(o.storage, s.id, relidos);
       } catch (err) {
         o.log?.(`medidor de contexto de ${s.id}: ${(err as Error).message}`);
       }

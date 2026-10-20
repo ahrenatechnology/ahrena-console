@@ -1,10 +1,10 @@
-// Esquema SQLite do medidor de contexto (item 1.7). Entra na lista de migrações do adaptador
-// (adapters/sqlite/migrations.ts) como uma migração própria, aditiva: não toca nas tabelas que já existem.
+// SQLite schema of the context meter (item 1.7). It joins the adapter's migration list
+// (adapters/sqlite/migrations.ts) as a migration of its own, additive: it does not touch existing tables.
 
-export const CONTEXTO_MIGRATION_DESCRIPTION = 'medidor de contexto e estouros por sessão e agente (item 1.7)';
+export const CONTEXT_MIGRATION_DESCRIPTION = 'medidor de contexto e estouros por sessão e agente (item 1.7)';
 
-// `agent_key` é o agente do medidor, com '' no lugar do principal (a chave primária não aceita nulo).
-export const CONTEXTO_MIGRATION_SQL = `
+// `agent_key` is the meter's agent, with '' in place of the main one (the primary key does not accept null).
+export const CONTEXT_MIGRATION_SQL = `
   CREATE TABLE context_meters (
     session_id TEXT NOT NULL,
     agent_key TEXT NOT NULL,

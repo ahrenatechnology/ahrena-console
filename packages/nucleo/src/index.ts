@@ -19,7 +19,7 @@ export * from './ingest/hooks/index.ts';
 export * from './states/index.ts';
 export * from './custo/index.ts';
 export * from './plano/index.ts';
-export * from './contexto/index.ts';
+export * from './context/index.ts';
 export * from './decisoes/index.ts';
 export * from './perfis/index.ts';
 export * from './changes/index.ts';
