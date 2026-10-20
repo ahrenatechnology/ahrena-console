@@ -238,6 +238,15 @@ describe('Install (C34): the card on the Instructions tab', () => {
     assert.ok(body.querySelector('.ins-grid'), 'o que existe continua embaixo');
   });
 
+  test('while the default plan is being read, the card is already there, with Instalar off and the notice', async () => {
+    const { area } = await mountTab({ plan: () => ({ state: 'loading', error: null }) as unknown as Plan });
+    const card = area.querySelector('[data-install="loading"]')!;
+    assert.ok(card, 'o card aparece já durante a leitura');
+    assert.equal(card.getAttribute('aria-busy'), 'true');
+    assert.match(texto(card), /Lendo o repositório para preparar a instalação…/);
+    assert.ok(card.querySelector('[data-action="install"]')!.hasAttribute('disabled'));
+  });
+
   test('with the framework installed, there is no card', async () => {
     const { area } = await mountTab({ plan: () => plan({ installed: true }) });
     assert.equal(area.querySelector('.fwi-top'), null);
@@ -359,6 +368,28 @@ describe('Install (C35): step 1, platforms and plugins', () => {
     assert.ok(m.area.querySelector('[data-plugin="ahrena-engineering-delivery"]'));
     await click(m.area.querySelector('[data-plugin="ahrena-engineering-go"]'));
     assert.equal(m.reads.at(-1), `${PLAN_BASE}/plan?platforms=claude,codex&plugins=ahrena-foundation,ahrena-contributing,ahrena-engineering-python,ahrena-engineering-go`);
+  });
+
+  test('changing the choice shows "Recalculando o plano…" and holds Ver a prévia until the new plan arrives', async () => {
+    let release: (() => void) | null = null;
+    let first = true;
+    const m = await mountTab({
+      plan: () => {
+        if (first) return plan();
+        return new Promise<Plan>((resolve) => (release = () => resolve(plan())));
+      },
+    });
+    await click(action(m.area, 'install'));
+    first = false;
+    await click(m.area.querySelector('[data-plugin="ahrena-engineering-python"]'));
+    assert.match(texto(m.area.querySelector('.fwi-band-wait')), /Recalculando o plano…/);
+    const preview = action(m.area, 'preview')!;
+    assert.ok(preview.hasAttribute('disabled'));
+    assert.equal(texto(preview), 'Calculando…');
+    release!();
+    await settle();
+    assert.equal(m.area.querySelector('.fwi-band-wait'), null);
+    assert.equal(texto(action(m.area, 'preview')), 'Ver a prévia');
   });
 
   test('unchecking every suggested plugin still sends the base, not an empty list (which would mean the default)', async () => {

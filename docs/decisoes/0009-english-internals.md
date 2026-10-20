@@ -24,7 +24,7 @@ O código nasceu com os bastidores em pt-BR: rotas (`/api/atencao`, `/api/painel
 | Chaves de JSON (API, MCP, arquivos de configuração) | `{ sessoes, proximo }` | `{ sessions, next }` |
 | Tabelas, colunas e índices do SQLite | `reprocessamentos` | `reprocessings` |
 | Opções de linha de comando | `--cenario`, `--porta` | `--scenario`, `--port` |
-| Variáveis de ambiente, sempre com o prefixo `AHRENA_CONSOLE_` | `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_CORE_PORT` (tabela abaixo) |
+| Variáveis de ambiente, sempre com o prefixo `AHRENA_CONSOLE_` | `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_DEMO_PORT` (tabela abaixo) |
 | Nomes de teste (`test('…')`) e de fixture | | |
 
 ### Variáveis de ambiente
@@ -33,7 +33,7 @@ Todas com o prefixo `AHRENA_CONSOLE_`, como as que já nasceram assim (`AHRENA_C
 
 | Antiga | Nova | Onde |
 | --- | --- | --- |
-| `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_CORE_PORT` | app |
+| `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_DEMO_PORT` | app (a porta de uma demonstração que o app só mostra, #221; `AHRENA_CONSOLE_CORE_PORT` é a porta do núcleo) |
 | `AHRENA_NUCLEO_DIR` | `AHRENA_CONSOLE_CORE_DIR` | app e núcleo (dono) |
 | `AHRENA_NUCLEO_ENTRY` | `AHRENA_CONSOLE_CORE_ENTRY` | núcleo (dono) |
 | `AHRENA_DADOS_DIR` | `AHRENA_CONSOLE_DATA_DIR` | app e núcleo (dono) |

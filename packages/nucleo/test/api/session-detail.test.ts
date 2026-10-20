@@ -6,18 +6,18 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
-  Contas,
-  iniciarApiLocal,
+  Accounts,
+  startLocalApi,
   LeiturasDoDetalhe,
   MontadorDoPainel,
   TrabalhoPorBranch,
   type AgentesDoDetalhe,
-  type ApiLocal,
+  type LocalApi,
   type CabecaDoDetalhe,
   type ConversaDoDetalhe,
   type EventosDoDetalhe,
 } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { DETAIL_LOCAL, demoLocal, DETAIL_SESSION, seedDetail } from '../../src/simulator/detail.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
@@ -29,7 +29,7 @@ const AGORA = Date.now();
 
 describe('Detalhe da sessão: /api/sessions/<id>', () => {
   let storage: SqliteStorage;
-  let api: ApiLocal;
+  let api: LocalApi;
   let host: string;
   const abertos: string[] = [];
   const read = async <T>(caminho: string): Promise<T> => {
@@ -44,9 +44,9 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     await seedDetail(storage, AGORA);
     const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     // Como na --demo: o painel troca qualquer id pelo da sessão do cenário; o Detalhe, não.
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
     const detalhe = new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: demoLocal });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, detalhe, abrirNoDesktop: async (url) => void abertos.push(url) });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, detail: detalhe, openInDesktop: async (url) => void abertos.push(url) });
     host = new URL(api.url).host;
   });
   after(async () => {
@@ -156,7 +156,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
     assert.equal(c.messages[0]!.text, veneno);
     // A tela só põe dado no DOM por `textContent` (el()); nunca por innerHTML.
-    const tela = readFileSync(`${PASTA_DA_UI}screens/session-detail.js`, 'utf8');
+    const tela = readFileSync(`${UI_FOLDER}screens/session-detail.js`, 'utf8');
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   });
 
@@ -230,7 +230,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
   // O CSS de cada tela fica carregado depois que ela abre uma vez: uma classe com o mesmo nome em
   // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `sd-` e as da moldura.
   test('o CSS do Detalhe só estiliza classes `sd-` e não toca as classes de outra tela', () => {
-    const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const semComentario = (arquivo: string) => readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const classes = (arquivo: string) => new Set([...semComentario(arquivo).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((m) => m[1]!));
     const daMoldura = classes('shell.css');
     const minhas = [...classes('screens/session-detail.css')].filter((c) => !daMoldura.has(c));
@@ -238,7 +238,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     // Nenhum seletor de elemento solto (`code`, `pre`): eles pegariam as outras telas.
     const soltos = semComentario('screens/session-detail.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
     assert.deepEqual(soltos.filter((l) => !/^select\.sd-/.test(l)), [], 'seletor de elemento fora do Detalhe');
-    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['screens/session-detail.css', 'shell.css', 'brand.css'].includes(a));
+    const outras = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['screens/session-detail.css', 'shell.css', 'brand.css'].includes(a));
     assert.ok(outras.length > 0);
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));

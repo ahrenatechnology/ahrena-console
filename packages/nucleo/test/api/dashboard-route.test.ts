@@ -3,18 +3,18 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type LocalApi } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { at, event } from '../fixtures.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
-let contas: Contas;
+let contas: Accounts;
 
 beforeEach(() => {
   storage = openSqliteStorage({ path: ':memory:' });
-  contas = new Contas({ storage, arquivo: null });
+  contas = new Accounts({ storage, file: null });
 });
 afterEach(() => storage.close());
 
@@ -135,14 +135,14 @@ describe('MontadorDoDashboard', () => {
 });
 
 describe('GET /api/dashboard', () => {
-  let api: ApiLocal | null = null;
+  let api: LocalApi | null = null;
   afterEach(async () => {
     await api?.close();
     api = null;
   });
 
   const subir = (frota?: FleetReader) =>
-    iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { frota } : {}) });
+    startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { fleet: frota } : {}) });
 
   test('responde o dashboard quando o núcleo tem a frota', async () => {
     const agora = Date.now();

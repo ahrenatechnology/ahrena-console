@@ -6,8 +6,8 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
@@ -42,14 +42,14 @@ const curto = (id: string) => id.replace('sim-wf-payments:', '');
 
 describe('front de Workflows contra a demonstração do p4', () => {
   let storage: SqliteStorage;
-  let api: ApiLocal;
+  let api: LocalApi;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
     await seedPanelScenario(storage, 'p4', AGORA);
     await seedDemoWorkflows(storage, AGORA);
     const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {
     await api.close();
@@ -232,13 +232,13 @@ describe('formatos e registro', () => {
     assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');
     const usados = new Set<string>(['workflows', 'graph']);
     for (const a of ['workflows.js', 'session-detail-workflow.js']) {
-      const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
+      const texto = readFileSync(`${UI_FOLDER}screens/${a}`, 'utf8');
       for (const [, nome] of texto.matchAll(/icone\('([a-z-]+)'\)/g)) usados.add(nome!);
       for (const [, nome] of texto.matchAll(/icone: '([a-z-]+)'/g)) usados.add(nome!);
     }
     for (const nome of usados) assert.ok(ICON_NAMES.includes(nome), `falta o ícone ${nome}`);
     // Sem desenho repetido com outro nome: `graph` é o mesmo de `workflows`, por referência.
-    const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
+    const dom = readFileSync(`${UI_FOLDER}dom.js`, 'utf8');
     assert.match(dom, /ICONS\.graph = ICONS\.workflows;/);
     const desenhos = [...dom.matchAll(/^\s+'?([\w-]+)'?: '(<[^']*)',$/gm)];
     for (const nome of ['workflows', 'people', 'repeat', 'gantt']) {

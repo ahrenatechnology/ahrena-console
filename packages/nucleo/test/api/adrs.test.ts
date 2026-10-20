@@ -7,7 +7,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { createCoreDecisions, createDecisionsRoute, DecisionsService, DECISIONS_DISCOVERY_TTL, type AccountRepo } from '../../src/api/adrs.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import type { DecisionList, DecisionRecordView, RepoDecisions } from '../../src/adrs/model.ts';
 import { EXTRACTOR_VERSION } from '../../src/adrs/parse.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
@@ -410,13 +410,13 @@ describe('#174 the demo data', () => {
 });
 
 describe('#174 the /api/adrs and /api/pdrs routes', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   let s: Setup;
   before(async () => {
     s = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, decisions: createDecisionsRoute(s.service) });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, decisions: createDecisionsRoute(s.service) });
     await s.service.list('adr');
     await s.service.wait();
   });

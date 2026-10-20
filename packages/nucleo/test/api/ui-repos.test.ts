@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import {
   bars,
   COMPUTING,
@@ -363,7 +363,7 @@ describe('repos na /ui: o que a tela mostra', () => {
 // selos de status.
 describe('repos na /ui: as classes', () => {
   const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-  const classesDoCss = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+  const classesDoCss = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
   const daMoldura = classesDoCss('shell.css');
   const permitida = (c: string) => c.startsWith('repo-') || SELOS.has(c) || daMoldura.has(c);
 
@@ -374,8 +374,8 @@ describe('repos na /ui: as classes', () => {
   test('repos.css não estiliza classe de outra tela, fora selos e moldura', () => {
     const minhas = new Set([...classesDoCss('repos.css')].filter((c) => !daMoldura.has(c)));
     const outras = [
-      ...readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'shell.css', 'brand.css'].includes(a)),
-      ...readdirSync(`${PASTA_DA_UI}screens`).filter((a) => a.endsWith('.css')).map((a) => `screens/${a}`),
+      ...readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['repos.css', 'shell.css', 'brand.css'].includes(a)),
+      ...readdirSync(`${UI_FOLDER}screens`).filter((a) => a.endsWith('.css')).map((a) => `screens/${a}`),
     ];
     assert.ok(outras.includes('screens/session-detail.css'));
     for (const outra of outras) {
@@ -385,7 +385,7 @@ describe('repos na /ui: as classes', () => {
 
   test('as telas só usam classe da moldura, selo ou repo-', () => {
     for (const arquivo of ['screens/repos.js', 'screens/repo.js']) {
-      const fonte = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+      const fonte = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
       const usadas = new Set<string>();
       for (const [, , valor] of fonte.matchAll(/class:\s*(['`])(.*?)\1/g)) for (const c of valor!.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/)) if (c) usadas.add(c);
       // Classes passadas por variável (`barraH(pct, 'repo-k-ok')`, as cores): toda string que parece classe.

@@ -66,28 +66,28 @@ describe('decisions: hub and inference', () => {
       repo: '/repo/app',
       branch: 'feat/42-kanban',
       transcriptPath: '/t/s1.jsonl',
-      excerpts: [{ role: 'agente', text: 'Sugiro 10 cards por coluna.', uuid: 'u7', at: at(5) }],
+      excerpts: [{ role: 'agent', text: 'Sugiro 10 cards por coluna.', uuid: 'u7', at: at(5) }],
     };
     const [s] = await captureSuggestions(ctx.decisions, fake, input, at(6));
     assert.equal(seen.length, 1);
-    assert.equal(s.origin, 'sugerida');
-    assert.equal(s.decidedBy, 'agente');
+    assert.equal(s.origin, 'suggested');
+    assert.equal(s.decidedBy, 'agent');
     assert.equal(s.inferred, true);
-    assert.equal(s.state, 'a_confirmar');
+    assert.equal(s.state, 'to_confirm');
     assert.deepEqual(s.alternatives, ['20 por coluna', 'rolagem infinita']);
     assert.deepEqual(s.message, { uuid: 'u7', toolUseId: null, transcriptPath: '/t/s1.jsonl' });
-    assert.equal((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'familia')).length, 0);
+    assert.equal((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'family')).length, 0);
 
     await confirmDecision(ctx.decisions, s.id, at(7));
-    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'familia')).map((d) => d.id), [s.id]);
+    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'family')).map((d) => d.id), [s.id]);
     // Repeating the inference does not duplicate.
     assert.deepEqual(await captureSuggestions(ctx.decisions, fake, input, at(8)), []);
   });
 
   test('CA2: not even a direct registration can make a suggestion count without confirming', async () => {
-    const { decision } = await registerDecision(ctx.decisions, draft({ origin: 'sugerida', decidedBy: 'usuario', inferred: false, state: 'vigente' }), at(1));
-    assert.equal(decision.state, 'a_confirmar');
-    assert.equal(decision.decidedBy, 'agente');
+    const { decision } = await registerDecision(ctx.decisions, draft({ origin: 'suggested', decidedBy: 'user', inferred: false, state: 'current' }), at(1));
+    assert.equal(decision.state, 'to_confirm');
+    assert.equal(decision.decidedBy, 'agent');
     assert.equal(decision.inferred, true);
   });
 });

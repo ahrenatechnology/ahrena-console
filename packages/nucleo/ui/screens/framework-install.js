@@ -136,6 +136,17 @@ const githubLink = (url, label = 'Abrir no GitHub') => (url ? el('a', { class: '
  * `{ inEmpty }`: no vazio (C33) o botão fica no próprio card do vazio, e este só aparece com PR ou sem escrita.
  */
 export function installCard(plan, { onInstall, onFollow, inEmpty = false }) {
+  // O plano padrão ainda sendo montado: o card já aparece, com o Instalar desligado e o aviso de que
+  // está lendo, em vez de surgir do nada uns segundos depois (no vazio, o botão do vazio cuida disso).
+  if (plan?.state === 'loading' && !inEmpty) {
+    return el(
+      'section',
+      { class: 'card fwi-top', 'data-install': 'loading', 'aria-label': 'Instalação do Ahrena Framework', 'aria-busy': 'true' },
+      el('span', { class: 'fwi-top-ico' }, icon('package-plus')),
+      el('div', { class: 'fwi-top-text' }, el('b', {}, 'Ahrena Framework'), el('span', { class: 'fwi-top-sub' }, 'Lendo o repositório para preparar a instalação…')),
+      el('span', { class: 'fwi-top-actions' }, el('button', { type: 'button', class: 'btn filled', 'data-action': 'install', disabled: true }, icon('package-plus'), 'Instalar')),
+    );
+  }
   if (!plan || plan.state !== 'ready' || plan.installed) return null;
   const pr = activePullRequest(plan);
   if (pr) {
@@ -299,6 +310,9 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
     );
     const parts = [head];
     if (notice) parts.push(band(notice));
+    // Recalculando o plano depois de mudar a escolha: o passo 1 diz que está calculando, e o
+    // "Ver a prévia" espera (sem isso, nada mudava na tela por uns segundos).
+    if (busy && step === 0 && plan?.state === 'ready') parts.push(band({ tone: 'wait', title: 'Recalculando o plano…', text: 'A prévia sai com a escolha nova.', iconName: 'clock' }));
     if (!plan || plan.state === 'loading') parts.push(loading({ label: 'Lendo o repositório…' }));
     else if (plan.state !== 'ready') parts.push(band({ tone: 'err', title: 'O plano não saiu.', text: plan.error ?? 'O GitHub não respondeu.' }));
     else if (step === 0) parts.push(...stepChoose());
@@ -311,7 +325,7 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
     if (step === 0) {
       return [
         el('button', { type: 'button', class: 'btn outline', 'data-action': 'cancel', onClick: close }, 'Cancelar'),
-        el('button', { type: 'button', class: 'btn filled', 'data-action': 'preview', disabled: busy || !plan || plan.state !== 'ready' ? true : null, onClick: () => go(1) }, 'Ver a prévia', icon('arrow-right')),
+        el('button', { type: 'button', class: 'btn filled', 'data-action': 'preview', disabled: busy || !plan || plan.state !== 'ready' ? true : null, 'aria-busy': busy ? 'true' : null, onClick: () => go(1) }, busy ? 'Calculando…' : 'Ver a prévia', busy ? null : icon('arrow-right')),
       ];
     }
     if (step === 1) {

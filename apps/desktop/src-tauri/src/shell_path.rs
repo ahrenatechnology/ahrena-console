@@ -1,55 +1,55 @@
-// Um app aberto pelo Finder, pelo Dock ou no login herda do launchd um PATH mínimo
-// (/usr/bin:/bin:/usr/sbin:/sbin) e não acha `claude` (em ~/.local/bin) nem `node`
-// (em /opt/homebrew/bin ou num gerenciador de versões). Como o app do CCAM
-// (desktop/src/shell-path.ts), roda o shell de login uma vez e junta o PATH dele.
+// An app opened from the Finder, the Dock or at login inherits a minimal PATH from launchd
+// (/usr/bin:/bin:/usr/sbin:/sbin) and finds neither `claude` (in ~/.local/bin) nor `node`
+// (in /opt/homebrew/bin or in a version manager). Like CCAM's app (desktop/src/shell-path.ts),
+// it runs the login shell once and merges its PATH.
 
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const MARCA: &str = "__AHRENA_PATH__";
+const MARKER: &str = "__AHRENA_PATH__";
 
-pub fn corrigir_path() {
+pub fn fix_path() {
     let home = std::env::var("HOME").unwrap_or_default();
-    let mut partes: Vec<String> = Vec::new();
-    let mut juntar = |valor: &str| {
-        for p in valor.split(':') {
-            if !p.is_empty() && !partes.iter().any(|x| x == p) {
-                partes.push(p.to_string());
+    let mut parts: Vec<String> = Vec::new();
+    let mut merge = |value: &str| {
+        for p in value.split(':') {
+            if !p.is_empty() && !parts.iter().any(|x| x == p) {
+                parts.push(p.to_string());
             }
         }
     };
-    if let Some(p) = path_do_shell() {
-        juntar(&p);
+    if let Some(p) = shell_path() {
+        merge(&p);
     }
-    juntar(&format!("{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin"));
-    juntar(&std::env::var("PATH").unwrap_or_default());
-    std::env::set_var("PATH", partes.join(":"));
+    merge(&format!("{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin"));
+    merge(&std::env::var("PATH").unwrap_or_default());
+    std::env::set_var("PATH", parts.join(":"));
 }
 
-fn path_do_shell() -> Option<String> {
+fn shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let mut filho = Command::new(shell)
-        .args(["-ilc", &format!("printf '%s' \"{MARCA}$PATH{MARCA}\"")])
+    let mut child = Command::new(shell)
+        .args(["-ilc", &format!("printf '%s' \"{MARKER}$PATH{MARKER}\"")])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    // Um .zshrc lento não pode travar a abertura do app.
-    let prazo = Instant::now() + Duration::from_secs(5);
+    // A slow .zshrc must not hold up the app's opening.
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        match filho.try_wait() {
+        match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) if Instant::now() < prazo => std::thread::sleep(Duration::from_millis(50)),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(50)),
             _ => {
-                let _ = filho.kill();
+                let _ = child.kill();
                 return None;
             }
         }
     }
-    let mut saida = String::new();
-    std::io::Read::read_to_string(&mut filho.stdout.take()?, &mut saida).ok()?;
-    let ini = saida.find(MARCA)? + MARCA.len();
-    let fim = ini + saida[ini..].find(MARCA)?;
-    Some(saida[ini..fim].to_string())
+    let mut output = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut output).ok()?;
+    let start = output.find(MARKER)? + MARKER.len();
+    let end = start + output[start..].find(MARKER)?;
+    Some(output[start..end].to_string())
 }

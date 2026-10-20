@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 import { findScreen, SCREENS } from '../../ui/screens.js';
 
@@ -528,15 +528,15 @@ test('the registry: Analytics in the sidebar; /ui/analytics/cost opens the same 
 });
 
 test('as rotas e os períodos da tela são os do núcleo', async () => {
-  const { ROTA_DO_ANALYTICS, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/analytics-route.ts');
-  assert.equal(tela.OVERVIEW_ROUTE, ROTA_DO_ANALYTICS);
+  const { ANALYTICS_ROUTE, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/analytics-route.ts');
+  assert.equal(tela.OVERVIEW_ROUTE, ANALYTICS_ROUTE);
   assert.equal(tela.COST_ROUTE, COST_ROUTE);
   assert.deepEqual(tela.PERIODS, [...DIAS_DO_CUSTO]);
 });
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem estilo inline', () => {
   for (const arquivo of ['screens/analytics.js', 'analytics.css']) {
-    const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+    const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
     assert.deepEqual(urls, [], `${arquivo} chama endereço de fora`);
@@ -546,11 +546,11 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
   // O CSS de cada tela fica carregado depois que ela abre: classe própria sem prefixo, ou repetida
   // em outra tela, desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões, #151).
   test('analytics.css só estiliza classes an-* ou da moldura, e nenhuma de outra tela', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const daMoldura = classes('shell.css');
     const minhas = [...classes('analytics.css')].filter((c) => !daMoldura.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('an-')), [], 'classe própria do Analytics sem o prefixo an-');
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['analytics.css', 'shell.css', 'brand.css'].includes(a));
+    const outras = readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['analytics.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
       assert.deepEqual(comuns, [], `analytics.css e ${outra} estilizam as mesmas classes`);

@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 
@@ -147,13 +147,13 @@ describe('Dashboard: formatação', () => {
 
 describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
   let sqlite: SqliteStorage;
-  let api: ApiLocal;
+  let api: LocalApi;
   before(async () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
     await seedPanelScenario(sqlite, 'p1');
-    const contas = new Contas({ storage: sqlite, arquivo: null });
+    const contas = new Accounts({ storage: sqlite, file: null });
     const frota = new FleetReader({ storage: sqlite, accounts: contas, cacheMs: 0, costMs: 0 });
-    api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, frota });
+    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, fleet: frota });
   });
   after(async () => {
     await api.close();
@@ -260,14 +260,14 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
 });
 
 test('as rotas da tela são as do núcleo', async () => {
-  const { ATTENTION_ROUTE, ROTA_DO_DASHBOARD: DASHBOARD_ROUTE } = await import('../../src/api/index.ts');
+  const { ATTENTION_ROUTE, DASHBOARD_ROUTE } = await import('../../src/api/index.ts');
   assert.equal(tela.ATTENTION_ROUTE, ATTENTION_ROUTE);
   assert.equal(tela.DASHBOARD_ROUTE, DASHBOARD_ROUTE);
 });
 
 test('a tela e o estilo dela não escrevem cor à mão nem chamam endereço de fora', () => {
   for (const arquivo of ['screens/dashboard.js', 'dashboard.css']) {
-    const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+    const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     assert.doesNotMatch(texto, /https?:\/\//, `${arquivo} chama endereço de fora`);
     assert.doesNotMatch(texto, /innerHTML|style=/, `${arquivo} põe HTML ou estilo inline`);

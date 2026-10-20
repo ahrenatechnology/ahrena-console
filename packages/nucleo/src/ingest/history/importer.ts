@@ -3,7 +3,7 @@
 // Idempotent and resumable:
 // - each line becomes an event with a stable id (`jsonl:<uuid>`); writing it again does not duplicate;
 // - token usage is recomputed from the session's events, deduplicated by message;
-// - each file's cursor (byte offset, size and mtime) lives in the `metadata.importacao` of the
+// - each file's cursor (byte offset, size and mtime) lives in the `metadata.import` of the
 //   session (main file) or of the agent (subagent file) and is written last. If the import stops
 //   halfway, the next one rereads from the previous cursor and the ids absorb the repetition.
 //
@@ -71,7 +71,7 @@ export interface ImportReport {
   filesRewound: number;
 }
 
-/** Cursor gravado em `metadata.importacao`. */
+/** Cursor gravado em `metadata.import`. */
 export interface ImportCursor {
   file: string;
   offset: number;
@@ -89,7 +89,7 @@ const SOURCE = 'import';
 const TITLE_PRIORITY = ['customTitle', 'agentName', 'aiTitle', 'summary'] as const;
 
 function readCursor(metadata: Metadata | undefined): ImportCursor | null {
-  const c = metadata?.importacao as Partial<ImportCursor> | undefined;
+  const c = metadata?.import as Partial<ImportCursor> | undefined;
   if (!c || typeof c.file !== 'string' || !Number.isInteger(c.offset) || !Number.isInteger(c.size) || typeof c.mtimeMs !== 'number') {
     return null;
   }
@@ -327,7 +327,7 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
     const facts = run.agentFacts(id);
     const parent = (meta?.toolUseId && run.toolUseOwner.get(meta.toolUseId)) || mainId;
     const metadata: Metadata = { tokens: tokens(id) };
-    if (sub?.cursor) metadata.importacao = sub.cursor;
+    if (sub?.cursor) metadata.import = sub.cursor;
     if (meta?.toolUseId) metadata.toolUseId = meta.toolUseId;
     if (meta?.spawnDepth !== null && meta?.spawnDepth !== undefined) metadata.spawnDepth = meta.spawnDepth;
     await storage.putAgent(
@@ -352,7 +352,7 @@ async function importSession(work: SessionWork, storage: StoragePort, report: Im
 
   // A sessão por último: o cursor do arquivo principal só avança depois que tudo foi gravado.
   const metadata: Metadata = { ...(prevSession?.metadata ?? {}) };
-  if (mainCursor) metadata.importacao = mainCursor;
+  if (mainCursor) metadata.import = mainCursor;
   const session: Session = prevSession
     ? {
         ...prevSession,

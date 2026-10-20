@@ -18,17 +18,15 @@
 
 import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
-import type { PrecisaDeVoce } from './types.ts';
+import type { NeedsYouItem } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DA_ATENCAO = '/api/atencao';
 
 /** O nível: o que trava a sessão (`needs`) e o que é só a sua vez; os valores do painel. */
-export type AttentionLevel = PrecisaDeVoce['level'];
+export type AttentionLevel = NeedsYouItem['level'];
 /** O motivo, com os valores do "precisam de você" do painel. */
-export type AttentionReason = PrecisaDeVoce['why'];
+export type AttentionReason = NeedsYouItem['why'];
 
 const MOTIVO: Record<McpAttentionReason, AttentionReason> = {
   permission: 'permission',

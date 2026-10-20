@@ -3,19 +3,19 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, montarAtencao, MontadorDoPainel, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
-let contas: Contas;
+let contas: Accounts;
 let frota: FleetReader;
 
 beforeEach(() => {
   storage = openSqliteStorage({ path: ':memory:' });
-  contas = new Contas({ storage, arquivo: null });
+  contas = new Accounts({ storage, file: null });
   frota = new FleetReader({ storage, accounts: contas, now: () => NOW, timeZone: 'UTC' });
 });
 afterEach(() => storage.close());
@@ -101,13 +101,13 @@ describe('montarAtencao', () => {
 });
 
 describe('GET /api/attention', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   let mudancas: ChangeCursor;
   beforeEach(async () => {
     await seedPanelScenario(storage, 'p3', NOW);
     mudancas = new ChangeCursor();
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, frota, mudancas });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota, changes: mudancas });
   });
   afterEach(() => api.close());
 
@@ -139,7 +139,7 @@ describe('GET /api/attention', () => {
 
   test('sem a frota, a rota não existe', async () => {
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    const outra = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/attention`)).status, 404);
     await outra.close();
   });

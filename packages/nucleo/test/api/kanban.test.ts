@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import {
   COLUNAS_DOS_AGENTES,
   COLUNAS_DAS_SESSOES,
@@ -43,7 +43,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
   let quadro: QuadroKanban;
   let sessoes: Session[];
   let agentes: Agent[];
-  let api: ApiLocal;
+  let api: LocalApi;
   const get = async (caminho: string) => {
     const r = await pedir(api.url, caminho);
     return { status: r.status, corpo: JSON.parse(r.corpo) as KanbanHttp & { error?: string }, texto: r.corpo };
@@ -64,10 +64,10 @@ describe('#31 GET /api/kanban com o simulador', () => {
     await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     agentes = (await Promise.all(sessoes.map((s) => storage.listAgents(s.id)))).flat();
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     quadro = new QuadroKanban({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, kanban: quadro });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, kanban: quadro });
   });
   after(async () => {
     await api.close();

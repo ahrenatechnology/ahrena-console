@@ -67,16 +67,16 @@ import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisions.ts';
 import { responderDecisoesDaUi, type DecisoesDaUi } from './decisions-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './panel.ts';
-import type { EscopoDasDecisoes } from './types.ts';
-import { VERSAO_DA_API } from './version.ts';
+import type { PanelDecisionScope } from './types.ts';
+import { API_VERSION } from './version.ts';
 import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
-import { ehDaUi, responderUi } from './ui.ts';
+import { isUiPath, respondUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './wall.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessions.ts';
 import { HISTORY_ROUTE, responderHistorico } from './history.ts';
 import type { SessionHistory } from '../history/reading.ts';
-import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
+import { responderKanban, KANBAN_ROUTE, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './events.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { McpServer } from '../mcp/protocol.ts';
@@ -84,10 +84,10 @@ import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProje
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
-import { montarDashboard, ROTA_DO_DASHBOARD } from './dashboard-route.ts';
+import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
-import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
+import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
 import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
@@ -95,13 +95,13 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 
-export { VERSAO_DA_API };
+export { API_VERSION };
 
-export interface OpcoesDaApi {
-  montador: MontadorDoPainel;
+export interface ApiOptions {
+  panelBuilder: MontadorDoPainel;
   hooks: HookRouteOptions;
   host?: string;
-  /** 0 escolhe uma porta livre (testes). Padrão 4720. */
+  /** 0 picks a free port (tests). Default 4720. */
   port?: number;
   /**
    * A socket already listening (the port the owner reserved before opening the database, issue
@@ -109,40 +109,40 @@ export interface OpcoesDaApi {
    * in between. With port 0, that is the only way to keep the port the system assigned.
    */
   listenOn?: NetServer;
-  log?: (mensagem: string) => void;
-  /** Contadores extras para `/api/load` (seguidor, índice do Desktop). */
-  carga?: () => Record<string, unknown>;
+  log?: (message: string) => void;
+  /** Extra counters for `/api/load` (follower, Desktop index). */
+  load?: () => Record<string, unknown>;
   /**
-   * Abre um endereço `claude://` no Claude Desktop (no macOS, `open <url>`). Sem ela, o
-   * `POST /open/<local_…>` responde 501 e o painel fica com o link de reserva.
+   * Opens a `claude://` address in the Claude Desktop (on macOS, `open <url>`). Without it,
+   * `POST /open/<local_…>` answers 501 and the panel keeps the fallback link.
    */
-  abrirNoDesktop?: ((url: string) => Promise<void>) | null;
+  openInDesktop?: ((url: string) => Promise<void>) | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: McpServer;
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
-  /** O cursor de mudanças; liga `GET /api/changes`. */
-  mudancas?: ChangeCursor;
-  /** O kanban do GitHub Project (#80). Sem ele, `/api/project` responde 503. */
-  projeto?: OpcoesDoProjeto;
-  /** As leituras do Detalhe da sessão (`/api/sessions/<id>…`); sem elas, 404. */
-  detalhe?: LeiturasDoDetalhe;
-  /** O feed de atividade; liga `GET /api/events` (#94). */
-  eventos?: FeedDeEventos;
-  /** A leitura da frota do MCP; liga `GET /api/attention`. */
-  frota?: FleetReader;
+  /** The change cursor; turns on `GET /api/changes`. */
+  changes?: ChangeCursor;
+  /** The GitHub Project kanban (#80). Without it, `/api/project` answers 503. */
+  project?: OpcoesDoProjeto;
+  /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
+  detail?: LeiturasDoDetalhe;
+  /** The activity feed; turns on `GET /api/events` (#94). */
+  events?: FeedDeEventos;
+  /** The MCP fleet reader; turns on `GET /api/attention`. */
+  fleet?: FleetReader;
   /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
   remoteAttention?: readonly RemoteAttentionSource[];
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
   analytics?: RotaAnalytics;
-  /** A lista da tela Sessões; liga `GET /api/sessions`. */
-  sessoes?: ListaDeSessoes;
-  /** As sessões encerradas por dia; liga `GET /api/history` (#33). */
-  historico?: SessionHistory;
+  /** The Sessions screen's list; turns on `GET /api/sessions`. */
+  sessions?: ListaDeSessoes;
+  /** The ended sessions by day; turns on `GET /api/history` (#33). */
+  history?: SessionHistory;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
-  /** A página e a aba Decisões da /ui e o Promover (api/decisions-ui.ts, #103). Sem ela, essas rotas dão 404. */
-  decisoesUi?: DecisoesDaUi;
+  /** The /ui's Decisions page and tab and the Promote (api/decisions-ui.ts, #103). Without it, those routes give 404. */
+  decisionsUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
   /** The Instructions tab of a repository (api/agent-instructions.ts, #183); without it, `/api/agent-instructions` gives 404. */
@@ -164,8 +164,8 @@ export interface OpcoesDaApi {
   telemetry?: TelemetryService | null;
 }
 
-/** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
-export const LOCAL_DO_DESKTOP = /^local_[0-9a-f-]{36}$/;
+/** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
+export const DESKTOP_LOCAL_ID = /^local_[0-9a-f-]{36}$/;
 
 export const PANEL_ROUTE = '/api/panel';
 export const OPEN_ROUTE = '/open';
@@ -179,9 +179,9 @@ const DECISION_LIST = /^\/api\/decisions\/([^/]+)$/;
 const DECISION_ACTION = /^\/api\/decisions\/([^/]+)\/(confirm|dismiss|adjust|undo)$/;
 const DECISION_WRITE_FROM_UI = /^\/api\/decisions\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirm|dismiss|adjust|undo|promote)$/;
 /** The action in the URL → the action the panel builder still names in Portuguese (phase 3). */
-const DECISION_ACTIONS: Readonly<Record<string, AcaoNaDecisao>> = { confirm: 'confirmar', dismiss: 'descartar', adjust: 'ajustar', undo: 'desfazer' };
+const DECISION_ACTIONS: Readonly<Record<string, AcaoNaDecisao>> = { confirm: 'confirm', dismiss: 'dismiss', adjust: 'adjust', undo: 'undo' };
 
-export interface ApiLocal {
+export interface LocalApi {
   server: Server;
   url: string;
   close(): Promise<void>;
@@ -189,40 +189,42 @@ export interface ApiLocal {
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
-const CAMINHO = /^\/[^\0\n]{0,1023}$/;
-const MAX_CORPO = 4096;
+const CWD = /^\/[^\0\n]{0,1023}$/;
+const MAX_BODY = 4096;
 
-/** O pedido vem da própria `/ui`: `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
-function daPropriaUi(req: IncomingMessage, port: number): boolean {
+/** The request comes from our own `/ui`: `Origin` equal to `http://<Host>`, and the Host is ours. */
+function fromOwnUi(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
-  const origem = req.headers.origin;
-  if (typeof origem !== 'string') return false;
+  const origin = req.headers.origin;
+  if (typeof origin !== 'string') return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
-  return origem === `http://${host}`;
+  return origin === `http://${host}`;
 }
 
-/** A própria `/ui` lendo: `GET` da mesma origem. */
-const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && daPropriaUi(req, port);
+/** Our own `/ui` reading: a same-origin `GET`. */
+const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && fromOwnUi(req, port);
 
 /**
- * O "Abrir no Claude Desktop" do Detalhe: só `POST /open/<local_…>` (ou o alias `/abrir/<local_…>`)
- * da mesma origem, com a URL crua exatamente assim (sem query, sem `..`). O resto da decisão 0003
- * vale como nas outras escritas: JSON (o `abrirDireto` confere) e o id estrito.
+ * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` (or the alias `/abrir/<local_…>`)
+ * from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
+ * holds as in the other writes: JSON (`openDirect` checks it) and the strict id.
  */
-const mesmaOrigemAbrindo = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(normalizeLegacyPath(req.url ?? '')) && daPropriaUi(req, port);
+const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
 
 /**
- * A própria `/ui` decidindo (#103): só `POST /api/decisions/<id>/<action>` (ou o alias
- * `/api/decisoes/<id>/<ação>`), com o caminho cru exato (query dá 403) e da mesma origem. O id começa por alfanumérico: `/api/decisions/../confirm` não passa. O JSON obrigatório continua com quem responde (415).
+ * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>` (or the alias
+ * `/api/decisoes/<id>/<ação>`), with the exact raw path (a query gives 403) and from the same origin. The id
+ * starts with an alphanumeric: `/api/decisions/../confirm` does not pass. The mandatory JSON stays with the handler (415).
  */
-const mesmaOrigemDecidindo = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(normalizeLegacyPath(req.url ?? '')) && daPropriaUi(req, port);
+const sameOriginDecision = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
 
-const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
+/** The decision list scope of a parameter, or `null`. */
+const scopeOf = (v: string | null): PanelDecisionScope | null => (ESCOPOS_DAS_DECISOES.includes(v as PanelDecisionScope) ? (v as PanelDecisionScope) : null);
 
-/** O que o painel manda de si: os mesmos parâmetros do `GET /api/panel`. */
-function pedidoDe(sessionId: string, url: URL): PedidoDoPainel {
+/** What the panel sends about itself: the same parameters as `GET /api/panel`. */
+function panelRequestOf(sessionId: string, url: URL): PedidoDoPainel {
   const p = (k: string) => {
     const v = url.searchParams.get(k);
     return v && PARAM.test(v) ? v : null;
@@ -234,98 +236,99 @@ function pedidoDe(sessionId: string, url: URL): PedidoDoPainel {
     conta: p('account'),
     org: p('org'),
     modelo: p('model'),
-    cwd: cwd && CAMINHO.test(cwd) ? cwd : null,
-    decisoes: escopoDe(url.searchParams.get('decisions')),
+    cwd: cwd && CWD.test(cwd) ? cwd : null,
+    decisoes: scopeOf(url.searchParams.get('decisions')),
   };
 }
 
-function lerCorpo(req: IncomingMessage): Promise<string | null> {
+/** The request body, or `null` past `MAX_BODY`. */
+function readBody(req: IncomingMessage): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    let corpo = '';
-    let grande = false;
+    let body = '';
+    let tooLarge = false;
     req.setEncoding('utf8');
-    req.on('data', (parte: string) => {
-      if (grande) return;
-      corpo += parte;
-      if (corpo.length > MAX_CORPO) grande = true;
+    req.on('data', (chunk: string) => {
+      if (tooLarge) return;
+      body += chunk;
+      if (body.length > MAX_BODY) tooLarge = true;
     });
-    req.on('end', () => resolve(grande ? null : corpo));
+    req.on('end', () => resolve(tooLarge ? null : body));
     req.on('error', reject);
   });
 }
 
-export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
+export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
-  const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
-  const mural = muralDoPainel(opts.montador);
-  const contadores = { requests: 0, panel: 0, panelMs: 0 };
+  const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
+  const wall = muralDoPainel(opts.panelBuilder);
+  const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
-  async function painel(res: ServerResponse, sessionId: string, url: URL) {
+  async function panel(res: ServerResponse, sessionId: string, url: URL) {
     if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
     const t0 = performance.now();
-    const corpo = await opts.montador.montar(pedidoDe(sessionId, url));
-    contadores.panel++;
-    contadores.panelMs += performance.now() - t0;
-    send(res, 200, corpo);
+    const body = await opts.panelBuilder.montar(panelRequestOf(sessionId, url));
+    counters.panel++;
+    counters.panelMs += performance.now() - t0;
+    send(res, 200, body);
   }
 
-  async function listaDeDecisoes(res: ServerResponse, sessionId: string, url: URL) {
+  async function decisionList(res: ServerResponse, sessionId: string, url: URL) {
     if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
-    const escopo = escopoDe(url.searchParams.get('scope') ?? 'family');
-    if (!escopo) return send(res, 400, { error: 'scope: session, family ou branch' });
-    const lista = await opts.montador.listaDeDecisoes(pedidoDe(sessionId, url), escopo);
-    if (!lista) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
-    send(res, 200, lista);
+    const scope = scopeOf(url.searchParams.get('scope') ?? 'family');
+    if (!scope) return send(res, 400, { error: 'scope: session, family ou branch' });
+    const list = await opts.panelBuilder.listaDeDecisoes(panelRequestOf(sessionId, url), scope);
+    if (!list) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
+    send(res, 200, list);
   }
 
-  // Escrita: só JSON, com a sessão no corpo; a montagem confere se a sessão enxerga a decisão. The body
+  // A write: JSON only, with the session in the body; the panel builder checks the session sees the decision. The body
   // is `{ session, text }`; the old `{ sessao, texto }` is read too, on the new path as well (the old
   // path translates it through `legacyRequestBody`), so a client can move to the new route first.
-  async function decidir(req: IncomingMessage, res: ServerResponse, id: string, acao: AcaoNaDecisao, url: URL) {
+  async function decide(req: IncomingMessage, res: ServerResponse, id: string, action: AcaoNaDecisao, url: URL) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
-    const texto = await lerCorpo(req);
-    if (texto === null) return send(res, 413, { error: 'corpo grande demais' });
-    let sessao: unknown;
-    let ajuste: unknown;
+    const text = await readBody(req);
+    if (text === null) return send(res, 413, { error: 'corpo grande demais' });
+    let session: unknown;
+    let adjustment: unknown;
     try {
-      const corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as { session?: unknown; text?: unknown; sessao?: unknown; texto?: unknown } | null;
-      sessao = corpo?.session ?? corpo?.sessao;
-      ajuste = corpo?.text ?? corpo?.texto;
+      const body = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(text)) as { session?: unknown; text?: unknown; sessao?: unknown; texto?: unknown } | null;
+      session = body?.session ?? body?.sessao;
+      adjustment = body?.text ?? body?.texto;
     } catch {
       return send(res, 400, { error: 'JSON inválido' });
     }
-    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "session": "<id>" }' });
+    if (typeof session !== 'string' || !ID.test(session)) return send(res, 400, { error: 'informe a sessão: { "session": "<id>" }' });
     try {
-      const decisao = await opts.montador.decidir(pedidoDe(sessao, url), id, acao, typeof ajuste === 'string' ? ajuste : null);
-      if (!decisao) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
-      log(`decisão ${id}: ${acao} pela sessão ${sessao}`);
-      send(res, 200, { decision: decisao });
+      const decision = await opts.panelBuilder.decidir(panelRequestOf(session, url), id, action, typeof adjustment === 'string' ? adjustment : null);
+      if (!decision) return send(res, 404, { error: 'o núcleo subiu sem as decisões' });
+      log(`decision ${id}: ${action} by session ${session}`);
+      send(res, 200, { decision });
     } catch (err) {
       if (err instanceof ErroDaDecisao) return send(res, err.status, { error: err.message });
       throw err;
     }
   }
 
-  // O id passou pelo padrão `local_<hex e hífen>`: nada do pedido vai além dele para o endereço.
-  function abrirNoDesktop(res: ServerResponse, local: string) {
-    const destino = `claude://claude.ai/epitaxy/${local}`;
-    const corpo = `<!doctype html><meta charset="utf-8"><title>Abrindo a sessão</title><p>Abrindo a sessão no Claude Desktop… <a href="${destino}">abrir</a></p>`;
-    res.writeHead(302, { location: destino, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(corpo) });
-    res.end(corpo);
+  // The id passed the `local_<hex and hyphen>` pattern: nothing else from the request goes into the address.
+  function redirectToDesktop(res: ServerResponse, local: string) {
+    const target = `claude://claude.ai/epitaxy/${local}`;
+    const body = `<!doctype html><meta charset="utf-8"><title>Abrindo a sessão</title><p>Abrindo a sessão no Claude Desktop… <a href="${target}">abrir</a></p>`;
+    res.writeHead(302, { location: target, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(body) });
+    res.end(body);
   }
 
-  // Escrita como as das decisões: só JSON e só de 127.0.0.1 (o `allowedLocalRequest` do `handle`).
-  async function abrirDireto(req: IncomingMessage, res: ServerResponse, local: string) {
+  // A write like the decisions': JSON only and only from 127.0.0.1 (`handle`'s `allowedLocalRequest`).
+  async function openDirect(req: IncomingMessage, res: ServerResponse, local: string) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
-    if (!LOCAL_DO_DESKTOP.test(local)) return send(res, 400, { error: 'id de sessão do Desktop inválido' });
-    if (!opts.abrirNoDesktop) return send(res, 501, { error: 'abrir a sessão só no macOS, com o Claude Desktop' });
+    if (!DESKTOP_LOCAL_ID.test(local)) return send(res, 400, { error: 'id de sessão do Desktop inválido' });
+    if (!opts.openInDesktop) return send(res, 501, { error: 'abrir a sessão só no macOS, com o Claude Desktop' });
     try {
-      await opts.abrirNoDesktop(`claude://claude.ai/epitaxy/${local}`);
-      log(`sessão ${local} aberta no Claude Desktop`);
+      await opts.openInDesktop(`claude://claude.ai/epitaxy/${local}`);
+      log(`session ${local} opened in the Claude Desktop`);
       send(res, 200, { ok: true });
     } catch (err) {
       send(res, 502, { error: `não deu para abrir: ${(err as Error).message}` });
@@ -333,7 +336,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    contadores.requests++;
+    counters.requests++;
     // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
     const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const normalized = normalizeLegacyUrl(raw);
@@ -342,7 +345,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // through its back-translator (new → old keys and values).
     const toLegacy = legacyResponseFor(raw.pathname);
     if (toLegacy) rewriteJsonBodies(res, toLegacy);
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
     // its live refresh work with the current id.
     if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
@@ -350,64 +353,64 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return void res.end();
     }
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
-    const direto = OPEN.exec(url.pathname);
-    if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]!));
-    if (opts.decisoesUi && (await responderDecisoesDaUi(req, res, url, opts.decisoesUi, log))) return;
-    const escrita = DECISION_ACTION.exec(url.pathname);
-    if (escrita) {
+    const openMatch = OPEN.exec(url.pathname);
+    if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
+    if (opts.decisionsUi && (await responderDecisoesDaUi(req, res, url, opts.decisionsUi, log))) return;
+    const actionMatch = DECISION_ACTION.exec(url.pathname);
+    if (actionMatch) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
-      return decidir(req, res, decodeURIComponent(escrita[1]!), DECISION_ACTIONS[escrita[2]!]!, url);
+      return decide(req, res, decodeURIComponent(actionMatch[1]!), DECISION_ACTIONS[actionMatch[2]!]!, url);
     }
     if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
-    if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
+    if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
-    if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
-    const abrir = OPEN_IN_DESKTOP.exec(url.pathname);
-    if (abrir) return abrirNoDesktop(res, abrir[1]!);
+    if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
+    const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
+    if (desktopMatch) return redirectToDesktop(res, desktopMatch[1]!);
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
     // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
-    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: VERSAO_DA_API });
-    if (url.pathname === CHANGES_ROUTE && opts.mudancas) return serveChanges(res, url, opts.mudancas);
-    if (url.pathname === WALL_ROUTE) return responderMural(res, mural);
-    if (url.pathname === EVENTS_ROUTE && opts.eventos) return responderEventos(res, url, opts.eventos);
-    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.current ?? null, opts.remoteAttention));
-    if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
+    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: API_VERSION });
+    if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
+    if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
+    if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
+    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, opts.remoteAttention));
+    if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
       return send(res, r.status, r.corpo);
     }
-    if (url.pathname === SESSIONS_ROUTE && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
-    if (url.pathname === HISTORY_ROUTE) return responderHistorico(res, url, opts.historico);
-    if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
-    if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
+    if (url.pathname === SESSIONS_ROUTE && opts.sessions) return responderSessoes(res, url, opts.sessions);
+    if (url.pathname === HISTORY_ROUTE) return responderHistorico(res, url, opts.history);
+    if (url.pathname === KANBAN_ROUTE && opts.kanban) return responderKanban(res, url, opts.kanban);
+    if (opts.repos && (url.pathname === REPOS_ROUTE || url.pathname.startsWith(`${REPOS_ROUTE}/`))) return opts.repos(res, url);
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
-        ...contadores,
-        eventsRead: opts.montador.resumos.eventosLidos,
-        ...(opts.mudancas ? { openWaits: opts.mudancas.openWaits } : {}),
-        ...(opts.carga?.() ?? {}),
+        ...counters,
+        eventsRead: opts.panelBuilder.resumos.eventosLidos,
+        ...(opts.changes ? { openWaits: opts.changes.openWaits } : {}),
+        ...(opts.load?.() ?? {}),
       });
     }
-    if (await responderWorkflows(res, url, opts.montador)) return;
+    if (await responderWorkflows(res, url, opts.panelBuilder)) return;
     const m = PANEL.exec(url.pathname);
-    if (m) return painel(res, decodeURIComponent(m[1]!), url);
+    if (m) return panel(res, decodeURIComponent(m[1]!), url);
     const d = DECISION_LIST.exec(url.pathname);
-    if (d) return listaDeDecisoes(res, decodeURIComponent(d[1]!), url);
-    const det = opts.detalhe && DETAIL_ROUTE.exec(url.pathname);
-    if (det) return opts.detalhe!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
+    if (d) return decisionList(res, decodeURIComponent(d[1]!), url);
+    const det = opts.detail && DETAIL_ROUTE.exec(url.pathname);
+    if (det) return opts.detail!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
     send(res, 404, { error: 'não encontrado' });
   }
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
-      log(`erro em ${req.url}: ${(err as Error).message}`);
+      log(`error on ${req.url}: ${(err as Error).message}`);
       if (!res.headersSent) send(res, 500, { error: 'erro interno' });
     });
   });
@@ -423,7 +426,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         url: `http://${address}:${bound}`,
         close: () =>
           new Promise<void>((done, fail) => {
-            opts.mudancas?.close();
+            opts.changes?.close();
             server.close((err) => (err ? fail(err) : done()));
             server.closeAllConnections();
           }),

@@ -4,43 +4,49 @@
 // effort chosen in the Desktop (`effort`, for the wall of #34).
 //
 // Cost: the first read reads each file once; after that, only the `stat` of the folders and the
-// files, at most every `intervaloMs`, and it re-reads only the file whose mtime changed. Never on
+// files, at most every `intervalMs`, and it re-reads only the file whose mtime changed. Never on
 // every panel request. It reads only the fields below; the rest of the JSON is ignored.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export interface SessaoDoDesktop {
-  /** `local_…`: o id do Desktop. */
+/** One session of the Desktop index, merged across the account/org folders it appears in. */
+export interface DesktopSession {
+  /** `local_…`: the Desktop id. */
   localId: string;
-  /** O `sessionId` do transcript (o que o núcleo usa). */
+  /** The transcript's `sessionId` (what the core uses). */
   cliSessionId: string | null;
-  titulo: string | null;
+  /** The sidebar title. */
+  title: string | null;
   branch: string | null;
   cwd: string | null;
-  /** `local_…` da sessão que abriu esta, quando foi aberta por outra. */
-  maeLocalId: string | null;
-  arquivada: boolean;
-  /** O esforço (`effort`) da sessão no Desktop: `low`, `medium`, `high`…; ausente ou `null` quando não se sabe. */
-  esforco?: string | null;
-  /** Pastas `<conta>/<org>` em que a sessão aparece. Mais de uma: a pasta não diz a conta. */
-  contas: string[];
+  /** `local_…` of the session that opened this one, when another one opened it. */
+  parentLocalId: string | null;
+  /** Archived in the Claude Desktop (#145). */
+  archived: boolean;
+  /** The session's effort (`effort`) in the Desktop: `low`, `medium`, `high`…; absent or `null` when unknown. */
+  effort?: string | null;
+  /** The `<account>/<org>` folders the session appears in. More than one: the folder does not tell the account. */
+  accounts: string[];
 }
 
-export function raizPadraoDoDesktop(): string {
+/** `~/Library/Application Support/Claude/claude-code-sessions`, the Desktop's folder on macOS. */
+export function defaultDesktopRoot(): string {
   return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
 }
 
-interface Arquivo {
+/** A read file: its mtime, its `<account>/<org>` folder and the session it holds. */
+interface IndexedFile {
   mtimeMs: number;
-  escopo: string;
-  sessao: SessaoDoDesktop;
+  scope: string;
+  session: DesktopSession;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
-async function lista(dir: string): Promise<string[]> {
+/** The names in a folder, or none when it cannot be read. */
+async function listDir(dir: string): Promise<string[]> {
   try {
     return await readdir(dir);
   } catch {
@@ -48,119 +54,124 @@ async function lista(dir: string): Promise<string[]> {
   }
 }
 
-export interface OpcoesDoIndice {
-  raiz?: string;
-  /** Intervalo mínimo entre duas conferências do disco. Padrão 30 s. */
-  intervaloMs?: number;
-  agora?: () => number;
+export interface DesktopIndexOptions {
+  root?: string;
+  /** Minimum time between two disk checks. Default 30 s. */
+  intervalMs?: number;
+  now?: () => number;
 }
 
-export class IndiceDoDesktop {
-  readonly raiz: string;
-  private readonly intervaloMs: number;
-  private readonly agora: () => number;
-  private readonly arquivos = new Map<string, Arquivo>();
-  private porCli = new Map<string, SessaoDoDesktop>();
-  private porLocal = new Map<string, SessaoDoDesktop>();
-  private filhas = new Map<string, SessaoDoDesktop[]>();
-  private conferidoEm = -Infinity;
-  private rodada: Promise<void> | null = null;
-  /** Arquivos lidos desde o início (para a medição de carga). */
-  lidos = 0;
+/** The index, re-read at most every `intervalMs`; see the top of the file. */
+export class DesktopIndex {
+  readonly root: string;
+  private readonly intervalMs: number;
+  private readonly now: () => number;
+  private readonly files = new Map<string, IndexedFile>();
+  private byCli = new Map<string, DesktopSession>();
+  private byLocal = new Map<string, DesktopSession>();
+  private children = new Map<string, DesktopSession[]>();
+  private checkedAt = -Infinity;
+  private pending: Promise<void> | null = null;
+  /** Files read since the start (for the load measurement). */
+  filesRead = 0;
 
-  constructor({ raiz = raizPadraoDoDesktop(), intervaloMs = 30_000, agora = Date.now }: OpcoesDoIndice = {}) {
-    this.raiz = raiz;
-    this.intervaloMs = intervaloMs;
-    this.agora = agora;
+  constructor({ root = defaultDesktopRoot(), intervalMs = 30_000, now = Date.now }: DesktopIndexOptions = {}) {
+    this.root = root;
+    this.intervalMs = intervalMs;
+    this.now = now;
   }
 
-  /** Confere o disco se o intervalo passou; pedidos ao mesmo tempo esperam a mesma rodada. */
-  async atualizar(forcar = false): Promise<void> {
-    if (!forcar && this.agora() - this.conferidoEm < this.intervaloMs) return;
-    this.rodada ??= this.conferir().finally(() => {
-      this.conferidoEm = this.agora();
-      this.rodada = null;
+  /** Checks the disk if the interval passed; concurrent requests wait for the same round. */
+  async refresh(force = false): Promise<void> {
+    if (!force && this.now() - this.checkedAt < this.intervalMs) return;
+    this.pending ??= this.scan().finally(() => {
+      this.checkedAt = this.now();
+      this.pending = null;
     });
-    return this.rodada;
+    return this.pending;
   }
 
-  sessaoPorCli(cliSessionId: string): SessaoDoDesktop | null {
-    return this.porCli.get(cliSessionId) ?? null;
+  /** The session by its transcript id. */
+  sessionByCli(cliSessionId: string): DesktopSession | null {
+    return this.byCli.get(cliSessionId) ?? null;
   }
 
-  sessaoPorLocal(localId: string): SessaoDoDesktop | null {
-    return this.porLocal.get(localId) ?? null;
+  /** The session by its Desktop id. */
+  sessionByLocal(localId: string): DesktopSession | null {
+    return this.byLocal.get(localId) ?? null;
   }
 
-  /** As sessões abertas por esta; as arquivadas vêm junto, com `arquivada` (#145). */
-  filhasDe(localId: string): SessaoDoDesktop[] {
-    return this.filhas.get(localId) ?? [];
+  /** The sessions this one opened; the archived ones come along, with `archived` (#145). */
+  childrenOf(localId: string): DesktopSession[] {
+    return this.children.get(localId) ?? [];
   }
 
-  private async conferir(): Promise<void> {
-    const vistos = new Set<string>();
-    for (const conta of await lista(this.raiz)) {
-      for (const org of await lista(join(this.raiz, conta))) {
-        const dir = join(this.raiz, conta, org);
-        for (const nome of await lista(dir)) {
-          if (!nome.startsWith('local_') || !nome.endsWith('.json')) continue;
-          const caminho = join(dir, nome);
-          vistos.add(caminho);
+  /** Walks `<account>/<org>/local_*.json`, re-reading only the files whose mtime changed. */
+  private async scan(): Promise<void> {
+    const seen = new Set<string>();
+    for (const account of await listDir(this.root)) {
+      for (const org of await listDir(join(this.root, account))) {
+        const dir = join(this.root, account, org);
+        for (const name of await listDir(dir)) {
+          if (!name.startsWith('local_') || !name.endsWith('.json')) continue;
+          const path = join(dir, name);
+          seen.add(path);
           let mtimeMs: number;
           try {
-            mtimeMs = (await stat(caminho)).mtimeMs;
+            mtimeMs = (await stat(path)).mtimeMs;
           } catch {
             continue;
           }
-          const antes = this.arquivos.get(caminho);
-          if (antes && antes.mtimeMs === mtimeMs) continue;
-          const sessao = await this.ler(caminho, nome.slice(0, -'.json'.length));
-          if (sessao) this.arquivos.set(caminho, { mtimeMs, escopo: `${conta}/${org}`, sessao });
+          const previous = this.files.get(path);
+          if (previous && previous.mtimeMs === mtimeMs) continue;
+          const session = await this.read(path, name.slice(0, -'.json'.length));
+          if (session) this.files.set(path, { mtimeMs, scope: `${account}/${org}`, session });
         }
       }
     }
-    for (const caminho of [...this.arquivos.keys()]) if (!vistos.has(caminho)) this.arquivos.delete(caminho);
-    this.reindexar();
+    for (const path of [...this.files.keys()]) if (!seen.has(path)) this.files.delete(path);
+    this.reindex();
   }
 
-  private async ler(caminho: string, localId: string): Promise<SessaoDoDesktop | null> {
+  /** One `local_*.json`: only the fields above, or `null` if it is not JSON. */
+  private async read(path: string, localId: string): Promise<DesktopSession | null> {
     try {
-      const o = JSON.parse(await readFile(caminho, 'utf8')) as Record<string, unknown>;
-      this.lidos++;
-      const mae = o.spawnedFrom && typeof o.spawnedFrom === 'object' ? str((o.spawnedFrom as Record<string, unknown>).sessionId) : null;
+      const o = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+      this.filesRead++;
+      const parent = o.spawnedFrom && typeof o.spawnedFrom === 'object' ? str((o.spawnedFrom as Record<string, unknown>).sessionId) : null;
       return {
         localId: str(o.sessionId) ?? localId,
         cliSessionId: str(o.cliSessionId),
-        titulo: str(o.title),
+        title: str(o.title),
         branch: str(o.branch),
         cwd: str(o.cwd),
-        maeLocalId: mae,
-        arquivada: o.isArchived === true,
-        esforco: str(o.effort),
-        contas: [],
+        parentLocalId: parent,
+        archived: o.isArchived === true,
+        effort: str(o.effort),
+        accounts: [],
       };
     } catch {
       return null;
     }
   }
 
-  // A mesma sessão pode estar em várias pastas conta/org (sincronização entre orgs): junta por id.
-  private reindexar(): void {
-    const porLocal = new Map<string, SessaoDoDesktop>();
-    for (const { escopo, sessao } of this.arquivos.values()) {
-      const atual = porLocal.get(sessao.localId);
-      if (atual) {
-        if (!atual.contas.includes(escopo)) atual.contas.push(escopo);
-      } else porLocal.set(sessao.localId, { ...sessao, contas: [escopo] });
+  // The same session can be in several account/org folders (sync between orgs): merged by id.
+  private reindex(): void {
+    const byLocal = new Map<string, DesktopSession>();
+    for (const { scope, session } of this.files.values()) {
+      const current = byLocal.get(session.localId);
+      if (current) {
+        if (!current.accounts.includes(scope)) current.accounts.push(scope);
+      } else byLocal.set(session.localId, { ...session, accounts: [scope] });
     }
-    const porCli = new Map<string, SessaoDoDesktop>();
-    const filhas = new Map<string, SessaoDoDesktop[]>();
-    for (const s of porLocal.values()) {
-      if (s.cliSessionId) porCli.set(s.cliSessionId, s);
-      if (s.maeLocalId) filhas.set(s.maeLocalId, [...(filhas.get(s.maeLocalId) ?? []), s]);
+    const byCli = new Map<string, DesktopSession>();
+    const children = new Map<string, DesktopSession[]>();
+    for (const s of byLocal.values()) {
+      if (s.cliSessionId) byCli.set(s.cliSessionId, s);
+      if (s.parentLocalId) children.set(s.parentLocalId, [...(children.get(s.parentLocalId) ?? []), s]);
     }
-    this.porLocal = porLocal;
-    this.porCli = porCli;
-    this.filhas = filhas;
+    this.byLocal = byLocal;
+    this.byCli = byCli;
+    this.children = children;
   }
 }

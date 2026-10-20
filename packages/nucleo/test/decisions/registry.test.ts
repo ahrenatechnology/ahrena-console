@@ -44,20 +44,20 @@ describe('decisions: registry, chain and family', () => {
 
   test('CA4: the new one on the same topic replaces the previous one, and the chain walks both ways', async () => {
     const d1 = (await reg({ choice: 'Postgres no Docker', decidedAt: at(1) })).decision;
-    const other = (await reg({ topic: 'permissao:bash npm test', choice: 'Permitir Bash: npm test', decidedAt: at(2) })).decision;
-    const d2 = (await reg({ choice: 'SQLite em memória', origin: 'correcao', decidedAt: at(3) })).decision;
+    const other = (await reg({ topic: 'permission:bash npm test', choice: 'Permitir Bash: npm test', decidedAt: at(2) })).decision;
+    const d2 = (await reg({ choice: 'SQLite em memória', origin: 'correction', decidedAt: at(3) })).decision;
     const d3 = (await reg({ choice: 'SQLite em arquivo', decidedAt: at(4) })).decision;
 
     assert.equal(decisionLabel(d3), 'D4');
     const [v1, v2, v3, vo] = await Promise.all([get(d1.id), get(d2.id), get(d3.id), get(other.id)]);
-    assert.equal(v1.state, 'substituida');
+    assert.equal(v1.state, 'superseded');
     assert.equal(v1.supersededBy, d2.id);
-    assert.equal(v2.state, 'substituida');
+    assert.equal(v2.state, 'superseded');
     assert.equal(v2.supersedes, d1.id);
     assert.equal(v2.supersededBy, d3.id);
-    assert.equal(v3.state, 'vigente');
+    assert.equal(v3.state, 'current');
     assert.equal(v3.supersedes, d2.id);
-    assert.equal(vo.state, 'vigente', 'another topic does not join the chain');
+    assert.equal(vo.state, 'current', 'another topic does not join the chain');
 
     const ids = (l: { id: string }[]) => l.map((d) => d.id);
     const expected = [d1.id, d2.id, d3.id];
@@ -69,37 +69,37 @@ describe('decisions: registry, chain and family', () => {
   test('CA4: an out-of-order capture lands in the right place of the chain', async () => {
     const newer = (await reg({ choice: 'SQLite', decidedAt: at(10) })).decision;
     const older = (await reg({ choice: 'Postgres', decidedAt: at(1) })).decision;
-    assert.equal((await get(newer.id)).state, 'vigente');
-    assert.equal((await get(older.id)).state, 'substituida');
+    assert.equal((await get(newer.id)).state, 'current');
+    assert.equal((await get(older.id)).state, 'superseded');
     assert.equal((await get(older.id)).supersededBy, newer.id);
   });
 
   test('without a topic, nothing replaces anything', async () => {
     const a = (await reg({ topic: null, decidedAt: at(1) })).decision;
     const b = (await reg({ topic: null, decidedAt: at(2) })).decision;
-    assert.equal((await get(a.id)).state, 'vigente');
-    assert.equal((await get(b.id)).state, 'vigente');
+    assert.equal((await get(a.id)).state, 'current');
+    assert.equal((await get(b.id)).state, 'current');
   });
 
   test('CA2: to confirm neither replaces nor counts; once confirmed, it joins the chain', async () => {
     const current = (await reg({ choice: 'Postgres', decidedAt: at(1) })).decision;
-    const suggested = (await reg({ origin: 'sugerida', decidedBy: 'agente', inferred: true, choice: 'SQLite', decidedAt: at(2) })).decision;
-    assert.equal(suggested.state, 'a_confirmar');
-    assert.equal((await get(current.id)).state, 'vigente');
-    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao')).map((d) => d.id), [current.id]);
+    const suggested = (await reg({ origin: 'suggested', decidedBy: 'agent', inferred: true, choice: 'SQLite', decidedAt: at(2) })).decision;
+    assert.equal(suggested.state, 'to_confirm');
+    assert.equal((await get(current.id)).state, 'current');
+    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'session')).map((d) => d.id), [current.id]);
 
     const confirmed = await confirmDecision(ctx.decisions, suggested.id, at(3));
-    assert.equal(confirmed.state, 'vigente');
+    assert.equal(confirmed.state, 'current');
     assert.equal(confirmed.supersedes, current.id);
-    assert.equal((await get(current.id)).state, 'substituida');
+    assert.equal((await get(current.id)).state, 'superseded');
     await assert.rejects(confirmDecision(ctx.decisions, suggested.id, at(4)), DecisionStateError);
   });
 
   test('discarding removes the suggestion from the lists and keeps it in the history', async () => {
-    const s = (await reg({ origin: 'sugerida', decidedBy: 'agente', inferred: true })).decision;
+    const s = (await reg({ origin: 'suggested', decidedBy: 'agent', inferred: true })).decision;
     const d = await discardDecision(ctx.decisions, s.id, at(2));
-    assert.equal(d.state, 'descartada');
-    assert.equal((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao')).length, 0);
+    assert.equal(d.state, 'dismissed');
+    assert.equal((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'session')).length, 0);
     assert.ok(await ctx.decisions.getDecision(s.id));
     await assert.rejects(discardDecision(ctx.decisions, s.id, at(3)), DecisionStateError);
   });
@@ -108,10 +108,10 @@ describe('decisions: registry, chain and family', () => {
     const d1 = (await reg({ choice: 'Postgres', decidedAt: at(1) })).decision;
     const d2 = (await reg({ choice: 'SQLite', decidedAt: at(2) })).decision;
     const r = await revertDecision(ctx.decisions, d2.id, at(3));
-    assert.equal(r.state, 'revertida');
+    assert.equal(r.state, 'reverted');
     assert.equal(r.supersedes, null);
     const v1 = await get(d1.id);
-    assert.equal(v1.state, 'vigente');
+    assert.equal(v1.state, 'current');
     assert.equal(v1.supersededBy, null);
     await assert.rejects(revertDecision(ctx.decisions, d1.id + 'x', at(4)), DecisionStateError);
     await assert.rejects(revertDecision(ctx.decisions, d2.id, at(4)), DecisionStateError);
@@ -124,16 +124,16 @@ describe('decisions: registry, chain and family', () => {
   });
 
   test('CA5: after /clear, the new linked session inherits the family\'s current decisions', async () => {
-    const d1 = (await reg({ sessionId: 's1', choice: 'Kanban só leitura', topic: 'pergunta:kanban', decidedAt: at(1) })).decision;
-    const local = (await reg({ sessionId: 's1', choice: 'Só nesta sessão', topic: null, scope: 'sessao', decidedAt: at(2) })).decision;
+    const d1 = (await reg({ sessionId: 's1', choice: 'Kanban só leitura', topic: 'question:kanban', decidedAt: at(1) })).decision;
+    const local = (await reg({ sessionId: 's1', choice: 'Só nesta sessão', topic: null, scope: 'session', decidedAt: at(2) })).decision;
     await linkSession(ctx.decisions, { sessionId: 's2', parentSessionId: 's1', reason: 'clear', linkedAt: at(10) }, at(10));
 
-    const inherited = await currentDecisionsFor(ctx.decisions, { sessionId: 's2' }, 'familia');
+    const inherited = await currentDecisionsFor(ctx.decisions, { sessionId: 's2' }, 'family');
     assert.deepEqual(inherited.map((d) => d.id), [d1.id], 'session scope does not cross /clear');
-    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'familia')).map((d) => d.id).sort(), [d1.id, local.id].sort());
+    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'family')).map((d) => d.id).sort(), [d1.id, local.id].sort());
 
     // The new session decides the same topic again: it replaces the parent's, with the next number in the family.
-    const d3 = (await reg({ sessionId: 's2', choice: 'Kanban com arrastar', topic: 'pergunta:kanban', decidedAt: at(11) })).decision;
+    const d3 = (await reg({ sessionId: 's2', choice: 'Kanban com arrastar', topic: 'question:kanban', decidedAt: at(11) })).decision;
     assert.equal(d3.familyId, 's1');
     assert.equal(d3.seq, 3);
     assert.equal((await get(d1.id)).supersededBy, d3.id);
@@ -142,23 +142,23 @@ describe('decisions: registry, chain and family', () => {
   test('CA5: compaction keeps the session, and the decisions stay in it', async () => {
     const d = (await reg({ sessionId: 's1', decidedAt: at(1) })).decision;
     // Depois do /compact o Claude Code segue com o mesmo session_id: nada a ligar.
-    const after = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao');
+    const after = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'session');
     assert.deepEqual(after.map((x) => x.id), [d.id]);
   });
 
   test('CA5: the child and grandchildren join the family; what the child already decided comes along', async () => {
-    const parent = (await reg({ sessionId: 'mae', topic: 'pergunta:a', decidedAt: at(1) })).decision;
-    await linkSession(ctx.decisions, { sessionId: 'neta', parentSessionId: 'filha', reason: 'filha', linkedAt: at(2) }, at(2));
-    const fromChild = (await reg({ sessionId: 'filha', topic: 'pergunta:a', choice: 'outra', decidedAt: at(3) })).decision;
-    assert.equal(fromChild.familyId, 'filha');
+    const parent = (await reg({ sessionId: 'mae', topic: 'question:a', decidedAt: at(1) })).decision;
+    await linkSession(ctx.decisions, { sessionId: 'neta', parentSessionId: 'child', reason: 'child', linkedAt: at(2) }, at(2));
+    const fromChild = (await reg({ sessionId: 'child', topic: 'question:a', choice: 'outra', decidedAt: at(3) })).decision;
+    assert.equal(fromChild.familyId, 'child');
 
-    await linkSession(ctx.decisions, { sessionId: 'filha', parentSessionId: 'mae', reason: 'filha', linkedAt: at(4) }, at(4));
+    await linkSession(ctx.decisions, { sessionId: 'child', parentSessionId: 'mae', reason: 'child', linkedAt: at(4) }, at(4));
     const moved = await get(fromChild.id);
     assert.equal(moved.familyId, 'mae');
     assert.equal(moved.seq, 2);
     assert.equal((await get(parent.id)).supersededBy, fromChild.id, 'the chain is rebuilt in the new family');
     assert.equal((await ctx.decisions.getSessionLink('neta'))?.familyId, 'mae');
-    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 'neta' }, 'familia')).map((d) => d.id), [fromChild.id]);
+    assert.deepEqual((await currentDecisionsFor(ctx.decisions, { sessionId: 'neta' }, 'family')).map((d) => d.id), [fromChild.id]);
   });
 
   test('linking again to the same family is idempotent; a cycle or a family change is rejected', async () => {
@@ -171,7 +171,7 @@ describe('decisions: registry, chain and family', () => {
   test('branch level adds the branch-scoped ones of other families on the same branch', async () => {
     const mine = (await reg({ sessionId: 's1', topic: 'a', decidedAt: at(1) })).decision;
     const branchScoped = (await reg({ sessionId: 'sX', topic: 'b', scope: 'branch', decidedAt: at(2) })).decision;
-    await reg({ sessionId: 'sY', topic: 'c', scope: 'familia', decidedAt: at(3) });
+    await reg({ sessionId: 'sY', topic: 'c', scope: 'family', decidedAt: at(3) });
     await reg({ sessionId: 'sZ', topic: 'd', scope: 'branch', branch: 'main', decidedAt: at(4) });
     const r = await currentDecisionsFor(ctx.decisions, { sessionId: 's1', branch: 'feat/42-kanban', repo: '/repo/app' }, 'branch');
     assert.deepEqual(r.map((d) => d.id), [branchScoped.id, mine.id]);

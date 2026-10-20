@@ -109,7 +109,7 @@ describe('scenario', () => {
     for (const op of generateScenario({ seed: 4, chaos: true, clock }).operations) {
       if (op.kind === 'session') {
         assert.match(op.record.cwd ?? '', /^\/simulacao\//);
-        assert.equal(op.record.metadata.simulado, true);
+        assert.equal(op.record.metadata.simulated, true);
       }
       if (op.kind === 'event') {
         const path = (op.record.data as { file_path?: string } | null)?.file_path;
@@ -179,16 +179,16 @@ describe('batch simulation through the port', () => {
 });
 
 describe('chaos mode', () => {
-  // `metadata.roteiro` keeps the stored (Portuguese) value of each script: STORED_SCRIPT in scenario.ts.
+  // `metadata.script` is the script of each session.
   const byScript = async (seed: number) => {
     const { storage, data } = await run({ seed, chaos: true, sessions: 10 });
     const sessions = data.sessions.map((s, i) => ({ s, ...data.rest[i] }));
-    return { storage, of: (r: string) => sessions.filter((x) => x.s.metadata.roteiro === r) };
+    return { storage, of: (r: string) => sessions.filter((x) => x.s.metadata.script === r) };
   };
 
   test('stuck: keeps waiting for input, without ending', async () => {
     const { storage, of } = await byScript(11);
-    const stuck = of('travada');
+    const stuck = of('stuck');
     assert.ok(stuck.length > 0);
     for (const { s, events } of stuck) {
       assert.equal(s.status, 'active');
@@ -201,19 +201,19 @@ describe('chaos mode', () => {
 
   test('error: the tool fails and the session stays in error', async () => {
     const { storage, of } = await byScript(12);
-    for (const { s, agents, events } of of('erro')) {
+    for (const { s, agents, events } of of('error')) {
       assert.equal(s.status, 'error');
       assert.equal(agents[0].status, 'error');
       assert.equal(events.at(-1)!.type, 'PostToolUseFailure');
     }
-    assert.ok(of('erro').length > 0);
+    assert.ok(of('error').length > 0);
     await storage.close();
   });
 
   test(`abandonment: no activity for ${MINUTES_UNTIL_ABANDONED} min and written as abandoned`, async () => {
     const { storage, of } = await byScript(13);
-    assert.ok(of('abandono').length > 0);
-    for (const { s, events } of of('abandono')) {
+    assert.ok(of('abandonment').length > 0);
+    for (const { s, events } of of('abandonment')) {
       assert.equal(s.status, 'abandoned');
       const last = Date.parse(events.at(-1)!.createdAt);
       assert.ok(Date.parse(s.endedAt!) - last >= MINUTES_UNTIL_ABANDONED * 60_000);
@@ -223,11 +223,11 @@ describe('chaos mode', () => {
 
   test('overflow: token spikes overflow the context at least twice, with the compaction floor', async () => {
     const { storage, of } = await byScript(14);
-    assert.ok(of('estouro').length > 0);
-    for (const { s, events, usages } of of('estouro')) {
-      const context = s.metadata.contexto as { estouros: number; limite: number };
-      assert.ok(context.estouros >= 2);
-      assert.equal(context.limite, CONTEXT_LIMIT);
+    assert.ok(of('overflow').length > 0);
+    for (const { s, events, usages } of of('overflow')) {
+      const context = s.metadata.context as { overflows: number; limit: number };
+      assert.ok(context.overflows >= 2);
+      assert.equal(context.limit, CONTEXT_LIMIT);
       assert.ok(events.filter((e) => e.type === 'PreCompact').length >= 2);
       const main = usages.find((u) => u.model === s.model)!;
       assert.ok(main.baseline.cacheWrite5m > 0);
@@ -238,8 +238,8 @@ describe('chaos mode', () => {
 
   test('swarm: at least 8 subagents working at the same time', async () => {
     const { storage, of } = await byScript(15);
-    assert.ok(of('enxame').length > 0);
-    for (const { agents } of of('enxame')) {
+    assert.ok(of('swarm').length > 0);
+    for (const { agents } of of('swarm')) {
       const subs = agents.filter((a) => a.type === 'subagent');
       // Concurrency peak: at the start of each subagent, how many are running.
       const concurrent = Math.max(...subs.map((x) => subs.filter((a) => a.startedAt <= x.startedAt && a.endedAt! > x.startedAt).length));
@@ -322,7 +322,7 @@ describe('real-time simulation', () => {
     for (const c of accounts) {
       assert.match(c.accountUuid, /^00000000-0000-4000-8000-/);
       assert.match(c.organizationUuid, /^00000000-0000-4000-8000-/);
-      assert.equal(c.metadata.simulado, true);
+      assert.equal(c.metadata.simulated, true);
       assert.ok(c.configDirs.every((d) => d.startsWith('/simulacao/')));
       const ofAccount = data.sessions.filter((s) => s.accountId === c.id);
       assert.equal(ofAccount.length, 3);

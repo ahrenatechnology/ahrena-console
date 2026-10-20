@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, ACCOUNT_COLORS } from '../../src/api/accounts.ts';
+import { Accounts, ACCOUNT_COLORS } from '../../src/api/accounts.ts';
 import { accountFromClaudeJson, freeColor, discoverFolders, Profiles } from '../../src/profiles/index.ts';
 
 const UUID_A = '00000000-0000-4000-8000-00000000000a';
@@ -159,11 +159,11 @@ describe('Profiles in the port', () => {
     await new Profiles({ storage, home, file: null, now: () => T0 }).sync();
     const arquivo = join(home, 'contas.json');
     writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: '#1baf7a' } }));
-    const contas = new Contas({ storage, arquivo });
-    await contas.atualizar();
+    const contas = new Accounts({ storage, file: arquivo });
+    await contas.refresh();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    assert.deepEqual(contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config' });
-    assert.deepEqual(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config' });
+    assert.deepEqual(contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config' });
+    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config' });
     await storage.close();
   });
 
@@ -175,9 +175,9 @@ describe('Profiles in the port', () => {
     const [a] = await storage.listAccounts();
     assert.deepEqual([a.label, a.organizationName], [null, null]);
     assert.ok(!JSON.stringify(a).includes('pessoa@exemplo.test'));
-    const contas = new Contas({ storage, arquivo: null });
-    await contas.atualizar();
-    assert.equal(contas.daSessao({ id: 's', accountId: a.id, accountSource: 'config' }, null)?.label, 'conta 1');
+    const contas = new Accounts({ storage, file: null });
+    await contas.refresh();
+    assert.equal(contas.ofSession({ id: 's', accountId: a.id, accountSource: 'config' }, null)?.label, 'conta 1');
     await storage.close();
   });
 
@@ -189,14 +189,14 @@ describe('Profiles in the port', () => {
     await new Profiles({ storage, home, file: null, now: () => T0 }).sync();
     const arquivo = join(home, 'contas.json');
     writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente' } }));
-    const contas = new Contas({ storage, arquivo });
-    await contas.atualizar();
+    const contas = new Accounts({ storage, file: arquivo });
+    await contas.refresh();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    const a = contas.daSessao(sessao(`${UUID_A}/${ORG_A}`), null);
+    const a = contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null);
     assert.equal(a?.label, 'conta pessoal');
     assert.ok(!JSON.stringify(a).includes('@'));
     // O contas.json continua por cima.
-    assert.equal(contas.daSessao(sessao(`${UUID_B}/${ORG_B}`), null)?.label, 'cliente');
+    assert.equal(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null)?.label, 'cliente');
     await storage.close();
   });
 
@@ -207,15 +207,15 @@ describe('Profiles in the port', () => {
     await perfis.sync();
     writeFileSync(join(dir, '.claude.json'), claudeJson(UUID_A, ORG_A, { organizationName: 'Nome Novo' }));
     await perfis.sync();
-    const contas = new Contas({ storage, arquivo: null, intervaloMs: 0 });
-    await contas.atualizar();
+    const contas = new Accounts({ storage, file: null, intervalMs: 0 });
+    await contas.refresh();
     const s = { id: 's', accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' as const };
-    assert.equal(contas.daSessao(s, null)?.label, 'Nome Novo');
+    assert.equal(contas.ofSession(s, null)?.label, 'Nome Novo');
     await storage.putAccount({ ...(await storage.getAccount(`${UUID_A}/${ORG_A}`))!, label: 'meu rótulo' });
     writeFileSync(join(dir, '.claude.json'), claudeJson(UUID_A, ORG_A, { organizationName: 'Outro Nome' }));
     await perfis.sync();
-    await contas.atualizar();
-    assert.equal(contas.daSessao(s, null)?.label, 'meu rótulo');
+    await contas.refresh();
+    assert.equal(contas.ofSession(s, null)?.label, 'meu rótulo');
     await storage.close();
   });
 

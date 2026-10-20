@@ -57,7 +57,7 @@ export function checkWatcherRules(
   const idle = now.getTime() - Date.parse(lastActivity(state));
 
   if (liveDirs && s.cwd && idle >= limits.probeGraceMs && !liveDirs.has(normalizeDir(s.cwd))) {
-    return { rule: 'probe', event: syntheticEvent(state, now, 'SessionEnd', 'processo encerrado (sonda)', { reason: 'processo_encerrado' }) };
+    return { rule: 'probe', event: syntheticEvent(state, now, 'SessionEnd', 'processo encerrado (sonda)', { reason: 'process_ended' }) };
   }
 
   if (s.status !== 'active') return null;
@@ -72,7 +72,7 @@ export function checkWatcherRules(
     !s.awaitingInputSince &&
     main?.status === 'working' &&
     !main.currentTool &&
-    Object.keys(memory.delegacoes).length === 0 &&
+    Object.keys(memory.delegations).length === 0 &&
     workingSubagents(state).length === 0 &&
     idle >= limits.deadTurnMs
   ) {
@@ -81,19 +81,19 @@ export function checkWatcherRules(
   return null;
 }
 
-// The id prefix, `data.sintetico`, the summaries and the reason are saved with the event: they stay as they are.
+// The id prefix (`state:`) and `data.synthetic` mark the event; the summary is screen text.
 function syntheticEvent(state: SessionState, now: Date, type: string, summary: string, extra: Record<string, unknown> | null): SessionEvent {
   const createdAt = now.toISOString();
   const sessionId = state.session.id;
   const digest = createHash('sha256').update(`${sessionId}\0${type}\0${createdAt}`).digest('hex').slice(0, 32);
   return {
-    id: `estado:${digest}`,
+    id: `state:${digest}`,
     sessionId,
     agentId: mainAgentOf(state)?.id ?? null,
     type,
     toolName: null,
     summary,
-    data: { sintetico: true, ...extra },
+    data: { synthetic: true, ...extra },
     createdAt,
   };
 }

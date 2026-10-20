@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, iniciarApiLocal, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, startLocalApi, type LocalApi } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/analytics-route.ts';
 import { DecisoesDaUi } from '../../src/api/decisions-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
@@ -36,7 +36,7 @@ export const DEMO_ALIAS = 'demo';
 const DEMO_REPO = '/simulacao/ahrena-demo';
 
 export interface LegacyDemo {
-  api: ApiLocal;
+  api: LocalApi;
   /** `127.0.0.1:<port>`, for the page's own `Origin`. */
   host: string;
   /** The `claude://` addresses the server asked the Desktop to open. */
@@ -61,7 +61,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   const storage = withChanges(sqlite, changes, sessionAccounts);
   const decisions = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
   const work = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: clock });
-  const accounts = new Contas({ storage, arquivo: null });
+  const accounts = new Accounts({ storage, file: null });
   const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id) });
   await seedPanelScenario(storage, 'p4', NOW);
   // The decisions of the p9 scenario (p4 has none): a suggested one to confirm and undo.
@@ -80,22 +80,22 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     raiz: (repo) => (repo === DEMO_REPO ? repoFolder : null),
   });
   const project = new GithubProject({ source: new SimulatorProject(NOW), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), project: SIMULATOR_PROJECT });
-  const api = await iniciarApiLocal({
-    montador: builder,
+  const api = await startLocalApi({
+    panelBuilder: builder,
     hooks: { storage },
     port: 0,
     log: () => {},
-    abrirNoDesktop: async (url) => void opened.push(url),
-    mudancas: changes,
-    projeto: { kanban: project, fonte: 'demo', log: () => {} },
-    detalhe: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: demoLocal }),
-    eventos: new FeedDeEventos({ storage }),
-    frota: mcp.fleet,
+    openInDesktop: async (url) => void opened.push(url),
+    changes,
+    project: { kanban: project, fonte: 'demo', log: () => {} },
+    detail: new LeiturasDoDetalhe({ storage, montador: builder, agora: clock, local: demoLocal }),
+    events: new FeedDeEventos({ storage }),
+    fleet: mcp.fleet,
     analytics: new RotaAnalytics({ storage, contas: accounts, agora: clock }),
-    sessoes: new ListaDeSessoes({ storage, contas: accounts, agora: clock }),
-    historico: new SessionHistory({ storage, decisions, timeZone: 'UTC' }),
+    sessions: new ListaDeSessoes({ storage, contas: accounts, agora: clock }),
+    history: new SessionHistory({ storage, decisions, timeZone: 'UTC' }),
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
-    decisoesUi: decisionsUi,
+    decisionsUi,
     repos: repos.rota,
     // As in the --demo: the old session ids (before #173) still open the session.
     demoUrl: upgradeDemoUrl,
