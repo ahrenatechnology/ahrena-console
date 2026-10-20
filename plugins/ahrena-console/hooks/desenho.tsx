@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.15'
+export const VERSAO_DO_PLUGIN = '0.0.16'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -362,20 +362,22 @@ function rotuloDaSecao(c: Contexto, largura: number, titulo: string, direita: Re
  */
 function chipDaSecao(c: Contexto, largura: number, estreito: boolean, conta: ContaDoPainel | null | undefined): RenderElement | null {
   if (!estreito) return chip(c, 'chip', 'auto · 5 s')
-  // O título, o espaço e "◆ rótulo"; o chip tem a borda e o respiro dos dois lados (4).
+  // O título, o espaço e "◆ rótulo"; antes do chip, um espaço.
   const daConta = conta ? 1 + 2 + [...rotuloDaConta(conta.rotulo)].length : 0
   const usadas = [...'ESTA SESSÃO'].length + daConta
-  return usadas + [...'5 s'].length + 4 <= largura ? chip(c, 'chip', '5 s') : null
+  return usadas + 1 + [...'5 s'].length <= largura ? chip(c, 'chip', '5 s') : null
 }
 
+/**
+ * O chip do P1 (`.pn-sec .r`): no Desktop, um Box com borda ganha respiro vertical e o chip ficava
+ * com duas linhas de altura. Sem borda: só o texto pequeno e neutro, numa linha.
+ */
 function chip(c: Contexto, key: string, texto: string) {
-  const { Box, Text } = c.el
+  const { Text } = c.el
   return (
-    <Box key={key} borderStyle="round" borderColor={BORDA} paddingX={1} flexShrink={0}>
-      <Text mono size="caption" dimColor>
-        {texto}
-      </Text>
-    </Box>
+    <Text key={key} mono size="caption" dimColor>
+      {texto}
+    </Text>
   )
 }
 
@@ -1776,8 +1778,8 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   const util = g.largura - 4
   // No desktop a borda é um traço fino, não uma linha: o topo (logo e duas linhas de texto) ocupa
   // 3, e cada faixa de uma linha com borda (decisões, precisam, PRs) ocupa 2, com o botão.
-  // O topo ocupa 3; o rótulo da seção, 2 (o chip com borda é mais alto que uma linha).
-  const partes = [3, 2]
+  // O topo ocupa 3; o rótulo da seção, 1 (o chip não tem borda).
+  const partes = [3, 1]
   if (compactar === 'confirmar') partes.push(4)
   const r = p.decisoes?.retomada
   if (r && r.n > 0) partes.push(2 + 1 + (estreito ? 3 : 2) + 1)
