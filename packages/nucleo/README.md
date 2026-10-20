@@ -334,15 +334,15 @@ Os nomes antigos (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`
 
 **Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `--speed` vezes mais rápido; as datas gravadas acompanham o relógio.
 
-O **modo caos** garante pelo menos uma sessão de cada falha:
+O **modo caos** garante pelo menos uma sessão de cada falha (o valor gravado em `metadata.roteiro`; no código, `stuck`, `error`, `abandonment`, `overflow` e `swarm`):
 
 | Roteiro | O que fica gravado |
 | --- | --- |
-| `stuck` | `active` esperando input (`notification` com pedido de permissão, ou `interrupted`), e nada mais acontece |
-| `error` | `PostToolUseFailure` e a sessão em `error` |
-| `abandonment` | Para no meio de um comando e, 180 min depois, a sessão é gravada como `abandoned` |
-| `overflow` | Dois picos de tokens que estouram o contexto de 200k; cada um gera `PreCompact` e move o uso para o piso (`baseline`) |
-| `swarm` | De 8 a 14 subagentes em paralelo no mesmo turno |
+| `travada` | `active` esperando input (`notification` com pedido de permissão, ou `interrupted`), e nada mais acontece |
+| `erro` | `PostToolUseFailure` e a sessão em `error` |
+| `abandono` | Para no meio de um comando e, 180 min depois, a sessão é gravada como `abandoned` |
+| `estouro` | Dois picos de tokens que estouram o contexto de 200k; cada um gera `PreCompact` e move o uso para o piso (`baseline`) |
+| `enxame` | De 8 a 14 subagentes em paralelo no mesmo turno |
 
 Os estados são gravados como dados; as transições continuam sendo da máquina de estados (item 1.5).
 
