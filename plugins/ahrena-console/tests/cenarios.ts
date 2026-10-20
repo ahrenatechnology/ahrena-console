@@ -5,7 +5,7 @@ import type { EscopoDasDecisoes, ListaDeDecisoes, Painel } from '../types'
 
 export const AGORA = 1793620800000
 
-export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 'p9', Painel> = {
+export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 'p9' | 'p12' | 'p13', Painel> = {
   "p1": {
     "versao": 1,
     "api": {
@@ -203,7 +203,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "mapear usos",
           "status": "working",
           "desde": "2026-11-02T11:59:18.000Z",
-          "ate": null
+          "ate": null,
+          "pai": null,
+          "onda": 18
         },
         {
           "id": "sim-painel-esta:a1",
@@ -211,7 +213,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "plano",
           "status": "completed",
           "desde": "2026-11-02T11:49:00.000Z",
-          "ate": "2026-11-02T11:51:00.000Z"
+          "ate": "2026-11-02T11:51:00.000Z",
+          "pai": null,
+          "onda": 2
         }
       ]
     },
@@ -475,7 +479,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "ler testes",
           "status": "completed",
           "desde": "2026-11-02T11:44:00.000Z",
-          "ate": "2026-11-02T11:45:00.000Z"
+          "ate": "2026-11-02T11:45:00.000Z",
+          "pai": null,
+          "onda": 5
         }
       ]
     },
@@ -696,7 +702,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "esquema atual",
           "status": "completed",
           "desde": "2026-11-02T11:33:00.000Z",
-          "ate": "2026-11-02T11:40:00.000Z"
+          "ate": "2026-11-02T11:40:00.000Z",
+          "pai": null,
+          "onda": 5
         }
       ]
     },
@@ -1010,7 +1018,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "bateria",
           "status": "working",
           "desde": "2026-11-02T11:59:48.000Z",
-          "ate": null
+          "ate": null,
+          "pai": null,
+          "onda": 9
         },
         {
           "id": "sim-painel-esta:a1",
@@ -1018,7 +1028,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "diff",
           "status": "working",
           "desde": "2026-11-02T11:59:18.000Z",
-          "ate": null
+          "ate": null,
+          "pai": null,
+          "onda": 9
         },
         {
           "id": "sim-painel-esta:a0",
@@ -1026,7 +1038,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "achar usos",
           "status": "working",
           "desde": "2026-11-02T11:59:00.000Z",
-          "ate": null
+          "ate": null,
+          "pai": null,
+          "onda": 9
         },
         {
           "id": "sim-painel-esta:a3",
@@ -1034,7 +1048,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "plano",
           "status": "completed",
           "desde": "2026-11-02T11:37:00.000Z",
-          "ate": "2026-11-02T11:40:00.000Z"
+          "ate": "2026-11-02T11:40:00.000Z",
+          "pai": null,
+          "onda": 2
         }
       ]
     },
@@ -1320,7 +1336,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "bateria",
           "status": "error",
           "desde": "2026-11-02T11:53:00.000Z",
-          "ate": "2026-11-02T11:55:00.000Z"
+          "ate": "2026-11-02T11:55:00.000Z",
+          "pai": null,
+          "onda": 22
         },
         {
           "id": "sim-painel-esta:a1",
@@ -1328,7 +1346,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "índices",
           "status": "completed",
           "desde": "2026-11-02T11:29:00.000Z",
-          "ate": "2026-11-02T11:30:00.000Z"
+          "ate": "2026-11-02T11:30:00.000Z",
+          "pai": null,
+          "onda": 12
         }
       ]
     },
@@ -2046,7 +2066,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "mapear usos",
           "status": "working",
           "desde": "2026-11-02T11:59:18.000Z",
-          "ate": null
+          "ate": null,
+          "pai": null,
+          "onda": 18
         },
         {
           "id": "sim-painel-esta:a1",
@@ -2054,7 +2076,9 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
           "tarefa": "plano",
           "status": "completed",
           "desde": "2026-11-02T11:49:00.000Z",
-          "ate": "2026-11-02T11:51:00.000Z"
+          "ate": "2026-11-02T11:51:00.000Z",
+          "pai": null,
+          "onda": 15
         }
       ]
     },
@@ -2154,6 +2178,631 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
     "decisoes": {
       "vigentes": 4,
       "aConfirmar": 1,
+      "retomada": null,
+      "lista": null
+    }
+  },
+  "p12": {
+    "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
+    },
+    "geradoEm": "2026-11-02T12:00:00.000Z",
+    "sessao": {
+      "id": "sim-painel-esta",
+      "titulo": "Separar pagamentos em serviços",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-11-02T11:46:00.000Z",
+      "status": "active",
+      "estado": "delegating",
+      "motivo": null,
+      "urgente": false,
+      "desde": "2026-11-02T11:59:57.000Z",
+      "turno": 2,
+      "atividade": {
+        "tipo": "delegando",
+        "texto": "esperando 1 subagente"
+      },
+      "faixa": null,
+      "conta": {
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "rotulo": "equipe",
+        "cor": "#df285d",
+        "fonte": "env"
+      },
+      "branch": null,
+      "cwd": "/simulacao/vitrine-demo"
+    },
+    "contexto": {
+      "usados": 70000,
+      "limite": 200000,
+      "pct": 35,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "70k / 200k (35%)",
+      "agentes": []
+    },
+    "custo": {
+      "usd": 1.1993642,
+      "serie": [
+        0,
+        0.06863,
+        0.13811,
+        0.20844000000000001,
+        0.27962,
+        0.35164999999999996,
+        0.42452999999999996,
+        0.49826,
+        0.57284,
+        0.64827,
+        0.72455,
+        0.8016800000000001,
+        0.8796600000000001,
+        0.9584900000000001,
+        1.03817,
+        1.1187,
+        1.1993642
+      ],
+      "estimativa": true
+    },
+    "tokens": {
+      "entrada": 614421,
+      "saida": 49264
+    },
+    "background": {
+      "total": 0,
+      "primeiro": null
+    },
+    "plano": null,
+    "planos": [],
+    "subagentes": {
+      "ativos": 1,
+      "itens": [
+        {
+          "id": "sim-painel-esta:a2",
+          "nome": "test-runner",
+          "tarefa": "bateria",
+          "status": "working",
+          "desde": "2026-11-02T11:57:00.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a1",
+          "nome": "Explore",
+          "tarefa": "achar usos",
+          "status": "completed",
+          "desde": "2026-11-02T11:55:00.000Z",
+          "ate": "2026-11-02T11:59:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a0",
+          "nome": "Plan",
+          "tarefa": "plano da extração",
+          "status": "completed",
+          "desde": "2026-11-02T11:48:00.000Z",
+          "ate": "2026-11-02T11:50:00.000Z",
+          "pai": null,
+          "onda": 1
+        }
+      ]
+    },
+    "filhas": [
+      {
+        "id": "sim-painel-fila-de-tarefas",
+        "local": null,
+        "titulo": "fila-de-tarefas",
+        "estado": "waiting",
+        "motivo": "stop",
+        "desde": "2026-11-02T11:59:00.000Z",
+        "fazendo": null,
+        "arquivada": false
+      }
+    ],
+    "trabalho": {
+      "branch": "feat/63-separar-pagamentos",
+      "repo": "exemplo/simulacao",
+      "issue": {
+        "numero": 63,
+        "titulo": "Separar pagamentos",
+        "url": "https://github.com/exemplo/simulacao/issues/63",
+        "subIssues": {
+          "feitas": 2,
+          "total": 6
+        }
+      },
+      "pr": {
+        "numero": 90,
+        "url": "https://github.com/exemplo/simulacao/pull/90",
+        "estado": "aberto",
+        "ci": "rodando",
+        "checks": {
+          "total": 7,
+          "ok": 3,
+          "falhas": 0,
+          "rodando": 4
+        },
+        "review": "aprovado"
+      },
+      "semPush": false,
+      "erro": null
+    },
+    "precisam": {
+      "total": 0,
+      "suaVez": 1,
+      "porConta": [],
+      "familia": [
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
+          "local": null,
+          "titulo": "fila-de-tarefas",
+          "estado": "waiting",
+          "motivo": "stop",
+          "urgente": false,
+          "desde": "2026-11-02T11:59:00.000Z",
+          "texto": "\"Terminei a migração. Rodo os testes?\"",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": "filha",
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        }
+      ],
+      "maquina": [
+        {
+          "id": "sim-painel-fila-de-tarefas",
+          "nivel": "sua-vez",
+          "porque": "sua-vez",
+          "local": null,
+          "titulo": "fila-de-tarefas",
+          "estado": "waiting",
+          "motivo": "stop",
+          "urgente": false,
+          "desde": "2026-11-02T11:59:00.000Z",
+          "texto": "\"Terminei a migração. Rodo os testes?\"",
+          "modelo": "claude-sonnet-5-5",
+          "relacao": "filha",
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+            "rotulo": "equipe",
+            "cor": "#df285d",
+            "fonte": "env"
+          }
+        }
+      ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
+      "retomada": null,
+      "lista": null
+    }
+  },
+  "p13": {
+    "versao": 1,
+    "api": {
+      "versao": "0.0.1",
+      "commit": null,
+      "pasta": null,
+      "abreSessao": false
+    },
+    "geradoEm": "2026-11-02T12:00:00.000Z",
+    "sessao": {
+      "id": "sim-painel-esta",
+      "titulo": "Separar pagamentos em serviços",
+      "modelo": "claude-opus-5-5",
+      "iniciadaEm": "2026-11-02T11:08:00.000Z",
+      "status": "active",
+      "estado": "delegating",
+      "motivo": null,
+      "urgente": false,
+      "desde": "2026-11-02T11:59:57.000Z",
+      "turno": 5,
+      "atividade": {
+        "tipo": "delegando",
+        "texto": "esperando 4 subagentes"
+      },
+      "faixa": null,
+      "conta": {
+        "id": "00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1",
+        "rotulo": "equipe",
+        "cor": "#df285d",
+        "fonte": "env"
+      },
+      "branch": null,
+      "cwd": "/simulacao/vitrine-demo"
+    },
+    "contexto": {
+      "usados": 150000,
+      "limite": 200000,
+      "pct": 75,
+      "estouros": 0,
+      "alerta": false,
+      "compactacoesManuais": 0,
+      "rotulo": "150k / 200k (75%)",
+      "agentes": []
+    },
+    "custo": {
+      "usd": 6.296101800000001,
+      "serie": [
+        0,
+        0.37987,
+        0.76159,
+        1.14516,
+        1.53058,
+        1.91785,
+        2.30697,
+        2.69794,
+        3.09076,
+        3.48543,
+        3.88195,
+        4.28032,
+        4.68054,
+        5.08261,
+        5.48653,
+        5.8923000000000005,
+        6.296101800000001
+      ],
+      "estimativa": true
+    },
+    "tokens": {
+      "entrada": 1278909,
+      "saida": 297456
+    },
+    "background": {
+      "total": 0,
+      "primeiro": null
+    },
+    "plano": null,
+    "planos": [],
+    "subagentes": {
+      "ativos": 4,
+      "itens": [
+        {
+          "id": "sim-painel-esta:a19",
+          "nome": "test-runner",
+          "tarefa": "api de cobrança",
+          "status": "working",
+          "desde": "2026-11-02T11:55:00.000Z",
+          "ate": null,
+          "pai": "sim-painel-esta:a13",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a21",
+          "nome": "test-runner",
+          "tarefa": "e2e",
+          "status": "working",
+          "desde": "2026-11-02T11:52:00.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a20",
+          "nome": "code-reviewer",
+          "tarefa": "diff do serviço",
+          "status": "working",
+          "desde": "2026-11-02T11:48:00.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a13",
+          "nome": "general-purpose",
+          "tarefa": "migrar a cobrança",
+          "status": "working",
+          "desde": "2026-11-02T11:41:00.000Z",
+          "ate": null,
+          "pai": null,
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a7",
+          "nome": "test-runner",
+          "tarefa": "lint e tipos",
+          "status": "error",
+          "desde": "2026-11-02T11:19:00.000Z",
+          "ate": "2026-11-02T11:23:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a24",
+          "nome": "Explore",
+          "tarefa": "métricas",
+          "status": "completed",
+          "desde": "2026-11-02T11:54:00.000Z",
+          "ate": "2026-11-02T11:57:00.000Z",
+          "pai": null,
+          "onda": 5
+        },
+        {
+          "id": "sim-painel-esta:a23",
+          "nome": "Explore",
+          "tarefa": "logs",
+          "status": "completed",
+          "desde": "2026-11-02T11:53:00.000Z",
+          "ate": "2026-11-02T11:55:00.000Z",
+          "pai": null,
+          "onda": 5
+        },
+        {
+          "id": "sim-painel-esta:a18",
+          "nome": "Explore",
+          "tarefa": "clientes",
+          "status": "completed",
+          "desde": "2026-11-02T11:49:00.000Z",
+          "ate": "2026-11-02T11:52:00.000Z",
+          "pai": "sim-painel-esta:a16",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a17",
+          "nome": "Explore",
+          "tarefa": "esquemas",
+          "status": "completed",
+          "desde": "2026-11-02T11:47:00.000Z",
+          "ate": "2026-11-02T11:49:00.000Z",
+          "pai": "sim-painel-esta:a16",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a16",
+          "nome": "general-purpose",
+          "tarefa": "contratos",
+          "status": "completed",
+          "desde": "2026-11-02T11:46:00.000Z",
+          "ate": "2026-11-02T11:54:00.000Z",
+          "pai": "sim-painel-esta:a13",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a22",
+          "nome": "docs-writer",
+          "tarefa": "README do serviço",
+          "status": "completed",
+          "desde": "2026-11-02T11:43:00.000Z",
+          "ate": "2026-11-02T11:47:00.000Z",
+          "pai": null,
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a14",
+          "nome": "Explore",
+          "tarefa": "rotas de cobrança",
+          "status": "completed",
+          "desde": "2026-11-02T11:42:00.000Z",
+          "ate": "2026-11-02T11:44:00.000Z",
+          "pai": "sim-painel-esta:a13",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a15",
+          "nome": "Explore",
+          "tarefa": "webhooks",
+          "status": "completed",
+          "desde": "2026-11-02T11:42:00.000Z",
+          "ate": "2026-11-02T11:45:00.000Z",
+          "pai": "sim-painel-esta:a13",
+          "onda": 4
+        },
+        {
+          "id": "sim-painel-esta:a12",
+          "nome": "Plan",
+          "tarefa": "plano da migração",
+          "status": "completed",
+          "desde": "2026-11-02T11:26:00.000Z",
+          "ate": "2026-11-02T11:39:00.000Z",
+          "pai": null,
+          "onda": 3
+        },
+        {
+          "id": "sim-painel-esta:a10",
+          "nome": "Explore",
+          "tarefa": "mocks",
+          "status": "completed",
+          "desde": "2026-11-02T11:21:00.000Z",
+          "ate": "2026-11-02T11:25:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a9",
+          "nome": "Explore",
+          "tarefa": "fixtures",
+          "status": "completed",
+          "desde": "2026-11-02T11:20:00.000Z",
+          "ate": "2026-11-02T11:24:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a11",
+          "nome": "Plan",
+          "tarefa": "fatias",
+          "status": "completed",
+          "desde": "2026-11-02T11:19:00.000Z",
+          "ate": "2026-11-02T11:24:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a6",
+          "nome": "code-reviewer",
+          "tarefa": "diff inicial",
+          "status": "completed",
+          "desde": "2026-11-02T11:18:00.000Z",
+          "ate": "2026-11-02T11:22:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a8",
+          "nome": "Explore",
+          "tarefa": "testes",
+          "status": "completed",
+          "desde": "2026-11-02T11:18:00.000Z",
+          "ate": "2026-11-02T11:20:00.000Z",
+          "pai": null,
+          "onda": 2
+        },
+        {
+          "id": "sim-painel-esta:a5",
+          "nome": "Explore",
+          "tarefa": "configuração",
+          "status": "completed",
+          "desde": "2026-11-02T11:12:00.000Z",
+          "ate": "2026-11-02T11:17:00.000Z",
+          "pai": null,
+          "onda": 1
+        },
+        {
+          "id": "sim-painel-esta:a4",
+          "nome": "Explore",
+          "tarefa": "filas",
+          "status": "completed",
+          "desde": "2026-11-02T11:11:00.000Z",
+          "ate": "2026-11-02T11:16:00.000Z",
+          "pai": null,
+          "onda": 1
+        },
+        {
+          "id": "sim-painel-esta:a3",
+          "nome": "Explore",
+          "tarefa": "eventos",
+          "status": "completed",
+          "desde": "2026-11-02T11:10:30.000Z",
+          "ate": "2026-11-02T11:13:00.000Z",
+          "pai": null,
+          "onda": 1
+        },
+        {
+          "id": "sim-painel-esta:a2",
+          "nome": "Explore",
+          "tarefa": "modelos",
+          "status": "completed",
+          "desde": "2026-11-02T11:10:00.000Z",
+          "ate": "2026-11-02T11:15:00.000Z",
+          "pai": null,
+          "onda": 1
+        },
+        {
+          "id": "sim-painel-esta:a1",
+          "nome": "Explore",
+          "tarefa": "rotas",
+          "status": "completed",
+          "desde": "2026-11-02T11:09:30.000Z",
+          "ate": "2026-11-02T11:14:00.000Z",
+          "pai": null,
+          "onda": 1
+        },
+        {
+          "id": "sim-painel-esta:a0",
+          "nome": "Explore",
+          "tarefa": "mapear módulos",
+          "status": "completed",
+          "desde": "2026-11-02T11:09:00.000Z",
+          "ate": "2026-11-02T11:17:00.000Z",
+          "pai": null,
+          "onda": 1
+        }
+      ]
+    },
+    "filhas": [],
+    "trabalho": {
+      "branch": "feat/63-separar-pagamentos",
+      "repo": "exemplo/simulacao",
+      "issue": {
+        "numero": 63,
+        "titulo": "Separar pagamentos",
+        "url": "https://github.com/exemplo/simulacao/issues/63",
+        "subIssues": {
+          "feitas": 2,
+          "total": 6
+        }
+      },
+      "pr": {
+        "numero": 90,
+        "url": "https://github.com/exemplo/simulacao/pull/90",
+        "estado": "aberto",
+        "ci": "rodando",
+        "checks": {
+          "total": 7,
+          "ok": 3,
+          "falhas": 0,
+          "rodando": 4
+        },
+        "review": "aprovado"
+      },
+      "semPush": false,
+      "erro": null
+    },
+    "precisam": {
+      "total": 1,
+      "suaVez": 0,
+      "porConta": [
+        {
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          },
+          "n": 1
+        }
+      ],
+      "familia": [],
+      "maquina": [
+        {
+          "id": "sim-painel-painel-de-metricas",
+          "nivel": "precisa",
+          "porque": "erro",
+          "local": null,
+          "titulo": "painel-de-metricas",
+          "estado": "error",
+          "motivo": null,
+          "urgente": true,
+          "desde": "2026-11-02T11:57:00.000Z",
+          "texto": "API 529 · overloaded_error",
+          "modelo": "claude-opus-5-5",
+          "relacao": null,
+          "mesmoProjeto": false,
+          "conta": {
+            "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
+            "rotulo": "cliente-exemplo",
+            "cor": "#1baf7a",
+            "fonte": "config"
+          }
+        }
+      ]
+    },
+    "prs": {
+      "total": 0,
+      "itens": []
+    },
+    "decisoes": {
+      "vigentes": 0,
+      "aConfirmar": 0,
       "retomada": null,
       "lista": null
     }

@@ -5,7 +5,8 @@ A bandeja do Ahrena Console na barra de menus do macOS, em Tauri 2 ([decisão 00
 ## O que faz
 
 - **Número ao lado do ícone** (`tray.set_title`): as sessões esperando você ou com erro, em todas as contas. Com zero ou com o núcleo parado, só o ícone template.
-- **Menu**, como os wireframes A1, A2 e A4 (`docs/wireframes/index.html`, ids `app-bandeja-0`, `app-bandeja-3` e `app-parado`): o estado do núcleo, "N precisam de você" com o motivo e o tempo de cada sessão (as que travam primeiro), "N ativas", "Abrir o console ⌘O", Notificações, Abrir no login, a versão e Sair.
+- **Ícone template** em 18 e 36 px (`icons/bandeja.png` e `bandeja@2x.png`, de `bandeja.svg`): o macOS escolhe o nítido para cada tela e o pinta conforme a barra.
+- **Menu**, como os wireframes A1, A2 e A4 (`docs/wireframes/index.html`, ids `app-bandeja-0`, `app-bandeja-3` e `app-parado`): o estado do núcleo, "N precisam de você" com o motivo e o tempo de cada sessão (urgentes primeiro: permissão, pergunta, plano e decisão; depois erro; depois a sua vez), "N ativas", "Abrir o console ⌘O", Notificações, Abrir no login, a versão e Sair.
 - **Clique numa sessão:** por enquanto abre a conversa no Claude Desktop (`POST /abrir/<local_…>` do núcleo). Com ⌥, cada item vira "Abrir no Claude Desktop" (item alternativo nativo do macOS). Quando a janela do app mostrar a sessão (A5), o clique sem ⌥ passa a abrir lá.
 - **Abrir o console:** uma janela com `http://127.0.0.1:<porta>/ui`. Fechar a janela não fecha o app.
 - **Notificações e Abrir no login** só marcam, sem efeito: o efeito é das issues #88 e #89.
@@ -64,7 +65,7 @@ curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
 cd apps/desktop && npm install && npm run build
 ```
 
-O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icones` os refaz do logo, e o da bandeja (`bandeja.png`, template) vem de `bandeja.svg`.
+O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icones` os refaz do logo. Os da bandeja vêm de `bandeja.svg`: `npx tauri icon src-tauri/icons/bandeja.svg -p 18 -p 36`.
 
 Testes, sem abrir o app:
 

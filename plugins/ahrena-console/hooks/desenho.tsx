@@ -1,4 +1,4 @@
-// O desenho do painel (wireframes P0 a P10, docs/wireframes): só elementos nativos do mod
+// O desenho do painel (wireframes P0 a P13, docs/wireframes): só elementos nativos do mod
 // (Box, Text, Button, Link, Select, Svg), sem HTML. Recebe a leitura e devolve a árvore; quem
 // pede ao núcleo e guarda o estado é o register.tsx.
 //
@@ -56,6 +56,7 @@ import {
   usd,
 } from './formato'
 import { alturaDaGrade, BORDA_DO_CARD, ESPACO, LINHAS_DO_CARD, linhasDoTexto } from './altura'
+import { ESTADO_DO_GRAFO, contagemCurta, montarGrafo, paginar, type EstadoDoGrafo, type LinhaDoGrafo } from './grafo'
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
@@ -63,7 +64,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.28'
+export const VERSAO_DO_PLUGIN = '0.0.29'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -131,6 +132,8 @@ export type Acoes = {
   ajustar: (abrir: boolean) => void
   enviarAjuste: (d: DecisaoDoPainel, texto: string) => void
   verSubagentes: () => void
+  /** #146: mexe no grafo da sessão: a página, as ondas abertas e fechadas, o filtro. */
+  grafo: (patch: Partial<EstadoDoGrafo>) => void
   verFilhas: () => void
   /** #140: a lista dos PRs aguardando a sua aprovação. */
   verPrs: () => void
@@ -971,25 +974,19 @@ function quantosCabem(alturas: number[], linhas: number): number {
 const LINHAS_DA_LISTA = 3
 
 /**
- * O que ficou fora do card, no padrão dos pés ("N coisa estado"): "17 subagentes concluídos",
- * "1 subagente concluído", "2 subagentes ativos · 10 concluídos". O substantivo vai só na primeira parte.
+ * O pé do card Subagentes (P11), que abre o grafo da sessão: com todos no card, "ver o grafo ›"; com
+ * mais, quantos ficaram fora e, entre eles, os com erro: "+22 · 1 com erro · grafo ›".
  */
-function subagentesFora(fora: SubagenteDoPainel[]): string {
-  const partes: [number, string, string][] = [
-    [fora.filter(subagenteAtivo).length, 'ativo', 'ativos'],
-    [fora.filter((i) => i.status === 'completed').length, 'concluído', 'concluídos'],
-    [fora.filter((i) => i.status === 'error').length, 'com erro', 'com erro'],
-  ]
-  return partes
-    .filter(([n]) => n > 0)
-    .map(([n, um, varios], i) => (i === 0 ? `${contagem(n, 'subagente', 'subagentes')} ${n === 1 ? um : varios}` : `${n} ${n === 1 ? um : varios}`))
-    .join(' · ')
+function peDosSubagentes(fora: SubagenteDoPainel[]): string {
+  if (fora.length === 0) return 'ver o grafo ›'
+  const erros = fora.filter((i) => i.status === 'error').length
+  return `+${fora.length}${erros ? ` · ${erros} com erro` : ''} · grafo ›`
 }
 
 /**
  * O card Subagentes (pnSubs do P1): "N ativos" à direita do cabeçalho, a barra por estado (ativo
  * laranja, concluído verde, erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
- * concluídos também; o resto em "+N concluídos", que abre a lista. Nunca só o cabeçalho.
+ * concluídos também. O pé abre o grafo da sessão (P11). Nunca só o cabeçalho.
  */
 function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
   const { Text, Svg } = c.el
@@ -1011,7 +1008,7 @@ function cardSubagentes(c: Contexto, s: Painel['subagentes']) {
     <Svg source={subagentesSvg(s.itens)} alt={`${s.ativos} ativos de ${s.itens.length}`} width={BARRA_W} height={BARRA_H} />,
     ...todos.slice(0, LINHAS_DA_LISTA).map((i) => linhaDeSubagente(c, i)),
   )
-  const pe = fora.length > 0 ? peDoCard(c, abre(c, 'ver-subagentes', `${subagentesFora(fora)} ›`, c.acoes.verSubagentes, true)) : null
+  const pe = peDoCard(c, abre(c, 'ver-subagentes', peDosSubagentes(fora), c.acoes.verSubagentes, true))
   return cartao(c, 'card-subagentes', corpo, BORDA, FUNDO_CARTAO, pe)
 }
 
@@ -1181,29 +1178,289 @@ function naoCouberam(c: Contexto, key: string, n: number) {
 /** Quantas fileiras de cards de 9 linhas cabem (com o espaço entre elas). */
 const fileirasQueCabem = (linhas: number) => Math.max(1, Math.floor((linhas + 1) / (BORDA_DO_CARD + LINHAS_DO_CARD + 1)))
 
-/** A lista completa de subagentes ou de sessões filhas, no lugar dos cards. */
-function telaLista(c: Contexto, p: Painel, g: ReturnType<typeof grade>, qual: 'subagentes' | 'filhas') {
+/** A lista completa das sessões filhas, no lugar dos cards. */
+function telaFilhas(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   const { Box, Text, Button } = c.el
   const util = g.largura - 4
-  const todos = qual === 'subagentes' ? subagentesEmOrdem(p.subagentes) : p.filhas
-  const alturas =
-    qual === 'subagentes'
-      ? subagentesEmOrdem(p.subagentes).map((x) => linhasDoTexto(`● ${x.nome}${x.tarefa ? ` · ${x.tarefa}` : ''}`, util - TEMPO_W - 1))
-      : p.filhas.map((f) => (enderecoDaSessao(c, f.local) ? 1 : linhasDoTexto(`● ${f.titulo}`, util - TEMPO_W - 3)))
+  const alturas = p.filhas.map((f) => (enderecoDaSessao(c, f.local) ? 1 : linhasDoTexto(`● ${f.titulo}`, util - TEMPO_W - 3)))
   // Em volta: respiro, topo, voltar, rótulo, borda da caixa, rodapé, versão e os espaços.
   const n = quantosCabem(alturas, livres(c, 2 + 4 + 1 + 1 + 2 + 1 + 1 + 5))
-  const itens =
-    qual === 'subagentes'
-      ? subagentesEmOrdem(p.subagentes).slice(0, n).map((x) => linhaDeSubagente(c, x, true))
-      : filhasEmOrdem(p.filhas).slice(0, n).map((f) => (f.arquivada ? linhaDeArquivada(c, f, p.sessao) : linhaDeFilha(c, f, g.largura, true)))
-  const titulo = qual === 'subagentes' ? `SUBAGENTES · ${p.subagentes.itens.length}` : `SESSÕES FILHAS · ${p.filhas.length}`
+  const itens = filhasEmOrdem(p.filhas).slice(0, n).map((f) => (f.arquivada ? linhaDeArquivada(c, f, p.sessao) : linhaDeFilha(c, f, g.largura, true)))
   return [
-    rotuloDaSecao(c, g.largura, titulo, chip(c, `chip-${qual}`, qual === 'subagentes' ? plural(p.subagentes.ativos, 'ativo', 'ativos') : 'desta sessão')),
-    <Box key={`lista-${qual}`} flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
-      {itens.length ? [...itens, naoCouberam(c, 'nao-couberam', todos.length - n)] : [<Text key="vazio" mono dimColor>nada por aqui</Text>]}
+    rotuloDaSecao(c, g.largura, `SESSÕES FILHAS · ${p.filhas.length}`, chip(c, 'chip-filhas', 'desta sessão')),
+    <Box key="lista-filhas" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1} gap="xs">
+      {itens.length ? [...itens, naoCouberam(c, 'nao-couberam', p.filhas.length - n)] : [<Text key="vazio" mono dimColor>nada por aqui</Text>]}
     </Box>,
-    <Box key={`rodape-${qual}`} flexDirection="row" justifyContent="flex-end" width={g.largura}>
-      <Button key={`fechar-${qual}`} plain onPress={c.acoes.fechar}>
+    <Box key="rodape-filhas" flexDirection="row" justifyContent="flex-end" width={g.largura}>
+      <Button key="fechar-filhas" plain onPress={c.acoes.fechar}>
+        <Text color={LARANJA} underline>
+          ← voltar
+        </Text>
+      </Button>
+    </Box>,
+  ]
+}
+
+// --- O grafo da sessão (#146, P12 e P13) ---
+
+/** Px por coluna da fonte mono no Desktop (ver BARRA_W): a barra do tempo tem a largura das colunas dela. */
+const PX_POR_COLUNA = 7.9
+const BARRA_DO_GRAFO_H = 10
+/** As colunas de cada linha do grafo: no estreito, nome, barra e tempo; no largo, também estado e início. */
+const COLUNAS_DO_GRAFO = {
+  estreito: { nome: 14, barra: 7, estado: 0, inicio: 0, tempo: TEMPO_W },
+  largo: { nome: 40, barra: 36, estado: 9, inicio: 6, tempo: TEMPO_W },
+} as const
+/** O que o grafo tem em volta, em linhas: o respiro, o topo, os dois "← voltar", o rótulo, a borda da caixa, a régua, a raiz, o pé e a versão. */
+const EM_VOLTA_DO_GRAFO = 2 + 4 + 1 + 1 + 2 + 2 + 2 + 2 + 1 + 5
+
+const COR_DO_SUB = (s: SubagenteDoPainel['status']) => (s === 'completed' ? VERDE : s === 'error' ? VERMELHO : LARANJA)
+const GLIFO_DO_SUB = (s: SubagenteDoPainel['status']) => (s === 'completed' ? '✓' : s === 'error' ? '✕' : '●')
+const ESTADO_DO_SUB = (s: SubagenteDoPainel['status']) => (s === 'completed' ? 'concluído' : s === 'error' ? 'com erro' : 'ativo')
+const ESTADO_DA_SESSAO: Record<ReturnType<typeof statusDe>, string> = { active: 'ativa', waiting: 'esperando', completed: 'concluída', error: 'com erro', abandoned: 'abandonada' }
+
+/** O minuto da sessão, como na régua: "33′". */
+const minutoDaSessao = (t0: number, t: number) => `${Math.max(0, Math.round((t - t0) / 60_000))}′`
+
+/**
+ * A barra do tempo de uma linha: o trilho fino da sessão inteira e, nele, de quando começou a quando
+ * acabou (ou até agora, com um traço no fim). Numa onda recolhida, a faixa da onda, clara, com um
+ * traço por subagente. Largura e altura explícitas, como todo Svg do mod.
+ */
+function barraDoGrafoSvg(w: number, t0: number, t1: number, ini: number, fim: number | null, cor: string, marcas?: number[]) {
+  const h = BARRA_DO_GRAFO_H
+  const x = (v: number) => 1 + ((Math.max(t0, Math.min(t1, v)) - t0) / Math.max(1, t1 - t0)) * (w - 2)
+  const de = x(ini)
+  const ate = x(fim ?? t1)
+  const larg = Math.max(3, ate - de).toFixed(1)
+  const trilho = `<rect x="0" y="${h / 2 - 1}" width="${w}" height="2" rx="1" fill="${BORDA}"/>`
+  if (marcas) {
+    return svg(w, h, `${trilho}<rect x="${de.toFixed(1)}" y="1" width="${larg}" height="${h - 2}" rx="2" fill="${cor}" fill-opacity="0.3"/>${marcas.map((m) => `<rect x="${x(m).toFixed(1)}" y="1" width="2" height="${h - 2}" fill="${cor}"/>`).join('')}`)
+  }
+  const agora = fim === null ? `<rect x="${(ate - 2).toFixed(1)}" y="0" width="2" height="${h}" fill="${cor}"/>` : ''
+  return svg(w, h, `${trilho}<rect x="${de.toFixed(1)}" y="1" width="${larg}" height="${h - 2}" rx="2" fill="${cor}"/>${agora}`)
+}
+
+/** A régua do largo: 0′ à esquerda, a duração da sessão à direita e as dezenas (ou os cincos) no meio. */
+function reguaDoGrafoSvg(w: number, minutos: number) {
+  const passo = minutos < 30 ? 5 : 10
+  const marcas = Array.from({ length: Math.floor(minutos / passo) + 1 }, (_, i) => i * passo).filter((m) => m === 0 || m <= minutos - passo / 2)
+  const x = (m: number) => 1 + (m / Math.max(1, minutos)) * (w - 2)
+  const fonte = `font-family="ui-monospace, Menlo, monospace" font-size="9" fill="${paleta.gray['300']}"`
+  return svg(
+    w,
+    14,
+    marcas.map((m) => `<rect x="${x(m).toFixed(1)}" y="10" width="1" height="4" fill="${paleta.gray['300']}"/><text x="${m === 0 ? 0 : (x(m) - 3).toFixed(1)}" y="8" ${fonte}>${m}′</text>`).join('') +
+      `<rect x="${w - 1}" y="10" width="1" height="4" fill="${paleta.gray['300']}"/><text x="${w}" y="8" text-anchor="end" ${fonte}>${minutos}′</text>`,
+  )
+}
+
+/** Uma linha do grafo: as colunas de largura fixa, que nunca dividem espaço uma com a outra. */
+function linhaDoGrafo(
+  c: Contexto,
+  key: string,
+  largo: boolean,
+  nome: RenderElement | RenderElement[],
+  barra: RenderElement | null,
+  direita: { estado?: string; corEstado?: string; inicio?: string; tempo: string },
+  fundo?: string,
+) {
+  const { Box, Text } = c.el
+  const k = largo ? COLUNAS_DO_GRAFO.largo : COLUNAS_DO_GRAFO.estreito
+  const celula = (chave: string, w: number, texto: string | undefined, cor?: string, aDireita = false) => (
+    <Box key={chave} width={w} flexShrink={0} flexDirection="row" justifyContent={aDireita ? 'flex-end' : 'flex-start'} overflow="hidden">
+      <Text mono size="footnote" tabular color={cor} dimColor={!cor} wrap="truncate-end">
+        {texto ?? ''}
+      </Text>
+    </Box>
+  )
+  return (
+    <Box key={key} flexDirection="row" gap={1} alignItems="center" backgroundColor={fundo}>
+      <Box key="nome" width={k.nome} flexShrink={0} flexDirection="row" alignItems="center" overflow="hidden">
+        {nome}
+      </Box>
+      <Box key="barra" width={k.barra} flexShrink={0} flexDirection="row" alignItems="center">
+        {barra}
+      </Box>
+      {largo ? celula('estado', k.estado, direita.estado, direita.corEstado) : null}
+      {largo ? celula('inicio', k.inicio, direita.inicio) : null}
+      {celula('tempo', k.tempo, direita.tempo, undefined, true)}
+    </Box>
+  )
+}
+
+/** Uma onda: ▸/▾ (botão nativo) que abre e fecha, o que ela tem e, recolhida, a faixa dela no tempo. */
+function linhaDaOnda(c: Contexto, o: Extract<LinhaDoGrafo, { tipo: 'onda' }>, largo: boolean, t0: number, estado: EstadoDoGrafo) {
+  const { Svg, Text, Button } = c.el
+  const k = largo ? COLUNAS_DO_GRAFO.largo : COLUNAS_DO_GRAFO.estreito
+  const w = Math.round(k.barra * PX_POR_COLUNA)
+  const alternar = () =>
+    c.acoes.grafo(
+      o.aberta
+        ? { abertas: estado.abertas.filter((n) => n !== o.numero), fechadas: [...estado.fechadas.filter((n) => n !== o.numero), o.numero] }
+        : { fechadas: estado.fechadas.filter((n) => n !== o.numero), abertas: [...estado.abertas.filter((n) => n !== o.numero), o.numero] },
+    )
+  const oQue = o.tipos.length === 1 ? `${o.total} ${o.tipos[0]}` : `${o.total} subagentes`
+  const corDaOnda = o.cont.erros ? VERMELHO : o.cont.ativos ? LARANJA : VERDE
+  const nome = [
+    <Button key={`onda-${o.numero}`} plain label={`${o.aberta ? '▾' : '▸'} Onda ${o.numero}`} onPress={alternar} />,
+    <Text key="resumo" mono size="footnote" wrap="truncate-end">
+      <Text dimColor> · {largo ? `${oQue}${o.aberta && o.emParalelo ? ' em paralelo' : ''} ` : ''}</Text>
+      {contagemCurta(o.cont).map((x, i) => (
+        <Text key={`cont-${i}`} color={COR_STATUS[x.st].cor}>
+          {i ? ' ' : ''}
+          {x.texto}
+        </Text>
+      ))}
+    </Text>,
+  ]
+  const fim = o.fim ?? c.agora
+  const barra = o.aberta ? null : <Svg source={barraDoGrafoSvg(w, t0, c.agora, o.ini, o.fim, corDaOnda, o.marcas)} alt={`onda ${o.numero}`} width={w} height={BARRA_DO_GRAFO_H} />
+  const estadoDaOnda = o.cont.erros ? { estado: 'com erro', corEstado: VERMELHO_TEXTO } : o.cont.ativos ? { estado: 'ativa', corEstado: LARANJA } : { estado: 'concluída' }
+  return linhaDoGrafo(c, `grafo-onda-${o.numero}`, largo, nome, barra, o.aberta ? { tempo: '' } : { ...estadoDaOnda, inicio: minutoDaSessao(t0, o.ini), tempo: duracao(fim - o.ini) })
+}
+
+/** Um subagente: o trilho de quem o disparou, o glifo do estado, o tipo e a descrição, e a barra. */
+function linhaDoNo(c: Contexto, n: Extract<LinhaDoGrafo, { tipo: 'no' }>, largo: boolean, t0: number) {
+  const { Svg, Text } = c.el
+  const s = n.sub
+  const k = largo ? COLUNAS_DO_GRAFO.largo : COLUNAS_DO_GRAFO.estreito
+  const w = Math.round(k.barra * PX_POR_COLUNA)
+  const ini = Date.parse(s.desde)
+  const fim = s.ate ? Date.parse(s.ate) : null
+  const cor = COR_DO_SUB(s.status)
+  const mais = n.mais && largo ? contagemCurta(n.mais).map((x) => x.texto.replace(/^(\d+)/, '+$1')).join(' ') : null
+  const nome = (
+    <Text key="no" mono size="footnote" wrap="truncate-end">
+      <Text dimColor>{n.trilho}</Text>
+      <Text color={s.status === 'error' ? VERMELHO_TEXTO : cor}>{GLIFO_DO_SUB(s.status)} </Text>
+      <Text weight="bold">{s.nome}</Text>
+      {s.tarefa && (largo || n.nivel === 1) ? <Text dimColor> · {s.tarefa}</Text> : null}
+      {mais ? <Text dimColor> · {mais}</Text> : null}
+    </Text>
+  )
+  const estado = s.status === 'error' ? { estado: 'com erro', corEstado: VERMELHO_TEXTO } : s.status === 'completed' ? { estado: 'concluído' } : { estado: 'ativo', corEstado: LARANJA }
+  return linhaDoGrafo(
+    c,
+    `grafo-no-${s.id}`,
+    largo,
+    nome,
+    <Svg source={barraDoGrafoSvg(w, t0, c.agora, ini, fim, cor)} alt={`${s.nome}: ${ESTADO_DO_SUB(s.status)}`} width={w} height={BARRA_DO_GRAFO_H} />,
+    { ...estado, inicio: minutoDaSessao(t0, ini), tempo: duracao((fim ?? c.agora) - ini) },
+    s.status === 'error' ? BADGE.vermelho : undefined,
+  )
+}
+
+/**
+ * O grafo da sessão (P12 e P13), no lugar dos cards, aberto pelo pé do card Subagentes (P11): a
+ * sessão na raiz, cada subagente pendurado em quem o disparou e a barra de quando rodou; barras
+ * sobrepostas rodaram em paralelo. Com mais de AGRUPAR_ACIMA, por onda, com o filtro; pagina pela
+ * altura do painel, sem cortar uma linha.
+ */
+function telaGrafo(c: Contexto, p: Painel, g: ReturnType<typeof grade>, estreito: boolean) {
+  const { Box, Text, Button, Select, Svg } = c.el
+  const largo = !estreito
+  const k = largo ? COLUNAS_DO_GRAFO.largo : COLUNAS_DO_GRAFO.estreito
+  const itens = p.subagentes.itens
+  const estado = c.vista.grafo ?? ESTADO_DO_GRAFO
+  const grafo = montarGrafo(itens, c.agora, estado)
+  const s = p.sessao
+  const t0 = Math.min(s ? Date.parse(s.iniciadaEm) : c.agora, ...itens.map((x) => Date.parse(x.desde)))
+  const minutos = Math.max(1, Math.round((c.agora - t0) / 60_000))
+  const pag = paginar(grafo.linhas, livres(c, EM_VOLTA_DO_GRAFO), estado.pagina)
+  const w = Math.round(k.barra * PX_POR_COLUNA)
+
+  const cont = grafo.cont
+  const chips = (
+    <Box key="chips-grafo" flexDirection="row" gap={2} flexShrink={0}>
+      {cont.erros ? (
+        <Text key="erros" mono size="caption" color={VERMELHO_TEXTO}>
+          {cont.erros} {estreito ? '✕' : 'com erro'}
+        </Text>
+      ) : null}
+      {largo && grafo.paralelos ? chip(c, 'paralelos', `${grafo.paralelos} em paralelo`) : null}
+      {chip(c, 'ativos', plural(cont.ativos, 'ativo', 'ativos'))}
+    </Box>
+  )
+  const regua = linhaDoGrafo(
+    c,
+    'grafo-regua',
+    largo,
+    <Text key="quem" mono size="caption" dimColor wrap="truncate-end">
+      {largo ? 'quem disparou quem' : 'quem disparou'}
+    </Text>,
+    largo ? (
+      <Svg source={reguaDoGrafoSvg(w, minutos)} alt={`de 0 a ${minutos} minutos`} width={w} height={14} />
+    ) : (
+      <Text mono size="caption" dimColor>
+        0–{minutos}′
+      </Text>
+    ),
+    { estado: 'estado', inicio: 'início', tempo: largo ? 'duração' : 'tempo' },
+  )
+  const st = s ? statusDe(s.estado) : 'active'
+  const raiz = linhaDoGrafo(
+    c,
+    'grafo-raiz',
+    largo,
+    <Text key="raiz" mono size="footnote" wrap="truncate-end">
+      <Text color={LARANJA}>◆ </Text>
+      <Text weight="bold">Esta sessão</Text>
+      {largo && s?.modelo ? <Text dimColor> · {modelo(s.modelo)}</Text> : null}
+    </Text>,
+    <Svg source={barraDoGrafoSvg(w, t0, c.agora, t0, null, COR_STATUS[st].borda)} alt="esta sessão" width={w} height={BARRA_DO_GRAFO_H} />,
+    { estado: ESTADO_DA_SESSAO[st], corEstado: st === 'active' ? LARANJA : COR_STATUS[st].cor, inicio: '0′', tempo: duracao(c.agora - t0) },
+  )
+  const linhas = pag.linhas.map((l) => (l.tipo === 'onda' ? linhaDaOnda(c, l, largo, t0, estado) : linhaDoNo(c, l, largo, t0)))
+  const depois = pag.depois ? (
+    <Text key="grafo-depois" mono size="footnote" dimColor>
+      {'  '}⋯ +{pag.depois} na pág. {pag.pagina + 2}
+    </Text>
+  ) : null
+  const filtro = grafo.agrupado ? (
+    <Select
+      key="grafo-filtro"
+      value={estado.filtro}
+      options={[
+        { value: 'todos', label: 'Todos' },
+        { value: 'ativos', label: 'Ativos e erros' },
+      ]}
+      onSelect={(v: string) => c.acoes.grafo({ filtro: v === 'ativos' ? 'ativos' : 'todos', pagina: 0 })}
+    />
+  ) : null
+  const paginas =
+    pag.paginas > 1
+      ? [
+          <Button key="grafo-anterior" plain label="‹" onPress={() => c.acoes.grafo({ pagina: Math.max(0, pag.pagina - 1) })} />,
+          <Text key="grafo-pagina" mono size="footnote" dimColor tabular>
+            {pag.pagina + 1}/{pag.paginas}
+          </Text>,
+          <Button key="grafo-proxima" plain label="›" onPress={() => c.acoes.grafo({ pagina: Math.min(pag.paginas - 1, pag.pagina + 1) })} />,
+        ]
+      : []
+  // No estreito, a legenda só cabe quando o pé não tem a paginação nem o filtro.
+  const legenda =
+    largo || (!paginas.length && !filtro) ? (
+      <Box key="legenda" flexShrink={1} minWidth={0}>
+        <Text mono size="footnote" dimColor wrap="truncate-end">
+          {largo ? `barras sobrepostas rodaram em paralelo${grafo.agrupado ? ' · ▸ abre a onda' : ''}` : 'sobrepostas: em paralelo'}
+        </Text>
+      </Box>
+    ) : null
+  return [
+    rotuloDaSecao(c, g.largura, estreito ? `GRAFO · ${grafo.total}` : `GRAFO · ${grafo.total} SUBAGENTES`, chips),
+    <Box key="grafo" flexDirection="column" width={g.largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
+      {regua}
+      {raiz}
+      {linhas.length ? linhas : [<Text key="vazio" mono size="footnote" dimColor>nenhum nesta sessão</Text>]}
+      {depois}
+    </Box>,
+    <Box key="grafo-pe" flexDirection="row" alignItems="center" gap={1} width={g.largura}>
+      {paginas}
+      {filtro}
+      {legenda}
+      <Box key="espaco" flexGrow={1} />
+      <Button key="fechar-grafo" plain onPress={c.acoes.fechar}>
         <Text color={LARANJA} underline>
           ← voltar
         </Text>
@@ -1987,8 +2244,10 @@ export function desenhar(c: Contexto): RenderElement {
     corpo = [voltar(c, g.largura, c.acoes.voltarDecisoes, 'voltar-decisoes'), ...telaDecisao(c, g)]
   } else if (c.vista.tela === 'prs') {
     corpo = [voltar(c, g.largura), ...telaPrs(c, p, g)]
-  } else if (c.vista.tela === 'subagentes' || c.vista.tela === 'filhas') {
-    corpo = [voltar(c, g.largura), ...telaLista(c, p, g, c.vista.tela)]
+  } else if (c.vista.tela === 'subagentes') {
+    corpo = [voltar(c, g.largura), ...telaGrafo(c, p, g, estreito)]
+  } else if (c.vista.tela === 'filhas') {
+    corpo = [voltar(c, g.largura), ...telaFilhas(c, p, g)]
   } else {
     // Os seis cards do P1, sempre inteiros e no lugar deles.
     const cards = [

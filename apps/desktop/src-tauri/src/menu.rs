@@ -171,9 +171,11 @@ fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
         return;
     };
     if a.itens.is_empty() {
+        // A1: dois itens, cada um com a sua bolinha (o menu nativo não põe duas na mesma linha).
+        // Com a lista vazia não há sessão com erro: uma com erro estaria na lista.
         m.push(Item::Texto { texto: "Ninguém precisa de você".into(), ponto: Some(Ponto::Vazio) });
-        let erro = if a.com_erro == 0 { " · nenhuma com erro".to_string() } else { String::new() };
-        m.push(Item::Texto { texto: format!("{}{erro}", ativas(a.ativas)), ponto: Some(Ponto::Laranja) });
+        m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
+        m.push(Item::Texto { texto: "nenhuma com erro".into(), ponto: Some(Ponto::Vermelho) });
         return;
     }
     let n = a.itens.len();
@@ -298,8 +300,9 @@ mod testes {
         let a = Atencao::do_json(ZERO).unwrap();
         let n = EstadoDoNucleo::DePe { porta: 4720 };
         let m = montar(&entrada(&n, Some(&a)));
-        assert_eq!(&textos(&m)[..6], ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas · nenhuma com erro", "—"]);
-        assert!(matches!(m[3], Item::Texto { ponto: Some(Ponto::Vazio), .. }));
+        assert_eq!(&textos(&m)[..7], ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas", "nenhuma com erro", "—"]);
+        let pontos: Vec<_> = m[3..6].iter().map(|i| if let Item::Texto { ponto, .. } = i { *ponto } else { None }).collect();
+        assert_eq!(pontos, [Some(Ponto::Vazio), Some(Ponto::Laranja), Some(Ponto::Vermelho)]);
         assert_eq!(titulo_da_bandeja(&n, Some(&a)), None);
     }
 
