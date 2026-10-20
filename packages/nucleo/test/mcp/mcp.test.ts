@@ -6,7 +6,7 @@ import { request } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import {
   serveStdio,
   createMcpServer,
@@ -38,7 +38,7 @@ async function callTool(name: string, args: Record<string, unknown> = {}, s = se
 
 beforeEach(async () => {
   storage = openSqliteStorage({ path: ':memory:' });
-  ({ server } = createMcpServer({ storage, accounts: new Contas({ storage, arquivo: null }), now: () => NOW, timeZone: 'UTC' }));
+  ({ server } = createMcpServer({ storage, accounts: new Accounts({ storage, file: null }), now: () => NOW, timeZone: 'UTC' }));
 });
 afterEach(() => storage.close());
 
@@ -144,8 +144,8 @@ describe('sessions_needing_attention', () => {
 
   test('with the session in the Desktop index, open carries the link that opens the conversation', async () => {
     const local = 'local_00000000-0000-4000-8000-000000000001';
-    const desktop = { atualizar: async () => {}, sessaoPorCli: (id: string) => (id === 'permissao' ? { localId: local, cliSessionId: id, titulo: 'Migrar\no banco', branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: [] } : null) };
-    const { server: s } = createMcpServer({ storage, accounts: new Contas({ storage, arquivo: null }), desktop: desktop as never, now: () => NOW, timeZone: 'UTC' });
+    const desktop = { refresh: async () => {}, sessionByCli: (id: string) => (id === 'permissao' ? { localId: local, cliSessionId: id, title: 'Migrar\no banco', branch: null, cwd: null, parentLocalId: null, archived: false, accounts: [] } : null) };
+    const { server: s } = createMcpServer({ storage, accounts: new Accounts({ storage, file: null }), desktop: desktop as never, now: () => NOW, timeZone: 'UTC' });
     const items = (await callTool('sessions_needing_attention', {}, s)).structuredContent.items;
     const p = items.find((i: any) => i.sessionId === 'permissao');
     assert.equal(p.title, 'Migrar o banco');
@@ -203,7 +203,7 @@ describe('sessions_needing_attention', () => {
 
   test('with nobody waiting, says so', async () => {
     const empty = openSqliteStorage({ path: ':memory:' });
-    const { server: s } = createMcpServer({ storage: empty, accounts: new Contas({ storage: empty, arquivo: null }), now: () => NOW, timeZone: 'UTC' });
+    const { server: s } = createMcpServer({ storage: empty, accounts: new Accounts({ storage: empty, file: null }), now: () => NOW, timeZone: 'UTC' });
     const r = await callTool('sessions_needing_attention', {}, s);
     assert.equal(r.content[0].text, 'Nenhuma sessão precisa de você agora.');
     assert.equal(r.structuredContent.total, 0);
@@ -266,7 +266,7 @@ describe('fleet_overview', () => {
   test('simulator scenario: the synthetic accounts and who needs you match the panel', async () => {
     const sim = openSqliteStorage({ path: ':memory:' });
     await seedPanelScenario(sim, 'p3', NOW);
-    const accounts = new Contas({ storage: sim, arquivo: null });
+    const accounts = new Accounts({ storage: sim, file: null });
     const { server: s } = createMcpServer({ storage: sim, accounts, now: () => NOW, timeZone: 'UTC' });
     const builder = new MontadorDoPainel({ storage: sim, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });
     const panel = await builder.montar({ sessionId: 'nenhuma' });
@@ -306,7 +306,7 @@ describe('transports', () => {
   let api: LocalApi;
   beforeEach(async () => {
     await seedCases();
-    const accounts = new Contas({ storage, arquivo: null });
+    const accounts = new Accounts({ storage, file: null });
     const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
     api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
@@ -407,7 +407,7 @@ describe('transports', () => {
     const call = (await bridge({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fleet_overview', arguments: {} } })) as JsonRpcResponse;
     assert.equal(call.id, 3);
     assert.deepEqual(call.result, { content: [{ type: 'text', text: 'suba o núcleo' }], isError: true });
-    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
 
   test('stdio: one message per line, only JSON on the output', async () => {

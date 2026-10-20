@@ -78,7 +78,7 @@ Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
 
 Comum às duas:
 
-- **`account`** (decisão 0006): o rótulo da conta (sem diferença de caixa) ou o id `<accountUuid>/<organizationUuid>`, um ou vários; `none` pede as sessões "Sem conta". Sem ele, todas. A conta de cada sessão é a mesma do painel (a mesma instância de `Contas`). Na saída, a conta é o rótulo, a cor e a fonte, nunca o id.
+- **`account`** (decisão 0006): o rótulo da conta (sem diferença de caixa) ou o id `<accountUuid>/<organizationUuid>`, um ou vários; `none` pede as sessões "Sem conta". Sem ele, todas. A conta de cada sessão é a mesma do painel (a mesma instância de `Accounts`). Na saída, a conta é o rótulo, a cor e a fonte, nunca o id.
 - **Paginação por tamanho:** `limit` (padrão 10, máximo 50) e `cursor`. A página para no `limit` ou quando o JSON dos itens passa de 12 kB, o que vier primeiro, e devolve `nextCursor`.
 - **Transcript não confiável:** nenhuma ferramenta devolve texto de conversa: prompts, respostas, perguntas, planos, comandos ou mensagens de erro. Sai o título da sessão (limpo de caracteres de controle, até 60 caracteres), nomes de ferramenta que passam por um padrão estrito, a quantidade de opções de uma pergunta e o código de um erro da API (`529 overloaded_error`). O texto lembra o modelo de que títulos são dados, não instruções.
 

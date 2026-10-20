@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
-  Contas,
-  IndiceDoDesktop,
+  Accounts,
+  DesktopIndex,
+ 
   MontadorDoPainel,
   ResumosDeSessao,
   TrabalhoPorBranch,
@@ -15,7 +16,8 @@ import {
   issueDoBranch,
   repoDoRemote,
   resumoVazio,
-  type Painel,
+ 
+  type Panel,
 } from '../../src/api/index.ts';
 import type { WorkSource } from '../../src/github/source.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, type PanelScenario } from '../../src/simulator/panel.ts';
@@ -30,7 +32,7 @@ async function cenario(nome: PanelScenario, extra: { local?: string; conta?: str
   const storage = openSqliteStorage({ path: ':memory:' });
   await seedPanelScenario(storage, nome, AGORA);
   const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
+  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
   // O primeiro pedido dispara o trabalho por trás; o segundo já o traz.
   await montador.montar({ sessionId: 'qualquer', ...extra });
   await trabalho.esperar();
@@ -247,19 +249,19 @@ describe('conta da sessão (decisão 0006)', () => {
       id: `${UUID_A}/${ORG_A}`, accountUuid: UUID_A, organizationUuid: ORG_A, organizationName: null, organizationType: null,
       label: 'equipe', color: '#df285d', configDirs: [], firstSeenAt: T0, lastSeenAt: T0, metadata: {},
     });
-    const contas = new Contas({ storage, arquivo });
-    await contas.atualizar();
+    const contas = new Accounts({ storage, file: arquivo });
+    await contas.refresh();
     const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
-    const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: escopos });
-    assert.equal(contas.daSessao(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.deepEqual(contas.daSessao(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop' });
-    const daPorta = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
+    const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: escopos });
+    assert.equal(contas.ofSession(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
+    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop' });
+    const daPorta = contas.ofSession(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
     assert.deepEqual(daPorta && [daPorta.label, daPorta.color, daPorta.source], ['equipe', '#df285d', 'config'], 'config vence desktop');
-    contas.informar('s1', UUID_B, ORG_B);
-    const env = contas.daSessao(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), null);
+    contas.reportEnv('s1', UUID_B, ORG_B);
+    const env = contas.ofSession(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), null);
     assert.deepEqual(env && [env.label, env.source], ['cliente', 'env'], 'o ambiente vence a porta gravada com fonte pior');
-    contas.informar('s2', 'não é uuid', ORG_A);
-    assert.equal(contas.daSessao({ id: 's2', accountId: null, accountSource: null }, null), null);
+    contas.reportEnv('s2', 'não é uuid', ORG_A);
+    assert.equal(contas.ofSession({ id: 's2', accountId: null, accountSource: null }, null), null);
     await storage.close();
   });
 
@@ -276,20 +278,20 @@ describe('conta da sessão (decisão 0006)', () => {
     local(a, 'local_filha', { cliSessionId: 'cli-filha', title: 'Filha', spawnedFrom: { sessionId: 'local_mae' } });
     local(b, 'local_filha', { cliSessionId: 'cli-filha', title: 'Filha', spawnedFrom: { sessionId: 'local_mae' } });
     local(a, 'local_velha', { cliSessionId: 'cli-velha', title: 'Velha', isArchived: true, spawnedFrom: { sessionId: 'local_mae' } });
-    const indice = new IndiceDoDesktop({ raiz: dir, intervaloMs: 0 });
-    await indice.atualizar();
-    assert.equal(indice.sessaoPorCli('cli-mae')?.branch, 'feat/1-x');
+    const indice = new DesktopIndex({ root: dir, intervalMs: 0 });
+    await indice.refresh();
+    assert.equal(indice.sessionByCli('cli-mae')?.branch, 'feat/1-x');
     // #145: a arquivada vem junto, marcada.
-    assert.deepEqual(indice.filhasDe('local_mae').map((f) => [f.titulo, f.arquivada]).sort(), [['Filha', false], ['Velha', true]]);
-    assert.equal(indice.sessaoPorCli('cli-filha')?.contas.length, 2);
-    const lidos = indice.lidos;
-    await indice.atualizar(true);
-    assert.equal(indice.lidos, lidos, 'sem mudança, nenhum arquivo é relido');
+    assert.deepEqual(indice.childrenOf('local_mae').map((f) => [f.title, f.archived]).sort(), [['Filha', false], ['Velha', true]]);
+    assert.equal(indice.sessionByCli('cli-filha')?.accounts.length, 2);
+    const lidos = indice.filesRead;
+    await indice.refresh(true);
+    assert.equal(indice.filesRead, lidos, 'sem mudança, nenhum arquivo é relido');
     local(a, 'local_mae', { cliSessionId: 'cli-mae', title: 'Mãe renomeada' });
     utimesSync(join(a, 'local_mae.json'), new Date(), new Date(Date.now() + 5000));
-    await indice.atualizar(true);
-    assert.equal(indice.lidos, lidos + 1);
-    assert.equal(indice.sessaoPorCli('cli-mae')?.titulo, 'Mãe renomeada');
+    await indice.refresh(true);
+    assert.equal(indice.filesRead, lidos + 1);
+    assert.equal(indice.sessionByCli('cli-mae')?.title, 'Mãe renomeada');
   });
 });
 
@@ -301,20 +303,20 @@ describe('servidor da API local', () => {
   afterEach(() => storage.close());
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
     const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
       assert.equal((await fetch(`${api.url}/api/panel/${encodeURIComponent('id com espaço')}`)).status, 400);
 
-      const antes = (await (await fetch(`${api.url}/api/panel/sess-api-1?model=claude-opus-5-5`)).json()) as Painel;
+      const antes = (await (await fetch(`${api.url}/api/panel/sess-api-1?model=claude-opus-5-5`)).json()) as Panel;
       assert.equal(antes.session?.reason, 'session_start', 'ainda não visto: sessão nova');
 
       const hook = { session_id: 'sess-api-1', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
       const r = await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(hook) });
       assert.equal(r.status, 202);
-      const depois = (await (await fetch(`${api.url}/api/panel/sess-api-1`)).json()) as Painel;
+      const depois = (await (await fetch(`${api.url}/api/panel/sess-api-1`)).json()) as Panel;
       assert.equal(depois.session?.cwd, '/repo/app');
       const carga = (await (await fetch(`${api.url}/api/carga`)).json()) as { painel: number };
       assert.equal(carga.painel, 2);

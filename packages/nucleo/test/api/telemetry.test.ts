@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { SIMULATED_WORKSTATION, seedTelemetry, SimulatedCollector, simulatedReading } from '../../src/simulator/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
@@ -32,7 +32,7 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
     await new TelemetrySampler({ machineId: m.id, collector: new SimulatedCollector(m.id === 'local' ? 'local' : 'workstation', () => NOW), store, tracker }).sampleOnce();
   }
   const telemetry = opts.withTelemetry === false ? undefined : new TelemetryService({ store, tracker, machines, now: () => NOW });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
+  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
   const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry });
   return {
     api,

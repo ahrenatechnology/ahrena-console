@@ -36,7 +36,7 @@ import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
 import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisions/registry.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
 import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisions.ts';
-import type { DecisaoDoPainel, EscopoDasDecisoes } from './types.ts';
+import type { PanelDecision, PanelDecisionScope } from './types.ts';
 import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
 /** The Decisions page of the /ui (C21). */
@@ -45,11 +45,11 @@ export const DECISIONS_PAGE_ROUTE = '/api/decisions';
 export type AgrupamentoDasDecisoes = 'branch' | 'family' | 'session';
 export type FiltroDeEstado = 'all' | 'current' | 'to_confirm';
 
-/** O card de uma decisão, igual na página e na aba: the panel's decision (`DecisaoDoPainel`) and what the /ui adds. */
-export interface DecisaoDaUi extends DecisaoDoPainel {
+/** O card de uma decisão, igual na página e na aba: the panel's decision (`PanelDecision`) and what the /ui adds. */
+export interface DecisaoDaUi extends PanelDecision {
   sessionId: string;
   /** Até onde vale ("escopo: sessão"). */
-  scope: EscopoDasDecisoes;
+  scope: PanelDecisionScope;
   /** O "D2" da decisão que esta substituiu. */
   supersedes: string | null;
   /** `docs/decisoes/NNNN-slug.md`, quando virou registro. */
@@ -91,16 +91,16 @@ export interface DecisoesDaPagina {
 /** `GET /api/sessions/<id>/decisions` (C20). */
 export interface DecisoesDaAba {
   session: string;
-  scope: EscopoDasDecisoes;
+  scope: PanelDecisionScope;
   state: FiltroDeEstado;
   q: string | null;
   /** Vigentes e a confirmar em cada escopo. */
-  byScope: Record<EscopoDasDecisoes, number>;
+  byScope: Record<PanelDecisionScope, number>;
   /** Vigentes e a confirmar no escopo pedido: o "(4)" da aba. */
   total: number;
   items: DecisaoDaUi[];
   /** O card "No início de cada sessão" (#100). */
-  injection: { enabled: boolean; scope: EscopoDasDecisoes; decisions: number; tokens: number; text: string };
+  injection: { enabled: boolean; scope: PanelDecisionScope; decisions: number; tokens: number; text: string };
   /** O card "Quando o agente perguntar" (#101); `call` é texto de tela, com o argumento como a ferramenta vai pedir. */
   mcp: { tool: 'session_decisions'; exists: boolean; call: string; response: string };
 }
@@ -341,7 +341,7 @@ export class DecisoesDaUi {
   }
 
   /** A aba C20; `null` quando a sessão não existe. */
-  async aba(sessionId: string, p: { scope: EscopoDasDecisoes; state: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
+  async aba(sessionId: string, p: { scope: PanelDecisionScope; state: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
     const alvo = await this.alvo(sessionId);
     if (!alvo) return null;
     const doEscopo = await this.sessao.doEscopo(alvo, p.scope);
@@ -595,7 +595,7 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const sessao = decodificado(aba[1]!);
     if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
-    const scope = (url.searchParams.get('scope') ?? 'family') as EscopoDasDecisoes;
+    const scope = (url.searchParams.get('scope') ?? 'family') as PanelDecisionScope;
     if (!ESCOPOS_DAS_DECISOES.includes(scope)) return send(res, 400, { error: 'scope: session, family ou branch' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;

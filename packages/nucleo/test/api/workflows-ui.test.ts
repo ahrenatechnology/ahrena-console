@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
@@ -48,7 +48,7 @@ describe('front de Workflows contra a demonstração do p4', () => {
     await seedPanelScenario(storage, 'p4', AGORA);
     await seedDemoWorkflows(storage, AGORA);
     const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {

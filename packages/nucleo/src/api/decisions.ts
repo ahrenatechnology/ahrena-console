@@ -12,15 +12,15 @@ import type { Decision, DecisionState } from '../decisions/model.ts';
 import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
 import { confirmDecision, decisionId, decisionLabel, discardDecision, familyOf, registerDecision, reopenDecision, revertDecision } from '../decisions/registry.ts';
 import { cleanText, shortChoice } from '../decisions/text.ts';
-import type { DecisaoDoPainel, DecisoesDoPainel, EscopoDasDecisoes, ListaDeDecisoes } from './types.ts';
+import type { PanelDecision, PanelDecisions, PanelDecisionScope, PanelDecisionList } from './types.ts';
 
-export const ESCOPOS_DAS_DECISOES: readonly EscopoDasDecisoes[] = ['session', 'family', 'branch'];
+export const ESCOPOS_DAS_DECISOES: readonly PanelDecisionScope[] = ['session', 'family', 'branch'];
 
 // The decision model (src/decisions), its database and the API share the English values since #173
 // phase 5. The one difference: a reverted decision is shown as `current` (it never reaches the list).
 
 /** The state of a decision as the API shows it. */
-const apiState = (s: DecisionState): DecisaoDoPainel['state'] => (s === 'reverted' ? 'current' : s);
+const apiState = (s: DecisionState): PanelDecision['state'] => (s === 'reverted' ? 'current' : s);
 /** O que a lista mostra; descartada e revertida ficam no histórico. */
 const NA_LISTA: readonly DecisionState[] = ['current', 'to_confirm', 'superseded'];
 /** Cards na lista: o largo mostra até 4 linhas de 3; o estreito, menos. */
@@ -113,7 +113,7 @@ export class DecisoesDaSessao {
    * - `family`: as desta sessão e as de escopo família ou branch das outras da família;
    * - `branch`: as da família e as de escopo branch de outras famílias no mesmo branch e pasta.
    */
-  async doEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, states: readonly DecisionState[] = NA_LISTA): Promise<Decision[]> {
+  async doEscopo(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope, states: readonly DecisionState[] = NA_LISTA): Promise<Decision[]> {
     const porId = new Map<string, Decision>();
     for (const d of await todas(this.port, { sessionId: alvo.sessionId, states })) porId.set(d.id, d);
     if (escopo !== 'session') {
@@ -132,8 +132,8 @@ export class DecisoesDaSessao {
    * Vigentes e a confirmar em cada escopo. As do escopo pedido já vieram lidas (`doEscopo`, em
    * qualquer estado) e não são consultadas de novo.
    */
-  async porEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, doEscopo: readonly Decision[]): Promise<Record<EscopoDasDecisoes, number>> {
-    const out = {} as Record<EscopoDasDecisoes, number>;
+  async porEscopo(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope, doEscopo: readonly Decision[]): Promise<Record<PanelDecisionScope, number>> {
+    const out = {} as Record<PanelDecisionScope, number>;
     for (const e of ESCOPOS_DAS_DECISOES) out[e] = e === escopo ? contaveis(doEscopo) : (await this.doEscopo(alvo, e, CONTAVEIS)).length;
     return out;
   }
@@ -149,7 +149,7 @@ export class DecisoesDaSessao {
   }
 
   /** A linha do painel e, quando pedida, a lista aberta. */
-  async doPainel(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes | null): Promise<DecisoesDoPainel> {
+  async doPainel(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope | null): Promise<PanelDecisions> {
     const familia = await this.doEscopo(alvo, 'family', ['current', 'to_confirm']);
     return {
       current: familia.filter((d) => d.state === 'current').length,
@@ -160,12 +160,12 @@ export class DecisoesDaSessao {
     };
   }
 
-  async lista(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes): Promise<ListaDeDecisoes> {
+  async lista(alvo: AlvoDasDecisoes, escopo: PanelDecisionScope): Promise<PanelDecisionList> {
     const todasDoEscopo = await this.doEscopo(alvo, escopo);
     const familyId = await familyOf(this.port, alvo.sessionId);
     const mae = (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null;
     const lidas = new Map(todasDoEscopo.map((d) => [d.id, d]));
-    const itens: DecisaoDoPainel[] = [];
+    const itens: PanelDecision[] = [];
     for (const d of todasDoEscopo.slice(0, MAX_ITENS)) itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, await rotuloPorId(this.port, d.supersededBy, lidas)));
     const porEscopo = await this.porEscopo(alvo, escopo, todasDoEscopo);
     return {
@@ -185,7 +185,7 @@ export class DecisoesDaSessao {
    *   que a substitui no mesmo assunto;
    * - Desfazer: volta a decisão ao estado de antes da última ação do painel.
    */
-  async decidir(alvo: AlvoDasDecisoes, id: string, acao: AcaoNaDecisao, agora: string, texto: string | null = null): Promise<DecisaoDoPainel> {
+  async decidir(alvo: AlvoDasDecisoes, id: string, acao: AcaoNaDecisao, agora: string, texto: string | null = null): Promise<PanelDecision> {
     const d = await this.port.getDecision(id);
     const visivel = d && (await this.doEscopo(alvo, 'branch', ['to_confirm', d.state])).some((x) => x.id === id);
     if (!d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
@@ -201,7 +201,7 @@ export class DecisoesDaSessao {
     return this.paraOPainel(alvo, feita);
   }
 
-  private async paraOPainel(alvo: AlvoDasDecisoes, d: Decision): Promise<DecisaoDoPainel> {
+  private async paraOPainel(alvo: AlvoDasDecisoes, d: Decision): Promise<PanelDecision> {
     const familyId = await familyOf(this.port, alvo.sessionId);
     const mae = (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null;
     const nova = d.supersededBy ? await this.port.getDecision(d.supersededBy) : null;
@@ -268,7 +268,7 @@ export class DecisoesDaSessao {
 }
 
 /** A decisão como o card a desenha, relativa à sessão `sessionId` (a aba e a página da /ui também usam). */
-export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): DecisaoDoPainel {
+export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): PanelDecision {
   const painel = d.metadata?.panel as Partial<RegistroDoPainel> | undefined;
   return {
     id: d.id,

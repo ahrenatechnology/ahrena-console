@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, montarAtencao, MontadorDoPainel, remoteAttentionItems, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, montarAtencao, MontadorDoPainel, remoteAttentionItems, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
@@ -36,7 +36,7 @@ afterEach(async () => {
 async function boot() {
   storage = openSqliteStorage({ path: ':memory:' });
   await seed(storage);
-  const contas = new Contas({ storage, arquivo: null });
+  const contas = new Accounts({ storage, file: null });
   const frota = new FleetReader({ storage, accounts: contas, now: () => NOW, timeZone: 'UTC' });
   const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   const store = new SqliteTelemetryStore(storage.db);

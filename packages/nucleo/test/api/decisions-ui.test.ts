@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
-  Contas,
+  Accounts,
   DecisoesDaUi,
   MontadorDoPainel,
   startLocalApi,
@@ -51,7 +51,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   const decisoes = new SqliteDecisionStore(storage.db);
   await seedPanelScenario(storage, 'p9', AGORA);
   await seedPanelDecisions(decisoes, 'p9', AGORA);
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
+  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
   const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
   const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, decisionsUi: decisoesUi });

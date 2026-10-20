@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
 import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
 import { WORKFLOW_SESSIONS, seedDemoWorkflows } from '../../src/simulator/workflows.ts';
@@ -34,7 +34,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     await seedPanelScenario(storage, 'p4', AGORA);
     await seedDemoWorkflows(storage, AGORA);
     trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {

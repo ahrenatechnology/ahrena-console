@@ -10,7 +10,7 @@ import { after, beforeEach, describe, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate, schemaVersion } from '../src/adapters/sqlite/migrations.ts';
-import { Contas, MontadorDoPainel } from '../src/api/index.ts';
+import { Accounts, MontadorDoPainel } from '../src/api/index.ts';
 import { reprocessarContexto } from '../src/api/reprocessing.ts';
 import {
   LONG_WINDOW,
@@ -190,7 +190,7 @@ describe('overflows from the PreCompact hook', () => {
   test('meter from PreCompact only: the card does not show "0 / 200k"', async () => {
     const sid = 'sess-hook-2';
     await pre(sid, 1, 'auto', 'd5');
-    const builder = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
+    const builder = new MontadorDoPainel({ storage: store, contas: new Accounts({ storage: store, file: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
     assert.equal((await builder.montar({ sessionId: sid })).context, null);
   });
 
@@ -266,7 +266,7 @@ describe('panel API', () => {
       compaction(sid, 4.5, 'manual', 70_000, 7_000),
       message(sid, 5, { input: 600, cacheRead: 62_000 }),
     ], [message(sid, 6, { input: 50, cacheRead: 20_000 }, { agentId: A })]);
-    const builder = new MontadorDoPainel({ storage: store, contas: new Contas({ storage: store, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
+    const builder = new MontadorDoPainel({ storage: store, contas: new Accounts({ storage: store, file: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(10)) });
     const p = await builder.montar({ sessionId: sid });
     assert.deepEqual(p.context, {
       used: 62_600,
