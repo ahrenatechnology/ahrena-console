@@ -39,6 +39,8 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
+import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
@@ -262,8 +264,12 @@ if (demo) {
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
   await semearHistorico(storage);
   await semearDetalhe(storage);
+  await semearHistoricoDoPainel(storage, decisoes, cenario);
 }
 const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
+
+// O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
+const historico = new HistoricoDeSessoes({ storage, decisoes, tituloDe: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -320,6 +326,7 @@ const api: ApiLocal = await iniciarApiLocal({
   frota: mcp.frota,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
+  historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
   carga: () => ({

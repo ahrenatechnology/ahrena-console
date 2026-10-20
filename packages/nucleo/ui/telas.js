@@ -107,6 +107,15 @@ export const TELAS = [
     icone: 'repos',
     arquivo: '/ui/telas/repo.js', // C23
   },
+  {
+    id: 'historico',
+    rota: '/ui/historico',
+    item: { rotulo: 'Histórico', icone: 'historico' },
+    titulo: 'Histórico',
+    sub: 'Sessões encerradas, por dia',
+    icone: 'historico',
+    arquivo: '/ui/telas/historico.js', // #33
+  },
 ];
 
 // Um id de sessão ou um nome do GitHub (ponto, hífen e sublinhado); `.` e `..` nunca.
