@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { createDevConsole, DEV_CONSOLE_TTL, parseContexts, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
@@ -271,11 +271,11 @@ describe('Dev Console without a context', () => {
 });
 
 describe('GET /api/dev-console', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   beforeEach(async () => {
     const contas = new Contas({ storage, arquivo: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: now });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, devConsole });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, devConsole });
   });
   afterEach(() => api.close());
 
@@ -308,7 +308,7 @@ describe('GET /api/dev-console', () => {
   test('without the Dev Console, the route does not exist', async () => {
     const contas = new Contas({ storage, arquivo: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    const outra = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/dev-console`)).status, 404);
     await outra.close();
   });

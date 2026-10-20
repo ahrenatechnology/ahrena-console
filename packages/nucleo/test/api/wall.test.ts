@@ -7,7 +7,7 @@ import {
   MontadorDoPainel,
   TrabalhoPorBranch,
   ehAberta,
-  iniciarApiLocal,
+  startLocalApi,
   muralDoPainel,
   type IndiceDoDesktop,
   type Mural,
@@ -191,7 +191,7 @@ describe('mural ao vivo (#34)', () => {
 
   test('GET /api/wall pela API local', async () => {
     const storage = await semear();
-    const api = await iniciarApiLocal({ montador: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
     try {
       const r = await fetch(`${api.url}/api/wall`);
       assert.equal(r.status, 200);

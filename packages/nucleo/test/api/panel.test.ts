@@ -7,16 +7,14 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import {
   Contas,
   IndiceDoDesktop,
-  LEGACY_BODIES,
   MontadorDoPainel,
   ResumosDeSessao,
   TrabalhoPorBranch,
   aplicarEvento,
-  iniciarApiLocal,
+  startLocalApi,
   issueDoBranch,
   repoDoRemote,
   resumoVazio,
-  translateBody,
   type Painel,
 } from '../../src/api/index.ts';
 import type { WorkSource } from '../../src/github/source.ts';
@@ -304,7 +302,7 @@ describe('servidor da API local', () => {
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
@@ -349,15 +347,13 @@ describe('contrato com o plugin', () => {
     const ler = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
     const versao = JSON.parse(ler('../../../../plugins/ahrena-console/.claude-plugin/plugin.json')).version;
     const doMarketplace = JSON.parse(ler('../../../../.claude-plugin/marketplace.json')).plugins.find((p: { name: string }) => p.name === 'ahrena-console').version;
-    assert.equal(/VERSAO_DO_PLUGIN = '([^']+)'/.exec(ler('../../../../plugins/ahrena-console/hooks/desenho.tsx'))?.[1], versao);
+    assert.equal(/PLUGIN_VERSION = '([^']+)'/.exec(ler('../../../../plugins/ahrena-console/hooks/render.tsx'))?.[1], versao);
     assert.equal(doMarketplace, versao);
   });
 
-  // #173 phase 2b: the published mod reads the old route (`/api/painel/<id>`), so what its types must
-  // cover is the panel as the old route answers it, through the back-translator.
+  // #187: the mod reads the new route (`/api/panel/<id>`), so its types cover the English body as is.
   test('todo campo da resposta está nos tipos do plugin', async () => {
-    const { painel: novo, storage } = await cenario('p4');
-    const painel = translateBody(LEGACY_BODIES.panel.response, novo);
+    const { painel, storage } = await cenario('p4');
     const tipos = readFileSync(new URL('../../../../plugins/ahrena-console/types/index.d.ts', import.meta.url), 'utf8');
     const chaves = new Set<string>();
     const juntar = (v: unknown) => {

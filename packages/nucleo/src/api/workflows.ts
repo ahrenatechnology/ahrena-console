@@ -698,7 +698,7 @@ export interface FontesDosWorkflows {
   maximoDeSessoes?: number;
 }
 
-export const ROTA_DOS_WORKFLOWS = '/api/workflows';
+export const WORKFLOWS_ROUTE = '/api/workflows';
 const DA_SESSAO = /^\/api\/sessions\/([^/]+)\/workflow$/;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 export const MAXIMO_DE_SESSOES = 500;
@@ -776,7 +776,7 @@ export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: Filtr
  */
 export async function responderWorkflows(res: ServerResponse, url: URL, fontes: FontesDosWorkflows): Promise<boolean> {
   const agora = (fontes.agora ?? Date.now)();
-  if (url.pathname === ROTA_DOS_WORKFLOWS) {
+  if (url.pathname === WORKFLOWS_ROUTE) {
     const filtro = url.searchParams.get('filter') ?? 'all';
     if (!FILTROS_DOS_WORKFLOWS.includes(filtro as FiltroDosWorkflows)) {
       send(res, 400, { error: 'filter: all, active ou completed' });

@@ -27,10 +27,8 @@ import { currentPrices } from '../cost/table.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './accounts.ts';
 
-export const ROTA_DO_ANALYTICS = '/api/analytics';
+export const ANALYTICS_ROUTE = '/api/analytics';
 export const COST_ROUTE = '/api/analytics/cost';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_CUSTO = '/api/analytics/custo';
 export const DIAS_DO_CUSTO = [7, 30, 90] as const;
 /** Janela dos números da Visão geral. */
 export const DIAS_DA_VISAO = 30;
@@ -201,14 +199,14 @@ export class RotaAnalytics {
 
   /** `true` quando o caminho é desta rota. */
   static atende(pathname: string): boolean {
-    return pathname === ROTA_DO_ANALYTICS || pathname.startsWith(`${ROTA_DO_ANALYTICS}/`);
+    return pathname === ANALYTICS_ROUTE || pathname.startsWith(`${ANALYTICS_ROUTE}/`);
   }
 
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
       const fuso = validarFuso(url.searchParams.get('tz'));
       const hoje = dayOf(new Date(this.agora()).toISOString(), fuso);
-      if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
+      if (url.pathname === ANALYTICS_ROUTE) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
       if (url.pathname === COST_ROUTE) {
         const dias = Number(url.searchParams.get('days') ?? 30);
         if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);

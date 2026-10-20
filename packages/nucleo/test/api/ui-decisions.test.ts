@@ -6,7 +6,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
@@ -175,14 +175,14 @@ const PREFIXO = 'dec-';
 const JS_DA_TELA = ['screens/decisions.js', 'screens/session-detail-decisions.js', 'screens/decisions-common.js'];
 // Igual ao `classes()` e ao `SELOS` de test/api/sessions.test.ts (no main), para os dois testes andarem juntos.
 const classesDoCss = (caminho: string) => new Set([...readFileSync(caminho, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-const classes = (arquivo: string) => classesDoCss(`${PASTA_DA_UI}${arquivo}`);
+const classes = (arquivo: string) => classesDoCss(`${UI_FOLDER}${arquivo}`);
 const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 const permitida = (c: string, daMoldura: Set<string>) => c.startsWith(PREFIXO) || daMoldura.has(c) || SELOS.has(c);
 
 /** Os css das outras telas: `ui/*.css` e `ui/screens/*.css`, fora a moldura, a marca e o desta tela. */
 function outrosCss(): string[] {
   const fora = new Set([TELA, 'shell.css', 'brand.css']);
-  return ['', 'screens/'].flatMap((sub) => readdirSync(`${PASTA_DA_UI}${sub}`).filter((a) => a.endsWith('.css') && !fora.has(a)).map((a) => `${PASTA_DA_UI}${sub}${a}`));
+  return ['', 'screens/'].flatMap((sub) => readdirSync(`${UI_FOLDER}${sub}`).filter((a) => a.endsWith('.css') && !fora.has(a)).map((a) => `${UI_FOLDER}${sub}${a}`));
 }
 
 /** As classes que `tela` e cada css de `outras` estilizam em comum, fora a moldura e os selos. */
@@ -238,7 +238,7 @@ describe('sem padrão interno', () => {
   // aponta para recurso nenhum da Ahrena nem supõe a pasta de um projeto.
   test('o front das Decisões não cita org, repositório, host, caminho de máquina nem pasta de registros', () => {
     for (const arquivo of [...JS_DA_TELA, TELA, 'api.js']) {
-      const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+      const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
       for (const proibido of [/ahrena/i, /github|gitlab/i, /\/Users\/|\/home\//, /docs\/decisoes/, /\b[a-z0-9-]+\.(com|io|dev|ai)\b/i]) assert.doesNotMatch(texto, proibido, `${arquivo}: ${proibido}`);
     }
   });
@@ -246,9 +246,9 @@ describe('sem padrão interno', () => {
 
 describe('o estilo das Decisões (ui/decisions.css)', () => {
   test('o CSS fica na raiz de ui/, como o das outras telas, e as duas telas carregam de lá', () => {
-    assert.ok(readdirSync(PASTA_DA_UI).includes(TELA));
-    assert.ok(!readdirSync(`${PASTA_DA_UI}screens`).includes(TELA), 'nada de cópia em screens/');
-    assert.match(readFileSync(`${PASTA_DA_UI}screens/decisions-common.js`, 'utf8'), /href: '\/ui\/decisions\.css'/);
+    assert.ok(readdirSync(UI_FOLDER).includes(TELA));
+    assert.ok(!readdirSync(`${UI_FOLDER}screens`).includes(TELA), 'nada de cópia em screens/');
+    assert.match(readFileSync(`${UI_FOLDER}screens/decisions-common.js`, 'utf8'), /href: '\/ui\/decisions\.css'/);
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
@@ -256,7 +256,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', (t) => {
     const outras = outrosCss();
     if (outras.length === 0) return t.skip('sem outro css até o rebase');
-    assert.deepEqual(repetidas(`${PASTA_DA_UI}${TELA}`, outras), {});
+    assert.deepEqual(repetidas(`${UI_FOLDER}${TELA}`, outras), {});
   });
 
   test('a comparação acima pega a classe repetida num css de outra tela', () => {
@@ -264,7 +264,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     try {
       const outra = join(pasta, 'outra.css');
       writeFileSync(outra, '.dec-seg { color: red; }\n.badge { color: blue; }\n.so-dela { margin: 0; }\n');
-      assert.deepEqual(repetidas(`${PASTA_DA_UI}${TELA}`, [outra]), { [outra]: ['dec-seg'] }, 'a repetida entra; o selo e a só dela, não');
+      assert.deepEqual(repetidas(`${UI_FOLDER}${TELA}`, [outra]), { [outra]: ['dec-seg'] }, 'a repetida entra; o selo e a só dela, não');
     } finally {
       rmSync(pasta, { recursive: true, force: true });
     }
@@ -274,7 +274,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     const daMoldura = classes('shell.css');
     assert.deepEqual([...classes(TELA)].filter((c) => !permitida(c, daMoldura)), [], `${TELA} tem classe sem o prefixo ${PREFIXO}`);
     for (const js of JS_DA_TELA) {
-      const usadas = classesDoJs(readFileSync(`${PASTA_DA_UI}${js}`, 'utf8'));
+      const usadas = classesDoJs(readFileSync(`${UI_FOLDER}${js}`, 'utf8'));
       assert.ok(usadas.length > 0, `${js}: nenhuma classe lida (o leitor de class: quebrou?)`);
       assert.deepEqual(usadas.filter((c) => !permitida(c, daMoldura)), [], `${js} usa classe sem o prefixo ${PREFIXO}`);
     }
@@ -293,7 +293,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
   // A janela abre com 1100 × 760 (#150) e vai a 1440: a área da tela é a janela menos a barra (220) e o
   // respiro (2 × 24). Nada pode rolar na horizontal.
   test('nada rola na horizontal: sem overflow-x auto, pre com pre-wrap, e as larguras declaradas cabem', () => {
-    const css = readFileSync(`${PASTA_DA_UI}${TELA}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = readFileSync(`${UI_FOLDER}${TELA}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const area = (janela: number) => janela - 220 - 2 * 24;
     const FOLGA = 15; // a barra de rolagem da área, quando o sistema não a esconde
 
@@ -301,7 +301,7 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     assert.doesNotMatch(css, /white-space:\s*pre\s*;/, 'pre sem quebra');
 
     // Todo <pre> das telas quebra a linha.
-    const pres = JS_DA_TELA.flatMap((js) => [...readFileSync(`${PASTA_DA_UI}${js}`, 'utf8').matchAll(/el\('pre', \{ class: '([^']+)'/g)].flatMap((m) => m[1]!.split(' ').filter((c) => c.startsWith(PREFIXO))));
+    const pres = JS_DA_TELA.flatMap((js) => [...readFileSync(`${UI_FOLDER}${js}`, 'utf8').matchAll(/el\('pre', \{ class: '([^']+)'/g)].flatMap((m) => m[1]!.split(' ').filter((c) => c.startsWith(PREFIXO))));
     assert.ok(pres.length >= 2, 'a injeção e o rascunho são <pre>');
     for (const c of pres) {
       const regra = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, sel]) => sel!.split(',').some((s) => s.trim() === `.${c}`));

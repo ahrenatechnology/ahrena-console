@@ -1,5 +1,5 @@
 // Synthetic sessions for the Workflows screens (#96, C14) and the detail's Workflow tab (#97, C7), in
-// the demo `npm run api -- --demo --cenario p4`. All made up, with the simulator's vocabulary
+// the demo `npm run api -- --demo --scenario p4`. All made up, with the simulator's vocabulary
 // (projects under /simulacao, all-zero UUID accounts). The representation follows api/workflows.ts:
 // the loop comes from the subagents' types and order and from each review's last message ("3 ajustes
 // pedidos"); the Workflow tool runs, from the main agent's `Workflow` call and `Agent.metadata.workflow`.

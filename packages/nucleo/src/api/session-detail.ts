@@ -24,8 +24,6 @@ import type { CustoDoPainel, PlanoDoPainel, SessaoDoPainel } from './types.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_DETALHE = /^\/api\/sessoes\/([^/]+)(?:\/(agentes|conversa|eventos))?$/;
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const LOCAL = /^local_[0-9a-f-]{36}$/;

@@ -27,8 +27,6 @@ import type { ListRecentEventsQuery, RecentEventsPage, StoragePort } from '../st
 import { fraseDoEvento, type ContextoDaFrase } from './event-phrase.ts';
 
 export const EVENTS_ROUTE = '/api/events';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DOS_EVENTOS = '/api/eventos';
 
 export const STATUS_DO_EVENTO = ['active', 'waiting', 'error', 'completed'] as const;
 export type StatusDoEvento = (typeof STATUS_DO_EVENTO)[number];

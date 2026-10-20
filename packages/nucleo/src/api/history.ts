@@ -15,8 +15,6 @@ import type { SessionHistory } from '../history/reading.ts';
 import { parseHistoryRequest } from '../history/model.ts';
 
 export const HISTORY_ROUTE = '/api/history';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_HISTORICO = '/api/historico';
 
 export async function responderHistorico(res: ServerResponse, url: URL, historico: SessionHistory | null | undefined): Promise<void> {
   if (!historico) return send(res, 404, { error: 'o núcleo subiu sem o histórico' });
