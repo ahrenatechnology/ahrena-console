@@ -10,7 +10,7 @@
 
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
 // Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
-// and, later, the architecture (ADR) and product (PDR) records.
+// and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
 export const SECTIONS = [
   { id: 'main', label: null },
   { id: 'delivery', label: 'Entrega' },
@@ -168,6 +168,48 @@ export const SCREENS = [
     file: '/ui/screens/decisions.js', // issue 103
   },
   {
+    // As decisões de arquitetura dos repositórios da conta (C28, issue 174).
+    id: 'adrs',
+    route: '/ui/adrs',
+    item: { label: 'ADR', icon: 'scroll-text', section: 'decisions' },
+    title: 'ADR',
+    sub: 'Decisões de arquitetura dos repositórios da sua conta',
+    icon: 'scroll-text',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // As decisões de produto (C38): a mesma tela, com outro rótulo.
+    id: 'pdrs',
+    route: '/ui/pdrs',
+    item: { label: 'PDR', icon: 'lightbulb', section: 'decisions' },
+    title: 'PDR',
+    sub: 'Decisões de produto dos repositórios da sua conta',
+    icon: 'lightbulb',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // Um registro aberto (C30): /ui/adrs/<owner>/<repo>/<id>; acende ADR.
+    id: 'adr',
+    route: '/ui/adrs/:owner/:repo/:id',
+    // O id é o nome do arquivo: acento e espaço valem (`0004-decisão de fila`).
+    params: { id: 'record' },
+    highlights: 'adrs',
+    title: 'ADR',
+    sub: null,
+    icon: 'scroll-text',
+    file: '/ui/screens/adr-record.js',
+  },
+  {
+    id: 'pdr',
+    route: '/ui/pdrs/:owner/:repo/:id',
+    params: { id: 'record' },
+    highlights: 'pdrs',
+    title: 'PDR',
+    sub: null,
+    icon: 'lightbulb',
+    file: '/ui/screens/adr-record.js',
+  },
+  {
     // This machine (C24, issue 178): always in the sidebar, before the remote ones.
     id: 'this-machine',
     route: '/ui/machines/local',
@@ -248,6 +290,9 @@ export function sidebarSections(screens = SCREENS, sections = SECTIONS) {
 
 // A session id or a GitHub name (dot, hyphen and underscore); `.` and `..` never.
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+// The other parameter shapes a screen may ask for in `params` (issue 174: o id de um registro de
+// decisão é o nome do arquivo, com acento e espaço; nunca barra nem caractere de controle).
+const PARAM_SHAPES = { record: /^[^/\u0000-\u001f]{1,200}$/u };
 
 /** The screen and the parameters of a path, or `null` when none matches. */
 export function findScreen(path, screens = SCREENS) {
@@ -263,7 +308,9 @@ export function findScreen(path, screens = SCREENS) {
         try {
           value = decodeURIComponent(parts[i]);
         } catch {}
-        if (ID.test(value) && value !== '.' && value !== '..') params[pattern[i].slice(1)] = value;
+        const name = pattern[i].slice(1);
+        const shape = PARAM_SHAPES[screen.params?.[name]] ?? ID;
+        if (shape.test(value) && value !== '.' && value !== '..') params[name] = value;
         else matches = false;
       } else matches = pattern[i] === parts[i];
     }

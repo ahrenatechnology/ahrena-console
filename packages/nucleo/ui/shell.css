@@ -65,6 +65,14 @@ button { font: inherit; cursor: pointer; }
 
 /* ---------- peças comuns ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+/* Cards in the same row have the same height (UI rule 9, issue 255): a card in a screen stretches to its
+   grid row, even when the grid says align-items: start. :where() keeps the specificity of one class,
+   so a screen can still place one card on purpose. */
+:where(.cc-main) .card { align-self: stretch; }
+/* Short cards next to a long one stack in one column, in the wireframe's order, instead of leaving a
+   hole under one of them; the last one grows to the bottom of the row. */
+.card-column { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+.card-column > .card:last-child { flex: 1 1 auto; }
 .eyebrow { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); }
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; color: var(--text); background: transparent; border: 1px solid transparent; white-space: nowrap; }
 .btn.outline { border-color: var(--border); background: var(--surface); }

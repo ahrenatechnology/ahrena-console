@@ -679,8 +679,8 @@ const CHANGES: LegacyBodySpec = {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions, framework-install':
-        'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions, framework-install',
+      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions, framework-install, adrs':
+        'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions, framework-install, adrs',
     },
   },
 };

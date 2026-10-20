@@ -11,7 +11,8 @@
 //   the `AbortError` as it came.
 //
 // The write (`write(route, body)`) lives here too, with the same rules and a transport swappable
-// with `useWriter(...)`: POST with JSON, only `/api/`, only the local core. A failure becomes a `WriteError`.
+// with `useWriter(...)`: POST with JSON (or, with `{ method: 'DELETE' }`, a DELETE without a body),
+// only `/api/`, only the local core. A failure becomes a `WriteError`.
 
 export class ReadError extends Error {
   constructor(message, { status = 0, route = null, retryIn = null, body = null } = {}) {
@@ -77,26 +78,27 @@ export function read(route, options) {
   return current(route, options);
 }
 
-/** The HTTP writer: POST with a JSON body, only to `/api/` of the local core, without credentials. */
+const WRITE_METHODS = new Set(['POST', 'DELETE']);
+
+/** The HTTP writer: POST with a JSON body (or DELETE), only to `/api/` of the local core, without credentials. */
 export function httpWriter({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
   const origin = new URL(base);
   if (origin.protocol !== 'http:' || !LOCAL_HOSTS.has(origin.hostname)) {
     throw new WriteError(`o console só escreve no núcleo local, não ${origin.origin}`);
   }
-  return async function writeOverHttp(route, body, { signal } = {}) {
+  return async function writeOverHttp(route, body, { signal, method = 'POST' } = {}) {
     if (typeof route !== 'string' || !route.startsWith('/api/')) throw new WriteError(`rota fora da API: ${route}`, { route });
+    if (!WRITE_METHODS.has(method)) throw new WriteError(`método de escrita não aceito: ${method}`, { route });
     const url = new URL(route, origin);
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/')) throw new WriteError(`rota fora do núcleo: ${route}`, { route });
     let response;
     try {
-      response = await fetch(url, {
-        method: 'POST',
-        signal,
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
-        body: JSON.stringify(body ?? {}),
-        credentials: 'omit',
-        cache: 'no-store',
-      });
+      response = await fetch(
+        url,
+        method === 'DELETE'
+          ? { method, signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
+          : { method, signal, headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
+      );
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
       throw new WriteError(`O núcleo em ${origin.host} não respondeu`, { route });
@@ -122,7 +124,7 @@ export function useWriter(next) {
   writer = next;
 }
 
-/** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer. */
+/** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer; `{ method: 'DELETE' }` deletes. */
 export function write(route, body, options) {
   writer ??= httpWriter();
   return writer(route, body, options);

@@ -5,6 +5,7 @@
 // `main.rs` only translates it into the native menu.
 //
 // #180 adds the "Máquinas" block of A6 and A7 (machines.rs) and the remote sessions' label (A2).
+// #244 adds, under an unreachable remote, Reconectar, its running line and the way to set it up (A8).
 
 use serde::Deserialize;
 
@@ -223,6 +224,12 @@ pub enum Item {
     /// A machine row or one of its open alerts (#180): the click opens the window at
     /// `/ui/machines/<id>`.
     Machine { id: String, text: String, dot: Dot },
+    /// Indented, with no dot, under a machine row (#244, A8): the click opens the window at
+    /// `/ui/machines/<id>`, like the row ("Como reconectar daqui…").
+    MachineLink { id: String, text: String },
+    /// "Reconectar a <label>" (#244, A8): the click asks the core to run the machine's reconnect
+    /// command (`POST /api/machines/<id>/reconnect`). Indented, with no dot.
+    Reconnect { id: String, text: String },
     Action { id: &'static str, text: String, shortcut: Option<&'static str> },
     Check { id: &'static str, text: &'static str, checked: bool },
     Separator,
@@ -256,6 +263,8 @@ pub const SESSION: &str = "session:";
 pub const SESSION_IN_DESKTOP: &str = "desktop:";
 /// Prefix of the ids of the machine rows and alerts (#180).
 pub const MACHINE: &str = "machine:";
+/// Prefix of the ids of the "Reconectar a <label>" items (#244).
+pub const RECONNECT: &str = "reconnect:";
 
 /// The number next to the icon: only the sessions that need you (blocked or with an error, #245);
 /// the idle ones never count. Zero or a stopped core: only the icon.
@@ -389,12 +398,30 @@ fn machines_block(ms: &[machines::Machine], now_ms: u64) -> Vec<Item> {
         let row = |text: String, dot: Dot| Item::Machine { id: s.id.clone(), text, dot };
         let reading = x.telemetry.as_ref().and_then(|t| t.current.as_ref());
         match s.state.as_str() {
+            "unreachable" if s.reconnect_running() => {
+                // A8 b: one at a time, so the item becomes a grey line with the count, no click.
+                b.push(row(format!("{label} · reconectando"), Dot::Yellow));
+                let time = s.reconnect.as_ref().and_then(|r| r.started_at.as_deref()).and_then(|t| machines::running_for(t, now_ms));
+                b.push(Item::Detail(match time {
+                    Some(t) => format!("Reconectando… aguardando login · {t}"),
+                    None => "Reconectando… aguardando login".into(),
+                }));
+            }
             "unreachable" => {
                 let age = s.last_read_at.as_deref().and_then(|t| machines::minutes_since(t, now_ms));
                 let since = age.map(|m| format!("sem conexão {}", machines::ago(m))).unwrap_or_else(|| "sem conexão".into());
                 b.push(row(format!("{label} · {since}"), Dot::Empty));
                 if let Some(reason) = machines::unreachable_reason(s) {
                     b.push(Item::Detail(reason));
+                }
+                // A8 a and c: Reconectar with a command in machines.json; without one, the way to
+                // set it up, on the machine's screen (C50, state 5), instead of a dead button.
+                if s.id != machines::LOCAL_ID {
+                    if s.reconnect_configured() {
+                        b.push(Item::Reconnect { id: s.id.clone(), text: format!("Reconectar a {label}") });
+                    } else {
+                        b.push(Item::MachineLink { id: s.id.clone(), text: "Como reconectar daqui…".into() });
+                    }
                 }
             }
             "incompatible-version" => b.push(row(format!("{label} · versão incompatível do núcleo"), Dot::Empty)),
@@ -472,6 +499,7 @@ mod tests {
         m.iter()
             .map(|i| match i {
                 Item::Text { text, .. } | Item::Header { text, .. } | Item::Session { text, .. } | Item::Action { text, .. } | Item::Machine { text, .. } => text.clone(),
+                Item::MachineLink { text, .. } | Item::Reconnect { text, .. } => format!("  {text}"),
                 Item::Detail(t) => format!("  {t}"),
                 Item::Check { text, checked, .. } => format!("{}{text}", if *checked { "✓ " } else { "" }),
                 Item::Separator => "—".into(),
@@ -711,9 +739,14 @@ mod tests {
 
     /// A7: the Workstation unreachable for 14 min, port closed.
     fn a7_machines(reason: &str) -> Vec<machines::Machine> {
+        a8_machines(reason, "null")
+    }
+
+    /// A7 with the Workstation's `reconnect` (#244): `null` as a core from before it sends.
+    fn a8_machines(reason: &str, reconnect: &str) -> Vec<machines::Machine> {
         let s = summaries(&format!(
             r#"[{LOCAL_SUMMARY},
-               {{ "id": "workstation", "label": "Workstation", "state": "unreachable", "reason": "{reason}", "version": 1, "port": 14720, "lastReadAt": "2026-10-18T22:56:00.000Z", "alerts": 1 }}]"#
+               {{ "id": "workstation", "label": "Workstation", "state": "unreachable", "reason": "{reason}", "version": 1, "port": 14720, "lastReadAt": "2026-10-18T22:56:00.000Z", "alerts": 1, "reconnect": {reconnect} }}]"#
         ));
         vec![
             machines::Machine { summary: s[0].clone(), telemetry: Some(telemetry(34.0, 2.1, 10, &[("/", 61.0)], "")) },
@@ -836,6 +869,7 @@ mod tests {
                 "Este Mac · CPU 34% · disco 61%",
                 "Workstation · sem conexão há 14 min",
                 "  A porta 14720 não aceita conexão: o túnel parece caído",
+                "  Como reconectar daqui…",
                 "—",
                 "1 ativa",
                 "2 ociosas",
@@ -846,6 +880,99 @@ mod tests {
         let actions: Vec<_> = m.iter().filter_map(|i| if let Item::Action { id, .. } = i { Some(*id) } else { None }).collect();
         assert_eq!(actions, [ID_OPEN, ID_QUIT], "no item brings a tunnel up");
         assert!(m.iter().any(|i| matches!(i, Item::Detail(t) if t.contains("túnel parece caído"))), "the reason is a disabled line");
+    }
+
+    // ---- #244: Reconectar (wireframe A8) ----
+
+    const CONFIGURED_IDLE: &str = r#"{ "configured": true, "command": ["/caminho/para/conectar.sh", "tunnel", "restart"], "timeoutSeconds": 180, "state": "idle",
+        "startedAt": null, "endedAt": null, "exitCode": null, "startedBy": null, "logFile": null }"#;
+    const CONFIGURED_RUNNING: &str = r#"{ "configured": true, "command": ["/caminho/para/conectar.sh"], "timeoutSeconds": 180, "state": "running",
+        "startedAt": "2026-10-18T23:08:48.000Z", "endedAt": null, "exitCode": null, "startedBy": "local", "logFile": "/dados/reconnect.log" }"#;
+    const NOT_CONFIGURED: &str = r#"{ "configured": false, "command": null, "timeoutSeconds": null, "state": "idle",
+        "startedAt": null, "endedAt": null, "exitCode": null, "startedBy": null, "logFile": null }"#;
+
+    fn machines_block_texts(ms: &[machines::Machine]) -> Vec<String> {
+        let a = Attention::from_json(ONE_LOCAL).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let t = texts(&build(&with_machines(&n, Some(&a), Some(ms))));
+        let from = t.iter().position(|x| x == "Máquinas").unwrap();
+        let to = from + t[from..].iter().position(|x| x == "—").unwrap();
+        t[from..to].to_vec()
+    }
+
+    #[test]
+    fn a8_a_configured_offers_reconnect_under_the_row() {
+        let ms = a8_machines("port-closed", CONFIGURED_IDLE);
+        assert_eq!(
+            machines_block_texts(&ms),
+            [
+                "Máquinas",
+                "Este Mac · CPU 34% · disco 61%",
+                "Workstation · sem conexão há 14 min",
+                "  A porta 14720 não aceita conexão: o túnel parece caído",
+                "  Reconectar a Workstation",
+            ]
+        );
+        let a = Attention::from_json(ONE_LOCAL).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&with_machines(&n, Some(&a), Some(&ms)));
+        let reconnects: Vec<_> = m.iter().filter_map(|i| if let Item::Reconnect { id, .. } = i { Some(id.as_str()) } else { None }).collect();
+        assert_eq!(reconnects, ["workstation"], "the click carries only the machine id");
+        assert!(!m.iter().any(|i| matches!(i, Item::MachineLink { .. })), "no setup item when configured");
+    }
+
+    #[test]
+    fn a8_b_running_is_a_grey_line_with_the_count() {
+        let ms = a8_machines("port-closed", CONFIGURED_RUNNING);
+        assert_eq!(
+            machines_block_texts(&ms),
+            ["Máquinas", "Este Mac · CPU 34% · disco 61%", "Workstation · reconectando", "  Reconectando… aguardando login · 1:12"]
+        );
+        let a = Attention::from_json(ONE_LOCAL).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&with_machines(&n, Some(&a), Some(&ms)));
+        assert!(!m.iter().any(|i| matches!(i, Item::Reconnect { .. } | Item::MachineLink { .. })), "nothing to click while it runs");
+        assert!(m.iter().any(|i| matches!(i, Item::Detail(t) if t.starts_with("Reconectando…"))), "a disabled line");
+        assert!(m.iter().any(|i| matches!(i, Item::Machine { id, dot: Dot::Yellow, .. } if id == "workstation")), "the row opens the screen, where Cancelar is");
+    }
+
+    #[test]
+    fn a8_b_running_without_a_start_time_shows_no_count() {
+        let ms = a8_machines("port-closed", r#"{ "configured": true, "state": "running" }"#);
+        assert_eq!(machines_block_texts(&ms)[3], "  Reconectando… aguardando login");
+    }
+
+    #[test]
+    fn a8_c_not_configured_teaches_how_on_the_machine_screen() {
+        for reconnect in [NOT_CONFIGURED, "null", r#""inesperado""#] {
+            let ms = a8_machines("no-response", reconnect);
+            assert_eq!(
+                machines_block_texts(&ms),
+                [
+                    "Máquinas",
+                    "Este Mac · CPU 34% · disco 61%",
+                    "Workstation · sem conexão há 14 min",
+                    "  O túnel está de pé, mas o núcleo de lá não respondeu",
+                    "  Como reconectar daqui…",
+                ],
+                "{reconnect}"
+            );
+            let a = Attention::from_json(ONE_LOCAL).unwrap();
+            let n = CoreState::Up { port: 4720 };
+            let m = build(&with_machines(&n, Some(&a), Some(&ms)));
+            assert!(m.iter().any(|i| matches!(i, Item::MachineLink { id, .. } if id == "workstation")));
+            assert!(!m.iter().any(|i| matches!(i, Item::Reconnect { .. })));
+        }
+    }
+
+    #[test]
+    fn a8_connected_machine_offers_no_reconnect() {
+        let mut ms = a6_machines();
+        ms[1].summary.reconnect = machines::summaries_from_json(&format!(r#"[{{ "id": "w", "label": "W", "state": "connected", "reconnect": {CONFIGURED_IDLE} }}]"#)).unwrap()[0].reconnect.clone();
+        let a = Attention::from_json(ONE_LOCAL).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&with_machines(&n, Some(&a), Some(&ms)));
+        assert!(!m.iter().any(|i| matches!(i, Item::Reconnect { .. } | Item::MachineLink { .. })));
     }
 
     #[test]

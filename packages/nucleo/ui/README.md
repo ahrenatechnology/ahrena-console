@@ -7,7 +7,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `screens.js` | **O registro das telas** (`route`, `item`, `file`) e a troca das URLs antigas pelas novas (`legacyUrl`) |
-| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
+| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
@@ -117,7 +117,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
 | `read(route)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
-| `write(route, body)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
+| `write(route, body)` | A camada de escrita (POST com JSON, ou DELETE com `{ method: 'DELETE' }`), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
 | `signal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
 | `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ type, key, sessionId, accountId, seq }`) |
 | `onRestart(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
@@ -136,6 +136,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
 - **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.reason`, `.soft`, `.p`).
 - **Nada rola na horizontal** em 1100 nem em 1440 de janela: `min-width: 0` nos filhos de flex e grid, `overflow-wrap: anywhere` em título, branch, caminho e mono, `pre` com `white-space: pre-wrap`, sem `overflow-x: auto`.
+- **Cards na mesma linha têm a mesma altura** ([#255](https://github.com/ahrenatechnology/ahrena-console/issues/255)). O `shell.css` estica todo `.card` da tela até a altura da linha do grid (`:where(.cc-main) .card { align-self: stretch }`), mesmo num grid com `align-items: start`; o conteúdo fica em cima, e um card que é coluna flex pode dar a sobra a uma parte (o gráfico das máquinas cresce) ou mandar o rodapé para baixo com `margin-top: auto`. Quando um card é muito mais curto que o vizinho (um card pequeno ao lado de uma tabela longa), os curtos empilham num `.card-column` ao lado do longo, na ordem do wireframe, e o último cresce até o fim da linha; a tabela longa vai para uma linha só dela. Fora da regra: as raias de quadro (Kanban, Kanban do projeto, Dev Console) e os itens de uma lista. O teste (`test/api/ui.test.ts`) recusa um CSS de tela que tire um card da altura da linha.
 - Exceção: nos Repositórios, a largura das barras que vem de dado entra por variável CSS via CSSOM (`el.style.setProperty('--w', …)`), nunca por atributo `style` no HTML.
 
 ## As URLs antigas

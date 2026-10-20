@@ -1,5 +1,5 @@
 {
-  "description": "Encaminha os eventos de hook do Claude Code ao núcleo do Ahrena Console (127.0.0.1:4720).",
+  "description": "Encaminha os eventos de hook do Claude Code a todos os núcleos vivos do Ahrena Console (registro de instâncias).",
   "hooks": {
     "SessionStart": [
       {

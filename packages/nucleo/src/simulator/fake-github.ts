@@ -5,7 +5,8 @@
 //
 // It imitates what the screens depend on from GitHub: ETag and 304 with `If-None-Match`, 202 while a
 // statistic "computes" (`computeFirst`), 403 on traffic and on alerts without write access.
-// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`), the content
+// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`, up to 20 repositories
+// per query, with the 23 decision folders of #174), the content
 // batches (`RepoBlobs`, by `oid` or by `<commit>:<path>`) and the recursive tree
 // (`git/trees/HEAD?recursive=1`), with Git's `oid` (SHA-1 of `blob <size>\0<text>`).
 // The framework install (#184) adds the writes: `FrameworkInstallTarget` (permission, the default
@@ -21,6 +22,8 @@ import { SeededRandom, hash32 } from './random.ts';
 import { ROOT } from './vocabulary.ts';
 import { catalogSnapshot, MARKETPLACE_PATH } from '../framework-install/catalog.ts';
 import { DEFAULT_FRAMEWORK_REPO } from '../framework-install/model.ts';
+import { DECISION_DIRS } from '../adrs/parse.ts';
+import { DEMO_DECISION_FILES } from './demo-decisions.ts';
 
 export interface FakeRepo {
   owner: string;
@@ -335,6 +338,8 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       dotClaudeMd: blob('.claude/CLAUDE.md'),
       mcpJson: blob('.mcp.json'),
       claudeDir: g.folders.has('.claude') ? { entries: entries('.claude', 1) } : null,
+      // As 23 pastas de decisão (#174), um apelido por pasta: só o primeiro nível, como o GitHub.
+      ...Object.fromEntries(DECISION_DIRS.map((dir, k) => [`dir${k}`, g.folders.has(dir) ? { entries: entries(dir, 3) } : g.oids.has(dir) ? {} : null])),
     };
   };
 
@@ -466,8 +471,13 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       };
     }
     if (op === 'RepoFilesDiscovery') {
-      const repo = find(v.owner, v.name);
-      return { rateLimit, repository: repo ? discovery(repo) : null };
+      // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).
+      const out: Record<string, unknown> = { rateLimit };
+      for (let i = 0; typeof v[`o${i}`] === 'string'; i++) {
+        const repo = find(v[`o${i}`], v[`n${i}`]);
+        out[`r${i}`] = repo ? discovery(repo) : null;
+      }
+      return out;
     }
     if (op === 'RepoBlobs') {
       const repo = find(v.owner, v.name);
@@ -769,8 +779,13 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
 };
 
 const withFiles = (repo: FakeRepo): FakeRepo => {
-  const extra = DEMO_INSTRUCTION_FILES[`${repo.owner}/${repo.name}`];
-  return extra ? { ...repo, files: extra.files, ...(extra.truncatedTree ? { truncatedTree: true } : {}) } : repo;
+  const key = `${repo.owner}/${repo.name}`;
+  const extra = DEMO_INSTRUCTION_FILES[key];
+  // Os registros de decisão (#174) somam-se aos arquivos de instrução; sem nenhum dos dois, fica só o README.
+  const decisions = DEMO_DECISION_FILES[key];
+  if (!extra && !decisions) return repo;
+  const files = { ...(extra?.files ?? { 'README.md': `# ${repo.name}\n` }), ...decisions };
+  return { ...repo, files, ...(extra?.truncatedTree ? { truncatedTree: true } : {}) };
 };
 
 /** The demo, as in wireframe C22: two orgs, the personal account and eight repositories. */
