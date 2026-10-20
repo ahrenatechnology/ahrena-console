@@ -8,3 +8,4 @@ export { MontadorDoMural, ehAberta, muralDoPainel, responderMural, RECENTE_DO_MU
 export { ResumosDeSessao, aplicarEvento, iniciosDosTurnos, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './resumo.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './trabalho.ts';
 export { iniciarApiLocal, VERSAO_DA_API, type ApiLocal, type OpcoesDaApi } from './servidor.ts';
+export { montarAtencao, MOTIVO_CURTO, ROTA_DA_ATENCAO, type ItemDaAtencao, type RespostaDaAtencao } from './rota-atencao.ts';
