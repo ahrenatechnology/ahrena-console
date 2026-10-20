@@ -15,14 +15,19 @@
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/decisoes`, `GET /api/sessoes/<id>/decisoes` e `POST /api/decisoes/<id>/promover` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada. A escrita nas
-// decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
-// alcança uma decisão que essa sessão enxerga, da conta dela.
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo as decisões pela
+// /ui (#103): a página em 127.0.0.1 confirma, descarta, ajusta, desfaz e promove, e o navegador manda
+// `Origin` até num `fetch` da mesma origem. A exceção vale só para `POST /api/decisoes/<id>/<ação>`
+// com o caminho exato (sem query), com `Origin` exatamente `http://<Host>` e JSON obrigatório: um
+// site de fora não consegue esse `Origin`, nem mandar JSON sem o preflight de CORS, e o núcleo não
+// responde CORS. A escrita nas decisões pede ainda `Content-Type: application/json` e o corpo
+// `{ "sessao": "<id>" }`, e só alcança uma decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -30,6 +35,7 @@ import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteO
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { ROTA_DAS_MUDANCAS, responderMudancas } from '../mudancas/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
+import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
@@ -59,6 +65,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */
+  decisoesUi?: DecisoesDaUi;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -75,14 +83,24 @@ const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 const MAX_CORPO = 4096;
 
-/** A própria `/ui` lendo: `GET` com `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
-function mesmaOrigemLendo(req: IncomingMessage, port: number): boolean {
+/** O pedido vem da própria `/ui`: `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
+function daPropriaUi(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
   const origem = req.headers.origin;
-  if (req.method !== 'GET' || typeof origem !== 'string') return false;
+  if (typeof origem !== 'string') return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
   return origem === `http://${host}`;
 }
+
+/** A própria `/ui` lendo: `GET` da mesma origem. */
+const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && daPropriaUi(req, port);
+
+/**
+ * A própria `/ui` decidindo (#103): só `POST /api/decisoes/<id>/<ação>`, com o caminho cru exato
+ * (query dá 403) e da mesma origem. O JSON obrigatório continua com quem responde (415).
+ */
+const mesmaOrigemDecidindo = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/api\/decisoes\/[A-Za-z0-9_.:-]{1,128}\/(confirmar|descartar|ajustar|desfazer|promover)$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -195,11 +213,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemDecidindo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
     if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]));
+    if (opts.decisoesUi && (await responderDecisoesDaUi(req, res, url, opts.decisoesUi, log))) return;
     const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname);
     if (escrita) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });

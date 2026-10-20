@@ -1,0 +1,592 @@
+// As decisões na /ui do núcleo (#103, wireframes C20 e C21):
+//
+// | Rota                                   | O quê                                                        |
+// | -------------------------------------- | ------------------------------------------------------------ |
+// | `GET /api/decisoes`                    | A página Decisões (C21): todas, agrupadas, com busca          |
+// | `GET /api/sessoes/<id>/decisoes`       | A aba Decisões do Detalhe (C20): o escopo, a injeção e o MCP |
+// | `POST /api/decisoes/<id>/promover`     | O "Promover a registro": rascunho, ou grava com `confirmar`  |
+//
+// Lê e escreve só pela porta das decisões; o escopo, a conta e a cadeia são de `DecisoesDaSessao` e
+// de src/decisoes/registro.ts, não daqui.
+//
+// A página lista "todas": a porta não tem essa consulta (as dela seguem padrões de acesso, para
+// caber no DynamoDB do hub), então a lista sai das sessões da porta de armazenamento, família a
+// família. A família traz também a sessão mãe que só a porta das decisões conhece.
+//
+// Na página não há conta de referência (decisão 0006): o console é local, de uma pessoa, e as
+// contas são todas dela; a página mostra todas, como a lista de sessões. O filtro por conta
+// continua onde há uma sessão de referência: na aba e nas escritas, que vão em nome da sessão dona.
+//
+// O Promover não grava nada sem `{ confirmar: true, caminho }`; grava só em `<repo>/docs/decisoes/`,
+// nunca por cima (flag `wx`), conferindo com `realpath` que a pasta não sai do repositório.
+
+import { readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { basename, isAbsolute, join, posix, sep } from 'node:path';
+import { send } from '../ingest/hooks/receiver.ts';
+import type { Session } from '../model.ts';
+import type { Decision, DecisionState } from '../decisoes/modelo.ts';
+import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
+import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisoes/registro.ts';
+import type { Page, StoragePort } from '../storage-port.ts';
+import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, type AlvoDasDecisoes } from './decisoes.ts';
+import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
+
+export type AgrupamentoDasDecisoes = 'branch' | 'familia' | 'sessao';
+export type FiltroDeEstado = 'todas' | 'vigentes' | 'a_confirmar';
+
+/** O card de uma decisão, igual na página e na aba. */
+export interface DecisaoDaUi extends DecisaoDoPainel {
+  sessionId: string;
+  /** Até onde vale ("escopo: sessão"). */
+  escopo: EscopoDasDecisoes;
+  /** O "D2" da decisão que esta substituiu. */
+  substitui: string | null;
+  /** `docs/decisoes/NNNN-slug.md`, quando virou registro. */
+  promovidaPara: string | null;
+  branch: string | null;
+  repo: string | null;
+  /** O "Ver na conversa": `/ui/sessoes/<sessionId>`. */
+  conversa: string;
+}
+
+export interface GrupoDeDecisoes {
+  /** Opaca, segura para URL: o `grupo=` do "Ver todas". */
+  chave: string;
+  tipo: AgrupamentoDasDecisoes;
+  /** O branch ("sem branch"), ou o título da sessão (família e sessão). */
+  titulo: string;
+  repo: string | null;
+  /** O nome da pasta do repositório. */
+  pasta: string | null;
+  vigentes: number;
+  aConfirmar: number;
+  total: number;
+  /** Até 3, mais recentes primeiro; todos com `grupo=`. */
+  itens: DecisaoDaUi[];
+  /** Quantos ficaram de fora. */
+  mais: number;
+}
+
+/** `GET /api/decisoes` (C21). */
+export interface DecisoesDaPagina {
+  agrupar: AgrupamentoDasDecisoes;
+  estado: FiltroDeEstado;
+  q: string | null;
+  /** Os quatro cartões: sempre sobre tudo, sem o filtro de estado nem a busca. */
+  contagens: { vigentes: number; branches: number; aConfirmar: number; substituidas30d: number; promovidas: number };
+  grupos: GrupoDeDecisoes[];
+}
+
+/** `GET /api/sessoes/<id>/decisoes` (C20). */
+export interface DecisoesDaAba {
+  sessao: string;
+  escopo: EscopoDasDecisoes;
+  estado: FiltroDeEstado;
+  q: string | null;
+  /** Vigentes e a confirmar em cada escopo. */
+  porEscopo: Record<EscopoDasDecisoes, number>;
+  /** Vigentes e a confirmar no escopo pedido: o "(4)" da aba. */
+  total: number;
+  itens: DecisaoDaUi[];
+  /** O card "No início de cada sessão" (#100). */
+  injecao: { ligada: boolean; escopo: EscopoDasDecisoes; decisoes: number; tokens: number; texto: string };
+  /** O card "Quando o agente perguntar" (#101). */
+  mcp: { ferramenta: 'session_decisions'; existe: boolean; chamada: string; resposta: string };
+}
+
+/** A resposta do Promover sem `confirmar`: nada foi gravado. */
+export interface RascunhoDeRegistro {
+  caminho: string;
+  markdown: string;
+  repo: string | null;
+  podeGravar: boolean;
+  /** Por que não dá para gravar, quando não dá. */
+  motivo: string | null;
+}
+
+export interface OpcoesDasDecisoesDaUi {
+  decisions: DecisionPort;
+  storage: StoragePort;
+  agora?: () => number;
+  /** Grava o registro; padrão `writeFile` com a flag `wx` (nunca sobrescreve). Os testes injetam. */
+  escrever?: (destino: string, markdown: string) => Promise<void>;
+  /** A pasta de verdade de um repositório (a --demo troca /simulacao por uma pasta temporária). */
+  raiz?: (repo: string) => string | null;
+  /** O `local_…` do Claude Desktop da sessão, para o link do registro. */
+  localDe?: (sessionId: string) => Promise<string | null> | string | null;
+  /** A injeção no início da sessão (#100) existe? Hoje não. */
+  injecaoLigada?: boolean;
+  /** A ferramenta MCP `session_decisions` (#101) existe? Hoje não. */
+  mcpExiste?: boolean;
+}
+
+const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
+const DO_FILTRO: Record<FiltroDeEstado, readonly DecisionState[]> = { todas: NA_LISTA, vigentes: ['vigente'], a_confirmar: ['a_confirmar'] };
+const ITENS_POR_GRUPO = 3;
+const MAX_BUSCA = 200;
+const DIA = 86_400_000;
+const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', familia: 'f', sessao: 's' };
+const CAMINHO_DO_REGISTRO = /^docs\/decisoes\/(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
+const ESCOPO_POR_EXTENSO: Record<EscopoDasDecisoes, string> = { sessao: 'sessão', familia: 'família', branch: 'branch' };
+const TIPO: Record<Decision['origin'], string> = { sugerida: 'Sugerida', correcao: 'Correção sua', permissao: 'Permissão', pergunta: 'Pergunta', plano: 'Plano' };
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const maisRecentes = (a: Decision, b: Decision) => (a.decidedAt === b.decidedAt ? b.seq - a.seq : a.decidedAt < b.decidedAt ? 1 : -1);
+const chave = (tipo: AgrupamentoDasDecisoes, bruta: string) => `${PREFIXO[tipo]}.${Buffer.from(bruta).toString('base64url')}`;
+
+function quem(d: Decision): string {
+  if (d.origin === 'sugerida') return 'agente propôs';
+  if (d.origin === 'correcao') return 'você corrigiu';
+  if (d.origin === 'plano') return 'você aprovou';
+  return d.decidedBy === 'agente' ? 'agente' : 'você';
+}
+
+async function todasDa(port: DecisionPort, query: ListDecisionsQuery): Promise<Decision[]> {
+  const out: Decision[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: Page<Decision> = await port.listDecisions({ ...query, limit: 500, cursor });
+    out.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return out;
+}
+
+function casa(d: Decision, q: string | null): boolean {
+  if (!q) return true;
+  const texto = typeof d.metadata?.texto === 'string' ? d.metadata.texto : '';
+  return semAcento([d.choice, d.context ?? '', ...d.alternatives, texto, d.branch ?? '', decisionLabel(d)].join('\n')).includes(semAcento(q));
+}
+
+/** O slug do arquivo: sem acento, minúsculo, com hífens, até 6 palavras e 48 letras. */
+export function slugDaDecisao(choice: string): string {
+  const palavras = semAcento(choice).split(/[^a-z0-9]+/).filter(Boolean);
+  const out: string[] = [];
+  for (const p of palavras) {
+    if (out.length === 6 || [...out, p].join('-').length > 48) break;
+    out.push(p);
+  }
+  return out.join('-') || 'decisao';
+}
+
+/** O caminho que o Promover aceita: relativo, dentro de `docs/decisoes/`, `NNNN-slug.md`. */
+function caminhoValido(v: unknown): string {
+  if (typeof v !== 'string' || !v || v.length > 200) throw new ErroDaDecisao(400, 'informe o caminho: "docs/decisoes/NNNN-slug.md"');
+  if (v.includes('\\') || v.includes('\0')) throw new ErroDaDecisao(400, 'caminho com barra invertida');
+  if (isAbsolute(v) || v.startsWith('/')) throw new ErroDaDecisao(400, 'o caminho é relativo ao repositório');
+  if (v.split('/').includes('..') || posix.normalize(v) !== v) throw new ErroDaDecisao(400, 'caminho com ".."');
+  if (!CAMINHO_DO_REGISTRO.test(v)) throw new ErroDaDecisao(400, 'o registro fica em docs/decisoes/NNNN-slug.md');
+  return v;
+}
+
+const gravarSemSobrescrever = (destino: string, markdown: string) => writeFile(destino, markdown, { encoding: 'utf8', flag: 'wx' });
+
+export class DecisoesDaUi {
+  private readonly port: DecisionPort;
+  private readonly storage: StoragePort;
+  private readonly sessao: DecisoesDaSessao;
+  private readonly agora: () => number;
+  private readonly escrever: (destino: string, markdown: string) => Promise<void>;
+  private readonly raiz: (repo: string) => string | null;
+  private readonly localDe: (sessionId: string) => Promise<string | null> | string | null;
+  private readonly injecaoLigada: boolean;
+  private readonly mcpExiste: boolean;
+
+  constructor(o: OpcoesDasDecisoesDaUi) {
+    this.port = o.decisions;
+    this.storage = o.storage;
+    this.sessao = new DecisoesDaSessao({ decisions: o.decisions, storage: o.storage });
+    this.agora = o.agora ?? Date.now;
+    this.escrever = o.escrever ?? gravarSemSobrescrever;
+    this.raiz = o.raiz ?? ((repo) => repo);
+    this.localDe = o.localDe ?? (() => null);
+    this.injecaoLigada = o.injecaoLigada ?? false;
+    this.mcpExiste = o.mcpExiste ?? false;
+  }
+
+  /** Todas as decisões que a máquina conhece: as das famílias de cada sessão da porta de armazenamento. */
+  private async todas(): Promise<{ decisoes: Decision[]; sessoes: Map<string, Session> }> {
+    const sessoes = new Map<string, Session>();
+    let cursor: string | null = null;
+    do {
+      const page: Page<Session> = await this.storage.listSessions({ limit: 500, cursor });
+      for (const s of page.items) sessoes.set(s.id, s);
+      cursor = page.nextCursor;
+    } while (cursor);
+    const familias = new Set<string>();
+    for (const id of sessoes.keys()) familias.add(await familyOf(this.port, id));
+    const decisoes: Decision[] = [];
+    for (const familyId of familias) decisoes.push(...(await todasDa(this.port, { familyId })));
+    return { decisoes, sessoes };
+  }
+
+  /** O "D2" de uma decisão pelo id: das já lidas, ou da porta. */
+  private async rotuloDe(id: string | null, lidas: Map<string, Decision>): Promise<string | null> {
+    if (!id) return null;
+    const d = lidas.get(id) ?? (await this.port.getDecision(id));
+    return d ? decisionLabel(d) : null;
+  }
+
+  private async paraUi(d: Decision, ref: { sessionId: string; familyId: string; mae: string | null }, lidas: Map<string, Decision>): Promise<DecisaoDaUi> {
+    return {
+      ...paraOPainel(d, ref.sessionId, ref.familyId, ref.mae, await this.rotuloDe(d.supersededBy, lidas)),
+      sessionId: d.sessionId,
+      escopo: d.scope,
+      substitui: await this.rotuloDe(d.supersedes, lidas),
+      promovidaPara: d.promotedTo,
+      branch: d.branch,
+      repo: d.repo,
+      conversa: `/ui/sessoes/${encodeURIComponent(d.sessionId)}`,
+    };
+  }
+
+  /** A página C21. Na página não há sessão de referência: cada card é relativo à própria sessão ('esta'). */
+  async pagina(p: { agrupar: AgrupamentoDasDecisoes; estado: FiltroDeEstado; q: string | null; grupo: string | null }): Promise<DecisoesDaPagina> {
+    const { decisoes, sessoes } = await this.todas();
+    const lidas = new Map(decisoes.map((d) => [d.id, d]));
+    const listadas = decisoes.filter((d) => NA_LISTA.includes(d.state)).sort(maisRecentes);
+    const vigentes = listadas.filter((d) => d.state === 'vigente');
+    const desde = new Date(this.agora() - 30 * DIA).toISOString();
+    const contagens = {
+      vigentes: vigentes.length,
+      branches: new Set(vigentes.filter((d) => d.branch).map((d) => `${d.repo ?? ''}\0${d.branch}`)).size,
+      aConfirmar: listadas.filter((d) => d.state === 'a_confirmar').length,
+      substituidas30d: listadas.filter((d) => d.state === 'substituida' && d.updatedAt >= desde).length,
+      promovidas: decisoes.filter((d) => d.promotedTo !== null).length,
+    };
+
+    // O título da família: a raiz, se a porta de armazenamento a conhece; senão a sessão gravada mais recente.
+    const tituloDaFamilia = new Map<string, string>();
+    for (const d of listadas) {
+      const raiz = sessoes.get(d.familyId)?.name;
+      if (raiz) tituloDaFamilia.set(d.familyId, raiz);
+      else if (!tituloDaFamilia.has(d.familyId) && sessoes.get(d.sessionId)?.name) tituloDaFamilia.set(d.familyId, sessoes.get(d.sessionId)!.name!);
+    }
+    const doGrupo = (d: Decision): { chave: string; titulo: string } => {
+      if (p.agrupar === 'branch') return { chave: chave('branch', `${d.repo ?? ''}\0${d.branch ?? ''}`), titulo: d.branch ?? 'sem branch' };
+      if (p.agrupar === 'familia') return { chave: chave('familia', d.familyId), titulo: tituloDaFamilia.get(d.familyId) ?? d.familyId };
+      return { chave: chave('sessao', d.sessionId), titulo: sessoes.get(d.sessionId)?.name ?? d.sessionId };
+    };
+
+    const estados = DO_FILTRO[p.estado];
+    const grupos = new Map<string, { titulo: string; decisoes: Decision[] }>();
+    for (const d of listadas) {
+      if (!estados.includes(d.state) || !casa(d, p.q)) continue;
+      const g = doGrupo(d);
+      if (p.grupo && g.chave !== p.grupo) continue;
+      if (!grupos.has(g.chave)) grupos.set(g.chave, { titulo: g.titulo, decisoes: [] });
+      grupos.get(g.chave)!.decisoes.push(d);
+    }
+
+    const out: GrupoDeDecisoes[] = [];
+    for (const [k, g] of grupos) {
+      const mostradas = p.grupo ? g.decisoes : g.decisoes.slice(0, ITENS_POR_GRUPO);
+      const repo = g.decisoes[0]!.repo;
+      const itens: DecisaoDaUi[] = [];
+      for (const d of mostradas) itens.push(await this.paraUi(d, { sessionId: d.sessionId, familyId: d.familyId, mae: null }, lidas));
+      out.push({
+        chave: k,
+        tipo: p.agrupar,
+        titulo: g.titulo,
+        repo,
+        pasta: repo ? basename(repo) : null,
+        vigentes: g.decisoes.filter((d) => d.state === 'vigente').length,
+        aConfirmar: g.decisoes.filter((d) => d.state === 'a_confirmar').length,
+        total: g.decisoes.length,
+        itens,
+        mais: g.decisoes.length - mostradas.length,
+      });
+    }
+    return { agrupar: p.agrupar, estado: p.estado, q: p.q, contagens, grupos: out };
+  }
+
+  /**
+   * A sessão a que a aba e as escritas se referem: a pasta e a conta da porta de armazenamento, o
+   * branch dos metadados ou, sem ele, o das decisões da própria sessão (gravado na captura).
+   * Uma sessão que só a porta das decisões conhece (a mãe de antes do /clear) também vale.
+   * `null` quando nenhuma das duas portas conhece a sessão.
+   */
+  private async alvo(sessionId: string): Promise<AlvoDasDecisoes | null> {
+    const s = await this.storage.getSession(sessionId);
+    const proprias = (await this.port.listDecisions({ sessionId, limit: 50 })).items;
+    if (!s && proprias.length === 0) return null;
+    const doMetadado = typeof s?.metadata?.branch === 'string' ? s.metadata.branch : null;
+    const comBranch = proprias.find((d) => d.branch);
+    const branch = doMetadado ?? comBranch?.branch ?? null;
+    const repo = doMetadado ? (s?.cwd ?? null) : (comBranch?.repo ?? s?.cwd ?? proprias[0]?.repo ?? null);
+    return { sessionId, branch, repo, contaId: s?.accountId ?? null };
+  }
+
+  /** A aba C20; `null` quando a sessão não existe. */
+  async aba(sessionId: string, p: { escopo: EscopoDasDecisoes; estado: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
+    const alvo = await this.alvo(sessionId);
+    if (!alvo) return null;
+    const doEscopo = await this.sessao.doEscopo(alvo, p.escopo);
+    const lidas = new Map(doEscopo.map((d) => [d.id, d]));
+    const contaveis = (ds: Decision[]) => ds.filter((d) => d.state === 'vigente' || d.state === 'a_confirmar').length;
+    const porEscopo = {} as Record<EscopoDasDecisoes, number>;
+    for (const e of ESCOPOS_DAS_DECISOES) porEscopo[e] = e === p.escopo ? contaveis(doEscopo) : (await this.sessao.doEscopo(alvo, e, ['vigente', 'a_confirmar'])).length;
+
+    const ref = { sessionId, familyId: await familyOf(this.port, sessionId), mae: (await this.port.getSessionLink(sessionId))?.parentSessionId ?? null };
+    const itens: DecisaoDaUi[] = [];
+    for (const d of doEscopo) if (DO_FILTRO[p.estado].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
+
+    // O que a injeção (#100) e a ferramenta MCP (#101) consultariam: as vigentes do branch.
+    const nivel: EscopoDasDecisoes = alvo.branch ? 'branch' : 'familia';
+    const vigentes = (await currentDecisionsFor(this.port, alvo, nivel)).reverse();
+    const linhas: string[] = [];
+    const cadeias: string[] = [];
+    for (const d of vigentes) {
+      const antes = await this.rotuloDe(d.supersedes, lidas);
+      if (antes) cadeias.push(`${decisionLabel(d)} substituiu ${antes}`);
+      linhas.push(`- ${d.choice} (${decisionLabel(d)}${antes ? `, substituiu ${antes}` : ''})`);
+    }
+    const cabeca = alvo.branch ? `Decisões vigentes em ${alvo.branch}:` : 'Decisões vigentes na família desta sessão:';
+    const texto = linhas.length ? [cabeca, ...linhas].join('\n') : '';
+    const n = vigentes.length;
+    const resposta =
+      n === 0
+        ? 'Responde que não há decisões vigentes.'
+        : `Responde com ${n === 1 ? 'a vigente' : `as ${n} vigentes`}${cadeias.length ? ` e a cadeia de substituição: ${cadeias.join(', ')}.` : '.'}`;
+    return {
+      sessao: sessionId,
+      escopo: p.escopo,
+      estado: p.estado,
+      q: p.q,
+      porEscopo,
+      total: porEscopo[p.escopo],
+      itens,
+      injecao: { ligada: this.injecaoLigada, escopo: nivel, decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
+      mcp: {
+        ferramenta: 'session_decisions',
+        existe: this.mcpExiste,
+        chamada: alvo.branch ? `session_decisions branch: ${JSON.stringify(alvo.branch)}` : `session_decisions sessao: ${JSON.stringify(sessionId)}`,
+        resposta,
+      },
+    };
+  }
+
+  /**
+   * `<repo>/docs/decisoes` de verdade, conferida: existe, é pasta e, depois de seguir os symlinks,
+   * continua dentro do repositório.
+   */
+  private async pastaDosRegistros(d: Decision): Promise<string> {
+    const repo = d.repo ? this.raiz(d.repo) : null;
+    if (!repo) throw new ErroDaDecisao(409, 'a decisão não tem a pasta do repositório');
+    let raiz: string;
+    try {
+      raiz = await realpath(repo);
+    } catch {
+      throw new ErroDaDecisao(409, `a pasta ${d.repo} não existe nesta máquina`);
+    }
+    const esperada = join(raiz, 'docs', 'decisoes');
+    let pasta: string;
+    try {
+      pasta = await realpath(esperada);
+    } catch {
+      throw new ErroDaDecisao(409, `${d.repo} não tem docs/decisoes`);
+    }
+    if (pasta !== esperada && !pasta.startsWith(raiz + sep)) throw new ErroDaDecisao(400, 'docs/decisoes aponta para fora do repositório');
+    if (!(await stat(pasta)).isDirectory()) throw new ErroDaDecisao(409, `${d.repo}/docs/decisoes não é uma pasta`);
+    return pasta;
+  }
+
+  private async proximoNumero(pasta: string): Promise<string> {
+    let maior = 0;
+    for (const nome of await readdir(pasta)) {
+      const m = /^(\d{4})-.*\.md$/.exec(nome);
+      if (m) maior = Math.max(maior, Number(m[1]));
+    }
+    return String(maior + 1).padStart(4, '0');
+  }
+
+  /** O registro no formato de docs/decisoes/*.md; o que a captura não sabe fica dito, não inventado. */
+  private async markdown(d: Decision, numero: string): Promise<string> {
+    const lidas = new Map<string, Decision>();
+    const anterior = d.supersedes ? await this.port.getDecision(d.supersedes) : null;
+    const local = await this.localDe(d.sessionId);
+    const escopo = ESCOPO_POR_EXTENSO[d.scope];
+    const status = d.state === 'a_confirmar' ? 'proposta' : d.state === 'substituida' ? 'substituída' : 'aceita';
+    const umaLinha = (s: string) => s.replace(/\s*\n\s*/g, ' ');
+    const conversa = `\`/ui/sessoes/${d.sessionId}\` no console${local ? ` · [abrir no Claude Desktop](claude://claude.ai/epitaxy/${local})` : ''}`;
+    const vale =
+      d.scope === 'sessao'
+        ? 'só a sessão que decidiu a segue'
+        : d.scope === 'familia'
+          ? 'segue a sessão pelo /clear, pela compactação e nas sessões filhas'
+          : `vale para as sessões do branch \`${d.branch ?? 'sem branch'}\` nesta pasta`;
+    const linhas = [
+      `# ${numero} · ${umaLinha(d.choice)}`,
+      '',
+      `- **Status:** ${status}`,
+      `- **Data:** ${new Date(this.agora()).toISOString().slice(0, 10)}`,
+      `- **Origem:** ${decisionLabel(d)} da sessão \`${d.sessionId}\` (${TIPO[d.origin]}, ${quem(d)}), escopo ${escopo}${d.branch ? `, branch \`${d.branch}\`` : ''}`,
+      ...(anterior ? [`- **Substitui:** ${await this.rotuloDe(anterior.id, lidas)} · ${umaLinha(anterior.choice)}`] : []),
+      `- **Conversa:** ${conversa}`,
+      '',
+      '## Contexto',
+      '',
+      d.context ?? 'A captura não registrou a pergunta ou o pedido que levou a esta decisão.',
+      '',
+      '## Decisão',
+      '',
+      typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+      '',
+      '## Alternativas consideradas',
+      '',
+      ...(d.alternatives.length ? d.alternatives.map((a) => `- ${umaLinha(a)}`) : ['- Nenhuma registrada na conversa.']),
+      '',
+      '## Consequências',
+      '',
+      `- No console, a decisão tem escopo ${escopo}: ${vale}. Aqui, ela passa a valer pelo repositório, sem depender do banco local.`,
+      '- O que fica mais fácil e o que fica mais difícil: a completar por quem promoveu, antes do merge.',
+      '',
+    ];
+    return linhas.join('\n');
+  }
+
+  private async rascunho(d: Decision): Promise<RascunhoDeRegistro> {
+    let pasta: string | null = null;
+    let motivo: string | null = d.promotedTo ? `já promovida para ${d.promotedTo}` : null;
+    try {
+      pasta = await this.pastaDosRegistros(d);
+    } catch (err) {
+      if (!(err instanceof ErroDaDecisao)) throw err;
+      motivo ??= err.message;
+    }
+    const numero = pasta ? await this.proximoNumero(pasta) : '0001';
+    return {
+      caminho: `docs/decisoes/${numero}-${slugDaDecisao(d.choice)}.md`,
+      markdown: await this.markdown(d, numero),
+      repo: d.repo,
+      podeGravar: motivo === null,
+      motivo,
+    };
+  }
+
+  /**
+   * O Promover, em nome da sessão `sessao` (que precisa enxergar a decisão, no escopo branch):
+   * sem `confirmar: true`, só o rascunho (200); com ele e o `caminho`, grava e marca (201).
+   */
+  async promover(id: string, sessao: string, corpo: { confirmar?: unknown; caminho?: unknown }): Promise<{ status: 200; corpo: { rascunho: RascunhoDeRegistro } } | { status: 201; corpo: { decisao: DecisaoDaUi; caminho: string } }> {
+    const alvo = await this.alvo(sessao);
+    const d = await this.port.getDecision(id);
+    const visivel = alvo && d && (await this.sessao.doEscopo(alvo, 'branch', [d.state])).some((x) => x.id === id);
+    if (!alvo || !d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
+    if (corpo.confirmar !== true) return { status: 200, corpo: { rascunho: await this.rascunho(d) } };
+
+    const caminho = caminhoValido(corpo.caminho);
+    if (d.promotedTo) throw new ErroDaDecisao(409, `já promovida para ${d.promotedTo}`);
+    const pasta = await this.pastaDosRegistros(d);
+    const destino = join(pasta, basename(caminho));
+    try {
+      await this.escrever(destino, await this.markdown(d, CAMINHO_DO_REGISTRO.exec(caminho)![1]!));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new ErroDaDecisao(409, `${caminho} já existe`);
+      throw err;
+    }
+    const feita = await markPromoted(this.port, id, caminho, new Date(this.agora()).toISOString());
+    const ref = { sessionId: sessao, familyId: await familyOf(this.port, sessao), mae: (await this.port.getSessionLink(sessao))?.parentSessionId ?? null };
+    return { status: 201, corpo: { decisao: await this.paraUi(feita, ref, new Map()), caminho } };
+  }
+}
+
+const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+const CHAVE_DO_GRUPO = /^[bfs]\.[A-Za-z0-9_-]{1,700}$/;
+const MAX_CORPO = 4096;
+const AGRUPAMENTOS: readonly AgrupamentoDasDecisoes[] = ['branch', 'familia', 'sessao'];
+const FILTROS: readonly FiltroDeEstado[] = ['todas', 'vigentes', 'a_confirmar'];
+
+function decodificado(parte: string): string | null {
+  try {
+    return decodeURIComponent(parte);
+  } catch {
+    return null;
+  }
+}
+
+function lerCorpo(req: IncomingMessage): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    let corpo = '';
+    let grande = false;
+    req.setEncoding('utf8');
+    req.on('data', (parte: string) => {
+      if (grande) return;
+      corpo += parte;
+      if (corpo.length > MAX_CORPO) grande = true;
+    });
+    req.on('end', () => resolve(grande ? null : corpo));
+    req.on('error', reject);
+  });
+}
+
+/** O `q`, o `estado` e o escopo ou o agrupamento: `null` + a mensagem quando algum não vale. */
+function filtrosDe(url: URL): { estado: FiltroDeEstado; q: string | null } | string {
+  const estado = (url.searchParams.get('estado') ?? 'todas') as FiltroDeEstado;
+  if (!FILTROS.includes(estado)) return 'estado: todas, vigentes ou a_confirmar';
+  const q = url.searchParams.get('q')?.trim() || null;
+  if (q && q.length > MAX_BUSCA) return `busca de até ${MAX_BUSCA} caracteres`;
+  return { estado, q };
+}
+
+/**
+ * As rotas da /ui das decisões. Devolve `true` quando a rota é daqui (e já respondeu). A origem
+ * já foi conferida pelo servidor (decisão 0003); a escrita pede ainda JSON e a sessão no corpo.
+ */
+export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerResponse, url: URL, ui: DecisoesDaUi, log: (m: string) => void = () => {}): Promise<boolean> {
+  if (url.pathname === '/api/decisoes') {
+    if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
+    const f = filtrosDe(url);
+    if (typeof f === 'string') return send(res, 400, { error: f }), true;
+    const agrupar = (url.searchParams.get('agrupar') ?? 'branch') as AgrupamentoDasDecisoes;
+    if (!AGRUPAMENTOS.includes(agrupar)) return send(res, 400, { error: 'agrupar: branch, familia ou sessao' }), true;
+    const grupo = url.searchParams.get('grupo');
+    if (grupo !== null && !CHAVE_DO_GRUPO.test(grupo)) return send(res, 400, { error: 'grupo inválido' }), true;
+    send(res, 200, await ui.pagina({ agrupar, ...f, grupo }));
+    return true;
+  }
+
+  const aba = /^\/api\/sessoes\/([^/]+)\/decisoes$/.exec(url.pathname);
+  if (aba) {
+    if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
+    const sessao = decodificado(aba[1]!);
+    if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
+    const escopo = (url.searchParams.get('escopo') ?? 'familia') as EscopoDasDecisoes;
+    if (!ESCOPOS_DAS_DECISOES.includes(escopo)) return send(res, 400, { error: 'escopo: sessao, familia ou branch' }), true;
+    const f = filtrosDe(url);
+    if (typeof f === 'string') return send(res, 400, { error: f }), true;
+    const corpo = await ui.aba(sessao, { escopo, ...f });
+    if (!corpo) send(res, 404, { error: 'sessão não encontrada' });
+    else send(res, 200, corpo);
+    return true;
+  }
+
+  const promover = /^\/api\/decisoes\/([^/]+)\/promover$/.exec(url.pathname);
+  if (promover) {
+    if (req.method !== 'POST') return send(res, 405, { error: 'use POST' }), true;
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' }), true;
+    const id = decodificado(promover[1]!);
+    if (!id || !ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' }), true;
+    const texto = await lerCorpo(req);
+    if (texto === null) return send(res, 413, { error: 'corpo grande demais' }), true;
+    let corpo: { sessao?: unknown; confirmar?: unknown; caminho?: unknown } | null;
+    try {
+      corpo = JSON.parse(texto) as typeof corpo;
+    } catch {
+      return send(res, 400, { error: 'JSON inválido' }), true;
+    }
+    const sessao = corpo?.sessao;
+    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "sessao": "<id>" }' }), true;
+    try {
+      const r = await ui.promover(id, sessao, corpo ?? {});
+      if (r.status === 201) log(`decisão ${id} promovida para ${r.corpo.caminho} pela sessão ${sessao}`);
+      send(res, r.status, r.corpo);
+    } catch (err) {
+      if (err instanceof ErroDaDecisao) return send(res, err.status, { error: err.message }), true;
+      throw err;
+    }
+    return true;
+  }
+  return false;
+}

@@ -239,7 +239,8 @@ export class DecisoesDaSessao {
   }
 }
 
-function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): DecisaoDoPainel {
+/** A decisão como o card a desenha, relativa à sessão `sessionId` (a aba e a página da /ui também usam). */
+export function paraOPainel(d: Decision, sessionId: string, familyId: string, mae: string | null, substituidaPor: string | null): DecisaoDoPainel {
   const painel = d.metadata?.painel as Partial<RegistroDoPainel> | undefined;
   return {
     id: d.id,
