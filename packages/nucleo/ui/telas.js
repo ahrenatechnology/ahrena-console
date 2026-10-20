@@ -17,6 +17,15 @@ export const TELAS = [
     arquivo: '/ui/telas/dashboard.js',
   },
   {
+    id: 'mural',
+    rota: '/ui/mural',
+    item: { rotulo: 'Mural ao vivo', icone: 'mural' },
+    titulo: 'Mural ao vivo',
+    sub: 'Um card por sessão aberta nesta máquina',
+    icone: 'mural',
+    arquivo: '/ui/telas/mural.js', // #34
+  },
+  {
     id: 'sessoes',
     rota: '/ui/sessoes',
     item: { rotulo: 'Sessões', icone: 'sessoes' },
@@ -42,6 +51,15 @@ export const TELAS = [
     sub: null,
     icone: 'sessoes',
     arquivo: '/ui/telas/detalhe.js', // #29 e #30
+  },
+  {
+    id: 'projeto',
+    rota: '/ui/projeto',
+    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    titulo: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icone: 'github',
+    arquivo: '/ui/telas/projeto.js', // #80 (C11)
   },
   {
     id: 'analytics',

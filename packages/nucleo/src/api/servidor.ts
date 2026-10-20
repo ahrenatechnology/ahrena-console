@@ -4,6 +4,7 @@
 // | ----------------------------- | --------------------------------------------------------- |
 // | `GET /api/overview`           | Saúde: o painel e o script de carga esperam por ela        |
 // | `GET /api/painel/<sessão>`    | Tudo o que o painel desenha, num pedido (api/tipos.ts)     |
+// | `GET /api/mural`              | Um card por sessão aberta, para o "Mural ao vivo" (api/mural.ts, #34) |
 // | `GET /api/sessao/<sessão>`    | O mesmo, no caminho que o script de carga já usa           |
 // | `GET /api/carga`              | Contadores para a medição de carga                         |
 // | `POST /api/hooks`             | O receptor de hooks (src/ingest/hooks)                     |
@@ -20,14 +21,17 @@
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 // | `GET /api/workflows` e `/api/sessoes/<id>/workflow` | Workflows e a aba Workflow (api/workflows.ts, #96 e #97) |
+// | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
+// | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo o "Abrir no Claude
-// Desktop" do Detalhe: `POST /abrir/<local_…>` com `Origin` exatamente `http://<Host>` (e JSON). A escrita nas
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo duas, só com `Origin`
+// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`, e
+// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -43,8 +47,10 @@ import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
+import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
@@ -73,6 +79,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** O kanban do GitHub Project (#80). Sem ele, `/api/projeto` responde 503. */
+  projeto?: OpcoesDoProjeto;
   /** As leituras do Detalhe da sessão (`/api/sessoes/<id>…`); sem elas, 404. */
   detalhe?: LeiturasDoDetalhe;
   /** A leitura da frota do MCP; liga `GET /api/atencao`. */
@@ -155,6 +163,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
+  const mural = muralDoPainel(opts.montador);
   const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
   let port = 0;
 
@@ -227,7 +237,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -238,6 +248,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as AcaoNaDecisao, url);
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
+    if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
@@ -245,6 +256,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === ROTA_DO_MURAL) return responderMural(res, mural);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {

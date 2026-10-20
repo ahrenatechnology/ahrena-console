@@ -7,15 +7,28 @@
 // - A rota é sempre `/api/...`; qualquer outra coisa é recusada antes de sair.
 // - O leitor HTTP só fala com 127.0.0.1, localhost ou [::1].
 // - Falha vira `ErroDeLeitura`, com `status` (0 quando o núcleo não respondeu) e `tentarEm` (ms,
-//   do `Retry-After`). Desistir (`signal`) propaga o `AbortError` como veio.
+//   do `Retry-After`) e o `corpo` da resposta, quando veio. Desistir (`signal`) propaga o
+//   `AbortError` como veio.
+//
+// A escrita (`escrever(rota, corpo)`) mora aqui também, com as mesmas regras e o transporte trocável
+// por `usarEscritor(...)`: POST com JSON, só `/api/`, só o núcleo local. Falha vira `ErroDeEscrita`.
 
 export class ErroDeLeitura extends Error {
-  constructor(mensagem, { status = 0, rota = null, tentarEm = null } = {}) {
+  constructor(mensagem, { status = 0, rota = null, tentarEm = null, corpo = null } = {}) {
     super(mensagem);
     this.name = 'ErroDeLeitura';
     this.status = status;
     this.rota = rota;
     this.tentarEm = tentarEm;
+    this.corpo = corpo;
+  }
+}
+
+/** A escrita falhou: os mesmos campos da leitura (`status`, `rota`, `tentarEm`, `corpo`). */
+export class ErroDeEscrita extends ErroDeLeitura {
+  constructor(mensagem, opcoes) {
+    super(mensagem, opcoes);
+    this.name = 'ErroDeEscrita';
   }
 }
 
@@ -44,6 +57,7 @@ export function leitorHttp({ base = globalThis.location?.origin, fetch = globalT
         status: resposta.status,
         rota,
         tentarEm: Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : null,
+        corpo,
       });
     }
     return corpo;
@@ -61,6 +75,57 @@ export function usarLeitor(leitor) {
 export function ler(rota, opcoes) {
   atual ??= leitorHttp();
   return atual(rota, opcoes);
+}
+
+/** O escritor HTTP: POST com corpo JSON, só para `/api/` do núcleo local, sem credenciais. */
+export function escritorHttp({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
+  const origem = new URL(base);
+  if (origem.protocol !== 'http:' || !LOCAIS.has(origem.hostname)) {
+    throw new ErroDeEscrita(`o console só escreve no núcleo local, não ${origem.origin}`);
+  }
+  return async function escreverPorHttp(rota, corpo, { signal } = {}) {
+    if (typeof rota !== 'string' || !rota.startsWith('/api/')) throw new ErroDeEscrita(`rota fora da API: ${rota}`, { rota });
+    const url = new URL(rota, origem);
+    if (url.origin !== origem.origin || !url.pathname.startsWith('/api/')) throw new ErroDeEscrita(`rota fora do núcleo: ${rota}`, { rota });
+    let resposta;
+    try {
+      resposta = await fetch(url, {
+        method: 'POST',
+        signal,
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(corpo ?? {}),
+        credentials: 'omit',
+        cache: 'no-store',
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      throw new ErroDeEscrita(`O núcleo em ${origem.host} não respondeu`, { rota });
+    }
+    const volta = await resposta.json().catch(() => null);
+    if (!resposta.ok) {
+      const segundos = Number(resposta.headers.get('retry-after'));
+      throw new ErroDeEscrita(volta?.error ?? `O núcleo respondeu ${resposta.status}`, {
+        status: resposta.status,
+        rota,
+        tentarEm: Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : null,
+        corpo: volta,
+      });
+    }
+    return volta;
+  };
+}
+
+let escritor = null;
+
+/** Troca o transporte da escrita (o artefato passa o escritor do `host:`). */
+export function usarEscritor(novo) {
+  escritor = novo;
+}
+
+/** Manda `corpo` (JSON) a uma rota da API do núcleo e devolve o JSON da resposta. */
+export function escrever(rota, corpo, opcoes) {
+  escritor ??= escritorHttp();
+  return escritor(rota, corpo, opcoes);
 }
 
 // ---------- A única escrita da página ----------
