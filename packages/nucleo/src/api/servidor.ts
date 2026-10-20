@@ -107,7 +107,7 @@ export interface OpcoesDaApi {
   abrirNoDesktop?: ((url: string) => Promise<void>) | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: ServidorMcp;
-  /** O commit do código no ar, em `/api/overview`: quem sobe outro núcleo compara (src/dono). */
+  /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/changes`. */
   mudancas?: CursorDeMudancas;
@@ -335,7 +335,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = OPEN_IN_DESKTOP.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]!);
-    // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
+    // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
     // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: VERSAO_DA_API });

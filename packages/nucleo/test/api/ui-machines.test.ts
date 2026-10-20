@@ -327,6 +327,7 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     await m.ready;
     const state = texto(m.area.querySelector('.tm-state'));
     assert.match(state, /O túnel está de pé, mas o núcleo de lá não respondeu A porta 14720 aceita a conexão e ninguém responde em 3 s\. Suba o núcleo na Workstation:/);
+    assert.equal(texto(m.area.querySelector('.tm-state .tm-config')), 'node packages/nucleo/src/dono/cli.ts subir');
     assert.match(texto(m.area), /não sobe nem derruba o túnel/);
   });
 

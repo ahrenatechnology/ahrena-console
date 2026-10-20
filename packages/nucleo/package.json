@@ -10,7 +10,8 @@
     "./simulador": "./src/simulador/index.ts",
     "./api": "./src/api/index.ts",
     "./mcp": "./src/mcp/index.ts",
-    "./dono": "./src/dono/index.ts"
+    "./owner": "./src/owner/index.ts",
+    "./dono": "./src/owner/index.ts"
   },
   "engines": {
     "node": ">=24"
@@ -20,7 +21,8 @@
     "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts",
-    "nucleo": "node --disable-warning=ExperimentalWarning src/dono/cli.ts"
+    "core": "node --disable-warning=ExperimentalWarning src/owner/cli.ts",
+    "nucleo": "node --disable-warning=ExperimentalWarning src/owner/cli.ts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.20.2"

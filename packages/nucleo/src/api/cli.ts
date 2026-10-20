@@ -2,8 +2,8 @@
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
 //
-// Um núcleo por máquina (#86, src/dono/): se já há um de pé, este processo o adota (imprime a porta
-// e a versão e sai com 0) em vez de subir outro.
+// One core per machine (#86, src/owner/): if one is already up, this process adopts it (prints the
+// port and version and exits 0) instead of starting another.
 
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -23,11 +23,11 @@ import { createGithubProject, GithubProject, type ProjectRef } from '../github/p
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import { Perfis } from '../perfis/perfis.ts';
-import { registrarCliente } from '../dono/clientes.ts';
-import { commitMaisVelho } from '../dono/codigo.ts';
-import { assumirTrava, avisoDeCodigo, planejarSubida, vigiarPai } from '../dono/dono.ts';
-import { esperarNucleo, pidVivo, reservarPorta, soltarPorta } from '../dono/sonda.ts';
-import { lerTrava, liberarTrava, pastaPadrao, prepararPasta } from '../dono/trava.ts';
+import { registerClient } from '../owner/clients.ts';
+import { isOlderCommit } from '../owner/commit.ts';
+import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
+import { readLock, releaseLock, defaultDir, prepareDir } from '../owner/lock.ts';
 import { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
 import { waitForChanges } from '../mudancas/mcp.ts';
@@ -121,7 +121,7 @@ AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) 
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
 Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
-versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
+versão, avisa se o código é outro) e sai com 0. Ver src/owner/README.md.
   --help
 `;
 
@@ -154,29 +154,29 @@ const porta = Number(o.porta ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
 const demo = o.demo;
 const pai = o.pai === undefined ? null : Number(o.pai);
 if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--pai: um pid');
-if (pai !== null && !pidVivo(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
+if (pai !== null && !isPidAlive(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
 const comTrava = !demo && !o['sem-trava'];
 const commit = commitDoCheckout();
-const codigo = { versao: VERSAO_DA_API, commit, commitMaisVelho };
+const codigo = { version: VERSAO_DA_API, commit, isOlderCommit };
 
 function adotar(p: number, versao: string, aviso: string | null = null): never {
   if (aviso) log(`atenção: ${aviso}`);
-  if (pai !== null && comTrava) registrarCliente(pai);
+  if (pai !== null && comTrava) registerClient(pai);
   process.stdout.write(`núcleo de pé em http://127.0.0.1:${p} · versão ${versao} (adotado)\n`);
   process.exit(0);
 }
 
 // Antes de abrir o banco: adota o núcleo vivo da trava, ou a recupera se for órfã.
 if (comTrava) {
-  const plano = await planejarSubida({ ...codigo, substituir: o.substituir, log });
-  if (plano.acao === 'adotar') adotar(plano.trava.porta, plano.trava.versao, plano.aviso);
-  if (plano.recuperou) log(`trava órfã recuperada: ${plano.recuperou}`);
+  const plano = await planStart({ ...codigo, replace: o.substituir, log });
+  if (plano.action === 'adopt') adotar(plano.lock.port, plano.lock.version, plano.warning);
+  if (plano.recovered) log(`trava órfã recuperada: ${plano.recovered}`);
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
 // A --demo e a --sem-trava não adotam: quem pede a demo nunca recebe o núcleo real, nem o contrário.
 async function adotarQuemTemAPorta(): Promise<never> {
-  const v = await esperarNucleo(porta, 30_000);
+  const v = await waitForCore(porta, 30_000);
   if (v && !comTrava) {
     log(`a porta ${porta} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
     process.exit(1);
@@ -188,22 +188,22 @@ async function adotarQuemTemAPorta(): Promise<never> {
       if (i === 20) semTrava = true;
       else await new Promise((r) => setTimeout(r, 100));
     }
-    const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, avisoDeCodigo(v, codigo)];
-    adotar(porta, v.versao, aviso.filter(Boolean).join('; ') || null);
+    const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, codigo)];
+    adotar(porta, v.version, aviso.filter(Boolean).join('; ') || null);
   }
   log(`a porta ${porta} está ocupada e não responde como núcleo`);
   process.exit(1);
 }
 function travaDaPorta(): number | null {
-  const t = lerTrava();
-  return t && t !== 'invalida' && t.porta === porta ? t.pid : null;
+  const t = readLock();
+  return t && t !== 'invalid' && t.port === porta ? t.pid : null;
 }
-const reserva = await reservarPorta(porta);
-if (reserva === 'ocupada') await adotarQuemTemAPorta();
+const reserva = await reservePort(porta);
+if (reserva === 'in-use') await adotarQuemTemAPorta();
 const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
 if (banco !== ':memory:') {
   // A pasta do núcleo fecha em 0700 (o banco mora nela); outra pasta dada em --banco fica como está.
-  if (dirname(banco) === pastaPadrao()) prepararPasta();
+  if (dirname(banco) === defaultDir()) prepareDir();
   else mkdirSync(dirname(banco), { recursive: true });
 }
 
@@ -405,7 +405,7 @@ const follower =
         onError: (e) => log(`seguidor: ${(e as Error).message}`),
       });
 
-if (reserva !== 'ocupada') await soltarPorta(reserva);
+if (reserva !== 'in-use') await releasePort(reserva);
 const api: ApiLocal = await iniciarApiLocal({
   montador,
   hooks: {
@@ -450,20 +450,20 @@ const api: ApiLocal = await iniciarApiLocal({
   return adotarQuemTemAPorta();
 });
 
-const trava = comTrava ? await assumirTrava({ porta, versao: VERSAO_DA_API, pai }) : null;
-if (trava && 'conflito' in trava) {
+const trava = comTrava ? await claimLock({ port: porta, version: VERSAO_DA_API, parent: pai }) : null;
+if (trava && 'conflict' in trava) {
   await api.close().catch(() => undefined);
   await storage.close();
-  adotar(trava.conflito.porta, trava.conflito.versao);
+  adotar(trava.conflict.port, trava.conflict.version);
 }
 log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
 
 const pararDeVigiarPai =
   pai === null
     ? () => {}
-    : vigiarPai({
-        pai,
-        aoSumir: (motivo) => {
+    : watchParent({
+        parent: pai,
+        onGone: (motivo) => {
           log(`${motivo}; saindo`);
           void desligar();
         },
@@ -510,7 +510,7 @@ async function desligar() {
   pararVigia();
   if (relerPerfis) clearInterval(relerPerfis);
   pararDeVigiarPai();
-  if (trava && !('conflito' in trava)) liberarTrava(trava.token);
+  if (trava && !('conflict' in trava)) releaseLock(trava.token);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);
