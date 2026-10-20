@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.16'
+export const VERSAO_DO_PLUGIN = '0.0.17'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -459,11 +459,15 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
   )
 }
 
-/** Um tile do P1 (`.tile`): o rótulo pequeno, o valor e, embaixo, a barra ou a linha. */
+/**
+ * Um tile do P1 (`.tile`): o rótulo pequeno, o valor e, embaixo, a barra ou a linha. Sem borda, só
+ * o fundo: no Desktop, a borda acrescenta respiro vertical e as duas fileiras não cabiam no card
+ * (uma ficava por cima da outra).
+ */
 function kpi(c: Contexto, key: string, rotulo: string, valor: RenderElement | string, rodape?: RenderElement | null, corValor?: string) {
   const { Box, Text } = c.el
   return (
-    <Box key={key} flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_KPI} paddingX={1}>
+    <Box key={key} flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" backgroundColor={FUNDO_KPI} paddingX={1}>
       <Text mono size="caption" weight="semibold" dimColor>
         {rotulo}
       </Text>
@@ -485,7 +489,7 @@ const contextoDaSessao = (c: Pick<Contexto, 'leitura'>, p: Painel | null) => c.l
 function tileCompactar(c: Contexto) {
   const { Box, Button, Text } = c.el
   return (
-    <Box key="kpi-compactar" flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={VERMELHO} backgroundColor={BADGE.vermelho} paddingX={1} gap="xs">
+    <Box key="kpi-compactar" flexDirection="column" width={KPI_W} flexShrink={0} overflow="hidden" backgroundColor={BADGE.vermelho} paddingX={1}>
       <Text mono size="caption" weight="semibold" color={VERMELHO_TEXTO}>
         CONTEXTO ALTO
       </Text>
@@ -516,11 +520,11 @@ function cardContexto(c: Contexto, p: Painel | null) {
   const tk = p?.tokens
   return cartao(c, 'card-contexto', [
     cabecalho(c, '◠', 'CONTEXTO E CUSTO', 'estimativa'),
-    <Box flexDirection="row" gap={1}>
+    <Box flexDirection="row" gap={1} flexShrink={0}>
       {kpi(c, 'kpi-contexto', 'CONTEXTO', `${pct}%`, <Svg source={barraSvg(pct, corCtx)} alt={`contexto em ${pct}%`} width={96} height={5} />, alto ? VERMELHO_TEXTO : undefined)}
       {kpi(c, 'kpi-custo', 'CUSTO', usd(p?.custo?.usd ?? 0), <Svg source={linhaSvg(p?.custo?.serie ?? [])} alt="custo acumulado da sessão" width={96} height={10} />)}
     </Box>,
-    <Box flexDirection="row" gap={1}>
+    <Box flexDirection="row" gap={1} flexShrink={0}>
       {kpi(c, 'kpi-tokens', 'TOKENS', tk ? `↑${tokens(tk.entrada)} ↓${tokens(tk.saida)}` : '—')}
       {alto ? tileCompactar(c) : kpi(c, 'kpi-background', 'BACKGROUND', bg.total ? `${bg.total} · ${bg.primeiro ?? ''}` : '0 · nenhum', null, bg.total && erro ? VERMELHO_TEXTO : undefined)}
     </Box>,
