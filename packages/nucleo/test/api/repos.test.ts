@@ -56,9 +56,11 @@ interface OpcoesDaMontagem {
   /** Atraso de cada resposta, em ms reais (para pedidos simultâneos ficarem visíveis). */
   atrasoMs?: number;
   fonte?: FonteDosRepos;
+  /** O sinal do teto de cada pedido (o teste aborta na mão, sem esperar 20 s). */
+  sinalDoPedido?: (ms: number) => AbortSignal;
 }
 
-async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada }: OpcoesDaMontagem = {}): Promise<Montagem> {
+async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada, sinalDoPedido }: OpcoesDaMontagem = {}): Promise<Montagem> {
   const relogio = { agora: T0 };
   const agora = () => relogio.agora;
   const gh = criarGithubFalso(base, { agora });
@@ -71,7 +73,8 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
     pedidos.maximoEmVoo = Math.max(pedidos.maximoEmVoo, pedidos.emVoo);
     try {
       if (atrasoMs > 0) await new Promise((r) => setTimeout(r, atrasoMs));
-      if (modo.atual === 'pendurado') return await new Promise<Response>(() => {});
+      // Nunca responde; só o sinal do pedido (o teto) o encerra.
+      if (modo.atual === 'pendurado') return await new Promise<Response>((_r, rej) => init?.signal?.addEventListener('abort', () => rej(init.signal!.reason)));
       if (modo.atual === 'falha') throw new Error('rede fora');
       if (modo.atual === 'limitado') return Response.json({ message: 'API rate limit exceeded' }, { status: 429, headers: { 'retry-after': '120' } });
       const r = await gh.fetch(entrada, init);
@@ -83,7 +86,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   }) as typeof globalThis.fetch;
   const fonte: FonteDosRepos | null = fonteNula
     ? null
-    : (fonteDada ?? new GithubReposSource({ token: token ?? 'token-de-teste', fetch, now: agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }));
+    : (fonteDada ?? new GithubReposSource({ token: token ?? 'token-de-teste', fetch, now: agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql', sinalDoPedido }));
 
   const storage = openSqliteStorage({ path: ':memory:' });
   // P1: motor-de-regras pede permissão (precisa de você), app-receitas foi interrompida (sua vez).
@@ -393,6 +396,32 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     assert.ok(m.pedidos.total > 10, `só ${m.pedidos.total} pedidos`);
     assert.equal(m.pedidos.maximoEmVoo, 1);
     assert.equal((await m.repos.metricas('dev-sintetico', 'cli-de-notas')).estado, 'pronto');
+  });
+
+  test('um pedido pendurado não trava a fila: estourado o teto, vira `erro` e a próxima chamada sai', async () => {
+    const tetos: AbortController[] = [];
+    const m = await montar({
+      sinalDoPedido: () => {
+        const c = new AbortController();
+        tetos.push(c);
+        return c.signal;
+      },
+    });
+    m.modo.atual = 'pendurado';
+    await m.repos.lista();
+    await m.repos.metricas('org-a', 'motor-de-regras');
+    await new Promise((r) => setImmediate(r));
+    // A ReposLista está pendurada; as métricas esperam na fila.
+    assert.equal(m.pedidos.total, 1);
+    m.modo.atual = 'ok';
+    tetos[0].abort(new DOMException('tempo', 'TimeoutError'));
+    await m.repos.esperar();
+    const l = await m.repos.lista();
+    assert.equal(l.estado, 'erro');
+    assert.match(l.erro ?? '', /não respondeu em 20 s/);
+    const d = await m.repos.metricas('org-a', 'motor-de-regras');
+    assert.equal(d.estado, 'pronto');
+    assert.ok(m.pedidos.total > 1);
   });
 
   test('falha fora do previsto na montagem: vai para o log e para o `erro`, com estado "erro" sem dado anterior', async () => {

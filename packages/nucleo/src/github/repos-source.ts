@@ -27,6 +27,11 @@ export const GITHUB_API_URL = 'https://api.github.com';
 export const PAGINAS_DA_BUSCA = { prs: 5, fechadas: 5, abertas: 3 } as const;
 /** Páginas de 100 repositórios na lista, no máximo. */
 export const PAGINAS_DA_LISTA = 5;
+/**
+ * Tempo máximo de cada pedido ao GitHub (GraphQL e REST, corpo incluído). As chamadas saem por uma
+ * fila só (src/api/repos.ts): sem teto, um pedido pendurado travaria todas as montagens.
+ */
+export const TEMPO_DO_PEDIDO_MS = 20_000;
 
 export interface RepoCru {
   name: string;
@@ -202,6 +207,10 @@ export interface GithubReposSourceOptions extends Omit<GithubGraphqlSourceOption
   token?: string | (() => Promise<string>);
   /** Base do REST. Padrão `https://api.github.com`. */
   api?: string;
+  /** Teto de cada pedido. Padrão `TEMPO_DO_PEDIDO_MS`. */
+  tempoDoPedidoMs?: number;
+  /** O sinal que aborta o pedido no teto (testes trocam). Padrão `AbortSignal.timeout`. */
+  sinalDoPedido?: (ms: number) => AbortSignal;
 }
 
 /** Adaptador do GitHub: token do `gh` por padrão, `fetch` injetável. */
@@ -286,10 +295,13 @@ export class GithubReposSource implements FonteDosRepos {
       'x-github-api-version': '2022-11-28',
     };
     if (etag) headers['if-none-match'] = etag;
-    const res = await doFetch(`${this.opts.api ?? GITHUB_API_URL}${caminho}`, { method: 'GET', headers });
+    const { res, texto } = await this.comTeto(async (signal) => {
+      const res = await doFetch(`${this.opts.api ?? GITHUB_API_URL}${caminho}`, { method: 'GET', headers, signal });
+      // 304 e 202 decidem pelo status; o corpo não importa.
+      return { res, texto: res.status === 304 || res.status === 202 ? '' : await res.text() };
+    });
     if (res.status === 304) return { estado: 'nao-modificado' };
     if (res.status === 202) return { estado: 'calculando' };
-    const texto = await res.text();
     let json: unknown = null;
     try {
       json = texto ? JSON.parse(texto) : null;
@@ -317,6 +329,19 @@ export class GithubReposSource implements FonteDosRepos {
   }
 
   private async graphql<T>(operacao: string, consulta: string, variaveis: Record<string, unknown>, tolerarNaoEncontrado = false): Promise<T> {
-    return githubGraphql<T>({ ...this.opts, token: await this.token() }, operacao, consulta, variaveis, { tolerateNotFound: tolerarNaoEncontrado });
+    const token = await this.token();
+    return this.comTeto((signal) => githubGraphql<T>({ ...this.opts, token }, operacao, consulta, variaveis, { tolerateNotFound: tolerarNaoEncontrado, signal }));
+  }
+
+  /** Um pedido com teto de tempo: estourado, vira um erro comum, que libera a fila de quem chama. */
+  private async comTeto<T>(pedido: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const ms = this.opts.tempoDoPedidoMs ?? TEMPO_DO_PEDIDO_MS;
+    const signal = (this.opts.sinalDoPedido ?? ((x: number) => AbortSignal.timeout(x)))(ms);
+    try {
+      return await pedido(signal);
+    } catch (err) {
+      if (signal.aborted) throw new Error(`o GitHub não respondeu em ${ms / 1000} s`);
+      throw err;
+    }
   }
 }

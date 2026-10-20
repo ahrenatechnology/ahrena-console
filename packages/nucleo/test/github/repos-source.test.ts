@@ -57,6 +57,34 @@ describe('#104 CA3 e #105: REST com ETag', () => {
     assert.equal((await fonte(f).rest('/repos/a/b.c_d-e/stats/contributors?x=1', null)).estado, 'ok');
   });
 
+  test('pedido que nunca responde: estourado o teto, vira erro comum, no REST e no GraphQL', async () => {
+    const sinais: AbortController[] = [];
+    const tetos: number[] = [];
+    // Nunca responde; só o sinal do pedido o encerra.
+    const pendurado = (async (_: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_r, rej) => init?.signal?.addEventListener('abort', () => rej(init.signal!.reason)))) as typeof fetch;
+    const s = new GithubReposSource({
+      token: 't',
+      fetch: pendurado,
+      api: 'https://api.falso',
+      url: 'https://api.falso/graphql',
+      sinalDoPedido: (ms) => {
+        tetos.push(ms);
+        const c = new AbortController();
+        sinais.push(c);
+        return c.signal;
+      },
+    });
+    const rest = s.rest('/repos/a/b/languages', null);
+    const detalhe = s.detalhe('a', 'b', '2026-01-01');
+    await new Promise((r) => setImmediate(r));
+    assert.equal(sinais.length, 2);
+    for (const c of sinais) c.abort(new DOMException('tempo', 'TimeoutError'));
+    await assert.rejects(rest, (e: Error) => !(e instanceof RateLimitedError) && /não respondeu em 20 s/.test(e.message));
+    await assert.rejects(detalhe, /não respondeu em 20 s/);
+    assert.deepEqual(tetos, [20_000, 20_000]);
+  });
+
   test('sem token do gh: SemGithubError, sem chamar o GitHub', async () => {
     const { f, pedidos } = fetchDe(() => Response.json({}));
     const s = new GithubReposSource({ token: () => Promise.reject(new Error('sem token')), fetch: f });

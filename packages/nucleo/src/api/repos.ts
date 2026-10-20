@@ -18,7 +18,8 @@
 // REST, dado velho por até 24 h, pausa quando o GitHub limita), o mesmo do trabalho no núcleo, para
 // a pausa valer para os dois. Todas as chamadas à fonte, de qualquer montagem (a lista e as
 // métricas de vários repositórios ao mesmo tempo), passam por uma fila só (`chamar()`): uma de cada
-// vez, nunca em paralelo (decisão 0001, item 6). Quando a montagem muda a resposta, o núcleo
+// vez, nunca em paralelo (decisão 0001, item 6), e cada pedido tem teto de 20 s, para um pedido
+// pendurado não travar a fila (o estouro vira `erro`). Quando a montagem muda a resposta, o núcleo
 // registra no cursor `{ tipo: 'repos', chave: 'lista' }` ou `{ tipo: 'repos', chave: '<dono>/<repo>' }`
 // em minúsculas (`chaveDoRepo`, seja qual for a caixa da rota), e a tela relê. A descoberta de
 // sessões novas num repositório também registra `lista`. As métricas guardam em memória no máximo
