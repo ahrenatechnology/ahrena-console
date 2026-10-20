@@ -1,91 +1,92 @@
 // Simulated history for the Analytics screen demo (#95, #32): ended sessions spread over the last
 // ~90 days, sparser up to 52 weeks, on the simulator's two accounts. Deterministic from the seed and
-// `agora`. Only for --demo: nothing here is real data.
+// `now`. Only for --demo: nothing here is real data.
 //
-// Each drawn day becomes a simulator scenario (gerarCenario) of a few sessions, at a time of day.
+// Each drawn day becomes a simulator scenario (generateScenario) of a few sessions, at a time of day.
 // Without chaos mode, and whatever the scenario leaves running is ended at the last written instant:
 // the seeded sessions are all completed and in the past (yesterday and before), with no wait or
 // error, so they do not show in the panel as "needs you" nor compete with the panel scenario's.
 
 import type { Agent, ClaudeAccount, Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { Aleatorio } from './random.ts';
-import { gerarCenario } from './scenario.ts';
+import { SeededRandom } from './random.ts';
+import { generateScenario } from './scenario.ts';
 
-export interface OpcoesDoHistorico {
-  semente?: string | number;
-  /** Relógio em ms. O histórico termina ontem. */
-  agora?: number;
-  /** Até quantos dias atrás. Padrão 364. */
-  dias?: number;
+export interface HistorySeedOptions {
+  seed?: string | number;
+  /** Clock in ms. The history ends yesterday. */
+  now?: number;
+  /** How many days back at most. Default 364. */
+  days?: number;
 }
 
-export interface ResumoDoHistorico {
-  dias: number;
-  sessoes: number;
-  eventos: number;
+export interface HistorySeedSummary {
+  days: number;
+  sessions: number;
+  events: number;
 }
 
 const MIN = 60_000;
-const DIA = 1440 * MIN;
+const DAY = 1440 * MIN;
 
-/** Chance de um dia ter sessões: alta nos últimos 90 dias, rala antes; fim de semana mais calmo. */
-function chanceDoDia(diasAtras: number, fimDeSemana: boolean): number {
-  const base = diasAtras <= 90 ? 0.85 - (diasAtras / 90) * 0.25 : 0.18;
-  return fimDeSemana ? base * 0.35 : base;
+/** Chance of a day having sessions: high in the last 90 days, sparse before; weekends calmer. */
+function dayChance(daysAgo: number, weekend: boolean): number {
+  const base = daysAgo <= 90 ? 0.85 - (daysAgo / 90) * 0.25 : 0.18;
+  return weekend ? base * 0.35 : base;
 }
 
-/** Sessão com erro também conta como "precisa de você" no painel: no histórico, tudo termina concluído. */
-function encerrarSessao(s: Session): Session {
+/** A session with an error also counts as "needs you" in the panel: in the history, everything ends completed. */
+function endSession(s: Session): Session {
   return { ...s, status: 'completed', endedAt: s.endedAt ?? s.updatedAt, awaitingInputSince: null, awaitingReason: null };
 }
 
-function encerrarAgente(a: Agent): Agent {
+function endAgent(a: Agent): Agent {
   if (a.status === 'completed' || a.status === 'error') return a;
   return { ...a, status: 'completed', endedAt: a.endedAt ?? a.updatedAt, currentTool: null };
 }
 
-export async function semearHistorico(porta: StoragePort, opcoes: OpcoesDoHistorico = {}): Promise<ResumoDoHistorico> {
-  const semente = opcoes.semente ?? 'analytics';
-  const agora = opcoes.agora ?? Date.now();
-  const total = opcoes.dias ?? 364;
-  const rng = new Aleatorio(`${semente}:historico`);
-  const hojeUtc = Math.floor(agora / DIA) * DIA;
-  const resumo: ResumoDoHistorico = { dias: 0, sessoes: 0, eventos: 0 };
-  const contas = new Map<string, ClaudeAccount>();
+export async function seedHistory(storage: StoragePort, options: HistorySeedOptions = {}): Promise<HistorySeedSummary> {
+  const seed = options.seed ?? 'analytics';
+  const now = options.now ?? Date.now();
+  const total = options.days ?? 364;
+  // The seed strings (`:historico`, `:dia:`) stay as they were: they decide the generated data.
+  const rng = new SeededRandom(`${seed}:historico`);
+  const todayUtc = Math.floor(now / DAY) * DAY;
+  const summary: HistorySeedSummary = { days: 0, sessions: 0, events: 0 };
+  const accounts = new Map<string, ClaudeAccount>();
 
-  for (let atras = total; atras >= 1; atras--) {
-    const inicioDoDia = hojeUtc - atras * DIA;
-    const fimDeSemana = [0, 6].includes(new Date(inicioDoDia).getUTCDay());
-    if (!rng.chance(chanceDoDia(atras, fimDeSemana))) continue;
-    const sessoes = atras <= 90 ? rng.inteiro(1, 4) : 1;
-    // Começa entre 11h e 15h UTC (manhã no Brasil) e dura até 6 h: fica no mesmo dia.
-    const inicio = inicioDoDia + rng.inteiro(11 * 60, 15 * 60) * MIN;
-    const cenario = gerarCenario({
-      semente: `${semente}:dia:${atras}`,
-      sessoes,
-      duracaoMin: 300,
-      relogio: (ms) => new Date(inicio + ms).toISOString(),
+  for (let ago = total; ago >= 1; ago--) {
+    const dayStart = todayUtc - ago * DAY;
+    const weekend = [0, 6].includes(new Date(dayStart).getUTCDay());
+    if (!rng.chance(dayChance(ago, weekend))) continue;
+    const sessions = ago <= 90 ? rng.int(1, 4) : 1;
+    // Starts between 11h and 15h UTC (morning in Brazil) and lasts up to 6 h: it stays on the same day.
+    const start = dayStart + rng.int(11 * 60, 15 * 60) * MIN;
+    const scenario = generateScenario({
+      seed: `${seed}:dia:${ago}`,
+      sessions,
+      durationMin: 300,
+      clock: (ms) => new Date(start + ms).toISOString(),
     });
-    resumo.dias++;
-    for (const c of cenario.contas) {
-      const vista = contas.get(c.id);
-      contas.set(c.id, vista ? { ...vista, lastSeenAt: c.lastSeenAt } : c);
+    summary.days++;
+    for (const c of scenario.accounts) {
+      const seen = accounts.get(c.id);
+      accounts.set(c.id, seen ? { ...seen, lastSeenAt: c.lastSeenAt } : c);
     }
-    // O último registro de cada sessão e de cada agente, já encerrado; eventos e usos como vieram.
-    const ultimaSessao = new Map<string, Session>();
-    const ultimoAgente = new Map<string, Agent>();
-    for (const op of cenario.operacoes) {
-      if (op.tipo === 'sessao') ultimaSessao.set(op.registro.id, op.registro);
-      else if (op.tipo === 'agente') ultimoAgente.set(op.registro.id, op.registro);
-      else if (op.tipo === 'evento') {
-        if (await porta.appendEvent(op.registro)) resumo.eventos++;
-      } else await porta.putTokenUsage(op.registro);
+    // The last record of each session and each agent, already ended; events and usages as they came.
+    const lastSession = new Map<string, Session>();
+    const lastAgent = new Map<string, Agent>();
+    for (const op of scenario.operations) {
+      if (op.kind === 'session') lastSession.set(op.record.id, op.record);
+      else if (op.kind === 'agent') lastAgent.set(op.record.id, op.record);
+      else if (op.kind === 'event') {
+        if (await storage.appendEvent(op.record)) summary.events++;
+      } else await storage.putTokenUsage(op.record);
     }
-    for (const s of ultimaSessao.values()) await porta.putSession(encerrarSessao(s));
-    for (const a of ultimoAgente.values()) await porta.putAgent(encerrarAgente(a));
-    resumo.sessoes += ultimaSessao.size;
+    for (const s of lastSession.values()) await storage.putSession(endSession(s));
+    for (const a of lastAgent.values()) await storage.putAgent(endAgent(a));
+    summary.sessions += lastSession.size;
   }
-  for (const c of contas.values()) await porta.putAccount(c);
-  return resumo;
+  for (const c of accounts.values()) await storage.putAccount(c);
+  return summary;
 }

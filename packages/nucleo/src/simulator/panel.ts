@@ -15,7 +15,7 @@ import { linkSession, markPromoted, registerDecision, type DecisionDraft } from 
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
-import { RAIZ } from './vocabulary.ts';
+import { ROOT } from './vocabulary.ts';
 
 /** As checagens do CI como no P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
 const CHECKS_DO_P1: Record<string, CiCounts> = {
@@ -303,7 +303,7 @@ async function uso(porta: StoragePort, sessionId: string, model: string, inicio:
 
 async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: string[]) {
   const id = SESSAO_DO_PAINEL;
-  const cwd = `${RAIZ}/${e.projeto}`;
+  const cwd = `${ROOT}/${e.projeto}`;
   const inicio = iso(agora, e.inicioMin);
   const s = sessaoBase(id, cwd, e.modelo, inicio, iso(agora, 0.05));
   s.name = e.titulo;
@@ -367,7 +367,7 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
 async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
   const id = `sim-painel-${o.slug}`;
   const atualizada = iso(agora, o.updatedMin ?? o.espera?.haMin ?? 1);
-  const s = sessaoBase(id, `${RAIZ}/${o.slug}`, o.modelo, iso(agora, 40), atualizada);
+  const s = sessaoBase(id, `${ROOT}/${o.slug}`, o.modelo, iso(agora, 40), atualizada);
   s.name = o.titulo ?? o.slug;
   s.status = o.status;
   if (o.status === 'completed') s.endedAt = atualizada;
@@ -410,7 +410,7 @@ export async function semearCenariosDoPainel(porta: StoragePort, cenario: Cenari
     if (s) await porta.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-painel-${mae.slug}` } } });
   }
   for (const o of outras) await gravarOutra(porta, o, agora);
-  estado.cwd = `${RAIZ}/${e.projeto}`;
+  estado.cwd = `${ROOT}/${e.projeto}`;
   estado.esta = e;
 }
 
@@ -466,7 +466,7 @@ export const MAE_DO_P9 = 'sim-painel-kanban-ontem';
  */
 export async function semearDecisoesDoPainel(porta: DecisionPort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
   if (cenario !== 'p9') return;
-  const repo = `${RAIZ}/${ESTA.p1.projeto}`;
+  const repo = `${ROOT}/${ESTA.p1.projeto}`;
   const branch = ESTA.p1.branch;
   const agoraIso = iso(agora, 0);
   let n = 0;
@@ -513,7 +513,7 @@ export function pastasDosRegistrosDaDemo(base: string): (repo: string) => string
     for (const nome of nomes) writeFileSync(join(dir, nome), `# ${nome.slice(0, 4)} · registro sintético da demonstração\n`);
   }
   return (repo) => {
-    const pasta = repo.startsWith(`${RAIZ}/`) ? repo.slice(RAIZ.length + 1) : null;
+    const pasta = repo.startsWith(`${ROOT}/`) ? repo.slice(ROOT.length + 1) : null;
     return pasta && Object.hasOwn(REGISTROS_DA_DEMO, pasta) ? join(base, pasta) : null;
   };
 }
@@ -552,7 +552,7 @@ async function semearDecisoesDaPagina(porta: DecisionPort, agora: number): Promi
     if (promovida) await markPromoted(porta, decision.id, promovida, agoraIso);
   };
 
-  const vitrine = (sessionId: string, d: Rascunho) => decidir(sessionId, `${RAIZ}/vitrine-demo`, 'feat/42-kanban', d);
+  const vitrine = (sessionId: string, d: Rascunho) => decidir(sessionId, `${ROOT}/vitrine-demo`, 'feat/42-kanban', d);
   const kanban = 'sim-painel-vitrine-demo';
   await vitrine(MAE_DA_VITRINE, { haMin: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
   await linkSession(porta, { sessionId: kanban, parentSessionId: MAE_DA_VITRINE, reason: 'clear', linkedAt: iso(agora, 60) }, agoraIso);
@@ -570,7 +570,7 @@ async function semearDecisoesDaPagina(porta: DecisionPort, agora: number): Promi
     choice: 'Esconder sessões encerradas há mais de 7 dias', alternatives: ['mostrar todas'],
   });
 
-  const pagamentos = (d: Rascunho) => decidir('sim-painel-motor-de-regras', `${RAIZ}/motor-de-regras`, 'refactor/pagamentos', d);
+  const pagamentos = (d: Rascunho) => decidir('sim-painel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
   await pagamentos({
     haMin: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
     promovida: registro('motor-de-regras', 0),
@@ -583,7 +583,7 @@ async function semearDecisoesDaPagina(porta: DecisionPort, agora: number): Promi
   await pagamentos({ haMin: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
   await pagamentos({ haMin: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
 
-  const relatorio = (d: Rascunho) => decidir('sim-painel-painel-de-metricas', `${RAIZ}/painel-de-metricas`, 'perf/47-relatorio', d);
+  const relatorio = (d: Rascunho) => decidir('sim-painel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
   await relatorio({ haMin: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
   await relatorio({ haMin: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
   await relatorio({ haMin: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });

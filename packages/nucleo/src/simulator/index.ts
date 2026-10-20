@@ -1,16 +1,16 @@
-export { Aleatorio, hash32 } from './random.ts';
+export { SeededRandom, hash32 } from './random.ts';
 export {
-  LIMITE_DE_CONTEXTO,
-  MINUTOS_ATE_ABANDONO,
-  TIPOS_DE_CAOS,
-  gerarCenario,
-  type Cenario,
-  type Gravacao,
-  type OpcoesDoCenario,
-  type Operacao,
-  type Roteiro,
-  type TipoDeCaos,
+  CONTEXT_LIMIT,
+  MINUTES_UNTIL_ABANDONED,
+  CHAOS_KINDS,
+  generateScenario,
+  type Scenario,
+  type StorageWrite,
+  type ScenarioOptions,
+  type Operation,
+  type Script,
+  type ChaosKind,
 } from './scenario.ts';
-export { semearHistorico, type OpcoesDoHistorico, type ResumoDoHistorico } from './history.ts';
-export { PRECOS_ILUSTRATIVOS, simular, type Modo, type OpcoesDaSimulacao, type Resumo } from './simulator.ts';
+export { seedHistory, type HistorySeedOptions, type HistorySeedSummary } from './history.ts';
+export { ILLUSTRATIVE_PRICES, simulate, type RunMode, type SimulationOptions, type SimulationSummary } from './simulator.ts';
 export { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry, simulatedReading, type SimulatedProfile } from './telemetry.ts';

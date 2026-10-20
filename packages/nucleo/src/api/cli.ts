@@ -44,7 +44,7 @@ import { semearWorkflowsDoDemo } from '../simulator/workflows.ts';
 import { semearHistoricoDoPainel } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulator/project.ts';
-import { semearHistorico } from '../simulator/history.ts';
+import { seedHistory } from '../simulator/history.ts';
 import { localDaDemo, semearDetalhe } from '../simulator/detail.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
@@ -305,7 +305,7 @@ if (demo) {
   await semearDecisoesDoPainel(decisoes, cenario);
   if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
-  await semearHistorico(storage);
+  await seedHistory(storage);
   await semearDetalhe(storage);
   await semearHistoricoDoPainel(storage, decisoes, cenario);
 }

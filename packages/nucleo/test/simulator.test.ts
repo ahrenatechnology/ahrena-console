@@ -5,333 +5,333 @@ import { validateAgent, validateEvent, validateSession, validateTokenUsage } fro
 import { estimateCost, effectiveTokens } from '../src/pricing.ts';
 import type { StoragePort } from '../src/storage-port.ts';
 import {
-  Aleatorio,
-  LIMITE_DE_CONTEXTO,
-  MINUTOS_ATE_ABANDONO,
-  TIPOS_DE_CAOS,
-  gerarCenario,
-  simular,
-  type OpcoesDaSimulacao,
+  SeededRandom,
+  CONTEXT_LIMIT,
+  MINUTES_UNTIL_ABANDONED,
+  CHAOS_KINDS,
+  generateScenario,
+  simulate,
+  type SimulationOptions,
 } from '../src/simulator/index.ts';
 import { T0 } from './fixtures.ts';
 
-const AGORA = Date.parse(T0);
-const relogio = (ms: number) => new Date(AGORA + ms).toISOString();
+const NOW = Date.parse(T0);
+const clock = (ms: number) => new Date(NOW + ms).toISOString();
 
-async function todosOsEventos(porta: StoragePort, sessionId: string) {
-  const eventos = [];
+async function allEvents(storage: StoragePort, sessionId: string) {
+  const events = [];
   let cursor: string | null = null;
   do {
-    const pagina = await porta.listEvents(sessionId, { limit: 500, cursor });
-    eventos.push(...pagina.items);
-    cursor = pagina.nextCursor;
+    const page = await storage.listEvents(sessionId, { limit: 500, cursor });
+    events.push(...page.items);
+    cursor = page.nextCursor;
   } while (cursor);
-  return eventos;
+  return events;
 }
 
-/** Tudo o que a simulação deixou no banco, em ordem estável. */
-async function despejar(porta: StoragePort) {
-  const sessoes = (await porta.listSessions({ limit: 500 })).items.sort((a, b) => a.id.localeCompare(b.id));
-  const resto = await Promise.all(
-    sessoes.map(async (s) => ({
-      agentes: await porta.listAgents(s.id),
-      eventos: await todosOsEventos(porta, s.id),
-      usos: await porta.listTokenUsage(s.id),
+/** Everything the simulation left in the database, in a stable order. */
+async function dump(storage: StoragePort) {
+  const sessions = (await storage.listSessions({ limit: 500 })).items.sort((a, b) => a.id.localeCompare(b.id));
+  const rest = await Promise.all(
+    sessions.map(async (s) => ({
+      agents: await storage.listAgents(s.id),
+      events: await allEvents(storage, s.id),
+      usages: await storage.listTokenUsage(s.id),
     })),
   );
-  return { sessoes, resto, precos: await porta.listModelPricing() };
+  return { sessions, rest, prices: await storage.listModelPricing() };
 }
 
-async function rodar(opcoes: Partial<OpcoesDaSimulacao> = {}) {
-  const porta = openSqliteStorage({ path: ':memory:' });
-  const resumo = await simular(porta, { semente: 7, agora: () => AGORA, ...opcoes });
-  return { porta, resumo, dados: await despejar(porta) };
+async function run(options: Partial<SimulationOptions> = {}) {
+  const storage = openSqliteStorage({ path: ':memory:' });
+  const summary = await simulate(storage, { seed: 7, now: () => NOW, ...options });
+  return { storage, summary, data: await dump(storage) };
 }
 
-describe('aleatório com semente', () => {
-  test('a mesma semente dá a mesma sequência; outra semente, outra sequência', () => {
+describe('seeded random', () => {
+  test('the same seed gives the same sequence; another seed, another sequence', () => {
     const seq = (s: string | number) => {
-      const r = new Aleatorio(s);
-      return Array.from({ length: 20 }, () => r.proximo());
+      const r = new SeededRandom(s);
+      return Array.from({ length: 20 }, () => r.next());
     };
     assert.deepEqual(seq('abc'), seq('abc'));
     assert.notDeepEqual(seq('abc'), seq('abd'));
     for (const x of seq(1)) assert.ok(x >= 0 && x < 1);
   });
 
-  test('inteiro respeita os limites inclusivos', () => {
-    const r = new Aleatorio(3);
-    const vistos = new Set(Array.from({ length: 500 }, () => r.inteiro(2, 5)));
-    assert.deepEqual([...vistos].sort(), [2, 3, 4, 5]);
+  test('int respects the inclusive bounds', () => {
+    const r = new SeededRandom(3);
+    const seen = new Set(Array.from({ length: 500 }, () => r.int(2, 5)));
+    assert.deepEqual([...seen].sort(), [2, 3, 4, 5]);
   });
 });
 
-describe('cenário', () => {
-  test('determinismo: a mesma semente e as mesmas opções geram exatamente o mesmo roteiro', () => {
-    const a = gerarCenario({ semente: 'demo', caos: true, relogio });
-    const b = gerarCenario({ semente: 'demo', caos: true, relogio });
+describe('scenario', () => {
+  test('determinism: the same seed and options generate exactly the same script', () => {
+    const a = generateScenario({ seed: 'demo', chaos: true, clock });
+    const b = generateScenario({ seed: 'demo', chaos: true, clock });
     assert.deepEqual(a, b);
-    assert.ok(a.operacoes.length > 100);
+    assert.ok(a.operations.length > 100);
   });
 
-  test('outra semente gera outro roteiro, com outro prefixo de ids', () => {
-    const a = gerarCenario({ semente: 1, relogio });
-    const b = gerarCenario({ semente: 2, relogio });
-    assert.notEqual(a.prefixo, b.prefixo);
+  test('another seed generates another script, with another id prefix', () => {
+    const a = generateScenario({ seed: 1, clock });
+    const b = generateScenario({ seed: 2, clock });
+    assert.notEqual(a.prefix, b.prefix);
     assert.notDeepEqual(
-      a.operacoes.map((o) => o.deslocamentoMs),
-      b.operacoes.map((o) => o.deslocamentoMs),
+      a.operations.map((o) => o.offsetMs),
+      b.operations.map((o) => o.offsetMs),
     );
   });
 
-  test('operações em ordem de tempo e todas dentro da janela', () => {
-    const { operacoes } = gerarCenario({ semente: 5, duracaoMin: 120, caos: true, relogio });
-    for (let i = 1; i < operacoes.length; i++) assert.ok(operacoes[i].deslocamentoMs >= operacoes[i - 1].deslocamentoMs);
-    assert.ok(operacoes.every((o) => o.deslocamentoMs <= 120 * 60_000));
+  test('operations in time order and all inside the window', () => {
+    const { operations } = generateScenario({ seed: 5, durationMin: 120, chaos: true, clock });
+    for (let i = 1; i < operations.length; i++) assert.ok(operations[i].offsetMs >= operations[i - 1].offsetMs);
+    assert.ok(operations.every((o) => o.offsetMs <= 120 * 60_000));
   });
 
-  test('todo registro gerado passa nos validadores do modelo', () => {
-    for (const op of gerarCenario({ semente: 9, sessoes: 20, caos: true, relogio }).operacoes) {
-      if (op.tipo === 'sessao') validateSession(op.registro);
-      else if (op.tipo === 'agente') validateAgent(op.registro);
-      else if (op.tipo === 'evento') validateEvent(op.registro);
-      else validateTokenUsage(op.registro);
+  test('every generated record passes the model validators', () => {
+    for (const op of generateScenario({ seed: 9, sessions: 20, chaos: true, clock }).operations) {
+      if (op.kind === 'session') validateSession(op.record);
+      else if (op.kind === 'agent') validateAgent(op.record);
+      else if (op.kind === 'event') validateEvent(op.record);
+      else validateTokenUsage(op.record);
     }
   });
 
-  test('sem caos, só roteiros normais; com caos, pelo menos uma sessão de cada falha', () => {
-    assert.ok(gerarCenario({ semente: 1, relogio }).roteiros.every((r) => r === 'normal'));
-    const { roteiros } = gerarCenario({ semente: 1, caos: true, relogio });
-    for (const tipo of TIPOS_DE_CAOS) assert.ok(roteiros.includes(tipo), `faltou ${tipo}`);
+  test('without chaos, only normal scripts; with chaos, at least one session of each failure', () => {
+    assert.ok(generateScenario({ seed: 1, clock }).scripts.every((r) => r === 'normal'));
+    const { scripts } = generateScenario({ seed: 1, chaos: true, clock });
+    for (const kind of CHAOS_KINDS) assert.ok(scripts.includes(kind), `missing ${kind}`);
   });
 
-  test('dados sintéticos: caminhos sob /simulacao e tudo marcado como simulado', () => {
-    for (const op of gerarCenario({ semente: 4, caos: true, relogio }).operacoes) {
-      if (op.tipo === 'sessao') {
-        assert.match(op.registro.cwd ?? '', /^\/simulacao\//);
-        assert.equal(op.registro.metadata.simulado, true);
+  test('synthetic data: paths under /simulacao and everything marked as simulated', () => {
+    for (const op of generateScenario({ seed: 4, chaos: true, clock }).operations) {
+      if (op.kind === 'session') {
+        assert.match(op.record.cwd ?? '', /^\/simulacao\//);
+        assert.equal(op.record.metadata.simulado, true);
       }
-      if (op.tipo === 'evento') {
-        const caminho = (op.registro.data as { file_path?: string } | null)?.file_path;
-        if (caminho) assert.match(caminho, /^\/simulacao\//);
+      if (op.kind === 'event') {
+        const path = (op.record.data as { file_path?: string } | null)?.file_path;
+        if (path) assert.match(path, /^\/simulacao\//);
       }
     }
   });
 
-  test('opções inválidas são recusadas', () => {
-    assert.throws(() => gerarCenario({ semente: 1, sessoes: 0, relogio }), RangeError);
-    assert.throws(() => gerarCenario({ semente: 1, duracaoMin: 0, relogio }), RangeError);
+  test('invalid options are refused', () => {
+    assert.throws(() => generateScenario({ seed: 1, sessions: 0, clock }), RangeError);
+    assert.throws(() => generateScenario({ seed: 1, durationMin: 0, clock }), RangeError);
   });
 });
 
-describe('simulação em lote pela porta', () => {
-  test('determinismo: a mesma semente grava exatamente os mesmos dados', async () => {
-    const a = await rodar({ caos: true, precos: true });
-    const b = await rodar({ caos: true, precos: true });
-    assert.deepEqual(a.dados, b.dados);
-    assert.deepEqual(a.resumo, b.resumo);
-    const c = await rodar({ semente: 8, caos: true, precos: true });
-    assert.notDeepEqual(a.dados.sessoes, c.dados.sessoes);
-    await Promise.all([a.porta.close(), b.porta.close(), c.porta.close()]);
+describe('batch simulation through the port', () => {
+  test('determinism: the same seed writes exactly the same data', async () => {
+    const a = await run({ chaos: true, prices: true });
+    const b = await run({ chaos: true, prices: true });
+    assert.deepEqual(a.data, b.data);
+    assert.deepEqual(a.summary, b.summary);
+    const c = await run({ seed: 8, chaos: true, prices: true });
+    assert.notDeepEqual(a.data.sessions, c.data.sessions);
+    await Promise.all([a.storage.close(), b.storage.close(), c.storage.close()]);
   });
 
-  test('grava sessões, agentes, subagentes, eventos e uso; a janela termina agora', async () => {
-    const { porta, resumo, dados } = await rodar({ sessoes: 10 });
-    assert.equal(dados.sessoes.length, 10);
-    assert.equal(resumo.gravados.sessoes, 10);
-    const agentes = dados.resto.flatMap((r) => r.agentes);
-    assert.ok(agentes.some((a) => a.type === 'main'));
-    const subs = agentes.filter((a) => a.type === 'subagent');
+  test('writes sessions, agents, subagents, events and usage; the window ends now', async () => {
+    const { storage, summary, data } = await run({ sessions: 10 });
+    assert.equal(data.sessions.length, 10);
+    assert.equal(summary.written.sessions, 10);
+    const agents = data.rest.flatMap((r) => r.agents);
+    assert.ok(agents.some((a) => a.type === 'main'));
+    const subs = agents.filter((a) => a.type === 'subagent');
     assert.ok(subs.length > 0);
     assert.ok(subs.every((s) => s.parentAgentId?.endsWith('-a0')));
-    assert.ok(dados.resto.every((r) => r.eventos.some((e) => e.type === 'SessionStart')));
-    assert.ok(dados.resto.flatMap((r) => r.eventos).some((e) => e.type === 'PreToolUse' && e.toolName));
-    assert.ok(dados.resto.every((r) => r.usos.length > 0));
-    for (const s of dados.sessoes) {
-      assert.ok(s.updatedAt <= T0, 'nada no futuro');
-      assert.ok(s.startedAt >= new Date(AGORA - 360 * 60_000).toISOString());
+    assert.ok(data.rest.every((r) => r.events.some((e) => e.type === 'SessionStart')));
+    assert.ok(data.rest.flatMap((r) => r.events).some((e) => e.type === 'PreToolUse' && e.toolName));
+    assert.ok(data.rest.every((r) => r.usages.length > 0));
+    for (const s of data.sessions) {
+      assert.ok(s.updatedAt <= T0, 'nothing in the future');
+      assert.ok(s.startedAt >= new Date(NOW - 360 * 60_000).toISOString());
     }
-    await porta.close();
+    await storage.close();
   });
 
-  test('reaplicar a mesma semente no mesmo banco não duplica nada', async () => {
-    const porta = openSqliteStorage({ path: ':memory:' });
-    const primeira = await simular(porta, { semente: 3, agora: () => AGORA });
-    const antes = await despejar(porta);
-    const segunda = await simular(porta, { semente: 3, agora: () => AGORA });
-    assert.deepEqual(await despejar(porta), antes);
-    assert.ok(primeira.gravados.eventos > 0);
-    assert.equal(segunda.gravados.eventos, 0);
-    await porta.close();
+  test('applying the same seed again on the same database duplicates nothing', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const first = await simulate(storage, { seed: 3, now: () => NOW });
+    const before = await dump(storage);
+    const second = await simulate(storage, { seed: 3, now: () => NOW });
+    assert.deepEqual(await dump(storage), before);
+    assert.ok(first.written.events > 0);
+    assert.equal(second.written.events, 0);
+    await storage.close();
   });
 
-  test('preços ilustrativos só quando pedidos, sem sobrescrever os existentes', async () => {
-    const sem = await rodar();
-    assert.equal(sem.dados.precos.length, 0);
-    const com = await rodar({ precos: true });
-    assert.equal(com.dados.precos.length, 3);
-    const usos = com.dados.resto.flatMap((r) => r.usos);
-    assert.ok(usos.every((u) => estimateCost(u, com.dados.precos).priced));
-    const outra = await simular(com.porta, { semente: 99, precos: true, agora: () => AGORA });
-    assert.equal(outra.gravados.precos, 0);
-    await Promise.all([sem.porta.close(), com.porta.close()]);
+  test('illustrative prices only when asked, without overwriting existing ones', async () => {
+    const without = await run();
+    assert.equal(without.data.prices.length, 0);
+    const withPrices = await run({ prices: true });
+    assert.equal(withPrices.data.prices.length, 3);
+    const usages = withPrices.data.rest.flatMap((r) => r.usages);
+    assert.ok(usages.every((u) => estimateCost(u, withPrices.data.prices).priced));
+    const another = await simulate(withPrices.storage, { seed: 99, prices: true, now: () => NOW });
+    assert.equal(another.written.prices, 0);
+    await Promise.all([without.storage.close(), withPrices.storage.close()]);
   });
 });
 
-describe('modo caos', () => {
-  const porRoteiro = async (semente: number) => {
-    const { porta, dados } = await rodar({ semente, caos: true, sessoes: 10 });
-    const sessoes = dados.sessoes.map((s, i) => ({ s, ...dados.resto[i] }));
-    return { porta, por: (r: string) => sessoes.filter((x) => x.s.metadata.roteiro === r) };
+describe('chaos mode', () => {
+  const byScript = async (seed: number) => {
+    const { storage, data } = await run({ seed, chaos: true, sessions: 10 });
+    const sessions = data.sessions.map((s, i) => ({ s, ...data.rest[i] }));
+    return { storage, of: (r: string) => sessions.filter((x) => x.s.metadata.roteiro === r) };
   };
 
-  test('travada: fica esperando input, sem encerrar', async () => {
-    const { porta, por } = await porRoteiro(11);
-    const travadas = por('travada');
-    assert.ok(travadas.length > 0);
-    for (const { s, eventos } of travadas) {
+  test('stuck: keeps waiting for input, without ending', async () => {
+    const { storage, of } = await byScript(11);
+    const stuck = of('stuck');
+    assert.ok(stuck.length > 0);
+    for (const { s, events } of stuck) {
       assert.equal(s.status, 'active');
       assert.ok(s.awaitingReason === 'notification' || s.awaitingReason === 'interrupted');
       assert.equal(s.endedAt, null);
-      assert.ok(['Notification', 'Interrupted'].includes(eventos.at(-1)!.type));
+      assert.ok(['Notification', 'Interrupted'].includes(events.at(-1)!.type));
     }
-    await porta.close();
+    await storage.close();
   });
 
-  test('erro: a ferramenta falha e a sessão fica em error', async () => {
-    const { porta, por } = await porRoteiro(12);
-    for (const { s, agentes, eventos } of por('erro')) {
+  test('error: the tool fails and the session stays in error', async () => {
+    const { storage, of } = await byScript(12);
+    for (const { s, agents, events } of of('error')) {
       assert.equal(s.status, 'error');
-      assert.equal(agentes[0].status, 'error');
-      assert.equal(eventos.at(-1)!.type, 'PostToolUseFailure');
+      assert.equal(agents[0].status, 'error');
+      assert.equal(events.at(-1)!.type, 'PostToolUseFailure');
     }
-    assert.ok(por('erro').length > 0);
-    await porta.close();
+    assert.ok(of('error').length > 0);
+    await storage.close();
   });
 
-  test(`abandono: sem atividade por ${MINUTOS_ATE_ABANDONO} min e gravada como abandoned`, async () => {
-    const { porta, por } = await porRoteiro(13);
-    assert.ok(por('abandono').length > 0);
-    for (const { s, eventos } of por('abandono')) {
+  test(`abandonment: no activity for ${MINUTES_UNTIL_ABANDONED} min and written as abandoned`, async () => {
+    const { storage, of } = await byScript(13);
+    assert.ok(of('abandonment').length > 0);
+    for (const { s, events } of of('abandonment')) {
       assert.equal(s.status, 'abandoned');
-      const ultima = Date.parse(eventos.at(-1)!.createdAt);
-      assert.ok(Date.parse(s.endedAt!) - ultima >= MINUTOS_ATE_ABANDONO * 60_000);
+      const last = Date.parse(events.at(-1)!.createdAt);
+      assert.ok(Date.parse(s.endedAt!) - last >= MINUTES_UNTIL_ABANDONED * 60_000);
     }
-    await porta.close();
+    await storage.close();
   });
 
-  test('estouro: picos de tokens estouram o contexto pelo menos duas vezes, com piso da compactação', async () => {
-    const { porta, por } = await porRoteiro(14);
-    assert.ok(por('estouro').length > 0);
-    for (const { s, eventos, usos } of por('estouro')) {
-      const contexto = s.metadata.contexto as { estouros: number; limite: number };
-      assert.ok(contexto.estouros >= 2);
-      assert.equal(contexto.limite, LIMITE_DE_CONTEXTO);
-      assert.ok(eventos.filter((e) => e.type === 'PreCompact').length >= 2);
-      const principal = usos.find((u) => u.model === s.model)!;
-      assert.ok(principal.baseline.cacheWrite5m > 0);
-      assert.ok(effectiveTokens(principal).cacheRead >= LIMITE_DE_CONTEXTO);
+  test('overflow: token spikes overflow the context at least twice, with the compaction floor', async () => {
+    const { storage, of } = await byScript(14);
+    assert.ok(of('overflow').length > 0);
+    for (const { s, events, usages } of of('overflow')) {
+      const context = s.metadata.contexto as { estouros: number; limite: number };
+      assert.ok(context.estouros >= 2);
+      assert.equal(context.limite, CONTEXT_LIMIT);
+      assert.ok(events.filter((e) => e.type === 'PreCompact').length >= 2);
+      const main = usages.find((u) => u.model === s.model)!;
+      assert.ok(main.baseline.cacheWrite5m > 0);
+      assert.ok(effectiveTokens(main).cacheRead >= CONTEXT_LIMIT);
     }
-    await porta.close();
+    await storage.close();
   });
 
-  test('enxame: pelo menos 8 subagentes trabalhando ao mesmo tempo', async () => {
-    const { porta, por } = await porRoteiro(15);
-    assert.ok(por('enxame').length > 0);
-    for (const { agentes } of por('enxame')) {
-      const subs = agentes.filter((a) => a.type === 'subagent');
-      // Pico de simultaneidade: no começo de cada subagente, quantos estão em andamento.
-      const simultaneos = Math.max(...subs.map((x) => subs.filter((a) => a.startedAt <= x.startedAt && a.endedAt! > x.startedAt).length));
-      assert.ok(simultaneos >= 8, `só ${simultaneos} em paralelo`);
+  test('swarm: at least 8 subagents working at the same time', async () => {
+    const { storage, of } = await byScript(15);
+    assert.ok(of('swarm').length > 0);
+    for (const { agents } of of('swarm')) {
+      const subs = agents.filter((a) => a.type === 'subagent');
+      // Concurrency peak: at the start of each subagent, how many are running.
+      const concurrent = Math.max(...subs.map((x) => subs.filter((a) => a.startedAt <= x.startedAt && a.endedAt! > x.startedAt).length));
+      assert.ok(concurrent >= 8, `only ${concurrent} in parallel`);
     }
-    await porta.close();
+    await storage.close();
   });
 });
 
-describe('simulação em tempo real', () => {
-  test('espera o ritmo da velocidade e carimba cada gravação com a hora do relógio', async () => {
-    let relogioVirtual = AGORA;
-    const esperas: number[] = [];
-    const porta = openSqliteStorage({ path: ':memory:' });
-    const resumo = await simular(porta, {
-      semente: 21,
-      sessoes: 3,
-      duracaoMin: 60,
-      modo: 'tempo-real',
-      velocidade: 60,
-      agora: () => relogioVirtual,
-      esperar: async (ms) => {
-        esperas.push(ms);
-        relogioVirtual += ms;
+describe('real-time simulation', () => {
+  test('waits for the pace of the speed and stamps each write with the clock time', async () => {
+    let virtualClock = NOW;
+    const waits: number[] = [];
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const summary = await simulate(storage, {
+      seed: 21,
+      sessions: 3,
+      durationMin: 60,
+      mode: 'real-time',
+      speed: 60,
+      now: () => virtualClock,
+      wait: async (ms) => {
+        waits.push(ms);
+        virtualClock += ms;
       },
     });
-    assert.equal(resumo.interrompido, false);
-    assert.ok(esperas.length > 0);
-    // 60 min simulados a 60x cabem em 1 min de relógio.
-    assert.ok(relogioVirtual - AGORA <= 60_000);
-    const { resto } = await despejar(porta);
-    for (const e of resto.flatMap((r) => r.eventos)) assert.ok(Date.parse(e.createdAt) <= relogioVirtual);
-    await porta.close();
+    assert.equal(summary.interrupted, false);
+    assert.ok(waits.length > 0);
+    // 60 simulated min at 60x fit in 1 clock min.
+    assert.ok(virtualClock - NOW <= 60_000);
+    const { rest } = await dump(storage);
+    for (const e of rest.flatMap((r) => r.events)) assert.ok(Date.parse(e.createdAt) <= virtualClock);
+    await storage.close();
   });
 
-  test('determinismo também em tempo real', async () => {
-    const executar = async () => {
-      let t = AGORA;
-      const porta = openSqliteStorage({ path: ':memory:' });
-      await simular(porta, { semente: 'rt', caos: true, modo: 'tempo-real', agora: () => t, esperar: async (ms) => void (t += ms) });
-      const dados = await despejar(porta);
-      await porta.close();
-      return dados;
+  test('determinism in real time too', async () => {
+    const execute = async () => {
+      let t = NOW;
+      const storage = openSqliteStorage({ path: ':memory:' });
+      await simulate(storage, { seed: 'rt', chaos: true, mode: 'real-time', now: () => t, wait: async (ms) => void (t += ms) });
+      const data = await dump(storage);
+      await storage.close();
+      return data;
     };
-    assert.deepEqual(await executar(), await executar());
+    assert.deepEqual(await execute(), await execute());
   });
 
-  test('o signal interrompe e mantém o que já foi gravado', async () => {
-    let t = AGORA;
-    const parar = new AbortController();
-    let gravacoes = 0;
-    const porta = openSqliteStorage({ path: ':memory:' });
-    const resumo = await simular(porta, {
-      semente: 22,
-      modo: 'tempo-real',
-      agora: () => t,
-      esperar: async (ms) => void (t += ms),
-      signal: parar.signal,
-      aoGravar: () => {
-        if (++gravacoes === 50) parar.abort();
+  test('the signal interrupts and keeps what was already written', async () => {
+    let t = NOW;
+    const stop = new AbortController();
+    let writes = 0;
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const summary = await simulate(storage, {
+      seed: 22,
+      mode: 'real-time',
+      now: () => t,
+      wait: async (ms) => void (t += ms),
+      signal: stop.signal,
+      onWrite: () => {
+        if (++writes === 50) stop.abort();
       },
     });
-    assert.equal(resumo.interrompido, true);
-    assert.equal(gravacoes, 50);
-    assert.ok((await despejar(porta)).sessoes.length > 0);
-    await porta.close();
+    assert.equal(summary.interrupted, true);
+    assert.equal(writes, 50);
+    assert.ok((await dump(storage)).sessions.length > 0);
+    await storage.close();
   });
 
-  test('velocidade inválida é recusada', async () => {
-    const porta = openSqliteStorage({ path: ':memory:' });
-    await assert.rejects(simular(porta, { semente: 1, modo: 'tempo-real', velocidade: 0 }), RangeError);
-    await porta.close();
+  test('invalid speed is refused', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await assert.rejects(simulate(storage, { seed: 1, mode: 'real-time', speed: 0 }), RangeError);
+    await storage.close();
   });
 
-  test('gera duas contas sintéticas e reparte as sessões entre elas', async () => {
-    const { porta, resumo, dados } = await rodar({ sessoes: 6 });
-    const contas = await porta.listAccounts();
-    assert.equal(contas.length, 2);
-    assert.equal(resumo.gravados.contas, 2);
-    for (const c of contas) {
+  test('generates two synthetic accounts and splits the sessions between them', async () => {
+    const { storage, summary, data } = await run({ sessions: 6 });
+    const accounts = await storage.listAccounts();
+    assert.equal(accounts.length, 2);
+    assert.equal(summary.written.accounts, 2);
+    for (const c of accounts) {
       assert.match(c.accountUuid, /^00000000-0000-4000-8000-/);
       assert.match(c.organizationUuid, /^00000000-0000-4000-8000-/);
       assert.equal(c.metadata.simulado, true);
       assert.ok(c.configDirs.every((d) => d.startsWith('/simulacao/')));
-      const daConta = dados.sessoes.filter((s) => s.accountId === c.id);
-      assert.equal(daConta.length, 3);
-      assert.equal(c.lastSeenAt, daConta.map((s) => s.updatedAt).sort().at(-1));
+      const ofAccount = data.sessions.filter((s) => s.accountId === c.id);
+      assert.equal(ofAccount.length, 3);
+      assert.equal(c.lastSeenAt, ofAccount.map((s) => s.updatedAt).sort().at(-1));
       assert.ok(c.firstSeenAt <= c.lastSeenAt);
-      assert.equal((await porta.listSessions({ accountIds: [c.id] })).items.length, 3);
+      assert.equal((await storage.listSessions({ accountIds: [c.id] })).items.length, 3);
     }
-    assert.ok(dados.sessoes.every((s) => s.accountId !== null && s.accountSource !== null));
-    assert.deepEqual(new Set(dados.sessoes.map((s) => s.accountSource)), new Set(['env', 'config']));
-    assert.deepEqual((await porta.listSessions({ accountIds: [null] })).items, []);
-    await porta.close();
+    assert.ok(data.sessions.every((s) => s.accountId !== null && s.accountSource !== null));
+    assert.deepEqual(new Set(data.sessions.map((s) => s.accountSource)), new Set(['env', 'config']));
+    assert.deepEqual((await storage.listSessions({ accountIds: [null] })).items, []);
+    await storage.close();
   });
 });
