@@ -79,8 +79,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
 
 Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
-AHRENA_CONSOLE_PROJECT=dono/número (padrão ahrenatechnology/3), com o token do \`gh\` (escopo
-\`project\`) e o cache no banco do núcleo.
+AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
+banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
 Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
 versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
@@ -189,17 +189,20 @@ const trabalho = new TrabalhoPorBranch({
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
-function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? 'ahrenatechnology/3'): ProjectRef {
+// Sem a variável não há Project padrão: a tela explica como escolher um.
+function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? ''): ProjectRef | null {
+  if (!valor.trim()) return null;
   const m = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/(\d{1,9})$/.exec(valor.trim());
-  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: dono/número, como ahrenatechnology/3 (veio "${valor}")`);
+  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: dono/número, como minha-org/3 (veio "${valor}")`);
   return { owner: m[1], number: Number(m[2]) };
 }
+const projetoEscolhido = demo || o['sem-github'] ? null : projetoDoAmbiente();
 const cacheDoProjeto = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const kanban = demo
   ? new GithubProject({ source: new ProjetoDoSimulador(), cache: cacheDoProjeto, project: PROJECT_DO_SIMULADOR })
-  : o['sem-github']
-    ? null
-    : createGithubProject({ project: projetoDoAmbiente(), cache: cacheDoProjeto, token: () => ghCliToken() });
+  : projetoEscolhido
+    ? createGithubProject({ project: projetoEscolhido, cache: cacheDoProjeto, token: () => ghCliToken() })
+    : null;
 
 // O commit do checkout da API, para o rodapé do painel dizer qual versão está no ar.
 function commitDoCheckout(): string | null {
@@ -293,7 +296,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
-  projeto: { kanban, fonte: demo ? 'demo' : 'github', log },
+  projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   frota: mcp.frota,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',

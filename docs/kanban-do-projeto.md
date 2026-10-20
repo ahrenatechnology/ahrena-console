@@ -1,6 +1,6 @@
 # Kanban do projeto
 
-Item 5.3 do backlog. O console mostra os itens de um GitHub Project por Status e muda o Status no GitHub quando um card troca de raia. Por padrão, o Project é o do próprio Ahrena Console, o Project 3 da organização `ahrenatechnology`. Assim o console gerencia o próprio desenvolvimento.
+Item 5.3 do backlog. O console mostra os itens de um GitHub Project por Status e muda o Status no GitHub quando um card troca de raia. Não há Project padrão: cada um escolhe o seu. Sem configuração, a tela explica como escolher. O próprio Ahrena Console usa o Project 3 da organização `ahrenatechnology` para gerenciar o próprio desenvolvimento.
 
 ## O que aparece
 
@@ -19,7 +19,7 @@ O quadro segue a [decisão 0001](decisoes/0001-github-consulta-cache.md):
 
 ## Configuração
 
-- **Qual Project:** no núcleo de teste, a variável `AHRENA_CONSOLE_PROJECT=dono/número`. O padrão é `ahrenatechnology/3`. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
+- **Qual Project:** a variável `AHRENA_CONSOLE_PROJECT=dono/número`, sem padrão. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
 - **Permissão:** o token do `gh` precisa do escopo `project` para ler e para mover. Sem ele, o painel mostra o erro com o comando que resolve:
 
   ```bash
@@ -66,7 +66,7 @@ Com o GitHub fora e o quadro no cache, o GET responde 200 com `desatualizado: tr
 
 **Origem.** Como as outras rotas, o núcleo recusa `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>` ([decisão 0003](decisoes/0003-responder-sessao.md)). O mover é a única escrita que aceita `Origin`, e só o da própria `/ui` (`http://<Host>`). Pede ainda `Content-Type: application/json` (415 sem ele) e corpo de até 4096 bytes (413).
 
-**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número` (padrão `ahrenatechnology/3`), com o token do `gh` e o cache no banco do núcleo. `--sem-github` desliga o quadro.
+**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número`, com o token do `gh` e o cache no banco do núcleo. Sem a variável, as rotas respondem 503 `sem-projeto` e a tela mostra como escolher o Project. `--sem-github` desliga o quadro (503 `desligado`).
 
 **Demo.** A `--demo` traz um GitHub falso com o quadro do wireframe C11: o Project "Ahrena Console", as raias Backlog, Ready, In Progress, In Review e Done, e os 11 cards. Mover funciona em memória, até o processo sair:
 

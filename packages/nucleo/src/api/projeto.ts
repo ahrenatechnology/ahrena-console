@@ -42,8 +42,10 @@ export interface KanbanDoProjeto {
 }
 
 export interface OpcoesDoProjeto {
-  /** `null` com `--sem-github`: as duas rotas respondem 503. */
+  /** `null` sem GitHub ou sem Project escolhido: as duas rotas respondem 503 (veja `semProjeto`). */
   kanban: KanbanDoProjeto | null;
+  /** Sem kanban porque nenhum Project foi escolhido (`AHRENA_CONSOLE_PROJECT` vazia), e não por `--sem-github`. */
+  semProjeto?: boolean;
   /** `demo` quando o kanban é o GitHub falso do simulador. */
   fonte: 'github' | 'demo';
   log?: (mensagem: string) => void;
@@ -147,6 +149,12 @@ function enviarErro(res: ServerResponse, e: Erro): void {
 }
 
 const DESLIGADO: Erro = { status: 503, codigo: 'desligado', error: 'o núcleo subiu sem o GitHub (--sem-github): não há quadro' };
+const SEM_PROJETO: Erro = {
+  status: 503,
+  codigo: 'sem-projeto',
+  error: 'nenhum GitHub Project escolhido: suba o núcleo com AHRENA_CONSOLE_PROJECT=dono/número',
+  extra: { variavel: 'AHRENA_CONSOLE_PROJECT' },
+};
 
 /** O corpo, ou `null` assim que passa do limite: não espera o resto chegar (quem responde fecha a conexão). */
 function lerCorpo(req: IncomingMessage): Promise<string | null> {
@@ -175,10 +183,11 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 const deOutroSite = (req: IncomingMessage) => /^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''));
 
 /** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
-export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoProjeto) {
+export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = () => {} }: OpcoesDoProjeto) {
+  const parado = semProjeto ? SEM_PROJETO : DESLIGADO;
   async function ler(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (deOutroSite(req)) return send(res, 403, { error: 'origem não permitida' });
-    if (!kanban) return enviarErro(res, DESLIGADO);
+    if (!kanban) return enviarErro(res, parado);
     const forcar = url.searchParams.get('forcar') === '1';
     try {
       send(res, 200, quadroDe(await kanban.board({ force: forcar }), fonte));
@@ -206,7 +215,7 @@ export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoPr
     const optionId = corpo?.optionId;
     if (typeof itemId !== 'string' || !ITEM.test(itemId)) return send(res, 400, { error: 'itemId inválido: o id do item no Project (PVTI_…)', codigo: 'invalido' });
     if (typeof optionId !== 'string' || !OPCAO.test(optionId)) return send(res, 400, { error: 'optionId inválido: o id da raia de destino', codigo: 'invalido' });
-    if (!kanban) return enviarErro(res, DESLIGADO);
+    if (!kanban) return enviarErro(res, parado);
     try {
       const r = await kanban.move(itemId, optionId);
       log(`projeto: ${itemId} de ${r.moved.from ?? 'sem status'} para ${r.moved.to ?? 'sem status'}`);

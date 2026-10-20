@@ -176,6 +176,16 @@ export async function montar(area, ctx) {
 
   function desenharFalha(e) {
     const codigo = codigoDe(e);
+    if (codigo === 'sem-projeto') {
+      const caixa = vazio({
+        icone: 'github',
+        titulo: 'Escolha o GitHub Project',
+        texto: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
+      });
+      caixa.append(el('code', { class: 'pj-comando mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
+      trocarArea(caixa);
+      return;
+    }
     if (e?.status === 503 || codigo === 'desligado') {
       trocarArea(
         vazio({

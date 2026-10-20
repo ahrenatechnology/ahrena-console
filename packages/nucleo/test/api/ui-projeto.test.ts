@@ -333,6 +333,18 @@ describe('Kanban do projeto (C11)', () => {
     assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--sem-github/);
   });
 
+  test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
+    tela = await montarTela({
+      ler: async () => {
+        throw erroDoNucleo(ErroDeLeitura, 503, { error: 'Nenhum Project.', codigo: 'sem-projeto' });
+      },
+    });
+    const caixa = tela.area.querySelector('section.estado')!;
+    assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
+    assert.match(texto(caixa), /Escolha o GitHub Project/);
+    assert.equal(texto(caixa.querySelector('code')!), 'AHRENA_CONSOLE_PROJECT=dono/número');
+  });
+
   test('502 sem cache: estado de erro com Tentar de novo, que lê de novo', async () => {
     let n = 0;
     tela = await montarTela({

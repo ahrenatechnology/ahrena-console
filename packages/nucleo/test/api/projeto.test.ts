@@ -285,6 +285,18 @@ describe('GET /api/projeto', () => {
       }
     }
   });
+
+  test('sem Project escolhido (sem AHRENA_CONSOLE_PROJECT): 503 sem-projeto, sem Project padrão', async () => {
+    const s = await subir({ kanban: null, fonte: 'github', semProjeto: true });
+    try {
+      const r = await pedir(s.api, '/api/projeto');
+      assert.deepEqual([r.status, r.json.codigo, r.json.variavel], [503, 'sem-projeto', 'AHRENA_CONSOLE_PROJECT']);
+      const m = await mover(s.api, { itemId: ITEM, optionId: TODO });
+      assert.deepEqual([m.status, m.json.codigo], [503, 'sem-projeto']);
+    } finally {
+      await s.fechar();
+    }
+  });
 });
 
 describe('POST /api/projeto/mover', () => {
