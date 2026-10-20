@@ -6,8 +6,8 @@
 // e a versão e sai com 0) em vez de subir outro.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -33,12 +33,14 @@ import { waitForChanges } from '../mudancas/mcp.ts';
 import {
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
+  pastasDosRegistrosDaDemo,
   SESSAO_DO_PAINEL,
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
 import { Contas } from './contas.ts';
+import { DecisoesDaUi } from './decisoes-ui.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
@@ -214,7 +216,22 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),
+  // Na demo, o painel lateral (que manda o id real da sessão) vê a do cenário; as sessões do
+  // simulador (`sim-…`), que a /ui manda ao decidir em nome da sessão dona, ficam como vieram.
+  ...(demo ? { apelido: (id: string) => (id.startsWith('sim-') ? id : SESSAO_DO_PAINEL) } : {}),
+});
+
+// A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
+// agora e apagada na saída, no lugar de /simulacao; fora da demo, no próprio repositório da decisão.
+const pastaDaDemo = demo ? mkdtempSync(join(tmpdir(), 'ahrena-console-demo-')) : null;
+const decisoesUi = new DecisoesDaUi({
+  decisions: decisoes,
+  storage,
+  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  localDe: async (id) => {
+    await desktop?.atualizar();
+    return desktop?.sessaoPorCli(id)?.localId ?? null;
+  },
 });
 
 if (demo) {
@@ -272,6 +289,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  decisoesUi,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -346,6 +364,7 @@ async function desligar() {
   await follower?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
+  if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
 process.on('SIGINT', () => void desligar());
