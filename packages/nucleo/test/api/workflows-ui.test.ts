@@ -20,7 +20,7 @@ import { criar, detalheDoNo, escalaDaLinha, layoutDoGrafo, nomeDoNo, trechosDaFa
 // @ts-expect-error: idem
 import { findScreen, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
-import { NOMES_DOS_ICONES } from '../../ui/dom.js';
+import { ICON_NAMES } from '../../ui/dom.js';
 
 const AGORA = Date.parse(T0);
 
@@ -165,7 +165,7 @@ describe('front de Workflows contra a demonstração do p4', () => {
   test('a aba lê `<base>/workflow`, para de reler ao esconder e não lê sem corpo', async () => {
     const lidas: string[] = [];
     const sair = new AbortController();
-    const aba = criar({ ler: async (r: string) => (lidas.push(r), { nos: [] }), sinal: sair.signal }, '/api/sessoes/x', { cabeca: () => null, rotular: () => {} });
+    const aba = criar({ read: async (r: string) => (lidas.push(r), { nos: [] }), signal: sair.signal }, '/api/sessoes/x', { cabeca: () => null, rotular: () => {} });
     assert.deepEqual(Object.keys(aba).sort(), ['atualizar', 'esconder', 'mostrar']);
     await aba.atualizar();
     assert.deepEqual(lidas, [], 'escondida, não lê');
@@ -235,10 +235,10 @@ describe('formatos e registro', () => {
       for (const [, nome] of texto.matchAll(/icone\('([a-z-]+)'\)/g)) usados.add(nome!);
       for (const [, nome] of texto.matchAll(/icone: '([a-z-]+)'/g)) usados.add(nome!);
     }
-    for (const nome of usados) assert.ok(NOMES_DOS_ICONES.includes(nome), `falta o ícone ${nome}`);
+    for (const nome of usados) assert.ok(ICON_NAMES.includes(nome), `falta o ícone ${nome}`);
     // Sem desenho repetido com outro nome: `graph` é o mesmo de `workflows`, por referência.
     const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
-    assert.match(dom, /ICONES\.graph = ICONES\.workflows;/);
+    assert.match(dom, /ICONS\.graph = ICONS\.workflows;/);
     const desenhos = [...dom.matchAll(/^\s+'?([\w-]+)'?: '(<[^']*)',$/gm)];
     for (const nome of ['workflows', 'people', 'repeat', 'gantt']) {
       const meu = desenhos.find((m) => m[1] === nome)![2];

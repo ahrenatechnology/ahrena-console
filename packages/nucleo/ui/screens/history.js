@@ -3,8 +3,8 @@
 //
 // As funções puras exportadas (rota, datas, valores) não tocam o DOM: os testes as importam no node.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 /** Quantos dias cada página traz. */
 export const DIAS_POR_PAGINA = 7;
@@ -115,7 +115,7 @@ function linha(s) {
     ? el(
         'div',
         { class: 'hist-o hist-trunc hist-continued' },
-        icone('continued'),
+        icon('continued'),
         ' continuou depois do ',
         el('code', {}, '/clear'),
         ' em ',
@@ -131,7 +131,7 @@ function linha(s) {
     el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.modelo || '—'),
     el('span', { class: 'hist-o mono hist-duration' }, formatarDuracao(s.duracaoMs)),
     el('span', { class: 'mono hist-cost' }, formatarCusto(s.custoUsd)),
-    el('span', { class: 'hist-muted hist-arrow' }, icone('chevron-right')),
+    el('span', { class: 'hist-muted hist-arrow' }, icon('chevron-right')),
   );
 }
 
@@ -141,21 +141,21 @@ function grupo(dia, hoje) {
   return el(
     'section',
     { class: 'hist-group', 'aria-label': rotulo },
-    el('h2', { class: 'eyebrow hist-day' }, icone('calendar'), rotulo, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
+    el('h2', { class: 'eyebrow hist-day' }, icon('calendar'), rotulo, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
     el('div', { class: 'card hist-rows' }, ...dia.sessoes.map(linha)),
   );
 }
 
 // ---------- Tela ----------
 
-export function montar(area, ctx) {
+export function mount(area, ctx) {
   // O estilo da tela, uma vez por página.
   if (!document.querySelector('link[data-screen="history"]')) {
     document.head.append(el('link', { rel: 'stylesheet', href: '/ui/history.css', 'data-screen': 'history' }));
   }
   const entrada = el('input', { type: 'search', placeholder: 'Buscar…', 'aria-label': 'Buscar no histórico', maxlength: BUSCA_MAXIMA, autocomplete: 'off', spellcheck: 'false' });
-  const campo = el('label', { class: 'hist-search' }, icone('search'), entrada);
-  const cab = cabecalho({ icone: 'history', titulo: 'Histórico', sub: 'Sessões encerradas, por dia', acoes: [campo] });
+  const campo = el('label', { class: 'hist-search' }, icon('search'), entrada);
+  const cab = header({ icon: 'history', title: 'Histórico', sub: 'Sessões encerradas, por dia', actions: [campo] });
   // Três regiões: a faixa do ao vivo, a lista e o rodapé (faixa da página seguinte ou sentinela).
   // As faixas são nós estáveis: um redesenho da lista não as recria nem as anuncia de novo.
   const topo = el('div', { class: 'hist-region', hidden: true });
@@ -194,9 +194,9 @@ export function montar(area, ctx) {
   }
 
   // O `ctx.ler` põe o sinal da tela antes das opções: o nosso o substituiria, então vão os dois juntos.
-  function ler(rota) {
-    const sinal = ctx.sinal && typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.sinal, controle.signal]) : controle.signal;
-    return ctx.ler(rota, { signal: sinal });
+  function read(rota) {
+    const sinal = ctx.signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, controle.signal]) : controle.signal;
+    return ctx.read(rota, { signal: sinal });
   }
 
   function porNa(regiao, no) {
@@ -219,10 +219,10 @@ export function montar(area, ctx) {
     if (!dias.length && (!proximo || !observador)) {
       filhos.push(
         busca
-          ? vazio({ titulo: 'Nenhuma sessão encontrada', texto: `Nada com “${busca}” no histórico.` })
-          : vazio({ titulo: 'Nenhuma sessão encerrada ainda', texto: 'As sessões aparecem aqui quando terminam.' }),
+          ? empty({ title: 'Nenhuma sessão encontrada', text: `Nada com “${busca}” no histórico.` })
+          : empty({ title: 'Nenhuma sessão encerrada ainda', text: 'As sessões aparecem aqui quando terminam.' }),
       );
-    } else if (!dias.length) filhos.push(carregando()); // páginas vazias: o sentinela segue buscando
+    } else if (!dias.length) filhos.push(loading()); // páginas vazias: o sentinela segue buscando
     for (const dia of dias) filhos.push(grupo(dia, hoje));
     lista.replaceChildren(...filhos);
 
@@ -255,9 +255,9 @@ export function montar(area, ctx) {
     observador?.disconnect();
     porNa(topo, null);
     porNa(rodape, null);
-    lista.replaceChildren(carregando());
+    lista.replaceChildren(loading());
     try {
-      const r = await ler(rotaDoHistorico({ busca }));
+      const r = await read(rotaDoHistorico({ busca }));
       if (g !== geracao || encerrada) return;
       dias = r?.dias ?? [];
       proximo = r?.proximo ?? null;
@@ -266,7 +266,7 @@ export function montar(area, ctx) {
     } catch (e) {
       if (abortou(e) || g !== geracao) return;
       // Status 0: o núcleo não respondeu (o título padrão). Outro status: ele respondeu com erro.
-      lista.replaceChildren(erro({ titulo: e?.status ? 'Não deu para ler o histórico' : undefined, texto: e?.message ?? String(e), tentar: recomecar }));
+      lista.replaceChildren(error({ title: e?.status ? 'Não deu para ler o histórico' : undefined, text: e?.message ?? String(e), retry: recomecar }));
     }
   }
 
@@ -275,14 +275,14 @@ export function montar(area, ctx) {
     const g = geracao;
     carregandoMais = true;
     try {
-      const r = await ler(rotaDoHistorico({ antes: proximo, busca }));
+      const r = await read(rotaDoHistorico({ antes: proximo, busca }));
       if (g !== geracao || encerrada) return;
       dias = anexarDias(dias, r?.dias ?? []);
       proximo = r?.proximo ?? null;
       faixaMais = null;
     } catch (e) {
       if (abortou(e) || g !== geracao) return;
-      faixaMais ??= faixaDeErro({ titulo: 'Não deu para carregar mais dias', texto: e?.message ?? String(e), acao: { rotulo: 'Tentar de novo', aoClicar: tentarMais } });
+      faixaMais ??= errorBand({ title: 'Não deu para carregar mais dias', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: tentarMais } });
     }
     carregandoMais = false;
     desenharLista();
@@ -300,7 +300,7 @@ export function montar(area, ctx) {
     const g = geracao;
     const vez = ++vezDoAoVivo;
     try {
-      const r = await ler(rotaDoHistorico({ busca }));
+      const r = await read(rotaDoHistorico({ busca }));
       if (g !== geracao || vez !== vezDoAoVivo || encerrada) return;
       const novos = r?.dias ?? [];
       const maisAntigo = novos.length ? novos[novos.length - 1].dia : null;
@@ -311,7 +311,7 @@ export function montar(area, ctx) {
       faixaAoVivo = null;
     } catch (e) {
       if (abortou(e) || g !== geracao || vez !== vezDoAoVivo) return;
-      faixaAoVivo ??= faixaDeErro({ titulo: 'Não deu para atualizar o histórico', texto: e?.message ?? String(e), acao: { rotulo: 'Tentar de novo', aoClicar: tentarAoVivo } });
+      faixaAoVivo ??= errorBand({ title: 'Não deu para atualizar o histórico', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: tentarAoVivo } });
     }
     desenharLista();
   }
@@ -333,7 +333,7 @@ export function montar(area, ctx) {
 
   // Espera a rajada de mudanças assentar, mas relê no máximo ESPERA_MAXIMA_DO_AO_VIVO_MS depois da
   // primeira mudança pendente, mesmo que elas não parem.
-  ctx.aoMudar((mudancas) => {
+  ctx.onChange((mudancas) => {
     if (!mudancas?.some((m) => m.tipo === 'sessao')) return;
     const agora = Date.now();
     primeiraPendente ??= agora;
@@ -345,7 +345,7 @@ export function montar(area, ctx) {
     }, atraso);
   });
   // Núcleo reiniciado ou conexão de volta: com a lista no ar, relê sem perder páginas nem rolagem.
-  ctx.aoReiniciar(() => (pronto ? releer() : recomecar()));
+  ctx.onRestart(() => (pronto ? releer() : recomecar()));
 
   recomecar();
 

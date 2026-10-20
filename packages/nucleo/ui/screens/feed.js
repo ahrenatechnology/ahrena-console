@@ -8,8 +8,8 @@
 // - Pausa: a lista congela; o que chega espera e aparece como "N novos", que solta tudo ao retomar.
 // - "Mostrar mais": pede `antes=<anteriores>` e põe os mais velhos no fim.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 import {
   alternar,
   carregar,
@@ -45,7 +45,7 @@ function ligarCss() {
 
 const ehAbort = (e) => e?.name === 'AbortError';
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   const css = ligarCss();
   const estado = novoEstado();
   const filtros = {};
@@ -58,16 +58,16 @@ export async function montar(area, ctx) {
 
   // ---------- cabeçalho ----------
 
-  const botaoPausa = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', aoClicar: () => (estado.pausado ? soltar() : congelar()) });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => recarregar() }, icone('refresh'), 'Atualizar');
-  const cab = cabecalho({ icone: 'activity', titulo: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', acoes: [botaoPausa, botaoAtualizar] });
+  const botaoPausa = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', onClick: () => (estado.pausado ? soltar() : congelar()) });
+  const botaoAtualizar = el('button', { type: 'button', class: 'btn', onClick: () => recarregar() }, icon('refresh'), 'Atualizar');
+  const cab = header({ icon: 'activity', title: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', actions: [botaoPausa, botaoAtualizar] });
 
   // ---------- sobre ----------
 
   const sobre = el(
     'details',
     { class: 'card feed-about' },
-    el('summary', {}, icone('info'), el('b', {}, 'Sobre eventos, filtros e agrupamento'), el('span', {}, ' · como ler as pílulas, o ciclo de vida e os filtros')),
+    el('summary', {}, icon('info'), el('b', {}, 'Sobre eventos, filtros e agrupamento'), el('span', {}, ' · como ler as pílulas, o ciclo de vida e os filtros')),
     el(
       'div',
       { class: 'feed-about-body' },
@@ -95,9 +95,9 @@ export async function montar(area, ctx) {
     el(
       'div',
       { class: 'feed-filters-row' },
-      el('label', { class: 'feed-field feed-search' }, icone('filter'), busca),
-      el('label', { class: 'feed-field feed-day' }, icone('calendar'), el('span', {}, 'De'), de),
-      el('label', { class: 'feed-field feed-day' }, icone('calendar'), el('span', {}, 'Até'), ate),
+      el('label', { class: 'feed-field feed-search' }, icon('filter'), busca),
+      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'De'), de),
+      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'Até'), ate),
     ),
     el('div', { class: 'feed-filters-row' }, sStatus, sTipo, sFerramenta, sSessao),
   );
@@ -136,11 +136,11 @@ export async function montar(area, ctx) {
 
   // ---------- aviso de novos, faixa e corpo ----------
 
-  const aviso = el('button', { type: 'button', class: 'btn outline feed-new', hidden: true, aoClicar: () => soltar() });
+  const aviso = el('button', { type: 'button', class: 'btn outline feed-new', hidden: true, onClick: () => soltar() });
   const faixa = el('div', { class: 'feed-band' });
   const corpo = el('div', { class: 'feed-body' });
   const listaEl = el('div', { class: 'feed-list' });
-  const botaoMais = el('button', { type: 'button', class: 'btn outline feed-more', aoClicar: () => mostrarMais() }, 'Mostrar mais');
+  const botaoMais = el('button', { type: 'button', class: 'btn outline feed-more', onClick: () => mostrarMais() }, 'Mostrar mais');
   const cartaoLista = el('div', { class: 'card feed-rows' }, listaEl, el('div', { class: 'feed-foot' }, botaoMais));
 
   area.replaceChildren(cab, sobre, cartaoFiltros, aviso, faixa, corpo);
@@ -148,7 +148,7 @@ export async function montar(area, ctx) {
 
   const mostrarCorpo = (no) => corpo.replaceChildren(no);
   const limparFaixa = () => faixa.replaceChildren();
-  const mostrarFaixa = (titulo, texto) => faixa.replaceChildren(faixaDeErro({ titulo, texto, acao: { rotulo: 'Atualizar', aoClicar: () => recarregar() } }));
+  const mostrarFaixa = (titulo, texto) => faixa.replaceChildren(errorBand({ title: titulo, text: texto, action: { label: 'Atualizar', onClick: () => recarregar() } }));
 
   // ---------- linhas ----------
 
@@ -159,7 +159,7 @@ export async function montar(area, ctx) {
     const seta = el(
       'button',
       { type: 'button', class: 'feed-arrow', 'aria-expanded': aberta ? 'true' : 'false', 'aria-label': aberta ? 'Fechar o detalhe' : 'Abrir o detalhe' },
-      icone(aberta ? 'chevron-down' : 'chevron-right'),
+      icon(aberta ? 'chevron-down' : 'chevron-right'),
     );
     seta.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -176,7 +176,7 @@ export async function montar(area, ctx) {
       el('span', { class: 'feed-trunc feed-summary', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
       ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
       el('span', { class: 'feed-o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
-      rota ? el('a', { class: 'btn outline feed-session', href: rota }, 'Sessão', icone('external')) : null,
+      rota ? el('a', { class: 'btn outline feed-session', href: rota }, 'Sessão', icon('external')) : null,
     );
     cabeca.addEventListener('click', (e) => {
       if (e.target?.closest?.('a, button')) return;
@@ -197,7 +197,7 @@ export async function montar(area, ctx) {
       ['Call id', d.callId],
     ];
     const bloco = ev.ferramenta
-      ? el('div', { class: 'feed-toolblock' }, icone('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
+      ? el('div', { class: 'feed-toolblock' }, icon('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
       : el('p', { class: 'feed-text' }, ev.resumo ?? d.entrada ?? '—');
     return el(
       'div',
@@ -232,8 +232,8 @@ export async function montar(area, ctx) {
     if (!estado.eventos.length) {
       mostrarCorpo(
         temFiltro(filtros)
-          ? vazio({ titulo: 'Nenhum evento com esses filtros', texto: 'Mude ou limpe os filtros para ver mais.' })
-          : vazio({ titulo: 'Nenhum evento ainda', texto: 'Os eventos aparecem aqui assim que uma sessão do Claude Code registrar algo.' }),
+          ? empty({ title: 'Nenhum evento com esses filtros', text: 'Mude ou limpe os filtros para ver mais.' })
+          : empty({ title: 'Nenhum evento ainda', text: 'Os eventos aparecem aqui assim que uma sessão do Claude Code registrar algo.' }),
       );
       return;
     }
@@ -254,7 +254,7 @@ export async function montar(area, ctx) {
   }
 
   function desenharPausa() {
-    botaoPausa.replaceChildren(icone(estado.pausado ? 'resume' : 'pause'), estado.pausado ? 'Retomar' : 'Pausar');
+    botaoPausa.replaceChildren(icon(estado.pausado ? 'resume' : 'pause'), estado.pausado ? 'Retomar' : 'Pausar');
     botaoPausa.setAttribute('aria-pressed', estado.pausado ? 'true' : 'false');
     const n = estado.chegados;
     aviso.hidden = !n;
@@ -277,9 +277,9 @@ export async function montar(area, ctx) {
     const g = ++geracao;
     pronto = false;
     deNovo = false;
-    if (!manterLista) mostrarCorpo(carregando({ rotulo: 'Carregando eventos' }));
+    if (!manterLista) mostrarCorpo(loading({ label: 'Carregando eventos' }));
     try {
-      const r = await ctx.ler(consulta(filtros));
+      const r = await ctx.read(consulta(filtros));
       if (g !== geracao) return;
       carregar(estado, r);
       atualizarOpcoes(r.opcoes);
@@ -290,7 +290,7 @@ export async function montar(area, ctx) {
     } catch (e) {
       if (ehAbort(e) || g !== geracao) return;
       if (manterLista && corpo.firstChild === cartaoLista) mostrarFaixa('Não deu para reler o feed.', e?.message);
-      else mostrarCorpo(erro({ texto: e?.message ?? String(e), tentar: () => recarregar() }));
+      else mostrarCorpo(error({ text: e?.message ?? String(e), retry: () => recarregar() }));
     }
   }
 
@@ -300,7 +300,7 @@ export async function montar(area, ctx) {
     emVoo = true;
     const g = geracao;
     try {
-      const r = await ctx.ler(consulta(filtros, { depois: estado.cursor }));
+      const r = await ctx.read(consulta(filtros, { depois: estado.cursor }));
       if (g !== geracao) return;
       limparFaixa();
       atualizarOpcoes(r.opcoes);
@@ -313,7 +313,7 @@ export async function montar(area, ctx) {
       mostrarFaixa('O ao vivo do feed falhou.', e?.message);
     } finally {
       emVoo = false;
-      if (deNovo && !ctx.sinal?.aborted) {
+      if (deNovo && !ctx.signal?.aborted) {
         deNovo = false;
         buscarNovos();
       }
@@ -325,7 +325,7 @@ export async function montar(area, ctx) {
     const g = geracao;
     botaoMais.disabled = true;
     try {
-      const r = await ctx.ler(consulta(filtros, { antes: estado.anteriores }));
+      const r = await ctx.read(consulta(filtros, { antes: estado.anteriores }));
       if (g !== geracao) return;
       const velhos = receberAnteriores(estado, r);
       listaEl.append(...velhos.map(item));
@@ -338,13 +338,13 @@ export async function montar(area, ctx) {
     }
   }
 
-  ctx.aoMudar(() => buscarNovos());
-  ctx.aoReiniciar(() => recarregar({ manterLista: true }));
+  ctx.onChange(() => buscarNovos());
+  ctx.onRestart(() => recarregar({ manterLista: true }));
 
   // Evento novo sozinho não é mudança no long polling (só estado, plano, decisão...): o relógio também
   // pergunta pelos novos, para o feed não esperar a próxima mudança de estado.
   const relogio = setInterval(() => {
-    if (ctx.aoVivo?.() !== 'sem-conexao') buscarNovos();
+    if (ctx.liveState?.() !== 'offline') buscarNovos();
     const agora = Date.now();
     for (const { no, ev } of itens.values()) {
       const rel = no.querySelector('.feed-rel');
@@ -358,10 +358,10 @@ export async function montar(area, ctx) {
     css?.remove();
   }
   // Sair durante a primeira carga aborta o sinal antes de a moldura receber a limpeza: liga aqui.
-  ctx.sinal?.addEventListener('abort', limpar, { once: true });
+  ctx.signal?.addEventListener('abort', limpar, { once: true });
 
   await recarregar();
-  if (ctx.sinal?.aborted) limpar();
+  if (ctx.signal?.aborted) limpar();
 
   return limpar;
 }

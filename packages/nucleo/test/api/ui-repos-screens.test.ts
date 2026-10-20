@@ -23,9 +23,9 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const { montar: montarLista } = await import('../../ui/screens/repos.js');
+const { mount: montarLista } = await import('../../ui/screens/repos.js');
 // @ts-expect-error: idem
-const { montar: montarRepo } = await import('../../ui/screens/repo.js');
+const { mount: montarRepo } = await import('../../ui/screens/repo.js');
 
 const AGORA = Date.now();
 const HORA = 3_600_000;
@@ -140,21 +140,21 @@ afterEach(() => {
 });
 
 /** Monta a tela sem esperar a primeira leitura; `pronta` resolve quando `montar` termina. */
-function montar(montarTela: (area: ElementoFalso, ctx: unknown) => Promise<() => void>, ler: (rota: string) => Promise<unknown>, params = {}) {
+function mount(montarTela: (area: ElementoFalso, ctx: unknown) => Promise<() => void>, read: (rota: string) => Promise<unknown>, params = {}) {
   const area = new ElementoFalso('main');
   const leituras: string[] = [];
   const sinal = new AbortController();
   let limpar: (() => void) | null = null;
   const ctx = {
     params,
-    sinal: sinal.signal,
-    ler: (rota: string) => (leituras.push(rota), ler(rota)),
-    aoMudar: () => {},
-    aoReiniciar: () => {},
-    aoVivo: () => 'ao-vivo',
-    contador: () => {},
-    titulo: () => {},
-    navegar: () => {},
+    signal: sinal.signal,
+    read: (rota: string) => (leituras.push(rota), read(rota)),
+    onChange: () => {},
+    onRestart: () => {},
+    liveState: () => 'live',
+    counter: () => {},
+    title: () => {},
+    navigate: () => {},
   };
   const pronta = montarTela(area, ctx).then((f) => (limpar = f));
   const m: Montada = { area, leituras, sair: () => (sinal.abort(), limpar?.()) };
@@ -163,14 +163,14 @@ function montar(montarTela: (area: ElementoFalso, ctx: unknown) => Promise<() =>
 }
 
 const montarListaCom = async (lista: ListaDeRepos) => {
-  const m = montar(montarLista, async () => lista);
+  const m = mount(montarLista, async () => lista);
   await m.pronta;
   return m;
 };
 
 const montarRepoCom = async (dados: MetricasDoRepo) => {
   local.search = '';
-  const m = montar(montarRepo, async () => dados, { owner: 'exemplo-labs', repo: 'vitrine-demo' });
+  const m = mount(montarRepo, async () => dados, { owner: 'exemplo-labs', repo: 'vitrine-demo' });
   await m.pronta;
   return m;
 };
@@ -300,7 +300,7 @@ describe('Repositório (C23) montada', () => {
   test('#105 critério 6: trocar o período relê com o novo periodo e descarta a resposta do período velho', async () => {
     local.search = '?period=90d';
     const pendentes = new Map<string, (d: MetricasDoRepo) => void>();
-    const m = montar(
+    const m = mount(
       montarRepo,
       (rota) => new Promise((resolver) => pendentes.set(new URLSearchParams(rota.split('?')[1]).get('period')!, resolver as (d: MetricasDoRepo) => void)),
       { owner: 'exemplo-labs', repo: 'vitrine-demo' },

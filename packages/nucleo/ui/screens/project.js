@@ -9,8 +9,8 @@
 // - Enquanto um movimento ou um arrasto está em curso, a releitura espera: um quadro lido antes do
 //   movimento não pode desfazê-lo na tela.
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 
 const ROTA = '/api/project';
 const ESTILO = '/ui/project.css';
@@ -62,10 +62,10 @@ const hora = (ms) => {
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
 };
 
-const codigoDe = (e) => e?.corpo?.codigo ?? null;
-const comandoDe = (e) => e?.corpo?.comando ?? (codigoDe(e) === 'sem-escopo' ? COMANDO_DO_ESCOPO : null);
+const codigoDe = (e) => e?.body?.codigo ?? null;
+const comandoDe = (e) => e?.body?.comando ?? (codigoDe(e) === 'sem-escopo' ? COMANDO_DO_ESCOPO : null);
 const nomeDoCard = (card) => (card.numero != null ? `#${card.numero}` : `“${card.titulo}”`);
-const esperaDe = (e) => (e?.tentarEm ? ` Tente de novo em ${Math.ceil(e.tentarEm / 1000)} s.` : '');
+const esperaDe = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
 const comComando = (no, comando) => (comando ? (no.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, comando)), no) : no);
 
 /** O CSS da tela, uma vez por página (fica carregado quando se troca de tela). */
@@ -75,7 +75,7 @@ function carregarEstilo() {
   doc.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
 }
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   carregarEstilo();
   let quadro = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
   let marco = '';
@@ -100,13 +100,13 @@ export async function montar(area, ctx) {
     marco = seletor.value;
     desenharQuadro();
   });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar({ forcar: true }) }, icone('refresh'), 'Atualizar');
+  const botaoAtualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar({ forcar: true }) }, icon('refresh'), 'Atualizar');
   // O cabeçalho fica: a pílula "Ao vivo" é dele, e a moldura a mantém em dia.
-  const cab = cabecalho({
-    icone: 'github',
-    titulo: 'Kanban do projeto',
+  const cab = header({
+    icon: 'github',
+    title: 'Kanban do projeto',
     sub: 'GitHub Project · por Status · arraste para mudar',
-    acoes: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), seletor, icone('chevron-down')), botaoAtualizar],
+    actions: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), seletor, icon('chevron-down')), botaoAtualizar],
   });
   const sub = cab.querySelector('.sub');
   // O toast mora numa região viva fixa, logo depois do cabeçalho: o leitor de tela anuncia o que entra
@@ -143,10 +143,10 @@ export async function montar(area, ctx) {
     }
     const minha = ++leitura;
     lendo++;
-    if (!quadro) trocarArea(carregando({ rotulo: 'Lendo o GitHub Project' }));
+    if (!quadro) trocarArea(loading({ label: 'Lendo o GitHub Project' }));
     if (forcar) botaoAtualizar.setAttribute('aria-busy', 'true');
     try {
-      const novo = await ctx.ler(forcar ? `${ROTA}?refresh=1` : ROTA);
+      const novo = await ctx.read(forcar ? `${ROTA}?refresh=1` : ROTA);
       if (minha !== leitura) return;
       quadro = novo;
       falhaDeLeitura = null;
@@ -186,10 +186,10 @@ export async function montar(area, ctx) {
   function desenharFalha(e) {
     const codigo = codigoDe(e);
     if (codigo === 'sem-projeto') {
-      const caixa = vazio({
-        icone: 'github',
-        titulo: 'Escolha o GitHub Project',
-        texto: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
+      const caixa = empty({
+        icon: 'github',
+        title: 'Escolha o GitHub Project',
+        text: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
       });
       caixa.append(el('code', { class: 'prj-command mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
       trocarArea(caixa);
@@ -197,22 +197,22 @@ export async function montar(area, ctx) {
     }
     if (e?.status === 503 || codigo === 'desligado') {
       trocarArea(
-        vazio({
-          icone: 'github',
-          titulo: 'O núcleo subiu sem GitHub',
-          texto: 'Ele foi iniciado com --sem-github, então não há quadro para mostrar. Reinicie o núcleo sem essa opção para ver o Kanban do projeto.',
+        empty({
+          icon: 'github',
+          title: 'O núcleo subiu sem GitHub',
+          text: 'Ele foi iniciado com --sem-github, então não há quadro para mostrar. Reinicie o núcleo sem essa opção para ver o Kanban do projeto.',
         }),
       );
       return;
     }
     if (e?.status === 401 || codigo === 'sem-escopo') {
-      const caixa = erro({ titulo: 'Falta o escopo project no gh', texto: `${e.message} Rode o comando abaixo e tente de novo.`, tentar: () => desenhar({ forcar: true }) });
+      const caixa = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => desenhar({ forcar: true }) });
       caixa.insertBefore(el('code', { class: 'prj-command mono' }, comandoDe(e)), caixa.lastChild);
       trocarArea(caixa);
       return;
     }
     const titulo = e?.status === 0 || e?.status === undefined ? undefined : 'GitHub indisponível';
-    trocarArea(erro({ titulo, texto: `${e?.message ?? String(e)}${esperaDe(e)}`, tentar: () => desenhar({ forcar: true }) }));
+    trocarArea(error({ title: titulo, text: `${e?.message ?? String(e)}${esperaDe(e)}`, retry: () => desenhar({ forcar: true }) }));
   }
 
   // ---------- o quadro ----------
@@ -220,28 +220,28 @@ export async function montar(area, ctx) {
   /** As faixas de cima. Só são refeitas quando o que dizem muda: um alerta é anunciado uma vez. */
   function desenharFaixas() {
     const faixas = [];
-    if (aviso) faixas.push({ titulo: aviso.titulo, texto: aviso.texto, comando: aviso.comando, acao: { rotulo: 'Fechar', aoClicar: () => ((aviso = null), desenharQuadro()) } });
+    if (aviso) faixas.push({ title: aviso.titulo, text: aviso.texto, comando: aviso.comando, action: { label: 'Fechar', onClick: () => ((aviso = null), desenharQuadro()) } });
     if (falhaDeLeitura) {
       faixas.push({
-        titulo: 'Não deu para reler o quadro.',
-        texto: `${falhaDeLeitura.message} Mostrando a última leitura.${esperaDe(falhaDeLeitura)}`,
+        title: 'Não deu para reler o quadro.',
+        text: `${falhaDeLeitura.message} Mostrando a última leitura.${esperaDe(falhaDeLeitura)}`,
         comando: codigoDe(falhaDeLeitura) === 'sem-escopo' ? comandoDe(falhaDeLeitura) : null,
-        acao: { rotulo: 'Tentar agora', aoClicar: () => desenhar({ forcar: true }) },
+        action: { label: 'Tentar agora', onClick: () => desenhar({ forcar: true }) },
       });
     } else if (quadro.desatualizado) {
       const quando = hora(quadro.lidoEm);
       faixas.push({
-        titulo: 'GitHub indisponível.',
-        texto: `Mostrando o quadro em cache${quando ? `, de ${quando}` : ''}.${quadro.motivo ? ` ${quadro.motivo}` : ''}`,
-        acao: { rotulo: 'Tentar agora', aoClicar: () => desenhar({ forcar: true }) },
+        title: 'GitHub indisponível.',
+        text: `Mostrando o quadro em cache${quando ? `, de ${quando}` : ''}.${quadro.motivo ? ` ${quadro.motivo}` : ''}`,
+        action: { label: 'Tentar agora', onClick: () => desenhar({ forcar: true }) },
       });
     }
-    const chave = JSON.stringify(faixas.map(({ titulo, texto, comando }) => [titulo, texto, comando]));
+    const chave = JSON.stringify(faixas.map(({ title, text, comando }) => [title, text, comando]));
     if (chave === chaveDasFaixas) return;
     chaveDasFaixas = chave;
     if (faixas.length) caixaDasFaixas.removeAttribute('hidden');
     else caixaDasFaixas.setAttribute('hidden', '');
-    caixaDasFaixas.replaceChildren(...faixas.map((f) => comComando(faixaDeErro(f), f.comando)));
+    caixaDasFaixas.replaceChildren(...faixas.map((f) => comComando(errorBand(f), f.comando)));
   }
 
   function desenharQuadro() {
@@ -269,7 +269,7 @@ export async function montar(area, ctx) {
     caixaDoQuadro.replaceChildren(
       raias.length
         ? el('div', { class: 'prj-columns' }, ...raias.map((raia, i) => coluna(raia, i, raias, nos)))
-        : vazio({ icone: 'github', titulo: 'O projeto não tem raias', texto: `O campo ${quadro.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
+        : empty({ icon: 'github', title: 'O projeto não tem raias', text: `O campo ${quadro.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
     );
     if (itemAtivo && nos.has(itemAtivo)) nos.get(itemAtivo).focus();
   }
@@ -314,9 +314,9 @@ export async function montar(area, ctx) {
   function cartao(card, raia, indice, raias) {
     const { rotulo, classe } = tipoDoCard(card);
     const pe = [];
-    if (card.subIssues && card.subIssues.total) pe.push(el('span', { title: 'Sub-issues feitas' }, icone('list-checks'), `${card.subIssues.feitas}/${card.subIssues.total}`));
+    if (card.subIssues && card.subIssues.total) pe.push(el('span', { title: 'Sub-issues feitas' }, icon('list-checks'), `${card.subIssues.feitas}/${card.subIssues.total}`));
     if (card.pr) {
-      pe.push(el('span', { title: 'Pull request' }, icone('git-pull-request'), `#${card.pr.numero}`));
+      pe.push(el('span', { title: 'Pull request' }, icon('git-pull-request'), `#${card.pr.numero}`));
       const ci = CI.get(card.pr.ci);
       const review = REVIEW.get(card.pr.review);
       if (ci) pe.push(el('span', { class: `prj-pill ${ci[1]}` }, ci[0]));
@@ -337,7 +337,7 @@ export async function montar(area, ctx) {
         { class: 'type' },
         el('b', { class: `prj-type ${classe}` }, rotulo),
         card.numero != null ? el('span', { class: 'num mono' }, `#${card.numero}`) : null,
-        el('span', { class: 'grip', title: 'Arraste para outra raia (ou Alt+← / Alt+→)' }, icone('grip-vertical')),
+        el('span', { class: 'grip', title: 'Arraste para outra raia (ou Alt+← / Alt+→)' }, icon('grip-vertical')),
       ),
       el('div', { class: 'tt' }, card.titulo),
       pe.length ? el('div', { class: 'foot' }, ...pe) : null,
@@ -409,7 +409,7 @@ export async function montar(area, ctx) {
     focar = teclado ? itemId : null;
     desenharQuadro();
     try {
-      const r = await ctx.escrever(ROTA_MOVER, { itemId, optionId: para });
+      const r = await ctx.write(ROTA_MOVER, { itemId, optionId: para });
       // Só o último movimento em voo pode trocar o quadro inteiro; os de antes já estão na tela.
       if (r?.quadro && emVoo === 1) quadro = r.quadro;
       else if (emVoo > 1) adiada = { forcar: Boolean(adiada?.forcar) };
@@ -453,9 +453,9 @@ export async function montar(area, ctx) {
       el(
         'div',
         { class: 'prj-toast' },
-        icone('check-circle-2'),
+        icon('check-circle-2'),
         el('span', {}, el('b', {}, nomeDoCard(card)), ' movido para ', el('b', {}, nome), ' no GitHub'),
-        de !== null && de !== undefined ? el('button', { type: 'button', class: 'prj-undo', aoClicar: () => mover(card.itemId, de, { teclado: true }) }, 'Desfazer') : null,
+        de !== null && de !== undefined ? el('button', { type: 'button', class: 'prj-undo', onClick: () => mover(card.itemId, de, { teclado: true }) }, 'Desfazer') : null,
       ),
     );
     armarToast();
@@ -463,8 +463,8 @@ export async function montar(area, ctx) {
 
   // ---------- ao vivo ----------
 
-  ctx.aoReiniciar(() => desenhar());
-  ctx.aoMudar(() => {
+  ctx.onRestart(() => desenhar());
+  ctx.onChange(() => {
     clearTimeout(timerDoAoVivo);
     timerDoAoVivo = setTimeout(() => desenhar(), ESPERA_DO_AO_VIVO);
   });

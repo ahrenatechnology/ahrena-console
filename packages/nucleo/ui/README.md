@@ -7,10 +7,10 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `screens.js` | **O registro das telas** (`route`, `item`, `file`) e a troca das URLs antigas pelas novas (`legacyUrl`) |
-| `api.js` | A camada de leitura, `ler(rota)`, e de escrita: `escrever(rota, corpo)` (POST JSON na `/api/`) e `abrirNoDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()`, `usarEscritor()` e `usarAbridor()` |
+| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
-| `states.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
-| `dom.js` | `el()`, `icone()` e `cabecalho()` |
+| `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
+| `dom.js` | `el()`, `icon()` e `header()` |
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |
 | `brand.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `shell.css` |
@@ -39,34 +39,34 @@ O Analytics tem duas abas, que são a mesma tela: em `screens.js`, a entrada `an
 
 ## Registrar uma tela
 
-1. Crie `ui/screens/<nome>.js` exportando `montar(area, ctx)`:
+1. Crie `ui/screens/<name>.js` exportando `mount(area, ctx)`:
 
    ```js
-   import { cabecalho } from '../dom.js';
-   import { carregando, vazio, erro } from '../states.js';
+   import { header } from '../dom.js';
+   import { loading, empty, error } from '../states.js';
 
-   export async function montar(area, ctx) {
-     const cab = cabecalho({ icone: 'sessoes', titulo: 'Sessões', sub: '…' });
-     area.replaceChildren(cab, carregando());
-     async function desenhar() {
+   export async function mount(area, ctx) {
+     const head = header({ icon: 'sessions', title: 'Sessões', sub: '…' });
+     area.replaceChildren(head, loading());
+     async function draw() {
        try {
-         const dados = await ctx.ler('/api/...');
-         area.replaceChildren(cab, dados.length ? lista(dados) : vazio({ titulo: 'Nenhuma sessão ainda', texto: '…' }));
+         const data = await ctx.read('/api/...');
+         area.replaceChildren(head, data.length ? list(data) : empty({ title: 'Nenhuma sessão ainda', text: '…' }));
        } catch (e) {
          if (e.name === 'AbortError') return;
-         area.replaceChildren(cab, erro({ texto: e.message, tentar: desenhar }));
+         area.replaceChildren(head, error({ text: e.message, retry: draw }));
        }
      }
-     ctx.aoReiniciar(desenhar);
-     ctx.aoMudar((mudancas) => { /* relê o que mudou */ });
-     await desenhar();
+     ctx.onRestart(draw);
+     ctx.onChange((changes) => { /* relê o que mudou */ });
+     await draw();
      return () => { /* limpeza ao sair da tela, se precisar */ };
    }
    ```
 
 2. Em `screens.js`, aponte o `file` da entrada: `file: '/ui/screens/<name>.js'`. Uma tela nova ganha uma entrada com `id`, `route`, `title`, `icon` e, se aparece na barra, `item: { label, icon, section }`. Id, rota, nome de arquivo e classes em inglês (decisão 0009); o texto da tela em pt-BR. `section` é o bloco da barra, um id de `SECTIONS` em `screens.js`: `main` (as telas do dia a dia, sem título), `machines` (Máquinas) ou `control` (Controle), na ordem do C24. Dentro do bloco, o item sai na posição da entrada no registro; um bloco sem item não aparece. Uma tela fora da barra usa `highlights` para dizer qual item fica aceso (o Detalhe acende Sessões).
 
-3. Um ícone novo entra em `ICONES` (`dom.js`), copiado do Lucide, com `currentColor`.
+3. Um ícone novo entra em `ICONS` (`dom.js`), com nome em inglês, copiado do Lucide, com `currentColor`.
 
 Item da barra só para tela que existe: nada de placeholder para as telas que não estão na versão.
 
@@ -75,43 +75,43 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 O que é de uma tela só fica num arquivo dela, `ui/<name>.css`, e não em `shell.css`. A tela o põe no `<head>` ao montar, marcado com `data-screen`, sem duplicar, e o tira quando a pessoa sai:
 
 ```js
-function ligarFolha() {
-  const ja = document.head.querySelector('link[data-screen="kanban"]');
-  if (ja) return ja;
+function attachSheet() {
+  const already = document.head.querySelector('link[data-screen="kanban"]');
+  if (already) return already;
   const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-screen': 'kanban' });
   document.head.append(link);
   return link;
 }
 
-const folha = ligarFolha();
-ctx.sinal.addEventListener('abort', () => folha.remove());
+const sheet = attachSheet();
+ctx.signal.addEventListener('abort', () => sheet.remove());
 ```
 
-A limpeza vai no `ctx.sinal`, e não só na função que `montar` devolve, para valer mesmo quando a pessoa sai antes da primeira leitura voltar. O núcleo já serve `/ui/<nome>.css` e `/ui/screens/<nome>.js`, e as regras abaixo valem para eles também (`test/api/ui-kanban.test.ts` confere as do Kanban).
+A limpeza vai no `ctx.signal`, e não só na função que `mount` devolve, para valer mesmo quando a pessoa sai antes da primeira leitura voltar. O núcleo já serve `/ui/<nome>.css` e `/ui/screens/<nome>.js`, e as regras abaixo valem para eles também (`test/api/ui-kanban.test.ts` confere as do Kanban).
 
 ## Parâmetros na URL
 
-Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A moldura a preserva ao navegar por `ctx.navegar` ou por link. Para trocar a query sem sair da tela, use `history.replaceState`: a tela continua montada e relê o que precisar.
+Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A moldura a preserva ao navegar por `ctx.navigate` ou por link. Para trocar a query sem sair da tela, use `history.replaceState`: a tela continua montada e relê o que precisar.
 
 ## O `ctx` da tela
 
 | Campo | O quê |
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
-| `ler(rota)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
-| `escrever(rota, corpo)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
-| `sinal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
-| `aoMudar(f)` | `f(mudancas)` a cada novidade do long polling (`{ tipo, chave, sessionId, accountId }`) |
-| `aoReiniciar(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
-| `aoVivo()` | `'conectando'`, `'ao-vivo'` ou `'sem-conexao'` |
-| `contador(id, n)` | O número no item da barra (o "4" do Dashboard); `0` esconde |
-| `titulo(texto)` | O título da janela (`Ahrena Console · <texto>`) |
-| `navegar(rota)` | Troca de tela sem recarregar; a rota pode levar query (`/ui/agent-config?tab=skills`). Links `<a href="/ui/...">` já fazem isso sozinhos, com a query |
+| `read(route)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
+| `write(route, body)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
+| `signal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
+| `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ tipo, chave, sessionId, accountId }`) |
+| `onRestart(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
+| `liveState()` | `'connecting'`, `'live'` ou `'offline'` |
+| `counter(id, n)` | O número no item da barra (o "4" do Dashboard); `0` esconde |
+| `title(text)` | O título da janela (`Ahrena Console · <text>`) |
+| `navigate(route)` | Troca de tela sem recarregar; a rota pode levar query (`/ui/agent-config?tab=skills`). Links `<a href="/ui/...">` já fazem isso sozinhos, com a query |
 
 ## Regras
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
-- **Toda leitura passa por `ler()`, toda escrita por `escrever()`** (ou `abrirNoDesktop()`), nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
+- **Toda leitura passa por `read()`, toda escrita por `write()`** (ou `openInDesktop()`), nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
 - **As escritas com o `Origin` da página** são só três: o "Abrir no Claude Desktop" (`POST /open/<local_…>`), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `brand.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.

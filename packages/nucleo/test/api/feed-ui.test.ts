@@ -226,11 +226,11 @@ describe('Feed de atividade: estado', () => {
 
 describe('Feed de atividade: a tela', () => {
   const salvo = { document: globalThis.document, Node: globalThis.Node };
-  let montar: (area: unknown, ctx: unknown) => Promise<() => void>;
+  let mount: (area: unknown, ctx: unknown) => Promise<() => void>;
   before(async () => {
     Object.assign(globalThis, { document: documento, Node: No });
     // @ts-expect-error: idem
-    ({ montar } = await import('../../ui/screens/feed.js'));
+    ({ mount } = await import('../../ui/screens/feed.js'));
   });
   after(() => Object.assign(globalThis, salvo));
 
@@ -244,14 +244,14 @@ describe('Feed de atividade: a tela', () => {
       mudar: () => ouvintes.mudar.forEach((f) => f()),
       ctx: {
         params: {},
-        sinal: sair.signal,
-        ler: async (rota: string) => (pedidos.push(rota), responder(rota)),
-        aoMudar: (f: () => void) => ouvintes.mudar.push(f),
-        aoReiniciar: (f: () => void) => ouvintes.reiniciar.push(f),
-        aoVivo: () => 'ao-vivo',
-        contador: () => {},
+        signal: sair.signal,
+        read: async (rota: string) => (pedidos.push(rota), responder(rota)),
+        onChange: (f: () => void) => ouvintes.mudar.push(f),
+        onRestart: (f: () => void) => ouvintes.reiniciar.push(f),
+        liveState: () => 'live',
+        counter: () => {},
         titulo: () => {},
-        navegar: () => {},
+        navigate: () => {},
       },
     };
   }
@@ -271,7 +271,7 @@ describe('Feed de atividade: a tela', () => {
     ];
     const f = ctxFalso(() => fila.shift());
     const area = new Elemento('main');
-    const limpar = await montar(area, f.ctx);
+    const limpar = await mount(area, f.ctx);
 
     assert.equal(f.pedidos[0], '/api/events');
     assert.ok(documento.head.querySelector('link[data-screen="feed"]'), 'o CSS da tela entrou no head');
@@ -336,7 +336,7 @@ describe('Feed de atividade: a tela', () => {
       return new Promise((r) => (soltar = r));
     });
     const area = new Elemento('main');
-    const limpar = await montar(area, f.ctx);
+    const limpar = await mount(area, f.ctx);
     f.mudar();
     f.mudar();
     f.mudar();
@@ -355,7 +355,7 @@ describe('Feed de atividade: a tela', () => {
 
   test('vazio, vazio com filtro, erro e "mostrar mais"', async () => {
     const area = new Elemento('main');
-    let limpar = await montar(area, ctxFalso(() => ({ eventos: [], cursor: null, anteriores: null, opcoes: null })).ctx);
+    let limpar = await mount(area, ctxFalso(() => ({ eventos: [], cursor: null, anteriores: null, opcoes: null })).ctx);
     assert.match(area.textContent, /Nenhum evento ainda/);
     const status = area.querySelectorAll('select')[0]!;
     status.value = 'error';
@@ -364,8 +364,8 @@ describe('Feed de atividade: a tela', () => {
     assert.match(area.textContent, /Nenhum evento com esses filtros/);
     limpar();
 
-    const falha = ctxFalso(() => Promise.reject(Object.assign(new Error('O núcleo respondeu 500'), { name: 'ErroDeLeitura' })));
-    limpar = await montar(area, falha.ctx);
+    const falha = ctxFalso(() => Promise.reject(Object.assign(new Error('O núcleo respondeu 500'), { name: 'ReadError' })));
+    limpar = await mount(area, falha.ctx);
     assert.match(area.textContent, /Sem conexão com o núcleo/);
     assert.match(area.textContent, /Tentar de novo/);
     limpar();
@@ -373,7 +373,7 @@ describe('Feed de atividade: a tela', () => {
     const mais = ctxFalso((rota) =>
       rota.includes('before=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
     );
-    limpar = await montar(area, mais.ctx);
+    limpar = await mount(area, mais.ctx);
     const botao = area.querySelector('.feed-more')!;
     assert.equal(botao.hidden, false);
     botao.click();
@@ -389,7 +389,7 @@ describe('Feed de atividade: a tela', () => {
     let soltar: (v: unknown) => void = () => {};
     const f = ctxFalso(() => new Promise((_, rejeitar) => (soltar = rejeitar)));
     const area = documento.createElement('main');
-    const montado = montar(area, f.ctx);
+    const montado = mount(area, f.ctx);
     assert.equal(documento.head.querySelectorAll('link').length, antes + 1);
     f.sair.abort();
     soltar(Object.assign(new Error('saiu'), { name: 'AbortError' }));

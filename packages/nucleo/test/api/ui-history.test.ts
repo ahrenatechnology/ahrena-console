@@ -60,7 +60,7 @@ describe('Histórico: registro e arquivo', () => {
     await responderUi(res as unknown as ServerResponse, '/ui/screens/history.js');
     assert.equal(res.status, 200);
     assert.match(String(res.headers['content-type']), /^text\/javascript/);
-    assert.match(res.corpo, /export function montar\(/);
+    assert.match(res.corpo, /export function mount\(/);
   });
 
   test('history.js segue as regras da página', () => {

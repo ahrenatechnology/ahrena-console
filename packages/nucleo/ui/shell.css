@@ -36,9 +36,9 @@ button { font: inherit; cursor: pointer; }
 .cc-foot .card { padding: 8px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .cc-foot .card b { font-weight: var(--weight-medium); }
 #live .version { margin-left: auto; }
-#live[data-state="ao-vivo"] b { color: var(--status-completed-text); }
-#live[data-state="sem-conexao"] { color: var(--status-error-text); }
-#live[data-state="conectando"] b { color: var(--muted); }
+#live[data-state="live"] b { color: var(--status-completed-text); }
+#live[data-state="offline"] { color: var(--status-error-text); }
+#live[data-state="connecting"] b { color: var(--muted); }
 
 .cc-main { padding: 20px 24px 24px; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 
@@ -51,8 +51,8 @@ button { font: inherit; cursor: pointer; }
 
 .live { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-medium); background: var(--status-completed-badge); color: var(--status-completed-text); }
 .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.live[data-state="sem-conexao"] { background: var(--status-error-badge); color: var(--status-error-text); }
-.live[data-state="conectando"] { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.live[data-state="offline"] { background: var(--status-error-badge); color: var(--status-error-text); }
+.live[data-state="connecting"] { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
 
 /* ---------- peças comuns ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }

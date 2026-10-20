@@ -9,8 +9,8 @@
 //
 // Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
 
-import { el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro } from '../states.js';
+import { el, icon } from '../dom.js';
+import { loading, error, errorBand } from '../states.js';
 import { duracao, nomeDoModelo, num } from './workflow-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -250,7 +250,7 @@ function linhaDoTempo(w) {
   return el(
     'section',
     { class: 'card wfd-panel' },
-    el('div', { class: 'wfd-ttl' }, icone('gantt'), 'Linha do tempo dos agentes', el('span', { class: 'wfd-ttl-r' }, `${escala.resumo} · concorrência`)),
+    el('div', { class: 'wfd-ttl' }, icon('gantt'), 'Linha do tempo dos agentes', el('span', { class: 'wfd-ttl-r' }, `${escala.resumo} · concorrência`)),
     ...faixas,
     eixo,
   );
@@ -261,7 +261,7 @@ function desenho(w) {
     el(
       'section',
       { class: 'card wfd-panel' },
-      el('div', { class: 'wfd-ttl' }, icone('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.resumo ?? '')),
+      el('div', { class: 'wfd-ttl' }, icon('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.resumo ?? '')),
       grafo(w),
       legenda(w),
     ),
@@ -276,7 +276,7 @@ export function criar(ctx, base) {
   let dados = null;
   let seq = 0;
   let timer = null;
-  ctx.sinal?.addEventListener('abort', () => clearTimeout(timer));
+  ctx.signal?.addEventListener('abort', () => clearTimeout(timer));
 
   async function desenhar() {
     const meu = ++seq;
@@ -284,16 +284,16 @@ export function criar(ctx, base) {
     if (!alvo) return;
     carregarCss();
     try {
-      const w = await ctx.ler(`${base}/workflow`);
+      const w = await ctx.read(`${base}/workflow`);
       if (meu !== seq || !alvo) return;
       dados = w;
       alvo.replaceChildren(...desenho(w));
     } catch (e) {
       if (e?.name === 'AbortError' || meu !== seq || !alvo) return;
-      if (dados) alvo.replaceChildren(faixaDeErro({ titulo: 'Não deu para atualizar.', texto: e.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar() } }), ...desenho(dados));
-      else alvo.replaceChildren(erro({ titulo: e.status === 404 ? 'Sessão não encontrada' : 'Não deu para ler o workflow', texto: e.message, tentar: () => (alvo?.replaceChildren(carregando({ rotulo: 'Carregando', blocos: 2 })), desenhar()) }));
+      if (dados) alvo.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => desenhar() } }), ...desenho(dados));
+      else alvo.replaceChildren(error({ title: e.status === 404 ? 'Sessão não encontrada' : 'Não deu para ler o workflow', text: e.message, retry: () => (alvo?.replaceChildren(loading({ label: 'Carregando', blocks: 2 })), desenhar()) }));
     }
-    if (meu === seq && alvo && !ctx.sinal?.aborted && dados?.nos.some((n) => n.estado === 'ativo')) timer = setTimeout(desenhar, RELER_ATIVO_MS);
+    if (meu === seq && alvo && !ctx.signal?.aborted && dados?.nos.some((n) => n.estado === 'ativo')) timer = setTimeout(desenhar, RELER_ATIVO_MS);
   }
 
   return {

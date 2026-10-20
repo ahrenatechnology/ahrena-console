@@ -1,7 +1,7 @@
-// Peças de DOM da interface. Texto entra sempre por `textContent`: nada vindo do núcleo vira HTML.
+// DOM pieces of the interface. Text always goes in through `textContent`: nothing from the core becomes HTML.
 
-// Ícones do Lucide (ISC), em traço com `currentColor`: a cor vem do CSS.
-const ICONES = {
+// Lucide icons (ISC), stroked with `currentColor`: the color comes from the CSS.
+const ICONS = {
   dashboard: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
   sessions: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
   live: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>',
@@ -127,47 +127,47 @@ const ICONES = {
   pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
 };
 // The detail's Workflow tab registers the icon as `graph`: the same drawing as `workflows`.
-ICONES.graph = ICONES.workflows;
+ICONS.graph = ICONS.workflows;
 
-/** Os nomes dos ícones que existem (o teste confere os que as telas usam). */
-export const NOMES_DOS_ICONES = Object.keys(ICONES);
+/** The names of the icons that exist (the test checks the ones the screens use). */
+export const ICON_NAMES = Object.keys(ICONS);
 
 const SVG = 'http://www.w3.org/2000/svg';
 
-export function icone(nome) {
+export function icon(name) {
   const svg = document.createElementNS(SVG, 'svg');
   for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', class: 'icon' })) svg.setAttribute(k, v);
-  svg.innerHTML = ICONES[nome] ?? '';
+  svg.innerHTML = ICONS[name] ?? '';
   return svg;
 }
 
-/** `el('a', { class: 'x', href: '/ui', aoClicar: fn }, 'texto', outroNo)` */
-export function el(tag, atributos = {}, ...filhos) {
-  const no = document.createElement(tag);
-  for (const [k, v] of Object.entries(atributos ?? {})) {
+/** `el('a', { class: 'x', href: '/ui', onClick: fn }, 'text', otherNode)` */
+export function el(tag, attributes = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attributes ?? {})) {
     if (v === null || v === undefined || v === false) continue;
-    if (k === 'aoClicar') no.addEventListener('click', v);
-    else no.setAttribute(k, v === true ? '' : String(v));
+    if (k === 'onClick') node.addEventListener('click', v);
+    else node.setAttribute(k, v === true ? '' : String(v));
   }
-  for (const f of filhos.flat()) {
-    if (f === null || f === undefined || f === false) continue;
-    no.append(f instanceof Node ? f : document.createTextNode(String(f)));
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
-  return no;
+  return node;
 }
 
-/** A pílula "Ao vivo" do cabeçalho, ligada ao estado do long polling pela moldura. */
-export function pilulaAoVivo() {
+/** The "Ao vivo" pill of the header, tied to the long polling state by the shell. */
+export function livePill() {
   return el('span', { class: 'live', 'data-live': '' }, 'Ao vivo');
 }
 
-/** O cabeçalho de uma tela (C1): ícone, título com "Ao vivo", subtítulo e ações à direita. */
-export function cabecalho({ icone: nome, titulo, sub, acoes = [] }) {
+/** The header of a screen (C1): icon, title with "Ao vivo", subtitle and actions on the right. */
+export function header({ icon: name, title, sub, actions = [] }) {
   return el(
     'header',
     { class: 'cc-head' },
-    el('div', { class: 'ico' }, icone(nome)),
-    el('div', {}, el('h1', {}, titulo, ' ', pilulaAoVivo()), sub ? el('div', { class: 'sub' }, sub) : null),
-    acoes.length ? el('div', { class: 'actions' }, ...acoes) : null,
+    el('div', { class: 'ico' }, icon(name)),
+    el('div', {}, el('h1', {}, title, ' ', livePill()), sub ? el('div', { class: 'sub' }, sub) : null),
+    actions.length ? el('div', { class: 'actions' }, ...actions) : null,
   );
 }

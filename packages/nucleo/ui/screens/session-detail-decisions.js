@@ -8,8 +8,8 @@
 // o número; o session-detail.js redesenha as abas. O escopo padrão é a família, como o da API.
 // `atualizar()` também serve com a aba escondida: lê e só rotula.
 
-import { el, icone } from '../dom.js';
-import { erro } from '../states.js';
+import { el, icon } from '../dom.js';
+import { error } from '../states.js';
 import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisions-common.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
@@ -36,7 +36,7 @@ function cartaoDaInjecao(i) {
   return el(
     'section',
     { class: 'card dec-side' },
-    el('div', { class: 'dec-side-ttl' }, icone('start'), el('h3', {}, 'No início de cada sessão'), i.ligada ? el('span', { class: 'dec-pill dec-e-current' }, 'Ligado') : el('span', { class: 'dec-pill dec-e-superseded' }, 'Ainda não ligado')),
+    el('div', { class: 'dec-side-ttl' }, icon('start'), el('h3', {}, 'No início de cada sessão'), i.ligada ? el('span', { class: 'dec-pill dec-e-current' }, 'Ligado') : el('span', { class: 'dec-pill dec-e-superseded' }, 'Ainda não ligado')),
     el(
       'p',
       {},
@@ -54,8 +54,8 @@ function cartaoDoMcp(m) {
   return el(
     'section',
     { class: 'card dec-side' },
-    el('div', { class: 'dec-side-ttl' }, icone('mcp'), el('h3', {}, 'Quando o agente perguntar'), el('span', { class: 'dec-r' }, 'MCP')),
-    el('div', { class: 'dec-call mono', title: m.chamada }, icone('chevron-right'), el('span', { class: 'dec-n' }, nome), el('span', { class: 'dec-cmd' }, args)),
+    el('div', { class: 'dec-side-ttl' }, icon('mcp'), el('h3', {}, 'Quando o agente perguntar'), el('span', { class: 'dec-r' }, 'MCP')),
+    el('div', { class: 'dec-call mono', title: m.chamada }, icon('chevron-right'), el('span', { class: 'dec-n' }, nome), el('span', { class: 'dec-cmd' }, args)),
     el('p', {}, m.resposta),
     m.existe ? null : el('p', { class: 'dec-note' }, `A ferramenta ${nome} ainda não existe no MCP do núcleo: esta é a chamada que ela vai responder.`),
   );
@@ -65,7 +65,7 @@ function cartaoDoPromover() {
   return el(
     'section',
     { class: 'card dec-side' },
-    el('div', { class: 'dec-side-ttl' }, icone('promote'), el('h3', {}, 'Promover a registro de decisão')),
+    el('div', { class: 'dec-side-ttl' }, icon('promote'), el('h3', {}, 'Promover a registro de decisão')),
     el('p', {}, 'Gera um rascunho de registro de decisão para o repositório da sessão, com contexto, decisão, alternativas e o link para a conversa. O caminho vem do núcleo e aparece antes de gravar.'),
   );
 }
@@ -111,26 +111,26 @@ export function criar(ctx, base, { cabeca = () => null, rotular = () => {} } = {
   async function desenhar() {
     const meu = ++pedido;
     try {
-      const r = await ctx.ler(rotaDaAba(base, filtros));
+      const r = await ctx.read(rotaDaAba(base, filtros));
       if (meu !== pedido) return;
       ultimo = r;
       rotular(num(r.total));
       if (alvo) pintar(r);
     } catch (e) {
       if (e.name === 'AbortError' || meu !== pedido) return;
-      alvo?.replaceChildren(erro({ titulo: 'Não deu para ler as decisões', texto: e.message, tentar: desenhar }));
+      alvo?.replaceChildren(error({ title: 'Não deu para ler as decisões', text: e.message, retry: desenhar }));
     }
   }
 
   // As decisões de outra sessão da família ou do branch também mudam esta aba: o session-detail.js só relê
   // pelas mudanças desta sessão, então a aba escuta as de decisão por conta própria.
   let espera = null;
-  ctx.aoMudar((mudancas) => {
+  ctx.onChange((mudancas) => {
     if (!mudancas.some((m) => m.tipo === 'decisao')) return;
     clearTimeout(espera);
     espera = setTimeout(desenhar, 400);
   });
-  ctx.sinal?.addEventListener('abort', () => clearTimeout(espera));
+  ctx.signal?.addEventListener('abort', () => clearTimeout(espera));
 
   return {
     mostrar(no) {

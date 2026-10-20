@@ -6,8 +6,8 @@
 // - `carregando` do núcleo (o GitHub ainda não respondeu): relê a cada 5 s, além da mudança
 //   `repos`/`lista` do Ao vivo. O que a tela desenha sai de `estadoDaTela` (repos-format.js).
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 import { estadoDaTela, filtrarRepos, inteiro, mudancaInteressa, ORDENACOES, porcentagem, relativo, SEM_GITHUB, sparkline, temLista, TRACO, VISIBILIDADES } from '../repos-format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -53,7 +53,7 @@ function stat(rotulo, valor, sub, nomeIcone, cor) {
     'section',
     { class: 'card repo-stat' },
     el('span', { class: 'repo-stat-label' }, rotulo),
-    el('span', { class: `repo-stat-ic ${cor}` }, icone(nomeIcone)),
+    el('span', { class: `repo-stat-ic ${cor}` }, icon(nomeIcone)),
     el('span', { class: 'repo-stat-v' }, valor),
     el('span', { class: 'repo-stat-s' }, sub),
   );
@@ -80,7 +80,7 @@ const COLUNAS = [
   ['repo-col-push', 'Último push'],
 ];
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   carregarEstilo();
   const filtro = { busca: '', dono: '', vis: 'todos', ordem: 'recente' };
   let dados = null;
@@ -90,18 +90,18 @@ export async function montar(area, ctx) {
 
   // ---------- cabeçalho ----------
   const chipConta = el('span', { class: 'repo-chip', hidden: true });
-  const atualizar = el('button', { type: 'button', class: 'btn' }, icone('refresh'), 'Atualizar');
+  const atualizar = el('button', { type: 'button', class: 'btn' }, icon('refresh'), 'Atualizar');
   atualizar.addEventListener('click', async () => {
     atualizar.disabled = true;
     atualizar.setAttribute('aria-busy', 'true');
     try {
-      await ler({ forcar: true });
+      await read({ forcar: true });
     } finally {
       atualizar.disabled = false;
       atualizar.removeAttribute('aria-busy');
     }
   });
-  const cab = cabecalho({ icone: 'repos', titulo: 'Repositórios', sub: 'Organizações e repositórios da sua conta do GitHub', acoes: [chipConta, atualizar] });
+  const cab = header({ icon: 'repos', title: 'Repositórios', sub: 'Organizações e repositórios da sua conta do GitHub', actions: [chipConta, atualizar] });
 
   // ---------- filtros: montados uma vez ----------
   const busca = el('input', { type: 'search', placeholder: 'Buscar repositórios…', 'aria-label': 'Buscar repositórios', autocomplete: 'off', spellcheck: 'false' });
@@ -127,9 +127,9 @@ export async function montar(area, ctx) {
   const filtros = el(
     'div',
     { class: 'card repo-filters', role: 'search' },
-    el('label', { class: 'repo-field repo-field-search' }, icone('search'), busca),
-    el('label', { class: 'repo-field repo-field-list' }, orgs, icone('chevron-down')),
-    el('label', { class: 'repo-field repo-field-list' }, ordem, icone('chevron-down')),
+    el('label', { class: 'repo-field repo-field-search' }, icon('search'), busca),
+    el('label', { class: 'repo-field repo-field-list' }, orgs, icon('chevron-down')),
+    el('label', { class: 'repo-field repo-field-list' }, ordem, icon('chevron-down')),
     el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Visibilidade' }, ...botoesVis),
   );
 
@@ -174,13 +174,13 @@ export async function montar(area, ctx) {
       el('td', {}, pilulaDeCi(r.ci)),
       el('td', { class: 'repo-sessions' }, sessoes(r.sessoes)),
       el('td', { class: 'repo-muted', title: r.ultimoPush ? new Date(r.ultimoPush).toLocaleString('pt-BR') : null }, relativo(r.ultimoPush, agora)),
-      el('td', { class: 'repo-arrow' }, icone('chevron-right')),
+      el('td', { class: 'repo-arrow' }, icon('chevron-right')),
     );
     // A linha inteira leva ao repositório; o link do nome é o caminho pelo teclado.
     tr.addEventListener('click', (ev) => {
       if (ev.defaultPrevented || (ev.target instanceof Element && ev.target.closest('a'))) return;
       if (getSelection()?.toString()) return;
-      ctx.navegar(href);
+      ctx.navigate(href);
     });
     return tr;
   }
@@ -190,7 +190,7 @@ export async function montar(area, ctx) {
     return el(
       'section',
       { class: 'repo-group' },
-      el('div', { class: 'repo-group-head' }, icone(g.tipo === 'pessoal' ? 'person' : 'organization'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
+      el('div', { class: 'repo-group-head' }, icon(g.tipo === 'pessoal' ? 'person' : 'organization'), el('h2', {}, g.tipo === 'pessoal' ? 'você (pessoal)' : g.dono), el('span', {}, `${n} ${n === 1 ? 'repositório' : 'repositórios'}`)),
       el(
         'div',
         { class: 'card' },
@@ -211,31 +211,31 @@ export async function montar(area, ctx) {
     const focado = lista.contains(document.activeElement) ? document.activeElement.getAttribute('href') : null;
     const grupos = filtrarRepos(dados.grupos, filtro);
     const agora = Date.now();
-    lista.replaceChildren(...(grupos.length ? grupos.map((g) => grupo(g, agora)) : [vazio({ icone: 'search', titulo: 'Nenhum repositório com esse filtro', texto: 'Mude a busca, a organização ou a visibilidade.' })]));
+    lista.replaceChildren(...(grupos.length ? grupos.map((g) => grupo(g, agora)) : [empty({ icon: 'search', title: 'Nenhum repositório com esse filtro', text: 'Mude a busca, a organização ou a visibilidade.' })]));
     if (focado) [...lista.querySelectorAll('a[href]')].find((a) => a.getAttribute('href') === focado)?.focus();
   }
 
-  const nenhum = () => vazio({ icone: 'repos', titulo: 'Nenhum repositório', texto: 'A conta do GitHub não tem repositórios, fora os arquivados.' });
-  const tentar = () => (area.replaceChildren(cab, carregando()), ler());
+  const nenhum = () => empty({ icon: 'repos', title: 'Nenhum repositório', text: 'A conta do GitHub não tem repositórios, fora os arquivados.' });
+  const tentar = () => (area.replaceChildren(cab, loading()), read());
 
   function desenhar() {
     clearTimeout(timer);
     timer = null;
     chipConta.hidden = !dados?.conta;
-    chipConta.replaceChildren(icone('github'), `conta: ${dados?.conta ?? ''}`);
+    chipConta.replaceChildren(icon('github'), `conta: ${dados?.conta ?? ''}`);
 
     const e = estadoDaTela({ dados, falha, temDado: temLista(dados) });
-    if (e.reler) timer = setTimeout(ler, RELER_MS);
-    if (e.tela === 'erro') return area.replaceChildren(cab, falha ? erro({ texto: falha.message, tentar }) : erro({ titulo: 'O GitHub não respondeu', texto: dados.erro ?? 'A leitura dos repositórios falhou.', tentar: () => (area.replaceChildren(cab, carregando()), ler({ forcar: true })) }));
-    if (e.tela === 'carregando') return area.replaceChildren(cab, carregando());
-    if (e.tela === 'lendo') return area.replaceChildren(cab, carregando({ rotulo: 'Lendo o GitHub…' }));
-    if (e.tela === 'sem-github') return area.replaceChildren(cab, vazio({ icone: 'github', ...SEM_GITHUB }));
+    if (e.reler) timer = setTimeout(read, RELER_MS);
+    if (e.tela === 'erro') return area.replaceChildren(cab, falha ? error({ text: falha.message, retry: tentar }) : error({ title: 'O GitHub não respondeu', text: dados.erro ?? 'A leitura dos repositórios falhou.', retry: () => (area.replaceChildren(cab, loading()), read({ forcar: true })) }));
+    if (e.tela === 'carregando') return area.replaceChildren(cab, loading());
+    if (e.tela === 'lendo') return area.replaceChildren(cab, loading({ label: 'Lendo o GitHub…' }));
+    if (e.tela === 'sem-github') return area.replaceChildren(cab, empty({ icon: 'github', ...SEM_GITHUB }));
     if (e.tela !== 'dados') return area.replaceChildren(cab, nenhum());
 
     if (!area.contains(filtros)) area.replaceChildren(cab, faixa, stats, filtros, lista);
     const quando = dados.atualizadoEm ? new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
-    if (e.faixa === 'conexao') faixa.replaceChildren(faixaDeErro({ titulo: 'Sem conexão com o núcleo.', texto: `${falha.message}. Mostrando a última leitura${quando ? `, de ${quando}` : ''}.`, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }));
-    else if (e.faixa === 'github') faixa.replaceChildren(faixaDeErro({ titulo: 'GitHub com problema.', texto: `${dados.erro}. Mostrando os repositórios${quando ? ` de ${quando}` : ' da última leitura'}.` }));
+    if (e.faixa === 'conexao') faixa.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${falha.message}. Mostrando a última leitura${quando ? `, de ${quando}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
+    else if (e.faixa === 'github') faixa.replaceChildren(errorBand({ title: 'GitHub com problema.', text: `${dados.erro}. Mostrando os repositórios${quando ? ` de ${quando}` : ' da última leitura'}.` }));
     else faixa.replaceChildren();
     faixa.hidden = !faixa.firstChild;
 
@@ -249,12 +249,12 @@ export async function montar(area, ctx) {
     desenharLista();
   }
 
-  async function ler({ forcar = false } = {}) {
+  async function read({ forcar = false } = {}) {
     clearTimeout(timer);
     timer = null;
     const n = ++pedido;
     try {
-      const d = await ctx.ler(forcar ? '/api/repos?refresh=1' : '/api/repos');
+      const d = await ctx.read(forcar ? '/api/repos?refresh=1' : '/api/repos');
       if (n !== pedido) return;
       dados = d;
       falha = null;
@@ -265,13 +265,13 @@ export async function montar(area, ctx) {
     desenhar();
   }
 
-  ctx.aoMudar((mudancas) => {
-    if (mudancaInteressa(mudancas)) ler();
+  ctx.onChange((mudancas) => {
+    if (mudancaInteressa(mudancas)) read();
   });
-  ctx.aoReiniciar(() => ler());
+  ctx.onRestart(() => read());
 
-  area.replaceChildren(cab, carregando());
-  await ler();
+  area.replaceChildren(cab, loading());
+  await read();
   return () => {
     clearTimeout(timer);
     timer = null;

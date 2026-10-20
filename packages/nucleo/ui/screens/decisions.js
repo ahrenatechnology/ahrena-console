@@ -2,8 +2,8 @@
 // busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma. Lê `GET /api/decisions`
 // (src/api/decisoes-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (api.js).
 
-import { cabecalho, el, icone } from '../dom.js';
-import { carregando, erro, faixaDeErro, vazio } from '../states.js';
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
 import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisions-common.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
@@ -25,19 +25,19 @@ export function resumoDoGrupo(g) {
 }
 
 function numero({ rotulo, valor, detalhe, icone: nome, cor }) {
-  return el('div', { class: 'card dec-number' }, el('div', { class: 'eyebrow' }, rotulo), el('span', { class: `dec-number-ico dec-color-${cor}` }, icone(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
+  return el('div', { class: 'card dec-number' }, el('div', { class: 'eyebrow' }, rotulo), el('span', { class: `dec-number-ico dec-color-${cor}` }, icon(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
 }
 
-export async function montar(area, ctx) {
+export async function mount(area, ctx) {
   carregarCssDasDecisoes();
   const filtros = { agrupar: 'branch', estado: 'todas', q: '', grupo: null };
 
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
-  const cab = cabecalho({
-    icone: 'decision',
-    titulo: 'Decisões',
+  const atualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar() }, icon('refresh'), 'Atualizar');
+  const cab = header({
+    icon: 'decision',
+    title: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
-    acoes: [
+    actions: [
       alternador({ rotulo: 'Agrupar por', opcoes: [['sessao', 'Sessão'], ['familia', 'Família'], ['branch', 'Branch']], atual: filtros.agrupar, aoTrocar: (v) => ((filtros.agrupar = v), (filtros.grupo = null), desenhar()) }),
       atualizar,
     ],
@@ -59,13 +59,13 @@ export async function montar(area, ctx) {
     const cabeca = el(
       'div',
       { class: 'dec-group-head' },
-      icone(g.tipo === 'branch' ? 'branch' : 'sessions'),
+      icon(g.tipo === 'branch' ? 'branch' : 'sessions'),
       el('span', { class: g.tipo === 'branch' ? 'mono dec-name' : 'dec-name' }, g.titulo),
       el('span', { class: 'dec-summary' }, resumoDoGrupo(g)),
       filtros.grupo
-        ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, icone('back'), 'Todos os grupos')
+        ? el('button', { type: 'button', class: 'dec-link', onClick: () => ((filtros.grupo = null), desenhar()) }, icon('back'), 'Todos os grupos')
         : g.mais > 0
-          ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)})`, icone('chevron-right'))
+          ? el('button', { type: 'button', class: 'dec-link', onClick: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)})`, icon('chevron-right'))
           : null,
     );
     const agora = Date.now();
@@ -83,14 +83,14 @@ export async function montar(area, ctx) {
     const total = c.vigentes + c.aConfirmar + c.substituidas30d;
     if (r.grupos.length) lista.replaceChildren(...r.grupos.map(grupo));
     else if (!total && !filtros.q && filtros.estado === 'todas')
-      lista.replaceChildren(vazio({ icone: 'decision', titulo: 'Nenhuma decisão ainda', texto: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
-    else lista.replaceChildren(vazio({ icone: 'search', titulo: 'Nada com esses filtros', texto: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
+      lista.replaceChildren(empty({ icon: 'decision', title: 'Nenhuma decisão ainda', text: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
+    else lista.replaceChildren(empty({ icon: 'search', title: 'Nada com esses filtros', text: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
   }
 
   async function desenhar() {
     const meu = ++pedido;
     try {
-      const r = await ctx.ler(rotaDasDecisoes(filtros));
+      const r = await ctx.read(rotaDasDecisoes(filtros));
       if (meu !== pedido) return;
       faixa.replaceChildren();
       const primeira = !ultimo;
@@ -99,21 +99,21 @@ export async function montar(area, ctx) {
       if (primeira) area.replaceChildren(cab, numeros, barra, faixa, lista);
     } catch (e) {
       if (e.name === 'AbortError' || meu !== pedido) return;
-      if (!ultimo) area.replaceChildren(cab, erro({ texto: e.message, tentar: desenhar }));
-      else faixa.replaceChildren(faixaDeErro({ titulo: 'Não deu para atualizar.', texto: e.message, acao: { rotulo: 'Tentar de novo', aoClicar: desenhar } }));
+      if (!ultimo) area.replaceChildren(cab, error({ text: e.message, retry: desenhar }));
+      else faixa.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: desenhar } }));
     }
   }
 
   // Ao vivo: qualquer decisão que muda relê a página, juntando as que chegam perto.
   let espera = null;
-  ctx.aoMudar((mudancas) => {
+  ctx.onChange((mudancas) => {
     if (!mudancas.some((m) => m.tipo === 'decisao')) return;
     clearTimeout(espera);
     espera = setTimeout(desenhar, 400);
   });
-  ctx.aoReiniciar(desenhar);
+  ctx.onRestart(desenhar);
 
-  area.replaceChildren(cab, carregando({ rotulo: 'Carregando as decisões' }));
+  area.replaceChildren(cab, loading({ label: 'Carregando as decisões' }));
   await desenhar();
   return () => clearTimeout(espera);
 }

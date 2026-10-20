@@ -1,23 +1,23 @@
-// A moldura do console (#26): barra lateral, roteamento no cliente, "Ao vivo" e a área da tela.
-// As telas se registram em screens.js; o contrato de uma tela está no README.md.
+// The console shell (#26): sidebar, client-side routing, "Ao vivo" and the screen area.
+// Screens register in screens.js; the screen contract is in README.md.
 
-import { escrever, ler } from './api.js';
-import { iniciarAoVivo } from './live.js';
-import { cabecalho, el, icone } from './dom.js';
-import { erro, vazio } from './states.js';
+import { write, read } from './api.js';
+import { startLive } from './live.js';
+import { header, el, icon } from './dom.js';
+import { error, empty } from './states.js';
 import { findScreen, legacyUrl, sidebarSections } from './screens.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
-const cartaoAoVivo = document.getElementById('live');
-const porta = document.getElementById('port');
+const liveCard = document.getElementById('live');
+const port = document.getElementById('port');
 
-porta.textContent = location.host;
+port.textContent = location.host;
 
-// ---------- Barra lateral ----------
+// ---------- Sidebar ----------
 
-// Um bloco por seção (C1, C24): as telas do dia a dia sem título, depois Máquinas e Controle.
-const itens = new Map();
+// One block per section (C1, C24): the everyday screens without a title, then Machines and Control.
+const items = new Map();
 for (const section of sidebarSections()) {
   const titleId = section.label ? `cc-nav-title-${section.id}` : null;
   const group = el(
@@ -25,157 +25,157 @@ for (const section of sidebarSections()) {
     { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
     titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
   );
-  for (const tela of section.items) {
+  for (const screen of section.items) {
     const q = el('span', { class: 'q', hidden: true });
-    const a = el('a', { class: 'cc-nav', href: tela.route, 'data-screen': tela.id }, icone(tela.item.icon), el('span', {}, tela.item.label), q);
-    itens.set(tela.id, { a, q });
+    const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', {}, screen.item.label), q);
+    items.set(screen.id, { a, q });
     group.append(a);
   }
   nav.append(group);
 }
 
-function acender(id) {
-  for (const [k, { a }] of itens) {
+function highlight(id) {
+  for (const [k, { a }] of items) {
     a.classList.toggle('on', k === id);
     if (k === id) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
 }
 
-function contador(id, n) {
-  const item = itens.get(id);
+function counter(id, n) {
+  const item = items.get(id);
   if (!item) return;
   item.q.hidden = !n;
   item.q.textContent = n ? String(n) : '';
 }
 
-// ---------- Ao vivo ----------
+// ---------- Live ----------
 
-let versao = null;
-let estadoAoVivo = { estado: 'conectando', erro: null, proximaTentativa: null };
-const ouvintes = { mudar: new Set(), reiniciar: new Set() };
+let version = null;
+let liveState = { state: 'connecting', error: null, nextAttempt: null };
+const listeners = { change: new Set(), restart: new Set() };
 
-// O primeiro `reiniciar` é o da conexão: a tela acabou de ler, não precisa reler. Depois dele (ou
-// depois de uma queda), todo `reiniciar` faz a tela reler.
-let conectou = false;
-function reiniciar() {
-  lerVersao();
-  if (!conectou) return void (conectou = true);
-  if (telaComErro) return abrir();
-  for (const f of ouvintes.reiniciar) f();
+// The first `restart` is the connection's: the screen has just read, it does not need to re-read.
+// After it (or after a drop), every `restart` makes the screen re-read.
+let connected = false;
+function restart() {
+  readVersion();
+  if (!connected) return void (connected = true);
+  if (screenFailed) return open();
+  for (const f of listeners.restart) f();
 }
 
-async function lerVersao() {
+async function readVersion() {
   try {
-    versao = (await ler('/api/overview')).versao ?? null;
+    version = (await read('/api/overview')).versao ?? null;
   } catch {}
-  desenharAoVivo();
+  drawLive();
 }
 
-const ROTULOS = { conectando: 'Conectando', 'ao-vivo': 'Ao vivo', 'sem-conexao': 'Sem conexão' };
+const LABELS = { connecting: 'Conectando', live: 'Ao vivo', offline: 'Sem conexão' };
 
-function desenharAoVivo() {
-  const { estado, erro: e, proximaTentativa } = estadoAoVivo;
-  const segundos = proximaTentativa ? Math.max(1, Math.round((proximaTentativa - Date.now()) / 1000)) : null;
-  cartaoAoVivo.dataset.state = estado;
-  cartaoAoVivo.title = estado === 'sem-conexao' ? `${e?.message ?? 'O núcleo não respondeu'}. Tentando de novo${segundos ? ` em ${segundos} s` : ''}.` : '';
-  cartaoAoVivo.replaceChildren(
-    icone(estado === 'sem-conexao' ? 'offline' : 'live'),
-    el('b', {}, ROTULOS[estado]),
-    el('span', { class: 'version mono' }, versao ? `v${versao}` : ''),
+function drawLive() {
+  const { state, error: e, nextAttempt } = liveState;
+  const seconds = nextAttempt ? Math.max(1, Math.round((nextAttempt - Date.now()) / 1000)) : null;
+  liveCard.dataset.state = state;
+  liveCard.title = state === 'offline' ? `${e?.message ?? 'O núcleo não respondeu'}. Tentando de novo${seconds ? ` em ${seconds} s` : ''}.` : '';
+  liveCard.replaceChildren(
+    icon(state === 'offline' ? 'offline' : 'live'),
+    el('b', {}, LABELS[state]),
+    el('span', { class: 'version mono' }, version ? `v${version}` : ''),
   );
   for (const p of document.querySelectorAll('[data-live]')) {
-    p.dataset.state = estado;
-    p.textContent = ROTULOS[estado];
+    p.dataset.state = state;
+    p.textContent = LABELS[state];
   }
 }
 
-iniciarAoVivo({
-  ler,
-  aoEstado(novo) {
-    // Depois de uma queda, a próxima resposta relê tudo, mesmo que seja a primeira.
-    if (novo.estado === 'sem-conexao') conectou = true;
-    estadoAoVivo = novo;
-    desenharAoVivo();
+startLive({
+  read,
+  onState(next) {
+    // After a drop, the next answer re-reads everything, even if it is the first.
+    if (next.state === 'offline') connected = true;
+    liveState = next;
+    drawLive();
   },
-  aoReiniciar: reiniciar,
-  aoMudar(mudancas) {
-    for (const f of ouvintes.mudar) f(mudancas);
+  onRestart: restart,
+  onChange(changes) {
+    for (const f of listeners.change) f(changes);
   },
 });
 
-// ---------- Roteamento ----------
+// ---------- Routing ----------
 
-let saida = null;
-let telaComErro = false;
+let leaving = null;
+let screenFailed = false;
 
-// `rota` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
-function navegar(rota) {
-  if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
-  abrir();
+// `route` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
+function navigate(route) {
+  if (route !== location.pathname + location.search) history.pushState(null, '', route);
+  open();
 }
 
-async function abrir() {
-  saida?.abort();
-  const sair = new AbortController();
-  saida = sair;
-  telaComErro = false;
+async function open() {
+  leaving?.abort();
+  const leave = new AbortController();
+  leaving = leave;
+  screenFailed = false;
   // An old URL (`/ui/sessoes/<id>`) becomes the new one, in place, before routing.
-  const nova = legacyUrl(location);
-  if (nova) history.replaceState(history.state, '', nova);
-  const achada = findScreen(location.pathname);
-  if (!achada) {
-    acender(null);
+  const next = legacyUrl(location);
+  if (next) history.replaceState(history.state, '', next);
+  const found = findScreen(location.pathname);
+  if (!found) {
+    highlight(null);
     document.title = 'Ahrena Console';
-    area.replaceChildren(vazio({ titulo: 'Página não encontrada', texto: `Nada em ${location.pathname}.`, acao: { rotulo: 'Ir para o Dashboard', aoClicar: () => navegar('/ui') } }));
+    area.replaceChildren(empty({ title: 'Página não encontrada', text: `Nada em ${location.pathname}.`, action: { label: 'Ir para o Dashboard', onClick: () => navigate('/ui') } }));
     return;
   }
-  const { screen: tela, params } = achada;
-  acender(tela.item ? tela.id : tela.highlights);
-  document.title = `Ahrena Console · ${tela.title}`;
-  if (!tela.file) {
+  const { screen, params } = found;
+  highlight(screen.item ? screen.id : screen.highlights);
+  document.title = `Ahrena Console · ${screen.title}`;
+  if (!screen.file) {
     area.replaceChildren(
-      cabecalho({ icone: tela.icon, titulo: tela.title, sub: tela.sub ?? params.id ?? null }),
-      vazio({ titulo: 'Esta tela ainda não existe', texto: 'Ela chega na próxima versão do console.' }),
+      header({ icon: screen.icon, title: screen.title, sub: screen.sub ?? params.id ?? null }),
+      empty({ title: 'Esta tela ainda não existe', text: 'Ela chega na próxima versão do console.' }),
     );
-    desenharAoVivo();
+    drawLive();
     return;
   }
   const ctx = {
     params,
-    ler: (rota, opcoes) => ler(rota, { signal: sair.signal, ...opcoes }),
-    escrever: (rota, corpo, opcoes) => escrever(rota, corpo, { signal: sair.signal, ...opcoes }),
-    sinal: sair.signal,
-    navegar,
-    contador,
-    titulo: (texto) => (document.title = `Ahrena Console · ${texto}`),
-    aoMudar: (f) => (ouvintes.mudar.add(f), sair.signal.addEventListener('abort', () => ouvintes.mudar.delete(f))),
-    aoReiniciar: (f) => (ouvintes.reiniciar.add(f), sair.signal.addEventListener('abort', () => ouvintes.reiniciar.delete(f))),
-    aoVivo: () => estadoAoVivo.estado,
+    read: (route, options) => read(route, { signal: leave.signal, ...options }),
+    write: (route, body, options) => write(route, body, { signal: leave.signal, ...options }),
+    signal: leave.signal,
+    navigate,
+    counter,
+    title: (text) => (document.title = `Ahrena Console · ${text}`),
+    onChange: (f) => (listeners.change.add(f), leave.signal.addEventListener('abort', () => listeners.change.delete(f))),
+    onRestart: (f) => (listeners.restart.add(f), leave.signal.addEventListener('abort', () => listeners.restart.delete(f))),
+    liveState: () => liveState.state,
   };
   try {
-    const modulo = await import(tela.file);
-    if (sair.signal.aborted) return;
+    const module = await import(screen.file);
+    if (leave.signal.aborted) return;
     area.replaceChildren();
-    const limpar = await modulo.montar(area, ctx);
-    if (typeof limpar === 'function') sair.signal.addEventListener('abort', limpar);
-    desenharAoVivo();
+    const cleanup = await module.mount(area, ctx);
+    if (typeof cleanup === 'function') leave.signal.addEventListener('abort', cleanup);
+    drawLive();
   } catch (e) {
-    if (sair.signal.aborted || e?.name === 'AbortError') return;
-    telaComErro = true;
-    area.replaceChildren(erro({ titulo: 'A tela não abriu', texto: e?.message ?? String(e), tentar: () => abrir() }));
+    if (leave.signal.aborted || e?.name === 'AbortError') return;
+    screenFailed = true;
+    area.replaceChildren(error({ title: 'A tela não abriu', text: e?.message ?? String(e), retry: () => open() }));
   }
 }
 
-// Links internos (`/ui...`) trocam de tela sem recarregar a página.
+// Internal links (`/ui...`) switch screens without reloading the page.
 document.addEventListener('click', (ev) => {
   const a = ev.target instanceof Element ? ev.target.closest('a[href]') : null;
   if (!a || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || !(url.pathname === '/ui' || url.pathname.startsWith('/ui/'))) return;
   ev.preventDefault();
-  navegar(url.pathname + url.search);
+  navigate(url.pathname + url.search);
 });
-addEventListener('popstate', abrir);
+addEventListener('popstate', open);
 
-abrir();
+open();

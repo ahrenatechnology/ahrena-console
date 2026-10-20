@@ -13,22 +13,22 @@ const nf = (casas) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: ca
 const NF0 = nf(0);
 const NF1 = nf(1);
 
-const vazio = (n) => n === null || n === undefined || !Number.isFinite(n);
+const empty = (n) => n === null || n === undefined || !Number.isFinite(n);
 
 /** "1.204". */
 export function inteiro(n) {
-  return vazio(n) ? TRACO : NF0.format(Math.round(n));
+  return empty(n) ? TRACO : NF0.format(Math.round(n));
 }
 
 /** "1,6": uma casa decimal. */
 export function decimal(n) {
-  return vazio(n) ? TRACO : NF1.format(n);
+  return empty(n) ? TRACO : NF1.format(n);
 }
 
 /** "48,3 mil", "1,2 mi"; abaixo de mil, o número inteiro. Sem sinal. Arredonda antes de escolher a
  * escala: 999,6 é "1,0 mil", não "1.000"; e só vira "mi" quando "mil" daria "1.000,0 mil". */
 export function mil(n) {
-  if (vazio(n)) return TRACO;
+  if (empty(n)) return TRACO;
   const a = Math.abs(n);
   if (Math.round(a / 100) >= 1e4) return `${NF1.format(a / 1e6)} mi`;
   if (Math.round(a) >= 1e3) return `${NF1.format(a / 1e3)} mil`;
@@ -37,26 +37,26 @@ export function mil(n) {
 
 /** "61,4 k" a partir de mil (arredondado: 999,6 é "1,0 k"); abaixo, o inteiro ("212"). Sem sinal. */
 export function kilo(n) {
-  if (vazio(n)) return TRACO;
+  if (empty(n)) return TRACO;
   const a = Math.abs(n);
   return Math.round(a) >= 1e3 ? `${NF1.format(a / 1e3)} k` : NF0.format(Math.round(a));
 }
 
 /** O número com "+" ou "−" na frente (zero fica sem sinal), no formato dado. */
 export function comSinal(n, formato = inteiro) {
-  if (vazio(n)) return TRACO;
+  if (empty(n)) return TRACO;
   const texto = formato(Math.abs(n));
   return n > 0 ? `+${texto}` : n < 0 ? `${MENOS}${texto}` : texto;
 }
 
 /** De 0 a 1 em "94%". */
 export function porcentagem(fatia) {
-  return vazio(fatia) ? TRACO : `${Math.round(fatia * 100)}%`;
+  return empty(fatia) ? TRACO : `${Math.round(fatia * 100)}%`;
 }
 
 /** Duração em ms: "1 d 4 h", "3 h 12", "6 min", "< 1 min". */
 export function duracao(ms) {
-  if (vazio(ms) || ms < 0) return TRACO;
+  if (empty(ms) || ms < 0) return TRACO;
   if (ms >= DIA) {
     const d = Math.floor(ms / DIA);
     const h = Math.floor((ms % DIA) / HORA);

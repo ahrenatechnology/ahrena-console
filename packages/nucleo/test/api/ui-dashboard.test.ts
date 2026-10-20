@@ -85,7 +85,7 @@ Object.assign(globalThis, {
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 const tela = await import('../../ui/screens/dashboard.js');
-const { cards, cartoesDaInbox, custo, idade, montar, nomeDoModelo, quantidade, tituloDaInbox } = tela;
+const { cards, cartoesDaInbox, custo, idade, mount, nomeDoModelo, quantidade, tituloDaInbox } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
 
@@ -166,16 +166,16 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     const sair = new AbortController();
     const ctx = {
       params: {},
-      sinal: sair.signal,
-      ler: lerOutra ?? (async (rota: string) => (await fetch(`${api.url}${rota}`)).json()),
-      aoMudar: () => {},
-      aoReiniciar: () => {},
-      contador: (id: string, n: number) => (contadores[id] = n),
+      signal: sair.signal,
+      read: lerOutra ?? (async (rota: string) => (await fetch(`${api.url}${rota}`)).json()),
+      onChange: () => {},
+      onRestart: () => {},
+      counter: (id: string, n: number) => (contadores[id] = n),
       titulo: () => {},
-      navegar: () => {},
-      aoVivo: () => 'ao-vivo',
+      navigate: () => {},
+      liveState: () => 'live',
     };
-    const limpar = await montar(area, ctx);
+    const limpar = await mount(area, ctx);
     return { area, contadores, sair: () => (sair.abort(), limpar()) };
   }
 
