@@ -76,6 +76,10 @@ export type SubagenteDoPainel = {
   status: 'working' | 'waiting' | 'completed' | 'error'
   desde: string
   ate: string | null
+  /** #146: o subagente que disparou este; `null` quando foi a própria sessão. Núcleo antigo não manda. */
+  pai?: string | null
+  /** #146: o turno da sessão em que foi disparado (o aninhado herda o de cima); `null`: sem os prompts. */
+  onda?: number | null
 }
 
 export type FilhaDoPainel = {
@@ -247,7 +251,7 @@ export type Leitura = {
 
 /** O que a pessoa abriu no painel. */
 export type Vista = {
-  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131). */
+  /** `precisam`: a lista de "precisam de você" (P7); `decisoes`: as decisões (P9); `planos`: os planos da sessão (#131); `subagentes`: o grafo da sessão (#146). */
   tela: 'sessao' | 'precisam' | 'decisoes' | 'planos' | 'decisao' | 'subagentes' | 'filhas' | 'prs'
   /** `decisao`: a decisão aberta no detalhe, como chegou da lista ou da última ação. */
   decisao?: DecisaoDoPainel | null
@@ -266,6 +270,8 @@ export type Vista = {
   escopo: 'familia' | 'maquina' | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */
   escopoDecisoes?: EscopoDasDecisoes | null
+  /** #146: o grafo da sessão (tela `subagentes`): a página, as ondas abertas e fechadas, o filtro. */
+  grafo?: { pagina: number; abertas: number[]; fechadas: number[]; filtro: 'todos' | 'ativos' }
 }
 
 /**

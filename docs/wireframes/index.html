@@ -427,6 +427,30 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .pn-medida b { color: var(--status-completed-text); font-weight: 500; }
 .sub-ln { display: grid; grid-template-columns: 2.2ch minmax(0, 1fr) auto; gap: .8ch; align-items: center; white-space: nowrap; }
 .sq { width: 2.2ch; height: 2.2ch; border-radius: 5px; display: grid; place-items: center; font-size: 11px; background: var(--raised); }
+/* Grafo da sessão (#146): trilho de quem disparou quem, barra do tempo e duração, numa caixa só. */
+.gr-caixa { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: .7ch 1.2ch; display: flex; flex-direction: column; gap: .15em; }
+.gr-ln { display: grid; gap: 0 .8ch; align-items: center; white-space: nowrap; min-height: 1.55em; }
+.gr-ln > * { min-width: 0; overflow: hidden; }
+.gr-ln svg { display: block; }
+.gr-ln .gr-d { text-align: right; }
+.gr-ln.gr-eixo > * { font-size: 10.5px; }
+.gr-ln.gr-eixo { border-bottom: 1px dashed var(--border); padding-bottom: .3em; margin-bottom: .2em; }
+.gr-ln.gr-o { margin-top: .25em; }
+.gr-ln.gr-erro { background: color-mix(in srgb, var(--status-error-badge) 55%, transparent); border-radius: 5px; }
+.gr-tr { white-space: pre; color: var(--muted); }
+.gr-onda { display: inline-flex; align-items: center; gap: .6ch; }
+.gr-tg { height: 17px; padding: 0 .5ch; font-size: 10.5px; }
+.gr-pe { display: flex; align-items: center; gap: 1ch; white-space: nowrap; overflow: hidden; }
+.gr-pe > .trunc { min-width: 0; flex: 1; }
+.gr-pe > .pn-link { flex: none; }
+.pn-sec .gr-chips { margin-left: auto; display: flex; gap: 1ch; align-items: center; white-space: nowrap; }
+.pn-sec .gr-chips .r { margin: 0; }
+.pc .gr-pe-card { margin-top: auto; }
+.gr-opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2ch; font-family: var(--font-sans); font-size: 11.5px; }
+.gr-op { border: 1px dashed var(--border); border-radius: 10px; padding: 1ch 1.4ch; display: flex; flex-direction: column; gap: .4em; color: var(--muted); line-height: 1.45; }
+.gr-op b { color: var(--text); font-weight: 600; }
+.gr-op.on { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.gr-op.on b { color: var(--accent-text); }
 
 /* ---------- macOS ---------- */
 .mac { position: relative; width: 980px; height: 520px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); font-family: -apple-system, BlinkMacSystemFont, var(--font-sans);
@@ -1386,6 +1410,137 @@ function painelEstados() {
 }
 
 // =====================================================================
+// PAINEL: grafo da sessão com os subagentes (#146)
+// =====================================================================
+// Cada nó: [nível, status, tipo, descrição, início (min), fim (min, null = rodando), extra]. Nível 1 é
+// disparado pela sessão; 2 e 3, por outro subagente. Uma onda é o que um mesmo turno da sessão disparou.
+const CH = 7.5 // px de 1 coluna na fonte mono de 12,5 px
+const durGr = m => m < 1 ? `${Math.round(m * 60)} s` : `${Math.round(m)} min`
+const GR = {
+  simples: {
+    tempo: 14, ativos: 1, total: 3, paralelos: 1, status: '● Ativa · delegando · 1 precisa de você',
+    linhas: [
+      { k: 'no', n: [1, 'completed', 'Plan', 'plano da extração', 2, 4] },
+      { k: 'no', n: [1, 'completed', 'Explore', 'achar usos', 9, 13] },
+      { k: 'no', n: [1, 'active', 'test-runner', 'bateria', 11, null], par: true },
+    ],
+  },
+  caotico: {
+    tempo: 52, ativos: 4, total: 25, erros: 1, status: '● Ativa · 4 subagentes · 1 com erro',
+    linhas: [
+      { k: 'onda', o: 1, ini: 1, fim: 9, txt: '6 Explore', cont: { completed: 6 }, aberta: false, marcas: [1, 1.5, 2, 2.5, 3, 4] },
+      { k: 'onda', o: 2, ini: 10, fim: 17, txt: '6 subagentes', cont: { completed: 5, error: 1 }, aberta: false, marcas: [10, 10, 11, 12, 13] },
+      { k: 'no', n: [1, 'error', 'test-runner', 'lint e tipos', 11, 15], solto: true },
+      { k: 'onda', o: 3, ini: 18, fim: 31, txt: '1 Plan', cont: { completed: 1 }, aberta: false, marcas: [18] },
+      { k: 'onda', o: 4, ini: 33, fim: null, txt: '10 subagentes', cont: { active: 4, completed: 6 }, aberta: true },
+      { k: 'no', n: [1, 'active', 'general-purpose', 'migrar a cobrança', 33, null] },
+      { k: 'no', n: [2, 'completed', 'Explore', 'rotas de cobrança', 34, 36] },
+      { k: 'no', n: [2, 'completed', 'Explore', 'webhooks', 34, 37] },
+      { k: 'no', n: [2, 'completed', 'general-purpose', 'contratos', 38, 46], mais: '+2 ✓' },
+      { k: 'no', n: [2, 'active', 'test-runner', 'api de cobrança', 47, null] },
+      { k: 'no', n: [1, 'active', 'code-reviewer', 'diff do serviço', 40, null] },
+      { k: 'no', n: [1, 'active', 'test-runner', 'e2e', 44, null] },
+      { k: 'no', n: [1, 'completed', 'docs-writer', 'README do serviço', 35, 39] },
+      { k: 'onda', o: 5, ini: 45, fim: 49, txt: '2 Explore', cont: { completed: 2 }, aberta: false, marcas: [45, 46] },
+    ],
+  },
+}
+
+// A barra do tempo: um Svg com largura e altura explícitas, como o mod exige.
+function grBarra(cols, T, ini, fim, st, marcas) {
+  const w = Math.round(cols * CH), h = 12, x = v => Math.round(v / T * (w - 2)) + 1
+  const ate = fim ?? T
+  const cor = `var(--status-${st}-dot)`
+  const fundo = `<rect x="0" y="5" width="${w}" height="2" rx="1" fill="var(--border)"/>`
+  if (marcas) return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${fundo}<rect x="${x(ini)}" y="2" width="${Math.max(3, x(ate) - x(ini))}" height="8" rx="2" fill="${cor}" opacity=".28"/>${marcas.map(m => `<rect x="${x(m)}" y="2" width="2" height="8" fill="${cor}"/>`).join('')}</svg>`
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${fundo}<rect x="${x(ini)}" y="2" width="${Math.max(3, x(ate) - x(ini))}" height="8" rx="2" fill="${cor}"/>${fim == null ? `<rect x="${x(ate) - 2}" y="0" width="2" height="12" fill="${cor}"/>` : ''}</svg>`
+}
+// A régua em cima das barras: 0 à esquerda, o tempo da sessão à direita, "agora" no fim.
+function grRegua(cols, T, largo) {
+  const w = Math.round(cols * CH)
+  const passo = T < 30 ? 5 : 10
+  const marcas = Array.from({ length: Math.floor(T / passo) + 1 }, (_, i) => i * passo).filter(m => m === 0 || m <= T - passo / 2)
+  return `<svg width="${w}" height="14" viewBox="0 0 ${w} 14">${marcas.map(m => { const x = Math.round(m / T * (w - 2)) + 1; return `<rect x="${x}" y="9" width="1" height="5" fill="var(--muted)"/><text x="${m === 0 ? 0 : x - 3}" y="8" font-size="9.5" fill="var(--muted)" font-family="var(--font-mono)">${m}′</text>` }).join('')}
+    <rect x="${w - 1}" y="9" width="1" height="5" fill="var(--muted)"/><text x="${w}" y="8" text-anchor="end" font-size="9.5" fill="var(--muted)" font-family="var(--font-mono)">${T}′</text></svg>`
+}
+// O trilho à esquerda (quem disparou quem): ├ e ╰ por nível, │ quando o pai ainda tem irmãos abaixo.
+function grTrilho(l, i) {
+  const nivel = l[i].n[0]
+  const temIrmaoAbaixo = niv => { for (let j = i + 1; j < l.length; j++) { if (l[j].k !== 'no' || l[j].n[0] < niv) return false; if (l[j].n[0] === niv) return true } return false }
+  let s = ''
+  for (let v = 1; v < nivel; v++) s += temIrmaoAbaixo(v) ? '│ ' : '  '
+  return s + (temIrmaoAbaixo(nivel) ? '├' : '╰')
+}
+const grCont = c => ['active', 'error', 'completed'].filter(st => c[st]).map(st => `<span class="c-${st}">${c[st]} ${ST[st].g}</span>`).join(' ')
+const grEstado = { active: 'ativo', completed: 'concluído', error: 'com erro' }
+
+function grafo(nome, largo) {
+  const d = GR[nome]
+  const T = d.tempo
+  const C = largo ? { nome: 40, barra: 36 } : { nome: 16, barra: 7 }
+  const grid = largo ? `grid-template-columns:${C.nome}ch ${C.barra}ch 9ch 6ch 7ch` : `grid-template-columns:${C.nome}ch ${C.barra}ch 6ch`
+  const lin = (a, b, c3, c4, c5, cls = '') => `<div class="gr-ln ${cls}" style="${grid}">${a}<span>${b}</span>${largo ? `<span class="mut">${c3 ?? ''}</span><span class="mut">${c4 ?? ''}</span>` : ''}<span class="mut gr-d">${c5 ?? ''}</span></div>`
+  const linhas = largo || nome === 'simples' ? d.linhas : d.linhas.slice(0, 9)
+  const rows = [
+    lin(`<span class="mut gr-cab">${largo ? 'quem disparou quem' : 'quem disparou'}</span>`, largo ? grRegua(C.barra, T, largo) : `<span class="mut">0–${T}′</span>`, 'estado', 'início', largo ? 'duração' : 'tempo', 'gr-eixo'),
+    lin(`<span class="trunc"><span class="c-accent">◆</span> <b>Esta sessão</b>${largo ? ' <span class="mut">· Opus 5.5</span>' : ''}</span>`, grBarra(C.barra, T, 0, null, 'active'), 'ativa', '0′', `${T} min`),
+  ]
+  linhas.forEach((x, i) => {
+    if (x.k === 'onda') {
+      const glifo = x.aberta ? '▾' : '▸'
+      const resumo = largo ? `<span class="mut">· ${x.txt}${x.aberta ? ' em paralelo' : ''}</span> ${grCont(x.cont)}` : `<span class="mut">·</span> ${grCont(x.cont)}`
+      rows.push(lin(`<span class="trunc gr-onda"><span class="pn-btn sec gr-tg">${glifo}</span><b>Onda ${x.o}</b> ${resumo}</span>`,
+        x.aberta ? '' : grBarra(C.barra, T, x.ini, x.fim, x.cont.error ? 'error' : 'completed', x.marcas),
+        x.aberta ? '' : x.cont.error ? '<span class="c-error">com erro</span>' : 'concluída', x.aberta ? '' : `${x.ini}′`, x.aberta ? '' : durGr(x.fim - x.ini), 'gr-o'))
+      return
+    }
+    const [nivel, st, tipo, desc, ini, fim] = x.n
+    const trilho = x.solto ? '  ╰' : (d.linhas.some(y => y.k === 'onda') ? '  ' : '') + grTrilho(d.linhas, i)
+    const texto = largo || nivel === 1 ? `<b>${tipo}</b> <span class="mut">· ${desc}</span>` : `<b>${tipo}</b>`
+    rows.push(lin(`<span class="trunc"><span class="gr-tr">${trilho}</span><span class="c-${st}">${ST[st].g}</span> ${texto}${largo && x.mais ? ` <span class="mut">· ${x.mais}</span>` : ''}</span>`,
+      grBarra(C.barra, T, ini, fim, st), `<span class="${st === 'error' ? 'c-error' : st === 'active' ? 'c-active' : ''}">${grEstado[st]}</span>`, `${ini}′`, durGr((fim ?? T) - ini), st === 'error' ? 'gr-erro' : ''))
+  })
+  const pagina = !largo && nome === 'caotico'
+  const cab = `<div class="pn-sec">Grafo · ${d.total}${largo ? ' subagentes' : ''}<span class="gr-chips">${d.erros ? `<span class="r c-error">${d.erros} ${largo ? 'com erro' : '✕'}</span>` : ''}${d.paralelos && largo ? `<span class="r">${d.paralelos} em paralelo</span>` : ''}<span class="r">${d.ativos} ativo${d.ativos > 1 ? 's' : ''}</span></span></div>`
+  const filtro = d.total > 10 ? `<span class="pn-sel">Todos ${ic('chevron-down')}</span>` : ''
+  const legenda = largo
+    ? `<span class="mut trunc">barras sobrepostas rodaram em paralelo${d.total > 10 ? ' · ▸ abre a onda' : ''}</span>`
+    : `<span class="mut trunc">sobrepostas: em paralelo</span>`
+  const pe = pagina
+    ? `<div class="gr-pe"><span class="pn-btn sec">‹</span><span class="mut">1/2</span><span class="pn-btn sec">›</span>${filtro}<span class="pn-link" style="margin-left:auto">← voltar</span></div>`
+    : `<div class="gr-pe">${filtro}${legenda}<span class="pn-link" style="margin-left:auto">← voltar</span></div>`
+  return `${cab}<div class="gr-caixa${largo ? ' largo' : ''}">${rows.join('')}${pagina ? `<div class="gr-ln mut" style="${grid}"><span class="trunc">  ⋯ +5 na pág. 2</span></div>` : ''}</div>${pe}`
+}
+function painelGrafo(nome) {
+  const d = GR[nome]
+  const miolo = largo => `${pnServidor()}${grafo(nome, largo)}`
+  const med = nome === 'caotico'
+    ? [`linhas de 30 col · página por altura · <b>sem estouro</b>`, `linhas de 103 col · cabe numa página · <b>sem estouro</b>`]
+    : [`linhas de 30 col · <b>sem estouro</b>`, `linhas de 103 col · <b>sem estouro</b>`]
+  return `<div class="fila">${pane(38, miolo, d.status, med[0])}${pane(121, miolo, d.status, med[1])}</div>`
+}
+// Onde o grafo vive: o card Subagentes do P1 ganha o pé que abre o grafo no lugar dos cards.
+function pnSubsComPe(l, pe) {
+  const card = pnSubs(l)
+  return card.replace(/<\/div>$/, `<div class="ln gr-pe-card"><span class="pn-link">${pe}</span></div></div>`)
+}
+function painelOndeVive() {
+  const caotico = [['active', 'general-purpose', 'migrar a cobrança', '19 min'], ['active', 'code-reviewer', 'diff do serviço', '12 min'], ['active', 'test-runner', 'e2e', '8 min'],
+    ['active', 'test-runner', '', ''], ['error', 'test-runner', '', ''], ...Array(20).fill(['completed', 'Explore', '', ''])]
+  const casos = [
+    [[['active', 'test-runner', 'bateria', '3 min'], ['completed', 'Explore', 'achar usos', '4 min'], ['completed', 'Plan', 'plano da extração', '2 min']], 'ver o grafo ›'],
+    [caotico, '+22 · 1 com erro · grafo ›'],
+  ]
+  const opcoes = `<div class="gr-opcoes">
+    <div class="gr-op"><b>A. Dentro do card Subagentes</b><span>Não cabe. O card tem 190 px e já leva a barra e 3 linhas; um grafo ali corta texto já com 3 nós.</span></div>
+    <div class="gr-op on"><b>B. Detalhe aberto pelo card · a proposta</b><span>O pé do card abre o grafo no lugar dos cards, como o "Ver" das decisões (P9). Hoje esse pé abre a lista completa; o grafo passa a ser essa tela, e "← voltar" fecha. O card não muda.</span></div>
+    <div class="gr-op"><b>C. Seção própria abaixo dos cards</b><span>Empurra as decisões e o "precisam de você" para baixo da dobra, e ocupa espaço mesmo quando ninguém está olhando.</span></div></div>`
+  const miolo = largo => `${pnServidor()}<div class="pn-sec">Esta sessão<span class="r">auto · 5 s</span></div>
+    <div class="pn-grade" style="--cols:${largo ? 3 : 1}">${(largo ? casos : casos.slice(1)).map(([l, pe]) => pnSubsComPe(l, pe)).join('')}</div>${largo ? opcoes : ''}`
+  return `<div class="fila">${pane(38, miolo, '● Ativa · 4 subagentes · 1 com erro', 'o pé usa a linha que o card já reserva · <b>sem estouro</b>')}${pane(121, miolo, '● Ativa · delegando', 'à esquerda, 3 subagentes; ao lado, 25 · embaixo, onde o grafo pode viver')}</div>`
+}
+
+// =====================================================================
 // APP (Tauri, bandeja do macOS)
 // =====================================================================
 const GLIFO = `<svg class="glifo" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 13 L8 3 L12.5 13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.4 9 L9.6 9 L8 11.6 Z" fill="currentColor"/></svg>`
@@ -1454,6 +1609,13 @@ const TELAS = [
     n: N(['Nenhuma: nem o CCAM nem o Podium guardam decisões. Os cards seguem o SessionCard e a sidebar da extensão VS Code.'], ['As decisões vêm da resposta a uma pergunta, da aprovação de um plano, de uma permissão e das suas correções. As inferidas pelo agente ficam "A confirmar" até você confirmar.', 'Uma decisão substituída fica riscada e aponta para a que a substituiu.']) },
   { id: 'painel-retomada', cod: 'P10', nome: 'Retomada depois de /clear', sub: 'A sessão nova do mesmo branch já começa com as decisões vigentes injetadas, e o painel avisa numa faixa.', html: () => painel('retomada'),
     n: N(['A ligação entre sessões depois do <code>/clear</code> vem do Podium (Histórico).'], ['A injeção é automática e pode ser desligada; o agente também consulta pelo MCP quando precisar.', 'A faixa diz quanto custou em tokens.']) },
+
+  { id: 'painel-grafo-onde', cod: 'P11', nome: 'Onde o grafo vive', sub: 'O card Subagentes continua o do P1, com 190 px. O pé do card abre o grafo da sessão no lugar dos cards. Com tudo no card, o pé diz "ver o grafo ›"; com mais, diz quantos ficaram fora.', html: painelOndeVive,
+    n: N(['A árvore de agentes do Session Detail, montada pelo <code>parent_agent_id</code>.', 'O grafo de orquestração do Workflows, com o clique no nó que leva ao detalhe.'], ['A proposta é a B: um detalhe aberto pelo card, como as decisões (P9). A e C estão embaixo, com o motivo de ficarem de fora.', 'O grafo substitui a lista completa que o pé abre hoje: uma tela só para "ver todos".']) },
+  { id: 'painel-grafo-simples', cod: 'P12', nome: 'Grafo da sessão, simples', sub: 'Três subagentes. O Plan rodou sozinho; o Explore e o test-runner rodaram juntos, e as barras se sobrepõem. A sessão é a raiz, cada subagente pendura de quem o disparou.', html: () => painelGrafo('simples'),
+    n: N(['A árvore com o principal na raiz e os subagentes como filhos.', 'As faixas de concorrência: uma barra por agente no eixo do tempo.'], ['Árvore e tempo numa linha só: à esquerda quem disparou quem, à direita quando rodou. No CCAM são duas telas.', 'A barra é um Svg com largura e altura fixas; no estreito ela tem 7 colunas e só mostra início, fim e sobreposição.', 'No largo entram estado, início e duração por extenso; no estreito, só a duração.']) },
+  { id: 'painel-grafo-caotico', cod: 'P13', nome: 'Grafo da sessão, caótico', sub: '25 subagentes em 5 ondas, um com erro, e um general-purpose que disparou os seus. Ondas concluídas ficam recolhidas numa linha; a onda com ativos fica aberta; o erro fica sempre à vista.', html: () => painelGrafo('caotico'),
+    n: N(['O agrupamento dos agentes por tipo, com a contagem.', 'Os aninhados do <code>parent_agent_id</code>, em qualquer profundidade.'], ['<b>Agrupar:</b> por onda, o que um mesmo turno da sessão disparou junto. Fora isso, a ordem é a do início.', '<b>Colapsar:</b> onda só de concluídos vira uma linha com a contagem e a barra da onda (um traço por subagente). ▸ abre, ▾ fecha (botões nativos).', '<b>Erro e ativo nunca somem:</b> o erro sai da onda recolhida e fica embaixo dela.', '<b>Aninhados:</b> até 2 níveis com trilho; do 3º para baixo, "+N aninhados" na linha do pai.', '<b>Paginar:</b> pela altura do painel, sem cortar uma linha. No estreito, ‹ 1/2 ›; no largo, cabe numa página.', 'O Select troca entre Todos e Ativos e erros.']) },
 
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja com 0 esperando', sub: 'Ninguém precisa de você: só o ícone na barra de menus.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
@@ -1535,6 +1697,7 @@ function montar() {
     <li><b>Som da notificação:</b> só nos urgentes (Pede permissão, Interrompida e Com erro).</li>
     <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
     <li><b>Decisões da sessão:</b> o escopo tem os três níveis (sessão, família e branch), trocados no mesmo seletor; as decisões vigentes chegam à sessão nova pelos dois caminhos, injetadas no início e pelo MCP quando o agente perguntar (P9, P10, C20 e C21).</li>
+    <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
