@@ -71,21 +71,21 @@ cd packages/nucleo && npm run api
 
 Ela importa o histórico de `~/.claude/projects`, segue os transcripts, recebe os hooks, roda a máquina de estados e responde ao painel. O banco fica em `~/.ahrena-console/nucleo.sqlite`. O GitHub usa o token do `gh`. `npm run api -- --help` lista as opções (outra porta, sem GitHub, sem histórico).
 
-Um núcleo por máquina: se já há um de pé (subido pelo app, pela extensão ou por outro terminal), `npm run api` não sobe outro. Ele adota o de pé, imprime a porta e a versão, avisa se o código é outro, e sai com 0. `npm run nucleo -- status|subir|parar` mostra, sobe em segundo plano e para ([src/dono](../../packages/nucleo/src/dono/README.md)).
+Um núcleo por instalação, em porta aleatória ([decisão 0010](../../docs/decisoes/0010-core-per-installation.md)): o do app desktop, o deste checkout (`dev`) e o da extensão convivem, cada um registrado em `~/.ahrena-console/instances/`, e o painel acha o vivo por lá. `npm run core -- status|start|stop` mostra, sobe em segundo plano e para o núcleo deste checkout ([src/owner](../../packages/nucleo/src/owner/README.md)).
 
 Para ver o painel com dados de exemplo, sem tocar em nada real, a demonstração serve um dos cenários dos wireframes a qualquer sessão que abrir o painel:
 
 ```bash
-cd packages/nucleo && npm run api -- --demo --cenario p4
+cd packages/nucleo && npm run api -- --demo --scenario p4
 ```
 
-Se a porta já tem um núcleo, a demonstração não sobe e não o adota: ela falha e pede outra porta (`--porta 4730`).
+Se a porta já tem um núcleo, a demonstração não sobe e não o adota: ela falha e pede outra porta (`--port 4730`).
 
 Os cenários vão de `p1` a `p7` (P8 é o núcleo desligado), mais o `p9`, com as decisões da sessão e da sessão mãe, e o `p12` e o `p13`, com o grafo dos subagentes simples e caótico. São do simulador: projetos sob `/simulacao`, repositório `exemplo/simulacao`, contas `equipe` e `cliente-exemplo`.
 
 ### Porta
 
-Outra porta: `npm run api -- --porta 4730`. O painel acha o núcleo pelo registro; para fixar uma porta, a opção `port` do plugin (no `/config`, ou em `pluginConfigs` do `settings.json`). Uma porta maior que 0 escrita ali vale mais que o registro; `0`, o padrão desde a 0.0.34, é achar pelo registro. A opção antiga `porta` (até a 0.0.30) é ignorada desde a 0.0.34: o `settings.json` de quem veio daquelas versões guarda nela o padrão de então, `4720`, e não uma escolha.
+Uma porta fixa: `npm run api -- --port 4730`. O painel acha o núcleo pelo registro; para fixar uma porta, a opção `port` do plugin (no `/config`, ou em `pluginConfigs` do `settings.json`). Uma porta maior que 0 escrita ali vale mais que o registro; `0`, o padrão desde a 0.0.34, é achar pelo registro. A opção antiga `porta` (até a 0.0.30) é ignorada desde a 0.0.34: o `settings.json` de quem veio daquelas versões guarda nela o padrão de então, `4720`, e não uma escolha.
 
 ### Rótulo e cor das contas
 
