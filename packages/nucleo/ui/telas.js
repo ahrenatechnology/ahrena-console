@@ -89,6 +89,15 @@ export const TELAS = [
     icone: 'analytics',
     arquivo: '/ui/telas/analytics.js',
   },
+  {
+    id: 'historico',
+    rota: '/ui/historico',
+    item: { rotulo: 'Histórico', icone: 'historico' },
+    titulo: 'Histórico',
+    sub: 'Sessões encerradas, por dia',
+    icone: 'historico',
+    arquivo: '/ui/telas/historico.js', // #33
+  },
 ];
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

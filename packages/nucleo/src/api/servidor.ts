@@ -20,6 +20,7 @@
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
 // | `GET /api/analytics` e `/api/analytics/custo` | A tela Analytics (api/rota-analytics.ts, #95 e #32) |
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
+// | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 // | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
@@ -49,6 +50,8 @@ import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
+import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
+import type { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
@@ -93,6 +96,8 @@ export interface OpcoesDaApi {
   analytics?: RotaAnalytics;
   /** A lista da tela Sessões; liga `GET /api/sessoes`. */
   sessoes?: ListaDeSessoes;
+  /** As sessões encerradas por dia; liga `GET /api/historico` (#33). */
+  historico?: HistoricoDeSessoes;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
 }
@@ -271,6 +276,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return send(res, r.status, r.corpo);
     }
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
+    if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
     if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
