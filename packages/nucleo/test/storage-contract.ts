@@ -254,8 +254,13 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         await store.appendEvent(event({ id: 'e5', sessionId: 's1', createdAt: at(5), type: 'Stop', toolName: null, summary: null }));
       }
 
-      test('sem evento nenhum: vazio, sem cursor', async () => {
-        assert.deepEqual(await store.listRecentEvents(), { items: [], liveCursor: null, nextCursor: null });
+      test('sem evento nenhum: vazio, com o cursor do ao vivo no começo', async () => {
+        const p = await store.listRecentEvents();
+        assert.deepEqual(p.items, []);
+        assert.equal(p.nextCursor, null);
+        assert.ok(p.liveCursor);
+        await store.appendEvent(event({ id: 'primeiro', createdAt: at(1) }));
+        assert.deepEqual(ids(await store.listRecentEvents({ after: p.liveCursor })), ['primeiro']);
       });
 
       test('todas as sessões, mais novo primeiro, paginando para trás por cursor', async () => {
@@ -306,8 +311,6 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       });
 
       test('ao vivo com mais novos que o limite: os gravados primeiro, e o cursor busca o resto', async () => {
-        const p = await store.listRecentEvents();
-        assert.equal(p.liveCursor, null);
         await store.appendEvent(event({ id: 'zero', createdAt: at(0) }));
         const base = await store.listRecentEvents();
         for (let i = 1; i <= 5; i++) await store.appendEvent(event({ id: `n${i}`, createdAt: at(i) }));

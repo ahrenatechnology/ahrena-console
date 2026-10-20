@@ -470,7 +470,8 @@ export class SqliteStorage implements StoragePort {
       return { items: lote.map(toEvent).sort(maisNovoPrimeiro), liveCursor: encodeFeedCursor(ate), nextCursor: null };
     }
 
-    if (maior === null) return { items: [], liveCursor: null, nextCursor: null };
+    // Banco vazio: o ao vivo começa da posição 0, para o primeiro lote não virar uma página inicial.
+    if (maior === null) return { items: [], liveCursor: encodeFeedCursor(0), nextCursor: null };
     const retrato = before ? before.seq : maior;
     const todos = ['seq <= ?', ...where];
     const antes: string[] = [];

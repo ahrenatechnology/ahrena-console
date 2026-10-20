@@ -55,6 +55,7 @@ describe('#94 o texto que sai é uma linha curta', () => {
   test('corta por code point, sem partir par substituto, e tira quebras e controles', () => {
     assert.equal(textoDeUmaLinha('a\nb\r\n\tc\u0000d\u2028e', 100), 'a b c d e');
     assert.equal(textoDeUmaLinha('abcdef', 4), 'abc…');
+    assert.equal(textoDeUmaLinha('rm\u202e-rf\u200b x\u2066y\u2069\ufeff', 100), 'rm -rf x y', 'bidi e largura zero viram espaço');
     const emojis = '😀'.repeat(10);
     const cortado = textoDeUmaLinha(emojis, 5)!;
     assert.equal(cortado, `${'😀'.repeat(4)}…`);
@@ -94,10 +95,10 @@ describe('#94 GET /api/eventos: a montagem', () => {
     assert.equal(r.anteriores, null);
   });
 
-  test('sem evento nenhum: lista vazia, cursor null', async () => {
+  test('sem evento nenhum: lista vazia, e o cursor do ao vivo já no começo', async () => {
     const r = await ok();
     assert.deepEqual(r.eventos, []);
-    assert.equal(r.cursor, null);
+    assert.ok(r.cursor);
     assert.equal(r.anteriores, null);
     assert.deepEqual(r.opcoes, { tipos: [], ferramentas: [], sessoes: [] });
   });
@@ -190,6 +191,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
       'busca=a%0Ab',
       'de=ontem',
       'ate=2026-13-40',
+      'de=2026-11-02T12:00',
       `de=${encodeURIComponent(at(5))}&ate=${encodeURIComponent(at(1))}`,
     ];
     for (const q of ruins) {

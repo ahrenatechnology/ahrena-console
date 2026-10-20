@@ -192,6 +192,11 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX events_by_created ON events (created_at, id);
       CREATE INDEX events_by_type ON events (type, created_at);
       CREATE INDEX events_by_tool ON events (tool_name, created_at);
+      -- Um processo de antes da migração, com o banco já aberto, grava sem seq: o gatilho preenche.
+      CREATE TRIGGER events_seq_faltando AFTER INSERT ON events WHEN NEW.seq IS NULL
+      BEGIN
+        UPDATE events SET seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM events) WHERE rowid = NEW.rowid;
+      END;
     `,
   },
 ];

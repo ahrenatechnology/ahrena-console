@@ -92,9 +92,11 @@ const FERRAMENTA = /^[A-Za-z0-9_.:-]{1,128}$/;
 const CURSOR = /^[A-Za-z0-9_-]{1,512}$/;
 const NUMERO = /^\d{1,3}$/;
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
-const DATA_HORA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?$/;
-// Controles C0 e C1, DEL e os separadores de linha e parágrafo do Unicode.
-const CONTROLES = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// Com hora, o fuso é obrigatório: sem ele, `Date.parse` leria no fuso do processo.
+const DATA_HORA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+// Controles C0 e C1, DEL, os separadores de linha e parágrafo do Unicode, e os de direção (bidi) e
+// largura zero, que deixariam um texto do transcript esconder ou inverter o que mostra.
+const CONTROLES = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
 const CONTROLES_G = new RegExp(CONTROLES.source, 'g');
 const DIA_MS = 86_400_000;
 

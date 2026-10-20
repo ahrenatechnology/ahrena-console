@@ -163,6 +163,17 @@ describe('migração 8: ordem de gravação dos eventos (feed, #94)', () => {
     await store.close();
   });
 
+  test('quem grava sem seq (processo de antes da migração) ganha o seq pelo gatilho e aparece no ao vivo', async () => {
+    const store = openSqliteStorage({ path: ':memory:' });
+    await store.appendEvent(event({ id: 'novo' }));
+    const p = await store.listRecentEvents();
+    store.db.prepare(`INSERT INTO events (id, session_id, type, created_at) VALUES ('antigo', 's1', 'Stop', ?)`).run(T0);
+    const { seq } = store.db.prepare(`SELECT seq FROM events WHERE id = 'antigo'`).get() as { seq: number | null };
+    assert.ok(seq !== null && seq > 1);
+    assert.deepEqual((await store.listRecentEvents({ after: p.liveCursor })).items.map((e) => e.id), ['antigo']);
+    await store.close();
+  });
+
   test('a página do feed usa o índice por createdAt, e o ao vivo o de seq', () => {
     const store = openSqliteStorage({ path: ':memory:' });
     const plano = (sql: string) => JSON.stringify(store.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all());
