@@ -56,7 +56,7 @@ export interface OpcoesDoAnalytics {
   cacheMsDaVisao?: number;
   /** O mesmo para o Custo. Padrão 10 s. */
   cacheMsDoCusto?: number;
-  /** A posição do cursor de mudanças (`CursorDeMudancas.atual`): sem mudança, a resposta vale até 5 min. */
+  /** A posição do cursor de mudanças (`ChangeCursor.current`): sem mudança, a resposta vale até 5 min. */
   versao?: () => string;
 }
 

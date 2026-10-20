@@ -16,7 +16,7 @@
 //   enters or leaves it is published too, so the tray refreshes.
 // - `GET` only, never overlapping, injectable timers and clock; in tests, `pollOnce()` directly.
 
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type TelemetryReading } from './model.ts';
@@ -308,8 +308,8 @@ export class RemoteMachine implements MachineEntry {
  * Publishes each remote session that enters or leaves the attention list as `needs-you`, with
  * the key `<machine>:<session>`; no local session or account, since the session is not this Mac's.
  */
-export function publishRemoteAttentionChanges(cursor: CursorDeMudancas): (change: RemoteSessionChange) => void {
+export function publishRemoteAttentionChanges(cursor: ChangeCursor): (change: RemoteSessionChange) => void {
   return ({ machineId, sessionId }) => {
-    cursor.registrar({ type: 'needs-you', key: `${machineId}:${sessionId}`, sessionId: null, accountId: null });
+    cursor.record({ type: 'needs-you', key: `${machineId}:${sessionId}`, sessionId: null, accountId: null });
   };
 }

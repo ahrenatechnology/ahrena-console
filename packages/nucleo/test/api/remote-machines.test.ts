@@ -7,7 +7,7 @@ import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, remoteAttentionItems, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet } from '../../src/telemetry/adapters/loopback-http.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
@@ -38,7 +38,7 @@ async function boot() {
   await semear(storage);
   const contas = new Contas({ storage, arquivo: null });
   const frota = new LeituraDaFrota({ storage, contas, agora: () => AGORA, fusoHorario: 'UTC' });
-  const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
+  const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   const store = new SqliteTelemetryStore(storage.db);
   const tracker = new AlertTracker();
   remoteCore = await startFakeRemote({

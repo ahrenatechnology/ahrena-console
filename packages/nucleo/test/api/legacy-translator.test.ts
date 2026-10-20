@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, normalizeLegacyQuery, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
-import { TIPOS_DE_MUDANCA } from '../../src/mudancas/cursor.ts';
+import { CHANGE_TYPES } from '../../src/changes/cursor.ts';
 import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
 import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
 import { BUSCA_MAXIMA as HISTORY_SEARCH_MAX, DIAS_MAXIMO } from '../../src/historico/modelo.ts';
@@ -300,7 +300,7 @@ describe('every union member of the installed app and the live group answers the
   });
 
   test('changes: every type, the keys of a change and of the answer, and the errors that cite a parameter', () => {
-    assert.deepEqual(Object.keys(CHANGE), [...TIPOS_DE_MUDANCA], 'every change type');
+    assert.deepEqual(Object.keys(CHANGE), [...CHANGE_TYPES], 'every change type');
     const route = legacyResponseFor('/api/mudancas')!;
     for (const [type, old] of Object.entries(CHANGE)) {
       const body = { cursor: 'g.2', changes: [{ type, key: 'k', sessionId: null, accountId: null, seq: 2 }], reset: false, timedOut: false };
@@ -310,7 +310,7 @@ describe('every union member of the installed app and the live group answers the
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      [`type: um de ${TIPOS_DE_MUDANCA.join(', ')}`]: 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert',
+      [`type: um de ${CHANGE_TYPES.join(', ')}`]: 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert',
       'esperas abertas demais (máximo 2)': 'esperas abertas demais (máximo 2)',
     };
     for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);

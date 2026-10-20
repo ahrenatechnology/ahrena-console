@@ -10,7 +10,7 @@ import { SessoesPorRepo } from '../../src/api/repos-sessoes.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
 import { LeituraDaFrota } from '../../src/mcp/frota.ts';
-import { CursorDeMudancas, type MudancaRegistrada } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor, type RecordedChange } from '../../src/changes/cursor.ts';
 import { criarGithubFalso, gitDaDemo, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
 
@@ -40,7 +40,7 @@ interface Montagem {
   chamadas: string[];
   status: number[];
   agendados: { ms: number; fn: () => void }[];
-  mudancas: () => Promise<MudancaRegistrada[]>;
+  mudancas: () => Promise<RecordedChange[]>;
   relogio: { agora: number };
   modo: { atual: Modo };
   /** Pedidos ao `fetch`, em qualquer modo, e o máximo de pedidos em voo ao mesmo tempo. */
@@ -92,9 +92,9 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   // P1: motor-de-regras pede permissão (precisa de você), app-receitas foi interrompida (sua vez).
   await semearCenariosDoPainel(storage, 'p1', T0);
   const frota = new LeituraDaFrota({ storage, contas: new Contas({ storage, arquivo: null }), agora, fusoHorario: 'UTC' });
-  const cursor = new CursorDeMudancas({ geracao: 'g', agruparMs: 0, intervaloMinimoMs: 0 });
-  const inicio = cursor.atual;
-  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
+  const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
+  const inicio = cursor.current;
+  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.record({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
   const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
   const logs: string[] = [];
@@ -117,7 +117,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
     pedidos,
     cache,
     logs,
-    mudancas: async () => (await cursor.aguardar(inicio, { timeoutMs: 0 })).changes,
+    mudancas: async () => (await cursor.wait(inicio, { timeoutMs: 0 })).changes,
   };
 }
 
@@ -608,7 +608,7 @@ describe('#104 e #105: o serviço como o núcleo monta', () => {
         semGithub: false,
         cache: new GithubCache({ store: new MemoryCacheStore() }),
         frota,
-        mudancas: new CursorDeMudancas(),
+        mudancas: new ChangeCursor(),
         log: (msg) => logs.push(msg),
       });
       await repos.lista();

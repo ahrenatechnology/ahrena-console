@@ -13,7 +13,7 @@
 // | `POST /open/<local_…>`        | Abre a conversa no Claude Desktop (`open claude://…`, no macOS); JSON, como as outras escritas |
 // | `GET /open/<local_…>`         | Redireciona para `claude://claude.ai/epitaxy/<local_…>`, que abre a conversa no Claude Desktop (o `Link` do mod só leva `http://localhost`) |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
-// | `GET /api/changes`            | Long polling das mudanças (`?since=`, `?wait=`; src/mudancas, item 2.4) |
+// | `GET /api/changes`            | Long polling das mudanças (`?since=`, `?wait=`; src/changes, item 2.4) |
 // | `GET /api/events`             | O feed de atividade, todas as sessões (api/eventos.ts, #94) |
 // | `GET /api/attention`          | Quem precisa de você, em todas as contas (a bandeja, #87)  |
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
@@ -59,8 +59,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
-import type { CursorDeMudancas } from '../mudancas/cursor.ts';
-import { CHANGES_ROUTE, responderMudancas } from '../mudancas/http.ts';
+import type { ChangeCursor } from '../changes/cursor.ts';
+import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
 import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
@@ -110,7 +110,7 @@ export interface OpcoesDaApi {
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/changes`. */
-  mudancas?: CursorDeMudancas;
+  mudancas?: ChangeCursor;
   /** O kanban do GitHub Project (#80). Sem ele, `/api/project` responde 503. */
   projeto?: OpcoesDoProjeto;
   /** As leituras do Detalhe da sessão (`/api/sessions/<id>…`); sem elas, 404. */
@@ -339,10 +339,10 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
     // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: VERSAO_DA_API });
-    if (url.pathname === CHANGES_ROUTE && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === CHANGES_ROUTE && opts.mudancas) return serveChanges(res, url, opts.mudancas);
     if (url.pathname === WALL_ROUTE) return responderMural(res, mural);
     if (url.pathname === EVENTS_ROUTE && opts.eventos) return responderEventos(res, url, opts.eventos);
-    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null, opts.remoteAttention));
+    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.current ?? null, opts.remoteAttention));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
@@ -358,7 +358,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return send(res, 200, {
         ...contadores,
         eventsRead: opts.montador.resumos.eventosLidos,
-        ...(opts.mudancas ? { openWaits: opts.mudancas.abertas } : {}),
+        ...(opts.mudancas ? { openWaits: opts.mudancas.openWaits } : {}),
         ...(opts.carga?.() ?? {}),
       });
     }
@@ -390,7 +390,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         url: `http://${address}:${bound}`,
         close: () =>
           new Promise<void>((done, fail) => {
-            opts.mudancas?.encerrar();
+            opts.mudancas?.close();
             server.close((err) => (err ? fail(err) : done()));
             server.closeAllConnections();
           }),
