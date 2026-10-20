@@ -1001,6 +1001,8 @@ const SESSION_EVENTS: LegacyBodySpec = {
     ...scoped('agents', AGENT_NAME),
   },
   opaque: ['items.summary', 'items.data'],
+  // #245: the old body never had the attention of each event.
+  drop: ['items.attention'],
 };
 
 const WORKFLOW_NODE_STATES = { active: 'ativo', completed: 'concluido', error: 'erro' };
