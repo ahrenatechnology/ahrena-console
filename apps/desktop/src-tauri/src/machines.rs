@@ -97,14 +97,14 @@ pub struct Machine {
     pub telemetry: Option<Telemetry>,
 }
 
-/// `GET /api/machines`; `None` when it does not parse.
-pub fn summaries_from_json(text: &str) -> Option<Vec<MachineSummary>> {
-    serde_json::from_str(text).ok()
+/// `GET /api/machines`; the serde error when it does not parse, for the caller to log.
+pub fn summaries_from_json(text: &str) -> Result<Vec<MachineSummary>, serde_json::Error> {
+    serde_json::from_str(text)
 }
 
-/// `GET /api/telemetry`; `None` when it does not parse.
-pub fn telemetry_from_json(text: &str) -> Option<Telemetry> {
-    serde_json::from_str(text).ok()
+/// `GET /api/telemetry`; the serde error when it does not parse, for the caller to log.
+pub fn telemetry_from_json(text: &str) -> Result<Telemetry, serde_json::Error> {
+    serde_json::from_str(text)
 }
 
 /// The name in the tray: "Este Mac" for this machine, the core's label for a remote one.
@@ -151,7 +151,7 @@ pub fn parse_iso_ms(iso: &str) -> Option<u64> {
     if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || !matches!(b[10], b'T' | b't' | b' ') || b[13] != b':' || b[16] != b':' {
         return None;
     }
-    let num = |from: usize, to: usize| -> Option<i64> { iso.get(from..to)?.parse::<i64>().ok() };
+    let num = |from: usize, to: usize| -> Option<i64> { iso.get(from..to).filter(|s| s.bytes().all(|b| b.is_ascii_digit()))?.parse().ok() };
     let (year, month, day) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
     let (hour, minute, second) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(parse_iso_ms("1970-01-01T00:00:00Z"), Some(0));
         assert_eq!(parse_iso_ms("2026-10-18T23:10:00.5Z"), Some(1_792_365_000_500));
         assert_eq!(parse_iso_ms("2026-10-18T20:10:00-03:00"), Some(1_792_365_000_000));
-        for bad in ["", "ontem", "2026-13-01T00:00:00Z", "2026-10-18T23:10:00", "2026-10-18T23:10:00.Z"] {
+        for bad in ["", "ontem", "2026-13-01T00:00:00Z", "2026-10-18T23:10:00", "2026-10-18T23:10:00.Z", "2026-10-18T-1:10:00Z"] {
             assert_eq!(parse_iso_ms(bad), None, "{bad:?}");
         }
     }

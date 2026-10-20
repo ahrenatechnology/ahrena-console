@@ -55,6 +55,8 @@ struct Estado {
     sem_atencao: bool,
     /// The machines of `/api/machines` with their telemetry (#180); `None` without telemetry.
     machines: Option<Vec<Machine>>,
+    /// Consecutive reads of `/api/machines` that did not answer; see `count_machine_misses`.
+    machine_misses: u32,
     /// O detector e o silêncio das notificações; a marca "Notificações" é `avisos.silencio.ligadas`.
     avisos: Avisos,
     /// O status do `SMAppService` é `enabled` (login.rs), relido a cada menu.
@@ -79,6 +81,7 @@ fn main() {
         atencao: None,
         sem_atencao: false,
         machines: None,
+        machine_misses: 0,
         avisos: Avisos::default(),
         login: false,
         locais: HashMap::new(),
@@ -205,24 +208,37 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
             Some(r) if r.status == 200 => {
                 let Some(atencao) = Atencao::do_json(&r.corpo) else { return };
                 cursor = atencao.cursor.clone().or(cursor);
-                let read = read_machines(porta);
+                // Sessions first: a slow `/api/machines` must not hold back their notices.
                 let mut novos = Vec::new();
                 mudar(app, estado, |e| {
                     novos = e.avisos.ler(&atencao);
+                    e.atencao = Some(atencao);
+                    e.sem_atencao = false;
+                });
+                avisar(app, &novos);
+                let read = read_machines(porta);
+                let mut novos = Vec::new();
+                mudar(app, estado, |e| {
+                    let (misses, drop) = count_machine_misses(e.machine_misses, matches!(read, MachinesRead::NoAnswer));
+                    e.machine_misses = misses;
                     match read {
                         MachinesRead::Read(ms) => {
-                            novos.extend(e.avisos.read_machines(&ms));
+                            novos = e.avisos.read_machines(&ms);
                             e.machines = Some(ms);
                         }
                         MachinesRead::NoTelemetry => {
                             e.machines = None;
                             e.avisos.machines.reset();
                         }
-                        // Keeps the last block and its detector: a hiccup neither hides nor re-notifies.
-                        MachinesRead::NoAnswer => {}
+                        // A hiccup keeps the last block and its detector, so it neither hides nor
+                        // re-notifies; a run of them drops the block instead of showing it stale.
+                        MachinesRead::NoAnswer => {
+                            if drop {
+                                e.machines = None;
+                                e.avisos.machines.reset();
+                            }
+                        }
                     }
-                    e.atencao = Some(atencao);
-                    e.sem_atencao = false;
                 });
                 avisar(app, &novos);
             }
@@ -278,9 +294,22 @@ fn read_machines(porta: u16) -> MachinesRead {
     let r = match http::get_com_status(porta, "/api/machines", wait) {
         Some(r) if r.status == 404 => return MachinesRead::NoTelemetry,
         Some(r) if r.status == 200 => r,
-        _ => return MachinesRead::NoAnswer,
+        Some(r) => {
+            eprintln!("[ahrena-console] máquinas: /api/machines respondeu {}", r.status);
+            return MachinesRead::NoAnswer;
+        }
+        None => {
+            eprintln!("[ahrena-console] máquinas: /api/machines sem resposta");
+            return MachinesRead::NoAnswer;
+        }
     };
-    let Some(summaries) = machines::summaries_from_json(&r.corpo) else { return MachinesRead::NoAnswer };
+    let summaries = match machines::summaries_from_json(&r.corpo) {
+        Ok(summaries) => summaries,
+        Err(err) => {
+            eprintln!("[ahrena-console] máquinas: /api/machines não leu: {err}");
+            return MachinesRead::NoAnswer;
+        }
+    };
     if summaries.is_empty() {
         return MachinesRead::NoTelemetry;
     }
@@ -289,11 +318,28 @@ fn read_machines(porta: u16) -> MachinesRead {
             .into_iter()
             .map(|summary| {
                 let path = format!("/api/telemetry?machine={}", http::codificar(&summary.id));
-                let telemetry = http::get(porta, &path, wait).and_then(|t| machines::telemetry_from_json(&t));
+                let telemetry = http::get(porta, &path, wait).and_then(|t| {
+                    machines::telemetry_from_json(&t)
+                        .map_err(|err| eprintln!("[ahrena-console] máquinas: telemetria de {}: {err}", summary.id))
+                        .ok()
+                });
                 Machine { summary, telemetry }
             })
             .collect(),
     )
+}
+
+/// Consecutive `NoAnswer` reads after which the "Máquinas" block is dropped rather than kept stale.
+const MACHINE_MISSES_TO_DROP: u32 = 3;
+
+/// The miss count after one read of `/api/machines`, and whether the kept block must now be dropped.
+/// Any read that answered resets the count.
+fn count_machine_misses(misses: u32, no_answer: bool) -> (u32, bool) {
+    if !no_answer {
+        return (0, false);
+    }
+    let misses = misses.saturating_add(1);
+    (misses, misses >= MACHINE_MISSES_TO_DROP)
 }
 
 fn now_ms() -> u64 {
@@ -547,5 +593,24 @@ fn avisar(app: &AppHandle, avisos: &[Aviso]) {
         if let Err(err) = n.show() {
             eprintln!("[ahrena-console] notificação: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::count_machine_misses;
+
+    #[test]
+    fn machine_block_drops_after_three_consecutive_misses() {
+        assert_eq!(count_machine_misses(0, true), (1, false));
+        assert_eq!(count_machine_misses(1, true), (2, false));
+        assert_eq!(count_machine_misses(2, true), (3, true));
+        assert_eq!(count_machine_misses(3, true), (4, true), "stays dropped while it keeps missing");
+    }
+
+    #[test]
+    fn any_answer_resets_the_miss_count() {
+        assert_eq!(count_machine_misses(2, false), (0, false));
+        assert_eq!(count_machine_misses(0, false), (0, false));
     }
 }
