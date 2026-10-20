@@ -68,7 +68,7 @@ function mountHome(home: string, project: string) {
     }),
   );
   write(join(autoMemoryDir(u, project), 'MEMORY.md'), 'conteúdo da memória: valor-de-settings');
-  return configFolder(u, 'padrao', home);
+  return configFolder(u, 'default', home);
 }
 
 function mountProject(project: string) {
@@ -162,7 +162,7 @@ describe('#63 GET /api/agent-config: reading', () => {
   test('two user folders (profiles) give two user roots, with the folder name in the label', async () => {
     const home = tmp();
     const a = mountHome(home, '/nao/existe');
-    const b = configFolder(join(home, '.claude-cliente'), 'nome', home);
+    const b = configFolder(join(home, '.claude-cliente'), 'name', home);
     write(join(b.dir, 'skills', 'do-cliente', 'SKILL.md'), '---\ndescription: só do cliente\n---\n');
     write(b.claudeJson, JSON.stringify({ mcpServers: { cliente: {} } }));
     const r = await readAgentConfig({ folders: [a, b], projects: [] });
@@ -193,7 +193,7 @@ describe('#63 GET /api/agent-config: reading', () => {
     const home = tmp();
     const outside = tmp();
     write(join(outside, 'alvo', 'SKILL.md'), '---\nname: alvo\n---\n');
-    const folder = configFolder(join(home, '.claude'), 'padrao', home);
+    const folder = configFolder(join(home, '.claude'), 'default', home);
     mkdirSync(join(folder.dir, 'skills'), { recursive: true });
     symlinkSync(join(outside, 'alvo'), join(folder.dir, 'skills', 'link'));
     const r = await readAgentConfig({ folders: [folder], projects: [] });
@@ -202,7 +202,7 @@ describe('#63 GET /api/agent-config: reading', () => {
 
   test('SKILL.md and agents/*.md as symlinks to another file in the root: listed, nothing read from the target', async () => {
     const home = tmp();
-    const folder = configFolder(join(home, '.claude'), 'padrao', home);
+    const folder = configFolder(join(home, '.claude'), 'default', home);
     // Fictitious content that looks like frontmatter: if the target were read, it would show in `description`.
     write(join(folder.dir, '.credentials.json'), '---\nname: seg\ndescription: segredo-ficticio-abc\n---\n');
     mkdirSync(join(folder.dir, 'skills', 'seg'), { recursive: true });
@@ -217,7 +217,7 @@ describe('#63 GET /api/agent-config: reading', () => {
 
   test('SKILL.md as a hardlink to .credentials.json: listed, nothing read from the target', async () => {
     const home = tmp();
-    const folder = configFolder(join(home, '.claude'), 'padrao', home);
+    const folder = configFolder(join(home, '.claude'), 'default', home);
     write(join(folder.dir, '.credentials.json'), '---\nname: duro\ndescription: segredo-ficticio-abc\n---\n');
     mkdirSync(join(folder.dir, 'skills', 'duro'), { recursive: true });
     linkSync(join(folder.dir, '.credentials.json'), join(folder.dir, 'skills', 'duro', 'SKILL.md'));
@@ -357,7 +357,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   before(async () => {
     t = mkdtempSync(join(tmpdir(), 'agent-config-http-'));
     outside = mkdtempSync(join(tmpdir(), 'agent-config-outside-'));
-    home = configFolder(join(t, '.claude'), 'padrao', t);
+    home = configFolder(join(t, '.claude'), 'default', t);
     project = join(t, 'proj');
     backups = join(t, 'backups');
     write(join(home.dir, 'skills', 'revisar-pr', 'SKILL.md'), '---\nname: revisar-pr\ndescription: Revisa\n---\nversão antiga\n');
@@ -565,7 +565,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   test("project = the home's parent folder: POST to root p gives 400 and nothing lands in the home", async () => {
     const t4 = mkdtempSync(join(tmpdir(), 'agent-config-project-home-'));
     try {
-      const h4 = configFolder(join(t4, '.claude'), 'padrao', t4);
+      const h4 = configFolder(join(t4, '.claude'), 'default', t4);
       mkdirSync(h4.dir);
       await withApi(createAgentConfigRoute({ folders: async () => [h4], projects: async () => [t4], backups: join(t4, 'b') }), async (url) => {
         const r = await get(url, '/api/agent-config/skill', { method: 'POST', headers: json, body: JSON.stringify({ root: await rootIdFor('p', join(t4, '.claude')), name: 'nova', content: 'x', create: true }) });
@@ -593,8 +593,8 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   test('root ids come from the real path: the discovery order changes nothing, and an id that left never lands in another folder', async () => {
     const t5 = mkdtempSync(join(tmpdir(), 'agent-config-ids-'));
     try {
-      const a = configFolder(join(t5, '.claude'), 'padrao', t5);
-      const b = configFolder(join(t5, '.claude-cliente'), 'nome', t5);
+      const a = configFolder(join(t5, '.claude'), 'default', t5);
+      const b = configFolder(join(t5, '.claude-cliente'), 'name', t5);
       mkdirSync(a.dir);
       mkdirSync(b.dir);
       const idOf = (roots: { id: string; path: string }[], dir: string) => roots.find((x) => x.path === dir)!.id;
@@ -646,7 +646,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
   test('the whole skills folder as a symlink out is refused too', async () => {
     const t2 = mkdtempSync(join(tmpdir(), 'agent-config-skills-link-'));
     try {
-      const h2 = configFolder(join(t2, '.claude'), 'padrao', t2);
+      const h2 = configFolder(join(t2, '.claude'), 'default', t2);
       mkdirSync(h2.dir);
       symlinkSync(outside, join(h2.dir, 'skills'));
       await withApi(createAgentConfigRoute({ folders: async () => [h2], projects: async () => [], backups: join(t2, 'b') }), async (url) => {
