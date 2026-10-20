@@ -974,8 +974,10 @@ test('Compactar: a partir de 80%, no pé do card Contexto, à direita; pede conf
   await f.relogio.advance(5_000)
   ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
   const agora = await ui.find({ key: 'compactar' })
-  expect(agora?.props.label).toBe('Compactar agora')
-  expect(agora?.props.variant).toBe('primary')
+  // A linha de pé, como as dos outros cards: sem moldura (plain), nada de botão primário.
+  expect(agora?.props.label).toBe('Compactar agora ›')
+  expect(agora?.props.plain).toBe(true)
+  expect(agora?.props.variant).toBeUndefined()
   // No pé do card, à direita; os quatro tiles ficam.
   expect(await ui.find({ key: 'kpi-background' })).toBeDefined()
   expect((await ui.find({ key: 'pe-do-card' }))?.props.justifyContent).toBe('flex-end')

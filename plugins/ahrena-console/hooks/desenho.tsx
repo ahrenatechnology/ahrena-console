@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.26'
+export const VERSAO_DO_PLUGIN = '0.0.27'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -563,15 +563,19 @@ export const CONTEXTO_ALTO = 80
 /** O contexto desta sessão: o do engine (acompanha a compactação na hora) ou, sem ele, o do núcleo. */
 const contextoDaSessao = (c: Pick<Contexto, 'leitura'>, p: Painel | null) => c.leitura?.contextoAoVivo ?? p?.contexto ?? null
 
-/** O "Compactar agora" do pé do card Contexto (a partir de 80%), ou "compactando…" enquanto o engine compacta. */
+/**
+ * O "Compactar agora" do pé do card Contexto (a partir de 80%): a mesma linha de pé dos outros
+ * cards, à direita, sem moldura. O botão primário nativo do Desktop (~28 px, branco) não cabia
+ * acima do respiro e destoava dos outros pés. Enquanto o engine compacta, "compactando…".
+ */
 function botaoCompactar(c: Contexto) {
-  const { Button, Text } = c.el
+  const { Text } = c.el
   return c.vista.compactar === 'compactando' ? (
     <Text key="compactando" mono size="footnote" color={AMARELO}>
       compactando…
     </Text>
   ) : (
-    <Button key="compactar" label="Compactar agora" variant="primary" onPress={() => c.acoes.compactar('pedir')} />
+    abre(c, 'compactar', 'Compactar agora ›', () => c.acoes.compactar('pedir'))
   )
 }
 
