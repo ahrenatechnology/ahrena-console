@@ -17,6 +17,16 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
 | `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `sessoes.js` (C3, #28) lê `GET /api/sessoes`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `sessoes.css`), carregado pela própria tela |
 | `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
+| `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
+
+## As telas
+
+| Tela | Rota | Lê | Arquivo |
+| --- | --- | --- | --- |
+| Analytics · Visão geral (C12) | `/ui/analytics` | `GET /api/analytics?fuso=` | `telas/analytics.js` |
+| Analytics · Custo (C13) | `/ui/analytics/custo` | `GET /api/analytics/custo?dias=7\|30\|90&fuso=` | `telas/analytics.js` |
+
+O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `analytics` (item da barra) e a `analytics-aba` (`/ui/analytics/:aba`, acende Analytics). A tela lê `ctx.params.aba`: só `custo` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
 
 ## Registrar uma tela
 
