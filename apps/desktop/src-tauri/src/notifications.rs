@@ -27,6 +27,8 @@ use crate::menu::{Attention, AttentionItem};
 
 /// The name of the silence file in the app's data folder.
 pub const FILE: &str = "notifications.json";
+/// Its name before #173 (phase 4): read once, when `FILE` does not exist yet, and then removed.
+pub const LEGACY_FILE: &str = "notificacoes.json";
 
 /// A notification to show.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,9 +204,10 @@ impl Detector {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Silence {
     /// The "Notificações" check in the menu; off, nothing notifies.
-    #[serde(default = "enabled_by_default")]
+    /// `alias`: the keys of the file written before #173 (phase 4).
+    #[serde(alias = "ligadas", default = "enabled_by_default")]
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(alias = "sessoes", default)]
     pub sessions: BTreeSet<String>,
 }
 
@@ -259,7 +262,7 @@ pub struct Notices {
 
 impl Notices {
     pub fn open(file: Option<PathBuf>) -> Notices {
-        let silence = file.as_deref().map(Silence::load).unwrap_or_default();
+        let silence = file.as_deref().map(load_or_migrate).unwrap_or_default();
         Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
     }
 
@@ -295,6 +298,23 @@ impl Notices {
             eprintln!("[ahrena-console] save {}: {err}", file.display());
         }
     }
+}
+
+/// The silence in `file`; when it does not exist yet, the one in `LEGACY_FILE` next to it, saved as
+/// `file` and removed, so the switch and the silenced sessions survive the rename.
+fn load_or_migrate(file: &Path) -> Silence {
+    let legacy = file.with_file_name(LEGACY_FILE);
+    if file.exists() || !legacy.exists() {
+        return Silence::load(file);
+    }
+    let silence = Silence::load(&legacy);
+    match silence.save(file) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&legacy);
+        }
+        Err(err) => eprintln!("[ahrena-console] migrate {}: {err}", legacy.display()),
+    }
+    silence
 }
 
 /// The session's detail screen in the core's `/ui`, where "Abrir" leads. Empty, "." or ".." do not
@@ -720,32 +740,40 @@ mod tests {
         let bad = p.0.join(FILE);
         std::fs::write(&bad, "não é json").unwrap();
         assert_eq!(Silence::load(&bad), Silence::default());
-        std::fs::write(&bad, r#"{ "sessions": ["s9"] }"#).unwrap();
+        std::fs::write(&bad, r#"{ "sessoes": ["s9"] }"#).unwrap();
         assert_eq!(Silence::load(&bad), Silence { enabled: true, sessions: ["s9".to_string()].into() });
     }
 
     #[test]
-    fn saves_and_reads_the_english_keys_only() {
+    fn saves_the_english_keys_and_reads_the_old_ones() {
         let p = TempDir::new("keys");
         let file = p.0.join(FILE);
         Silence { enabled: false, sessions: ["s1".to_string()].into() }.save(&file).unwrap();
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("\"enabled\"") && text.contains("\"sessions\""), "{text}");
-        assert_eq!(Silence::load(&file), Silence { enabled: false, sessions: ["s1".to_string()].into() });
-        // The Portuguese keys (#173 phase 6) are ignored: the default.
         std::fs::write(&file, r#"{ "ligadas": false, "sessoes": ["s2"] }"#).unwrap();
-        assert_eq!(Silence::load(&file), Silence::default());
+        assert_eq!(Silence::load(&file), Silence { enabled: false, sessions: ["s2".to_string()].into() });
     }
 
     #[test]
-    fn the_file_from_before_the_rename_is_not_read() {
-        // #173 phase 6: app 0.0.5 already moved `notificacoes.json` to `notifications.json`; the
-        // migration left, and an app 0.0.4 or older updated straight to this one starts unsilenced.
-        let p = TempDir::new("old-file");
+    fn migrates_the_file_from_before_the_rename() {
+        let p = TempDir::new("migrate");
         std::fs::create_dir_all(&p.0).unwrap();
-        std::fs::write(p.0.join("notificacoes.json"), r#"{ "ligadas": false, "sessoes": ["s1"] }"#).unwrap();
+        let legacy = p.0.join(LEGACY_FILE);
+        std::fs::write(&legacy, r#"{ "ligadas": false, "sessoes": ["s1"] }"#).unwrap();
         let file = p.0.join(FILE);
-        assert_eq!(Notices::open(Some(file.clone())).silence, Silence::default());
-        assert!(!file.exists());
+        let n = Notices::open(Some(file.clone()));
+        assert_eq!(n.silence, Silence { enabled: false, sessions: ["s1".to_string()].into() });
+        assert!(file.exists() && !legacy.exists(), "saved under the new name, the old one removed");
+        assert_eq!(Silence::load(&file), n.silence);
+    }
+
+    #[test]
+    fn the_new_file_wins_over_the_old_one() {
+        let p = TempDir::new("both");
+        std::fs::create_dir_all(&p.0).unwrap();
+        std::fs::write(p.0.join(LEGACY_FILE), r#"{ "ligadas": false }"#).unwrap();
+        std::fs::write(p.0.join(FILE), r#"{ "enabled": true, "sessions": ["s3"] }"#).unwrap();
+        assert_eq!(Notices::open(Some(p.0.join(FILE))).silence, Silence { enabled: true, sessions: ["s3".to_string()].into() });
     }
 }
