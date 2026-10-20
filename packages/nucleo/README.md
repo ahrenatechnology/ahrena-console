@@ -33,6 +33,7 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
+                                         # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
 npm run api -- --help
 ```
 

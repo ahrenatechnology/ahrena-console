@@ -38,7 +38,9 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
+import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
@@ -68,6 +70,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
+                      A demo grava também o Detalhe da /ui: uma sessão que pede permissão
+                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
@@ -223,7 +227,9 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  await semearDetalhe(storage);
 }
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -273,6 +279,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  detalhe,
   frota: mcp.frota,
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
