@@ -371,6 +371,15 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.ok((lista.json.skills as { nome: string; raiz: string }[]).some((s) => s.nome === 'do-projeto' && s.raiz === 'p'));
   });
 
+  test('POST com criar: true só cria; se a skill já existe, 409 e nada muda (o "Nova" da tela)', async () => {
+    const nova = await postar({ raiz: 'u0', nome: 'so-cria', conteudo: 'um', criar: true });
+    assert.equal(nova.status, 200, nova.corpo);
+    assert.equal(nova.json.backup, null);
+    const outra = await postar({ raiz: 'u0', nome: 'so-cria', conteudo: 'dois', criar: true });
+    assert.equal(outra.status, 409, outra.corpo);
+    assert.equal(readFileSync(join(home.dir, 'skills', 'so-cria', 'SKILL.md'), 'utf8'), 'um');
+  });
+
   test('a própria /ui grava (Origin igual a http://<Host>); Origin de outro site e Host estranho dão 403', async () => {
     const ok = await postar({ raiz: 'u0', nome: 'pela-ui', conteudo: 'x' }, { ...json, origin: `http://${host}` });
     assert.equal(ok.status, 200, ok.corpo);

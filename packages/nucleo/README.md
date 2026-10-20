@@ -56,7 +56,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
 | `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
 | `GET /api/config/skill?raiz=<id>&nome=<nome>` | O `SKILL.md` de uma skill, com a `versao` |
-| `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes |
+| `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `criar: true`, só cria (409 se já existe) |
 
 `?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa, e o `POST /api/config/skill` vindo dela.
 

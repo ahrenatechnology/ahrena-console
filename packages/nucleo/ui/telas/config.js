@@ -148,13 +148,24 @@ function garantirCss() {
   return pronto;
 }
 
-const sujo = (ed) => !!ed && (ed.modo === 'nova' || (ed.modo === 'editar' && ed.texto !== ed.conteudo));
+const sujo = (ed) => !!ed && ((ed.modo === 'nova' && ed.texto !== modeloDeSkill(ed.nome)) || (ed.modo === 'editar' && ed.texto !== ed.conteudo));
+/** Pode salvar: a skill foi lida (tem `versao`) ou é nova. Sem isso, um POST sem `versao` trocaria o arquivo às cegas. */
+const podeSalvar = (ed) => !!ed && !ed.carregando && !ed.salvando && (ed.modo === 'nova' || (ed.modo === 'editar' && !!ed.versao && ed.texto !== ed.conteudo));
+
+// Fechar ou recarregar a janela com texto não salvo pergunta antes.
+globalThis.addEventListener?.('beforeunload', (ev) => {
+  if (sujo(estado.editor)) ev.preventDefault();
+});
 
 export async function montar(area, ctx) {
   let url = lerUrl(location.search);
   const sinal = ctx.sinal;
   await garantirCss();
   if (sinal.aborted) return;
+  /** O `data-foco` a focar depois do próximo desenho (Cancelar da Nova volta ao botão Nova…). */
+  let focoPedido = null;
+  /** Só a última leitura de `/api/config` vale: uma resposta atrasada de outro projeto é descartada. */
+  let leitura = 0;
 
   // ---------- Cabeçalho ----------
   const lugarDoProjeto = el('span', { class: 'cfg-projeto' });
@@ -165,7 +176,7 @@ export async function montar(area, ctx) {
   function desenharSeg() {
     seg.replaceChildren(
       ...ESCOPOS.map(([id, rotulo]) =>
-        el('button', { type: 'button', 'aria-pressed': String(estado.escopo === id), aoClicar: () => ((estado.escopo = id), desenhar()) }, rotulo),
+        el('button', { type: 'button', 'data-foco': `escopo:${id}`, 'aria-pressed': String(estado.escopo === id), aoClicar: () => ((estado.escopo = id), desenhar()) }, rotulo),
       ),
     );
   }
@@ -175,7 +186,7 @@ export async function montar(area, ctx) {
     if (!d || d.projetos.length < 2) return lugarDoProjeto.replaceChildren();
     const select = el(
       'select',
-      { class: 'cfg-select', 'aria-label': 'Projeto', title: d.projeto ?? '' },
+      { class: 'cfg-select', 'data-foco': 'projeto', 'aria-label': 'Projeto', title: d.projeto ?? '' },
       ...d.projetos.map((p) => el('option', { value: p, selected: p === d.projeto }, nomeCurto(p))),
     );
     select.addEventListener('change', () => {
@@ -204,7 +215,7 @@ export async function montar(area, ctx) {
         const n = a.resumo ? numeroDo(d?.resumo?.[a.resumo], estado.escopo) : null;
         const link = el(
           'a',
-          { href: urlDa({ aba: a.id, projeto: url.projeto }), class: a.id === url.aba ? 'on' : null, 'aria-current': a.id === url.aba ? 'page' : null },
+          { href: urlDa({ aba: a.id, projeto: url.projeto }), 'data-foco': `aba:${a.id}`, class: a.id === url.aba ? 'on' : null, 'aria-current': a.id === url.aba ? 'page' : null },
           icone(a.icone),
           a.rotulo,
           n === null ? null : el('span', { class: 'cfg-chip' }, String(n)),
@@ -225,17 +236,19 @@ export async function montar(area, ctx) {
 
   async function carregar({ silencioso = false, comSkill = false } = {}) {
     const pedido = url.projeto;
+    const minha = ++leitura;
+    const valeAinda = () => !sinal.aborted && minha === leitura && pedido === url.projeto;
     if (!silencioso || !estado.dados) area.replaceChildren(cab, carregando({ rotulo: 'Lendo as pastas de configuração' }));
     try {
       const dados = await ctx.ler(`/api/config${pedido ? `?projeto=${encodeURIComponent(pedido)}` : ''}`);
-      if (sinal.aborted) return;
+      if (!valeAinda()) return;
       estado.dados = dados;
       estado.pedido = pedido;
       faixaDeLeitura = null;
       desenhar();
       if (comSkill && estado.editor && !sujo(estado.editor) && estado.editor.modo !== 'nova') abrirSkill(estado.editor, estado.editor.modo);
     } catch (e) {
-      if (e?.name === 'AbortError' || sinal.aborted) return;
+      if (e?.name === 'AbortError' || !valeAinda()) return;
       if (e?.status === 400 && pedido) {
         area.replaceChildren(
           cab,
@@ -262,6 +275,12 @@ export async function montar(area, ctx) {
     if (sinal.aborted) return;
     const d = estado.dados;
     if (!d) return;
+    // Redesenhar não tira o foco (nem o cursor) de quem está no teclado: o controle equivalente,
+    // achado pelo `data-foco`, volta a ter o foco. `focoPedido` diz para onde ir quando o controle some.
+    const ativo = document.activeElement;
+    const chave = focoPedido ?? (area.contains(ativo) ? ativo?.dataset?.foco : null);
+    const texto = !focoPedido && ativo && 'selectionStart' in ativo && area.contains(ativo) ? { de: ativo.selectionStart, ate: ativo.selectionEnd, rolagem: ativo.scrollTop } : null;
+    focoPedido = null;
     const aba = ABAS.find((a) => a.id === url.aba);
     ctx.titulo(url.aba === 'visao' ? 'Agent Config' : `Agent Config · ${aba.rotulo}`);
     desenharSeg();
@@ -269,16 +288,15 @@ export async function montar(area, ctx) {
     const partes = [cab, faixaDeLeitura];
     if (url.aba === 'visao') partes.push(...visaoGeral(d));
     else partes.push(abas(), url.aba === 'skills' ? skills(d) : listaSimples(d, url.aba));
-    // Uma releitura por trás não tira o cursor de quem está digitando na busca ou no editor.
-    const ativo = document.activeElement;
-    const foco = ativo?.matches?.('.cfg-texto, .cfg-campo input') ? { classe: ativo.matches('.cfg-texto') ? '.cfg-texto' : '.cfg-campo input', de: ativo.selectionStart, ate: ativo.selectionEnd, rolagem: ativo.scrollTop } : null;
     area.replaceChildren(...partes.filter(Boolean));
-    if (foco) {
-      const novo = area.querySelector(foco.classe);
-      if (novo) {
-        novo.focus();
-        novo.setSelectionRange?.(foco.de, foco.ate);
-        novo.scrollTop = foco.rolagem;
+    const novo = chave ? area.querySelector(`[data-foco="${CSS.escape(chave)}"]`) : null;
+    if (novo && !novo.disabled) {
+      novo.focus();
+      if (texto && 'selectionStart' in novo) {
+        try {
+          novo.setSelectionRange(texto.de, texto.ate);
+        } catch {}
+        novo.scrollTop = texto.rolagem;
       }
     }
   }
@@ -288,7 +306,7 @@ export async function montar(area, ctx) {
     const raizes = doEscopo(d.raizes, estado.escopo);
     const botaoBackups = el(
       'button',
-      { type: 'button', class: 'btn contorno', 'aria-expanded': String(estado.backupsAbertos), 'aria-controls': 'cfg-backups' },
+      { type: 'button', class: 'btn contorno', 'data-foco': 'backups', 'aria-expanded': String(estado.backupsAbertos), 'aria-controls': estado.backupsAbertos ? 'cfg-backups' : null },
       icone('history'),
       'Backups',
     );
@@ -378,14 +396,14 @@ export async function montar(area, ctx) {
             ]),
       );
     };
-    const busca = el('input', { type: 'search', class: 'cfg-entrada', placeholder: 'Buscar skills…', 'aria-label': 'Buscar skills', value: estado.busca, autocomplete: 'off', spellcheck: 'false' });
+    const busca = el('input', { type: 'search', 'data-foco': 'busca', class: 'cfg-entrada', placeholder: 'Buscar skills…', 'aria-label': 'Buscar skills', value: estado.busca, autocomplete: 'off', spellcheck: 'false' });
     busca.addEventListener('input', () => ((estado.busca = busca.value), desenharLista()));
-    const nova = el('button', { type: 'button', class: 'btn cheio', 'aria-expanded': String(!!estado.nova) }, icone('plus'), 'Nova');
+    const nova = el('button', { type: 'button', class: 'btn cheio', 'data-foco': 'nova', 'aria-expanded': String(!!estado.nova) }, icone('plus'), 'Nova');
     nova.addEventListener('click', () => {
       const primeira = raizesDeSkill(d)[0];
       estado.nova = estado.nova ? null : { nome: '', raiz: primeira?.id ?? null, erro: null };
+      focoPedido = estado.nova ? 'nova-nome' : 'nova';
       desenhar();
-      area.querySelector('.cfg-nova input')?.focus();
     });
     desenharLista();
     return el(
@@ -415,8 +433,8 @@ export async function montar(area, ctx) {
         'div',
         { class: 'cfg-item-linha cfg-item-pe' },
         caminhoEl(s.caminho, 'cfg-cresce'),
-        el('button', { type: 'button', class: 'cfg-link', 'aria-label': `Ver ${s.nome}`, aoClicar: () => trocarPara(s, 'ver') }, 'Ver'),
-        s.editavel ? el('button', { type: 'button', class: 'cfg-link', 'aria-label': `Editar ${s.nome}`, aoClicar: () => trocarPara(s, 'editar') }, 'Editar') : null,
+        el('button', { type: 'button', class: 'cfg-link', 'data-foco': `ver:${s.raiz}/${s.nome}`, 'aria-label': `Ver ${s.nome}`, aoClicar: () => trocarPara(s, 'ver') }, 'Ver'),
+        s.editavel ? el('button', { type: 'button', class: 'cfg-link', 'data-foco': `editar:${s.raiz}/${s.nome}`, 'aria-label': `Editar ${s.nome}`, aoClicar: () => trocarPara(s, 'editar') }, 'Editar') : null,
       ),
     );
   }
@@ -427,8 +445,8 @@ export async function montar(area, ctx) {
       if (modo === 'editar' && ed.modo === 'ver') {
         ed.modo = 'editar';
         ed.aviso = null;
+        focoPedido = 'texto';
         desenhar();
-        area.querySelector('.cfg-texto')?.focus();
       }
       return;
     }
@@ -450,17 +468,18 @@ export async function montar(area, ctx) {
       Object.assign(ed, { conteudo: r.conteudo, texto: r.conteudo, versao: r.versao, editadoEm: r.editadoEm, caminho: r.caminho, carregando: false });
     } catch (e) {
       if (e?.name === 'AbortError' || sinal.aborted || estado.editor !== ed) return;
-      Object.assign(ed, { carregando: false, erro: { titulo: 'Não abriu.', texto: e?.message ?? String(e) } });
+      // Sem a leitura não há `versao`: fica só leitura, sem Salvar (um POST sem versão trocaria o arquivo).
+      Object.assign(ed, { carregando: false, modo: 'ver', erro: { titulo: 'Não abriu.', texto: e?.message ?? String(e), acao: { rotulo: 'Tentar de novo', aoClicar: () => abrirSkill(ed, modo) } } });
     }
+    if (modo === 'editar' && !ed.erro) focoPedido = 'texto';
     desenhar();
-    if (modo === 'editar') area.querySelector('.cfg-texto')?.focus();
   }
 
   function formularioNova(d) {
     const nova = estado.nova;
     const opcoes = raizesDeSkill(d);
     const variosPerfis = opcoes.filter((r) => r.tipo === 'home').length > 1;
-    const entrada = el('input', { type: 'text', class: 'cfg-entrada mono', id: 'cfg-nova-nome', value: nova.nome, autocomplete: 'off', spellcheck: 'false', maxlength: '64', placeholder: 'minha-skill', 'aria-describedby': 'cfg-nova-msg', 'aria-invalid': nova.erro ? 'true' : null });
+    const entrada = el('input', { type: 'text', class: 'cfg-entrada mono', id: 'cfg-nova-nome', 'data-foco': 'nova-nome', value: nova.nome, autocomplete: 'off', spellcheck: 'false', maxlength: '64', placeholder: 'minha-skill', 'aria-describedby': 'cfg-nova-msg', 'aria-invalid': nova.erro ? 'true' : null });
     const msg = el('p', { class: `cfg-nova-msg${nova.erro ? ' erro' : ''}`, id: 'cfg-nova-msg', 'aria-live': 'polite' }, nova.erro ?? 'Minúsculas, números, ponto, hífen ou sublinhado.');
     const existentes = () => new Set(d.skills.filter((s) => s.raiz === nova.raiz).map((s) => s.nome));
     entrada.addEventListener('input', () => {
@@ -477,7 +496,7 @@ export async function montar(area, ctx) {
       ...opcoes.map((r) =>
         el(
           'button',
-          { type: 'button', 'aria-pressed': String(nova.raiz === r.id), title: r.caminho, aoClicar: () => ((nova.raiz = r.id), (nova.erro = nova.nome ? validarNomeDeSkill(nova.nome, existentes()) : null), desenhar(), area.querySelector('.cfg-nova input')?.focus()) },
+          { type: 'button', 'data-foco': `nova-raiz:${r.id}`, 'aria-pressed': String(nova.raiz === r.id), title: r.caminho, aoClicar: () => ((nova.raiz = r.id), (nova.erro = nova.nome ? validarNomeDeSkill(nova.nome, existentes()) : null), desenhar()) },
           r.tipo === 'home' ? (variosPerfis ? `Usuário · ${r.rotulo}` : 'Usuário') : 'Projeto',
         ),
       ),
@@ -493,7 +512,7 @@ export async function montar(area, ctx) {
       el(
         'div',
         { class: 'cfg-pe' },
-        el('button', { type: 'button', class: 'btn contorno cfg-empurra', aoClicar: () => ((estado.nova = null), desenhar()) }, 'Cancelar'),
+        el('button', { type: 'button', class: 'btn contorno cfg-empurra', aoClicar: () => ((estado.nova = null), (focoPedido = 'nova'), desenhar()) }, 'Cancelar'),
         el('button', { type: 'submit', class: 'btn cheio', disabled: !opcoes.length }, icone('plus'), 'Criar'),
       ),
     );
@@ -504,8 +523,8 @@ export async function montar(area, ctx) {
       const raiz = opcoes.find((r) => r.id === nova.raiz);
       if (!nova.erro && !raiz) nova.erro = 'Escolha onde criar.';
       if (nova.erro) {
+        focoPedido = 'nova-nome';
         desenhar();
-        area.querySelector('.cfg-nova input')?.focus();
         return;
       }
       if (sujo(estado.editor) && !confirm('Descartar as alterações da skill aberta?')) return;
@@ -526,8 +545,8 @@ export async function montar(area, ctx) {
         aviso: null,
       };
       estado.nova = null;
+      focoPedido = 'texto';
       desenhar();
-      area.querySelector('.cfg-texto')?.focus();
     });
     return form;
   }
@@ -545,6 +564,7 @@ export async function montar(area, ctx) {
     const quando = ed.modo === 'nova' ? 'nova' : ed.carregando ? 'abrindo…' : editadoHa(ed.editadoEm);
     const texto = el('textarea', {
       class: 'cfg-texto mono',
+      'data-foco': 'texto',
       'aria-label': `${ed.nome} / SKILL.md`,
       spellcheck: 'false',
       readonly: ed.modo === 'ver' || ed.carregando || ed.salvando,
@@ -554,8 +574,7 @@ export async function montar(area, ctx) {
     const estadoPe = el('span', { class: 'cfg-mudo cfg-estado-pe', 'aria-live': 'polite' });
     const salvar = el('button', { type: 'button', class: 'btn cheio' }, icone('save'), ed.salvando ? 'Salvando…' : 'Salvar com backup');
     const atualizarPe = () => {
-      const pode = !ed.carregando && !ed.salvando && sujo(ed);
-      salvar.disabled = !pode;
+      salvar.disabled = !podeSalvar(ed);
       estadoPe.replaceChildren(
         ...(ed.modo === 'ver'
           ? [icone('lock'), ' Só leitura']
@@ -573,13 +592,16 @@ export async function montar(area, ctx) {
       atualizarPe();
     });
     salvar.addEventListener('click', () => gravar(ed));
-    const fechar = el('button', { type: 'button', class: 'btn contorno' }, ed.modo === 'ver' ? 'Fechar' : 'Cancelar');
+    const fechar = el('button', { type: 'button', class: 'btn contorno', 'data-foco': 'fechar' }, ed.modo === 'ver' ? 'Fechar' : 'Cancelar');
     fechar.addEventListener('click', () => {
       if (sujo(ed) && !confirm('Descartar as alterações?')) return;
       if (ed.modo === 'editar') {
         // Cancelar a edição volta ao texto lido, em modo de leitura.
         Object.assign(ed, { modo: 'ver', texto: ed.conteudo, erro: null, aviso: null });
-      } else estado.editor = null;
+      } else {
+        estado.editor = null;
+        focoPedido = ed.modo === 'nova' ? 'nova' : `ver:${ed.raiz}/${ed.nome}`;
+      }
       desenhar();
     });
     const editavel = estado.dados?.skills.find((s) => s.raiz === ed.raiz && s.nome === ed.nome)?.editavel;
@@ -599,7 +621,7 @@ export async function montar(area, ctx) {
         fechar,
         ed.modo === 'ver'
           ? editavel
-            ? el('button', { type: 'button', class: 'btn cheio', disabled: ed.carregando, aoClicar: () => trocarPara(ed, 'editar') }, icone('pencil'), 'Editar')
+            ? el('button', { type: 'button', class: 'btn cheio', 'data-foco': 'editar', disabled: ed.carregando || !ed.versao, aoClicar: () => trocarPara(ed, 'editar') }, icone('pencil'), 'Editar')
             : null
           : salvar,
       ),
@@ -607,7 +629,7 @@ export async function montar(area, ctx) {
   }
 
   async function gravar(ed) {
-    if (ed.salvando || !sujo(ed)) return;
+    if (!podeSalvar(ed)) return;
     ed.salvando = true;
     ed.erro = null;
     ed.aviso = null;
@@ -615,26 +637,32 @@ export async function montar(area, ctx) {
     const corpo = { raiz: ed.raiz, nome: ed.nome, conteudo: ed.texto };
     if (ed.versao) corpo.versao = ed.versao;
     if (ed.projeto) corpo.projeto = ed.projeto;
+    // Nova só cria: se a pasta já tem a skill (outro processo criou), o núcleo dá 409 em vez de trocar.
+    if (ed.modo === 'nova') corpo.criar = true;
     try {
-      const r = await ctx.escrever('/api/config/skill', corpo);
-      if (sinal.aborted) return;
+      // Sem o `signal` da tela: sair no meio não desfaz a gravação, e a resposta ainda acerta o editor
+      // (que mora no módulo e reaparece quando a pessoa volta).
+      const r = await ctx.escrever('/api/config/skill', corpo, { signal: undefined });
       const nova = ed.modo === 'nova';
       Object.assign(ed, { conteudo: corpo.conteudo, versao: r.versao, editadoEm: r.editadoEm, caminho: r.caminho, modo: 'editar', salvando: false });
       ed.aviso = r.backup ? `Salvo. O anterior ficou em ${r.backup}` : nova ? `Criada em ${r.caminho}` : `Salvo em ${r.caminho}`;
       if (r.backup) estado.backupsDaJanela.unshift(r.backup);
+      if (sinal.aborted) return;
       desenhar();
       carregar({ silencioso: true });
     } catch (e) {
-      if (e?.name === 'AbortError' || sinal.aborted) return;
       ed.salvando = false;
       ed.erro =
-        e?.status === 409
+        e?.status === 409 && corpo.criar
+          ? { titulo: 'Essa skill já existe.', texto: `Alguém criou ${ed.nome} nessa pasta depois da última leitura. Feche e abra a que existe, ou use outro nome.` }
+          : e?.status === 409
           ? {
               titulo: 'A skill mudou por fora.',
               texto: 'Recarregue para ver a versão do disco. O seu texto continua aqui até você recarregar: copie o que quiser guardar.',
               acao: { rotulo: 'Recarregar', aoClicar: () => abrirSkill(ed, 'editar') },
             }
           : { titulo: 'Não salvou.', texto: e?.message ?? String(e) };
+      if (sinal.aborted) return;
       desenhar();
     }
   }
@@ -684,11 +712,15 @@ export async function montar(area, ctx) {
 
   // ---------- Início ----------
   ctx.aoReiniciar(() => carregar({ silencioso: true }));
+  // Uma leitura da skill cortada ao sair da tela recomeça (a gravação não é cortada: veja `gravar`).
+  const recomecar = () => estado.editor?.carregando && estado.dados && abrirSkill(estado.editor, estado.editor.modo);
   if (estado.dados && estado.pedido === url.projeto) {
     desenhar();
+    recomecar();
     carregar({ silencioso: true });
   } else {
-    estado.editor = null;
+    // Outro projeto: o editor limpo sai; o sujo fica (ele grava no projeto dele, `ed.projeto`).
+    if (!sujo(estado.editor)) estado.editor = null;
     estado.nova = null;
     await carregar();
   }
@@ -707,11 +739,14 @@ function nomeCurto(caminho) {
 
 /** Copia `texto`; mostra "Copiado" no botão. Sem área de transferência, seleciona o caminho para copiar à mão. */
 function copiarTexto(texto, botao, alvo) {
+  const rotuloOriginal = botao.getAttribute('aria-label');
   const voltar = () => {
     botao.classList.remove('ok');
+    botao.setAttribute('aria-label', rotuloOriginal);
     botao.replaceChildren(icone('copy'));
   };
   const mostrar = (rotulo, ok) => {
+    botao.setAttribute('aria-label', rotulo);
     botao.classList.toggle('ok', ok);
     botao.replaceChildren(icone(ok ? 'check' : 'copy'), el('span', {}, rotulo));
     setTimeout(voltar, 1600);

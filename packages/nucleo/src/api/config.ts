@@ -5,7 +5,7 @@
 // | -------------------------------------- | --------------------------------------------------------- |
 // | `GET /api/config?projeto=<abs>`        | Raízes, resumo e as listas (src/config/modelo.ts), e `backups`: a pasta dos backups |
 // | `GET /api/config/skill?raiz=&nome=`    | O `SKILL.md` de uma skill, com a `versao` (sha256)         |
-// | `POST /api/config/skill`               | `{ raiz, nome, conteudo, versao?, projeto? }`: cria ou troca, com backup |
+// | `POST /api/config/skill`               | `{ raiz, nome, conteudo, versao?, projeto?, criar? }`: cria ou troca, com backup; `criar: true` só cria (409 se existe) |
 //
 // `?projeto=` (e `projeto` no corpo do POST) só vale se for um dos `projetos` conhecidos (os `cwd`
 // das sessões, src/config/projetos.ts); outro valor dá 400. Sem ele, o mais recente.
@@ -91,6 +91,8 @@ export function criarRotaDaConfig(opts: OpcoesDaConfig): RotaDaConfig {
     }
     const { raizes } = await contexto(corpo.projeto);
     const raiz = raizDeSkill(corpo.raiz, raizes);
+    // `criar: true` (o "Nova" da tela): só cria; se a skill já existe, 409 em vez de trocar com backup.
+    if (corpo.criar === true && (await lerSkill(raiz, corpo.nome))) return send(res, 409, { error: 'a skill já existe' });
     const r = await gravarSkill({ raiz, nome: corpo.nome, conteudo: corpo.conteudo, versao: corpo.versao, backups, agora: opts.agora });
     log(`skill ${String(corpo.nome)} gravada em ${raiz.id}${r.backup ? ' (com backup)' : ' (nova)'}`);
     send(res, 200, r);
