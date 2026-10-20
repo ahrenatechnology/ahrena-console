@@ -31,10 +31,10 @@ import { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
 import { waitForChanges } from '../mudancas/mcp.ts';
 import {
+  apelidoDaDemo,
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
   pastasDosRegistrosDaDemo,
-  SESSAO_DO_PAINEL,
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
@@ -216,9 +216,7 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  // Na demo, o painel lateral (que manda o id real da sessão) vê a do cenário; as sessões do
-  // simulador (`sim-…`), que a /ui manda ao decidir em nome da sessão dona, ficam como vieram.
-  ...(demo ? { apelido: (id: string) => (id.startsWith('sim-') ? id : SESSAO_DO_PAINEL) } : {}),
+  ...(demo ? { apelido: apelidoDaDemo } : {}),
 });
 
 // A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada

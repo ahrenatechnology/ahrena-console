@@ -187,6 +187,26 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
   });
 });
 
+describe('C21: a janela de 30 dias das substituídas', () => {
+  test('uma substituída há 31 dias não conta; uma há 29, conta', async () => {
+    const c = await cenario();
+    try {
+      const antes = (await c.ler<DecisoesDaPagina>('/api/decisoes')).corpo.contagens;
+      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-painel-motor-de-regras', states: ['vigente'] })).items;
+      assert.ok(vigentes.length >= 3);
+      const ha = (dias: number) => new Date(AGORA - dias * 86_400_000).toISOString();
+      const nova = vigentes[2]!.id;
+      await c.decisoes.putDecision({ ...vigentes[0]!, state: 'substituida', supersededBy: nova, updatedAt: ha(31) });
+      await c.decisoes.putDecision({ ...vigentes[1]!, state: 'substituida', supersededBy: nova, updatedAt: ha(29) });
+      const depois = (await c.ler<DecisoesDaPagina>('/api/decisoes')).corpo.contagens;
+      assert.equal(depois.vigentes, antes.vigentes - 2);
+      assert.equal(depois.substituidas30d, antes.substituidas30d + 1, 'só a de 29 dias entra');
+    } finally {
+      await c.fechar();
+    }
+  });
+});
+
 describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
   let c: Cenario;
   before(async () => {

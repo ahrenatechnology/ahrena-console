@@ -449,9 +449,15 @@ export function pastasDosRegistrosDaDemo(base: string): (repo: string) => string
   }
   return (repo) => {
     const pasta = repo.startsWith(`${RAIZ}/`) ? repo.slice(RAIZ.length + 1) : null;
-    return pasta && pasta in REGISTROS_DA_DEMO ? join(base, pasta) : null;
+    return pasta && Object.hasOwn(REGISTROS_DA_DEMO, pasta) ? join(base, pasta) : null;
   };
 }
+
+/**
+ * O apelido do painel na --demo: o painel lateral (que manda o id real da sessão) vê a do cenário;
+ * as sessões do simulador (`sim-…`), que a /ui manda ao decidir em nome da sessão dona, ficam como vieram.
+ */
+export const apelidoDaDemo = (sessionId: string): string => (sessionId.startsWith('sim-') ? sessionId : SESSAO_DO_PAINEL);
 
 /** A sessão mãe da vitrine: a de ontem, antes do /clear. Só existe na porta das decisões. */
 export const MAE_DA_VITRINE = 'sim-painel-vitrine-ontem';
