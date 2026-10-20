@@ -31,12 +31,21 @@ Depois disso, as versões novas chegam pelo item "Atualizar para a versão X" do
 
 ## O núcleo
 
-O núcleo vai dentro do app como recurso (`Contents/Resources/packages/nucleo` e `packages/marca/gerado`), sem Node embutido.
+Um núcleo por instalação, em porta aleatória ([decisão 0010](../../docs/decisoes/0010-core-per-installation.md), issue [#221](https://github.com/ahrenatechnology/ahrena-console/issues/221)). O app **sempre** sobe e usa o próprio núcleo, que vai dentro dele como recurso (`Contents/Resources/packages/nucleo` e `packages/marca/gerado`), sem Node embutido. Ele nunca adota o núcleo de outra instalação: nem o de desenvolvimento (`~/.ahrena-console/`, que pode estar na 4720), nem o da extensão. Os dois rodam lado a lado, em portas e bancos diferentes.
 
-1. Com um Node 24 no PATH do shell de login, o app roda `node <núcleo>/src/dono/cli.ts subir --pai <pid do app> --json`, o dono único da #86: ele **adota** o núcleo de pé (e registra o app como cliente) ou **sobe** um em segundo plano.
-2. Sem Node, o app só procura um núcleo em `127.0.0.1:4720` e o adota se responder.
-3. Sem Node e sem núcleo: o menu A4, com "Como instalar o Node 24" e "Procurar o núcleo de novo". O app tenta de novo a cada 30 s.
-4. **Ao sair,** o app não sinaliza ninguém. O núcleo que ele subiu tem o app como `--pai` e sai sozinho em até 1 s, a menos que outro cliente (a extensão, por exemplo) o tenha adotado. O que ele adotou continua.
+1. Com um Node 24 no PATH do shell de login, o app roda o `start` do dono (`packages/nucleo/src/owner`):
+
+   ```bash
+   node --disable-warning=ExperimentalWarning <núcleo>/src/owner/cli.ts start --installation app \
+     --data-dir "~/Library/Application Support/dev.ahrena.console" --port 0 --parent <pid do app> --json
+   ```
+
+   A pasta de dados vem do Tauri (`app_data_dir`, a do identificador `dev.ahrena.console`). O dono **sobe** o núcleo em segundo plano numa porta que o sistema escolhe, ou **adota** o que já roda naquela pasta de dados (só a do app). O app lê da linha `--json` a `porta`, o `pid`, o `subiu`, e confere `installation` (`app`) e `dataDir` (a pasta do app): se vier outra, recusa e mostra o núcleo parado. O app tira do ambiente do núcleo `AHRENA_CONSOLE_DB`, `AHRENA_CONSOLE_DATA_DIR`, `AHRENA_CONSOLE_CORE_PORT` e `AHRENA_CONSOLE_PORT`, que um shell pode exportar para o núcleo de desenvolvimento.
+2. **Pasta de dados:** `~/Library/Application Support/dev.ahrena.console/`, com o banco (`nucleo.sqlite`), o log (`nucleo.log`), os clientes (`clientes/`) e a trava (`nucleo.json`), além do `notificacoes.json` do app. O núcleo se registra em `~/.ahrena-console/instances/app-<pid>.json`, onde os hooks e o mod o acham.
+3. **Primeira vez:** com o banco do app vazio, o núcleo importa o histórico dos transcripts (`~/.claude/projects`) ao subir, como sempre fez; não precisa de opção.
+4. A bandeja, a janela (`/ui`) e todo pedido HTTP do app só falam com a porta do núcleo que ele subiu ou adotou, e cada conferência de que ele ainda responde olha também o `pid` do `/api/overview`. Com o núcleo parado, "Abrir o console" não abre outro: procura o próprio de novo.
+5. Sem Node (ou com um Node velho): o menu A4, com "Como instalar o Node 24" e "Procurar o núcleo de novo". O app **não** procura núcleo em porta nenhuma e tenta de novo a cada 30 s.
+6. **Ao sair,** o app não sinaliza ninguém. O núcleo que ele subiu tem o app como `--parent` e sai sozinho em até 1 s, apagando a trava e a própria entrada do registro. Nenhum outro núcleo é tocado.
 
 A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since=<cursor>&wait=25` (long polling). Toda volta da espera relê a atenção, o que também atualiza os minutos. Se o núcleo para de responder, o app volta a procurá-lo (e sobe outro, se puder). Um núcleo de antes desta rota (404) fica adotado, com o aviso "Este núcleo não lista quem precisa de você: atualize-o".
 
@@ -45,7 +54,7 @@ A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since
 | [src-tauri/src/main.rs](src-tauri/src/main.rs) | A bandeja, o laço do núcleo, os cliques e a janela |
 | [src-tauri/src/menu.rs](src-tauri/src/menu.rs) | O menu como dados, montado do JSON de `/api/attention` (testado sem abrir o app) |
 | [src-tauri/src/machines.rs](src-tauri/src/machines.rs) | As máquinas de `/api/machines` e `/api/telemetry`: a leitura do JSON e os textos curtos da linha, do alerta e do motivo sem conexão (testado sem abrir o app) |
-| [src-tauri/src/nucleo.rs](src-tauri/src/nucleo.rs) | A escolha entre adotar, subir e o A4, e a leitura do `subir --json` |
+| [src-tauri/src/nucleo.rs](src-tauri/src/nucleo.rs) | O plano (subir o próprio núcleo, o A4 ou a porta de demonstração), a linha de comando do `start` e a leitura do `start --json`, que recusa o núcleo de outra instalação |
 | [src-tauri/src/notificacoes.rs](src-tauri/src/notificacoes.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
 | [src-tauri/src/aviso_nativo.rs](src-tauri/src/aviso_nativo.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
 | [src-tauri/src/login.rs](src-tauri/src/login.rs) | Abrir no login pelo `SMAppService` e a origem da partida (login ou à mão), testados com um registro falso |
@@ -85,9 +94,9 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 
 | Variável | Efeito |
 | --- | --- |
-| `AHRENA_NUCLEO_PORTA=<n>` | Procura o núcleo nesta porta em vez da 4720 (uma `npm run api -- --demo --porta <n>`) |
-| `AHRENA_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4) |
-| `AHRENA_NUCLEO_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app |
+| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints. O nome antigo `AHRENA_NUCLEO_PORTA` continua aceito |
+| `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4). O nome antigo `AHRENA_NODE` continua aceito |
+| `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app. O nome antigo `AHRENA_NUCLEO_DIR` continua aceito |
 | `AHRENA_ABRIR_MENU=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
 | `AHRENA_DADOS_DIR=<pasta>` | Grava e lê o `notificacoes.json` nesta pasta em vez do diretório de dados do app |
 | `AHRENA_ORIGEM=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console) |
@@ -95,7 +104,7 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 Pelo Finder, `open --env` passa as variáveis:
 
 ```bash
-open --env AHRENA_NODE= --env AHRENA_NUCLEO_PORTA=4797 "src-tauri/target/release/bundle/macos/Ahrena Console.app"
+open --env AHRENA_CONSOLE_DEMO_PORT=4797 "src-tauri/target/release/bundle/macos/Ahrena Console.app"
 ```
 
 ## Release
