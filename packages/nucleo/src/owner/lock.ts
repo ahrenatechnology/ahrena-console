@@ -1,5 +1,6 @@
-// The core's lock: `~/.ahrena-console/nucleo.json`, with pid, port, version, start time and a token
-// for local clients (decision 0005, item 4). Atomic write (temporary file and `rename`), readable
+// The core's lock: `nucleo.json` in the installation's data folder (`~/.ahrena-console` for `dev`,
+// decision 0010), with pid, port, version, start time and a token for local clients (decision 0005,
+// item 4). Atomic write (temporary file and `rename`), readable
 // only by the owner (0600). The core writes it, once the port is already its own.
 //
 // The file keeps its Portuguese keys (`porta`, `versao`, `inicio`, `pai`): other installed cores
@@ -7,8 +8,8 @@
 
 import { randomBytes } from 'node:crypto';
 import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { consoleHome } from './installation.ts';
 
 export interface Lock {
   pid: number;
@@ -36,8 +37,12 @@ const toFile = (l: Lock): LockFile => ({ pid: l.pid, porta: l.port, versao: l.ve
 
 export const LOCK_FILE_NAME = 'nucleo.json';
 
+/**
+ * The `dev` installation's data folder, `~/.ahrena-console` (or `AHRENA_CONSOLE_HOME`): the default
+ * for every function here. Another installation passes its own (installation.ts, `resolveDataDir`).
+ */
 export function defaultDir(): string {
-  return join(homedir(), '.ahrena-console');
+  return consoleHome();
 }
 
 export function lockFilePath(dir = defaultDir()): string {
