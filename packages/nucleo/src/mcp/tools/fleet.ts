@@ -3,7 +3,7 @@
 // Cost and counts add up across accounts; usage limits never come in here.
 
 import type { InboxState } from '../../states/inbox.ts';
-import type { ContaDoPainel } from '../../api/types.ts';
+import type { PanelAccount } from '../../api/types.ts';
 import type { Tool, JsonObject } from '../protocol.ts';
 import { matchesAccountFilter, LIVE_STATES, minutesSince, projectOf, type FleetReader } from '../fleet.ts';
 import { COMMON_ARGS, ACCOUNT_SCHEMA, objectSchema, timeAgo, parseCommonArgs, arrayOf, strictObject, nullable, paginate, T } from '../output.ts';
@@ -96,14 +96,14 @@ export function fleetOverview(fleet: FleetReader): Tool {
       const [live, ended, cost, attention] = await Promise.all([fleet.live(), fleet.endedToday(), fleet.costToday(), needingYou(fleet, null)]);
 
       // One row per account (by id); the total adds up only the ones that pass the filter.
-      const rows = new Map<string, { account: ContaDoPainel | null; t: Totals }>();
-      const row = (c: ContaDoPainel | null) => {
+      const rows = new Map<string, { account: PanelAccount | null; t: Totals }>();
+      const row = (c: PanelAccount | null) => {
         const k = c?.id ?? '';
         let r = rows.get(k);
         if (!r) rows.set(k, (r = { account: c, t: emptyTotals() }));
         return r.t;
       };
-      const accountBySession = new Map<string, ContaDoPainel | null>();
+      const accountBySession = new Map<string, PanelAccount | null>();
 
       for (const s of live) {
         accountBySession.set(s.session.id, s.account);

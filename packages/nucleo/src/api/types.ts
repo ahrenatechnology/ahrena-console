@@ -9,7 +9,8 @@
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { InboxState } from '../states/inbox.ts';
 
-export interface ContaDoPainel {
+/** A session's account on the panel (decision 0006). */
+export interface PanelAccount {
   /** `<accountUuid>/<organizationUuid>`; só para agrupar, nunca para mostrar. */
   id: string;
   label: string;
@@ -19,14 +20,14 @@ export interface ContaDoPainel {
   source: AccountSource;
 }
 
-/** Linha de baixo do card "Esta sessão": o que ela está fazendo agora. */
-export interface AtividadeDaSessao {
+/** The bottom line of the "Esta sessão" card: what the session is doing now. */
+export interface SessionActivity {
   type: 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle';
   text: string;
 }
 
-/** A faixa de cima, quando a sessão espera por algo que precisa ser lido inteiro (P2, P3, P5). */
-export interface FaixaDaSessao {
+/** The top banner, when the session waits for something that must be read in full (P2, P3, P5). */
+export interface SessionBanner {
   type: 'question' | 'permission' | 'error';
   /** O texto inteiro: a pergunta, o pedido de permissão ou o erro. */
   text: string;
@@ -35,7 +36,8 @@ export interface FaixaDaSessao {
   since: string;
 }
 
-export interface SessaoDoPainel {
+/** The "Esta sessão" card. */
+export interface PanelSession {
   id: string;
   title: string;
   model: string | null;
@@ -47,14 +49,15 @@ export interface SessaoDoPainel {
   /** Desde quando está no estado atual (a espera, ou a última atividade). */
   since: string;
   turn: number;
-  activity: AtividadeDaSessao;
-  banner: FaixaDaSessao | null;
-  account: ContaDoPainel | null;
+  activity: SessionActivity;
+  banner: SessionBanner | null;
+  account: PanelAccount | null;
   branch: string | null;
   cwd: string | null;
 }
 
-export interface ContextoDoPainel {
+/** The context meter of the session, and of each subagent. */
+export interface PanelContext {
   /** Tokens que o principal mandou na última mensagem (input mais cache). */
   used: number;
   /** Janela do modelo, em tokens (200k, ou 1M no modo longo). */
@@ -69,11 +72,12 @@ export interface ContextoDoPainel {
   manualCompactions: number;
   /** "62.6k / 200k (31%)". */
   label: string;
-  /** O medidor de cada subagente que já mandou mensagem; `agentId` é o `SubagenteDoPainel.id`. */
-  agents: ContextoDoAgente[];
+  /** O medidor de cada subagente que já mandou mensagem; `agentId` é o `PanelSubagent.id`. */
+  agents: AgentContext[];
 }
 
-export interface ContextoDoAgente {
+/** A subagent's context meter. */
+export interface AgentContext {
   agentId: string;
   used: number;
   limit: number;
@@ -82,7 +86,8 @@ export interface ContextoDoAgente {
   alert: boolean;
 }
 
-export interface CustoDoPainel {
+/** The session's estimated cost. */
+export interface PanelCost {
   /** `null`: há uso, mas nenhum modelo dele tem preço ("sem preço", nunca zero). */
   usd: number | null;
   /** Custo acumulado ao longo da sessão, de 2 a 16 pontos, para a linha do card. */
@@ -90,7 +95,8 @@ export interface CustoDoPainel {
   estimate: true;
 }
 
-export interface PlanoDoPainel {
+/** The current plan: progress, the current and next steps, and the steps in order. */
+export interface PanelPlan {
   done: number;
   total: number;
   /** O item em andamento. */
@@ -100,15 +106,15 @@ export interface PlanoDoPainel {
   /** Quantos ainda faltam além do próximo. */
   remaining: number;
   /** Quem faz o item em andamento. */
-  currentOwner: DonoDoPasso | null;
+  currentOwner: StepOwner | null;
   /** Hora da última mudança do plano; `null` no plano lido só do TodoWrite (sem plano gravado). */
   changedAt: string | null;
   /** Os passos na ordem do plano (item 1.9). */
-  steps: PassoDoPainel[];
+  steps: PanelStep[];
 }
 
-/** Um plano do histórico da sessão (issue #131). */
-export interface PlanoDaSessao {
+/** A plan of the session's history (issue #131). */
+export interface PlanHistoryEntry {
   /** 1, 2, 3… na ordem em que os planos começaram. */
   number: number;
   outcome: 'current' | 'completed' | 'abandoned';
@@ -123,8 +129,8 @@ export interface PlanoDaSessao {
   end: string | null;
 }
 
-/** O principal, um subagente ou uma sessão filha, quando o passo foi delegado. */
-export interface DonoDoPasso {
+/** The main agent, a subagent or a child session, when the step was delegated. */
+export interface StepOwner {
   type: 'main' | 'subagent' | 'session';
   /** Nome do subagente (tipo ou `owner`) ou da sessão filha; `null` no principal. */
   name: string | null;
@@ -132,16 +138,18 @@ export interface DonoDoPasso {
   agentId: string | null;
 }
 
-export interface PassoDoPainel {
+/** A step of the plan. */
+export interface PanelStep {
   id: string;
   text: string;
   /** O texto no gerúndio, para o passo em andamento. */
   activeText: string | null;
   state: 'pending' | 'in_progress' | 'completed';
-  owner: DonoDoPasso;
+  owner: StepOwner;
 }
 
-export interface SubagenteDoPainel {
+/** A subagent of the session. */
+export interface PanelSubagent {
   id: string;
   name: string;
   task: string | null;
@@ -157,7 +165,8 @@ export interface SubagenteDoPainel {
   wave: number | null;
 }
 
-export interface FilhaDoPainel {
+/** A session this one opened. */
+export interface PanelChild {
   id: string;
   /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
   local: string | null;
@@ -172,7 +181,8 @@ export interface FilhaDoPainel {
   archived?: boolean;
 }
 
-export interface TrabalhoDoPainel {
+/** The branch's work: the issue, the PR and its CI. */
+export interface PanelWork {
   branch: string;
   /** `dono/repo`, do remote do git. */
   repo: string | null;
@@ -192,7 +202,8 @@ export interface TrabalhoDoPainel {
   error: string | null;
 }
 
-export interface PrecisaDeVoce {
+/** A session that needs you (or whose turn it is). */
+export interface NeedsYouItem {
   id: string;
   /**
    * #140: `needs`, bloqueada até você agir (permissão, pergunta com opções, plano para aprovar,
@@ -214,24 +225,25 @@ export interface PrecisaDeVoce {
   relation: 'parent' | 'child' | 'sibling' | null;
   /** Mesmo projeto (cwd) desta sessão. */
   sameProject: boolean;
-  account: ContaDoPainel | null;
+  account: PanelAccount | null;
 }
 
-export interface PrecisamDoPainel {
+/** "Precisam de você": the count, by account, the family and the machine. */
+export interface PanelNeedYou {
   /** Só as que precisam de você (nível `needs`). */
   total: number;
   /** As que só estão na sua vez: fora da contagem, sem destaque. */
   yourTurn: number;
   /** A divisão por conta; "Sem conta" quando não se sabe. Limites nunca entram aqui. */
-  byAccount: { account: ContaDoPainel | null; n: number }[];
+  byAccount: { account: PanelAccount | null; n: number }[];
   /** Só a família desta sessão (quem a abriu e quem ela abriu), urgentes primeiro. */
-  family: PrecisaDeVoce[];
+  family: NeedsYouItem[];
   /** A máquina inteira, urgentes primeiro, até 12. */
-  machine: PrecisaDeVoce[];
+  machine: NeedsYouItem[];
 }
 
-/** Um PR aberto por uma sessão que aguarda a sua aprovação (review pendente no GitHub). */
-export interface PrAguardando {
+/** A PR opened by a session that awaits your approval (review pending on GitHub). */
+export interface AwaitingPr {
   number: number;
   url: string;
   repo: string | null;
@@ -240,13 +252,15 @@ export interface PrAguardando {
   session: { id: string; title: string; local: string | null };
 }
 
-export interface PrsDoPainel {
+/** The PRs awaiting your approval, across the machine (#140). */
+export interface PanelPrs {
   total: number;
   /** Mais novos primeiro. */
-  items: PrAguardando[];
+  items: AwaitingPr[];
 }
 
-export interface Painel {
+/** The body of `GET /api/panel/<session>`. */
+export interface Panel {
   version: 1;
   /**
    * A versão da API e, para o rodapé: o commit do código que ela carregou ao subir e o da pasta
@@ -256,29 +270,29 @@ export interface Painel {
   api: { version: string; commit: string | null; folder: string | null; opensSession: boolean };
   generatedAt: string;
   /** `null`: o núcleo ainda não viu esta sessão (nem hook, nem transcript). */
-  session: SessaoDoPainel | null;
-  context: ContextoDoPainel | null;
-  cost: CustoDoPainel | null;
+  session: PanelSession | null;
+  context: PanelContext | null;
+  cost: PanelCost | null;
   tokens: { input: number; output: number } | null;
   background: { total: number; first: string | null };
-  plan: PlanoDoPainel | null;
+  plan: PanelPlan | null;
   /** Os planos da sessão, do mais recente para o mais antigo; o atual, se houver, primeiro. */
-  plans: PlanoDaSessao[];
-  subagents: { active: number; items: SubagenteDoPainel[] };
-  children: FilhaDoPainel[];
-  work: TrabalhoDoPainel | null;
-  needYou: PrecisamDoPainel;
+  plans: PlanHistoryEntry[];
+  subagents: { active: number; items: PanelSubagent[] };
+  children: PanelChild[];
+  work: PanelWork | null;
+  needYou: PanelNeedYou;
   /** #140: os PRs aguardando a sua aprovação, em toda a máquina. */
-  prs: PrsDoPainel;
+  prs: PanelPrs;
   /** `null`: o núcleo subiu sem a porta das decisões. */
-  decisions: DecisoesDoPainel | null;
+  decisions: PanelDecisions | null;
 }
 
-/** O escopo da lista de decisões (o Select do P9). */
-export type EscopoDasDecisoes = 'session' | 'family' | 'branch';
+/** The scope of the decision list (P9's Select). */
+export type PanelDecisionScope = 'session' | 'family' | 'branch';
 
-/** Uma decisão no card 34 × 6 (P9). */
-export interface DecisaoDoPainel {
+/** A decision in the 34 × 6 card (P9). */
+export interface PanelDecision {
   id: string;
   /** "D4": o número na família. */
   label: string;
@@ -307,25 +321,26 @@ export interface DecisaoDoPainel {
   toolUseId: string | null;
 }
 
-export interface ListaDeDecisoes {
-  scope: EscopoDasDecisoes;
+/** The open decision list of a scope. */
+export interface PanelDecisionList {
+  scope: PanelDecisionScope;
   /** Vigentes e a confirmar neste escopo. */
   current: number;
   toConfirm: number;
   /** Mais recentes primeiro: vigentes, a confirmar e substituídas. */
-  items: DecisaoDoPainel[];
+  items: PanelDecision[];
   /**
    * Quantas vigentes e a confirmar cada escopo tem: o seletor mostra as três contagens, e a pessoa
    * vê quando a troca não muda nada (todas da própria sessão).
    */
-  byScope?: Record<EscopoDasDecisoes, number>;
+  byScope?: Record<PanelDecisionScope, number>;
 }
 
 /**
- * A faixa do P10: as decisões da sessão anterior que valem nesta depois de um /clear. Só vem
- * quando a reinjeição (#100) gravou o que injetou; até lá, sempre `null`.
+ * P10's banner: the previous session's decisions that hold in this one after a /clear. Only comes
+ * when the reinjection (#100) recorded what it injected; until then, always `null`.
  */
-export interface RetomadaDoPainel {
+export interface PanelResume {
   /** Quantas decisões foram injetadas. */
   n: number;
   /** Tokens que a injeção custou (estimativa). */
@@ -334,20 +349,21 @@ export interface RetomadaDoPainel {
   from: string | null;
 }
 
-export interface DecisoesDoPainel {
+/** The panel's decisions line and, when asked, the open list. */
+export interface PanelDecisions {
   /** Vigentes no escopo família: a linha "N decisões vigentes". */
   current: number;
   toConfirm: number;
-  resume: RetomadaDoPainel | null;
+  resume: PanelResume | null;
   /** A lista aberta, só quando o painel pede (`?decisions=<scope>`). */
-  list: ListaDeDecisoes | null;
+  list: PanelDecisionList | null;
 }
 
 /**
- * O contrato de `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): um card por sessão aberta nesta
- * máquina. "Aberta" e a ordem estão em api/wall.ts. Datas em ISO 8601 (UTC).
+ * The contract of `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): one card per open session on this
+ * machine. "Open" and the order are in api/wall.ts. Dates in ISO 8601 (UTC).
  */
-export interface Mural {
+export interface Wall {
   version: 1;
   generatedAt: string;
   /**
@@ -356,13 +372,14 @@ export interface Mural {
    */
   count: { all: number; waiting: number; active: number };
   /** Primeiro as que precisam de você (as urgentes antes), depois a atividade mais recente. */
-  cards: CardDoMural[];
+  cards: WallCard[];
 }
 
-export interface CardDoMural {
+/** A wall card. */
+export interface WallCard {
   /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
-  /** Como `SessaoDoPainel.title`. */
+  /** Like `PanelSession.title`. */
   title: string;
   /** O nome da pasta da sessão (basename do cwd); `null` sem pasta. */
   project: string | null;
@@ -371,12 +388,12 @@ export interface CardDoMural {
   status: DisplayStatus;
   state: InboxState;
   reason: AwaitingReason | null;
-  /** Espera `notification` ou `interrupted`, e o erro (como `PrecisaDeVoce.urgent`). */
+  /** Espera `notification` ou `interrupted`, e o erro (like `NeedsYouItem.urgent`). */
   urgent: boolean;
   /** Desde quando está no estado atual (a espera, o erro, ou a última atividade). */
   since: string;
   /** A linha do meio: o que pede (waiting), o erro, "terminou sem erro", ou o que está fazendo. */
-  activity: AtividadeDaSessao;
+  activity: SessionActivity;
   model: string | null;
   /** O esforço (`effort`) da sessão, do índice do Claude Desktop; `null` quando o núcleo não sabe. */
   effort: string | null;

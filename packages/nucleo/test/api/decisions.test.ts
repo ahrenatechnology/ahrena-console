@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, TrabalhoPorBranch, startLocalApi, type PanelDecision, type PanelDecisionList, type Panel } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions, type PanelScenario } from '../../src/simulator/panel.ts';
@@ -23,14 +23,14 @@ async function cenario(nome: PanelScenario = 'p9') {
   await seedPanelDecisions(decisoes, nome, AGORA);
   const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
   const montador = new MontadorDoPainel({
-    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
+    storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
   });
   await montador.montar({ sessionId: 'qualquer' });
   await trabalho.esperar();
   return { storage, decisoes, montador };
 }
 
-const titulos = (l: ListaDeDecisoes) => l.items.map((i) => `${i.label} ${i.state}`);
+const titulos = (l: PanelDecisionList) => l.items.map((i) => `${i.label} ${i.state}`);
 
 // Uma decisão de escopo branch de outra família, no mesmo branch e pasta, com a conta dada.
 async function deOutraSessao(storage: ReturnType<typeof openSqliteStorage>, decisoes: SqliteDecisionStore, id: string, conta: string | null, choice: string) {
@@ -54,7 +54,7 @@ describe('decisões no painel', () => {
 
     const semPorta = openSqliteStorage({ path: ':memory:' });
     await seedPanelScenario(semPorta, 'p1', AGORA);
-    const m = new MontadorDoPainel({ storage: semPorta, contas: new Contas({ storage: semPorta, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA, apelido: () => PANEL_SESSION });
+    const m = new MontadorDoPainel({ storage: semPorta, contas: new Accounts({ storage: semPorta, file: null }), desktop: null, trabalho: null, agora: () => AGORA, apelido: () => PANEL_SESSION });
     assert.equal((await m.montar({ sessionId: 'qualquer' })).decisions, null);
     await semPorta.close();
   });
@@ -68,7 +68,7 @@ describe('decisões no painel', () => {
 
     const familia = (await montador.listaDeDecisoes({ sessionId: 'qualquer' }, 'family'))!;
     assert.deepEqual(titulos(familia), ['D6 to_confirm', 'D4 current', 'D5 current', 'D3 superseded', 'D2 current', 'D1 current']);
-    const porRotulo = Object.fromEntries(familia.items.map((i) => [i.label, i])) as Record<string, DecisaoDoPainel>;
+    const porRotulo = Object.fromEntries(familia.items.map((i) => [i.label, i])) as Record<string, PanelDecision>;
     assert.equal(porRotulo.D3!.supersededBy, 'D4');
     assert.deepEqual(porRotulo.D6!.rejected, ['20 por coluna', 'rolagem infinita']);
     assert.equal(porRotulo.D6!.decidedBy, 'agent');
@@ -114,7 +114,7 @@ describe('decisões no painel', () => {
   test('sem branch pelo Desktop, metadado ou git, o painel usa o que a sessão gravou, como a lista e o Confirmar', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const decisoes = new SqliteDecisionStore(storage.db);
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
     const gravar = (sessionId: string, scope: 'sessao' | 'branch', choice: string) =>
       registerDecision(
         decisoes,
@@ -145,10 +145,10 @@ describe('API das decisões em 127.0.0.1', () => {
     const post = (caminho: string, corpo: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
       fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: JSON.stringify(corpo) });
     try {
-      const familia = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=family`)).json()) as ListaDeDecisoes;
+      const familia = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=family`)).json()) as PanelDecisionList;
       assert.equal(familia.items.length, 6);
       assert.equal((await fetch(`${api.url}/api/decisions/qualquer?scope=maquina`)).status, 400);
-      const noPainel = (await (await fetch(`${api.url}/api/panel/qualquer?decisions=session`)).json()) as Painel;
+      const noPainel = (await (await fetch(`${api.url}/api/panel/qualquer?decisions=session`)).json()) as Panel;
       assert.equal(noPainel.decisions?.list?.scope, 'session');
 
       const sugerida = familia.items.find((i) => i.state === 'to_confirm')!;
@@ -160,7 +160,7 @@ describe('API das decisões em 127.0.0.1', () => {
 
       const r = await post(caminho, { session: 'qualquer' });
       assert.equal(r.status, 200);
-      const { decision: decisao } = (await r.json()) as { decision: DecisaoDoPainel };
+      const { decision: decisao } = (await r.json()) as { decision: PanelDecision };
       assert.equal(decisao.state, 'current');
       assert.equal(decisao.confirmedAt, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
@@ -168,7 +168,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(gravada?.decidedBy, 'agente', 'quem propôs continua sendo o agente');
       assert.equal((await post(caminho, { session: 'qualquer' })).status, 409, 'já confirmada');
 
-      const depois = (await (await fetch(`${api.url}/api/panel/qualquer`)).json()) as Painel;
+      const depois = (await (await fetch(`${api.url}/api/panel/qualquer`)).json()) as Panel;
       assert.equal(depois.decisions?.current, 5);
       assert.equal(depois.decisions?.toConfirm, 0);
 
@@ -184,7 +184,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal((await post(`/api/decisions/${encodeURIComponent(outra.id)}/dismiss`, { session: 'qualquer' })).status, 200);
       assert.equal((await decisoes.getDecision(outra.id))?.state, 'descartada');
       assert.equal(((await decisoes.getDecision(outra.id))?.metadata.painel as { acao: string }).acao, 'descartar');
-      const semEla = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
+      const semEla = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as PanelDecisionList;
       assert.ok(!semEla.items.some((i) => i.id === outra.id));
 
       // Uma sugerida que esta sessão não enxerga (outra família, outra conta) não é alcançável.
@@ -214,7 +214,7 @@ describe('API das decisões em 127.0.0.1', () => {
     const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     const post = async (id: string, acao: string, corpo: Record<string, unknown> = {}) => {
       const r = await fetch(`${api.url}/api/decisions/${encodeURIComponent(id)}/${acao}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: 'qualquer', ...corpo }) });
-      return { status: r.status, decisao: r.ok ? ((await r.json()) as { decision: DecisaoDoPainel }).decision : null };
+      return { status: r.status, decisao: r.ok ? ((await r.json()) as { decision: PanelDecision }).decision : null };
     };
     const sugerida = async (n: number, topic: string | null) =>
       (
@@ -256,7 +256,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(nova.metadata.texto, ajuste);
       assert.deepEqual(nova.alternatives, ['Filtro 1 no topo']);
       assert.equal(nova.supersedes, a.id);
-      const lista = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
+      const lista = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as PanelDecisionList;
       const noPainel = lista.items.find((i) => i.id === nova.id)!;
       assert.equal(noPainel.text, ajuste);
       assert.equal(noPainel.context, 'Filtro 1 no topo');
@@ -322,7 +322,7 @@ describe('API das decisões em 127.0.0.1', () => {
     const semOpen = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${semOpen.url}/abrir/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
-      assert.equal(((await (await fetch(`${semOpen.url}/api/panel/qualquer`)).json()) as Painel).api.opensSession, false);
+      assert.equal(((await (await fetch(`${semOpen.url}/api/panel/qualquer`)).json()) as Panel).api.opensSession, false);
     } finally {
       await semOpen.close();
       await storage.close();

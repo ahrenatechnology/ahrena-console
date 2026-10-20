@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas } from '../../src/api/index.ts';
+import { Accounts } from '../../src/api/index.ts';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
@@ -68,7 +68,7 @@ beforeEach(async () => {
   const decisions = new SqliteDecisionStore(storage.db);
   now = clock(Date.now());
   source = new SimulatedDevConsoleSource({ now });
-  const frota = new FleetReader({ storage, accounts: new Contas({ storage, arquivo: null }), now, timeZone: 'UTC', cacheMs: 0 });
+  const frota = new FleetReader({ storage, accounts: new Accounts({ storage, file: null }), now, timeZone: 'UTC', cacheMs: 0 });
   devConsole = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
   await live({ id: 'working', name: 'Separar pagamentos', cwd: '/sim/vitrine-demo' });
   const s = await live({ id: 'permission', name: 'Rodar a migração', cwd: '/sim/motor-de-regras', awaitingInputSince: minutesAgo(2), awaitingReason: 'notification' });

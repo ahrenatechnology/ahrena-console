@@ -61,11 +61,11 @@ import { demoLocal, seedDetail } from '../simulator/detail.ts';
 import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
-import { Contas } from './accounts.ts';
+import { Accounts } from './accounts.ts';
 import { DecisoesDaUi } from './decisions-ui.ts';
 import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './session-detail.ts';
-import { IndiceDoDesktop } from './desktop-index.ts';
+import { DesktopIndex } from './desktop-index.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { MontadorDoPainel } from './panel.ts';
 import {
@@ -233,7 +233,7 @@ const machine = new SessionStateMachine({
   onChange: onMachineChange(changes, sessionAccounts),
   ...(demo ? { probe: null } : {}),
 });
-const desktop = demo || o.noDesktop ? null : new IndiceDoDesktop();
+const desktop = demo || o.noDesktop ? null : new DesktopIndex();
 const workSource = demo ? new SimulatorWorkSource() : o.noGithub ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
 // A single GitHub cache, in the database, for the work and the repositories: a rate-limit pause holds for both.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
@@ -281,8 +281,8 @@ const openInDesktop =
         new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
     : null;
 
-// The same `Contas` in the panel and in the MCP: the "conta 1" label is the same on both surfaces.
-const accounts = new Contas({ storage, ...(demo ? { arquivo: null } : {}) });
+// The same `Accounts` in the panel and in the MCP: the "conta 1" label is the same on both surfaces.
+const accounts = new Accounts({ storage, ...(demo ? { file: null } : {}) });
 const panelBuilder = new MontadorDoPainel({
   commit,
   commitDaPasta: folderCommit,
@@ -305,8 +305,8 @@ const decisionsUi = new DecisoesDaUi({
   alvoDe: (id) => panelBuilder.alvoDaSessao(id),
   ...(demoFolder ? { raiz: demoRecordFolders(demoFolder) } : {}),
   localDe: async (id) => {
-    await desktop?.atualizar();
-    return desktop?.sessaoPorCli(id)?.localId ?? null;
+    await desktop?.refresh();
+    return desktop?.sessionByCli(id)?.localId ?? null;
   },
 });
 
@@ -324,7 +324,7 @@ if (demo) {
 const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
-const history = new SessionHistory({ storage, decisions, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
+const history = new SessionHistory({ storage, decisions, titleOf: (s) => desktop?.sessionByCli(s.id)?.title ?? null });
 
 // Profiles: the current account of each configuration folder goes to the port, with the org name
 // as its label. Re-read every minute, to pick up a new `claude auth login`.
@@ -462,7 +462,7 @@ const api: LocalApi = await startLocalApi({
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
-    desktopRead: desktop?.lidos ?? 0,
+    desktopRead: desktop?.filesRead ?? 0,
     work: work.chamadas,
   }),
 }).catch(async (e: unknown) => {

@@ -19,105 +19,109 @@ import { join } from 'node:path';
 import { accountSourceRank, claudeAccountId, type AccountSource, type ClaudeAccount, type Session } from '../model.ts';
 import { ACCOUNT_COLORS } from '../profiles/colors.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { SessaoDoDesktop } from './desktop-index.ts';
-import type { ContaDoPainel } from './types.ts';
+import type { DesktopSession } from './desktop-index.ts';
+import type { PanelAccount } from './types.ts';
 
 export { ACCOUNT_COLORS };
 const UUID = /^[0-9a-f-]{8,64}$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
 
-/** O nome que o Claude dá à org pessoal: "<e-mail>'s Organization". */
-const ORG_PESSOAL = /^\S+@\S+'s Organization$/i;
+/** The name Claude gives the personal org: "<e-mail>'s Organization". */
+const PERSONAL_ORG = /^\S+@\S+'s Organization$/i;
 
 /**
- * O nome da org para o rótulo, sem e-mail (decisão 0006): a org pessoal vira "conta pessoal"; um
- * nome com e-mail que não é esse padrão não serve de rótulo.
+ * The org name for the label, without e-mail (decision 0006): the personal org becomes "conta pessoal";
+ * a name with an e-mail that is not that pattern does not serve as a label.
  */
-export function nomeDaOrg(nome: string | null | undefined): string | null {
-  if (!nome) return null;
-  if (ORG_PESSOAL.test(nome.trim())) return 'conta pessoal';
-  return nome.includes('@') ? null : nome;
+export function orgLabel(name: string | null | undefined): string | null {
+  if (!name) return null;
+  if (PERSONAL_ORG.test(name.trim())) return 'conta pessoal';
+  return name.includes('@') ? null : name;
 }
 
-export function arquivoPadraoDeContas(): string {
+/** The label file, `~/.ahrena-console/contas.json` (its name on disk stays). */
+export function defaultAccountsFile(): string {
   return join(homedir(), '.ahrena-console', 'contas.json');
 }
 
-export interface OpcoesDasContas {
+/** `file: null` reads no label file (the demo, tests); `intervalMs` is the minimum time between two reads. */
+export interface AccountsOptions {
   storage?: Pick<StoragePort, 'listAccounts'> | null;
-  arquivo?: string | null;
-  intervaloMs?: number;
-  agora?: () => number;
+  file?: string | null;
+  intervalMs?: number;
+  now?: () => number;
 }
 
-export class Contas {
+/** The account of each session for the panel and the MCP, with its label and color (decision 0006). */
+export class Accounts {
   private readonly storage: Pick<StoragePort, 'listAccounts'> | null;
-  private readonly arquivo: string | null;
-  private readonly intervaloMs: number;
-  private readonly agora: () => number;
-  private configurados = new Map<string, { rotulo?: string; cor?: string }>();
-  private daPorta = new Map<string, ClaudeAccount>();
-  private readonly ordem: string[] = [];
-  /** Conta que o painel de cada sessão informou pelo ambiente. */
-  private readonly doAmbiente = new Map<string, string>();
+  private readonly file: string | null;
+  private readonly intervalMs: number;
+  private readonly now: () => number;
+  private configured = new Map<string, { label?: string; color?: string }>();
+  private fromPort = new Map<string, ClaudeAccount>();
+  private readonly order: string[] = [];
+  /** The account each session's panel reported from its environment. */
+  private readonly fromEnv = new Map<string, string>();
   private mtimeMs = -1;
-  private conferidoEm = -Infinity;
+  private checkedAt = -Infinity;
 
-  constructor({ storage = null, arquivo = arquivoPadraoDeContas(), intervaloMs = 30_000, agora = Date.now }: OpcoesDasContas = {}) {
+  constructor({ storage = null, file = defaultAccountsFile(), intervalMs = 30_000, now = Date.now }: AccountsOptions = {}) {
     this.storage = storage;
-    this.arquivo = arquivo;
-    this.intervaloMs = intervaloMs;
-    this.agora = agora;
+    this.file = file;
+    this.intervalMs = intervalMs;
+    this.now = now;
   }
 
-  /** Relê as contas da porta e o arquivo de rótulos; no máximo a cada `intervaloMs`. */
-  async atualizar(): Promise<void> {
-    if (this.agora() - this.conferidoEm < this.intervaloMs) return;
-    this.conferidoEm = this.agora();
-    if (this.storage) this.daPorta = new Map((await this.storage.listAccounts()).map((a) => [a.id, a]));
-    if (!this.arquivo) return;
+  /** Re-reads the port's accounts and the label file; at most every `intervalMs`. */
+  async refresh(): Promise<void> {
+    if (this.now() - this.checkedAt < this.intervalMs) return;
+    this.checkedAt = this.now();
+    if (this.storage) this.fromPort = new Map((await this.storage.listAccounts()).map((a) => [a.id, a]));
+    if (!this.file) return;
     try {
-      const { mtimeMs } = await stat(this.arquivo);
+      const { mtimeMs } = await stat(this.file);
       if (mtimeMs === this.mtimeMs) return;
       this.mtimeMs = mtimeMs;
-      const o = JSON.parse(await readFile(this.arquivo, 'utf8')) as Record<string, { rotulo?: unknown; cor?: unknown }>;
-      const lidos = new Map<string, { rotulo?: string; cor?: string }>();
+      const o = JSON.parse(await readFile(this.file, 'utf8')) as Record<string, { rotulo?: unknown; cor?: unknown }>;
+      const read = new Map<string, { label?: string; color?: string }>();
       for (const [id, v] of Object.entries(o ?? {})) {
-        lidos.set(id, {
-          rotulo: typeof v?.rotulo === 'string' && v.rotulo.trim() ? v.rotulo.trim().slice(0, 24) : undefined,
-          cor: typeof v?.cor === 'string' && HEX.test(v.cor) ? v.cor : undefined,
+        read.set(id, {
+          label: typeof v?.rotulo === 'string' && v.rotulo.trim() ? v.rotulo.trim().slice(0, 24) : undefined,
+          color: typeof v?.cor === 'string' && HEX.test(v.cor) ? v.cor : undefined,
         });
       }
-      this.configurados = lidos;
+      this.configured = read;
     } catch {
-      // Sem arquivo, ou inválido: os rótulos padrão valem.
+      // No file, or an invalid one: the default labels hold.
     }
   }
 
-  /** Grava a conta que o painel leu do ambiente da própria sessão. Ignora o que não parece UUID. */
-  informar(sessionId: string, conta: string | null, org: string | null): void {
-    if (!conta || !org || !UUID.test(conta) || !UUID.test(org)) return;
-    this.doAmbiente.set(sessionId, claudeAccountId(conta, org));
+  /** Records the account the panel read from its own session's environment. Ignores what does not look like a UUID. */
+  reportEnv(sessionId: string, account: string | null, org: string | null): void {
+    if (!account || !org || !UUID.test(account) || !UUID.test(org)) return;
+    this.fromEnv.set(sessionId, claudeAccountId(account, org));
   }
 
-  /** A conta da sessão: a fonte de menor ordem entre a porta, o ambiente e o índice do Desktop. */
-  daSessao(session: Pick<Session, 'id' | 'accountId' | 'accountSource'>, desktop: SessaoDoDesktop | null): ContaDoPainel | null {
-    const candidatas: { id: string; fonte: AccountSource }[] = [];
-    if (session.accountId && session.accountSource) candidatas.push({ id: session.accountId, fonte: session.accountSource });
-    const env = this.doAmbiente.get(session.id);
-    if (env) candidatas.push({ id: env, fonte: 'env' });
-    if (desktop && desktop.contas.length === 1) candidatas.push({ id: desktop.contas[0], fonte: 'desktop' });
-    if (candidatas.length === 0) return null;
-    candidatas.sort((a, b) => accountSourceRank(a.fonte) - accountSourceRank(b.fonte));
-    return this.montar(candidatas[0].id, candidatas[0].fonte);
+  /** The session's account: the lowest-order source among the port, the environment and the Desktop index. */
+  ofSession(session: Pick<Session, 'id' | 'accountId' | 'accountSource'>, desktop: DesktopSession | null): PanelAccount | null {
+    const candidates: { id: string; source: AccountSource }[] = [];
+    if (session.accountId && session.accountSource) candidates.push({ id: session.accountId, source: session.accountSource });
+    const env = this.fromEnv.get(session.id);
+    if (env) candidates.push({ id: env, source: 'env' });
+    if (desktop && desktop.accounts.length === 1) candidates.push({ id: desktop.accounts[0], source: 'desktop' });
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => accountSourceRank(a.source) - accountSourceRank(b.source));
+    return this.build(candidates[0].id, candidates[0].source);
   }
 
-  private montar(id: string, fonte: AccountSource): ContaDoPainel {
-    if (!this.ordem.includes(id)) this.ordem.push(id);
-    const i = this.ordem.indexOf(id);
-    const a = this.daPorta.get(id);
-    const c = this.configurados.get(id);
-    const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
-    return { id, label: c?.rotulo ?? a?.label ?? nomeDaOrg(a?.organizationName) ?? `conta ${i + 1}`, color: cor, source: fonte };
+  /** The account's label and color: the label file, then the port's account, then "conta N". */
+  private build(id: string, source: AccountSource): PanelAccount {
+    if (!this.order.includes(id)) this.order.push(id);
+    const i = this.order.indexOf(id);
+    const a = this.fromPort.get(id);
+    const c = this.configured.get(id);
+    const color = c?.color ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
+    return { id, label: c?.label ?? a?.label ?? orgLabel(a?.organizationName) ?? `conta ${i + 1}`, color, source };
   }
 }

@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type LocalApi, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type LocalApi, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
@@ -51,7 +51,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
     await simulate(storage, { seed: 28, sessions: 16, chaos: true, prices: true, now: () => AGORA });
     await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
-    const contas = new Contas({ storage, arquivo: null });
+    const contas = new Accounts({ storage, file: null });
     lista = new ListaDeSessoes({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, sessions: lista });

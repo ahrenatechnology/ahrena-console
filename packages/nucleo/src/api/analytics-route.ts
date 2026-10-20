@@ -25,7 +25,7 @@ import type { Session, SessionEvent } from '../model.ts';
 import { dayOf, sessionCostSlices, costReport, type CostLine, type CostSlice } from '../cost/aggregation.ts';
 import { currentPrices } from '../cost/table.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from './accounts.ts';
+import type { Accounts } from './accounts.ts';
 
 export const ANALYTICS_ROUTE = '/api/analytics';
 export const COST_ROUTE = '/api/analytics/cost';
@@ -48,7 +48,7 @@ type Porta = Pick<StoragePort, 'listSessions' | 'listAgents' | 'listEvents' | 'l
 export interface OpcoesDoAnalytics {
   storage: Porta;
   /** Rótulo e cor das contas, as mesmas do painel. Sem ela, "conta 1", "conta 2"… sem cor. */
-  contas?: Pick<Contas, 'atualizar' | 'daSessao'> | null;
+  contas?: Pick<Accounts, 'refresh' | 'ofSession'> | null;
   agora?: () => number;
   /** Quanto a resposta da Visão geral fica em memória mesmo com mudanças. Padrão 30 s. */
   cacheMsDaVisao?: number;
@@ -183,7 +183,7 @@ function idDaChamada(e: SessionEvent): string | null {
 
 export class RotaAnalytics {
   private readonly porta: Porta;
-  private readonly contas: Pick<Contas, 'atualizar' | 'daSessao'> | null;
+  private readonly contas: Pick<Accounts, 'refresh' | 'ofSession'> | null;
   private readonly agora: () => number;
   private readonly cacheMs: { visao: number; custo: number };
   private readonly versao: (() => string) | null;
@@ -236,7 +236,7 @@ export class RotaAnalytics {
 
   private contaDe(s: Session): ContaDoAnalytics {
     if (!this.contas) return s.accountId ? { id: s.accountId, label: s.accountId, color: null } : { id: null, label: SEM_CONTA, color: null };
-    const c = this.contas.daSessao(s, null);
+    const c = this.contas.ofSession(s, null);
     return c ? { id: c.id, label: c.label, color: c.color } : { id: null, label: SEM_CONTA, color: null };
   }
 
@@ -245,7 +245,7 @@ export class RotaAnalytics {
    * `guardarDesde`. `aoLer` vê todo evento lido, guardado ou não (o heatmap conta por ele).
    */
   private async lerJanela(desde: string, guardarDesde: string, fuso: string, aoLer: ((e: SessionEvent) => void) | null = null): Promise<SessaoLida[]> {
-    await this.contas?.atualizar();
+    await this.contas?.refresh();
     const sessoes = await sessoesDesde(this.porta, desde, fuso);
     return emParalelo(sessoes, LEITURAS_EM_PARALELO, async (sessao) => {
       const guardar = dayOf(sessao.updatedAt, fuso) >= guardarDesde;

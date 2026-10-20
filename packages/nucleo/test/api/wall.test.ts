@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
-  Contas,
+  Accounts,
   MontadorDoMural,
   MontadorDoPainel,
   TrabalhoPorBranch,
   ehAberta,
   startLocalApi,
   muralDoPainel,
-  type IndiceDoDesktop,
-  type Mural,
-  type SessaoDoDesktop,
+  type DesktopIndex,
+  type Wall,
+  type DesktopSession,
 } from '../../src/api/index.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import type { StoragePort } from '../../src/storage-port.ts';
@@ -37,11 +37,11 @@ async function semear() {
   return storage;
 }
 
-function painelDe(storage: StoragePort, desktop: IndiceDoDesktop | null = null, trabalho: TrabalhoPorBranch | null = null) {
-  return new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop, trabalho, agora: () => AGORA });
+function painelDe(storage: StoragePort, desktop: DesktopIndex | null = null, trabalho: TrabalhoPorBranch | null = null) {
+  return new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop, trabalho, agora: () => AGORA });
 }
 
-const muralDe = (storage: StoragePort, desktop: IndiceDoDesktop | null = null) => muralDoPainel(painelDe(storage, desktop));
+const muralDe = (storage: StoragePort, desktop: DesktopIndex | null = null) => muralDoPainel(painelDe(storage, desktop));
 
 /** Conta as leituras de custo e tokens que passam pela porta. */
 function contando(storage: StoragePort) {
@@ -68,7 +68,7 @@ describe('mural ao vivo (#34)', () => {
     assert.equal(ehAberta({ status: 'completed', endedAt: iso(179), updatedAt: iso(179) }, null, AGORA), true, 'concluída dentro do abandono do vigia (180 min) entra');
     assert.equal(ehAberta({ status: 'completed', endedAt: iso(181), updatedAt: iso(181) }, null, AGORA), false, 'concluída há mais de 180 min sai');
     assert.equal(ehAberta({ status: 'abandoned', endedAt: iso(1), updatedAt: iso(1) }, null, AGORA), false, 'abandonada nunca entra');
-    assert.equal(ehAberta({ ...base, status: 'active' }, { arquivada: true }, AGORA), false, 'arquivada no Desktop sai');
+    assert.equal(ehAberta({ ...base, status: 'active' }, { archived: true }, AGORA), false, 'arquivada no Desktop sai');
   });
 
   test('formato, ordem e contagem', async () => {
@@ -156,14 +156,14 @@ describe('mural ao vivo (#34)', () => {
 
   test('o esforço e a arquivada vêm do índice do Desktop', async () => {
     const storage = await semear();
-    const sessao = (cli: string, extra: Partial<SessaoDoDesktop>): SessaoDoDesktop => ({
-      localId: `local_${cli}`, cliSessionId: cli, titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: [], ...extra,
+    const sessao = (cli: string, extra: Partial<DesktopSession>): DesktopSession => ({
+      localId: `local_${cli}`, cliSessionId: cli, title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: [], ...extra,
     });
-    const doDesktop: Record<string, SessaoDoDesktop> = {
-      [PANEL_SESSION]: sessao(PANEL_SESSION, { esforco: 'max', branch: 'feat/63-do-desktop' }),
-      [sim('catalogo-exemplo')]: sessao(sim('catalogo-exemplo'), { arquivada: true }),
+    const doDesktop: Record<string, DesktopSession> = {
+      [PANEL_SESSION]: sessao(PANEL_SESSION, { effort: 'max', branch: 'feat/63-do-desktop' }),
+      [sim('catalogo-exemplo')]: sessao(sim('catalogo-exemplo'), { archived: true }),
     };
-    const desktop = { atualizar: async () => {}, sessaoPorCli: (id: string) => doDesktop[id] ?? null, sessaoPorLocal: () => null, filhasDe: () => [] } as unknown as IndiceDoDesktop;
+    const desktop = { refresh: async () => {}, sessionByCli: (id: string) => doDesktop[id] ?? null, sessionByLocal: () => null, childrenOf: () => [] } as unknown as DesktopIndex;
     const mural = await muralDe(storage, desktop).montar();
     const esta = mural.cards.find((c) => c.id === PANEL_SESSION)!;
     assert.equal(esta.effort, 'max', 'o Desktop vale mais que a metadata');
@@ -196,7 +196,7 @@ describe('mural ao vivo (#34)', () => {
       const r = await fetch(`${api.url}/api/wall`);
       assert.equal(r.status, 200);
       assert.match(r.headers.get('content-type') ?? '', /application\/json/);
-      const mural = (await r.json()) as Mural;
+      const mural = (await r.json()) as Wall;
       assert.equal(mural.version, 1);
       // The old route answers the old keys (#173 phase 2b; its golden has the whole body).
       assert.equal(((await (await fetch(`${api.url}/api/mural`)).json()) as { versao: number }).versao, 1);

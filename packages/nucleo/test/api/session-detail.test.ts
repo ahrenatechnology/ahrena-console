@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
-  Contas,
+  Accounts,
   startLocalApi,
   LeiturasDoDetalhe,
   MontadorDoPainel,
@@ -44,7 +44,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     await seedDetail(storage, AGORA);
     const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     // Como na --demo: o painel troca qualquer id pelo da sessão do cenário; o Detalhe, não.
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
     const detalhe = new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: demoLocal });
     api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, detail: detalhe, openInDesktop: async (url) => void abertos.push(url) });
     host = new URL(api.url).host;

@@ -3,19 +3,19 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, startLocalApi, montarAtencao, MontadorDoPainel, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, montarAtencao, MontadorDoPainel, type LocalApi, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
-let contas: Contas;
+let contas: Accounts;
 let frota: FleetReader;
 
 beforeEach(() => {
   storage = openSqliteStorage({ path: ':memory:' });
-  contas = new Contas({ storage, arquivo: null });
+  contas = new Accounts({ storage, file: null });
   frota = new FleetReader({ storage, accounts: contas, now: () => NOW, timeZone: 'UTC' });
 });
 afterEach(() => storage.close());
