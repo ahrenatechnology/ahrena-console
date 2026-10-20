@@ -27,6 +27,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
 | [src/agent-config/](src/agent-config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
+| [src/telemetry/](src/telemetry/) | Telemetria das máquinas: coletores do Mac e do Linux atrás de uma porta, amostras de 12 h no SQLite, alertas e `/api/machines` e `/api/telemetry` (#175, seção abaixo) |
 
 ## API local
 
@@ -37,6 +38,7 @@ npm run api                              # histórico real, banco em ~/.ahrena-c
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
                                          # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
 npm run api -- --help
+npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
 
 **Um núcleo por máquina** ([src/dono/](src/dono/README.md), #86). Se já há um de pé, `npm run api` o adota: imprime a porta e a versão e sai com 0. Para o app, a extensão e o terminal:
@@ -58,6 +60,8 @@ As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>
 | `GET /api/changes?since=<cursor>&wait=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
 | `GET /api/history?before=<AAAA-MM-DD>&days=<N>&search=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?before=` na próxima página. `days` padrão 7, máximo 31; `search` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
+| `GET /api/machines` | As máquinas (#175): `[{ id, label, state, lastReadAt, alerts }]`, esta máquina (`local`) primeiro. `state` é `connected`, `unreachable`, `not-configured` ou `incompatible-version` (as remotas são a #176). Seção [Telemetria](#telemetria-das-máquinas) |
+| `GET /api/telemetry?machine=<id>&hours=1\|12` | A telemetria de uma máquina (#175): `{ version, machine, hours, current, series, alerts }`. `machine` padrão `local`, `hours` padrão 1; inválido dá 400, máquina que não existe 404 |
 | `GET /api/kanban?view=sessions\|agents&column=<id>&page=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `column`, todas na página 1; com ela, só aquela, na `page` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
 | `GET /api/agent-config?project=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
 | `GET /api/agent-config/skill?root=<id>&name=<nome>` | O `SKILL.md` de uma skill, com a `version` |
@@ -327,6 +331,42 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 
 `gerarCenario()` devolve só o roteiro, sem gravar; `agora` e `esperar` são injetáveis para testes.
 
+## Telemetria das máquinas
+
+#175, [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md). O núcleo mede a própria máquina a cada 30 s enquanto está de pé e guarda 12 h no SQLite. É a base das telas "Esta máquina" e "Workstation" (C24 e C25) e do bloco Máquinas da bandeja (A6); a leitura da máquina remota pelo túnel é a #176. Código, rotas e chaves de JSON em inglês; o texto dos alertas, que a tela mostra, em pt-BR.
+
+| Arquivo | O quê |
+| --- | --- |
+| [model.ts](src/telemetry/model.ts) | A leitura (`TelemetryReading`), os alertas, os pontos da série e os estados de uma máquina |
+| [ports.ts](src/telemetry/ports.ts) | As portas: `TelemetryCollector` (mede) e `TelemetryStore` (guarda), e o que o coletor recebe de fora: `CommandRunner`, `FileReader`, `StatFs`, `PortProbe`, `OsFacts` |
+| [alerts.ts](src/telemetry/alerts.ts) | Os alertas sobre as amostras e o `AlertTracker`, que diz o que entrou e o que saiu |
+| [sampler.ts](src/telemetry/sampler.ts) | O `TelemetrySampler`: lê, grava com a poda, recalcula os alertas e publica a passagem em `/api/changes` |
+| [service.ts](src/telemetry/service.ts) | O `TelemetryService`: o que `/api/machines` e `/api/telemetry` respondem |
+| [adapters/darwin.ts](src/telemetry/adapters/darwin.ts), [adapters/linux.ts](src/telemetry/adapters/linux.ts) | Os coletores, um por plataforma, com a base comum em [adapters/common.ts](src/telemetry/adapters/common.ts) |
+| [adapters/sqlite.ts](src/telemetry/adapters/sqlite.ts) | As amostras na tabela `telemetry_samples` (migração 9, [migration.ts](src/telemetry/migration.ts)) |
+| [adapters/system.ts](src/telemetry/adapters/system.ts) | O executor de comandos, a sonda de porta e o `collectorFor(plataforma)` do núcleo no ar |
+
+**De onde vem cada número.** Tudo é leitura, sem `sudo` e sem dependência nova: o `node:os` e os comandos que já vêm no sistema.
+
+| Grupo | Mac | Linux |
+| --- | --- | --- |
+| CPU (`cpu.usedPct`, `cpu.load` contra `cpu.cores`) | `os.cpus()` (a diferença entre duas amostras) e `os.loadavg()` | igual |
+| Memória (`memory.usedBytes`, `memory.swapUsedBytes`, `memory.pressure`) | `vm_stat`, `sysctl vm.swapusage`, `sysctl kern.memorystatus_vm_pressure_level` | `/proc/meminfo` (sem pressão) |
+| GPU (`gpu`) | `ioreg -c IOAccelerator` | `nvidia-smi`, se existir |
+| Volumes (`disk.volumes[]`) | `fs.statfs` de cada ponto; o `df -P` só lista (fora os volumes de sistema do APFS) | igual (fora `tmpfs`, snaps e EFI) |
+| Rede (`network`) | `route -n get default` e `netstat -ibn`, bytes/s entre amostras | `/proc/net/route` e `/proc/net/dev` |
+| Claude (`claude.processes`, `.cli`, `.desktop`) e `topProcesses` | `ps -axo` (o CLI pela linha de comando, o Desktop por `Claude.app`) | `ps -eo` |
+| Docker (`docker`) | `docker ps -a` (stacks pelo rótulo `com.docker.compose.project`) e `docker system df`, se o `docker` responder | igual |
+| Portas (`ports[]`) | `lsof -nP -iTCP -sTCP:LISTEN` (os processos do usuário) | `ss -ltnp` |
+| Túnel (`tunnels[].ports[].state`) | os `ssh` com `-L` (ou `LocalForward` pelo `ssh -G <destino>`), e a sonda de cada porta: `up`, `idle`, `busy`, `down` | não se aplica (`null`) |
+
+- **Ausente, nunca erro.** Cada comando roda sem shell, com `LC_ALL=C` e 2,5 s de tempo (3 s no `docker system df`). O que falta, falha ou estoura o tempo sai `null` no grupo; a rota nunca falha por isso. A primeira leitura espera 1 s entre duas medidas, para CPU e rede já virem preenchidas.
+- **Amostras.** A tabela `telemetry_samples` (uma linha por máquina e hora: as colunas das séries e a leitura inteira em JSON). A poda vai na mesma transação da gravação: nada passa de 12 h. A série de 1 h tem um ponto por amostra (120); a de 12 h, baldes de 2 min com a média (360).
+- **Alertas.** Carga de 1 min acima dos núcleos em todas as amostras dos últimos 5 min (`load-high`), volume acima de 85% (`volume-full:<ponto>`), porta em todas as interfaces (`port-exposed:<porta>`) e porta do túnel ocupada por outro processo (`tunnel-busy:<porta>`). Cada um com `level`, `message` e `detail` em pt-BR e `since`. A entrada e a saída viram a mudança `alert` em `/api/changes` (`?type=alert` só elas), com a chave `<máquina>:<alerta>`.
+- **Túnel.** A sonda conecta em `127.0.0.1:<porta>` e não escreve nada: a conexão que fica aberta 1 s é `up` (o outro lado responde), a que fecha antes é `idle` (o `ssh` aceitou e lá não há ninguém), a recusada é `down`; outro processo escutando a porta é `busy`.
+- **No ar.** O `cli.ts` liga o amostrador na subida e o para no desligamento; sem coletor para a plataforma, ou com `--no-telemetry`, as duas rotas dão 404. Na `--demo`, as leituras são do simulador ([src/simulador/telemetry.ts](src/simulador/telemetry.ts)): esta máquina (`mac-exemplo`) e a máquina remota sintética `workstation` (`ws-exemplo`), com 12 h já semeadas e os alertas dos wireframes; a carga da workstation passa dos núcleos por uns 15 min a cada 40, então o alerta entra e sai sozinho.
+- **Testes.** Os coletores rodam sobre saídas escritas à mão em [test/fixtures/telemetry](test/fixtures/telemetry/) (Mac e Linux), nunca sobre o sistema.
+
 ## Testes
 
 ```bash
@@ -338,7 +378,7 @@ npm test
 
 O que deixa as telas ao vivo sem polling curto: o artefato, cujo `watchTool` tem piso de 30 s (validação V2), o app de bandeja (decisão 0005) e o painel.
 
-- **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave, sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reiniciar: true` (releia tudo).
+- **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta` e `alert`, o alerta de máquina da [telemetria](#telemetria-das-máquinas)), chave, sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reiniciar: true` (releia tudo).
 - **Espera.** `aguardarMudancas(cursor, { filtros, timeoutMs, signal })` responde na hora se já há novidade; senão segura até chegar uma que passe nos filtros (sessão, conta, tipo) ou até o timeout (padrão 25 s, máximo 110 s, abaixo dos ~130 s do app). Cada espera responde no mínimo 1 s depois de começar: com hooks chegando sem parar, quem faz long polling em laço acorda no máximo uma vez por segundo, e a rajada sai numa resposta só, uma vez por (tipo, chave). O cursor devolvido é sempre o de agora: as mudanças que os filtros deixaram de fora ficam para trás e não voltam num pedido seguinte com outros filtros. No máximo 256 esperas abertas; acima disso, `ErroDeLotacao` (503 no HTTP).
 - **Fontes.** [fontes.ts](src/mudancas/fontes.ts): `comMudancas(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `sessao` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisoesComMudancas` a das decisões, e `aoMudarDaMaquina` vai no `aoMudar` da máquina de estados (`estado` e, quando entra ou sai do inbox, `precisa-de-voce`). A API (`cli.ts`) liga as três.
 - **HTTP.** `GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id|sem-conta>&type=<tipo>` ([http.ts](src/mudancas/http.ts)). O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.

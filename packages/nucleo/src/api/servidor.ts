@@ -29,6 +29,8 @@
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` e `POST /api/decisions/<id>/promote` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 // | `GET /api/repos` e `/api/repos/<owner>/<repo>` | Repositórios do GitHub e métricas (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
+// | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
+// | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 //
 // The old Portuguese routes and query parameters (`/api/painel/<id>`, `/api/sessao/<id>`, `/abrir/<id>`,
 // `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
@@ -78,6 +80,8 @@ import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
 import { normalizeLegacyPath, normalizeLegacyUrl } from './legacy-routes.ts';
 import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
+import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
+import type { TelemetryService } from '../telemetry/service.ts';
 
 export { VERSAO_DA_API };
 
@@ -123,6 +127,8 @@ export interface OpcoesDaApi {
   repos?: RotaDosRepos;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
+  /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
+  telemetry?: TelemetryService | null;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -327,6 +333,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === HISTORY_ROUTE) return responderHistorico(res, url, opts.historico);
     if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
+    if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...contadores,
