@@ -57,7 +57,7 @@ O painel de teste (`ahrena-console-painel`, em `spikes/`) também registra `/con
 claude plugin disable ahrena-console-painel@ahrena-console-testes
 ```
 
-Além do painel, o plugin leva os hooks que mandam os eventos da sessão ao núcleo ([forward.mjs](hooks/forward.mjs), o mesmo de `packages/nucleo/src/ingest/hooks/plugin`). Desde a 0.0.33, cada evento vai, ao mesmo tempo, para todos os núcleos vivos do registro de instâncias (`~/.ahrena-console/instances/`, [decisão 0010](../../docs/decisoes/0010-core-per-installation.md), item 4), e não mais para a 4720 fixa; `AHRENA_CONSOLE_URL` ou `AHRENA_CONSOLE_PORT` mandam para um núcleo só. Eles não atrapalham nada: sem núcleo vivo, desistem calados; com um núcleo que não responde, desistem em 800 ms e registram a falha, com a porta, em `~/.ahrena-console/hooks.log`.
+Além do painel, o plugin leva os hooks que mandam os eventos da sessão ao núcleo ([forward.mjs](hooks/forward.mjs), o mesmo de `packages/nucleo/src/ingest/hooks/plugin`). Desde a 0.0.33, cada evento vai, ao mesmo tempo, para todos os núcleos vivos do registro de instâncias (`~/.ahrena-console/instances/`, [decisão 0010](../../docs/decisoes/0010-core-per-installation.md), item 4), e, na transição, também para a 4720, onde ouvem os núcleos publicados antes do registro (o app 0.0.1), sem repetir um núcleo do registro que já esteja nela; `AHRENA_CONSOLE_URL` ou `AHRENA_CONSOLE_PORT` mandam para um núcleo só. Eles não atrapalham nada: sem núcleo vivo, desistem calados; com um núcleo que não responde, desistem em 800 ms e registram a falha, com a porta, em `~/.ahrena-console/hooks.log`.
 
 ## Subir o núcleo
 

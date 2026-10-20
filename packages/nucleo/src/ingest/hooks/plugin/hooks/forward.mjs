@@ -13,8 +13,12 @@
 // - Otherwise, every live core in the instance registry, `<home>/instances/<installation>-<pid>.json`,
 //   where `<home>` is `AHRENA_CONSOLE_HOME` or `~/.ahrena-console`. All at once, within the same
 //   deadline, with the same body and the same `x-ahrena-delivery-id`: one delivery, many cores.
-// - No live core: gives up silently, with no request and no log line (with nothing running, every
-//   hook of every session would add one).
+// - Transition (decision 0010, item 7): also 127.0.0.1:4720, unless a registered core already has it.
+//   Cores published before #221 (the app 0.0.1, an old checkout) answer there and write no registry
+//   entry. Nobody listening there is the normal case once they are gone, so a refused connection to
+//   4720 is not logged. Goes away when every published core writes the registry.
+// - No live core at all: the 4720 attempt is refused and nothing is logged (with nothing running,
+//   every hook of every session would add a line).
 // The hook only reads the registry. Entries of dead cores are skipped here and deleted by the cores,
 // which clean the folder when they list it; a hook stays free of side effects.
 // An entry is trusted on "pid alive" alone: the file of a core killed with SIGKILL whose pid was reused
@@ -42,6 +46,12 @@ const home = env.AHRENA_CONSOLE_HOME ? resolve(env.AHRENA_CONSOLE_HOME) : join(h
 const timeoutMs = Number(env.AHRENA_CONSOLE_HOOK_TIMEOUT_MS) || 800;
 const logPath = env.AHRENA_CONSOLE_HOOK_LOG || join(home, 'hooks.log');
 const MAX_BODY = 1024 * 1024;
+/**
+ * The fixed port of the cores published before the registry (decision 0010, item 7).
+ * `AHRENA_CONSOLE_LEGACY_PORT` moves it (the tests) and `0` turns the fallback off.
+ */
+const LEGACY_PORT = env.AHRENA_CONSOLE_LEGACY_PORT === undefined ? 4720 : Number(env.AHRENA_CONSOLE_LEGACY_PORT);
+const LEGACY_BASE = Number.isInteger(LEGACY_PORT) && LEGACY_PORT > 0 && LEGACY_PORT <= 65535 ? `http://127.0.0.1:${LEGACY_PORT}` : null;
 const MAX_LOG = 256 * 1024;
 /** A registry entry is a few hundred bytes; anything bigger is not one. */
 const MAX_ENTRY = 64 * 1024;
@@ -162,6 +172,12 @@ function registeredBases() {
   return [...ports].map((port) => `http://127.0.0.1:${port}`);
 }
 
+/** The registry's cores plus the legacy 4720, unless one of them is already there. */
+function targetBases() {
+  const bases = registeredBases();
+  return !LEGACY_BASE || bases.includes(LEGACY_BASE) ? bases : [...bases, LEGACY_BASE];
+}
+
 function eventName(body) {
   const m = /"hook_event_name"\s*:\s*"([A-Za-z0-9]+)"/.exec(body);
   return m ? m[1] : 'desconhecido';
@@ -183,6 +199,8 @@ async function send(base, event, payload, deliveryId) {
     if (!res.ok) record(`${event} recusado pelo núcleo ${base}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
   } catch (err) {
     const cause = err?.cause?.code || err?.name || 'erro';
+    // Nobody on the legacy port is the normal case after the transition: not a failure.
+    if (base === LEGACY_BASE && !explicitBase && cause === 'ECONNREFUSED') return;
     record(`${event} não enviado a ${base}: ${cause}`);
   }
 }
@@ -190,8 +208,8 @@ async function send(base, event, payload, deliveryId) {
 async function main() {
   // stdin is always read to the end (or the deadline), so Claude Code never writes to a closed pipe.
   const { body, problem } = await readStdin();
-  const targets = explicitBase ? [explicitBase.replace(/\/+$/, '')] : registeredBases();
-  if (!targets.length) return; // no core running: nothing to send, nothing to log
+  const targets = explicitBase ? [explicitBase.replace(/\/+$/, '')] : targetBases();
+  if (!targets.length) return; // no core and no legacy port: nothing to send, nothing to log
   const event = eventName(body);
   if (problem) return record(`${event} não enviado: ${problem}`);
   if (!body.trim()) return record('hook sem payload, nada a enviar');

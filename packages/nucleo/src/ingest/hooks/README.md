@@ -52,7 +52,7 @@ Decisão [0010](../../../../../docs/decisoes/0010-core-per-installation.md), ite
 - Senão, o registro de instâncias, `<home>/instances/<instalação>-<pid>.json` (`<home>` é `AHRENA_CONSOLE_HOME` ou `~/.ahrena-console`, o mesmo de [owner/registry.ts](../../owner/registry.ts)): toda entrada com nome válido, porta válida e pid vivo (`EPERM` conta como vivo) recebe o evento em `127.0.0.1:<porta>`, todas ao mesmo tempo, dentro do mesmo prazo.
 - Todos recebem o mesmo corpo e o mesmo `x-ahrena-delivery-id`: é uma entrega só, e cada núcleo guarda o retrato inteiro.
 - O encaminhador só lê o registro. Entrada de pid morto ou ilegível é pulada, nunca apagada: quem limpa é o núcleo, ao listar.
-- A porta fixa 4720 deixou de ser o padrão. Na transição (item 7), quem sobe o núcleo de desenvolvimento com `--port 4720` também entra no registro e recebe os hooks por ele.
+- A porta fixa 4720 deixou de ser o padrão, mas, na transição (item 7), cada evento vai também para `127.0.0.1:4720`, a menos que um núcleo do registro já esteja nela: os núcleos publicados antes da #221 não gravam o registro. Ninguém na 4720 (conexão recusada) não vira linha de log. `AHRENA_CONSOLE_LEGACY_PORT` muda essa porta, e `0` desliga o fallback (os testes usam).
 
 ## Duplicatas
 

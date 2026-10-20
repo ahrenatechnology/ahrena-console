@@ -63,6 +63,8 @@ function runHook(event: string, payload: unknown, env: Record<string, string>, o
         AHRENA_CONSOLE_HOOK_LOG: logPath,
         AHRENA_CONSOLE_HOOK_TIMEOUT_MS: String(SLACK_MS),
         AHRENA_CONSOLE_HOME: EMPTY_HOME,
+        // Never the machine's 4720: the legacy fallback is off unless a test points it at a fake core.
+        AHRENA_CONSOLE_LEGACY_PORT: '0',
         ...env,
       },
     });
@@ -489,6 +491,39 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
       assert.equal(decoy.hits.length, 0);
     } finally {
       await decoy.close();
+    }
+  });
+
+  test('transition: the legacy port gets every event too, once, and nobody there is not a failure', async () => {
+    const legacy = await fakeCore();
+    const a = await fakeCore();
+    const closed = await fakeCore();
+    const closedPort = closed.port;
+    await closed.close();
+    try {
+      // Empty registry: the legacy core alone, as before #221.
+      const alone = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: newHome(), AHRENA_CONSOLE_LEGACY_PORT: String(legacy.port) });
+      assert.equal(alone.log, '');
+      assert.equal(legacy.hits.length, 1);
+      // With a registered core: both, with the same delivery.
+      const home = newHome();
+      register(home, 'dev', process.pid, a.port);
+      const both = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: home, AHRENA_CONSOLE_LEGACY_PORT: String(legacy.port) });
+      assert.equal(both.log, '');
+      assert.deepEqual([legacy.hits.length, a.hits.length], [2, 1]);
+      assert.equal(legacy.hits[1].deliveryId, a.hits[0].deliveryId);
+      // A registered core already on the legacy port: one request, not two.
+      const same = newHome();
+      register(same, 'dev', process.pid, legacy.port);
+      await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: same, AHRENA_CONSOLE_LEGACY_PORT: String(legacy.port) });
+      assert.equal(legacy.hits.length, 3);
+      // Nobody on the legacy port: refused, not logged.
+      const none = await runHook('Stop', HOOK_PAYLOADS.Stop, { AHRENA_CONSOLE_HOME: newHome(), AHRENA_CONSOLE_LEGACY_PORT: String(closedPort) });
+      assert.equal(none.code, 0);
+      assert.equal(none.log, '');
+    } finally {
+      await legacy.close();
+      await a.close();
     }
   });
 
