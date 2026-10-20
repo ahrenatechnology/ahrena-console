@@ -351,7 +351,7 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     const b = bridge('--no-start');
     const r = await b.call();
     assert.equal(r.isError, true);
-    assert.match(r.text, /npm run core -- start/);
+    assert.match(r.text, /npm run nucleo -- subir/);
     await b.close();
   });
 

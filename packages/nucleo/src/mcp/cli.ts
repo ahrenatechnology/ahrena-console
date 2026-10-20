@@ -98,10 +98,10 @@ void resolver?.target().catch((e) => log(`registry: ${(e as Error).message}`));
 // Shown to the model in the tool error: pt-BR, with the commands as they are on screen.
 const howToStart = (): string =>
   fixedPort !== null
-    ? `O núcleo não respondeu em ${url(fixedPort)}. Suba com \`npm run core -- start --port ${fixedPort}\` em packages/nucleo e chame de novo.`
+    ? `O núcleo não respondeu em ${url(fixedPort)}. Suba com \`npm run api -- --porta ${fixedPort}\` em packages/nucleo e chame de novo.`
     : resolver?.isStarting()
       ? 'Nenhum núcleo do Ahrena Console respondeu ainda; a ponte está subindo um. Chame de novo em alguns segundos.'
-      : 'Nenhum núcleo do Ahrena Console respondeu. Suba com `npm run core -- start` em packages/nucleo e chame de novo.';
+      : 'Nenhum núcleo do Ahrena Console respondeu. Suba com `npm run nucleo -- subir` em packages/nucleo e chame de novo.';
 
 /** Thrown by the bridge's `withoutCore`: the core did not answer, try the next one. */
 class Unreachable extends Error {}
