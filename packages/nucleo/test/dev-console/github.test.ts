@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
+import { buildMergeQueue } from '../../src/dev-console/model.ts';
 import { DEV_CONSOLE_TTL, devConsoleCacheKey, DevConsoleGithub } from '../../src/dev-console/reader.ts';
 import { DEV_CONSOLE_QUERIES, disabledDevConsoleSource, GithubDevConsoleSource, searchDate, type DevConsoleSource } from '../../src/dev-console/source.ts';
 import { clock } from '../github/helpers.ts';
@@ -147,6 +148,24 @@ describe('pelo cache da 0001', () => {
     now.add(DEV_CONSOLE_TTL.issues);
     await github.read(REPO);
     assert.ok(source.calls.slice(5).includes(`issues:${REPO}`));
+  });
+
+  test('#177/AC-5 an UNKNOWN mergeable is re-read after the PR TTL, never held longer', async () => {
+    const now = clock();
+    const source = countingSource();
+    let mergeable: 'UNKNOWN' | 'MERGEABLE' = 'UNKNOWN';
+    source.pullRequests = async (repo: string) => {
+      source.calls.push(`pullRequests:${repo}`);
+      return { open: [pr(81, { mergeable })], merged: [] };
+    };
+    const github = new DevConsoleGithub({ source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), now });
+    const queue = async () => buildMergeQueue((await github.read(REPO)).openPullRequests);
+    assert.deepEqual((await queue()).notReady.map((n) => n.reason), ['checking']);
+    mergeable = 'MERGEABLE';
+    now.add(DEV_CONSOLE_TTL.pullRequests - 1);
+    assert.deepEqual((await queue()).notReady.map((n) => n.reason), ['checking'], 'inside the TTL the cached value stands');
+    now.add(1);
+    assert.deepEqual((await queue()).ready.map((q) => q.number), [81]);
   });
 
   test('#177/AC-5 sem GitHub, devolve o cache com readAt e stale: true', async () => {

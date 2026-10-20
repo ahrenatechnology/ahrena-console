@@ -82,8 +82,12 @@ describe('fila de merge', () => {
     assert.deepEqual(q.notReady.map((n) => [n.number, n.reasons]), [[90, ['ci-failing']]]);
   });
 
-  test('#177/AC-6 mergeable UNKNOWN conta como pronto; só CONFLICTING tira da fila', () => {
-    assert.deepEqual(numbers(buildMergeQueue([pr(93, { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' })]).ready), [93]);
+  test('#177/AC-2 mergeable UNKNOWN is not ready: notReady with checking, right after conflict', () => {
+    const q = buildMergeQueue([pr(93, { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' })]);
+    assert.deepEqual(q.ready, []);
+    assert.deepEqual(q.notReady.map((n) => [n.number, n.reason, n.reasons]), [[93, 'checking', ['checking']]]);
+    assert.deepEqual(ownReasons(pr(94, { mergeable: 'UNKNOWN', ci: 'FAILURE' })), ['checking', 'ci-failing']);
+    assert.deepEqual(ownReasons(pr(95, { isDraft: true, mergeable: 'UNKNOWN' })), ['draft', 'checking']);
   });
 
   test('#177/AC-6 a pilha só vale dentro do mesmo repositório', () => {

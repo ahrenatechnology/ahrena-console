@@ -66,7 +66,7 @@ export interface ContextSession {
 
 // ---------- o que o Dev Console mostra ----------
 
-export const NOT_READY_REASONS = ['draft', 'conflict', 'ci-failing', 'changes-requested', 'behind', 'ci-running', 'no-ci', 'stacked'] as const;
+export const NOT_READY_REASONS = ['draft', 'conflict', 'checking', 'ci-failing', 'changes-requested', 'behind', 'ci-running', 'no-ci', 'stacked'] as const;
 /** Por que um PR aberto não está na fila. A ordem é a de prioridade: o primeiro motivo é o que a tela mostra. */
 export type NotReadyReason = (typeof NOT_READY_REASONS)[number];
 
@@ -156,6 +156,7 @@ export function ownReasons(p: PullRequestFact): NotReadyReason[] {
   const ci = ciSummary(p.ci);
   if (p.isDraft) r.push('draft');
   if (p.mergeable === 'CONFLICTING') r.push('conflict');
+  if (p.mergeable === 'UNKNOWN') r.push('checking');
   if (ci === 'failing') r.push('ci-failing');
   if (p.review === 'CHANGES_REQUESTED') r.push('changes-requested');
   if (p.mergeStateStatus === 'BEHIND') r.push('behind');
@@ -172,8 +173,8 @@ const byAge = (a: { createdAt: string; repo: string; number: number }, b: { crea
  * dia com a base), o mais antigo primeiro, e o empilhado logo depois da base. Um empilhado só
  * entra se a base entrou; senão fica fora com `stacked`.
  *
- * `mergeable: 'UNKNOWN'` (o GitHub ainda calcula) conta como pronto: só `CONFLICTING` tira da fila.
- * Se houver conflito, o próprio GitHub recusa o merge, e a próxima leitura já traz `conflict`.
+ * `mergeable: 'UNKNOWN'` (o GitHub ainda calcula) não é pronto: fica fora com `checking`. O GitHub
+ * calcula sob demanda, então a próxima leitura (o TTL dos PRs, 60 s) já traz o valor.
  */
 export function buildMergeQueue(prs: readonly PullRequestFact[]): MergeQueue {
   const bases = stackBases(prs);
