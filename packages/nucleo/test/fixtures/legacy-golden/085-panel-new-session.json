@@ -71,7 +71,7 @@
       "familia": [],
       "maquina": [
         {
-          "id": "sim-detalhe-pedidos",
+          "id": "sim-detail-orders",
           "nivel": "precisa",
           "porque": "permissao",
           "local": null,
@@ -108,7 +108,7 @@
           }
         },
         {
-          "id": "sim-historico-relatorio-mensal",
+          "id": "sim-history-monthly-report",
           "nivel": "precisa",
           "porque": "erro",
           "local": null,
@@ -124,7 +124,7 @@
           "conta": null
         },
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "nivel": "sua-vez",
           "porque": "sua-vez",
           "local": null,

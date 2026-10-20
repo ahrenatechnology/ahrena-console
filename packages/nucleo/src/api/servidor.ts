@@ -143,6 +143,11 @@ export interface OpcoesDaApi {
   repos?: RotaDosRepos;
   /** The Instructions tab of a repository (api/agent-instructions.ts, #183); without it, `/api/agent-instructions` gives 404. */
   agentInstructions?: AgentInstructionsRoute;
+  /**
+   * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
+   * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
+   */
+  demoUrl?: (url: URL) => URL;
   /** The Dev Console (#177); turns on `GET /api/dev-console`. */
   devConsole?: DevConsole;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
@@ -323,12 +328,19 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     contadores.requests++;
     // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
     const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const url = normalizeLegacyUrl(raw);
+    const normalized = normalizeLegacyUrl(raw);
+    const url = opts.demoUrl ? opts.demoUrl(normalized) : normalized;
     // An old route answers its old body: every JSON written from here on, errors included, goes
     // through its back-translator (new → old keys and values).
     const toLegacy = legacyResponseFor(raw.pathname);
     if (toLegacy) rewriteJsonBodies(res, toLegacy);
     if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
+    // its live refresh work with the current id.
+    if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
+      res.writeHead(302, { location: `${url.pathname}${url.search}`, 'cache-control': 'no-store', 'content-length': 0 });
+      return void res.end();
+    }
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = OPEN.exec(url.pathname);
     if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]!));

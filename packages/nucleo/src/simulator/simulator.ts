@@ -3,156 +3,157 @@
 
 import type { ModelPricing } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { gerarCenario, type Operacao, type Roteiro } from './scenario.ts';
+import { generateScenario, type Operation, type Script } from './scenario.ts';
 
-export type Modo = 'lote' | 'tempo-real';
+/** `batch` writes everything at once; `real-time` writes at the pace of the clock. */
+export type RunMode = 'batch' | 'real-time';
 
-export interface OpcoesDaSimulacao {
-  semente: string | number;
-  sessoes?: number;
-  duracaoMin?: number;
-  caos?: boolean;
-  intensidadeDoCaos?: number;
+export interface SimulationOptions {
+  seed: string | number;
+  sessions?: number;
+  durationMin?: number;
+  chaos?: boolean;
+  chaosIntensity?: number;
   /**
-   * `lote`: grava tudo de uma vez, com a janela terminando agora (as sessões já aconteceram).
-   * `tempo-real`: começa agora e grava cada operação na hora dela. Padrão `lote`.
+   * `batch`: writes everything at once, with the window ending now (the sessions already happened).
+   * `real-time`: starts now and writes each operation at its time. Default `batch`.
    */
-  modo?: Modo;
-  /** Só em tempo real: quantos minutos simulados passam por minuto de relógio. Padrão 30. */
-  velocidade?: number;
-  /** Grava preços ilustrativos para os modelos simulados que ainda não têm preço. */
-  precos?: boolean;
-  /** Relógio em ms. Padrão `Date.now`. */
-  agora?: () => number;
-  /** Espera em ms. Padrão `setTimeout`, cancelável pelo `signal`. */
-  esperar?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** Interrompe a simulação em tempo real; o que já foi gravado fica. */
+  mode?: RunMode;
+  /** Real time only: how many simulated minutes pass per clock minute. Default 30. */
+  speed?: number;
+  /** Writes illustrative prices for the simulated models that have no price yet. */
+  prices?: boolean;
+  /** Clock in ms. Default `Date.now`. */
+  now?: () => number;
+  /** Wait in ms. Default `setTimeout`, cancellable by the `signal`. */
+  wait?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** Interrupts the real-time simulation; what was already written stays. */
   signal?: AbortSignal;
-  /** Chamado depois de cada gravação. */
-  aoGravar?: (op: Operacao) => void;
+  /** Called after each write. */
+  onWrite?: (op: Operation) => void;
 }
 
-export interface Resumo {
-  semente: string;
-  prefixo: string;
-  modo: Modo;
-  inicio: string;
-  roteiros: Record<Roteiro, number>;
-  gravados: { contas: number; sessoes: number; agentes: number; eventos: number; usos: number; precos: number };
-  /** `true` quando o `signal` parou a simulação antes do fim. */
-  interrompido: boolean;
+export interface SimulationSummary {
+  seed: string;
+  prefix: string;
+  mode: RunMode;
+  start: string;
+  scripts: Record<Script, number>;
+  written: { accounts: number; sessions: number; agents: number; events: number; usages: number; prices: number };
+  /** `true` when the `signal` stopped the simulation before the end. */
+  interrupted: boolean;
 }
 
 /**
- * Preços ilustrativos, em US$ por milhão de tokens, só para o custo aparecer na demonstração.
- * Não são a tabela oficial: quem usa o console de verdade edita a própria tabela (item 1.6).
+ * Illustrative prices, in US$ per million tokens, only so the cost shows up in the demo.
+ * They are not the official table: whoever uses the console for real edits their own table (item 1.6).
  */
-export const PRECOS_ILUSTRATIVOS: readonly Omit<ModelPricing, 'updatedAt'>[] = [
+export const ILLUSTRATIVE_PRICES: readonly Omit<ModelPricing, 'updatedAt'>[] = [
   { pattern: 'claude-opus-5%', inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: null, cacheWrite5mPerMTok: null, cacheWrite1hPerMTok: null },
   { pattern: 'claude-sonnet-5%', inputPerMTok: 3, outputPerMTok: 15, cacheReadPerMTok: null, cacheWrite5mPerMTok: null, cacheWrite1hPerMTok: null },
   { pattern: 'claude-haiku-5%', inputPerMTok: 1, outputPerMTok: 5, cacheReadPerMTok: null, cacheWrite5mPerMTok: null, cacheWrite1hPerMTok: null },
 ];
 
-function esperarPadrao(ms: number, signal?: AbortSignal): Promise<void> {
+function defaultWait(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve();
     const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', parar);
+      signal?.removeEventListener('abort', stop);
       resolve();
     }, ms);
-    const parar = () => {
+    const stop = () => {
       clearTimeout(timer);
       resolve();
     };
-    signal?.addEventListener('abort', parar, { once: true });
+    signal?.addEventListener('abort', stop, { once: true });
   });
 }
 
-export async function simular(porta: StoragePort, opcoes: OpcoesDaSimulacao): Promise<Resumo> {
-  const modo = opcoes.modo ?? 'lote';
-  const velocidade = opcoes.velocidade ?? 30;
-  if (!(velocidade > 0)) throw new RangeError(`velocidade inválida: ${velocidade}`);
-  const duracaoMin = opcoes.duracaoMin ?? 360;
-  const agora = opcoes.agora ?? Date.now;
-  const esperar = opcoes.esperar ?? esperarPadrao;
+export async function simulate(storage: StoragePort, options: SimulationOptions): Promise<SimulationSummary> {
+  const mode = options.mode ?? 'batch';
+  const speed = options.speed ?? 30;
+  if (!(speed > 0)) throw new RangeError(`invalid speed: ${speed}`);
+  const durationMin = options.durationMin ?? 360;
+  const now = options.now ?? Date.now;
+  const wait = options.wait ?? defaultWait;
 
-  // Em lote a janela termina agora; em tempo real ela começa agora e corre `velocidade` vezes mais rápido.
-  const escala = modo === 'lote' ? 1 : 1 / velocidade;
-  const inicio = modo === 'lote' ? agora() - duracaoMin * 60_000 : agora();
-  const instante = (deslocamentoMs: number) => inicio + Math.round(deslocamentoMs * escala);
+  // In batch the window ends now; in real time it starts now and runs `speed` times faster.
+  const scale = mode === 'batch' ? 1 : 1 / speed;
+  const start = mode === 'batch' ? now() - durationMin * 60_000 : now();
+  const instant = (offsetMs: number) => start + Math.round(offsetMs * scale);
 
-  const cenario = gerarCenario({
-    semente: opcoes.semente,
-    sessoes: opcoes.sessoes,
-    duracaoMin,
-    caos: opcoes.caos,
-    intensidadeDoCaos: opcoes.intensidadeDoCaos,
-    relogio: (ms) => new Date(instante(ms)).toISOString(),
+  const scenario = generateScenario({
+    seed: options.seed,
+    sessions: options.sessions,
+    durationMin,
+    chaos: options.chaos,
+    chaosIntensity: options.chaosIntensity,
+    clock: (ms) => new Date(instant(ms)).toISOString(),
   });
 
-  const resumo: Resumo = {
-    semente: String(opcoes.semente),
-    prefixo: cenario.prefixo,
-    modo,
-    inicio: new Date(inicio).toISOString(),
-    roteiros: { normal: 0, travada: 0, erro: 0, abandono: 0, estouro: 0, enxame: 0 },
-    gravados: { contas: 0, sessoes: 0, agentes: 0, eventos: 0, usos: 0, precos: 0 },
-    interrompido: false,
+  const summary: SimulationSummary = {
+    seed: String(options.seed),
+    prefix: scenario.prefix,
+    mode,
+    start: new Date(start).toISOString(),
+    scripts: { normal: 0, stuck: 0, error: 0, abandonment: 0, overflow: 0, swarm: 0 },
+    written: { accounts: 0, sessions: 0, agents: 0, events: 0, usages: 0, prices: 0 },
+    interrupted: false,
   };
-  for (const r of cenario.roteiros) resumo.roteiros[r]++;
+  for (const s of scenario.scripts) summary.scripts[s]++;
 
-  if (opcoes.precos) {
-    const existentes = new Set((await porta.listModelPricing()).map((p) => p.pattern));
-    for (const p of PRECOS_ILUSTRATIVOS) {
-      if (existentes.has(p.pattern)) continue;
-      await porta.putModelPricing({ ...p, updatedAt: new Date(inicio).toISOString() });
-      resumo.gravados.precos++;
+  if (options.prices) {
+    const existing = new Set((await storage.listModelPricing()).map((p) => p.pattern));
+    for (const p of ILLUSTRATIVE_PRICES) {
+      if (existing.has(p.pattern)) continue;
+      await storage.putModelPricing({ ...p, updatedAt: new Date(start).toISOString() });
+      summary.written.prices++;
     }
   }
 
-  // As contas vão antes das sessões; o `lastSeenAt` acompanha a última atividade gravada de cada uma.
-  const contas = new Map(cenario.contas.map((c) => [c.id, c]));
-  for (const c of contas.values()) await porta.putAccount(c);
-  resumo.gravados.contas = contas.size;
+  // Accounts go before sessions; `lastSeenAt` follows each one's last written activity.
+  const accounts = new Map(scenario.accounts.map((c) => [c.id, c]));
+  for (const c of accounts.values()) await storage.putAccount(c);
+  summary.written.accounts = accounts.size;
 
-  const sessoes = new Set<string>();
-  const agentes = new Set<string>();
-  for (const op of cenario.operacoes) {
-    if (modo === 'tempo-real') {
-      const falta = instante(op.deslocamentoMs) - agora();
-      if (falta > 0) await esperar(falta, opcoes.signal);
+  const sessions = new Set<string>();
+  const agents = new Set<string>();
+  for (const op of scenario.operations) {
+    if (mode === 'real-time') {
+      const remaining = instant(op.offsetMs) - now();
+      if (remaining > 0) await wait(remaining, options.signal);
     }
-    if (opcoes.signal?.aborted) {
-      resumo.interrompido = true;
+    if (options.signal?.aborted) {
+      summary.interrupted = true;
       break;
     }
-    switch (op.tipo) {
-      case 'sessao': {
-        await porta.putSession(op.registro);
-        sessoes.add(op.registro.id);
-        const conta = op.registro.accountId ? contas.get(op.registro.accountId) : undefined;
-        if (conta && op.registro.updatedAt > conta.lastSeenAt) {
-          const vista = { ...conta, lastSeenAt: op.registro.updatedAt };
-          contas.set(conta.id, vista);
-          await porta.putAccount(vista);
+    switch (op.kind) {
+      case 'session': {
+        await storage.putSession(op.record);
+        sessions.add(op.record.id);
+        const account = op.record.accountId ? accounts.get(op.record.accountId) : undefined;
+        if (account && op.record.updatedAt > account.lastSeenAt) {
+          const seen = { ...account, lastSeenAt: op.record.updatedAt };
+          accounts.set(account.id, seen);
+          await storage.putAccount(seen);
         }
         break;
       }
-      case 'agente':
-        await porta.putAgent(op.registro);
-        agentes.add(op.registro.id);
+      case 'agent':
+        await storage.putAgent(op.record);
+        agents.add(op.record.id);
         break;
-      case 'evento':
-        if (await porta.appendEvent(op.registro)) resumo.gravados.eventos++;
+      case 'event':
+        if (await storage.appendEvent(op.record)) summary.written.events++;
         break;
-      case 'uso':
-        await porta.putTokenUsage(op.registro);
-        resumo.gravados.usos++;
+      case 'usage':
+        await storage.putTokenUsage(op.record);
+        summary.written.usages++;
         break;
     }
-    opcoes.aoGravar?.(op);
+    options.onWrite?.(op);
   }
-  resumo.gravados.sessoes = sessoes.size;
-  resumo.gravados.agentes = agentes.size;
-  return resumo;
+  summary.written.sessions = sessions.size;
+  summary.written.agents = agents.size;
+  return summary;
 }

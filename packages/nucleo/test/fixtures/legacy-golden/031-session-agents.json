@@ -2,7 +2,7 @@
   "name": "session-agents",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/agentes"
+    "path": "/api/sessoes/sim-panel-current/agentes"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
@@ -53,7 +53,7 @@
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": "sim-painel-esta:main"
+        "agenteId": "sim-panel-current:main"
       },
       "mudouEm": "2026-10-20T14:59:30.000Z",
       "passos": [
@@ -65,7 +65,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -76,7 +76,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -87,7 +87,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -98,7 +98,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -109,7 +109,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -120,7 +120,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         }
       ]
@@ -134,7 +134,7 @@
     },
     "agentes": [
       {
-        "id": "sim-painel-esta:main",
+        "id": "sim-panel-current:main",
         "tipo": "principal",
         "nome": "Agente principal",
         "tarefa": null,
@@ -147,7 +147,7 @@
         "pai": null
       },
       {
-        "id": "sim-painel-esta:a3",
+        "id": "sim-panel-current:a3",
         "tipo": "subagente",
         "nome": "Plan",
         "tarefa": "plano",
@@ -157,10 +157,10 @@
         "inicio": "2026-10-20T14:37:00.000Z",
         "fim": "2026-10-20T14:40:00.000Z",
         "custoUsd": 0.042,
-        "pai": "sim-painel-esta:main"
+        "pai": "sim-panel-current:main"
       },
       {
-        "id": "sim-painel-esta:a0",
+        "id": "sim-panel-current:a0",
         "tipo": "subagente",
         "nome": "Explore",
         "tarefa": "achar usos",
@@ -170,10 +170,10 @@
         "inicio": "2026-10-20T14:59:00.000Z",
         "fim": null,
         "custoUsd": 0.062,
-        "pai": "sim-painel-esta:main"
+        "pai": "sim-panel-current:main"
       },
       {
-        "id": "sim-painel-esta:a1",
+        "id": "sim-panel-current:a1",
         "tipo": "subagente",
         "nome": "code-reviewer",
         "tarefa": "diff",
@@ -183,10 +183,10 @@
         "inicio": "2026-10-20T14:59:18.000Z",
         "fim": null,
         "custoUsd": 0.082,
-        "pai": "sim-painel-esta:main"
+        "pai": "sim-panel-current:main"
       },
       {
-        "id": "sim-painel-esta:a2",
+        "id": "sim-panel-current:a2",
         "tipo": "subagente",
         "nome": "test-runner",
         "tarefa": "bateria",
@@ -196,7 +196,7 @@
         "inicio": "2026-10-20T14:59:48.000Z",
         "fim": null,
         "custoUsd": 0.102,
-        "pai": "sim-painel-esta:main"
+        "pai": "sim-panel-current:main"
       }
     ]
   }

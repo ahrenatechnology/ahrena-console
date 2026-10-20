@@ -11,7 +11,7 @@
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, ESCOPOS_DAS_DECISOES, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, translateBody } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
-import { CENARIOS_DO_PAINEL, FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { PANEL_SCENARIOS, SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -19,14 +19,14 @@ const AGORA = Date.parse(T0);
 const ESCOPO_ANTIGO = { session: 'sessao', family: 'familia', branch: 'branch' } as const;
 const saida: Record<string, unknown> = {};
 const listas: Record<string, unknown> = {};
-for (const nome of CENARIOS_DO_PAINEL) {
+for (const nome of PANEL_SCENARIOS) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisoes = new SqliteDecisionStore(storage.db);
-  await semearCenariosDoPainel(storage, nome, AGORA);
-  await semearDecisoesDoPainel(decisoes, nome, AGORA);
-  const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+  await seedPanelScenario(storage, nome, AGORA);
+  await seedPanelDecisions(decisoes, nome, AGORA);
+  const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
   const montador = new MontadorDoPainel({
-    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL,
+    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
   });
   const pedido = { sessionId: 'sessao-teste', modelo: 'claude-sonnet-5-5', cwd: '/simulacao/cli-de-notas' };
   await montador.montar(pedido);
@@ -40,7 +40,7 @@ for (const nome of CENARIOS_DO_PAINEL) {
   }
   await storage.close();
 }
-const chaves = CENARIOS_DO_PAINEL.map((c) => `'${c}'`).join(' | ');
+const chaves = PANEL_SCENARIOS.map((c) => `'${c}'`).join(' | ');
 process.stdout.write(
   `// Gerado por packages/nucleo/test/api/gravar-cenarios.ts: a resposta de /api/painel em cada cenário\n` +
     `// do simulador (P1 a P7, P9, P12 e P13), com a hora fixa AGORA, e as listas de decisões do P9 por escopo.\n` +

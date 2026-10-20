@@ -2,7 +2,7 @@
   "name": "session-events-filtered",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/eventos?limite=3&tipo=PreToolUse"
+    "path": "/api/sessoes/sim-panel-current/eventos?limite=3&tipo=PreToolUse"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
@@ -11,46 +11,46 @@
     "filtrados": 53,
     "itens": [
       {
-        "id": "sim-painel-esta-d0083",
+        "id": "sim-panel-current-d0083",
         "em": "2026-10-20T14:59:48.000Z",
         "tipo": "PreToolUse",
         "ferramenta": "Grep",
         "resumo": "cobrar(",
         "agente": {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "nome": "test-runner"
         },
         "status": "active",
         "dados": "{\n  \"tool_name\": \"Grep\",\n  \"tool_use_id\": \"toolu_sim_sub_3_g\"\n}"
       },
       {
-        "id": "sim-painel-esta-d0082",
+        "id": "sim-panel-current-d0082",
         "em": "2026-10-20T14:59:48.000Z",
         "tipo": "PreToolUse",
         "ferramenta": "Read",
         "resumo": "src/pagamentos/cobranca.ts",
         "agente": {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "nome": "test-runner"
         },
         "status": "active",
         "dados": "{\n  \"tool_name\": \"Read\",\n  \"tool_use_id\": \"toolu_sim_sub_3_r\"\n}"
       },
       {
-        "id": "sim-painel-esta-e0034",
+        "id": "sim-panel-current-e0034",
         "em": "2026-10-20T14:59:42.000Z",
         "tipo": "PreToolUse",
         "ferramenta": "Agent",
         "resumo": "3 subagentes em paralelo",
         "agente": {
-          "id": "sim-painel-esta:main",
+          "id": "sim-panel-current:main",
           "nome": "Agente principal"
         },
         "status": "active",
         "dados": "{\n  \"tool_name\": \"Agent\",\n  \"tool_input\": {\n    \"command\": \"3 subagentes em paralelo\"\n  }\n}"
       }
     ],
-    "proximo": "sim-painel-esta-e0034",
+    "proximo": "sim-panel-current-e0034",
     "opcoes": {
       "tipos": [
         "AssistantMessage",
@@ -68,23 +68,23 @@
       ],
       "agentes": [
         {
-          "id": "sim-painel-esta:main",
+          "id": "sim-panel-current:main",
           "nome": "Agente principal"
         },
         {
-          "id": "sim-painel-esta:a3",
+          "id": "sim-panel-current:a3",
           "nome": "Plan"
         },
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "nome": "Explore"
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "nome": "code-reviewer"
         },
         {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "nome": "test-runner"
         }
       ],

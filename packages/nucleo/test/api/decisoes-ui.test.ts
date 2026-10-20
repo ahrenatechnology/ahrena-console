@@ -22,12 +22,12 @@ import {
 } from '../../src/api/index.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
-import { MAE_DO_P9, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { P9_PARENT, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
-const VITRINE = 'sim-painel-vitrine-demo';
-const VITRINE_ONTEM = 'sim-painel-vitrine-ontem';
+const VITRINE = 'sim-panel-vitrine-demo';
+const VITRINE_ONTEM = 'sim-panel-vitrine-yesterday';
 const JSON_ = { 'content-type': 'application/json' };
 
 /** O rascunho como a rota antiga `/api/decisoes/:id/promover` o responde: as chaves antigas (a nova responde `draft`, um `RascunhoDeRegistro`). */
@@ -49,8 +49,8 @@ interface Cenario {
 async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi>[0]> = {}): Promise<Cenario> {
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisoes = new SqliteDecisionStore(storage.db);
-  await semearCenariosDoPainel(storage, 'p9', AGORA);
-  await semearDecisoesDoPainel(decisoes, 'p9', AGORA);
+  await seedPanelScenario(storage, 'p9', AGORA);
+  await seedPanelDecisions(decisoes, 'p9', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
   const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
@@ -122,7 +122,7 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
   test('a lista sai de todas as sessões, inclusive a mãe que só existe na porta das decisões', async () => {
     const { corpo } = await c.ler<DecisoesDaPagina>('/api/decisions?groupBy=session');
     const sessoes = corpo.groups.map((g) => g.key && g.items[0]!.sessionId);
-    for (const s of [SESSAO_DO_PAINEL, MAE_DO_P9, VITRINE, VITRINE_ONTEM, 'sim-painel-motor-de-regras', 'sim-painel-painel-de-metricas']) assert.ok(sessoes.includes(s), s);
+    for (const s of [PANEL_SESSION, P9_PARENT, VITRINE, VITRINE_ONTEM, 'sim-panel-motor-de-regras', 'sim-panel-painel-de-metricas']) assert.ok(sessoes.includes(s), s);
     const vitrine = corpo.groups.find((g) => g.items[0]!.sessionId === VITRINE)!;
     assert.equal(vitrine.type, 'session');
     assert.equal(vitrine.title, 'Kanban da vitrine', 'o título da sessão gravada');
@@ -197,7 +197,7 @@ describe('C21: a janela de 30 dias das substituídas', () => {
     const c = await cenario();
     try {
       const antes = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.counts;
-      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-painel-motor-de-regras', states: ['vigente'] })).items;
+      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-panel-motor-de-regras', states: ['vigente'] })).items;
       assert.ok(vigentes.length >= 3);
       const ha = (dias: number) => new Date(AGORA - dias * 86_400_000).toISOString();
       const nova = vigentes[2]!.id;
@@ -271,7 +271,7 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
     assert.match(corpo.mcp.response, /6 vigentes/);
     assert.match(corpo.mcp.response, /D7 substituiu D3/);
 
-    const esta = (await c.ler<DecisoesDaAba>(`/api/sessions/${SESSAO_DO_PAINEL}/decisions`)).corpo;
+    const esta = (await c.ler<DecisoesDaAba>(`/api/sessions/${PANEL_SESSION}/decisions`)).corpo;
     assert.match(esta.injection.text, /^Decisões vigentes em feat\/42-kanban-de-sessoes:\n/);
   });
 });
@@ -319,16 +319,16 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
     assert.equal(ok.status, 200);
     assert.equal((await c.decisoes.getDecision(d.id))?.state, 'vigente');
 
-    const outra = await sugeridaDe('sim-painel-painel-de-metricas');
+    const outra = await sugeridaDe('sim-panel-painel-de-metricas');
     for (const origin of ['http://evil.example', `https://${c.host}`, 'null', 'http://localhost:1', `http://${c.host}.exemplo.com`]) {
-      assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-painel-painel-de-metricas' }, { ...JSON_, origin })).status, 403, origin);
+      assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-panel-painel-de-metricas' }, { ...JSON_, origin })).status, 403, origin);
     }
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar?x=1`, { sessao: 'sim-painel-painel-de-metricas' }, nossa)).status, 403, 'query na URL');
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-painel-painel-de-metricas' }, { 'content-type': 'text/plain', origin: `http://${c.host}` })).status, 415);
+    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar?x=1`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 403, 'query na URL');
+    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-panel-painel-de-metricas' }, { 'content-type': 'text/plain', origin: `http://${c.host}` })).status, 415);
     assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'a_confirmar', 'nada mudou');
 
     // O promover também é da exceção; o resto das escritas e dos hooks, não.
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/promover`, { sessao: 'sim-painel-painel-de-metricas' }, nossa)).status, 200);
+    assert.equal((await c.postar(`/api/decisoes/${outra.id}/promover`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 200);
     assert.equal((await c.postar(`/api/decisoes/${outra.id}/apagar`, { sessao: 'x' }, nossa)).status, 403);
     const hook = JSON.stringify({ session_id: 'x', hook_event_name: 'SessionStart' });
     assert.equal((await c.postar('/api/hooks', hook, nossa)).status, 403);

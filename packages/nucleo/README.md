@@ -36,7 +36,8 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
-                                         # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
+                                         # o Detalhe da /ui: /ui/sessions/sim-detail-orders (pede permissão) e /ui/sessions/sim-panel-current
+                                         # os ids antigos (sim-painel-esta, sim-detalhe-pedidos…) abrem a mesma sessão até a fase 6 da #173 (src/simulator/legacy-ids.ts)
 npm run api -- --help
 npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
@@ -299,7 +300,7 @@ Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens 
 
 Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
 
-A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulator/project.ts`).
+A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`SimulatorProject`, em `src/simulator/project.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
@@ -334,7 +335,7 @@ Os nomes antigos (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`
 
 **Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `--speed` vezes mais rápido; as datas gravadas acompanham o relógio.
 
-O **modo caos** garante pelo menos uma sessão de cada falha:
+O **modo caos** garante pelo menos uma sessão de cada falha (o valor gravado em `metadata.roteiro`; no código, `stuck`, `error`, `abandonment`, `overflow` e `swarm`):
 
 | Roteiro | O que fica gravado |
 | --- | --- |
@@ -351,12 +352,12 @@ Tudo é sintético: projetos inventados sob `/simulacao/`, nenhum nome de pessoa
 Pelo código:
 
 ```ts
-import { simular } from '@ahrena-console/nucleo/simulator';
+import { simulate } from '@ahrena-console/nucleo/simulator';
 
-const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
+const summary = await simulate(storage, { seed: 42, chaos: true, mode: 'batch' });
 ```
 
-`gerarCenario()` devolve só o roteiro, sem gravar; `agora` e `esperar` são injetáveis para testes.
+`generateScenario()` devolve só o roteiro, sem gravar; `now` e `wait` são injetáveis para testes.
 
 ## Telemetria das máquinas
 

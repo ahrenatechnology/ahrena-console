@@ -11,25 +11,25 @@ import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { RepoFilesSource } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
-import { blobOid, criarGithubFalso, DADOS_DA_DEMO, DEMO_INSTRUCTION_FILES, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
+import { blobOid, createFakeGithub, DEMO_GITHUB_DATA, DEMO_INSTRUCTION_FILES, type FakeGithubData, type FakeRepo } from '../../src/simulator/fake-github.ts';
 
 const T0 = Date.parse('2026-10-20T12:00:00Z');
 const TOKEN = 'token-that-must-not-leak';
-const base: Omit<RepoFalso, 'dono' | 'nome'> = { privado: false, linguagem: 'TypeScript', permissao: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, ritmo: 1 };
+const base: Omit<FakeRepo, 'owner' | 'name'> = { isPrivate: false, language: 'TypeScript', permission: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, commitsPerWeek: 1 };
 
 const FULL = DEMO_INSTRUCTION_FILES['exemplo-labs/vitrine-demo'].files;
 const WARNINGS = DEMO_INSTRUCTION_FILES['exemplo-labs/motor-de-regras'];
 
-function data(files: Record<string, string> = FULL): DadosDoGithubFalso {
+function data(files: Record<string, string> = FULL): FakeGithubData {
   return {
     login: 'dev-sintetico',
-    organizacoes: ['org-a'],
-    esperandoReview: 0,
-    fechadasNaSemana: 0,
+    organizations: ['org-a'],
+    awaitingReview: 0,
+    closedThisWeek: 0,
     repos: [
-      { ...base, dono: 'org-a', nome: 'full', files },
-      { ...base, dono: 'org-a', nome: 'warnings', files: WARNINGS.files, truncatedTree: true },
-      { ...base, dono: 'org-a', nome: 'empty' },
+      { ...base, owner: 'org-a', name: 'full', files },
+      { ...base, owner: 'org-a', name: 'warnings', files: WARNINGS.files, truncatedTree: true },
+      { ...base, owner: 'org-a', name: 'empty' },
     ],
   };
 }
@@ -53,16 +53,16 @@ interface Setup {
 function setup({ token = TOKEN as string | (() => Promise<string>), noSource = false } = {}): Setup {
   const clock = { now: T0 };
   const now = () => clock.now;
-  let gh = criarGithubFalso(data(), { agora: now });
+  let gh = createFakeGithub(data(), { now: now });
   const all: string[] = [];
   const statuses: number[] = [];
   const mode = { current: 'ok' as Mode };
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     if (mode.current === 'down') throw new Error('rede fora');
     if (mode.current === 'no-blobs' && String(init?.body ?? '').includes('RepoBlobs')) throw new Error('lote de conteúdo fora');
-    const before = gh.chamadas.length;
+    const before = gh.calls.length;
     const r = await gh.fetch(input, init);
-    all.push(...gh.chamadas.slice(before));
+    all.push(...gh.calls.slice(before));
     statuses.push(r.status);
     return r;
   }) as typeof globalThis.fetch;
@@ -84,7 +84,7 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
     mode,
     changes: async () => (await cursor.wait(start, { timeoutMs: 0 })).changes,
     push: (files) => {
-      gh = criarGithubFalso(data(files), { agora: now });
+      gh = createFakeGithub(data(files), { now: now });
     },
     store,
   };
@@ -337,7 +337,7 @@ describe('#183 the Instructions tab, through the service', () => {
     const queue = new GithubCallQueue();
     let inFlight = 0;
     let max = 0;
-    const gh = criarGithubFalso(data());
+    const gh = createFakeGithub(data());
     const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       inFlight++;
       max = Math.max(max, inFlight);
@@ -444,7 +444,7 @@ describe('#183 the service as the core mounts it', () => {
       assert.deepEqual(complete.warnings, []);
       assert.deepEqual((await read('exemplo-labs/motor-de-regras')).warnings.map((w) => w.kind), ['truncated', 'invalid-settings', 'agents-not-imported', 'missing-import']);
       assert.equal((await read('dev-sintetico/blog-estatico')).empty, true);
-      assert.ok(DADOS_DA_DEMO.repos.some((r) => `${r.dono}/${r.nome}` === 'dev-sintetico/blog-estatico'), 'the empty case is a repository of the Repositories screen');
+      assert.ok(DEMO_GITHUB_DATA.repos.some((r) => `${r.owner}/${r.name}` === 'dev-sintetico/blog-estatico'), 'the empty case is a repository of the Repositories screen');
       assert.deepEqual(outside, []);
     } finally {
       globalThis.fetch = original;

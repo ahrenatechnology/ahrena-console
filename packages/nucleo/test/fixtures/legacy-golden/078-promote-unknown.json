@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/nao-existe/promover",
     "body": {
-      "sessao": "sim-painel-esta"
+      "sessao": "sim-panel-current"
     }
   },
   "status": 404,

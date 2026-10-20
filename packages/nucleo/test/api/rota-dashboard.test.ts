@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type ApiLocal } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
+import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { at, event } from '../fixtures.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
@@ -23,14 +23,14 @@ const frotaEm = (agora: () => number, fusoHorario = 'UTC') => new FleetReader({ 
 describe('montarDashboard com o cenário p1 do simulador', () => {
   test('os seis números', async () => {
     const agora = Date.now();
-    await semearCenariosDoPainel(storage, 'p1', agora);
+    await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(d.numbers.sessions, { total: 3, active: 1, waiting: 2, withError: 0 });
     // Só o principal da sessão que trabalha; os das que esperam você não contam.
     assert.deepEqual(d.numbers.agents, { active: 1, sessions: 1 });
     assert.deepEqual(d.numbers.subagents, { active: 1, sessions: 1 });
     let eventos = 0;
-    for (const id of [SESSAO_DO_PAINEL, 'sim-painel-motor-de-regras', 'sim-painel-app-receitas']) eventos += (await storage.listEvents(id, { limit: 500 })).items.length;
+    for (const id of [PANEL_SESSION, 'sim-panel-motor-de-regras', 'sim-panel-app-receitas']) eventos += (await storage.listEvents(id, { limit: 500 })).items.length;
     assert.deepEqual(d.numbers.events, { today: eventos, lastHour: eventos, total: eventos });
     assert.equal(d.numbers.cost.usd, 1.84);
     assert.equal(d.numbers.cost.days, 30);
@@ -38,14 +38,14 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
 
   test('os agentes: quem trabalha primeiro, com subagentes, turnos, plano e custo', async () => {
     const agora = Date.now();
-    await semearCenariosDoPainel(storage, 'p1', agora);
+    await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
       d.agents.map((a) => [a.session, a.status]),
       [
-        [SESSAO_DO_PAINEL, 'active'],
-        ['sim-painel-motor-de-regras', 'waiting'],
-        ['sim-painel-app-receitas', 'waiting'],
+        [PANEL_SESSION, 'active'],
+        ['sim-panel-motor-de-regras', 'waiting'],
+        ['sim-panel-app-receitas', 'waiting'],
       ],
     );
     const esta = d.agents[0]!;
@@ -69,7 +69,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
 
   test('a atividade recente: o pedido de permissão e a interrupção, mais novo primeiro', async () => {
     const agora = Date.now();
-    await semearCenariosDoPainel(storage, 'p1', agora);
+    await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
       d.activity.map((l) => [l.text, l.project, l.status]),
@@ -146,7 +146,7 @@ describe('GET /api/dashboard', () => {
 
   test('responde o dashboard quando o núcleo tem a frota', async () => {
     const agora = Date.now();
-    await semearCenariosDoPainel(storage, 'p1', agora);
+    await seedPanelScenario(storage, 'p1', agora);
     api = await subir(frotaEm(() => agora));
     const r = await fetch(`${api.url}/api/dashboard`);
     assert.equal(r.status, 200);

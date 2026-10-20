@@ -2,7 +2,7 @@
   "name": "panel",
   "request": {
     "method": "GET",
-    "path": "/api/painel/sim-painel-esta"
+    "path": "/api/painel/sim-panel-current"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
@@ -16,7 +16,7 @@
     },
     "geradoEm": "2026-10-20T15:00:00.000Z",
     "sessao": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "titulo": "Separar pagamentos em serviços",
       "modelo": "claude-opus-5-5",
       "iniciadaEm": "2026-10-20T14:32:00.000Z",
@@ -84,7 +84,7 @@
       "atualDono": {
         "tipo": "principal",
         "nome": null,
-        "agenteId": "sim-painel-esta:main"
+        "agenteId": "sim-panel-current:main"
       },
       "mudouEm": "2026-10-20T14:59:30.000Z",
       "passos": [
@@ -96,7 +96,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -107,7 +107,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -118,7 +118,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -129,7 +129,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -140,7 +140,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         },
         {
@@ -151,7 +151,7 @@
           "dono": {
             "tipo": "principal",
             "nome": null,
-            "agenteId": "sim-painel-esta:main"
+            "agenteId": "sim-panel-current:main"
           }
         }
       ]
@@ -202,7 +202,7 @@
       "ativos": 3,
       "itens": [
         {
-          "id": "sim-painel-esta:a2",
+          "id": "sim-panel-current:a2",
           "nome": "test-runner",
           "tarefa": "bateria",
           "status": "working",
@@ -212,7 +212,7 @@
           "onda": 9
         },
         {
-          "id": "sim-painel-esta:a1",
+          "id": "sim-panel-current:a1",
           "nome": "code-reviewer",
           "tarefa": "diff",
           "status": "working",
@@ -222,7 +222,7 @@
           "onda": 9
         },
         {
-          "id": "sim-painel-esta:a0",
+          "id": "sim-panel-current:a0",
           "nome": "Explore",
           "tarefa": "achar usos",
           "status": "working",
@@ -232,7 +232,7 @@
           "onda": 9
         },
         {
-          "id": "sim-painel-esta:a3",
+          "id": "sim-panel-current:a3",
           "nome": "Plan",
           "tarefa": "plano",
           "status": "completed",
@@ -245,7 +245,7 @@
     },
     "filhas": [
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "local": null,
         "titulo": "fila-de-tarefas",
         "estado": "waiting",
@@ -255,7 +255,7 @@
         "arquivada": false
       },
       {
-        "id": "sim-painel-catalogo-exemplo",
+        "id": "sim-panel-catalogo-exemplo",
         "local": null,
         "titulo": "catalogo-exemplo",
         "estado": "active",
@@ -265,7 +265,7 @@
         "arquivada": false
       },
       {
-        "id": "sim-painel-blog-estatico",
+        "id": "sim-panel-blog-estatico",
         "local": null,
         "titulo": "blog-estatico",
         "estado": "completed",
@@ -296,7 +296,7 @@
       ],
       "familia": [
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "nivel": "sua-vez",
           "porque": "sua-vez",
           "local": null,
@@ -319,7 +319,7 @@
       ],
       "maquina": [
         {
-          "id": "sim-detalhe-pedidos",
+          "id": "sim-detail-orders",
           "nivel": "precisa",
           "porque": "permissao",
           "local": null,
@@ -356,7 +356,7 @@
           }
         },
         {
-          "id": "sim-historico-relatorio-mensal",
+          "id": "sim-history-monthly-report",
           "nivel": "precisa",
           "porque": "erro",
           "local": null,
@@ -372,7 +372,7 @@
           "conta": null
         },
         {
-          "id": "sim-painel-fila-de-tarefas",
+          "id": "sim-panel-fila-de-tarefas",
           "nivel": "sua-vez",
           "porque": "sua-vez",
           "local": null,

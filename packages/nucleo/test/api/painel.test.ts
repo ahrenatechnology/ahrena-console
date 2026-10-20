@@ -20,7 +20,7 @@ import {
   type Painel,
 } from '../../src/api/index.ts';
 import type { WorkSource } from '../../src/github/source.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, type CenarioDoPainel } from '../../src/simulator/panel.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, type PanelScenario } from '../../src/simulator/panel.ts';
 import { parseLine } from '../../src/ingest/history/transcript.ts';
 import { ingestHook } from '../../src/ingest/hooks/index.ts';
 import { T0, at, event, session } from '../fixtures.ts';
@@ -28,11 +28,11 @@ import type { SessionPlan } from '../../src/plan/model.ts';
 
 const AGORA = Date.parse(T0);
 
-async function cenario(nome: CenarioDoPainel, extra: { local?: string; conta?: string; org?: string; modelo?: string; cwd?: string } = {}) {
+async function cenario(nome: PanelScenario, extra: { local?: string; conta?: string; org?: string; modelo?: string; cwd?: string } = {}) {
   const storage = openSqliteStorage({ path: ':memory:' });
-  await semearCenariosDoPainel(storage, nome, AGORA);
-  const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
+  await seedPanelScenario(storage, nome, AGORA);
+  const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
+  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
   // O primeiro pedido dispara o trabalho por trás; o segundo já o traz.
   await montador.montar({ sessionId: 'qualquer', ...extra });
   await trabalho.esperar();
@@ -94,7 +94,7 @@ describe('trabalho pelo branch', () => {
 
   test('o pedido não espera o GitHub; a falha vira aviso e guarda o último dado', async () => {
     let falhar = false;
-    const base = new FonteDeTrabalhoDoSimulador();
+    const base = new SimulatorWorkSource();
     const fonte: WorkSource = {
       listShallow: () => base.listShallow(),
       nodes: (k) => (falhar ? Promise.reject(new Error('fora do ar')) : base.nodes(k)),
@@ -102,9 +102,9 @@ describe('trabalho pelo branch', () => {
       detail: (k) => base.detail(k),
     };
     const storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p5', AGORA);
+    await seedPanelScenario(storage, 'p5', AGORA);
     let agora = AGORA;
-    const t = new TrabalhoPorBranch({ fonte, git: FonteDeTrabalhoDoSimulador.git, agora: () => agora });
+    const t = new TrabalhoPorBranch({ fonte, git: SimulatorWorkSource.git, agora: () => agora });
     assert.equal(t.ler('/simulacao/x', null), null, 'a primeira leitura não espera');
     await t.esperar();
     const lido = t.ler('/simulacao/x', null);
@@ -133,7 +133,7 @@ describe('painel por cenário (P1 a P7)', () => {
     assert.deepEqual(p.background, { total: 2, first: 'npm run dev' });
     // O plano atual do histórico (#131): dois anteriores, um concluído e um abandonado.
     const { steps, ...plano } = p.plan!;
-    assert.deepEqual(plano, { done: 3, total: 6, current: 'Rodar a bateria', next: 'Abrir o PR', remaining: 1, currentOwner: { type: 'main', name: null, agentId: `${SESSAO_DO_PAINEL}:main` }, changedAt: at(-0.5) });
+    assert.deepEqual(plano, { done: 3, total: 6, current: 'Rodar a bateria', next: 'Abrir o PR', remaining: 1, currentOwner: { type: 'main', name: null, agentId: `${PANEL_SESSION}:main` }, changedAt: at(-0.5) });
     assert.deepEqual(
       p.plans.map((x) => [x.number, x.outcome, x.summary, `${x.done}/${x.total}`, x.current, x.end === null]),
       [
@@ -376,14 +376,14 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
     const { storage, montador } = await cenario('p4');
     // Banco de antes do histórico (#131): o card lê o plano gravado.
     storage.db.exec('DELETE FROM session_plan_history');
-    const sub = (await storage.listAgents(SESSAO_DO_PAINEL)).find((a) => a.type === 'subagent')!;
+    const sub = (await storage.listAgents(PANEL_SESSION)).find((a) => a.type === 'subagent')!;
     const passo = (id: string, text: string, status: 'pending' | 'in_progress' | 'completed', owner: SessionPlan['steps'][number]['owner']) =>
       ({ id, text, activeText: null, status, owner, updatedAt: at(1) });
     await storage.putPlan({
-      sessionId: SESSAO_DO_PAINEL,
+      sessionId: PANEL_SESSION,
       source: 'Task',
       steps: [
-        passo('1', 'Mapear', 'completed', { kind: 'main', agentId: `${SESSAO_DO_PAINEL}:main`, name: null }),
+        passo('1', 'Mapear', 'completed', { kind: 'main', agentId: `${PANEL_SESSION}:main`, name: null }),
         passo('2', 'Extrair a cobrança', 'in_progress', { kind: 'subagent', agentId: sub.id, name: null }),
         passo('3', 'Revisar', 'pending', { kind: 'session', agentId: null, name: 'revisao' }),
         passo('4', 'Abrir o PR', 'pending', { kind: 'subagent', agentId: null, name: 'revisor' }),
@@ -412,7 +412,7 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
   test('plano gravado vazio (depois do /clear) é "sem plano"', async () => {
     const { storage, montador } = await cenario('p1');
     storage.db.exec('DELETE FROM session_plan_history');
-    await storage.putPlan({ sessionId: SESSAO_DO_PAINEL, source: 'TodoWrite', steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3), metadata: {} });
+    await storage.putPlan({ sessionId: PANEL_SESSION, source: 'TodoWrite', steps: [], done: 0, total: 0, currentStepId: null, changedAt: at(3), metadata: {} });
     assert.equal((await montador.montar({ sessionId: 'qualquer' })).plan, null);
     await storage.close();
   });
@@ -421,7 +421,7 @@ describe('card Plano pelo plano gravado (item 1.9)', () => {
 describe('histórico dos planos no painel (#131)', () => {
   test('depois do /clear não há plano atual, mas os anteriores continuam, do mais recente para o mais antigo', async () => {
     const { storage, montador } = await cenario('p1');
-    await ingestHook(storage, { session_id: SESSAO_DO_PAINEL, hook_event_name: 'SessionStart', source: 'clear' }, { receivedAt: new Date(T0).toISOString() });
+    await ingestHook(storage, { session_id: PANEL_SESSION, hook_event_name: 'SessionStart', source: 'clear' }, { receivedAt: new Date(T0).toISOString() });
     const p = await montador.montar({ sessionId: 'qualquer' });
     assert.equal(p.plan, null);
     assert.deepEqual(p.plans.map((x) => [x.number, x.outcome, `${x.done}/${x.total}`]), [[3, 'abandoned', '3/6'], [2, 'abandoned', '1/4'], [1, 'completed', '3/3']]);

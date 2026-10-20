@@ -6,7 +6,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
@@ -71,7 +71,7 @@ describe('montarAtencao', () => {
   });
 
   test('cenário do simulador: os números batem com o "precisam de você" do painel', async () => {
-    await semearCenariosDoPainel(storage, 'p3', NOW);
+    await seedPanelScenario(storage, 'p3', NOW);
     const r = await montarAtencao(frota, null);
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
     const painel = await montador.montar({ sessionId: 'nenhuma' });
@@ -84,7 +84,7 @@ describe('montarAtencao', () => {
   });
 
   test('A2 do wireframe: a permissão vem antes do erro mais antigo, e a sua vez por último', async () => {
-    await semearCenariosDoPainel(storage, 'p7', NOW);
+    await seedPanelScenario(storage, 'p7', NOW);
     const r = await montarAtencao(frota, null);
     assert.deepEqual(
       r.items.map((i) => i.reason),
@@ -104,7 +104,7 @@ describe('GET /api/attention', () => {
   let api: ApiLocal;
   let mudancas: ChangeCursor;
   beforeEach(async () => {
-    await semearCenariosDoPainel(storage, 'p3', NOW);
+    await seedPanelScenario(storage, 'p3', NOW);
     mudancas = new ChangeCursor();
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, frota, mudancas });

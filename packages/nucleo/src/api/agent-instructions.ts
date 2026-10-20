@@ -50,7 +50,7 @@ import { isInterestingPath, MAX_TREE_PATHS, RepoFilesSource, validPath, type Blo
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { criarGithubFalso, DADOS_DA_DEMO } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA } from '../simulator/fake-github.ts';
 
 export const AGENT_INSTRUCTIONS_ROUTE = '/api/agent-instructions';
 
@@ -443,7 +443,7 @@ export interface CoreAgentInstructionsOptions {
 export function createCoreAgentInstructions({ demo, noGithub, cache, changes, queue, log }: CoreAgentInstructionsOptions): { service: AgentInstructionsService; route: AgentInstructionsRoute } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const transport = demo
-    ? new GithubReposSource({ token: 'demo', fetch: criarGithubFalso(DADOS_DA_DEMO, { atrasoMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
+    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
     : noGithub
       ? null
       : new GithubReposSource();

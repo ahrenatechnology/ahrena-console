@@ -10,7 +10,7 @@ import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../
 import { PROJECT_ERROR_CODES, quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/projeto.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { createGithubProject, GithubProject, toProjectCard, type RawProjectItem } from '../../src/github/project.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador, RAIAS_DO_SIMULADOR } from '../../src/simulator/project.ts';
+import { SIMULATOR_PROJECT, SimulatorProject, SIMULATOR_LANES } from '../../src/simulator/project.ts';
 import { clock, replayFetch, type Recorded } from '../github/helpers.ts';
 
 const recordedBoard: Recorded[] = JSON.parse(readFileSync(new URL('../github/fixtures/project.json', import.meta.url), 'utf8'));
@@ -101,8 +101,8 @@ function doGithub(responses: Recorded[] = recordedBoard, fetch = replayFetch(res
 }
 
 function doSimulador() {
-  const fonte = new ProjetoDoSimulador(AGORA);
-  const kanban = new GithubProject({ source: fonte, cache: new GithubCache({ store: new MemoryCacheStore() }), project: PROJECT_DO_SIMULADOR });
+  const fonte = new SimulatorProject(AGORA);
+  const kanban = new GithubProject({ source: fonte, cache: new GithubCache({ store: new MemoryCacheStore() }), project: SIMULATOR_PROJECT });
   return { fonte, kanban };
 }
 
@@ -323,7 +323,7 @@ describe('POST /api/projeto/mover', () => {
     try {
       const antes = (await pedir(s.api, '/api/projeto')).json;
       const c92 = (antes.raias as RaiaAntiga[]).flatMap((l) => l.cards).find((c) => c.numero === 92)!;
-      const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
+      const done = SIMULATOR_LANES.find((r) => r.name === 'Done')!.id;
       const r = await mover(s.api, { itemId: c92.itemId, optionId: done });
       assert.equal(r.status, 200);
       assert.deepEqual(r.json.movido, { itemId: c92.itemId, de: c92.raiaId, para: done });
@@ -332,7 +332,7 @@ describe('POST /api/projeto/mover', () => {
       assert.equal(raiaDe((await pedir(s.api, '/api/projeto')).json, c92.itemId), 'Done', 'o GET seguinte já vê');
       const desfazer = await mover(s.api, { itemId: c92.itemId, optionId: r.json.movido.de });
       assert.equal(raiaDe(desfazer.json.quadro, c92.itemId), 'In Review');
-      assert.deepEqual(fonte.chamadas, { board: 1, move: 2 });
+      assert.deepEqual(fonte.calls, { board: 1, move: 2 });
     } finally {
       await s.fechar();
     }
@@ -404,7 +404,7 @@ describe('origem do mover (decisão 0003)', () => {
   test('a própria /ui move com Origin igual a http://<Host>; outro Origin ou outro Host dá 403', async () => {
     const { kanban } = doSimulador();
     const s = await subir({ kanban, fonte: 'demo' });
-    const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
+    const done = SIMULATOR_LANES.find((r) => r.name === 'Done')!.id;
     const corpo = { itemId: 'PVTI_simulado92', optionId: done };
     try {
       const mesma = await mover(s.api, corpo, { ...JSON_CT, origin: `http://${s.host}` });
@@ -435,13 +435,13 @@ describe('origem do mover (decisão 0003)', () => {
     const s = await subir({ kanban, fonte: 'demo' });
     const origin = `http://${s.host}`;
     try {
-      const corpo = { itemId: 'PVTI_simulado92', optionId: RAIAS_DO_SIMULADOR[0].id };
+      const corpo = { itemId: 'PVTI_simulado92', optionId: SIMULATOR_LANES[0].id };
       assert.equal((await mover(s.api, corpo, { 'content-type': 'text/plain', origin })).status, 415);
       assert.equal((await mover(s.api, corpo, { origin })).status, 415);
       assert.equal((await mover(s.api, corpo, { 'content-type': 'application/x-www-form-urlencoded' })).status, 415);
       const grande = JSON.stringify({ ...corpo, sobra: 'x'.repeat(5000) });
       assert.equal((await mover(s.api, grande, { ...JSON_CT, origin })).status, 413);
-      assert.equal(fonte.chamadas.move, 0);
+      assert.equal(fonte.calls.move, 0);
     } finally {
       await s.fechar();
     }
@@ -461,7 +461,7 @@ describe('origem do mover (decisão 0003)', () => {
         req.write('{"sobra":"' + 'x'.repeat(5000)); // e nunca chama end()
       });
       assert.equal(status, 413);
-      assert.equal(fonte.chamadas.move, 0);
+      assert.equal(fonte.calls.move, 0);
     } finally {
       await s.fechar();
     }
@@ -499,7 +499,7 @@ describe('o kanban que a API usa', () => {
   test('GithubProject cumpre a porta da API', () => {
     const { kanban } = doSimulador();
     const k: KanbanDoProjeto = kanban;
-    assert.equal(k.project.owner, PROJECT_DO_SIMULADOR.owner);
+    assert.equal(k.project.owner, SIMULATOR_PROJECT.owner);
     assert.equal(k.pauseLeftMs(), 0);
   });
 });
@@ -522,13 +522,13 @@ describe('GET /api/project and POST /api/project/move: the English body', () => 
       assert.deepEqual(pills, [[42, 'running', null], [81, 'ok', null], [92, 'ok', 'pending'], [64, 'failed', 'changes-requested'], [40, 'ok', 'approved'], [82, 'ok', 'approved']]);
 
       const c92 = q.lanes.flatMap((l) => l.cards).find((c) => c.number === 92)!;
-      const done = RAIAS_DO_SIMULADOR.find((r) => r.name === 'Done')!.id;
+      const done = SIMULATOR_LANES.find((r) => r.name === 'Done')!.id;
       const r = await pedir(s.api, '/api/project/move', { method: 'POST', headers: JSON_CT, corpo: JSON.stringify({ itemId: c92.itemId, optionId: done }) });
       assert.equal(r.status, 200);
       assert.deepEqual(Object.keys(r.json), ['board', 'moved']);
       assert.deepEqual(r.json.moved, { itemId: c92.itemId, from: c92.laneId, to: done });
       assert.equal((r.json.board as QuadroDoProjeto).lanes.find((l) => l.cards.some((c) => c.itemId === c92.itemId))?.name, 'Done');
-      assert.deepEqual(fonte.chamadas, { board: 1, move: 1 });
+      assert.deepEqual(fonte.calls, { board: 1, move: 1 });
     } finally {
       await s.fechar();
     }

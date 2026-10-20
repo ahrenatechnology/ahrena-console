@@ -7,7 +7,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
+import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 
 // ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
@@ -150,7 +150,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
   let api: ApiLocal;
   before(async () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(sqlite, 'p1');
+    await seedPanelScenario(sqlite, 'p1');
     const contas = new Contas({ storage: sqlite, arquivo: null });
     const frota = new FleetReader({ storage: sqlite, accounts: contas, cacheMs: 0, costMs: 0 });
     api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, frota });
@@ -195,19 +195,19 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       const inbox = comClasse(area, 'inbox')[0]!;
       assert.match(inbox.textContent, /2 precisam de você/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
+      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
       assert.equal(contadores.dashboard, 2);
 
       const agentes = comClasse(area, 'ac');
       assert.equal(agentes.length, 3);
-      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessions/${SESSAO_DO_PAINEL}`);
+      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessions/${PANEL_SESSION}`);
       assert.match(agentes[0]!.textContent, /Agente principal · Kanban de sessões no artefato.*ahrena-demo · 2 subagentes · 18 turnos.*Ativa/);
       assert.match(agentes[0]!.textContent, /Opus 5\.5.*~US\$ 1,84.*Rodar a bateria/);
       assert.ok(agentes[1]!.classes.includes('st-waiting'));
 
       const linhas = comClasse(area, 'row');
-      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
+      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
       assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
       assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
     } finally {

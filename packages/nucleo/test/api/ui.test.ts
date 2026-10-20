@@ -11,7 +11,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { withChanges, ChangeCursor } from '../../src/changes/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
+import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: idem
@@ -58,7 +58,7 @@ describe('/ui no núcleo', () => {
     cursor = new ChangeCursor({ batchMs: 0, minIntervalMs: 0 });
     sqlite = openSqliteStorage({ path: ':memory:' });
     const storage = withChanges(sqlite, cursor);
-    await semearCenariosDoPainel(storage, 'p1');
+    await seedPanelScenario(storage, 'p1');
     const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor });
@@ -71,7 +71,7 @@ describe('/ui no núcleo', () => {
 
   test('/ui, /ui/sessions and /ui/sessions/<id> (and the old /ui/sessoes/<id>) return the same page, with the content policy', async () => {
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
-    for (const caminho of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${SESSAO_DO_PAINEL}`, '/ui/sessoes', `/ui/sessoes/${SESSAO_DO_PAINEL}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
+    for (const caminho of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${PANEL_SESSION}`, '/ui/sessoes', `/ui/sessoes/${PANEL_SESSION}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
       const r = await pedir(api.url, caminho);
       assert.equal(r.status, 200, caminho);
       assert.match(String(r.headers['content-type']), /^text\/html/);
@@ -175,8 +175,8 @@ describe('/ui no núcleo', () => {
     assert.equal(overview.name, 'ahrena-console');
     // `nome` stays beside `name` until phase 6 of #173: the installed app reads it.
     assert.equal(overview.nome, 'ahrena-console');
-    const painel = await read(`/api/painel/${SESSAO_DO_PAINEL}`);
-    assert.ok(JSON.stringify(painel).includes(SESSAO_DO_PAINEL), 'o painel da sessão do simulador');
+    const painel = await read(`/api/painel/${PANEL_SESSION}`);
+    assert.ok(JSON.stringify(painel).includes(PANEL_SESSION), 'o painel da sessão do simulador');
 
     await assert.rejects(read('/api/nao-existe'), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 404);
     await assert.rejects(read('/ui'), /rota fora da API/);

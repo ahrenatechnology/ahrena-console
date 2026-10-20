@@ -3,7 +3,7 @@
   "request": {
     "method": "POST",
     "path": "/api/decisoes/{decision}/confirmar",
-    "body": "{\"sessao\":\"sim-painel-esta\"}"
+    "body": "{\"sessao\":\"sim-panel-current\"}"
   },
   "status": 415,
   "contentType": "application/json; charset=utf-8",

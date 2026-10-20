@@ -6,7 +6,7 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { atencaoDe } from '../../src/api/atencao.ts';
 import { Contas, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
 import { aplicarEvento, resumoVazio } from '../../src/api/resumo.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { T0, at, event } from '../fixtures.ts';
 
 const S = 'sess-atencao';
@@ -67,9 +67,9 @@ describe('#140 CA3: PRs aguardando aprovação', () => {
     const montar = async (nome: 'p1' | 'p3') => {
       const storage = openSqliteStorage({ path: ':memory:' });
       const agora = Date.parse(T0);
-      await semearCenariosDoPainel(storage, nome, agora);
-      const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => agora });
-      const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => agora, apelido: () => SESSAO_DO_PAINEL });
+      await seedPanelScenario(storage, nome, agora);
+      const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => agora });
+      const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => agora, apelido: () => PANEL_SESSION });
       await montador.montar({ sessionId: 'qualquer' });
       await trabalho.esperar();
       const p = await montador.montar({ sessionId: 'qualquer' });
@@ -81,7 +81,7 @@ describe('#140 CA3: PRs aguardando aprovação', () => {
     assert.equal(p3.prs.total, 1);
     assert.equal(p3.prs.items[0]?.number, 91);
     assert.match(p3.prs.items[0]!.url, /^https:\/\/github\.com\/.+\/pull\/91$/);
-    assert.equal(p3.prs.items[0]?.session.id, SESSAO_DO_PAINEL);
+    assert.equal(p3.prs.items[0]?.session.id, PANEL_SESSION);
     // P1: o PR #78 é rascunho: não aguarda aprovação.
     assert.equal((await montar('p1')).prs.total, 0);
   });

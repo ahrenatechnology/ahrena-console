@@ -4,20 +4,20 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { BLOB_BATCH, blobsQuery, RepoFilesSource, validPath } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
-import { criarGithubFalso, blobOid, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulator/fake-github.ts';
+import { createFakeGithub, blobOid, type FakeGithubData, type FakeRepo } from '../../src/simulator/fake-github.ts';
 
-const base: Omit<RepoFalso, 'dono' | 'nome'> = { privado: false, linguagem: 'TypeScript', permissao: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, ritmo: 1 };
+const base: Omit<FakeRepo, 'owner' | 'name'> = { isPrivate: false, language: 'TypeScript', permission: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, commitsPerWeek: 1 };
 
-function setup(files: Record<string, string>, extra: Partial<RepoFalso> = {}) {
-  const data: DadosDoGithubFalso = { login: 'dev-sintetico', organizacoes: ['org-a'], esperandoReview: 0, fechadasNaSemana: 0, repos: [{ ...base, dono: 'org-a', nome: 'repo', files, ...extra }] };
-  const gh = criarGithubFalso(data);
+function setup(files: Record<string, string>, extra: Partial<FakeRepo> = {}) {
+  const data: FakeGithubData = { login: 'dev-sintetico', organizations: ['org-a'], awaitingReview: 0, closedThisWeek: 0, repos: [{ ...base, owner: 'org-a', name: 'repo', files, ...extra }] };
+  const gh = createFakeGithub(data);
   const bodies: string[] = [];
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     if (init?.body) bodies.push(String(init.body));
     return gh.fetch(input, init);
   }) as typeof globalThis.fetch;
   const source = new RepoFilesSource(new GithubReposSource({ token: 'test-token', fetch, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid' }));
-  return { source, calls: gh.chamadas, bodies };
+  return { source, calls: gh.calls, bodies };
 }
 
 const FILES = {
