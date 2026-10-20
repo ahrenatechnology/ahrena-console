@@ -8,9 +8,6 @@
 // its own installation's core, else the oldest live one; with none of its installation live, it may
 // start its own with `--parent` on itself, and that core exits when the bridge and every registered
 // client exit.
-//
-// Old option names (`--porta`, `--sem-subir`) are still accepted until phase 6 of #173; the new
-// one wins if both are given.
 
 import { parseArgs } from 'node:util';
 import { parseInstallation, resolveDataDir, resolvePort, type Installation } from '../owner/installation.ts';
@@ -38,7 +35,6 @@ registered client exit.
 
 Reads JSON-RPC from stdin and answers on stdout, one message per line. Without a core up, the tool
 list answers and every call says how to start one.
-The old names (--porta, --sem-subir) are accepted until phase 6.
 `;
 
 const { values: o } = parseArgs({
@@ -48,9 +44,6 @@ const { values: o } = parseArgs({
     port: { type: 'string' },
     'no-start': { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
-    // Old names, accepted until phase 6.
-    porta: { type: 'string' },
-    'sem-subir': { type: 'boolean', default: false },
   },
 });
 if (o.help) {
@@ -66,8 +59,8 @@ const log = (m: string): void => {
 };
 const url = (p: number) => `http://127.0.0.1:${p}${MCP_PATH}`;
 
-const portOption = o.port ?? o.porta;
-const noStart = o['no-start'] || o['sem-subir'];
+const portOption = o.port;
+const noStart = o['no-start'];
 let installation: Installation = 'dev';
 let startPort = 0;
 try {
@@ -77,7 +70,7 @@ try {
   fail((e as Error).message);
 }
 const fixedPort = portOption === undefined ? null : Number(portOption);
-if (fixedPort !== null && (!Number.isInteger(fixedPort) || fixedPort < 1 || fixedPort > 65535)) fail(`invalid ${o.port !== undefined ? '--port' : '--porta'}: ${portOption}`);
+if (fixedPort !== null && (!Number.isInteger(fixedPort) || fixedPort < 1 || fixedPort > 65535)) fail(`invalid --port: ${portOption}`);
 
 const resolver =
   fixedPort === null
@@ -98,10 +91,10 @@ void resolver?.target().catch((e) => log(`registry: ${(e as Error).message}`));
 // Shown to the model in the tool error: pt-BR, with the commands as they are on screen.
 const howToStart = (): string =>
   fixedPort !== null
-    ? `O núcleo não respondeu em ${url(fixedPort)}. Suba com \`npm run api -- --porta ${fixedPort}\` em packages/nucleo e chame de novo.`
+    ? `O núcleo não respondeu em ${url(fixedPort)}. Suba com \`npm run api -- --port ${fixedPort}\` em packages/nucleo e chame de novo.`
     : resolver?.isStarting()
       ? 'Nenhum núcleo do Ahrena Console respondeu ainda; a ponte está subindo um. Chame de novo em alguns segundos.'
-      : 'Nenhum núcleo do Ahrena Console respondeu. Suba com `npm run nucleo -- subir` em packages/nucleo e chame de novo.';
+      : 'Nenhum núcleo do Ahrena Console respondeu. Suba com `npm run core -- start` em packages/nucleo e chame de novo.';
 
 /** Thrown by the bridge's `withoutCore`: the core did not answer, try the next one. */
 class Unreachable extends Error {}

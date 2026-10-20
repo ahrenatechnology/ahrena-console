@@ -276,7 +276,7 @@ describe('GET /api/project', () => {
     }
   });
 
-  test('sem projeto (--sem-github): 503 off nas duas rotas', async () => {
+  test('sem projeto (--no-github): 503 off nas duas rotas', async () => {
     for (const projeto of [undefined, { kanban: null, fonte: 'github' as const }]) {
       const s = await subir(projeto);
       try {

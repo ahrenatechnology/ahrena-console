@@ -1,1 +1,1 @@
-O dono único mudou para [src/owner](../owner/README.md); esta página fica até a fase 6 da #173, porque `plugins/ahrena-console/README.md` aponta para cá.
+O dono único mudou para [src/owner](../owner/README.md). Esta página fica só porque `plugins/ahrena-console/README.md` (do mod, que tem dono próprio) ainda aponta para cá; o atalho `src/dono/cli.ts` saiu na fase 6 da #173.

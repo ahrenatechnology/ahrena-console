@@ -192,8 +192,8 @@ export class GithubDevConsoleSource implements DevConsoleSource {
   }
 }
 
-/** The `--sem-github` source: every read fails and the Dev Console serves the cache with `stale: true`. The reason stays pt-BR: the screen shows it. */
-export const disabledDevConsoleSource = (reason = 'GitHub desligado (--sem-github)'): DevConsoleSource => {
+/** The `--no-github` source: every read fails and the Dev Console serves the cache with `stale: true`. The reason stays pt-BR: the screen shows it. */
+export const disabledDevConsoleSource = (reason = 'GitHub desligado (--no-github)'): DevConsoleSource => {
   const fail = () => Promise.reject(new Error(reason));
   return { pullRequests: fail, issues: fail, branches: fail };
 };

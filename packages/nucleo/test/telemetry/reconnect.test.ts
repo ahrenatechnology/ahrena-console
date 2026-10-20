@@ -195,9 +195,9 @@ describe('#244 the reconnect runner', () => {
     assert.deepEqual(await r.cancel('nao-existe'), { kind: 'unknown' });
   });
 
-  test('#244 the command sees the environment without AHRENA_CONSOLE_* and the old names, runs in the home folder, stdin closed', async () => {
+  test('#244 the command sees the environment without AHRENA_CONSOLE_*, runs in the home folder, stdin closed', async () => {
     const out = join(dir, 'env.json');
-    const env = { ...process.env, AHRENA_CONSOLE_PORT: '1', AHRENA_CONSOLE_DATA_DIR: '/x', AHRENA_NUCLEO_PORTA: '2', AHRENA_DADOS_DIR: '/y', AHRENA_NODE: '/z', EXAMPLE_KEEP: 'yes' };
+    const env = { ...process.env, AHRENA_CONSOLE_PORT: '1', AHRENA_CONSOLE_DATA_DIR: '/x', EXAMPLE_KEEP: 'yes' };
     const { r } = runner({ 'ws-exemplo': fake('env', out) }, { env: reconnectEnv(env) });
     await r.start('ws-exemplo', 'ui');
     await r.exited('ws-exemplo');
@@ -208,19 +208,12 @@ describe('#244 the reconnect runner', () => {
     assert.notEqual(seen.stdinTty, true);
   });
 
-  test('#244 reconnectEnv drops every AHRENA_CONSOLE_* and the legacy names, keeps the rest', () => {
+  test('#244 reconnectEnv drops every AHRENA_CONSOLE_*, keeps the rest', () => {
     const env = reconnectEnv({
       PATH: '/usr/bin',
       HOME: '/home/example',
       AHRENA_CONSOLE_CORE_PORT: '1',
       AHRENA_CONSOLE_ANYTHING_NEW: '1',
-      AHRENA_NUCLEO_DIR: '1',
-      AHRENA_NUCLEO_PORTA: '1',
-      AHRENA_NUCLEO_ENTRY: '1',
-      AHRENA_DADOS_DIR: '1',
-      AHRENA_NODE: '1',
-      AHRENA_ORIGEM: '1',
-      AHRENA_ABRIR_MENU: '1',
     });
     assert.deepEqual(env, { PATH: '/usr/bin', HOME: '/home/example' });
   });

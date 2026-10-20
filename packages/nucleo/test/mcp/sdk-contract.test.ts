@@ -98,14 +98,13 @@ test('stdio without the core: the official client connects, lists the tools and 
   await storage.close();
 
   const client = new Client({ name: 'contrato', version: '0.0.0' });
-  // The old option name (`--porta`) is still accepted until phase 6 of #173.
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: ['--disable-warning=ExperimentalWarning', CLI, '--porta', port], stderr: 'ignore' }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: ['--disable-warning=ExperimentalWarning', CLI, '--port', port], stderr: 'ignore' }));
   try {
     const { tools } = await client.listTools();
     assert.equal(tools.length, 2);
     const r = await client.callTool({ name: 'sessions_needing_attention', arguments: {} });
     assert.equal(r.isError, true);
-    assert.match((r.content as { text: string }[])[0].text, /npm run api -- --porta/);
+    assert.match((r.content as { text: string }[])[0].text, /npm run api -- --port/);
   } finally {
     await client.close();
   }

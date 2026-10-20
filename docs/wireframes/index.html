@@ -1833,7 +1833,7 @@ const workstationOfflineScreen = () => `${workstationHeader('off', 'última leit
   <div class="tm-faded">${workstationBody(1100)}</div>`
 const machineStatesScreen = () => `${cab('server', 'Workstation', 'Os outros estados de uma máquina remota')}
   <div class="tm-states" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/dono/cli.ts subir</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
+    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/owner/cli.ts start</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
     <div class="cartao vazio" style="min-height:300px"><span class="ic">${ic('plug')}</span><b>Nenhuma máquina remota</b><span>Sem configuração, só esta máquina aparece. Para acompanhar outra, rode o núcleo nela, encaminhe a 4720 de lá por um túnel e grave:</span><span class="tm-config">~/.ahrena-console/machines.json
 { "machines": [{ "id": "workstation",
   "label": "Workstation", "port": 14720 }] }</span></div>

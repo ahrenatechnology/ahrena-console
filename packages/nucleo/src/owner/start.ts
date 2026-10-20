@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VERSAO_DA_API } from '../api/version.ts';
+import { API_VERSION } from '../api/version.ts';
 import { registerClient } from './clients.ts';
 import { codeCommit, isOlderCommit } from './commit.ts';
 import { codeWarning, examine, planStart } from './owner.ts';
@@ -16,23 +16,24 @@ import { prepareDir, type Lock } from './lock.ts';
 import { DEFAULT_INSTALLATION, resolveDataDir, type Installation } from './installation.ts';
 
 /**
- * The `--json` line of `start` and `status`. Its keys and values stay in Portuguese on purpose: the
- * desktop app parses them (`estado`, `porta`, `subiu`, `motivo`), and `motivo`/`aviso` show on screen.
+ * The `--json` line of `start` and `status`, in English since phase 6 of #173 (the desktop app reads
+ * `state`, `port`, `pid`, `started`, `reason`, `installation` and `dataDir` since 0.0.5). `reason` and
+ * `warning` are pt-BR: they show on screen.
  */
 export interface StartOutput {
-  estado: 'de-pe' | 'parado';
+  state: 'up' | 'stopped';
   url?: string;
-  porta?: number;
+  port?: number;
   pid?: number | null;
-  versao?: string;
+  version?: string;
   commit?: string | null;
-  inicio?: string;
-  pai?: number | null;
+  startedAt?: string;
+  parent?: number | null;
   /** `true` if this call started the core; `false` if it adopted one already up. */
-  subiu?: boolean;
-  aviso?: string;
-  motivo?: string;
-  /** Since #221: the installation (`app`, `dev`, `mcpb`) and its data folder. New keys, in English. */
+  started?: boolean;
+  warning?: string;
+  reason?: string;
+  /** Since #221: the installation (`app`, `dev`, `mcpb`) and its data folder. */
   installation?: Installation;
   dataDir?: string;
 }
@@ -54,13 +55,13 @@ export interface StartOptions {
 
 /** The output for a core that is up, from its lock. */
 export const runningOutput = (t: Lock, extra: Partial<StartOutput> = {}): StartOutput => ({
-  estado: 'de-pe',
+  state: 'up',
   url: `http://127.0.0.1:${t.port}`,
-  porta: t.port,
+  port: t.port,
   pid: t.pid,
-  versao: t.version,
-  inicio: t.startedAt,
-  pai: t.parent,
+  version: t.version,
+  startedAt: t.startedAt,
+  parent: t.parent,
   ...extra,
 });
 
@@ -68,17 +69,17 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
   const installation = o.installation ?? DEFAULT_INSTALLATION;
   const dir = o.dir ?? resolveDataDir({ installation });
   const parent = o.parent ?? null;
-  const code = { version: VERSAO_DA_API, commit: codeCommit(), isOlderCommit };
+  const code = { version: API_VERSION, commit: codeCommit(), isOlderCommit };
   const where = { installation, dataDir: dir };
   const adopted = (s: StartOutput): StartOutput => {
     if (parent !== null) registerClient(parent, dir);
-    if (s.aviso) o.log?.(`warning: ${s.aviso}`);
+    if (s.warning) o.log?.(`warning: ${s.warning}`);
     return { ...s, ...where };
   };
 
   const plan = await planStart({ dir, ...code, replace: o.replace, log: o.log });
   if (plan.action === 'adopt') {
-    return adopted(runningOutput(plan.lock, { subiu: false, commit: plan.view.commit, ...(plan.warning ? { aviso: plan.warning } : {}) }));
+    return adopted(runningOutput(plan.lock, { started: false, commit: plan.view.commit, ...(plan.warning ? { warning: plan.warning } : {}) }));
   }
 
   // The core runs on its own, without holding the caller or the terminal.
@@ -110,26 +111,26 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
     const ex = await examine(dir);
     if (ex.state === 'alive') {
       const started = ex.lock.pid === child.pid;
-      const extra = { subiu: started, commit: ex.view.commit };
+      const extra = { started, commit: ex.view.commit };
       // Another one started at the same time and won the port: this call adopts, as the child did.
       if (started) return runningOutput(ex.lock, { ...extra, ...where });
       const warning = codeWarning({ version: ex.lock.version, commit: ex.view.commit, pid: ex.lock.pid }, code);
-      return adopted(runningOutput(ex.lock, { ...extra, ...(warning ? { aviso: warning } : {}) }));
+      return adopted(runningOutput(ex.lock, { ...extra, ...(warning ? { warning } : {}) }));
     }
-    if (exitCode !== null && exitCode !== 0) return { estado: 'parado', motivo: `o núcleo saiu com código ${exitCode}; veja ${logFile}` };
-    // The child adopted a core without a lock (a --demo or --sem-trava, or one from before #86).
+    if (exitCode !== null && exitCode !== 0) return { state: 'stopped', reason: `o núcleo saiu com código ${exitCode}; veja ${logFile}` };
+    // The child adopted a core without a lock (a --demo or --no-lock, or one from before #86).
     // With port 0 there is no port to look at: the child adopted through the lock, seen above.
     if (exitCode === 0 && o.port !== 0) {
       const v = await probeCore(o.port);
       if (v) {
         const warning = [
-          'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)',
+          'o núcleo nesta porta não tem trava (uma --demo, uma --no-lock ou um núcleo de antes da #86)',
           codeWarning(v, code),
         ].filter(Boolean).join('; ');
-        return adopted({ estado: 'de-pe', url: `http://127.0.0.1:${o.port}`, porta: o.port, pid: v.pid, versao: v.version, commit: v.commit, subiu: false, aviso: warning });
+        return adopted({ state: 'up', url: `http://127.0.0.1:${o.port}`, port: o.port, pid: v.pid, version: v.version, commit: v.commit, started: false, warning });
       }
     }
     await sleep(100);
   }
-  return { estado: 'parado', motivo: `o núcleo não respondeu em ${Math.round((o.timeoutMs ?? 60_000) / 1000)} s; veja ${logFile}` };
+  return { state: 'stopped', reason: `o núcleo não respondeu em ${Math.round((o.timeoutMs ?? 60_000) / 1000)} s; veja ${logFile}` };
 }

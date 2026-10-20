@@ -709,7 +709,7 @@ export function sessionMeta(item) {
 export const MACHINES_JSON_EXAMPLE = '~/.ahrena-console/machines.json\n{ "machines": [{ "id": "workstation",\n  "label": "Workstation", "port": 14720 }] }';
 
 /** The command that starts the core on the remote machine. */
-export const START_CORE_COMMAND = 'node packages/nucleo/src/dono/cli.ts subir';
+export const START_CORE_COMMAND = 'node packages/nucleo/src/owner/cli.ts start';
 
 /**
  * Whether a `/api/changes` batch concerns this screen: an alert of this machine, any machine going

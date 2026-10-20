@@ -201,7 +201,7 @@ export async function mount(area, ctx) {
         empty({
           icon: 'github',
           title: 'O núcleo subiu sem GitHub',
-          text: 'Ele foi iniciado com --sem-github, então não há quadro para mostrar. Reinicie o núcleo sem essa opção para ver o Kanban do projeto.',
+          text: 'Ele foi iniciado com --no-github, então não há quadro para mostrar. Reinicie o núcleo sem essa opção para ver o Kanban do projeto.',
         }),
       );
       return;

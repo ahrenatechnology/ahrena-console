@@ -4,6 +4,3 @@
 import { readFileSync } from 'node:fs';
 
 export const API_VERSION: string = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
-
-/** @deprecated phase 6: src/owner still imports it */
-export const VERSAO_DA_API = API_VERSION;
