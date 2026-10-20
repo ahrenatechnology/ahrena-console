@@ -1,5 +1,5 @@
 // Captura cada tela de docs/wireframes/index.html?captura=<id> em PNG, via CDP no chrome-headless-shell.
-// The base URL may carry its own query (`?tema=light&width=1100`): the id is appended with `&`.
+// The base URL may carry its own query (`?theme=light&width=1100`): the id is appended with `&`.
 import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 const [,, chrome, base, saida, ...ids] = process.argv
