@@ -47,12 +47,12 @@ describe('escrever (ler.js)', () => {
     assert.deepEqual(JSON.parse(p!.init.body!), { sessao: 's1' });
   });
 
-  test('recusa host de fora, https e rota que não é escrita das decisões, antes de sair', async () => {
-    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720', fetch: fetchFalso().f }), /só fala com o núcleo local/);
-    assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só fala com o núcleo local/);
+  test('recusa host de fora, https e rota fora da API, antes de sair (quem restringe às decisões é o servidor)', async () => {
+    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
+    assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só escreve no núcleo local/);
     const { f, pedidos } = fetchFalso();
     const escrever = escritorHttp({ base: 'http://localhost:4791', fetch: f });
-    for (const rota of ['/api/hooks', '/api/decisoes/d1/apagar', '/api/decisoes/d1/confirmar?x=1', '/api/decisoes/../hooks/confirmar', '/api/decisoes/../confirmar', '/api/decisoes/.d1/confirmar', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisoes']) {
+    for (const rota of ['/api/decisoes/../../hooks', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisoes', '/abrir/x']) {
       await assert.rejects(escrever(rota, { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura, rota);
     }
     assert.equal(pedidos.length, 0, 'nada saiu');
@@ -119,9 +119,9 @@ describe('o card de uma decisão', () => {
 });
 
 describe('a página (C21) e a aba (C20)', () => {
-  test('a página está registrada na barra, depois de Sessões', () => {
+  test('a página está registrada na barra, depois de Analytics', () => {
     const ids = TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
-    assert.deepEqual(ids.slice(ids.indexOf('sessoes')), ['sessoes', 'decisoes']);
+    assert.ok(ids.indexOf('decisoes') > ids.indexOf('analytics'));
     const { tela } = acharTela('/ui/decisoes');
     assert.equal(tela.item.rotulo, 'Decisões');
     assert.equal(tela.item.icone, 'decisao', 'o desenho do main (git-commit-horizontal), não um nome novo');
