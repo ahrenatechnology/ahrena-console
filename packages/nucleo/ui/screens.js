@@ -9,7 +9,8 @@
 // - `title`, `sub` and `icon`: the header of the empty state and the window title.
 
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
-// Control. A block without items does not show.
+// Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
+// and, later, the architecture (ADR) and product (PDR) records.
 export const SECTIONS = [
   { id: 'main', label: null },
   { id: 'delivery', label: 'Entrega' },
@@ -149,7 +150,7 @@ export const SCREENS = [
   {
     id: 'decisions',
     route: '/ui/decisions',
-    item: { label: 'Decisões', icon: 'decision', section: 'decisions' },
+    item: { label: 'Das sessões', icon: 'decision', section: 'decisions' },
     title: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     icon: 'decision',

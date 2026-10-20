@@ -239,7 +239,7 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Decisões; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Das sessões; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
     assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
