@@ -109,6 +109,32 @@ describe('decisões no painel', () => {
     assert.deepEqual([...chaves].filter((k) => !new RegExp(`\\b${k}\\??:`).test(tipos)), []);
     await storage.close();
   });
+
+  test('sem branch pelo Desktop, metadado ou git, o painel usa o que a sessão gravou, como a lista e o Confirmar', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const decisoes = new SqliteDecisionStore(storage.db);
+    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
+    const gravar = (sessionId: string, scope: 'sessao' | 'branch', choice: string) =>
+      registerDecision(
+        decisoes,
+        {
+          sourceKey: `teste:${sessionId}`, sessionId, repo: '/r', branch: 'feat/x', topic: `t:${sessionId}`, context: null, choice, alternatives: [],
+          decidedBy: 'usuario', origin: 'pergunta', inferred: false, scope, decidedAt: new Date(AGORA - 60_000).toISOString(),
+        },
+        T0,
+      );
+    await storage.putSession(session({ id: 'sess-a', cwd: null }));
+    await storage.putSession(session({ id: 'sess-b', cwd: '/r' }));
+    await gravar('sess-a', 'sessao', 'A própria');
+    await gravar('sess-b', 'branch', 'De outra família');
+
+    const doPainel = (await montador.montar({ sessionId: 'sess-a', decisoes: 'branch' })).decisoes!.lista!;
+    const daLista = (await montador.listaDeDecisoes({ sessionId: 'sess-a' }, 'branch'))!;
+    assert.deepEqual(doPainel.porEscopo, daLista.porEscopo);
+    assert.equal(doPainel.itens.length, daLista.itens.length);
+    assert.ok(daLista.itens.some((i) => i.titulo === 'De outra família'), 'o cenário tem a decisão de branch');
+    await storage.close();
+  });
 });
 
 describe('API das decisões em 127.0.0.1', () => {

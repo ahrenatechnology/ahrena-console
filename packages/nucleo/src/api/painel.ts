@@ -181,7 +181,7 @@ export class MontadorDoPainel {
       precisam: await this.precisamDe(pedido.sessionId, session, desktop),
       prs: await this.prsAguardando(),
       decisoes: this.decisoes
-        ? await this.decisoes.doPainel(this.alvo(pedido.sessionId, sessao.cwd ?? pedido.cwd ?? null, sessao.branch ?? trabalho?.branch ?? null, conta), pedido.decisoes ?? null)
+        ? await this.decisoes.doPainel(await this.alvoDe(pedido.sessionId, session, pedido.cwd ?? null, desktop, conta), pedido.decisoes ?? null)
         : null,
     };
   }
@@ -203,11 +203,19 @@ export class MontadorDoPainel {
     const session = await this.storage.getSession(pedido.sessionId);
     const desktop = this.doDesktop(pedido.sessionId, pedido.local ?? null);
     const conta = this.contas.daSessao(session ?? { id: pedido.sessionId, accountId: null, accountSource: null }, desktop);
-    const pasta = session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null;
+    return this.alvoDe(pedido.sessionId, session, pedido.cwd ?? null, desktop, conta);
+  }
+
+  /**
+   * A pasta, o branch e a conta das decisões, com o que a captura gravou quando o ambiente não diz o
+   * branch. Uma regra só, para o painel montado (`montar`) e para a lista, a aba e o Confirmar.
+   */
+  private async alvoDe(sessionId: string, session: Session | null, cwd: string | null, desktop: SessaoDoDesktop | null, conta: ContaDoPainel | null): Promise<AlvoDasDecisoes> {
+    const pasta = session?.cwd ?? cwd ?? desktop?.cwd ?? null;
     const branch = desktop?.branch ?? (session?.metadata?.branch as string | undefined) ?? this.trabalho?.ler(pasta, null)?.branch ?? null;
-    if (branch || !this.decisoes) return this.alvo(pedido.sessionId, pasta, branch, conta);
-    const gravado = await this.decisoes.gravadoNasProprias(pedido.sessionId);
-    return this.alvo(pedido.sessionId, gravado.branch ? (gravado.repo ?? pasta) : (pasta ?? gravado.repo), gravado.branch, conta);
+    if (branch || !this.decisoes) return this.alvo(sessionId, pasta, branch, conta);
+    const gravado = await this.decisoes.gravadoNasProprias(sessionId);
+    return this.alvo(sessionId, gravado.branch ? (gravado.repo ?? pasta) : (pasta ?? gravado.repo), gravado.branch, conta);
   }
 
   /** A sessão das decisões só pelo id: a da aba e do Promover da /ui, igual à do Confirmar. */
