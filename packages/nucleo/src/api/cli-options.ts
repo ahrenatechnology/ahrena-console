@@ -47,9 +47,10 @@ export const HELP = `Usage: npm run api -- [options]
   --no-telemetry         Does not measure this machine: /api/machines and /api/telemetry answer 404.
                          Under --demo, the telemetry is synthetic (this machine and a "workstation")
   --machines <file>      The remote machines (default ~/.ahrena-console/machines.json, #176):
-                         { "machines": [{ "id", "label", "port" }] }, port is the port of this Mac
-                         that your tunnel forwards to 4720 over there. Without a file, only this
-                         machine. Read at start; --demo does not read it
+                         { "machines": [{ "id", "label", "port", "reconnect"? }] }, port is the port
+                         of this Mac that your tunnel forwards to 4720 over there. Without a file,
+                         only this machine. Re-read every 30 s and before a reconnect (#244);
+                         --demo does not read it
   --help
 
 The old names (--porta, --banco, --projetos, --varredura, --sem-historico, --sem-desktop, --sem-github, --cenario, --pai, --substituir, --sem-trava) are accepted until phase 6.

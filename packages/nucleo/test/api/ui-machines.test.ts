@@ -382,6 +382,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     assert.match(texto(m.area.querySelector('.cc-head')), /Conectando/);
   });
 
+  // Decision 0012 (issue 244) adds one write, Reconectar, which runs the user's own command and only
+  // when machines.json has one (test/api/ui-machine-reconnect.test.ts); without it, nothing changes here.
   test('no button starts, stops or forwards a tunnel: the app only shows', async () => {
     const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo']);
     for (const [state, reason] of [['connected', null], ['unreachable', 'port-closed'], ['unreachable', 'no-response'], ['incompatible-version', null], ['unreachable', null]] as const) {
@@ -394,7 +396,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
       }
     }
     const source = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
-    assert.doesNotMatch(source, /ctx\.write|write\(/, 'the machine screen never writes');
+    const writes = [...source.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]);
+    assert.deepEqual(writes, ['reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/reconnect');
   });
 });
 

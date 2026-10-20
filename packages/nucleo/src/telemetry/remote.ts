@@ -15,11 +15,13 @@
 //   the attention route (api/attention-route.ts), which marks them with this machine. A session that
 //   enters or leaves it is published too, so the tray refreshes.
 // - `GET` only, never overlapping, injectable timers and clock; in tests, `pollOnce()` directly.
+// - `readNow()` reads at once, outside the 30 s round (after a reconnect that exited 0, #244), joining
+//   a read already in flight; `reconnect()` is the machine's reconnect status, from the runner.
 
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
-import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type TelemetryReading } from './model.ts';
+import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
 import type { RemoteGet, TelemetryStore } from './ports.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
 import type { MachineEntry, MachineStatus } from './service.ts';
@@ -46,6 +48,8 @@ export interface RemoteMachineOptions {
   retentionMs?: number;
   timers?: SamplerTimers;
   log?: (message: string) => void;
+  /** The machine's reconnect (#244); without it, `null`. */
+  reconnectStatus?: (machineId: string) => ReconnectStatus | null;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -212,6 +216,15 @@ export class RemoteMachine implements MachineEntry {
 
   get running(): boolean {
     return this.timer !== null;
+  }
+
+  reconnect(): ReconnectStatus | null {
+    return this.o.reconnectStatus?.(this.id) ?? null;
+  }
+
+  /** Reads now, outside the 30 s round; joins a read already in flight. */
+  readNow(): Promise<MachineStatus> {
+    return this.tick();
   }
 
   /** Reads now and then every `intervalMs`. Calling it again does not start another timer. */

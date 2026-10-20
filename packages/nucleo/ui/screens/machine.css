@@ -1,4 +1,4 @@
-/* The machine screens (C24, C25, C26, issue 178): the wireframe's look, ported. The screen puts this
+/* The machine screens (C24, C25, C26, issue 178; C50, issue 244): the wireframe's look, ported. The screen puts this
    sheet in the head when it opens (link[data-screen="machine"]) and removes it when the person
    leaves; while it is there, the other screens' CSS is loaded too, so every own class starts with
    `tm-` and the shared ones are only the shell's and the status seals (`badge`, `b-*`), repeated in
@@ -136,3 +136,44 @@
 .tm-only-shows > .icon { color: var(--status-waiting-text); font-size: 16px; margin-top: 1px; }
 .tm-only-shows p { margin: 0; }
 .tm-only-shows b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+
+/* ---------- C50: Reconectar. The band takes the C26 band's place: red with the tunnel down or a run
+   that failed (it is also an .error-band), yellow while the command runs, green when it brought the
+   machine back. The text column wraps; the buttons stay on the right. ---------- */
+.tm-rc-band { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border-radius: 12px; font-size: 13px; min-width: 0; }
+.tm-rc-band.tm-rc-running { border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.tm-rc-band.tm-rc-ok { border: 1px solid color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.tm-rc-ic { font-size: 18px; line-height: 1; flex: none; margin-top: 1px; display: inline-flex; }
+.tm-rc-error .tm-rc-ic { color: var(--status-error-text); }
+.tm-rc-running .tm-rc-ic, .tm-rc-running .tm-rc-text > p > b { color: var(--status-waiting-text); }
+.tm-rc-ok .tm-rc-ic, .tm-rc-ok .tm-rc-text > p > b { color: var(--status-completed-text); }
+.tm-rc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.tm-rc-text p { margin: 0; }
+.tm-rc-text > p > b { font-weight: var(--weight-semibold); }
+.tm-rc-cmd { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tm-rc-note { font-size: 12px; }
+.tm-rc-problem { font-size: 12px; color: var(--status-error-text); }
+.tm-rc-actions { display: flex; gap: 8px; flex: none; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.tm-rc-actions .btn[disabled] { opacity: .55; cursor: not-allowed; }
+.tm-rc-steps { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.tm-rc-steps li { display: inline-flex; gap: 5px; align-items: center; }
+.tm-rc-steps li + li::before { content: "→"; margin-right: 3px; color: var(--muted); font-weight: var(--weight-regular); }
+.tm-rc-steps .tm-rc-done { color: var(--status-completed-text); }
+.tm-rc-steps .tm-rc-on { color: var(--text); font-weight: var(--weight-semibold); }
+.tm-rc-steps .tm-rc-on .icon, .tm-rc-spin .icon { animation: tm-rc-turn 1s linear infinite; }
+@keyframes tm-rc-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tm-rc-steps .tm-rc-on .icon, .tm-rc-spin .icon { animation: none; } }
+.tm-rc-time { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
+.tm-rc-bar { -webkit-appearance: none; appearance: none; display: block; width: 200px; max-width: 40%; height: 6px; border: 0; border-radius: 99px; overflow: hidden; background: var(--raised); color: var(--status-waiting-dot); flex: none; }
+.tm-rc-bar::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
+.tm-rc-bar::-webkit-progress-value { background: var(--status-waiting-dot); border-radius: 99px; }
+.tm-rc-bar::-moz-progress-bar { background: var(--status-waiting-dot); border-radius: 99px; }
+
+/* the card that teaches how to configure it (5) */
+.tm-rc-setup { gap: 12px; }
+.tm-rc-howto { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.tm-rc-howto b { font-weight: var(--weight-semibold); }
+.tm-rc-howto code { font-family: var(--font-mono); font-size: 11.5px; }
+.tm-rc-howto .tm-config { margin-top: 6px; }
+.tm-rc-setup .tm-legend { gap: 8px 18px; }
+.tm-rc-setup .tm-legend .icon { vertical-align: -2px; }

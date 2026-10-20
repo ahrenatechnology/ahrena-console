@@ -7,7 +7,12 @@
 // machine's screen reads, for each tunnel to a connected remote, that remote's reading ("O que é").
 // Those extra reads are optional: when one fails, the column says "—".
 //
-// The app only shows: no button here starts, stops or forwards a tunnel ("Tentar agora" re-reads).
+// The app does not know the tunnel: no button here builds, stops or forwards one ("Tentar agora"
+// re-reads). The one write is Reconectar (C50, issue 244, decision 0012): when the remote's tunnel is
+// down and machines.json has a `reconnect` command for it, "Reconectar" POSTs the machine's id to
+// `/api/machines/<id>/reconnect` and "Cancelar" DELETEs it; the core runs the command the person
+// wrote, and the screen shows the state, the elapsed time (ticking here once a second) and the exit
+// code, never the command's output. Without a command, a card says how to configure one.
 // Live: an alert of this machine or a machine going down on `/api/changes` re-reads at once, and a
 // new sample (every 30 s, which publishes nothing) is picked up by re-reading every 30 s.
 //
@@ -29,6 +34,14 @@ import {
   WINDOWS,
   axisLabels,
   bandText,
+  commandLine,
+  logLine,
+  normalizeReconnect,
+  reconnectClock,
+  reconnectExample,
+  reconnectResult,
+  reconnectRoute,
+  reconnectView,
   bytes,
   chartOf,
   dockerRows,
@@ -315,6 +328,126 @@ const showOnlyNote = () =>
 const noRemoteCard = () =>
   stateCard({ iconName: 'plug', title: 'Nenhuma máquina remota', text: 'Sem configuração, só esta máquina aparece. Para acompanhar outra, rode o núcleo nela, encaminhe a 4720 de lá por um túnel e grave:', code: MACHINES_JSON_EXAMPLE });
 
+// ---------- Reconectar (C50) ----------
+
+function rcButton({ label, iconName = null, filled = false, action, busy = false, disabled = false, onClick = null }) {
+  return el(
+    'button',
+    { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, 'data-rc-action': action, 'aria-busy': busy ? 'true' : null, disabled: disabled || busy, onClick },
+    iconName ? icon(iconName) : null,
+    label,
+  );
+}
+
+const rcProblem = (problem) => (problem ? el('p', { class: 'tm-rc-problem', role: 'alert' }, problem) : null);
+const rcCommand = (text) => (text ? el('p', { class: 'tm-rc-cmd' }, text) : null);
+
+/** The band of C50: an icon, the text column and the buttons on the right. */
+function rcBand({ tone, iconName, spin = false, role = 'status', title, text, lines = [], actions = [] }) {
+  return el(
+    'div',
+    { class: `${tone === 'error' ? 'error-band ' : ''}tm-rc-band tm-rc-${tone}`, role, 'data-part': 'reconnect' },
+    el('span', { class: `tm-rc-ic${spin ? ' tm-rc-spin' : ''}` }, icon(iconName)),
+    el('div', { class: 'tm-rc-text' }, el('p', {}, el('b', {}, title), text ? ` ${text}` : null), ...lines),
+    actions.length ? el('div', { class: 'tm-rc-actions' }, ...actions) : null,
+  );
+}
+
+function rcSteps(machine) {
+  const steps = [
+    ['tm-rc-done', 'wall-check', 'rodando o comando'],
+    ['tm-rc-on', 'wall-loader', 'aguardando o login'],
+    ['', 'dot', `lendo a ${machine.label}`],
+  ];
+  return el('ol', { class: 'tm-rc-steps', 'aria-label': 'Andamento da reconexão' }, ...steps.map(([cls, name, text]) => el('li', { class: cls || null }, icon(name), text)));
+}
+
+function rcTime(rc, now) {
+  const c = reconnectClock(rc, now);
+  return el(
+    'div',
+    { class: 'tm-rc-time' },
+    c.max ? el('progress', { class: 'tm-rc-bar', max: c.max, value: c.seconds, 'aria-label': 'Tempo contra o limite', 'data-rc-bar': '' }) : null,
+    el('span', { class: 'mono', 'data-rc-elapsed': '' }, c.limit ? `${c.elapsed} de ${c.limit}` : c.elapsed),
+  );
+}
+
+function setupCard(machine) {
+  return el(
+    'section',
+    { class: 'card tm-card tm-rc-setup', 'data-part': 'reconnect-setup' },
+    el('h2', { class: 'tm-title' }, icon('plug'), el('span', {}, 'Reconectar daqui')),
+    el('p', { class: 'tm-muted' }, 'O console pode rodar, com um clique, o comando que você já usa para subir o túnel. Ele não sabe montar túnel nenhum: só roda o que você escrever.'),
+    el(
+      'ol',
+      { class: 'tm-rc-howto' },
+      el('li', {}, el('b', {}, 'Tenha um comando que sobe o túnel.'), ' ', el('span', { class: 'tm-muted' }, 'O seu script, o que você já roda no terminal.')),
+      el('li', {}, el('b', {}, 'Acrescente ', el('code', {}, 'reconnect'), ' à máquina no machines.json.'), el('pre', { class: 'tm-config' }, reconnectExample(machine))),
+      el('li', {}, el('b', {}, 'Pronto.'), ' ', el('span', { class: 'tm-muted' }, 'O console relê o arquivo ao salvar, sem reiniciar, e o botão Reconectar aparece aqui e na bandeja.')),
+    ),
+    el('div', { class: 'tm-legend' }, el('span', {}, icon('list'), ' Uma lista, sem shell: o console roda exatamente o que está no arquivo.'), el('span', {}, icon('lock'), ' Nada da tela vira comando.')),
+  );
+}
+
+/**
+ * The C50 part of a remote, in place of the C26 one, or `null` when C26 (or C25) stays as it was.
+ * `pending` is the write on its way ('start' or 'cancel'), `problem` the message of the last one that failed.
+ */
+export function reconnectParts(machine, reading, { retry = () => {}, start = () => {}, cancel = () => {}, pending = null, problem = null, now = Date.now() } = {}) {
+  const view = reconnectView(machine, now);
+  if (!view) return null;
+  const rc = machine.reconnect;
+  // The last reading fades as in C26: with the tunnel down, or up with no core answering.
+  const offline = ['band', 'no-response'].includes(remoteCondition(machine));
+  const again = (label, iconName) => rcButton({ label, iconName, filled: true, action: 'start', busy: pending === 'start', onClick: start });
+  const tryNow = () => rcButton({ label: 'Tentar agora', action: 'retry', onClick: retry });
+  if (view.kind === 'running') {
+    return {
+      faded: offline,
+      parts: [
+        rcBand({
+          tone: 'running',
+          iconName: 'wall-loader',
+          spin: true,
+          title: view.fromTray ? 'Reconectando, pela bandeja…' : 'Reconectando…',
+          text: 'aguardando o login no navegador. Se o comando abriu uma página de login, ela é sua: entre por lá e o console segue sozinho.',
+          lines: [rcSteps(machine), rcTime(rc, now), rcCommand(commandLine(rc)), rcProblem(problem)],
+          actions: [
+            rcButton({ label: 'Cancelar', iconName: 'x', action: 'cancel', busy: pending === 'cancel', onClick: cancel }),
+            rcButton({ label: view.fromTray ? 'Um por vez' : 'Reconectando…', iconName: 'wall-loader', filled: true, action: 'running', busy: true }),
+          ],
+        }),
+      ],
+    };
+  }
+  if (view.kind === 'succeeded') {
+    const r = reconnectResult(machine, 'succeeded');
+    return { faded: false, parts: [rcBand({ tone: 'ok', iconName: 'ok', title: r.title, text: r.text })] };
+  }
+  if (view.kind === 'failed' || view.kind === 'timed-out') {
+    const r = reconnectResult(machine, view.kind);
+    return { faded: true, parts: [rcBand({ tone: 'error', iconName: 'error', role: 'alert', title: r.title, text: r.text, lines: [rcCommand(logLine(rc)), rcProblem(problem)], actions: [again('Tentar de novo', 'refresh')] })] };
+  }
+  const b = bandText(machine, reading, now);
+  if (view.kind === 'setup') {
+    return { faded: true, parts: [rcBand({ tone: 'error', iconName: 'offline', role: 'alert', title: b.title, text: b.text, lines: [rcProblem(problem)], actions: [tryNow()] }), setupCard(machine)] };
+  }
+  return {
+    faded: true,
+    parts: [
+      rcBand({
+        tone: 'error',
+        iconName: 'offline',
+        role: 'alert',
+        title: b.title,
+        text: b.text,
+        lines: [view.note ? el('p', { class: 'tm-rc-note' }, view.note) : null, rcCommand(commandLine(rc)), rcProblem(problem)],
+        actions: [tryNow(), again('Reconectar', 'plug')],
+      }),
+    ],
+  };
+}
+
 // ---------- the body ----------
 
 /** Everything under the header for one reading: the cards, then the grid. Exported for the test. */
@@ -398,6 +531,10 @@ export async function mount(area, ctx) {
   let filter = 'all';
   let last = null;
   let request = 0;
+  // Reconectar: the write on its way ('start' | 'cancel'), and the last failed one, tied to the
+  // reconnect state it failed on (a new state from the core hides it).
+  let pending = null;
+  let problem = null;
 
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
   const toggle = el('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Janela do gráfico' }, ...hourButtons);
@@ -436,7 +573,11 @@ export async function mount(area, ctx) {
     const label = local ? 'Esta máquina' : (machine?.label ?? id);
     titleText.textContent = label;
     ctx.title(label);
-    const condition = local ? { faded: false, parts: [] } : conditionParts(machine, data.reading, { retry: () => draw(), version: data.version, now });
+    const shownProblem = problem && problem.key === reconnectKey(machine) ? problem.message : null;
+    const condition = local
+      ? { faded: false, parts: [] }
+      : (reconnectParts(machine, data.reading, { retry: () => draw(), start: () => reconnect('POST'), cancel: () => reconnect('DELETE'), pending, problem: shownProblem, now }) ??
+        conditionParts(machine, data.reading, { retry: () => draw(), version: data.version, now }));
     if (sub) sub.textContent = headerLine(data.reading, machine, { local, offline: condition.faded, now }) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
     if (!local && machine) pillSlot.replaceChildren(pill(statePill(machine)));
     const ownPort = Number(globalThis.location?.port) || null;
@@ -452,9 +593,51 @@ export async function mount(area, ctx) {
     if (active && area.contains(active)) {
       if (active.getAttribute?.('data-filter')) key = `[data-filter="${active.getAttribute('data-filter')}"]`;
       else if (active.getAttribute?.('data-hours')) key = `[data-hours="${active.getAttribute('data-hours')}"]`;
+      else if (active.getAttribute?.('data-rc-action')) key = `[data-rc-action="${active.getAttribute('data-rc-action')}"]`;
     }
     area.replaceChildren(...nodes);
-    if (key) area.querySelector(key)?.focus();
+    if (!key) return;
+    // Reconectar becomes Cancelar (and back): the focus goes to the band's first button.
+    const target = area.querySelector(key) ?? (key.startsWith('[data-rc-action') ? area.querySelector('[data-rc-action]') : null);
+    target?.focus();
+  }
+
+  const reconnectKey = (machine) => `${machine?.reconnect?.state ?? ''}|${machine?.reconnect?.startedAt ?? ''}`;
+
+  // POST starts (or joins the run already going), DELETE cancels. The answer's `reconnect` repaints at
+  // once; the re-read and `/api/changes` bring the rest.
+  async function reconnect(method) {
+    if (pending || ctx.signal.aborted) return;
+    pending = method === 'DELETE' ? 'cancel' : 'start';
+    problem = null;
+    if (last) paint(last);
+    try {
+      const answer = await ctx.write(reconnectRoute(id), method === 'DELETE' ? null : {}, method === 'DELETE' ? { method } : undefined);
+      const rc = normalizeReconnect(answer?.reconnect);
+      if (rc && last?.machine) last = { ...last, machine: { ...last.machine, reconnect: rc } };
+    } catch (e) {
+      pending = null;
+      if (e?.name === 'AbortError' || ctx.signal.aborted) return;
+      if (e?.status === 404) return notFound();
+      // Cancelar on a run that already ended (409): nothing to say, the re-read shows how it ended.
+      if (!(method === 'DELETE' && e?.status === 409)) {
+        const what = method === 'DELETE' ? 'cancelar' : 'reconectar';
+        problem = { key: reconnectKey(last?.machine), message: `Não deu para ${what}: ${e?.message || 'o núcleo não respondeu'}` };
+      }
+    }
+    pending = null;
+    if (ctx.signal.aborted) return;
+    if (last) paint(last);
+    draw();
+  }
+
+  // While a reconnect runs, the elapsed time ticks here, once a second, without repainting.
+  function tick() {
+    const rc = last?.machine?.reconnect;
+    if (rc?.state !== 'running') return;
+    const c = reconnectClock(rc, Date.now());
+    for (const n of area.querySelectorAll('[data-rc-elapsed]')) n.textContent = c.limit ? `${c.elapsed} de ${c.limit}` : c.elapsed;
+    for (const n of area.querySelectorAll('[data-rc-bar]')) n.setAttribute('value', String(c.seconds));
   }
 
   async function draw() {
@@ -519,11 +702,13 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(() => draw());
   const background = setInterval(() => draw(), REREAD_MS);
+  const ticker = local ? null : setInterval(tick, 1000);
   // The teardown hangs on the signal, not only on the returned function: leaving before the first
   // read comes back aborts the signal before the shell could register that function.
   const stop = () => {
     clearTimeout(wait);
     clearInterval(background);
+    clearInterval(ticker);
   };
   if (ctx.signal.aborted) stop();
   else ctx.signal.addEventListener('abort', stop);

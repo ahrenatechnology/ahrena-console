@@ -33,6 +33,7 @@
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
+// | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 //
 // The old Portuguese routes and query parameters (`/api/painel/<id>`, `/api/sessao/<id>`, `/abrir/<id>`,
 // `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
@@ -50,9 +51,11 @@
 // even on a same-origin `fetch`). A write with `Origin` is still refused, except three, only with `Origin`
 // exactly `http://<Host>` and the exact path (no query): the Detail's "Abrir no Claude Desktop",
 // `POST /open/<local_…>`, the project Kanban's `POST /api/project/move` (api/project.ts) and the
-// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`, 
-// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts) and the framework
-// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184). The old aliases
+// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`,
+// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
+// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
+// screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
+// decision 0012). The old aliases
 // (`/abrir/…`, `/api/projeto/mover`, `/api/decisoes/<id>/<action>`) go through the same rules.
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
@@ -92,7 +95,8 @@ import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-i
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
 import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
-import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
+import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
+import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 
 export { API_VERSION };
@@ -131,8 +135,8 @@ export interface ApiOptions {
   events?: FeedDeEventos;
   /** The MCP fleet reader; turns on `GET /api/attention`. */
   fleet?: FleetReader;
-  /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
-  remoteAttention?: readonly RemoteAttentionSource[];
+  /** The remote machines whose sessions also enter `GET /api/attention` (#176); a function follows machines.json live (#244). */
+  remoteAttention?: readonly RemoteAttentionSource[] | (() => readonly RemoteAttentionSource[]);
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
   analytics?: RotaAnalytics;
   /** The Sessions screen's list; turns on `GET /api/sessions`. */
@@ -162,6 +166,8 @@ export interface ApiOptions {
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
   telemetry?: TelemetryService | null;
+  /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
+  reconnect?: ReconnectControl | null;
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -345,7 +351,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     // through its back-translator (new → old keys and values).
     const toLegacy = legacyResponseFor(raw.pathname);
     if (toLegacy) rewriteJsonBodies(res, toLegacy);
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
     // its live refresh work with the current id.
     if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
@@ -365,6 +371,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
+    const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
+    if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
@@ -376,7 +384,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
-    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, opts.remoteAttention));
+    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : opts.remoteAttention));
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
