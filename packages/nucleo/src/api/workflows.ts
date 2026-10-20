@@ -9,7 +9,8 @@
 // `ativas` são as sessões com status `active`; `concluidas`, as que terminaram (`completed`, `error`,
 // `abandoned`). `no` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
 // passam por aquele nó (`principal` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
-// A resposta devolve o `no` aplicado, para a tela destacar. Lê as 500 sessões mais recentes no máximo.
+// A resposta devolve o `no` aplicado, para a tela destacar. Lê as 500 sessões mais recentes no máximo;
+// `truncado: true` diz que o teto cortou.
 //
 // O modelo não tem "run do Workflow tool" nem "rodada de review". A representação é derivada do que
 // já existe, sem tabela nova:
@@ -20,23 +21,33 @@
 // - Rodada: o n-ésimo review da sessão, na ordem em que começaram, é a rodada n; um dev é da rodada
 //   seguinte à do último review que começou antes dele (dev r1, review r1, dev r2...).
 // - Ajustes pedidos por um review: `metadata.workflow.ajustes` ou `metadata.ajustes` (número); senão, a
-//   última mensagem do subagente (`AssistantMessage` com o `agentId` dele): "3 ajustes" dá 3, "aprovado"
-//   ou "LGTM" dá 0. Sem nada disso, `null` (não sabemos).
+//   última mensagem do subagente (`AssistantMessage` com o `agentId` dele): o último número logo antes de
+//   "ajustes"/"mudanças" (até duas palavras no meio: "3 pequenos ajustes" dá 3; "revisei 12 changes e
+//   peço 2 ajustes" dá 2), ou de "changes"/"issues" sem eles; "sem ajustes"/"nenhum ajuste" dá 0;
+//   "aprovado"/"LGTM" dá 0, mas não negado ("não aprovado", "reprovado" ficam `null`). Sem nada, `null`.
 // - O laço (grafo da sessão): cada subagente tem uma aresta de entrada. Plan concluído antes do dev r1
 //   dá `plano → dev r1` (`entregou`, "plano"); o dev mais recente que terminou antes de um review dá
 //   `dev → review` (`entregou`, "diff" na rodada 1, "v<n>" depois); um review seguido de um dev da
-//   rodada seguinte dá `review → dev` (`ajustes`), a menos que o review tenha pedido 0 ajustes; o
+//   rodada seguinte dá `review → dev` (`ajustes`) quando o review terminou antes de o dev começar e não
+//   pediu 0 ajustes (um review ainda rodando não conta); o
 //   test-runner que começa depois de um dev terminar sai desse dev (`entregou`). Os demais saem de quem
 //   os disparou (`abriu`): o subagente pai (`subagentesDe`, #146) ou o principal.
-// - Run do Workflow tool: os subagentes com `Agent.metadata.workflow.run` (o `tool_use_id` da chamada
-//   da ferramenta `Workflow`), agrupados por esse id. A chamada (`PreToolUse`/`ToolUse` com `toolName`
-//   `Workflow`) dá o início, o nome (`tool_input.name`/`workflow`), as fases (`tool_input.fases`/
-//   `phases`), a volta (`tool_input.volta`) e o modelo (`tool_input.model`); o `PostToolUse` (ou
-//   `PostToolUseFailure`, erro) com o mesmo id dá o fim. Sem a chamada, valem `metadata.workflow.nome`,
-//   as fases na ordem em que os agentes aparecem e o modelo da sessão. A fase de cada agente é
-//   `metadata.workflow.fase`. Tokens de um agente: input, output e escrita de cache das mensagens dele
-//   (a leitura de cache fica de fora, para não contar o mesmo contexto várias vezes); ferramentas: as
-//   chamadas dele (o maior entre hooks `PreToolUse` e transcript `ToolUse`).
+// - Run do Workflow tool: os subagentes agrupados pelo id da chamada da ferramenta `Workflow`. O id vem de
+//   `Agent.metadata.workflow.run` (simulador) ou, nos dados reais, de `Agent.metadata.toolUseId` (o
+//   importer grava o id da chamada que abriu o subagente) quando esse id é de um evento `ToolUse`/
+//   `PreToolUse` com `toolName` `Workflow` da sessão. A chamada dá o início e, se o `tool_input` estiver
+//   gravado, o nome (`name`/`workflow`), as fases (`fases`/`phases`), a volta (`volta`) e o modelo
+//   (`model`); o `PostToolUse` ou o `ToolResult` com o mesmo id dá o fim (`PostToolUseFailure` ou
+//   `isError`: erro). Sem o `tool_input` (o importer hoje não guarda o da `Workflow`), o nome é
+//   `metadata.workflow.nome` ou "workflow", as fases são as distintas dos agentes (`metadata.workflow.fase`,
+//   ou nenhuma) e o modelo é o da sessão. ATENÇÃO: o formato do Workflow tool no journal (nome da
+//   ferramenta, campos da entrada, como o subagente aponta para a chamada) não foi conferido contra dados
+//   reais; segue o que o importer grava para qualquer ferramenta.
+//   Tokens de um agente: `Agent.metadata.tokens` (já deduplicado pelo importer), input + output + escrita
+//   de cache; sem ele, das mensagens do agente, uma por `usage.messageId` (o streaming repete a mesma
+//   mensagem; vale a de mais saída, como em ingest/historico/usage.ts). A leitura de cache fica de fora,
+//   para não contar o mesmo contexto várias vezes. Ferramentas: as chamadas dele (o maior entre hooks
+//   `PreToolUse` e transcript `ToolUse`).
 // - Compactação de uma sessão: algum medidor de contexto com compactação (automática ou manual), ou o
 //   `metadata.contexto.estouros` do simulador.
 // - Origem: `Session.source` `resume` é "Retomada"; o resto, "Prompt novo".
@@ -51,6 +62,8 @@
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
+import { dedupeByMessage, type UsageSample } from '../ingest/historico/usage.ts';
+import type { MessageUsage } from '../ingest/historico/transcript.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -128,6 +141,8 @@ export interface RespostaDosWorkflows {
   geradoEm: string;
   /** Quantas sessões entraram na conta (depois do filtro e do nó). */
   sessoes: number;
+  /** O teto de sessões lidas (`MAXIMO_DE_SESSOES`) cortou: a conta não cobre todas. */
+  truncado: boolean;
   kpis: KpisDosWorkflows;
   runs: RunDoWorkflow[];
   grafo: GrafoDeOrquestracao;
@@ -214,8 +229,18 @@ export function papelDe(a: Agent): string {
   return t || 'subagente';
 }
 
-const AJUSTES = /(\d+)\s+(?:ajustes?|mudan[cç]as?|changes?|issues?)/i;
-const APROVADO = /\b(aprovad[oa]|approved|lgtm)\b/i;
+const AJUSTES = /(\d+)(?:\s+[\p{L}-]+){0,2}\s+(ajustes?|mudan[cç]as?|changes?|issues?)(?![\p{L}])/giu;
+const EM_PORTUGUES = /^(?:ajustes?|mudan[cç]as?)$/iu;
+
+/** O número dos ajustes pedidos: o último antes de "ajustes"/"mudanças"; sem eles, o último antes de "changes"/"issues". */
+function numeroDeAjustes(texto: string): number | null {
+  const achados = [...texto.matchAll(AJUSTES)];
+  const m = achados.filter((x) => EM_PORTUGUES.test(x[2])).at(-1) ?? achados.at(-1);
+  return m ? Number(m[1]) : null;
+}
+const SEM_AJUSTES = /(?<![\p{L}])(?:sem\s+ajustes|nenhum\s+ajuste|no\s+changes)(?![\p{L}])/iu;
+const NEGADO = /(?<![\p{L}])(?:n[aã]o\s+(?:foi\s+|est[aá]\s+)?aprovad[oa]|not\s+approved|reprovad[oa]|rejeitad[oa])(?![\p{L}])/iu;
+const APROVADO = /(?<![\p{L}])(?:aprovad[oa]|approved|lgtm)(?![\p{L}])/iu;
 
 /** Ajustes pedidos por um review: dos metadados, ou da última mensagem dele. `null` sem como saber. */
 export function ajustesDe(a: Agent, eventos: readonly SessionEvent[] = []): number | null {
@@ -224,8 +249,10 @@ export function ajustesDe(a: Agent, eventos: readonly SessionEvent[] = []): numb
   let ultima: string | null = null;
   for (const e of eventos) if (e.agentId === a.id && e.type === 'AssistantMessage' && e.summary) ultima = e.summary;
   if (!ultima) return null;
-  const n = AJUSTES.exec(ultima);
-  if (n) return Number(n[1]);
+  const n = numeroDeAjustes(ultima);
+  if (n !== null) return n;
+  if (NEGADO.test(ultima)) return null;
+  if (SEM_AJUSTES.test(ultima)) return 0;
   return APROVADO.test(ultima) ? 0 : null;
 }
 
@@ -313,7 +340,9 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
       if (plano) aresta = { de: plano.a.id, para: c.a.id, tipo: 'entregou', rotulo: 'plano' };
     } else if (c.papel === 'dev' && c.rodada !== null && c.rodada > 1) {
       const review = subs.find((x) => x.papel === 'review' && x.rodada === c.rodada! - 1);
-      if (review && noDe.get(review.a.id)!.ajustes !== 0) aresta = { de: review.a.id, para: c.a.id, tipo: 'ajustes', rotulo: 'ajustes' };
+      // Só a volta de um review que já terminou quando o dev começou, e que não aprovou (0 ajustes).
+      const terminou = !!review && review.a.endedAt !== null && review.a.endedAt <= c.a.startedAt;
+      if (review && terminou && noDe.get(review.a.id)!.ajustes !== 0) aresta = { de: review.a.id, para: c.a.id, tipo: 'ajustes', rotulo: 'ajustes' };
     } else if (c.papel === 'review') {
       const dev = terminouAntes('dev', c);
       if (dev) aresta = { de: dev.a.id, para: c.a.id, tipo: 'entregou', rotulo: dev.rodada === 1 ? 'diff' : `v${dev.rodada}` };
@@ -371,6 +400,8 @@ export interface OpcoesDosWorkflows {
   filtro?: FiltroDosWorkflows;
   no?: string | null;
   agora: number;
+  /** A leitura parou no teto de sessões. */
+  truncado?: boolean;
 }
 
 export const NO_DO_GRAFO = /^(?:principal|origem:(?:prompt|retomada)|compactacao:(?:sem|compactou)|resultado:(?:concluida|erro|andamento|abandonada)|subagente:[A-Za-z0-9_.:-]{1,64})$/;
@@ -461,14 +492,22 @@ const idDaChamada = (e: SessionEvent) => {
   return str(d?.tool_use_id) ?? str(d?.toolUseId);
 };
 
-function tokensDe(agentId: string, eventos: readonly SessionEvent[]): number {
-  let t = 0;
+const semLeitura = (k: Json) => num(k.input) + num(k.output) + num(k.cacheWrite5m) + num(k.cacheWrite1h);
+
+/** Tokens do agente: os do importer (`metadata.tokens`); sem eles, das mensagens, uma por `messageId`. */
+export function tokensDe(a: Agent, eventos: readonly SessionEvent[]): number {
+  const gravados = obj(a.metadata?.tokens);
+  if (gravados) return semLeitura(gravados);
+  const amostras: UsageSample[] = [];
   for (const e of eventos) {
-    if (e.agentId !== agentId) continue;
-    const k = obj(obj(obj(e.data)?.usage)?.tokens);
-    if (k) t += num(k.input) + num(k.output) + num(k.cacheWrite5m) + num(k.cacheWrite1h);
+    if (e.agentId !== a.id) continue;
+    const u = obj(obj(e.data)?.usage);
+    const k = obj(u?.tokens);
+    if (!u || !k) continue;
+    const tokens = { input: num(k.input), output: num(k.output), cacheRead: num(k.cacheRead), cacheWrite5m: num(k.cacheWrite5m), cacheWrite1h: num(k.cacheWrite1h) };
+    amostras.push({ eventId: e.id, agentId: a.id, usage: { ...(u as unknown as MessageUsage), messageId: str(u.messageId), requestId: str(u.requestId), tokens } });
   }
-  return t;
+  return dedupeByMessage(amostras).reduce((t, s) => t + semLeitura(s.usage.tokens as unknown as Json), 0);
 }
 
 function ferramentasDe(agentId: string, eventos: readonly SessionEvent[]): number {
@@ -488,13 +527,32 @@ const fasesDa = (v: unknown): string[] | null => {
   return fases.length ? fases : null;
 };
 
+/** Os ids das chamadas da ferramenta `Workflow` na sessão. */
+export function idsDasChamadasDeWorkflow(eventos: readonly SessionEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of eventos) {
+    const id = e.toolName === 'Workflow' && CHAMADA.has(e.type) ? idDaChamada(e) : null;
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+/** O run do subagente: `metadata.workflow.run`, ou o `metadata.toolUseId` quando é de uma chamada `Workflow`. */
+function runDe(a: Agent, chamadas: ReadonlySet<string>): string | null {
+  const marcado = str(wf(a)?.run);
+  if (marcado) return marcado;
+  const id = str(a.metadata?.toolUseId);
+  return id && chamadas.has(id) ? id : null;
+}
+
 /** Os runs do Workflow tool de uma sessão (ver o topo do arquivo). */
 export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflow[] {
   const eventos = x.eventos ?? [];
   const classificados = classificar(x.agentes);
+  const chamadas = idsDasChamadasDeWorkflow(eventos);
   const porRun = new Map<string, Classificado[]>();
   for (const c of classificados) {
-    const run = str(wf(c.a)?.run);
+    const run = runDe(c.a, chamadas);
     if (!run) continue;
     porRun.set(run, [...(porRun.get(run) ?? []), c]);
   }
@@ -513,7 +571,7 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
         fase: str(wf(a)?.fase),
         estado,
         ajustes,
-        tokens: tokensDe(a.id, eventos),
+        tokens: tokensDe(a, eventos),
         ferramentas: ferramentasDe(a.id, eventos),
         duracaoMs: duracao(a.startedAt, a.endedAt, agora),
       };
@@ -526,7 +584,7 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
     let estado: EstadoDoRun;
     let termino: string | null;
     if (fim) {
-      estado = fim.type === 'PostToolUseFailure' || algumErro ? 'erro' : 'concluida';
+      estado = fim.type === 'PostToolUseFailure' || obj(fim.data)?.isError === true || algumErro ? 'erro' : 'concluida';
       termino = fim.createdAt;
     } else if (x.session.status === 'active') {
       // Sem o fim da chamada, a sessão viva ainda pode abrir a próxima fase.
@@ -602,11 +660,11 @@ export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestr
 
 const PESO_DO_RUN: Record<EstadoDoRun, number> = { ativa: 0, erro: 1, concluida: 2 };
 
-export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'todas', no = null, agora }: OpcoesDosWorkflows): RespostaDosWorkflows {
+export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'todas', no = null, agora, truncado = false }: OpcoesDosWorkflows): RespostaDosWorkflows {
   let sessoes = todas.filter((x) => passaNoFiltro(x.session, filtro));
   if (no) sessoes = sessoes.filter((x) => nosDaSessao(x).has(no));
   const runs = sessoes.flatMap((x) => runsDaSessao(x, agora)).sort((a, b) => PESO_DO_RUN[a.estado] - PESO_DO_RUN[b.estado] || b.inicio.localeCompare(a.inicio));
-  return { filtro, no, geradoEm: new Date(agora).toISOString(), sessoes: sessoes.length, kpis: kpisDe(sessoes, agora), runs, grafo: grafoDe(sessoes) };
+  return { filtro, no, geradoEm: new Date(agora).toISOString(), sessoes: sessoes.length, truncado, kpis: kpisDe(sessoes, agora), runs, grafo: grafoDe(sessoes) };
 }
 
 // ---------- Rotas ----------
@@ -616,6 +674,8 @@ export interface FontesDosWorkflows {
   storage: StoragePort;
   trabalho?: TrabalhoPorBranch | null;
   agora?: () => number;
+  /** O teto de sessões lidas; padrão `MAXIMO_DE_SESSOES` (testes usam menos). */
+  maximoDeSessoes?: number;
 }
 
 export const ROTA_DOS_WORKFLOWS = '/api/workflows';
@@ -641,8 +701,37 @@ async function compactou(storage: StoragePort, s: Session): Promise<boolean> {
   return medidores.some((m) => m.compactions > 0 || m.manualCompactions > 0);
 }
 
+export interface LeituraDosWorkflows {
+  sessoes: SessaoDosWorkflows[];
+  /** Havia mais sessões que o teto. */
+  truncado: boolean;
+}
+
+/**
+ * Os eventos das sessões com subagentes que podem ser de um run, guardados pelo `updatedAt`: a sessão
+ * que não mudou não é relida. Só ficam os eventos das que têm run; das outras, `null`.
+ */
+const EVENTOS_DOS_RUNS = new Map<string, { updatedAt: string; eventos: SessionEvent[] | null }>();
+const MAXIMO_NO_CACHE = 1_000;
+
+async function eventosDosRuns(storage: StoragePort, session: Session, agentes: Agent[]): Promise<SessionEvent[] | null> {
+  const marcado = agentes.some((a) => str(wf(a)?.run));
+  const candidato = marcado || agentes.some((a) => a.type === 'subagent' && str(a.metadata?.toolUseId));
+  if (!candidato) return null;
+  const guardado = EVENTOS_DOS_RUNS.get(session.id);
+  if (guardado && guardado.updatedAt === session.updatedAt) return guardado.eventos;
+  const todos = await todosOsEventos(storage, session.id);
+  const chamadas = idsDasChamadasDeWorkflow(todos);
+  const temRun = marcado || agentes.some((a) => runDe(a, chamadas) !== null);
+  const eventos = temRun ? todos : null;
+  EVENTOS_DOS_RUNS.delete(session.id);
+  EVENTOS_DOS_RUNS.set(session.id, { updatedAt: session.updatedAt, eventos });
+  if (EVENTOS_DOS_RUNS.size > MAXIMO_NO_CACHE) EVENTOS_DOS_RUNS.delete(EVENTOS_DOS_RUNS.keys().next().value!);
+  return eventos;
+}
+
 /** As sessões do filtro, com o que a montagem pede; os eventos só das que têm run do Workflow tool. */
-export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: FiltroDosWorkflows): Promise<SessaoDosWorkflows[]> {
+export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: FiltroDosWorkflows, maximo = MAXIMO_DE_SESSOES): Promise<LeituraDosWorkflows> {
   const status: SessionStatus[] | undefined = filtro === 'ativas' ? ['active'] : filtro === 'concluidas' ? ['completed', 'error', 'abandoned'] : undefined;
   const sessoes: Session[] = [];
   let cursor: string | null = null;
@@ -650,14 +739,14 @@ export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: Filtr
     const page = await storage.listSessions({ ...(status ? { status } : {}), limit: 200, cursor });
     sessoes.push(...page.items);
     cursor = page.nextCursor;
-  } while (cursor && sessoes.length < MAXIMO_DE_SESSOES);
+  } while (cursor && sessoes.length < maximo);
+  const truncado = sessoes.length > maximo || (sessoes.length === maximo && cursor !== null);
   const out: SessaoDosWorkflows[] = [];
-  for (const session of sessoes.slice(0, MAXIMO_DE_SESSOES)) {
+  for (const session of sessoes.slice(0, maximo)) {
     const agentes = await storage.listAgents(session.id);
-    const temRun = agentes.some((a) => str(wf(a)?.run));
-    out.push({ session, agentes, compactou: await compactou(storage, session), eventos: temRun ? await todosOsEventos(storage, session.id) : null });
+    out.push({ session, agentes, compactou: await compactou(storage, session), eventos: await eventosDosRuns(storage, session, agentes) });
   }
-  return out;
+  return { sessoes: out, truncado };
 }
 
 /**
@@ -678,13 +767,18 @@ export async function responderWorkflows(res: ServerResponse, url: URL, fontes: 
       send(res, 400, { error: 'no: um id de nó do grafo (ex.: subagente:Explore)' });
       return true;
     }
-    const sessoes = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows);
-    send(res, 200, montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora }));
+    const { sessoes, truncado } = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows, fontes.maximoDeSessoes);
+    send(res, 200, montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora, truncado }));
     return true;
   }
   const m = DA_SESSAO.exec(url.pathname);
   if (!m) return false;
-  const id = decodeURIComponent(m[1]);
+  let id: string;
+  try {
+    id = decodeURIComponent(m[1]);
+  } catch {
+    id = '';
+  }
   if (!ID.test(id)) {
     send(res, 400, { error: 'id de sessão inválido' });
     return true;

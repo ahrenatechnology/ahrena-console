@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
 import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { lerSessoesDosWorkflows, montarWorkflows } from '../../src/api/workflows.ts';
 import { SESSOES_DOS_WORKFLOWS, semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
 import { T0 } from '../fixtures.ts';
 
@@ -70,6 +71,10 @@ describe('Workflows na API, com a demonstração do p4', () => {
   test('#97 Dado uma sessão que não existe, a aba recebe 404; um id estranho, 400', async () => {
     assert.equal((await pedir(api.url, '/api/sessoes/nao-existe/workflow')).status, 404);
     assert.equal((await pedir(api.url, '/api/sessoes/a%20b/workflow')).status, 400);
+    const malformado = await pedir(api.url, '/api/sessoes/%E0/workflow');
+    assert.equal(malformado.status, 400, 'decodeURIComponent falha: 400, não 500');
+    assert.equal(malformado.corpo.error, 'id de sessão inválido');
+    assert.equal((await pedir(api.url, '/api/sessoes/%E0%A4%A/workflow')).status, 400, 'escape malformado não é 500');
   });
 
   test('#96/AC-1 #96/AC-2 Dado a demonstração, a tela Workflows traz os KPIs e os três runs, o ativo primeiro', async () => {
@@ -78,6 +83,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     const r = corpo as RespostaDosWorkflows;
     assert.equal(r.filtro, 'todas');
     assert.equal(r.no, null);
+    assert.equal(r.truncado, false);
     for (const k of Object.keys(r.kpis) as (keyof typeof r.kpis)[]) assert.notEqual(r.kpis[k], null, `KPI ${k}`);
     assert.equal(r.kpis.fluxoComum!.rotulo, 'dev → review');
     assert.deepEqual(r.runs.map((x) => [x.nome, x.estado, x.projeto]), [
@@ -100,6 +106,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
   test('#96/AC-3 #96/AC-4 Dado o grafo, o clique num nó e o filtro valem para a tela inteira', async () => {
     const todas = (await pedir(api.url, '/api/workflows')).corpo as RespostaDosWorkflows;
     const total = todas.sessoes;
+    assert.equal(todas.truncado, false);
     assert.ok(total >= SESSOES_DOS_WORKFLOWS.length);
     assert.deepEqual(todas.grafo.colunas.map((c) => c.id), ['origem', 'principal', 'subagente', 'compactacao', 'resultado']);
     for (const id of ['origem:prompt', 'origem:retomada', 'compactacao:sem', 'compactacao:compactou', 'resultado:concluida', 'resultado:erro']) {
@@ -115,5 +122,17 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.deepEqual(retomadas.runs.map((x) => x.nome), ['triagem-de-bugs']);
     assert.equal((await pedir(api.url, '/api/workflows?filtro=x')).status, 400);
     assert.equal((await pedir(api.url, '/api/workflows?no=qualquer')).status, 400);
+  });
+
+  test('#96 Dado mais sessões que o teto, a leitura diz que cortou', async () => {
+    const todas = await lerSessoesDosWorkflows(storage, 'todas');
+    assert.equal(todas.truncado, false);
+    const n = todas.sessoes.length;
+    assert.ok(n >= 3);
+    const cortada = await lerSessoesDosWorkflows(storage, 'todas', n - 1);
+    assert.deepEqual([cortada.sessoes.length, cortada.truncado], [n - 1, true]);
+    const exata = await lerSessoesDosWorkflows(storage, 'todas', n);
+    assert.deepEqual([exata.sessoes.length, exata.truncado], [n, false], 'o teto exato não corta');
+    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncado, true);
   });
 });

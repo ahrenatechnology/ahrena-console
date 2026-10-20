@@ -2,7 +2,8 @@
 // (grafo dos agentes, laço dev → review → ajustes, linha do tempo), como funções puras.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { ajustesDe, montarWorkflows, papelDe, workflowDaSessao, type SessaoDosWorkflows } from '../../src/api/workflows.ts';
+import { ajustesDe, lerSessoesDosWorkflows, montarWorkflows, papelDe, tokensDe, workflowDaSessao, type SessaoDosWorkflows } from '../../src/api/workflows.ts';
+import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import type { Agent, SessionEvent } from '../../src/model.ts';
 import { T0, agent, at, event, session } from '../fixtures.ts';
 
@@ -48,6 +49,20 @@ describe('papel e ajustes de um subagente', () => {
     assert.equal(ajustesDe(r, [msg('Aprovado, pode seguir', 1)]), 0);
     assert.equal(ajustesDe(r, [msg('olhando', 1)]), null);
     assert.equal(ajustesDe(r, []), null);
+  });
+
+  test('a negação não aprova; com dois números, vale o último antes de "ajustes"; os metadados mandam', () => {
+    const r = sub('r', 'code-reviewer', 0, 1);
+    const msg = (summary: string): SessionEvent[] => [event({ id: 'm', agentId: r.id, type: 'AssistantMessage', toolName: null, summary, createdAt: at(1) })];
+    assert.equal(ajustesDe(r, msg('Não aprovado: faltam testes')), null);
+    assert.equal(ajustesDe(r, msg('nao aprovado ainda')), null);
+    assert.equal(ajustesDe(r, msg('Not approved: missing tests')), null);
+    assert.equal(ajustesDe(r, msg('Revisei 12 changes e peço 2 ajustes')), 2);
+    assert.equal(ajustesDe(r, msg('3 pequenos ajustes e depois mais 1 ajuste')), 1);
+    assert.equal(ajustesDe(r, msg('Found 4 issues')), 4);
+    assert.equal(ajustesDe(r, msg('Sem ajustes, aprovado')), 0);
+    assert.equal(ajustesDe({ ...r, metadata: { workflow: { ajustes: 5 } } }, msg('Aprovado')), 5);
+    assert.equal(ajustesDe({ ...r, metadata: { ajustes: 0 } }, msg('Revisei 12 changes e peço 2 ajustes')), 0);
   });
 });
 
@@ -209,6 +224,8 @@ describe('#96 montarWorkflows: KPIs de orquestração', () => {
     const r = montarWorkflows([], { agora: AGORA });
     assert.deepEqual(r.kpis, { profundidadeMedia: null, subagentesPorSessao: null, sucessoSubagentes: null, fluxoComum: null, rodadasPorPr: null, duracaoMediaMs: null });
     assert.deepEqual([r.runs, r.grafo.nos, r.grafo.arestas, r.sessoes], [[], [], [], 0]);
+    assert.equal(r.truncado, false);
+    assert.equal(montarWorkflows([], { agora: AGORA, truncado: true }).truncado, true);
     assert.equal(r.grafo.colunas.length, 5);
   });
 });
@@ -318,5 +335,114 @@ describe('#96 montarWorkflows: o grafo de orquestração', () => {
     const concl = montarWorkflows(sessoes(), { agora: AGORA, filtro: 'concluidas' });
     assert.deepEqual([concl.sessoes, concl.runs.length, concl.kpis.duracaoMediaMs], [2, 0, 10 * MIN]);
     assert.equal(montarWorkflows(sessoes(), { agora: AGORA }).sessoes, 3);
+  });
+});
+
+// ---------- Rodada 2 (achados do Argos) ----------
+
+describe('ajustes lidos da mensagem do review (M1)', () => {
+  const r = sub('r', 'code-reviewer', 0, 1);
+  const com = (summary: string) => ajustesDe(r, [event({ id: 'm', agentId: r.id, type: 'AssistantMessage', toolName: null, summary })]);
+  test('o número logo antes de "ajustes", com até duas palavras no meio', () => {
+    assert.equal(com('Pedi 3 pequenos ajustes'), 3);
+    assert.equal(com('Rodada 2: pedi 4 ajustes no serviço'), 4);
+    assert.equal(com('5 changes requested'), 5);
+    assert.equal(com('Rodada 2: pequenos ajustes'), null, 'o número da rodada não é a contagem');
+  });
+  test('aprovado negado não é zero; "sem ajustes" é zero; os metadados continuam valendo primeiro', () => {
+    assert.equal(com('Não aprovado: falta teste'), null);
+    assert.equal(com('Reprovado'), null);
+    assert.equal(com('not approved yet'), null);
+    assert.equal(com('Aprovado, sem ajustes'), 0);
+    assert.equal(com('Nenhum ajuste'), 0);
+    assert.equal(com('LGTM'), 0);
+    assert.equal(ajustesDe({ ...r, metadata: { workflow: { ajustes: 2 } } }, [event({ id: 'm', agentId: r.id, type: 'AssistantMessage', toolName: null, summary: 'Aprovado' })]), 2);
+  });
+});
+
+describe('a volta review → dev só quando o review terminou (I3)', () => {
+  const s = session({ status: 'active' });
+  test('#97/AC-2 review ainda rodando: o dev seguinte foi aberto, não é volta', () => {
+    const agentes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, null), sub('d2', 'general-purpose', 7, null)];
+    const w = workflowDaSessao(s, agentes, [], { agora: AGORA });
+    assert.deepEqual(w.arestas.find((e) => e.para === 's1:d2'), { de: 's1:main', para: 's1:d2', tipo: 'abriu', rotulo: null });
+  });
+  test('#97/AC-2 review que terminou depois de o dev começar também não é volta; antes, com ajustes desconhecidos, é', () => {
+    const depois = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 9), sub('d2', 'general-purpose', 7, null)];
+    assert.equal(workflowDaSessao(s, depois, [], { agora: AGORA }).arestas.find((e) => e.para === 's1:d2')!.tipo, 'abriu');
+    const antes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 7), sub('d2', 'general-purpose', 7, null)];
+    assert.equal(workflowDaSessao(s, antes, [], { agora: AGORA }).arestas.find((e) => e.para === 's1:d2')!.tipo, 'ajustes');
+  });
+});
+
+describe('tokens de um agente sem contar duas vezes (I2)', () => {
+  const linha = (n: number, messageId: string | null, output: number) =>
+    event({ id: `u${n}`, agentId: 's1:a', type: 'AssistantMessage', toolName: null, summary: null, createdAt: at(n), data: { usage: { messageId, requestId: null, tokens: { input: 100, output, cacheRead: 5_000, cacheWrite5m: 20, cacheWrite1h: 0 } } } });
+  const a = sub('a', 'general-purpose', 0, 5);
+  test('as linhas de streaming da mesma mensagem contam uma vez, a de mais saída', () => {
+    assert.equal(tokensDe(a, [linha(1, 'msg_1', 10), linha(2, 'msg_1', 50), linha(3, 'msg_1', 100), linha(4, 'msg_2', 7)]), 100 + 100 + 20 + (100 + 7 + 20));
+  });
+  test('os tokens gravados pelo importer (metadata.tokens) valem antes dos eventos', () => {
+    const gravado = { ...a, metadata: { tokens: { input: 1_000, output: 200, cacheRead: 90_000, cacheWrite5m: 30, cacheWrite1h: 5 } } };
+    assert.equal(tokensDe(gravado, [linha(1, 'msg_1', 999)]), 1_235);
+  });
+});
+
+describe('runs com o formato que o importer grava (B1)', () => {
+  // O importer: o subagente leva `metadata.toolUseId` (a chamada que o abriu) e `metadata.tokens`; a
+  // chamada é um `ToolUse` com `data.toolUseId`, sem o `tool_input` da Workflow; o fim, um `ToolResult`.
+  const sid = 'imp';
+  const tokens = (input: number, output: number) => ({ input, output, cacheRead: 50_000, cacheWrite5m: 0, cacheWrite1h: 0 });
+  const toolUse = (id: string, nome: string, n: number): SessionEvent =>
+    event({ id: `${sid}-tu-${id}`, sessionId: sid, agentId: `${sid}:main`, type: 'ToolUse', toolName: nome, summary: null, createdAt: at(n), data: { parentUuid: null, transcriptAgentId: null, toolUseId: id } });
+  const resultado = (id: string, n: number, isError = false): SessionEvent =>
+    event({ id: `${sid}-tr-${id}`, sessionId: sid, agentId: `${sid}:main`, type: 'ToolResult', toolName: 'Workflow', summary: null, createdAt: at(n), data: { parentUuid: null, transcriptAgentId: null, toolUseId: id, isError } });
+  const base = (eventos: SessionEvent[]): SessaoDosWorkflows => ({
+    session: session({ id: sid, status: 'completed', endedAt: at(20), model: 'claude-opus-5-5', cwd: '/simulacao/gateway-sandbox' }),
+    agentes: [
+      principal(sid),
+      sub('a', 'general-purpose', 2, 6, { metadata: { toolUseId: 'toolu_wf', tokens: tokens(1_000, 100) } }, sid),
+      sub('b', 'code-reviewer', 6, 8, { metadata: { toolUseId: 'toolu_wf', tokens: tokens(500, 50) } }, sid),
+      sub('c', 'Explore', 9, 10, { metadata: { toolUseId: 'toolu_agent', tokens: tokens(10, 1) } }, sid),
+    ],
+    compactou: false,
+    eventos,
+  });
+
+  test('#96/AC-2 o subagente aberto por uma chamada Workflow entra no run; o aberto pela Agent, não', () => {
+    const r = montarWorkflows([base([toolUse('toolu_wf', 'Workflow', 1), toolUse('toolu_agent', 'Agent', 9), resultado('toolu_wf', 12)])], { agora: AGORA });
+    assert.equal(r.runs.length, 1);
+    const run = r.runs[0];
+    assert.deepEqual([run.id, run.nome, run.estado, run.inicio, run.fim, run.modelo, run.projeto], ['toolu_wf', 'workflow', 'concluida', at(1), at(12), 'claude-opus-5-5', 'gateway-sandbox']);
+    assert.deepEqual(run.fases, [], 'sem tool_input nem fase nos agentes: nenhuma fase, não inventada');
+    assert.deepEqual(run.agentes.map((a) => [a.id, a.rotulo, a.tokens]), [['imp:a', 'dev:r1', 1_100], ['imp:b', 'review:r1', 550]]);
+    assert.equal(run.tokens, 1_650);
+  });
+
+  test('#96/AC-2 o ToolResult com erro fecha o run com erro; sem a chamada Workflow, não há run', () => {
+    const erro = montarWorkflows([base([toolUse('toolu_wf', 'Workflow', 1), resultado('toolu_wf', 12, true)])], { agora: AGORA });
+    assert.equal(erro.runs[0].estado, 'erro');
+    assert.deepEqual(montarWorkflows([base([toolUse('toolu_wf', 'Agent', 1)])], { agora: AGORA }).runs, []);
+  });
+
+  test('#96/AC-2 com o tool_input gravado, nome e fases vêm dele', () => {
+    const chamada = toolUse('toolu_wf', 'Workflow', 1);
+    chamada.data = { ...(chamada.data as object), tool_input: { name: 'dev-review', phases: [{ name: 'Implementar' }, { name: 'Revisar' }] } };
+    const run = montarWorkflows([base([chamada])], { agora: AGORA }).runs[0];
+    assert.deepEqual([run.nome, run.fases.map((f) => f.nome)], ['dev-review', ['Implementar', 'Revisar']]);
+  });
+});
+
+describe('o teto de sessões (M5)', () => {
+  test('#96 truncado diz que o teto cortou a leitura', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    for (let i = 0; i < 3; i++) await storage.putSession(session({ id: `t${i}`, updatedAt: at(i) }));
+    const cortada = await lerSessoesDosWorkflows(storage, 'todas', 2);
+    assert.deepEqual([cortada.sessoes.length, cortada.truncado], [2, true]);
+    const inteira = await lerSessoesDosWorkflows(storage, 'todas', 3);
+    assert.deepEqual([inteira.sessoes.length, inteira.truncado], [3, false]);
+    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncado, true);
+    assert.equal(montarWorkflows(inteira.sessoes, { agora: AGORA }).truncado, false);
+    await storage.close();
   });
 });
