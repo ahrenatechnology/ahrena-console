@@ -9,7 +9,7 @@ import { basename } from 'node:path';
 import type { Git } from '../api/trabalho.ts';
 import type { DevConsoleContext } from '../dev-console/contexts.ts';
 import type { IssueFact, MergedPullRequestFact, PullRequestFact } from '../dev-console/model.ts';
-import type { DevConsoleSource, RepoIssues, RepoPullRequests } from '../dev-console/source.ts';
+import type { DevConsoleSource, RepoBranches, RepoIssues, RepoPullRequests } from '../dev-console/source.ts';
 
 export const DEV_CONSOLE_SIMULATOR_CATALOG = 'dev-sintetico/catalogo-exemplo';
 export const DEV_CONSOLE_SIMULATOR_RULES = 'dev-sintetico/motor-de-regras';
@@ -59,7 +59,7 @@ export class SimulatedDevConsoleSource implements DevConsoleSource {
     this.check(`pullRequests:${repo}`);
     const p = (n: number, title: string, over: Partial<PullRequestFact>): PullRequestFact => ({
       repo, number: n, title, url: url(repo, 'pull', n), isDraft: false, mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN',
-      baseRefName: 'main', headRefName: `feat/${n}`, createdAt: this.ago(10), ci: 'SUCCESS', review: null, closes: [], ...over,
+      baseRefName: 'main', headRefName: `feat/${n}`, isCrossRepository: false, createdAt: this.ago(10), ci: 'SUCCESS', review: null, closes: [], ...over,
     });
     const m = (n: number, title: string, hours: number): MergedPullRequestFact => ({ repo, number: n, title, url: url(repo, 'pull', n), mergedAt: this.ago(hours) });
     if (repo === DEV_CONSOLE_SIMULATOR_CATALOG) {
@@ -111,10 +111,10 @@ export class SimulatedDevConsoleSource implements DevConsoleSource {
     return { open: [], closed: [] };
   }
 
-  async branches(repo: string): Promise<string[]> {
+  async branches(repo: string): Promise<RepoBranches> {
     this.check(`branches:${repo}`);
-    if (repo === DEV_CONSOLE_SIMULATOR_CATALOG) return ['main', 'feat/31-exportacao-csv', 'feat/61-pagamentos', 'feat/72-retry', 'feat/47-relatorio'];
-    if (repo === DEV_CONSOLE_SIMULATOR_RULES) return ['main', 'feat/58-esquema-pedidos', 'feat/60-indices-pedidos', 'feat/82-frete'];
-    return [];
+    if (repo === DEV_CONSOLE_SIMULATOR_CATALOG) return { names: ['main', 'feat/31-exportacao-csv', 'feat/61-pagamentos', 'feat/72-retry', 'feat/47-relatorio'] };
+    if (repo === DEV_CONSOLE_SIMULATOR_RULES) return { names: ['main', 'feat/58-esquema-pedidos', 'feat/60-indices-pedidos', 'feat/82-frete'] };
+    return { names: [] };
   }
 }

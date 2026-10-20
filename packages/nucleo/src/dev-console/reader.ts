@@ -3,9 +3,9 @@
 // issues. Sem GitHub, serve o que está guardado com `stale: true`; sem nada guardado, o
 // repositório vem vazio, também `stale`, para a tela dizer por quê.
 
-import { GITHUB_TTL, GithubCache, type CacheResult, type GetOptions } from '../github/cache.ts';
+import { GITHUB_TTL, GithubCache, type CacheResult } from '../github/cache.ts';
 import { DONE_WINDOW_MS, type IssueFact, type MergedPullRequestFact, type PullRequestFact } from './model.ts';
-import type { DevConsoleSource, RepoIssues, RepoPullRequests } from './source.ts';
+import type { DevConsoleSource, RepoBranches, RepoIssues, RepoPullRequests } from './source.ts';
 
 export const DEV_CONSOLE_TTL = {
   pullRequests: GITHUB_TTL.detail,
@@ -22,6 +22,8 @@ export interface RepoSnapshot {
   openIssues: IssueFact[];
   closedIssues: IssueFact[];
   branches: string[];
+  /** Alguma das listas veio parcial (mais do que a página do GitHub). */
+  truncated: boolean;
   /** A leitura mais velha das três (ms desde a época); `null` quando nenhuma veio. */
   readAt: number | null;
   stale: boolean;
@@ -52,12 +54,12 @@ export class DevConsoleGithub {
     this.now = now;
   }
 
-  async read(repo: string, options: GetOptions = {}): Promise<RepoSnapshot> {
+  async read(repo: string): Promise<RepoSnapshot> {
     const since = new Date(this.now() - DONE_WINDOW_MS).toISOString();
     const [prs, issues, branches] = await Promise.all([
-      this.get<RepoPullRequests>(devConsoleCacheKey('pullRequests', repo), DEV_CONSOLE_TTL.pullRequests, () => this.source.pullRequests(repo, since), { open: [], merged: [] }, options),
-      this.get<RepoIssues>(devConsoleCacheKey('issues', repo), DEV_CONSOLE_TTL.issues, () => this.source.issues(repo, since), { open: [], closed: [] }, options),
-      this.get<string[]>(devConsoleCacheKey('branches', repo), DEV_CONSOLE_TTL.branches, () => this.source.branches(repo), [], options),
+      this.get<RepoPullRequests>(devConsoleCacheKey('pullRequests', repo), DEV_CONSOLE_TTL.pullRequests, () => this.source.pullRequests(repo, since), { open: [], merged: [] }),
+      this.get<RepoIssues>(devConsoleCacheKey('issues', repo), DEV_CONSOLE_TTL.issues, () => this.source.issues(repo, since), { open: [], closed: [] }),
+      this.get<RepoBranches>(devConsoleCacheKey('branches', repo), DEV_CONSOLE_TTL.branches, () => this.source.branches(repo), { names: [] }),
     ]);
     const reads = [prs, issues, branches];
     const times = reads.map((r) => r.readAt).filter((t): t is number => t !== null);
@@ -67,16 +69,17 @@ export class DevConsoleGithub {
       merged: prs.value.merged,
       openIssues: issues.value.open,
       closedIssues: issues.value.closed,
-      branches: branches.value,
+      branches: branches.value.names,
+      truncated: Boolean(prs.value.truncated || issues.value.truncated || branches.value.truncated),
       readAt: times.length > 0 ? Math.min(...times) : null,
       stale: reads.some((r) => r.stale),
       staleReason: reads.find((r) => r.staleReason)?.staleReason ?? null,
     };
   }
 
-  private async get<T>(key: string, ttl: number, fetch: () => Promise<T>, empty: T, options: GetOptions): Promise<Read<T>> {
+  private async get<T>(key: string, ttl: number, fetch: () => Promise<T>, empty: T): Promise<Read<T>> {
     try {
-      const r: CacheResult<T> = await this.cache.get(key, ttl, async () => ({ value: await fetch() }), options);
+      const r: CacheResult<T> = await this.cache.get(key, ttl, async () => ({ value: await fetch() }));
       return { value: r.value, readAt: r.fetchedAt, stale: r.stale, staleReason: r.staleReason };
     } catch (err) {
       // `NoDataError`: nada guardado e o GitHub falhou.
