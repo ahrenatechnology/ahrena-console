@@ -3,13 +3,14 @@
 // Desktop). É uma ponte para o `/mcp` do núcleo que já roda (`npm run api`): o mesmo servidor e
 // um só processo lendo o banco. `npm run mcp -- --help`.
 //
-// O núcleo vem do dono único (src/dono, #86): a ponte adota o núcleo da máquina pela trava ou, se
-// ninguém subiu, sobe um com `--pai` nela. Quando a ponte sai (o Claude Desktop fecha), o núcleo
-// sai junto, a menos que outro cliente (o app, outra ponte) esteja registrado.
+// The core comes from the single owner (src/owner, #86): the bridge adopts the machine's core
+// through the lock or, if nobody started one, starts one with `--parent` on itself. When the bridge
+// exits (Claude Desktop closes), the core exits too, unless another client (the app, another
+// bridge) is registered.
 
 import { parseArgs } from 'node:util';
-import { examinar } from '../dono/dono.ts';
-import { subirOuAdotar } from '../dono/subir.ts';
+import { examine } from '../owner/owner.ts';
+import { startOrAdopt } from '../owner/start.ts';
 import { CAMINHO_DO_MCP } from './http.ts';
 import { servidorSemNucleo } from './index.ts';
 import { atenderPorStdio, ponteHttp } from './stdio.ts';
@@ -49,15 +50,15 @@ const url = (p: number) => `http://127.0.0.1:${p}${CAMINHO_DO_MCP}`;
 // A porta do núcleo: a da trava viva, conferida a cada pedido (o núcleo pode ter sido trocado).
 async function portaDoNucleo(): Promise<number> {
   if (fixa) return porta;
-  const ex = await examinar();
-  return ex.estado === 'vivo' ? ex.trava.porta : porta;
+  const ex = await examine();
+  return ex.state === 'alive' ? ex.lock.port : porta;
 }
 
 // Adota ou sobe, em segundo plano: o `initialize` responde na hora, com o núcleo ou sem ele.
 let subindo: Promise<void> | null = null;
 function garantirNucleo(): void {
   if (fixa || o['sem-subir'] || subindo) return;
-  subindo = subirOuAdotar({ porta, pai: process.pid, log })
+  subindo = startOrAdopt({ port: porta, parent: process.pid, log })
     .then((r) => log(r.estado === 'de-pe' ? `núcleo em ${r.url} (${r.subiu ? 'subiu agora' : 'adotado'})` : `o núcleo não subiu: ${r.motivo}`))
     .catch((e) => log(`o núcleo não subiu: ${(e as Error).message}`))
     .finally(() => {
@@ -69,7 +70,7 @@ garantirNucleo();
 const comoSubir = fixa
   ? `Suba com \`npm run api -- --porta ${porta}\` em packages/nucleo e chame de novo.`
   : o['sem-subir']
-    ? 'Suba com `npm run nucleo -- subir` em packages/nucleo e chame de novo.'
+    ? 'Suba com `npm run core -- start` em packages/nucleo e chame de novo.'
     : 'A ponte está subindo o núcleo; chame de novo em alguns segundos.';
 await atenderPorStdio({
   atender: async (m) => {
