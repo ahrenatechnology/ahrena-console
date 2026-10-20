@@ -1,0 +1,89 @@
+/* Workflows (C14). Toda cor vem de marca.css: nenhuma é escrita aqui. Tudo com o prefixo wf-, porque
+   o CSS de uma tela fica carregado depois que ela sai. */
+
+.wf-kpis, .wf-painel { flex: none; }
+
+/* ---------- filtro do topo ---------- */
+.wf-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.wf-seg button { font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
+.wf-seg button:hover { color: var(--text); }
+.wf-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.wf-seg button:focus-visible, .wf-run-abrir:focus-visible, .wf-run-link:focus-visible, .wf-no:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- KPIs ---------- */
+.wf-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.wf-kpi { padding: 14px 16px; height: 96px; display: flex; flex-direction: column; justify-content: space-between; position: relative; min-width: 0; }
+.wf-kpi .rot { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-kpi .ic { position: absolute; top: 13px; right: 14px; font-size: 17px; }
+.wf-kpi .k-acento { color: var(--accent-text); }
+.wf-kpi .k-ok { color: var(--status-completed-text); }
+.wf-kpi .k-espera { color: var(--status-waiting-text); }
+.wf-kpi .v { font-size: 26px; font-weight: var(--weight-semibold); letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-kpi.k-fluxo .v { font-size: 18px; }
+.wf-kpi .s { font-size: 11.5px; color: var(--muted); }
+
+/* ---------- painéis ---------- */
+.wf-painel { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wf-ttl { font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; }
+.wf-ttl .r { margin-left: auto; font-size: 12px; font-weight: var(--weight-medium); color: var(--muted); text-align: right; }
+.wf-mudo { color: var(--muted); display: inline-flex; align-items: center; }
+.wf-nada { margin: 0; padding: 10px 2px; color: var(--muted); font-size: 12.5px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.wf-nada p { margin: 0; }
+.wf-rolar { overflow-x: auto; min-width: 0; }
+
+/* ---------- runs ---------- */
+.wf-runs { display: flex; flex-direction: column; gap: 4px; }
+.wf-run { border: 1px solid transparent; border-radius: 12px; }
+.wf-run.aberto { background: var(--bg); border-color: var(--border); padding: 4px 0 6px; display: flex; flex-direction: column; gap: 6px; }
+.wf-run-cab { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 0; }
+.wf-run-abrir { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 0 6px 12px; background: none; border: 0; color: var(--text); text-align: left; border-radius: 8px; }
+.wf-run-abrir b { font-weight: var(--weight-semibold); font-size: 14px; white-space: nowrap; }
+.wf-meta { color: var(--muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-run-link { color: var(--muted); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; flex: none; }
+.wf-run-link:hover { color: var(--text); background: var(--raised); }
+
+.wf-selo, .wf-pilula { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.wf-selo::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.wf-pilula { height: 20px; font-size: 11px; font-weight: var(--weight-semibold); }
+:is(.wf-selo, .wf-pilula).e-active { background: var(--status-active-badge); color: var(--status-active-text); }
+:is(.wf-selo, .wf-pilula).e-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+:is(.wf-selo, .wf-pilula).e-error { background: var(--status-error-badge); color: var(--status-error-text); }
+
+.wf-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 7px; font-size: 11.5px; background: var(--raised); color: var(--text); border: 1px solid var(--border); white-space: nowrap; flex: none; }
+.wf-chip.mono { color: var(--muted); }
+
+.wf-fases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 12px; }
+.wf-volta { color: var(--muted); font-size: 11.5px; margin-left: 8px; }
+
+.wf-run.aberto > .wf-rolar { padding: 0 12px; }
+.wf-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wf-tabela th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.wf-tabela td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+.wf-tabela tr:last-child td { border-bottom: 0; }
+.wf-tabela .n { text-align: right; }
+.wf-tipo { color: var(--muted); margin-left: 6px; }
+
+/* ---------- grafo de orquestração ---------- */
+.wf-orq { display: block; max-width: 100%; height: auto; margin: 0 auto; font-family: var(--font-mono); font-size: 10.5px; }
+.wf-orq-col { fill: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.wf-aresta { fill: none; stroke: var(--accent); stroke-opacity: .35; }
+.wf-aresta.erro { stroke: var(--status-error-dot); }
+.wf-no { cursor: pointer; }
+.wf-no rect { fill: var(--raised); stroke: var(--border); stroke-width: 1; }
+.wf-no.r-ok rect { stroke: var(--status-completed-dot); }
+.wf-no.r-erro rect { stroke: var(--status-error-dot); }
+.wf-no:hover rect { stroke: var(--muted); }
+.wf-no.sel rect { stroke: var(--accent); stroke-width: 2; }
+.wf-no .rot { fill: var(--text); }
+.wf-no .vol { fill: var(--muted); }
+.wf-no:focus { outline: none; }
+.wf-no:focus-visible rect { stroke: var(--accent); stroke-width: 2; }
+
+@media (max-width: 1100px) {
+  .wf-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cc-cab:has(.wf-seg) { flex-wrap: wrap; }
+  .cc-cab:has(.wf-seg) > div:nth-child(2) { flex: 1 1 0; min-width: 240px; }
+}
+@media (max-width: 640px) {
+  .wf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
