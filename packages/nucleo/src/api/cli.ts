@@ -64,6 +64,13 @@ import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
+import { AlertTracker } from '../telemetry/alerts.ts';
+import { collectorFor } from '../telemetry/adapters/system.ts';
+import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
+import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
+import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
+import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 
@@ -89,6 +96,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
+  --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
+                      Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
 
 Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
@@ -113,6 +122,7 @@ const { values: o } = parseArgs({
     pai: { type: 'string' },
     substituir: { type: 'boolean', default: false },
     'sem-trava': { type: 'boolean', default: false },
+    'no-telemetry': { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
   },
 });
@@ -285,6 +295,29 @@ relerPerfis?.unref();
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 
+// Telemetria das máquinas (#175, decisão 0008): uma amostra a cada 30 s, 12 h no banco, e o alerta
+// que entra ou sai em /api/mudancas. Na --demo, as leituras sintéticas do simulador, já com 12 h
+// semeadas, e a "workstation" que a #176 vai ler de verdade pelo túnel.
+const amostras = new SqliteTelemetryStore(sqlite.db);
+const alertas = new AlertTracker();
+const maquinas: MachineEntry[] = [localMachine()];
+const amostradores: TelemetrySampler[] = [];
+function amostrador(machineId: string, collector: TelemetryCollector) {
+  amostradores.push(new TelemetrySampler({ machineId, collector, store: amostras, tracker: alertas, onAlertChange: publishAlertChanges(mudancas), log }));
+}
+if (demo) {
+  maquinas.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  await seedTelemetry(amostras, 'local', 'local');
+  await seedTelemetry(amostras, SIMULATED_WORKSTATION.id, 'workstation');
+  amostrador('local', new SimulatedCollector('local'));
+  amostrador(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
+} else if (!o['no-telemetry']) {
+  const coletor = collectorFor();
+  if (coletor) amostrador('local', coletor);
+  else log(`telemetria: sem coletor para ${process.platform}`);
+}
+const telemetria = amostradores.length > 0 ? new TelemetryService({ store: amostras, tracker: alertas, machines: maquinas }) : null;
+
 let historicoPronto = false;
 const follower =
   demo || o['sem-historico']
@@ -325,6 +358,7 @@ const api: ApiLocal = await iniciarApiLocal({
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
+  telemetry: telemetria,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -358,6 +392,7 @@ const pararDeVigiarPai =
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
+for (const a of amostradores) a.start();
 if (follower) {
   follower
     .start()
@@ -397,6 +432,7 @@ async function desligar() {
   pararDeVigiarPai();
   if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
+  await Promise.all(amostradores.map((a) => a.stop()));
   await api.close().catch(() => undefined);
   await storage.close();
   process.exit(0);

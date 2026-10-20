@@ -13,3 +13,4 @@ export {
 } from './cenario.ts';
 export { semearHistorico, type OpcoesDoHistorico, type ResumoDoHistorico } from './historico.ts';
 export { PRECOS_ILUSTRATIVOS, simular, type Modo, type OpcoesDaSimulacao, type Resumo } from './simulador.ts';
+export { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry, simulatedReading, type SimulatedProfile } from './telemetry.ts';
