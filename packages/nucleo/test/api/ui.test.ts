@@ -106,13 +106,34 @@ describe('/ui no núcleo', () => {
   });
 
   test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
-    const arquivos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
+    // A pasta e as telas (`telas/`): as regras valem para todo arquivo servido.
+    const arquivos = readdirSync(PASTA_DA_UI, { recursive: true })
+      .map(String)
+      .filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
+      assert.doesNotMatch(texto, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
+      if (a !== 'ler.js') assert.doesNotMatch(texto, /\bfetch\(/, `${a} chama fetch: só ler.js fala com o núcleo`);
+      // `innerHTML` só nos ícones (constantes de dom.js), nunca com dado.
+      if (a !== 'dom.js') assert.doesNotMatch(texto, /innerHTML|outerHTML|insertAdjacentHTML/, `${a} monta HTML com texto`);
+    }
+    // As telas, em ui/telas/: a mesma regra, e nada de estilo inline, innerHTML ou fetch direto.
+    const telas = readdirSync(`${PASTA_DA_UI}telas`).filter((a) => /\.(js|css)$/.test(a));
+    for (const a of telas) {
+      const texto = readFileSync(`${PASTA_DA_UI}telas/${a}`, 'utf8');
+      const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      assert.deepEqual(urls, [], `telas/${a} cita endereço externo`);
+      assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `telas/${a} escreve cor à mão`);
+      if (a.endsWith('.js')) {
+        // O que a CSP (`style-src 'self'`) bloqueia é o atributo `style`: `{ style: … }` no el(),
+        // `style="…"` e `setAttribute('style', …)`. O CSSOM (`x.style.setProperty`) ela deixa passar.
+        assert.doesNotMatch(texto, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `telas/${a} usa estilo inline, HTML ou fetch`);
+        for (const [, css] of texto.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(telas.includes(css!), `telas/${a} carrega ${css}, que não existe`);
+      }
     }
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
     for (const [, ref] of pagina.matchAll(/(?:href|src)="\/ui\/([^"]+)"/g)) assert.ok(readdirSync(PASTA_DA_UI).includes(ref!), `index.html cita ${ref}, que não existe`);
@@ -200,9 +221,11 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics e Histórico; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'historico']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics, Workflows, Histórico e Decisões; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'workflows', 'historico', 'decisoes']);
+    assert.equal(acharTela('/ui/decisoes').tela.arquivo, '/ui/telas/decisoes.js');
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
+    assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
     assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');

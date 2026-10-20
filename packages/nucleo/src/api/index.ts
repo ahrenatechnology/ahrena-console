@@ -2,12 +2,26 @@
 export * from './tipos.ts';
 export { Contas, arquivoPadraoDeContas, type OpcoesDasContas } from './contas.ts';
 export { IndiceDoDesktop, raizPadraoDoDesktop, type OpcoesDoIndice, type SessaoDoDesktop } from './indice-desktop.ts';
+export {
+  DecisoesDaUi,
+  responderDecisoesDaUi,
+  slugDaDecisao,
+  type AgrupamentoDasDecisoes,
+  type DecisaoDaUi,
+  type DecisoesDaAba,
+  type DecisoesDaPagina,
+  type FiltroDeEstado,
+  type GrupoDeDecisoes,
+  type OpcoesDasDecisoesDaUi,
+  type RascunhoDeRegistro,
+} from './decisoes-ui.ts';
 export { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao, type AlvoDasDecisoes, type RegistroDoPainel } from './decisoes.ts';
 export { MontadorDoPainel, atividadeDe, subagentesDe, LIMITE_PADRAO_DE_CONTEXTO, type LeituraDaSessao, type OpcoesDoPainel, type PedidoDoPainel } from './painel.ts';
 export { MontadorDoMural, ehAberta, muralDoPainel, responderMural, RECENTE_DO_MURAL_MS, ROTA_DO_MURAL, type OpcoesDoMural } from './mural.ts';
 export { ResumosDeSessao, aplicarEvento, iniciosDosTurnos, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './resumo.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './trabalho.ts';
 export { iniciarApiLocal, VERSAO_DA_API, type ApiLocal, type OpcoesDaApi } from './servidor.ts';
+export * from './workflows.ts';
 export { criarRotaDoProjeto, quadroDe, mesmaOrigemMovendo, type CardDoProjeto, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from './projeto.ts';
 export { LeiturasDoDetalhe, ROTA_DO_DETALHE, filtroDe, type CabecaDoDetalhe, type AgentesDoDetalhe, type ConversaDoDetalhe, type EventosDoDetalhe, type OpcoesDoDetalhe } from './detalhe.ts';
 export { FeedDeEventos, ROTA_DOS_EVENTOS, statusDoEvento, TIPOS_POR_STATUS, type EventoDoFeed, type RespostaDoFeed, type StatusDoEvento } from './eventos.ts';
