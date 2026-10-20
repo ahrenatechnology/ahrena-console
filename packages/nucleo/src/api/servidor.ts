@@ -21,6 +21,7 @@
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/kanban`             | O Kanban só leitura, sessões ou agentes por coluna (api/kanban.ts, #31) |
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
@@ -50,6 +51,7 @@ import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
 import type { HistoricoDeSessoes } from '../historico/leitura.ts';
+import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
@@ -92,6 +94,8 @@ export interface OpcoesDaApi {
   sessoes?: ListaDeSessoes;
   /** As sessões encerradas por dia; liga `GET /api/historico` (#33). */
   historico?: HistoricoDeSessoes;
+  /** O Kanban (#31); liga `GET /api/kanban`. */
+  kanban?: QuadroKanban;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -268,6 +272,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
     if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
+    if (url.pathname === ROTA_DO_KANBAN && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,

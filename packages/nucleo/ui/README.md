@@ -18,6 +18,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
 | `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`; `historico.js` (C15, #33) lê `GET /api/historico`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`, `historico.css`), carregado pela própria tela |
 | `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
+| `telas/kanban.js` | O Kanban ([#31](https://github.com/ahrenatechnology/ahrena-console/issues/31)): sessões ou agentes em colunas por status, só leitura, em `/ui/kanban` (`?visao=agentes` para os agentes) |
+| `kanban.css` | O estilo do Kanban, carregado pela tela só enquanto ela está aberta |
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
 
 ## As telas
@@ -61,6 +63,29 @@ O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `anal
 3. Um ícone novo entra em `ICONES` (`dom.js`), copiado do Lucide, com `currentColor`.
 
 Item da barra só para tela que existe: nada de placeholder para as telas que não estão na versão.
+
+## O CSS de uma tela
+
+O que é de uma tela só fica num arquivo dela, `ui/<nome>.css`, e não em `moldura.css`. A tela o põe no `<head>` ao montar, marcado com `data-tela`, sem duplicar, e o tira quando a pessoa sai:
+
+```js
+function ligarFolha() {
+  const ja = document.head.querySelector('link[data-tela="kanban"]');
+  if (ja) return ja;
+  const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-tela': 'kanban' });
+  document.head.append(link);
+  return link;
+}
+
+const folha = ligarFolha();
+ctx.sinal.addEventListener('abort', () => folha.remove());
+```
+
+A limpeza vai no `ctx.sinal`, e não só na função que `montar` devolve, para valer mesmo quando a pessoa sai antes da primeira leitura voltar. O núcleo já serve `/ui/<nome>.css` e `/ui/telas/<nome>.js`, e as regras abaixo valem para eles também (`test/api/ui-kanban.test.ts` confere as do Kanban).
+
+## Parâmetros na URL
+
+Uma tela pode ler a query (`location.search`), como o Kanban lê `?visao=`. A moldura a preserva ao navegar por `ctx.navegar` ou por link. Para trocar a query sem sair da tela, use `history.replaceState`: a tela continua montada e relê o que precisar.
 
 ## O `ctx` da tela
 

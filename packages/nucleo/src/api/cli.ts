@@ -45,6 +45,7 @@ import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.t
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
+import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
@@ -319,6 +320,7 @@ const api: ApiLocal = await iniciarApiLocal({
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
+  kanban: new QuadroKanban({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

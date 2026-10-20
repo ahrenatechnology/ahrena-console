@@ -5,6 +5,8 @@
 //   `putSession` só registra quando muda um campo que as telas mostram (`camposVisiveis`): todo hook
 //   grava a sessão para avançar o `updatedAt`, e isso sozinho não acorda ninguém. Atividade nova
 //   (eventos) não é mudança: estado, plano e decisões têm os seus tipos.
+// - `putAgent` registra `sessao` (da sessão do agente) quando muda o que o Kanban mostra do agente
+//   (`camposVisiveisDoAgente`): um subagente que começa ou termina mexe na visão Agentes (#31).
 // - `decisoesComMudancas(porta, cursor, contaDe)` faz o mesmo com `putDecision`.
 // - `aoMudarDaMaquina(cursor, contaDe)` vai no `aoMudar` da máquina: registra `estado` e, quando
 //   entra ou sai do inbox, `precisa-de-voce`.
@@ -15,7 +17,7 @@
 import type { Mudanca as MudancaDaMaquina } from '../estados/maquina.ts';
 import type { EstadoDoInbox } from '../estados/leitura.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
-import type { Session } from '../model.ts';
+import type { Agent, Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { CursorDeMudancas } from './cursor.ts';
 
@@ -24,10 +26,17 @@ export function camposVisiveis(s: Session): string {
   return JSON.stringify([s.name, s.status, s.cwd, s.model, s.endedAt, s.awaitingInputSince, s.awaitingReason, s.accountId]);
 }
 
+/** O que as telas mostram do agente: entra, muda de status ou termina. */
+export function camposVisiveisDoAgente(a: Agent): string {
+  return JSON.stringify([a.type, a.status, a.name, a.subagentType, a.task, a.endedAt]);
+}
+
 export class ContasDasSessoes {
   private readonly contas = new Map<string, string | null>();
   /** `camposVisiveis` da última gravação de cada sessão, para saber se a próxima muda algo. */
   readonly vistas = new Map<string, string>();
+  /** O mesmo para os agentes, pela chave `<sessão>\0<agente>`. */
+  readonly agentesVistos = new Map<string, string>();
   private readonly storage: Pick<StoragePort, 'getSession'>;
 
   constructor(storage: Pick<StoragePort, 'getSession'>) {
@@ -56,6 +65,15 @@ export function comMudancas<T extends StoragePort>(storage: T, cursor: CursorDeM
       if (contas.vistas.get(session.id) === visivel) return;
       contas.vistas.set(session.id, visivel);
       cursor.registrar({ tipo: 'sessao', chave: session.id, sessionId: session.id, accountId: session.accountId });
+    },
+    async putAgent(agent) {
+      await storage.putAgent(agent);
+      const chave = `${agent.sessionId}\0${agent.id}`;
+      const visivel = camposVisiveisDoAgente(agent);
+      if (contas.agentesVistos.get(chave) === visivel) return;
+      contas.agentesVistos.set(chave, visivel);
+      const accountId = await contas.de(agent.sessionId);
+      cursor.registrar({ tipo: 'sessao', chave: agent.sessionId, sessionId: agent.sessionId, accountId });
     },
     async putPlan(plan) {
       await storage.putPlan(plan);
