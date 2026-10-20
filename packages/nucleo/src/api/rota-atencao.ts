@@ -177,8 +177,8 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
   const grupo = (i: ItemDaAtencao) => (i.level === 'your-turn' ? 2 : i.reason === 'error' ? 1 : 0);
   items.sort((a, b) => grupo(a) - grupo(b) || a.since.localeCompare(b.since) || a.session.localeCompare(b.session) || (a.machine?.id ?? '').localeCompare(b.machine?.id ?? ''));
   for (const s of await frota.vivas()) {
-    if (s.inbox.estado === 'error') withError++;
-    else if (ESTADOS_VIVOS.includes(s.inbox.estado) && s.inbox.estado !== 'waiting') active++;
+    if (s.inbox.state === 'error') withError++;
+    else if (ESTADOS_VIVOS.includes(s.inbox.state) && s.inbox.state !== 'waiting') active++;
   }
   const needs = items.filter((i) => i.level === 'needs').length;
   return {

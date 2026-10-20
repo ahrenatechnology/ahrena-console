@@ -16,7 +16,7 @@ export { defaultProjectsRoot } from './ingest/historico/files.ts';
 export { followTranscripts, type FollowOptions, type FollowerStats, type TranscriptFollower } from './ingest/historico/follower.ts';
 export * from './github/index.ts';
 export * from './ingest/hooks/index.ts';
-export * from './estados/index.ts';
+export * from './states/index.ts';
 export * from './custo/index.ts';
 export * from './plano/index.ts';
 export * from './contexto/index.ts';

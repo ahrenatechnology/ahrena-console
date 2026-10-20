@@ -8,7 +8,7 @@ import { LIST_CHANGE_KEY } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
-import { MaquinaDeEstados } from '../../src/estados/maquina.ts';
+import { SessionStateMachine } from '../../src/states/machine.ts';
 import {
   ContasDasSessoes,
   CursorDeMudancas,
@@ -314,10 +314,10 @@ describe('fontes das mudanças', () => {
     assert.equal(d.changes.length, 1);
     assert.equal(d.changes[0].accountId, 'conta-b');
 
-    const maquina = new MaquinaDeEstados({ storage, sonda: null, agora: () => new Date(T0), aoMudar: aoMudarDaMaquina(cursor, contas), log: () => {} });
+    const maquina = new SessionStateMachine({ storage, probe: null, now: () => new Date(T0), onChange: aoMudarDaMaquina(cursor, contas), log: () => {} });
     const c1 = cursor.atual;
     const espera = cursor.aguardar(c1, { filtros: { tipos: ['needs-you'] }, timeoutMs: 1000 });
-    await maquina.aplicar({ id: 'h1', sessionId: 's1', agentId: null, type: 'Notification', toolName: null, summary: null, data: { notification_type: 'permission_prompt', message: 'Permitir?' }, createdAt: T0 });
+    await maquina.apply({ id: 'h1', sessionId: 's1', agentId: null, type: 'Notification', toolName: null, summary: null, data: { notification_type: 'permission_prompt', message: 'Permitir?' }, createdAt: T0 });
     const r = await espera;
     assert.deepEqual(r.changes.map((m) => [m.type, m.key, m.accountId]), [['needs-you', 's1', 'conta-b']]);
     const tudo = await cursor.aguardar(c1);

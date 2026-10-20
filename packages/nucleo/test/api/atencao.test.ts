@@ -17,7 +17,7 @@ const resumoDe = (...eventos: ReturnType<typeof ev>[]) => {
   for (const e of eventos) aplicarEvento(r, e);
   return r;
 };
-const esperando = (motivo: 'stop' | 'notification' | 'interrupted' | 'session_start') => ({ status: 'waiting' as const, estado: 'waiting' as const, motivo });
+const esperando = (motivo: 'stop' | 'notification' | 'interrupted' | 'session_start') => ({ status: 'waiting' as const, state: 'waiting' as const, reason: motivo });
 
 describe('#140 CA1 e CA2: precisa de você × sua vez', () => {
   test('permissão, pergunta com opções e plano para aprovar precisam de você', () => {
@@ -58,7 +58,7 @@ describe('#140 CA1 e CA2: precisa de você × sua vez', () => {
   });
 
   test('erro precisa de você', () => {
-    assert.deepEqual(atencaoDe({ status: 'error', estado: 'error', motivo: null }, null), { nivel: 'precisa', porque: 'erro' });
+    assert.deepEqual(atencaoDe({ status: 'error', state: 'error', reason: null }, null), { nivel: 'precisa', porque: 'erro' });
   });
 });
 

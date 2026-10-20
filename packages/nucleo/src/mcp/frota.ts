@@ -2,7 +2,7 @@
 // encerradas hoje e o custo de hoje. Tudo pela porta e por caches em memória, como o painel
 // (decisão 0004): nenhuma chamada varre transcripts.
 //
-// - Vivas: as `active` e `error` da porta, com `lerInbox` (1.5). Guardadas por `cacheMs`, e
+// - Vivas: as `active` e `error` da porta, com `readInbox` (1.5). Guardadas por `cacheMs`, e
 //   chamadas ao mesmo tempo esperam a mesma leitura.
 // - Encerradas hoje: `completed` e `abandoned` com a última atividade hoje, no fuso da máquina.
 // - Custo de hoje: `agregarCusto` (1.6) do dia, recalculado no máximo a cada `custoMs`.
@@ -11,7 +11,7 @@
 
 import { basename } from 'node:path';
 import { agregarCusto, diaDe, type RelatorioDeCusto } from '../custo/agregacao.ts';
-import { lerInbox, type EstadoDoInbox, type LeituraDoInbox } from '../estados/leitura.ts';
+import { readInbox, type InboxState, type InboxReading } from '../states/inbox.ts';
 import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from '../api/contas.ts';
@@ -43,7 +43,7 @@ const MOTIVO_DO_PAINEL: Record<MotivoDaAtencao, Motivo> = {
 
 export interface SessaoDaFrota {
   session: Session;
-  inbox: LeituraDoInbox;
+  inbox: InboxReading;
   desktop: SessaoDoDesktop | null;
   conta: ContaDoPainel | null;
   /** Já limpo (saida.ts). */
@@ -115,7 +115,7 @@ export class LeituraDaFrota {
       for await (const session of this.todas({ status: ['active', 'error'] })) {
         const agentes: Agent[] = await this.storage.listAgents(session.id);
         const desktop = this.desktop?.sessaoPorCli(session.id) ?? null;
-        itens.push({ session, inbox: lerInbox(session, agentes), desktop, conta: this.contas.daSessao(session, desktop), titulo: tituloDe(session, desktop) });
+        itens.push({ session, inbox: readInbox(session, agentes), desktop, conta: this.contas.daSessao(session, desktop), titulo: tituloDe(session, desktop) });
       }
       this.vivasCache = { em: this.agora(), itens };
       return itens;
@@ -176,7 +176,7 @@ export class LeituraDaFrota {
  * O motivo e o grupo vêm de `atencaoDe` (src/api/atencao.ts), a mesma regra do "precisam de você"
  * do painel; aqui só se acrescenta o que o MCP mostra além dela, sem texto da conversa.
  */
-export function classificar(inbox: LeituraDoInbox, r: ResumoDosEventos): Atencao {
+export function classificar(inbox: InboxReading, r: ResumoDosEventos): Atencao {
   const { nivel, porque } = atencaoDe(inbox, r);
   const motivo = MOTIVO_DO_PAINEL[porque];
   return {
@@ -204,7 +204,7 @@ export function projetoDe(s: Session): string | null {
 }
 
 /** Estados vivos na ordem em que aparecem nos totais. */
-export const ESTADOS_VIVOS: readonly EstadoDoInbox[] = ['active', 'waiting', 'delegating', 'background', 'error'];
+export const ESTADOS_VIVOS: readonly InboxState[] = ['active', 'waiting', 'delegating', 'background', 'error'];
 
 /**
  * Casa a conta da sessão com o filtro `account`: rótulo (sem diferença de caixa), id, ou "none"

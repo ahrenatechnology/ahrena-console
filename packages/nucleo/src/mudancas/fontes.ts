@@ -8,14 +8,14 @@
 // - `putAgent` registra `session` (da sessão do agente) quando muda o que o Kanban mostra do agente
 //   (`camposVisiveisDoAgente`): um subagente que começa ou termina mexe na visão Agentes (#31).
 // - `decisoesComMudancas(porta, cursor, contaDe)` faz o mesmo com `putDecision`.
-// - `aoMudarDaMaquina(cursor, contaDe)` vai no `aoMudar` da máquina: registra `state` e, quando
+// - `aoMudarDaMaquina(cursor, contaDe)` vai no `onChange` da máquina: registra `state` e, quando
 //   entra ou sai do inbox, `needs-you`.
 //
 // A conta de cada sessão vem de `ContasDasSessoes`: aprendida em cada `putSession`, e só lida da porta
 // quando a sessão ainda não passou por aqui.
 
-import type { Mudanca as MudancaDaMaquina } from '../estados/maquina.ts';
-import type { EstadoDoInbox } from '../estados/leitura.ts';
+import type { StateChange } from '../states/machine.ts';
+import type { InboxState } from '../states/inbox.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import type { Agent, Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -109,15 +109,15 @@ export function decisoesComMudancas<T extends DecisionPort>(porta: T, cursor: Cu
   });
 }
 
-/** Entra no inbox: esperando você, ou em erro (o mesmo de `lerInbox().precisaDeVoce`). */
-const noInbox = (e: EstadoDoInbox) => e === 'waiting' || e === 'error';
+/** Goes into the inbox: waiting for you, or in error (the same as `readInbox().needsYou`). */
+const noInbox = (e: InboxState) => e === 'waiting' || e === 'error';
 
-export function aoMudarDaMaquina(cursor: CursorDeMudancas, contas: ContasDasSessoes): (m: MudancaDaMaquina) => void {
+export function aoMudarDaMaquina(cursor: CursorDeMudancas, contas: ContasDasSessoes): (m: StateChange) => void {
   return (m) => {
     // A máquina chama de forma síncrona; a conta quase sempre já está no mapa (a máquina acabou de gravar).
     void contas.de(m.sessionId).then((accountId) => {
       cursor.registrar({ type: 'state', key: m.sessionId, sessionId: m.sessionId, accountId });
-      if (noInbox(m.antes) !== noInbox(m.depois)) {
+      if (noInbox(m.before) !== noInbox(m.after)) {
         cursor.registrar({ type: 'needs-you', key: m.sessionId, sessionId: m.sessionId, accountId });
       }
     });

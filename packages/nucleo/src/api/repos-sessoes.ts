@@ -117,7 +117,7 @@ export class SessoesPorRepo {
       if (!repo) continue;
       const c = de(repo);
       c.active++;
-      if (s.inbox.precisaDeVoce && (await this.frota.atencao(s)).grupo === 'blocking') c.needYou++;
+      if (s.inbox.needsYou && (await this.frota.atencao(s)).grupo === 'blocking') c.needYou++;
     }
     // Do mês corrente, no fuso da máquina: a porta lista da mais recente para a mais antiga.
     const inicioDoMes = `${this.frota.hoje().slice(0, 8)}01`;

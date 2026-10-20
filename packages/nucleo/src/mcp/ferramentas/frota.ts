@@ -2,7 +2,7 @@
 // quem precisa de você, o custo de hoje (estimativa, 1.6) e as sessões vivas, paginadas.
 // Custo e contagens somam entre contas; limites de uso nunca entram aqui.
 
-import type { EstadoDoInbox } from '../../estados/leitura.ts';
+import type { InboxState } from '../../states/inbox.ts';
 import type { ContaDoPainel } from '../../api/tipos.ts';
 import type { Ferramenta, ObjetoJson } from '../protocolo.ts';
 import { casaConta, ESTADOS_VIVOS, minutosDesde, projetoDe, type LeituraDaFrota } from '../frota.ts';
@@ -28,7 +28,7 @@ interface SessaoAtiva {
   project: string | null;
   account: ContaDeSaida | null;
   model: string | null;
-  state: EstadoDoInbox;
+  state: InboxState;
   needsYou: boolean;
   lastActivity: string;
   minutesSinceActivity: number;
@@ -109,7 +109,7 @@ export function fleetOverview(frota: LeituraDaFrota): Ferramenta {
         contaPorSessao.set(s.session.id, s.conta);
         const t = linha(s.conta);
         t.live++;
-        if (s.inbox.estado in t.byState) t.byState[s.inbox.estado as keyof PorEstado]++;
+        if (s.inbox.state in t.byState) t.byState[s.inbox.state as keyof PorEstado]++;
       }
       for (const s of encerradas) {
         contaPorSessao.set(s.id, s.conta);
@@ -148,12 +148,12 @@ export function fleetOverview(frota: LeituraDaFrota): Ferramenta {
           project: projetoDe(s.session),
           account: contaDeSaida(s.conta),
           model: s.session.model,
-          state: s.inbox.estado,
-          needsYou: s.inbox.precisaDeVoce,
+          state: s.inbox.state,
+          needsYou: s.inbox.needsYou,
           lastActivity: s.session.updatedAt,
           minutesSinceActivity: minutosDesde(s.session.updatedAt, agora),
-          activeSubagents: s.inbox.subagentesAtivos,
-          backgroundProcesses: s.inbox.processosEmBackground,
+          activeSubagents: s.inbox.activeSubagents,
+          backgroundProcesses: s.inbox.backgroundProcesses,
         }));
       const { pagina, nextCursor } = paginar(ativas, comuns);
 

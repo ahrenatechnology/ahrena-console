@@ -4,30 +4,30 @@ Decide o estado de cada sessão e dos agentes dela a partir dos eventos de hook 
 
 | Arquivo | O quê |
 | --- | --- |
-| [regras.ts](regras.ts) | `transicionar(estado, evento)`: função pura, uma regra por tipo de evento |
-| [vigia.ts](vigia.ts) | `vigiar(estado, agora, vivos)`: turno morto, sonda e abandono, também puro |
-| [sonda.ts](sonda.ts) | Sonda de processo vivo: `ps` + `lsof` no macOS, `/proc` no Linux, desligada no resto. Reconhece o `claude` do Claude Desktop, cujo caminho tem espaço (`Application Support`) |
-| [leitura.ts](leitura.ts) | `lerInbox(sessão, agentes)`: o que o inbox mostra, com delegando e background |
-| [maquina.ts](maquina.ts) | `MaquinaDeEstados`: lê e grava pela porta, em série |
+| [rules.ts](rules.ts) | `transition(state, event)`: função pura, uma regra por tipo de evento |
+| [watcher.ts](watcher.ts) | `watch(state, now, liveDirs)`: turno morto, sonda e abandono, também puro |
+| [probe.ts](probe.ts) | Sonda de processo vivo (`systemProcessProbe`): `ps` + `lsof` no macOS, `/proc` no Linux, desligada no resto. Reconhece o `claude` do Claude Desktop, cujo caminho tem espaço (`Application Support`) |
+| [inbox.ts](inbox.ts) | `readInbox(session, agents)`: o que o inbox mostra, com delegando e background |
+| [machine.ts](machine.ts) | `SessionStateMachine`: lê e grava pela porta, em série |
 
 ## Uso
 
 ```ts
-import { MaquinaDeEstados, startHookReceiver, lerInbox } from '@ahrena-console/nucleo';
+import { SessionStateMachine, startHookReceiver, readInbox } from '@ahrena-console/nucleo';
 
-const maquina = new MaquinaDeEstados({ storage, aoMudar: (m) => avisar(m) });
-await startHookReceiver({ storage, onEvent: maquina.aoReceberHook });
-const parar = maquina.iniciar(); // vigia a cada 15 s
+const machine = new SessionStateMachine({ storage, onChange: (change) => notify(change) });
+await startHookReceiver({ storage, onEvent: machine.onHook });
+const stop = machine.start(); // vigia a cada 15 s
 
-await maquina.sincronizar(sessionId); // depois de importar histórico, se quiser na hora
-const { estado, precisaDeVoce, urgente } = lerInbox(sessao, agentes);
+await machine.sync(sessionId); // depois de importar histórico, se quiser na hora
+const { state, needsYou, urgent } = readInbox(session, agents);
 ```
 
-Relógio (`agora`) e sonda (`sonda`) são injetáveis. Na nuvem, `sonda: null`: o processo não está na mesma máquina.
+Relógio (`now`) e sonda (`probe`) são injetáveis. Na nuvem, `probe: null`: o processo não está na mesma máquina.
 
 ## Estados
 
-A sessão grava `active`, `completed`, `error` ou `abandoned`. `waiting` é a camada sobre `awaitingInputSince`, com o motivo em `awaitingReason`. `lerInbox()` acrescenta:
+A sessão grava `active`, `completed`, `error` ou `abandoned`. `waiting` é a camada sobre `awaitingInputSince`, com o motivo em `awaitingReason`. `readInbox()` acrescenta:
 
 | Estado do inbox | Quando | Precisa de você |
 | --- | --- | --- |
