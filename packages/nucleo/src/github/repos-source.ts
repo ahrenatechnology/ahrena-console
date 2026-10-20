@@ -4,14 +4,21 @@
 //
 // | Consulta       | O que traz                                                          | Custo  |
 // | -------------- | ------------------------------------------------------------------- | -----: |
-// | ReposLista     | login, orgs e até 100 repos por página, com contagens e CI do padrão | 1 a 2  |
+// | ReposLista     | login, orgs e até 25 repos por página, com contagens e CI do padrão  | 1      |
 // | ReposResumo    | duas buscas só com `issueCount`: PRs esperando review, issues fechadas na semana | 1 |
-// | RepoDetalhe    | o repositório, as 100 releases mais novas, a 1ª página de PRs, issues fechadas e abertas do período, e duas contagens (PRs mergeados e fechados sem merge) | ≈ 4 |
+// | RepoDetalhe    | o repositório, as 100 releases mais novas, a 1ª página de PRs (25), issues fechadas e abertas do período (100), e duas contagens (PRs mergeados e fechados sem merge) | ≈ 4 |
 // | RepoBusca      | as páginas seguintes de uma das buscas, até o teto                  | ≈ 2    |
 //
 // Os totais (issues fechadas e abertas, PRs mergeados e fechados sem merge) vêm do `issueCount` das
 // buscas, que conta tudo; as páginas lidas são a amostra das medianas e do `porTipo`, cortada em
 // `PAGINAS_DA_BUSCA`. `ContagensCruas` leva os dois números, e a resposta diz se a amostra cortou.
+//
+// The GraphQL API gives up on a query after ~10 s and answers 502 (#269). Measured on an account
+// with ~240 repositories: 100 repos per `ReposLista` page took over 10 s (the open counts and the
+// CI rollup cost 5 to 9 s each per 100), 25 took ~3 s; a page of 100 PRs with reviews took 5 to
+// 8 s, 25 took ~2 s. So the heavy pages are 25 (`LIST_PAGE_SIZE`, `PR_PAGE_SIZE`); a 502/503/504
+// is retried (`retryOnGateway`) with half the page each time, down to `MIN_PAGE_SIZE`; and a later
+// page that still fails leaves what was read, with `incomplete` saying which part is missing.
 //
 // REST, cada uma com `If-None-Match` (o 304 não gasta o limite primário):
 // `stats/commit_activity`, `stats/code_frequency`, `stats/contributors` (os três devolvem 202
@@ -19,14 +26,23 @@
 // escrita, `traffic/*`, `dependabot/alerts` e `code-scanning/alerts`.
 
 import { backoffMs, RateLimitedError } from './cache.ts';
-import { ghCliToken, githubGraphql, type GithubGraphqlSourceOptions } from './github-source.ts';
+import { ghCliToken, githubGraphql, retryOnGateway, type GithubGraphqlSourceOptions } from './github-source.ts';
 
 export const GITHUB_API_URL = 'https://api.github.com';
 
-/** Páginas de 100 que cada busca do detalhe lê, no máximo (a amostra; os totais vêm do `issueCount`). */
-export const PAGINAS_DA_BUSCA = { prs: 5, fechadas: 5, abertas: 3 } as const;
-/** Páginas de 100 repositórios na lista, no máximo. */
-export const PAGINAS_DA_LISTA = 5;
+/**
+ * Páginas que cada busca do detalhe lê, no máximo (a amostra; os totais vêm do `issueCount`): de
+ * `PR_PAGE_SIZE` para os PRs (500 PRs), de 100 para as issues.
+ */
+export const PAGINAS_DA_BUSCA = { prs: 20, fechadas: 5, abertas: 3 } as const;
+/** Repositories per `ReposLista` page: 100 made GitHub time out (502) on a large account. */
+export const LIST_PAGE_SIZE = 25;
+/** Repositories the list reads, at most. */
+export const LIST_MAX_REPOS = 500;
+/** PRs per page of the detail's PR sample (each one brings its reviews). */
+export const PR_PAGE_SIZE = 25;
+/** The smallest page a 502/504 retry shrinks to. */
+export const MIN_PAGE_SIZE = 5;
 /**
  * Tempo máximo de cada pedido ao GitHub (GraphQL e REST, corpo incluído). As chamadas saem por uma
  * fila só (src/api/repos.ts): sem teto, um pedido pendurado travaria todas as montagens.
@@ -52,6 +68,8 @@ export interface ListaCrua {
   login: string;
   organizacoes: string[];
   repos: RepoCru[];
+  /** A later page failed after every retry: `repos` has what was read before it. */
+  incomplete?: { read: number; total: number; error: string };
 }
 
 export interface ResumoCru {
@@ -112,6 +130,8 @@ export interface DetalheCru {
   fechadas: IssueCrua[];
   /** Issues abertas agora (só o tipo). */
   abertas: IssueCrua[];
+  /** A later page of a sample failed after every retry: what is missing and why (screen text). */
+  incomplete?: string[];
 }
 
 export type RespostaRest<T> =
@@ -159,22 +179,22 @@ const PAGINA = 'issueCount pageInfo { hasNextPage endCursor }';
 const CONTAGEM = 'type: ISSUE, first: 1) { issueCount }';
 
 export const CONSULTAS_DOS_REPOS = {
-  lista: `query ReposLista($after: String) { ${RATE}
+  lista: `query ReposLista($first: Int!, $after: String) { ${RATE}
   viewer { login organizations(first: 100) { nodes { login } }
-    repositories(first: 100, after: $after, isArchived: false, affiliations: [OWNER, ORGANIZATION_MEMBER], ownerAffiliations: [OWNER, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
-      pageInfo { hasNextPage endCursor } nodes { ${REPO} } } } }`,
+    repositories(first: $first, after: $after, isArchived: false, affiliations: [OWNER, ORGANIZATION_MEMBER], ownerAffiliations: [OWNER, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
+      totalCount pageInfo { hasNextPage endCursor } nodes { ${REPO} } } } }`,
   resumo: `query ReposResumo($review: String!, $fechadas: String!) { ${RATE}
   review: search(query: $review, type: ISSUE, first: 1) { issueCount }
   fechadas: search(query: $fechadas, type: ISSUE, first: 1) { issueCount } }`,
-  detalhe: `query RepoDetalhe($o: String!, $r: String!, $prs: String!, $fechadas: String!, $abertas: String!, $mergeados: String!, $fechadosSemMerge: String!) { ${RATE}
+  detalhe: `query RepoDetalhe($o: String!, $r: String!, $first: Int!, $prs: String!, $fechadas: String!, $abertas: String!, $mergeados: String!, $fechadosSemMerge: String!) { ${RATE}
   repository(owner: $o, name: $r) { ${INFO} }
   mergeados: search(query: $mergeados, ${CONTAGEM}
   fechadosSemMerge: search(query: $fechadosSemMerge, ${CONTAGEM}
-  prs: search(query: $prs, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on PullRequest { ${PR} } } }
+  prs: search(query: $prs, type: ISSUE, first: $first) { ${PAGINA} nodes { ... on PullRequest { ${PR} } } }
   fechadas: search(query: $fechadas, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on Issue { ${ISSUE} } } }
   abertas: search(query: $abertas, type: ISSUE, first: 100) { ${PAGINA} nodes { ... on Issue { issueType { name } } } } }`,
-  busca: `query RepoBusca($q: String!, $after: String) { ${RATE}
-  search(query: $q, type: ISSUE, first: 100, after: $after) { ${PAGINA} nodes { ... on PullRequest { ${PR} } ... on Issue { ${ISSUE} } } } }`,
+  busca: `query RepoBusca($q: String!, $first: Int!, $after: String) { ${RATE}
+  search(query: $q, type: ISSUE, first: $first, after: $after) { ${PAGINA} nodes { ... on PullRequest { ${PR} } ... on Issue { ${ISSUE} } } } }`,
 } as const;
 
 /** As buscas do detalhe, do período que começa em `desde` (AAAA-MM-DD). */
@@ -223,15 +243,28 @@ export class GithubReposSource implements FonteDosRepos {
   }
 
   async lista(): Promise<ListaCrua> {
-    type Data = { viewer: { login: string; organizations: { nodes: { login: string }[] }; repositories: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: RepoCru[] } } };
+    type Data = { viewer: { login: string; organizations: { nodes: { login: string }[] }; repositories: { totalCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: RepoCru[] } } };
     const repos: RepoCru[] = [];
     let after: string | null = null;
     let login = '';
     let organizacoes: string[] = [];
-    for (let pagina = 0; pagina < PAGINAS_DA_LISTA; pagina++) {
-      const data: Data = await this.graphql<Data>('ReposLista', CONSULTAS_DOS_REPOS.lista, { after });
+    let total = 0;
+    let size = LIST_PAGE_SIZE;
+    while (repos.length < LIST_MAX_REPOS) {
+      let page: { data: Data; size: number };
+      try {
+        page = await this.page<Data>('ReposLista', CONSULTAS_DOS_REPOS.lista, { after }, size);
+      } catch (err) {
+        // Without the first page there is no list; a limit pauses everything (the cache keeps the old one).
+        if (repos.length === 0 || err instanceof RateLimitedError) throw err;
+        return { login, organizacoes, repos, incomplete: { read: repos.length, total, error: err instanceof Error ? err.message : String(err) } };
+      }
+      // A page that only came back smaller keeps that size for the rest.
+      size = page.size;
+      const data = page.data;
       login = data.viewer.login;
       organizacoes = data.viewer.organizations.nodes.map((o) => o.login);
+      total = data.viewer.repositories.totalCount;
       repos.push(...data.viewer.repositories.nodes.filter(Boolean));
       if (!data.viewer.repositories.pageInfo.hasNextPage) break;
       after = data.viewer.repositories.pageInfo.endCursor;
@@ -255,8 +288,12 @@ export class GithubReposSource implements FonteDosRepos {
       mergeados: { issueCount: number };
       fechadosSemMerge: { issueCount: number };
     };
-    const data = await this.graphql<Data>('RepoDetalhe', CONSULTAS_DOS_REPOS.detalhe, { o: dono, r: nome, ...buscas }, true);
+    const { data, size } = await this.page<Data>('RepoDetalhe', CONSULTAS_DOS_REPOS.detalhe, { o: dono, r: nome, ...buscas }, PR_PAGE_SIZE, true);
     if (!data.repository) return null;
+    const incomplete: string[] = [];
+    const prs = await this.resto(buscas.prs, data.prs, PAGINAS_DA_BUSCA.prs, size, 'PRs', incomplete);
+    const fechadas = await this.resto(buscas.fechadas, data.fechadas, PAGINAS_DA_BUSCA.fechadas, 100, 'issues fechadas', incomplete);
+    const abertas = await this.resto(buscas.abertas, data.abertas, PAGINAS_DA_BUSCA.abertas, 100, 'issues abertas', incomplete);
     return {
       repo: data.repository,
       contagens: {
@@ -266,19 +303,30 @@ export class GithubReposSource implements FonteDosRepos {
         mergeados: data.mergeados.issueCount,
         fechadosSemMerge: data.fechadosSemMerge.issueCount,
       },
-      prs: await this.resto(buscas.prs, data.prs, PAGINAS_DA_BUSCA.prs) as PrCru[],
-      fechadas: await this.resto(buscas.fechadas, data.fechadas, PAGINAS_DA_BUSCA.fechadas) as IssueCrua[],
-      abertas: await this.resto(buscas.abertas, data.abertas, PAGINAS_DA_BUSCA.abertas) as IssueCrua[],
+      prs: prs as PrCru[],
+      fechadas: fechadas as IssueCrua[],
+      abertas: abertas as IssueCrua[],
+      ...(incomplete.length ? { incomplete } : {}),
     };
   }
 
-  /** As páginas seguintes de uma busca, em série, até `maximo` páginas no total. */
-  private async resto<T>(q: string, primeira: Pagina<T>, maximo: number): Promise<Partial<T>[]> {
+  /**
+   * As páginas seguintes de uma busca, em série, até `maximo` páginas no total. A page that still
+   * fails after its retries ends the sample there and adds a line to `incomplete`.
+   */
+  private async resto<T>(q: string, primeira: Pagina<T>, maximo: number, size: number, what: string, incomplete: string[]): Promise<Partial<T>[]> {
     const nos = primeira.nodes.filter((n) => n && Object.keys(n).length > 0);
     let pagina = primeira;
     for (let i = 1; i < maximo && pagina.pageInfo.hasNextPage; i++) {
-      const data: { search: Pagina<T> } = await this.graphql<{ search: Pagina<T> }>('RepoBusca', CONSULTAS_DOS_REPOS.busca, { q, after: pagina.pageInfo.endCursor });
-      pagina = data.search;
+      try {
+        const r: { data: { search: Pagina<T> }; size: number } = await this.page<{ search: Pagina<T> }>('RepoBusca', CONSULTAS_DOS_REPOS.busca, { q, after: pagina.pageInfo.endCursor }, size);
+        size = r.size;
+        pagina = r.data.search;
+      } catch (err) {
+        if (err instanceof RateLimitedError) throw err;
+        incomplete.push(`amostra de ${what} incompleta: ${nos.length} lidos, o resto falhou (${err instanceof Error ? err.message : String(err)})`);
+        break;
+      }
       nos.push(...pagina.nodes.filter((n) => n && Object.keys(n).length > 0));
     }
     return nos;
@@ -317,8 +365,11 @@ export class GithubReposSource implements FonteDosRepos {
     return { estado: 'ok', valor: (json ?? []) as T, etag: res.headers.get('etag') };
   }
 
-  /** Uma consulta GraphQL com o token e o teto deste adaptador (a leitura dos arquivos do repositório, repo-files-source.ts). */
+  /** Uma consulta GraphQL com o token e o teto deste adaptador (a leitura dos arquivos do repositório, repo-files-source.ts, e as mutações da instalação). */
   async query<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
+    // A mutation (the install's pull request, pull-request-writer.ts) is never repeated: a 502 may
+    // come after GitHub applied it.
+    if (/^\s*mutation\b/.test(query)) return this.graphqlOnce<T>(operation, query, variables, true);
     return this.graphql<T>(operation, query, variables, true);
   }
 
@@ -334,8 +385,27 @@ export class GithubReposSource implements FonteDosRepos {
   }
 
   private async graphql<T>(operacao: string, consulta: string, variaveis: Record<string, unknown>, tolerarNaoEncontrado = false): Promise<T> {
+    return retryOnGateway(() => this.graphqlOnce<T>(operacao, consulta, variaveis, tolerarNaoEncontrado), { sleep: this.opts.sleep });
+  }
+
+  /**
+   * One page of a query that takes `$first`: a 502/503/504 is retried with half the page each time
+   * (down to `MIN_PAGE_SIZE`), since that is GitHub giving up on a query too big for its time limit.
+   * Returns the size that answered, for the next pages.
+   */
+  private async page<T>(operation: string, query: string, variables: Record<string, unknown>, size: number, tolerateNotFound = false): Promise<{ data: T; size: number }> {
+    return retryOnGateway(
+      async (n) => {
+        const first = Math.max(MIN_PAGE_SIZE, Math.floor(size / 2 ** n));
+        return { data: await this.graphqlOnce<T>(operation, query, { ...variables, first }, tolerateNotFound), size: first };
+      },
+      { sleep: this.opts.sleep },
+    );
+  }
+
+  private async graphqlOnce<T>(operation: string, query: string, variables: Record<string, unknown>, tolerateNotFound: boolean): Promise<T> {
     const token = await this.token();
-    return this.comTeto((signal) => githubGraphql<T>({ ...this.opts, token }, operacao, consulta, variaveis, { tolerateNotFound: tolerarNaoEncontrado, signal }));
+    return this.comTeto((signal) => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal }));
   }
 
   /** Um pedido com teto de tempo: estourado, vira um erro comum, que libera a fila de quem chama. */

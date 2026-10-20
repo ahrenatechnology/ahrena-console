@@ -388,6 +388,9 @@ export class ReposDoGithub {
       return;
     }
     const erros: string[] = crua.stale && crua.staleReason ? [crua.staleReason] : [];
+    // A list cut by a page that failed says so first: how many came and why the rest did not.
+    const falta = crua.value.incomplete;
+    if (falta) erros.unshift(`lista incompleta: ${falta.read} de ${falta.total} repositórios lidos, o resto falhou (${falta.error})`);
     const commitsAntes = new Map((e.valor?.groups ?? []).flatMap((g) => g.repos.map((r) => [r.fullName, r.commits12] as const)));
     const ciAntes = e.valor?.summary.ci ?? { greenRate: null, runs: 0 };
     const montar = (resumo: ResumoCru | null, commits: ReadonlyMap<string, number[]>, ci: { greenRate: number | null; runs: number }): ListaDeRepos => ({
@@ -454,7 +457,8 @@ export class ReposDoGithub {
     const completo = d.repo.nameWithOwner;
     const k = chaveDoRepo(completo);
     const escrita = temEscrita(d.repo.viewerPermission);
-    const erros: string[] = detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [];
+    // A sample page that failed comes first: it says which part of these numbers is missing.
+    const erros: string[] = [...(d.incomplete ?? []), ...(detalhe.stale && detalhe.staleReason ? [detalhe.staleReason] : [])];
     const base: MetricasDoRepo = {
       ...metricasVazias('ready', periodo, null),
       updatedAt: new Date(detalhe.fetchedAt).toISOString(),

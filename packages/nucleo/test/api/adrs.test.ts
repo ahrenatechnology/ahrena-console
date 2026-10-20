@@ -75,7 +75,7 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
     all.push(...gh.calls.slice(n));
     return r;
   }) as typeof globalThis.fetch;
-  const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid' });
+  const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid', sleep: async () => {} });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
   const store = new MemoryCacheStore();
@@ -234,11 +234,11 @@ describe('#174 the decision list, through the service', () => {
     assert.equal((await repo(s, 'madr')).error, null);
   });
 
-  test('a general failure (HTTP 502) fails the whole batch in one call, without splitting it', async () => {
+  test('a general failure (HTTP 502) fails the whole batch after its retries (#269), without splitting it', async () => {
     const s = setup({ many: 21 });
     s.mode.current = 'bad-gateway';
     const l = await list(s);
-    assert.equal(s.bodies.filter((b) => b.includes('RepoFilesDiscovery')).length, 2, 'one call per batch of 20');
+    assert.equal(s.bodies.filter((b) => b.includes('RepoFilesDiscovery')).length, 2 * 3, 'three tries per batch of 20');
     assert.equal(l.groups.length, 0);
     assert.match(l.error!, /502/);
   });
