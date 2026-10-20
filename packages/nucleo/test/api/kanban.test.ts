@@ -45,7 +45,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
   let sessoes: Session[];
   let agentes: Agent[];
   /** #245: the attention of each session, by the same rule as the route's. */
-  let atencao: Map<string, SessionAttention | null>;
+  let attentionBySession: Map<string, SessionAttention | null>;
   let api: LocalApi;
   const get = async (caminho: string) => {
     const r = await pedir(api.url, caminho);
@@ -67,9 +67,9 @@ describe('#31 GET /api/kanban com o simulador', () => {
     await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     agentes = (await Promise.all(sessoes.map((s) => storage.listAgents(s.id)))).flat();
-    const resumos = new ResumosDeSessao(storage, { agora: () => AGORA, maximo: 500 });
-    atencao = new Map();
-    for (const s of sessoes) atencao.set(s.id, await readSessionAttention(s, await storage.listAgents(s.id), resumos));
+    const summaries = new ResumosDeSessao(storage, { agora: () => AGORA, maximo: 500 });
+    attentionBySession = new Map();
+    for (const s of sessoes) attentionBySession.set(s.id, await readSessionAttention(s, await storage.listAgents(s.id), summaries));
     const contas = new Accounts({ storage, file: null });
     quadro = new QuadroKanban({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
@@ -86,7 +86,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.ok(agentes.some((a) => a.type === 'subagent'));
   });
 
-  test('#245 sem visão é a de sessões: as cinco colunas do wireframe, na ordem, com rótulos', async () => {
+  test('#245 no view is the sessions view: the five wireframe columns, in order, with labels', async () => {
     const { status, corpo } = await get('/api/kanban');
     assert.equal(status, 200);
     assert.equal(corpo.view, 'sessions');
@@ -104,19 +104,19 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.deepEqual(COLUNAS_DAS_SESSOES.map((c) => c.id), corpo.columns.map((c) => c.id));
   });
 
-  test('visão sessões: cada total bate com as sessões daquele status e atenção, e os cards são da coluna', async () => {
+  test('sessions view: each total matches the sessions of that status and attention, and the cards belong to the column', async () => {
     const { corpo } = await get('/api/kanban?view=sessions');
-    const colunaDe = (s: Session) => sessionColumnOf(displayStatus(s), atencao.get(s.id) ?? null);
+    const columnOf = (s: Session) => sessionColumnOf(displayStatus(s), attentionBySession.get(s.id) ?? null);
     let soma = 0;
     for (const c of corpo.columns) {
-      const esperado = sessoes.filter((s) => colunaDe(s) === c.id).length;
+      const esperado = sessoes.filter((s) => columnOf(s) === c.id).length;
       assert.equal(c.total, esperado, c.id);
       assert.equal(c.page, 1);
       assert.equal(c.items.length, Math.min(10, esperado), c.id);
       assert.equal(c.hasMore, esperado > 10, c.id);
       for (const card of c.items as CardDeSessao[]) {
         assert.equal(sessionColumnOf(card.status, card.attention), c.id, card.id);
-        assert.deepEqual(card.attention, atencao.get(card.id), card.id);
+        assert.deepEqual(card.attention, attentionBySession.get(card.id), card.id);
       }
       soma += c.total;
     }
@@ -192,7 +192,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.equal(alem.corpo.columns[0].hasMore, false);
   });
 
-  test('#245 visão agentes: as cinco colunas do wireframe, na ordem, com rótulos', async () => {
+  test('#245 agents view: the five wireframe columns, in order, with labels', async () => {
     const { status, corpo } = await get('/api/kanban?view=agents');
     assert.equal(status, 200);
     assert.equal(corpo.view, 'agents');
@@ -219,7 +219,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
     const porSessao = new Map(sessoes.map((s) => [s.id, s]));
     const esperado = new Map<string, number>();
     for (const s of sessoes) {
-      const k = colunaDoAgente(displayStatus(s), atencao.get(s.id) ?? null);
+      const k = colunaDoAgente(displayStatus(s), attentionBySession.get(s.id) ?? null);
       esperado.set(k, (esperado.get(k) ?? 0) + 1);
     }
     for (const a of subagentes) {

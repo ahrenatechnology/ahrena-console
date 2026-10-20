@@ -52,19 +52,19 @@ describe('#245 attention on every /ui route', () => {
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
     await seed(storage);
-    const contas = new Accounts({ storage, file: null });
-    const agora = () => NOW;
-    const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora });
+    const accounts = new Accounts({ storage, file: null });
+    const now = () => NOW;
+    const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: now });
     api = await startLocalApi({
-      panelBuilder: montador,
+      panelBuilder,
       hooks: { storage },
       port: 0,
       log: () => {},
-      fleet: new FleetReader({ storage, accounts: contas, now: agora, timeZone: 'UTC' }),
-      sessions: new ListaDeSessoes({ storage, contas, agora }),
-      kanban: new QuadroKanban({ storage, contas, agora }),
+      fleet: new FleetReader({ storage, accounts, now, timeZone: 'UTC' }),
+      sessions: new ListaDeSessoes({ storage, contas: accounts, agora: now }),
+      kanban: new QuadroKanban({ storage, contas: accounts, agora: now }),
       events: new FeedDeEventos({ storage }),
-      detail: new LeiturasDoDetalhe({ storage, montador, agora }),
+      detail: new LeiturasDoDetalhe({ storage, montador: panelBuilder, agora: now }),
     });
   });
   after(async () => {
