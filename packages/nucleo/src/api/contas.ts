@@ -16,12 +16,12 @@ import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { accountSourceRank, claudeAccountId, type AccountSource, type ClaudeAccount, type Session } from '../model.ts';
-import { CORES_DAS_CONTAS } from '../perfis/cores.ts';
+import { ACCOUNT_COLORS } from '../profiles/colors.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { SessaoDoDesktop } from './indice-desktop.ts';
 import type { ContaDoPainel } from './tipos.ts';
 
-export { CORES_DAS_CONTAS };
+export { ACCOUNT_COLORS };
 const UUID = /^[0-9a-f-]{8,64}$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -116,7 +116,7 @@ export class Contas {
     const i = this.ordem.indexOf(id);
     const a = this.daPorta.get(id);
     const c = this.configurados.get(id);
-    const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? CORES_DAS_CONTAS[i % CORES_DAS_CONTAS.length];
+    const cor = c?.cor ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
     return { id, label: c?.rotulo ?? a?.label ?? nomeDaOrg(a?.organizationName) ?? `conta ${i + 1}`, color: cor, source: fonte };
   }
 }

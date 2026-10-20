@@ -2,8 +2,8 @@
 // Sobe a API local do núcleo: importa o histórico, segue os transcripts, recebe os hooks, roda a
 // máquina de estados e responde ao painel, tudo em 127.0.0.1. `npm run api -- --help`.
 //
-// Um núcleo por máquina (#86, src/dono/): se já há um de pé, este processo o adota (imprime a porta
-// e a versão e sai com 0) em vez de subir outro.
+// One core per machine (#86, src/owner/): if one is already up, this process adopts it (prints the
+// port and version and exits 0) instead of starting another.
 
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -12,25 +12,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
-import { HookDecisionCapture } from '../decisoes/captura-hooks.ts';
-import { SqliteDecisionStore } from '../decisoes/sqlite.ts';
-import { MaquinaDeEstados } from '../estados/maquina.ts';
-import { criarServidorMcp } from '../mcp/index.ts';
+import { HookDecisionCapture } from '../decisions/capture-hooks.ts';
+import { SqliteDecisionStore } from '../decisions/sqlite.ts';
+import { SessionStateMachine } from '../states/machine.ts';
+import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
-import { defaultProjectsRoot } from '../ingest/historico/files.ts';
-import { followTranscripts } from '../ingest/historico/follower.ts';
-import { Perfis } from '../perfis/perfis.ts';
-import { registrarCliente } from '../dono/clientes.ts';
-import { commitMaisVelho } from '../dono/codigo.ts';
-import { assumirTrava, avisoDeCodigo, planejarSubida, vigiarPai } from '../dono/dono.ts';
-import { esperarNucleo, pidVivo, reservarPorta, soltarPorta } from '../dono/sonda.ts';
-import { lerTrava, liberarTrava, pastaPadrao, prepararPasta } from '../dono/trava.ts';
-import { CursorDeMudancas } from '../mudancas/cursor.ts';
-import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
-import { waitForChanges } from '../mudancas/mcp.ts';
+import { defaultProjectsRoot } from '../ingest/history/files.ts';
+import { followTranscripts } from '../ingest/history/follower.ts';
+import { Profiles } from '../profiles/profiles.ts';
+import { registerClient } from '../owner/clients.ts';
+import { isOlderCommit } from '../owner/commit.ts';
+import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
+import { readLock, releaseLock, defaultDir, prepareDir } from '../owner/lock.ts';
+import { ChangeCursor } from '../changes/cursor.ts';
+import { onMachineChange, withChanges, SessionAccounts, decisionsWithChanges } from '../changes/sources.ts';
+import { waitForChanges } from '../changes/mcp.ts';
 import {
   apelidoDaDemo,
   CENARIOS_DO_PAINEL,
@@ -42,7 +42,7 @@ import {
 } from '../simulador/painel.ts';
 import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
 import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
-import { HistoricoDeSessoes } from '../historico/leitura.ts';
+import { SessionHistory } from '../history/reading.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
@@ -121,7 +121,7 @@ AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) 
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
 Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
-versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
+versão, avisa se o código é outro) e sai com 0. Ver src/owner/README.md.
   --help
 `;
 
@@ -154,29 +154,29 @@ const porta = Number(o.porta ?? process.env.AHRENA_CONSOLE_PORT ?? 4720);
 const demo = o.demo;
 const pai = o.pai === undefined ? null : Number(o.pai);
 if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--pai: um pid');
-if (pai !== null && !pidVivo(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
+if (pai !== null && !isPidAlive(pai)) throw new Error(`--pai: o pid ${pai} não existe`);
 const comTrava = !demo && !o['sem-trava'];
 const commit = commitDoCheckout();
-const codigo = { versao: VERSAO_DA_API, commit, commitMaisVelho };
+const codigo = { version: VERSAO_DA_API, commit, isOlderCommit };
 
 function adotar(p: number, versao: string, aviso: string | null = null): never {
   if (aviso) log(`atenção: ${aviso}`);
-  if (pai !== null && comTrava) registrarCliente(pai);
+  if (pai !== null && comTrava) registerClient(pai);
   process.stdout.write(`núcleo de pé em http://127.0.0.1:${p} · versão ${versao} (adotado)\n`);
   process.exit(0);
 }
 
 // Antes de abrir o banco: adota o núcleo vivo da trava, ou a recupera se for órfã.
 if (comTrava) {
-  const plano = await planejarSubida({ ...codigo, substituir: o.substituir, log });
-  if (plano.acao === 'adotar') adotar(plano.trava.porta, plano.trava.versao, plano.aviso);
-  if (plano.recuperou) log(`trava órfã recuperada: ${plano.recuperou}`);
+  const plano = await planStart({ ...codigo, replace: o.substituir, log });
+  if (plano.action === 'adopt') adotar(plano.lock.port, plano.lock.version, plano.warning);
+  if (plano.recovered) log(`trava órfã recuperada: ${plano.recovered}`);
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
 // A --demo e a --sem-trava não adotam: quem pede a demo nunca recebe o núcleo real, nem o contrário.
 async function adotarQuemTemAPorta(): Promise<never> {
-  const v = await esperarNucleo(porta, 30_000);
+  const v = await waitForCore(porta, 30_000);
   if (v && !comTrava) {
     log(`a porta ${porta} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
     process.exit(1);
@@ -188,38 +188,38 @@ async function adotarQuemTemAPorta(): Promise<never> {
       if (i === 20) semTrava = true;
       else await new Promise((r) => setTimeout(r, 100));
     }
-    const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, avisoDeCodigo(v, codigo)];
-    adotar(porta, v.versao, aviso.filter(Boolean).join('; ') || null);
+    const aviso = [semTrava ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, codigo)];
+    adotar(porta, v.version, aviso.filter(Boolean).join('; ') || null);
   }
   log(`a porta ${porta} está ocupada e não responde como núcleo`);
   process.exit(1);
 }
 function travaDaPorta(): number | null {
-  const t = lerTrava();
-  return t && t !== 'invalida' && t.porta === porta ? t.pid : null;
+  const t = readLock();
+  return t && t !== 'invalid' && t.port === porta ? t.pid : null;
 }
-const reserva = await reservarPorta(porta);
-if (reserva === 'ocupada') await adotarQuemTemAPorta();
+const reserva = await reservePort(porta);
+if (reserva === 'in-use') await adotarQuemTemAPorta();
 const banco = demo ? ':memory:' : (o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(homedir(), '.ahrena-console', 'nucleo.sqlite'));
 if (banco !== ':memory:') {
   // A pasta do núcleo fecha em 0700 (o banco mora nela); outra pasta dada em --banco fica como está.
-  if (dirname(banco) === pastaPadrao()) prepararPasta();
+  if (dirname(banco) === defaultDir()) prepareDir();
   else mkdirSync(dirname(banco), { recursive: true });
 }
 
 // Toda gravação passa pelo cursor de mudanças (item 2.4): é dele que sai o long polling.
-const mudancas = new CursorDeMudancas();
+const mudancas = new ChangeCursor();
 const sqlite = openSqliteStorage({ path: banco });
-const contasDasSessoes = new ContasDasSessoes(sqlite);
-const storage = comMudancas(sqlite, mudancas, contasDasSessoes);
+const contasDasSessoes = new SessionAccounts(sqlite);
+const storage = withChanges(sqlite, mudancas, contasDasSessoes);
 // As decisões da sessão (#99) no mesmo banco: os hooks capturam, o painel lê e confirma (#102).
-const decisoes = decisoesComMudancas(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
+const decisoes = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), mudancas, contasDasSessoes);
 const captura = new HookDecisionCapture({ decisions: decisoes });
-const maquina = new MaquinaDeEstados({
+const maquina = new SessionStateMachine({
   storage,
   log,
-  aoMudar: aoMudarDaMaquina(mudancas, contasDasSessoes),
-  ...(demo ? { sonda: null } : {}),
+  onChange: onMachineChange(mudancas, contasDasSessoes),
+  ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
@@ -312,35 +312,35 @@ if (demo) {
 const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
-const historico = new HistoricoDeSessoes({ storage, decisoes, tituloDe: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
+const historico = new SessionHistory({ storage, decisions: decisoes, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
 
-// Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
-// rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
-const perfis = demo ? null : new Perfis({ storage });
+// Profiles: the current account of each configuration folder goes to the port, with the org name
+// as its label. Re-read every minute, to pick up a new `claude auth login`.
+const perfis = demo ? null : new Profiles({ storage });
 const sincronizarPerfis = () =>
   perfis
-    ?.sincronizar()
+    ?.sync()
     .then((ps) => ps.length)
-    .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
-if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+    .catch((e) => (log(`profiles: ${(e as Error).message}`), 0));
+if (perfis) log(`profiles: ${await sincronizarPerfis()} configuration folder(s)`);
 // The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
 const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
 if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
 const agentConfig = demoAgentConfig
   ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
-  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
+  : createAgentConfigRoute({ folders: () => perfis!.list(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
-// Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
-const mcp = criarServidorMcp({ storage, contas, desktop, log });
-mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
-const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
+// New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
+const mcp = createMcpServer({ storage, accounts: contas, desktop, log });
+mcp.server.register(waitForChanges({ changes: mudancas, accounts: contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
   storage,
-  frota: mcp.frota,
+  frota: mcp.fleet,
   decisions: decisoes,
   cache: cacheDoGithub,
   source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
@@ -405,15 +405,15 @@ const follower =
         onError: (e) => log(`seguidor: ${(e as Error).message}`),
       });
 
-if (reserva !== 'ocupada') await soltarPorta(reserva);
+if (reserva !== 'in-use') await releasePort(reserva);
 const api: ApiLocal = await iniciarApiLocal({
   montador,
   hooks: {
     storage,
     // Os mesmos perfis: a pasta que um hook revela entra nas próximas listagens.
-    perfis: perfis ?? undefined,
+    profiles: perfis ?? undefined,
     onEvent: async (r) => {
-      await maquina.aoReceberHook(r);
+      await maquina.onHook(r);
       await captura.onEvent(r.event);
     },
     log,
@@ -421,16 +421,16 @@ const api: ApiLocal = await iniciarApiLocal({
   port: porta,
   log,
   abrirNoDesktop,
-  mcp: mcp.servidor,
+  mcp: mcp.server,
   commit,
   mudancas,
   decisoesUi,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
   eventos: new FeedDeEventos({ storage }),
-  frota: mcp.frota,
+  frota: mcp.fleet,
   remoteAttention: remoteMachines,
-  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.current }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
@@ -450,27 +450,27 @@ const api: ApiLocal = await iniciarApiLocal({
   return adotarQuemTemAPorta();
 });
 
-const trava = comTrava ? await assumirTrava({ porta, versao: VERSAO_DA_API, pai }) : null;
-if (trava && 'conflito' in trava) {
+const trava = comTrava ? await claimLock({ port: porta, version: VERSAO_DA_API, parent: pai }) : null;
+if (trava && 'conflict' in trava) {
   await api.close().catch(() => undefined);
   await storage.close();
-  adotar(trava.conflito.porta, trava.conflito.versao);
+  adotar(trava.conflict.port, trava.conflict.version);
 }
 log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
 
 const pararDeVigiarPai =
   pai === null
     ? () => {}
-    : vigiarPai({
-        pai,
-        aoSumir: (motivo) => {
+    : watchParent({
+        parent: pai,
+        onGone: (motivo) => {
           log(`${motivo}; saindo`);
           void desligar();
         },
       });
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
-const pararVigia = demo ? () => {} : maquina.iniciar();
+const pararVigia = demo ? () => {} : maquina.start();
 for (const a of samplers) a.start();
 for (const m of remoteMachines) m.start();
 if (follower) {
@@ -510,7 +510,7 @@ async function desligar() {
   pararVigia();
   if (relerPerfis) clearInterval(relerPerfis);
   pararDeVigiarPai();
-  if (trava && !('conflito' in trava)) liberarTrava(trava.token);
+  if (trava && !('conflict' in trava)) releaseLock(trava.token);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
   await api.close().catch(() => undefined);

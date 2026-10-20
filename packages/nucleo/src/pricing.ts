@@ -2,7 +2,7 @@
 //
 // Os modificadores (batch, região US, fast, contexto longo) e o preço da busca na web seguem a página
 // pública de preços: https://platform.claude.com/docs/en/about-claude/pricing (consultada em 2026-10-18).
-// A tabela de preços padrão fica em src/custo/precos-padrao.ts.
+// The default price table lives in src/cost/default-prices.ts.
 
 import type { ModelPricing, TokenCounts, TokenUsage } from './model.ts';
 

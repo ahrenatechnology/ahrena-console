@@ -7,7 +7,7 @@
 // keys and values, exactly what the mod reads since 0.0.31.
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, ESCOPOS_DAS_DECISOES, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { CENARIOS_DO_PAINEL, FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
 import { T0 } from '../fixtures.ts';
 

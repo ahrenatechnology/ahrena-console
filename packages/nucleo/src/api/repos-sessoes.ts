@@ -1,6 +1,6 @@
 // As sessões de cada repositório (#104 critério 2): ativas, quantas precisam de você e quantas
 // tiveram atividade no mês. Tudo sai das sessões do próprio núcleo, pela mesma leitura do MCP
-// (`LeituraDaFrota`): ativas são as vivas (`active` e `error`); "precisa de você" é o nível
+// (`FleetReader`): ativas são as vivas (`active` e `error`); "precisa de você" é o nível
 // `precisa` de `atencaoDe` (#140), o grupo `blocking` do MCP, e nada além disso.
 //
 // O repositório de uma sessão vem do cwd → `git remote get-url origin` → `repoDoRemote`. O git
@@ -8,8 +8,8 @@
 // série, e quando ela descobre algo novo chama `aoDescobrir` (o serviço registra a mudança no
 // cursor e a tela relê). O remote de cada cwd vale por `remoteMs`.
 
-import { diaDe } from '../custo/agregacao.ts';
-import type { LeituraDaFrota } from '../mcp/frota.ts';
+import { dayOf } from '../cost/aggregation.ts';
+import type { FleetReader } from '../mcp/fleet.ts';
 import type { SessoesDoRepo } from './repos-tipos.ts';
 import { gitDoSistema, repoDoRemote, type Git } from './trabalho.ts';
 
@@ -17,7 +17,7 @@ import { gitDoSistema, repoDoRemote, type Git } from './trabalho.ts';
 export const chaveDoRepo = (completo: string): string => completo.toLowerCase();
 
 export interface OpcoesDasSessoesPorRepo {
-  frota: Pick<LeituraDaFrota, 'vivas' | 'atencao' | 'hoje' | 'storage' | 'fusoHorario' | 'agora'>;
+  frota: Pick<FleetReader, 'live' | 'attention' | 'today' | 'storage' | 'timeZone' | 'now'>;
   git?: Git;
   /** Chamado quando a fila do git descobre o repositório de um cwd novo (ou ele muda). */
   aoDescobrir?: () => void;
@@ -60,7 +60,7 @@ export class SessoesPorRepo {
 
   /** Contagem por repositório (chave `chaveDoRepo`). Lê só o banco do núcleo; o git fica por trás. */
   async ler(): Promise<Map<string, SessoesDoRepo>> {
-    if (this.cache && this.frota.agora() - this.cache.em < this.cacheMs) return this.cache.mapa;
+    if (this.cache && this.frota.now() - this.cache.em < this.cacheMs) return this.cache.mapa;
     this.montando ??= this.montar().finally(() => {
       this.montando = null;
     });
@@ -75,7 +75,7 @@ export class SessoesPorRepo {
   /** O repositório de um cwd já resolvido, ou `undefined` (a resolução entra na fila). */
   repoDe(cwd: string): string | null | undefined {
     const r = this.remotes.get(cwd);
-    if (!r || this.frota.agora() - r.em >= this.remoteMs) this.enfileirar(cwd);
+    if (!r || this.frota.now() - r.em >= this.remoteMs) this.enfileirar(cwd);
     return r?.repo;
   }
 
@@ -95,7 +95,7 @@ export class SessoesPorRepo {
       const remote = await this.git(cwd, ['remote', 'get-url', 'origin']).catch(() => null);
       const repo = remote ? repoDoRemote(remote) : null;
       const antes = this.remotes.get(cwd);
-      this.remotes.set(cwd, { repo, em: this.frota.agora() });
+      this.remotes.set(cwd, { repo, em: this.frota.now() });
       if (antes?.repo !== repo) mudou = true;
     }
     if (mudou) {
@@ -112,20 +112,20 @@ export class SessoesPorRepo {
       if (!c) mapa.set(k, (c = { active: 0, needYou: 0, thisMonth: 0 }));
       return c;
     };
-    for (const s of await this.frota.vivas()) {
+    for (const s of await this.frota.live()) {
       const repo = s.session.cwd ? this.repoDe(s.session.cwd) : null;
       if (!repo) continue;
       const c = de(repo);
       c.active++;
-      if (s.inbox.precisaDeVoce && (await this.frota.atencao(s)).grupo === 'blocking') c.needYou++;
+      if (s.inbox.needsYou && (await this.frota.attention(s)).group === 'blocking') c.needYou++;
     }
     // Do mês corrente, no fuso da máquina: a porta lista da mais recente para a mais antiga.
-    const inicioDoMes = `${this.frota.hoje().slice(0, 8)}01`;
+    const inicioDoMes = `${this.frota.today().slice(0, 8)}01`;
     let cursor: string | null = null;
     pagina: do {
       const page = await this.frota.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
-        if (diaDe(s.updatedAt, this.frota.fusoHorario) < inicioDoMes) break pagina;
+        if (dayOf(s.updatedAt, this.frota.timeZone) < inicioDoMes) break pagina;
         const repo = s.cwd ? this.repoDe(s.cwd) : null;
         if (repo) de(repo).thisMonth++;
       }
@@ -137,7 +137,7 @@ export class SessoesPorRepo {
       c.needYou += extra.needYou ?? 0;
       c.thisMonth += extra.thisMonth ?? 0;
     }
-    this.cache = { em: this.frota.agora(), mapa };
+    this.cache = { em: this.frota.now(), mapa };
     return mapa;
   }
 }

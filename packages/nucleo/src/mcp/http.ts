@@ -1,67 +1,67 @@
-// Transporte HTTP do MCP ("Streamable HTTP" sem sessão), montado em `/mcp` na porta da API local.
+// MCP HTTP transport ("Streamable HTTP" without a session), mounted at `/mcp` on the local API port.
 //
-// - `POST /mcp` com uma mensagem JSON-RPC (ou um lote): resposta em `application/json`, sem SSE.
-//   Só notificações → 202 sem corpo.
-// - `GET /mcp` → 405: o servidor não abre stream para o cliente (a spec permite). Quem quer
-//   esperar mudança chama a ferramenta de long polling (2.4), que responde no próprio POST.
-// - `DELETE /mcp` → 405: stateless, não há `Mcp-Session-Id` para encerrar.
-// - `MCP-Protocol-Version` (2025-06-18 em diante) com versão que não conhecemos → 400. Sem o
-//   cabeçalho, vale qualquer uma (é o que a spec manda supor para o cliente de 2025-03-26).
+// - `POST /mcp` with a JSON-RPC message (or a batch): answer in `application/json`, no SSE.
+//   Only notifications → 202 with no body.
+// - `GET /mcp` → 405: the server opens no stream to the client (the spec allows it). Whoever wants
+//   to wait for a change calls the long-polling tool (2.4), which answers in the POST itself.
+// - `DELETE /mcp` → 405: stateless, there is no `Mcp-Session-Id` to end.
+// - `MCP-Protocol-Version` (2025-06-18 on) with a version we do not know → 400. Without the
+//   header, any goes (it is what the spec says to assume for a 2025-03-26 client).
 //
-// `Origin` e `Host` são conferidos antes, pelo servidor da API (decisão 0003): é a defesa contra
-// DNS rebinding que a spec pede.
+// `Origin` and `Host` are checked before, by the API server (decision 0003): it is the defence
+// against DNS rebinding the spec asks for.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readBody, send } from '../ingest/hooks/receiver.ts';
-import { ERROS, erro, VERSOES_DO_PROTOCOLO, type ServidorMcp } from './protocolo.ts';
+import { RPC_ERRORS, rpcError, PROTOCOL_VERSIONS, type McpServer } from './protocol.ts';
 
-export const CAMINHO_DO_MCP = '/mcp';
+export const MCP_PATH = '/mcp';
 
-export type RotaMcp = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+export type McpRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
-export function criarRotaMcp(servidor: ServidorMcp): RotaMcp {
+export function createMcpRoute(server: McpServer): McpRoute {
   return async (req, res) => {
     if (req.method !== 'POST') {
       res.setHeader('allow', 'POST');
-      return send(res, 405, erro(null, ERROS.pedidoInvalido, 'use POST: este servidor MCP não abre stream nem guarda sessão'));
+      return send(res, 405, rpcError(null, RPC_ERRORS.invalidRequest, 'use POST: este servidor MCP não abre stream nem guarda sessão'));
     }
-    const versao = header(req, 'mcp-protocol-version');
-    if (versao && !(VERSOES_DO_PROTOCOLO as readonly string[]).includes(versao)) {
-      return send(res, 400, erro(null, ERROS.pedidoInvalido, `MCP-Protocol-Version não suportada: ${versao}`));
+    const version = header(req, 'mcp-protocol-version');
+    if (version && !(PROTOCOL_VERSIONS as readonly string[]).includes(version)) {
+      return send(res, 400, rpcError(null, RPC_ERRORS.invalidRequest, `MCP-Protocol-Version não suportada: ${version}`));
     }
-    const tipo = header(req, 'content-type') ?? '';
-    if (!tipo.toLowerCase().includes('application/json')) return send(res, 415, erro(null, ERROS.pedidoInvalido, 'use Content-Type: application/json'));
+    const contentType = header(req, 'content-type') ?? '';
+    if (!contentType.toLowerCase().includes('application/json')) return send(res, 415, rpcError(null, RPC_ERRORS.invalidRequest, 'use Content-Type: application/json'));
 
-    let corpo: string;
+    let body: string;
     try {
-      corpo = await readBody(req);
+      body = await readBody(req);
     } catch (e) {
       const status = (e as { status?: number }).status ?? 400;
-      return send(res, status, erro(null, ERROS.pedidoInvalido, (e as Error).message));
+      return send(res, status, rpcError(null, RPC_ERRORS.invalidRequest, (e as Error).message));
     }
-    let mensagem: unknown;
+    let message: unknown;
     try {
-      mensagem = JSON.parse(corpo);
+      message = JSON.parse(body);
     } catch {
-      return send(res, 400, erro(null, ERROS.parse, 'JSON inválido'));
+      return send(res, 400, rpcError(null, RPC_ERRORS.parse, 'JSON inválido'));
     }
 
-    // A chamada longa (long polling) para quando o cliente fecha a conexão.
-    const desistiu = new AbortController();
+    // The long call (long polling) stops when the client closes the connection.
+    const gaveUp = new AbortController();
     res.on('close', () => {
-      if (!res.writableFinished) desistiu.abort();
+      if (!res.writableFinished) gaveUp.abort();
     });
-    const resposta = await servidor.atender(mensagem, { sinal: desistiu.signal, versao });
-    if (desistiu.signal.aborted) return;
-    if (resposta === null) {
+    const response = await server.handle(message, { signal: gaveUp.signal, version });
+    if (gaveUp.signal.aborted) return;
+    if (response === null) {
       res.writeHead(202).end();
       return;
     }
-    send(res, 200, resposta);
+    send(res, 200, response);
   };
 }
 
-function header(req: IncomingMessage, nome: string): string | null {
-  const v = req.headers[nome];
+function header(req: IncomingMessage, name: string): string | null {
+  const v = req.headers[name];
   return typeof v === 'string' && v.length > 0 ? v : null;
 }

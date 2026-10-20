@@ -10,7 +10,7 @@ import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiL
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
-import { comMudancas, CursorDeMudancas } from '../../src/mudancas/index.ts';
+import { withChanges, ChangeCursor } from '../../src/changes/index.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
@@ -51,13 +51,13 @@ const ate = async (cond: () => boolean, ms = 3000) => {
 
 describe('/ui no núcleo', () => {
   let sqlite: SqliteStorage;
-  let cursor: CursorDeMudancas;
+  let cursor: ChangeCursor;
   let api: ApiLocal;
   let host: string;
   before(async () => {
-    cursor = new CursorDeMudancas({ agruparMs: 0, intervaloMinimoMs: 0 });
+    cursor = new ChangeCursor({ batchMs: 0, minIntervalMs: 0 });
     sqlite = openSqliteStorage({ path: ':memory:' });
-    const storage = comMudancas(sqlite, cursor);
+    const storage = withChanges(sqlite, cursor);
     await semearCenariosDoPainel(storage, 'p1');
     const trabalho = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho });
@@ -186,7 +186,7 @@ describe('/ui no núcleo', () => {
       onRestart: () => reiniciou++,
       onChange: (m: { type: string; key: string }[]) => mudancas.push(m),
     });
-    await ate(() => reiniciou === 1 && cursor.abertas === 1);
+    await ate(() => reiniciou === 1 && cursor.openWaits === 1);
     assert.deepEqual(estados, ['live']);
 
     const hook = { session_id: 'sess-ui', hook_event_name: 'SessionStart', cwd: '/repo/app', source: 'startup', model: 'claude-opus-5-5', transcript_path: '/x.jsonl' };
@@ -196,7 +196,7 @@ describe('/ui no núcleo', () => {
     assert.equal(reiniciou, 1, 'mudança comum não pede releitura');
 
     await vivo.stop();
-    await ate(() => cursor.abertas === 0);
+    await ate(() => cursor.openWaits === 0);
   });
 
   test('Ao vivo: sem o núcleo mostra a falha, tenta de novo e relê quando volta', async () => {

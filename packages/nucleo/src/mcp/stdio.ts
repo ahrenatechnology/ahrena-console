@@ -1,87 +1,87 @@
-// Transporte stdio do MCP: uma mensagem JSON-RPC por linha na entrada, uma resposta por linha na
-// saída. Nada além de JSON vai para a saída; o log vai para o stderr.
+// MCP stdio transport: one JSON-RPC message per line on the input, one answer per line on the
+// output. Nothing but JSON goes to the output; the log goes to stderr.
 //
-// Quem atende é uma função: o próprio `ServidorMcp` (testes) ou a ponte para o núcleo que já
-// roda em 127.0.0.1 (cli.ts), que é o que o Claude Desktop usa. Assim só um processo lê o banco.
+// The handler is a function: the `McpServer` itself (tests) or the bridge to the core already
+// running on 127.0.0.1 (cli.ts), which is what Claude Desktop uses. So only one process reads the database.
 
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
-import { ERROS, erro, type RespostaJsonRpc } from './protocolo.ts';
+import { RPC_ERRORS, rpcError, type JsonRpcResponse } from './protocol.ts';
 
-export type Atender = (mensagem: unknown) => Promise<RespostaJsonRpc | RespostaJsonRpc[] | null>;
+export type MessageHandler = (message: unknown) => Promise<JsonRpcResponse | JsonRpcResponse[] | null>;
 
-export interface OpcoesDoStdio {
-  atender: Atender;
-  entrada?: Readable;
-  saida?: Writable;
-  log?: (mensagem: string) => void;
+export interface StdioOptions {
+  handle: MessageHandler;
+  input?: Readable;
+  output?: Writable;
+  log?: (message: string) => void;
 }
 
-/** Atende até a entrada fechar; resolve depois da última resposta escrita. */
-export async function atenderPorStdio({ atender, entrada = process.stdin, saida = process.stdout, log = () => {} }: OpcoesDoStdio): Promise<void> {
-  const pendentes = new Set<Promise<void>>();
-  const escrever = (r: unknown) => saida.write(`${JSON.stringify(r)}\n`);
-  for await (const linha of createInterface({ input: entrada, crlfDelay: Infinity })) {
-    if (!linha.trim()) continue;
-    let mensagem: unknown;
+/** Serves until the input closes; resolves after the last answer is written. */
+export async function serveStdio({ handle, input = process.stdin, output = process.stdout, log = () => {} }: StdioOptions): Promise<void> {
+  const pending = new Set<Promise<void>>();
+  const write = (r: unknown) => output.write(`${JSON.stringify(r)}\n`);
+  for await (const line of createInterface({ input, crlfDelay: Infinity })) {
+    if (!line.trim()) continue;
+    let message: unknown;
     try {
-      mensagem = JSON.parse(linha);
+      message = JSON.parse(line);
     } catch {
-      escrever(erro(null, ERROS.parse, 'JSON inválido'));
+      write(rpcError(null, RPC_ERRORS.parse, 'JSON inválido'));
       continue;
     }
-    const p = atender(mensagem)
+    const p = handle(message)
       .then((r) => {
-        if (r !== null) escrever(r);
+        if (r !== null) write(r);
       })
-      .catch((e) => log(`erro: ${(e as Error).message}`))
-      .finally(() => pendentes.delete(p));
-    pendentes.add(p);
+      .catch((e) => log(`error: ${(e as Error).message}`))
+      .finally(() => pending.delete(p));
+    pending.add(p);
   }
-  await Promise.all(pendentes);
+  await Promise.all(pending);
 }
 
 /**
- * Ponte para o `/mcp` do núcleo: o mesmo servidor, pelo HTTP local. Com o núcleo fora do ar,
- * `semNucleo` responde no lugar dele (`initialize`, `ping` e `tools/list` funcionam; `tools/call`
- * volta com `isError` dizendo como subir o núcleo), para o cliente não marcar o servidor como
- * quebrado só porque o núcleo ainda não subiu. Cada pedido tenta o HTTP de novo.
+ * Bridge to the core's `/mcp`: the same server, over local HTTP. With the core down,
+ * `withoutCore` answers in its place (`initialize`, `ping` and `tools/list` work; `tools/call`
+ * comes back with `isError` saying how to start the core), so the client does not mark the server
+ * as broken just because the core has not started yet. Every request tries HTTP again.
  */
-export function ponteHttp(url: string, { semNucleo, fetcher = fetch }: { semNucleo: Atender; fetcher?: typeof fetch }): Atender {
-  return async (mensagem) => {
+export function httpBridge(url: string, { withoutCore, fetcher = fetch }: { withoutCore: MessageHandler; fetcher?: typeof fetch }): MessageHandler {
+  return async (message) => {
     let res: Response;
     try {
       res = await fetcher(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-        body: JSON.stringify(mensagem),
+        body: JSON.stringify(message),
       });
     } catch {
-      return semNucleo(mensagem);
+      return withoutCore(message);
     }
     if (res.status === 202) return null;
-    const texto = await res.text();
-    let corpo: RespostaJsonRpc | RespostaJsonRpc[];
+    const text = await res.text();
+    let body: JsonRpcResponse | JsonRpcResponse[];
     try {
-      corpo = JSON.parse(texto) as RespostaJsonRpc | RespostaJsonRpc[];
+      body = JSON.parse(text) as JsonRpcResponse | JsonRpcResponse[];
     } catch {
-      return erroComId(mensagem, `resposta inesperada do núcleo (HTTP ${res.status})`);
+      return errorWithId(message, `resposta inesperada do núcleo (HTTP ${res.status})`);
     }
-    // O 4xx do HTTP não sabe o id (o corpo nem foi lido, ou não era JSON-RPC): no stdio, o cliente
-    // casa a resposta pelo id, então ela leva o do pedido.
-    if (!Array.isArray(corpo) && corpo.id === null && corpo.error) return erroComId(mensagem, corpo.error.message, corpo.error.code);
-    return corpo;
+    // The HTTP 4xx does not know the id (the body was not even read, or was not JSON-RPC): on stdio,
+    // the client matches the answer by id, so it carries the request's.
+    if (!Array.isArray(body) && body.id === null && body.error) return errorWithId(message, body.error.message, body.error.code);
+    return body;
   };
 }
 
-function erroComId(mensagem: unknown, motivo: string, codigo: number = ERROS.interno): RespostaJsonRpc | RespostaJsonRpc[] | null {
-  const um = (m: unknown): RespostaJsonRpc | null => {
+function errorWithId(message: unknown, reason: string, code: number = RPC_ERRORS.internal): JsonRpcResponse | JsonRpcResponse[] | null {
+  const one = (m: unknown): JsonRpcResponse | null => {
     const id = (m as { id?: unknown } | null)?.id;
-    return typeof id === 'string' || typeof id === 'number' ? erro(id, codigo, motivo) : null;
+    return typeof id === 'string' || typeof id === 'number' ? rpcError(id, code, reason) : null;
   };
-  if (Array.isArray(mensagem)) {
-    const r = mensagem.map(um).filter((x): x is RespostaJsonRpc => x !== null);
+  if (Array.isArray(message)) {
+    const r = message.map(one).filter((x): x is JsonRpcResponse => x !== null);
     return r.length > 0 ? r : null;
   }
-  return um(mensagem);
+  return one(message);
 }

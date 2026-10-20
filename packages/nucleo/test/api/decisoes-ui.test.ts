@@ -20,8 +20,8 @@ import {
   type DecisoesDaPagina,
   type RascunhoDeRegistro,
 } from '../../src/api/index.ts';
-import { registerDecision } from '../../src/decisoes/registro.ts';
-import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
+import { registerDecision } from '../../src/decisions/registry.ts';
+import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { MAE_DO_P9, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
 import { T0 } from '../fixtures.ts';
 

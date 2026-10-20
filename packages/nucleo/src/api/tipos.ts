@@ -7,7 +7,7 @@
 // Datas em ISO 8601 (UTC); o painel calcula "há quanto tempo" com o próprio relógio.
 
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
-import type { EstadoDoInbox } from '../estados/leitura.ts';
+import type { InboxState } from '../states/inbox.ts';
 
 export interface ContaDoPainel {
   /** `<accountUuid>/<organizationUuid>`; só para agrupar, nunca para mostrar. */
@@ -41,7 +41,7 @@ export interface SessaoDoPainel {
   model: string | null;
   startedAt: string;
   status: DisplayStatus;
-  state: EstadoDoInbox;
+  state: InboxState;
   reason: AwaitingReason | null;
   urgent: boolean;
   /** Desde quando está no estado atual (a espera, ou a última atividade). */
@@ -162,7 +162,7 @@ export interface FilhaDoPainel {
   /** `local_…` do índice do Claude Desktop, para abrir a conversa; `null` na sessão só de terminal. */
   local: string | null;
   title: string;
-  state: EstadoDoInbox | 'unknown';
+  state: InboxState | 'unknown';
   reason: AwaitingReason | null;
   /** Desde quando está no que faz: a atividade atual, se trabalhando; a espera, se parada. */
   since: string | null;
@@ -369,7 +369,7 @@ export interface CardDoMural {
   branch: string | null;
   /** O badge. */
   status: DisplayStatus;
-  state: EstadoDoInbox;
+  state: InboxState;
   reason: AwaitingReason | null;
   /** Espera `notification` ou `interrupted`, e o erro (como `PrecisaDeVoce.urgent`). */
   urgent: boolean;

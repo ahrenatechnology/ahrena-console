@@ -10,17 +10,17 @@
 // - o GitHub e o git respondem por trás, nunca no caminho do pedido (trabalho.ts).
 
 import { basename } from 'node:path';
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
-import { precosVigentes } from '../custo/tabela.ts';
-import { lerInbox, type LeituraDoInbox } from '../estados/leitura.ts';
-import { lerMemoria, principalDe } from '../estados/regras.ts';
+import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
+import { currentPrices } from '../cost/table.ts';
+import { readInbox, type InboxReading } from '../states/inbox.ts';
+import { readMemory, mainAgentOf } from '../states/rules.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
-import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
-import { JANELA_LONGA, JANELA_PADRAO } from '../contexto/janela.ts';
-import { alertaDeContexto, pctDoContexto, rotuloDoContexto, type ContextMeter } from '../contexto/modelo.ts';
+import type { PlanOwner, PlanRecord, SessionPlan } from '../plan/model.ts';
+import { LONG_WINDOW, DEFAULT_WINDOW } from '../context/window.ts';
+import { contextAlert, contextPct, contextLabel, type ContextMeter } from '../context/model.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
+import type { DecisionPort } from '../decisions/port.ts';
 import type { Contas } from './contas.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisoes.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
@@ -50,8 +50,8 @@ import type {
 import type { TrabalhoPorBranch } from './trabalho.ts';
 import { VERSAO_DA_API } from './versao.ts';
 
-export const LIMITE_PADRAO_DE_CONTEXTO = JANELA_PADRAO;
-const LIMITE_LONGO_DE_CONTEXTO = JANELA_LONGA;
+export const LIMITE_PADRAO_DE_CONTEXTO = DEFAULT_WINDOW;
+const LIMITE_LONGO_DE_CONTEXTO = LONG_WINDOW;
 const MAX_MAQUINA = 12;
 const MAX_SESSOES_DOS_PRS = 30;
 const PONTOS_DA_SERIE = 16;
@@ -95,7 +95,7 @@ type Porta = StoragePort;
 interface Candidata {
   session: Session;
   agentes: Agent[];
-  inbox: LeituraDoInbox;
+  inbox: InboxReading;
   desktop: SessaoDoDesktop | null;
 }
 
@@ -104,7 +104,7 @@ const UM_MIN = 60_000;
 /** O que o painel calcula de uma sessão já gravada, com os mesmos caches: o card do mural (#34) sai daqui. */
 export interface LeituraDaSessao {
   sessao: SessaoDoPainel;
-  inbox: LeituraDoInbox;
+  inbox: InboxReading;
   desktop: SessaoDoDesktop | null;
   /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git (só `git branch`, em cache). */
   branch: string | null;
@@ -197,7 +197,7 @@ export class MontadorDoPainel {
     const pasta = session.cwd ?? desktop?.cwd ?? null;
     return {
       sessao,
-      inbox: lerInbox(session, agentes),
+      inbox: readInbox(session, agentes),
       desktop,
       // O que o trabalho por branch já sabe e, sem isso, só o `git branch` da pasta (em cache, nunca o
       // GitHub): o mural lê todas as abertas.
@@ -227,7 +227,7 @@ export class MontadorDoPainel {
       ? this.sessaoDe(session, agentes, resumo!, desktop, conta, agora)
       : this.sessaoNova(pedido, desktop, conta, agora);
     const { custo, tokens } = session ? await this.custoDe(session) : { custo: null, tokens: null };
-    const memoria = session ? lerMemoria(session) : null;
+    const memoria = session ? readMemory(session) : null;
     const planos = session ? await this.storage.listPlanRecords(session.id) : [];
     const bg = memoria ? Object.values(memoria.background) : [];
     const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
@@ -327,8 +327,8 @@ export class MontadorDoPainel {
     conta: ContaDoPainel | null,
     agora: number,
   ): SessaoDoPainel {
-    const inbox = lerInbox(session, agentes);
-    const memoria = lerMemoria(session);
+    const inbox = readInbox(session, agentes);
+    const memoria = readMemory(session);
     const desde = session.awaitingInputSince ?? (inbox.status === 'error' ? memoria.erroEm : null) ?? session.updatedAt;
     const { atividade, faixa } = atividadeDe(session, agentes, inbox, r, desde, agora);
     return {
@@ -337,9 +337,9 @@ export class MontadorDoPainel {
       model: session.model,
       startedAt: session.startedAt,
       status: inbox.status,
-      state: inbox.estado,
-      reason: inbox.motivo,
-      urgent: inbox.urgente,
+      state: inbox.state,
+      reason: inbox.reason,
+      urgent: inbox.urgent,
       since: desde,
       turn: Math.max(r.promptsHook, r.promptsTranscript),
       activity: atividade,
@@ -376,11 +376,11 @@ export class MontadorDoPainel {
     const c = this.custos.get(session.id);
     const agora = this.agora();
     if (c && (c.updatedAt === session.updatedAt || agora - c.em < this.custoMs)) return c;
-    const precos = await precosVigentes(this.storage);
-    const [parcelas, buckets] = await Promise.all([parcelasDaSessao(this.storage, session.id, precos), this.storage.listTokenUsage(session.id)]);
-    const relatorio = relatorioDeCusto(parcelas);
+    const precos = await currentPrices(this.storage);
+    const [parcelas, buckets] = await Promise.all([sessionCostSlices(this.storage, session.id, precos), this.storage.listTokenUsage(session.id)]);
+    const relatorio = costReport(parcelas);
     let acumulado = 0;
-    const pontos = parcelas.map((p) => (acumulado += p.custo.costUsd ?? 0));
+    const pontos = parcelas.map((p) => (acumulado += p.cost.costUsd ?? 0));
     const passo = Math.max(1, Math.ceil(pontos.length / PONTOS_DA_SERIE));
     const serie = [0, ...pontos.filter((_, i) => (i + 1) % passo === 0 || i === pontos.length - 1)];
     let entrada = 0;
@@ -393,7 +393,7 @@ export class MontadorDoPainel {
     const valor = {
       em: agora,
       updatedAt: session.updatedAt,
-      custo: { usd: relatorio.total.custoUsd ?? (relatorio.total.totalDeTokens === 0 ? 0 : null), series: serie, estimate: true as const },
+      custo: { usd: relatorio.total.costUsd ?? (relatorio.total.totalTokens === 0 ? 0 : null), series: serie, estimate: true as const },
       tokens: buckets.length ? { input: entrada, output: saida } : null,
     };
     this.custos.set(session.id, valor);
@@ -420,14 +420,14 @@ export class MontadorDoPainel {
         continue;
       }
       const agentes = await this.storage.listAgents(id);
-      const inbox = lerInbox(s, agentes);
+      const inbox = readInbox(s, agentes);
       const f = fazendoDa(s, agentes, inbox);
       out.push({
         id,
         local,
         title: titulo ?? s.name ?? (s.cwd ? basename(s.cwd) : id.slice(0, 8)),
-        state: inbox.estado,
-        reason: inbox.motivo,
+        state: inbox.state,
+        reason: inbox.reason,
         since: f ? f.desde : (s.awaitingInputSince ?? s.updatedAt),
         doing: f?.texto ?? null,
         archived: arquivada,
@@ -455,8 +455,8 @@ export class MontadorDoPainel {
       const out: Candidata[] = [];
       for (const session of vistas.values()) {
         const agentes = await this.storage.listAgents(session.id);
-        const inbox = lerInbox(session, agentes);
-        if (inbox.precisaDeVoce) out.push({ session, agentes, inbox, desktop: this.desktop?.sessaoPorCli(session.id) ?? null });
+        const inbox = readInbox(session, agentes);
+        if (inbox.needsYou) out.push({ session, agentes, inbox, desktop: this.desktop?.sessaoPorCli(session.id) ?? null });
       }
       this.precisamCache = { em: this.agora(), candidatas: out };
       return out;
@@ -518,8 +518,8 @@ export class MontadorDoPainel {
         local: c.desktop?.localId ?? null,
         title: c.desktop?.titulo ?? c.session.name ?? (c.session.cwd ? basename(c.session.cwd) : c.session.id.slice(0, 8)),
         state: c.inbox.status === 'error' ? 'error' : 'waiting',
-        reason: c.inbox.motivo,
-        urgent: c.inbox.urgente || c.inbox.status === 'error',
+        reason: c.inbox.reason,
+        urgent: c.inbox.urgent || c.inbox.status === 'error',
         since: desde,
         text: faixa?.type === 'error' ? faixa.text : atividade.text,
         model: c.session.model,
@@ -568,7 +568,7 @@ export function contextoDe(
 ): ContextoDoPainel | null {
   const agentes = medidores
     .filter((m) => m.agentId !== null && m.measuredAt !== null)
-    .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: pctDoContexto(m), overflows: m.compactions, alert: alertaDeContexto(m) }));
+    .map((m) => ({ agentId: m.agentId!, used: m.usedTokens, limit: m.windowTokens, pct: contextPct(m), overflows: m.compactions, alert: contextAlert(m) }));
   // Só o medidor que já mediu: o que nasceu só do PreCompact mostraria "0 / 200k".
   const principal = medidores.find((m) => m.agentId === null && m.measuredAt !== null);
   const sim = session.metadata?.contexto as { usados?: unknown; limite?: unknown; estouros?: unknown } | undefined;
@@ -576,11 +576,11 @@ export function contextoDe(
     return {
       used: principal.usedTokens,
       limit: principal.windowTokens,
-      pct: pctDoContexto(principal),
+      pct: contextPct(principal),
       overflows: principal.compactions,
-      alert: alertaDeContexto(principal),
+      alert: contextAlert(principal),
       manualCompactions: principal.manualCompactions,
-      label: rotuloDoContexto(principal),
+      label: contextLabel(principal),
       agents: agentes,
     };
   }
@@ -597,8 +597,8 @@ export function contextoDe(
   const total = Math.max(estouros, contado?.compactions ?? 0);
   const c = { usedTokens: usados, windowTokens: limite, compactions: total };
   return {
-    used: usados, limit: limite, pct: pctDoContexto(c), overflows: total, alert: alertaDeContexto(c),
-    manualCompactions: contado?.manualCompactions ?? 0, label: rotuloDoContexto(c), agents: agentes,
+    used: usados, limit: limite, pct: contextPct(c), overflows: total, alert: contextAlert(c),
+    manualCompactions: contado?.manualCompactions ?? 0, label: contextLabel(c), agents: agentes,
   };
 }
 
@@ -707,16 +707,16 @@ function pedidoDePermissao(r: ResumoDosEventos, cwd: string | null): string {
  * subagentes que espera, o background, ou "pensando". `desde` é o último passo do agente principal
  * (o início da ferramenta, ou a última resposta). Parada, `null`.
  */
-export function fazendoDa(session: Session, agentes: Agent[], inbox: LeituraDoInbox): { texto: string; desde: string } | null {
-  const principal = principalDe({ session, agentes });
+export function fazendoDa(session: Session, agentes: Agent[], inbox: InboxReading): { texto: string; desde: string } | null {
+  const principal = mainAgentOf({ session, agents: agentes });
   const desde = principal?.updatedAt ?? session.updatedAt;
-  switch (inbox.estado) {
+  switch (inbox.state) {
     case 'active':
       return { texto: principal?.currentTool ? `rodando ${principal.currentTool}` : 'pensando', desde };
     case 'delegating':
-      return { texto: `esperando ${inbox.subagentesAtivos || 1} subagente${inbox.subagentesAtivos > 1 ? 's' : ''}`, desde };
+      return { texto: `esperando ${inbox.activeSubagents || 1} subagente${inbox.activeSubagents > 1 ? 's' : ''}`, desde };
     case 'background':
-      return { texto: `${inbox.processosEmBackground} em background`, desde };
+      return { texto: `${inbox.backgroundProcesses} em background`, desde };
     default:
       return null;
   }
@@ -725,16 +725,16 @@ export function fazendoDa(session: Session, agentes: Agent[], inbox: LeituraDoIn
 export function atividadeDe(
   session: Session,
   agentes: Agent[],
-  inbox: LeituraDoInbox,
+  inbox: InboxReading,
   r: ResumoDosEventos,
   desde: string,
   agora: number,
 ): { atividade: AtividadeDaSessao; faixa: FaixaDaSessao | null } {
-  const principal = principalDe({ session, agentes });
+  const principal = mainAgentOf({ session, agents: agentes });
   const ferramenta = r.ultimaFerramenta;
-  switch (inbox.estado) {
+  switch (inbox.state) {
     case 'waiting': {
-      if (inbox.motivo === 'notification') {
+      if (inbox.reason === 'notification') {
         const pergunta = r.ultimaPergunta && (ferramenta?.nome === 'AskUserQuestion' || r.ultimoPedido?.tipo === 'elicitation_dialog');
         if (pergunta && r.ultimaPergunta) {
           const n = r.ultimaPergunta.opcoes;
@@ -749,8 +749,8 @@ export function atividadeDe(
           faixa: { type: 'permission', text: pedidoDePermissao(r, session.cwd), footer: 'permitir ou negar na conversa ao lado', since: desde },
         };
       }
-      if (inbox.motivo === 'interrupted') return { atividade: { type: 'interrupted', text: 'Esc no meio do turno' }, faixa: null };
-      if (inbox.motivo === 'session_start') return { atividade: { type: 'prompt', text: 'esperando o primeiro prompt' }, faixa: null };
+      if (inbox.reason === 'interrupted') return { atividade: { type: 'interrupted', text: 'Esc no meio do turno' }, faixa: null };
+      if (inbox.reason === 'session_start') return { atividade: { type: 'prompt', text: 'esperando o primeiro prompt' }, faixa: null };
       return { atividade: { type: 'your-turn', text: r.ultimaMensagem ? `"${r.ultimaMensagem}"` : 'o turno terminou' }, faixa: null };
     }
     case 'error': {
@@ -761,9 +761,9 @@ export function atividadeDe(
       };
     }
     case 'delegating':
-      return { atividade: { type: 'delegating', text: `esperando ${inbox.subagentesAtivos || 1} subagente${inbox.subagentesAtivos === 1 ? '' : 's'}` }, faixa: null };
+      return { atividade: { type: 'delegating', text: `esperando ${inbox.activeSubagents || 1} subagente${inbox.activeSubagents === 1 ? '' : 's'}` }, faixa: null };
     case 'background':
-      return { atividade: { type: 'tool', text: `${inbox.processosEmBackground} em background` }, faixa: null };
+      return { atividade: { type: 'tool', text: `${inbox.backgroundProcesses} em background` }, faixa: null };
     case 'completed':
       return { atividade: { type: 'completed', text: 'terminou sem erro' }, faixa: null };
     case 'abandoned':

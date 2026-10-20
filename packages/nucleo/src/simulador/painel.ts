@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import type { AccountSource, Agent, AwaitingReason, Session, SessionStatus, TokenUsage } from '../model.ts';
 import { claudeAccountId, emptyTokenCounts } from '../model.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
-import { atualizarPlano } from '../plano/gravacao.ts';
+import { updatePlan } from '../plan/recording.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { DecisionPort } from '../decisoes/porta.ts';
-import { linkSession, markPromoted, registerDecision, type DecisionDraft } from '../decisoes/registro.ts';
+import type { DecisionPort } from '../decisions/port.ts';
+import { linkSession, markPromoted, registerDecision, type DecisionDraft } from '../decisions/registry.ts';
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
@@ -354,7 +354,7 @@ async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: st
     const ultimo = e.anteriores?.at(-1);
     if (ultimo) eventos.push(await todoWrite(ultimo.desdeMin - ultimo.duracaoMin - 0.5, e.plano, true));
     eventos.push(await todoWrite((e.espera?.haMin ?? 0.3) + 0.2, e.plano));
-    await atualizarPlano(porta, id, eventos);
+    await updatePlan(porta, id, eventos);
   }
   if (e.ferramenta) {
     const entrada = e.pergunta ? { questions: [{ question: e.pergunta.texto, options: Array.from({ length: e.pergunta.opcoes }, (_, k) => ({ label: `opção ${k + 1}` })) }] } : { command: e.ferramenta.resumo };

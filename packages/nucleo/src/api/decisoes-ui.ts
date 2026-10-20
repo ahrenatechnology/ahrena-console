@@ -11,8 +11,8 @@
 // `/api/decisoes`, `/api/sessoes/<id>/decisoes`, `/api/decisoes/<id>/promover`, their parameter names
 // (`estado`, `agrupar`, `grupo`, `escopo`), values and bodies are aliases: src/api/legacy-routes.ts.
 //
-// Lê e escreve só pela porta das decisões; o escopo, a conta e a cadeia são de `DecisoesDaSessao` e
-// de src/decisoes/registro.ts, não daqui.
+// Reads and writes only through the decisions port; scope, account and chain belong to
+// `DecisoesDaSessao` and src/decisions/registry.ts, not here.
 //
 // A página lista "todas": a porta não tem essa consulta (as dela seguem padrões de acesso, para
 // caber no DynamoDB do hub), então a lista sai das sessões da porta de armazenamento, família a
@@ -31,9 +31,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, isAbsolute, join, posix } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Session } from '../model.ts';
-import type { Decision, DecisionScope, DecisionState } from '../decisoes/modelo.ts';
-import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
-import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisoes/registro.ts';
+import type { Decision, DecisionScope, DecisionState } from '../decisions/model.ts';
+import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
+import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisions/registry.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
 import { DecisoesDaSessao, ErroDaDecisao, API_SCOPE, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';

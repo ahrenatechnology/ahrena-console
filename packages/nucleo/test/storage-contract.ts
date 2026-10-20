@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
-import type { PlanRecord, SessionPlan } from '../src/plano/modelo.ts';
-import type { ContextMeter } from '../src/contexto/modelo.ts';
+import type { PlanRecord, SessionPlan } from '../src/plan/model.ts';
+import type { ContextMeter } from '../src/context/model.ts';
 import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {

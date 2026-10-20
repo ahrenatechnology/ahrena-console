@@ -7,7 +7,7 @@ import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
-import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
+import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { SIMULATED_WORKSTATION, seedTelemetry, SimulatedCollector, simulatedReading } from '../../src/simulador/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
@@ -23,7 +23,7 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const store = new SqliteTelemetryStore(storage.db);
   const tracker = new AlertTracker();
-  const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
+  const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   await seedTelemetry(store, 'local', 'local', NOW);
   await seedTelemetry(store, SIMULATED_WORKSTATION.id, 'workstation', NOW);
   const machines = [localMachine(), { ...SIMULATED_WORKSTATION, state: () => 'connected' as const }];
