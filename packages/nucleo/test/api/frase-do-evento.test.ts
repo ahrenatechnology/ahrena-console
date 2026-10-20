@@ -17,6 +17,8 @@ describe('a frase do evento', () => {
     assert.equal(fraseDoEvento(ev('PreToolUse', { toolName: 'Read', summary: 'src/cobranca/servico.ts' })), 'Read: src/cobranca/servico.ts');
     assert.equal(fraseDoEvento(ev('ToolUse', { toolName: 'Bash', summary: 'Bash' })), 'Bash');
     assert.equal(fraseDoEvento(ev('PreToolUse', { toolName: 'Agent', data: { tool_input: { subagent_type: 'Explore' } } })), 'Subagente Explore iniciado');
+    assert.equal(fraseDoEvento(ev('PreToolUse', { toolName: 'Agent', summary: '3 subagentes em paralelo' })), 'Agent: 3 subagentes em paralelo');
+    assert.equal(fraseDoEvento(ev('PreToolUse', { toolName: 'Task' })), 'Subagente iniciado');
     assert.equal(fraseDoEvento(ev('PreToolUse', { toolName: 'TodoWrite', summary: 'plano' })), 'Plano atualizado');
     assert.equal(fraseDoEvento(ev('PostToolUse', { toolName: 'Bash', summary: 'erro: npm test' })), 'Bash falhou');
     assert.equal(fraseDoEvento(ev('PostToolUse', { toolName: 'Bash', summary: 'npm test' })), 'Bash concluído');
@@ -45,7 +47,7 @@ describe('a frase do evento', () => {
     assert.equal(fraseDoEvento(ev('SubagentStop', { summary: 'Explore' })), 'Subagente Explore terminou');
     assert.equal(fraseDoEvento(ev('UserPromptSubmit', { summary: 'rode os testes' })), 'Prompt: "rode os testes"');
     assert.equal(fraseDoEvento(ev('AssistantMessage', { summary: 'Pronto.' })), 'Resposta: "Pronto."');
-    assert.equal(fraseDoEvento(ev('AssistantMessage')), 'Resposta');
+    assert.equal(fraseDoEvento(ev('AssistantMessage')), 'Resposta do modelo');
     assert.equal(fraseDoEvento(ev('Desconhecido')), null);
   });
 

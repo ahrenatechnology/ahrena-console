@@ -66,7 +66,10 @@ export function fraseDoEvento(e: Pick<SessionEvent, 'type' | 'toolName' | 'summa
     case 'ToolUse': {
       if (e.toolName === 'Agent' || e.toolName === 'Task') {
         const tipo = str(obj(d?.tool_input)?.subagent_type);
-        return `Subagente ${tipo ?? ''} iniciado`.replace(/\s+/g, ' ');
+        if (tipo) return `Subagente ${tipo} iniciado`;
+        // Sem o tipo, o que a chamada diz ("3 subagentes em paralelo") diz mais que "Subagente iniciado".
+        const alvo = str(e.summary);
+        return alvo && alvo !== e.toolName ? `${e.toolName}: ${alvo}` : 'Subagente iniciado';
       }
       if (e.toolName === 'TodoWrite') return 'Plano atualizado';
       if (!e.toolName) return null;
@@ -94,7 +97,7 @@ export function fraseDoEvento(e: Pick<SessionEvent, 'type' | 'toolName' | 'summa
       return str(e.summary) ? `Aviso: ${str(e.summary)}` : 'Aviso';
     }
     case 'AssistantMessage':
-      return citar('Resposta', str(e.summary));
+      return str(e.summary) ? citar('Resposta', str(e.summary)) : 'Resposta do modelo';
     case 'Stop':
       return turno(t, ctx.ultimoPrompt);
     case 'TurnDuration': {

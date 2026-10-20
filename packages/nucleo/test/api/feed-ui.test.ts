@@ -295,7 +295,7 @@ describe('Feed de atividade: a tela', () => {
     assert.match(det.textContent, /Call idtoolu_01/);
     assert.match(det.textContent, /Ferramenta—/);
     assert.equal(area.querySelector('.feed-seta')!.getAttribute('aria-expanded'), 'false');
-    area.querySelectorAll('.feed-item')[0]!.querySelector('.linha')!.click();
+    area.querySelectorAll('.feed-item')[0]!.querySelector('.feed-linha')!.click();
     assert.equal(area.querySelectorAll('.feed-detalhe').length, 1);
     det = area.querySelector('.feed-detalhe')!;
     assert.match(det.textContent, /npm test -- cobranca/);

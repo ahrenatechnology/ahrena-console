@@ -82,7 +82,7 @@ export async function montar(area, ctx) {
   const busca = el('input', { type: 'search', class: 'feed-entrada', maxlength: '100', placeholder: 'Buscar no resumo ou na ferramenta…', 'aria-label': 'Buscar no resumo ou na ferramenta' });
   const de = el('input', { type: 'date', class: 'feed-entrada', 'aria-label': 'De' });
   const ate = el('input', { type: 'date', class: 'feed-entrada', 'aria-label': 'Até' });
-  const seletor = (rotulo) => el('select', { class: 'chip feed-seletor', 'aria-label': rotulo }, el('option', { value: '' }, rotulo));
+  const seletor = (rotulo) => el('select', { class: 'feed-chip feed-seletor', 'aria-label': rotulo }, el('option', { value: '' }, rotulo));
   const sStatus = seletor('Status');
   const sTipo = seletor('Tipo de evento');
   const sFerramenta = seletor('Ferramenta');
@@ -95,9 +95,9 @@ export async function montar(area, ctx) {
     el(
       'div',
       { class: 'feed-filtros-linha' },
-      el('label', { class: 'campo feed-busca' }, icone('filtro'), busca),
-      el('label', { class: 'campo feed-dia' }, icone('calendario'), el('span', {}, 'De'), de),
-      el('label', { class: 'campo feed-dia' }, icone('calendario'), el('span', {}, 'Até'), ate),
+      el('label', { class: 'feed-campo feed-busca' }, icone('filtro'), busca),
+      el('label', { class: 'feed-campo feed-dia' }, icone('calendario'), el('span', {}, 'De'), de),
+      el('label', { class: 'feed-campo feed-dia' }, icone('calendario'), el('span', {}, 'Até'), ate),
     ),
     el('div', { class: 'feed-filtros-linha' }, sStatus, sTipo, sFerramenta, sSessao),
   );
@@ -141,7 +141,7 @@ export async function montar(area, ctx) {
   const corpo = el('div', { class: 'feed-corpo' });
   const listaEl = el('div', { class: 'feed-lista' });
   const botaoMais = el('button', { type: 'button', class: 'btn contorno feed-mais', aoClicar: () => mostrarMais() }, 'Mostrar mais');
-  const cartaoLista = el('div', { class: 'cartao linhas feed-linhas' }, listaEl, el('div', { class: 'feed-pe' }, botaoMais));
+  const cartaoLista = el('div', { class: 'cartao feed-linhas' }, listaEl, el('div', { class: 'feed-pe' }, botaoMais));
 
   area.replaceChildren(cab, sobre, cartaoFiltros, aviso, faixa, corpo);
   desenharPausa();
@@ -168,14 +168,14 @@ export async function montar(area, ctx) {
     const caminho = trilha(ev);
     const cabeca = el(
       'div',
-      { class: `linha feed-linha${aberta ? ' aberta' : ''}` },
+      { class: `feed-linha${aberta ? ' aberta' : ''}` },
       seta,
-      el('span', { class: 'o mono feed-hora' }, horaCurta(ev.criadoEm)),
+      el('span', { class: 'feed-o mono feed-hora' }, horaCurta(ev.criadoEm)),
       el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
-      el('span', { class: 'o trunc feed-trilha', title: caminho }, caminho),
-      el('span', { class: 'trunc feed-resumo', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
-      ev.ferramenta ? el('span', { class: 'chip' }, ev.ferramenta) : null,
-      el('span', { class: 'o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
+      el('span', { class: 'feed-o feed-trunc feed-trilha', title: caminho }, caminho),
+      el('span', { class: 'feed-trunc feed-resumo', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
+      ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
+      el('span', { class: 'feed-o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
       rota ? el('a', { class: 'btn contorno feed-sessao', href: rota }, 'Sessão', icone('abrir')) : null,
     );
     cabeca.addEventListener('click', (e) => {
@@ -197,13 +197,13 @@ export async function montar(area, ctx) {
       ['Call id', d.callId],
     ];
     const bloco = ev.ferramenta
-      ? el('div', { class: 'ferrbloco' }, icone('terminal'), el('span', { class: 'n' }, ev.ferramenta), el('span', { class: 'cmd trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
+      ? el('div', { class: 'feed-ferrbloco' }, icone('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
       : el('p', { class: 'feed-texto' }, ev.resumo ?? d.entrada ?? '—');
     return el(
       'div',
       { class: 'feed-detalhe' },
       el('div', { class: 'cartao feed-bloco' }, el('div', { class: 'olhinho' }, 'Resumo'), bloco, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-texto' }, ev.resumo) : null),
-      el('dl', { class: 'feed-kv mono' }, ...pares.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'trunc', title: v ?? '' }, v || '—')])),
+      el('dl', { class: 'feed-kv mono' }, ...pares.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
     );
   }
 
