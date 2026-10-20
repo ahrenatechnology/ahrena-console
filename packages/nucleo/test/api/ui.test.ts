@@ -106,8 +106,7 @@ describe('/ui no núcleo', () => {
   });
 
   test('a página e as telas não chamam nada fora da própria origem e não escrevem cor à mão', () => {
-    const telas = readdirSync(`${PASTA_DA_UI}telas`).filter((a) => a.endsWith('.js')).map((a) => `telas/${a}`);
-    const arquivos = [...readdirSync(PASTA_DA_UI).filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css'), ...telas];
+    const arquivos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('telas/repos.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
@@ -201,8 +200,9 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Sessões e Repositórios; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'sessoes', 'repos']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Kanban do projeto, Analytics e Repositórios; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'projeto', 'analytics', 'repos']);
+    assert.equal(acharTela('/ui/mural').tela.id, 'mural');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');

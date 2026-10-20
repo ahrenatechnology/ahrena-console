@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 24 24" role="img" aria-label="Ahrena Console">
+  <!-- O "A" do logo (docs/brand/logo.svg) sem o fundo: ícone template, o macOS pinta conforme a barra. -->
+  <path d="M9 23 L16 8 L23 23" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13 16.5 L19 16.5 L16 21.5 Z" fill="#000" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+</svg>

@@ -31,13 +31,23 @@ export function repoDoRemote(remote: string): string | null {
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
+type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
+
+/** CI do último commit, como o painel e o kanban mostram: `ok`, `falhou`, `rodando` ou `null` sem checagens. */
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrDoPainel['ci'] {
+  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
+}
+
+/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`. */
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrDoPainel['review'] {
+  return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
+}
+
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
   const estado = p.state === 'MERGED' ? 'mergeado' : p.state === 'CLOSED' ? 'fechado' : p.isDraft ? 'rascunho' : 'aberto';
-  const ci = !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
-  const review = p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
-  return { numero: p.number, url: p.url, estado, ci, checks: p.checks ?? null, review };
+  return { numero: p.number, url: p.url, estado, ci: ciDoPr(p), checks: p.checks ?? null, review: reviewDoPr(p) };
 }
 
 interface Entrada {
@@ -63,6 +73,7 @@ export class TrabalhoPorBranch {
   private readonly validadeMs: number;
   private readonly agora: () => number;
   private readonly entradas = new Map<string, Entrada>();
+  private readonly branches = new Map<string, { valor: string | null; em: number; rodando: Promise<void> | null }>();
   /** Montagens que passaram pelo cache do GitHub e chamadas ao git (para a medição de carga). */
   chamadas = { github: 0, git: 0 };
 
@@ -98,9 +109,41 @@ export class TrabalhoPorBranch {
     return e.valor;
   }
 
+  /** O último trabalho conhecido de `cwd`, sem atualizar: quem lê muitas pastas (o mural) não dispara git nem GitHub. */
+  espiar(cwd: string | null, branchDoDesktop: string | null = null): TrabalhoDoPainel | null {
+    if (!cwd && !branchDoDesktop) return null;
+    return this.entradas.get(`${cwd ?? ''}\0${branchDoDesktop ?? ''}`)?.valor ?? null;
+  }
+
+  /**
+   * Só o branch da pasta, pelo `git branch --show-current`: em cache, atualizado por trás quando vence,
+   * sem remote nem GitHub. Para o mural, que lê todas as sessões abertas.
+   */
+  branchDaPasta(cwd: string | null): string | null {
+    if (!cwd) return null;
+    let e = this.branches.get(cwd);
+    if (!e) {
+      e = { valor: null, em: -Infinity, rodando: null };
+      this.branches.set(cwd, e);
+    }
+    if (!e.rodando && this.agora() - e.em >= this.validadeMs) {
+      const alvo = e;
+      alvo.rodando = this.rodarGit(cwd, ['branch', '--show-current'])
+        .then((b) => {
+          alvo.valor = b;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          alvo.em = this.agora();
+          alvo.rodando = null;
+        });
+    }
+    return e.valor;
+  }
+
   /** Espera as atualizações em andamento (testes e o primeiro desenho). */
   async esperar(): Promise<void> {
-    await Promise.all([...this.entradas.values()].map((e) => e.rodando));
+    await Promise.all([...this.entradas.values(), ...this.branches.values()].map((e) => e.rodando));
   }
 
   private async rodarGit(cwd: string, args: string[]): Promise<string | null> {
