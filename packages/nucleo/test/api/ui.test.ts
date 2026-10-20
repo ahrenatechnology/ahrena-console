@@ -120,7 +120,7 @@ describe('/ui no núcleo', () => {
     const arquivos = readdirSync(PASTA_DA_UI, { recursive: true })
       .map(String)
       .filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
-    assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js'));
+    assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('telas/repos.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
@@ -231,8 +231,8 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics, Workflows, Histórico, Decisões e Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'workflows', 'historico', 'decisoes', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico, Decisões e Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes', 'agent-config']);
     assert.equal(acharTela('/ui/decisoes').tela.arquivo, '/ui/telas/decisoes.js');
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
     assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
@@ -248,6 +248,37 @@ describe('registro das telas', () => {
     assert.equal(acharTela('/ui/sessoes/a%20b'), null);
     assert.equal(acharTela('/ui/kanban').tela.id, 'kanban');
     assert.equal(acharTela('/ui/nao-existe'), null);
+  });
+
+  test('#104 critério 1: /ui/repos abre a lista de repositórios, com item na barra', () => {
+    const r = acharTela('/ui/repos');
+    assert.equal(r.tela.id, 'repos');
+    assert.equal(r.tela.item.rotulo, 'Repositórios');
+    assert.equal(acharTela('/ui/repos/').tela.id, 'repos');
+  });
+
+  test('#105: /ui/repos/<dono>/<repo> abre o repositório e acende Repositórios', () => {
+    const r = acharTela('/ui/repos/exemplo-labs/vitrine-demo');
+    assert.equal(r.tela.id, 'repo');
+    assert.equal(r.tela.acende, 'repos');
+    assert.deepEqual(r.params, { dono: 'exemplo-labs', repo: 'vitrine-demo' });
+    // Nomes do GitHub com ponto e sublinhado.
+    assert.deepEqual(acharTela('/ui/repos/meu_org/site.github.io').params, { dono: 'meu_org', repo: 'site.github.io' });
+    assert.deepEqual(acharTela('/ui/repos/meu_org/site.github.io/').params, { dono: 'meu_org', repo: 'site.github.io' });
+  });
+
+  test('#105: caminho de repositório estranho não casa nada', () => {
+    for (const caminho of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c', '/ui/sessoes/..']) {
+      assert.equal(acharTela(caminho), null, caminho);
+    }
+  });
+
+  test('toda tela com arquivo aponta para um arquivo que existe em ui/telas/', () => {
+    for (const t of TELAS as { id: string; arquivo?: string | null }[]) {
+      if (!t.arquivo) continue;
+      assert.match(t.arquivo, /^\/ui\/telas\/[a-z0-9-]+\.js$/, t.id);
+      readFileSync(`${PASTA_DA_UI}${t.arquivo.slice('/ui/'.length)}`);
+    }
   });
 });
 

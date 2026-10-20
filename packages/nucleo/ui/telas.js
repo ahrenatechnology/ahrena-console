@@ -71,6 +71,24 @@ export const TELAS = [
     arquivo: '/ui/telas/projeto.js', // #80 (C11)
   },
   {
+    id: 'repos',
+    rota: '/ui/repos',
+    item: { rotulo: 'Repositórios', icone: 'repos' },
+    titulo: 'Repositórios',
+    sub: 'Organizações e repositórios da sua conta do GitHub',
+    icone: 'repos',
+    arquivo: '/ui/telas/repos.js', // C22
+  },
+  {
+    id: 'repo',
+    rota: '/ui/repos/:dono/:repo',
+    acende: 'repos',
+    titulo: 'Repositório',
+    sub: null,
+    icone: 'repos',
+    arquivo: '/ui/telas/repo.js', // C23
+  },
+  {
     id: 'analytics',
     rota: '/ui/analytics',
     item: { rotulo: 'Analytics', icone: 'analytics' },
@@ -119,6 +137,7 @@ export const TELAS = [
   { id: 'agent-config', rota: '/ui/agent-config', item: { rotulo: 'Agent Config', icone: 'bot' }, titulo: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icone: 'bot', arquivo: '/ui/telas/agent-config.js' }, // #63
 ];
 
+// Um id de sessão ou um nome do GitHub (ponto, hífen e sublinhado); `.` e `..` nunca.
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 /** A tela e os parâmetros de um caminho, ou `null` se nenhuma casa. */
@@ -135,7 +154,7 @@ export function acharTela(caminho, telas = TELAS) {
         try {
           valor = decodeURIComponent(partes[i]);
         } catch {}
-        if (ID.test(valor)) params[molde[i].slice(1)] = valor;
+        if (ID.test(valor) && valor !== '.' && valor !== '..') params[molde[i].slice(1)] = valor;
         else casa = false;
       } else casa = molde[i] === partes[i];
     }
