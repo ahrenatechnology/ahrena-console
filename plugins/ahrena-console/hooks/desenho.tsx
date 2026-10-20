@@ -63,7 +63,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.20'
+export const VERSAO_DO_PLUGIN = '0.0.21'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -1243,15 +1243,15 @@ export function escopoDasDecisoes(vista: Vista, cols: number): EscopoDasDecisoes
 
 // No estreito, "· N a confirmar" não cabe ao lado do "Ver": desce para a linha de baixo.
 /**
- * As decisões (pnDec do P1), com o rótulo de registro: "⊸ N decisões registradas · M a confirmar"
- * e "Ver". Sem nenhuma, "nenhuma decisão registrada ainda", em cor neutra e sem botão.
+ * As decisões (pnDec do P1), com o rótulo de registro: "⊸ N decisões registradas" e "Ver", neutra,
+ * depois dos cards. As a confirmar ficam numa faixa própria no topo. Sem nenhuma, "nenhuma decisão
+ * registrada ainda", sem botão.
  */
 function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const d = p.decisoes
   if (!d) return null
   const { Box, Text, Button } = c.el
-  const nada = d.vigentes === 0 && d.aConfirmar === 0
-  const aConfirmar = d.aConfirmar ? `${d.aConfirmar} a confirmar` : null
+  const nada = d.vigentes === 0
   return (
     <Box key="decisoes" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={BORDA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
@@ -1264,7 +1264,6 @@ function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolea
             <Text color={LARANJA}>⊸ </Text>
             <Text weight="bold">{decisoesTexto(d.vigentes)}</Text>
             {estreito ? '' : ' nesta sessão'}
-            {aConfirmar ? <Text color={AMARELO}> · {aConfirmar}</Text> : null}
           </Text>
         )}
       </Box>
@@ -1276,8 +1275,25 @@ function linhaDecisoes(c: Contexto, p: Painel, largura: number, estreito: boolea
 /** O texto da faixa de decisões, para a estimativa da altura. */
 const textoDeDecisoes = (p: Painel, estreito: boolean) => {
   const d = p.decisoes
-  if (!d || (d.vigentes === 0 && d.aConfirmar === 0)) return '⊸ nenhuma decisão registrada ainda'
-  return `⊸ ${decisoesTexto(d.vigentes)}${estreito ? '' : ' nesta sessão'}${d.aConfirmar ? ` · ${d.aConfirmar} a confirmar` : ''}`
+  if (!d || d.vigentes === 0) return '⊸ nenhuma decisão registrada ainda'
+  return `⊸ ${decisoesTexto(d.vigentes)}${estreito ? '' : ' nesta sessão'}`
+}
+
+/** As decisões a confirmar, no topo (pedem a atenção da pessoa): "⊸ N a confirmar" e "Ver". */
+function faixaAConfirmar(c: Contexto, p: Painel, largura: number) {
+  const n = p.decisoes?.aConfirmar ?? 0
+  if (!n) return null
+  const { Box, Text, Button } = c.el
+  return (
+    <Box key="a-confirmar" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={AMARELO} backgroundColor={BADGE.amarelo} paddingX={1}>
+      <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text mono weight="bold" color={AMARELO} wrap="wrap">
+          ⊸ {n === 1 ? '1 decisão a confirmar' : `${n} decisões a confirmar`}
+        </Text>
+      </Box>
+      <Button key="ver-a-confirmar" label="Ver" variant="primary" onPress={c.acoes.verDecisoes} />
+    </Box>
+  )
 }
 
 /** P10: depois de um /clear, quantas decisões da sessão anterior continuam valendo. Só com dado (#100). */
@@ -1788,6 +1804,7 @@ function linhasForaDaGrade(p: Painel, g: ReturnType<typeof grade>, estreito: boo
   if (f) partes.push(2 + 1 + (estreito ? linhasDoTexto(corta(f.texto, 64), util) : 1) + 1)
   partes.push(0) // a grade
   if (p.decisoes) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDeDecisoes(p, estreito), util - BOTAO_VER))
+  if (p.decisoes?.aConfirmar) partes.push(LINHA_SOLTA)
   partes.push(linhasDePrecisam(p, util, estreito))
   if ((p.prs?.total ?? 0) > 0) partes.push(LINHA_SOLTA - 1 + linhasDoTexto(textoDePrs(p.prs!.total, estreito), util - BOTAO_VER))
   partes.push(linhasDoRodape(p))
@@ -1847,16 +1864,22 @@ export function desenhar(c: Contexto): RenderElement {
     ].filter((x): x is RenderElement => x !== null)
     corpo = [
       rotuloDaSecao(c, g.largura, 'ESTA SESSÃO', chipDaSecao(c, g.largura, estreito, s?.conta), s?.conta),
+      // Decisão do Fernando (desvio aprovado do P1): o que pede a atenção dele sobe para o topo,
+      // antes dos cards: a pergunta, quem precisa de você, os PRs e as decisões a confirmar. Com a
+      // rolagem, no fim do painel, elas saíam de vista.
       faixaPergunta(c, g.largura),
+      p.precisam.total > 0 ? linhaPrecisam(c, p, g.largura, estreito) : null,
+      linhaPrs(c, p, g.largura, estreito),
+      faixaAConfirmar(c, p, g.largura),
       faixaRetomada(c, p.decisoes?.retomada, g.largura, estreito),
       s ? faixa(c, s, g.largura, estreito) : null,
       faixaCompactar(c, g.largura),
       <Box key="cards" flexDirection="row" flexWrap="wrap" columnGap={GAP} rowGap={1} width={g.largura}>
         {cards}
       </Box>,
+      // Embaixo, só o que é informativo e neutro.
       linhaDecisoes(c, p, g.largura, estreito),
-      linhaPrecisam(c, p, g.largura, estreito),
-      linhaPrs(c, p, g.largura, estreito),
+      p.precisam.total > 0 ? null : linhaPrecisam(c, p, g.largura, estreito),
     ]
   }
 

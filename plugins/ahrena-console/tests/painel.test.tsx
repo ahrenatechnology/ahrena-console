@@ -298,6 +298,37 @@ test('0.0.20: Subagentes com 20 e 0 ativos: a barra fina, 3 linhas e "+17 conclu
   }
 })
 
+test('0.0.21 (decisão do Fernando): o que pede atenção vem no topo, antes dos cards; o neutro, embaixo', async ($, on) => {
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('prompt.submit', async (_$: unknown, e: { text: string }) => ({ text: e.text }))
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const pr = { numero: 7, titulo: 'pr sintético', url: 'https://example.invalid/pr/7', repo: 'exemplo/sintetico', sessao: { id: 's', titulo: 'sessão sintética', local: null } }
+  // Tudo pendente: a pergunta, quem precisa, os PRs e as a confirmar no topo, nessa ordem.
+  await ($ as any).tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'feito', ask: 'Sigo?' })
+  f.estado.painel = { ...p1, prs: { total: 1, itens: [pr] }, decisoes: { vigentes: 4, aConfirmar: 1, retomada: null, lista: null } }
+  await f.relogio.advance(5_000)
+  for (const base of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 200) })
+    const keys = ['pergunta', 'precisam', 'prs', 'a-confirmar', 'card-sessao', 'decisoes']
+    const pos = await Promise.all(keys.map(async (k) => (await ui.findAll({ type: 'Box' })).findIndex((b: any) => b.key === k)))
+    expect(pos.every((x) => x >= 0)).toBe(true)
+    expect([...pos].sort((a, b) => a - b)).toEqual(pos)
+    await ui.unmount()
+  }
+  // Nada pendente: o topo não ganha faixa; "ninguém mais precisa de você" fica embaixo, depois dos cards.
+  await ($ as any).prompt.submit({ text: 'sim', origin: { kind: 'sdk' } })
+  f.estado.painel = { ...p1, precisam: { ...p1.precisam, total: 0, suaVez: 0 }, prs: { total: 0, itens: [] }, decisoes: { vigentes: 4, aConfirmar: 0, retomada: null, lista: null } }
+  await f.relogio.advance(15_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 200) })
+  const boxes = await ui.findAll({ type: 'Box' })
+  for (const k of ['pergunta', 'prs', 'a-confirmar']) expect(boxes.some((b: any) => b.key === k)).toBe(false)
+  const idx = (k: string) => boxes.findIndex((b: any) => b.key === k)
+  expect(idx('card-filhas')).toBeLessThan(idx('decisoes'))
+  expect(idx('decisoes')).toBeLessThan(idx('precisam'))
+  await ui.unmount()
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })

@@ -104,14 +104,16 @@ async function abrir($: any, on: any, base?: Painel, conversa: 'inteira' | 'comp
 const porRotulo = (escopo: EscopoDasDecisoes, rotulo: string) => LISTAS_DO_P9[escopo].itens.find((i) => i.rotulo === rotulo) as DecisaoDoPainel
 const card = (d: DecisaoDoPainel) => `decisao-${d.id}`
 
-test('a linha "N decisões registradas", neutra, com as a confirmar, nas duas larguras e na linha de status', async ($, on) => {
+test('a linha "N decisões registradas", neutra, e as a confirmar no topo, nas duas larguras e na linha de status', async ($, on) => {
   const f = await abrir($, on)
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
     expect(await ui.find({ key: 'decisoes' })).toBeDefined()
-    // pnDec do P1: "⊸ N decisões registradas · M a confirmar" e "Ver", numa linha que quebra.
-    expect((await ui.find({ key: 'decisoes' }))?.text).toMatch(alvo === LARGO ? /4 decisões registradas nesta sessão · 1 a confirmar/ : /4 decisões registradas · 1 a confirmar/)
+    // pnDec do P1: "⊸ N decisões registradas" e "Ver", neutra; as a confirmar, numa faixa própria no topo.
+    expect((await ui.find({ key: 'decisoes' }))?.text).toMatch(alvo === LARGO ? /4 decisões registradas nesta sessão/ : /4 decisões registradas/)
+    expect((await ui.find({ key: 'decisoes' }))?.text).not.toMatch(/a confirmar/)
+    expect((await ui.find({ key: 'a-confirmar' }))?.text).toMatch(/1 decisão a confirmar/)
     expect(await ui.find({ type: 'Text', text: /4 decisões registradas/ })).toBeDefined()
     // Registro, não pendência: sem cara de ação.
     expect((await ui.find({ key: 'decisoes' }))?.text).not.toMatch(/vigentes/)
