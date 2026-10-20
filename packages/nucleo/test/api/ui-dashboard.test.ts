@@ -234,7 +234,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
 
   test('sem a /api/atencao, o resto fica no ar e a inbox vira a faixa de erro', async () => {
     const { area, sair } = await montarTela(async (rota) => {
-      if (rota === '/api/atencao') throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
+      if (rota === tela.ROTA_DA_ATENCAO) throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
       return (await fetch(`${api.url}${rota}`)).json();
     });
     try {
@@ -257,6 +257,12 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       sair();
     }
   });
+});
+
+test('as rotas da tela são as do núcleo', async () => {
+  const { ROTA_DA_ATENCAO, ROTA_DO_DASHBOARD } = await import('../../src/api/index.ts');
+  assert.equal(tela.ROTA_DA_ATENCAO, ROTA_DA_ATENCAO);
+  assert.equal(tela.ROTA_DO_DASHBOARD, ROTA_DO_DASHBOARD);
 });
 
 test('a tela e o estilo dela não escrevem cor à mão nem chamam endereço de fora', () => {

@@ -1,5 +1,6 @@
 // Dashboard (C1, #27): os seis números, "precisam de você" em destaque, os agentes ativos com os
 // subagentes e a atividade recente. Lê `GET /api/dashboard` e `GET /api/atencao` (#87).
+// O título da inbox conta o `total` da atenção (trava + sua vez), como o C1 e a barra de menus.
 //
 // As funções sem DOM (formatação e o que cada parte mostra) saem exportadas para o teste.
 
@@ -7,6 +8,10 @@ import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 
 const ESTILO = '/ui/dashboard.css';
+// As rotas do núcleo, num lugar só. A da atenção é a `ROTA_DA_ATENCAO` de src/api/rota-atencao.ts (#87):
+// se o nome mudar lá, muda aqui.
+export const ROTA_DO_DASHBOARD = '/api/dashboard';
+export const ROTA_DA_ATENCAO = '/api/atencao';
 /** Releitura depois de uma rajada de mudanças, e a releitura de fundo das idades ("2 min"). */
 const ESPERA_MS = 400;
 const FUNDO_MS = 30_000;
@@ -265,7 +270,7 @@ export async function montar(area, ctx) {
 
   async function desenhar() {
     const meu = ++pedido;
-    const [d, a] = await Promise.allSettled([ctx.ler('/api/dashboard'), ctx.ler('/api/atencao')]);
+    const [d, a] = await Promise.allSettled([ctx.ler(ROTA_DO_DASHBOARD), ctx.ler(ROTA_DA_ATENCAO)]);
     if (meu !== pedido || ctx.sinal.aborted) return;
     if (d.status === 'rejected') {
       if (d.reason?.name === 'AbortError') return;
