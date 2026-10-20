@@ -68,7 +68,7 @@ const STATUS = { active: 'Ativa', working: 'Ativa', waiting: 'Esperando você', 
 const COR = { active: 'active', working: 'active', waiting: 'waiting', error: 'error', completed: 'completed', abandoned: 'abandoned' };
 
 function pilulaDeStatus(status, rotulo = STATUS[status] ?? status) {
-  return el('span', { class: `det-status s-${COR[status] ?? 'abandoned'}` }, rotulo);
+  return el('span', { class: `det-status det-s-${COR[status] ?? 'abandoned'}` }, rotulo);
 }
 
 /** O motivo da espera, como no A5: "Pede permissão", "Pergunta", "Sua vez"… */
@@ -82,7 +82,7 @@ function motivoDe(sessao) {
 /** Texto com `código` entre crases: cada pedaço vira nó de texto ou `<code>`, nunca HTML. */
 function comCodigo(texto) {
   const partes = String(texto ?? '').split(/`([^`\n]+)`/);
-  return partes.map((p, i) => (i % 2 ? el('code', {}, p) : p));
+  return partes.map((p, i) => (i % 2 ? el('code', { class: 'det-code' }, p) : p));
 }
 
 const ICONE_DA_FERRAMENTA = { Bash: 'terminal', Edit: 'editar', Write: 'editar', MultiEdit: 'editar', Read: 'arquivo', Agent: 'robo', Task: 'robo', Grep: 'busca', Glob: 'busca', TaskUpdate: 'tarefas', TaskCreate: 'tarefas', TodoWrite: 'tarefas' };
@@ -92,8 +92,8 @@ function botaoCopiar(texto, rotulo) {
   b.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(texto);
-      b.classList.add('copiado');
-      setTimeout(() => b.classList.remove('copiado'), 1200);
+      b.classList.add('det-copiado');
+      setTimeout(() => b.classList.remove('det-copiado'), 1200);
     } catch {}
   });
   return b;
@@ -229,7 +229,7 @@ function desenharTopo(c, atualizar) {
     el('a', { class: 'det-voltar', href: '/ui/sessoes', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icone('voltar')),
     el('h1', {}, s.titulo),
     pilulaDeStatus(s.status),
-    motivo && s.status === 'waiting' ? el('span', { class: `det-motivo${s.urgente ? ' urgente' : ''}` }, s.faixa?.tipo === 'permissao' ? icone('escudo') : null, motivo) : null,
+    motivo && s.status === 'waiting' ? el('span', { class: `det-motivo${s.urgente ? ' det-urgente' : ''}` }, s.faixa?.tipo === 'permissao' ? icone('escudo') : null, motivo) : null,
     el('button', { type: 'button', class: 'det-atualizar', title: 'Atualizar', 'aria-label': 'Atualizar', aoClicar: atualizar }, icone('atualizar')),
   );
   const pilulas = el(
@@ -238,7 +238,7 @@ function desenharTopo(c, atualizar) {
     pilula(null, s.id.slice(0, 12), botaoCopiar(s.id, 'o id da sessão')),
     s.modelo ? pilula('porta', nomeDoModelo(s.modelo)) : null,
     pilula('relogio', `${quando(s.iniciadaEm)} (${duracao(fim - Date.parse(s.iniciadaEm))})`),
-    c.custo ? el('span', { class: 'det-pilula mono custo', title: 'Estimativa' }, usd(c.custo.usd)) : null,
+    c.custo ? el('span', { class: 'det-pilula mono det-custo', title: 'Estimativa' }, usd(c.custo.usd)) : null,
     c.branch ? pilula('branch', c.branch) : null,
   );
   const pasta = s.cwd ? el('div', { class: 'det-pasta mono' }, icone('pasta'), el('span', {}, s.cwd), botaoCopiar(s.cwd, 'a pasta')) : null;
@@ -249,7 +249,7 @@ function desenharTopo(c, atualizar) {
 function comComando(texto, comando) {
   const i = comando ? texto.indexOf(comando) : -1;
   if (i < 0) return comCodigo(texto);
-  return [texto.slice(0, i), el('code', {}, comando), texto.slice(i + comando.length)];
+  return [texto.slice(0, i), el('code', { class: 'det-code' }, comando), texto.slice(i + comando.length)];
 }
 
 const TITULO_DA_FAIXA = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
@@ -270,7 +270,7 @@ function faixa(c) {
   });
   return el(
     'section',
-    { class: `det-faixa t-${f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
+    { class: `det-faixa det-t-${f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
     icone(f.tipo === 'erro' ? 'erro' : 'escudo'),
     el('p', {}, el('b', {}, TITULO_DA_FAIXA[f.tipo] ?? ''), ' ', ...comComando(f.texto, c.comando), `. Há ${ha(f.desde).replace('agora', 'menos de 1 min')}.`, aviso),
     botao,
@@ -301,7 +301,7 @@ function abaAgentes(ctx, base) {
 }
 
 function numero(icon, rotulo, valor, detalhe) {
-  return el('div', { class: 'cartao det-numero' }, el('div', { class: 'olhinho' }, icone(icon), rotulo), el('div', { class: 'valor' }, el('b', { class: 'mono' }, valor), detalhe ? el('small', {}, detalhe) : null));
+  return el('div', { class: 'cartao det-numero' }, el('div', { class: 'olhinho' }, icone(icon), rotulo), el('div', { class: 'det-valor' }, el('b', { class: 'mono' }, valor), detalhe ? el('small', {}, detalhe) : null));
 }
 
 function agentes(a) {
@@ -327,9 +327,9 @@ function agentes(a) {
           'ul',
           { class: 'det-barras' },
           ...a.ferramentas.map((f) => {
-            const barra = el('span', { class: 'cheia' });
+            const barra = el('span', { class: 'det-cheia' });
             barra.style.setProperty('--w', `${(f.n / maior) * 100}%`);
-            return el('li', {}, el('span', { class: 'ico' }, icone(ICONE_DA_FERRAMENTA[f.nome] ?? 'chave')), el('span', { class: 'mono nome' }, f.nome), el('span', { class: 'trilho' }, barra), el('span', { class: 'mono n' }, num(f.n)));
+            return el('li', {}, el('span', { class: 'det-ico' }, icone(ICONE_DA_FERRAMENTA[f.nome] ?? 'chave')), el('span', { class: 'mono det-nome' }, f.nome), el('span', { class: 'det-trilho' }, barra), el('span', { class: 'mono det-n' }, num(f.n)));
           }),
         )
       : el('p', { class: 'det-nada' }, 'Nenhuma ferramenta ainda.'),
@@ -369,7 +369,7 @@ function progresso(t) {
   svg.setAttribute('viewBox', '0 0 64 64');
   svg.setAttribute('class', 'det-anel');
   svg.setAttribute('aria-hidden', 'true');
-  for (const [cls, dash] of [['fundo', `${volta} ${volta}`], ['frente', `${(volta * pct) / 100} ${volta}`]]) {
+  for (const [cls, dash] of [['det-fundo', `${volta} ${volta}`], ['det-frente', `${(volta * pct) / 100} ${volta}`]]) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     for (const [k, v] of Object.entries({ cx: 32, cy: 32, r, class: cls, 'stroke-dasharray': dash, transform: 'rotate(-90 32 32)' })) c.setAttribute(k, String(v));
     svg.append(c);
@@ -382,19 +382,19 @@ function progresso(t) {
   return el(
     'div',
     { class: 'det-tarefas' },
-    el('div', { class: 'det-anel-caixa' }, svg, el('b', { class: 'pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.feitos} / ${t.total} concluídas`), t.atual ? el('div', { class: 'atual' }, `Atual: ${t.atual}`) : null)),
+    el('div', { class: 'det-anel-caixa' }, svg, el('b', { class: 'det-pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.feitos} / ${t.total} concluídas`), t.atual ? el('div', { class: 'det-atual' }, `Atual: ${t.atual}`) : null)),
     el(
       'div',
       { class: 'det-legenda' },
-      el('span', { class: 'l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
-      el('span', { class: 'l-andamento' }, 'Em andamento ', el('b', {}, num(andamento))),
-      el('span', { class: 'l-pendente' }, 'Pendentes ', el('b', {}, num(pendentes))),
+      el('span', { class: 'det-l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
+      el('span', { class: 'det-l-andamento' }, 'Em andamento ', el('b', {}, num(andamento))),
+      el('span', { class: 'det-l-pendente' }, 'Pendentes ', el('b', {}, num(pendentes))),
     ),
     el(
       'ul',
       { class: 'det-passos' },
       ...passos.map((p, i) =>
-        el('li', { class: `p-${p.estado}` }, icone(p.estado === 'completed' ? 'feito' : 'circulo'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === passos.length - 1 && resto > 0 ? el('span', { class: 'mais' }, ` · +${resto}`) : null),
+        el('li', { class: `det-p-${p.estado}` }, icone(p.estado === 'completed' ? 'feito' : 'circulo'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === passos.length - 1 && resto > 0 ? el('span', { class: 'det-mais' }, ` · +${resto}`) : null),
       ),
     ),
   );
@@ -410,11 +410,11 @@ function fluxoDeTokens(k) {
   const barra = el('div', { class: 'det-fluxo', role: 'img', 'aria-label': partes.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
   for (const [cls, , v] of partes) {
     if (!v) continue;
-    const p = el('span', { class: `f-${cls}` });
+    const p = el('span', { class: `det-f-${cls}` });
     p.style.setProperty('--w', `${(v / k.total) * 100}%`);
     barra.append(p);
   }
-  return el('div', {}, barra, el('div', { class: 'det-legenda' }, ...partes.map(([cls, r, v]) => el('span', { class: `f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
+  return el('div', {}, barra, el('div', { class: 'det-legenda' }, ...partes.map(([cls, r, v]) => el('span', { class: `det-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
 }
 
 function no(g) {
@@ -425,10 +425,10 @@ function no(g) {
       : [g.tarefa, duracao(fim - Date.parse(g.inicio))];
   return el(
     'div',
-    { class: `cartao det-no${g.tipo === 'subagente' ? ' sub' : ''}` },
-    el('span', { class: 'ico' }, icone(g.tipo === 'principal' ? 'robo' : 'subagente')),
-    el('div', { class: 'texto' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
-    el('span', { class: 'mono custo' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
+    { class: `cartao det-no${g.tipo === 'subagente' ? ' det-sub' : ''}` },
+    el('span', { class: 'det-ico' }, icone(g.tipo === 'principal' ? 'robo' : 'subagente')),
+    el('div', { class: 'det-texto' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
+    el('span', { class: 'mono det-custo' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
     pilulaDeStatus(g.status),
   );
 }
@@ -474,11 +474,11 @@ function abaConversa(ctx, base) {
     const voce = m.papel === 'voce';
     return el(
       'article',
-      { class: `det-msg ${voce ? 'voce' : 'assistente'}` },
-      el('span', { class: 'avatar' }, icone(voce ? 'pessoa' : 'robo')),
+      { class: `det-msg ${voce ? 'det-voce' : 'det-assistente'}` },
+      el('span', { class: 'det-avatar' }, icone(voce ? 'pessoa' : 'robo')),
       el(
         'div',
-        { class: 'conteudo' },
+        { class: 'det-conteudo' },
         el(
           'header',
           {},
@@ -500,17 +500,17 @@ function abaConversa(ctx, base) {
     const detalhe = el(
       'div',
       { class: 'det-ferramenta-corpo', hidden: !aberta },
-      f.entrada ? el('div', {}, el('div', { class: 'olhinho' }, 'Entrada'), el('pre', { class: 'mono' }, f.entrada)) : null,
-      f.resultado ? el('div', {}, el('div', { class: 'olhinho' }, 'Resultado'), el('pre', { class: 'mono' }, f.resultado)) : null,
+      f.entrada ? el('div', {}, el('div', { class: 'olhinho' }, 'Entrada'), el('pre', { class: 'mono det-pre' }, f.entrada)) : null,
+      f.resultado ? el('div', {}, el('div', { class: 'olhinho' }, 'Resultado'), el('pre', { class: 'mono det-pre' }, f.resultado)) : null,
       !f.entrada && !f.resultado ? el('p', { class: 'det-nada' }, 'Sem entrada nem resultado guardados.') : null,
     );
     const cabeca = el(
       'button',
       { type: 'button', class: 'det-ferramenta-cab', 'aria-expanded': aberta ? 'true' : 'false' },
       icone(aberta ? 'chevron-baixo' : 'chevron-direita'),
-      el('b', { class: 'mono nome' }, f.nome),
-      el('span', { class: 'mono resumo' }, f.resumo ?? ''),
-      est ? el('span', { class: `mono situacao e-${f.estado}` }, icone(est.icone), est.rotulo) : null,
+      el('b', { class: 'mono det-nome' }, f.nome),
+      el('span', { class: 'mono det-resumo' }, f.resumo ?? ''),
+      est ? el('span', { class: `mono det-situacao det-e-${f.estado}` }, icone(est.icone), est.rotulo) : null,
     );
     cabeca.addEventListener('click', () => {
       const abrir = detalhe.hidden;
@@ -520,7 +520,7 @@ function abaConversa(ctx, base) {
       (abrir ? abertas : fechadas).add(f.id);
       (abrir ? fechadas : abertas).delete(f.id);
     });
-    return el('div', { class: `det-ferramenta${f.estado === 'permissao' ? ' pede' : ''}` }, cabeca, detalhe);
+    return el('div', { class: `det-ferramenta${f.estado === 'permissao' ? ' det-pede' : ''}` }, cabeca, detalhe);
   }
 
   return {
@@ -545,8 +545,8 @@ function abaTempo(ctx, base, { rotular }) {
   const filtros = { q: '', de: '', ate: '', status: '', tipo: '', ferramenta: '', agente: '' };
 
   const busca = el('input', { type: 'search', class: 'det-campo', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
-  const de = el('input', { type: 'datetime-local', class: 'det-campo data', 'aria-label': 'De' });
-  const ate = el('input', { type: 'datetime-local', class: 'det-campo data', 'aria-label': 'Até' });
+  const de = el('input', { type: 'datetime-local', class: 'det-campo det-data', 'aria-label': 'De' });
+  const ate = el('input', { type: 'datetime-local', class: 'det-campo det-data', 'aria-label': 'Até' });
   const selects = {
     status: el('select', { class: 'det-chip mono', 'aria-label': 'Status' }),
     tipo: el('select', { class: 'det-chip mono', 'aria-label': 'Tipo de evento' }),
@@ -615,15 +615,15 @@ function abaTempo(ctx, base, { rotular }) {
 
   function linha(e) {
     const aberto = abertos.has(e.id);
-    const dados = el('pre', { class: 'mono det-dados', hidden: !aberto }, e.dados ?? 'Sem dados guardados.');
+    const dados = el('pre', { class: 'mono det-pre det-dados', hidden: !aberto }, e.dados ?? 'Sem dados guardados.');
     const cab = el(
       'button',
       { type: 'button', class: 'det-evento-cab', 'aria-expanded': aberto ? 'true' : 'false' },
       icone(aberto ? 'chevron-baixo' : 'chevron-direita'),
       el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ha(e.em)),
       pilulaDeStatus(e.status),
-      el('span', { class: 'mono tipo' }, e.tipo),
-      el('span', { class: 'resumo' }, e.resumo ?? ''),
+      el('span', { class: 'mono det-tipo' }, e.tipo),
+      el('span', { class: 'det-resumo' }, e.resumo ?? ''),
       e.ferramenta ? el('span', { class: 'det-chip mono' }, e.ferramenta) : null,
     );
     cab.addEventListener('click', () => {

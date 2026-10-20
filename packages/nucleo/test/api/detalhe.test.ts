@@ -2,7 +2,7 @@
 // simulador (a demonstração do P4 mais a sessão que pede permissão), e o "Abrir no Claude Desktop"
 // pela própria página, sem abrir a porta a outro Origin (decisão 0003).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import {
@@ -213,6 +213,25 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     await assert.rejects(abrir('local_x"><script>'), /inválido/);
     await assert.rejects(abrir('../api/hooks'), /inválido/);
     assert.throws(() => abridorHttp({ base: 'http://exemplo.com:4720' }), /núcleo local/);
+  });
+
+  // O CSS de cada tela fica carregado depois que ela abre uma vez: uma classe com o mesmo nome em
+  // duas telas desmonta a outra (#151). O Detalhe só estiliza classes `det-` e as da moldura.
+  test('o CSS do Detalhe só estiliza classes `det-` e não toca as classes de outra tela', () => {
+    const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const classes = (arquivo: string) => new Set([...semComentario(arquivo).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((m) => m[1]!));
+    const daMoldura = classes('moldura.css');
+    const minhas = [...classes('telas/detalhe.css')].filter((c) => !daMoldura.has(c));
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('det-')), [], 'classe sem o prefixo det-');
+    // Nenhum seletor de elemento solto (`code`, `pre`): eles pegariam as outras telas.
+    const soltos = semComentario('telas/detalhe.css').split('\n').filter((l) => /^[a-z]/.test(l.trim()) && !l.startsWith('@') && !l.startsWith(' '));
+    assert.deepEqual(soltos.filter((l) => !/^select\.det-/.test(l)), [], 'seletor de elemento fora do Detalhe');
+    const outras = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => a.endsWith('.css') && !['telas/detalhe.css', 'moldura.css', 'marca.css'].includes(a));
+    assert.ok(outras.length > 0);
+    for (const outra of outras) {
+      const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
+      assert.deepEqual(comuns, [], `detalhe.css e ${outra} estilizam as mesmas classes`);
+    }
   });
 
   test('o nome do modelo nas pílulas', () => {

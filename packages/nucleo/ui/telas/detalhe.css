@@ -13,32 +13,32 @@
 
 .det-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
 .det-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.s-active { background: var(--status-active-badge); color: var(--status-active-text); }
-.s-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
-.s-error { background: var(--status-error-badge); color: var(--status-error-text); }
-.s-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
-.s-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.det-s-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.det-s-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.det-s-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.det-s-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.det-s-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
 .det-motivo { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-semibold); background: var(--status-waiting-badge); color: var(--status-waiting-text); flex: none; }
 
 .det-pilulas { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 42px; }
 .det-pilula { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--muted); white-space: nowrap; }
-.det-pilula.custo { color: var(--status-completed-text); }
+.det-pilula.det-custo { color: var(--status-completed-text); }
 .det-pasta { display: flex; align-items: center; gap: 8px; padding-left: 42px; color: var(--muted); font-size: 12px; min-width: 0; }
 .det-pasta span { overflow-wrap: anywhere; }
 .det-copiar { display: inline-grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
-.det-copiar:hover, .det-copiar.copiado { color: var(--accent-text); }
+.det-copiar:hover, .det-copiar.det-copiado { color: var(--accent-text); }
 
 .det-faixa { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); font-size: 13.5px; line-height: 1.55; }
 .det-faixa > .icone { font-size: 20px; color: var(--status-waiting-text); }
 .det-faixa p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .det-faixa b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
-.det-faixa.t-erro { border-color: var(--status-error-dot); background: var(--status-error-badge); }
-.det-faixa.t-erro > .icone, .det-faixa.t-erro b { color: var(--status-error-text); }
+.det-faixa.det-t-erro { border-color: var(--status-error-dot); background: var(--status-error-badge); }
+.det-faixa.det-t-erro > .icone, .det-faixa.det-t-erro b { color: var(--status-error-text); }
 .det-faixa .btn { flex: none; height: 34px; }
 .det-faixa .btn[disabled] { opacity: .55; cursor: not-allowed; }
 .det-aviso { display: block; color: var(--status-error-text); font-size: 12px; }
 .det-aviso:empty { display: none; }
-code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
+.det-code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 
 /* ---------- abas ---------- */
 .det-abas { display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; }
@@ -53,9 +53,9 @@ code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text
 .det-numeros { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .det-numero { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .det-numero .olhinho, .det-bloco .olhinho, .det-arvore > .olhinho { display: flex; align-items: center; gap: 6px; }
-.det-numero .valor { display: flex; align-items: baseline; gap: 6px; }
-.det-numero .valor b { font-size: 21px; font-weight: var(--weight-semibold); color: var(--text); }
-.det-numero .valor small { color: var(--muted); font-size: 12px; }
+.det-numero .det-valor { display: flex; align-items: baseline; gap: 6px; }
+.det-numero .det-valor b { font-size: 21px; font-weight: var(--weight-semibold); color: var(--text); }
+.det-numero .det-valor small { color: var(--muted); font-size: 12px; }
 
 .det-duas { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; }
 .det-bloco { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -64,50 +64,50 @@ code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text
 
 .det-barras { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .det-barras li { display: grid; grid-template-columns: 22px 110px minmax(0, 1fr) 44px; align-items: center; gap: 10px; font-size: 12.5px; }
-.det-barras .ico, .det-no .ico { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--raised); color: var(--accent-text); font-size: 13px; }
-.det-barras .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.det-barras .n { text-align: right; color: var(--muted); }
-.det-barras .trilho { height: 6px; border-radius: 99px; background: var(--raised); overflow: hidden; }
-.det-barras .cheia { display: block; height: 100%; width: var(--w, 0); border-radius: 99px; background: var(--accent); }
+.det-barras .det-ico, .det-no .det-ico { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--raised); color: var(--accent-text); font-size: 13px; }
+.det-barras .det-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-barras .det-n { text-align: right; color: var(--muted); }
+.det-barras .det-trilho { height: 6px; border-radius: 99px; background: var(--raised); overflow: hidden; }
+.det-barras .det-cheia { display: block; height: 100%; width: var(--w, 0); border-radius: 99px; background: var(--accent); }
 
 .det-tarefas { display: flex; flex-direction: column; gap: 12px; }
 .det-anel-caixa { display: flex; align-items: center; gap: 14px; position: relative; }
 .det-anel { width: 64px; height: 64px; flex: none; }
 .det-anel circle { fill: none; stroke-width: 6; stroke-linecap: round; }
-.det-anel .fundo { stroke: var(--raised); }
-.det-anel .frente { stroke: var(--accent); }
-.det-anel-caixa .pct { position: absolute; left: 0; width: 64px; text-align: center; font-size: 12.5px; }
-.det-anel-caixa .atual { color: var(--accent-text); font-size: 13px; }
+.det-anel .det-fundo { stroke: var(--raised); }
+.det-anel .det-frente { stroke: var(--accent); }
+.det-anel-caixa .det-pct { position: absolute; left: 0; width: 64px; text-align: center; font-size: 12.5px; }
+.det-anel-caixa .det-atual { color: var(--accent-text); font-size: 13px; }
 .det-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); }
 .det-legenda span { display: inline-flex; align-items: center; gap: 6px; }
 .det-legenda span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .det-legenda b { color: var(--text); font-weight: var(--weight-medium); }
-.det-legenda .l-ok::before { background: var(--status-completed-dot); }
-.det-legenda .l-andamento::before { background: var(--status-active-dot); }
-.det-legenda .l-pendente::before { background: var(--status-abandoned-dot); }
+.det-legenda .det-l-ok::before { background: var(--status-completed-dot); }
+.det-legenda .det-l-andamento::before { background: var(--status-active-dot); }
+.det-legenda .det-l-pendente::before { background: var(--status-abandoned-dot); }
 .det-passos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .det-passos li { display: flex; align-items: center; gap: 6px; }
-.det-passos .p-completed .icone { color: var(--status-completed-text); }
-.det-passos .p-in_progress { color: var(--text); }
-.det-passos .p-in_progress .icone { color: var(--status-active-dot); fill: currentColor; }
-.det-passos .mais { color: var(--muted); }
+.det-passos .det-p-completed .icone { color: var(--status-completed-text); }
+.det-passos .det-p-in_progress { color: var(--text); }
+.det-passos .det-p-in_progress .icone { color: var(--status-active-dot); fill: currentColor; }
+.det-passos .det-mais { color: var(--muted); }
 
 .det-fluxo { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); margin-bottom: 10px; }
 .det-fluxo span { width: var(--w, 0); height: 100%; }
-.det-fluxo .f-lido, .det-legenda .f-lido::before { background: var(--orange-200); }
-.det-fluxo .f-gravado, .det-legenda .f-gravado::before { background: var(--orange-700); }
-.det-fluxo .f-entrada, .det-legenda .f-entrada::before { background: var(--orange-500); }
-.det-fluxo .f-saida, .det-legenda .f-saida::before { background: var(--gray-100); }
+.det-fluxo .det-f-lido, .det-legenda .det-f-lido::before { background: var(--orange-200); }
+.det-fluxo .det-f-gravado, .det-legenda .det-f-gravado::before { background: var(--orange-700); }
+.det-fluxo .det-f-entrada, .det-legenda .det-f-entrada::before { background: var(--orange-500); }
+.det-fluxo .det-f-saida, .det-legenda .det-f-saida::before { background: var(--gray-100); }
 
 .det-arvore { display: flex; flex-direction: column; gap: 10px; }
 .det-arvore > .olhinho { margin: 4px 0 2px; }
 .det-no { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
-.det-no.sub { margin-left: 40px; }
-.det-no .ico { width: 30px; height: 30px; font-size: 15px; color: var(--muted); }
-.det-no .texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.det-no .texto b { font-weight: var(--weight-semibold); }
-.det-no .texto small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.det-no .custo { color: var(--muted); font-size: 12.5px; }
+.det-no.det-sub { margin-left: 40px; }
+.det-no .det-ico { width: 30px; height: 30px; font-size: 15px; color: var(--muted); }
+.det-no .det-texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.det-no .det-texto b { font-weight: var(--weight-semibold); }
+.det-no .det-texto small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-no .det-custo { color: var(--muted); font-size: 12.5px; }
 
 /* ---------- Conversa (C5) ---------- */
 .det-barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -117,9 +117,9 @@ code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text
 .det-barra .btn { height: 34px; }
 .det-mensagens { padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; }
 .det-msg { display: flex; gap: 12px; }
-.det-msg .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; flex: none; background: var(--raised); color: var(--muted); font-size: 15px; }
-.det-msg.voce .avatar { background: var(--status-active-badge); color: var(--accent-text); }
-.det-msg .conteudo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.det-msg .det-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; flex: none; background: var(--raised); color: var(--muted); font-size: 15px; }
+.det-msg.det-voce .det-avatar { background: var(--status-active-badge); color: var(--accent-text); }
+.det-msg .det-conteudo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .det-msg header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .det-msg header b { font-weight: var(--weight-semibold); }
 .det-msg header .det-pilula { height: 22px; font-size: 11.5px; padding: 0 8px; }
@@ -127,17 +127,17 @@ code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text
 .det-msg p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
 
 .det-ferramenta { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
-.det-ferramenta.pede { border-color: var(--status-waiting-dot); }
+.det-ferramenta.det-pede { border-color: var(--status-waiting-dot); }
 .det-ferramenta-cab { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 14px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 12.5px; }
-.det-ferramenta-cab .nome { color: var(--accent-text); font-weight: var(--weight-semibold); }
-.det-ferramenta-cab .resumo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.det-ferramenta-cab .situacao { display: inline-flex; align-items: center; gap: 5px; flex: none; }
-.e-ok { color: var(--status-completed-text); }
-.e-erro { color: var(--status-error-text); }
-.e-permissao { color: var(--status-waiting-text); }
-.e-rodando { color: var(--status-active-text); }
+.det-ferramenta-cab .det-nome { color: var(--accent-text); font-weight: var(--weight-semibold); }
+.det-ferramenta-cab .det-resumo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-ferramenta-cab .det-situacao { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.det-e-ok { color: var(--status-completed-text); }
+.det-e-erro { color: var(--status-error-text); }
+.det-e-permissao { color: var(--status-waiting-text); }
+.det-e-rodando { color: var(--status-active-text); }
 .det-ferramenta-corpo { padding: 0 14px 12px 38px; display: flex; flex-direction: column; gap: 10px; }
-pre.mono { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.det-pre { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
 
 /* ---------- Linha do tempo (C6) ---------- */
 .det-filtros { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -157,12 +157,12 @@ select.det-chip.on { color: var(--accent-text); border-color: var(--accent); }
 .det-evento-cab { display: grid; grid-template-columns: 16px 56px 132px 150px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 13.5px; }
 .det-evento-cab:hover { background: var(--raised); }
 .det-evento-cab > .icone { color: var(--muted); }
-.det-evento-cab time, .det-evento-cab .tipo { color: var(--muted); font-size: 12.5px; }
-.det-evento-cab .tipo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.det-evento-cab .resumo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-evento-cab time, .det-evento-cab .det-tipo { color: var(--muted); font-size: 12.5px; }
+.det-evento-cab .det-tipo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-evento-cab .det-resumo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .det-evento-cab .det-chip { display: inline-flex; align-items: center; }
 .det-evento-cab .det-status { justify-self: start; }
-pre.det-dados { margin: 0 16px 14px 44px; }
+.det-pre.det-dados { margin: 0 16px 14px 44px; }
 .det-rodape { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 
 @media (max-width: 1100px) {
@@ -175,6 +175,6 @@ pre.det-dados { margin: 0 16px 14px 44px; }
   .det-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .det-select { min-width: 0; flex: 1; }
   .det-evento-cab { grid-template-columns: 16px 52px minmax(0, 1fr); }
-  .det-evento-cab .det-status, .det-evento-cab .det-chip, .det-evento-cab .tipo { display: none; }
-  .det-no.sub { margin-left: 16px; }
+  .det-evento-cab .det-status, .det-evento-cab .det-chip, .det-evento-cab .det-tipo { display: none; }
+  .det-no.det-sub { margin-left: 16px; }
 }
