@@ -156,70 +156,70 @@ const evento = (id: string, s: number, extra: Record<string, unknown> = {}) => (
 describe('Feed de atividade: estado', () => {
   test('tempo relativo, hora e data local', () => {
     const t = Date.parse('2026-10-18T23:12:04Z');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 2000), 'agora');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 12_000), '12 s');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 61_000), '1 min');
-    assert.equal(E.tempoRelativo(new Date(t).toISOString(), t + 2 * 3600_000), '2 h');
-    assert.equal(E.tempoRelativo('lixo'), '');
-    assert.match(E.horaCurta(new Date(t).toISOString()), /^\d{2}:\d{2}$/);
-    assert.match(E.dataHora(new Date(t).toISOString()), /^\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 2000), 'agora');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 12_000), '12 s');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 61_000), '1 min');
+    assert.equal(E.relativeTime(new Date(t).toISOString(), t + 2 * 3600_000), '2 h');
+    assert.equal(E.relativeTime('lixo'), '');
+    assert.match(E.shortTime(new Date(t).toISOString()), /^\d{2}:\d{2}$/);
+    assert.match(E.dateTime(new Date(t).toISOString()), /^\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   test('a consulta codifica cada parâmetro e pula os vazios', () => {
-    assert.equal(E.consulta({}), '/api/events');
-    assert.equal(E.consulta({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
-    assert.ok(E.temFiltro({ status: 'error' }));
-    assert.ok(!E.temFiltro({ status: '', busca: '  ' }));
+    assert.equal(E.query({}), '/api/events');
+    assert.equal(E.query({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
+    assert.ok(E.hasFilter({ status: 'error' }));
+    assert.ok(!E.hasFilter({ status: '', busca: '  ' }));
   });
 
   test('só id que serve de rota vira link para o Detalhe', () => {
-    assert.equal(E.rotaDaSessao('c3f09b52-4e1'), '/ui/sessions/c3f09b52-4e1');
-    for (const ruim of ['../x', 'a b', '', null, 'x'.repeat(129), 'javascript:alert(1)/']) assert.equal(E.rotaDaSessao(ruim), null, String(ruim));
+    assert.equal(E.sessionRoute('c3f09b52-4e1'), '/ui/sessions/c3f09b52-4e1');
+    for (const ruim of ['../x', 'a b', '', null, 'x'.repeat(129), 'javascript:alert(1)/']) assert.equal(E.sessionRoute(ruim), null, String(ruim));
   });
 
   test('pausa acumula os novos sem repetir e solta no topo ao retomar', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [evento('b', 10), evento('a', 20)], cursor: 'c1', anteriores: 'v1' });
-    E.pausar(s);
-    assert.deepEqual(E.receberNovos(s, { eventos: [evento('c', 5)], cursor: 'c2' }).entraram, []);
-    E.receberNovos(s, { eventos: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
+    const s = E.newState();
+    E.load(s, { eventos: [evento('b', 10), evento('a', 20)], cursor: 'c1', anteriores: 'v1' });
+    E.pause(s);
+    assert.deepEqual(E.receiveNewer(s, { eventos: [evento('c', 5)], cursor: 'c2' }).entraram, []);
+    E.receiveNewer(s, { eventos: [evento('d', 1), evento('c', 5)], cursor: 'c3' });
     assert.deepEqual(s.pendentes.map((e: { id: string }) => e.id), ['d', 'c']);
     assert.equal(s.cursor, 'c3');
     assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['b', 'a'], 'a lista congela');
-    const { entraram } = E.retomar(s);
+    const { entraram } = E.resume(s);
     assert.deepEqual(entraram.map((e: { id: string }) => e.id), ['d', 'c']);
     assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['d', 'c', 'b', 'a']);
     assert.deepEqual(s.pendentes, []);
   });
 
   test('o evento gravado atrasado entra no lugar dele, não no topo', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
-    const r = E.receberNovos(s, { eventos: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
+    const s = E.newState();
+    E.load(s, { eventos: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
+    const r = E.receiveNewer(s, { eventos: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
     assert.equal(r.noTopo, false);
     assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
-    assert.equal(E.receberNovos(s, { eventos: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
+    assert.equal(E.receiveNewer(s, { eventos: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
   });
 
   test('a pausa guarda no máximo o limite, mas conta tudo o que chegou', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: [], cursor: 'c1' });
-    E.pausar(s);
-    E.receberNovos(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
-    E.receberNovos(s, { eventos: [evento('ultimo', 1)], cursor: 'c3' });
-    assert.equal(s.pendentes.length, E.LIMITE);
+    const s = E.newState();
+    E.load(s, { eventos: [], cursor: 'c1' });
+    E.pause(s);
+    E.receiveNewer(s, { eventos: Array.from({ length: E.LIMIT }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
+    E.receiveNewer(s, { eventos: [evento('ultimo', 1)], cursor: 'c3' });
+    assert.equal(s.pendentes.length, E.LIMIT);
     assert.equal(s.pendentes[0].id, 'ultimo');
-    assert.equal(s.chegados, E.LIMITE + 1);
-    E.retomar(s);
+    assert.equal(s.chegados, E.LIMIT + 1);
+    E.resume(s);
     assert.equal(s.chegados, 0);
   });
 
   test('o limite corta o fim e some com o "mostrar mais"', () => {
-    const s = E.novoEstado();
-    E.carregar(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', anteriores: 'v' });
-    const { cortados } = E.receberNovos(s, { eventos: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
-    assert.equal(s.eventos.length, E.LIMITE);
-    assert.deepEqual(cortados.map((e: { id: string }) => e.id), [`v${E.LIMITE - 2}`, `v${E.LIMITE - 1}`]);
+    const s = E.newState();
+    E.load(s, { eventos: Array.from({ length: E.LIMIT }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', anteriores: 'v' });
+    const { cortados } = E.receiveNewer(s, { eventos: [evento('n1', 1), evento('n2', 2)], cursor: 'c2' });
+    assert.equal(s.eventos.length, E.LIMIT);
+    assert.deepEqual(cortados.map((e: { id: string }) => e.id), [`v${E.LIMIT - 2}`, `v${E.LIMIT - 1}`]);
     assert.equal(s.anteriores, null);
   });
 });

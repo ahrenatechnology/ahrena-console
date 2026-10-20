@@ -11,60 +11,60 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import {
-  alternar,
-  carregar,
-  consulta,
-  dataHora,
-  diaParaIso,
-  horaCurta,
-  idCurto,
-  novoEstado,
-  pausar,
-  receberAnteriores,
-  receberNovos,
-  retomar,
-  rotaDaSessao,
+  toggleOne,
+  load,
+  query,
+  dateTime,
+  dayToIso,
+  shortTime,
+  shortId,
+  newState,
+  pause,
+  receiveOlder,
+  receiveNewer,
+  resume,
+  sessionRoute,
   STATUS,
-  tempoRelativo,
-  temFiltro,
-  trilha,
+  relativeTime,
+  hasFilter,
+  trail,
 } from './feed-state.js';
 
 const CSS = '/ui/feed.css';
-const RELOGIO_MS = 5000;
+const CLOCK_MS = 5000;
 /** O `limit` padrão de `/api/events`: um lote do ao vivo com esse tamanho diz que há mais. */
-const LOTE_DO_AO_VIVO = 50;
-const DIGITANDO_MS = 300;
+const LIVE_BATCH = 50;
+const TYPING_MS = 300;
 
-function ligarCss() {
+function attachCss() {
   if (document.head.querySelector('link[data-screen="feed"]')) return null;
   const link = el('link', { rel: 'stylesheet', href: CSS, 'data-screen': 'feed' });
   document.head.append(link);
   return link;
 }
 
-const ehAbort = (e) => e?.name === 'AbortError';
+const isAbort = (e) => e?.name === 'AbortError';
 
 export async function mount(area, ctx) {
-  const css = ligarCss();
-  const estado = novoEstado();
-  const filtros = {};
-  const itens = new Map(); // id → nó da linha (com o detalhe, quando aberta)
-  let geracao = 0;
-  let pronto = false;
-  let emVoo = false;
-  let deNovo = false;
-  let digitando = null;
+  const css = attachCss();
+  const state = newState();
+  const filters = {};
+  const items = new Map(); // id → nó da linha (com o detalhe, quando aberta)
+  let generation = 0;
+  let ready = false;
+  let inFlight = false;
+  let again = false;
+  let typing = null;
 
   // ---------- cabeçalho ----------
 
-  const botaoPausa = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', onClick: () => (estado.pausado ? soltar() : congelar()) });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', onClick: () => recarregar() }, icon('refresh'), 'Atualizar');
-  const cab = header({ icon: 'activity', title: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', actions: [botaoPausa, botaoAtualizar] });
+  const pauseButton = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', onClick: () => (state.pausado ? drop() : freeze()) });
+  const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => reload() }, icon('refresh'), 'Atualizar');
+  const head = header({ icon: 'activity', title: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', actions: [pauseButton, refreshButton] });
 
   // ---------- sobre ----------
 
-  const sobre = el(
+  const about = el(
     'details',
     { class: 'card feed-about' },
     el('summary', {}, icon('info'), el('b', {}, 'Sobre eventos, filtros e agrupamento'), el('span', {}, ' · como ler as pílulas, o ciclo de vida e os filtros')),
@@ -79,289 +79,289 @@ export async function mount(area, ctx) {
 
   // ---------- filtros ----------
 
-  const busca = el('input', { type: 'search', class: 'feed-input', maxlength: '100', placeholder: 'Buscar no resumo ou na ferramenta…', 'aria-label': 'Buscar no resumo ou na ferramenta' });
-  const de = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'De' });
-  const ate = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'Até' });
-  const seletor = (rotulo) => el('select', { class: 'feed-chip feed-selector', 'aria-label': rotulo }, el('option', { value: '' }, rotulo));
-  const sStatus = seletor('Status');
-  const sTipo = seletor('Tipo de evento');
-  const sFerramenta = seletor('Ferramenta');
-  const sSessao = seletor('Sessão');
-  opcoesDo(sStatus, 'Status', Object.entries(STATUS));
+  const search = el('input', { type: 'search', class: 'feed-input', maxlength: '100', placeholder: 'Buscar no resumo ou na ferramenta…', 'aria-label': 'Buscar no resumo ou na ferramenta' });
+  const from = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'De' });
+  const until = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'Até' });
+  const selector = (label) => el('select', { class: 'feed-chip feed-selector', 'aria-label': label }, el('option', { value: '' }, label));
+  const sStatus = selector('Status');
+  const sType = selector('Tipo de evento');
+  const sTool = selector('Ferramenta');
+  const sSession = selector('Sessão');
+  optionsOf(sStatus, 'Status', Object.entries(STATUS));
 
-  const cartaoFiltros = el(
+  const filtersCard = el(
     'div',
     { class: 'card feed-filters' },
     el(
       'div',
       { class: 'feed-filters-row' },
-      el('label', { class: 'feed-field feed-search' }, icon('filter'), busca),
-      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'De'), de),
-      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'Até'), ate),
+      el('label', { class: 'feed-field feed-search' }, icon('filter'), search),
+      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'De'), from),
+      el('label', { class: 'feed-field feed-day' }, icon('calendar'), el('span', {}, 'Até'), until),
     ),
-    el('div', { class: 'feed-filters-row' }, sStatus, sTipo, sFerramenta, sSessao),
+    el('div', { class: 'feed-filters-row' }, sStatus, sType, sTool, sSession),
   );
 
-  function lerFiltros() {
-    filtros.busca = busca.value;
-    filtros.de = diaParaIso(de.value);
-    filtros.ate = diaParaIso(ate.value, true);
-    filtros.status = sStatus.value;
-    filtros.tipo = sTipo.value;
-    filtros.ferramenta = sFerramenta.value;
-    filtros.sessao = sSessao.value;
+  function readFilters() {
+    filters.busca = search.value;
+    filters.de = dayToIso(from.value);
+    filters.ate = dayToIso(until.value, true);
+    filters.status = sStatus.value;
+    filters.tipo = sType.value;
+    filters.ferramenta = sTool.value;
+    filters.sessao = sSession.value;
   }
-  const mudouFiltro = () => (lerFiltros(), recarregar());
-  busca.addEventListener('input', () => {
-    clearTimeout(digitando);
-    digitando = setTimeout(mudouFiltro, DIGITANDO_MS);
+  const filterChanged = () => (readFilters(), reload());
+  search.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(filterChanged, TYPING_MS);
   });
-  for (const c of [de, ate, sStatus, sTipo, sFerramenta, sSessao]) c.addEventListener('change', mudouFiltro);
+  for (const c of [from, until, sStatus, sType, sTool, sSession]) c.addEventListener('change', filterChanged);
 
   /** Troca as opções de um seletor, sem perder a escolhida. */
-  function opcoesDo(select, rotulo, pares) {
-    const atual = select.value;
-    const lista = [...pares];
-    if (atual && !lista.some(([v]) => v === atual)) lista.unshift([atual, atual]);
-    select.replaceChildren(el('option', { value: '' }, rotulo), ...lista.map(([v, t]) => el('option', { value: v }, t)));
-    select.value = atual;
+  function optionsOf(select, label, pairs) {
+    const current = select.value;
+    const list = [...pairs];
+    if (current && !list.some(([v]) => v === current)) list.unshift([current, current]);
+    select.replaceChildren(el('option', { value: '' }, label), ...list.map(([v, t]) => el('option', { value: v }, t)));
+    select.value = current;
   }
 
-  function atualizarOpcoes(opcoes) {
-    if (!opcoes) return;
-    opcoesDo(sTipo, 'Tipo de evento', (opcoes.tipos ?? []).map((t) => [t, t]));
-    opcoesDo(sFerramenta, 'Ferramenta', (opcoes.ferramentas ?? []).map((t) => [t, t]));
-    opcoesDo(sSessao, 'Sessão', (opcoes.sessoes ?? []).map((s) => [s.id, [s.projeto, s.titulo ?? s.id].filter(Boolean).join(' › ')]));
+  function refreshOptions(options) {
+    if (!options) return;
+    optionsOf(sType, 'Tipo de evento', (options.tipos ?? []).map((t) => [t, t]));
+    optionsOf(sTool, 'Ferramenta', (options.ferramentas ?? []).map((t) => [t, t]));
+    optionsOf(sSession, 'Sessão', (options.sessoes ?? []).map((s) => [s.id, [s.projeto, s.titulo ?? s.id].filter(Boolean).join(' › ')]));
   }
 
   // ---------- aviso de novos, faixa e corpo ----------
 
-  const aviso = el('button', { type: 'button', class: 'btn outline feed-new', hidden: true, onClick: () => soltar() });
-  const faixa = el('div', { class: 'feed-band' });
-  const corpo = el('div', { class: 'feed-body' });
-  const listaEl = el('div', { class: 'feed-list' });
-  const botaoMais = el('button', { type: 'button', class: 'btn outline feed-more', onClick: () => mostrarMais() }, 'Mostrar mais');
-  const cartaoLista = el('div', { class: 'card feed-rows' }, listaEl, el('div', { class: 'feed-foot' }, botaoMais));
+  const notice = el('button', { type: 'button', class: 'btn outline feed-new', hidden: true, onClick: () => drop() });
+  const band = el('div', { class: 'feed-band' });
+  const body = el('div', { class: 'feed-body' });
+  const listEl = el('div', { class: 'feed-list' });
+  const moreButton = el('button', { type: 'button', class: 'btn outline feed-more', onClick: () => showMore() }, 'Mostrar mais');
+  const listCard = el('div', { class: 'card feed-rows' }, listEl, el('div', { class: 'feed-foot' }, moreButton));
 
-  area.replaceChildren(cab, sobre, cartaoFiltros, aviso, faixa, corpo);
-  desenharPausa();
+  area.replaceChildren(head, about, filtersCard, notice, band, body);
+  drawPause();
 
-  const mostrarCorpo = (no) => corpo.replaceChildren(no);
-  const limparFaixa = () => faixa.replaceChildren();
-  const mostrarFaixa = (titulo, texto) => faixa.replaceChildren(errorBand({ title: titulo, text: texto, action: { label: 'Atualizar', onClick: () => recarregar() } }));
+  const showBody = (node) => body.replaceChildren(node);
+  const clearBand = () => band.replaceChildren();
+  const showBand = (title, text) => band.replaceChildren(errorBand({ title, text, action: { label: 'Atualizar', onClick: () => reload() } }));
 
   // ---------- linhas ----------
 
-  function linha(ev) {
-    const aberta = estado.aberto === ev.id;
-    const rota = rotaDaSessao(ev.sessao?.id);
+  function row(ev) {
+    const isOpen = state.aberto === ev.id;
+    const route = sessionRoute(ev.sessao?.id);
     const status = STATUS[ev.status] ? ev.status : 'completed';
-    const seta = el(
+    const arrow = el(
       'button',
-      { type: 'button', class: 'feed-arrow', 'aria-expanded': aberta ? 'true' : 'false', 'aria-label': aberta ? 'Fechar o detalhe' : 'Abrir o detalhe' },
-      icon(aberta ? 'chevron-down' : 'chevron-right'),
+      { type: 'button', class: 'feed-arrow', 'aria-expanded': isOpen ? 'true' : 'false', 'aria-label': isOpen ? 'Fechar o detalhe' : 'Abrir o detalhe' },
+      icon(isOpen ? 'chevron-down' : 'chevron-right'),
     );
-    seta.addEventListener('click', (e) => {
+    arrow.addEventListener('click', (e) => {
       e.stopPropagation();
-      abrirFechar(ev.id);
+      toggleOpen(ev.id);
     });
-    const caminho = trilha(ev);
-    const cabeca = el(
+    const path = trail(ev);
+    const headEl = el(
       'div',
-      { class: `feed-row${aberta ? ' feed-open' : ''}` },
-      seta,
-      el('span', { class: 'feed-o mono feed-time' }, horaCurta(ev.criadoEm)),
+      { class: `feed-row${isOpen ? ' feed-open' : ''}` },
+      arrow,
+      el('span', { class: 'feed-o mono feed-time' }, shortTime(ev.criadoEm)),
       el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
-      el('span', { class: 'feed-o feed-trunc feed-trail', title: caminho }, caminho),
+      el('span', { class: 'feed-o feed-trunc feed-trail', title: path }, path),
       el('span', { class: 'feed-trunc feed-summary', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
       ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
-      el('span', { class: 'feed-o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
-      rota ? el('a', { class: 'btn outline feed-session', href: rota }, 'Sessão', icon('external')) : null,
+      el('span', { class: 'feed-o feed-rel', title: dateTime(ev.criadoEm) }, relativeTime(ev.criadoEm)),
+      route ? el('a', { class: 'btn outline feed-session', href: route }, 'Sessão', icon('external')) : null,
     );
-    cabeca.addEventListener('click', (e) => {
+    headEl.addEventListener('click', (e) => {
       if (e.target?.closest?.('a, button')) return;
-      abrirFechar(ev.id);
+      toggleOpen(ev.id);
     });
-    return cabeca;
+    return headEl;
   }
 
-  function detalhe(ev) {
+  function detail(ev) {
     const d = ev.detalhe ?? {};
-    const agente = ev.agente ?? {};
-    const pares = [
+    const agent = ev.agente ?? {};
+    const pairs = [
       ['Evento', ev.tipo],
-      ['Registrado', dataHora(ev.criadoEm)],
+      ['Registrado', dateTime(ev.criadoEm)],
       ['Sessão', ev.sessao?.id],
-      ['Agente', [agente.nome, idCurto(agente.id)].filter(Boolean).join(' · ')],
+      ['Agente', [agent.nome, shortId(agent.id)].filter(Boolean).join(' · ')],
       ['Ferramenta', ev.ferramenta],
       ['Call id', d.callId],
     ];
-    const bloco = ev.ferramenta
+    const block = ev.ferramenta
       ? el('div', { class: 'feed-toolblock' }, icon('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
       : el('p', { class: 'feed-text' }, ev.resumo ?? d.entrada ?? '—');
     return el(
       'div',
       { class: 'feed-detail' },
-      el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), bloco, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-text' }, ev.resumo) : null),
-      el('dl', { class: 'feed-kv mono' }, ...pares.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
+      el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), block, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-text' }, ev.resumo) : null),
+      el('dl', { class: 'feed-kv mono' }, ...pairs.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
     );
   }
 
   function item(ev) {
-    const no = el('div', { class: 'feed-item', 'data-id': ev.id });
-    preencher(no, ev);
-    itens.set(ev.id, { no, ev });
-    return no;
+    const node = el('div', { class: 'feed-item', 'data-id': ev.id });
+    fill(node, ev);
+    items.set(ev.id, { no: node, ev });
+    return node;
   }
 
-  function preencher(no, ev) {
-    no.replaceChildren(...[linha(ev), estado.aberto === ev.id ? detalhe(ev) : null].filter(Boolean));
+  function fill(node, ev) {
+    node.replaceChildren(...[row(ev), state.aberto === ev.id ? detail(ev) : null].filter(Boolean));
   }
 
-  function abrirFechar(id) {
-    const antes = estado.aberto;
-    alternar(estado, id);
-    for (const k of new Set([antes, estado.aberto])) {
-      const it = k && itens.get(k);
-      if (it) preencher(it.no, it.ev);
+  function toggleOpen(id) {
+    const before = state.aberto;
+    toggleOne(state, id);
+    for (const k of new Set([before, state.aberto])) {
+      const it = k && items.get(k);
+      if (it) fill(it.no, it.ev);
     }
   }
 
-  function desenharTudo() {
-    itens.clear();
-    if (!estado.eventos.length) {
-      mostrarCorpo(
-        temFiltro(filtros)
+  function drawAll() {
+    items.clear();
+    if (!state.eventos.length) {
+      showBody(
+        hasFilter(filters)
           ? empty({ title: 'Nenhum evento com esses filtros', text: 'Mude ou limpe os filtros para ver mais.' })
           : empty({ title: 'Nenhum evento ainda', text: 'Os eventos aparecem aqui assim que uma sessão do Claude Code registrar algo.' }),
       );
       return;
     }
-    listaEl.replaceChildren(...estado.eventos.map(item));
-    botaoMais.hidden = !estado.anteriores;
-    mostrarCorpo(cartaoLista);
+    listEl.replaceChildren(...state.eventos.map(item));
+    moreButton.hidden = !state.anteriores;
+    showBody(listCard);
   }
 
-  function desenharNovos({ entraram, cortados, noTopo }) {
-    if (!entraram.length) return;
-    if (corpo.firstChild !== cartaoLista || !noTopo) return desenharTudo();
-    for (const ev of cortados) {
-      itens.get(ev.id)?.no.remove();
-      itens.delete(ev.id);
+  function drawNew({ entraram: entered, cortados: cutOff, noTopo: atTop }) {
+    if (!entered.length) return;
+    if (body.firstChild !== listCard || !atTop) return drawAll();
+    for (const ev of cutOff) {
+      items.get(ev.id)?.no.remove();
+      items.delete(ev.id);
     }
-    listaEl.prepend(...entraram.map(item));
-    botaoMais.hidden = !estado.anteriores;
+    listEl.prepend(...entered.map(item));
+    moreButton.hidden = !state.anteriores;
   }
 
-  function desenharPausa() {
-    botaoPausa.replaceChildren(icon(estado.pausado ? 'resume' : 'pause'), estado.pausado ? 'Retomar' : 'Pausar');
-    botaoPausa.setAttribute('aria-pressed', estado.pausado ? 'true' : 'false');
-    const n = estado.chegados;
-    aviso.hidden = !n;
-    aviso.textContent = n ? `${n} ${n === 1 ? 'novo' : 'novos'}` : '';
+  function drawPause() {
+    pauseButton.replaceChildren(icon(state.pausado ? 'resume' : 'pause'), state.pausado ? 'Retomar' : 'Pausar');
+    pauseButton.setAttribute('aria-pressed', state.pausado ? 'true' : 'false');
+    const n = state.chegados;
+    notice.hidden = !n;
+    notice.textContent = n ? `${n} ${n === 1 ? 'novo' : 'novos'}` : '';
   }
 
-  function congelar() {
-    pausar(estado);
-    desenharPausa();
+  function freeze() {
+    pause(state);
+    drawPause();
   }
 
-  function soltar() {
-    desenharNovos(retomar(estado));
-    desenharPausa();
+  function drop() {
+    drawNew(resume(state));
+    drawPause();
   }
 
   // ---------- leitura ----------
 
-  async function recarregar({ manterLista = false } = {}) {
-    const g = ++geracao;
-    pronto = false;
-    deNovo = false;
-    if (!manterLista) mostrarCorpo(loading({ label: 'Carregando eventos' }));
+  async function reload({ manterLista: keepList = false } = {}) {
+    const g = ++generation;
+    ready = false;
+    again = false;
+    if (!keepList) showBody(loading({ label: 'Carregando eventos' }));
     try {
-      const r = await ctx.read(consulta(filtros));
-      if (g !== geracao) return;
-      carregar(estado, r);
-      atualizarOpcoes(r.opcoes);
-      pronto = true;
-      limparFaixa();
-      desenharTudo();
-      desenharPausa();
+      const r = await ctx.read(query(filters));
+      if (g !== generation) return;
+      load(state, r);
+      refreshOptions(r.opcoes);
+      ready = true;
+      clearBand();
+      drawAll();
+      drawPause();
     } catch (e) {
-      if (ehAbort(e) || g !== geracao) return;
-      if (manterLista && corpo.firstChild === cartaoLista) mostrarFaixa('Não deu para reler o feed.', e?.message);
-      else mostrarCorpo(error({ text: e?.message ?? String(e), retry: () => recarregar() }));
+      if (isAbort(e) || g !== generation) return;
+      if (keepList && body.firstChild === listCard) showBand('Não deu para reler o feed.', e?.message);
+      else showBody(error({ text: e?.message ?? String(e), retry: () => reload() }));
     }
   }
 
-  async function buscarNovos() {
-    if (!pronto) return;
-    if (emVoo) return void (deNovo = true);
-    emVoo = true;
-    const g = geracao;
+  async function fetchNew() {
+    if (!ready) return;
+    if (inFlight) return void (again = true);
+    inFlight = true;
+    const g = generation;
     try {
-      const r = await ctx.read(consulta(filtros, { depois: estado.cursor }));
-      if (g !== geracao) return;
-      limparFaixa();
-      atualizarOpcoes(r.opcoes);
-      desenharNovos(receberNovos(estado, r));
-      desenharPausa();
+      const r = await ctx.read(query(filters, { depois: state.cursor }));
+      if (g !== generation) return;
+      clearBand();
+      refreshOptions(r.opcoes);
+      drawNew(receiveNewer(state, r));
+      drawPause();
       // Lote cheio: há mais gravado depois deste cursor; pede de novo na hora.
-      if ((r.eventos?.length ?? 0) >= LOTE_DO_AO_VIVO) deNovo = true;
+      if ((r.eventos?.length ?? 0) >= LIVE_BATCH) again = true;
     } catch (e) {
-      if (ehAbort(e) || g !== geracao) return;
-      mostrarFaixa('O ao vivo do feed falhou.', e?.message);
+      if (isAbort(e) || g !== generation) return;
+      showBand('O ao vivo do feed falhou.', e?.message);
     } finally {
-      emVoo = false;
-      if (deNovo && !ctx.signal?.aborted) {
-        deNovo = false;
-        buscarNovos();
+      inFlight = false;
+      if (again && !ctx.signal?.aborted) {
+        again = false;
+        fetchNew();
       }
     }
   }
 
-  async function mostrarMais() {
-    if (!estado.anteriores) return;
-    const g = geracao;
-    botaoMais.disabled = true;
+  async function showMore() {
+    if (!state.anteriores) return;
+    const g = generation;
+    moreButton.disabled = true;
     try {
-      const r = await ctx.read(consulta(filtros, { antes: estado.anteriores }));
-      if (g !== geracao) return;
-      const velhos = receberAnteriores(estado, r);
-      listaEl.append(...velhos.map(item));
-      botaoMais.hidden = !estado.anteriores;
+      const r = await ctx.read(query(filters, { antes: state.anteriores }));
+      if (g !== generation) return;
+      const stale = receiveOlder(state, r);
+      listEl.append(...stale.map(item));
+      moreButton.hidden = !state.anteriores;
     } catch (e) {
-      if (ehAbort(e) || g !== geracao) return;
-      mostrarFaixa('Não deu para ler os eventos mais velhos.', e?.message);
+      if (isAbort(e) || g !== generation) return;
+      showBand('Não deu para ler os eventos mais velhos.', e?.message);
     } finally {
-      botaoMais.disabled = false;
+      moreButton.disabled = false;
     }
   }
 
-  ctx.onChange(() => buscarNovos());
-  ctx.onRestart(() => recarregar({ manterLista: true }));
+  ctx.onChange(() => fetchNew());
+  ctx.onRestart(() => reload({ manterLista: true }));
 
   // Evento novo sozinho não é mudança no long polling (só estado, plano, decisão...): o relógio também
   // pergunta pelos novos, para o feed não esperar a próxima mudança de estado.
-  const relogio = setInterval(() => {
-    if (ctx.liveState?.() !== 'offline') buscarNovos();
-    const agora = Date.now();
-    for (const { no, ev } of itens.values()) {
-      const rel = no.querySelector('.feed-rel');
-      if (rel) rel.textContent = tempoRelativo(ev.criadoEm, agora);
+  const clock = setInterval(() => {
+    if (ctx.liveState?.() !== 'offline') fetchNew();
+    const now = Date.now();
+    for (const { no: node, ev } of items.values()) {
+      const rel = node.querySelector('.feed-rel');
+      if (rel) rel.textContent = relativeTime(ev.criadoEm, now);
     }
-  }, RELOGIO_MS);
+  }, CLOCK_MS);
 
-  function limpar() {
-    clearInterval(relogio);
-    clearTimeout(digitando);
+  function clear() {
+    clearInterval(clock);
+    clearTimeout(typing);
     css?.remove();
   }
   // Sair durante a primeira carga aborta o sinal antes de a moldura receber a limpeza: liga aqui.
-  ctx.signal?.addEventListener('abort', limpar, { once: true });
+  ctx.signal?.addEventListener('abort', clear, { once: true });
 
-  await recarregar();
-  if (ctx.signal?.aborted) limpar();
+  await reload();
+  if (ctx.signal?.aborted) clear();
 
-  return limpar;
+  return clear;
 }

@@ -11,7 +11,7 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 import { simular } from '../../src/simulador/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUNAS, custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/screens/sessions.js';
+import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
 import { findScreen } from '../../ui/screens.js';
 
@@ -199,40 +199,40 @@ describe('#28 a tela Sessões', () => {
   });
 
   test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = estadoDaQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2');
+    const e = stateFromQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2');
     assert.deepEqual(e, { status: 'esperando', search: 'oi', dir: '/simulacao/x', order: 'custo', direction: 'asc', page: 2 });
-    assert.deepEqual(estadoDaQuery(queryDoEstado(e)), e);
-    assert.equal(queryDoEstado(estadoDaQuery('')), '');
-    assert.deepEqual(estadoDaQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), estadoDaQuery(''));
+    assert.deepEqual(stateFromQuery(queryFromState(e)), e);
+    assert.equal(queryFromState(stateFromQuery('')), '');
+    assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });
 
   test('a rota da API leva os filtros que o servidor entende', () => {
-    const rota = rotaDaLista({ status: 'erro', search: ' a b ', dir: '/d', order: 'duracao', direction: 'desc', page: 2 });
+    const rota = listRoute({ status: 'erro', search: ' a b ', dir: '/d', order: 'duracao', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
     assert.deepEqual(pedidoDeSessoes(url), { status: 'erro', busca: 'a b', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
-    assert.ok(!new URL(rotaDaLista(estadoDaQuery('')), 'http://x').searchParams.has('search'));
+    assert.ok(!new URL(listRoute(stateFromQuery('')), 'http://x').searchParams.has('search'));
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {
     const agora = Date.parse('2026-05-01T12:00:00Z');
-    assert.equal(idade('2026-05-01T11:59:30Z', agora), 'agora');
-    assert.equal(idade('2026-05-01T11:58:00Z', agora), 'há 2 min');
-    assert.equal(idade('2026-05-01T09:00:00Z', agora), 'há 3 h');
-    assert.equal(idade('2026-04-28T12:00:00Z', agora), 'há 3 d');
-    assert.equal(duracao(20_000), '< 1 min');
-    assert.equal(duracao(12 * 60_000), '12 min');
-    assert.equal(duracao(190 * 60_000), '3 h 10');
-    assert.equal(duracao(120 * 60_000), '2 h');
-    assert.equal(duracao(28 * 3_600_000), '1 d 4 h');
-    assert.equal(custo(1.84), '~US$ 1,84');
-    assert.equal(custo(0), '~US$ 0,00');
-    assert.equal(custo(null), 'sem preço');
-    assert.equal(faixa({ total: 12, pagina: 1, porPagina: 10 }), '1–10 de 12');
-    assert.equal(faixa({ total: 12, pagina: 2, porPagina: 10 }), '11–12 de 12');
-    assert.equal(faixa({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
-    assert.equal(idCurto('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
-    assert.equal(idCurto('sim-painel-esta'), 'sim-painel-esta');
+    assert.equal(age('2026-05-01T11:59:30Z', agora), 'agora');
+    assert.equal(age('2026-05-01T11:58:00Z', agora), 'há 2 min');
+    assert.equal(age('2026-05-01T09:00:00Z', agora), 'há 3 h');
+    assert.equal(age('2026-04-28T12:00:00Z', agora), 'há 3 d');
+    assert.equal(duration(20_000), '< 1 min');
+    assert.equal(duration(12 * 60_000), '12 min');
+    assert.equal(duration(190 * 60_000), '3 h 10');
+    assert.equal(duration(120 * 60_000), '2 h');
+    assert.equal(duration(28 * 3_600_000), '1 d 4 h');
+    assert.equal(cost(1.84), '~US$ 1,84');
+    assert.equal(cost(0), '~US$ 0,00');
+    assert.equal(cost(null), 'sem preço');
+    assert.equal(band({ total: 12, pagina: 1, porPagina: 10 }), '1–10 de 12');
+    assert.equal(band({ total: 12, pagina: 2, porPagina: 10 }), '11–12 de 12');
+    assert.equal(band({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
+    assert.equal(shortId('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
+    assert.equal(shortId('sim-painel-esta'), 'sim-painel-esta');
   });
 
   // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),
@@ -245,7 +245,7 @@ describe('#28 a tela Sessões', () => {
     const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.table \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
     const largas = larguras(css.slice(0, corte));
     const estreitas = { ...largas, ...larguras(css.slice(corte)) };
-    const classes = COLUNAS.map(([c]: [string]) => c);
+    const classes = COLUMNS.map(([c]: [string]) => c);
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
     assert.equal(classes.filter((c: string) => c !== 'c-dir').reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'sem o Diretório, o resto soma 100');

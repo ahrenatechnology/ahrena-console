@@ -9,24 +9,24 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
-const ESTILO = '/ui/wall.css';
-export const ROTA_DO_MURAL = '/api/wall';
+const STYLE = '/ui/wall.css';
+export const WALL_ROUTE = '/api/wall';
 /** Releitura depois de uma rajada de mudanças. */
-export const ESPERA_MS = 400;
+export const DEBOUNCE_MS = 400;
 /** Contexto a partir daqui pinta a barra com a cor de erro. */
-export const CONTEXTO_ALTO = 80;
+export const HIGH_CONTEXT = 80;
 
-export const ROTULO_DO_STATUS = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
+export const STATUS_LABEL = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 // Os motivos do "esperando", como no wireframe: urgente em negrito, o resto leve.
-const MOTIVOS = {
+const REASONS = {
   notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
   interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
   stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
-const ESFORCOS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
+const EFFORTS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
 
-export const FILTROS = [
+export const FILTERS = [
   { id: 'todas', rotulo: 'Todas', passa: () => true, vazio: 'Nenhuma sessão aberta' },
   // Os mesmos grupos da `contagem` do núcleo: o erro também precisa de você.
   { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.estado === 'waiting' || c.estado === 'error', vazio: 'Nenhuma sessão esperando você' },
@@ -35,67 +35,67 @@ export const FILTROS = [
 
 // ---------- Formatação ----------
 
-const dolar = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dollar = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Em dólar, como no wireframe ("~1,84"), sempre com "~": é estimativa. `null` (uso sem preço) é traço. */
-export const custo = (usd) => (usd === null || usd === undefined ? '—' : `~${dolar.format(usd)}`);
+export const cost = (usd) => (usd === null || usd === undefined ? '—' : `~${dollar.format(usd)}`);
 
 /** Só a família: "claude-opus-5-5" → "Opus"; "Sonnet 5.5" → "Sonnet"; sem modelo, traço. */
-export function nomeDoModelo(id) {
-  const texto = String(id ?? '').trim();
-  if (!texto) return '—';
-  const familia = /(opus|sonnet|haiku|fable)/i.exec(texto);
-  const palavra = familia ? familia[1].toLowerCase() : texto.split(/\s+/)[0];
-  return `${palavra[0].toUpperCase()}${palavra.slice(1)}`;
+export function modelName(id) {
+  const text = String(id ?? '').trim();
+  if (!text) return '—';
+  const family = /(opus|sonnet|haiku|fable)/i.exec(text);
+  const word = family ? family[1].toLowerCase() : text.split(/\s+/)[0];
+  return `${word[0].toUpperCase()}${word.slice(1)}`;
 }
 
 /** "high" → "alto"; o que não reconhece sai como veio; sem esforço, traço. */
-export const esforco = (e) => (e ? (ESFORCOS[e] ?? e) : '—');
+export const effort = (e) => (e ? (EFFORTS[e] ?? e) : '—');
 
-const limitar = (n) => Math.min(100, Math.max(0, Math.round(n)));
+const limit = (n) => Math.min(100, Math.max(0, Math.round(n)));
 
 /**
  * O que o card mostra, sem DOM. Plano `null` é "Plano 0/0" com a barra vazia (o wireframe desenha
  * assim a sessão sem plano); contexto `null` é "contexto —" com a barra vazia.
  */
-export function oQueOCardMostra(c) {
-  const plano = c.plano ?? { feitos: 0, total: 0 };
-  const pct = c.contexto ? limitar(c.contexto.pct) : null;
-  let linha;
-  if (c.status === 'waiting') linha = { tipo: 'pede', motivo: MOTIVOS[c.motivo] ?? null, texto: c.atividade?.texto ?? '' };
-  else if (c.status === 'error') linha = { tipo: 'erro', texto: c.atividade?.texto ?? '' };
-  else if (c.status === 'completed') linha = { tipo: 'concluida', texto: 'Terminou sem erro' };
-  else if (c.status === 'abandoned') linha = { tipo: 'parada', texto: c.atividade?.texto ?? '' };
-  else linha = { tipo: 'fazendo', texto: c.atividade?.texto ?? '' };
+export function cardContent(c) {
+  const plan = c.plano ?? { feitos: 0, total: 0 };
+  const pct = c.contexto ? limit(c.contexto.pct) : null;
+  let row;
+  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.motivo] ?? null, texto: c.atividade?.texto ?? '' };
+  else if (c.status === 'error') row = { tipo: 'erro', texto: c.atividade?.texto ?? '' };
+  else if (c.status === 'completed') row = { tipo: 'concluida', texto: 'Terminou sem erro' };
+  else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.atividade?.texto ?? '' };
+  else row = { tipo: 'fazendo', texto: c.atividade?.texto ?? '' };
   return {
     id: c.id,
     href: `/ui/sessions/${encodeURIComponent(c.id)}`,
     status: c.status,
     titulo: c.titulo,
     origem: [c.projeto, c.branch].filter(Boolean).join(' · ') || '—',
-    linha,
+    linha: row,
     grade: [
-      ['Modelo', nomeDoModelo(c.modelo)],
-      ['Esforço', esforco(c.esforco)],
+      ['Modelo', modelName(c.modelo)],
+      ['Esforço', effort(c.esforco)],
       ['Agentes', String(c.agentes?.total ?? 0)],
-      ['Custo', custo(c.custo?.usd)],
+      ['Custo', cost(c.custo?.usd)],
     ],
     agentes: c.agentes ?? { ativos: 0, total: 0 },
-    plano: { feitos: plano.feitos, total: plano.total, rotulo: `Plano ${plano.feitos}/${plano.total}`, atual: c.plano?.atual ?? null },
-    contexto: { pct, rotulo: pct === null ? 'contexto —' : `contexto ${pct}%`, alto: pct !== null && pct >= CONTEXTO_ALTO },
+    plano: { feitos: plan.feitos, total: plan.total, rotulo: `Plano ${plan.feitos}/${plan.total}`, atual: c.plano?.atual ?? null },
+    contexto: { pct, rotulo: pct === null ? 'contexto —' : `contexto ${pct}%`, alto: pct !== null && pct >= HIGH_CONTEXT },
   };
 }
 
 // ---------- Peças ----------
 
-function usarEstilo() {
-  if (document.querySelector(`link[href="${ESTILO}"]`)) return;
-  document.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
+function useStyle() {
+  if (document.querySelector(`link[href="${STYLE}"]`)) return;
+  document.head.append(el('link', { rel: 'stylesheet', href: STYLE }));
 }
 
-const badge = (status) => el('span', { class: `wall-badge wall-b-${status}` }, el('span', { class: 'p' }), ROTULO_DO_STATUS[status] ?? status);
+const badge = (status) => el('span', { class: `wall-badge wall-b-${status}` }, el('span', { class: 'p' }), STATUS_LABEL[status] ?? status);
 
-function linhaDoCard(l) {
+function cardRow(l) {
   if (l.tipo === 'pede') {
     const chip = l.motivo ? el('span', { class: `wall-reason${l.motivo.urgente ? '' : ' soft'}` }, icon(l.motivo.icone), l.motivo.rotulo) : null;
     return el('div', { class: 'wall-row' }, chip, el('span', { class: 'wall-trunc wall-muted' }, l.texto));
@@ -107,31 +107,31 @@ function linhaDoCard(l) {
 }
 
 /** A barra: `<progress>` estilizado, a largura vem do `value`. */
-function barra({ valor, max, rotulo, alto = false, tipo }) {
-  return el('progress', { class: `wall-bar${alto ? ' wall-high' : ''}`, 'data-bar': tipo, max: max > 0 ? max : 1, value: max > 0 ? Math.min(valor, max) : 0, 'aria-label': rotulo });
+function bar({ valor: value, max, rotulo: label, alto: high = false, tipo: type }) {
+  return el('progress', { class: `wall-bar${high ? ' wall-high' : ''}`, 'data-bar': type, max: max > 0 ? max : 1, value: max > 0 ? Math.min(value, max) : 0, 'aria-label': label });
 }
 
 function card(c) {
-  const v = oQueOCardMostra(c);
+  const v = cardContent(c);
   return el(
     'a',
     { class: `card wall-card wall-st-${v.status}`, href: v.href, 'data-session': v.id },
     el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.titulo }, v.titulo), badge(v.status)),
     el('div', { class: 'wall-prj wall-trunc' }, v.origem),
-    linhaDoCard(v.linha),
+    cardRow(v.linha),
     el(
       'div',
       { class: 'wall-gr' },
-      ...v.grade.map(([rotulo, valor]) =>
-        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'wall-trunc' }, valor)),
+      ...v.grade.map(([label, value]) =>
+        el('div', label === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
       ),
     ),
     el('div', { class: 'wall-planrow' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
     el(
       'div',
       { class: 'wall-bars' },
-      barra({ tipo: 'plano', valor: v.plano.feitos, max: v.plano.total, rotulo: `Plano: ${v.plano.feitos} de ${v.plano.total}` }),
-      barra({ tipo: 'contexto', valor: v.contexto.pct ?? 0, max: 100, alto: v.contexto.alto, rotulo: v.contexto.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.contexto.pct}%` }),
+      bar({ tipo: 'plan', valor: v.plano.feitos, max: v.plano.total, rotulo: `Plano: ${v.plano.feitos} de ${v.plano.total}` }),
+      bar({ tipo: 'context', valor: v.contexto.pct ?? 0, max: 100, alto: v.contexto.alto, rotulo: v.contexto.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.contexto.pct}%` }),
     ),
   );
 }
@@ -139,75 +139,75 @@ function card(c) {
 // ---------- A tela ----------
 
 export async function mount(area, ctx) {
-  usarEstilo();
-  let filtro = 'todas';
-  let mural = null;
-  let falha = null;
-  let pedido = 0;
-  let espera = null;
+  useStyle();
+  let filter = 'todas';
+  let wall = null;
+  let failure = null;
+  let request = 0;
+  let wait = null;
 
   // O seletor só com os rótulos, como no wireframe: a `contagem` do núcleo não aparece.
-  const botoes = new Map();
-  const seletor = el(
+  const buttons = new Map();
+  const selector = el(
     'div',
     { class: 'wall-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
-    ...FILTROS.map((f) => {
-      const b = el('button', { type: 'button', 'data-filter': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', onClick: () => escolher(f.id) }, f.rotulo);
-      botoes.set(f.id, b);
+    ...FILTERS.map((f) => {
+      const b = el('button', { type: 'button', 'data-filter': f.id, 'aria-pressed': f.id === filter ? 'true' : 'false', onClick: () => choose(f.id) }, f.rotulo);
+      buttons.set(f.id, b);
       return b;
     }),
   );
-  const atualizar = el('button', { type: 'button', class: 'btn', 'data-action': 'atualizar', onClick: () => read() }, icon('refresh'), 'Atualizar');
-  const cab = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [seletor, atualizar] });
+  const refresh = el('button', { type: 'button', class: 'btn', 'data-action': 'refresh', onClick: () => read() }, icon('refresh'), 'Atualizar');
+  const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh] });
 
-  function escolher(id) {
-    filtro = id;
-    for (const [k, b] of botoes) b.setAttribute('aria-pressed', k === id ? 'true' : 'false');
-    desenhar();
+  function choose(id) {
+    filter = id;
+    for (const [k, b] of buttons) b.setAttribute('aria-pressed', k === id ? 'true' : 'false');
+    draw();
   }
 
-  function desenhar() {
-    if (!mural) {
-      area.replaceChildren(cab, falha ? error({ text: falha.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
+  function draw() {
+    if (!wall) {
+      area.replaceChildren(head, failure ? error({ text: failure.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
       return;
     }
-    const f = FILTROS.find((x) => x.id === filtro);
-    const cards = (mural.cards ?? []).filter(f.passa);
-    const faixa = falha ? errorBand({ title: 'O mural não atualizou.', text: falha.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
-    const nos = cards.map(card);
-    const corpo = cards.length
-      ? el('div', { class: 'wall-grid' }, ...nos)
-      : empty({ icon: 'wall', title: f.vazio, text: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+    const f = FILTERS.find((x) => x.id === filter);
+    const cards = (wall.cards ?? []).filter(f.passa);
+    const band = failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
+    const nodes = cards.map(card);
+    const body = cards.length
+      ? el('div', { class: 'wall-grid' }, ...nodes)
+      : empty({ icon: 'wall', title: f.vazio, text: filter === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
-    const focado = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
-    area.replaceChildren(...[cab, faixa, corpo].filter(Boolean));
-    if (focado) nos.find((n) => n.getAttribute('data-session') === focado)?.focus();
+    const focused = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
+    area.replaceChildren(...[head, band, body].filter(Boolean));
+    if (focused) nodes.find((n) => n.getAttribute('data-session') === focused)?.focus();
   }
 
   async function read() {
-    const meu = ++pedido;
+    const mine = ++request;
     try {
-      const novo = await ctx.read(ROTA_DO_MURAL);
-      if (meu !== pedido) return;
-      mural = novo;
-      falha = null;
+      const fresh = await ctx.read(WALL_ROUTE);
+      if (mine !== request) return;
+      wall = fresh;
+      failure = null;
     } catch (e) {
-      if (e?.name === 'AbortError' || meu !== pedido) return;
-      falha = e instanceof Error ? e : new Error(String(e));
+      if (e?.name === 'AbortError' || mine !== request) return;
+      failure = e instanceof Error ? e : new Error(String(e));
     }
-    desenhar();
+    draw();
   }
 
   ctx.onRestart(() => read());
   // Junta a rajada, mas com teto: com atividade contínua, relê no máximo a cada ESPERA_MS.
   ctx.onChange(() => {
-    espera ??= setTimeout(() => {
-      espera = null;
+    wait ??= setTimeout(() => {
+      wait = null;
       read();
-    }, ESPERA_MS);
+    }, DEBOUNCE_MS);
   });
 
-  desenhar();
+  draw();
   await read();
-  return () => clearTimeout(espera);
+  return () => clearTimeout(wait);
 }
