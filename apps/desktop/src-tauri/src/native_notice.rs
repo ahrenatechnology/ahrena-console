@@ -18,7 +18,7 @@
 // it; window work goes through `run_on_main_thread`.
 //
 // Notifications already delivered stay in the Notification Center across an app update. Those of a
-// version from before #173 (phase 4, app 0.0.4 and older) carry the Portuguese category, action ids
+// version from before #173 phase 4 (app 0.0.1) carry the Portuguese category, action ids
 // and `userInfo` key, which are not read since phase 6: their buttons do nothing.
 
 use std::cell::RefCell;
