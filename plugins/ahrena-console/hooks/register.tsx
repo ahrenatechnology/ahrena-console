@@ -120,12 +120,13 @@ const SOMBRA = Object.fromEntries(
 ) as unknown as Elementos
 const SEM_ACOES = new Proxy({}, { get: () => () => undefined }) as Acoes
 
-/** Os botões de uma árvore (a key e o rótulo): o que a pessoa pode estar prestes a clicar. */
+/** O que se clica numa árvore (os botões, pela key e o rótulo; os links, pelo href): o que a pessoa pode estar prestes a clicar. */
 function botoesDe(no: unknown, saida: string[] = []): string[] {
   if (Array.isArray(no)) for (const n of no) botoesDe(n, saida)
   else if (no && typeof no === 'object') {
-    const o = no as { t?: string; key?: unknown; children?: unknown }
-    if (o.t === 'Button') saida.push(`${String(o.key)}=${JSON.stringify(o.children)}`)
+    const o = no as { t?: string; key?: unknown; children?: unknown; label?: unknown; href?: unknown }
+    if (o.t === 'Button') saida.push(`${String(o.key)}=${JSON.stringify(o.label ?? o.children)}`)
+    if (o.t === 'Link') saida.push(`link=${String(o.href)}`)
     botoesDe(o.children, saida)
   }
   return saida

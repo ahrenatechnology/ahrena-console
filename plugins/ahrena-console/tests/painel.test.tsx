@@ -329,6 +329,47 @@ test('0.0.21 (decisão do Fernando): o que pede atenção vem no topo, antes dos
   await ui.unmount()
 })
 
+test('0.0.22: todo card tem 9,5 linhas (~180 px no Desktop) e o mesmo respiro, com espaço embaixo', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p4' })
+  for (const painel of [CENARIOS.p1, CENARIOS.p4, CENARIOS.p6, carregado()]) {
+    f.estado.painel = painel
+    await f.relogio.advance(15_000)
+    for (const base of [PANE, LARGO]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 200) })
+      const cards = (await ui.findAll({ type: 'Box' })).filter((b: any) => /^card-/.test(b.key ?? ''))
+      expect(cards.length).toBeGreaterThanOrEqual(5)
+      for (const card of cards) {
+        expect([card.key, card.props.height, card.props.paddingX, card.props.paddingBottom]).toEqual([card.key, 9.5, 1, 1])
+      }
+      await ui.unmount()
+    }
+  }
+})
+
+test('0.0.22: os PRs para revisar abrem direto no GitHub: com um, a faixa é o link; com vários, um link por PR na lista', async ($, on) => {
+  const f = await abrir($, on, { cenario: 'p1' })
+  const p1 = CENARIOS.p1
+  const pr = (numero: number) => ({ numero, titulo: `pr sintético ${numero}`, url: `https://github.com/exemplo/sintetico/pull/${numero}`, repo: 'exemplo/sintetico', sessao: { id: 's', titulo: 'sessão sintética', local: null } })
+  f.estado.painel = { ...p1, prs: { total: 1, itens: [pr(7)] } }
+  await f.relogio.advance(5_000)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 200) })
+  // O Link não guarda a key: procura pelo href, dentro da faixa.
+  const faixa = await ui.find({ key: 'prs' })
+  expect(faixa?.text).toMatch(/1 PR aguardando sua aprovação/)
+  expect((await ui.findAll({ type: 'Link' })).map((l: any) => l.props.href)).toContain('https://github.com/exemplo/sintetico/pull/7')
+  await ui.unmount()
+  f.estado.painel = { ...p1, prs: { total: 2, itens: [pr(7), pr(8)] } }
+  // O link da faixa sai: o que se clica mudou, e o painel redesenha na hora.
+  await f.relogio.advance(5_000)
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 200) })
+  // Com dois, a faixa não é link de um PR só: "Ver" abre a lista.
+  expect((await ui.findAll({ type: 'Link' })).some((l: any) => /\/pull\/[78]$/.test(l.props.href))).toBe(false)
+  await ui.press({ key: 'ver-prs' })
+  const hrefs = (await ui.findAll({ type: 'Link' })).map((l: any) => l.props.href).filter((h: string) => /\/pull\//.test(h))
+  expect(hrefs).toEqual(['https://github.com/exemplo/sintetico/pull/7', 'https://github.com/exemplo/sintetico/pull/8'])
+  await ui.unmount()
+})
+
 test('P6: sessão nova, cards vazios no lugar', async ($, on) => {
   await abrir($, on, { cenario: 'p6' })
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
@@ -403,7 +444,7 @@ test('Plano: o anel com o % e três passos em destaque em volta do atual; o rest
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     const card = await ui.find({ key: 'card-plano' })
-    expect(card?.props.height).toBe(9)
+    expect(card?.props.height).toBe(9.5)
     const anel = (await ui.findAll({ type: 'Svg' })).find((x) => /plano 50% feito, 3 de 6/.test(String(x.props.alt)))
     expect([anel?.props.width, anel?.props.height]).toEqual([50, 50])
     expect(card?.text).toMatch(/PLANO\s*3\/6/)
@@ -600,7 +641,7 @@ test('altura: os seis cards do P1 aparecem sempre, inteiros e do mesmo tamanho, 
       const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
       for (const key of CARDS) {
         const card = await ui.find({ key })
-        expect([card?.props.width, card?.props.height]).toEqual([34, 9])
+        expect([card?.props.width, card?.props.height]).toEqual([34, 9.5])
       }
       expect(await ui.find({ key: 'resumos' })).toBeUndefined()
       // No card de altura fixa, o título corta com reticências, como no P1.
@@ -956,7 +997,8 @@ test('#140: PRs aguardando aprovação num indicador próprio, com a lista de li
   expect(await ui.find({ type: 'Text', text: /PRS AGUARDANDO SUA APROVAÇÃO · 7/ })).toBeDefined()
   const links = (await ui.findAll({ type: 'Link' })).filter((l) => /\/pull\/1\d\d$/.test(l.props.href))
   expect(links).toHaveLength(7)
-  expect(links[0]!.props.label).toMatch(/^PR #100 · #40 Uma issue sintética/)
+  // O texto vai dentro do link, em laranja (pn-link): o href leva ao PR.
+  expect(links[0]!.text).toMatch(/PR #100 · #40 Uma issue sintética/)
   await ui.press({ key: 'fechar-prs' })
   expect(await ui.find({ key: 'card-sessao' })).toBeDefined()
   await ui.unmount()
@@ -999,7 +1041,7 @@ test('"Compactar agora" não quebra a grade 2×2: toma o lugar do tile Backgroun
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-compactar']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
     const card = await ui.find({ key: 'card-contexto' })
-    expect(card?.props.height).toBe(9)
+    expect(card?.props.height).toBe(9.5)
     // O cabeçalho continua o do P1.
     expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
     await ui.unmount()
@@ -1153,7 +1195,7 @@ test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, mesmo c
   await abrir($, on, { cenario: 'p1' })
   for (const [base, linhas] of [[PANE, 45], [LARGO, 30]] as const) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(9)
+    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(9.5)
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
     await ui.unmount()

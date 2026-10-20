@@ -59,11 +59,11 @@ import { alturaDaGrade, BORDA_DO_CARD, ESPACO, LINHAS_DO_CARD, linhasDoTexto } f
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
-/** Todo card tem a mesma altura (P1): a borda e as linhas de conteúdo. O que sobra fica vazio embaixo. */
+/** Todo card tem a mesma altura, 180 px no Desktop (ver LINHAS_DO_CARD): a borda e as linhas de conteúdo. */
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.21'
+export const VERSAO_DO_PLUGIN = '0.0.22'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -263,11 +263,18 @@ function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, 
   )
 }
 
-/** Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda e o mesmo raio. */
+/**
+ * O respiro de todo card, num lugar só: dos lados, uma coluna (o que já estava bom); embaixo, um
+ * espaço (~10 px no Desktop), para o conteúdo nunca encostar na borda de baixo. Em cima, o respiro
+ * que o Desktop já dá ao Box com borda.
+ */
+export const RESPIRO_DO_CARD = { paddingX: 1, paddingBottom: 1 } as const
+
+/** Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda, o mesmo raio e o mesmo respiro. */
 function cartao(c: Contexto, key: string, filhos: (RenderElement | false | null)[], borda: string = BORDA, fundo: string = FUNDO_CARTAO) {
   const { Box } = c.el
   return (
-    <Box key={key} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} paddingX={1} gap="xs">
+    <Box key={key} flexDirection="column" width={CARD_W} height={CARD_H} flexShrink={0} overflow="hidden" borderStyle="round" borderColor={borda} backgroundColor={fundo} {...RESPIRO_DO_CARD} gap="xs">
       {filhos.filter(Boolean)}
     </Box>
   )
@@ -1188,13 +1195,23 @@ const textoDePrs = (n: number, estreito: boolean) => `⇄ ${n === 1 ? '1 PR' : `
 function linhaPrs(c: Contexto, p: Painel, largura: number, estreito: boolean) {
   const n = p.prs?.total ?? 0
   if (n === 0) return null
-  const { Box, Text, Button } = c.el
+  const { Box, Text, Button, Link } = c.el
+  const um = n === 1 ? (p.prs?.itens[0] ?? null) : null
   return (
     <Box key="prs" flexDirection="row" alignItems="center" gap={1} width={largura} borderStyle="round" borderColor={LARANJA} backgroundColor={FUNDO_CARTAO} paddingX={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text mono weight="bold" color={LARANJA} wrap="wrap">
-          {textoDePrs(n, estreito)}
-        </Text>
+        {/* Com um PR só, o texto já é o link para ele no GitHub; com mais, "Ver" abre a lista, um link por PR. */}
+        {um ? (
+          <Link key="abrir-o-pr" href={um.url}>
+            <Text mono weight="bold" color={LARANJA} underline wrap="wrap">
+              {textoDePrs(n, estreito)}
+            </Text>
+          </Link>
+        ) : (
+          <Text mono weight="bold" color={LARANJA} wrap="wrap">
+            {textoDePrs(n, estreito)}
+          </Text>
+        )}
       </Box>
       <Button key="ver-prs" label="Ver" variant="secondary" onPress={c.acoes.verPrs} />
     </Box>
@@ -1210,7 +1227,7 @@ function telaPrs(c: Contexto, p: Painel, g: ReturnType<typeof grade>) {
   const linha = (pr: PrAguardando) => (
     <Box key={`pr-${pr.url}`} flexDirection="row" gap={1}>
       <Box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
-        <Link href={pr.url} label={corta(`PR #${pr.numero} · ${pr.titulo}`, Math.max(20, g.largura - 24))} />
+        {link(c, `link-pr-${pr.url}`, pr.url, corta(`PR #${pr.numero} · ${pr.titulo}`, Math.max(20, g.largura - 24)))}
       </Box>
       <Box width={18} flexShrink={0} flexDirection="row" justifyContent="flex-end">
         <Text mono size="footnote" dimColor wrap="truncate-end">
