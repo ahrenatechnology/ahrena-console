@@ -33,31 +33,25 @@ export function repoDoRemote(remote: string): string | null {
 
 type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
 
-/**
- * CI do último commit, como o kanban do projeto mostra: `ok`, `falhou`, `rodando` ou `null` sem
- * checagens. The project route still answers these Portuguese values (its JSON turns English in a
- * later layer of #173 phase 2b); the panel maps them to English in `prDoPainel`.
- */
-export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): 'ok' | 'falhou' | 'rodando' | null {
-  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
+export type CiDoPr = NonNullable<PrDoPainel['ci']>;
+export type ReviewDoPr = NonNullable<PrDoPainel['review']>;
+
+/** CI do último commit, como o painel e o kanban do projeto mostram: `ok`, `failed`, `running` ou `null` sem checagens. */
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): CiDoPr | null {
+  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'failed' : 'running';
 }
 
-/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`; o painel os passa para inglês. */
-export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): 'aprovado' | 'ajustes' | 'pendente' | null {
-  return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
+/** Review do PR: `approved`, `changes-requested`, `pending` (aberto sem decisão) ou `null`. */
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): ReviewDoPr | null {
+  return p.review === 'APPROVED' ? 'approved' : p.review === 'CHANGES_REQUESTED' ? 'changes-requested' : p.state === 'OPEN' ? 'pending' : null;
 }
-
-const PANEL_CI = { ok: 'ok', falhou: 'failed', rodando: 'running' } as const satisfies Record<string, PrDoPainel['ci']>;
-const PANEL_REVIEW = { aprovado: 'approved', ajustes: 'changes-requested', pendente: 'pending' } as const satisfies Record<string, PrDoPainel['review']>;
 
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
   const state = p.state === 'MERGED' ? 'merged' : p.state === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : 'open';
-  const ci = ciDoPr(p);
-  const review = reviewDoPr(p);
   const checks = p.checks ? { total: p.checks.total, ok: p.checks.ok, failed: p.checks.falhas, running: p.checks.rodando } : null;
-  return { number: p.number, url: p.url, state, ci: ci && PANEL_CI[ci], checks, review: review && PANEL_REVIEW[review] };
+  return { number: p.number, url: p.url, state, ci: ciDoPr(p), checks, review: reviewDoPr(p) };
 }
 
 interface Entrada {

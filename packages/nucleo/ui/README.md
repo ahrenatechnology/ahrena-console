@@ -134,6 +134,6 @@ As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173). As antigas contin
 | `/ui/projeto` | `/ui/project` |
 | `/ui/decisoes` | `/ui/decisions` |
 | `/ui/analytics/custo` | `/ui/analytics/cost` |
-| `/ui/kanban?visao=agentes` | `/ui/kanban?view=agents` |
+| `/ui/kanban?visao=agentes` | `/ui/kanban?view=agents` (as colunas do Kanban e os filtros das Decisões não vão na URL da /ui: só a API os recebe, e aceita os valores antigos) |
 | `/ui/repos/<dono>/<repo>?periodo=1a` | `/ui/repos/<owner>/<repo>?period=1y` |
 | `/ui/telas/<arquivo>` | `/ui/screens/<arquivo>` |

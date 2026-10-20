@@ -75,8 +75,8 @@ describe('Kanban: funções da tela', () => {
     assert.equal(status('error').rotulo, 'Com erro');
     assert.equal(status('abandoned').rotulo, 'Abandonada');
     const cores = (ids: string[]) => ids.map(columnColor);
-    assert.deepEqual(cores(['ativa', 'esperando', 'concluida', 'erro', 'abandonada']), ['active', 'waiting', 'completed', 'error', 'abandoned']);
-    assert.deepEqual(cores(['trabalhando', 'esperando', 'concluidos', 'erro']), ['active', 'waiting', 'completed', 'error']);
+    assert.deepEqual(cores(['active', 'waiting', 'completed', 'error', 'abandoned']), ['active', 'waiting', 'completed', 'error', 'abandoned']);
+    assert.deepEqual(cores(['working', 'waiting', 'done', 'error']), ['active', 'waiting', 'completed', 'error']);
   });
 
   test('visão na URL e rotas da API', () => {
@@ -88,7 +88,7 @@ describe('Kanban: funções da tela', () => {
     assert.equal(viewQuery('agents'), '?view=agents');
     assert.equal(viewQuery('sessions'), '');
     assert.equal(kanbanRoute('sessions'), '/api/kanban?view=sessions');
-    assert.equal(kanbanRoute('agents', 'esperando', 2), '/api/kanban?view=agents&column=esperando&page=2');
+    assert.equal(kanbanRoute('agents', 'waiting', 2), '/api/kanban?view=agents&column=waiting&page=2');
   });
 
   test('"mostrar mais N": o que falta; ao vivo só relê com mudança de sessão', () => {

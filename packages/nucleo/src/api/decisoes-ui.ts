@@ -4,10 +4,12 @@
 // | -------------------------------------- | ------------------------------------------------------------ |
 // | `GET /api/decisions`                   | A página Decisões (C21): todas, agrupadas, com busca (`?state=`, `?groupBy=`, `?group=`, `?q=`) |
 // | `GET /api/sessions/<id>/decisions`     | A aba Decisões do Detalhe (C20): o escopo (`?scope=`), a injeção e o MCP |
-// | `POST /api/decisions/<id>/promote`     | O "Promover a registro": rascunho, ou grava com `confirmar`  |
+// | `POST /api/decisions/<id>/promote`     | O "Promover a registro": rascunho, ou grava com `confirm`    |
 //
-// The old `/api/decisoes`, `/api/sessoes/<id>/decisoes`, `/api/decisoes/<id>/promover` and parameter
-// names (`estado`, `agrupar`, `grupo`, `escopo`) are aliases: src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English since #173 phase 2b (`state` `all|current|to_confirm`,
+// `groupBy` `branch|family|session`, the promote body `{ session, confirm, path, hash }`). The old
+// `/api/decisoes`, `/api/sessoes/<id>/decisoes`, `/api/decisoes/<id>/promover`, their parameter names
+// (`estado`, `agrupar`, `grupo`, `escopo`), values and bodies are aliases: src/api/legacy-routes.ts.
 //
 // Lê e escreve só pela porta das decisões; o escopo, a conta e a cadeia são de `DecisoesDaSessao` e
 // de src/decisoes/registro.ts, não daqui.
@@ -20,7 +22,7 @@
 // contas são todas dela; a página mostra todas, como a lista de sessões. O filtro por conta
 // continua onde há uma sessão de referência: na aba e nas escritas, que vão em nome da sessão dona.
 //
-// O Promover não grava nada sem `{ confirmar: true, caminho }`; grava só em `<repo>/docs/decisoes/`,
+// O Promover não grava nada sem `{ confirm: true, path }`; grava só em `<repo>/docs/decisoes/`,
 // nunca por cima (flag `wx`), conferindo com `realpath` que a pasta não sai do repositório.
 
 import { createHash } from 'node:crypto';
@@ -40,13 +42,10 @@ import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 /** The Decisions page of the /ui (C21). */
 export const DECISIONS_PAGE_ROUTE = '/api/decisions';
 
-export type AgrupamentoDasDecisoes = 'branch' | 'familia' | 'sessao';
-export type FiltroDeEstado = 'todas' | 'vigentes' | 'a_confirmar';
+export type AgrupamentoDasDecisoes = 'branch' | 'family' | 'session';
+export type FiltroDeEstado = 'all' | 'current' | 'to_confirm';
 
-/**
- * O card de uma decisão, igual na página e na aba: the panel's decision (`DecisaoDoPainel`) and what
- * the /ui adds, with English keys since #173 phase 2b (the page and tab around it follow in a later layer).
- */
+/** O card de uma decisão, igual na página e na aba: the panel's decision (`DecisaoDoPainel`) and what the /ui adds. */
 export interface DecisaoDaUi extends DecisaoDoPainel {
   sessionId: string;
   /** Até onde vale ("escopo: sessão"). */
@@ -62,60 +61,60 @@ export interface DecisaoDaUi extends DecisaoDoPainel {
 }
 
 export interface GrupoDeDecisoes {
-  /** Opaca, segura para URL: o `grupo=` do "Ver todas". */
-  chave: string;
-  tipo: AgrupamentoDasDecisoes;
+  /** Opaca, segura para URL: o `group=` do "Ver todas". */
+  key: string;
+  type: AgrupamentoDasDecisoes;
   /** O branch ("sem branch"), ou o título da sessão (família e sessão). */
-  titulo: string;
+  title: string;
   repo: string | null;
   /** O nome da pasta do repositório. */
-  pasta: string | null;
-  vigentes: number;
-  aConfirmar: number;
+  folder: string | null;
+  current: number;
+  toConfirm: number;
   total: number;
-  /** Até 3, mais recentes primeiro; todos com `grupo=`. */
-  itens: DecisaoDaUi[];
+  /** Até 3, mais recentes primeiro; todos com `group=`. */
+  items: DecisaoDaUi[];
   /** Quantos ficaram de fora. */
-  mais: number;
+  more: number;
 }
 
 /** `GET /api/decisions` (C21). */
 export interface DecisoesDaPagina {
-  agrupar: AgrupamentoDasDecisoes;
-  estado: FiltroDeEstado;
+  groupBy: AgrupamentoDasDecisoes;
+  state: FiltroDeEstado;
   q: string | null;
   /** Os quatro cartões: sempre sobre tudo, sem o filtro de estado nem a busca. */
-  contagens: { vigentes: number; branches: number; aConfirmar: number; substituidas30d: number; promovidas: number };
-  grupos: GrupoDeDecisoes[];
+  counts: { current: number; branches: number; toConfirm: number; superseded30d: number; promoted: number };
+  groups: GrupoDeDecisoes[];
 }
 
 /** `GET /api/sessions/<id>/decisions` (C20). */
 export interface DecisoesDaAba {
-  sessao: string;
-  escopo: EscopoDasDecisoes;
-  estado: FiltroDeEstado;
+  session: string;
+  scope: EscopoDasDecisoes;
+  state: FiltroDeEstado;
   q: string | null;
   /** Vigentes e a confirmar em cada escopo. */
-  porEscopo: Record<EscopoDasDecisoes, number>;
+  byScope: Record<EscopoDasDecisoes, number>;
   /** Vigentes e a confirmar no escopo pedido: o "(4)" da aba. */
   total: number;
-  itens: DecisaoDaUi[];
+  items: DecisaoDaUi[];
   /** O card "No início de cada sessão" (#100). */
-  injecao: { ligada: boolean; escopo: EscopoDasDecisoes; decisoes: number; tokens: number; texto: string };
-  /** O card "Quando o agente perguntar" (#101). */
-  mcp: { ferramenta: 'session_decisions'; existe: boolean; chamada: string; resposta: string };
+  injection: { enabled: boolean; scope: EscopoDasDecisoes; decisions: number; tokens: number; text: string };
+  /** O card "Quando o agente perguntar" (#101); `call` é texto de tela, com o argumento como a ferramenta vai pedir. */
+  mcp: { tool: 'session_decisions'; exists: boolean; call: string; response: string };
 }
 
-/** A resposta do Promover sem `confirmar`: nada foi gravado. */
+/** A resposta do Promover sem `confirm`: nada foi gravado. */
 export interface RascunhoDeRegistro {
-  caminho: string;
+  path: string;
   markdown: string;
-  /** sha256 (hex) do `markdown`: o confirmar que o manda recusa (409) se o registro mudou. */
+  /** sha256 (hex) do `markdown`: o confirm que o manda recusa (409) se o registro mudou. */
   hash: string;
   repo: string | null;
-  podeGravar: boolean;
+  canWrite: boolean;
   /** Por que não dá para gravar, quando não dá. */
-  motivo: string | null;
+  reason: string | null;
 }
 
 export interface OpcoesDasDecisoesDaUi {
@@ -140,11 +139,11 @@ export interface OpcoesDasDecisoesDaUi {
 }
 
 const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
-const DO_FILTRO: Record<FiltroDeEstado, readonly DecisionState[]> = { todas: NA_LISTA, vigentes: ['vigente'], a_confirmar: ['a_confirmar'] };
+const DO_FILTRO: Record<FiltroDeEstado, readonly DecisionState[]> = { all: NA_LISTA, current: ['vigente'], to_confirm: ['a_confirmar'] };
 const ITENS_POR_GRUPO = 3;
 const MAX_BUSCA = 200;
 const DIA = 86_400_000;
-const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', familia: 'f', sessao: 's' };
+const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', family: 'f', session: 's' };
 const CAMINHO_DO_REGISTRO = /^docs\/decisoes\/(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 /** Um registro na pasta, de qualquer slug: o número dele. */
 const REGISTRO_NUMERADO = /^(\d{4})-.*\.md$/;
@@ -190,9 +189,11 @@ export function slugDaDecisao(choice: string): string {
   return out.join('-') || 'decisao';
 }
 
+export const PROMOTE_PATH_ERROR = 'informe o path: "docs/decisoes/NNNN-slug.md"';
+
 /** O caminho que o Promover aceita: relativo, dentro de `docs/decisoes/`, `NNNN-slug.md`. */
 function caminhoValido(v: unknown): string {
-  if (typeof v !== 'string' || !v || v.length > 200) throw new ErroDaDecisao(400, 'informe o caminho: "docs/decisoes/NNNN-slug.md"');
+  if (typeof v !== 'string' || !v || v.length > 200) throw new ErroDaDecisao(400, PROMOTE_PATH_ERROR);
   if (v.includes('\\') || v.includes('\0')) throw new ErroDaDecisao(400, 'caminho com barra invertida');
   if (isAbsolute(v) || v.startsWith('/')) throw new ErroDaDecisao(400, 'o caminho é relativo ao repositório');
   if (v.split('/').includes('..') || posix.normalize(v) !== v) throw new ErroDaDecisao(400, 'caminho com ".."');
@@ -269,18 +270,18 @@ export class DecisoesDaUi {
   }
 
   /** A página C21. Na página não há sessão de referência: cada card é relativo à própria sessão ('esta'). */
-  async pagina(p: { agrupar: AgrupamentoDasDecisoes; estado: FiltroDeEstado; q: string | null; grupo: string | null }): Promise<DecisoesDaPagina> {
+  async pagina(p: { groupBy: AgrupamentoDasDecisoes; state: FiltroDeEstado; q: string | null; group: string | null }): Promise<DecisoesDaPagina> {
     const { decisoes, sessoes } = await this.todas();
     const lidas = new Map(decisoes.map((d) => [d.id, d]));
     const listadas = decisoes.filter((d) => NA_LISTA.includes(d.state)).sort(maisRecentes);
     const vigentes = listadas.filter((d) => d.state === 'vigente');
     const desde = new Date(this.agora() - 30 * DIA).toISOString();
-    const contagens = {
-      vigentes: vigentes.length,
+    const counts = {
+      current: vigentes.length,
       branches: new Set(vigentes.filter((d) => d.branch).map((d) => `${d.repo ?? ''}\0${d.branch}`)).size,
-      aConfirmar: listadas.filter((d) => d.state === 'a_confirmar').length,
-      substituidas30d: listadas.filter((d) => d.state === 'substituida' && d.updatedAt >= desde).length,
-      promovidas: decisoes.filter((d) => d.promotedTo !== null).length,
+      toConfirm: listadas.filter((d) => d.state === 'a_confirmar').length,
+      superseded30d: listadas.filter((d) => d.state === 'substituida' && d.updatedAt >= desde).length,
+      promoted: decisoes.filter((d) => d.promotedTo !== null).length,
     };
 
     // O título da família: a raiz, se a porta de armazenamento a conhece; senão a sessão gravada mais recente.
@@ -291,41 +292,41 @@ export class DecisoesDaUi {
       else if (!tituloDaFamilia.has(d.familyId) && sessoes.get(d.sessionId)?.name) tituloDaFamilia.set(d.familyId, sessoes.get(d.sessionId)!.name!);
     }
     const doGrupo = (d: Decision): { chave: string; titulo: string } => {
-      if (p.agrupar === 'branch') return { chave: chave('branch', `${d.repo ?? ''}\0${d.branch ?? ''}`), titulo: d.branch ?? 'sem branch' };
-      if (p.agrupar === 'familia') return { chave: chave('familia', d.familyId), titulo: tituloDaFamilia.get(d.familyId) ?? d.familyId };
-      return { chave: chave('sessao', d.sessionId), titulo: sessoes.get(d.sessionId)?.name ?? d.sessionId };
+      if (p.groupBy === 'branch') return { chave: chave('branch', `${d.repo ?? ''}\0${d.branch ?? ''}`), titulo: d.branch ?? 'sem branch' };
+      if (p.groupBy === 'family') return { chave: chave('family', d.familyId), titulo: tituloDaFamilia.get(d.familyId) ?? d.familyId };
+      return { chave: chave('session', d.sessionId), titulo: sessoes.get(d.sessionId)?.name ?? d.sessionId };
     };
 
-    const estados = DO_FILTRO[p.estado];
+    const estados = DO_FILTRO[p.state];
     const grupos = new Map<string, { titulo: string; decisoes: Decision[] }>();
     for (const d of listadas) {
       if (!estados.includes(d.state) || !casa(d, p.q)) continue;
       const g = doGrupo(d);
-      if (p.grupo && g.chave !== p.grupo) continue;
+      if (p.group && g.chave !== p.group) continue;
       if (!grupos.has(g.chave)) grupos.set(g.chave, { titulo: g.titulo, decisoes: [] });
       grupos.get(g.chave)!.decisoes.push(d);
     }
 
     const out: GrupoDeDecisoes[] = [];
     for (const [k, g] of grupos) {
-      const mostradas = p.grupo ? g.decisoes : g.decisoes.slice(0, ITENS_POR_GRUPO);
+      const mostradas = p.group ? g.decisoes : g.decisoes.slice(0, ITENS_POR_GRUPO);
       const repo = g.decisoes[0]!.repo;
       const itens: DecisaoDaUi[] = [];
       for (const d of mostradas) itens.push(await this.paraUi(d, { sessionId: d.sessionId, familyId: d.familyId, mae: null }, lidas));
       out.push({
-        chave: k,
-        tipo: p.agrupar,
-        titulo: g.titulo,
+        key: k,
+        type: p.groupBy,
+        title: g.titulo,
         repo,
-        pasta: repo ? basename(repo) : null,
-        vigentes: g.decisoes.filter((d) => d.state === 'vigente').length,
-        aConfirmar: g.decisoes.filter((d) => d.state === 'a_confirmar').length,
+        folder: repo ? basename(repo) : null,
+        current: g.decisoes.filter((d) => d.state === 'vigente').length,
+        toConfirm: g.decisoes.filter((d) => d.state === 'a_confirmar').length,
         total: g.decisoes.length,
-        itens,
-        mais: g.decisoes.length - mostradas.length,
+        items: itens,
+        more: g.decisoes.length - mostradas.length,
       });
     }
-    return { agrupar: p.agrupar, estado: p.estado, q: p.q, contagens, grupos: out };
+    return { groupBy: p.groupBy, state: p.state, q: p.q, counts, groups: out };
   }
 
   /**
@@ -340,16 +341,16 @@ export class DecisoesDaUi {
   }
 
   /** A aba C20; `null` quando a sessão não existe. */
-  async aba(sessionId: string, p: { escopo: EscopoDasDecisoes; estado: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
+  async aba(sessionId: string, p: { scope: EscopoDasDecisoes; state: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
     const alvo = await this.alvo(sessionId);
     if (!alvo) return null;
-    const doEscopo = await this.sessao.doEscopo(alvo, p.escopo);
+    const doEscopo = await this.sessao.doEscopo(alvo, p.scope);
     const lidas = new Map(doEscopo.map((d) => [d.id, d]));
-    const porEscopo = await this.sessao.porEscopo(alvo, p.escopo, doEscopo);
+    const porEscopo = await this.sessao.porEscopo(alvo, p.scope, doEscopo);
 
     const ref = { sessionId: alvo.sessionId, familyId: await familyOf(this.port, alvo.sessionId), mae: (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null };
     const itens: DecisaoDaUi[] = [];
-    for (const d of doEscopo) if (DO_FILTRO[p.estado].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
+    for (const d of doEscopo) if (DO_FILTRO[p.state].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
 
     // O que a injeção (#100) e a ferramenta MCP (#101) consultariam: as vigentes do branch.
     const nivel: DecisionScope = alvo.branch ? 'branch' : 'familia';
@@ -369,19 +370,19 @@ export class DecisoesDaUi {
         ? 'Responde que não há decisões vigentes.'
         : `Responde com ${n === 1 ? 'a vigente' : `as ${n} vigentes`}${cadeias.length ? ` e a cadeia de substituição: ${cadeias.join(', ')}.` : '.'}`;
     return {
-      sessao: sessionId,
-      escopo: p.escopo,
-      estado: p.estado,
+      session: sessionId,
+      scope: p.scope,
+      state: p.state,
       q: p.q,
-      porEscopo,
-      total: porEscopo[p.escopo],
-      itens,
-      injecao: { ligada: this.injecaoLigada, escopo: API_SCOPE[nivel], decisoes: n, tokens: Math.ceil(texto.length / 4), texto },
+      byScope: porEscopo,
+      total: porEscopo[p.scope],
+      items: itens,
+      injection: { enabled: this.injecaoLigada, scope: API_SCOPE[nivel], decisions: n, tokens: Math.ceil(texto.length / 4), text: texto },
       mcp: {
-        ferramenta: 'session_decisions',
-        existe: this.mcpExiste,
-        chamada: alvo.branch ? `session_decisions branch: ${JSON.stringify(alvo.branch)}` : `session_decisions sessao: ${JSON.stringify(sessionId)}`,
-        resposta,
+        tool: 'session_decisions',
+        exists: this.mcpExiste,
+        call: alvo.branch ? `session_decisions branch: ${JSON.stringify(alvo.branch)}` : `session_decisions sessao: ${JSON.stringify(sessionId)}`,
+        response: resposta,
       },
     };
   }
@@ -478,30 +479,30 @@ export class DecisoesDaUi {
     const numero = pasta ? await this.proximoNumero(pasta) : '0001';
     const markdown = await this.markdown(d, numero);
     return {
-      caminho: `docs/decisoes/${numero}-${slugDaDecisao(d.choice)}.md`,
+      path: `docs/decisoes/${numero}-${slugDaDecisao(d.choice)}.md`,
       markdown,
       hash: hashDe(markdown),
       repo: d.repo,
-      podeGravar: motivo === null,
-      motivo,
+      canWrite: motivo === null,
+      reason: motivo,
     };
   }
 
   /**
    * O Promover, em nome da sessão `sessao` (que precisa enxergar a decisão, no escopo branch):
-   * sem `confirmar: true`, só o rascunho (200); com ele e o `caminho`, grava e marca (201). O markdown
-   * é regerado no confirmar; com o `hash` do rascunho, um registro que mudou desde então dá 409.
+   * sem `confirm: true`, só o rascunho (200); com ele e o `path`, grava e marca (201). O markdown
+   * é regerado no confirm; com o `hash` do rascunho, um registro que mudou desde então dá 409.
    */
-  async promover(id: string, sessao: string, corpo: { confirmar?: unknown; caminho?: unknown; hash?: unknown }): Promise<{ status: 200; corpo: { rascunho: RascunhoDeRegistro } } | { status: 201; corpo: { decisao: DecisaoDaUi; caminho: string } }> {
+  async promover(id: string, sessao: string, corpo: { confirm?: unknown; path?: unknown; hash?: unknown }): Promise<{ status: 200; corpo: { draft: RascunhoDeRegistro } } | { status: 201; corpo: { decision: DecisaoDaUi; path: string } }> {
     const alvo = await this.alvo(sessao);
     const d = await this.port.getDecision(id);
     const visivel = alvo && d && (await this.sessao.doEscopo(alvo, 'branch', [d.state])).some((x) => x.id === id);
     if (!alvo || !d || !visivel) throw new ErroDaDecisao(404, 'decisão não encontrada nesta sessão');
     // Só o que a página mostra vira registro: uma descartada ou revertida não é "aceita".
     if (!NA_LISTA.includes(d.state)) throw new ErroDaDecisao(409, `a decisão está ${d.state}: só vigente, a confirmar ou substituída vira registro`);
-    if (corpo.confirmar !== true) return { status: 200, corpo: { rascunho: await this.rascunho(d) } };
+    if (corpo.confirm !== true) return { status: 200, corpo: { draft: await this.rascunho(d) } };
 
-    const caminho = caminhoValido(corpo.caminho);
+    const caminho = caminhoValido(corpo.path);
     if (corpo.hash !== undefined && (typeof corpo.hash !== 'string' || !HASH.test(corpo.hash))) throw new ErroDaDecisao(400, 'hash: o sha256 (hex) do markdown do rascunho');
     if (d.promotedTo) throw new ErroDaDecisao(409, `já promovida para ${d.promotedTo}`);
     const pasta = await this.pastaDosRegistros(d);
@@ -526,15 +527,19 @@ export class DecisoesDaUi {
       throw err;
     }
     const ref = { sessionId: alvo.sessionId, familyId: await familyOf(this.port, alvo.sessionId), mae: (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null };
-    return { status: 201, corpo: { decisao: await this.paraUi(feita, ref, new Map()), caminho } };
+    return { status: 201, corpo: { decision: await this.paraUi(feita, ref, new Map()), path: caminho } };
   }
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const CHAVE_DO_GRUPO = /^[bfs]\.[A-Za-z0-9_-]{1,700}$/;
 const MAX_CORPO = 4096;
-const AGRUPAMENTOS: readonly AgrupamentoDasDecisoes[] = ['branch', 'familia', 'sessao'];
-const FILTROS: readonly FiltroDeEstado[] = ['todas', 'vigentes', 'a_confirmar'];
+export const DECISION_GROUPINGS: readonly AgrupamentoDasDecisoes[] = ['branch', 'family', 'session'];
+export const DECISION_STATE_FILTERS: readonly FiltroDeEstado[] = ['all', 'current', 'to_confirm'];
+/** The 400s that name a parameter or a body key, with the new names (the old routes map them back). */
+export const STATE_FILTER_ERROR = `state: ${DECISION_STATE_FILTERS.slice(0, -1).join(', ')} ou ${DECISION_STATE_FILTERS.at(-1)}`;
+export const GROUPING_ERROR = `groupBy: ${DECISION_GROUPINGS.slice(0, -1).join(', ')} ou ${DECISION_GROUPINGS.at(-1)}`;
+export const PROMOTE_SESSION_ERROR = 'informe a sessão: { "session": "<id>" }';
 
 function decodificado(parte: string): string | null {
   try {
@@ -559,13 +564,13 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-/** O `estado` e o `q` da busca; quando algum não vale, a mensagem de erro (uma string) no lugar deles. */
-function filtrosDe(url: URL): { estado: FiltroDeEstado; q: string | null } | string {
-  const estado = (url.searchParams.get('state') ?? 'todas') as FiltroDeEstado;
-  if (!FILTROS.includes(estado)) return 'estado: todas, vigentes ou a_confirmar';
+/** O `state` e o `q` da busca; quando algum não vale, a mensagem de erro (uma string) no lugar deles. */
+function filtrosDe(url: URL): { state: FiltroDeEstado; q: string | null } | string {
+  const state = (url.searchParams.get('state') ?? 'all') as FiltroDeEstado;
+  if (!DECISION_STATE_FILTERS.includes(state)) return STATE_FILTER_ERROR;
   const q = url.searchParams.get('q')?.trim() || null;
   if (q && q.length > MAX_BUSCA) return `busca de até ${MAX_BUSCA} caracteres`;
-  return { estado, q };
+  return { state, q };
 }
 
 /**
@@ -577,11 +582,11 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;
-    const agrupar = (url.searchParams.get('groupBy') ?? 'branch') as AgrupamentoDasDecisoes;
-    if (!AGRUPAMENTOS.includes(agrupar)) return send(res, 400, { error: 'agrupar: branch, familia ou sessao' }), true;
-    const grupo = url.searchParams.get('group');
-    if (grupo !== null && !CHAVE_DO_GRUPO.test(grupo)) return send(res, 400, { error: 'grupo inválido' }), true;
-    send(res, 200, await ui.pagina({ agrupar, ...f, grupo }));
+    const groupBy = (url.searchParams.get('groupBy') ?? 'branch') as AgrupamentoDasDecisoes;
+    if (!DECISION_GROUPINGS.includes(groupBy)) return send(res, 400, { error: GROUPING_ERROR }), true;
+    const group = url.searchParams.get('group');
+    if (group !== null && !CHAVE_DO_GRUPO.test(group)) return send(res, 400, { error: 'group inválido' }), true;
+    send(res, 200, await ui.pagina({ groupBy, ...f, group }));
     return true;
   }
 
@@ -590,11 +595,11 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const sessao = decodificado(aba[1]!);
     if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
-    const escopo = (url.searchParams.get('scope') ?? 'family') as EscopoDasDecisoes;
-    if (!ESCOPOS_DAS_DECISOES.includes(escopo)) return send(res, 400, { error: 'scope: session, family ou branch' }), true;
+    const scope = (url.searchParams.get('scope') ?? 'family') as EscopoDasDecisoes;
+    if (!ESCOPOS_DAS_DECISOES.includes(scope)) return send(res, 400, { error: 'scope: session, family ou branch' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;
-    const corpo = await ui.aba(sessao, { escopo, ...f });
+    const corpo = await ui.aba(sessao, { scope, ...f });
     if (!corpo) send(res, 404, { error: 'sessão não encontrada' });
     else send(res, 200, corpo);
     return true;
@@ -608,17 +613,19 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (!id || !ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' }), true;
     const texto = await lerCorpo(req);
     if (texto === null) return send(res, 413, { error: 'corpo grande demais' }), true;
-    let corpo: { sessao?: unknown; confirmar?: unknown; caminho?: unknown; hash?: unknown } | null;
+    // The body is `{ session, confirm, path, hash }`; the old `{ sessao, confirmar, caminho }` is read
+    // too, on the new path as well (the old path translates it through `legacyRequestBody`).
+    let corpo: { session?: unknown; confirm?: unknown; path?: unknown; hash?: unknown; sessao?: unknown; confirmar?: unknown; caminho?: unknown } | null;
     try {
       corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as typeof corpo;
     } catch {
       return send(res, 400, { error: 'JSON inválido' }), true;
     }
-    const sessao = corpo?.sessao;
-    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: 'informe a sessão: { "sessao": "<id>" }' }), true;
+    const sessao = corpo?.session ?? corpo?.sessao;
+    if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: PROMOTE_SESSION_ERROR }), true;
     try {
-      const r = await ui.promover(id, sessao, corpo ?? {});
-      if (r.status === 201) log(`decisão ${id} promovida para ${r.corpo.caminho} pela sessão ${sessao}`);
+      const r = await ui.promover(id, sessao, { confirm: corpo?.confirm ?? corpo?.confirmar, path: corpo?.path ?? corpo?.caminho, hash: corpo?.hash });
+      if (r.status === 201) log(`decisão ${id} promovida para ${r.corpo.path} pela sessão ${sessao}`);
       send(res, r.status, r.corpo);
     } catch (err) {
       if (err instanceof ErroDaDecisao) return send(res, err.status, { error: err.message }), true;

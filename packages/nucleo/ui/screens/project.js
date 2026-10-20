@@ -29,32 +29,33 @@ const TYPES = new Map([
   ['bug', ['Bug', 'bug']],
 ]);
 
-/** `{ rotulo, classe }` do tipo de um card. Tipo desconhecido sai com o nome cru. */
+/** `{ label, className }` do tipo de um card. Tipo desconhecido sai com o nome cru. */
 export function cardType(card) {
-  const raw = typeof card?.tipoDaIssue === 'string' ? card.tipoDaIssue.trim() : '';
+  const raw = typeof card?.issueType === 'string' ? card.issueType.trim() : '';
   if (raw) {
     const [label, className] = TYPES.get(raw.toLowerCase()) ?? [raw, 'other'];
-    return { rotulo: label, classe: className };
+    return { label, className };
   }
-  if (card?.tipo === 'PullRequest') return { rotulo: 'Pull request', classe: 'other' };
-  if (card?.tipo === 'DraftIssue') return { rotulo: 'Rascunho', classe: 'other' };
-  return { rotulo: 'Issue', classe: 'other' };
+  if (card?.type === 'PullRequest') return { label: 'Pull request', className: 'other' };
+  if (card?.type === 'DraftIssue') return { label: 'Rascunho', className: 'other' };
+  return { label: 'Issue', className: 'other' };
 }
 
+// The PR's CI and review are the API's values (English since issue 173, phase 2b) → the pill's text and class.
 const CI = new Map([
   ['ok', ['CI ✓', 'ok']],
-  ['falhou', ['CI ✕', 'failed']],
-  ['rodando', ['CI …', 'running']],
+  ['failed', ['CI ✕', 'failed']],
+  ['running', ['CI …', 'running']],
 ]);
 const REVIEW = new Map([
-  ['aprovado', ['aprovado', 'ok']],
-  ['ajustes', ['ajustes', 'failed']],
-  ['pendente', ['review', 'running']],
+  ['approved', ['aprovado', 'ok']],
+  ['changes-requested', ['ajustes', 'failed']],
+  ['pending', ['review', 'running']],
 ]);
 
 /** Os cards de uma raia que passam no filtro de marco (`''` = todos). */
 export function filter(cards, milestone) {
-  return milestone ? cards.filter((c) => c.marco === milestone) : cards;
+  return milestone ? cards.filter((c) => c.milestone === milestone) : cards;
 }
 
 const hour = (ms) => {
@@ -62,9 +63,9 @@ const hour = (ms) => {
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
 };
 
-const codeOf = (e) => e?.body?.codigo ?? null;
-const commandOf = (e) => e?.body?.comando ?? (codeOf(e) === 'sem-escopo' ? SCOPE_COMMAND : null);
-const cardName = (card) => (card.numero != null ? `#${card.numero}` : `“${card.titulo}”`);
+const codeOf = (e) => e?.body?.code ?? null;
+const commandOf = (e) => e?.body?.command ?? (codeOf(e) === 'no-scope' ? SCOPE_COMMAND : null);
+const cardName = (card) => (card.number != null ? `#${card.number}` : `“${card.title}”`);
 const waitOf = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
 const withCommand = (node, command) => (command ? (node.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, command)), node) : node);
 
@@ -80,14 +81,14 @@ export async function mount(area, ctx) {
   let board = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
   let milestone = '';
   let readFailure = null; // leitura que falhou com um quadro já na tela
-  let notice = null; // movimento recusado: { titulo, texto, comando }
-  let toast = null; // { card, nome, de }
-  let dragging = null; // { card, de }
+  let notice = null; // movimento recusado: { title, text, command }
+  let toast = null; // { card, name, from }
+  let dragging = null; // { card, from }
   let pendingRedraw = false; // redesenho que esperou o arrasto terminar
   let inFlight = 0; // movimentos sem resposta
   let pendingReads = 0; // leituras sem resposta
   let latestRead = 0; // a leitura mais nova; as outras são descartadas
-  let deferred = null; // releitura que esperou um movimento ou arrasto: { forcar }
+  let deferred = null; // releitura que esperou um movimento ou arrasto: { force }
   let toastTimer = null;
   let liveTimer = null;
   let focus = null; // itemId que recebe o foco no próximo desenho (movimento pelo teclado)
@@ -100,7 +101,7 @@ export async function mount(area, ctx) {
     milestone = selector.value;
     drawBoard();
   });
-  const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => draw({ forcar: true }) }, icon('refresh'), 'Atualizar');
+  const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => draw({ force: true }) }, icon('refresh'), 'Atualizar');
   // O cabeçalho fica: a pílula "Ao vivo" é dele, e a moldura a mantém em dia.
   const head = header({
     icon: 'github',
@@ -121,8 +122,8 @@ export async function mount(area, ctx) {
   let screenShape = false;
 
   function drawHeader() {
-    if (sub) sub.textContent = `GitHub Project “${board.projeto?.titulo ?? ''}” · por Status · arraste para mudar`;
-    const milestones = Array.isArray(board.marcos) ? board.marcos : [];
+    if (sub) sub.textContent = `GitHub Project “${board.project?.title ?? ''}” · por Status · arraste para mudar`;
+    const milestones = Array.isArray(board.milestones) ? board.milestones : [];
     if (milestone && !milestones.includes(milestone)) milestone = '';
     selector.replaceChildren(el('option', { value: '' }, 'Todos os marcos'), ...milestones.map((m) => el('option', { value: m }, m)));
     selector.value = milestone;
@@ -135,10 +136,10 @@ export async function mount(area, ctx) {
 
   // ---------- leitura ----------
 
-  async function draw({ forcar: force = false } = {}) {
+  async function draw({ force = false } = {}) {
     // Com um movimento sem resposta ou um card no ar, ler agora traria o quadro de antes: fica para depois.
     if (inFlight || dragging) {
-      deferred = { forcar: force || Boolean(deferred?.forcar) };
+      deferred = { force: force || Boolean(deferred?.force) };
       return;
     }
     const mine = ++latestRead;
@@ -178,14 +179,14 @@ export async function mount(area, ctx) {
   /** Lê de novo o que ficou adiado, quando nada mais segura a leitura. */
   function deferredRead() {
     if (!deferred || inFlight || dragging) return;
-    const { forcar: force } = deferred;
+    const { force } = deferred;
     deferred = null;
-    draw({ forcar: force });
+    draw({ force });
   }
 
   function drawFailure(e) {
     const code = codeOf(e);
-    if (code === 'sem-projeto') {
+    if (code === 'no-project') {
       const box = empty({
         icon: 'github',
         title: 'Escolha o GitHub Project',
@@ -195,7 +196,7 @@ export async function mount(area, ctx) {
       switchArea(box);
       return;
     }
-    if (e?.status === 503 || code === 'desligado') {
+    if (e?.status === 503 || code === 'off') {
       switchArea(
         empty({
           icon: 'github',
@@ -205,14 +206,14 @@ export async function mount(area, ctx) {
       );
       return;
     }
-    if (e?.status === 401 || code === 'sem-escopo') {
-      const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ forcar: true }) });
+    if (e?.status === 401 || code === 'no-scope') {
+      const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ force: true }) });
       box.insertBefore(el('code', { class: 'prj-command mono' }, commandOf(e)), box.lastChild);
       switchArea(box);
       return;
     }
     const title = e?.status === 0 || e?.status === undefined ? undefined : 'GitHub indisponível';
-    switchArea(error({ title, text: `${e?.message ?? String(e)}${waitOf(e)}`, retry: () => draw({ forcar: true }) }));
+    switchArea(error({ title, text: `${e?.message ?? String(e)}${waitOf(e)}`, retry: () => draw({ force: true }) }));
   }
 
   // ---------- o quadro ----------
@@ -220,28 +221,28 @@ export async function mount(area, ctx) {
   /** As faixas de cima. Só são refeitas quando o que dizem muda: um alerta é anunciado uma vez. */
   function drawBands() {
     const bands = [];
-    if (notice) bands.push({ title: notice.titulo, text: notice.texto, comando: notice.comando, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
+    if (notice) bands.push({ title: notice.title, text: notice.text, command: notice.command, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
     if (readFailure) {
       bands.push({
         title: 'Não deu para reler o quadro.',
         text: `${readFailure.message} Mostrando a última leitura.${waitOf(readFailure)}`,
-        comando: codeOf(readFailure) === 'sem-escopo' ? commandOf(readFailure) : null,
-        action: { label: 'Tentar agora', onClick: () => draw({ forcar: true }) },
+        command: codeOf(readFailure) === 'no-scope' ? commandOf(readFailure) : null,
+        action: { label: 'Tentar agora', onClick: () => draw({ force: true }) },
       });
-    } else if (board.desatualizado) {
-      const when = hour(board.lidoEm);
+    } else if (board.stale) {
+      const when = hour(board.fetchedAt);
       bands.push({
         title: 'GitHub indisponível.',
-        text: `Mostrando o quadro em cache${when ? `, de ${when}` : ''}.${board.motivo ? ` ${board.motivo}` : ''}`,
-        action: { label: 'Tentar agora', onClick: () => draw({ forcar: true }) },
+        text: `Mostrando o quadro em cache${when ? `, de ${when}` : ''}.${board.reason ? ` ${board.reason}` : ''}`,
+        action: { label: 'Tentar agora', onClick: () => draw({ force: true }) },
       });
     }
-    const key = JSON.stringify(bands.map(({ title, text, comando: command }) => [title, text, command]));
+    const key = JSON.stringify(bands.map(({ title, text, command }) => [title, text, command]));
     if (key === bandsKey) return;
     bandsKey = key;
     if (bands.length) bandsBox.removeAttribute('hidden');
     else bandsBox.setAttribute('hidden', '');
-    bandsBox.replaceChildren(...bands.map((f) => withCommand(errorBand(f), f.comando)));
+    bandsBox.replaceChildren(...bands.map((f) => withCommand(errorBand(f), f.command)));
   }
 
   function drawBoard() {
@@ -264,12 +265,12 @@ export async function mount(area, ctx) {
     }
     drawBands();
 
-    const lanes = Array.isArray(board.raias) ? board.raias : [];
+    const lanes = Array.isArray(board.lanes) ? board.lanes : [];
     const nodes = new Map();
     boardBox.replaceChildren(
       lanes.length
         ? el('div', { class: 'prj-columns' }, ...lanes.map((lane, i) => column(lane, i, lanes, nodes)))
-        : empty({ icon: 'github', title: 'O projeto não tem raias', text: `O campo ${board.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
+        : empty({ icon: 'github', title: 'O projeto não tem raias', text: `O campo ${board.project?.field ?? 'Status'} do GitHub Project não tem opções.` }),
     );
     if (activeItem && nodes.has(activeItem)) nodes.get(activeItem).focus();
   }
@@ -279,8 +280,8 @@ export async function mount(area, ctx) {
     const accepts = lane.id !== null && lane.id !== undefined;
     const col = el(
       'section',
-      { class: 'prj-col', 'data-lane': accepts ? lane.id : 'no-status', 'aria-label': `${lane.nome}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
-      el('div', { class: 'head' }, el('span', { class: 'dot' }), el('span', { class: 'name' }, lane.nome), el('span', { class: 'n' }, String(cards.length))),
+      { class: 'prj-col', 'data-lane': accepts ? lane.id : 'no-status', 'aria-label': `${lane.name}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
+      el('div', { class: 'head' }, el('span', { class: 'dot' }), el('span', { class: 'name' }, lane.name), el('span', { class: 'n' }, String(cards.length))),
       ...cards.map((card) => {
         const node = cardEl(card, lane, index, lanes);
         nodes.set(card.itemId, node);
@@ -289,7 +290,7 @@ export async function mount(area, ctx) {
     );
     if (accepts) {
       col.addEventListener('dragover', (ev) => {
-        if (!dragging || dragging.de === lane.id) return;
+        if (!dragging || dragging.from === lane.id) return;
         ev.preventDefault();
         if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
         col.classList.add('target');
@@ -304,7 +305,7 @@ export async function mount(area, ctx) {
         col.classList.remove('target');
         const going = dragging;
         dragging = null;
-        if (going && going.de !== lane.id) move(going.card.itemId, lane.id);
+        if (going && going.from !== lane.id) move(going.card.itemId, lane.id);
         else dragEnd();
       });
     }
@@ -312,11 +313,11 @@ export async function mount(area, ctx) {
   }
 
   function cardEl(card, lane, index, lanes) {
-    const { rotulo: label, classe: className } = cardType(card);
+    const { label, className } = cardType(card);
     const foot = [];
-    if (card.subIssues && card.subIssues.total) foot.push(el('span', { title: 'Sub-issues feitas' }, icon('list-checks'), `${card.subIssues.feitas}/${card.subIssues.total}`));
+    if (card.subIssues && card.subIssues.total) foot.push(el('span', { title: 'Sub-issues feitas' }, icon('list-checks'), `${card.subIssues.done}/${card.subIssues.total}`));
     if (card.pr) {
-      foot.push(el('span', { title: 'Pull request' }, icon('git-pull-request'), `#${card.pr.numero}`));
+      foot.push(el('span', { title: 'Pull request' }, icon('git-pull-request'), `#${card.pr.number}`));
       const ci = CI.get(card.pr.ci);
       const review = REVIEW.get(card.pr.review);
       if (ci) foot.push(el('span', { class: `prj-pill ${ci[1]}` }, ci[0]));
@@ -329,21 +330,21 @@ export async function mount(area, ctx) {
         draggable: 'true',
         tabindex: '0',
         'data-item': card.itemId,
-        'aria-label': `${label} ${card.numero != null ? `#${card.numero} ` : ''}${card.titulo}, em ${lane.nome}`,
+        'aria-label': `${label} ${card.number != null ? `#${card.number} ` : ''}${card.title}, em ${lane.name}`,
         'aria-keyshortcuts': 'Alt+ArrowLeft Alt+ArrowRight',
       },
       el(
         'div',
         { class: 'type' },
         el('b', { class: `prj-type ${className}` }, label),
-        card.numero != null ? el('span', { class: 'num mono' }, `#${card.numero}`) : null,
+        card.number != null ? el('span', { class: 'num mono' }, `#${card.number}`) : null,
         el('span', { class: 'grip', title: 'Arraste para outra raia (ou Alt+← / Alt+→)' }, icon('grip-vertical')),
       ),
-      el('div', { class: 'tt' }, card.titulo),
+      el('div', { class: 'tt' }, card.title),
       foot.length ? el('div', { class: 'foot' }, ...foot) : null,
     );
     node.addEventListener('dragstart', (ev) => {
-      dragging = { card, de: lane.id ?? null };
+      dragging = { card, from: lane.id ?? null };
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = 'move';
         ev.dataTransfer.setData('text/plain', card.itemId);
@@ -360,7 +361,7 @@ export async function mount(area, ctx) {
       for (let i = index + step; i >= 0 && i < lanes.length; i += step) {
         if (lanes[i].id === null || lanes[i].id === undefined) continue;
         ev.preventDefault();
-        move(card.itemId, lanes[i].id, { teclado: true });
+        move(card.itemId, lanes[i].id, { keyboard: true });
         return;
       }
     });
@@ -370,9 +371,9 @@ export async function mount(area, ctx) {
   // ---------- mover ----------
 
   function findCard(itemId) {
-    for (const lane of board?.raias ?? []) {
+    for (const lane of board?.lanes ?? []) {
       const i = (lane.cards ?? []).findIndex((c) => c.itemId === itemId);
-      if (i >= 0) return { raia: lane, i, card: lane.cards[i] };
+      if (i >= 0) return { lane, i, card: lane.cards[i] };
     }
     return null;
   }
@@ -380,27 +381,27 @@ export async function mount(area, ctx) {
   /** Muda o card de raia aqui na tela: no fim da raia, ou na posição `onde` (a de antes, ao voltar). */
   function moveHere(itemId, to, where = null) {
     const found = findCard(itemId);
-    const target = board?.raias?.find((r) => r.id === to);
+    const target = board?.lanes?.find((r) => r.id === to);
     if (!found || !target) return;
-    found.raia.cards.splice(found.i, 1);
-    found.card.raiaId = to;
+    found.lane.cards.splice(found.i, 1);
+    found.card.laneId = to;
     const cards = (target.cards ??= []);
     cards.splice(where ?? cards.length, 0, found.card);
   }
 
-  const laneName = (id) => board?.raias?.find((r) => r.id === id)?.nome ?? 'Sem status';
+  const laneName = (id) => board?.lanes?.find((r) => r.id === id)?.name ?? 'Sem status';
 
-  async function move(itemId, to, { teclado: keyboard = false } = {}) {
+  async function move(itemId, to, { keyboard = false } = {}) {
     const before = findCard(itemId);
-    if (to === null || to === undefined || !before || before.raia.id === to) return deferredRead();
+    if (to === null || to === undefined || !before || before.lane.id === to) return deferredRead();
     // Uma leitura em voo saiu antes deste movimento: o que ela trouxer não vale, e relê-se depois.
     if (pendingReads) {
       latestRead++;
-      deferred = { forcar: Boolean(deferred?.forcar) };
+      deferred = { force: Boolean(deferred?.force) };
     }
     // O movimento otimista mexe numa cópia: o quadro que veio da leitura fica como veio.
     board = structuredClone(board);
-    const { card, i: wasAt, raia: lane } = findCard(itemId);
+    const { card, i: wasAt, lane } = findCard(itemId);
     const from = lane.id ?? null;
     moveHere(itemId, to);
     notice = null;
@@ -411,20 +412,20 @@ export async function mount(area, ctx) {
     try {
       const r = await ctx.write(MOVE_ROUTE, { itemId, optionId: to });
       // Só o último movimento em voo pode trocar o quadro inteiro; os de antes já estão na tela.
-      if (r?.quadro && inFlight === 1) board = r.quadro;
-      else if (inFlight > 1) deferred = { forcar: Boolean(deferred?.forcar) };
-      showToast({ card, nome: laneName(to), de: r?.movido && r.movido.de !== undefined ? r.movido.de : from });
+      if (r?.board && inFlight === 1) board = r.board;
+      else if (inFlight > 1) deferred = { force: Boolean(deferred?.force) };
+      showToast({ card, name: laneName(to), from: r?.moved && r.moved.from !== undefined ? r.moved.from : from });
     } catch (e) {
       if (e?.name === 'AbortError') return;
       moveHere(itemId, from, wasAt);
-      const command = codeOf(e) === 'sem-escopo' ? commandOf(e) : null;
+      const command = codeOf(e) === 'no-scope' ? commandOf(e) : null;
       notice = {
-        titulo: `O GitHub não aceitou mover ${cardName(card)}.`,
-        texto: `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
-        comando: command,
+        title: `O GitHub não aceitou mover ${cardName(card)}.`,
+        text: `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
+        command,
       };
       // O quadro mudou por fora (404, 422) ou outro movimento está em voo: só a releitura acerta a tela.
-      if (e?.status === 404 || e?.status === 422 || inFlight > 1) deferred = { forcar: Boolean(deferred?.forcar) };
+      if (e?.status === 404 || e?.status === 422 || inFlight > 1) deferred = { force: Boolean(deferred?.force) };
     } finally {
       inFlight--;
     }
@@ -448,14 +449,14 @@ export async function mount(area, ctx) {
       toastBox.replaceChildren();
       return;
     }
-    const { card, de: from, nome: name } = toast;
+    const { card, from, name } = toast;
     toastBox.replaceChildren(
       el(
         'div',
         { class: 'prj-toast' },
         icon('check-circle-2'),
         el('span', {}, el('b', {}, cardName(card)), ' movido para ', el('b', {}, name), ' no GitHub'),
-        from !== null && from !== undefined ? el('button', { type: 'button', class: 'prj-undo', onClick: () => move(card.itemId, from, { teclado: true }) }, 'Desfazer') : null,
+        from !== null && from !== undefined ? el('button', { type: 'button', class: 'prj-undo', onClick: () => move(card.itemId, from, { keyboard: true }) }, 'Desfazer') : null,
       ),
     );
     armToast();

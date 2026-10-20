@@ -15,7 +15,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 
 export const VIEWS = ['sessions', 'agents'];
 
-/** A visão pedida na query; qualquer outra coisa é `sessoes`. */
+/** A visão pedida na query; qualquer outra coisa é `sessions`. */
 export function viewFromUrl(search) {
   const v = new URLSearchParams(search ?? '').get('view');
   return VIEWS.includes(v) ? v : 'sessions';
@@ -97,15 +97,15 @@ export function status(st) {
   return STATUS[st] ?? { cor: 'abandoned', rotulo: String(st ?? '—') };
 }
 
-/** A cor da coluna, pelo id dela (as duas visões). */
+/** A cor da coluna, pelo id dela (as duas visões; os ids são os da API, em inglês desde a issue 173). */
 const COLUMN_COLOR = {
-  ativa: 'active',
-  trabalhando: 'active',
-  esperando: 'waiting',
-  concluida: 'completed',
-  concluidos: 'completed',
-  erro: 'error',
-  abandonada: 'abandoned',
+  active: 'active',
+  working: 'active',
+  waiting: 'waiting',
+  completed: 'completed',
+  done: 'completed',
+  error: 'error',
+  abandoned: 'abandoned',
 };
 
 export function columnColor(id) {
@@ -157,21 +157,21 @@ function info(iconName, text, className = null) {
 }
 
 function sessionCard(s) {
-  const cost = formatCost(s.custoUsd);
+  const cost = formatCost(s.costUsd);
   return el(
     'a',
-    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: sessionHref(s.id), title: s.titulo || null },
-    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, shortId(s.id)))),
-    badges(s.status, s.motivo),
-    s.ultimoPrompt ? el('blockquote', {}, s.ultimoPrompt) : null,
+    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: sessionHref(s.id), title: s.title || null },
+    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.title || '(sem título)'), el('small', {}, shortId(s.id)))),
+    badges(s.status, s.reason),
+    s.lastPrompt ? el('blockquote', {}, s.lastPrompt) : null,
     s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
     el(
       'div',
       { class: 'kb-foot' },
-      info('bot', agentsLabel(s.agentes)),
-      s.modelo ? info('model', s.modelo) : null,
+      info('bot', agentsLabel(s.agents)),
+      s.model ? info('model', s.model) : null,
       cost ? info('coins', cost) : null,
-      info('duration', formatDuration(s.duracaoMs), s.rodando ? 'kb-dur kb-running' : 'kb-dur'),
+      info('duration', formatDuration(s.durationMs), s.running ? 'kb-dur kb-running' : 'kb-dur'),
     ),
   );
 }
@@ -179,10 +179,10 @@ function sessionCard(s) {
 function agentCard(a) {
   return el(
     'a',
-    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: sessionHref(a.sessaoId), title: a.descricao || a.nome || null },
-    el('div', { class: 'kb-l1' }, avatar(a.principal ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
-    badges(a.status, a.motivo),
-    el('div', { class: 'kb-foot' }, a.modelo ? info('model', a.modelo) : null, info('duration', formatDuration(a.duracaoMs), a.rodando ? 'kb-dur kb-running' : 'kb-dur')),
+    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: sessionHref(a.sessionId), title: a.description || a.name || null },
+    el('div', { class: 'kb-l1' }, avatar(a.main ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.name || '(sem nome)'), a.description ? el('small', {}, a.description) : null)),
+    badges(a.status, a.reason),
+    el('div', { class: 'kb-foot' }, a.model ? info('model', a.model) : null, info('duration', formatDuration(a.durationMs), a.running ? 'kb-dur kb-running' : 'kb-dur')),
   );
 }
 
@@ -221,7 +221,7 @@ export async function mount(area, ctx) {
     try {
       const data = await ctx.read(kanbanRoute(v));
       if (mine !== reading) return;
-      const columns = Array.isArray(data?.colunas) ? data.colunas : [];
+      const columns = Array.isArray(data?.columns) ? data.columns : [];
       if (!columns.some((c) => c.total > 0)) {
         boardInFlight = false;
         area.replaceChildren(head, empty(EMPTY[v]));
@@ -255,14 +255,14 @@ export async function mount(area, ctx) {
   function column(v, c) {
     const card = v === 'agents' ? agentCard : sessionCard;
     const color = columnColor(c.id);
-    const list = el('div', { class: 'kb-cards' }, ...(c.itens ?? []).map(card));
+    const list = el('div', { class: 'kb-cards' }, ...(c.items ?? []).map(card));
     const counter = el('span', { class: 'kb-n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
-    let page = c.pagina ?? 1;
+    let page = c.page ?? 1;
     // A ordem é pela última atividade: entre uma página e a próxima um card pode ter subido ou descido,
     // então o que já está na coluna não entra de novo.
-    const seen = new Set((c.itens ?? []).map((i) => i.id));
+    const seen = new Set((c.items ?? []).map((i) => i.id));
     let shown = seen.size;
-    let hasMore = Boolean(c.temMais);
+    let hasMore = Boolean(c.hasMore);
     const more = el('button', { type: 'button', class: 'kb-more' });
 
     function setLabel(text = null) {
@@ -278,14 +278,14 @@ export async function mount(area, ctx) {
       try {
         const r = await ctx.read(kanbanRoute(v, c.id, page + 1));
         if (ofThis !== reading) return; // o quadro foi relido nesse meio-tempo
-        const col = r?.colunas?.find((x) => x.id === c.id);
+        const col = r?.columns?.find((x) => x.id === c.id);
         if (!col) throw new Error('a coluna não veio');
-        const newOnes = (col.itens ?? []).filter((i) => !seen.has(i.id));
+        const newOnes = (col.items ?? []).filter((i) => !seen.has(i.id));
         for (const i of newOnes) seen.add(i.id);
         list.append(...newOnes.map(card));
         shown += newOnes.length;
-        page = col.pagina ?? page + 1;
-        hasMore = Boolean(col.temMais);
+        page = col.page ?? page + 1;
+        hasMore = Boolean(col.hasMore);
         counter.textContent = String(col.total ?? counter.textContent);
         setLabel();
       } catch (e) {
@@ -299,8 +299,8 @@ export async function mount(area, ctx) {
 
     return el(
       'section',
-      { class: 'kb-col', 'aria-label': `${c.rotulo}: ${c.total}` },
-      el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${color}` }), el('span', { class: `kb-c-${color}`, title: c.rotulo }, c.rotulo), counter),
+      { class: 'kb-col', 'aria-label': `${c.label}: ${c.total}` },
+      el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${color}` }), el('span', { class: `kb-c-${color}`, title: c.label }, c.label), counter),
       list,
       more,
     );

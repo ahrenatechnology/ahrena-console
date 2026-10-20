@@ -121,16 +121,20 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   // `/api/panel/<s>?decisions=`, `/api/sessions/<id>/decisions?scope=`).
   scope: { sessao: 'session', familia: 'family' },
   decisions: { sessao: 'session', familia: 'family' },
-  view: { sessions: 'sessoes', agents: 'agentes' },
-  groupBy: { family: 'familia', session: 'sessao' },
+  // Phase 2b layer 6: the Kanban view (`/api/kanban?view=`) and the Decisions page grouping
+  // (`/api/decisions?groupBy=`) are English in the handlers; each parameter has only that one reader.
+  view: { sessoes: 'sessions', agentes: 'agents' },
+  groupBy: { familia: 'family', sessao: 'session' },
   period: { '1y': '1a' },
   // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
 };
 
+const DECISION_STATE_FILTER_VALUES = { todas: 'all', vigentes: 'current', a_confirmar: 'to_confirm' };
+
 /**
- * Query values that only one route knows, by the route's NEW path: a name as common as `status` or
- * `order` means something else elsewhere (`/api/events?status=` takes `active|waiting|error|completed`
+ * Query values that only one route knows, by the route's NEW path (a session id as `:id`, `routeKeyOf`):
+ * a name as common as `status` or `order` means something else elsewhere (`/api/events?status=` takes `active|waiting|error|completed`
  * and must keep answering `?status=erro` with its 400), so these do not go global.
  */
 const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>> = {
@@ -158,7 +162,27 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
       'subagente:subagente': 'subagent:subagent',
     },
   },
+  // Phase 2b layer 6: the Kanban columns are English in `/api/kanban?column=` (no old path; the old
+  // name `coluna` is global). The two views share `waiting` and `error`.
+  '/api/kanban': {
+    column: {
+      ativa: 'active',
+      esperando: 'waiting',
+      concluida: 'completed',
+      erro: 'error',
+      abandonada: 'abandoned',
+      trabalhando: 'working',
+      concluidos: 'done',
+    },
+  },
+  // Phase 2b layer 6: the decision state filter is English on the Decisions page and the Detail's
+  // decisions tab (`?state=`; old aliases `/api/decisoes` and `/api/sessoes/<id>/decisoes`).
+  '/api/decisions': { state: DECISION_STATE_FILTER_VALUES },
+  '/api/sessions/:id/decisions': { state: DECISION_STATE_FILTER_VALUES },
 };
+
+/** The key of a route in the maps by path: a session's id is `:id` (`/api/sessions/:id/decisions`). */
+const routeKeyOf = (pathname: string): string => pathname.replace(/^\/api\/sessions\/[^/]+\/decisions$/, '/api/sessions/:id/decisions');
 
 /**
  * Query values whose old prefix carries data after it, by the route's NEW path: an old graph node
@@ -190,7 +214,8 @@ export function normalizeLegacyPath(pathname: string): string {
  */
 export function normalizeLegacyQuery(query: URLSearchParams, pathname = ''): URLSearchParams {
   const out = new URLSearchParams();
-  const routeValues = Object.hasOwn(ENGLISH_VALUES_BY_PATH, pathname) ? ENGLISH_VALUES_BY_PATH[pathname] : undefined;
+  const routeKey = routeKeyOf(pathname);
+  const routeValues = Object.hasOwn(ENGLISH_VALUES_BY_PATH, routeKey) ? ENGLISH_VALUES_BY_PATH[routeKey] : undefined;
   const routePrefixes = Object.hasOwn(ENGLISH_PREFIXES_BY_PATH, pathname) ? ENGLISH_PREFIXES_BY_PATH[pathname] : undefined;
   for (const [name, value] of query) {
     const next = LEGACY_PARAMS[name];
@@ -814,7 +839,7 @@ const HISTORY: LegacyBodySpec = {
 // The session Detail and the workflows (phase 2b layer 5): `GET /api/sessions/<id>` (old
 // `/api/sessoes/<id>`), its tabs `/agents`, `/conversation`, `/events` (old `/agentes`, `/conversa`,
 // `/eventos`; src/api/detalhe.ts) and `/workflow`, and `GET /api/workflows` (no old path;
-// src/api/workflows.ts). The decisions tab is the next layer's.
+// src/api/workflows.ts). The decisions tab is layer 6's.
 //
 // `GET /api/sessions/<id>` (CabecaDoDetalhe), keys old → new: versao → version, geradoEm →
 // generatedAt, sessao → session (the panel's session card), custo → cost (the panel's), abreSessao →
@@ -991,6 +1016,161 @@ const SESSION_WORKFLOW: LegacyBodySpec = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// The Decisions of the /ui and the GitHub Project kanban (phase 2b layer 6): `GET /api/decisions` (old
+// `/api/decisoes`), `GET /api/sessions/<id>/decisions` (old `/api/sessoes/<id>/decisoes`), `POST
+// /api/decisions/<id>/promote` (old `/promover`; src/api/decisoes-ui.ts), `GET /api/project` and `POST
+// /api/project/move` (old `/api/projeto` and `/api/projeto/mover`; src/api/projeto.ts). `GET /api/kanban`
+// (src/api/kanban.ts) has no old path: its body simply turned English (only its old query values map).
+//
+// `GET /api/decisions` (DecisoesDaPagina), keys old → new: agrupar → groupBy, estado → state, contagens
+// → counts (vigentes → current, aConfirmar → toConfirm, substituidas30d → superseded30d, promovidas →
+// promoted; branches stays), grupos → groups (chave → key, tipo → type, titulo → title, pasta → folder,
+// vigentes → current, aConfirmar → toConfirm, itens → items, mais → more; repo, total stay); the items
+// are the /ui's decision cards (layer 2) (q stays). Values: groupBy and groups.type familia → family,
+// sessao → session (branch stays); state todas → all, vigentes → current, a_confirmar → to_confirm.
+// `?groupBy=` and `?state=` take both (ENGLISH_VALUES, ENGLISH_VALUES_BY_PATH). Errors cite the new
+// parameter: `groupBy: branch, family ou session`, `state: all, current ou to_confirm`, `group inválido`
+// (`busca de até 200 caracteres` is about `q` and stays).
+//
+// `GET /api/sessions/<id>/decisions` (DecisoesDaAba), keys old → new: sessao → session, escopo → scope,
+// estado → state, porEscopo → byScope, itens → items (the /ui's decision cards), injecao → injection
+// (ligada → enabled, escopo → scope, decisoes → decisions, texto → text; tokens stays), mcp (ferramenta →
+// tool, existe → exists, chamada → call, resposta → response) (q, total stay). Values: the scopes as the
+// panel's, state as the page's. `mcp.call` is screen text (the call the tool will answer) and stays.
+//
+// `POST /api/decisions/<id>/promote`: request `{ sessao, confirmar, caminho, hash }` → `{ session,
+// confirm, path, hash }` (the new route reads the old keys too); response 200 `{ rascunho: { caminho,
+// markdown, hash, repo, podeGravar, motivo } }` → `{ draft: { path, markdown, hash, repo, canWrite,
+// reason } }`, 201 `{ decisao, caminho }` → `{ decision, path }` (the /ui's decision card). Errors that
+// name a body key: `informe a sessão: { "session": "<id>" }`, `informe o path: "docs/decisoes/…"`.
+//
+// `GET /api/project` (QuadroDoProjeto), keys old → new: projeto → project (dono → owner, numero →
+// number, titulo → title, campo → field; url stays), raias → lanes (nome → name, cor → color; id, cards
+// stay), marcos → milestones, lidoEm → fetchedAt, desatualizado → stale, motivo → reason, fonte →
+// source (total stays); each card: tipo → type, tipoDaIssue → issueType, numero → number, titulo →
+// title, estado → state, marco → milestone, subIssues.feitas → done, pr.numero → number, raiaId →
+// laneId (itemId, url, repo stay). Values: pr.ci falhou → failed, rodando → running (ok stays);
+// pr.review aprovado → approved, ajustes → changes-requested, pendente → pending (the panel's). The
+// card type, the issue type and the state are GitHub's and stay.
+// Errors (both routes): codigo → code, comando → command, variavel → variable; code invalido → invalid,
+// sem-escopo → no-scope, limitado → rate-limited, raia-desconhecida → unknown-lane, item-desconhecido →
+// unknown-item, github-fora → github-down, github-recusou → github-refused, desligado → off, sem-projeto
+// → no-project. The `error` texts name no Portuguese parameter and stay.
+// `POST /api/project/move` (body `{ itemId, optionId }`, English already): response quadro → board (the
+// project's), movido → moved (de → from, para → to; itemId stays).
+//
+// `GET /api/kanban` (KanbanHttp), no old path, keys old → new: visao → view, porPagina → perPage,
+// colunas → columns (rotulo → label, pagina → page, temMais → hasMore, itens → items; id, total stay);
+// the session card as the Sessions list row (titulo → title, motivo → reason, ultimaAtividade →
+// lastActivity, inicio → start, rodando → running, duracaoMs → durationMs, agentes → agents, custoUsd →
+// costUsd, conta → account { label, color }) plus ultimoPrompt → lastPrompt, modelo → model; the agent
+// card: sessaoId → sessionId, principal → main, nome → name, descricao → description, motivo → reason,
+// modelo → model, inicio → start, ultimaAtividade → lastActivity, rodando → running, duracaoMs →
+// durationMs. Values: view sessoes → sessions, agentes → agents; column ativa → active, esperando →
+// waiting, concluida → completed, erro → error, abandonada → abandoned, trabalhando → working,
+// concluidos → done. Errors: `view:`, `column:`, `page:`.
+// ---------------------------------------------------------------------------------------------
+
+const GROUPINGS = { family: 'familia', session: 'sessao' };
+const STATE_FILTERS = { all: 'todas', current: 'vigentes', to_confirm: 'a_confirmar' };
+const STATE_FILTER_ERRORS = { 'state: all, current ou to_confirm': 'estado: todas, vigentes ou a_confirmar' };
+const PR_CI = { failed: 'falhou', running: 'rodando' };
+const PR_REVIEW = { approved: 'aprovado', 'changes-requested': 'ajustes', pending: 'pendente' };
+
+/** `GET /api/decisions`, new → old: the page, its groups and the /ui's decision cards. */
+const DECISIONS_PAGE: LegacyBodySpec = merge(
+  {
+    keys: {
+      ...scoped('', { groupBy: 'agrupar', state: 'estado', counts: 'contagens', groups: 'grupos' }),
+      ...scoped('counts', { current: 'vigentes', toConfirm: 'aConfirmar', superseded30d: 'substituidas30d', promoted: 'promovidas' }),
+      ...scoped('groups', { key: 'chave', type: 'tipo', title: 'titulo', folder: 'pasta', current: 'vigentes', toConfirm: 'aConfirmar', items: 'itens', more: 'mais' }),
+    },
+    values: {
+      '.groupBy': GROUPINGS,
+      'groups.type': GROUPINGS,
+      '.state': STATE_FILTERS,
+      '.error': { ...STATE_FILTER_ERRORS, 'groupBy: branch, family ou session': 'agrupar: branch, familia ou sessao', 'group inválido': 'grupo inválido' },
+    },
+  },
+  decision('items', true),
+);
+
+/** `GET /api/sessions/<id>/decisions`, new → old: the tab, its scope counts, the injection and MCP cards and the decision cards. */
+const SESSION_DECISIONS: LegacyBodySpec = merge(
+  {
+    keys: {
+      ...scoped('', { session: 'sessao', scope: 'escopo', state: 'estado', byScope: 'porEscopo', items: 'itens', injection: 'injecao' }),
+      ...scoped('injection', { enabled: 'ligada', scope: 'escopo', decisions: 'decisoes', text: 'texto' }),
+      ...scoped('mcp', { tool: 'ferramenta', exists: 'existe', call: 'chamada', response: 'resposta' }),
+    },
+    values: { '.scope': SCOPES, 'injection.scope': SCOPES, byScope: SCOPES, '.state': STATE_FILTERS, '.error': { ...SCOPE_ERRORS, ...STATE_FILTER_ERRORS } },
+    dictKeys: ['byScope'],
+  },
+  decision('items', true),
+);
+
+/** `POST /api/decisions/<id>/promote`: the draft or the promoted card, and the old body `{ sessao, confirmar, caminho }`. */
+const DECISION_PROMOTE: LegacyRouteSpec = {
+  response: merge(
+    {
+      keys: {
+        ...scoped('', { draft: 'rascunho', decision: 'decisao', path: 'caminho' }),
+        ...scoped('draft', { path: 'caminho', canWrite: 'podeGravar', reason: 'motivo' }),
+      },
+      values: {
+        '.error': {
+          'informe a sessão: { "session": "<id>" }': 'informe a sessão: { "sessao": "<id>" }',
+          'informe o path: "docs/decisoes/NNNN-slug.md"': 'informe o caminho: "docs/decisoes/NNNN-slug.md"',
+        },
+      },
+    },
+    decision('decision', true),
+  ),
+  request: { keys: { '.sessao': 'session', '.confirmar': 'confirm', '.caminho': 'path' } },
+};
+
+/** The project board (`QuadroDoProjeto`) held by `parent` (`''` at the top level), with its lanes and cards. */
+const projectBoard = (parent: string): LegacyBodySpec => ({
+  keys: {
+    ...scoped(parent, { project: 'projeto', lanes: 'raias', milestones: 'marcos', fetchedAt: 'lidoEm', stale: 'desatualizado', reason: 'motivo', source: 'fonte' }),
+    ...scoped('project', { owner: 'dono', number: 'numero', title: 'titulo', field: 'campo' }),
+    ...scoped('lanes', { name: 'nome', color: 'cor' }),
+    ...scoped('cards', { type: 'tipo', issueType: 'tipoDaIssue', number: 'numero', title: 'titulo', state: 'estado', milestone: 'marco', laneId: 'raiaId' }),
+    ...scoped('subIssues', { done: 'feitas' }),
+    ...scoped('pr', { number: 'numero' }),
+  },
+  values: { 'pr.ci': PR_CI, 'pr.review': PR_REVIEW },
+});
+
+/** The errors of the two project routes: `{ error, code, command?, variable? }`. */
+const PROJECT_ERRORS: LegacyBodySpec = {
+  keys: scoped('', { code: 'codigo', command: 'comando', variable: 'variavel' }),
+  values: {
+    '.code': {
+      invalid: 'invalido',
+      'no-scope': 'sem-escopo',
+      'rate-limited': 'limitado',
+      'unknown-lane': 'raia-desconhecida',
+      'unknown-item': 'item-desconhecido',
+      'github-down': 'github-fora',
+      'github-refused': 'github-recusou',
+      off: 'desligado',
+      'no-project': 'sem-projeto',
+    },
+  },
+};
+
+/** `GET /api/project`, new → old. */
+const PROJECT: LegacyBodySpec = merge(projectBoard(''), PROJECT_ERRORS);
+
+/** `POST /api/project/move`, new → old: `{ board, moved }` (the body `{ itemId, optionId }` was English already). */
+const PROJECT_MOVE: LegacyBodySpec = merge(
+  { keys: { ...scoped('', { board: 'quadro', moved: 'movido' }), ...scoped('moved', { from: 'de', to: 'para' }) } },
+  projectBoard('board'),
+  PROJECT_ERRORS,
+);
+
 /**
  * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
  * fill its entry, and the goldens prove the old body did not move.
@@ -1009,26 +1189,17 @@ export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
   'session/conversation': { response: SESSION_CONVERSATION },
   'session/events': { response: SESSION_EVENTS },
   'session/workflow': { response: SESSION_WORKFLOW },
-  // The Detail's decisions tab: its scope, the counts by scope and the /ui's decision cards.
-  'session/decisions': {
-    response: merge(
-      { values: { '.escopo': SCOPES, 'injecao.escopo': SCOPES, porEscopo: SCOPES, '.error': SCOPE_ERRORS }, dictKeys: ['porEscopo'] },
-      decision('itens', true),
-    ),
-  },
+  'session/decisions': { response: SESSION_DECISIONS },
   history: { response: HISTORY },
   'decisions/scope': { response: merge(decisionList(''), { values: { '.error': SCOPE_ERRORS } }) },
-  // The Decisions page: only the cards (`grupos[].itens[]`) are the panel's.
-  decisions: { response: decision('itens', true) },
+  decisions: { response: DECISIONS_PAGE },
   'decision/confirm': DECISION_WRITE,
   'decision/dismiss': DECISION_WRITE,
   'decision/adjust': DECISION_WRITE,
   'decision/undo': DECISION_WRITE,
-  // The promote keeps its own keys (`{ decisao, caminho }`, `{ rascunho }`, the body `{ sessao, … }`)
-  // until its layer; the card inside is the /ui's decision.
-  'decision/promote': { response: decision('decisao', true) },
-  project: {},
-  'project/move': {},
+  'decision/promote': DECISION_PROMOTE,
+  project: { response: PROJECT },
+  'project/move': { response: PROJECT_MOVE },
   'analytics/cost': {},
 };
 

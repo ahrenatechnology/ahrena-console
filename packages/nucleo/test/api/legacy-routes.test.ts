@@ -88,7 +88,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       assert.equal(normalizeLegacyPath(p), p, p);
 
     const q = normalizeLegacyQuery(new URLSearchParams('desde=c1&espera=0&conta=a&conta=b&escopo=familia&visao=agents&busca=x&since=c2'));
-    assert.deepEqual([...q], [['wait', '0'], ['account', 'a'], ['account', 'b'], ['scope', 'family'], ['view', 'agentes'], ['search', 'x'], ['since', 'c2']], 'the new one wins; values map to the ones the handlers read (the scope is English since phase 2b)');
+    assert.deepEqual([...q], [['wait', '0'], ['account', 'a'], ['account', 'b'], ['scope', 'family'], ['view', 'agents'], ['search', 'x'], ['since', 'c2']], 'the new one wins; values map to the ones the handlers read (English since phase 2b)');
     assert.equal(normalizeLegacyUrl(new URL('http://x/api/hooks?tipo=1')).search, '?tipo=1', 'the hooks are not touched');
     assert.equal(normalizeLegacyUrl(new URL('http://x/ui/kanban?visao=agentes')).search, '?visao=agentes', 'the /ui URLs are phase 2');
   });
@@ -144,10 +144,15 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       ['/api/workflows?filter=todas&node=principal', '/api/workflows?filtro=todas&no=principal'],
       ['/api/decisions', '/api/decisoes'],
       ['/api/decisions?groupBy=family&state=a_confirmar&q=kanban', '/api/decisoes?agrupar=familia&estado=a_confirmar&q=kanban'],
+      ['/api/decisions?groupBy=family&state=to_confirm&q=kanban', '/api/decisoes?agrupar=familia&estado=a_confirmar&q=kanban'],
+      ['/api/decisions?state=nada', '/api/decisoes?estado=nada'],
+      ['/api/decisions?group=%3Cx%3E', '/api/decisoes?grupo=%3Cx%3E'],
       ['/api/decisions?groupBy=session', '/api/decisoes?agrupar=sessao'],
       ['/api/decisions?groupBy=nada', '/api/decisoes?agrupar=nada'],
       [`/api/sessions/${s}/decisions`, `/api/sessoes/${s}/decisoes`],
       [`/api/sessions/${s}/decisions?scope=branch&state=vigentes`, `/api/sessoes/${s}/decisoes?escopo=branch&estado=vigentes`],
+      [`/api/sessions/${s}/decisions?scope=session&state=current`, `/api/sessoes/${s}/decisoes?escopo=sessao&estado=vigentes`],
+      [`/api/sessions/${s}/decisions?state=nada`, `/api/sessoes/${s}/decisoes?estado=nada`],
       ['/api/repos', '/api/repos'],
       ['/api/repos?refresh=1', '/api/repos?atualizar=1'],
       ['/api/repos/exemplo-labs/vitrine-demo?period=30d', '/api/repos/exemplo-labs/vitrine-demo?periodo=30d'],
@@ -162,6 +167,7 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     // English values on the new parameters, and a mix of old and new names, read the same.
     await same(`/api/decisions/${s}?scope=family`, `/api/decisions/${s}?escopo=family`);
     await same('/api/kanban?view=agents', '/api/kanban?visao=agentes');
+    await same('/api/kanban?view=agents&column=working', '/api/kanban?visao=agentes&coluna=trabalhando');
   });
 
   test('the sessions `status`/`order` values are that route\'s alone: `/api/eventos?status=erro` answers its old 400', async () => {
@@ -217,8 +223,9 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     const self = { ...json, origin: `http://${host}` };
     for (const [next, old] of [['confirm', 'confirmar'], ['dismiss', 'descartar'], ['adjust', 'ajustar'], ['undo', 'desfazer'], ['promote', 'promover']]) {
       const [n, o] = [`/api/decisions/nao-existe/${next}`, `/api/decisoes/nao-existe/${old}`];
-      // The new route reads the old body `{ sessao }` too, so both get the same one.
+      // The new route reads the old body `{ sessao }` too, so both get the same one; and the new body `{ session }`.
       assert.deepEqual(await post(o, { sessao: DEMO_SESSION }), asOld(o, await post(n, { sessao: DEMO_SESSION })), n);
+      assert.deepEqual(await post(o, { sessao: DEMO_SESSION }), asOld(o, await post(n, { session: DEMO_SESSION })), `${n} { session }`);
       assert.deepEqual(await post(o, {}), asOld(o, await post(n, {})), `${n} without the session`);
       // The page's own Origin passes on both (#103); another site's, or a query, does not.
       assert.deepEqual(await post(o, { sessao: DEMO_SESSION }, self), asOld(o, await post(n, { sessao: DEMO_SESSION }, self)), `${n}: page Origin`);
