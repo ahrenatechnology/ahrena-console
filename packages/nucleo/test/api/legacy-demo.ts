@@ -27,6 +27,8 @@ import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 import { upgradeDemoUrl } from '../../src/simulator/legacy-ids.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
+/** The core's version when the goldens were recorded: it follows the app's releases since (#261). */
+const GOLDEN_VERSION = '0.0.1';
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
 /** The "this session" of the demo panel (p4). */
 export const DEMO_SESSION = PANEL_SESSION;
@@ -62,7 +64,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
   const decisions = decisionsWithChanges(new SqliteDecisionStore(sqlite.db), changes, sessionAccounts);
   const work = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: clock });
   const accounts = new Accounts({ storage, file: null });
-  const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id) });
+  const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work, decisoes: decisions, agora: clock, apelido: (id) => (id === DEMO_ALIAS ? DEMO_SESSION : id), version: GOLDEN_VERSION });
   await seedPanelScenario(storage, 'p4', NOW);
   // The decisions of the p9 scenario (p4 has none): a suggested one to confirm and undo.
   await seedPanelDecisions(decisions, 'p9', NOW);

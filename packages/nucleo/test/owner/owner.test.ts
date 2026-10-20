@@ -29,7 +29,10 @@ import {
   watchParent,
   type Lock,
 } from '../../src/owner/index.ts';
+import { API_VERSION } from '../../src/api/version.ts';
 
+/** The core's version, escaped for a RegExp. */
+const VERSION = API_VERSION.replaceAll('.', '\\.');
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const API_CLI = join(ROOT, 'src/api/cli.ts');
 const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
@@ -235,7 +238,7 @@ describe('start or adopt', { timeout: 60_000 }, () => {
     assert.ok(alive, 'the lock belongs to one of the two');
     const s = await other.done;
     assert.equal(s.code, 0, s.stderr);
-    assert.match(s.stdout, new RegExp(`127\\.0\\.0\\.1:${port} · versão 0\\.0\\.1 \\(adotado\\)`));
+    assert.match(s.stdout, new RegExp(`127\\.0\\.0\\.1:${port} · versão ${VERSION} \\(adotado\\)`));
     assert.doesNotMatch(s.stderr, /atenção/, 'same code, with a lock: adopts without a warning');
     assert.equal(alive.proc.exitCode, null);
   });
@@ -316,7 +319,7 @@ describe('version', { timeout: 60_000 }, () => {
 
     const warned = await api(port).done;
     assert.equal(warned.code, 0);
-    assert.match(warned.stderr, /versão 0\.0\.0, mais velha que esta \(0\.0\.1\).*--substituir/);
+    assert.match(warned.stderr, new RegExp(`versão 0\\.0\\.0, mais velha que esta \\(${VERSION}\\).*--substituir`));
     assert.match(warned.stdout, /\(adotado\)/);
     assert.ok(isPidAlive(t.pid), 'without --substituir, the old one stays');
 
@@ -324,7 +327,7 @@ describe('version', { timeout: 60_000 }, () => {
     await until(() => old.proc.exitCode !== null || old.proc.signalCode !== null);
     const t2 = await liveLock();
     assert.equal(t2.pid, fresh.proc.pid);
-    assert.equal(t2.version, '0.0.1');
+    assert.equal(t2.version, API_VERSION);
     assert.ok(!isPidAlive(t.pid));
   });
 
