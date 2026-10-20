@@ -37,7 +37,7 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: browser module, plain JavaScript
-import { findScreen, sidebarSections, SCREENS } from '../../ui/screens.js';
+import { findScreen, sidebarSections } from '../../ui/screens.js';
 // @ts-expect-error: idem
 import { ICON_NAMES } from '../../ui/dom.js';
 const screen = await import(
@@ -238,16 +238,13 @@ describe('Dev Console: pure parts', () => {
 // ---------- registration and files ----------
 
 describe('Dev Console: registration and files', () => {
-  test('#179/AC-1 /ui/dev-console opens the screen, with the item in main between Repositórios and Analytics', () => {
+  test('#179/AC-1 /ui/dev-console opens the screen, with the item in Entrega after Repositórios and Kanban do projeto', () => {
     const { screen: found } = findScreen('/ui/dev-console');
     assert.equal(found.id, 'dev-console');
     assert.equal(found.file, '/ui/screens/dev-console.js');
-    assert.deepEqual(found.item, { label: 'Dev Console', icon: 'gauge', section: 'main' });
-    const main = sidebarSections().find((s: { id: string }) => s.id === 'main').items.map((t: { id: string }) => t.id);
-    assert.equal(main.indexOf('dev-console'), main.indexOf('repos') + 1);
-    assert.equal(main.indexOf('analytics'), main.indexOf('dev-console') + 1);
-    const ids = SCREENS.map((t: { id: string }) => t.id);
-    assert.ok(ids.indexOf('dev-console') > ids.indexOf('repo') && ids.indexOf('dev-console') < ids.indexOf('analytics'));
+    assert.deepEqual(found.item, { label: 'Dev Console', icon: 'gauge', section: 'delivery' });
+    const delivery = sidebarSections().find((s: { id: string }) => s.id === 'delivery').items.map((t: { id: string }) => t.id);
+    assert.deepEqual(delivery, ['repos', 'project', 'dev-console']);
   });
 
   test('#179/AC-5 every icon the screen uses exists in dom.js', () => {
