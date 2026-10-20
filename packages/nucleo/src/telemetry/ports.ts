@@ -14,7 +14,10 @@ export interface TelemetryCollector {
 }
 
 export interface TelemetryStore {
-  /** Grava a amostra (cria ou substitui pela hora) e apaga as da máquina mais velhas que `retentionMs`. */
+  /**
+   * Grava a amostra (cria ou substitui pela hora) e apaga as da máquina com `retentionMs` ou mais
+   * de idade em relação a ela (12 h são 1440 amostras, não 1441).
+   */
   putSample(machineId: string, reading: TelemetryReading, retentionMs: number): Promise<void>;
   /** Os pontos da máquina desde `sinceMs` (inclusive), do mais velho ao mais novo. */
   listPoints(machineId: string, sinceMs: number): Promise<SamplePoint[]>;

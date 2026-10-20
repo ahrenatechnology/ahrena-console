@@ -19,11 +19,12 @@ function media(valores: (number | null)[]): number | null {
 }
 
 /**
- * `points` em qualquer ordem; só entram os de `[fromMs, toMs]`. Com até `maxPoints`, um ponto por
- * amostra; acima disso, baldes de `(toMs - fromMs) / maxPoints`, cada um na hora do seu começo.
+ * `points` em qualquer ordem; só entram os de `(fromMs, toMs]` (1 h são 120 amostras, não 121).
+ * Com até `maxPoints`, um ponto por amostra; acima disso, baldes de `(toMs - fromMs) / maxPoints`,
+ * cada um na hora do seu começo.
  */
 export function buildSeries(points: readonly SamplePoint[], fromMs: number, toMs: number, maxPoints = MAX_SERIES_POINTS): TelemetrySeries {
-  const dentro = points.filter((p) => p.takenAt >= fromMs && p.takenAt <= toMs).sort((a, b) => a.takenAt - b.takenAt);
+  const dentro = points.filter((p) => p.takenAt > fromMs && p.takenAt <= toMs).sort((a, b) => a.takenAt - b.takenAt);
   const s = emptySeries();
   if (dentro.length <= maxPoints) {
     for (const p of dentro) {

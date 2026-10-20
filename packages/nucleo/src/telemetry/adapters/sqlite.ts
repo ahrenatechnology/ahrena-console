@@ -25,7 +25,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
       INSERT OR REPLACE INTO telemetry_samples
         (machine_id, taken_at, cpu_used_pct, load1, cores, memory_used_bytes, swap_used_bytes, rx_bytes_per_sec, tx_bytes_per_sec, gpu_used_pct, reading)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    this.prune = db.prepare('DELETE FROM telemetry_samples WHERE machine_id = ? AND taken_at < ?');
+    this.prune = db.prepare('DELETE FROM telemetry_samples WHERE machine_id = ? AND taken_at <= ?');
     this.points = db.prepare(`
       SELECT taken_at, cpu_used_pct, load1, cores, memory_used_bytes, swap_used_bytes, rx_bytes_per_sec, tx_bytes_per_sec, gpu_used_pct
       FROM telemetry_samples WHERE machine_id = ? AND taken_at >= ? ORDER BY taken_at`);

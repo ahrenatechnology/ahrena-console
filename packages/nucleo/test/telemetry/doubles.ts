@@ -8,7 +8,7 @@ export class MemoryTelemetryStore implements TelemetryStore {
 
   async putSample(machineId: string, reading: TelemetryReading, retentionMs: number): Promise<void> {
     const at = Date.parse(reading.takenAt);
-    const l = (this.rows.get(machineId) ?? []).filter((r) => r.takenAt !== reading.takenAt && Date.parse(r.takenAt) >= at - retentionMs);
+    const l = (this.rows.get(machineId) ?? []).filter((r) => r.takenAt !== reading.takenAt && Date.parse(r.takenAt) > at - retentionMs);
     l.push(reading);
     l.sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt));
     this.rows.set(machineId, l);
