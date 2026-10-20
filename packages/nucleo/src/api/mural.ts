@@ -5,7 +5,8 @@
 // Sessão ABERTA (o critério do mural):
 // - não está arquivada no Claude Desktop (a pessoa a tirou da barra lateral); e
 // - está `active` (o que inclui esperando, delegando e em background) ou em `error` ainda sem
-//   `endedAt`: o vigia da máquina de estados já leva a `abandoned` a que fica 180 min parada; ou
+//   `endedAt` (o vigia da máquina de estados leva a `abandoned` a que fica 180 min parada, e a
+//   listagem só busca os erros dentro dessa janela); ou
 // - está `completed` (ou em `error` já encerrada) com a última atividade (`updatedAt`) dentro de
 //   `recenteMs`, que é o `abandonoMs` do vigia (180 min): o card "Terminou sem erro" do wireframe
 //   fica no mural pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada.
@@ -43,7 +44,7 @@ export const RECENTE_DO_MURAL_MS = LIMITES_PADRAO.abandonoMs;
 const PAGINA = 200;
 
 export interface OpcoesDoMural {
-  painel: Pick<MontadorDoPainel, 'atualizarFontes' | 'leituraDaSessao'>;
+  painel: Pick<MontadorDoPainel, 'atualizarFontes' | 'leituraDaSessao' | 'desktopDaSessao'>;
   storage: StoragePort;
   agora?: () => number;
   /** A resposta inteira fica guardada por este tempo. Padrão 2 s. */
@@ -94,10 +95,9 @@ export class MontadorDoMural {
     await this.painel.atualizarFontes();
     const lidas: { leitura: LeituraDaSessao; updatedAt: string }[] = [];
     for (const session of await this.candidatas(agora)) {
-      // Primeiro pelos campos da sessão; a arquivada só se sabe com o índice do Desktop, na leitura.
-      if (!ehAberta(session, null, agora, this.recenteMs)) continue;
-      const leitura = await this.painel.leituraDaSessao(session);
-      if (ehAberta(session, leitura.desktop, agora, this.recenteMs)) lidas.push({ leitura, updatedAt: session.updatedAt });
+      // O critério antes da leitura: a arquivada não paga custo, plano nem contexto.
+      if (!ehAberta(session, this.painel.desktopDaSessao(session.id), agora, this.recenteMs)) continue;
+      lidas.push({ leitura: await this.painel.leituraDaSessao(session), updatedAt: session.updatedAt });
     }
     const precisa = (l: LeituraDaSessao) => PRECISA.has(l.inbox.estado);
     lidas.sort((a, b) => {
@@ -121,20 +121,22 @@ export class MontadorDoMural {
     return mural;
   }
 
-  // As vivas (`active` e `error`) inteiras, por índice; das encerradas, só as páginas com atividade
-  // dentro da janela (a lista vem da mais recente para a mais antiga). `abandoned` nem é lida.
+  // As `active` inteiras, por índice; das `error` e das `completed`, só as páginas com atividade
+  // dentro da janela (a lista vem da mais recente para a mais antiga): o erro encerrado não vira
+  // `abandoned` e se acumularia, e o erro vivo mais velho que a janela o vigia já leva a `abandoned`.
+  // `abandoned` nem é lida.
   private async candidatas(agora: number): Promise<Session[]> {
     const vistas = new Map<string, Session>();
     let cursor: string | null = null;
     do {
-      const page = await this.storage.listSessions({ status: ['active', 'error'], limit: PAGINA, cursor });
+      const page = await this.storage.listSessions({ status: ['active'], limit: PAGINA, cursor });
       for (const s of page.items) vistas.set(s.id, s);
       cursor = page.nextCursor;
     } while (cursor);
     const corte = new Date(agora - this.recenteMs).toISOString();
     cursor = null;
     do {
-      const page = await this.storage.listSessions({ status: ['completed'], limit: PAGINA, cursor });
+      const page = await this.storage.listSessions({ status: ['error', 'completed'], limit: PAGINA, cursor });
       for (const s of page.items) if (s.updatedAt >= corte) vistas.set(s.id, s);
       const ultima = page.items.at(-1);
       cursor = ultima && ultima.updatedAt >= corte ? page.nextCursor : null;

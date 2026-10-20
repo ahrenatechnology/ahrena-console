@@ -172,12 +172,17 @@ describe('mural ao vivo (#34)', () => {
     await storage.close();
   });
 
-  test('sem o branch no Desktop nem na metadata, o do git pelo trabalho por branch (do cache)', async () => {
+  test('sem o branch no Desktop nem na metadata, o do trabalho por branch, só do cache: o mural não dispara git', async () => {
     const storage = await semear();
     const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
     const mural = muralDoPainel(painelDe(storage, null, trabalho), { cacheMs: 0 });
     const antes = await mural.montar();
     assert.equal(antes.cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, null, 'o primeiro pedido não espera o git');
+    await trabalho.esperar();
+    assert.equal((await mural.montar()).cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, null, 'o mural não pôs o git para rodar');
+    // O painel (ou o "precisam de você") lê a pasta; dali em diante o mural mostra o branch.
+    const sessao = await storage.getSession(SESSAO_DO_PAINEL);
+    trabalho.ler(sessao!.cwd, null);
     await trabalho.esperar();
     const depois = await mural.montar();
     assert.equal(depois.cards.find((c) => c.id === SESSAO_DO_PAINEL)?.branch, 'feat/63-separar-pagamentos');

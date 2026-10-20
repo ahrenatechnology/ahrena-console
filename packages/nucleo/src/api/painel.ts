@@ -158,6 +158,11 @@ export class MontadorDoPainel {
   }
 
   /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
+  /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
+  desktopDaSessao(sessionId: string): SessaoDoDesktop | null {
+    return this.desktop?.sessaoPorCli(sessionId) ?? null;
+  }
+
   async atualizarFontes(): Promise<void> {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
   }
@@ -168,7 +173,7 @@ export class MontadorDoPainel {
    */
   async leituraDaSessao(session: Session): Promise<LeituraDaSessao> {
     const agora = this.agora();
-    const desktop = this.desktop?.sessaoPorCli(session.id) ?? null;
+    const desktop = this.desktopDaSessao(session.id);
     const agentes = await this.storage.listAgents(session.id);
     const resumo = await this.resumos.ler(session.id, session.updatedAt);
     const conta = this.contas.daSessao(session, desktop);
@@ -178,7 +183,8 @@ export class MontadorDoPainel {
       sessao,
       inbox: lerInbox(session, agentes),
       desktop,
-      branch: sessao.branch ?? this.trabalho?.ler(session.cwd ?? desktop?.cwd ?? null, null)?.branch ?? null,
+      // Só o que o trabalho por branch já sabe: o mural lê todas as abertas e não dispara git nem GitHub.
+      branch: sessao.branch ?? this.trabalho?.espiar(session.cwd ?? desktop?.cwd ?? null)?.branch ?? null,
       custo: (await this.custoDe(session)).custo,
       plano: planoDe(await this.planoAtual(session.id, planos), resumo, agentes),
       contexto: contextoDe(session, resumo, await this.storage.listContextMeters(session.id)),

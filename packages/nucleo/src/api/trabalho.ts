@@ -98,6 +98,12 @@ export class TrabalhoPorBranch {
     return e.valor;
   }
 
+  /** O último trabalho conhecido de `cwd`, sem atualizar: quem lê muitas pastas (o mural) não dispara git nem GitHub. */
+  espiar(cwd: string | null, branchDoDesktop: string | null = null): TrabalhoDoPainel | null {
+    if (!cwd && !branchDoDesktop) return null;
+    return this.entradas.get(`${cwd ?? ''}\0${branchDoDesktop ?? ''}`)?.valor ?? null;
+  }
+
   /** Espera as atualizações em andamento (testes e o primeiro desenho). */
   async esperar(): Promise<void> {
     await Promise.all([...this.entradas.values()].map((e) => e.rodando));

@@ -64,6 +64,13 @@ class Elemento extends No {
   click() {
     for (const f of this.ouvintes.get('click') ?? []) f({});
   }
+  focus() {
+    (globalThis as unknown as { document: { activeElement: unknown } }).document.activeElement = this;
+  }
+  /** Só o `[data-sessao]` que a tela usa: o próprio elemento, se tem o atributo. */
+  closest(sel: string) {
+    return sel === '[data-sessao]' && this.atributos.has('data-sessao') ? this : null;
+  }
   set innerHTML(v: string) {
     this.html = v;
   }
@@ -76,6 +83,7 @@ Object.assign(globalThis, {
   Node: No,
   document: {
     head,
+    activeElement: null as unknown,
     createElement: (t: string) => new Elemento(t),
     createElementNS: (_ns: string, t: string) => new Elemento(t),
     createTextNode: (t: string) => new Texto(t),
@@ -169,6 +177,9 @@ describe('Mural: formatação', () => {
     assert.equal(nomeDoModelo('claude-haiku-4-5-20251001'), 'Haiku');
     assert.equal(nomeDoModelo('Sonnet 5.5'), 'Sonnet');
     assert.equal(nomeDoModelo(null), '—');
+    assert.equal(nomeDoModelo(' opus'), 'Opus');
+    assert.equal(nomeDoModelo('claude-3-5-sonnet-20241022'), 'Sonnet');
+    assert.equal(nomeDoModelo('   '), '—');
     assert.deepEqual(['low', 'medium', 'high', 'outro', null].map(esforco), ['baixo', 'médio', 'alto', 'outro', '—']);
   });
   test('plano nulo é "Plano 0/0"; contexto nulo é "contexto —"; contexto alto a partir de 80%', () => {
@@ -279,7 +290,7 @@ describe('Mural: a tela montada', () => {
       await ate(() => comClasse(area, 'mu-card').length === 5);
       const botao = (id: string) => area.todos((e) => e.getAttribute('data-filtro') === id)[0]!;
       botao('esperando').click();
-      assert.deepEqual(comClasse(area, 'mu-card').map((c) => c.getAttribute('data-sessao')), ['espera-1', 'espera-2']);
+      assert.deepEqual(comClasse(area, 'mu-card').map((c) => c.getAttribute('data-sessao')), ['espera-1', 'espera-2', 'erro-1'], 'o erro também precisa de você, como na contagem do núcleo');
       assert.equal(botao('esperando').getAttribute('aria-pressed'), 'true');
       assert.equal(botao('todas').getAttribute('aria-pressed'), 'false');
       botao('ativas').click();
@@ -356,6 +367,40 @@ describe('Mural: a tela montada', () => {
       await ate(() => comClasse(area, 'mu-card').length === 5);
       assert.equal(rotas.length, 3);
     } finally {
+      await sair();
+    }
+  });
+});
+
+describe('Mural: ao vivo com atividade contínua', () => {
+  test('mudanças a cada 100 ms não adiam a releitura para sempre', async () => {
+    const { area, rotas, ouvintes, sair } = await montarTela(async () => MURAL);
+    try {
+      await ate(() => comClasse(area, 'mu-card').length === 5);
+      const fim = Date.now() + 1_500;
+      while (Date.now() < fim) {
+        for (const f of ouvintes.mudar) f([{ tipo: 'sessao', chave: 'ativa-1' }]);
+        await new Promise((ok) => setTimeout(ok, 100));
+      }
+      assert.ok(rotas.length >= 3, `releu ${rotas.length - 1} vez(es) em 1,5 s`);
+    } finally {
+      await sair();
+    }
+  });
+
+  test('o foco do teclado volta ao card da mesma sessão depois de redesenhar', async () => {
+    const { area, rotas, sair } = await montarTela(async () => MURAL);
+    try {
+      await ate(() => comClasse(area, 'mu-card').length === 5);
+      const antes = comClasse(area, 'mu-card').find((c) => c.getAttribute('data-sessao') === 'espera-2')!;
+      antes.focus();
+      area.todos((e) => e.getAttribute('data-acao') === 'atualizar')[0]!.click();
+      await ate(() => rotas.length === 2 && comClasse(area, 'mu-card')[0] !== undefined && !comClasse(area, 'mu-card').includes(antes));
+      const doc = (globalThis as unknown as { document: { activeElement: Elemento } }).document;
+      assert.notEqual(doc.activeElement, antes);
+      assert.equal(doc.activeElement.getAttribute('data-sessao'), 'espera-2');
+    } finally {
+      (globalThis as unknown as { document: { activeElement: unknown } }).document.activeElement = null;
       await sair();
     }
   });

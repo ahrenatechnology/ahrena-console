@@ -28,8 +28,9 @@ const ESFORCOS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito a
 
 export const FILTROS = [
   { id: 'todas', rotulo: 'Todas', passa: () => true, vazio: 'Nenhuma sessão aberta' },
-  { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.status === 'waiting', vazio: 'Nenhuma sessão esperando você' },
-  { id: 'ativas', rotulo: 'Ativas', passa: (c) => c.status === 'active', vazio: 'Nenhuma sessão ativa' },
+  // Os mesmos grupos da `contagem` do núcleo: o erro também precisa de você.
+  { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.estado === 'waiting' || c.estado === 'error', vazio: 'Nenhuma sessão esperando você' },
+  { id: 'ativas', rotulo: 'Ativas', passa: (c) => ['active', 'delegating', 'background'].includes(c.estado), vazio: 'Nenhuma sessão ativa' },
 ];
 
 // ---------- Formatação ----------
@@ -41,9 +42,10 @@ export const custo = (usd) => (usd === null || usd === undefined ? 'sem preço' 
 
 /** Só a família: "claude-opus-5-5" → "Opus"; "Sonnet 5.5" → "Sonnet"; sem modelo, traço. */
 export function nomeDoModelo(id) {
-  if (!id) return '—';
-  const m = /^claude-([a-z]+)-/.exec(id);
-  const palavra = m ? m[1] : id.split(/\s+/)[0];
+  const texto = String(id ?? '').trim();
+  if (!texto) return '—';
+  const familia = /(opus|sonnet|haiku|fable)/i.exec(texto);
+  const palavra = familia ? familia[1].toLowerCase() : texto.split(/\s+/)[0];
   return `${palavra[0].toUpperCase()}${palavra.slice(1)}`;
 }
 
@@ -172,10 +174,14 @@ export async function montar(area, ctx) {
     const f = FILTROS.find((x) => x.id === filtro);
     const cards = (mural.cards ?? []).filter(f.passa);
     const faixa = falha ? faixaDeErro({ titulo: 'O mural não atualizou.', texto: falha.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null;
+    const nos = cards.map(card);
     const corpo = cards.length
-      ? el('div', { class: 'mu-grade' }, ...cards.map(card))
+      ? el('div', { class: 'mu-grade' }, ...nos)
       : vazio({ icone: 'mural', titulo: f.vazio, texto: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+    // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
+    const focado = globalThis.document?.activeElement?.closest?.('[data-sessao]')?.getAttribute('data-sessao') ?? null;
     area.replaceChildren(...[cab, faixa, corpo].filter(Boolean));
+    if (focado) nos.find((n) => n.getAttribute('data-sessao') === focado)?.focus();
   }
 
   async function ler() {
@@ -193,9 +199,12 @@ export async function montar(area, ctx) {
   }
 
   ctx.aoReiniciar(() => ler());
+  // Junta a rajada, mas com teto: com atividade contínua, relê no máximo a cada ESPERA_MS.
   ctx.aoMudar(() => {
-    clearTimeout(espera);
-    espera = setTimeout(() => ler(), ESPERA_MS);
+    espera ??= setTimeout(() => {
+      espera = null;
+      ler();
+    }, ESPERA_MS);
   });
 
   desenhar();
