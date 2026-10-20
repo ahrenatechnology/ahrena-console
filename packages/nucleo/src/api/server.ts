@@ -90,6 +90,7 @@ import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLeg
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
+import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
@@ -148,6 +149,8 @@ export interface ApiOptions {
   agentInstructions?: AgentInstructionsRoute;
   /** Instalar o Ahrena Framework num repositório por PR (api/framework-install.ts, #184); sem ela, `/api/framework-install` dá 404. */
   frameworkInstall?: FrameworkInstallRoute;
+  /** As ADRs e as PDRs dos repositórios (api/adrs.ts, #174); sem ela, `/api/adrs` e `/api/pdrs` dão 404. */
+  decisions?: DecisionsRoute;
   /**
    * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
    * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
@@ -384,6 +387,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === KANBAN_ROUTE && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === REPOS_ROUTE || url.pathname.startsWith(`${REPOS_ROUTE}/`))) return opts.repos(res, url);
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
+    if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (url.pathname === LOAD_ROUTE) {

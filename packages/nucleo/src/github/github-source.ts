@@ -157,6 +157,7 @@ export interface GithubGraphqlSourceOptions {
 interface GraphqlError {
   type?: string;
   message: string;
+  path?: unknown[];
 }
 
 export class GithubGraphqlSource implements WorkSource {
@@ -249,6 +250,19 @@ export class GithubScopeError extends Error {
 }
 
 /**
+ * O GitHub respondeu 200 com `errors` do GraphQL (FORBIDDEN de uma organização com SAML, por exemplo):
+ * a falha é de parte da consulta, não do transporte. `paths` traz o primeiro trecho de cada erro.
+ */
+export class GraphqlResponseError extends Error {
+  readonly paths: string[];
+  constructor(message: string, paths: string[]) {
+    super(message);
+    this.name = 'GraphqlResponseError';
+    this.paths = paths;
+  }
+}
+
+/**
  * Uma chamada ao GraphQL do GitHub (consulta ou mutação), com os erros traduzidos:
  * limite → `RateLimitedError`, escopo faltando → `GithubScopeError`, resto → `Error`.
  */
@@ -287,7 +301,8 @@ export async function githubGraphql<T>(
   const scope = json.errors?.find((e) => e.type === 'INSUFFICIENT_SCOPES');
   if (scope) throw new GithubScopeError(`o token do GitHub não tem o escopo pedido: ${scope.message}`);
   const fatal = json.errors?.filter((e) => !(tolerateNotFound && e.type === 'NOT_FOUND')) ?? [];
-  if (fatal.length || !json.data) throw new Error(`GitHub: ${fatal[0]?.message ?? message}`);
+  if (fatal.length) throw new GraphqlResponseError(`GitHub: ${fatal[0].message ?? message}`, fatal.map((e) => String(e.path?.[0] ?? '')));
+  if (!json.data) throw new Error(`GitHub: ${message}`);
   if (json.data.rateLimit) opts.onCost?.({ operation, cost: json.data.rateLimit.cost, remaining: json.data.rateLimit.remaining });
   return json.data;
 }

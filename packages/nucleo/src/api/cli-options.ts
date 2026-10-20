@@ -26,7 +26,8 @@ export const HELP = `Usage: npm run api -- [options]
   --no-desktop           Does not read the Claude Desktop session index
   --no-github            The work shows only the branch, without calling GitHub, the project
                          kanban (/api/project) answers 503 and the repositories (/api/repos) and the
-                         agent instructions (/api/agent-instructions) answer "sem-github"
+                         agent instructions (/api/agent-instructions) answer "sem-github"; the ADRs
+                         and PDRs (/api/adrs, /api/pdrs) answer "no-github"
   --demo                 In-memory database with a simulator panel scenario, no history, no
                          Desktop and no GitHub: synthetic data only. The panel session, whichever
                          it is, shows the scenario, and the project kanban is wireframe C11's, on
