@@ -20,6 +20,8 @@ export interface ResumoDosEventos {
    */
   iniciosHook: string[];
   iniciosTranscript: string[];
+  /** O texto (já resumido no evento) do último prompt da pessoa ao principal; o Kanban (#31) mostra. */
+  ultimoPrompt: string | null;
   plano: ItemDoPlano[] | null;
   /** Última chamada de ferramenta do agente principal. */
   ultimaFerramenta: { nome: string | null; resumo: string | null; em: string; entrada: Record<string, unknown> | null } | null;
@@ -46,6 +48,7 @@ export function resumoVazio(): ResumoDosEventos {
     promptsTranscript: 0,
     iniciosHook: [],
     iniciosTranscript: [],
+    ultimoPrompt: null,
     plano: null,
     ultimaFerramenta: null,
     ultimoPedido: null,
@@ -101,6 +104,7 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
     case 'UserPromptSubmit':
       r.promptsHook++;
       r.iniciosHook.push(e.createdAt);
+      if (e.summary) r.ultimoPrompt = e.summary;
       r.pendentes = [];
       r.pedidoNoFechamento = null;
       return;
@@ -108,6 +112,7 @@ export function aplicarEvento(r: ResumoDosEventos, e: SessionEvent): void {
       if (doPrincipal(e)) {
         r.promptsTranscript++;
         r.iniciosTranscript.push(e.createdAt);
+        if (e.summary) r.ultimoPrompt = e.summary;
         // A pessoa escreveu: o que estava pendente foi respondido ou deixado de lado.
         r.pendentes = [];
         r.pedidoNoFechamento = null;
