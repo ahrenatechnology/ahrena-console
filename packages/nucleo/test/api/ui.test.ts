@@ -17,7 +17,7 @@ import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: idem
 import { startLive } from '../../ui/live.js';
 // @ts-expect-error: idem
-import { findScreen, legacyUrl, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
+import { findScreen, legacyUrl, litItem, machineItems, MACHINES_ROUTE, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
 import * as agentConfigScreen from '../../ui/screens/agent-config.js';
 
@@ -239,12 +239,13 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico, Decisões e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'analytics', 'workflows', 'history', 'decisions', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Dev Console, Analytics, Workflows, Histórico, Decisões, em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
-        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'analytics', 'workflows', 'history', 'decisions']],
+        ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'project', 'repos', 'dev-console', 'analytics', 'workflows', 'history', 'decisions']],
+        ['machines', 'Máquinas', ['this-machine']],
         ['control', 'Controle', ['agent-config']],
       ],
     );
@@ -262,6 +263,7 @@ describe('registro das telas', () => {
     assert.deepEqual(d.params, { id: 'b91d04aa-4e1' });
     assert.equal(findScreen('/ui/sessions/a%20b'), null);
     assert.equal(findScreen('/ui/kanban').screen.id, 'kanban');
+    assert.equal(findScreen('/ui/dev-console').screen.file, '/ui/screens/dev-console.js');
     assert.equal(findScreen('/ui/nao-existe'), null);
     // The old URLs match nothing: the shell swaps them for the new one first (legacyUrl).
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);
@@ -290,13 +292,65 @@ describe('registro das telas', () => {
   });
 
   test('a moldura desenha o título de cada seção com as classes da moldura, sem estilo inline', () => {
-    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
-    assert.match(app, /sidebarSections\(\)/);
+    const app = readFileSync(`${PASTA_DA_UI}nav.js`, 'utf8');
+    assert.match(app, /sidebarSections\(\[\.\.\.screens, \.\.\.remoteItems\]\)/);
     assert.match(app, /'cc-nav-section'/);
     assert.match(app, /'cc-nav-title eyebrow'/);
     const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-section \{/);
     assert.match(css, /\.cc-nav-title \{/);
+  });
+
+  // Issue 178, criterion 1: the remote machines are not in the static registry; the shell reads
+  // GET /api/machines and adds one item per remote to the Máquinas block, after "Esta máquina".
+  test('#178 criterion 1: Máquinas has "Esta máquina" and one item per remote of /api/machines, with its state; without remotes, only "Esta máquina"', () => {
+    const local = { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: null, alerts: 0 };
+    const ws = { id: 'ws-exemplo', label: 'Workstation', state: 'unreachable', reason: 'port-closed', version: 1, port: 14720, lastReadAt: null, alerts: 1 };
+    const lab = { id: 'lab', label: 'Laboratório', state: 'connected', reason: null, version: 1, port: 14721, lastReadAt: null, alerts: 0 };
+    assert.equal(MACHINES_ROUTE, '/api/machines');
+    const machinesBlock = (list: unknown) => sidebarSections([...SCREENS, ...machineItems(list)]).find((s: { id: string }) => s.id === 'machines');
+    // Without remotes (only `local`, or the core without telemetry): only "Esta máquina".
+    for (const list of [[local], [], null, { error: 'x' }]) assert.deepEqual(machinesBlock(list).items.map((t: { id: string }) => t.id), ['this-machine'], JSON.stringify(list));
+    const block = machinesBlock([local, ws, lab]);
+    assert.equal(block.label, 'Máquinas');
+    assert.deepEqual(
+      block.items.map((t: { id: string; route: string; item: { label: string; icon: string }; state?: string }) => [t.id, t.route, t.item.label, t.item.icon, t.state ?? null]),
+      [
+        ['this-machine', '/ui/machines/local', 'Esta máquina', 'monitor', null],
+        ['machine-ws-exemplo', '/ui/machines/ws-exemplo', 'Workstation', 'server', 'unreachable'],
+        ['machine-lab', '/ui/machines/lab', 'Laboratório', 'server', 'connected'],
+      ],
+    );
+    // The other blocks do not move.
+    assert.deepEqual(sidebarSections([...SCREENS, ...machineItems([local, ws])]).map((s: { id: string }) => s.id), ['main', 'machines', 'control']);
+    // What the core sends is checked: a bad id, a repeated one, `local` and junk are left out.
+    assert.deepEqual(machineItems([ws, { ...ws }, { id: '../x', label: 'x' }, { id: 'local' }, 'junk', null, { id: 'sem-rotulo', state: 'weird' }]).map((t: { id: string; item: { label: string }; state: string }) => [t.id, t.item.label, t.state]), [
+      ['machine-ws-exemplo', 'Workstation', 'unreachable'],
+      ['machine-sem-rotulo', 'sem-rotulo', 'unreachable'],
+    ]);
+    // The routes: /ui/machines/local is this machine; /ui/machines/<id> opens the same screen and lights its item.
+    const here = findScreen('/ui/machines/local');
+    assert.equal(here.screen.id, 'this-machine');
+    assert.equal(here.screen.file, '/ui/screens/machine.js');
+    assert.equal(litItem(here.screen, here.params), 'this-machine');
+    const there = findScreen('/ui/machines/ws-exemplo');
+    assert.equal(there.screen.id, 'machine');
+    assert.equal(there.screen.file, '/ui/screens/machine.js');
+    assert.deepEqual(there.params, { id: 'ws-exemplo' });
+    assert.equal(litItem(there.screen, there.params), 'machine-ws-exemplo');
+    assert.equal(litItem(findScreen('/ui/sessions/abc').screen, { id: 'abc' }), 'sessions');
+    assert.equal(findScreen('/ui/machines/a/b'), null);
+  });
+
+  // The drawing itself (nav.js) is tested on the fake DOM in ui-machines.test.ts; here, the wiring.
+  test('#178 criterion 1: the shell draws the sidebar through nav.js and re-reads the machines on an alert', () => {
+    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
+    assert.match(app, /createNav\(\{ nav, read \}\)/);
+    assert.match(app, /highlight\(litItem\(screen, params\)\)/);
+    assert.match(app, /changes\.some\(\(c\) => c\.type === 'alert'\)\) readMachines\(\)/);
+    const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
+    assert.match(css, /\.cc-nav-dot \{/);
+    assert.match(css, /\.cc-nav-dot\[data-state="connected"\]/);
   });
 
   test('#104 critério 1: /ui/repos abre a lista de repositórios, com item na barra', () => {

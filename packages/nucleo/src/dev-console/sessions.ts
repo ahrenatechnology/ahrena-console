@@ -3,6 +3,7 @@
 // suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
+import { diaDe } from '../custo/agregacao.ts';
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { decisionLabel } from '../decisoes/registro.ts';
@@ -74,11 +75,25 @@ export interface SuggestedDecisionItem {
 
 export type DependsOnYouItem = WaitingSessionItem | SuggestedDecisionItem;
 
+/** A decision in force taken today (the machine's day) in one of the context's sessions, live or ended today: the C27 "Decisões tomadas hoje". */
+export interface DecisionTodayItem {
+  decisionId: string;
+  /** The UI's "D4". */
+  label: string;
+  choice: string;
+  sessionId: string;
+  repo: string;
+  decidedAt: string;
+  minutes: number;
+}
+
 export interface SessionsOfContexts {
   /** The live sessions of each repository. */
   byRepo: Map<string, ContextSession[]>;
   /** The depends-on-you items of each repository. */
   dependsOnYou: Map<string, DependsOnYouItem[]>;
+  /** The decisions in force taken today, per repository. */
+  decisionsToday: Map<string, DecisionTodayItem[]>;
 }
 
 export interface DevConsoleSessionsOptions {
@@ -112,9 +127,14 @@ export class DevConsoleSessions {
     const now = this.frota.agora();
     const byRepo = new Map<string, ContextSession[]>();
     const dependsOnYou = new Map<string, DependsOnYouItem[]>();
+    const decisionsToday = new Map<string, DecisionTodayItem[]>();
+    const today = this.frota.hoje();
     const push = <T>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
 
     const waiting = new Map((await precisamDeVoce(this.frota, null)).map((i) => [i.sessionId, i]));
+    // The live list is cached (`frota.cacheMs`) and the ended-today one is not: a session that completes
+    // inside that window is in both, and is scanned once.
+    const scanned = new Set<string>();
     for (const s of await this.frota.vivas()) {
       const { repo, branch } = await this.where(s.session, s.desktop?.branch ?? null);
       if (!repo || !repos.has(repo)) continue;
@@ -151,9 +171,41 @@ export class DevConsoleSessions {
           minutes: minutosDesde(d.decidedAt, now),
         });
       }
+      scanned.add(s.session.id);
+      await this.decisionsTakenToday(s.session.id, repo, today, now, (item) => push(decisionsToday, repo, item));
+    }
+    // Sessions that ended today count too: a decision taken at 09:00 stays "taken today" after its session completes at 09:30.
+    if (this.decisions) {
+      const ended = (await this.frota.encerradasHoje()).filter((e) => !scanned.has(e.id));
+      const found = await Promise.all(
+        ended.map(async (e) => {
+          const session = await this.frota.storage.getSession(e.id);
+          if (!session) return [];
+          const { repo } = await this.where(session);
+          if (!repo || !repos.has(repo)) return [];
+          const items: DecisionTodayItem[] = [];
+          await this.decisionsTakenToday(session.id, repo, today, now, (item) => items.push(item));
+          return items;
+        }),
+      );
+      for (const item of found.flat()) push(decisionsToday, item.repo, item);
     }
     for (const list of dependsOnYou.values()) list.sort((a, b) => a.since.localeCompare(b.since));
-    return { byRepo, dependsOnYou };
+    return { byRepo, dependsOnYou, decisionsToday };
+  }
+
+  /**
+   * The decisions in force a session took today (the machine's day, `frota.fusoHorario`). The port
+   * lists most recent first, so the first decision from another day ends the scan; the 50 cap is
+   * deliberate (more than 50 decisions in force in one session in one day is not a footer).
+   */
+  private async decisionsTakenToday(sessionId: string, repo: string, today: string, now: number, push: (item: DecisionTodayItem) => void): Promise<void> {
+    if (!this.decisions) return;
+    const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
+    for (const d of page.items) {
+      if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
+      push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutosDesde(d.decidedAt, now) });
+    }
   }
 }
 

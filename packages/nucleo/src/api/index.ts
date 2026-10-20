@@ -40,7 +40,7 @@ export * from './workflows.ts';
 export { criarRotaDoProjeto, quadroDe, mesmaOrigemMovendo, PROJECT_ROUTE, PROJECT_MOVE_ROUTE, type CardDoProjeto, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from './projeto.ts';
 export { LeiturasDoDetalhe, ROTA_DO_DETALHE, DETAIL_ROUTE, filtroDe, type CabecaDoDetalhe, type AgentesDoDetalhe, type ConversaDoDetalhe, type EventosDoDetalhe, type OpcoesDoDetalhe } from './detalhe.ts';
 export { FeedDeEventos, ROTA_DOS_EVENTOS, EVENTS_ROUTE, statusDoEvento, TIPOS_POR_STATUS, type EventoDoFeed, type RespostaDoFeed, type StatusDoEvento } from './eventos.ts';
-export { montarAtencao, MOTIVO_CURTO, ROTA_DA_ATENCAO, ATTENTION_ROUTE, type ItemDaAtencao, type RespostaDaAtencao } from './rota-atencao.ts';
+export { montarAtencao, MOTIVO_CURTO, remoteAttentionItems, ROTA_DA_ATENCAO, ATTENTION_ROUTE, type ItemDaAtencao, type RemoteAttentionSource, type RespostaDaAtencao } from './rota-atencao.ts';
 export { montarDashboard, MontadorDoDashboard, ROTA_DO_DASHBOARD, type RespostaDoDashboard, type AgenteDoDashboard, type AtividadeDoDashboard, type NumerosDoDashboard } from './rota-dashboard.ts';
 export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessoes.ts';
 export { QuadroKanban, pedidoDoKanban, rotuloDoModelo, colunaDoAgente, COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, type CardDeAgente, type CardDeSessao, type Coluna, type KanbanHttp, type PedidoDoKanban } from './kanban.ts';
