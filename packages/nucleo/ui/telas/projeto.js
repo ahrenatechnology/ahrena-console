@@ -13,6 +13,7 @@ import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 
 const ROTA = '/api/projeto';
+const ESTILO = '/ui/projeto.css';
 const ROTA_MOVER = '/api/projeto/mover';
 const TEMPO_DO_TOAST = 8000;
 const ESPERA_DO_AO_VIVO = 1000;
@@ -67,7 +68,15 @@ const nomeDoCard = (card) => (card.numero != null ? `#${card.numero}` : `“${ca
 const esperaDe = (e) => (e?.tentarEm ? ` Tente de novo em ${Math.ceil(e.tentarEm / 1000)} s.` : '');
 const comComando = (no, comando) => (comando ? (no.querySelector('p')?.append(' ', el('code', { class: 'pj-comando mono' }, comando)), no) : no);
 
+/** O CSS da tela, uma vez por página (fica carregado quando se troca de tela). */
+function carregarEstilo() {
+  const doc = globalThis.document;
+  if (!doc?.head || typeof doc.querySelector !== 'function' || doc.querySelector(`link[href="${ESTILO}"]`)) return;
+  doc.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
+}
+
 export async function montar(area, ctx) {
+  carregarEstilo();
   let quadro = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
   let marco = '';
   let falhaDeLeitura = null; // leitura que falhou com um quadro já na tela
