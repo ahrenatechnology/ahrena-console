@@ -15,7 +15,7 @@ import {
   type SessionEvent,
   type TokenUsage,
 } from '../../model.ts';
-import { validatePlan, validatePlanRecord, type PlanRecord, type SessionPlan } from '../../plano/modelo.ts';
+import { validatePlan, validatePlanRecord, type PlanRecord, type SessionPlan } from '../../plan/model.ts';
 import { validateContextMeter, type ContextMeter } from '../../context/model.ts';
 import {
   pageSize,

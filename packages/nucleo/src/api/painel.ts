@@ -16,7 +16,7 @@ import { readInbox, type InboxReading } from '../states/inbox.ts';
 import { readMemory, mainAgentOf } from '../states/rules.ts';
 import type { Agent, Session } from '../model.ts';
 import { effectiveTokens } from '../pricing.ts';
-import type { PlanOwner, PlanRecord, SessionPlan } from '../plano/modelo.ts';
+import type { PlanOwner, PlanRecord, SessionPlan } from '../plan/model.ts';
 import { LONG_WINDOW, DEFAULT_WINDOW } from '../context/window.ts';
 import { contextAlert, contextPct, contextLabel, type ContextMeter } from '../context/model.ts';
 import type { ListSessionsQuery, StoragePort } from '../storage-port.ts';

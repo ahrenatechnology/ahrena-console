@@ -1,6 +1,6 @@
-// Plano da sessão (item 1.9): a lista de tarefas que o agente mantém enquanto trabalha, vinda de
-// TodoWrite, TaskCreate e TaskUpdate e do `update_plan` dos plugins. Não é a issue do GitHub
-// (essa é o card Trabalho).
+// Session plan (item 1.9): the task list the agent keeps while it works, from TodoWrite,
+// TaskCreate and TaskUpdate and from the plugins' `update_plan`. It is not the GitHub issue
+// (that one is the Trabalho card).
 
 import { InvalidModelError, type Metadata } from '../model.ts';
 
