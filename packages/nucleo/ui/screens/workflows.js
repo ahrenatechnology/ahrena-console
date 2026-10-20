@@ -1,0 +1,406 @@
+// Workflows (#96, C14): as KPIs de orquestração, os runs do Workflow tool (fases e agentes) e o grafo
+// de orquestração, sobre `GET /api/workflows?filtro=&no=` (src/api/workflows.ts). O filtro do topo e o
+// clique num nó do grafo valem para a tela inteira: os dois vão para a API, que devolve tudo filtrado.
+//
+// Ao vivo: relê a cada mudança `sessao` ou `estado` (de qualquer sessão) e quando a moldura manda
+// reler. Subagente que começa ou termina não gera mudança, então, enquanto houver run ativo ou sessão
+// em andamento, relê a cada 10 s.
+//
+// Tudo o que vem do núcleo entra por `textContent` (`el()` e `svg()`), nunca como HTML.
+
+import { header, el, icon } from '../dom.js';
+import { loading, error, errorBand, empty } from '../states.js';
+import { decimal, duration, modelName, num, percent, when, tokens } from './workflow-format.js';
+
+const SVG = 'http://www.w3.org/2000/svg';
+const REREAD_ACTIVE_MS = 10_000;
+
+export const FILTERS = [
+  { id: 'todas', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
+  { id: 'ativas', rotulo: 'Só ativas', resumo: 'só as ativas' },
+  { id: 'concluidas', rotulo: 'Concluídas', resumo: 'só as concluídas' },
+];
+
+// ---------- Partes puras (testadas no node) ----------
+
+/** A rota da API para o filtro e o nó escolhidos. */
+export function workflowsRoute(filter, node) {
+  const q = new URLSearchParams({ filter: filter });
+  if (node) q.set('node', node);
+  return `/api/workflows?${q}`;
+}
+
+/** As seis KPIs do C14, já escritas: `{ id, rotulo, valor, sub, icone, cor }`. `null` vira "—". */
+export function writtenKpis(k) {
+  return [
+    { id: 'depth', rotulo: 'Profundidade', valor: decimal(k.profundidadeMedia), sub: 'níveis de agente', icone: 'subagent', cor: 'accent' },
+    { id: 'subagents', rotulo: 'Subagentes', valor: decimal(k.subagentesPorSessao), sub: 'por sessão', icone: 'people', cor: 'accent' },
+    { id: 'success', rotulo: 'Sucesso', valor: percent(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
+    { id: 'flow', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${percent(k.fluxoComum.fracao)} das sessões` : null, icone: 'repeat', cor: 'accent' },
+    { id: 'rounds', rotulo: 'Rodadas', valor: decimal(k.rodadasPorPr), sub: 'de review por PR', icone: 'refresh', cor: 'accent' },
+    { id: 'duration', rotulo: 'Duração', valor: duration(k.duracaoMediaMs), sub: 'média', icone: 'timer', cor: 'wait' },
+  ];
+}
+
+/** "motor-de-regras · 5 agentes · 36 ferramentas · 223 k tokens · 28 min" e, se acabou, "· ontem". */
+export function runMeta(run, now = new Date()) {
+  const n = run.agentes.length;
+  const parts = [
+    run.projeto,
+    `${num(n)} ${n === 1 ? 'agente' : 'agentes'}`,
+    `${num(run.ferramentas)} ${run.ferramentas === 1 ? 'ferramenta' : 'ferramentas'}`,
+    `${tokens(run.tokens)} tokens`,
+    duration(run.duracaoMs),
+    run.estado === 'ativa' ? null : when(run.fim ?? run.inicio, now),
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
+const RUN_STATE = { ativa: ['Ativa', 'active'], concluida: ['Concluída', 'completed'], erro: ['Erro', 'error'] };
+
+/** O estado de um agente do run: `[texto, cor]`. */
+export function agentState(a) {
+  if (a.estado === 'concluido') return ['Concluído', 'completed'];
+  if (a.estado === 'rodando') return ['Rodando', 'active'];
+  if (a.estado === 'erro') return ['Erro', 'error'];
+  if (a.ajustes === null || a.ajustes === undefined) return ['Ajustes', 'error'];
+  return [`${num(a.ajustes)} ${a.ajustes === 1 ? 'ajuste' : 'ajustes'}`, 'error'];
+}
+
+/** Espessura de uma aresta pelo volume, entre 1,2 e 22 (a mais grossa é a de maior volume). */
+export function thickness(volume, largest) {
+  if (!(largest > 0)) return 1.2;
+  return Math.max(1.2, Math.round((volume / largest) * 220) / 10);
+}
+
+const WIDTH = 960;
+const NODE_H = 30;
+const STEP = 42;
+const LETTER = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
+
+/**
+ * O desenho do grafo de orquestração na `largura` do painel, em px, sem escala: as colunas, na ordem da
+ * API, dividem a largura; os nós ficam empilhados no meio de cada coluna; as arestas vão em curva da
+ * direita de um nó à esquerda do outro, com espessura pelo volume. O rótulo que não cabe no nó encolhe
+ * com reticências (`texto`); o inteiro fica em `rotulo`.
+ */
+export function orchestrationLayout(graph, width = WIDTH) {
+  const columns = graph.colunas;
+  const n = Math.max(1, columns.length);
+  const NODE_W = Math.round(Math.min(152, Math.max(104, (width - 20) / n - 18)));
+  const stepX = columns.length > 1 ? (width - 20 - NODE_W) / (columns.length - 1) : 0;
+  const byColumn = columns.map((c) => graph.nos.filter((node) => node.coluna === c.id));
+  const height = Math.max(1, ...byColumn.map((l) => l.length)) * STEP;
+  const pos = new Map();
+  const nodes = [];
+  byColumn.forEach((list, i) => {
+    const x = Math.round(10 + i * stepX);
+    const k = list.length;
+    const s = k > 1 ? Math.min(70, (height - NODE_H) / (k - 1)) : 0;
+    const top = (height - (NODE_H + s * (k - 1))) / 2;
+    list.forEach((node, j) => {
+      const y = Math.round(top + j * s);
+      const volume = num(node.volume);
+      const fits = Math.max(4, Math.floor((NODE_W - 22 - volume.length * LETTER) / LETTER));
+      pos.set(node.id, { x, y });
+      nodes.push({ ...node, x, y, texto: node.rotulo.length > fits ? `${node.rotulo.slice(0, fits - 1)}…` : node.rotulo, volumeEscrito: volume });
+    });
+  });
+  const largest = Math.max(0, ...graph.arestas.map((a) => a.volume));
+  const edges = graph.arestas
+    .filter((a) => pos.has(a.de) && pos.has(a.para))
+    .map((a) => {
+      const A = pos.get(a.de);
+      const B = pos.get(a.para);
+      const x1 = A.x + NODE_W;
+      const y1 = A.y + NODE_H / 2;
+      const x2 = B.x;
+      const y2 = B.y + NODE_H / 2;
+      const m = (x1 + x2) / 2;
+      return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: thickness(a.volume, largest), erro: a.para === 'resultado:erro' };
+    });
+  return {
+    largura: width,
+    altura: height,
+    colunas: columns.map((c, i) => ({ ...c, x: Math.round(10 + i * stepX + NODE_W / 2) })),
+    nos: nodes,
+    arestas: edges,
+    no: { largura: NODE_W, altura: NODE_H },
+  };
+}
+
+/** Há o que mudar sem aviso? Run ativo ou sessão em andamento: a tela relê de tempos em tempos. */
+export function hasActive(data) {
+  return data.runs.some((r) => r.estado === 'ativa') || data.grafo.nos.some((n) => n.id === 'resultado:andamento' && n.volume > 0);
+}
+
+// ---------- DOM ----------
+
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attributes)) if (v !== null && v !== undefined && v !== false) node.setAttribute(k, String(v));
+  for (const f of children.flat()) if (f !== null && f !== undefined && f !== false) node.append(f instanceof Node ? f : document.createTextNode(String(f)));
+  return node;
+}
+
+function loadCss() {
+  if (document.querySelector('link[data-screen="workflows"]')) return;
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-screen': 'workflows' }));
+}
+
+function badgeEl(text, color) {
+  return el('span', { class: `badge b-${color}` }, el('span', { class: 'p' }), text);
+}
+
+function kpis(k) {
+  return el(
+    'div',
+    { class: 'wf-kpis' },
+    ...writtenKpis(k).map((c) =>
+      el(
+        'div',
+        { class: `card wf-kpi wf-kpi-${c.id}` },
+        el('span', { class: 'wf-kpi-label' }, c.rotulo),
+        el('span', { class: `wf-kpi-ic wf-color-${c.cor}` }, icon(c.icone)),
+        el('span', { class: 'wf-kpi-v mono' }, c.valor),
+        el('span', { class: 'wf-kpi-s' }, c.sub ?? ''),
+      ),
+    ),
+  );
+}
+
+function panel(title, right, ...body) {
+  return el('section', { class: 'card wf-panel' }, el('div', { class: 'wf-ttl' }, ...title, el('span', { class: 'wf-ttl-r' }, right)), ...body);
+}
+
+function chip(text, extra = '') {
+  return el('span', { class: `wf-chip${extra}` }, text);
+}
+
+function runRow(run, isOpen, toggleOne, ctx) {
+  const [label, color] = RUN_STATE[run.estado] ?? RUN_STATE.concluida;
+  const target = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
+  const link = el('a', { class: 'wf-run-link', href: `${target}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icon('external'));
+  // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
+  link.addEventListener('click', (ev) => {
+    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    history.pushState(null, '', `${target}#workflow`);
+    ctx.navigate(target);
+  });
+  const head = el(
+    'div',
+    { class: 'wf-run-head' },
+    el(
+      'button',
+      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': isOpen ? 'true' : 'false', onClick: toggleOne },
+      el('span', { class: 'wf-mute' }, icon(isOpen ? 'chevron-down' : 'chevron-right')),
+      el('b', {}, run.nome),
+      badgeEl(label, color),
+      isOpen && run.modelo ? chip(modelName(run.modelo), ' wf-chip-model mono') : null,
+      el('span', { class: 'wf-meta' }, runMeta(run)),
+    ),
+    link,
+  );
+  if (!isOpen) return el('div', { class: 'wf-run' }, head);
+
+  const phases = run.fases.length
+    ? el(
+        'div',
+        { class: 'wf-phases' },
+        el('span', { class: 'wf-mute' }, icon('layers')),
+        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icon('arrow-right')) : null, chip(f.nome)]),
+        run.volta ? el('span', { class: 'wf-back' }, run.volta) : null,
+      )
+    : null;
+
+  const table = el(
+    'table',
+    { class: 'wf-table' },
+    el('colgroup', {}, ...['agent', 'phase', 'state', 'tokens', 'tools', 'duration'].map((c) => el('col', { class: `wf-col-${c}` }))),
+    el('thead', {}, el('tr', {}, el('th', {}, 'Agente'), el('th', {}, 'Fase'), el('th', {}, 'Estado'), el('th', { class: 'wf-num' }, 'Tokens'), el('th', { class: 'wf-num' }, 'Ferramentas'), el('th', { class: 'wf-num' }, 'Duração'))),
+    el(
+      'tbody',
+      {},
+      ...run.agentes.map((a) => {
+        const [text, c] = agentState(a);
+        return el(
+          'tr',
+          {},
+          el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-type' }, `· ${a.tipo}`) : null),
+          el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mute' }, '—')),
+          el('td', {}, el('span', { class: `wf-pill b-${c}` }, text)),
+          el('td', { class: 'wf-num mono' }, tokens(a.tokens)),
+          el('td', { class: 'wf-num mono' }, num(a.ferramentas)),
+          el('td', { class: 'wf-num mono' }, duration(a.duracaoMs)),
+        );
+      }),
+    ),
+  );
+  return el('div', { class: 'wf-run wf-run-open' }, head, phases, el('div', { class: 'wf-table-box' }, table));
+}
+
+function graphSvg(graph, width, selected, choose) {
+  const g = orchestrationLayout(graph, width);
+  const { largura: W, altura: H } = g.no;
+  const root = svg('svg', { class: 'wf-orch', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
+  for (const c of g.colunas) root.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
+  for (const a of g.arestas) root.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
+  for (const n of g.nos) {
+    const cls = ['wf-node', n.id === 'resultado:concluida' ? 'wf-node-ok' : '', n.id === 'resultado:erro' ? 'wf-node-error' : '', n.id === selected ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
+    const group = svg(
+      'g',
+      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selected ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selected ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
+      svg('title', {}, `${n.rotulo} · ${n.id === selected ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
+      svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 7 }),
+      svg('text', { class: 'wf-node-label', x: n.x + 8, y: n.y + 19 }, n.texto),
+      svg('text', { class: 'wf-node-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
+    );
+    group.addEventListener('click', () => choose(n.id));
+    group.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      choose(n.id);
+    });
+    root.append(group);
+  }
+  return root;
+}
+
+// ---------- A tela ----------
+
+export async function mount(area, ctx) {
+  loadCss();
+  let filter = 'todas';
+  let node = null;
+  let data = null;
+  let failure = null;
+  let seq = 0;
+  let timer = null;
+  let wait = null;
+  let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
+  let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
+
+  const buttons = FILTERS.map((f) => {
+    const b = el('button', { type: 'button', 'aria-pressed': f.id === filter ? 'true' : 'false' }, f.rotulo);
+    b.addEventListener('click', () => {
+      if (filter === f.id) return;
+      filter = f.id;
+      markFilter();
+      read();
+    });
+    return b;
+  });
+  const markFilter = () => FILTERS.forEach((f, i) => buttons[i].setAttribute('aria-pressed', f.id === filter ? 'true' : 'false'));
+  const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...buttons);
+  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
+
+  area.replaceChildren(head, loading({ label: 'Carregando os workflows' }));
+
+  function chooseNode(id) {
+    node = node === id ? null : id;
+    focusTarget = id;
+    read();
+  }
+
+  const graphBox = el('div', { class: 'wf-orch-box' });
+  let graphWidth = 0;
+  function drawGraph() {
+    const width = Math.floor(graphBox.clientWidth);
+    if (!data || !graphBox.isConnected || width <= 0) return;
+    graphWidth = width;
+    graphBox.replaceChildren(graphSvg(data.grafo, width, data.no, chooseNode));
+  }
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    if (Math.floor(graphBox.clientWidth) !== graphWidth) drawGraph();
+  }) : null;
+  observer?.observe(graphBox);
+
+  function draw() {
+    const d = data;
+    // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
+    if (!d.sessoes && d.filtro === 'todas' && !d.no) {
+      area.replaceChildren(
+        ...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
+        empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
+      );
+      return;
+    }
+    if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
+    const nodeLabel = node ? (d.grafo.nos.find((n) => n.id === node)?.rotulo ?? node) : null;
+    // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
+    const summary = `${FILTERS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? `, das ${d.maximo ?? 500} mais recentes` : ''}`;
+
+    const runs = d.runs.length
+      ? d.runs.map((r) =>
+          runRow(r, expanded.has(r.id), () => {
+            expanded.has(r.id) ? expanded.delete(r.id) : expanded.add(r.id);
+            draw();
+            [...area.querySelectorAll('.wf-run-expand')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
+          }, ctx),
+        )
+      : [el('p', { class: 'wf-none' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
+
+    // O grafo é desenhado depois, na largura que o painel tem na tela (e de novo quando ela muda).
+    const graph = d.grafo.nos.length
+      ? graphBox
+      : el(
+          'div',
+          { class: 'wf-none' },
+          el('p', {}, 'Nenhuma sessão para desenhar.'),
+          node ? el('button', { type: 'button', class: 'btn outline', onClick: () => chooseNode(node) }, 'Limpar o filtro do nó') : null,
+        );
+
+    const parts = [
+      head,
+      failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
+      kpis(d.kpis),
+      panel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
+      panel(
+        ['Grafo de orquestração'],
+        node ? `${summary} · passando por ${nodeLabel} · clique de novo para limpar` : `${summary} · clique num nó para filtrar`,
+        graph,
+      ),
+    ];
+    area.replaceChildren(...parts.filter(Boolean));
+    if (d.grafo.nos.length) drawGraph();
+    if (focusTarget) {
+      [...area.querySelectorAll('.wf-node')].find((g) => g.getAttribute('data-node') === focusTarget)?.focus();
+      focusTarget = null;
+    }
+  }
+
+  async function read() {
+    const mine = ++seq;
+    clearTimeout(timer);
+    try {
+      const d = await ctx.read(workflowsRoute(filter, node));
+      if (mine !== seq) return;
+      data = d;
+      failure = null;
+      draw();
+    } catch (e) {
+      if (e?.name === 'AbortError' || mine !== seq) return;
+      if (!data) area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
+      else {
+        failure = e.message;
+        draw();
+      }
+    }
+    if (mine === seq && !ctx.signal.aborted && data && hasActive(data)) timer = setTimeout(read, REREAD_ACTIVE_MS);
+  }
+
+  ctx.onChange((changes) => {
+    if (!changes.some((m) => m.tipo === 'sessao' || m.tipo === 'estado')) return;
+    clearTimeout(wait);
+    wait = setTimeout(read, 400);
+  });
+  ctx.onRestart(() => read());
+
+  await read();
+  return () => {
+    clearTimeout(timer);
+    clearTimeout(wait);
+    observer?.disconnect();
+  };
+}

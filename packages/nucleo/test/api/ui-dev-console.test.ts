@@ -37,16 +37,16 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: browser module, plain JavaScript
-import { acharTela, sidebarSections, TELAS } from '../../ui/telas.js';
+import { findScreen, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
-import { NOMES_DOS_ICONES } from '../../ui/dom.js';
+import { ICON_NAMES } from '../../ui/dom.js';
 const screen = await import(
   // @ts-expect-error: idem
-  '../../ui/telas/dev-console.js'
+  '../../ui/screens/dev-console.js'
 );
-const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, isContextId, montar, queueNote, reasonLabel, reasonTone, reviewLabel, safeHref, scoreboardCards, staleText, screenRoute, stateFromSearch, touchesDevConsole } = screen;
+const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, isContextId, mount: mountScreen, queueNote, reasonLabel, reasonTone, reviewLabel, safeHref, scoreboardCards, staleText, screenRoute, stateFromSearch, touchesDevConsole } = screen;
 
-const FILES = ['telas/dev-console.js', 'telas/dev-console.css'];
+const FILES = ['screens/dev-console.js', 'screens/dev-console.css'];
 
 // ---------- the simulator's Dev Console ----------
 
@@ -81,7 +81,7 @@ beforeEach(async () => {
 });
 afterEach(() => storage.close());
 
-/** A `ler` that answers like the núcleo: the route goes to the Dev Console, the JSON goes through a round trip. */
+/** A `read` that answers like the núcleo: the route goes to the Dev Console, the JSON goes through a round trip. */
 function readerOf(dc: () => DevConsole) {
   return async (route: string) => {
     const url = new URL(route, 'http://127.0.0.1');
@@ -118,16 +118,16 @@ function mount(read: (route: string) => Promise<unknown>, search = ''): Mounted 
   let cleanup: (() => void) | null = null;
   const ctx = {
     params: {},
-    sinal: signal.signal,
-    ler: (route: string) => (reads.push(route), read(route)),
-    aoMudar: (f: (c: unknown[]) => void) => onChange.push(f),
-    aoReiniciar: (f: () => void) => onRestart.push(f),
-    aoVivo: () => 'ao-vivo',
-    contador: () => {},
-    titulo: () => {},
-    navegar: () => {},
+    signal: signal.signal,
+    read: (route: string) => (reads.push(route), read(route)),
+    onChange: (f: (c: unknown[]) => void) => onChange.push(f),
+    onRestart: (f: () => void) => onRestart.push(f),
+    liveState: () => 'live',
+    counter: () => {},
+    title: () => {},
+    navigate: () => {},
   };
-  const ready = montar(area, ctx).then((f: () => void) => (cleanup = f));
+  const ready = mountScreen(area, ctx).then((f: () => void) => (cleanup = f));
   const m: Mounted = {
     area,
     reads,
@@ -219,7 +219,7 @@ describe('Dev Console: pure parts', () => {
     assert.equal(d.title, 'Rodar a migração');
     assert.match(d.text, /^Pede permissão/);
     assert.equal(d.where, 'motor-de-regras');
-    assert.equal(d.href, '/ui/sessoes/permission');
+    assert.equal(d.href, '/ui/sessions/permission');
     const suggested = dependsOnYouCard({ kind: 'suggested-decision', choice: '10 cards por coluna', alternatives: ['20 por coluna'], title: 'Kanban', repo: 'a/b', sessionId: 's', minutes: 6, issue: null });
     assert.deepEqual([suggested.title, suggested.text], ['Decisão sugerida: 10 cards por coluna', 'Alternativa: 20 por coluna · de Kanban']);
     assert.equal(dependsOnYouCard({ kind: 'suggested-decision', choice: 'x', alternatives: ['y'], title: 'Kanban', repo: 'a/b', sessionId: 's', minutes: 6, issue: 61 }).text, 'Alternativa: y · de Kanban · #61');
@@ -239,22 +239,22 @@ describe('Dev Console: pure parts', () => {
 
 describe('Dev Console: registration and files', () => {
   test('#179/AC-1 /ui/dev-console opens the screen, with the item in main between Repositórios and Analytics', () => {
-    const { tela } = acharTela('/ui/dev-console');
-    assert.equal(tela.id, 'dev-console');
-    assert.equal(tela.arquivo, '/ui/telas/dev-console.js');
-    assert.deepEqual(tela.item, { rotulo: 'Dev Console', icone: 'gauge', section: 'main' });
+    const { screen: found } = findScreen('/ui/dev-console');
+    assert.equal(found.id, 'dev-console');
+    assert.equal(found.file, '/ui/screens/dev-console.js');
+    assert.deepEqual(found.item, { label: 'Dev Console', icon: 'gauge', section: 'main' });
     const main = sidebarSections().find((s: { id: string }) => s.id === 'main').items.map((t: { id: string }) => t.id);
     assert.equal(main.indexOf('dev-console'), main.indexOf('repos') + 1);
     assert.equal(main.indexOf('analytics'), main.indexOf('dev-console') + 1);
-    const ids = TELAS.map((t: { id: string }) => t.id);
+    const ids = SCREENS.map((t: { id: string }) => t.id);
     assert.ok(ids.indexOf('dev-console') > ids.indexOf('repo') && ids.indexOf('dev-console') < ids.indexOf('analytics'));
   });
 
   test('#179/AC-5 every icon the screen uses exists in dom.js', () => {
-    const js = readFileSync(`${PASTA_DA_UI}telas/dev-console.js`, 'utf8');
-    const used = new Set([...js.matchAll(/(?:icone|eyebrow)\('([a-z-]+)'/g), ...js.matchAll(/icon: '([a-z-]+)'/g), ...js.matchAll(/icone: '([a-z-]+)'/g)].map((m) => m[1]!));
+    const js = readFileSync(`${PASTA_DA_UI}screens/dev-console.js`, 'utf8');
+    const used = new Set([...js.matchAll(/(?:icon|eyebrow)\('([a-z-]+)'/g), ...js.matchAll(/icon: '([a-z-]+)'/g), ...js.matchAll(/listCard\(\s*'([a-z-]+)'/g)].map((m) => m[1]!));
     assert.ok(used.has('gauge') && used.has('hand') && used.has('merge'));
-    for (const name of used) assert.ok(NOMES_DOS_ICONES.includes(name), `${name} is not in dom.js`);
+    for (const name of used) assert.ok(ICON_NAMES.includes(name), `${name} is not in dom.js`);
   });
 
   test('#179/AC-5 the files call nothing outside, write no colour, no inline style, no HTML from data', () => {
@@ -268,9 +268,9 @@ describe('Dev Console: registration and files', () => {
   });
 
   test('#179/AC-5 the screen only uses dev- classes that exist in its stylesheet', () => {
-    const css = readFileSync(`${PASTA_DA_UI}telas/dev-console.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = readFileSync(`${PASTA_DA_UI}screens/dev-console.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const defined = new Set([...css.matchAll(/\.(dev-[a-z0-9-]+)/g)].map((m) => m[1]!));
-    const js = readFileSync(`${PASTA_DA_UI}telas/dev-console.js`, 'utf8');
+    const js = readFileSync(`${PASTA_DA_UI}screens/dev-console.js`, 'utf8');
     const used = new Set([...js.matchAll(/\bdev-[a-z0-9-]+/g)].map((m) => m[0]).filter((c) => !c.endsWith('-') && c !== 'dev-console'));
     for (const c of used) assert.ok(defined.has(c), `${c} is not in dev-console.css`);
     // The templated ones: pills, tones, dots and columns.
@@ -280,7 +280,7 @@ describe('Dev Console: registration and files', () => {
   });
 
   test('#179/AC-3 the board has six tracks side by side and, below 1280 px of window, four and two underneath', () => {
-    const css = readFileSync(`${PASTA_DA_UI}telas/dev-console.css`, 'utf8');
+    const css = readFileSync(`${PASTA_DA_UI}screens/dev-console.css`, 'utf8');
     assert.match(css, /\.dev-board \{[^}]*grid-template-columns: repeat\(12, minmax\(0, 1fr\)\)/);
     assert.match(css, /\.dev-col \{[^}]*grid-column: span 2;/);
     assert.match(css, /@media \(max-width: 1279px\) \{\s*\.dev-col \{ grid-column: span 3; \}\s*\.dev-col-blocked, \.dev-col-done \{ grid-column: span 6; \}/);
@@ -296,13 +296,13 @@ describe('Dev Console mounted on the simulator data', () => {
     const gate = new Promise<void>((r) => (release = r));
     const read = readerOf(() => devConsole);
     const m = mount(async (r) => (await gate, read(r)));
-    assert.ok(m.area.querySelector('.carregando'), 'skeleton while the first read is out');
-    assert.ok(document.head.querySelector('link[data-tela="dev-console"]'));
+    assert.ok(m.area.querySelector('.loading'), 'skeleton while the first read is out');
+    assert.ok(document.head.querySelector('link[data-screen="dev-console"]'));
     release();
     await m.ready;
-    assert.equal(m.area.querySelector('.carregando'), null);
+    assert.equal(m.area.querySelector('.loading'), null);
     m.leave();
-    assert.equal(document.head.querySelector('link[data-tela="dev-console"]'), null);
+    assert.equal(document.head.querySelector('link[data-screen="dev-console"]'), null);
   });
 
   test('#179/AC-1 #179/AC-2 #179/AC-5 the first context opens with the five numbers, depends on you, the queue, the board and the footer', async () => {
@@ -320,7 +320,7 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.ok(a.querySelector('.dev-stat-alert[data-stat="ci-failing"]'));
     // Depends on you, linking to the session.
     assert.match(texto(a.querySelector('.dev-inbox .dev-eyebrow')), /Depende de você · 1/);
-    assert.equal(a.querySelector('.dev-depend')?.getAttribute('href'), '/ui/sessoes/permission');
+    assert.equal(a.querySelector('.dev-depend')?.getAttribute('href'), '/ui/sessions/permission');
     // Queue in order, the stacked after its base; the not-ready collapsed with readable reasons.
     assert.deepEqual(all(a, '.dev-queue-row .dev-queue-title'), ['Endpoint de exportação em CSV', 'Migração do esquema de pedidos', 'Índices da tabela de pedidos']);
     assert.match(all(a, '.dev-queue-row small')[2]!, /empilhado em #79/);
@@ -338,7 +338,7 @@ describe('Dev Console mounted on the simulator data', () => {
     assert.equal(merged!.querySelectorAll('.dev-list-row').length, 3);
     assert.match(texto(merged!), /Paginação da listagem/);
     assert.match(texto(decisions!), /SQLite em memória nos testes/);
-    assert.equal(decisions!.querySelector('.dev-list-link')?.getAttribute('href'), '/ui/decisoes');
+    assert.equal(decisions!.querySelector('.dev-list-link')?.getAttribute('href'), '/ui/decisions');
     assert.equal(texto(decisions!.querySelector('.dev-list-link')), '1 · ver em Decisões ›');
   });
 
@@ -363,7 +363,7 @@ describe('Dev Console mounted on the simulator data', () => {
     source.offline = true;
     const m = mount(readerOf(() => devConsole), '?context=loja');
     await m.ready;
-    const band = m.area.querySelector('.faixa-erro');
+    const band = m.area.querySelector('.error-band');
     assert.ok(band);
     assert.match(texto(band), /Sem conexão com o GitHub\. Mostrando a leitura das \d\d:\d\d\. GitHub fora do ar \(simulado\)\./);
     assert.deepEqual(all(m.area, '.dev-stat-value'), ['3', '1', '2', '1', '1']);
@@ -372,13 +372,13 @@ describe('Dev Console mounted on the simulator data', () => {
     m.restart();
     await until(() => m.reads.length === 4);
     await new Promise((r) => setTimeout(r, 20));
-    assert.equal(m.area.querySelector('.faixa-erro'), band, 'the same band node after a re-read');
+    assert.equal(m.area.querySelector('.error-band'), band, 'the same band node after a re-read');
   });
 
   test('#179/AC-4 no context configured: the empty state explains ~/.ahrena-console/dev-console.json', async () => {
     const m = mount(async () => ({ contexts: [], mergeQueue: [], readAt: null, stale: false, staleReason: null }));
     await m.ready;
-    const empty = m.area.querySelector('.estado');
+    const empty = m.area.querySelector('.state');
     assert.match(texto(empty), /Nenhum contexto configurado/);
     assert.match(texto(empty), /~\/\.ahrena-console\/dev-console\.json/);
     assert.equal(m.area.querySelector('.dev-tabs'), null);
@@ -387,13 +387,13 @@ describe('Dev Console mounted on the simulator data', () => {
   test('#179/AC-1 unknown or invalid context: says so and offers the first one', async () => {
     const m = mount(readerOf(() => devConsole), '?context=nenhum');
     await m.ready;
-    assert.match(texto(m.area.querySelector('.estado')), /Contexto não encontrado/);
+    assert.match(texto(m.area.querySelector('.state')), /Contexto não encontrado/);
     assert.ok(m.area.querySelector('.dev-tabs'));
     // An id the núcleo would refuse is not asked for, and does not silently open another context.
     const bad = mount(readerOf(() => devConsole), '?context=a%20b');
     await bad.ready;
     assert.deepEqual(bad.reads, ['/api/dev-console']);
-    assert.match(texto(bad.area.querySelector('.estado')), /Contexto não encontrado.*"a b"/);
+    assert.match(texto(bad.area.querySelector('.state')), /Contexto não encontrado.*"a b"/);
   });
 
   test('#179 C19 the read fails: the error state with "Tentar de novo", which reads again', async () => {
@@ -404,7 +404,7 @@ describe('Dev Console mounted on the simulator data', () => {
       return read(r);
     });
     await m.ready;
-    const state = m.area.querySelector('.estado[role="alert"]');
+    const state = m.area.querySelector('.state[role="alert"]');
     assert.match(texto(state), /O núcleo não respondeu/);
     fail = false;
     state!.querySelector('button')!.dispatchEvent({ type: 'click' });
@@ -435,7 +435,7 @@ describe('Dev Console mounted on the simulator data', () => {
     });
     await m.ready;
     assert.ok(m.area.querySelector('.dev-tabs'), 'tabs stay');
-    assert.match(texto(m.area.querySelector('.faixa-erro')), /Não deu para atualizar\. O núcleo respondeu 500/);
+    assert.match(texto(m.area.querySelector('.error-band')), /Não deu para atualizar\. O núcleo respondeu 500/);
   });
 
   test('#179/AC-2 the open "não prontos" list stays open, and keeps the focus, across a re-read', async () => {
@@ -514,12 +514,12 @@ describe('Dev Console mounted on the simulator data', () => {
     gateLoja = true;
     const tab = (label: string) => m.area.querySelectorAll('.dev-tab').find((t) => texto(t) === label)!;
     tab('Loja · 2 repos').dispatchEvent({ type: 'click' });
-    assert.ok(m.area.querySelector('.carregando'), 'loading under the tabs while the context is read');
+    assert.ok(m.area.querySelector('.loading'), 'loading under the tabs while the context is read');
     assert.equal(texto(m.area.querySelector('.dev-tab[aria-current="page"]')), 'Loja · 2 repos');
     await until(() => m.reads.includes('/api/dev-console?context=loja'));
     // Back to the queue before Loja answers: the queue must stay.
     tab('Fila de merge · 3').dispatchEvent({ type: 'click' });
-    await until(() => !!m.area.querySelector('.dev-queue-card') && !m.area.querySelector('.carregando'));
+    await until(() => !!m.area.querySelector('.dev-queue-card') && !m.area.querySelector('.loading'));
     releaseLoja();
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(m.area.querySelector('.dev-stats'), null, 'the late Loja answer is dropped');

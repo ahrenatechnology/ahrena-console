@@ -53,7 +53,7 @@ export interface DecisaoDaUi extends DecisaoDoPainel {
   promovidaPara: string | null;
   branch: string | null;
   repo: string | null;
-  /** O "Ver na conversa": `/ui/sessoes/<sessionId>`. */
+  /** O "Ver na conversa": `/ui/sessions/<sessionId>`. */
   conversa: string;
 }
 
@@ -260,7 +260,7 @@ export class DecisoesDaUi {
       promovidaPara: d.promotedTo,
       branch: d.branch,
       repo: d.repo,
-      conversa: `/ui/sessoes/${encodeURIComponent(d.sessionId)}`,
+      conversa: `/ui/sessions/${encodeURIComponent(d.sessionId)}`,
     };
   }
 
@@ -425,7 +425,7 @@ export class DecisoesDaUi {
     const escopo = ESCOPO_POR_EXTENSO[d.scope];
     const status = d.state === 'a_confirmar' ? 'proposta' : d.state === 'substituida' ? 'substituída' : 'aceita';
     const umaLinha = (s: string) => s.replace(/\s*\n\s*/g, ' ');
-    const conversa = `\`/ui/sessoes/${d.sessionId}\` no console${local ? ` · [abrir no Claude Desktop](claude://claude.ai/epitaxy/${local})` : ''}`;
+    const conversa = `\`/ui/sessions/${d.sessionId}\` no console${local ? ` · [abrir no Claude Desktop](claude://claude.ai/epitaxy/${local})` : ''}`;
     const vale =
       d.scope === 'sessao'
         ? 'só a sessão que decidiu a segue'

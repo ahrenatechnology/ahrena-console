@@ -11,9 +11,9 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 import { simular } from '../../src/simulador/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUNAS, custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/telas/sessoes.js';
+import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
-import { acharTela } from '../../ui/telas.js';
+import { findScreen } from '../../ui/screens.js';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
 const PADRAO: PedidoDeSessoes = { status: 'todas', busca: null, dir: null, ordem: 'atividade', sentido: 'desc', pagina: 1 };
@@ -189,72 +189,72 @@ describe('#28 GET /api/sessoes com o simulador', () => {
 });
 
 describe('#28 a tela Sessões', () => {
-  test('está registrada em /ui/sessoes, e o arquivo existe', () => {
-    const { tela } = acharTela('/ui/sessoes');
-    assert.equal(tela.arquivo, '/ui/telas/sessoes.js');
-    assert.ok(existsSync(`${PASTA_DA_UI}telas/sessoes.js`));
-    assert.ok(existsSync(`${PASTA_DA_UI}sessoes.css`));
+  test('está registrada em /ui/sessions, e o arquivo existe', () => {
+    const { screen: tela } = findScreen('/ui/sessions');
+    assert.equal(tela.file, '/ui/screens/sessions.js');
+    assert.ok(existsSync(`${PASTA_DA_UI}screens/sessions.js`));
+    assert.ok(existsSync(`${PASTA_DA_UI}sessions.css`));
     // A linha leva ao Detalhe, que casa o id do simulador.
-    assert.equal(acharTela(`/ui/sessoes/${encodeURIComponent(SESSAO_DO_PAINEL)}`).tela.id, 'detalhe');
+    assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(SESSAO_DO_PAINEL)}`).screen.id, 'session-detail');
   });
 
   test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = estadoDaQuery('?status=esperando&busca=oi&dir=/simulacao/x&ordem=custo&sentido=asc&pagina=2');
-    assert.deepEqual(e, { status: 'esperando', busca: 'oi', dir: '/simulacao/x', ordem: 'custo', sentido: 'asc', pagina: 2 });
-    assert.deepEqual(estadoDaQuery(queryDoEstado(e)), e);
-    assert.equal(queryDoEstado(estadoDaQuery('')), '');
-    assert.deepEqual(estadoDaQuery('?status=x&ordem=y&sentido=z&pagina=-1&dir=rel'), estadoDaQuery(''));
+    const e = stateFromQuery('?status=esperando&search=oi&dir=/simulacao/x&order=custo&direction=asc&page=2');
+    assert.deepEqual(e, { status: 'esperando', search: 'oi', dir: '/simulacao/x', order: 'custo', direction: 'asc', page: 2 });
+    assert.deepEqual(stateFromQuery(queryFromState(e)), e);
+    assert.equal(queryFromState(stateFromQuery('')), '');
+    assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });
 
   test('a rota da API leva os filtros que o servidor entende', () => {
-    const rota = rotaDaLista({ status: 'erro', busca: ' a b ', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
+    const rota = listRoute({ status: 'erro', search: ' a b ', dir: '/d', order: 'duracao', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
     assert.deepEqual(pedidoDeSessoes(url), { status: 'erro', busca: 'a b', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
-    assert.ok(!new URL(rotaDaLista(estadoDaQuery('')), 'http://x').searchParams.has('search'));
+    assert.ok(!new URL(listRoute(stateFromQuery('')), 'http://x').searchParams.has('search'));
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {
     const agora = Date.parse('2026-05-01T12:00:00Z');
-    assert.equal(idade('2026-05-01T11:59:30Z', agora), 'agora');
-    assert.equal(idade('2026-05-01T11:58:00Z', agora), 'há 2 min');
-    assert.equal(idade('2026-05-01T09:00:00Z', agora), 'há 3 h');
-    assert.equal(idade('2026-04-28T12:00:00Z', agora), 'há 3 d');
-    assert.equal(duracao(20_000), '< 1 min');
-    assert.equal(duracao(12 * 60_000), '12 min');
-    assert.equal(duracao(190 * 60_000), '3 h 10');
-    assert.equal(duracao(120 * 60_000), '2 h');
-    assert.equal(duracao(28 * 3_600_000), '1 d 4 h');
-    assert.equal(custo(1.84), '~US$ 1,84');
-    assert.equal(custo(0), '~US$ 0,00');
-    assert.equal(custo(null), 'sem preço');
-    assert.equal(faixa({ total: 12, pagina: 1, porPagina: 10 }), '1–10 de 12');
-    assert.equal(faixa({ total: 12, pagina: 2, porPagina: 10 }), '11–12 de 12');
-    assert.equal(faixa({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
-    assert.equal(idCurto('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
-    assert.equal(idCurto('sim-painel-esta'), 'sim-painel-esta');
+    assert.equal(age('2026-05-01T11:59:30Z', agora), 'agora');
+    assert.equal(age('2026-05-01T11:58:00Z', agora), 'há 2 min');
+    assert.equal(age('2026-05-01T09:00:00Z', agora), 'há 3 h');
+    assert.equal(age('2026-04-28T12:00:00Z', agora), 'há 3 d');
+    assert.equal(duration(20_000), '< 1 min');
+    assert.equal(duration(12 * 60_000), '12 min');
+    assert.equal(duration(190 * 60_000), '3 h 10');
+    assert.equal(duration(120 * 60_000), '2 h');
+    assert.equal(duration(28 * 3_600_000), '1 d 4 h');
+    assert.equal(cost(1.84), '~US$ 1,84');
+    assert.equal(cost(0), '~US$ 0,00');
+    assert.equal(cost(null), 'sem preço');
+    assert.equal(band({ total: 12, pagina: 1, porPagina: 10 }), '1–10 de 12');
+    assert.equal(band({ total: 12, pagina: 2, porPagina: 10 }), '11–12 de 12');
+    assert.equal(band({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
+    assert.equal(shortId('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
+    assert.equal(shortId('sim-painel-esta'), 'sim-painel-esta');
   });
 
   // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),
   // a tabela tem 830 px; abaixo de 900 px de janela, 610 px e sem o Diretório. Cada coluna precisa
   // do mínimo que o texto mais largo dela pede (medido no navegador), senão corta ou rola.
   test('a tabela cabe em 1100 px sem rolagem horizontal, e abaixo de 900 px sem o Diretório', () => {
-    const css = readFileSync(`${PASTA_DA_UI}sessoes.css`, 'utf8');
+    const css = readFileSync(`${PASTA_DA_UI}sessions.css`, 'utf8');
     const corte = css.indexOf('@media (max-width: 900px)');
     assert.ok(corte > 0, 'falta a faixa de 900 px');
-    const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.tabela \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
+    const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.table \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
     const largas = larguras(css.slice(0, corte));
     const estreitas = { ...largas, ...larguras(css.slice(corte)) };
-    const classes = COLUNAS.map(([c]: [string]) => c);
+    const classes = COLUMNS.map(([c]: [string]) => c);
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
     assert.equal(classes.filter((c: string) => c !== 'c-dir').reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'sem o Diretório, o resto soma 100');
-    assert.match(css, /\.tabela \{ table-layout: fixed; \}/);
-    assert.match(css.slice(corte), /\.tabela \.c-dir, \.tabela \.dir \{ display: none; \}/);
+    assert.match(css, /\.table \{ table-layout: fixed; \}/);
+    assert.match(css.slice(corte), /\.table \.c-dir, \.table \.dir \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-sessao': 180, 'c-status': 140, 'c-atividade': 90, 'c-duracao': 85, 'c-agentes': 74, 'c-custo': 85, 'c-dir': 100, 'c-seta': 24 };
-    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-sessao': 130, 'c-atividade': 70, 'c-duracao': 75, 'c-agentes': 60, 'c-custo': 80 };
+    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-arrow': 24 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
     for (const c of classes) {
       assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
       if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
@@ -262,28 +262,28 @@ describe('#28 a tela Sessões', () => {
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
-  // telas desmonta a outra (o `.linha` do Dashboard, que é flex, desmontava as linhas desta tabela).
+  // telas desmonta a outra (o `.row` do Dashboard, que é flex, desmontava as linhas desta tabela).
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     // As da moldura (`.icone`, `.btn`) são de todas as telas.
-    const daMoldura = classes('moldura.css');
-    const minhas = new Set([...classes('sessoes.css')].filter((c) => !daMoldura.has(c)));
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessoes.css', 'moldura.css', 'marca.css'].includes(a));
+    const daMoldura = classes('shell.css');
+    const minhas = new Set([...classes('sessions.css')].filter((c) => !daMoldura.has(c)));
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['sessions.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.has(c) && !SELOS.has(c));
-      assert.deepEqual(comuns, [], `sessoes.css e ${outra} estilizam as mesmas classes`);
+      assert.deepEqual(comuns, [], `sessions.css e ${outra} estilizam as mesmas classes`);
     }
   });
 
   // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97) e o Dev Console (#179),
-  // contra todo CSS da /ui (também os de ui/telas/), e toda classe própria delas com o prefixo da tela.
+  // contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
   test('o CSS de Workflows, da aba Workflow e do Dev Console só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
-    const daMoldura = classes('moldura.css');
-    const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => a.endsWith('.css') && !['moldura.css', 'marca.css'].includes(a));
-    for (const [arquivo, prefixo] of [['telas/workflows.css', 'wf-'], ['telas/detalhe-workflow.css', 'wfd-'], ['telas/dev-console.css', 'dev-']] as const) {
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const daMoldura = classes('shell.css');
+    const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

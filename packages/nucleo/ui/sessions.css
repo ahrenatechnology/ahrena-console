@@ -1,0 +1,102 @@
+/* A tela Sessões (C3, #28), carregada por telas/sessions.js. Toda cor vem de marca.css. */
+
+.c-muted { color: var(--muted); }
+.c-active { color: var(--status-active-text); }
+
+/* ---------- filtros ---------- */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px; }
+.field { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; position: relative; }
+.field:focus-within { border-color: var(--accent); }
+.field.search { flex: 1; min-width: 180px; }
+.field.search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.field.search input::placeholder { color: var(--muted); }
+.field.square { padding: 0 10px; cursor: pointer; font: inherit; }
+.field.square:hover { color: var(--text); }
+.field.square:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dir-slot .field { width: 200px; }
+.order-slot .field { width: 190px; }
+/* O select ocupa o campo inteiro; a seta é o ícone por cima. */
+.field-sel { appearance: none; flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-overflow: ellipsis; padding-right: 18px; }
+.field-sel option { background: var(--surface); color: var(--text); }
+.field > .icon:last-child { position: absolute; right: 12px; pointer-events: none; }
+.field.search > .icon:last-child, .field.square > .icon:last-child { position: static; }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.seg button { font: inherit; font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- tabela ---------- */
+.sessions-body { display: flex; flex-direction: column; gap: 12px; }
+.table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 12px 10px; border-bottom: 1px solid var(--border); }
+.table td { padding: 11px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.table th:first-child, .table td:first-child { padding-left: 14px; }
+.table tr:last-child td { border-bottom: 0; }
+
+/*
+ * Largura: a janela do app abre com 1100 px (inner_size do app desktop), e a tabela cabe nela sem rolagem horizontal.
+ * O layout é fixo e as colunas dividem a largura em porcentagem, então nada empurra a tabela para
+ * fora: o título quebra em até duas linhas, o motivo desce para baixo do status, o tempo da
+ * duração desce para baixo do "rodando" e o diretório corta no começo, com o caminho inteiro no
+ * title. Abaixo de 900 px o Diretório sai.
+ */
+.table { table-layout: fixed; }
+.table .c-session { width: 24%; }
+.table .c-status { width: 17%; }
+.table .c-activity { width: 11%; }
+.table .c-duration { width: 11%; }
+.table .c-agents { width: 9%; }
+.table .c-cost { width: 11%; }
+.table .c-dir { width: 14%; }
+.table .c-arrow { width: 3%; }
+.table .nm, .table .st, .table .dur, .table th { white-space: normal; }
+.table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
+.table .st { line-height: 1.9; }
+.table .dur { font-size: 12px; }
+.table .dur > span { white-space: nowrap; }
+.table .dir { direction: rtl; text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.table .arrow { padding-left: 0; text-align: right; }
+@media (max-width: 900px) {
+  .table .c-dir, .table .dir { display: none; }
+  .table th, .table td { padding-left: 6px; padding-right: 6px; }
+  .table th { letter-spacing: .04em; }
+  .table .c-session { width: 23%; }
+  .table .c-status { width: 23%; }
+  .table .c-activity { width: 12%; }
+  .table .c-duration { width: 13%; }
+  .table .c-agents { width: 11%; }
+  .table .c-cost { width: 14%; }
+  .table .c-arrow { width: 4%; }
+}
+
+.table .session-row { cursor: pointer; }
+.table .session-row:hover td { background: var(--raised); }
+.table .nm a { display: block; }
+.table .nm a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.table .nm b { font-weight: var(--weight-medium); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.table .nm small { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 10.5px; }
+.table .nm small .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table .nm .account { white-space: nowrap; }
+
+.account { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-sans); }
+.account-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cor-da-conta, var(--muted)); }
+
+/* Os selos de status e de motivo: iguais aos do dashboard.css, para a ordem de carga não importar. */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.reason { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap;
+  background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
+.reason.soft { font-weight: var(--weight-medium); }
+.table .badge, .table .reason { vertical-align: middle; }
+.table .reason { margin-left: 4px; }
+
+.sessions-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+.sessions-footer .pages { display: flex; gap: 6px; }
+.btn:disabled { opacity: .45; cursor: default; }

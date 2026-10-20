@@ -9,7 +9,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 
-// ---------- Um DOM mínimo: só o que dom.js, estados.js e a tela usam ----------
+// ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
 class No {
   filhos: No[] = [];
@@ -84,34 +84,34 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-const tela = await import('../../ui/telas/dashboard.js');
-const { cards, cartoesDaInbox, custo, idade, montar, nomeDoModelo, quantidade, tituloDaInbox } = tela;
+const tela = await import('../../ui/screens/dashboard.js');
+const { cards, inboxCards, cost, age, mount, modelName, quantity, inboxTitle } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
 
 describe('Dashboard: formatação', () => {
   test('quantidades em pt-BR, como no C1', () => {
-    assert.equal(quantidade(412), '412');
-    assert.equal(quantidade(3200), '3,2 mil');
-    assert.equal(quantidade(48_100), '48,1 mil');
-    assert.equal(quantidade(2_100_000), '2,1 mi');
+    assert.equal(quantity(412), '412');
+    assert.equal(quantity(3200), '3,2 mil');
+    assert.equal(quantity(48_100), '48,1 mil');
+    assert.equal(quantity(2_100_000), '2,1 mi');
   });
   test('custo sempre com "~"; sem preço é traço', () => {
-    assert.equal(custo(41.2), '~US$ 41,20');
-    assert.equal(custo(0), '~US$ 0,00');
-    assert.equal(custo(null), '~US$ —');
+    assert.equal(cost(41.2), '~US$ 41,20');
+    assert.equal(cost(0), '~US$ 0,00');
+    assert.equal(cost(null), '~US$ —');
   });
   test('idade curta', () => {
     const agora = Date.parse('2026-11-02T12:00:00Z');
     const antes = (s: number) => new Date(agora - s * 1000).toISOString();
-    assert.deepEqual([antes(2), antes(12), antes(120), antes(3 * 3600), antes(2 * 86_400)].map((i) => idade(i, agora)), ['agora', '12 s', '2 min', '3 h', '2 d']);
+    assert.deepEqual([antes(2), antes(12), antes(120), antes(3 * 3600), antes(2 * 86_400)].map((i) => age(i, agora)), ['agora', '12 s', '2 min', '3 h', '2 d']);
   });
   test('nome do modelo', () => {
-    assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus 5.5');
-    assert.equal(nomeDoModelo('claude-sonnet-5'), 'Sonnet 5');
-    assert.equal(nomeDoModelo('claude-haiku-4-5-20251001'), 'Haiku 4.5');
-    assert.equal(nomeDoModelo('outro-modelo'), 'outro-modelo');
-    assert.equal(nomeDoModelo(null), null);
+    assert.equal(modelName('claude-opus-5-5'), 'Opus 5.5');
+    assert.equal(modelName('claude-sonnet-5'), 'Sonnet 5');
+    assert.equal(modelName('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+    assert.equal(modelName('outro-modelo'), 'outro-modelo');
+    assert.equal(modelName(null), null);
   });
   test('os seis cards, na ordem e com o texto do C1', () => {
     const c = cards({
@@ -134,14 +134,14 @@ describe('Dashboard: formatação', () => {
     );
   });
   test('inbox: no máximo quatro, o pedido e o modelo vindos do card do agente', () => {
-    const item = (sessao: string, motivo: string, minutos = 2) => ({ sessao, titulo: sessao, projeto: `p-${sessao}`, conta: { rotulo: 'equipe', cor: '' }, nivel: 'precisa', motivo, motivoCurto: 'Pede permissão', motivoLongo: 'pede permissão para usar Bash', desde: '', minutos, local: null });
+    const item = (sessao: string, reason: string, minutos = 2) => ({ sessao, titulo: sessao, projeto: `p-${sessao}`, conta: { rotulo: 'equipe', cor: '' }, nivel: 'precisa', motivo: reason, motivoCurto: 'Pede permissão', motivoLongo: 'pede permissão para usar Bash', desde: '', minutos, local: null });
     const atencao = { total: 5, itens: [item('a', 'permissao'), item('b', 'erro', 0), item('c', 'sua-vez'), item('d', 'plano'), item('e', 'pergunta')] };
-    const c = cartoesDaInbox(atencao, [{ sessao: 'a', tarefa: 'Bash: npm run migrate', modelo: 'claude-opus-5-5' }]);
+    const c = inboxCards(atencao, [{ sessao: 'a', tarefa: 'Bash: npm run migrate', modelo: 'claude-opus-5-5' }]);
     assert.equal(c.length, 4);
-    assert.deepEqual([c[0].nome, c[0].texto, c[0].pe, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessoes/a']);
+    assert.deepEqual([c[0].nome, c[0].texto, c[0].pe, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessions/a']);
     assert.deepEqual([c[1].texto, c[1].pe, c[1].idade], ['pede permissão para usar Bash', 'equipe', 'agora']);
-    assert.equal(tituloDaInbox(1), '1 precisa de você');
-    assert.equal(tituloDaInbox(4), '4 precisam de você');
+    assert.equal(inboxTitle(1), '1 precisa de você');
+    assert.equal(inboxTitle(4), '4 precisam de você');
   });
 });
 
@@ -166,16 +166,16 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     const sair = new AbortController();
     const ctx = {
       params: {},
-      sinal: sair.signal,
-      ler: lerOutra ?? (async (rota: string) => (await fetch(`${api.url}${rota}`)).json()),
-      aoMudar: () => {},
-      aoReiniciar: () => {},
-      contador: (id: string, n: number) => (contadores[id] = n),
+      signal: sair.signal,
+      read: lerOutra ?? (async (rota: string) => (await fetch(`${api.url}${rota}`)).json()),
+      onChange: () => {},
+      onRestart: () => {},
+      counter: (id: string, n: number) => (contadores[id] = n),
       titulo: () => {},
-      navegar: () => {},
-      aoVivo: () => 'ao-vivo',
+      navigate: () => {},
+      liveState: () => 'live',
     };
-    const limpar = await montar(area, ctx);
+    const limpar = await mount(area, ctx);
     return { area, contadores, sair: () => (sair.abort(), limpar()) };
   }
 
@@ -187,7 +187,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       assert.match(texto, /O agora das suas sessões/);
       assert.deepEqual(
         comClasse(area, 'stat').map((c) => c.getAttribute('data-card')),
-        ['sessoes', 'agentes', 'subagentes', 'eventos-hoje', 'eventos-total', 'custo'],
+        ['sessions', 'agents', 'subagents', 'events-today', 'events-total', 'cost'],
       );
       assert.match(comClasse(area, 'stat')[0]!.textContent, /^Sessões31 ativa2 esperando$/);
       assert.match(comClasse(area, 'stat')[5]!.textContent, /~US\$ 1,84estimativa · 30 dias/);
@@ -195,21 +195,21 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       const inbox = comClasse(area, 'inbox')[0]!;
       assert.match(inbox.textContent, /2 precisam de você/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessoes/sim-painel-motor-de-regras', '/ui/sessoes/sim-painel-app-receitas']);
+      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
       assert.equal(contadores.dashboard, 2);
 
       const agentes = comClasse(area, 'ac');
       assert.equal(agentes.length, 3);
-      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessoes/${SESSAO_DO_PAINEL}`);
+      assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessions/${SESSAO_DO_PAINEL}`);
       assert.match(agentes[0]!.textContent, /Agente principal · Kanban de sessões no artefato.*ahrena-demo · 2 subagentes · 18 turnos.*Ativa/);
       assert.match(agentes[0]!.textContent, /Opus 5\.5.*~US\$ 1,84.*Rodar a bateria/);
       assert.ok(agentes[1]!.classes.includes('st-waiting'));
 
-      const linhas = comClasse(area, 'linha');
-      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessoes/sim-painel-motor-de-regras', '/ui/sessoes/sim-painel-app-receitas']);
+      const linhas = comClasse(area, 'row');
+      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
       assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
-      assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessoes').length > 0), 'Ver tudo leva às Sessões');
+      assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
     } finally {
       sair();
     }
@@ -218,15 +218,15 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
   test('a árvore de subagentes abre e fecha pelo botão', async () => {
     const { area, sair } = await montarTela();
     try {
-      assert.equal(comClasse(area, 'arvore').length, 0);
+      assert.equal(comClasse(area, 'tree').length, 0);
       const botao = comClasse(area, 'subs')[0]!;
       assert.match(botao.textContent, /2 subagentes · 1 ativo/);
       botao.click();
-      const arvore = comClasse(area, 'arvore');
+      const arvore = comClasse(area, 'tree');
       assert.equal(arvore.length, 1);
-      assert.deepEqual(comClasse(arvore[0]!, 'filho').map((f) => f.textContent.replace(/\d+ (s|min)|agora/, '')), ['Explore · mapear usosAtiva', 'Plan · planoConcluída']);
+      assert.deepEqual(comClasse(arvore[0]!, 'child').map((f) => f.textContent.replace(/\d+ (s|min)|agora/, '')), ['Explore · mapear usosAtiva', 'Plan · planoConcluída']);
       comClasse(area, 'subs')[0]!.click();
-      assert.equal(comClasse(area, 'arvore').length, 0);
+      assert.equal(comClasse(area, 'tree').length, 0);
     } finally {
       sair();
     }
@@ -234,12 +234,12 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
 
   test('sem a /api/atencao, o resto fica no ar e a inbox vira a faixa de erro', async () => {
     const { area, sair } = await montarTela(async (rota) => {
-      if (rota === tela.ROTA_DA_ATENCAO) throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
+      if (rota === tela.ATTENTION_ROUTE) throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
       return (await fetch(`${api.url}${rota}`)).json();
     });
     try {
       assert.equal(comClasse(area, 'inbox').length, 0);
-      assert.match(comClasse(area, 'faixa-erro')[0]!.textContent, /Não deu para ler quem precisa de você/);
+      assert.match(comClasse(area, 'error-band')[0]!.textContent, /Não deu para ler quem precisa de você/);
       assert.equal(comClasse(area, 'stat').length, 6);
     } finally {
       sair();
@@ -260,13 +260,13 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
 });
 
 test('as rotas da tela são as do núcleo', async () => {
-  const { ATTENTION_ROUTE, ROTA_DO_DASHBOARD } = await import('../../src/api/index.ts');
-  assert.equal(tela.ROTA_DA_ATENCAO, ATTENTION_ROUTE);
-  assert.equal(tela.ROTA_DO_DASHBOARD, ROTA_DO_DASHBOARD);
+  const { ATTENTION_ROUTE, ROTA_DO_DASHBOARD: DASHBOARD_ROUTE } = await import('../../src/api/index.ts');
+  assert.equal(tela.ATTENTION_ROUTE, ATTENTION_ROUTE);
+  assert.equal(tela.DASHBOARD_ROUTE, DASHBOARD_ROUTE);
 });
 
 test('a tela e o estilo dela não escrevem cor à mão nem chamam endereço de fora', () => {
-  for (const arquivo of ['telas/dashboard.js', 'dashboard.css']) {
+  for (const arquivo of ['screens/dashboard.js', 'dashboard.css']) {
     const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
     assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${arquivo} escreve cor à mão`);
     assert.doesNotMatch(texto, /https?:\/\//, `${arquivo} chama endereço de fora`);
