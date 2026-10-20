@@ -22,7 +22,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/decisoes/](src/decisoes/README.md) | Decisões da sessão: modelo, porta, captura pelos hooks e pelo transcript, e a cadeia de substituição (#99) |
 | [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
-| [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
+| [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/changes` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 | [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
@@ -44,18 +44,20 @@ npm run api -- --help
 npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano; --pai <pid>, --substituir, --json
 ```
 
+As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>`, `/abrir/<local_…>`, `/api/atencao`, `/api/mudancas?desde=&espera=`, `/api/sessoes`, `/api/historico?antes=&dias=&busca=`, `/api/decisoes/<sessão>?escopo=`…), continuam respondendo como alias das novas, com a mesma resposta, até o mod publicado e o app instalado migrarem (issue #173, fase 1). O mapa fica num lugar só, [src/api/legacy-routes.ts](src/api/legacy-routes.ts).
+
 | Rota | O quê |
 | --- | --- |
-| `GET /api/painel/<sessão>` | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
-| `GET /api/mural` | O "Mural ao vivo" (#34, wireframe C2): um card por sessão aberta nesta máquina, em todas as contas, e a contagem para o seletor Todas / Esperando / Ativas. Formato e critério na seção [Mural](#mural-ao-vivo) |
+| `GET /api/panel/<session>` (`?account=`, `?model=`, `?decisions=`) | Tudo o que o painel desenha, num pedido: a sessão (status, motivo, faixa, turno, conta), contexto, custo, tokens, background, plano atual e os planos da sessão, subagentes, sessões filhas, trabalho pelo branch e "precisam de você" com a família, a máquina e a divisão por conta. Contrato em [src/api/tipos.ts](src/api/tipos.ts) |
+| `GET /api/wall` | O "Mural ao vivo" (#34, wireframe C2): um card por sessão aberta nesta máquina, em todas as contas, e a contagem para o seletor Todas / Esperando / Ativas. Formato e critério na seção [Mural](#mural-ao-vivo) |
 | `GET /api/overview` | Saúde |
-| `GET /api/carga` | Contadores para `scripts/medir-carga.mjs` |
+| `GET /api/load` | Contadores para `scripts/medir-carga.mjs` |
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
-| `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
-| `GET /api/historico?antes=<AAAA-MM-DD>&dias=<N>&busca=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?antes=` na próxima página. `dias` padrão 7, máximo 31; `busca` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
+| `GET /api/changes?since=<cursor>&wait=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
+| `GET /api/history?before=<AAAA-MM-DD>&days=<N>&search=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?before=` na próxima página. `days` padrão 7, máximo 31; `search` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
-| `GET /api/kanban?visao=sessoes\|agentes&coluna=<id>&pagina=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `coluna`, todas na página 1; com ela, só aquela, na `pagina` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
+| `GET /api/kanban?view=sessions\|agents&column=<id>&page=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `column`, todas na página 1; com ela, só aquela, na `page` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
 
 `?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa.
 
@@ -68,9 +70,10 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`), esforço (`effort`), arquivada e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
-| [historico.ts](src/api/historico.ts) | `GET /api/historico`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
+| [historico.ts](src/api/historico.ts) | `GET /api/history`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
 | [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
+| [legacy-routes.ts](src/api/legacy-routes.ts) | As rotas e os parâmetros antigos, em português, como alias das novas (#173) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
 **Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
@@ -81,7 +84,7 @@ node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 
 ### Mural ao vivo
 
-`GET /api/mural` (#34) responde `{ versao: 1, geradoEm, contagem: { todas, esperando, ativas }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/tipos.ts](src/api/tipos.ts)). Cada card traz id (leva a `/ui/sessoes/<id>`), título, projeto (o nome da pasta), branch, status, estado, motivo, urgente, desde, a atividade (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), modelo, esforço, agentes (`ativos`/`total`, o principal mais os subagentes), custo (`usd: null` é "sem preço"), plano (`feitos`/`total`/`atual`) e contexto (`pct`/`usados`/`limite`/`rotulo`); plano e contexto são `null` quando a sessão não tem.
+`GET /api/wall` (#34) responde `{ versao: 1, geradoEm, contagem: { todas, esperando, ativas }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/tipos.ts](src/api/tipos.ts)). Cada card traz id (leva a `/ui/sessoes/<id>`), título, projeto (o nome da pasta), branch, status, estado, motivo, urgente, desde, a atividade (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), modelo, esforço, agentes (`ativos`/`total`, o principal mais os subagentes), custo (`usd: null` é "sem preço"), plano (`feitos`/`total`/`atual`) e contexto (`pct`/`usados`/`limite`/`rotulo`); plano e contexto são `null` quando a sessão não tem.
 
 - **Aberta:** não arquivada no Claude Desktop, e `active` (o que inclui esperando, delegando e em background) ou `error` sem `endedAt`; a `completed` (ou o erro já encerrado) só enquanto a última atividade estiver dentro do `abandonoMs` do vigia (180 min), o card "Terminou sem erro": fica pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada. `abandoned` nunca entra.
 - **Ordem e urgência:** `urgente` é a espera `notification` ou `interrupted` e também o erro, como no "precisam de você" do painel. Primeiro as que precisam de você (`waiting` e `error`), as urgentes antes, e entre elas o pedido mais recente; depois as outras, pela atividade mais recente.
@@ -228,7 +231,7 @@ Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens 
 
 Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
 
-A API local expõe o quadro em `GET /api/projeto` e `POST /api/projeto/mover` (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
+A API local expõe o quadro em `GET /api/project` e `POST /api/project/move` (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
@@ -299,7 +302,7 @@ O que deixa as telas ao vivo sem polling curto: o artefato, cujo `watchTool` tem
 - **Cursor.** [cursor.ts](src/mudancas/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave, sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reiniciar: true` (releia tudo).
 - **Espera.** `aguardarMudancas(cursor, { filtros, timeoutMs, signal })` responde na hora se já há novidade; senão segura até chegar uma que passe nos filtros (sessão, conta, tipo) ou até o timeout (padrão 25 s, máximo 110 s, abaixo dos ~130 s do app). Cada espera responde no mínimo 1 s depois de começar: com hooks chegando sem parar, quem faz long polling em laço acorda no máximo uma vez por segundo, e a rajada sai numa resposta só, uma vez por (tipo, chave). O cursor devolvido é sempre o de agora: as mudanças que os filtros deixaram de fora ficam para trás e não voltam num pedido seguinte com outros filtros. No máximo 256 esperas abertas; acima disso, `ErroDeLotacao` (503 no HTTP).
 - **Fontes.** [fontes.ts](src/mudancas/fontes.ts): `comMudancas(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `sessao` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisoesComMudancas` a das decisões, e `aoMudarDaMaquina` vai no `aoMudar` da máquina de estados (`estado` e, quando entra ou sai do inbox, `precisa-de-voce`). A API (`cli.ts`) liga as três.
-- **HTTP.** `GET /api/mudancas?desde=<cursor>&espera=<s>&sessao=<id>&conta=<id|sem-conta>&tipo=<tipo>` ([http.ts](src/mudancas/http.ts)). O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
+- **HTTP.** `GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id|sem-conta>&type=<tipo>` ([http.ts](src/mudancas/http.ts)). O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
 - **MCP.** [mcp.ts](src/mudancas/mcp.ts): a ferramenta `wait_for_changes` no formato `Ferramenta` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `criarServidorMcp`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types`; saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.sinal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/mudancas/contrato-sdk.test.ts](test/mudancas/contrato-sdk.test.ts).
 
 **Consumo.** Parado, cada espera aberta é só um timer; nada varre o banco. Para medir, parado e com hooks sintéticos pelo receptor de verdade:

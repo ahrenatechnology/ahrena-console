@@ -2,8 +2,10 @@
 //
 // | Rota                          | O quê                                                          |
 // | ----------------------------- | -------------------------------------------------------------- |
-// | `GET /api/projeto`            | O quadro: raias, cards, marcos. `?forcar=1` relê (mínimo de 30 s) |
-// | `POST /api/projeto/mover`     | `{ itemId, optionId }`: muda o Status no GitHub e devolve o quadro |
+// | `GET /api/project`            | O quadro: raias, cards, marcos. `?refresh=1` relê (mínimo de 30 s) |
+// | `POST /api/project/move`      | `{ itemId, optionId }`: muda o Status no GitHub e devolve o quadro |
+//
+// `/api/projeto`, `?forcar=1` and `/api/projeto/mover` are aliases (src/api/legacy-routes.ts).
 //
 // Os dados saem do `GithubProject` (cache da decisão 0001): com o GitHub fora e algo no cache, o
 // GET responde 200 com `desatualizado: true`. A escrita aceita a própria `/ui` (Origin igual a
@@ -22,8 +24,12 @@ import {
   type ProjectMoveResult,
 } from '../github/project.ts';
 import { send } from '../ingest/hooks/receiver.ts';
+import { normalizeLegacyPath } from './legacy-routes.ts';
 import { ciDoPr, reviewDoPr } from './trabalho.ts';
 
+export const PROJECT_ROUTE = '/api/project';
+export const PROJECT_MOVE_ROUTE = '/api/project/move';
+/** The old routes, still answered as aliases (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_PROJETO = '/api/projeto';
 export const ROTA_DE_MOVER = '/api/projeto/mover';
 /** O comando que dá ao token do `gh` o escopo `project`. */
@@ -113,17 +119,17 @@ export function quadroDe(b: ProjectBoard, fonte: QuadroDoProjeto['fonte']): Quad
   };
 }
 
-/** A própria `/ui` movendo um card: `POST /api/projeto/mover` com `Origin` exatamente `http://<Host>`, e o Host é o nosso. */
+/** A própria `/ui` movendo um card: `POST /api/project/move` (ou o alias antigo) com `Origin` exatamente `http://<Host>`, e o Host é o nosso. */
 export function mesmaOrigemMovendo(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
   const origem = req.headers.origin;
   if (req.method !== 'POST' || typeof origem !== 'string') return false;
-  if (new URL(req.url ?? '/', 'http://x').pathname !== ROTA_DE_MOVER) return false;
+  if (normalizeLegacyPath(new URL(req.url ?? '/', 'http://x').pathname) !== PROJECT_MOVE_ROUTE) return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
   return origem === `http://${host}`;
 }
 
-export const ehDoProjeto = (caminho: string) => caminho === ROTA_DO_PROJETO || caminho === ROTA_DE_MOVER;
+export const ehDoProjeto = (caminho: string) => caminho === PROJECT_ROUTE || caminho === PROJECT_MOVE_ROUTE;
 
 type Erro = { status: number; codigo: string; error: string; headers?: Record<string, string>; extra?: Record<string, unknown> };
 
@@ -188,7 +194,7 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
   async function ler(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (deOutroSite(req)) return send(res, 403, { error: 'origem não permitida' });
     if (!kanban) return enviarErro(res, parado);
-    const forcar = url.searchParams.get('forcar') === '1';
+    const forcar = url.searchParams.get('refresh') === '1';
     try {
       send(res, 200, quadroDe(await kanban.board({ force: forcar }), fonte));
     } catch (err) {
@@ -226,7 +232,7 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
   }
 
   return async function rotaDoProjeto(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-    if (url.pathname === ROTA_DE_MOVER) {
+    if (url.pathname === PROJECT_MOVE_ROUTE) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST', codigo: 'invalido' });
       return mover(req, res);
     }

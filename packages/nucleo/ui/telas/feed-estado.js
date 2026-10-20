@@ -108,16 +108,18 @@ export function alternar(estado, id) {
 // ---------- consulta ----------
 
 const FILTROS = ['tipo', 'sessao', 'ferramenta', 'status', 'busca', 'de', 'ate'];
+/** The filter and extra names of the screen state → the English parameters of `/api/events`. */
+const PARAMETRO = { tipo: 'type', sessao: 'session', ferramenta: 'tool', status: 'status', busca: 'search', de: 'from', ate: 'to', depois: 'after', antes: 'before', limite: 'limit' };
 
-/** A rota de `/api/eventos` com os filtros preenchidos e os extras (`depois`, `antes`, `limite`). */
+/** A rota de `/api/events` com os filtros preenchidos e os extras (`depois`, `antes`, `limite`). */
 export function consulta(filtros = {}, extras = {}) {
   const partes = [];
-  for (const [k, v] of Object.entries(extras)) if (v !== null && v !== undefined && v !== '') partes.push(`${k}=${encodeURIComponent(v)}`);
+  for (const [k, v] of Object.entries(extras)) if (v !== null && v !== undefined && v !== '') partes.push(`${PARAMETRO[k] ?? k}=${encodeURIComponent(v)}`);
   for (const k of FILTROS) {
     const v = filtros[k];
-    if (v !== null && v !== undefined && String(v).trim() !== '') partes.push(`${k}=${encodeURIComponent(String(v).trim())}`);
+    if (v !== null && v !== undefined && String(v).trim() !== '') partes.push(`${PARAMETRO[k]}=${encodeURIComponent(String(v).trim())}`);
   }
-  return partes.length ? `/api/eventos?${partes.join('&')}` : '/api/eventos';
+  return partes.length ? `/api/events?${partes.join('&')}` : '/api/events';
 }
 
 export const temFiltro = (filtros = {}) => FILTROS.some((k) => filtros[k] !== null && filtros[k] !== undefined && String(filtros[k]).trim() !== '');

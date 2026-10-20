@@ -3,9 +3,9 @@
 // Ao abrir:
 // 1. corrige o PATH com o do shell de login, para achar o `node`;
 // 2. adota o núcleo de pé ou sobe um pelo dono único (nucleo.rs);
-// 3. lê `GET /api/atencao` e espera mudanças em `GET /api/mudancas` (long polling), e monta o menu
+// 3. lê `GET /api/attention` e espera mudanças em `GET /api/changes` (long polling), e monta o menu
 //    dos wireframes A1, A2 e A4 (menu.rs), com o número ao lado do ícone;
-// 4. o clique numa sessão a abre no Claude Desktop (`POST /abrir/<local_…>`); "Abrir o console"
+// 4. o clique numa sessão a abre no Claude Desktop (`POST /open/<local_…>`); "Abrir o console"
 //    abre a `/ui` do núcleo numa janela;
 // 5. avisa por notificação do sistema quem passa a precisar de você (A3, notificacoes.rs);
 // 6. com a chave do updater no tauri.conf.json, procura versão nova ao abrir e a cada 6 h
@@ -187,11 +187,11 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
     }
 }
 
-/// Lê `/api/atencao` e espera em `/api/mudancas` até o núcleo parar de responder.
+/// Lê `/api/attention` e espera em `/api/changes` até o núcleo parar de responder.
 fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::sync::mpsc::Receiver<()>) {
     let mut cursor: Option<String> = None;
     loop {
-        let resposta = http::get_com_status(porta, "/api/atencao", Duration::from_secs(15));
+        let resposta = http::get_com_status(porta, "/api/attention", Duration::from_secs(15));
         match resposta {
             Some(r) if r.status == 200 => {
                 let Some(atencao) = Atencao::do_json(&r.corpo) else { return };
@@ -223,11 +223,11 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
         while sinais.try_recv().is_ok() {}
         let inicio = Instant::now();
         let caminho = match &cursor {
-            Some(c) => format!("/api/mudancas?desde={}&espera=25", http::codificar(c)),
-            None => "/api/mudancas?espera=25".into(),
+            Some(c) => format!("/api/changes?since={}&wait=25", http::codificar(c)),
+            None => "/api/changes?wait=25".into(),
         };
         // Volta com mudanças, com `reiniciar` ou depois de 25 s sem nada: em todos os casos relê,
-        // o que também atualiza os minutos de espera. Sem `/api/mudancas` (núcleo antigo), relê a cada 25 s.
+        // o que também atualiza os minutos de espera. Sem `/api/changes` (núcleo antigo), relê a cada 25 s.
         if http::get(porta, &caminho, Duration::from_secs(40)).is_none() {
             let resto = Duration::from_secs(25).saturating_sub(inicio.elapsed());
             if !nucleo::responde(porta) {
@@ -398,7 +398,7 @@ fn abrir_sessao(app: &AppHandle, estado: &Compartilhado, sessao: &str) {
     abrir_no_desktop(app, local);
 }
 
-/// `POST /abrir/<local_…>` no núcleo; sem `local`, ou com um que o núcleo recusaria, o console.
+/// `POST /open/<local_…>` no núcleo; sem `local`, ou com um que o núcleo recusaria, o console.
 fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
     let porta = match app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).nucleo {
         EstadoDoNucleo::DePe { porta } => porta,
@@ -410,7 +410,7 @@ fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
         return abrir_console(app);
     }
     std::thread::spawn(move || {
-        let r = http::post_json(porta, &format!("/abrir/{local}"), "{}");
+        let r = http::post_json(porta, &format!("/open/{local}"), "{}");
         if r.as_ref().map(|r| r.status) != Some(200) {
             eprintln!("[ahrena-console] abrir {local}: {}", r.map(|r| format!("{} {}", r.status, r.corpo)).unwrap_or_else(|| "sem resposta".into()));
         }

@@ -1,4 +1,4 @@
-// O contrato de `GET /api/painel/<sessão>`: tudo o que o painel lateral desenha, num pedido só.
+// O contrato de `GET /api/panel/<session>`: tudo o que o painel lateral desenha, num pedido só.
 // O plugin (plugins/ahrena-console/types) repete estes tipos; mudar um é mudar os dois.
 // Datas em ISO 8601 (UTC); o painel calcula "há quanto tempo" com o próprio relógio.
 
@@ -247,7 +247,7 @@ export interface Painel {
   /**
    * A versão da API e, para o rodapé: o commit do código que ela carregou ao subir e o da pasta
    * agora (diferentes, a API precisa reiniciar); `null` fora de um git. `abreSessao`: a API abre
-   * a conversa no Claude Desktop (`POST /abrir/<local_…>`).
+   * a conversa no Claude Desktop (`POST /open/<local_…>`).
    */
   api: { versao: string; commit: string | null; pasta: string | null; abreSessao: boolean };
   geradoEm: string;
@@ -340,7 +340,7 @@ export interface DecisoesDoPainel {
 }
 
 /**
- * O contrato de `GET /api/mural` (#34, wireframe C2 "Mural ao vivo"): um card por sessão aberta nesta
+ * O contrato de `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): um card por sessão aberta nesta
  * máquina. "Aberta" e a ordem estão em api/mural.ts. Datas em ISO 8601 (UTC).
  */
 export interface Mural {

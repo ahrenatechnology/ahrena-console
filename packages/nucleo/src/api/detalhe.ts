@@ -2,14 +2,15 @@
 // Conversa (C5) e Linha do tempo (C6). Só leitura, do banco: nenhum pedido abre transcript
 // (decisão 0004). O texto das mensagens é o resumo que o núcleo guarda de cada evento.
 //
-// | Rota                               | O quê                                                     |
-// | ---------------------------------- | --------------------------------------------------------- |
-// | `GET /api/sessoes/<id>`            | O topo: título, status, motivo, pílulas, faixa e contagens |
-// | `GET /api/sessoes/<id>/agentes`    | Números, ferramentas, tarefas, tokens e a árvore de agentes |
-// | `GET /api/sessoes/<id>/conversa`   | As mensagens de um agente (`?agente=`, `?limite=`)          |
-// | `GET /api/sessoes/<id>/eventos`    | A linha do tempo, filtrada e paginada (veja `filtroDe`)     |
+// | Rota                                  | O quê                                                     |
+// | ------------------------------------- | --------------------------------------------------------- |
+// | `GET /api/sessions/<id>`              | O topo: título, status, motivo, pílulas, faixa e contagens |
+// | `GET /api/sessions/<id>/agents`       | Números, ferramentas, tarefas, tokens e a árvore de agentes |
+// | `GET /api/sessions/<id>/conversation` | As mensagens de um agente (`?agent=`, `?limit=`)            |
+// | `GET /api/sessions/<id>/events`       | A linha do tempo, filtrada e paginada (veja `filtroDe`)     |
 //
-// `GET /api/sessoes` (a lista, sem id) não é daqui: é da tela Sessões (#28).
+// `GET /api/sessions` (a lista, sem id) não é daqui: é da tela Sessões (#28). The old
+// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` and parameter names are aliases (src/api/legacy-routes.ts).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -21,7 +22,9 @@ import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './painel.ts';
 import type { CustoDoPainel, PlanoDoPainel, SessaoDoPainel } from './tipos.ts';
 
-/** `/api/sessoes/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
+/** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
+export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_DETALHE = /^\/api\/sessoes\/([^/]+)(?:\/(agentes|conversa|eventos))?$/;
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
@@ -44,7 +47,7 @@ export interface CabecaDoDetalhe {
   branch: string | null;
   /** `local_…` do Claude Desktop, para o "Abrir no Claude Desktop"; `null` na sessão só de terminal. */
   local: string | null;
-  /** A API abre a conversa no Claude Desktop (`POST /abrir/<local_…>`): no macOS. */
+  /** A API abre a conversa no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   abreSessao: boolean;
   /** O comando ou o alvo da ferramenta que pede permissão, para a faixa mostrar em código; `null` sem pedido. */
   comando: string | null;
@@ -254,9 +257,9 @@ export class LeiturasDoDetalhe {
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido' });
     const session = await this.storage.getSession(id);
     if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
-    if (aba === 'agentes') return send(res, 200, await this.agentes(session));
-    if (aba === 'conversa') return send(res, 200, await this.conversa(session, url.searchParams.get('agente'), url.searchParams.get('limite')));
-    if (aba === 'eventos') return send(res, 200, await this.eventos(session, url.searchParams));
+    if (aba === 'agents') return send(res, 200, await this.agentes(session));
+    if (aba === 'conversation') return send(res, 200, await this.conversa(session, url.searchParams.get('agent'), url.searchParams.get('limit')));
+    if (aba === 'events') return send(res, 200, await this.eventos(session, url.searchParams));
     send(res, 200, await this.cabeca(session));
   }
 
@@ -514,9 +517,9 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?Z$/;
 const PARAM = /^[A-Za-z0-9_.:\[\]-]{1,128}$/;
 
 /**
- * Os filtros da linha do tempo: `q` (resumo, ferramenta, tipo e conteúdo), `tipo`, `ferramenta`,
- * `agente`, `status` (`active`, `waiting` ou `error`), `de` e `ate` (ISO em UTC), `limite` (até 500)
- * e `antes` (o id do último evento da página anterior).
+ * Os filtros da linha do tempo: `q` (resumo, ferramenta, tipo e conteúdo), `type`, `tool`,
+ * `agent`, `status` (`active`, `waiting` ou `error`), `from` e `to` (ISO em UTC), `limit` (até 500)
+ * e `before` (o id do último evento da página anterior).
  */
 export function filtroDe(p: URLSearchParams) {
   const param = (k: string) => {
@@ -531,13 +534,13 @@ export function filtroDe(p: URLSearchParams) {
   const q = p.get('q')?.trim().toLowerCase().slice(0, 200) || null;
   return {
     q,
-    tipo: param('tipo'),
-    ferramenta: param('ferramenta'),
-    agente: param('agente'),
+    tipo: param('type'),
+    ferramenta: param('tool'),
+    agente: param('agent'),
     status: status === 'active' || status === 'waiting' || status === 'error' ? status : null,
-    de: data('de'),
-    ate: data('ate'),
-    limite: Math.min(MAX_PAGINA, Math.max(1, Number(p.get('limite')) || PAGINA_DE_EVENTOS)),
-    antes: p.get('antes')?.slice(0, 200) || null,
+    de: data('from'),
+    ate: data('to'),
+    limite: Math.min(MAX_PAGINA, Math.max(1, Number(p.get('limit')) || PAGINA_DE_EVENTOS)),
+    antes: p.get('before')?.slice(0, 200) || null,
   };
 }
