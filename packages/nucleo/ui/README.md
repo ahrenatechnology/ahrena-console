@@ -14,7 +14,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
-| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`), carregado pela própria tela |
+| `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
+| `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `sessoes.js` (C3, #28) lê `GET /api/sessoes`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `sessoes.css`), carregado pela própria tela |
 | `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
 
 ## Registrar uma tela
