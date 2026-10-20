@@ -129,7 +129,7 @@ describe('GET /api/attention', () => {
     assert.deepEqual(Object.keys(antigo), ['geradoEm', 'cursor', 'total', 'precisam', 'suaVez', 'ativas', 'comErro', 'itens']);
     assert.equal(antigo.precisam, novo.needs);
     assert.ok(antigo.itens.length > 0);
-    assert.deepEqual(Object.keys(antigo.itens[0]!), ['sessao', 'titulo', 'projeto', 'conta', 'nivel', 'motivo', 'motivoCurto', 'motivoLongo', 'desde', 'minutos', 'local']);
+    assert.deepEqual(Object.keys(antigo.itens[0]!), ['sessao', 'titulo', 'projeto', 'conta', 'nivel', 'motivo', 'motivoCurto', 'motivoLongo', 'desde', 'minutos', 'local', 'machine']);
   });
 
   test('pedido com Origin dá 403, como as outras rotas', async () => {

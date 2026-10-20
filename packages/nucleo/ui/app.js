@@ -5,7 +5,8 @@ import { write, read } from './api.js';
 import { startLive } from './live.js';
 import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
-import { findScreen, legacyUrl, sidebarSections } from './screens.js';
+import { findScreen, legacyUrl, litItem } from './screens.js';
+import { createNav } from './nav.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
@@ -16,38 +17,11 @@ port.textContent = location.host;
 
 // ---------- Sidebar ----------
 
-// One block per section (C1, C24): the everyday screens without a title, then Machines and Control.
-const items = new Map();
-for (const section of sidebarSections()) {
-  const titleId = section.label ? `cc-nav-title-${section.id}` : null;
-  const group = el(
-    'div',
-    { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
-    titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
-  );
-  for (const screen of section.items) {
-    const q = el('span', { class: 'q', hidden: true });
-    const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', {}, screen.item.label), q);
-    items.set(screen.id, { a, q });
-    group.append(a);
-  }
-  nav.append(group);
-}
-
-function highlight(id) {
-  for (const [k, { a }] of items) {
-    a.classList.toggle('on', k === id);
-    if (k === id) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
-  }
-}
-
-function counter(id, n) {
-  const item = items.get(id);
-  if (!item) return;
-  item.q.hidden = !n;
-  item.q.textContent = n ? String(n) : '';
-}
+// One block per section (C1, C24): the everyday screens, then Machines and Control. The remote
+// machines (issue 178) come from `GET /api/machines` and are added by nav.js (`createNav`).
+const { readMachines, highlight, counter } = createNav({ nav, read });
+// A remote's state also changes without an alert (another version over there): re-read now and then.
+setInterval(readMachines, 60_000);
 
 // ---------- Live ----------
 
@@ -60,6 +34,7 @@ const listeners = { change: new Set(), restart: new Set() };
 let connected = false;
 function restart() {
   readVersion();
+  readMachines();
   if (!connected) return void (connected = true);
   if (screenFailed) return open();
   for (const f of listeners.restart) f();
@@ -100,6 +75,8 @@ startLive({
   },
   onRestart: restart,
   onChange(changes) {
+    // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
+    if (changes.some((c) => c.type === 'alert')) readMachines();
     for (const f of listeners.change) f(changes);
   },
 });
@@ -131,7 +108,7 @@ async function open() {
     return;
   }
   const { screen, params } = found;
-  highlight(screen.item ? screen.id : screen.highlights);
+  highlight(litItem(screen, params));
   document.title = `Ahrena Console · ${screen.title}`;
   if (!screen.file) {
     area.replaceChildren(
