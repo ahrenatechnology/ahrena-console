@@ -39,8 +39,12 @@ import {
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
 import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
+import { semearHistorico } from '../simulador/historico.ts';
+import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
+import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
   capturarDoTranscript,
@@ -52,6 +56,7 @@ import {
   reprocessarHistorico,
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
+import { ListaDeSessoes } from './sessoes.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -68,6 +73,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
+                      A demo grava também o Detalhe da /ui: uma sessão que pede permissão
+                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
@@ -224,7 +231,11 @@ if (demo) {
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
   if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
+  // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
+  await semearHistorico(storage);
+  await semearDetalhe(storage);
 }
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -274,6 +285,10 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  detalhe,
+  frota: mcp.frota,
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
+  sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
