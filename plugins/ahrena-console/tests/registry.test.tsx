@@ -167,6 +167,16 @@ for (const [label, env] of [['an empty registry', { AHRENA_CONSOLE_HOME: HOME }]
   })
 }
 
+test('the old porta option (4720, saved by 0.0.30) is ignored: the registry wins', { options: { porta: 4720 } }, async ($, on) => {
+  const f = await open($, fakes(on, [entry('app', 101, 57627, '2026-10-20T00:00:00Z')], {
+    57627: { pid: 101, up: true },
+    4720: { pid: 1, up: true },
+  }))
+  expect(panelRequests(f).length).toBeGreaterThan(0)
+  expect(panelRequests(f).every((u) => u.startsWith('http://127.0.0.1:57627/'))).toBe(true)
+  await expectCard($, '127.0.0.1:57627')
+})
+
 test('a core restarted on a new port is found again on the next tick', async ($, on) => {
   const f = await open($, fakes(on, [entry('dev', 202, 51002, '2026-08-01T00:00:00Z')], { 51002: { pid: 202, up: true } }))
   await expectCard($, '127.0.0.1:51002')

@@ -21,7 +21,7 @@ import { LEGACY_CORE, discoverCore } from './discover'
 // por id o painel que a pessoa já abriu.
 export const PANE = 'ahrena-console-sessao'
 const EVERY_MS = 5000
-// `127.0.0.1:<port>` of the core (#221, 5b). An explicit `port` option (`porta` up to 0.0.30) wins;
+// `127.0.0.1:<port>` of the core (#221, 5b). An explicit `port` option wins (the old `porta` is ignored);
 // otherwise the core comes from the instance registry (hooks/discover.ts), and is looked up again
 // when it stops answering (a core restarted on a new port). No live core: 127.0.0.1:4720, as before.
 let core = LEGACY_CORE
@@ -513,9 +513,10 @@ async function goTo($: Engine, i: NeedsYou, surface: Parameters<Engine['ui']['co
 }
 
 export const register: Register = (on, options) => {
-  // `porta`: the option's name up to 0.0.30, for whoever had set it. 0 or unset: the registry.
-  const o = options as { port?: unknown; porta?: unknown } | undefined
-  const port = Number(o?.port || o?.porta)
+  // Only `port` > 0 pins the core. The old `porta` (up to 0.0.30) is ignored: settings saved by
+  // those versions hold the old default, 4720, not a choice, and it would hide the registry. 0 or unset: the registry.
+  const o = options as { port?: unknown } | undefined
+  const port = Number(o?.port)
   explicitCore = Number.isInteger(port) && port > 0 && port < 65536 ? `127.0.0.1:${port}` : null
   core = explicitCore ?? LEGACY_CORE
   resolved = false
