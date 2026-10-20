@@ -45,6 +45,9 @@ import {
   normalizeReading,
   normalizeSeries,
   polylines,
+  timeWindow,
+  failureKind,
+  isMachineId,
   portFilter,
   portRows,
   remoteCondition,
@@ -100,7 +103,7 @@ function statCard(c) {
   );
 }
 
-function chart(series, reading, { local, hours }) {
+function chart(series, reading, { local, hours, now = Date.now() }) {
   const c = chartOf(series, reading, { local });
   const box = { max: c.max, width: 600, height: 120 };
   const s = svg('svg', { class: 'tm-chart', viewBox: '0 0 600 120', preserveAspectRatio: 'none', role: 'img', 'aria-label': `${c.title} ${hours === 12 ? 'nas últimas 12 h' : 'na última hora'}` });
@@ -112,7 +115,8 @@ function chart(series, reading, { local, hours }) {
     const y = yOf(c.limit, box);
     s.append(svg('line', { class: 'tm-limit', x1: 0, x2: 600, y1: y, y2: y, 'vector-effect': 'non-scaling-stroke' }));
   }
-  for (const line of c.lines) for (const points of polylines(line.values, box)) s.append(svg('polyline', { class: `tm-line tm-line-${line.tone}`, points, 'vector-effect': 'non-scaling-stroke' }));
+  const time = { ...box, at: series.at, ...timeWindow(hours, now) };
+  for (const line of c.lines) for (const points of polylines(line.values, time)) s.append(svg('polyline', { class: `tm-line tm-line-${line.tone}`, points, 'vector-effect': 'non-scaling-stroke' }));
   const hasData = c.lines.some((l) => l.values.some((v) => v !== null));
   return el(
     'section',
@@ -322,7 +326,7 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     return parts;
   }
   parts.push(el('div', { class: 'tm-stats' }, ...statCards(reading, { local, sessions, alerts, now }).map(statCard)));
-  const grid = [chart(series, reading, { local, hours })];
+  const grid = [chart(series, reading, { local, hours, now })];
   if (local) {
     if (reading.volumes.length || reading.network) grid.push(volumesCard(reading, { local }));
     if (reading.tunnels) grid.push(tunnelCard(reading.tunnels, machines, remoteReadings, now));
@@ -433,11 +437,25 @@ export async function mount(area, ctx) {
     const ownPort = Number(globalThis.location?.port) || null;
     const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort }) : [];
     const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
-    area.replaceChildren(head, ...condition.parts, ...shown);
+    replaceKeepingFocus(head, ...condition.parts, ...shown);
+  }
+
+  // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.
+  function replaceKeepingFocus(...nodes) {
+    const active = globalThis.document?.activeElement;
+    let key = null;
+    if (active && area.contains(active)) {
+      if (active.getAttribute?.('data-filter')) key = `[data-filter="${active.getAttribute('data-filter')}"]`;
+      else if (active.getAttribute?.('data-hours')) key = `[data-hours="${active.getAttribute('data-hours')}"]`;
+    }
+    area.replaceChildren(...nodes);
+    if (key) area.querySelector(key)?.focus();
   }
 
   async function draw() {
+    if (ctx.signal.aborted) return;
     const mine = ++request;
+    if (!isMachineId(id)) return notFound();
     try {
       const [telemetry, machinesBody, attention] = await Promise.all([ctx.read(telemetryRoute(id, hours)), optional(MACHINES_ROUTE), optional(ATTENTION_ROUTE)]);
       const machines = normalizeMachines(machinesBody);
@@ -470,28 +488,42 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== request || ctx.signal.aborted) return;
       last = null;
-      if (e?.status === 404 && !local) {
-        area.replaceChildren(head, empty({ icon: 'server', title: 'Máquina não encontrada', text: `Nenhuma máquina "${id}" no ~/.ahrena-console/machines.json deste núcleo.`, action: { label: 'Ir para Esta máquina', onClick: () => ctx.navigate('/ui/machines/local') } }));
+      const kind = failureKind(e);
+      if (kind === 'not-found' && !local) return notFound();
+      if (kind === 'no-telemetry') {
+        area.replaceChildren(head, empty({ icon: 'activity', title: 'O núcleo subiu sem a telemetria', text: 'Ele foi iniciado com --no-telemetry, ou esta plataforma não tem coletor. Reinicie o núcleo sem a opção para ver as máquinas.' }));
         return;
       }
-      area.replaceChildren(head, error({ title: e?.status === 404 ? 'O núcleo subiu sem a telemetria' : undefined, text: e?.message, retry: () => draw() }));
+      replaceKeepingFocus(head, error({ text: e?.message, retry: () => draw() }));
     }
+  }
+
+  // An id the core refuses (400) or does not know (404): no endless retry, a way back.
+  function notFound() {
+    last = null;
+    area.replaceChildren(head, empty({ icon: 'server', title: 'Máquina não encontrada', text: `Nenhuma máquina "${id}" no ~/.ahrena-console/machines.json deste núcleo.`, action: { label: 'Ir para Esta máquina', onClick: () => ctx.navigate('/ui/machines/local') } }));
   }
 
   let wait = null;
   const rereadSoon = () => {
     clearTimeout(wait);
-    wait = setTimeout(() => draw(), DEBOUNCE_MS);
+    if (!ctx.signal.aborted) wait = setTimeout(() => draw(), DEBOUNCE_MS);
   };
   ctx.onChange((changes) => {
     if (touchesMachine(changes, id)) rereadSoon();
   });
   ctx.onRestart(() => draw());
   const background = setInterval(() => draw(), REREAD_MS);
-
-  await draw();
-  return () => {
+  // The teardown hangs on the signal, not only on the returned function: leaving before the first
+  // read comes back aborts the signal before the shell could register that function.
+  const stop = () => {
     clearTimeout(wait);
     clearInterval(background);
   };
+  if (ctx.signal.aborted) stop();
+  else ctx.signal.addEventListener('abort', stop);
+
+  await draw();
+  if (ctx.signal.aborted) stop();
+  return stop;
 }

@@ -290,8 +290,8 @@ describe('registro das telas', () => {
   });
 
   test('a moldura desenha o título de cada seção com as classes da moldura, sem estilo inline', () => {
-    const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
-    assert.match(app, /sidebarSections\(\[\.\.\.SCREENS, \.\.\.remoteItems\]\)/);
+    const app = readFileSync(`${PASTA_DA_UI}nav.js`, 'utf8');
+    assert.match(app, /sidebarSections\(\[\.\.\.screens, \.\.\.remoteItems\]\)/);
     assert.match(app, /'cc-nav-section'/);
     assert.match(app, /'cc-nav-title eyebrow'/);
     const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
@@ -340,13 +340,11 @@ describe('registro das telas', () => {
     assert.equal(findScreen('/ui/machines/a/b'), null);
   });
 
-  test('#178 criterion 1: the shell reads /api/machines, redraws the sidebar with the remote items and their state dot', () => {
+  // The drawing itself (nav.js) is tested on the fake DOM in ui-machines.test.ts; here, the wiring.
+  test('#178 criterion 1: the shell draws the sidebar through nav.js and re-reads the machines on an alert', () => {
     const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
-    assert.match(app, /await read\(MACHINES_ROUTE\)/);
-    assert.match(app, /remoteItems = next;\n\s+drawNav\(\);/);
-    assert.match(app, /'cc-nav-dot', 'data-state': screen\.state/);
+    assert.match(app, /createNav\(\{ nav, read \}\)/);
     assert.match(app, /highlight\(litItem\(screen, params\)\)/);
-    // A machine that goes down or comes back publishes an alert: the dot follows it.
     assert.match(app, /changes\.some\(\(c\) => c\.tipo === 'alert'\)\) readMachines\(\)/);
     const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-dot \{/);

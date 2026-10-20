@@ -5,7 +5,8 @@ import { write, read } from './api.js';
 import { startLive } from './live.js';
 import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
-import { findScreen, legacyUrl, litItem, machineItems, MACHINES_ROUTE, SCREENS, sidebarSections } from './screens.js';
+import { findScreen, legacyUrl, litItem } from './screens.js';
+import { createNav } from './nav.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
@@ -16,74 +17,11 @@ port.textContent = location.host;
 
 // ---------- Sidebar ----------
 
-// One block per section (C1, C24): the everyday screens without a title, then Machines and Control.
-// The remote machines (issue 178) are not in the registry: `GET /api/machines` gives them, and the
-// sidebar is drawn again with `machineItems(list)` added, keeping the counters and the lit item.
-const items = new Map();
-const counts = new Map();
-let lit = null;
-let remoteItems = [];
-
-function drawNav() {
-  items.clear();
-  const groups = [];
-  for (const section of sidebarSections([...SCREENS, ...remoteItems])) {
-    const titleId = section.label ? `cc-nav-title-${section.id}` : null;
-    const group = el(
-      'div',
-      { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
-      titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
-    );
-    for (const screen of section.items) {
-      const q = el('span', { class: 'q', hidden: true });
-      const dot = screen.state ? el('span', { class: 'cc-nav-dot', 'data-state': screen.state, title: MACHINE_STATE_LABELS[screen.state] ?? '' }) : null;
-      const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', { class: 'cc-nav-label' }, screen.item.label), dot, q);
-      items.set(screen.id, { a, q });
-      group.append(a);
-    }
-    groups.push(group);
-  }
-  nav.replaceChildren(...groups);
-  for (const [id, n] of counts) counter(id, n);
-  highlight(lit);
-}
-
-const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração' };
-
-async function readMachines() {
-  let list = [];
-  try {
-    list = await read(MACHINES_ROUTE);
-  } catch {
-    // Without telemetry (404) or offline: the remote items stay as they were.
-    return;
-  }
-  const next = machineItems(list);
-  if (JSON.stringify(next) === JSON.stringify(remoteItems)) return;
-  remoteItems = next;
-  drawNav();
-}
-
-drawNav();
+// One block per section (C1, C24): the everyday screens, then Machines and Control. The remote
+// machines (issue 178) come from `GET /api/machines` and are added by nav.js (`createNav`).
+const { readMachines, highlight, counter } = createNav({ nav, read });
 // A remote's state also changes without an alert (another version over there): re-read now and then.
 setInterval(readMachines, 60_000);
-
-function highlight(id) {
-  lit = id;
-  for (const [k, { a }] of items) {
-    a.classList.toggle('on', k === id);
-    if (k === id) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
-  }
-}
-
-function counter(id, n) {
-  counts.set(id, n);
-  const item = items.get(id);
-  if (!item) return;
-  item.q.hidden = !n;
-  item.q.textContent = n ? String(n) : '';
-}
 
 // ---------- Live ----------
 

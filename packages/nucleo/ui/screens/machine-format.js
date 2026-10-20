@@ -452,21 +452,47 @@ export function chartOf(series, reading, { local }) {
   };
 }
 
-/** The polylines of one line (a gap where the value is missing), in a `width` × `height` box. */
-export function polylines(values, { max, width = 600, height = 120 }) {
+/** The core's sampling step in a window: 30 s in 1 h; at 12 h, 2 min buckets (`MAX_SERIES_POINTS` 360). */
+export const stepMs = (hours) => (hours === 12 ? (12 * 3_600_000) / 360 : 30_000);
+
+/** The time box of the chart: the window ending now, and the gap that breaks a line (twice the step). */
+export const timeWindow = (hours, now = Date.now()) => ({ from: now - hours * 3_600_000, to: now, gapMs: 2 * stepMs(hours) });
+
+/**
+ * The polylines of one line in a `width` × `height` box. Each point is placed by its time (`at[i]`)
+ * inside `[from, to]`: the core does not fill the holes (src/telemetry/series.ts), so a missing value
+ * or two samples further apart than `gapMs` break the line. Without `at`, points are spread by index.
+ */
+export function polylines(values, { max, width = 600, height = 120, at = null, from = null, to = null, gapMs = Infinity }) {
   const out = [];
   let current = [];
+  let previous = null;
   const n = values.length;
+  const byTime = Array.isArray(at) && Number.isFinite(from) && Number.isFinite(to) && to > from;
   const y = (v) => (height - 4 - (Math.min(v, max) / max) * (height - 14)).toFixed(1);
+  const cut = () => {
+    if (current.length) out.push(current);
+    current = [];
+  };
   values.forEach((v, i) => {
-    if (v === null) {
-      if (current.length) out.push(current);
-      current = [];
-      return;
+    let x;
+    if (byTime) {
+      const t = Date.parse(at[i]);
+      if (v === null || !Number.isFinite(t) || t < from || t > to) {
+        cut();
+        previous = null;
+        return;
+      }
+      if (previous !== null && t - previous > gapMs) cut();
+      previous = t;
+      x = ((t - from) / (to - from)) * width;
+    } else {
+      if (v === null) return cut();
+      x = n > 1 ? (i * width) / (n - 1) : 0;
     }
-    current.push(`${(n > 1 ? (i * width) / (n - 1) : 0).toFixed(1)},${y(v)}`);
+    current.push(`${x.toFixed(1)},${y(v)}`);
   });
-  if (current.length) out.push(current);
+  cut();
   // A single point draws nothing: it becomes a tiny segment.
   return out.map((pts) => (pts.length === 1 ? [pts[0], pts[0]] : pts).join(' '));
 }
@@ -474,6 +500,21 @@ export function polylines(values, { max, width = 600, height = 120 }) {
 export const yOf = (v, { max, height = 120 }) => Number((height - 4 - (Math.min(v, max) / max) * (height - 14)).toFixed(1));
 
 export const axisLabels = (hours) => (hours === 12 ? ['−12 h', '−9 h', '−6 h', '−3 h', 'agora'] : ['−60 min', '−45', '−30', '−15', 'agora']);
+
+// The machine id of the core (src/telemetry/model.ts `MACHINE_ID`).
+const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+export const isMachineId = (id) => typeof id === 'string' && MACHINE_ID.test(id);
+
+/**
+ * What a failed telemetry read means: `not-found` (an id the core refuses, 400, or does not know,
+ * 404), `no-telemetry` (the core started without it: 404 with its own message) or `error`.
+ */
+export function failureKind(e) {
+  const message = String(e?.body?.error ?? e?.message ?? '');
+  if (e?.status === 404 && /sem a telemetria/.test(message)) return 'no-telemetry';
+  if (e?.status === 404 || e?.status === 400) return 'not-found';
+  return 'error';
+}
 
 // ---------- the header and the states (C26) ----------
 

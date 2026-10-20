@@ -5,7 +5,7 @@
 // No network, no real data, no machines.json.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { seedTelemetry, SimulatedCollector } from '../../src/simulador/telemetry.ts';
@@ -39,6 +39,10 @@ import { ICON_NAMES } from '../../ui/dom.js';
 import * as format from '../../ui/screens/machine-format.js';
 // @ts-expect-error: idem
 import * as dashboard from '../../ui/screens/dashboard.js';
+// @ts-expect-error: idem
+import { createNav } from '../../ui/nav.js';
+// @ts-expect-error: idem
+import { SCREENS } from '../../ui/screens.js';
 const screen = await import(
   // @ts-expect-error: idem
   '../../ui/screens/machine.js'
@@ -468,7 +472,7 @@ describe('machine-format.js', () => {
 
 // ---------- live ----------
 
-describe('#178 criterion 7: live through /api/changes', () => {
+describe('#178 criterion 6: live through /api/changes, with simulator data', () => {
   test('an alert of this machine or a machine going down re-reads; another machine\'s alert or a repos change does not', async () => {
     assert.equal(format.touchesMachine([{ tipo: 'alert', chave: 'ws-exemplo:volume-full:/' }], 'ws-exemplo'), true);
     assert.equal(format.touchesMachine([{ tipo: 'alert', chave: 'lab:machine-unreachable' }], 'local'), true);
@@ -498,7 +502,7 @@ describe('#178 criterion 7: live through /api/changes', () => {
 
 // ---------- C1: the remote sessions on the Dashboard ----------
 
-describe('#178 criterion 4: a remote session on the Dashboard gets the machine label and no link', () => {
+describe('Dashboard: remote sessions (supports #176/#178): the machine label and no link', () => {
   test('inboxCards: an item with `machine` carries the label and has no href; a local one keeps its link', () => {
     const cards = dashboard.inboxCards(ATTENTION, [{ sessao: 'r1', modelo: 'claude-opus-5-5', tarefa: 'Bash: rm' }]);
     assert.equal(cards[0].href, '/ui/sessions/l1');
@@ -540,8 +544,8 @@ const FILES = ['screens/machine.js', 'screens/machine-format.js', 'screens/machi
 const classesOfCss = (file: string) => new Set([...readFileSync(`${PASTA_DA_UI}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const SEALS = new Set(['badge', 'p', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 
-describe('#178 criteria 5 and 6: the screen\'s CSS, classes and icons', () => {
-  test('every own class in machine.css and in the JS starts with tm-', () => {
+describe('#178 the screen\'s files, CSS, classes and icons', () => {
+  test('criterion 5: every own class in machine.css and in the JS starts with tm-', () => {
     const shell = classesOfCss('shell.css');
     const own = [...classesOfCss('screens/machine.css')].filter((c) => !shell.has(c) && !SEALS.has(c));
     assert.ok(own.length > 30);
@@ -552,7 +556,7 @@ describe('#178 criteria 5 and 6: the screen\'s CSS, classes and icons', () => {
     assert.deepEqual(used.filter((c) => !c.startsWith('tm-') && !shell.has(c) && !SEALS.has(c) && !['card', 'btn', 'outline', 'mono', 'eyebrow', 'badge', 'error-band'].includes(c)), []);
   });
 
-  test('nothing scrolls horizontally: fixed tables, wrapping text, no overflow-x', () => {
+  test('criterion 4 (static part): nothing scrolls horizontally: fixed tables, wrapping text, no overflow-x', () => {
     const css = readFileSync(`${PASTA_DA_UI}screens/machine.css`, 'utf8');
     assert.doesNotMatch(css, /overflow-x/);
     assert.match(css, /\.tm-table \{[^}]*table-layout: fixed/);
@@ -561,7 +565,7 @@ describe('#178 criteria 5 and 6: the screen\'s CSS, classes and icons', () => {
     assert.match(css, /\.tm-config \{[^}]*white-space: pre-wrap/);
   });
 
-  test('the files exist, the screen loads its CSS by data-screen and removes it on leaving', async () => {
+  test('criterion 5: the files exist, the screen loads its CSS by data-screen and removes it on leaving', async () => {
     for (const f of FILES) readFileSync(`${PASTA_DA_UI}${f}`);
     const m = mount(null);
     await m.ready;
@@ -572,7 +576,7 @@ describe('#178 criteria 5 and 6: the screen\'s CSS, classes and icons', () => {
     assert.equal(document.head.querySelector('link[data-screen="machine"]'), null);
   });
 
-  test('every icon the screen uses exists; the new ones are not a drawing already there', () => {
+  test('criterion 5: every icon the screen uses exists; the new ones are not a drawing already there', () => {
     const js = FILES.filter((f) => f.endsWith('.js')).map((f) => readFileSync(`${PASTA_DA_UI}${f}`, 'utf8')).join('\n');
     const used = new Set([...js.matchAll(/icon\('([a-z-]+)'\)|iconName: '([a-z-]+)'|icon: '([a-z-]+)'/g)].map((m) => m[1] ?? m[2] ?? m[3]));
     for (const name of [...used, 'monitor', 'server', 'memory-stick', 'hard-drive', 'wifi', 'monitor-dot', 'container', 'cable', 'radio-tower', 'server-off', 'git-compare']) assert.ok(ICON_NAMES.includes(name), `missing icon ${name}`);
@@ -582,5 +586,144 @@ describe('#178 criteria 5 and 6: the screen\'s CSS, classes and icons', () => {
       const mine = drawings.find((d) => d[1] === name)![2];
       assert.deepEqual(drawings.filter((d) => d[2] === mine).map((d) => d[1]), [name], `the drawing of ${name} repeats`);
     }
+  });
+});
+
+// ---------- the sidebar (nav.js) ----------
+
+describe('#178 criterion 1: the sidebar draws the remote machines from /api/machines', () => {
+  test('a remote appears in Máquinas with its state dot; a counter and the lit item survive the redraw', async () => {
+    let list: unknown = [{ id: 'local', label: 'Esta máquina', state: 'connected' }];
+    const nav = new ElementoFalso('nav');
+    const reads: string[] = [];
+    const { readMachines, highlight, counter } = createNav({ nav, read: async (route: string) => (reads.push(route), list), screens: SCREENS });
+    const machinesBlock = () => nav.querySelector('[data-section="machines"]')!;
+    assert.deepEqual(machinesBlock().querySelectorAll('a').map((a) => a.getAttribute('data-screen')), ['this-machine']);
+    counter('dashboard', 4);
+    // The open screen is the remote's, before the list arrives.
+    highlight('machine-ws-exemplo');
+    list = [...(list as unknown[]), { id: 'ws-exemplo', label: 'Workstation', state: 'unreachable', reason: 'port-closed', port: 14720 }];
+    await readMachines();
+    assert.deepEqual(reads, ['/api/machines']);
+    const links = machinesBlock().querySelectorAll('a');
+    assert.deepEqual(links.map((a) => [a.getAttribute('data-screen'), a.getAttribute('href'), texto(a)]), [
+      ['this-machine', '/ui/machines/local', 'Esta máquina'],
+      ['machine-ws-exemplo', '/ui/machines/ws-exemplo', 'Workstation'],
+    ]);
+    const dot = links[1]!.querySelector('.cc-nav-dot')!;
+    assert.equal(dot.getAttribute('data-state'), 'unreachable');
+    assert.equal(dot.getAttribute('role'), 'img');
+    assert.equal(dot.getAttribute('aria-label'), 'Sem conexão');
+    assert.equal(links[0]!.querySelector('.cc-nav-dot'), null, 'this machine has no dot');
+    assert.equal(links[1]!.getAttribute('aria-current'), 'page');
+    assert.equal(texto(nav.querySelector('[data-screen="dashboard"] .q')), '4');
+    // The machine comes back: one more redraw, the counter and aria-current still there.
+    list = (list as { id: string }[]).map((m) => (m.id === 'ws-exemplo' ? { ...m, state: 'connected', reason: null } : m));
+    await readMachines();
+    assert.equal(nav.querySelector('[data-screen="machine-ws-exemplo"] .cc-nav-dot')!.getAttribute('aria-label'), 'Conectada');
+    assert.equal(nav.querySelector('[data-screen="machine-ws-exemplo"]')!.getAttribute('aria-current'), 'page');
+    assert.equal(texto(nav.querySelector('[data-screen="dashboard"] .q')), '4');
+    // A failed read (no telemetry, offline) keeps the items there.
+    const failing = createNav({ nav: new ElementoFalso('nav'), read: async () => Promise.reject(new Error('404')), screens: SCREENS });
+    await failing.readMachines();
+    await readMachines();
+    assert.equal(machinesBlock().querySelectorAll('a').length, 2);
+  });
+});
+
+// ---------- review round 1 ----------
+
+describe('#178 criterion 2: the chart places samples by time', () => {
+  test('a 30-minute hole in the samples breaks the line where it is, not at the next index', () => {
+    const now = Date.parse('2026-10-20T12:00:00Z');
+    const at: string[] = [];
+    const values: number[] = [];
+    for (let t = now - 3_600_000 + 30_000; t <= now; t += 30_000) {
+      const minute = (now - t) / 60_000;
+      if (minute > 15 && minute < 45) continue; // the core was down for 30 min
+      at.push(new Date(t).toISOString());
+      values.push(50);
+    }
+    const lines = format.polylines(values, { max: 100, width: 600, height: 120, at, ...format.timeWindow(1, now) });
+    assert.equal(lines.length, 2);
+    const xs = (line: string) => line.split(' ').map((p) => Number(p.split(',')[0]));
+    assert.ok(Math.abs(xs(lines[0]!).at(-1)! - 150) < 6, `the first part ends near −45 min: ${xs(lines[0]!).at(-1)}`);
+    assert.ok(Math.abs(xs(lines[1]!)[0]! - 450) < 6, `the second starts near −15 min: ${xs(lines[1]!)[0]}`);
+    assert.equal(xs(lines[1]!).at(-1), 600);
+    // Without a hole, one line; at 12 h the step is the 2 min bucket.
+    assert.equal(format.polylines([1, 2, 3], { max: 4, at: [now - 60_000, now - 30_000, now].map((t) => new Date(t).toISOString()), ...format.timeWindow(1, now) }).length, 1);
+    assert.equal(format.timeWindow(12, now).gapMs, 4 * 60_000);
+    // A sample outside the window, or with a bad time, is not drawn.
+    assert.deepEqual(format.polylines([1, 1], { max: 2, at: [new Date(now - 2 * 3_600_000).toISOString(), 'x'], ...format.timeWindow(1, now) }), []);
+  });
+});
+
+describe('#178 criterion 2: an id the core refuses and the core without telemetry', () => {
+  test('/ui/machines/Foo (400 from the core, or an invalid id) is "Máquina não encontrada", without reading', async () => {
+    const m = mount('Foo');
+    await m.ready;
+    assert.match(texto(m.area), /Máquina não encontrada/);
+    assert.deepEqual(m.reads, []);
+    assert.equal(format.failureKind({ status: 400, message: 'machine inválida' }), 'not-found');
+    assert.equal(format.failureKind({ status: 404, message: 'máquina desconhecida: x' }), 'not-found');
+    assert.equal(format.failureKind({ status: 404, message: 'o núcleo subiu sem a telemetria' }), 'no-telemetry');
+    assert.equal(format.failureKind({ status: 0, message: 'offline' }), 'error');
+  });
+
+  test('the core without telemetry: its own message, not "Sem conexão" with an endless retry', async () => {
+    const m = mount(null, async () => Promise.reject(Object.assign(new Error('o núcleo subiu sem a telemetria'), { name: 'ReadError', status: 404 })));
+    await m.ready;
+    assert.match(texto(m.area), /O núcleo subiu sem a telemetria/);
+    assert.doesNotMatch(texto(m.area), /Sem conexão com o núcleo|Tentar de novo/);
+  });
+});
+
+describe('#178 criterion 6: leaving the screen stops the re-reads', () => {
+  test('leaving before the first read comes back: no read afterwards, not even on the 30 s tick', async () => {
+    mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+    try {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((r) => (release = r));
+      const m = mount(WS.id, async (route) => (await gate, coreRead(route)));
+      assert.equal(m.reads.length, 3, 'the first draw is under way');
+      m.leave();
+      release();
+      await m.ready;
+      const after = m.reads.length;
+      mock.timers.tick(5 * 30_000);
+      m.change([{ tipo: 'alert', chave: 'ws-exemplo:machine-unreachable' }]);
+      mock.timers.tick(1000);
+      await new Promise((r) => setImmediate(r));
+      assert.equal(m.reads.length, after, 'nothing read after leaving');
+    } finally {
+      mock.timers.reset();
+    }
+  });
+});
+
+describe('#178 criterion 2: the focus stays on the button through a repaint', () => {
+  test('a port filter keeps the focus after the click and after the re-read', async () => {
+    const m = mount(null);
+    await m.ready;
+    const active = () => (document as unknown as { activeElement: ElementoFalso }).activeElement;
+    const exposed = part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!;
+    exposed.focus();
+    exposed.click();
+    assert.notEqual(active(), exposed, 'the old button is gone');
+    assert.equal(active().getAttribute('data-filter'), 'exposed');
+    assert.ok(part(m.area, 'ports')!.contains(active()));
+    // A re-read (an alert of this machine) repaints everything again.
+    const reads = m.reads.length;
+    const old = active();
+    m.change([{ tipo: 'alert', chave: 'local:port-exposed:5432' }]);
+    await until(() => m.reads.length > reads && active() !== old);
+    assert.equal(active().getAttribute('data-filter'), 'exposed');
+    assert.ok(part(m.area, 'ports')!.contains(active()));
+    // And the 12 h button.
+    const twelve = m.area.querySelector('[data-hours="12"]')!;
+    twelve.focus();
+    twelve.click();
+    await until(() => /−12 h/.test(texto(part(m.area, 'chart'))));
+    assert.equal(active().getAttribute('data-hours'), '12');
   });
 });

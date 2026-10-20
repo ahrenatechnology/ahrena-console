@@ -1,8 +1,9 @@
-/* The machine screens (C24, C25, C26, issue 178): the wireframe's look, ported. This file stays in the
-   head after the person leaves, so every own class starts with `tm-`; the shared ones are only the
-   shell's and the status seals (`badge`, `b-*`), repeated in each screen's CSS. Every color comes
-   from brand.css. Nothing scrolls horizontally from a 1100 px window: two columns up to 1299 px of
-   window, three from 1300. */
+/* The machine screens (C24, C25, C26, issue 178): the wireframe's look, ported. The screen puts this
+   sheet in the head when it opens (link[data-screen="machine"]) and removes it when the person
+   leaves; while it is there, the other screens' CSS is loaded too, so every own class starts with
+   `tm-` and the shared ones are only the shell's and the status seals (`badge`, `b-*`), repeated in
+   each screen's CSS. Every color comes from brand.css. Nothing scrolls horizontally from a 1100 px
+   window: two columns up to 1299 px of window, three from 1300. */
 
 /* ---------- seals: the same block as dashboard.css, on purpose ---------- */
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
