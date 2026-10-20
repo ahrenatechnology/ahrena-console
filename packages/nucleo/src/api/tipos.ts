@@ -144,6 +144,13 @@ export interface SubagenteDoPainel {
   status: 'working' | 'waiting' | 'completed' | 'error';
   desde: string;
   ate: string | null;
+  /** #146: o subagente que disparou este; `null` quando foi a própria sessão. */
+  pai: string | null;
+  /**
+   * #146: a onda, o turno da sessão (1, 2, …) em que o subagente foi disparado; o aninhado herda a
+   * do subagente de cima. `null` sem os prompts da sessão: o painel agrupa pela sobreposição no tempo.
+   */
+  onda: number | null;
 }
 
 export interface FilhaDoPainel {
