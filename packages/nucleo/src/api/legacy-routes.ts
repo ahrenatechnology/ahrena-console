@@ -748,7 +748,7 @@ const LOAD: LegacyBodySpec = {
 // - errors cite the new parameter and values: `status: um de all, …`, `order: um de activity, …`,
 //   `direction:`, `page:`, `search grande demais`.
 //
-// `GET /api/history` (RespostaDoHistorico, src/historico/leitura.ts), keys old → new: dias → days,
+// `GET /api/history` (HistoryResponse, src/history/reading.ts), keys old → new: dias → days,
 // proximo → next; each day: dia → day, sessoes → sessions; each session: titulo → title, projeto →
 // project, modelo → model, inicio → start, fim → end, duracaoMs → durationMs, custoUsd → costUsd,
 // anterior → previous, seguinte → next (id, status stay); previous/next: titulo → title. Errors:
