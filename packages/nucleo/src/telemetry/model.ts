@@ -16,9 +16,18 @@ export const RETENTION_MS = 12 * 60 * 60 * 1000;
 export const WINDOW_HOURS = [1, 12] as const;
 export type WindowHours = (typeof WINDOW_HOURS)[number];
 
-/** A machine's state for the sidebar and the tray. Remote machines are #176. */
+/** A machine's state for the sidebar and the tray. */
 export const MACHINE_STATES = ['connected', 'unreachable', 'not-configured', 'incompatible-version'] as const;
 export type MachineState = (typeof MACHINE_STATES)[number];
+
+/**
+ * Why a remote machine is `unreachable` (#176, decision 0008 section 3):
+ * - `port-closed`: the local port the tunnel forwards refuses the connection (the tunnel is down);
+ * - `no-response`: the port accepts, but the núcleo over there does not answer HTTP in time, closes
+ *   at once or answers something that is not its telemetry (the tunnel is up, the núcleo is not).
+ */
+export const UNREACHABLE_REASONS = ['port-closed', 'no-response'] as const;
+export type UnreachableReason = (typeof UNREACHABLE_REASONS)[number];
 
 /** This machine. Remote machines use the `id` from `~/.ahrena-console/machines.json` (#176). */
 export const LOCAL_MACHINE_ID = 'local';
@@ -185,7 +194,8 @@ export interface TelemetryReading {
 // ---------------------------------------------------------------------------------------------
 // Alerts
 
-export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy';
+/** `machine-unreachable` (#176): a remote machine the núcleo cannot read; computed on this Mac, not over there. */
+export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy' | 'machine-unreachable';
 export type AlertLevel = 'error' | 'warning';
 
 export interface Alert {
@@ -259,6 +269,13 @@ export interface MachineSummary {
   id: string;
   label: string;
   state: MachineState;
+  /** Only when `state` is `unreachable`; `null` otherwise (and before a remote's first read). */
+  reason: UnreachableReason | null;
+  /** The telemetry version the machine answers with; `null` while unknown (never read, or not reported). */
+  version: number | null;
+  /** The local port the tunnel forwards (`machines.json`); `null` for this machine and the simulated one. */
+  port: number | null;
+  /** The `takenAt` of the newest stored reading: its age, also while the machine is down. */
   lastReadAt: string | null;
   alerts: number;
 }
