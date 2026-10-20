@@ -325,6 +325,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     const toLegacy = legacyResponseFor(raw.pathname);
     if (toLegacy) rewriteJsonBodies(res, toLegacy);
     if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
+    // its live refresh work with the current id.
+    if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
+      res.writeHead(302, { location: `${url.pathname}${url.search}`, 'cache-control': 'no-store', 'content-length': 0 });
+      return void res.end();
+    }
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = OPEN.exec(url.pathname);
     if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]!));

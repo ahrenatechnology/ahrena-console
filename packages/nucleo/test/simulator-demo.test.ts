@@ -71,6 +71,43 @@ describe('the demo\'s old session ids (#173)', () => {
       await demo.close();
     }
   });
+
+  test('the old routes answer an old id like the new one: sessions, scope decisions and events', async () => {
+    const demo = await startLegacyDemo();
+    try {
+      const body = async (path: string) => {
+        const r = await fetch(`${demo.api.url}${path}`);
+        return [r.status, await r.json()];
+      };
+      for (const [old, current] of [
+        ['/api/sessoes/sim-detalhe-pedidos', '/api/sessoes/sim-detail-orders'],
+        ['/api/decisoes/sim-painel-esta?escopo=familia', '/api/decisoes/sim-panel-current?escopo=familia'],
+        ['/api/eventos?sessao=sim-detalhe-pedidos', '/api/eventos?sessao=sim-detail-orders'],
+      ]) {
+        const answer = await body(current);
+        assert.equal(answer[0], 200, current);
+        assert.deepEqual(await body(old), answer, old);
+      }
+    } finally {
+      await demo.close();
+    }
+  });
+
+  test('a /ui page asked by an old id is redirected (302) to its new URL, keeping the query', async () => {
+    const demo = await startLegacyDemo();
+    try {
+      const get = (path: string) => fetch(`${demo.api.url}${path}`, { redirect: 'manual' });
+      const old = await get('/ui/sessions/sim-detalhe-pedidos?x=1');
+      assert.equal(old.status, 302);
+      assert.equal(old.headers.get('location'), '/ui/sessions/sim-detail-orders?x=1');
+      const legacy = await get('/ui/sessoes/sim-painel-esta');
+      assert.equal(legacy.status, 302);
+      assert.equal(legacy.headers.get('location'), '/ui/sessoes/sim-panel-current', 'only the id changes: the page itself turns the old path into the new one');
+      assert.equal((await get('/ui/sessions/sim-detail-orders')).status, 200, 'the new id is served in place');
+    } finally {
+      await demo.close();
+    }
+  });
 });
 
 describe('demoRecordFolders', () => {
