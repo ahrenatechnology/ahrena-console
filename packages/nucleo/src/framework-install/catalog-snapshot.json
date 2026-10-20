@@ -1,0 +1,659 @@
+{
+  "marketplace": "ahrena",
+  "repo": "ahrenatechnology/ahrena-framework",
+  "commit": "9d70de7",
+  "plugins": [
+    {
+      "name": "ahrena-foundation",
+      "path": "foundation",
+      "description": "The self-hosting core: what an artifact is, where it lives, how it is named, and the skills that create the others. Every other plugin depends on this one.",
+      "keywords": [
+        "authoring",
+        "conventions",
+        "naming",
+        "templates",
+        "scaffolding"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "completeness",
+          "title": "Artifact completeness",
+          "statement": "An artifact carries no unfilled marker or placeholder, and every section its type requires.",
+          "enforcement": "hook",
+          "path": "foundation/rules/completeness.md"
+        },
+        {
+          "id": "frontmatter",
+          "title": "Artifact frontmatter",
+          "statement": "Every artifact opens with frontmatter carrying the fields its type requires and nothing undeclared.",
+          "enforcement": "hook",
+          "path": "foundation/rules/frontmatter.md"
+        },
+        {
+          "id": "naming",
+          "title": "Artifact names and paths",
+          "statement": "Artifact names are kebab-case, carry no type or clade prefix, and sit flat in their type directory.",
+          "enforcement": "hook",
+          "path": "foundation/rules/naming.md"
+        },
+        {
+          "id": "pilars",
+          "title": "Artifact types and authority",
+          "statement": "An artifact is exactly one of five types and references only what its type permits.",
+          "enforcement": "hook",
+          "path": "foundation/rules/pilars.md"
+        },
+        {
+          "id": "progressive-disclosure",
+          "title": "Progressive disclosure",
+          "statement": "A code block in a skill or agent body is at most 10 lines, and every file in a skill's body is named by a step.",
+          "enforcement": "hook",
+          "path": "foundation/rules/progressive-disclosure.md"
+        }
+      ],
+      "skills": 3,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-fundamentals",
+      "path": "engineering/fundamentals",
+      "description": "Language-agnostic engineering fundamentals: what justifies an abstraction, which structure must come out regardless, and the complexity signals a script can decide.",
+      "keywords": [
+        "solid",
+        "kiss",
+        "yagni",
+        "abstraction",
+        "cohesion",
+        "code-quality"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "aggregates",
+          "title": "The aggregate boundary and the event that leaves it",
+          "statement": "An invariant holds inside one aggregate, a transaction changes one root, aggregates refer to each other by identity, and an event names its root and time.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/aggregates.md"
+        },
+        {
+          "id": "clean-code",
+          "title": "The readable surface",
+          "statement": "A function body holds at most 30 statements, no statement follows an unconditional exit, and no comment is commented-out code.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/clean-code.md"
+        },
+        {
+          "id": "client-logic",
+          "title": "Platform code holds no client logic",
+          "statement": "No client logic in platform code: a client's rule is a declaration in its installation, checked by a platform schema; its code enters only by a platform port.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/client-logic.md"
+        },
+        {
+          "id": "comment-pointers",
+          "title": "A comment points, or it goes",
+          "statement": "A comment a change adds or edits carries a pointer — an ADR or an issue — or is a permitted exemption; prose with no pointer is a finding the fix removes.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/comment-pointers.md"
+        },
+        {
+          "id": "contract-first",
+          "title": "The contract is the source",
+          "statement": "The contract is authored, the code is derived from it or validated against it, and every operation it declares has a test that exercises it.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/contract-first.md"
+        },
+        {
+          "id": "cross-cutting-concerns",
+          "title": "Concerns belong at a boundary",
+          "statement": "Retry, transaction control, idempotency and metrics are declared once at a boundary; a hand-rolled one inside a body is the defect.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/cross-cutting-concerns.md"
+        },
+        {
+          "id": "debt-markers",
+          "title": "Debt that names its issue",
+          "statement": "A debt marker a change adds or edits names the issue that owns it; a finding with no issue is surfaced and decided, not left in a comment.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/debt-markers.md"
+        },
+        {
+          "id": "domain-model",
+          "title": "The domain owns its vocabulary",
+          "statement": "A domain module imports no mechanism and names no vendor, an aggregate root declares identity and an audit stamp, and no client datum is a literal.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/domain-model.md"
+        },
+        {
+          "id": "domain-services",
+          "title": "Behaviour that belongs to no aggregate",
+          "statement": "Behaviour whose terms name two aggregates is a stateless domain service under domain/; work that only loads, calls and saves is application, not domain.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/domain-services.md"
+        },
+        {
+          "id": "duplication",
+          "title": "Duplication at the third copy",
+          "statement": "The third function body with the same shape and the third table with the same contents are duplicates, counted inside one bounded context.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/duplication.md"
+        },
+        {
+          "id": "kiss",
+          "title": "Complexity a script can see",
+          "statement": "A function nests control flow at most 3 deep and branches on no boolean parameter.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/kiss.md"
+        },
+        {
+          "id": "pattern-selection",
+          "title": "Which pattern, and when",
+          "statement": "A pattern ships only when the situation its catalog entry names is present in the tree and the cheaper alternative in that entry has been ruled out.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/pattern-selection.md"
+        },
+        {
+          "id": "solid",
+          "title": "SOLID as detectable conditions",
+          "statement": "SOLID conditions that remove structure always apply; the ones that add it apply only when the abstraction trigger in rules/yagni.md is met.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/solid.md"
+        },
+        {
+          "id": "ubiquitous-language",
+          "title": "The project's language wins",
+          "statement": "Before naming or creating anything, read the project's ubiquitous language and conventions; the framework default applies only where the project is silent.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/ubiquitous-language.md"
+        },
+        {
+          "id": "value-semantics",
+          "title": "Parameter objects and value semantics",
+          "statement": "A callable takes at most 4 parameters, a type declared immutable exposes no mutable field, and a type that defines equality defines hashing.",
+          "enforcement": "hook",
+          "path": "engineering/fundamentals/rules/value-semantics.md"
+        },
+        {
+          "id": "yagni",
+          "title": "The abstraction trigger",
+          "statement": "An abstraction ships only with a second real consumer in the tree or a test that requires the seam; an anticipated consumer is not a consumer.",
+          "enforcement": "judgment",
+          "path": "engineering/fundamentals/rules/yagni.md"
+        }
+      ],
+      "skills": 3,
+      "agents": 0,
+      "commands": 1
+    },
+    {
+      "name": "ahrena-engineering-frontend",
+      "path": "engineering/frontend",
+      "description": "Frontend built outside-in: a validated wireframe before any code, four layers that stack as stacked pull requests, and a red-to-green test arc per layer, all conforming to the project's component map.",
+      "keywords": [
+        "frontend",
+        "outside-in",
+        "wireframe",
+        "bdd",
+        "components",
+        "accessibility"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "wireframe-first",
+          "title": "The wireframe is the first layer",
+          "statement": "No component is coded before its wireframe is approved as the first layer; code built against an unvalidated design is defective.",
+          "enforcement": "judgment",
+          "path": "engineering/frontend/rules/wireframe-first.md"
+        }
+      ],
+      "skills": 3,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-backend",
+      "path": "engineering/backend",
+      "description": "Backend built inside-out: four layers that stack as stacked pull requests — domain, use cases, OLTP, API — with unit TDD red-first at the domain and BDD acceptance tracing to its criteria at the API, all conforming to the project's component map.",
+      "keywords": [
+        "backend",
+        "inside-out",
+        "ddd",
+        "hexagonal",
+        "tdd",
+        "bdd",
+        "aggregates",
+        "use-cases",
+        "contract"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 3,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-data",
+      "path": "engineering/data",
+      "description": "Data built source→product, contract-first: four layers that stack as stacked pull requests — schema, medallion, expectations, marts — the data contract authored first and the later layers evolving from it, every mart reconciled to its source, all conforming to the project's component map.",
+      "keywords": [
+        "data",
+        "medallion",
+        "data-contracts",
+        "dbt",
+        "great-expectations",
+        "bronze-silver-gold",
+        "marts",
+        "contract-first"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "reconciliation",
+          "title": "A mart reconciles to its source",
+          "statement": "No mart ships without a reconciliation tying its figures to the source its contract pinned; a mart that cannot reconcile to its source is defective, not done.",
+          "enforcement": "judgment",
+          "path": "engineering/data/rules/reconciliation.md"
+        }
+      ],
+      "skills": 3,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-delivery",
+      "path": "engineering/delivery",
+      "description": "Delivery orchestrated issue→stacked-PRs: Athena, the tech-lead, plans a change, routes each concern deterministic-first — a route table, then the Clef decision gate, then a human — delegates to the build clades, runs the develop→Argos loop before each layer opens, and escalates when it is exhausted.",
+      "keywords": [
+        "delivery",
+        "orchestration",
+        "tech-lead",
+        "routing",
+        "stacked-prs",
+        "planning",
+        "escalation"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 3,
+      "agents": 1,
+      "commands": 1
+    },
+    {
+      "name": "ahrena-engineering-python",
+      "path": "engineering/python",
+      "description": "What is specific to Python: a distribution per layer under a PEP 420 namespace root, a dependency direction that only runs downward, and an import graph a script proves acyclic.",
+      "keywords": [
+        "python",
+        "imports",
+        "circular-imports",
+        "layering",
+        "packaging",
+        "namespace-packages"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "module-boundaries",
+          "title": "Module boundaries and import acyclicity",
+          "statement": "Layers import only downward and the first-party import graph is acyclic; moving an import inside a function is the same edge and breaks no cycle.",
+          "enforcement": "hook",
+          "path": "engineering/python/rules/module-boundaries.md"
+        },
+        {
+          "id": "typing",
+          "title": "Types that hold, and the defects they do not catch",
+          "statement": "Python annotates every parameter and return, passes `mypy --strict`, justifies every `Any`, defaults nothing to a mutable, and discards no exception it caught.",
+          "enforcement": "judgment",
+          "path": "engineering/python/rules/typing.md"
+        }
+      ],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-typescript",
+      "path": "engineering/typescript",
+      "description": "What is specific to TypeScript and the Node and browser code written in it: the type holes a compiler in loose mode lets through, the async mistakes, and the module surface others import.",
+      "keywords": [
+        "typescript",
+        "ts",
+        "types",
+        "frontend",
+        "node",
+        "code-quality"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-go",
+      "path": "engineering/go",
+      "description": "What is specific to Go: errors that are ignored or wrapped wrong, goroutines and contexts that leak, and the interface and nil traps the compiler does not catch.",
+      "keywords": [
+        "go",
+        "golang",
+        "goroutine",
+        "concurrency",
+        "errors",
+        "code-quality"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-rust",
+      "path": "engineering/rust",
+      "description": "What is specific to Rust: the panics a library should not take, the unsafe that has to justify itself, the ownership and concurrency choices, and the Result and error surface.",
+      "keywords": [
+        "rust",
+        "ownership",
+        "unsafe",
+        "result",
+        "panic",
+        "code-quality"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-quality",
+      "path": "engineering/quality",
+      "description": "The code-review system: the reviewer and the fixer, the per-discipline review skills, the path router, and the findings and verdict docs they share.",
+      "keywords": [
+        "code-review",
+        "review",
+        "security",
+        "findings",
+        "verdict",
+        "autofix",
+        "quality"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 7,
+      "agents": 2,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-security",
+      "path": "engineering/security",
+      "description": "Application security as review disciplines: secrets and supply chain, untrusted input, access and sensitive data, and the use of language models and agents.",
+      "keywords": [
+        "security",
+        "secrets",
+        "untrusted-input",
+        "access",
+        "cryptography",
+        "llm",
+        "code-review"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 6,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-reliability",
+      "path": "engineering/reliability",
+      "description": "Reliability as a review discipline: the timeout a call needs to survive a slow peer, the retry that needs a backoff and a bound, the effect that must stay idempotent under redelivery, the resource that must be released, the dependency that owes a degradation, and the destructive change that must carry a reversal.",
+      "keywords": [
+        "reliability",
+        "resilience",
+        "timeout",
+        "retry",
+        "idempotency",
+        "fallback",
+        "code-review"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-observability",
+      "path": "engineering/observability",
+      "description": "Observability as a review discipline: whether a failure leaves a log a human can act on, a critical operation emits a metric or event, a log line carries the what and where to diagnose it, and a service edge carries a correlation id - without ever logging sensitive data.",
+      "keywords": [
+        "observability",
+        "logging",
+        "metrics",
+        "tracing",
+        "telemetry",
+        "correlation-id",
+        "code-review"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-engineering-code-review",
+      "path": "engineering/code-review",
+      "description": "The code-review engine: the orchestrator that routes a change to the review lenses it calls for, merges their findings into one verdict, drives the fix-and-re-review loop, and hands an approval to the merge decision.",
+      "keywords": [
+        "code-review",
+        "review",
+        "orchestrator",
+        "routing",
+        "verdict",
+        "findings"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 0,
+      "agents": 1,
+      "commands": 0
+    },
+    {
+      "name": "ahrena-contributing",
+      "path": "contributing",
+      "description": "From the issue to trunk, through two gates and a person landing the change: how a typed issue is opened from its template and a backlog of epics planned, the issue number a branch name carries, the Conventional Commits subject and signature a commit holds, acceptance criteria traced to tests, how a pull request closes its issues, stacks native where the forge has them and run by the framework where it does not, and a trunk only a squash can reach.",
+      "keywords": [
+        "git",
+        "branch-naming",
+        "conventional-commits",
+        "signed-commits",
+        "pull-requests",
+        "stacked-pull-requests",
+        "acceptance-criteria",
+        "traceability",
+        "quality-gate",
+        "planning",
+        "user-stories",
+        "issue-templates",
+        "protected-branches",
+        "contributing"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [
+        {
+          "id": "branch-naming",
+          "title": "The branch name carries its issue",
+          "statement": "A working branch is named for its conventional type, the number of the issue it answers and a kebab-case slug, joined as type/number-slug.",
+          "enforcement": "hook",
+          "path": "contributing/rules/branch-naming.md"
+        },
+        {
+          "id": "commit-format",
+          "title": "What a commit carries",
+          "statement": "Every commit carries a Conventional Commits subject of at most 72 characters and a signature on the commit object.",
+          "enforcement": "hook",
+          "path": "contributing/rules/commit-format.md"
+        },
+        {
+          "id": "concurrent-decision-records",
+          "title": "A decision-record number is free across open pull requests",
+          "statement": "An open pull request introduces no decision-record number that trunk already carries or that another open pull request also introduces.",
+          "enforcement": "hook",
+          "path": "contributing/rules/concurrent-decision-records.md"
+        },
+        {
+          "id": "decision-records",
+          "title": "What a decision record carries",
+          "statement": "A decision record is numbered without gaps, carries a status from the enum and the four sections, and its supersession names a record that names it back.",
+          "enforcement": "hook",
+          "path": "contributing/rules/decision-records.md"
+        },
+        {
+          "id": "gates",
+          "title": "Two gates, and a review lands the change",
+          "statement": "An agent starts an issue only when asked, asks for review only after the quality gate passes, and lands a change only after a review approved it.",
+          "enforcement": "judgment",
+          "path": "contributing/rules/gates.md"
+        },
+        {
+          "id": "issue-quality",
+          "title": "What an issue carries",
+          "statement": "An issue states what is wrong or missing with the evidence for it, what done looks like, and what it leaves to other issues.",
+          "enforcement": "judgment",
+          "path": "contributing/rules/issue-quality.md"
+        },
+        {
+          "id": "planning",
+          "title": "A plan closes when its units have, and in order",
+          "statement": "A pull request does not close an issue with open sub-issues, nor one blocked by an open issue unless it is a layer of a stack.",
+          "enforcement": "hook",
+          "path": "contributing/rules/planning.md"
+        },
+        {
+          "id": "pr-quality",
+          "title": "What a pull request carries",
+          "statement": "A pull request names its branch's issue, closes each issue with its own keyword and nothing it does not name, and has a title trunk can take as a subject.",
+          "enforcement": "hook",
+          "path": "contributing/rules/pr-quality.md"
+        },
+        {
+          "id": "protected-trunk",
+          "title": "Only a pull request reaches trunk",
+          "statement": "Trunk is written only by a pull request's squash, and the forge is configured so that nothing else can reach it.",
+          "enforcement": "hook",
+          "path": "contributing/rules/protected-trunk.md"
+        },
+        {
+          "id": "stacked-pull-requests",
+          "title": "A stack is native where it can be, and lands on trunk",
+          "statement": "A pull request not based on trunk is a layer of a stack, native where the forge has them, the stack lands on trunk, and nothing already landed rides along.",
+          "enforcement": "hook",
+          "path": "contributing/rules/stacked-pull-requests.md"
+        },
+        {
+          "id": "traceability",
+          "title": "Every acceptance criterion is traced to a test",
+          "statement": "Every issue a pull request closes lists numbered criteria, a test names each one that is not checked by review, and no test names a criterion that is not there.",
+          "enforcement": "hook",
+          "path": "contributing/rules/traceability.md"
+        }
+      ],
+      "skills": 7,
+      "agents": 0,
+      "commands": 2
+    },
+    {
+      "name": "ahrena-costs",
+      "path": "costs",
+      "description": "What each issue cost to build: a hook that records a session's tokens and time when it ends, a ledger outside every repository, a price table kept as data, a report per issue in tokens, hours and money, and one cost comment per pull request that local sessions and the CI pipeline both keep up to date.",
+      "keywords": [
+        "cost",
+        "tokens",
+        "usage",
+        "pricing",
+        "hooks",
+        "issues",
+        "pull-requests",
+        "ci",
+        "claude-code"
+      ],
+      "platforms": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "rules": [],
+      "skills": 1,
+      "agents": 0,
+      "commands": 1
+    }
+  ]
+}

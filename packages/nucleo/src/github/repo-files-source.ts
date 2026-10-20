@@ -161,16 +161,17 @@ export class RepoFilesSource {
   }
 
   /**
-   * A árvore recursiva do HEAD, com ETag. Do que vem, fica só o que interessa (`isInterestingPath`):
+   * A árvore recursiva do HEAD, com ETag. Do que vem, fica só o que interessa (`keep`; padrão
+   * `isInterestingPath`, a leitura das instruções; a instalação do framework, #184, passa a dela):
    * a árvore inteira pode ter 13 MB. 404 e 409 (repositório vazio) viram árvore vazia.
    */
-  async tree(owner: string, name: string, etag: string | null): Promise<{ state: 'ok'; value: RepoTreeSummary; etag: string | null } | { state: 'not-modified' }> {
+  async tree(owner: string, name: string, etag: string | null, keep: (path: string) => boolean = isInterestingPath): Promise<{ state: 'ok'; value: RepoTreeSummary; etag: string | null } | { state: 'not-modified' }> {
     const r = await this.transport.rest<RawTree>(`/repos/${owner}/${name}/git/trees/HEAD?recursive=1`, etag);
     if (r.estado === 'nao-modificado') return { state: 'not-modified' };
     if (r.estado === 'indisponivel' || r.estado === 'calculando') return { state: 'ok', value: { sha: null, truncated: false, files: [] }, etag: null };
     const raw = r.valor ?? {};
     const files = (raw.tree ?? [])
-      .filter((e) => e && e.type === 'blob' && typeof e.path === 'string' && OID.test(e.sha) && isInterestingPath(e.path))
+      .filter((e) => e && e.type === 'blob' && typeof e.path === 'string' && OID.test(e.sha) && keep(e.path))
       .slice(0, MAX_TREE_PATHS)
       .map((e) => ({ path: e.path, oid: e.sha }));
     return { state: 'ok', value: { sha: typeof raw.sha === 'string' ? raw.sha : null, truncated: raw.truncated === true, files }, etag: r.etag };

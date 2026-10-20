@@ -277,7 +277,7 @@ describe('#173 phase 2b: the back-translator', () => {
 describe('every union member of the installed app and the live group answers the old value on the old route', () => {
   const LEVEL = { needs: 'precisa', 'your-turn': 'sua-vez' };
   const REASON = { permission: 'permissao', question: 'pergunta', plan: 'plano', decision: 'decisao', error: 'erro', 'your-turn': 'sua-vez', interrupted: 'interrompida', 'no-prompt': 'no-prompt' };
-  const CHANGE = { session: 'sessao', state: 'estado', 'needs-you': 'precisa-de-voce', plan: 'plano', decision: 'decisao', account: 'conta', repos: 'repos', alert: 'alert', 'agent-instructions': 'agent-instructions' };
+  const CHANGE = { session: 'sessao', state: 'estado', 'needs-you': 'precisa-de-voce', plan: 'plano', decision: 'decisao', account: 'conta', repos: 'repos', alert: 'alert', 'agent-instructions': 'agent-instructions', 'framework-install': 'framework-install' };
   const ACTIVITY = { tool: 'ferramenta', delegating: 'delegando', question: 'pergunta', permission: 'permissao', error: 'erro', prompt: 'prompt', 'your-turn': 'sua-vez', interrupted: 'interrompida', completed: 'concluida', abandoned: 'abandonada', idle: 'ociosa' };
   const HISTORY = { ready: 'pronto', importing: 'importando', off: 'desligado' };
 
@@ -310,7 +310,7 @@ describe('every union member of the installed app and the live group answers the
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      [`type: um de ${CHANGE_TYPES.join(', ')}`]: 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions',
+      [`type: um de ${CHANGE_TYPES.join(', ')}`]: 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions, framework-install',
       'esperas abertas demais (máximo 2)': 'esperas abertas demais (máximo 2)',
     };
     for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
