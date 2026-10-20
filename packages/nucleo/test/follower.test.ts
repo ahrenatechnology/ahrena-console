@@ -1,5 +1,5 @@
-// Seguidor dos transcripts (item 1.3), com diretório temporário e escritas sintéticas.
-// Nenhum transcript real: as linhas são montadas aqui.
+// Transcript follower (item 1.3), with a temporary directory and synthetic writes.
+// No real transcript: the lines are built here.
 
 import assert from 'node:assert/strict';
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, truncateSync, utimesSync, writeFileSync } from 'node:fs';
@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, afterEach, describe, test } from 'node:test';
 import { openSqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
-import { classifyTranscript } from '../src/ingest/historico/files.ts';
-import { followTranscripts, type FollowOptions, type TranscriptFollower } from '../src/ingest/historico/follower.ts';
-import { eventId, subagentId } from '../src/ingest/historico/importer.ts';
+import { classifyTranscript } from '../src/ingest/history/files.ts';
+import { followTranscripts, type FollowOptions, type TranscriptFollower } from '../src/ingest/history/follower.ts';
+import { eventId, subagentId } from '../src/ingest/history/importer.ts';
 import type { StoragePort } from '../src/index.ts';
 
-const tmp = mkdtempSync(join(tmpdir(), 'ahrena-seguidor-'));
+const tmp = mkdtempSync(join(tmpdir(), 'ahrena-follower-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 let n = 0;
@@ -78,8 +78,8 @@ function setup(opts: Partial<FollowOptions> = {}) {
   return { root, store, follower, errors };
 }
 
-describe('seguidor: classificação dos caminhos avisados', () => {
-  test('reconhece os três layouts e ignora o resto', () => {
+describe('follower: classifying notified paths', () => {
+  test('recognises the three layouts and ignores the rest', () => {
     const root = '/raiz';
     const none = () => false;
     assert.equal(classifyTranscript(root, join('p', `${sid(1)}.jsonl`), none)?.kind, 'main');
@@ -95,8 +95,8 @@ describe('seguidor: classificação dos caminhos avisados', () => {
   });
 });
 
-describe('seguidor: tempo real', () => {
-  test('importa o que já existe ao começar e segue o que é acrescentado pelo watch', async () => {
+describe('follower: real time', () => {
+  test('imports what exists on start and follows what is appended through the watch', async () => {
     const { root, store, follower, errors } = setup({ scanIntervalMs: 60_000 });
     const file = mainFile(root, sid(1));
     writeFileSync(file, line(sid(1), 'a1'));
@@ -113,7 +113,7 @@ describe('seguidor: tempo real', () => {
     await store.close();
   });
 
-  test('sessão nova em projeto novo chega pela varredura, com o watch desligado', async () => {
+  test('a new session in a new project arrives through the scan, with the watch off', async () => {
     const { root, store, follower } = setup({ watch: false, scanIntervalMs: 100 });
     await follower.start();
     assert.equal(follower.stats().watching, false);
@@ -124,7 +124,7 @@ describe('seguidor: tempo real', () => {
     await store.close();
   });
 
-  test('subagente novo, numa pasta criada depois, chega pelo watch', async () => {
+  test('a new subagent, in a folder created later, arrives through the watch', async () => {
     const { root, store, follower } = setup({ scanIntervalMs: 60_000 });
     writeFileSync(mainFile(root, sid(3)), line(sid(3), 'c1'));
     await follower.start();
@@ -144,7 +144,7 @@ describe('seguidor: tempo real', () => {
     await store.close();
   });
 
-  test('raiz que ainda não existe: começa pela varredura e liga o watch quando ela aparece', async () => {
+  test('a root that does not exist yet: starts with the scan and turns the watch on when it appears', async () => {
     const store = openSqliteStorage({ path: ':memory:' });
     const root = join(tmp, `ainda-nao-${n++}`);
     const follower = followTranscripts({ storage: store, root, scanIntervalMs: 100 });
@@ -160,11 +160,11 @@ describe('seguidor: tempo real', () => {
   });
 });
 
-describe('seguidor: arquivos que mudam de jeito estranho', () => {
+describe('follower: files that change in odd ways', () => {
   // Aqui sem watch e sem intervalo: cada rodada é um `sync()`, para o teste ser determinístico.
   const manual = () => setup({ watch: false, scanIntervalMs: 3_600_000 });
 
-  test('linha pela metade espera o resto', async () => {
+  test('a half-written line waits for the rest', async () => {
     const { root, store, follower } = manual();
     const file = mainFile(root, sid(5));
     writeFileSync(file, line(sid(5), 'e1'));
@@ -186,7 +186,7 @@ describe('seguidor: arquivos que mudam de jeito estranho', () => {
     await store.close();
   });
 
-  test('arquivo truncado e reescrito menor é relido do início', async () => {
+  test('a file truncated and rewritten smaller is reread from the start', async () => {
     const { root, store, follower } = manual();
     const file = mainFile(root, sid(6));
     writeFileSync(file, line(sid(6), 'f1') + line(sid(6), 'f2') + line(sid(6), 'f3'));
@@ -202,7 +202,7 @@ describe('seguidor: arquivos que mudam de jeito estranho', () => {
     await store.close();
   });
 
-  test('arquivo reescrito com tamanho maior é relido do início, pela impressão digital do cursor', async () => {
+  test("a file rewritten larger is reread from the start, by the cursor's fingerprint", async () => {
     const { root, store, follower } = manual();
     const file = mainFile(root, sid(7));
     writeFileSync(file, line(sid(7), 'g1') + line(sid(7), 'g2'));
@@ -219,7 +219,7 @@ describe('seguidor: arquivos que mudam de jeito estranho', () => {
     await store.close();
   });
 
-  test('arquivo apagado sai da lista e, se voltar, é lido de novo', async () => {
+  test('a deleted file leaves the list and, if it comes back, is read again', async () => {
     const { root, store, follower } = manual();
     const file = mainFile(root, sid(8));
     writeFileSync(file, line(sid(8), 'h1'));
@@ -237,8 +237,8 @@ describe('seguidor: arquivos que mudam de jeito estranho', () => {
   });
 });
 
-describe('seguidor: parar, começar e custo', () => {
-  test('parado não importa; ao recomeçar, pega o que ficou para trás', async () => {
+describe('follower: stop, start and cost', () => {
+  test('stopped, it does not import; on restart, it picks up what was left behind', async () => {
     const { root, store, follower } = setup({ scanIntervalMs: 100 });
     const file = mainFile(root, sid(9));
     writeFileSync(file, line(sid(9), 'i1'));
@@ -259,7 +259,7 @@ describe('seguidor: parar, começar e custo', () => {
     await store.close();
   });
 
-  test('com centenas de sessões, uma rodada sem mudança não lê nada e a mudança lê um arquivo', async () => {
+  test('with hundreds of sessions, a round without changes reads nothing and a change reads one file', async () => {
     const { root, store, follower } = setup({ watch: false, scanIntervalMs: 3_600_000 });
     const SESSIONS = 300;
     for (let i = 0; i < SESSIONS; i++) writeFileSync(mainFile(root, sid(1000 + i)), line(sid(1000 + i), `k${i}`));

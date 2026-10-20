@@ -3,20 +3,20 @@
 // `updatedAt`, `cwd` e `model` em dia. Status, espera e agentes não mudam aqui: são da máquina de
 // estados (item 1.5), que pode se pendurar no `onEvent` do receptor.
 //
-// A conta da sessão (#110) é resolvida no `SessionStart` e no primeiro evento que o receptor vê de
-// cada sessão (ver conta.ts); o resultado respeita a precedência da decisão 0006.
+// The session's account (#110) is resolved on `SessionStart` and on the first event the receiver
+// sees from each session (see account.ts); the result follows decision 0006's precedence.
 
 import { applySessionAccount, type Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { updatePlan } from '../../plan/recording.ts';
 import { updateContextMeters } from '../../context/recording.ts';
 import { Profiles } from '../../profiles/profiles.ts';
-import { resolverConta, type PerfisDoHook } from './conta.ts';
+import { resolveAccount, type HookProfiles } from './account.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
 
 export interface IngestOptions extends NormalizeOptions {
   /** Profiles (#109), which read a folder's account and write the `ClaudeAccount`; defaults to a new one over the port. */
-  perfis?: PerfisDoHook;
+  profiles?: HookProfiles;
 }
 
 export interface IngestResult extends NormalizedHook {
@@ -62,11 +62,11 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   }
 
   if (event.type === 'SessionStart' || next.metadata.accountCheckedAt === undefined) {
-    const r = await resolverConta(hints.env, hints.transcriptPath, opts.perfis ?? new Profiles({ storage }));
-    if (r.conta) next = applySessionAccount(next, r.conta.account.id, r.conta.source);
-    // O que um SessionStart anterior gravou do Desktop não vale mais se este não trouxe.
-    const { desktopScope: _escopo, desktopScopeConflict: _conflito, ...anterior } = next.metadata;
-    const metadata: Session['metadata'] = { ...anterior, accountCheckedAt: event.createdAt };
+    const r = await resolveAccount(hints.env, hints.transcriptPath, opts.profiles ?? new Profiles({ storage }));
+    if (r.resolved) next = applySessionAccount(next, r.resolved.account.id, r.resolved.source);
+    // What an earlier SessionStart recorded from Desktop no longer holds if this one did not bring it.
+    const { desktopScope: _scope, desktopScopeConflict: _conflict, ...rest } = next.metadata;
+    const metadata: Session['metadata'] = { ...rest, accountCheckedAt: event.createdAt };
     if (r.desktopScope) metadata.desktopScope = r.desktopScope;
     if (r.desktopScopeConflict !== null) metadata.desktopScopeConflict = r.desktopScopeConflict;
     next = { ...next, metadata };

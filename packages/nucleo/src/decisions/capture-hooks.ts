@@ -10,7 +10,7 @@
 //   then `PostToolUse` of the same call (allowed) or nothing from it until the next `Stop` or prompt (denied).
 // The source key is the `tool_use_id` one, the same as the transcript's, so the two paths do not duplicate.
 
-import { mainAgentId, subagentId } from '../ingest/historico/importer.ts';
+import { mainAgentId, subagentId } from '../ingest/history/importer.ts';
 import type { SessionEvent } from '../model.ts';
 import type { Decision } from './model.ts';
 import type { DecisionPort } from './port.ts';

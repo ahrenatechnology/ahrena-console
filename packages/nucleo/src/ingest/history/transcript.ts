@@ -1,6 +1,6 @@
-// Leitura de uma linha do transcript JSONL do Claude Code. Função pura: recebe a linha já
-// decodificada e devolve o que importa para o núcleo (evento, título, cwd, modelo).
-// O formato não é documentado; tudo é lido de forma defensiva e o que não se reconhece é ignorado.
+// Reading of one line of Claude Code's JSONL transcript. A pure function: it takes the decoded
+// line and returns what matters to the core (event, title, cwd, model).
+// The format is undocumented; everything is read defensively and what is not recognised is ignored.
 
 import type { TokenCounts } from '../../model.ts';
 

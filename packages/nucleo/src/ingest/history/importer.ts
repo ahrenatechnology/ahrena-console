@@ -1,15 +1,15 @@
-// Importação do histórico de `~/.claude/projects` para o núcleo, pela porta de armazenamento.
+// Import of the `~/.claude/projects` history into the core, through the storage port.
 //
-// Idempotente e retomável:
-// - cada linha vira um evento de id estável (`jsonl:<uuid>`); gravar de novo não duplica;
-// - o uso de tokens é recalculado a partir dos eventos da sessão, deduplicado por mensagem;
-// - o cursor de cada arquivo (deslocamento em bytes, tamanho e mtime) fica no `metadata.importacao`
-//   da sessão (arquivo principal) ou do agente (arquivo do subagente) e é gravado por último.
-//   Se a importação cair no meio, a próxima relê do cursor anterior e os ids absorvem a repetição.
+// Idempotent and resumable:
+// - each line becomes an event with a stable id (`jsonl:<uuid>`); writing it again does not duplicate;
+// - token usage is recomputed from the session's events, deduplicated by message;
+// - each file's cursor (byte offset, size and mtime) lives in the `metadata.importacao` of the
+//   session (main file) or of the agent (subagent file) and is written last. If the import stops
+//   halfway, the next one rereads from the previous cursor and the ids absorb the repetition.
 //
-// Seguir em tempo real é do `follower.ts` (item 1.3), que chama esta importação só com os arquivos
-// que mudaram. Não decide estados (item 1.5): sessão nova nasce
-// `completed`, e sessão que já existe (criada pelos hooks, por exemplo) mantém status e espera.
+// Following in real time belongs to `follower.ts` (item 1.3), which calls this import only with the
+// files that changed. It does not decide states (item 1.5): a new session is born `completed`, and
+// a session that already exists (created by the hooks, for example) keeps its status and wait.
 
 import type { Agent, Metadata, Session, SessionEvent, TokenCounts } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
@@ -43,10 +43,11 @@ export interface ImportOptions {
    * Chamado depois de gravar cada sessão que ganhou eventos, com o transcript principal e os
    * eventos novos. É onde a API pendura a captura das decisões pelo transcript (#99).
    */
-  onSession?: (s: SessaoImportada) => Promise<void>;
+  onSession?: (s: ImportedSession) => Promise<void>;
 }
 
-export interface SessaoImportada {
+/** A session that gained events in an import round, handed to `onSession`. */
+export interface ImportedSession {
   sessionId: string;
   /** O transcript principal; `null` quando só os subagentes mudaram. */
   transcriptPath: string | null;
@@ -392,11 +393,11 @@ async function sessionIdFromLines(path: string): Promise<string | null> {
 }
 
 /**
- * Relê um transcript inteiro e devolve os eventos que passam no filtro, com os mesmos ids da
- * importação. Para reprocessar o que a importação antiga gravou sem os campos de hoje (o
- * `tool_input` das ferramentas do plano, guardado desde o item 1.9).
+ * Rereads a whole transcript and returns the events that pass the filter, with the same ids as the
+ * import. Used to reprocess what an older import recorded without today's fields (the plan tools'
+ * `tool_input`, kept since item 1.9).
  */
-export async function eventosDoTranscript(path: string, sessionId: string, filtro: (e: SessionEvent) => boolean): Promise<SessionEvent[]> {
+export async function transcriptEvents(path: string, sessionId: string, filter: (e: SessionEvent) => boolean): Promise<SessionEvent[]> {
   const out: SessionEvent[] = [];
   const toolNames = new Map<string, string>();
   for await (const { line } of readLinesFrom(path, 0)) {
@@ -405,7 +406,7 @@ export async function eventosDoTranscript(path: string, sessionId: string, filtr
     const agentId = parsed.transcriptAgentId ? subagentId(sessionId, parsed.transcriptAgentId) : mainAgentId(sessionId);
     for (const e of parsed.events) {
       const event: SessionEvent = { id: eventId(e.uuid), sessionId, agentId, type: e.type, toolName: e.toolName, summary: e.summary, data: e.data, createdAt: e.createdAt };
-      if (filtro(event)) out.push(event);
+      if (filter(event)) out.push(event);
     }
   }
   return out;

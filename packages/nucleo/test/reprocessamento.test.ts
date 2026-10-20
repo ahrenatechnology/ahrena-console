@@ -13,7 +13,7 @@ import { MIGRATIONS, migrate } from '../src/adapters/sqlite/migrations.ts';
 import { capturarDoTranscript, limparDecisoes, reprocessarHistorico } from '../src/api/reprocessamento.ts';
 import { registerDecision } from '../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../src/decisions/sqlite.ts';
-import { importHistory } from '../src/ingest/historico/importer.ts';
+import { importHistory } from '../src/ingest/history/importer.ts';
 import { ingestHook } from '../src/ingest/hooks/index.ts';
 import { ASK_ANSWERS, ASK_INPUT, at, jsonl, tx } from './decisions/helpers.ts';
 

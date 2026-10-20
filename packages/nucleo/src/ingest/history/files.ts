@@ -1,12 +1,12 @@
-// Descoberta dos transcripts em `~/.claude/projects` e leitura incremental por deslocamento em bytes.
+// Discovery of the transcripts in `~/.claude/projects` and incremental reading by byte offset.
 //
-// Layouts conhecidos, dentro de cada pasta de projeto:
-// - `<sessionId>.jsonl`: o agente principal;
-// - `<sessionId>/subagents/agent-<agentId>.jsonl` (+ `.meta.json`): subagentes, layout atual;
-// - `agent-<agentId>.jsonl`: subagentes no layout antigo, com o `sessionId` da sessão-mãe dentro das linhas.
+// Known layouts, inside each project folder:
+// - `<sessionId>.jsonl`: the main agent;
+// - `<sessionId>/subagents/agent-<agentId>.jsonl` (+ `.meta.json`): subagents, current layout;
+// - `agent-<agentId>.jsonl`: subagents in the old layout, with the parent session's `sessionId` inside the lines.
 //
-// `<sessionId>.superseded-<n>.jsonl` é uma versão antiga do arquivo principal, reescrito pelo
-// Claude Code; tudo o que ela tem está no arquivo atual, então é ignorada (como qualquer nome com ponto).
+// `<sessionId>.superseded-<n>.jsonl` is an old version of the main file, rewritten by Claude Code;
+// everything in it is in the current file, so it is ignored (like any name with a dot).
 
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';

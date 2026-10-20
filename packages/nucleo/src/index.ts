@@ -11,9 +11,9 @@ export {
   type ImportOptions,
   type ImportReport,
   type ImportCursor,
-} from './ingest/historico/importer.ts';
-export { defaultProjectsRoot } from './ingest/historico/files.ts';
-export { followTranscripts, type FollowOptions, type FollowerStats, type TranscriptFollower } from './ingest/historico/follower.ts';
+} from './ingest/history/importer.ts';
+export { defaultProjectsRoot } from './ingest/history/files.ts';
+export { followTranscripts, type FollowOptions, type FollowerStats, type TranscriptFollower } from './ingest/history/follower.ts';
 export * from './github/index.ts';
 export * from './ingest/hooks/index.ts';
 export * from './states/index.ts';
