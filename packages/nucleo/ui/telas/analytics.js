@@ -113,7 +113,15 @@ function divisaoPorConta(linhas) {
     { class: 'an-contas', 'aria-label': 'Divisão por conta' },
     ...linhas.map((l) => {
       const classe = classeDaConta(l.cor);
-      return el('li', { 'data-conta': l.conta ?? 'sem-conta' }, el('span', { class: classe ? `an-ponto ${classe}` : 'an-ponto', 'aria-hidden': 'true' }), el('span', { class: 'an-trunc' }, l.rotulo), el('b', {}, usd(l.usd)));
+      // Com preço só para parte dos modelos, o valor é parcial: a dica diz quais ficaram de fora.
+      const parcial = l.usd !== null && l.usd !== undefined && (l.semPreco ?? []).length > 0;
+      return el(
+        'li',
+        { 'data-conta': l.conta ?? 'sem-conta', title: parcial ? `Parcial: sem preço para ${l.semPreco.map(nomeDoModelo).join(', ')}` : null },
+        el('span', { class: classe ? `an-ponto ${classe}` : 'an-ponto', 'aria-hidden': 'true' }),
+        el('span', { class: 'an-trunc' }, l.rotulo),
+        el('b', {}, usd(l.usd), parcial ? el('span', { class: 'an-parcial' }, ' · parcial') : null),
+      );
     }),
   );
 }
@@ -125,15 +133,14 @@ export function contasDaVisao(dados) {
   if (contas.length < 2 || por.length < 2) return null;
   return por.map((p) => {
     const c = contas.find((x) => x.id === p.conta);
-    return { conta: p.conta, rotulo: c?.rotulo ?? 'Sem conta', cor: c?.cor ?? null, usd: p.usd };
+    return { conta: p.conta, rotulo: c?.rotulo ?? 'Sem conta', cor: c?.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] };
   });
 }
 
-/** As linhas da divisão por conta do C13, ou `null` com uma conta só. */
-export function contasDoCusto(dados) {
-  const por = dados?.porConta ?? [];
-  if ((dados?.contas ?? []).length < 2 || por.length < 2) return null;
-  return por.map((p) => ({ conta: p.conta, rotulo: p.rotulo ?? 'Sem conta', cor: p.cor ?? null, usd: p.usd }));
+/** As linhas da divisão por conta do C13 (do período, ou de hoje com `por`), ou `null` com uma conta só. */
+export function contasDoCusto(dados, por = dados?.porConta ?? []) {
+  if ((dados?.contas ?? []).length < 2 || (por ?? []).length < 2) return null;
+  return por.map((p) => ({ conta: p.conta, rotulo: p.rotulo ?? 'Sem conta', cor: p.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] }));
 }
 
 // ---------- SVG ----------
@@ -423,7 +430,7 @@ export function telaDoCusto(d) {
     el(
       'div',
       { class: 'an-stats an-quatro' },
-      stat({ id: 'hoje', rotulo: 'Hoje', valor: usd(hoje.usd), sub: plural(hoje.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dolar', cor: 'concluida' }),
+      stat({ id: 'hoje', rotulo: 'Hoje', valor: usd(hoje.usd), sub: plural(hoje.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dolar', cor: 'concluida', contas: contasDoCusto(d, hoje.porConta) }),
       stat({
         id: 'periodo',
         rotulo: `${d.dias} dias`,

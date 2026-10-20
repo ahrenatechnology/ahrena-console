@@ -115,7 +115,7 @@ function visao({ contas = [CONTA_A], sessoes = 412 } = {}) {
       sessoes: { total: sessoes, ativas: 4 },
       agentes: { total: 1086, ativos: 7 },
       tokens: { total: 1_900_000_000, cachePct: 71 },
-      custo: { usd: 341.2, dias: 30, semPreco: [], porConta: contas.length > 1 ? [{ conta: CONTA_A.id, usd: 300 }, { conta: CONTA_B.id, usd: 41.2 }] : [{ conta: CONTA_A.id, usd: 341.2 }] },
+      custo: { usd: 341.2, dias: 30, semPreco: [], porConta: contas.length > 1 ? [{ conta: CONTA_A.id, usd: 300, semPreco: [] as string[] }, { conta: CONTA_B.id, usd: 41.2, semPreco: ['modelo-novo'] }] : [{ conta: CONTA_A.id, usd: 341.2, semPreco: [] as string[] }] },
       eventos: { total: 48_100, porSessao: 116.7 },
     },
     atividade: { semanas: 52, dias: dias.map((dia, i) => ({ dia, eventos: i % 5 === 0 ? 0 : (i * 13) % 97 })) },
@@ -150,7 +150,7 @@ function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = f
     moeda: 'USD',
     contas,
     hoje: '2026-10-18',
-    resumoDeHoje: { usd: 12.4, sessoes: 9 },
+    resumoDeHoje: { usd: 12.4 as number | null, sessoes: 9, porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 9.3 : (null as number | null), semPreco: i === 0 ? [] : ['modelo-novo'] })) },
     periodo: { usd: vazio ? null : 341.2, mediaPorDia: vazio ? null : 11.4 },
     cache: { pct: 71 },
     semPreco: { modelos: ['modelo-novo'], totalDeTokens: 1000 },
@@ -171,7 +171,7 @@ function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio = f
           { projeto: 'painel-de-metricas', usd: 74.9 },
           { projeto: 'sem-tabela', usd: null },
         ],
-    porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 300 : 41.2, semPreco: [], porDia: [] })),
+    porConta: contas.map((c, i) => ({ conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: i === 0 ? 300 : 41.2, semPreco: i === 0 ? [] : ['modelo-novo'], porDia: [] })),
   };
 }
 
@@ -329,7 +329,9 @@ describe('Analytics: Visão geral', () => {
     try {
       const custoCard = comClasse(area, 'an-stat').find((s) => s.getAttribute('data-card') === 'custo')!;
       const linhas = porTag(comClasse(custoCard, 'an-contas')[0]!, 'li');
-      assert.deepEqual(linhas.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20']);
+      assert.deepEqual(linhas.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
+      assert.equal(linhas[0]!.getAttribute('title'), null);
+      assert.equal(linhas[1]!.getAttribute('title'), 'Parcial: sem preço para modelo-novo');
       assert.equal(comClasse(area, 'an-contas').length, 1);
     } finally {
       limpar();
@@ -338,7 +340,7 @@ describe('Analytics: Visão geral', () => {
 
   test('conta sem dono (id null) entra na divisão; heatmap que começa na segunda tem uma célula por dia', async () => {
     const d = visao({ contas: [CONTA_A, { id: null, rotulo: 'Sem conta', cor: null }] as never });
-    d.numeros.custo.porConta = [{ conta: CONTA_A.id, usd: 300 }, { conta: null as never, usd: null as never }];
+    d.numeros.custo.porConta = [{ conta: CONTA_A.id, usd: 300, semPreco: [] }, { conta: null as never, usd: null as never, semPreco: ['modelo-novo'] }];
     d.atividade.dias = d.atividade.dias.slice(6); // 358 dias, de uma segunda até hoje
     const { area, limpar } = await montarTela({ ler: async () => d });
     try {
@@ -445,11 +447,16 @@ describe('Analytics: Custo', () => {
     }
   });
 
-  test('com duas contas, o período leva a divisão por conta; com uma, não', async () => {
+  test('com duas contas, hoje e o período levam a divisão por conta (parcial quando falta preço); com uma, não', async () => {
     const duas = await montarTela({ aba: 'custo', ler: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
     try {
-      const periodo = comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === 'periodo')!;
-      assert.deepEqual(porTag(comClasse(periodo, 'an-contas')[0]!, 'li').map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20']);
+      const card = (id: string) => comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === id)!;
+      const periodo = porTag(comClasse(card('periodo'), 'an-contas')[0]!, 'li');
+      assert.deepEqual(periodo.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
+      assert.equal(periodo[1]!.getAttribute('title'), 'Parcial: sem preço para modelo-novo');
+      const hoje = porTag(comClasse(card('hoje'), 'an-contas')[0]!, 'li');
+      assert.deepEqual(hoje.map((l) => l.textContent), ['pessoal~US$ 9,30', 'equipesem preço'], 'usd null é "sem preço", não parcial');
+      assert.equal(hoje[1]!.getAttribute('title'), null);
     } finally {
       duas.limpar();
     }
@@ -464,7 +471,7 @@ describe('Analytics: Custo', () => {
   test('custo sem preço no período mostra "sem preço", não US$ 0', async () => {
     const d = custo(30);
     d.periodo = { usd: null, mediaPorDia: null };
-    d.resumoDeHoje = { usd: null, sessoes: 2 };
+    d.resumoDeHoje = { usd: null, sessoes: 2, porConta: [] };
     const { area, limpar } = await montarTela({ aba: 'custo', ler: async () => d });
     try {
       const textos = comClasse(area, 'an-stat').map((s) => s.textContent);

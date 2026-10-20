@@ -29,6 +29,7 @@
 .an-contas { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; }
 .an-contas li { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .an-contas b { margin-left: auto; font-family: var(--font-mono); font-weight: var(--weight-medium); white-space: nowrap; }
+.an-parcial { font-family: var(--font-sans); font-weight: var(--weight-regular); color: var(--status-waiting-text); }
 
 .an-ponto { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .an-ponto.an-vazio { border: 1px solid var(--muted); }
