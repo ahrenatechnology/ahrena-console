@@ -93,6 +93,17 @@ export const SCREENS = [
     file: '/ui/screens/repo.js', // C23
   },
   {
+    // The tabs of a repository with their own URL (/ui/repos/<owner>/<repo>/instructions, C32 and issue 183):
+    // the same screen, which reads the tab from `params.tab`; an unknown tab shows "Aba não encontrada".
+    id: 'repo-tab',
+    route: '/ui/repos/:owner/:repo/:tab',
+    highlights: 'repos',
+    title: 'Repositório',
+    sub: null,
+    icon: 'repos',
+    file: '/ui/screens/repo.js',
+  },
+  {
     id: 'project',
     route: '/ui/project',
     item: { label: 'Kanban do projeto', icon: 'github', section: 'delivery' },

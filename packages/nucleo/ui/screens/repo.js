@@ -6,6 +6,9 @@
 //   (`loading`), "calculando…" (`valueOrPending`). Número nenhum é inventado.
 // - Com escrita no repositório, o último card é "Tráfego e segurança"; sem, "Comunidade".
 // - `loading` ou `computing`: relê a cada 5 s, além da mudança `repos` do Ao vivo.
+// - As abas ficam no cabeçalho. Métricas é `/ui/repos/<dono>/<repo>`; Instruções (C32, issue 183) é
+//   `/ui/repos/<dono>/<repo>/instructions`, com o conteúdo de agent-instructions.js. Na aba Instruções,
+//   a leitura das métricas só enche o cabeçalho (chips e contagens das abas).
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
@@ -36,6 +39,10 @@ import {
   valueOrPending,
 } from '../repos-format.js';
 import { loadStyle, ciPill } from './repos.js';
+import { mountInstructions } from './agent-instructions.js';
+
+/** As abas com URL própria: a da rota (`:tab`) e a Métricas, sem segmento. */
+const TABS = ['metrics', 'instructions'];
 
 const SVG = 'http://www.w3.org/2000/svg';
 const REREAD_MS = 5000;
@@ -102,6 +109,8 @@ function frequencyChart(f) {
 export async function mount(area, ctx) {
   loadStyle();
   const { owner: owner, repo: name } = ctx.params;
+  const tab = ctx.params.tab ?? 'metrics';
+  const base = `/ui/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
   let period = periodFrom(location.search);
   let data = null;
   let failure = null;
@@ -119,6 +128,7 @@ export async function mount(area, ctx) {
   });
   const openOnGithub = el('a', { class: 'btn outline', target: '_blank', rel: 'noopener noreferrer', hidden: true }, icon('external'), 'Abrir no GitHub');
   const chips = el('div', { class: 'repo-chips' });
+  const tabsNav = el('nav', { class: 'repo-tabs', 'aria-label': 'Seções do repositório' });
   const head = el(
     'header',
     { class: 'repo-head' },
@@ -129,13 +139,21 @@ export async function mount(area, ctx) {
       title,
       ciSlot,
       visSlot,
-      el('div', { class: 'repo-head-dir' }, el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Período' }, ...periodButtons), openOnGithub),
+      el('div', { class: 'repo-head-dir' }, tab === 'metrics' ? el('div', { class: 'repo-seg', role: 'group', 'aria-label': 'Período' }, ...periodButtons) : null, openOnGithub),
     ),
     chips,
+    tabsNav,
   );
   const band = el('div', { hidden: true });
   const content = el('div', { class: 'repo-groups' });
   area.replaceChildren(head, band, content);
+  if (!TABS.includes(tab)) {
+    tabsNav.replaceChildren(...tabs());
+    content.replaceChildren(
+      empty({ icon: 'repos', title: 'Aba não encontrada', text: `O repositório não tem a aba ${tab}.`, action: { label: 'Ver as métricas', icon: 'analytics', onClick: () => ctx.navigate(base) } }),
+    );
+    return () => {};
+  }
 
   function switchPeriod(v) {
     if (v === period) return;
@@ -171,13 +189,14 @@ export async function mount(area, ctx) {
   function drawHeader() {
     const r = data?.repo;
     title.textContent = r?.fullName ?? `${owner}/${name}`;
-    ctx.title(title.textContent);
+    ctx.title(tab === 'instructions' ? `${title.textContent} · Instruções` : title.textContent);
     ciSlot.replaceChildren(...(r?.ci ? [ciPill(r.ci)] : []));
     visSlot.replaceChildren(...(r ? [el('span', { class: 'repo-chip repo-chip-sans' }, r.visibility === 'public' ? 'público' : 'privado')] : []));
     const url = r ? githubUrl(r.url) : null;
     openOnGithub.hidden = !url;
     if (url) openOnGithub.setAttribute('href', url);
     else openOnGithub.removeAttribute('href');
+    tabsNav.replaceChildren(...tabs());
     if (!r) return chips.replaceChildren();
     const now = Date.now();
     const list = [
@@ -192,20 +211,23 @@ export async function mount(area, ctx) {
     chips.replaceChildren(...list.filter(Boolean));
   }
 
-  function tabs(url) {
+  /** A fila de abas (C29): Métricas, Issues, PRs, CI, Sessões, Decisões e Instruções; a aberta com `aria-current`. */
+  function tabs() {
+    const url = data?.repo ? githubUrl(data.repo.url) : null;
+    const count = (label, n) => (typeof n === 'number' ? `${label} (${integer(n)})` : label);
     const outside = (path, iconName, label) =>
       url ? el('a', { href: `${url}/${path}`, target: '_blank', rel: 'noopener noreferrer' }, icon(iconName), label) : el('span', {}, icon(iconName), label);
-    return el(
-      'nav',
-      { class: 'repo-tabs', 'aria-label': 'Seções do repositório' },
-      el('span', { 'aria-current': 'page' }, icon('analytics'), 'Métricas'),
-      outside('issues', 'dot', `Issues (${integer(data.tabs.issues)})`),
-      outside('pulls', 'git-pull-request', `PRs (${integer(data.tabs.prs)})`),
+    const own = (id, href, iconName, label) => (tab === id ? el('span', { 'aria-current': 'page' }, icon(iconName), label) : el('a', { href }, icon(iconName), label));
+    return [
+      own('metrics', base, 'analytics', 'Métricas'),
+      outside('issues', 'dot', count('Issues', data?.tabs?.issues)),
+      outside('pulls', 'git-pull-request', count('PRs', data?.tabs?.prs)),
       outside('actions', 'ci', 'CI'),
       // A tela Sessões não filtra por repositório: a busca casa com o diretório, e o clone tem o nome do repo.
-      el('a', { href: `/ui/sessions?search=${encodeURIComponent(name)}`, title: `Sessões cujo diretório tem "${name}"` }, icon('sessions'), `Sessões (${integer(data.tabs.sessions)})`),
+      el('a', { href: `/ui/sessions?search=${encodeURIComponent(name)}`, title: `Sessões cujo diretório tem "${name}"` }, icon('sessions'), count('Sessões', data?.tabs?.sessions)),
       el('span', { 'aria-disabled': 'true', title: 'As decisões ainda não têm contagem por repositório' }, icon('decision'), 'Decisões'),
-    );
+      own('instructions', `${base}/instructions`, 'book-open', 'Instruções'),
+    ];
   }
 
   function kpis() {
@@ -397,7 +419,6 @@ export async function mount(area, ctx) {
 
   function metrics() {
     return [
-      tabs(githubUrl(data.repo.url)),
       kpis(),
       el('div', { class: 'repo-two' }, commitsCard(), frequencyCard()),
       el('div', { class: 'repo-three' }, issuesCard(), prsCard(), languagesCard()),
@@ -416,6 +437,8 @@ export async function mount(area, ctx) {
     drawHeader();
     const e = screenState({ dados: data, falha: failure, temDado: hasRepo(data) });
     if (e.reler) timer = setTimeout(read, REREAD_MS);
+    // Na aba Instruções, as métricas só enchem o cabeçalho: o conteúdo e os estados são da aba.
+    if (tab !== 'metrics') return;
 
     const when = data?.updatedAt ? new Date(data.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
     if (e.faixa === 'connection') band.replaceChildren(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura${when ? `, de ${when}` : ''}.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
@@ -454,6 +477,19 @@ export async function mount(area, ctx) {
     if (changeMatters(changes, `${owner}/${name}`)) read();
   });
   ctx.onRestart(() => read());
+
+  if (tab === 'instructions') {
+    drawHeader();
+    const header = read();
+    const leaveInstructions = await mountInstructions(content, ctx, { owner, name });
+    await header;
+    return () => {
+      clearTimeout(timer);
+      timer = null;
+      request++;
+      leaveInstructions?.();
+    };
+  }
 
   content.replaceChildren(loading());
   await read();
