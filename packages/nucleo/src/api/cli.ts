@@ -94,7 +94,7 @@ import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/
 import { MachinesFileSource } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
-import { publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
+import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
@@ -421,9 +421,11 @@ if (demo) {
   reconnectRunner = new ReconnectRunner({
     logFile: reconnectLogFile(dataDir),
     // Always the freshest reading of the file: a command removed from it does not run.
+    // While the file is invalid, nothing runs, even if the last good reading had a command.
     lookup: async (id) => {
       await registry.refresh();
-      return registry.reconnectOf(id);
+      const config = registry.reconnectOf(id);
+      return config !== undefined && registry.fileInvalid() ? INVALID_MACHINES_FILE : config;
     },
     onSucceeded: (id) => void registry.get(id)?.readNow(),
     onChange: publishReconnectChanges(changes),

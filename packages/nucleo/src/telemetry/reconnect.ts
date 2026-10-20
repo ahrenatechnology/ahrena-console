@@ -2,8 +2,10 @@
 // 0012 section 3). What this module guarantees:
 //
 // - The command comes only from the freshest reading of the file (`lookup`, which refreshes it): a
-//   command removed from the file does not run, even if the screen still shows the button. Nothing
-//   from the request reaches the process; the routes pass only the machine id.
+//   command removed from the file does not run, even if the screen still shows the button. While the
+//   file is invalid (its last refresh did not parse), nothing runs either, even if the last good
+//   reading had a command (`invalid-file`, 409). Nothing from the request reaches the process; the
+//   routes pass only the machine id.
 // - `spawn(command[0], command.slice(1), { shell: false, detached: true })`: no shell, no expansion,
 //   its own process group (so the timeout and Cancel reach the script's children too), standard input
 //   closed (a command that asks something in a terminal fails instead of hanging), the user's home
@@ -17,16 +19,22 @@
 //   `failed` otherwise, with the exit code (`null` when a signal ended it). The process group is left
 //   alone after a normal exit: a script that leaves a tunnel running in the background keeps it.
 // - A spawn error (ENOENT, EACCES): `failed`, exit code `null`, one log line with the error code.
-// - The output (stdout and stderr) goes ONLY to `reconnect.log` in the installation's data folder,
-//   mode 0600, one line per output line with the ISO time, the machine id and the stream, rotated to
-//   `reconnect.log.1` past 1 MB. It may carry a device code, an account name or a path, so it never
+// - The output (stdout and stderr) goes ONLY to `reconnect.log` in the installation's data folder:
+//   the core opens it (append, mode 0600, rotated to `reconnect.log.1` first when past 1 MB) and hands
+//   that file descriptor to the child as its stdout AND stderr, then closes its own copy. The core
+//   never reads the output: no pipe, no per-line work, and a tunnel the script leaves in the
+//   background keeps writing to the file after the script exits and after the core restarts (no
+//   SIGPIPE). The core writes one header line before spawning (ISO time, machine id, `start`, who
+//   started it) and one footer line on exit (state, exit code, duration). If the log cannot be
+//   opened, one line goes to the console log and the command runs with its output discarded
+//   (`stdio: 'ignore'`). The output may carry a device code, an account name or a path, so it never
 //   reaches the API, and the console log gets only a one-line start and end summary.
 // - Every state change calls `onChange(id)`; `publishReconnectChanges` turns it into an `alert`
 //   change keyed `<machine>:reconnect` on /api/changes, which the machine screen's `touchesMachine`
 //   and the app's machine list already re-read on.
 
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
-import { appendFileSync, chmodSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { appendFileSync, chmodSync, closeSync, fchmodSync, fstatSync, mkdirSync, openSync, readSync, renameSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChangeCursor } from '../changes/cursor.ts';
@@ -36,8 +44,8 @@ import type { ReconnectStarter, ReconnectState, ReconnectStatus } from './model.
 export const RECONNECT_LOG_FILE = 'reconnect.log';
 export const MAX_RECONNECT_LOG_BYTES = 1024 * 1024;
 export const RECONNECT_KILL_GRACE_MS = 5_000;
-/** A longer output line is cut here, so one runaway line never fills the log. */
-const MAX_LINE = 4_096;
+/** What `lookup` answers while machines.json is invalid: nothing runs until it is fixed. */
+export const INVALID_MACHINES_FILE = 'invalid-file';
 
 /** The old names of the console's variables (decision 0009), still accepted somewhere in the repo. */
 const LEGACY_ENV = new Set(['AHRENA_ABRIR_MENU', 'AHRENA_DADOS_DIR', 'AHRENA_NODE', 'AHRENA_ORIGEM']);
@@ -56,7 +64,11 @@ export function reconnectLogFile(dataDir: string): string {
   return join(dataDir, RECONNECT_LOG_FILE);
 }
 
-export type StartResult = { kind: 'unknown' } | { kind: 'not-configured' } | { kind: 'started' | 'already-running'; status: ReconnectStatus };
+export type StartResult =
+  | { kind: 'unknown' }
+  | { kind: 'not-configured' }
+  | { kind: 'invalid-file' }
+  | { kind: 'started' | 'already-running'; status: ReconnectStatus };
 export type CancelResult = { kind: 'unknown' } | { kind: 'not-running' } | { kind: 'canceled'; status: ReconnectStatus };
 
 /** What the routes need (src/api/telemetry.ts). */
@@ -69,8 +81,11 @@ type Spawn = (command: string, args: readonly string[], options: SpawnOptions) =
 
 export interface ReconnectRunnerOptions {
   logFile: string;
-  /** The freshest reconnect of a machine (refreshing machines.json first): `undefined` = unknown id, `null` = no command. */
-  lookup: (machineId: string) => Promise<ReconnectConfig | null | undefined>;
+  /**
+   * The freshest reconnect of a machine (refreshing machines.json first): `undefined` = unknown id,
+   * `null` = no command, `INVALID_MACHINES_FILE` = the file is invalid right now.
+   */
+  lookup: (machineId: string) => Promise<ReconnectConfig | null | undefined | typeof INVALID_MACHINES_FILE>;
   onSucceeded?: (machineId: string) => void;
   onChange?: (machineId: string) => void;
   /** Tests: counts the spawns. */
@@ -106,7 +121,6 @@ export class ReconnectRunner implements ReconnectControl {
   private readonly o: ReconnectRunnerOptions;
   private readonly runs = new Map<string, Run>();
   private readonly starting = new Map<string, Promise<StartResult>>();
-  private logReady = false;
 
   constructor(options: ReconnectRunnerOptions) {
     this.o = options;
@@ -158,7 +172,7 @@ export class ReconnectRunner implements ReconnectControl {
 
   private async currentStatus(machineId: string): Promise<ReconnectStatus> {
     const config = await this.o.lookup(machineId).catch(() => null);
-    return this.status(machineId, config ?? null);
+    return this.status(machineId, typeof config === 'object' && config !== null ? config : (this.runs.get(machineId)?.config ?? null));
   }
 
   private alreadyRunning(machineId: string): StartResult {
@@ -170,6 +184,7 @@ export class ReconnectRunner implements ReconnectControl {
     const config = await this.o.lookup(machineId);
     if (config === undefined) return { kind: 'unknown' };
     if (config === null) return { kind: 'not-configured' };
+    if (config === INVALID_MACHINES_FILE) return { kind: 'invalid-file' };
     const now = (this.o.now ?? Date.now)();
     let markExited: () => void = () => {};
     const run: Run = {
@@ -187,7 +202,7 @@ export class ReconnectRunner implements ReconnectControl {
     };
     this.runs.set(machineId, run);
     this.o.log?.(`reconnect (${machineId}): started by ${startedBy === 'ui' ? 'the /ui' : 'a local client'}`);
-    this.writeLog(machineId, 'core', `start (${startedBy})`);
+    const fd = this.openLog(machineId, `start (${startedBy})`);
 
     const finish = (state: ReconnectState, exitCode: number | null) => {
       if (!run.alive) return;
@@ -200,7 +215,7 @@ export class ReconnectRunner implements ReconnectControl {
       run.exitCode = exitCode;
       const seconds = Math.round(((this.o.now ?? Date.now)() - run.startedMs) / 1000);
       this.o.log?.(`reconnect (${machineId}): ${run.state}${exitCode === null ? '' : ` (exit ${exitCode})`} after ${seconds} s`);
-      this.writeLog(machineId, 'core', `end ${run.state}${exitCode === null ? '' : ` exit ${exitCode}`}`);
+      this.footer(machineId, `end ${run.state} exit ${exitCode === null ? 'none' : exitCode} after ${seconds} s`, fd !== null);
       markExited();
       this.o.onChange?.(machineId);
       if (run.state === 'succeeded') this.o.onSucceeded?.(machineId);
@@ -211,21 +226,22 @@ export class ReconnectRunner implements ReconnectControl {
       child = (this.o.spawn ?? (nodeSpawn as Spawn))(config.command[0]!, config.command.slice(1), {
         shell: false,
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: fd === null ? 'ignore' : ['ignore', fd, fd],
         cwd: this.o.cwd ?? homedir(),
         env: this.o.env ?? reconnectEnv(),
         windowsHide: true,
       });
     } catch (err) {
+      closeQuietly(fd);
       this.o.log?.(`reconnect (${machineId}): could not start (${(err as NodeJS.ErrnoException).code ?? 'error'})`);
       finish('failed', null);
       return { kind: 'started', status: this.status(machineId, config) };
     }
+    // The child has its own copy of the descriptor; the core keeps none.
+    closeQuietly(fd);
     this.o.onSpawn?.(machineId);
     run.child = child;
     child.unref();
-    this.pipe(machineId, child.stdout, 'stdout');
-    this.pipe(machineId, child.stderr, 'stderr');
     child.once('error', (err: NodeJS.ErrnoException) => {
       this.o.log?.(`reconnect (${machineId}): could not start (${err.code ?? 'error'})`);
       finish('failed', null);
@@ -256,54 +272,76 @@ export class ReconnectRunner implements ReconnectControl {
     this.o.onChange?.(machineId);
   }
 
-  private pipe(machineId: string, stream: NodeJS.ReadableStream | null, name: 'stdout' | 'stderr'): void {
-    if (!stream) return;
-    let buffer = '';
-    stream.setEncoding('utf8');
-    stream.on('data', (chunk: string) => {
-      buffer += chunk;
-      let i: number;
-      while ((i = buffer.indexOf('\n')) >= 0) {
-        this.writeLog(machineId, name, buffer.slice(0, i));
-        buffer = buffer.slice(i + 1);
-      }
-      if (buffer.length > MAX_LINE) {
-        this.writeLog(machineId, name, buffer);
-        buffer = '';
-      }
-    });
-    stream.on('end', () => {
-      if (buffer) this.writeLog(machineId, name, buffer);
-      buffer = '';
-    });
-    stream.on('error', () => undefined);
-  }
-
-  /** One line in reconnect.log (0600, rotated past the limit). A write error is logged once per run, without the line. */
-  private writeLog(machineId: string, stream: string, text: string): void {
-    const line = `${new Date((this.o.now ?? Date.now)()).toISOString()} ${machineId} ${stream}: ${text.replace(/\r$/, '').slice(0, MAX_LINE).replace(/[\r\n]/g, ' ')}\n`;
+  /**
+   * Opens reconnect.log for the child (append, 0600; rotated to `.1` first when past the limit) and
+   * writes the header line. `null`, with one console log line, when it cannot: the output is discarded.
+   */
+  private openLog(machineId: string, header: string): number | null {
     try {
-      if (!this.logReady) {
-        mkdirSync(dirname(this.logFile), { recursive: true, mode: 0o700 });
-      }
+      mkdirSync(dirname(this.logFile), { recursive: true, mode: 0o700 });
       let size = 0;
       try {
         size = statSync(this.logFile).size;
       } catch {
         size = 0;
       }
-      if (size > 0 && size + Buffer.byteLength(line) > (this.o.maxLogBytes ?? MAX_RECONNECT_LOG_BYTES)) {
+      if (size > (this.o.maxLogBytes ?? MAX_RECONNECT_LOG_BYTES)) {
         renameSync(this.logFile, `${this.logFile}.1`);
         chmodSync(`${this.logFile}.1`, 0o600);
       }
-      appendFileSync(this.logFile, line, { mode: 0o600 });
-      if (!this.logReady) {
-        chmodSync(this.logFile, 0o600);
-        this.logReady = true;
+      const fd = openSync(this.logFile, 'a', 0o600);
+      try {
+        fchmodSync(fd, 0o600);
+        writeSync(fd, this.line(machineId, header));
+      } catch (err) {
+        closeQuietly(fd);
+        throw err;
       }
+      return fd;
+    } catch (err) {
+      this.o.log?.(`reconnect (${machineId}): could not open ${this.logFile} (${(err as NodeJS.ErrnoException).code ?? 'error'}); the output is discarded`);
+      return null;
+    }
+  }
+
+  /** The footer line, appended by the core on exit; silent when the log could not be opened at the start. */
+  private footer(machineId: string, text: string, logOpen: boolean): void {
+    if (!logOpen) return;
+    try {
+      // The command's last line may lack its newline: the footer starts on a line of its own.
+      appendFileSync(this.logFile, `${endsWithNewline(this.logFile) ? '' : '\n'}${this.line(machineId, text)}`, { mode: 0o600 });
     } catch (err) {
       this.o.log?.(`reconnect (${machineId}): could not write ${this.logFile} (${(err as NodeJS.ErrnoException).code ?? 'error'})`);
     }
+  }
+
+  private line(machineId: string, text: string): string {
+    return `${new Date((this.o.now ?? Date.now)()).toISOString()} ${machineId} ${text}\n`;
+  }
+}
+
+function endsWithNewline(file: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = openSync(file, 'r');
+    const size = fstatSync(fd).size;
+    if (size === 0) return true;
+    const b = Buffer.alloc(1);
+    readSync(fd, b, 0, 1, size - 1);
+    return b[0] === 0x0a;
+  } catch {
+    return true;
+  } finally {
+    closeQuietly(fd);
+  }
+}
+
+function closeQuietly(fd: number | null): void {
+  if (fd === null) return;
+  try {
+    closeSync(fd);
+  } catch {
+    // already closed
   }
 }
 

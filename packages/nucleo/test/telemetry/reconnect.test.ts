@@ -1,6 +1,6 @@
 // The reconnect runner (#244, decision 0012 section 3) with a FAKE command: a tiny node script written
-// to a temporary folder, which exits 0, exits 1, sleeps past a short timeout, ignores SIGTERM or prints
-// lines. No real tunnel, host or provider. The time unit is shortened (1 "second" = 20 ms) so the
+// to a temporary folder, which exits 0, exits 1, sleeps past a short timeout, ignores SIGTERM, prints
+// lines or leaves a child running in the background (a tunnel). No real tunnel, host or provider. The time unit is shortened (1 "second" = 20 ms) so the
 // timeout tests run fast; the rules are the same. A command that must finish on its own gets the
 // longest timeout (900 = 18 s here), so a loaded runner never turns it into a timeout.
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import type { ReconnectConfig } from '../../src/telemetry/machines-config.ts';
-import { reconnectEnv, ReconnectRunner, type ReconnectRunnerOptions } from '../../src/telemetry/reconnect.ts';
+import { INVALID_MACHINES_FILE, reconnectEnv, ReconnectRunner, type ReconnectRunnerOptions } from '../../src/telemetry/reconnect.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-reconnect-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -24,13 +24,21 @@ if (mode === 'sleep') setTimeout(() => {}, 60_000);
 if (mode === 'stubborn') { process.on('SIGTERM', () => {}); setTimeout(() => {}, 60_000); }
 if (mode === 'env') { const fs = await import('node:fs'); fs.writeFileSync(arg, JSON.stringify({ keys: Object.keys(process.env), cwd: process.cwd(), stdinTty: process.stdin.isTTY ?? null })); }
 if (mode === 'marker') { const fs = await import('node:fs'); fs.writeFileSync(arg, 'ran'); }
+if (mode === 'chatty') { for (let i = 0; i < 200; i++) console.log('chatty line ' + i); }
+if (mode === 'background') {
+  const { spawn } = await import('node:child_process');
+  // Inherits stdout and stderr, stays in the group, outlives the script: like a tunnel left running.
+  const c = spawn(process.execPath, ['-e', "require('fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => console.log('bg-tick'), 30)", arg], { stdio: 'inherit' });
+  c.unref();
+  await new Promise((r) => setTimeout(r, 150));
+}
 `,
 );
 
 const fake = (mode: string, ...args: string[]): ReconnectConfig => ({ command: [process.execPath, SCRIPT, mode, ...args], timeoutSeconds: 900 });
 
 let n = 0;
-function runner(configs: Record<string, ReconnectConfig | null>, over: Partial<ReconnectRunnerOptions> = {}) {
+function runner(configs: Record<string, ReconnectConfig | null | typeof INVALID_MACHINES_FILE>, over: Partial<ReconnectRunnerOptions> = {}) {
   const logFile = join(dir, `reconnect-${++n}.log`);
   const succeeded: string[] = [];
   const changes: string[] = [];
@@ -58,7 +66,7 @@ describe('#244 the reconnect runner', () => {
     assert.equal(started.status.startedBy, 'ui');
     assert.equal(started.status.configured, true);
     await r.exited('ws-exemplo');
-    const s = r.status('ws-exemplo', configs['ws-exemplo']!);
+    const s = r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig);
     assert.equal(s.state, 'succeeded');
     assert.equal(s.exitCode, 0);
     assert.ok(s.startedAt && s.endedAt);
@@ -67,29 +75,71 @@ describe('#244 the reconnect runner', () => {
     assert.ok(changes.every((c) => c === 'ws-exemplo'));
   });
 
-  test('#244 the output lines go only to reconnect.log, mode 0600, each with the ISO time and the machine id; never into the status', async () => {
+  test('#244 the output goes only to reconnect.log through its file descriptor, with a header and a footer from the core; mode 0600; never in the status', async () => {
     const { r, logFile, logs, configs } = runner({ 'ws-exemplo': fake('ok') });
     await r.start('ws-exemplo', 'local');
     await r.exited('ws-exemplo');
-    // The stream tail arrives right after the exit.
-    await new Promise((res) => setTimeout(res, 50));
-    const text = readFileSync(logFile, 'utf8');
-    assert.match(text, /^\d{4}-\d\d-\d\dT[\d:.]+Z ws-exemplo stdout: line-out-one$/m);
-    assert.match(text, /^\d{4}-\d\d-\d\dT[\d:.]+Z ws-exemplo stderr: line-err-two$/m);
-    assert.match(text, /ws-exemplo stdout: no-newline-tail$/m);
+    const lines = readFileSync(logFile, 'utf8').split('\n');
+    assert.match(lines[0]!, /^\d{4}-\d\d-\d\dT[\d:.]+Z ws-exemplo start \(local\)$/);
+    assert.ok(lines.includes('line-out-one'), 'stdout as written, no prefix');
+    assert.ok(lines.includes('line-err-two'), 'stderr into the same file');
+    assert.ok(lines.some((l) => l.startsWith('no-newline-tail')));
+    assert.match(lines.at(-2)!, /^\d{4}-\d\d-\d\dT[\d:.]+Z ws-exemplo end succeeded exit 0 after \d+ s$/);
     assert.equal(statSync(logFile).mode & 0o777, 0o600);
-    const status = JSON.stringify(r.status('ws-exemplo', configs['ws-exemplo']!));
+    const status = JSON.stringify(r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig));
     assert.doesNotMatch(status, /line-out-one|line-err-two|no-newline-tail/);
     assert.doesNotMatch(logs.join('\n'), /line-out-one|line-err-two|no-newline-tail/);
     assert.ok(logs.some((l) => /^reconnect \(ws-exemplo\): started/.test(l)));
     assert.ok(logs.some((l) => /^reconnect \(ws-exemplo\): succeeded/.test(l)));
   });
 
+  test('#244 a child left in the background keeps running and writing to reconnect.log after the script exits; the core holds no pipe', async () => {
+    const pidFile = join(dir, 'bg.pid');
+    const { r, logFile } = runner({ 'ws-exemplo': fake('background', pidFile) });
+    await r.start('ws-exemplo', 'ui');
+    await r.exited('ws-exemplo');
+    assert.equal(r.status('ws-exemplo', null).state, 'succeeded');
+    const pid = Number(readFileSync(pidFile, 'utf8'));
+    try {
+      const before = statSync(logFile).size;
+      await new Promise((res) => setTimeout(res, 200));
+      // Still alive (signal 0 throws if not) and still writing to the file, with nobody in the core reading.
+      process.kill(pid, 0);
+      assert.ok(statSync(logFile).size > before);
+      assert.match(readFileSync(logFile, 'utf8'), /^bg-tick$/m);
+    } finally {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // already gone
+      }
+    }
+  });
+
+  test('#244 an unwritable reconnect.log: one console log line, the command still runs with its output discarded', async () => {
+    const { r, logs } = runner({ 'ws-exemplo': fake('chatty') }, { logFile: join(SCRIPT, 'cannot', 'reconnect.log') });
+    await r.start('ws-exemplo', 'ui');
+    await r.exited('ws-exemplo');
+    assert.equal(r.status('ws-exemplo', null).state, 'succeeded');
+    assert.equal(logs.filter((l) => /could not (open|write)/.test(l)).length, 1);
+    assert.match(logs.find((l) => /could not open/.test(l))!, /the output is discarded$/);
+    assert.doesNotMatch(logs.join('\n'), /chatty line/);
+  });
+
+  test('#244 while machines.json is invalid nothing runs, even with a command in the last good reading', async () => {
+    const marker = join(dir, 'invalid-file-marker');
+    const { r } = runner({ 'ws-exemplo': INVALID_MACHINES_FILE });
+    assert.deepEqual(await r.start('ws-exemplo', 'ui'), { kind: 'invalid-file' });
+    await new Promise((res) => setTimeout(res, 100));
+    assert.equal(existsSync(marker), false);
+    assert.deepEqual(await r.cancel('ws-exemplo'), { kind: 'not-running' });
+  });
+
   test('#244 exit 1: failed with the exit code, the machine is not read', async () => {
     const { r, succeeded, configs } = runner({ 'ws-exemplo': fake('fail') });
     await r.start('ws-exemplo', 'ui');
     await r.exited('ws-exemplo');
-    const s = r.status('ws-exemplo', configs['ws-exemplo']!);
+    const s = r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig);
     assert.equal(s.state, 'failed');
     assert.equal(s.exitCode, 1);
     assert.deepEqual(succeeded, []);
@@ -101,7 +151,7 @@ describe('#244 the reconnect runner', () => {
     await r.start('ws-exemplo', 'ui');
     await r.exited('ws-exemplo');
     assert.ok(Date.now() - t0 >= 190, 'not before the timeout');
-    assert.equal(r.status('ws-exemplo', configs['ws-exemplo']!).state, 'timed-out');
+    assert.equal(r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig).state, 'timed-out');
   });
 
   test('#244 a process that ignores SIGTERM gets SIGKILL after the grace', async () => {
@@ -111,7 +161,7 @@ describe('#244 the reconnect runner', () => {
     await r.start('ws-exemplo', 'ui');
     await r.exited('ws-exemplo');
     assert.ok(Date.now() - t0 >= 2_150, 'timeout plus the grace');
-    const s = r.status('ws-exemplo', configs['ws-exemplo']!);
+    const s = r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig);
     assert.equal(s.state, 'timed-out');
     assert.equal(s.exitCode, null);
   });
@@ -141,7 +191,7 @@ describe('#244 the reconnect runner', () => {
     assert.equal(c.kind, 'canceled');
     if (c.kind === 'canceled') assert.equal(c.status.state, 'canceled');
     await r.exited('ws-exemplo');
-    assert.equal(r.status('ws-exemplo', configs['ws-exemplo']!).state, 'canceled');
+    assert.equal(r.status('ws-exemplo', configs['ws-exemplo'] as ReconnectConfig).state, 'canceled');
     assert.deepEqual(await r.cancel('nao-existe'), { kind: 'unknown' });
   });
 

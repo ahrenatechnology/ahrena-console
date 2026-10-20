@@ -18,7 +18,7 @@ export {
   type RemoteMachineConfig,
 } from './machines-config.ts';
 export { RemoteMachines, type ManagedMachine, type RemoteMachinesOptions } from './remote-machines.ts';
-export { publishReconnectChanges, reconnectEnv, reconnectLogFile, ReconnectRunner, type CancelResult, type ReconnectControl, type ReconnectRunnerOptions, type StartResult } from './reconnect.ts';
+export { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectEnv, reconnectLogFile, ReconnectRunner, type CancelResult, type ReconnectControl, type ReconnectRunnerOptions, type StartResult } from './reconnect.ts';
 export { publishRemoteAttentionChanges, RemoteMachine, type RemoteMachineOptions, type RemoteSessionChange } from './remote.ts';
 export { loopbackGet, REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from './adapters/loopback-http.ts';
 export { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from './migration.ts';

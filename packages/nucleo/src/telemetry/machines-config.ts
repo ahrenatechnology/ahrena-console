@@ -20,7 +20,8 @@
 // The path is injectable (tests and `--machines`), like `contas.json` in src/api/accounts.ts. The file
 // is read live (#244, decision 0012 section 2): `MachinesFileSource.refresh()` stats it every 30 s and
 // right before a reconnect, and parses it again only when its modification time or size changed. An
-// invalid file keeps the last good reading (on the first read, no remote machine, as before).
+// invalid file keeps the last good reading for display (on the first read, no remote machine, as
+// before), and says so (`invalid`): a reconnect is refused until the file is fixed.
 
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -160,6 +161,11 @@ export interface MachinesRefresh {
   config: MachinesConfig;
   /** The machines may differ from the previous refresh. */
   changed: boolean;
+  /**
+   * The file as it is now does not parse (the machines are the last good reading's). A reconnect is
+   * refused until it is fixed (#244): the command shown may be one the user is trying to remove.
+   */
+  invalid: boolean;
 }
 
 /**
@@ -173,6 +179,7 @@ export class MachinesFileSource {
   private last: MachinesConfig = { status: 'missing', machines: [] };
   private stamp: string | null = null;
   private everRead = false;
+  private invalidNow = false;
 
   constructor(options: MachinesFileSourceOptions = {}) {
     this.o = options;
@@ -185,7 +192,7 @@ export class MachinesFileSource {
 
   async refresh(): Promise<MachinesRefresh> {
     const { file } = this;
-    if (!file) return { config: this.last, changed: false };
+    if (!file) return { config: this.last, changed: false, invalid: false };
     const statFile = this.o.stat ?? (async (p: string) => {
       const s = await stat(p);
       return { mtimeMs: s.mtimeMs, size: s.size };
@@ -199,13 +206,14 @@ export class MachinesFileSource {
         this.stamp = 'missing';
         this.everRead = true;
         if (changed) this.last = { status: 'missing', machines: [] };
-        return { config: this.last, changed };
+        this.invalidNow = false;
+        return { config: this.last, changed, invalid: false };
       }
       this.o.log?.(`machines: could not read ${file} (${(err as Error).message}); keeping the last good reading`);
-      return { config: this.last, changed: false };
+      return { config: this.last, changed: false, invalid: this.invalidNow };
     }
     const key = `${stamp.mtimeMs}:${stamp.size}`;
-    if (key === this.stamp) return { config: this.last, changed: false };
+    if (key === this.stamp) return { config: this.last, changed: false, invalid: this.invalidNow };
     this.stamp = key;
     let text: string;
     try {
@@ -213,7 +221,7 @@ export class MachinesFileSource {
     } catch (err) {
       this.stamp = null; // try again on the next refresh
       this.o.log?.(`machines: could not read ${file} (${(err as Error).message}); keeping the last good reading`);
-      return { config: this.last, changed: false };
+      return { config: this.last, changed: false, invalid: this.invalidNow };
     }
     const parsed = parseMachinesConfig(text, (m) => this.o.log?.(`machines: ${file}: ${m}`));
     if (typeof parsed === 'string') {
@@ -222,10 +230,12 @@ export class MachinesFileSource {
         this.last = { status: 'invalid', machines: [] };
         this.o.log?.(`machines: ${file} is invalid (${parsed}); only this machine`);
       } else this.o.log?.(`machines: ${file} is invalid (${parsed}); keeping the last good reading`);
-      return { config: this.last, changed: false };
+      this.invalidNow = true;
+      return { config: this.last, changed: false, invalid: true };
     }
     this.everRead = true;
+    this.invalidNow = false;
     this.last = { status: 'ok', machines: parsed };
-    return { config: this.last, changed: true };
+    return { config: this.last, changed: true, invalid: false };
   }
 }

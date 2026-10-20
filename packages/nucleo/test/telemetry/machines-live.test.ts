@@ -67,6 +67,7 @@ describe('#244 machines.json is re-read by its modification time', () => {
     f.write('{ machines: ');
     const r = await s.refresh();
     assert.equal(r.changed, false);
+    assert.equal(r.invalid, true);
     assert.deepEqual(r.config, { status: 'ok', machines: [ws()] });
     await s.refresh();
     assert.equal(logs.length, 1);
@@ -223,6 +224,25 @@ describe('#244 the remote machines follow machines.json without a restart', () =
     f.write('not json');
     await r.machines.refresh();
     assert.deepEqual(r.machines.list().map((m) => m.id), ['ws-exemplo']);
+  });
+
+  test('#244 while the file is invalid the registry says so (reconnect refused), keeping the last good command for display; fixed, it clears', async () => {
+    const f = new FakeFile();
+    const reconnect = { command: ['/opt/example/connect.sh'], timeoutSeconds: 60 };
+    f.write({ machines: [ws({ reconnect })] });
+    const r = registry(f);
+    await r.machines.refresh();
+    assert.equal(r.machines.fileInvalid(), false);
+    f.write('{ "machines": [ { "id": "ws-exemplo", ');
+    await r.machines.refresh();
+    assert.equal(r.machines.fileInvalid(), true);
+    assert.deepEqual(r.machines.reconnectOf('ws-exemplo'), reconnect);
+    await r.machines.refresh(); // same stamp: still invalid
+    assert.equal(r.machines.fileInvalid(), true);
+    f.write({ machines: [ws()] });
+    await r.machines.refresh();
+    assert.equal(r.machines.fileInvalid(), false);
+    assert.equal(r.machines.reconnectOf('ws-exemplo'), null);
   });
 
   test('#244 a machine on the core own port is skipped, also when it is added live', async () => {

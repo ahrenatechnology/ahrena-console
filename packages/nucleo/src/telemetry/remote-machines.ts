@@ -8,7 +8,8 @@
 // - a machine whose `reconnect` alone changed is kept: the reconnect is read from here
 //   (`reconnectOf`), never from a stale copy;
 // - a machine on the core's own port is skipped, with a log line, as before;
-// - an invalid file keeps the machines of the last good reading (MachinesFileSource).
+// - an invalid file keeps the machines of the last good reading (MachinesFileSource), and
+//   `fileInvalid()` says so, for the reconnect to refuse until it is fixed.
 //
 // Each machine added, removed or changed calls `onChange(id)` (published on /api/changes), so the
 // screen and the tray pick up an edit without waiting for their own re-read. Refreshes never
@@ -48,6 +49,7 @@ export class RemoteMachines<M extends ManagedMachine> {
   private timer: unknown = null;
   private running = false;
   private inFlight: Promise<void> | null = null;
+  private invalid = false;
 
   constructor(options: RemoteMachinesOptions<M>) {
     this.o = options;
@@ -70,6 +72,11 @@ export class RemoteMachines<M extends ManagedMachine> {
   reconnectOf(id: string): ReconnectConfig | null | undefined {
     const e = this.machines.get(id);
     return e ? (e.config.reconnect ?? null) : undefined;
+  }
+
+  /** machines.json, as it is now, does not parse (as of the last refresh). */
+  fileInvalid(): boolean {
+    return this.invalid;
   }
 
   /** Reads the file if it changed and applies it. A refresh already running is joined, then one more runs. */
@@ -100,7 +107,8 @@ export class RemoteMachines<M extends ManagedMachine> {
   }
 
   private async apply(): Promise<void> {
-    const { config, changed } = await this.o.source.refresh();
+    const { config, changed, invalid } = await this.o.source.refresh();
+    this.invalid = invalid;
     if (!changed) return;
     const next = new Map<string, RemoteMachineConfig>();
     const skipped = new Set<string>();

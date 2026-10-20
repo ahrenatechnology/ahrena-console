@@ -14,7 +14,8 @@
 //
 // - `POST /api/machines/<id>/reconnect`: starts the command of machines.json, or returns the one
 //   running. 202 `{ reconnect }`; 404 for an unknown id; 409 `{ error }` without a command. The body
-//   is never read: only the id of the path reaches the runner (src/telemetry/reconnect.ts).
+//   is never read: only the id of the path reaches the runner (src/telemetry/reconnect.ts). 409 too
+//   while machines.json is invalid, even if its last good reading had a command.
 // - `DELETE /api/machines/<id>/reconnect`: Cancel. 200 `{ reconnect }` (`canceled`); 409 when nothing
 //   runs; 404 for an unknown id.
 // - Origin: these two method+path pairs are a same-origin exception of the /ui (`reconnectFromSameOrigin`,
@@ -96,6 +97,7 @@ export async function respondReconnect(
     const r = await control.start(rawId, startedBy);
     if (r.kind === 'unknown') return send(res, 404, unknown);
     if (r.kind === 'not-configured') return send(res, 409, { error: NOT_CONFIGURED });
+    if (r.kind === 'invalid-file') return send(res, 409, { error: INVALID_FILE });
     return send(res, 202, { reconnect: r.status });
   }
   const r = await control.cancel(rawId);
@@ -104,4 +106,5 @@ export async function respondReconnect(
   send(res, 200, { reconnect: r.status });
 }
 
+const INVALID_FILE = 'O machines.json está inválido; corrija o arquivo para reconectar.';
 const NOT_CONFIGURED = 'esta máquina não tem comando de reconexão: adicione "reconnect" a ela no machines.json';

@@ -16,7 +16,7 @@ import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import type { ReconnectConfig } from '../../src/telemetry/machines-config.ts';
 import type { MachineSummary } from '../../src/telemetry/model.ts';
-import { publishReconnectChanges, ReconnectRunner } from '../../src/telemetry/reconnect.ts';
+import { INVALID_MACHINES_FILE, publishReconnectChanges, ReconnectRunner } from '../../src/telemetry/reconnect.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../../src/telemetry/service.ts';
 import { touchesMachine } from '../../ui/screens/machine-format.js';
 
@@ -35,6 +35,7 @@ if (mode === 'sleep') setTimeout(() => {}, 60_000);
 let n = 0;
 async function boot(mode: 'marker' | 'sleep' = 'marker') {
   const marker = join(dir, `marker-${++n}`);
+  const file = { invalid: false };
   const configs: Record<string, ReconnectConfig | null> = {
     'ws-exemplo': { command: [process.execPath, SCRIPT, mode, marker], timeoutSeconds: 900 },
     'ws-dois': null,
@@ -45,7 +46,8 @@ async function boot(mode: 'marker' | 'sleep' = 'marker') {
   const cursor = new ChangeCursor({ generation: 'g1', minIntervalMs: 0, batchMs: 0 });
   const runner = new ReconnectRunner({
     logFile: join(dir, `reconnect-${n}.log`),
-    lookup: async (id) => (id in configs ? configs[id]! : undefined),
+    // Like cli.ts: a known machine while machines.json is invalid gets INVALID_MACHINES_FILE.
+    lookup: async (id) => (id in configs ? (file.invalid ? INVALID_MACHINES_FILE : configs[id]!) : undefined),
     onChange: publishReconnectChanges(cursor),
     msPerSecond: 20,
     killGraceMs: 100,
@@ -66,6 +68,7 @@ async function boot(mode: 'marker' | 'sleep' = 'marker') {
     api,
     runner,
     marker,
+    file,
     cursor,
     host: `127.0.0.1:${port}`,
     close: async () => {
@@ -137,6 +140,43 @@ describe('#244 POST /api/machines/<id>/reconnect', () => {
       await settle();
       assert.equal(existsSync(b.marker), false);
       assert.equal(b.runner.status('ws-exemplo', null).state, 'idle');
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#244 Origin null, a DNS-rebinding Host (with or without a matching Origin) and a query all get 403; the command never runs', async () => {
+    const b = await boot();
+    try {
+      const port = b.host.split(':')[1];
+      const cases: [string, Record<string, string>][] = [
+        ['/api/machines/ws-exemplo/reconnect', { origin: 'null' }],
+        ['/api/machines/ws-exemplo/reconnect', { host: `evil.example:${port}` }],
+        ['/api/machines/ws-exemplo/reconnect', { host: `evil.example:${port}`, origin: `http://evil.example:${port}` }],
+        ['/api/machines/ws-exemplo/reconnect', { host: `evil.example:${port}`, origin: `http://${b.host}` }],
+        ['/api/machines/ws-exemplo/reconnect?x=1', { origin: `http://${b.host}` }],
+        ['/api/machines/ws-exemplo/reconnect?machine=other', { origin: `http://${b.host}` }],
+      ];
+      for (const method of ['POST', 'DELETE']) {
+        for (const [path, headers] of cases) assert.equal((await call(b.api.url, method, path, headers)).status, 403, `${method} ${path} ${JSON.stringify(headers)}`);
+      }
+      await settle();
+      assert.equal(existsSync(b.marker), false);
+      assert.equal(b.runner.status('ws-exemplo', null).state, 'idle');
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#244 while machines.json is invalid: 409 with the pt-BR message and nothing runs', async () => {
+    const b = await boot();
+    try {
+      b.file.invalid = true;
+      const r = await call(b.api.url, 'POST', '/api/machines/ws-exemplo/reconnect', { origin: `http://${b.host}` });
+      assert.equal(r.status, 409);
+      assert.deepEqual(JSON.parse(r.text), { error: 'O machines.json está inválido; corrija o arquivo para reconectar.' });
+      await settle();
+      assert.equal(existsSync(b.marker), false);
     } finally {
       await b.close();
     }
