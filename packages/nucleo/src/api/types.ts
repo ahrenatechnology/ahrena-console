@@ -6,6 +6,7 @@
 // src/api/legacy-routes.ts (the `panel` spec, with the key table at its top).
 // Dates in ISO 8601 (UTC); the panel computes "how long ago" with its own clock.
 
+import type { SessionAttention } from './attention.ts';
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { InboxState } from '../states/inbox.ts';
 
@@ -46,6 +47,12 @@ export interface PanelSession {
   state: InboxState;
   reason: AwaitingReason | null;
   urgent: boolean;
+  /**
+   * #245: `blocked` ("Precisa de você": the session is stuck until you act) or `idle` ("Ociosa": the
+   * turn ended), with the reason; `null` when it is not waiting on you and not in error.
+   * `sessionAttention` in api/attention.ts; the old routes leave it out.
+   */
+  attention: SessionAttention | null;
   /** Desde quando está no estado atual (a espera, ou a última atividade). */
   since: string;
   turn: number;
@@ -232,7 +239,7 @@ export interface NeedsYouItem {
 export interface PanelNeedYou {
   /** Só as que precisam de você (nível `needs`). */
   total: number;
-  /** As que só estão na sua vez: fora da contagem, sem destaque. */
+  /** As ociosas (#245: o turno acabou, nada trava): fora da contagem, sem destaque. */
   yourTurn: number;
   /** A divisão por conta; "Sem conta" quando não se sabe. Limites nunca entram aqui. */
   byAccount: { account: PanelAccount | null; n: number }[];
@@ -370,8 +377,16 @@ export interface Wall {
    * Para o seletor Todas / Esperando / Ativas. `waiting`: estado `waiting` ou `error` (precisa de
    * você); `active`: estado `active`, `delegating` ou `background`. As concluídas só contam em `all`.
    */
-  count: { all: number; waiting: number; active: number };
-  /** Primeiro as que precisam de você (as urgentes antes), depois a atividade mais recente. */
+  count: {
+    all: number;
+    waiting: number;
+    active: number;
+    /** #245: as que precisam de você (`attention.level` `blocked`, as de erro incluídas). */
+    blocked: number;
+    /** #245: as ociosas (`attention.level` `idle`). */
+    idle: number;
+  };
+  /** Primeiro as que precisam de você (as urgentes antes), depois as ociosas, depois a atividade mais recente (#245). */
   cards: WallCard[];
 }
 
@@ -390,6 +405,8 @@ export interface WallCard {
   reason: AwaitingReason | null;
   /** Espera `notification` ou `interrupted`, e o erro (like `NeedsYouItem.urgent`). */
   urgent: boolean;
+  /** #245: `blocked` or `idle`, with the reason; `null` when not waiting on you (like `PanelSession.attention`). */
+  attention: SessionAttention | null;
   /** Desde quando está no estado atual (a espera, o erro, ou a última atividade). */
   since: string;
   /** A linha do meio: o que pede (waiting), o erro, "terminou sem erro", ou o que está fazendo. */

@@ -96,6 +96,8 @@ a.dev-num:hover, .dev-card-line a:hover { text-decoration: underline; }
 .dev-card-title { overflow-wrap: anywhere; }
 .dev-card-line { font-size: 11px; color: var(--muted); display: flex; gap: 5px; align-items: center; min-width: 0; }
 .dev-card-waiting { border-left-color: var(--status-waiting-dot); }
+.dev-card-idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
+.dev-card-chip { font-family: var(--font-mono); }
 .dev-card-blocked { border-left-color: var(--status-error-dot); }
 .dev-card-slim { border-left: 0; padding: 6px 10px; flex-direction: row; align-items: center; gap: 6px; color: var(--muted); }
 

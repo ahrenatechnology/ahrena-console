@@ -311,7 +311,7 @@ describe('#178 criterion 2: a remote machine (C25) with the simulator', () => {
     // Sessions of this machine only, four shown and the rest counted; no link (this core does not serve them).
     const sessions = all(m.area, '.tm-sessions li');
     assert.equal(sessions.length, 4);
-    assert.match(sessions[0]!, /Migração do esquema de pedidos motor-de-regras · 2 min Fez uma pergunta/);
+    assert.match(sessions[0]!, /Migração do esquema de pedidos motor-de-regras · 2 min Precisa de você/, 'an older core without attention: level needs is blocked (issue 245)');
     assert.match(sessions[1]!, /Com erro/);
     assert.match(texto(m.area), /e mais 1 · as que esperam também vão para a bandeja/);
     assert.equal(m.area.querySelectorAll('.tm-sessions a').length, 0);
@@ -566,7 +566,7 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
       assert.equal(minis[1]!.tagName, 'DIV');
       assert.equal(minis[1]!.getAttribute('href'), null);
       assert.equal(minis[1]!.getAttribute('data-machine'), WS.id);
-      assert.match(texto(minis[1]!), /Workstation$/);
+      assert.match(texto(minis[1]!), /Workstation · 2 min$/);
       assert.doesNotMatch(texto(minis[1]!), /Abrir/);
     } finally {
       signal.abort();

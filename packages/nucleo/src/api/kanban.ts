@@ -11,11 +11,15 @@
 // old path, so its body simply turned English. The old parameter names (`visao`, `coluna`, `pagina`)
 // and values (`sessoes`, `agentes`, `ativa`, `trabalhando`…) are still read: src/api/legacy-routes.ts.
 //
-// Visão sessões: `active`, `waiting`, `completed`, `error`, `abandoned` (o `DisplayStatus`).
-// Visão agentes: `working`, `waiting`, `done`, `error`; o principal de cada sessão (o
-// id é o da sessão) e cada subagente (`<sessão>:<agente>`). O principal herda o status da sessão.
+// #245: the waiting column splits in two, by the session's `attention` (src/api/attention.ts):
+// Visão sessões: `active`, `blocked` ("Precisam de você", as de erro incluídas), `idle` ("Ociosas"),
+// `completed`, `abandoned`. A waiting session with no attention (delegating, in background) is `active`.
+// Visão agentes: `working`, `blocked`, `idle`, `done`, `error`; o principal de cada sessão (o
+// id é o da sessão) e cada subagente (`<sessão>:<agente>`). O principal herda o status e a atenção da
+// sessão: esperando, vai para `blocked` ou `idle`; com erro, para `error`. Cada card traz `attention`
+// (o subagente, `null`).
 // O subagente que terminou é `completed`, o que falhou é `error`; o que não terminou roda
-// (`active`) enquanto a sessão está viva, mesmo esperando você (o principal espera, ele não), e
+// (`active`) enquanto a sessão está viva, mesmo quando ela precisa de você ou está ociosa (o principal espera, ele não), e
 // segue a sessão quando ela se encerrou (concluída, com erro ou abandonada). Agente de sessão
 // abandonada vai para Concluídos com o status `abandoned`: parou, e a pílula diz como.
 //
@@ -32,6 +36,7 @@ import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from './accounts.ts';
+import { readSessionAttention, type SessionAttention } from './attention.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { custoDaSessao, duracaoDe, tituloDe } from './sessions.ts';
@@ -45,16 +50,17 @@ export const VISOES = ['sessions', 'agents'] as const;
 export type Visao = (typeof VISOES)[number];
 
 export const COLUNAS_DAS_SESSOES = [
-  { id: 'active', label: 'Ativa', status: 'active' },
-  { id: 'waiting', label: 'Esperando você', status: 'waiting' },
-  { id: 'completed', label: 'Concluída', status: 'completed' },
-  { id: 'error', label: 'Com erro', status: 'error' },
-  { id: 'abandoned', label: 'Abandonada', status: 'abandoned' },
-] as const satisfies readonly { id: string; label: string; status: DisplayStatus }[];
+  { id: 'active', label: 'Ativas' },
+  { id: 'blocked', label: 'Precisam de você' },
+  { id: 'idle', label: 'Ociosas' },
+  { id: 'completed', label: 'Concluídas' },
+  { id: 'abandoned', label: 'Abandonadas' },
+] as const;
 
 export const COLUNAS_DOS_AGENTES = [
   { id: 'working', label: 'Trabalhando' },
-  { id: 'waiting', label: 'Esperando' },
+  { id: 'blocked', label: 'Precisam de você' },
+  { id: 'idle', label: 'Ociosos' },
   { id: 'done', label: 'Concluídos' },
   { id: 'error', label: 'Erro' },
 ] as const;
@@ -62,25 +68,18 @@ export const COLUNAS_DOS_AGENTES = [
 export type ColunaDeSessao = (typeof COLUNAS_DAS_SESSOES)[number]['id'];
 export type ColunaDeAgente = (typeof COLUNAS_DOS_AGENTES)[number]['id'];
 
-const DA_SESSAO: Record<DisplayStatus, ColunaDeSessao> = {
-  active: 'active',
-  waiting: 'waiting',
-  completed: 'completed',
-  error: 'error',
-  abandoned: 'abandoned',
-};
+/** A coluna da visão sessões: pela atenção (#245), senão pelo status. */
+export function sessionColumnOf(status: DisplayStatus, attention: SessionAttention | null): ColunaDeSessao {
+  if (attention) return attention.level;
+  if (status === 'completed' || status === 'abandoned') return status;
+  return status === 'error' ? 'blocked' : 'active';
+}
 
-const DO_AGENTE: Record<DisplayStatus, ColunaDeAgente> = {
-  active: 'working',
-  waiting: 'waiting',
-  completed: 'done',
-  error: 'error',
-  abandoned: 'done',
-};
-
-/** A coluna da visão agentes para o status do card. */
-export function colunaDoAgente(status: DisplayStatus): ColunaDeAgente {
-  return DO_AGENTE[status];
+/** A coluna da visão agentes para o status e a atenção do card (#245: só o principal tem atenção). */
+export function colunaDoAgente(status: DisplayStatus, attention: SessionAttention | null = null): ColunaDeAgente {
+  if (status === 'error') return 'error';
+  if (status === 'completed' || status === 'abandoned') return 'done';
+  return attention ? attention.level : 'working';
 }
 
 /** The session card of the Kanban: the Sessions list row (`GET /api/sessions`), with the last prompt and the model. */
@@ -89,6 +88,8 @@ export interface CardDeSessao {
   title: string;
   status: DisplayStatus;
   reason: AwaitingReason | null;
+  /** #245: `blocked` ou `idle`, com o motivo; `null` quando não espera você nem está com erro. */
+  attention: SessionAttention | null;
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
   lastPrompt: string | null;
   lastActivity: string;
@@ -114,6 +115,8 @@ export interface CardDeAgente {
   description: string;
   status: DisplayStatus;
   reason: AwaitingReason | null;
+  /** #245: a da sessão, no principal; `null` no subagente. */
+  attention: SessionAttention | null;
   model: string | null;
   start: string;
   lastActivity: string;
@@ -184,6 +187,7 @@ export interface OpcoesDoKanban {
 interface SessaoLida {
   s: Session;
   status: DisplayStatus;
+  attention: SessionAttention | null;
   desktop: DesktopSession | null;
   titulo: string;
 }
@@ -231,7 +235,10 @@ export class QuadroKanban {
       const page = await this.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
         const desktop = this.desktop?.sessionByCli(s.id) ?? null;
-        todas.push({ s, status: displayStatus(s), desktop, titulo: tituloDe(s, desktop) });
+        const status = displayStatus(s);
+        // #245: only a waiting or errored session has attention; only a waiting one reads its events.
+        const attention = status === 'waiting' ? await readSessionAttention(s, await this.agentesDe(s), this.resumos) : status === 'error' ? await readSessionAttention(s, [], this.resumos) : null;
+        todas.push({ s, status, attention, desktop, titulo: tituloDe(s, desktop) });
       }
       cursor = page.nextCursor;
     } while (cursor);
@@ -247,7 +254,7 @@ export class QuadroKanban {
     const agora = this.agora();
     const colunas: Coluna<CardDeSessao>[] = [];
     for (const c of pedidas) {
-      const daColuna = ordenadas.filter((x) => DA_SESSAO[x.status] === c.id);
+      const daColuna = ordenadas.filter((x) => sessionColumnOf(x.status, x.attention) === c.id);
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
       const itens: CardDeSessao[] = [];
       for (const x of fatia) itens.push(await this.cardDeSessao(x, agora, precos));
@@ -256,7 +263,7 @@ export class QuadroKanban {
     return colunas;
   }
 
-  private async cardDeSessao({ s, status, desktop, titulo }: SessaoLida, agora: number, precos: ModelPricing[]): Promise<CardDeSessao> {
+  private async cardDeSessao({ s, status, attention, desktop, titulo }: SessaoLida, agora: number, precos: ModelPricing[]): Promise<CardDeSessao> {
     const conta = this.contas.ofSession(s, desktop);
     const resumo = await this.resumos.ler(s.id, s.updatedAt);
     return {
@@ -264,6 +271,7 @@ export class QuadroKanban {
       title: titulo,
       status,
       reason: status === 'waiting' ? s.awaitingReason : null,
+      attention,
       lastPrompt: umaLinha(resumo.ultimoPrompt, TEXTO_MAXIMO),
       lastActivity: s.updatedAt,
       start: s.startedAt,
@@ -287,7 +295,7 @@ export class QuadroKanban {
     cards.sort((a, b) => maisRecente(a.lastActivity, a.id, b.lastActivity, b.id));
     const pedidas = COLUNAS_DOS_AGENTES.filter((c) => pedido.coluna === null || c.id === pedido.coluna);
     return pedidas.map((c) => {
-      const daColuna = cards.filter((a) => DO_AGENTE[a.status] === c.id);
+      const daColuna = cards.filter((a) => colunaDoAgente(a.status, a.attention) === c.id);
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
       return { id: c.id, label: c.label, total: daColuna.length, page: pagina, hasMore: temMais, items: fatia };
     });
@@ -313,7 +321,7 @@ export class QuadroKanban {
   }
 }
 
-function principalDe({ s, status, titulo }: SessaoLida, agora: number): CardDeAgente {
+function principalDe({ s, status, attention, titulo }: SessaoLida, agora: number): CardDeAgente {
   return {
     id: s.id,
     sessionId: s.id,
@@ -322,6 +330,7 @@ function principalDe({ s, status, titulo }: SessaoLida, agora: number): CardDeAg
     description: titulo,
     status,
     reason: status === 'waiting' ? s.awaitingReason : null,
+    attention,
     model: rotuloDoModelo(s.model),
     start: s.startedAt,
     lastActivity: s.updatedAt,
@@ -343,6 +352,7 @@ function subagenteDe(a: Agent, s: Session, agora: number): CardDeAgente {
     description: umaLinha(a.task, TEXTO_MAXIMO) ?? '',
     status,
     reason: null,
+    attention: null,
     model: rotuloDoModelo(modelo),
     start: a.startedAt,
     lastActivity: a.updatedAt,

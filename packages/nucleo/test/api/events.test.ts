@@ -98,6 +98,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
       createdAt: at(2),
       type: 'PreToolUse',
       status: 'active',
+      attention: null,
       tool: 'Bash',
       summary: 'Bash: npm test',
       session: { id: 's2', title: null, project: 'api' },

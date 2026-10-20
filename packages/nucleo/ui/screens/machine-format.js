@@ -7,6 +7,8 @@
 // keeps only the entries with the shape, a number that is not finite becomes `null`. Nothing here
 // throws on a strange reading. The test imports this file directly.
 
+import { attentionOfItem } from '../attention.js';
+
 export const MACHINES_ROUTE = '/api/machines';
 export const TELEMETRY_ROUTE = '/api/telemetry';
 export const ATTENTION_ROUTE = '/api/attention';
@@ -295,8 +297,11 @@ export function statCards(reading, { local, sessions = null, alerts = [], now = 
     cards.push({ id: 'docker', label: 'Docker', icon: 'container', value: f0.format(docker.running + docker.stopped), unit: null, sub, tone: 'ok' });
   }
   if (sessions) {
-    const urgent = sessions.filter((i) => i.level === 'needs').length;
-    cards.push({ id: 'sessions', label: local ? 'Sessões' : 'Sessões lá', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub: urgent ? `${urgent} ${urgent === 1 ? 'precisa' : 'precisam'} de você` : sessions.length ? 'na sua vez' : 'ninguém esperando você', tone: 'session' });
+    // issue 245: "precisam de você" counts only the blocked ones; the idle ones are said apart.
+    const blocked = sessions.filter((i) => sessionAttention(i).level === 'blocked').length;
+    const idle = sessions.length - blocked;
+    const sub = blocked ? `${blocked} ${blocked === 1 ? 'precisa' : 'precisam'} de você` : idle ? `${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}` : 'ninguém precisa de você';
+    cards.push({ id: 'sessions', label: local ? 'Sessões' : 'Sessões lá', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub, tone: 'session' });
   }
   return cards;
 }
@@ -686,11 +691,12 @@ export function reconnectExample(machine) {
   ].join('\n');
 }
 
-/** The pill of a session in the attention list: with error, needing you, or your turn. */
-export function sessionPill(item) {
-  if (item.reason === 'error') return ['b-error', 'Com erro'];
-  if (item.level === 'needs') return ['b-waiting', typeof item.shortReason === 'string' ? item.shortReason.slice(0, 40) : 'Esperando você'];
-  return ['b-active', 'Sua vez'];
+/**
+ * The attention of a session in the attention list (issue 245): its `attention`, or, from an older core
+ * that does not send it, the old `level` (`needs` is blocked, the rest idle; an error is blocked).
+ */
+export function sessionAttention(item) {
+  return attentionOfItem(item) ?? { level: 'idle', reason: null };
 }
 
 /** "motor-de-regras · 2 min" under a session's name. */

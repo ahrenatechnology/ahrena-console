@@ -25,7 +25,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
     const agora = Date.now();
     await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
-    assert.deepEqual(d.numbers.sessions, { total: 3, active: 1, waiting: 2, withError: 0 });
+    assert.deepEqual(d.numbers.sessions, { total: 3, active: 1, waiting: 2, withError: 0, blocked: 1, idle: 1 });
     // Só o principal da sessão que trabalha; os das que esperam você não contam.
     assert.deepEqual(d.numbers.agents, { active: 1, sessions: 1 });
     assert.deepEqual(d.numbers.subagents, { active: 1, sessions: 1 });
@@ -127,7 +127,7 @@ describe('MontadorDoDashboard', () => {
 
   test('banco vazio: tudo zero, listas vazias', async () => {
     const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW) }).montar();
-    assert.deepEqual(d.numbers.sessions, { total: 0, active: 0, waiting: 0, withError: 0 });
+    assert.deepEqual(d.numbers.sessions, { total: 0, active: 0, waiting: 0, withError: 0, blocked: 0, idle: 0 });
     assert.deepEqual(d.numbers.events, { today: 0, lastHour: 0, total: 0 });
     assert.equal(d.numbers.cost.usd, 0);
     assert.deepEqual([d.agents, d.activity], [[], []]);

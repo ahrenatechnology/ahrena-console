@@ -24,6 +24,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "active",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 18,
       "activity": {
@@ -337,6 +338,10 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "waiting",
       "reason": "notification",
       "urgent": true,
+      "attention": {
+        "level": "blocked",
+        "reason": "question"
+      },
       "since": "2026-11-02T11:56:00.000Z",
       "turn": 11,
       "activity": {
@@ -538,6 +543,10 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "waiting",
       "reason": "notification",
       "urgent": true,
+      "attention": {
+        "level": "blocked",
+        "reason": "permission"
+      },
       "since": "2026-11-02T11:58:00.000Z",
       "turn": 22,
       "activity": {
@@ -829,6 +838,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "delegating",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 9,
       "activity": {
@@ -1194,6 +1204,10 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "error",
       "reason": null,
       "urgent": false,
+      "attention": {
+        "level": "blocked",
+        "reason": "error"
+      },
       "since": "2026-11-02T11:57:00.000Z",
       "turn": 23,
       "activity": {
@@ -1470,6 +1484,10 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "waiting",
       "reason": "session_start",
       "urgent": false,
+      "attention": {
+        "level": "idle",
+        "reason": "first_prompt"
+      },
       "since": "2026-11-02T12:00:00.000Z",
       "turn": 0,
       "activity": {
@@ -1622,6 +1640,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "active",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 18,
       "activity": {
@@ -1887,6 +1906,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "active",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 18,
       "activity": {
@@ -2200,6 +2220,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "delegating",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 2,
       "activity": {
@@ -2414,6 +2435,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
       "state": "delegating",
       "reason": null,
       "urgent": false,
+      "attention": null,
       "since": "2026-11-02T11:59:57.000Z",
       "turn": 5,
       "activity": {
