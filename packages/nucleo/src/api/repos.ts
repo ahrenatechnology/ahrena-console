@@ -51,6 +51,7 @@
 
 import type { ServerResponse } from 'node:http';
 import { GithubCache, MemoryCacheStore } from '../github/cache.ts';
+import { GithubCallQueue } from '../github/call-queue.ts';
 import {
   ciDosRuns,
   commits12,
@@ -168,6 +169,8 @@ export interface OpcoesDosRepos {
   maximoPorRepo?: number;
   /** Falhas fora do previsto numa montagem (no núcleo, o `log` do cli). Padrão: nada. */
   log?: (mensagem: string) => void;
+  /** A fila das chamadas ao GitHub; no núcleo, a mesma das instruções dos agentes. Padrão: uma só deste serviço. */
+  queue?: GithubCallQueue;
 }
 
 const agendarDoSistema = (fn: () => void, ms: number) => {
@@ -185,14 +188,15 @@ export class ReposDoGithub {
   private readonly maximoPorRepo: number;
   private readonly log: (mensagem: string) => void;
   /** A fila global das chamadas à fonte: cada uma começa quando a anterior terminou. */
-  private fila: Promise<unknown> = Promise.resolve();
+  private readonly fila: GithubCallQueue;
   private readonly entradaDaLista = entrada<ListaDeRepos>();
   private readonly entradas = new Map<string, Entrada<MetricasDoRepo>>();
   private semToken: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   chamadas = { fonte: 0 };
 
-  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO, log = () => {} }: OpcoesDosRepos) {
+  constructor({ fonte, cache, sessoes = null, mudancas = null, agora = Date.now, validadeMs = 60_000, agendar = agendarDoSistema, maximoPorRepo = MAXIMO_POR_REPO, log = () => {}, queue = new GithubCallQueue() }: OpcoesDosRepos) {
+    this.fila = queue;
     this.fonte = fonte;
     this.cache = cache ?? new GithubCache({ store: new MemoryCacheStore(), now: agora });
     this.sessoes = sessoes;
@@ -334,7 +338,7 @@ export class ReposDoGithub {
    */
   private chamar<T>(fn: (fonte: FonteDosRepos) => Promise<T>): Promise<T> {
     this.chamadas.fonte++;
-    const vez = this.fila.then(async () => {
+    return this.fila.run(async () => {
       try {
         const v = await fn(this.fonte!);
         this.semToken = null;
@@ -344,8 +348,6 @@ export class ReposDoGithub {
         throw err;
       }
     });
-    this.fila = vez.catch(() => undefined);
-    return vez;
   }
 
   private async graphql<T>(chave: string, ttl: number, forcar: boolean, fn: (fonte: FonteDosRepos) => Promise<T>) {
@@ -594,10 +596,12 @@ export interface OpcoesDosReposDoNucleo {
   mudancas: CursorDeMudancas;
   /** As falhas fora do previsto das montagens. */
   log?: (mensagem: string) => void;
+  /** A fila das chamadas ao GitHub, dividida com as instruções dos agentes. */
+  queue?: GithubCallQueue;
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
     ? new GithubReposSource({ token: 'demo', fetch: criarGithubFalso(DADOS_DA_DEMO, { atrasoMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
@@ -609,6 +613,6 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
     aoDescobrir: () => mudancas.registrar({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
     ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
   });
-  const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });
+  const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log, ...(queue ? { queue } : {}) });
   return { repos, rota: criarRotaDosRepos(repos) };
 }

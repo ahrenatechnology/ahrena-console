@@ -16,17 +16,19 @@
 
 // `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave (`key`) `lista` ou `<dono>/<repo>`
 // em minúsculas. Só a rota HTTP o expõe; o `wait_for_changes` do MCP o filtra (mcp.ts).
+// `agent-instructions` (#183): a aba Instruções de um repositório mudou; chave `<owner>/<repo>` em
+// minúsculas. Como `repos`, só a rota HTTP o expõe.
 // `alert` (#175, src/telemetry): a machine alert that enters or exits; the key is `<machine>:<alert>`,
 // with no session and no account.
 // The values are English since #173 phase 2b; the old ones (`sessao`, `estado`, `precisa-de-voce`, `plano`,
 // `decisao`, `conta`) are still accepted in `?type=` and answered on the old route (src/api/legacy-routes.ts).
-export const TIPOS_DE_MUDANCA = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert'] as const;
+export const TIPOS_DE_MUDANCA = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions'] as const;
 export type TipoDeMudanca = (typeof TIPOS_DE_MUDANCA)[number];
 
 export interface MudancaRegistrada {
   seq: number;
   type: TipoDeMudanca;
-  /** O que mudou: o id da sessão, da decisão ou da conta; em `repos`, `lista` ou `<dono>/<repo>`. For `alert`: `<machine>:<alert>`. */
+  /** O que mudou: o id da sessão, da decisão ou da conta; em `repos`, `lista` ou `<dono>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions`, `<owner>/<repo>`. */
   key: string;
   /** A sessão a que a mudança pertence; `null` em mudança de conta e de repositórios (and for `alert`). */
   sessionId: string | null;

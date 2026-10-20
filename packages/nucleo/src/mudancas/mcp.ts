@@ -28,8 +28,8 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** Os tipos que o MCP expõe: todos menos `repos`. */
-export const TIPOS_DO_MCP = TIPOS_DE_MUDANCA.filter((t): t is Exclude<TipoDeMudanca, 'repos'> => t !== 'repos');
+/** Os tipos que o MCP expõe: todos menos os das telas do GitHub (`repos` e `agent-instructions`). */
+export const TIPOS_DO_MCP = TIPOS_DE_MUDANCA.filter((t): t is Exclude<TipoDeMudanca, 'repos' | 'agent-instructions'> => t !== 'repos' && t !== 'agent-instructions');
 export type TipoDoMcp = (typeof TIPOS_DO_MCP)[number];
 
 /**
@@ -132,7 +132,7 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
         cursor: r.cursor,
         reset: r.reset,
         timedOut: r.timedOut,
-        changes: r.changes.flatMap((m) => (m.type === 'repos' ? [] : [saida(m as MudancaRegistrada & { type: TipoDoMcp }, conta(m.accountId))])),
+        changes: r.changes.flatMap((m) => (m.type === 'repos' || m.type === 'agent-instructions' ? [] : [saida(m as MudancaRegistrada & { type: TipoDoMcp }, conta(m.accountId))])),
       };
       return { texto: texto(dados), dados: dados as unknown as ObjetoJson };
     },
