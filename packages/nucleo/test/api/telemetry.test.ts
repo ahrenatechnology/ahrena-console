@@ -68,7 +68,7 @@ describe('#175/AC-4 GET /api/machines', () => {
       const body = (await r.json()) as unknown[];
       assert.deepEqual(body, [
         { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 2 },
-        { id: 'workstation', label: 'Workstation', state: 'connected', reason: null, version: 1, port: null, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 3 },
+        { id: 'workstation', label: 'Workstation', state: 'connected', reason: null, version: 1, port: 14720, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 3 },
       ]);
       assert.deepEqual([...MACHINE_STATES], ['connected', 'unreachable', 'not-configured', 'incompatible-version']);
     } finally {
