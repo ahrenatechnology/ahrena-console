@@ -1,7 +1,8 @@
 // Gera os tokens da marca a partir de docs/brand/tokens.json, a única fonte:
 // - gerado/marca.ts: as cores como strings hex, para o painel (elementos nativos, sem CSS);
 // - gerado/marca.css: variáveis CSS para o artefato HTML, escuro por padrão e claro
-//   por prefers-color-scheme ou data-theme;
+//   por prefers-color-scheme ou data-theme, e uma cópia dele na interface que o núcleo serve
+//   (packages/nucleo/ui), que vai junto quando o núcleo é empacotado sem este pacote;
 // - uma cópia do marca.ts em cada plugin que o usa, porque um módulo de hooks só
 //   importa arquivos de dentro do próprio plugin.
 // Roda com: node packages/marca/src/gerar.ts
@@ -15,7 +16,7 @@ export const FONTE = new URL('docs/brand/tokens.json', raiz)
 // Caminho relativo à raiz do repositório e conteúdo de cada saída.
 export const SAIDAS = {
   ts: ['packages/marca/gerado/marca.ts', 'spikes/painel-teste/hooks/marca.ts', 'plugins/ahrena-console/hooks/marca.ts'],
-  css: ['packages/marca/gerado/marca.css'],
+  css: ['packages/marca/gerado/marca.css', 'packages/nucleo/ui/marca.css'],
 }
 
 // Escalas que o tokens.json guarda só como histórico e marca como "não usar".
