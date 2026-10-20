@@ -1,0 +1,647 @@
+// The system notifications (wireframe A3, issue #88) as data: when to notify, what, and who is
+// silenced.
+//
+// Kept apart from Tauri so it is tested without opening the app. The tray rereads `/api/attention`
+// on every change and every 25 s; notifying on every read would be noise. The `Detector` keeps each
+// session's reason from the previous read and only notifies a session that entered the list or
+// changed reason. The first read (on opening, or after losing the core) only records: whoever was
+// already waiting does not become a notice.
+//
+// Machine alerts (#180, decision 0008 sections 3 and 5) follow the same rule with their own
+// detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
+// on the transition, without sound; the first read and a rediscovery of the core only record.
+//
+// The silence belongs to the app, not to the core: a small JSON in the app's data folder, with the
+// menu's main switch ("Notificações") and the sessions silenced by the notification's "Silenciar".
+
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::http;
+use crate::machines;
+use crate::menu::{Attention, AttentionItem};
+
+/// The name of the silence file in the app's data folder.
+pub const FILE: &str = "notificacoes.json";
+
+/// A notification to show.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub body: String,
+    /// Only on the urgent ones: asks for permission, interrupted and with an error.
+    pub sound: bool,
+    pub session: String,
+    /// Claude Desktop's `local_…`, for "Abrir no Claude Desktop".
+    pub local: Option<String>,
+    /// Where the click and "Abrir" take the app window: the session's or the machine's screen.
+    pub path: String,
+    pub origin: Origin,
+}
+
+/// What a notice is about: it decides the actions the notification offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// "Abrir", "Abrir no Claude Desktop" and "Silenciar" (A3).
+    Session,
+    /// A session on a remote machine (#180, decision 0008 section 5): "Abrir" and "Silenciar",
+    /// no "Abrir no Claude Desktop", since this Mac's Claude Desktop does not know it.
+    RemoteSession,
+    /// A machine alert (#180): only "Abrir".
+    Machine,
+}
+
+/// An action button of a notification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// "Abrir": the app window at the notice's `path`.
+    Open,
+    /// "Abrir no Claude Desktop": `POST /open/<local_…>`.
+    OpenInDesktop,
+    /// "Silenciar": silences the session.
+    Silence,
+}
+
+impl Origin {
+    /// The actions this kind of notice offers, in the order the notification shows them.
+    pub fn actions(self) -> &'static [Action] {
+        match self {
+            Origin::Session => &[Action::Open, Action::OpenInDesktop, Action::Silence],
+            Origin::RemoteSession => &[Action::Open, Action::Silence],
+            Origin::Machine => &[Action::Open],
+        }
+    }
+}
+
+impl Notice {
+    pub fn from_item(i: &AttentionItem) -> Notice {
+        Notice {
+            title: title(i),
+            body: i.long_reason.clone(),
+            sound: has_sound(&i.reason),
+            session: i.session.clone(),
+            local: i.local.clone(),
+            path: session_path(&i.session),
+            origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
+        }
+    }
+
+    /// A machine alert as a notification, silent: "Workstation: CPU saturada", "Workstation sem
+    /// conexão". `session` carries the alert key, the notification's identifier.
+    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert) -> Notice {
+        let label = machines::display_label(m);
+        let (title, body) = match a.kind.as_str() {
+            machines::UNREACHABLE_KIND => (format!("{label} sem conexão"), a.detail.clone().unwrap_or_default()),
+            "load-high" => (format!("{label}: CPU saturada"), a.message.clone()),
+            "volume-full" => (format!("{label}: disco quase cheio"), a.message.clone()),
+            _ => (format!("{label}: {}", a.message), a.detail.clone().unwrap_or_default()),
+        };
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin: Origin::Machine }
+    }
+}
+
+/// The identity of a machine alert across reads, as `/api/changes` names it (`<machine>:<alert>`),
+/// with a prefix that never collides with a session id in the silence file or the notification center.
+fn alert_key(machine: &str, alert: &str) -> String {
+    format!("machine:{machine}:{alert}")
+}
+
+/// The machine alerts that opened since the previous read (#180).
+#[derive(Debug, Default)]
+pub struct MachineAlertDetector {
+    /// The alert keys of the previous read; `None` before the first (or after `reset`).
+    previous: Option<HashSet<String>>,
+}
+
+impl MachineAlertDetector {
+    pub fn observe(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
+        let mut now: HashSet<String> = HashSet::new();
+        let mut notices = Vec::new();
+        for m in ms {
+            let Some(t) = &m.telemetry else {
+                // The telemetry read failed this time: keep what was open, so it does not notify again.
+                let prefix = alert_key(&m.summary.id, "");
+                now.extend(self.previous.iter().flatten().filter(|k| k.starts_with(&prefix)).cloned());
+                continue;
+            };
+            for a in &t.alerts {
+                let key = alert_key(&m.summary.id, &a.id);
+                if self.previous.as_ref().is_some_and(|p| !p.contains(&key)) {
+                    notices.push(Notice::from_machine_alert(&m.summary, a));
+                }
+                now.insert(key);
+            }
+        }
+        self.previous = Some(now);
+        notices
+    }
+
+    /// Forgets the previous read: the next one only records. On losing the core or its telemetry.
+    pub fn reset(&mut self) {
+        self.previous = None;
+    }
+}
+
+/// The A3 title: the session and the reason ("motor-de-regras pede permissão").
+pub fn title(i: &AttentionItem) -> String {
+    // A remote session carries its machine's label (#180): "motor-de-regras · Workstation pede permissão".
+    let t = match &i.machine {
+        Some(m) => format!("{} · {}", i.title, m.label),
+        None => i.title.clone(),
+    };
+    match i.reason.as_str() {
+        "permission" => format!("{t} pede permissão"),
+        "question" => format!("{t} fez uma pergunta"),
+        "plan" => format!("{t} tem um plano para aprovar"),
+        "decision" => format!("{t} pede uma decisão"),
+        "error" => format!("{t} parou com erro"),
+        "your-turn" => format!("{t}: sua vez"),
+        "interrupted" => format!("{t} foi interrompida"),
+        "no-prompt" => format!("{t}: sessão nova"),
+        _ => format!("{t}: {}", i.short_reason),
+    }
+}
+
+fn has_sound(reason: &str) -> bool {
+    matches!(reason, "permission" | "interrupted" | "error")
+}
+
+/// Who entered the list or changed reason since the previous read.
+#[derive(Debug, Default)]
+pub struct Detector {
+    /// `session` → `reason` of the previous read; `None` before the first (or after `reset`).
+    previous: Option<HashMap<String, String>>,
+}
+
+impl Detector {
+    pub fn observe(&mut self, a: &Attention) -> Vec<Notice> {
+        let now: HashMap<String, String> = a.items.iter().map(|i| (i.session.clone(), i.reason.clone())).collect();
+        let notices = match &self.previous {
+            None => Vec::new(),
+            Some(before) => a.items.iter().filter(|i| before.get(&i.session) != Some(&i.reason)).map(Notice::from_item).collect(),
+        };
+        self.previous = Some(now);
+        notices
+    }
+
+    /// Forgets the previous read: the next one only records. On losing the core or the list.
+    pub fn reset(&mut self) {
+        self.previous = None;
+    }
+}
+
+/// The main switch and the silenced sessions, as they go in the JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Silence {
+    /// The "Notificações" check in the menu; off, nothing notifies.
+    #[serde(rename = "ligadas", default = "enabled_by_default")]
+    pub enabled: bool,
+    #[serde(rename = "sessoes", default)]
+    pub sessions: BTreeSet<String>,
+}
+
+fn enabled_by_default() -> bool {
+    true
+}
+
+impl Default for Silence {
+    fn default() -> Self {
+        Silence { enabled: true, sessions: BTreeSet::new() }
+    }
+}
+
+impl Silence {
+    pub fn filter(&self, notices: Vec<Notice>) -> Vec<Notice> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        notices.into_iter().filter(|n| !self.sessions.contains(&n.session)).collect()
+    }
+
+    /// Missing or unreadable: the default (on, nobody silenced).
+    pub fn load(path: &Path) -> Silence {
+        std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    }
+
+    /// Writes to a temporary file next to it and renames, so as not to leave half a file.
+    pub fn save(&self, path: &Path) -> io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let text = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
+        let tmp = path.with_extension("json.tmp");
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, path)
+    }
+}
+
+/// The detector, the silence and where it is saved: what the app keeps of the notifications.
+#[derive(Debug, Default)]
+pub struct Notices {
+    pub detector: Detector,
+    /// The machine alerts' detector (#180), behind the same switch.
+    pub machines: MachineAlertDetector,
+    pub silence: Silence,
+    /// `None` when the app has no data folder: the silence only lasts until it quits.
+    pub file: Option<PathBuf>,
+}
+
+impl Notices {
+    pub fn open(file: Option<PathBuf>) -> Notices {
+        let silence = file.as_deref().map(Silence::load).unwrap_or_default();
+        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
+    }
+
+    /// The notices of this read that pass the silence.
+    pub fn read(&mut self, a: &Attention) -> Vec<Notice> {
+        let new = self.detector.observe(a);
+        self.silence.filter(new)
+    }
+
+    /// The machine notices of this read that pass the silence (#180).
+    pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
+        let new = self.machines.observe(ms);
+        self.silence.filter(new)
+    }
+
+    /// The click on "Notificações". Returns the switch's new state.
+    pub fn toggle(&mut self) -> bool {
+        self.silence.enabled = !self.silence.enabled;
+        self.save();
+        self.silence.enabled
+    }
+
+    /// The notification's "Silenciar" action.
+    pub fn silence_session(&mut self, session: &str) {
+        if self.silence.sessions.insert(session.to_string()) {
+            self.save();
+        }
+    }
+
+    fn save(&self) {
+        let Some(file) = &self.file else { return };
+        if let Err(err) = self.silence.save(file) {
+            eprintln!("[ahrena-console] save {}: {err}", file.display());
+        }
+    }
+}
+
+/// The session's detail screen in the core's `/ui`, where "Abrir" leads. Empty, "." or ".." do not
+/// make a path segment: then, the `/ui`.
+pub fn session_path(session: &str) -> String {
+    if matches!(session, "" | "." | "..") {
+        return "/ui".into();
+    }
+    format!("/ui/sessions/{}", http::encode(session))
+}
+
+/// The `local_…` the core's `POST /open/` accepts: `local_` and 8 to 64 of `[0-9a-fA-F-]`.
+pub fn valid_local(local: &str) -> bool {
+    let Some(rest) = local.strip_prefix("local_") else { return false };
+    (8..=64).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+}
+
+/// Where the JSON lives: in `AHRENA_DADOS_DIR`, if set, or in the app's data folder.
+pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
+    let dir = std::env::var_os("AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
+    Some(dir.join(FILE))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(session: &str, title: &str, reason: &str) -> AttentionItem {
+        AttentionItem {
+            session: session.into(),
+            title: title.into(),
+            account: None,
+            level: if reason == "your-turn" { "your-turn" } else { "needs" }.into(),
+            reason: reason.into(),
+            short_reason: format!("curto de {reason}"),
+            long_reason: format!("longo de {reason}"),
+            minutes: 1,
+            local: None,
+            machine: None,
+        }
+    }
+
+    fn attention(items: Vec<AttentionItem>) -> Attention {
+        Attention { cursor: None, total: items.len() as u64, active: 0, with_error: 0, items }
+    }
+
+    fn sessions(notices: &[Notice]) -> Vec<&str> {
+        notices.iter().map(|n| n.session.as_str()).collect()
+    }
+
+    /// A folder of this test alone in `temp_dir`, deleted at the end.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> TempDir {
+            let p = std::env::temp_dir().join(format!("ahrena-console-test-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&p);
+            TempDir(p)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn first_read_does_not_notify() {
+        let mut d = Detector::default();
+        assert!(d.observe(&attention(vec![item("s1", "a", "permission"), item("s2", "b", "error")])).is_empty());
+    }
+
+    #[test]
+    fn entering_notifies_once() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![]));
+        let list = attention(vec![item("s1", "a", "permission")]);
+        assert_eq!(sessions(&d.observe(&list)), ["s1"]);
+        assert!(d.observe(&list).is_empty(), "the repeated read does not notify");
+        assert!(d.observe(&list).is_empty());
+    }
+
+    #[test]
+    fn reason_change_notifies() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![item("s1", "a", "your-turn"), item("s2", "b", "question")]));
+        let notices = d.observe(&attention(vec![item("s1", "a", "permission"), item("s2", "b", "question")]));
+        assert_eq!(sessions(&notices), ["s1"]);
+        assert_eq!(notices[0].title, "a pede permissão");
+    }
+
+    #[test]
+    fn left_and_came_back_notifies() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![item("s1", "a", "permission")]));
+        assert!(d.observe(&attention(vec![])).is_empty());
+        assert_eq!(sessions(&d.observe(&attention(vec![item("s1", "a", "permission")]))), ["s1"]);
+    }
+
+    #[test]
+    fn reconnection_does_not_notify() {
+        let mut d = Detector::default();
+        d.observe(&attention(vec![]));
+        d.reset();
+        assert!(d.observe(&attention(vec![item("s1", "a", "error")])).is_empty());
+        assert_eq!(sessions(&d.observe(&attention(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
+    }
+
+    #[test]
+    fn sound_only_on_the_urgent_ones() {
+        let with: Vec<_> = ["permission", "question", "plan", "decision", "error", "your-turn", "interrupted", "no-prompt", "outro"]
+            .into_iter()
+            .filter(|r| Notice::from_item(&item("s", "t", r)).sound)
+            .collect();
+        assert_eq!(with, ["permission", "error", "interrupted"]);
+    }
+
+    #[test]
+    fn a3_titles() {
+        let a = |t: &str, r: &str| title(&item("s", t, r));
+        assert_eq!(a("motor-de-regras", "permission"), "motor-de-regras pede permissão");
+        assert_eq!(a("painel-de-metricas", "error"), "painel-de-metricas parou com erro");
+        assert_eq!(a("fila-de-tarefas", "your-turn"), "fila-de-tarefas: sua vez");
+        assert_eq!(a("x", "interrupted"), "x foi interrompida");
+        assert_eq!(a("x", "motivo-novo"), "x: curto de motivo-novo");
+    }
+
+    #[test]
+    fn body_and_local() {
+        let mut i = item("s1", "a", "permission");
+        i.local = Some("local_1".into());
+        let n = Notice::from_item(&i);
+        assert_eq!((n.body.as_str(), n.local.as_deref()), ("longo de permission", Some("local_1")));
+    }
+
+    #[test]
+    fn session_screen_path() {
+        assert_eq!(session_path("c3f09b52"), "/ui/sessions/c3f09b52");
+        assert_eq!(session_path("a:b/c"), "/ui/sessions/a%3Ab%2Fc");
+        for empty in ["", ".", ".."] {
+            assert_eq!(session_path(empty), "/ui", "{empty:?}");
+        }
+    }
+
+    #[test]
+    fn local_like_the_core() {
+        assert!(valid_local("local_716ecd97-6a9b-4452-9770-e2c155279784"));
+        assert!(valid_local("local_ABCDEF01"));
+        assert!(valid_local(&format!("local_{}", "a".repeat(64))));
+        assert!(!valid_local("local_1234567"), "fewer than 8");
+        assert!(!valid_local(&format!("local_{}", "a".repeat(65))), "more than 64");
+        assert!(!valid_local("local_1234567g"));
+        assert!(!valid_local("local_12345678/../x"));
+        assert!(!valid_local("remoto_12345678"));
+        assert!(!valid_local(""));
+    }
+
+    #[test]
+    fn global_silence() {
+        let notices = vec![Notice::from_item(&item("s1", "a", "error"))];
+        let s = Silence { enabled: false, ..Silence::default() };
+        assert!(s.filter(notices.clone()).is_empty());
+        assert_eq!(Silence::default().filter(notices.clone()), notices);
+    }
+
+    #[test]
+    fn per_session_silence() {
+        let notices = vec![Notice::from_item(&item("s1", "a", "error")), Notice::from_item(&item("s2", "b", "error"))];
+        let mut s = Silence::default();
+        s.sessions.insert("s1".into());
+        assert_eq!(sessions(&s.filter(notices)), ["s2"]);
+    }
+
+    #[test]
+    fn notices_read_and_filter() {
+        let mut n = Notices::open(None);
+        n.read(&attention(vec![]));
+        n.silence_session("s1");
+        assert_eq!(sessions(&n.read(&attention(vec![item("s1", "a", "error"), item("s2", "b", "error")]))), ["s2"]);
+        assert!(!n.toggle());
+        assert!(n.read(&attention(vec![item("s3", "c", "error")])).is_empty());
+    }
+
+    #[test]
+    fn global_silence_does_not_stop_the_detector() {
+        let p = TempDir::new("global-off");
+        let mut n = Notices::open(Some(p.0.join(FILE)));
+        n.read(&attention(vec![]));
+        assert!(!n.toggle());
+        assert!(n.read(&attention(vec![item("s1", "a", "error")])).is_empty(), "off does not notify");
+        assert!(n.toggle());
+        assert!(n.read(&attention(vec![item("s1", "a", "error")])).is_empty(), "turning back on does not notify who was already there");
+    }
+
+    #[test]
+    fn persistence_round_trip() {
+        let p = TempDir::new("round-trip");
+        let file = p.0.join("sub").join(FILE);
+        let mut n = Notices::open(Some(file.clone()));
+        assert_eq!(n.silence, Silence::default());
+        n.silence_session("s1");
+        n.toggle();
+        let read = Silence::load(&file);
+        assert_eq!(read, Silence { enabled: false, sessions: ["s1".to_string()].into() });
+        assert_eq!(Notices::open(Some(file.clone())).silence, read);
+        assert!(!file.with_extension("json.tmp").exists());
+    }
+
+    // ---- #180: machine alerts ----
+
+    fn alert(id: &str, kind: &str, message: &str, detail: Option<&str>) -> machines::Alert {
+        machines::Alert { id: id.into(), kind: kind.into(), level: "error".into(), message: message.into(), detail: detail.map(Into::into), since: "2026-10-18T22:58:00.000Z".into() }
+    }
+
+    fn machine(id: &str, label: &str, state: &str, alerts: Option<Vec<machines::Alert>>) -> machines::Machine {
+        machines::Machine {
+            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None },
+            telemetry: alerts.map(|alerts| machines::Telemetry { current: None, alerts }),
+        }
+    }
+
+    fn load() -> machines::Alert {
+        alert("load-high", "load-high", "CPU saturada: carga de 24,6 em 16 núcleos", None)
+    }
+
+    fn down() -> machines::Alert {
+        alert("machine-unreachable", "machine-unreachable", "Workstation sem conexão", Some("A porta 14720 deste Mac não aceita conexão: o túnel está caído"))
+    }
+
+    fn ids(notices: &[Notice]) -> Vec<&str> {
+        notices.iter().map(|n| n.session.as_str()).collect()
+    }
+
+    #[test]
+    fn criterion_5_first_read_of_machines_does_not_notify() {
+        let mut d = MachineAlertDetector::default();
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_new_alert_notifies_once_silently() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        let with = [machine("workstation", "Workstation", "connected", Some(vec![load()]))];
+        let notices = d.observe(&with);
+        assert_eq!(ids(&notices), ["machine:workstation:load-high"]);
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Workstation: CPU saturada", "CPU saturada: carga de 24,6 em 16 núcleos"));
+        assert!(!n.sound, "machine notifications are silent");
+        assert_eq!((n.path.as_str(), n.origin, n.local.as_deref()), ("/ui/machines/workstation", Origin::Machine, None));
+        assert!(d.observe(&with).is_empty(), "the repeated read does not notify");
+    }
+
+    #[test]
+    fn criterion_5_machine_going_down_notifies_once() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        let gone = [machine("local", "Esta máquina", "connected", Some(vec![])), machine("workstation", "Workstation", "unreachable", Some(vec![down()]))];
+        let notices = d.observe(&gone);
+        assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"]);
+        assert_eq!(notices[0].title, "Workstation sem conexão");
+        assert_eq!(notices[0].body, "A porta 14720 deste Mac não aceita conexão: o túnel está caído");
+        assert!(!notices[0].sound);
+        assert!(d.observe(&gone).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_this_mac_is_named_este_mac() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![]))]);
+        let notices = d.observe(&[machine("local", "Esta máquina", "connected", Some(vec![load()]))]);
+        assert_eq!(notices[0].title, "Este Mac: CPU saturada");
+        assert_eq!(notices[0].path, "/ui/machines/local");
+    }
+
+    #[test]
+    fn criterion_5_a_telemetry_read_that_failed_does_not_renotify() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]);
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", None)]).is_empty());
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "the alert never left");
+    }
+
+    #[test]
+    fn criterion_5_rediscovery_does_not_notify() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        d.reset();
+        assert!(d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty());
+    }
+
+    #[test]
+    fn criterion_5_respects_the_notifications_switch() {
+        let mut n = Notices::open(None);
+        n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        assert!(!n.toggle());
+        assert!(n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "off: nothing");
+        assert!(n.toggle());
+        let notices = n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
+        assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
+    }
+
+    fn remote(session: &str, title: &str, reason: &str) -> AttentionItem {
+        AttentionItem { machine: Some(crate::menu::SessionMachine { id: "workstation".into(), label: "Workstation".into() }), ..item(session, title, reason) }
+    }
+
+    #[test]
+    fn remote_session_title_carries_the_machine_label() {
+        let n = Notice::from_item(&remote("s1", "motor-de-regras", "permission"));
+        assert_eq!(n.title, "motor-de-regras · Workstation pede permissão");
+        assert_eq!(title(&remote("s3", "fila-de-tarefas", "your-turn")), "fila-de-tarefas · Workstation: sua vez");
+    }
+
+    #[test]
+    fn remote_session_has_no_desktop_action() {
+        let notice = Notice::from_item(&remote("s1", "motor-de-regras", "permission"));
+        assert_eq!(notice.origin, Origin::RemoteSession);
+        assert_eq!(notice.origin.actions(), [Action::Open, Action::Silence], "Silenciar stays, Abrir no Claude Desktop goes");
+        assert_eq!((notice.path.as_str(), notice.session.as_str(), notice.local.as_deref()), ("/ui/sessions/s1", "s1", None), "the click opens the session screen");
+        let mut n = Notices::open(None);
+        n.read(&attention(vec![]));
+        n.silence_session("s1");
+        assert!(n.read(&attention(vec![remote("s1", "motor-de-regras", "permission")])).is_empty(), "Silenciar works as for a local session");
+    }
+
+    #[test]
+    fn local_session_notice_is_unchanged() {
+        let mut i = item("s1", "motor-de-regras", "permission");
+        i.local = Some("local_00000000-0000-4000-8000-000000000001".into());
+        let n = Notice::from_item(&i);
+        assert_eq!(n.title, "motor-de-regras pede permissão");
+        assert_eq!(n.origin, Origin::Session);
+        assert_eq!(n.origin.actions(), [Action::Open, Action::OpenInDesktop, Action::Silence]);
+        assert_eq!(Origin::Machine.actions(), [Action::Open]);
+    }
+
+    #[test]
+    fn session_notices_open_the_session_screen() {
+        let n = Notice::from_item(&item("c3f09b52", "a", "permission"));
+        assert_eq!((n.path.as_str(), n.origin), ("/ui/sessions/c3f09b52", Origin::Session));
+    }
+
+    #[test]
+    fn bad_or_missing_file_is_the_default() {
+        let p = TempDir::new("bad");
+        assert_eq!(Silence::load(&p.0.join(FILE)), Silence::default());
+        std::fs::create_dir_all(&p.0).unwrap();
+        let bad = p.0.join(FILE);
+        std::fs::write(&bad, "não é json").unwrap();
+        assert_eq!(Silence::load(&bad), Silence::default());
+        std::fs::write(&bad, r#"{ "sessoes": ["s9"] }"#).unwrap();
+        assert_eq!(Silence::load(&bad), Silence { enabled: true, sessions: ["s9".to_string()].into() });
+    }
+}

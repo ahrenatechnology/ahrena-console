@@ -5,7 +5,7 @@ A bandeja do Ahrena Console na barra de menus do macOS, em Tauri 2 ([decisão 00
 ## O que faz
 
 - **Número ao lado do ícone** (`tray.set_title`): as sessões esperando você ou com erro, em todas as contas. Com zero ou com o núcleo parado, só o ícone template.
-- **Ícone template** em 18 e 36 px (`icons/bandeja.png` e `bandeja@2x.png`, de `bandeja.svg`): o macOS escolhe o nítido para cada tela e o pinta conforme a barra.
+- **Ícone template** em 18 e 36 px (`icons/tray.png` e `tray@2x.png`, de `tray.svg`): o macOS escolhe o nítido para cada tela e o pinta conforme a barra.
 - **Menu**, como os wireframes A1, A2 e A4 (`docs/wireframes/index.html`, ids `app-bandeja-0`, `app-bandeja-3` e `app-parado`): o estado do núcleo, "N precisam de você" com o motivo e o tempo de cada sessão (urgentes primeiro: permissão, pergunta, plano e decisão; depois erro; depois a sua vez), "N ativas", "Abrir o console ⌘O", Notificações, Abrir no login, a versão e Sair.
 - **Clique numa sessão:** por enquanto abre a conversa no Claude Desktop (`POST /open/<local_…>` do núcleo). Com ⌥, cada item vira "Abrir no Claude Desktop" (item alternativo nativo do macOS). Quando a janela do app mostrar a sessão (A5), o clique sem ⌥ passa a abrir lá.
 - **Abrir o console:** uma janela com `http://127.0.0.1:<porta>/ui`. Fechar a janela não fecha o app.
@@ -54,14 +54,14 @@ A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since
 | [src-tauri/src/main.rs](src-tauri/src/main.rs) | A bandeja, o laço do núcleo, os cliques e a janela |
 | [src-tauri/src/menu.rs](src-tauri/src/menu.rs) | O menu como dados, montado do JSON de `/api/attention` (testado sem abrir o app) |
 | [src-tauri/src/machines.rs](src-tauri/src/machines.rs) | As máquinas de `/api/machines` e `/api/telemetry`: a leitura do JSON e os textos curtos da linha, do alerta e do motivo sem conexão (testado sem abrir o app) |
-| [src-tauri/src/nucleo.rs](src-tauri/src/nucleo.rs) | O plano (subir o próprio núcleo, o A4 ou a porta de demonstração), a linha de comando do `start` e a leitura do `start --json`, que recusa o núcleo de outra instalação |
-| [src-tauri/src/notificacoes.rs](src-tauri/src/notificacoes.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
-| [src-tauri/src/aviso_nativo.rs](src-tauri/src/aviso_nativo.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
+| [src-tauri/src/core.rs](src-tauri/src/core.rs) | O plano (subir o próprio núcleo, o A4 ou a porta de demonstração), a linha de comando do `start` e a leitura do `start --json`, que recusa o núcleo de outra instalação |
+| [src-tauri/src/notifications.rs](src-tauri/src/notifications.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
+| [src-tauri/src/native_notice.rs](src-tauri/src/native_notice.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
 | [src-tauri/src/login.rs](src-tauri/src/login.rs) | Abrir no login pelo `SMAppService` e a origem da partida (login ou à mão), testados com um registro falso |
-| [src-tauri/src/nativo.rs](src-tauri/src/nativo.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
+| [src-tauri/src/native.rs](src-tauri/src/native.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
 | [src-tauri/src/http.rs](src-tauri/src/http.rs) | HTTP/1.0 cru com `127.0.0.1` |
-| [src-tauri/src/atualizacao.rs](src-tauri/src/atualizacao.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
-| [src-tauri/tests/configuracao.rs](src-tauri/tests/configuracao.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
+| [src-tauri/src/updater.rs](src-tauri/src/updater.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
+| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
 | [src-tauri/src/shell_path.rs](src-tauri/src/shell_path.rs) | O PATH do shell de login, para achar o `node` aberto pelo Finder |
 
 ## Rodar
@@ -80,7 +80,7 @@ curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
 cd apps/desktop && npm install && npm run build
 ```
 
-O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icones` os refaz do logo. Os da bandeja vêm de `bandeja.svg`: `npx tauri icon src-tauri/icons/bandeja.svg -p 18 -p 36`.
+O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icons` os refaz do logo. Os da bandeja vêm de `tray.svg`: `npx tauri icon src-tauri/icons/tray.svg -p 18 -p 36`.
 
 Testes, sem abrir o app:
 
