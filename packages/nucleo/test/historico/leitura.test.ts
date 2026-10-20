@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { HistoricoDeSessoes, type ItemDoHistorico } from '../../src/historico/leitura.ts';
-import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulador/historico.ts';
+import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
 import { semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
 import { T0 } from '../fixtures.ts';
 

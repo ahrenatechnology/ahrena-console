@@ -42,10 +42,12 @@ function respostaFalsa() {
 }
 
 describe('Histórico: registro e arquivo', () => {
-  test('está na barra logo depois de Sessões, em /ui/historico, com o arquivo da tela', () => {
+  test('está na barra na ordem do wireframe (depois de Sessões e Analytics), em /ui/historico, com o arquivo da tela', () => {
     const telas = TELAS as Tela[];
     const naBarra = telas.filter((t) => t.item).map((t) => t.id);
-    assert.equal(naBarra[naBarra.indexOf('sessoes') + 1], 'historico');
+    for (const antes of ['dashboard', 'sessoes', 'analytics', 'workflows']) {
+      if (naBarra.includes(antes)) assert.ok(naBarra.indexOf(antes) < naBarra.indexOf('historico'), antes);
+    }
     const h = telas.find((t) => t.id === 'historico')!;
     assert.equal(h.rota, '/ui/historico');
     assert.deepEqual(h.item, { rotulo: 'Histórico', icone: 'historico' });

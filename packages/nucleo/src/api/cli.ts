@@ -38,10 +38,14 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
-import { semearHistoricoDoPainel } from '../simulador/historico.ts';
+import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
 import { HistoricoDeSessoes } from '../historico/leitura.ts';
+import { semearHistorico } from '../simulador/historico.ts';
+import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
+import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
   capturarDoTranscript,
@@ -70,6 +74,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
+                      A demo grava também o Detalhe da /ui: uma sessão que pede permissão
+                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
@@ -225,8 +231,12 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
+  await semearHistorico(storage);
+  await semearDetalhe(storage);
   await semearHistoricoDoPainel(storage, decisoes, cenario);
 }
+const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
 const historico = new HistoricoDeSessoes({ storage, decisoes, tituloDe: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
@@ -279,7 +289,9 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  detalhe,
   frota: mcp.frota,
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   carga: () => ({

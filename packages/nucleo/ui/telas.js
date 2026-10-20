@@ -26,6 +26,34 @@ export const TELAS = [
     arquivo: '/ui/telas/sessoes.js', // #28
   },
   {
+    id: 'detalhe',
+    rota: '/ui/sessoes/:id',
+    acende: 'sessoes',
+    titulo: 'Sessão',
+    sub: null,
+    icone: 'sessoes',
+    arquivo: '/ui/telas/detalhe.js', // #29 e #30
+  },
+  {
+    id: 'analytics',
+    rota: '/ui/analytics',
+    item: { rotulo: 'Analytics', icone: 'analytics' },
+    titulo: 'Analytics',
+    sub: 'Uso, custo e produtividade das sessões',
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js', // #95 e #32
+  },
+  {
+    // A aba Custo (/ui/analytics/custo): a mesma tela, que lê a aba de `params.aba`.
+    id: 'analytics-aba',
+    rota: '/ui/analytics/:aba',
+    acende: 'analytics',
+    titulo: 'Analytics',
+    sub: null,
+    icone: 'analytics',
+    arquivo: '/ui/telas/analytics.js',
+  },
+  {
     id: 'historico',
     rota: '/ui/historico',
     item: { rotulo: 'Histórico', icone: 'historico' },
@@ -33,15 +61,6 @@ export const TELAS = [
     sub: 'Sessões encerradas, por dia',
     icone: 'historico',
     arquivo: '/ui/telas/historico.js', // #33
-  },
-  {
-    id: 'detalhe',
-    rota: '/ui/sessoes/:id',
-    acende: 'sessoes',
-    titulo: 'Sessão',
-    sub: null,
-    icone: 'sessoes',
-    arquivo: null, // #29 e #30
   },
 ];
 

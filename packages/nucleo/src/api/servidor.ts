@@ -16,15 +16,18 @@
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 // | `GET /api/atencao`            | Quem precisa de você, em todas as contas (a bandeja, #87)  |
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
+// | `GET /api/analytics` e `/api/analytics/custo` | A tela Analytics (api/rota-analytics.ts, #95 e #32) |
 // | `GET /api/sessoes`            | A lista da tela Sessões, paginada e filtrada (api/sessoes.ts, #28) |
 // | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada. A escrita nas
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo o "Abrir no Claude
+// Desktop" do Detalhe: `POST /abrir/<local_…>` com `Origin` exatamente `http://<Host>` (e JSON). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -43,9 +46,11 @@ import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sesso
 import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
 import type { HistoricoDeSessoes } from '../historico/leitura.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
 import { montarAtencao, ROTA_DA_ATENCAO } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 
 export { VERSAO_DA_API };
 
@@ -69,8 +74,12 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** As leituras do Detalhe da sessão (`/api/sessoes/<id>…`); sem elas, 404. */
+  detalhe?: LeiturasDoDetalhe;
   /** A leitura da frota do MCP; liga `GET /api/atencao`. */
   frota?: LeituraDaFrota;
+  /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/custo`. */
+  analytics?: RotaAnalytics;
   /** A lista da tela Sessões; liga `GET /api/sessoes`. */
   sessoes?: ListaDeSessoes;
   /** As sessões encerradas por dia; liga `GET /api/historico` (#33). */
@@ -91,14 +100,24 @@ const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 const MAX_CORPO = 4096;
 
-/** A própria `/ui` lendo: `GET` com `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
-function mesmaOrigemLendo(req: IncomingMessage, port: number): boolean {
+/** O pedido vem da própria `/ui`: `Origin` igual a `http://<Host>`, e o Host já é o nosso. */
+function daPropriaUi(req: IncomingMessage, port: number): boolean {
   const host = req.headers.host;
   const origem = req.headers.origin;
-  if (req.method !== 'GET' || typeof origem !== 'string') return false;
+  if (typeof origem !== 'string') return false;
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
   return origem === `http://${host}`;
 }
+
+/** A própria `/ui` lendo: `GET` da mesma origem. */
+const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && daPropriaUi(req, port);
+
+/**
+ * O "Abrir no Claude Desktop" do Detalhe: só `POST /abrir/<local_…>` da mesma origem. O resto da
+ * decisão 0003 vale como nas outras escritas: JSON (o `abrirDireto` confere) e o id estrito.
+ */
+const mesmaOrigemAbrindo = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/abrir\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -211,7 +230,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -231,6 +250,10 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
+    if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
+      const r = await opts.analytics.responder(url);
+      return send(res, r.status, r.corpo);
+    }
     if (url.pathname === ROTA_DAS_SESSOES && opts.sessoes) return responderSessoes(res, url, opts.sessoes);
     if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
     if (url.pathname === '/api/carga') {
@@ -245,6 +268,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (m) return painel(res, decodeURIComponent(m[1]), url);
     const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);
     if (d) return listaDeDecisoes(res, decodeURIComponent(d[1]), url);
+    const det = opts.detalhe && ROTA_DO_DETALHE.exec(url.pathname);
+    if (det) return opts.detalhe!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
     send(res, 404, { error: 'não encontrado' });
   }
 
