@@ -172,7 +172,7 @@ export function dependsOnYouCard(d) {
   if (d.kind === 'suggested-decision') {
     return {
       title: `Decisão sugerida: ${d.choice}`,
-      text: d.alternatives?.length ? `Alternativa: ${d.alternatives.join(', ')} · de ${d.title}` : `De ${d.title}${issue}`,
+      text: d.alternatives?.length ? `Alternativa: ${d.alternatives.join(', ')} · de ${d.title}${issue}` : `De ${d.title}${issue}`,
       where: repoName(d.repo),
       minutes: `${d.minutes} min`,
       href: `/ui/sessoes/${encodeURIComponent(d.sessionId)}`,
@@ -245,7 +245,7 @@ function dependsOnYou(view) {
           const c = dependsOnYouCard(d);
           return el(
             'a',
-            { class: 'cartao dev-depend', href: c.href },
+            { class: 'cartao dev-depend', href: c.href, 'data-focus': `depend:${d.kind}:${d.sessionId}:${d.decisionId ?? ''}` },
             el('span', { class: 'dev-depend-title' }, c.title),
             el('span', { class: 'dev-depend-text' }, c.text),
             el('span', { class: 'dev-depend-foot' }, el('span', {}, c.where), el('b', {}, c.minutes)),
@@ -275,7 +275,7 @@ function notReady(view, open) {
   return el(
     'details',
     { class: 'dev-more', open: open || null },
-    el('summary', {}, icone('chevron-direita'), el('span', {}, `Na fila, ainda não prontos · ${items.length}`), el('span', { class: 'dev-more-tags' }, ...items.map(tag))),
+    el('summary', { 'data-focus': 'more' }, icone('chevron-direita'), el('span', {}, `Na fila, ainda não prontos · ${items.length}`), el('span', { class: 'dev-more-tags' }, ...items.map(tag))),
     el(
       'ul',
       { class: 'dev-more-list' },
@@ -377,7 +377,7 @@ function footer(view, now) {
 /** The GitHub-down band's text: the hour of the cache shown, and why. Stable between re-reads. */
 export function staleText(view) {
   if (!view?.stale) return null;
-  const when = view.readAt ? `Mostrando a leitura das ${HOUR.format(new Date(view.readAt))}.` : 'Ainda não há leitura guardada.';
+  const when = Number.isFinite(Date.parse(view.readAt ?? '')) ? `Mostrando a leitura das ${HOUR.format(new Date(view.readAt))}.` : 'Ainda não há leitura guardada.';
   return `${when}${view.staleReason ? ` ${view.staleReason}.` : ''} Tentamos de novo a cada 30 s.`;
 }
 
@@ -387,8 +387,10 @@ function truncatedNote(view) {
 }
 
 /** What identifies a focusable node across re-renders: tag, link and text. */
-const focusKey = (node) => (node ? `${node.tagName}|${node.getAttribute?.('href') ?? ''}|${node.textContent}` : null);
-/** The focusable nodes of the screen, in document order. */
+// `data-focus` where the text changes between reads (minutes, counts); otherwise the link, and the
+// text only for what has neither (the Atualizar button). Never the text of a node that has an id.
+const focusKey = (node) => (node ? `${node.tagName}|${node.getAttribute?.('data-focus') ?? node.getAttribute?.('href') ?? node.textContent}` : null);
+/** The focusable nodes of the screen, links then buttons then summaries: the same order before and after a re-render. */
 const focusables = (area) => [...area.querySelectorAll('a'), ...area.querySelectorAll('button'), ...area.querySelectorAll('summary')];
 
 export async function montar(area, ctx) {
@@ -438,7 +440,7 @@ export async function montar(area, ctx) {
     const contexts = overview?.contexts ?? [];
     const current = state.tab === 'context' ? (state.context ?? contexts[0]?.id) : null;
     const tab = (label, target, on, iconName = null) => {
-      const a = el('a', { class: 'dev-tab', href: screenRoute(target), 'aria-current': on ? 'page' : null }, iconName ? icone(iconName) : null, label);
+      const a = el('a', { class: 'dev-tab', href: screenRoute(target), 'data-focus': `tab:${target.tab === MERGE_QUEUE_TAB ? MERGE_QUEUE_TAB : target.context}`, 'aria-current': on ? 'page' : null }, iconName ? icone(iconName) : null, label);
       a.addEventListener('click', (ev) => {
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
         ev.preventDefault?.();

@@ -176,14 +176,19 @@ export class DevConsoleSessions {
     }
     // Sessions that ended today count too: a decision taken at 09:00 stays "taken today" after its session completes at 09:30.
     if (this.decisions) {
-      for (const ended of await this.frota.encerradasHoje()) {
-        if (scanned.has(ended.id)) continue;
-        const session = await this.frota.storage.getSession(ended.id);
-        if (!session) continue;
-        const { repo } = await this.where(session);
-        if (!repo || !repos.has(repo)) continue;
-        await this.decisionsTakenToday(session.id, repo, today, now, (item) => push(decisionsToday, repo, item));
-      }
+      const ended = (await this.frota.encerradasHoje()).filter((e) => !scanned.has(e.id));
+      const found = await Promise.all(
+        ended.map(async (e) => {
+          const session = await this.frota.storage.getSession(e.id);
+          if (!session) return [];
+          const { repo } = await this.where(session);
+          if (!repo || !repos.has(repo)) return [];
+          const items: DecisionTodayItem[] = [];
+          await this.decisionsTakenToday(session.id, repo, today, now, (item) => items.push(item));
+          return items;
+        }),
+      );
+      for (const item of found.flat()) push(decisionsToday, item.repo, item);
     }
     for (const list of dependsOnYou.values()) list.sort((a, b) => a.since.localeCompare(b.since));
     return { byRepo, dependsOnYou, decisionsToday };

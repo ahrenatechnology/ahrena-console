@@ -44,7 +44,7 @@ const screen = await import(
   // @ts-expect-error: idem
   '../../ui/telas/dev-console.js'
 );
-const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, isContextId, montar, queueNote, reasonLabel, reasonTone, reviewLabel, safeHref, scoreboardCards, screenRoute, stateFromSearch, touchesDevConsole } = screen;
+const { ago, apiRoute, ciLabel, clockTime, DEV_COLUMNS, dependsOnYouCard, isContextId, montar, queueNote, reasonLabel, reasonTone, reviewLabel, safeHref, scoreboardCards, staleText, screenRoute, stateFromSearch, touchesDevConsole } = screen;
 
 const FILES = ['telas/dev-console.js', 'telas/dev-console.css'];
 
@@ -222,6 +222,7 @@ describe('Dev Console: pure parts', () => {
     assert.equal(d.href, '/ui/sessoes/permission');
     const suggested = dependsOnYouCard({ kind: 'suggested-decision', choice: '10 cards por coluna', alternatives: ['20 por coluna'], title: 'Kanban', repo: 'a/b', sessionId: 's', minutes: 6, issue: null });
     assert.deepEqual([suggested.title, suggested.text], ['Decisão sugerida: 10 cards por coluna', 'Alternativa: 20 por coluna · de Kanban']);
+    assert.equal(dependsOnYouCard({ kind: 'suggested-decision', choice: 'x', alternatives: ['y'], title: 'Kanban', repo: 'a/b', sessionId: 's', minutes: 6, issue: 61 }).text, 'Alternativa: y · de Kanban · #61');
     assert.deepEqual(v.mergeQueue.map((q) => queueNote(q, v.mergeQueue)), ['fecha #31', 'fecha #58 · base de #84', 'empilhado em #79']);
   });
 
@@ -460,6 +461,44 @@ describe('Dev Console mounted on the simulator data', () => {
     await until(() => m.reads.length === 4);
     await new Promise((r) => setTimeout(r, 20));
     assert.ok((document.activeElement as unknown as ElementoFalso).closest('.dev-board'), 'focus stays on the board copy');
+  });
+
+  test('#179/AC-2 the focus stays on a depends-on-you card whose minutes change, and on a tab whose count changes', async () => {
+    const read = readerOf(() => devConsole);
+    let shrink = false;
+    const m = mount(async (r) => {
+      const body = (await read(r)) as { mergeQueue: unknown[]; contexts?: unknown };
+      if (shrink && r === '/api/dev-console') body.mergeQueue = body.mergeQueue.slice(0, 1);
+      return body;
+    });
+    await m.ready;
+    const card = m.area.querySelector('.dev-depend')!;
+    const before = texto(card.querySelector('.dev-depend-foot b'));
+    card.focus();
+    now.add(2 * 60_000);
+    m.restart();
+    await until(() => m.reads.length === 4);
+    await new Promise((r) => setTimeout(r, 20));
+    const again = document.activeElement as unknown as ElementoFalso;
+    assert.ok(again.classList.contains('dev-depend'), 'focus on a depends-on-you card');
+    assert.equal(again.getAttribute('data-focus'), card.getAttribute('data-focus'));
+    assert.notEqual(texto(again.querySelector('.dev-depend-foot b')), before, 'the minutes changed');
+
+    const queueTab = m.area.querySelectorAll('.dev-tab').find((t) => t.getAttribute('data-focus') === 'tab:merge-queue')!;
+    assert.equal(texto(queueTab), 'Fila de merge · 3');
+    queueTab.focus();
+    shrink = true;
+    m.restart();
+    await until(() => m.reads.length === 6);
+    await new Promise((r) => setTimeout(r, 20));
+    const tab = document.activeElement as unknown as ElementoFalso;
+    assert.equal(tab.getAttribute('data-focus'), 'tab:merge-queue');
+    assert.equal(texto(tab), 'Fila de merge · 1', 'the count changed and the focus stayed');
+  });
+
+  test('#179/AC-4 a bad readAt does not break the GitHub-down band', () => {
+    assert.match(staleText({ stale: true, readAt: 'não é data', staleReason: null }), /^Ainda não há leitura guardada\./);
+    assert.equal(staleText({ stale: false }), null);
   });
 
   test('#179/AC-1 tab switch: loading at once, and the last tab clicked wins over a late answer', async () => {
