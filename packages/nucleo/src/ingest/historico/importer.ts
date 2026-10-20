@@ -26,7 +26,7 @@ import {
 } from './files.ts';
 import { parseLine, truncate, TASK_MAX, type EventData } from './transcript.ts';
 import { aggregateUsage, bucketKey, type UsageSample } from './usage.ts';
-import { aplicarPiso } from '../../custo/piso.ts';
+import { applyFloor } from '../../cost/floor.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
 import { updateContextMeters } from '../../context/recording.ts';
 
@@ -226,7 +226,7 @@ class SessionImport {
     for (const b of buckets) {
       const prev = existing.get(bucketKey(b));
       // Piso da compactação (item 1.6): se a contagem viva caiu, o que sumiu vai para o piso.
-      await this.storage.putTokenUsage({ ...b, baseline: aplicarPiso(prev, b.tokens), updatedAt });
+      await this.storage.putTokenUsage({ ...b, baseline: applyFloor(prev, b.tokens), updatedAt });
     }
     return byAgent;
   }

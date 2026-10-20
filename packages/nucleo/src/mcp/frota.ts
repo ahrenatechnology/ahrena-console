@@ -5,12 +5,12 @@
 // - Vivas: as `active` e `error` da porta, com `readInbox` (1.5). Guardadas por `cacheMs`, e
 //   chamadas ao mesmo tempo esperam a mesma leitura.
 // - Encerradas hoje: `completed` e `abandoned` com a última atividade hoje, no fuso da máquina.
-// - Custo de hoje: `agregarCusto` (1.6) do dia, recalculado no máximo a cada `custoMs`.
+// - Today's cost: the day's `aggregateCost` (1.6), recomputed at most every `custoMs`.
 // - Conta: `Contas.daSessao` (decisão 0006), a mesma instância do painel quando o núcleo a
 //   passa, para o rótulo "conta 1" ser o mesmo nas duas superfícies.
 
 import { basename } from 'node:path';
-import { agregarCusto, diaDe, type RelatorioDeCusto } from '../custo/agregacao.ts';
+import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import { readInbox, type InboxState, type InboxReading } from '../states/inbox.ts';
 import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -89,7 +89,7 @@ export class LeituraDaFrota {
   private readonly resumos: ResumosDeSessao;
   private vivasCache: { em: number; itens: SessaoDaFrota[] } | null = null;
   private vivasRodando: Promise<SessaoDaFrota[]> | null = null;
-  private custoCache: { em: number; dia: string; relatorio: RelatorioDeCusto } | null = null;
+  private custoCache: { em: number; dia: string; relatorio: CostReport } | null = null;
 
   constructor({ storage, contas, desktop = null, agora = Date.now, fusoHorario, cacheMs = 2_000, custoMs = 30_000 }: OpcoesDaFrota) {
     this.storage = storage;
@@ -103,7 +103,7 @@ export class LeituraDaFrota {
   }
 
   hoje(): string {
-    return diaDe(new Date(this.agora()).toISOString(), this.fusoHorario);
+    return dayOf(new Date(this.agora()).toISOString(), this.fusoHorario);
   }
 
   /** As sessões `active` e `error`, com o estado do inbox e a conta. Mais recentes primeiro. */
@@ -136,11 +136,11 @@ export class LeituraDaFrota {
     return out;
   }
 
-  async custoDeHoje(): Promise<RelatorioDeCusto> {
+  async custoDeHoje(): Promise<CostReport> {
     const dia = this.hoje();
     const c = this.custoCache;
     if (c && c.dia === dia && this.agora() - c.em < this.custoMs) return c.relatorio;
-    const relatorio = await agregarCusto(this.storage, { desde: dia, ate: dia, fusoHorario: this.fusoHorario });
+    const relatorio = await aggregateCost(this.storage, { since: dia, until: dia, timeZone: this.fusoHorario });
     this.custoCache = { em: this.agora(), dia, relatorio };
     return relatorio;
   }
@@ -164,7 +164,7 @@ export class LeituraDaFrota {
       const page = await this.storage.listSessions({ ...query, limit: 500, cursor });
       for (const s of page.items) {
         // Mais recentes primeiro: a primeira de antes do dia encerra a busca.
-        if (desdeODia && diaDe(s.updatedAt, this.fusoHorario) < desdeODia) return;
+        if (desdeODia && dayOf(s.updatedAt, this.fusoHorario) < desdeODia) return;
         yield s;
       }
       cursor = page.nextCursor;

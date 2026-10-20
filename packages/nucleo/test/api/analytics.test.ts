@@ -22,7 +22,7 @@ const comUso = (id: string, sessionId: string, createdAt: string, model: string,
 const ferramenta = (id: string, sessionId: string, createdAt: string, type: string, toolName: string, data: unknown = null) =>
   event({ id, sessionId, agentId: null, type, toolName, summary: null, createdAt, data });
 
-// Preços padrão (src/custo/precos-padrao.ts), em US$ por milhão.
+// Default prices (src/cost/default-prices.ts), in US$ per million.
 const OPUS = (1000 * 4 + 1000 * 20 + 3000 * 0.2) / 1e6; // s1, hoje
 const SONNET = (2000 * 2 + 500 * 10) / 1e6; // s1, há 5 dias
 const HAIKU = (10_000 * 0.1 + 2000 * 0.5) / 1e6; // s4, hoje 01:30 UTC (ontem em São Paulo)

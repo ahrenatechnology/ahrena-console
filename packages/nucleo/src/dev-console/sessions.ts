@@ -3,7 +3,7 @@
 // suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
-import { diaDe } from '../custo/agregacao.ts';
+import { dayOf } from '../cost/aggregation.ts';
 import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisoes/porta.ts';
 import { decisionLabel } from '../decisoes/registro.ts';
@@ -203,7 +203,7 @@ export class DevConsoleSessions {
     if (!this.decisions) return;
     const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
     for (const d of page.items) {
-      if (diaDe(d.decidedAt, this.frota.fusoHorario) !== today) break;
+      if (dayOf(d.decidedAt, this.frota.fusoHorario) !== today) break;
       push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutosDesde(d.decidedAt, now) });
     }
   }
