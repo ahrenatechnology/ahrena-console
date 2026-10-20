@@ -50,7 +50,6 @@
     "packages/nucleo/src/config/modelo.ts",
     "packages/nucleo/src/config/projetos.ts",
     "packages/nucleo/src/dono",
-    "packages/nucleo/test/api/gravar-cenarios.ts",
     "scripts/medir-carga.mjs",
     "scripts/medir-esperas.mjs",
     "spikes/app-desktop/src-tauri/src/integracao.rs",

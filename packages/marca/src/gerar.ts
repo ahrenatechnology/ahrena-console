@@ -15,7 +15,7 @@ export const FONTE = new URL('docs/brand/tokens.json', raiz)
 
 // Caminho relativo à raiz do repositório e conteúdo de cada saída.
 export const SAIDAS = {
-  ts: ['packages/marca/gerado/marca.ts', 'spikes/painel-teste/hooks/marca.ts', 'plugins/ahrena-console/hooks/marca.ts'],
+  ts: ['packages/marca/gerado/marca.ts', 'spikes/painel-teste/hooks/marca.ts', 'plugins/ahrena-console/hooks/brand.ts'],
   css: ['packages/marca/gerado/marca.css', 'packages/nucleo/ui/brand.css'],
 }
 
