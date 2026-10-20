@@ -101,9 +101,9 @@ describe('Kanban: funções da tela', () => {
 });
 
 describe('Kanban: registro e arquivos', () => {
-  test('a rota /ui/kanban abre a tela, com o item depois de Sessões', () => {
+  test('a rota /ui/kanban abre a tela, com o item depois de Sessões e do Feed (a ordem do wireframe)', () => {
     const ids = TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id);
-    assert.equal(ids.indexOf('kanban'), ids.indexOf('sessoes') + 1);
+    assert.equal(ids.indexOf('kanban'), Math.max(ids.indexOf('sessoes'), ids.indexOf('feed')) + 1);
     const { tela } = acharTela('/ui/kanban');
     assert.equal(tela.id, 'kanban');
     assert.equal(tela.arquivo, '/ui/telas/kanban.js');

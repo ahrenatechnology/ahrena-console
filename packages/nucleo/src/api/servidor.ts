@@ -15,6 +15,7 @@
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
+// | `GET /api/eventos`            | O feed de atividade, todas as sessões (api/eventos.ts, #94) |
 // | `GET /api/atencao`            | Quem precisa de você, em todas as contas (a bandeja, #87)  |
 // | `GET /api/dashboard`          | Números, agentes ativos e atividade do Dashboard (C1, #27) |
 // | `GET /api/analytics` e `/api/analytics/custo` | A tela Analytics (api/rota-analytics.ts, #95 e #32) |
@@ -49,6 +50,7 @@ import { ehDaUi, responderUi } from './ui.ts';
 import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
+import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
@@ -83,6 +85,8 @@ export interface OpcoesDaApi {
   projeto?: OpcoesDoProjeto;
   /** As leituras do Detalhe da sessão (`/api/sessoes/<id>…`); sem elas, 404. */
   detalhe?: LeiturasDoDetalhe;
+  /** O feed de atividade; liga `GET /api/eventos` (#94). */
+  eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/atencao`. */
   frota?: LeituraDaFrota;
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/custo`. */
@@ -259,6 +263,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
     if (url.pathname === ROTA_DO_MURAL) return responderMural(res, mural);
+    if (url.pathname === ROTA_DOS_EVENTOS && opts.eventos) return responderEventos(res, url, opts.eventos);
     if (url.pathname === ROTA_DA_ATENCAO && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {

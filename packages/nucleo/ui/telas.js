@@ -35,6 +35,15 @@ export const TELAS = [
     arquivo: '/ui/telas/sessoes.js', // #28
   },
   {
+    id: 'feed',
+    rota: '/ui/feed',
+    item: { rotulo: 'Feed de atividade', icone: 'atividade' },
+    titulo: 'Feed de atividade',
+    sub: 'Todos os eventos das sessões, ao vivo',
+    icone: 'atividade',
+    arquivo: '/ui/telas/feed.js', // #94
+  },
+  {
     id: 'kanban',
     rota: '/ui/kanban',
     item: { rotulo: 'Kanban', icone: 'kanban' },
