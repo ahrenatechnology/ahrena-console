@@ -216,12 +216,17 @@ const kanban = createGithubProject({
 });
 const board = await kanban.board();           // raias com os cards; TTL de 2 min
 await kanban.board({ force: true });          // botão de atualizar (mínimo de 30 s)
-await kanban.move(card.itemId, lane.id);      // mutação; devolve o quadro já atualizado
+const r = await kanban.move(card.itemId, lane.id); // mutação; devolve o quadro já atualizado
+r.moved;                                      // { itemId, from, to }: de que raia para qual
 ```
 
-Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens por página, e custa 1 ponto; mover é uma mutação (`updateProjectV2ItemFieldValue`) que devolve o item, e o cache é atualizado com ela, sem reler o Project. Itens sem Status ficam numa raia "Sem status", a primeira, como no GitHub; itens arquivados ficam de fora.
+Cada card traz também `milestone` (o título do marco), `subIssues` (`{ total, completed }`) e `pullRequest` (o PR que fecha a issue, ou o próprio PR, com `ci` e `review`), `null` quando não há. Os três são opcionais no tipo: um quadro guardado antes deles continua válido.
 
-Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
+Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens por página, e custa ~3 pontos por página com o marco, as sub-issues e o PR (estimado pela regra do GitHub; sem o PR, 1); mover é uma mutação (`updateProjectV2ItemFieldValue`) que devolve o item, e o cache é atualizado com ela, sem reler o Project. Itens sem Status ficam numa raia "Sem status", a primeira, como no GitHub; itens arquivados ficam de fora.
+
+Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
+
+A API local expõe o quadro em `GET /api/projeto` e `POST /api/projeto/mover` (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 

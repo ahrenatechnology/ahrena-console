@@ -31,13 +31,23 @@ export function repoDoRemote(remote: string): string | null {
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
+type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
+
+/** CI do último commit, como o painel e o kanban mostram: `ok`, `falhou`, `rodando` ou `null` sem checagens. */
+export function ciDoPr(p: Pick<LinkedPullRequest, 'ci'>): PrDoPainel['ci'] {
+  return !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
+}
+
+/** Review do PR: `aprovado`, `ajustes`, `pendente` (aberto sem decisão) ou `null`. */
+export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrDoPainel['review'] {
+  return p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
+}
+
 function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
   const estado = p.state === 'MERGED' ? 'mergeado' : p.state === 'CLOSED' ? 'fechado' : p.isDraft ? 'rascunho' : 'aberto';
-  const ci = !p.ci ? null : p.ci === 'SUCCESS' ? 'ok' : p.ci === 'FAILURE' || p.ci === 'ERROR' ? 'falhou' : 'rodando';
-  const review = p.review === 'APPROVED' ? 'aprovado' : p.review === 'CHANGES_REQUESTED' ? 'ajustes' : p.state === 'OPEN' ? 'pendente' : null;
-  return { numero: p.number, url: p.url, estado, ci, checks: p.checks ?? null, review };
+  return { numero: p.number, url: p.url, estado, ci: ciDoPr(p), checks: p.checks ?? null, review: reviewDoPr(p) };
 }
 
 interface Entrada {
