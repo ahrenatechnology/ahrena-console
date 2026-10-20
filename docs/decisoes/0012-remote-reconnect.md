@@ -1,6 +1,6 @@
 # 0012 · Reconectar a máquina remota pelo console, com o comando que o usuário escreveu
 
-- **Status:** proposta, a confirmar pelo Fernando com os wireframes C45 e A8
+- **Status:** aceita (o Fernando aprovou os wireframes C50 e A8 em 20/10, com a saída só no log)
 - **Data:** 2026-10-20
 - **Issue:** [#244](https://github.com/ahrenatechnology/ahrena-console/issues/244)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), "o app só mostra" para a reconexão (seção 3, a linha "Túnel caído", e seção 6, o item "Ações que mudam estado"). O resto da 0008 continua valendo.
@@ -41,19 +41,19 @@ Até aqui o arquivo era lido uma vez, quando o núcleo subia (`src/api/cli.ts`),
 - **O ambiente do usuário.** O processo herda o ambiente do núcleo, que no app já tem o PATH do shell de login (`apps/desktop/src-tauri/src/shell_path.rs`), menos as variáveis do próprio console (`AHRENA_CONSOLE_*` e os nomes antigos). A pasta de trabalho é a pasta do usuário. A entrada padrão é fechada: um comando que pede algo no terminal falha em vez de ficar parado.
 - **Um por máquina de cada vez.** Um segundo pedido para a mesma máquina, de qualquer lugar (a tela, a bandeja, a notificação), recebe o estado do que já roda, sem rodar outro.
 - **Login no navegador.** Se o comando abrir um login (o de um provedor de nuvem, por exemplo), é o navegador do usuário que abre, como no terminal. O console não lê, não preenche e não acompanha esse login: só mostra "aguardando o login no navegador" enquanto o comando não termina.
-- **A saída fica fora da `/ui`.** O stdout e o stderr vão para o log da instalação (o mesmo do núcleo, linha a linha, com o `id` da máquina), porque podem trazer dado sensível: um código de dispositivo, um nome de conta, um caminho. A tela mostra o estado, o tempo, o código de saída e onde está o log.
+- **A saída fica fora da `/ui`.** O stdout e o stderr vão para `reconnect.log`, na pasta de dados da instalação (ao lado do banco, com permissão só do usuário, uma linha por linha de saída, com a hora e o `id` da máquina, podado em 1 MB), porque podem trazer dado sensível: um código de dispositivo, um nome de conta, um caminho. A tela mostra o estado, o tempo, o código de saída e onde está o log.
 - **Ao sair com 0**, o núcleo relê a máquina na hora, sem esperar a volta de 30 s, e a tela volta a "Conectada". Saiu com outro código, ou passou do limite, a tela mostra o que houve e oferece "Tentar de novo".
 
 ### 4. As rotas
 
 - `POST /api/machines/<id>/reconnect`: começa a reconexão, ou devolve a que já roda. Responde `202` com o estado.
 - `DELETE /api/machines/<id>/reconnect`: Cancelar. Encerra o processo do jeito do tempo limite.
-- O estado vai em `GET /api/machines`, por máquina: `reconnect: { configured, state: idle|running|succeeded|failed|timed-out|canceled, startedAt, endedAt, exitCode, timeoutSeconds, command }` (`command` só para a tela mostrar o que vai rodar; nunca a saída). Uma mudança de estado sai em `/api/mudancas`, para a tela e a bandeja reagirem sem recarregar.
+- O estado vai em `GET /api/machines`, por máquina: `reconnect: { configured, state: idle|running|succeeded|failed|timed-out|canceled, startedAt, endedAt, exitCode, timeoutSeconds, command, logFile }` (`command` só para a tela mostrar o que vai rodar, `logFile` para dizer onde está a saída; nunca a saída). Uma mudança de estado sai em `/api/mudancas`, para a tela e a bandeja reagirem sem recarregar.
 - As duas escritas são **exceções de mesma origem da `/ui`**, como as da 0003: só com `Origin` igual ao do próprio núcleo e o `Host` em loopback. Um teste prova que outro `Origin` é recusado com 403 e que nada roda. A bandeja, que não é página, chama a rota como já chama o `POST /open/<local_…>`: sem `Origin` e com o `Host` em loopback, o pedido local que a 0003 já aceita. Um processo local pode fazer o mesmo, mas esse processo já pode rodar o comando direto; o que a defesa fecha é uma página qualquer do navegador disparando o comando.
 
 ### 5. Onde aparece
 
-- **Tela da máquina** (C26 e C45): "Reconectar" na faixa de sem conexão, com a linha do comando que vai rodar; o andamento ("aguardando o login…", o tempo contra o limite, Cancelar); o resultado. Sem `reconnect`, a tela mostra os passos para configurar, sem botão morto.
+- **Tela da máquina** (C26 e C50): "Reconectar" na faixa de sem conexão, com a linha do comando que vai rodar; o andamento ("aguardando o login…", o tempo contra o limite, Cancelar); o resultado. Sem `reconnect`, a tela mostra os passos para configurar, sem botão morto.
 - **Bandeja** (A7 e A8): o item "Reconectar a Workstation" quando ela está sem conexão e tem comando; enquanto roda, uma linha cinza com o tempo. A notificação "<rótulo> sem conexão" ganha a ação Reconectar.
 
 ## Alternativas consideradas
@@ -61,7 +61,7 @@ Até aqui o arquivo era lido uma vez, quando o núcleo subia (`src/api/cli.ts`),
 - **Continuar só mostrando** (a 0008 como está). Perdeu porque a queda é frequente (a credencial do provedor expira todo dia) e a volta é sempre o mesmo comando, digitado fora do console.
 - **O console sobe o túnel sozinho** (abre o SSH, conhece o host, chama o login do provedor). Perdeu pelos mesmos motivos da 0008: credencial e infraestrutura dentro de um núcleo público, um provedor por vez.
 - **Uma linha de comando em texto, rodada num shell** (`"reconnect": "conectar.sh tunnel restart"`). Mais fácil de escrever, mas abre a porta para interpolação e para um texto que muda de sentido com aspas. A lista roda o que está escrito; o shell continua possível, dentro do script do usuário.
-- **Mostrar as últimas linhas da saída na tela.** Ajuda a entender um erro sem abrir o log, mas a saída de um login costuma trazer código de dispositivo, conta e URL. Fica a variante B do C45, para o Fernando decidir; a proposta é deixar fora.
+- **Mostrar as últimas linhas da saída na tela.** Ajuda a entender um erro sem abrir o log, mas a saída de um login costuma trazer código de dispositivo, conta e URL. O Fernando escolheu deixar fora (a variante A do C50): a tela diz o código de saída, o tempo e onde está o log.
 - **Vigiar o arquivo com `fs.watch`.** Mais imediato, mas o `fs.watch` perde eventos com editores que gravam por troca de arquivo e muda de comportamento entre macOS e Linux. Reler pela data de modificação a cada 30 s e antes de reconectar já cobre o "salvei e o botão apareceu".
 
 ## Consequências
