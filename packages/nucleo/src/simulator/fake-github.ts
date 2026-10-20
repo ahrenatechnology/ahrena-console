@@ -509,6 +509,8 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       return { rateLimit, repository: out };
     }
     if (op === 'ReposResumo') return { rateLimit, review: { issueCount: data.awaitingReview }, fechadas: { issueCount: data.closedThisWeek } };
+    if (op === 'RepoDelivery') return delivery(v);
+    if (op === 'RepoDeliveryPage') return { rateLimit, search: empty() };
     if (op === 'RepoDetalhe') {
       const repo = find(v.o, v.r);
       if (!repo) return { rateLimit, repository: null, prs: empty(), fechadas: empty(), abertas: empty(), mergeados: empty(), fechadosSemMerge: empty() };
@@ -543,6 +545,36 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       };
     }
     return null;
+  }
+
+  /** The Delivery tab's read (#266): no author, no assignee, as src/github/delivery-source.ts asks. */
+  function delivery(v: Record<string, string>): unknown {
+    const repo = find(v.o, v.r);
+    if (!repo) return { rateLimit, repository: null, prs: empty(), issues: empty(), open: empty() };
+    const s = seriesOf(repo);
+    const k = `${repo.owner}/${repo.name}`;
+    const prsSince = searchSince(v.prs, 'updated');
+    const issuesSince = searchSince(v.issues, 'updated');
+    const prs = s.prs
+      .filter((p) => (p._updated as number) >= prsSince)
+      .map((p) => {
+        const reviews = p.reviews as { totalCount: number; nodes: { createdAt: string }[] };
+        const first = reviews.nodes[0] ? Date.parse(reviews.nodes[0].createdAt) : 0;
+        return { createdAt: p.createdAt, mergedAt: p.mergedAt, reviews: { nodes: Array.from({ length: reviews.totalCount }, (_, j) => ({ submittedAt: iso(first + j * 3_600_000) })) } };
+      });
+    const open = deliveryOpenItems(repo, s, now());
+    const openIssues = open.filter((o) => o.__typename === 'Issue');
+    const issues = [
+      ...s.closed.filter((i) => Date.parse(i.closedAt as string) >= issuesSince).map((i) => ({ createdAt: i.createdAt, closedAt: i.closedAt })),
+      ...openIssues.filter((i) => Date.parse(i.createdAt) >= issuesSince).map((i) => ({ createdAt: i.createdAt, closedAt: null })),
+    ];
+    return {
+      rateLimit,
+      repository: { nameWithOwner: k, issues: { totalCount: repo.issues }, pullRequests: { totalCount: repo.prs } },
+      prs: page(prs),
+      issues: page(issues),
+      open: { issueCount: open.length, nodes: open.slice(0, 50) },
+    };
   }
 
   function rest(path: string): { status: number; body?: unknown } {
@@ -666,6 +698,61 @@ function buildGit(repo: FakeRepo): GitFake {
   }
   const tree = oidOf(`tree ${[...oids].sort().map(([p, o]) => `${p}:${o}`).join('\n')}`);
   return { files, oids, folders, tree, commit: oidOf(`commit ${repo.owner}/${repo.name}:${tree}`) };
+}
+
+const OPEN_TITLES = [
+  'Exportar o relatório em CSV',
+  'Trocar o motor de templates',
+  'Retry com backoff na fila',
+  'Separar pagamentos em serviços',
+  'Cache das consultas do catálogo',
+  'Migração do esquema de pedidos',
+  'Paginação na listagem de itens',
+  'Mensagem de erro mais clara no login',
+  'Atualizar as dependências de build',
+  'Teste de carga do endpoint de busca',
+  'Documentar a configuração local',
+  'Filtro por data no histórico',
+] as const;
+
+/**
+ * A repository's open PRs and issues for the Delivery tab (#266), the oldest first: the series' open
+ * PRs (the newest, `repo.prs`) and `repo.issues` issues opened up to 60 days ago, with synthetic
+ * titles and states. Deterministic by repository.
+ */
+function deliveryOpenItems(repo: FakeRepo, s: Series, now: number) {
+  const r = new SeededRandom(`${repo.owner}/${repo.name}:open`);
+  const url = `https://github.com/${repo.owner}/${repo.name}`;
+  const prs = s.prs
+    .filter((p) => p.state === 'OPEN')
+    .map((p, i) => {
+      const number = 200 + i * 3;
+      const draft = i % 4 === 1;
+      const ci = repo.ci === 'FAILURE' && i === 0 ? 'FAILURE' : 'SUCCESS';
+      return {
+        __typename: 'PullRequest' as const,
+        number,
+        title: OPEN_TITLES[(number + repo.name.length) % OPEN_TITLES.length],
+        url: `${url}/pull/${number}`,
+        createdAt: p.createdAt as string,
+        isDraft: draft,
+        reviewDecision: i % 3 === 2 ? ('APPROVED' as const) : ('REVIEW_REQUIRED' as const),
+        commits: { nodes: [{ commit: { statusCheckRollup: { state: ci } } }] },
+      };
+    });
+  const issues = Array.from({ length: repo.issues }, (_, i) => {
+    const number = 20 + i * 5;
+    const linked = i % 5 === 2 && prs[0] ? prs[0].number : null;
+    return {
+      __typename: 'Issue' as const,
+      number,
+      title: OPEN_TITLES[(number * 7 + repo.name.length) % OPEN_TITLES.length],
+      url: `${url}/issues/${number}`,
+      createdAt: iso(now - r.int(1, 60 * 24) * 3_600_000),
+      closedByPullRequestsReferences: { nodes: linked ? [{ number: linked, state: 'OPEN' }] : [] },
+    };
+  });
+  return [...prs, ...issues].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
 const empty = () => ({ issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] });
@@ -830,6 +917,29 @@ export function fakeFrameworkRepo(fullName: string = DEFAULT_FRAMEWORK_REPO): Fa
   }
   return { owner, name, isPrivate: false, language: 'Markdown', permission: 'READ', pushMin: 60, issues: 0, prs: 0, ci: 'SUCCESS', commitsPerWeek: 5, files };
 }
+
+/**
+ * The Delivery tab's fake GitHub (#266): the demo's repositories plus one that no simulated session
+ * works in (`portal-de-ajuda` is not a simulator project), so the tab shows a repository without Claude
+ * hours. Only the Delivery read uses it; the Repositories screen keeps `DEMO_GITHUB_DATA`.
+ */
+export const DEMO_DELIVERY_GITHUB_DATA: FakeGithubData = {
+  ...DEMO_GITHUB_DATA,
+  repos: [
+    ...DEMO_GITHUB_DATA.repos,
+    { owner: 'estudio-ficticio', name: 'portal-de-ajuda', isPrivate: true, language: 'TypeScript', permission: 'WRITE', pushMin: 5 * 60, issues: 5, prs: 2, ci: 'SUCCESS', commitsPerWeek: 7 },
+  ],
+};
+
+/**
+ * The demo's GitHub Projects for the Delivery tab (#266, wireframe C55): three projects over the
+ * Delivery fake's repositories, with `gateway-sandbox` in two of them. The key is the Project's `owner/number`.
+ */
+export const DEMO_DELIVERY_PROJECTS: { key: string; label: string; repos: string[] }[] = [
+  { key: 'exemplo-labs/7', label: 'Loja de exemplo', repos: ['exemplo-labs/vitrine-demo', 'estudio-ficticio/catalogo-exemplo', 'exemplo-labs/gateway-sandbox'] },
+  { key: 'exemplo-labs/8', label: 'Plataforma de regras', repos: ['exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox'] },
+  { key: 'estudio-ficticio/2', label: 'Métricas', repos: ['exemplo-labs/painel-de-metricas', 'estudio-ficticio/app-receitas', 'estudio-ficticio/portal-de-ajuda'] },
+];
 
 /** The demo's fake git: `/simulacao/<project>` is a clone of the repository with the same name, if there is one. */
 export function demoGit(data: FakeGithubData = DEMO_GITHUB_DATA) {

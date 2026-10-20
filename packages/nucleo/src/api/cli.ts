@@ -78,6 +78,7 @@ import {
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
+import { createCoreDelivery } from './delivery-github.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreDecisions } from './adrs.ts';
@@ -358,6 +359,22 @@ mcp.server.register(waitForChanges({ changes, accounts }));
 // A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
 const githubQueue = new GithubCallQueue();
 const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
+// The Analytics Delivery tab (#266): the same GitHub cache and queue, the Repositories screen's session → repository,
+// the project kanban's Project (the demo has its own synthetic ones) and the account's repository list.
+const delivery = createCoreDelivery({
+  demo,
+  noGithub: o.noGithub,
+  cache: githubCache,
+  queue: githubQueue,
+  changes,
+  sessions: repos.sessions,
+  boards: async () => (kanban ? [await kanban.board()] : []),
+  accountRepos: async () => {
+    const l = await repos.repos.lista();
+    return l.groups.flatMap((g) => g.repos.map((r) => ({ fullName: r.fullName, lastPush: r.lastPush })));
+  },
+  log,
+});
 // The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
 // Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
@@ -494,7 +511,7 @@ const api: LocalApi = await startLocalApi({
   events: new FeedDeEventos({ storage }),
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
-  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current }),
+  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
   sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),

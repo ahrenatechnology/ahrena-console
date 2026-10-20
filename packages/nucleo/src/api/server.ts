@@ -17,7 +17,7 @@
 // | `GET /api/events`             | The activity feed, all sessions (api/events.ts, #94)      |
 // | `GET /api/attention`          | Who needs you, across all accounts (the tray, #87)        |
 // | `GET /api/dashboard`          | The Dashboard's numbers, active agents and activity (C1, #27) |
-// | `GET /api/analytics` and `/api/analytics/cost` | The Analytics screen (`?tz=`, `?days=`; api/analytics-route.ts, #95 and #32) |
+// | `GET /api/analytics`, `/api/analytics/cost` and `/api/analytics/delivery` | The Analytics screen (`?tz=`, `?days=`, `?groupBy=`, `?key=`; api/analytics-route.ts, #95, #32 and #266) |
 // | `GET /api/sessions`           | The Sessions screen's list, paginated and filtered (api/sessions.ts, #28) |
 // | `GET /api/history`            | The ended sessions by day (`?before=`, `?days=`, `?search=`; api/history.ts, #33) |
 // | `GET /ui` and `/ui/*`         | The console's interface (api/ui.ts, folder `ui/`, #26)    |
