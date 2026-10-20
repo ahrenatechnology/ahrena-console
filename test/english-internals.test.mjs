@@ -4,7 +4,7 @@
 // What already existed when the rule was written is frozen in english-internals.legacy.json
 // and leaves that list as the migration phases rename it.
 //
-// Run with: node --test test/
+// Run with: node --test 'test/*.test.mjs'
 // Freeze the names of a tree (adds to the legacy list, never removes):
 //   FREEZE_LEGACY_NAMES=1 ROOT=<checkout> node --test test/english-internals.test.mjs
 import { test } from 'node:test'

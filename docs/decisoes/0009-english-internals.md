@@ -59,7 +59,7 @@ Enquanto não houver confirmação, o guarda **não olha** `docs/` nem comentár
 
 ## O guarda
 
-`test/english-internals.test.mjs`, que roda com `node --test test/` e no CI (`repo-tests`), recusa o que é **novo** e está em português:
+`test/english-internals.test.mjs`, que roda com `node --test 'test/*.test.mjs'` e no CI (`repo-tests`), recusa o que é **novo** e está em português:
 
 - rotas da API e URLs da /ui escritas em `packages/nucleo/src`, `packages/nucleo/ui` e `apps/desktop`;
 - nomes de arquivo e de pasta (fora de `docs/` e de `plugins/`, que é do mod e migra no ritmo dele);
