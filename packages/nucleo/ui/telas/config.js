@@ -18,7 +18,7 @@ import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 export const NOME_DE_SKILL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const ABAS = [
-  { id: 'visao', rotulo: 'Visão geral', icone: 'layout-grid' },
+  { id: 'visao', rotulo: 'Visão geral', icone: 'mural' },
   { id: 'skills', rotulo: 'Skills', icone: 'sparkles', resumo: 'skills' },
   { id: 'subagentes', rotulo: 'Subagentes', icone: 'users', resumo: 'subagentes' },
   { id: 'comandos', rotulo: 'Comandos', icone: 'slash', resumo: 'comandos' },
@@ -196,7 +196,7 @@ export async function montar(area, ctx) {
       irPara({ aba: url.aba, projeto: select.value });
       carregar();
     });
-    lugarDoProjeto.replaceChildren(el('label', { class: 'cfg-projeto-rotulo' }, icone('folder'), select));
+    lugarDoProjeto.replaceChildren(el('label', { class: 'cfg-projeto-rotulo' }, icone('pasta'), select));
   }
 
   // ---------- Navegação dentro da tela ----------
@@ -253,7 +253,7 @@ export async function montar(area, ctx) {
         area.replaceChildren(
           cab,
           vazio({
-            icone: 'folder',
+            icone: 'pasta',
             titulo: 'Projeto desconhecido',
             texto: `${pedido} não está entre os projetos das sessões desta máquina.`,
             acao: { rotulo: 'Abrir o projeto mais recente', aoClicar: () => (irPara({ aba: url.aba }), carregar()) },
@@ -307,7 +307,7 @@ export async function montar(area, ctx) {
     const botaoBackups = el(
       'button',
       { type: 'button', class: 'btn contorno', 'data-foco': 'backups', 'aria-expanded': String(estado.backupsAbertos), 'aria-controls': estado.backupsAbertos ? 'cfg-backups' : null },
-      icone('history'),
+      icone('historico'),
       'Backups',
     );
     botaoBackups.addEventListener('click', () => ((estado.backupsAbertos = !estado.backupsAbertos), desenhar()));
@@ -328,7 +328,7 @@ export async function montar(area, ctx) {
           'section',
           { class: 'cartao cfg-painel', id: 'cfg-backups' },
           el('div', { class: 'olhinho' }, 'Backups'),
-          d.backups ? cartaoDeCaminho('Pasta dos backups', d.backups, 'history') : el('p', { class: 'cfg-mudo' }, 'O núcleo não informou a pasta dos backups.'),
+          d.backups ? cartaoDeCaminho('Pasta dos backups', d.backups, 'historico') : el('p', { class: 'cfg-mudo' }, 'O núcleo não informou a pasta dos backups.'),
           estado.backupsDaJanela.length
             ? el('ul', { class: 'cfg-backups' }, ...estado.backupsDaJanela.map((b) => el('li', { class: 'mono' }, b)))
             : el('p', { class: 'cfg-mudo' }, 'Nenhuma gravação com backup nesta janela ainda.'),
@@ -364,7 +364,7 @@ export async function montar(area, ctx) {
 
   function cartaoDeCaminho(rotulo, caminho, ic) {
     const texto = el('div', { class: 'mono cfg-trunc cfg-caminho cfg-corta-inicio', title: caminho }, el('bdi', { dir: 'ltr' }, caminho));
-    const copiar = el('button', { type: 'button', class: 'cfg-copiar', title: `Copiar ${caminho}`, 'aria-label': `Copiar o caminho de ${rotulo}` }, icone('copy'));
+    const copiar = el('button', { type: 'button', class: 'cfg-copiar', title: `Copiar ${caminho}`, 'aria-label': `Copiar o caminho de ${rotulo}` }, icone('copiar'));
     copiar.addEventListener('click', () => copiarTexto(caminho, copiar, texto));
     return el(
       'div',
@@ -396,9 +396,9 @@ export async function montar(area, ctx) {
             ]),
       );
     };
-    const busca = el('input', { type: 'search', 'data-foco': 'busca', class: 'cfg-entrada', placeholder: 'Buscar skills…', 'aria-label': 'Buscar skills', value: estado.busca, autocomplete: 'off', spellcheck: 'false' });
+    const busca = el('input', { type: 'buscar', 'data-foco': 'busca', class: 'cfg-entrada', placeholder: 'Buscar skills…', 'aria-label': 'Buscar skills', value: estado.busca, autocomplete: 'off', spellcheck: 'false' });
     busca.addEventListener('input', () => ((estado.busca = busca.value), desenharLista()));
-    const nova = el('button', { type: 'button', class: 'btn cheio', 'data-foco': 'nova', 'aria-expanded': String(!!estado.nova) }, icone('plus'), 'Nova');
+    const nova = el('button', { type: 'button', class: 'btn cheio cfg-acao', 'data-foco': 'nova', 'aria-expanded': String(!!estado.nova) }, icone('plus'), 'Nova');
     nova.addEventListener('click', () => {
       const primeira = raizesDeSkill(d)[0];
       estado.nova = estado.nova ? null : { nome: '', raiz: primeira?.id ?? null, erro: null };
@@ -409,7 +409,7 @@ export async function montar(area, ctx) {
     return el(
       'div',
       { class: 'cfg-skills' },
-      el('div', { class: 'cfg-coluna' }, el('div', { class: 'cfg-busca-linha' }, el('label', { class: 'cfg-campo' }, icone('search'), busca), nova), estado.nova ? formularioNova(d) : null, lista),
+      el('div', { class: 'cfg-coluna' }, el('div', { class: 'cfg-busca-linha' }, el('label', { class: 'cfg-campo' }, icone('buscar'), busca), nova), estado.nova ? formularioNova(d) : null, lista),
       editor(),
     );
   }
@@ -513,7 +513,7 @@ export async function montar(area, ctx) {
         'div',
         { class: 'cfg-pe' },
         el('button', { type: 'button', class: 'btn contorno cfg-empurra', aoClicar: () => ((estado.nova = null), (focoPedido = 'nova'), desenhar()) }, 'Cancelar'),
-        el('button', { type: 'submit', class: 'btn cheio', disabled: !opcoes.length }, icone('plus'), 'Criar'),
+        el('button', { type: 'submit', class: 'btn cheio cfg-acao', disabled: !opcoes.length }, icone('plus'), 'Criar'),
       ),
     );
     form.addEventListener('submit', (ev) => {
@@ -572,7 +572,7 @@ export async function montar(area, ctx) {
     });
     texto.value = ed.texto;
     const estadoPe = el('span', { class: 'cfg-mudo cfg-estado-pe', 'aria-live': 'polite' });
-    const salvar = el('button', { type: 'button', class: 'btn cheio' }, icone('save'), ed.salvando ? 'Salvando…' : 'Salvar com backup');
+    const salvar = el('button', { type: 'button', class: 'btn cheio cfg-acao' }, icone('save'), ed.salvando ? 'Salvando…' : 'Salvar com backup');
     const atualizarPe = () => {
       salvar.disabled = !podeSalvar(ed);
       estadoPe.replaceChildren(
@@ -612,7 +612,7 @@ export async function montar(area, ctx) {
       el('div', { class: 'cfg-ttl' }, icone('file-text'), el('span', { class: 'cfg-trunc' }, `${ed.nome} / SKILL.md`), el('span', { class: 'cfg-ttl-r' }, `${ROTULO_DO_ESCOPO[ed.escopo] ?? ed.escopo} · ${quando}`)),
       caminhoEl(ed.caminho),
       ed.erro ? faixaDeErro(ed.erro) : null,
-      ed.aviso ? el('div', { class: 'cfg-ok', role: 'status' }, icone('check'), el('p', {}, ed.aviso)) : null,
+      ed.aviso ? el('div', { class: 'cfg-ok', role: 'status' }, icone('feito'), el('p', {}, ed.aviso)) : null,
       texto,
       el(
         'div',
@@ -621,7 +621,7 @@ export async function montar(area, ctx) {
         fechar,
         ed.modo === 'ver'
           ? editavel
-            ? el('button', { type: 'button', class: 'btn cheio', 'data-foco': 'editar', disabled: ed.carregando || !ed.versao, aoClicar: () => trocarPara(ed, 'editar') }, icone('pencil'), 'Editar')
+            ? el('button', { type: 'button', class: 'btn cheio cfg-acao', 'data-foco': 'editar', disabled: ed.carregando || !ed.versao, aoClicar: () => trocarPara(ed, 'editar') }, icone('pencil'), 'Editar')
             : null
           : salvar,
       ),
@@ -743,12 +743,12 @@ function copiarTexto(texto, botao, alvo) {
   const voltar = () => {
     botao.classList.remove('ok');
     botao.setAttribute('aria-label', rotuloOriginal);
-    botao.replaceChildren(icone('copy'));
+    botao.replaceChildren(icone('copiar'));
   };
   const mostrar = (rotulo, ok) => {
     botao.setAttribute('aria-label', rotulo);
     botao.classList.toggle('ok', ok);
-    botao.replaceChildren(icone(ok ? 'check' : 'copy'), el('span', {}, rotulo));
+    botao.replaceChildren(icone(ok ? 'feito' : 'copiar'), el('span', {}, rotulo));
     setTimeout(voltar, 1600);
   };
   const selecionar = () => {

@@ -251,6 +251,15 @@ describe('escrever(rota, corpo): a escrita da /ui (#63)', () => {
 });
 
 describe('tela Agent Config (#63): registro e funções puras', () => {
+  // O CSS de cada tela fica carregado depois que ela abre uma vez: um seletor sem a classe própria
+  // (`cfg-…`) vazaria para as outras telas (regras da /ui, item 1).
+  test('todo seletor de config.css passa por uma classe cfg-', () => {
+    const css = readFileSync(`${PASTA_DA_UI}config.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const seletores = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1]!.split(',')).map((s) => s.trim()).filter((s) => s && !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s));
+    assert.ok(seletores.length > 20);
+    assert.deepEqual(seletores.filter((s) => !s.includes('.cfg-')), []);
+  });
+
   test('registrada em /ui/config, com o item Agent Config (ícone bot) e o arquivo em telas/', () => {
     const achada = acharTela('/ui/config');
     assert.equal(achada.tela.id, 'config');
