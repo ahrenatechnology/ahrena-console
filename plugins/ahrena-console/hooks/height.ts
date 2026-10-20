@@ -3,46 +3,46 @@
 // os outros para o card de resumos. Aqui ficam as medidas e as contas puras.
 
 /** Borda de cima e de baixo de um card. */
-export const BORDA_DO_CARD = 2
+export const CARD_BORDER = 2
 /**
  * Linhas internas de todo card: a mesma altura para todos, ~190 px no Desktop. Uma linha do Desktop
  * tem ~19 px; o card tem 10 linhas, a borda e 8 de conteúdo. A conta, pelo print do Contexto: o
  * cabeçalho e os tiles vão até ~147 px, a linha de pé soma ~23 e o respiro de baixo (2 espaços,
  * ~20 px) fecha em ~190.
  */
-export const LINHAS_DO_CARD = 8
+export const CARD_LINES = 8
 
 /**
  * Um espaço de 1 (`gap`, `rowGap`, `paddingY`), em linhas do corpo. Medido no Desktop: um card de
  * 7 linhas tem ~133 px (19 px por linha) e o espaço entre dois cards, ~10 px.
  */
-export const ESPACO = 0.5
+export const SPACE = 0.5
 
 /** Linhas que a grade ocupa: por linha da grade, a borda mais o card mais alto; e o espaço entre elas. */
-export function alturaDaGrade(linhas: readonly number[], porLinha: number): number {
+export function gridHeight(lines: readonly number[], perRow: number): number {
   let total = 0
-  for (let i = 0; i < linhas.length; i += porLinha) total += BORDA_DO_CARD + Math.max(...linhas.slice(i, i + porLinha))
-  const fileiras = Math.ceil(linhas.length / porLinha)
-  return total + Math.max(0, fileiras - 1) * ESPACO
+  for (let i = 0; i < lines.length; i += perRow) total += CARD_BORDER + Math.max(...lines.slice(i, i + perRow))
+  const rows = Math.ceil(lines.length / perRow)
+  return total + Math.max(0, rows - 1) * SPACE
 }
 
 /** Linhas que um texto ocupa numa largura, quebrando por palavra (estimativa conservadora). */
-export function linhasDoTexto(texto: string, largura: number): number {
-  if (largura <= 0) return 1
-  let linhas = 1
-  let coluna = 0
-  for (const palavra of texto.split(/\s+/).filter(Boolean)) {
-    const n = [...palavra].length
-    if (coluna === 0) coluna = n
-    else if (coluna + 1 + n <= largura) coluna += 1 + n
+export function textLines(text: string, width: number): number {
+  if (width <= 0) return 1
+  let lines = 1
+  let column = 0
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const n = [...word].length
+    if (column === 0) column = n
+    else if (column + 1 + n <= width) column += 1 + n
     else {
-      linhas++
-      coluna = n
+      lines++
+      column = n
     }
-    while (coluna > largura) {
-      linhas++
-      coluna -= largura
+    while (column > width) {
+      lines++
+      column -= width
     }
   }
-  return linhas
+  return lines
 }

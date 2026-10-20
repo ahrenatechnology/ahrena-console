@@ -400,7 +400,7 @@ export class AgentInstructionsService {
   }
 }
 
-/** A rota de `/api/agent-instructions`, registrada no servidor (`OpcoesDaApi.agentInstructions`). Responde só a `GET`. */
+/** A rota de `/api/agent-instructions`, registrada no servidor (`ApiOptions.agentInstructions`). Responde só a `GET`. */
 export type AgentInstructionsRoute = (res: ServerResponse, url: URL) => Promise<void>;
 
 export function createAgentInstructionsRoute(service: AgentInstructionsService): AgentInstructionsRoute {

@@ -35,10 +35,10 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
-npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
+npm run api -- --demo --scenario p4      # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
                                          # o Detalhe da /ui: /ui/sessions/sim-detail-orders (pede permissão) e /ui/sessions/sim-panel-current
                                          # os ids antigos (sim-painel-esta, sim-detalhe-pedidos…) abrem a mesma sessão até a fase 6 da #173 (src/simulator/legacy-ids.ts)
-npm run api -- --help
+npm run api -- --help                    # os nomes antigos (--porta, --banco, --cenario, --sem-github…) valem até a fase 6 da #173
 npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
 
@@ -97,7 +97,7 @@ As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>
 | [legacy-routes.ts](src/api/legacy-routes.ts) | As rotas e os parâmetros antigos, em português, como alias das novas (#173) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
-**Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
+**Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--scan-interval`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
 
 ```bash
 node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1

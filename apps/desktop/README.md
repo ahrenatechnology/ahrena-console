@@ -5,11 +5,11 @@ A bandeja do Ahrena Console na barra de menus do macOS, em Tauri 2 ([decisão 00
 ## O que faz
 
 - **Número ao lado do ícone** (`tray.set_title`): as sessões esperando você ou com erro, em todas as contas. Com zero ou com o núcleo parado, só o ícone template.
-- **Ícone template** em 18 e 36 px (`icons/bandeja.png` e `bandeja@2x.png`, de `bandeja.svg`): o macOS escolhe o nítido para cada tela e o pinta conforme a barra.
+- **Ícone template** em 18 e 36 px (`icons/tray.png` e `tray@2x.png`, de `tray.svg`): o macOS escolhe o nítido para cada tela e o pinta conforme a barra.
 - **Menu**, como os wireframes A1, A2 e A4 (`docs/wireframes/index.html`, ids `app-bandeja-0`, `app-bandeja-3` e `app-parado`): o estado do núcleo, "N precisam de você" com o motivo e o tempo de cada sessão (urgentes primeiro: permissão, pergunta, plano e decisão; depois erro; depois a sua vez), "N ativas", "Abrir o console ⌘O", Notificações, Abrir no login, a versão e Sair.
 - **Clique numa sessão:** por enquanto abre a conversa no Claude Desktop (`POST /open/<local_…>` do núcleo). Com ⌥, cada item vira "Abrir no Claude Desktop" (item alternativo nativo do macOS). Quando a janela do app mostrar a sessão (A5), o clique sem ⌥ passa a abrir lá.
 - **Abrir o console:** uma janela com `http://127.0.0.1:<porta>/ui`. Fechar a janela não fecha o app.
-- **Notificações** (A3, issue #88): uma notificação do sistema quando uma sessão **passa** a precisar de você (entra na lista ou troca de motivo), nunca a cada leitura; ao abrir e ao reencontrar o núcleo, quem já esperava não avisa. Título com a sessão e o motivo ("motor-de-regras pede permissão"), corpo com o que ela pede, som só em Pede permissão, Interrompida e Com erro. O clique e "Abrir" levam a janela a `/ui/sessions/<id>`; "Abrir no Claude Desktop" faz o `POST /open/<local_…>`; "Silenciar" cala só aquela sessão. A marca "Notificações" do menu liga e desliga tudo. As duas coisas ficam no app, não no núcleo: `notificacoes.json` no diretório de dados do app (`~/Library/Application Support/dev.ahrena.console/`). O clique e as ações vêm do `UNUserNotificationCenter`, com a categoria do A3 e a apresentação também com o app em primeiro plano: o plugin de notificação do Tauri tem `on_action` no desktop, mas no macOS só reporta o clique pelo `NSUserNotification` (obsoleto), com as ações num menu "Opções". Fora de um bundle (`cargo run`), o `UNUserNotificationCenter` não pode ser usado e o aviso sai pelo plugin; o app não registra `on_action` nele, por isso fica sem clique nem ações.
+- **Notificações** (A3, issue #88): uma notificação do sistema quando uma sessão **passa** a precisar de você (entra na lista ou troca de motivo), nunca a cada leitura; ao abrir e ao reencontrar o núcleo, quem já esperava não avisa. Título com a sessão e o motivo ("motor-de-regras pede permissão"), corpo com o que ela pede, som só em Pede permissão, Interrompida e Com erro. O clique e "Abrir" levam a janela a `/ui/sessions/<id>`; "Abrir no Claude Desktop" faz o `POST /open/<local_…>`; "Silenciar" cala só aquela sessão. A marca "Notificações" do menu liga e desliga tudo. As duas coisas ficam no app, não no núcleo: `notifications.json` no diretório de dados do app (`~/Library/Application Support/dev.ahrena.console/`); o `notificacoes.json` de uma versão anterior é lido uma vez, gravado com o nome novo e apagado. O clique e as ações vêm do `UNUserNotificationCenter`, com a categoria do A3 e a apresentação também com o app em primeiro plano: o plugin de notificação do Tauri tem `on_action` no desktop, mas no macOS só reporta o clique pelo `NSUserNotification` (obsoleto), com as ações num menu "Opções". Fora de um bundle (`cargo run`), o `UNUserNotificationCenter` não pode ser usado e o aviso sai pelo plugin; o app não registra `on_action` nele, por isso fica sem clique nem ações.
 - **Máquinas** (A6 e A7, issue #180, [decisão 0008](../../docs/decisoes/0008-machine-telemetry-and-dev-console.md) seção 5): um bloco entre quem precisa de você e o pé, lido de `GET /api/machines` e de `GET /api/telemetry?machine=<id>` a cada volta do laço. Uma linha por máquina ("Este Mac" e o rótulo de cada remota do `machines.json`) com a CPU (ou a carga contra os núcleos, quando passa deles) e o volume mais cheio, e um item por alerta aberto; o clique abre a janela em `/ui/machines/<id>`. Remota sem conexão: ponto cinza, "sem conexão há N min" (de `lastReadAt`) e uma linha com o que o núcleo viu, sem item para subir o túnel. As sessões remotas que esperam entram na lista de cima com o rótulo da máquina e sem o ⌥ "Abrir no Claude Desktop". O número da barra continua só de sessões. Um alerta novo, ou uma máquina que cai, notifica uma vez, na passagem e sem som, sob a mesma marca "Notificações". Sem `machines.json`, só "Este Mac"; com um núcleo sem telemetria (404 ou lista vazia), o bloco não aparece.
 - **Abrir no login:** registra o app pelo `SMAppService.mainApp` (macOS 13+, sem LaunchAgent) e fica marcado só com o registro ligado; aberto pelo login, fica só na bandeja, e aberto à mão abre também o console.
 - **Atualizar para a versão X:** com a chave do updater no app, ele procura versão nova ao abrir e a cada 6 h; se houver, o item aparece logo abaixo da versão e o clique baixa, confere a assinatura, instala e relança. Sem a chave (builds locais), o item nunca aparece.
@@ -41,7 +41,7 @@ Um núcleo por instalação, em porta aleatória ([decisão 0010](../../docs/dec
    ```
 
    A pasta de dados vem do Tauri (`app_data_dir`, a do identificador `dev.ahrena.console`). O dono **sobe** o núcleo em segundo plano numa porta que o sistema escolhe, ou **adota** o que já roda naquela pasta de dados (só a do app). O app lê da linha `--json` a `porta`, o `pid`, o `subiu`, e confere `installation` (`app`) e `dataDir` (a pasta do app): se vier outra, recusa e mostra o núcleo parado. O app tira do ambiente do núcleo `AHRENA_CONSOLE_DB`, `AHRENA_CONSOLE_DATA_DIR`, `AHRENA_CONSOLE_CORE_PORT` e `AHRENA_CONSOLE_PORT`, que um shell pode exportar para o núcleo de desenvolvimento.
-2. **Pasta de dados:** `~/Library/Application Support/dev.ahrena.console/`, com o banco (`nucleo.sqlite`), o log (`nucleo.log`), os clientes (`clientes/`) e a trava (`nucleo.json`), além do `notificacoes.json` do app. O núcleo se registra em `~/.ahrena-console/instances/app-<pid>.json`, onde os hooks e o mod o acham.
+2. **Pasta de dados:** `~/Library/Application Support/dev.ahrena.console/`, com o banco (`nucleo.sqlite`), o log (`nucleo.log`), os clientes (`clientes/`) e a trava (`nucleo.json`), além do `notifications.json` do app. O núcleo se registra em `~/.ahrena-console/instances/app-<pid>.json`, onde os hooks e o mod o acham.
 3. **Primeira vez:** com o banco do app vazio, o núcleo importa o histórico dos transcripts (`~/.claude/projects`) ao subir, como sempre fez; não precisa de opção.
 4. A bandeja, a janela (`/ui`) e todo pedido HTTP do app só falam com a porta do núcleo que ele subiu ou adotou, e cada conferência de que ele ainda responde olha também o `pid` do `/api/overview`. A porta muda a cada subida: se o núcleo cai e o app sobe outro, a janela aberta passa para a porta nova. Com o núcleo parado ou ainda subindo, "Abrir o console" não abre outro: procura o próprio de novo e abre a janela quando ele responder.
 5. Sem Node (ou com um Node velho): o menu A4, com "Como instalar o Node 24" e "Procurar o núcleo de novo". O app **não** procura núcleo em porta nenhuma e tenta de novo a cada 30 s.
@@ -54,14 +54,14 @@ A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since
 | [src-tauri/src/main.rs](src-tauri/src/main.rs) | A bandeja, o laço do núcleo, os cliques e a janela |
 | [src-tauri/src/menu.rs](src-tauri/src/menu.rs) | O menu como dados, montado do JSON de `/api/attention` (testado sem abrir o app) |
 | [src-tauri/src/machines.rs](src-tauri/src/machines.rs) | As máquinas de `/api/machines` e `/api/telemetry`: a leitura do JSON e os textos curtos da linha, do alerta e do motivo sem conexão (testado sem abrir o app) |
-| [src-tauri/src/nucleo.rs](src-tauri/src/nucleo.rs) | O plano (subir o próprio núcleo, o A4 ou a porta de demonstração), a linha de comando do `start` e a leitura do `start --json`, que recusa o núcleo de outra instalação |
-| [src-tauri/src/notificacoes.rs](src-tauri/src/notificacoes.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
-| [src-tauri/src/aviso_nativo.rs](src-tauri/src/aviso_nativo.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
+| [src-tauri/src/core.rs](src-tauri/src/core.rs) | O plano (subir o próprio núcleo, o A4 ou a porta de demonstração), a linha de comando do `start` e a leitura do `start --json`, que recusa o núcleo de outra instalação |
+| [src-tauri/src/notifications.rs](src-tauri/src/notifications.rs) | Quando avisar (a transição desde a leitura anterior), o título e o som de cada aviso, e o silêncio gravado em JSON (testado sem abrir o app) |
+| [src-tauri/src/native_notice.rs](src-tauri/src/native_notice.rs) | A notificação pelo `UNUserNotificationCenter`: autorização, as ações do A3 e o delegate que responde ao clique |
 | [src-tauri/src/login.rs](src-tauri/src/login.rs) | Abrir no login pelo `SMAppService` e a origem da partida (login ou à mão), testados com um registro falso |
-| [src-tauri/src/nativo.rs](src-tauri/src/nativo.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
+| [src-tauri/src/native.rs](src-tauri/src/native.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
 | [src-tauri/src/http.rs](src-tauri/src/http.rs) | HTTP/1.0 cru com `127.0.0.1` |
-| [src-tauri/src/atualizacao.rs](src-tauri/src/atualizacao.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
-| [src-tauri/tests/configuracao.rs](src-tauri/tests/configuracao.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
+| [src-tauri/src/updater.rs](src-tauri/src/updater.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
+| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
 | [src-tauri/src/shell_path.rs](src-tauri/src/shell_path.rs) | O PATH do shell de login, para achar o `node` aberto pelo Finder |
 
 ## Rodar
@@ -80,7 +80,7 @@ curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
 cd apps/desktop && npm install && npm run build
 ```
 
-O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icones` os refaz do logo. Os da bandeja vêm de `bandeja.svg`: `npx tauri icon src-tauri/icons/bandeja.svg -p 18 -p 36`.
+O `.app` e o `.dmg` saem em `src-tauri/target/release/bundle/`, assinados ad hoc (sem Developer ID). Os ícones já estão em `src-tauri/icons`; `npm run icons` os refaz do logo. Os da bandeja vêm de `tray.svg`: `npx tauri icon src-tauri/icons/tray.svg -p 18 -p 36`.
 
 Testes, sem abrir o app:
 
@@ -97,9 +97,11 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 | `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints. O nome antigo `AHRENA_NUCLEO_PORTA` continua aceito |
 | `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4). O nome antigo `AHRENA_NODE` continua aceito |
 | `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app. O nome antigo `AHRENA_NUCLEO_DIR` continua aceito |
-| `AHRENA_ABRIR_MENU=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
-| `AHRENA_DADOS_DIR=<pasta>` | Grava e lê o `notificacoes.json` nesta pasta em vez do diretório de dados do app |
-| `AHRENA_ORIGEM=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console) |
+| `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints). O nome antigo `AHRENA_ABRIR_MENU` continua aceito |
+| `AHRENA_CONSOLE_DATA_DIR=<pasta>` | Grava e lê o `notifications.json` nesta pasta em vez do diretório de dados do app; o núcleo do app continua na pasta do app. O nome antigo `AHRENA_DADOS_DIR` continua aceito |
+| `AHRENA_CONSOLE_LAUNCH_ORIGIN=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console). O nome antigo `AHRENA_ORIGEM` continua aceito |
+
+Quando vêm o nome novo e o antigo, vale o novo.
 
 Pelo Finder, `open --env` passa as variáveis:
 

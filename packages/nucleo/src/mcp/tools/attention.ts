@@ -9,7 +9,7 @@
 
 import { ArgumentError, type Tool, type JsonObject } from '../protocol.ts';
 import { matchesAccountFilter, minutesSince, MCP_ATTENTION_REASONS, projectOf, type Attention, type McpAttentionGroup, type FleetReader, type McpAttentionReason, type FleetSession } from '../fleet.ts';
-import { LOCAL_DO_DESKTOP } from '../../api/server.ts';
+import { DESKTOP_LOCAL_ID } from '../../api/server.ts';
 import { COMMON_ARGS, ACCOUNT_SCHEMA, objectSchema, timeAgo, parseCommonArgs, arrayOf, strictObject, nullable, paginate, T } from '../output.ts';
 import { outputAccount, accountLabel, type OutputAccount } from './common.ts';
 
@@ -103,7 +103,7 @@ function toItem(s: FleetSession, a: Attention, now: number): AttentionItem {
     errorCode: a.errorCode,
     waitingSince: since,
     waitingMinutes: minutesSince(since, now),
-    open: { resume: `claude --resume ${s.session.id}`, cwd: s.session.cwd, desktopSessionId: local, desktopLink: local && LOCAL_DO_DESKTOP.test(local) ? `claude://claude.ai/epitaxy/${local}` : null },
+    open: { resume: `claude --resume ${s.session.id}`, cwd: s.session.cwd, desktopSessionId: local, desktopLink: local && DESKTOP_LOCAL_ID.test(local) ? `claude://claude.ai/epitaxy/${local}` : null },
   };
 }
 

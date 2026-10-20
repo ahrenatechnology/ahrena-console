@@ -30,9 +30,6 @@ import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './work.ts';
 
 export const PROJECT_ROUTE = '/api/project';
 export const PROJECT_MOVE_ROUTE = '/api/project/move';
-/** The old routes, still answered as aliases (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_PROJETO = '/api/projeto';
-export const ROTA_DE_MOVER = '/api/projeto/mover';
 /** O comando que dá ao token do `gh` o escopo `project`. */
 export const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
 

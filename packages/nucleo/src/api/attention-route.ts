@@ -22,8 +22,6 @@ import type { PrecisaDeVoce } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DA_ATENCAO = '/api/atencao';
 
 /** O nível: o que trava a sessão (`needs`) e o que é só a sua vez; os valores do painel. */
 export type AttentionLevel = PrecisaDeVoce['level'];

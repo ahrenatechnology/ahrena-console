@@ -6,7 +6,7 @@ import { request } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import {
   serveStdio,
   createMcpServer,
@@ -303,12 +303,12 @@ describe('output', () => {
 });
 
 describe('transports', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   beforeEach(async () => {
     await seedCases();
     const accounts = new Contas({ storage, arquivo: null });
     const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador: builder, hooks: { storage }, port: 0, log: () => {}, mcp: server });
+    api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
   afterEach(() => api.close());
 
@@ -407,7 +407,7 @@ describe('transports', () => {
     const call = (await bridge({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fleet_overview', arguments: {} } })) as JsonRpcResponse;
     assert.equal(call.id, 3);
     assert.deepEqual(call.result, { content: [{ type: 'text', text: 'suba o núcleo' }], isError: true });
-    api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
 
   test('stdio: one message per line, only JSON on the output', async () => {

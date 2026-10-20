@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { PROJECT_ERROR_CODES, quadroDe, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from '../../src/api/project.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { createGithubProject, GithubProject, toProjectCard, type RawProjectItem } from '../../src/github/project.ts';
@@ -51,7 +51,7 @@ interface RaiaAntiga {
 }
 
 /** `http.request`, para poder mandar `Host` e `Origin` como um navegador mandaria. */
-function pedir(api: ApiLocal, caminho: string, { method = 'GET', headers = {} as Record<string, string>, corpo = '' } = {}): Promise<Resposta> {
+function pedir(api: LocalApi, caminho: string, { method = 'GET', headers = {} as Record<string, string>, corpo = '' } = {}): Promise<Resposta> {
   const { hostname, port } = new URL(api.url);
   return new Promise((resolve, reject) => {
     const req = request({ hostname, port, path: caminho, method, headers }, (res) => {
@@ -74,13 +74,13 @@ function pedir(api: ApiLocal, caminho: string, { method = 'GET', headers = {} as
 }
 
 const JSON_CT = { 'content-type': 'application/json' };
-const mover = (api: ApiLocal, corpo: unknown, headers: Record<string, string> = JSON_CT) =>
+const mover = (api: LocalApi, corpo: unknown, headers: Record<string, string> = JSON_CT) =>
   pedir(api, '/api/projeto/mover', { method: 'POST', headers, corpo: typeof corpo === 'string' ? corpo : JSON.stringify(corpo) });
 
 async function subir(projeto?: OpcoesDoProjeto) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA });
-  const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { projeto } : {}) });
+  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {
     api,

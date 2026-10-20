@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas } from '../../src/api/index.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { createDevConsole, DEV_CONSOLE_TTL, type DevConsole, type DevConsoleView } from '../../src/dev-console/index.ts';
@@ -248,7 +248,7 @@ describe('Dev Console: registration and files', () => {
   });
 
   test('#179/AC-5 every icon the screen uses exists in dom.js', () => {
-    const js = readFileSync(`${PASTA_DA_UI}screens/dev-console.js`, 'utf8');
+    const js = readFileSync(`${UI_FOLDER}screens/dev-console.js`, 'utf8');
     const used = new Set([...js.matchAll(/(?:icon|eyebrow)\('([a-z-]+)'/g), ...js.matchAll(/icon: '([a-z-]+)'/g), ...js.matchAll(/listCard\(\s*'([a-z-]+)'/g)].map((m) => m[1]!));
     assert.ok(used.has('gauge') && used.has('hand') && used.has('merge'));
     for (const name of used) assert.ok(ICON_NAMES.includes(name), `${name} is not in dom.js`);
@@ -256,7 +256,7 @@ describe('Dev Console: registration and files', () => {
 
   test('#179/AC-5 the files call nothing outside, write no colour, no inline style, no HTML from data', () => {
     for (const f of FILES) {
-      const body = readFileSync(`${PASTA_DA_UI}${f}`, 'utf8');
+      const body = readFileSync(`${UI_FOLDER}${f}`, 'utf8');
       const urls = (body.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${f} names an external address`);
       assert.doesNotMatch(body, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${f} writes a colour by hand`);
@@ -265,9 +265,9 @@ describe('Dev Console: registration and files', () => {
   });
 
   test('#179/AC-5 the screen only uses dev- classes that exist in its stylesheet', () => {
-    const css = readFileSync(`${PASTA_DA_UI}screens/dev-console.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = readFileSync(`${UI_FOLDER}screens/dev-console.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const defined = new Set([...css.matchAll(/\.(dev-[a-z0-9-]+)/g)].map((m) => m[1]!));
-    const js = readFileSync(`${PASTA_DA_UI}screens/dev-console.js`, 'utf8');
+    const js = readFileSync(`${UI_FOLDER}screens/dev-console.js`, 'utf8');
     const used = new Set([...js.matchAll(/\bdev-[a-z0-9-]+/g)].map((m) => m[0]).filter((c) => !c.endsWith('-') && c !== 'dev-console'));
     for (const c of used) assert.ok(defined.has(c), `${c} is not in dev-console.css`);
     // The templated ones: pills, tones, dots and columns.
@@ -277,7 +277,7 @@ describe('Dev Console: registration and files', () => {
   });
 
   test('#179/AC-3 the board has six tracks side by side and, below 1280 px of window, four and two underneath', () => {
-    const css = readFileSync(`${PASTA_DA_UI}screens/dev-console.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}screens/dev-console.css`, 'utf8');
     assert.match(css, /\.dev-board \{[^}]*grid-template-columns: repeat\(12, minmax\(0, 1fr\)\)/);
     assert.match(css, /\.dev-col \{[^}]*grid-column: span 2;/);
     assert.match(css, /@media \(max-width: 1279px\) \{\s*\.dev-col \{ grid-column: span 3; \}\s*\.dev-col-blocked, \.dev-col-done \{ grid-column: span 6; \}/);

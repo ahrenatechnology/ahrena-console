@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "identifier": "dev.ahrena.console",
   "build": {
-    "frontendDist": "../pagina"
+    "frontendDist": "../page"
   },
   "app": {
     "windows": [],

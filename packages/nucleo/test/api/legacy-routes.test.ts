@@ -4,12 +4,12 @@
 // `/api/mudancas`. The server is the --demo one (scenario p4), assembled in `legacy-demo.ts`.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { LEGACY_BODIES, legacyResponseFor, normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type ApiLocal, type LegacyRouteSpec } from '../../src/api/index.ts';
+import { LEGACY_BODIES, legacyResponseFor, normalizeLegacyPath, normalizeLegacyQuery, normalizeLegacyUrl, type LocalApi, type LegacyRouteSpec } from '../../src/api/index.ts';
 import { DEMO_SESSION, LOCAL, startLegacyDemo, type LegacyDemo } from './legacy-demo.ts';
 
 describe('#173 phase 1: English routes, Portuguese aliases', () => {
   let demo: LegacyDemo;
-  let api: ApiLocal;
+  let api: LocalApi;
   let host: string;
   let decisionId: string;
   let opened: string[];

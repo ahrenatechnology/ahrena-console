@@ -15,23 +15,24 @@ import type { ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { send } from '../ingest/hooks/receiver.ts';
 
-export const ROTA_DA_UI = '/ui';
-export const PASTA_DA_UI = fileURLToPath(new URL('../../ui/', import.meta.url));
+export const UI_ROUTE = '/ui';
+export const UI_FOLDER = fileURLToPath(new URL('../../ui/', import.meta.url));
 
-const TIPOS: Record<string, string> = {
+const CONTENT_TYPES: Record<string, string> = {
   js: 'text/javascript; charset=utf-8',
   css: 'text/css; charset=utf-8',
   svg: 'image/svg+xml',
   html: 'text/html; charset=utf-8',
 };
 
-const ARQUIVO = /^\/ui\/((?:screens\/)?[a-z0-9-]+\.(js|css|svg))$/;
+const UI_FILE = /^\/ui\/((?:screens\/)?[a-z0-9-]+\.(js|css|svg))$/;
 // The old folder of the screens: the same files.
 const LEGACY_SCREENS = /^\/ui\/telas\//;
-// Um arquivo que não existe dá 404, não a página: um id de sessão nunca termina assim.
-const PARECE_ARQUIVO = /\.(js|mjs|css|svg|html?|json|map|png|ico|txt|woff2?)$/i;
+// A file that does not exist gives 404, not the page: a session id never ends like this.
+const LOOKS_LIKE_FILE = /\.(js|mjs|css|svg|html?|json|map|png|ico|txt|woff2?)$/i;
 
-export const POLITICA_DA_UI = [
+/** The content policy: the page only talks to its own origin. */
+export const UI_CONTENT_POLICY = [
   "default-src 'none'",
   "script-src 'self'",
   "style-src 'self'",
@@ -42,26 +43,27 @@ export const POLITICA_DA_UI = [
   "frame-ancestors 'none'",
 ].join('; ');
 
-/** `/ui` e tudo o que começa com `/ui/`. */
-export const ehDaUi = (caminho: string): boolean => caminho === ROTA_DA_UI || caminho.startsWith(`${ROTA_DA_UI}/`);
+/** `/ui` and everything that starts with `/ui/`. */
+export const isUiPath = (path: string): boolean => path === UI_ROUTE || path.startsWith(`${UI_ROUTE}/`);
 
-export async function responderUi(res: ServerResponse, caminho: string, pasta: string = PASTA_DA_UI): Promise<void> {
-  const arquivo = ARQUIVO.exec(caminho.replace(LEGACY_SCREENS, '/ui/screens/'));
-  if (!arquivo && PARECE_ARQUIVO.test(caminho)) return send(res, 404, { error: 'não encontrado' });
-  const nome = arquivo ? arquivo[1] : 'index.html';
-  let corpo: Buffer;
+/** Serves `index.html` or a file of the `/ui` folder, with the content policy. */
+export async function respondUi(res: ServerResponse, path: string, folder: string = UI_FOLDER): Promise<void> {
+  const file = UI_FILE.exec(path.replace(LEGACY_SCREENS, '/ui/screens/'));
+  if (!file && LOOKS_LIKE_FILE.test(path)) return send(res, 404, { error: 'não encontrado' });
+  const name = file ? file[1] : 'index.html';
+  let body: Buffer;
   try {
-    corpo = await readFile(`${pasta}${nome}`);
+    body = await readFile(`${folder}${name}`);
   } catch {
     return send(res, 404, { error: 'não encontrado' });
   }
   res.writeHead(200, {
-    'content-type': TIPOS[nome.slice(nome.lastIndexOf('.') + 1)]!,
-    'content-length': corpo.length,
+    'content-type': CONTENT_TYPES[name.slice(name.lastIndexOf('.') + 1)]!,
+    'content-length': body.length,
     'cache-control': 'no-cache',
-    'content-security-policy': POLITICA_DA_UI,
+    'content-security-policy': UI_CONTENT_POLICY,
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
   });
-  res.end(corpo);
+  res.end(body);
 }
