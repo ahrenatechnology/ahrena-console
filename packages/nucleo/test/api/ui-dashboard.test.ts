@@ -195,7 +195,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       const inbox = comClasse(area, 'inbox')[0]!;
       assert.match(inbox.textContent, /2 precisam de você/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
+      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
       assert.equal(contadores.dashboard, 2);
 
@@ -207,7 +207,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       assert.ok(agentes[1]!.classes.includes('st-waiting'));
 
       const linhas = comClasse(area, 'row');
-      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-painel-motor-de-regras', '/ui/sessions/sim-painel-app-receitas']);
+      assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
       assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
       assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
     } finally {

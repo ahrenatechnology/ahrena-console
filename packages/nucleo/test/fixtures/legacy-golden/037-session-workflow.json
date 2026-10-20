@@ -2,19 +2,19 @@
   "name": "session-workflow",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/workflow"
+    "path": "/api/sessoes/sim-panel-current/workflow"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
   "body": {
-    "sessaoId": "sim-painel-esta",
+    "sessaoId": "sim-panel-current",
     "inicio": "2026-10-20T14:32:00.000Z",
     "fim": null,
     "duracaoMs": 1680000,
     "resumo": "dev → review · termina no PR #90",
     "nos": [
       {
-        "id": "sim-painel-esta:main",
+        "id": "sim-panel-current:main",
         "nome": "Principal",
         "tipo": null,
         "rodada": null,
@@ -27,7 +27,7 @@
         "fim": null
       },
       {
-        "id": "sim-painel-esta:a3",
+        "id": "sim-panel-current:a3",
         "nome": "Plan",
         "tipo": "Plan",
         "rodada": null,
@@ -40,7 +40,7 @@
         "fim": "2026-10-20T14:40:00.000Z"
       },
       {
-        "id": "sim-painel-esta:a0",
+        "id": "sim-panel-current:a0",
         "nome": "Explore",
         "tipo": "Explore",
         "rodada": null,
@@ -53,7 +53,7 @@
         "fim": null
       },
       {
-        "id": "sim-painel-esta:a1",
+        "id": "sim-panel-current:a1",
         "nome": "review",
         "tipo": "code-reviewer",
         "rodada": 1,
@@ -66,7 +66,7 @@
         "fim": null
       },
       {
-        "id": "sim-painel-esta:a2",
+        "id": "sim-panel-current:a2",
         "nome": "test-runner",
         "tipo": "test-runner",
         "rodada": null,
@@ -81,26 +81,26 @@
     ],
     "arestas": [
       {
-        "de": "sim-painel-esta:main",
-        "para": "sim-painel-esta:a3",
+        "de": "sim-panel-current:main",
+        "para": "sim-panel-current:a3",
         "tipo": "abriu",
         "rotulo": null
       },
       {
-        "de": "sim-painel-esta:main",
-        "para": "sim-painel-esta:a0",
+        "de": "sim-panel-current:main",
+        "para": "sim-panel-current:a0",
         "tipo": "abriu",
         "rotulo": null
       },
       {
-        "de": "sim-painel-esta:main",
-        "para": "sim-painel-esta:a1",
+        "de": "sim-panel-current:main",
+        "para": "sim-panel-current:a1",
         "tipo": "abriu",
         "rotulo": null
       },
       {
-        "de": "sim-painel-esta:main",
-        "para": "sim-painel-esta:a2",
+        "de": "sim-panel-current:main",
+        "para": "sim-panel-current:a2",
         "tipo": "abriu",
         "rotulo": null
       }
@@ -112,11 +112,11 @@
       "fim": "2026-10-20T15:00:00.000Z",
       "faixas": [
         {
-          "noId": "sim-painel-esta:main",
+          "noId": "sim-panel-current:main",
           "rotulo": "Agente principal",
           "trechos": [
             {
-              "noId": "sim-painel-esta:main",
+              "noId": "sim-panel-current:main",
               "inicio": "2026-10-20T14:32:00.000Z",
               "fim": null,
               "estado": "ativo"
@@ -124,11 +124,11 @@
           ]
         },
         {
-          "noId": "sim-painel-esta:a3",
+          "noId": "sim-panel-current:a3",
           "rotulo": "Plan",
           "trechos": [
             {
-              "noId": "sim-painel-esta:a3",
+              "noId": "sim-panel-current:a3",
               "inicio": "2026-10-20T14:37:00.000Z",
               "fim": "2026-10-20T14:40:00.000Z",
               "estado": "concluido"
@@ -136,11 +136,11 @@
           ]
         },
         {
-          "noId": "sim-painel-esta:a0",
+          "noId": "sim-panel-current:a0",
           "rotulo": "Explore",
           "trechos": [
             {
-              "noId": "sim-painel-esta:a0",
+              "noId": "sim-panel-current:a0",
               "inicio": "2026-10-20T14:59:00.000Z",
               "fim": null,
               "estado": "ativo"
@@ -148,11 +148,11 @@
           ]
         },
         {
-          "noId": "sim-painel-esta:a1",
+          "noId": "sim-panel-current:a1",
           "rotulo": "review · r1",
           "trechos": [
             {
-              "noId": "sim-painel-esta:a1",
+              "noId": "sim-panel-current:a1",
               "inicio": "2026-10-20T14:59:18.000Z",
               "fim": null,
               "estado": "ativo"
@@ -160,11 +160,11 @@
           ]
         },
         {
-          "noId": "sim-painel-esta:a2",
+          "noId": "sim-panel-current:a2",
           "rotulo": "test-runner",
           "trechos": [
             {
-              "noId": "sim-painel-esta:a2",
+              "noId": "sim-panel-current:a2",
               "inicio": "2026-10-20T14:59:48.000Z",
               "fim": null,
               "estado": "ativo"

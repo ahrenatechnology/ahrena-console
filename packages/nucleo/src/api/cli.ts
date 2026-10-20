@@ -46,6 +46,7 @@ import { SessionHistory } from '../history/reading.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
+import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
@@ -102,7 +103,7 @@ const AJUDA = `Uso: npm run api -- [opções]
                       num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
-                      (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
+                      (/ui/sessions/sim-detail-orders) e as ferramentas da sessão do cenário
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
   --substituir        Se o núcleo de pé for mais velho que este (versão, ou commit ancestral
@@ -435,6 +436,8 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
+  ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
   agentConfig,
   telemetry: telemetryService,

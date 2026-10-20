@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/nao-existe/ajustar",
     "body": {
-      "sessao": "sim-painel-esta",
+      "sessao": "sim-panel-current",
       "texto": "x"
     }
   },

@@ -27,7 +27,7 @@ describe('history: reading', () => {
     const { storage, history } = await p4();
     const p1 = await history.page({ before: null, days: 7, search: null });
     assert.deepEqual(p1.days.map((d) => d.day), ['2026-11-02', '2026-11-01', '2026-10-31', '2026-10-30', '2026-10-28', '2026-10-27', '2026-10-25']);
-    assert.deepEqual(p1.days[0].sessions.map((s) => s.id), ['sim-painel-blog-estatico'], 'the scenario\'s active sessions do not go in');
+    assert.deepEqual(p1.days[0].sessions.map((s) => s.id), ['sim-panel-blog-estatico'], 'the scenario\'s active sessions do not go in');
     assert.deepEqual(p1.days[1].sessions.map((s) => s.id), [AFTER_CLEAR, BEFORE_CLEAR]);
     assert.equal(p1.next, '2026-10-25');
     const p2 = await history.page({ before: p1.next, days: 7, search: null });
@@ -50,9 +50,9 @@ describe('history: reading', () => {
     assert.equal(after.next, null);
     assert.deepEqual(item(days, BEFORE_CLEAR).next, { id: AFTER_CLEAR, title: 'Extrair a cobrança' });
     assert.equal(item(days, BEFORE_CLEAR).previous, null);
-    assert.equal(item(days, 'sim-historico-relatorio-mensal').status, 'error');
-    assert.equal(item(days, 'sim-historico-regras-de-desconto').status, 'abandoned');
-    assert.equal(item(days, 'sim-historico-busca-de-receitas').costUsd, null, 'no usage, no cost');
+    assert.equal(item(days, 'sim-history-monthly-report').status, 'error');
+    assert.equal(item(days, 'sim-history-discount-rules').status, 'abandoned');
+    assert.equal(item(days, 'sim-history-recipe-search').costUsd, null, 'no usage, no cost');
     await storage.close();
   });
 

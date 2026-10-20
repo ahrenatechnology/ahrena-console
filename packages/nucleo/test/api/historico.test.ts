@@ -73,7 +73,7 @@ describe('GET /api/history', () => {
     const { get, fechar } = await subir();
     try {
       const corpo = (await (await get('?search=Gateway')).json()) as HistoryResponse;
-      assert.deepEqual(corpo.days.map((d) => [d.day, d.sessions.map((s) => s.id)]), [['2026-10-24', ['sim-historico-limites-do-gateway']]]);
+      assert.deepEqual(corpo.days.map((d) => [d.day, d.sessions.map((s) => s.id)]), [['2026-10-24', ['sim-history-gateway-limits']]]);
       assert.equal(corpo.next, null);
     } finally {
       await fechar();

@@ -28,18 +28,18 @@ interface EndedSession {
 }
 
 /** The session before /clear and the one that continued after it, yesterday. */
-export const BEFORE_CLEAR = 'sim-historico-mapear-pagamentos';
-export const AFTER_CLEAR = 'sim-historico-extrair-cobranca';
+export const BEFORE_CLEAR = 'sim-history-map-payments';
+export const AFTER_CLEAR = 'sim-history-extract-billing';
 
 const ENDED: EndedSession[] = [
-  { slug: 'mapear-pagamentos', title: 'Mapear o módulo de pagamentos', project: 'vitrine-demo', model: OPUS, status: 'completed', endMin: DAY + 180, durationMin: 50, cost: 2.1 },
-  { slug: 'extrair-cobranca', title: 'Extrair a cobrança', project: 'vitrine-demo', model: OPUS, status: 'completed', endMin: DAY + 60, durationMin: 110, cost: 1.3 },
-  { slug: 'relatorio-mensal', title: 'Relatório mensal mais rápido', project: 'painel-de-metricas', model: OPUS, status: 'error', endMin: 2 * DAY, durationMin: 35, cost: 0.8 },
-  { slug: 'busca-de-receitas', title: 'Busca de receitas', project: 'app-receitas', model: SONNET, status: 'completed', endMin: 3 * DAY + 30, durationMin: 20 },
-  { slug: 'regras-de-desconto', title: 'Regras de desconto', project: 'motor-de-regras', model: SONNET, status: 'abandoned', endMin: 5 * DAY, durationMin: 240, cost: 0.4 },
-  { slug: 'notas-em-markdown', title: 'Notas em Markdown', project: 'cli-de-notas', model: SONNET, status: 'completed', endMin: 6 * DAY, durationMin: 15, cost: 0.2 },
-  { slug: 'agenda-semanal', title: 'Agenda semanal', project: 'agenda-ficticia', model: OPUS, status: 'completed', endMin: 8 * DAY, durationMin: 45, cost: 1.1 },
-  { slug: 'limites-do-gateway', title: 'Limites do gateway', project: 'gateway-sandbox', model: OPUS, status: 'completed', endMin: 9 * DAY, durationMin: 70, cost: 2.6 },
+  { slug: 'map-payments', title: 'Mapear o módulo de pagamentos', project: 'vitrine-demo', model: OPUS, status: 'completed', endMin: DAY + 180, durationMin: 50, cost: 2.1 },
+  { slug: 'extract-billing', title: 'Extrair a cobrança', project: 'vitrine-demo', model: OPUS, status: 'completed', endMin: DAY + 60, durationMin: 110, cost: 1.3 },
+  { slug: 'monthly-report', title: 'Relatório mensal mais rápido', project: 'painel-de-metricas', model: OPUS, status: 'error', endMin: 2 * DAY, durationMin: 35, cost: 0.8 },
+  { slug: 'recipe-search', title: 'Busca de receitas', project: 'app-receitas', model: SONNET, status: 'completed', endMin: 3 * DAY + 30, durationMin: 20 },
+  { slug: 'discount-rules', title: 'Regras de desconto', project: 'motor-de-regras', model: SONNET, status: 'abandoned', endMin: 5 * DAY, durationMin: 240, cost: 0.4 },
+  { slug: 'markdown-notes', title: 'Notas em Markdown', project: 'cli-de-notas', model: SONNET, status: 'completed', endMin: 6 * DAY, durationMin: 15, cost: 0.2 },
+  { slug: 'weekly-agenda', title: 'Agenda semanal', project: 'agenda-ficticia', model: OPUS, status: 'completed', endMin: 8 * DAY, durationMin: 45, cost: 1.1 },
+  { slug: 'gateway-limits', title: 'Limites do gateway', project: 'gateway-sandbox', model: OPUS, status: 'completed', endMin: 9 * DAY, durationMin: 70, cost: 2.6 },
 ];
 
 // Default price (US$ per million): Opus 5.5 4/20, Sonnet 5.5 2/10. Half the cost in input, half in output.
@@ -53,7 +53,7 @@ export async function seedPanelHistory(storage: StoragePort, decisions: Decision
   if (scenario !== 'p4') return;
   const iso = (minAgo: number) => new Date(now - minAgo * MIN).toISOString();
   for (const e of ENDED) {
-    const id = `sim-historico-${e.slug}`;
+    const id = `sim-history-${e.slug}`;
     const end = iso(e.endMin);
     const s: Session = {
       id, name: e.title, status: e.status, cwd: `${ROOT}/${e.project}`, model: e.model, source: 'startup',
@@ -68,6 +68,6 @@ export async function seedPanelHistory(storage: StoragePort, decisions: Decision
       });
     }
   }
-  const after = ENDED.find((e) => `sim-historico-${e.slug}` === AFTER_CLEAR)!;
+  const after = ENDED.find((e) => `sim-history-${e.slug}` === AFTER_CLEAR)!;
   if (decisions) await linkSession(decisions, { sessionId: AFTER_CLEAR, parentSessionId: BEFORE_CLEAR, reason: 'clear', linkedAt: iso(after.endMin + after.durationMin) }, iso(0));
 }

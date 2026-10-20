@@ -24,6 +24,7 @@ import { seedPanelHistory } from '../../src/simulator/history-ended.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../../src/simulator/project.ts';
 import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
+import { upgradeDemoUrl } from '../../src/simulator/legacy-ids.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';
@@ -96,6 +97,8 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
     decisoesUi: decisionsUi,
     repos: repos.rota,
+    // As in the --demo: the old session ids (before #173) still open the session.
+    demoUrl: upgradeDemoUrl,
   });
   return {
     api,

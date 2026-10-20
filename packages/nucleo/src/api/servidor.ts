@@ -133,6 +133,11 @@ export interface OpcoesDaApi {
   decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
+  /**
+   * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
+   * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
+   */
+  demoUrl?: (url: URL) => URL;
   /** The Dev Console (#177); turns on `GET /api/dev-console`. */
   devConsole?: DevConsole;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
@@ -313,7 +318,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     contadores.requests++;
     // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
     const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const url = normalizeLegacyUrl(raw);
+    const normalized = normalizeLegacyUrl(raw);
+    const url = opts.demoUrl ? opts.demoUrl(normalized) : normalized;
     // An old route answers its old body: every JSON written from here on, errors included, goes
     // through its back-translator (new → old keys and values).
     const toLegacy = legacyResponseFor(raw.pathname);

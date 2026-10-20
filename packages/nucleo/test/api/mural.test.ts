@@ -56,7 +56,7 @@ function contando(storage: StoragePort) {
   return { porta, n };
 }
 
-const sim = (slug: string) => `sim-painel-${slug}`;
+const sim = (slug: string) => `sim-panel-${slug}`;
 
 describe('mural ao vivo (#34)', () => {
   test('critério de aberta: viva, ou encerrada com atividade recente; nunca abandonada nem arquivada', () => {

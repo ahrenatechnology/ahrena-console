@@ -16,7 +16,7 @@
     "comErro": 2,
     "itens": [
       {
-        "sessao": "sim-detalhe-pedidos",
+        "sessao": "sim-detail-orders",
         "titulo": "Migração do esquema de pedidos",
         "projeto": "motor-de-regras",
         "conta": null,
@@ -30,7 +30,7 @@
         "machine": null
       },
       {
-        "sessao": "sim-historico-relatorio-mensal",
+        "sessao": "sim-history-monthly-report",
         "titulo": "Relatório mensal mais rápido",
         "projeto": "painel-de-metricas",
         "conta": null,
@@ -61,7 +61,7 @@
         "machine": null
       },
       {
-        "sessao": "sim-painel-fila-de-tarefas",
+        "sessao": "sim-panel-fila-de-tarefas",
         "titulo": "fila-de-tarefas",
         "projeto": "fila-de-tarefas",
         "conta": {

@@ -4,14 +4,14 @@
     "method": "POST",
     "path": "/api/decisoes/{decision}/descartar",
     "body": {
-      "sessao": "sim-painel-esta"
+      "sessao": "sim-panel-current"
     }
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
   "body": {
     "decisao": {
-      "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+      "id": "dec:7555fc23396627a5f58dd96044d1df1b",
       "rotulo": "D6",
       "origem": "sugerida",
       "estado": "descartada",

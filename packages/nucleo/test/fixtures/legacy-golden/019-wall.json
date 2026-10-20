@@ -16,7 +16,7 @@
     },
     "cards": [
       {
-        "id": "sim-detalhe-pedidos",
+        "id": "sim-detail-orders",
         "titulo": "Migração do esquema de pedidos",
         "projeto": "motor-de-regras",
         "branch": "feat/58-pedidos",
@@ -80,7 +80,7 @@
         }
       },
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "titulo": "fila-de-tarefas",
         "projeto": "fila-de-tarefas",
         "branch": "feat/9-retry",
@@ -107,7 +107,7 @@
         "contexto": null
       },
       {
-        "id": "sim-painel-esta",
+        "id": "sim-panel-current",
         "titulo": "Separar pagamentos em serviços",
         "projeto": "vitrine-demo",
         "branch": "feat/63-separar-pagamentos",
@@ -143,7 +143,7 @@
         }
       },
       {
-        "id": "sim-wf-retomada",
+        "id": "sim-wf-resume",
         "titulo": "Rotas do gateway",
         "projeto": "gateway-sandbox",
         "branch": "feat/63-separar-pagamentos",
@@ -170,7 +170,7 @@
         "contexto": null
       },
       {
-        "id": "sim-wf-pagamentos",
+        "id": "sim-wf-payments",
         "titulo": "Separar pagamentos em serviços",
         "projeto": "motor-de-regras",
         "branch": "feat/63-separar-pagamentos",
@@ -197,7 +197,7 @@
         "contexto": null
       },
       {
-        "id": "sim-painel-catalogo-exemplo",
+        "id": "sim-panel-catalogo-exemplo",
         "titulo": "catalogo-exemplo",
         "projeto": "catalogo-exemplo",
         "branch": "feat/31-csv",
@@ -224,7 +224,7 @@
         "contexto": null
       },
       {
-        "id": "sim-painel-blog-estatico",
+        "id": "sim-panel-blog-estatico",
         "titulo": "blog-estatico",
         "projeto": "blog-estatico",
         "branch": "fix/5-paginacao",

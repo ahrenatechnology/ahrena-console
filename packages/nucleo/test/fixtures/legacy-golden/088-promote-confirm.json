@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/{current}/promover",
     "body": {
-      "sessao": "sim-painel-esta",
+      "sessao": "sim-panel-current",
       "confirmar": true,
       "caminho": "{recordPath}",
       "hash": "{recordHash}"
@@ -14,7 +14,7 @@
   "contentType": "application/json; charset=utf-8",
   "body": {
     "decisao": {
-      "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+      "id": "dec:351173aa6d7ef78de44261bf91a9a171",
       "rotulo": "D4",
       "origem": "correcao",
       "estado": "vigente",
@@ -31,13 +31,13 @@
       "substituidaPor": null,
       "sessao": "esta",
       "toolUseId": "sim-toolu-p9-4",
-      "sessionId": "sim-painel-esta",
+      "sessionId": "sim-panel-current",
       "escopo": "familia",
       "substitui": "D3",
       "promovidaPara": "docs/decisoes/0001-sqlite-em-memoria-nos-testes.md",
       "branch": "feat/42-kanban-de-sessoes",
       "repo": "/simulacao/ahrena-demo",
-      "conversa": "/ui/sessions/sim-painel-esta"
+      "conversa": "/ui/sessions/sim-panel-current"
     },
     "caminho": "docs/decisoes/0001-sqlite-em-memoria-nos-testes.md"
   }
