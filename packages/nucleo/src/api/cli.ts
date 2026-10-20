@@ -38,6 +38,7 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
@@ -222,6 +223,7 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
 }
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como

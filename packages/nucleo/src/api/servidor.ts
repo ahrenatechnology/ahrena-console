@@ -15,6 +15,7 @@
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/workflows` e `/api/sessoes/<id>/workflow` | Workflows e a aba Workflow (api/workflows.ts, #96 e #97) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -35,6 +36,7 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { responderWorkflows } from './workflows.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 
 export { VERSAO_DA_API };
@@ -221,6 +223,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
         ...(opts.carga?.() ?? {}),
       });
     }
+    if (await responderWorkflows(res, url, opts.montador)) return;
     const m = /^\/api\/(?:painel|sessao)\/([^/]+)$/.exec(url.pathname);
     if (m) return painel(res, decodeURIComponent(m[1]), url);
     const d = /^\/api\/decisoes\/([^/]+)$/.exec(url.pathname);

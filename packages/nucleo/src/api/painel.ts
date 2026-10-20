@@ -109,11 +109,11 @@ function minutos(desde: string, agora: number): string {
 }
 
 export class MontadorDoPainel {
-  private readonly storage: Porta;
+  readonly storage: Porta;
   private readonly contas: Contas;
   private readonly desktop: IndiceDoDesktop | null;
-  private readonly trabalho: TrabalhoPorBranch | null;
-  private readonly agora: () => number;
+  readonly trabalho: TrabalhoPorBranch | null;
+  readonly agora: () => number;
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
