@@ -38,10 +38,12 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
 import { Contas } from './contas.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
   capturarDoTranscript,
@@ -227,6 +229,8 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
+  await semearHistorico(storage);
   await semearDetalhe(storage);
 }
 const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
@@ -281,6 +285,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   detalhe,
   frota: mcp.frota,
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
