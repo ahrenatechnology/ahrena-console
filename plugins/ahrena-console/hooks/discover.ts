@@ -40,9 +40,12 @@ export function toInstance(v: unknown, fileName: string): Instance | null {
 
 /** The registry folder: AHRENA_CONSOLE_HOME, else the home folder's `.ahrena-console`. */
 export async function instancesDir($: Engine): Promise<string | null> {
+  // Only an absolute AHRENA_CONSOLE_HOME: the core resolves a relative one against its own cwd,
+  // which the mod does not know.
   const fromEnv = await $.env.get('AHRENA_CONSOLE_HOME')
+  const absolute = fromEnv && /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(fromEnv) ? fromEnv : null
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const root = fromEnv || (home ? `${home.replace(/[\\/]+$/, '')}/.ahrena-console` : null)
+  const root = absolute || (home ? `${home.replace(/[\\/]+$/, '')}/.ahrena-console` : null)
   return root ? `${root.replace(/[\\/]+$/, '')}/instances` : null
 }
 

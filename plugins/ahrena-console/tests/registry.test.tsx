@@ -26,6 +26,7 @@ const entry = (installation: Installation, pid: number, port: number, startedAt:
 function fakes(on: any, files: { name: string; text: string }[], cores: Record<number, Core>, env: Record<string, string> = { AHRENA_CONSOLE_HOME: HOME }) {
   const registry = new Map(files.map((f) => [f.name, f.text]))
   const requests: string[] = []
+  const state: { panel: unknown } = { panel: SCENARIOS.p1 }
   on('fs.list', async (_$: unknown, e: { path: string }) => {
     if (e.path !== DIR) throw new Error(`ENOENT: ${e.path}`)
     return { value: [...registry.keys()].map((name) => ({ name, kind: 'file', size: 1, mtimeMs: 1, isLink: false })) }
@@ -40,7 +41,7 @@ function fakes(on: any, files: { name: string; text: string }[], cores: Record<n
     const url = new URL(e.url)
     const core = cores[Number(url.port)]
     if (!core?.up) throw new Error(`connect ECONNREFUSED 127.0.0.1:${url.port}`)
-    const body = url.pathname === '/api/overview' ? { name: 'ahrena-console', version: '0.0.1', pid: core.pid, commit: null } : SCENARIOS.p1
+    const body = url.pathname === '/api/overview' ? { name: 'ahrena-console', version: '0.0.1', pid: core.pid, commit: null } : state.panel
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(body) } }
   })
   const timer = mock.clock(on, { now: NOW })
@@ -60,7 +61,7 @@ function fakes(on: any, files: { name: string; text: string }[], cores: Record<n
   })
   on('command.register', async () => ({ value: undefined }))
   on('session.start', async (_$: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
-  return { requests, registry, timer, cores }
+  return { requests, registry, timer, cores, state }
 }
 
 async function open($: any, f: ReturnType<typeof fakes>) {
@@ -168,9 +169,34 @@ test('a core restarted on a new port is found again on the next tick', async ($,
   await f.timer.advance(5_000)
   expect(panelRequests(f).at(-1)!.startsWith('http://127.0.0.1:51003/')).toBe(true)
   await expectCard($, '127.0.0.1:51003')
-  // the conversation link goes through the discovered core too
+})
+
+test('the conversation link goes through the discovered core', async ($, on) => {
+  const LOCAL = 'local_00000000-0000-4000-8000-0000000000f1'
+  const f = await open($, fakes(on, [entry('dev', 202, 51002, '2026-08-01T00:00:00Z')], { 51002: { pid: 202, up: true } }))
+  const p4 = SCENARIOS.p4
+  f.state.panel = { ...p4, children: p4.children.map((x, i) => (i === 0 ? { ...x, local: LOCAL } : x)) }
+  await f.timer.advance(5_000)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   const hrefs = (await ui.findAll({ type: 'Link' })).map((l: any) => String(l.props.href)).filter((h: string) => h.includes('/open/'))
-  expect(hrefs.every((h: string) => h.startsWith('http://localhost:51003/open/'))).toBe(true)
+  expect(hrefs).toEqual([`http://localhost:51002/open/${LOCAL}`])
   await ui.unmount()
+})
+
+test('a discovered core that dies with no other live one: Offline at 127.0.0.1:4720, one lookup per tick', async ($, on) => {
+  const f = await open($, fakes(on, [entry('dev', 202, 51002, '2026-08-01T00:00:00Z')], { 51002: { pid: 202, up: true } }))
+  await expectCard($, '127.0.0.1:51002')
+  f.cores[51002]!.up = false
+  await f.timer.advance(5_000)
+  expect(panelRequests(f).at(-1)!.startsWith('http://127.0.0.1:4720/')).toBe(true)
+  for (const target of [PANE, WIDE]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+    expect(await ui.find({ key: 'offline' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^127\.0\.0\.1:4720 · sem/ })).toBeDefined()
+    await ui.unmount()
+  }
+  // While offline, each tick probes each registry entry once, not twice.
+  const before = f.requests.filter((u) => u.includes('/api/overview')).length
+  await f.timer.advance(5_000)
+  expect(f.requests.filter((u) => u.includes('/api/overview')).length - before).toBe(1)
 })

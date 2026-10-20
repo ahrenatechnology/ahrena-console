@@ -84,7 +84,7 @@ Os cenários vão de `p1` a `p7` (P8 é o núcleo desligado), mais o `p9`, com a
 
 ### Porta
 
-Outra porta: `npm run api -- --porta 4730`. O painel acha o núcleo pelo registro; para fixar uma porta, a opção `port` do plugin (`porta` até a 0.0.30; no `/config`, ou em `pluginConfigs` do `settings.json`). Uma porta escrita ali vale mais que o registro; `0`, o padrão desde a 0.0.34, é achar pelo registro.
+Outra porta: `npm run api -- --porta 4730`. O painel acha o núcleo pelo registro; para fixar uma porta, a opção `port` do plugin (`porta` até a 0.0.30; no `/config`, ou em `pluginConfigs` do `settings.json`). Uma porta escrita ali vale mais que o registro; `0`, o padrão desde a 0.0.34, é achar pelo registro. Quem gravou `4720` nessa opção antes da 0.0.34 fica preso a ela: apague a opção (ou ponha `0`) para o painel voltar a achar o núcleo pelo registro.
 
 ### Rótulo e cor das contas
 

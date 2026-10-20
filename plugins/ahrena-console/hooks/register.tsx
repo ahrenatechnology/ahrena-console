@@ -219,6 +219,8 @@ async function engineContext($: Engine): Promise<Reading['liveContext']> {
 async function refresh($: Engine, nextView?: Partial<View>, again = false) {
   const now = await $.clock.now()
   const v = { ...normalizeView(await read($, view)), ...nextView }
+  // Whether this call looks the core up itself: then a failure is not a reason to look again.
+  const looked = !resolved
   try {
     await resolveCore($)
     const res = await $.http.fetch(`http://${core}${await tickPath($, v)}`)
@@ -243,10 +245,11 @@ async function refresh($: Engine, nextView?: Partial<View>, again = false) {
     showStatus($, statusLine(panel, false))
   } catch (err) {
     // The core stopped answering: look it up again in the registry; a different one is tried at once.
-    if (!explicitCore && resolved) {
+    if (!explicitCore) {
       const before = core
+      const stale = resolved && !looked
       resolved = false
-      if (!again && (await resolveCore($)) !== before) return refresh($, nextView, true)
+      if (stale && !again && (await resolveCore($)) !== before) return refresh($, nextView, true)
     }
     if (nextView) await changeView($, nextView)
     // Sem núcleo: guarda a última leitura boa e tenta de novo no próximo tick, sem redesenhar a cada um.
@@ -497,6 +500,8 @@ async function openSession($: Engine, local: string, title: string) {
       $.ui.toast(`Não deu para abrir "${title}": ${error ?? `HTTP ${res.status}`}.`)
     }
   } catch {
+    // the next action or tick looks the core up again
+    resolved = false
     $.ui.toast(`Sem conexão com o núcleo em ${core}; "${title}" não foi aberta.`)
   }
 }
