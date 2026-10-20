@@ -192,6 +192,28 @@ describe('Feed de atividade: estado', () => {
     assert.deepEqual(s.pendentes, []);
   });
 
+  test('o evento gravado atrasado entra no lugar dele, não no topo', () => {
+    const s = E.novoEstado();
+    E.carregar(s, { eventos: [evento('b', 10), evento('a', 30)], cursor: 'c1' });
+    const r = E.receberNovos(s, { eventos: [evento('novo', 1), evento('atrasado', 20)], cursor: 'c2' });
+    assert.equal(r.noTopo, false);
+    assert.deepEqual(s.eventos.map((e: { id: string }) => e.id), ['novo', 'b', 'atrasado', 'a']);
+    assert.equal(E.receberNovos(s, { eventos: [evento('topo', 0)], cursor: 'c3' }).noTopo, true);
+  });
+
+  test('a pausa guarda no máximo o limite, mas conta tudo o que chegou', () => {
+    const s = E.novoEstado();
+    E.carregar(s, { eventos: [], cursor: 'c1' });
+    E.pausar(s);
+    E.receberNovos(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`p${i}`, 1000 + i)), cursor: 'c2' });
+    E.receberNovos(s, { eventos: [evento('ultimo', 1)], cursor: 'c3' });
+    assert.equal(s.pendentes.length, E.LIMITE);
+    assert.equal(s.pendentes[0].id, 'ultimo');
+    assert.equal(s.chegados, E.LIMITE + 1);
+    E.retomar(s);
+    assert.equal(s.chegados, 0);
+  });
+
   test('o limite corta o fim e some com o "mostrar mais"', () => {
     const s = E.novoEstado();
     E.carregar(s, { eventos: Array.from({ length: E.LIMITE }, (_, i) => evento(`v${i}`, 100 + i)), cursor: 'c', anteriores: 'v' });
@@ -218,6 +240,7 @@ describe('Feed de atividade: a tela', () => {
     const sair = new AbortController();
     return {
       pedidos,
+      sair,
       mudar: () => ouvintes.mudar.forEach((f) => f()),
       ctx: {
         params: {},
@@ -359,6 +382,19 @@ describe('Feed de atividade: a tela', () => {
     assert.deepEqual(linhasDe(area), ['novo', 'velho']);
     assert.equal(botao.hidden, true);
     limpar();
+  });
+
+  test('sair durante a primeira carga tira o CSS e para o relógio', async () => {
+    const antes = documento.head.querySelectorAll('link').length;
+    let soltar: (v: unknown) => void = () => {};
+    const f = ctxFalso(() => new Promise((_, rejeitar) => (soltar = rejeitar)));
+    const area = documento.createElement('main');
+    const montado = montar(area, f.ctx);
+    assert.equal(documento.head.querySelectorAll('link').length, antes + 1);
+    f.sair.abort();
+    soltar(Object.assign(new Error('saiu'), { name: 'AbortError' }));
+    await montado;
+    assert.equal(documento.head.querySelectorAll('link').length, antes, 'o link do CSS saiu');
   });
 
   test('a tela não usa fetch, innerHTML nem estilo inline', () => {

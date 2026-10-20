@@ -21,7 +21,7 @@ export function rotaDaSessao(id) {
 }
 
 export function novoEstado() {
-  return { eventos: [], cursor: null, anteriores: null, pausado: false, pendentes: [], aberto: null };
+  return { eventos: [], cursor: null, anteriores: null, pausado: false, pendentes: [], chegados: 0, aberto: null };
 }
 
 /** A primeira página (ou a releitura): troca a lista inteira e esvazia o que estava pendente. */
@@ -30,6 +30,7 @@ export function carregar(estado, resposta) {
   estado.cursor = resposta.cursor ?? null;
   estado.anteriores = resposta.anteriores ?? null;
   estado.pendentes = [];
+  estado.chegados = 0;
   if (estado.aberto && !estado.eventos.some((e) => e.id === estado.aberto)) estado.aberto = null;
 }
 
@@ -44,20 +45,36 @@ export function receberNovos(estado, resposta) {
   const vistos = ids(estado);
   const novos = (resposta.eventos ?? []).filter((e) => !vistos.has(e.id));
   if (estado.pausado) {
-    estado.pendentes = [...novos, ...estado.pendentes];
+    // Guarda só os `LIMITE` mais novos (mais que isso cairia da lista ao retomar), mas conta todos.
+    estado.pendentes = [...novos, ...estado.pendentes].slice(0, LIMITE);
+    estado.chegados += novos.length;
     return { entraram: [], cortados: [] };
   }
   return subir(estado, novos);
 }
 
+/** Mais novo primeiro: `criadoEm` decrescente e, no empate, `id` decrescente (a ordem do núcleo). */
+export function maisNovoPrimeiro(a, b) {
+  if (a.criadoEm !== b.criadoEm) return a.criadoEm < b.criadoEm ? 1 : -1;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+/**
+ * Os novos entram na lista pela ordem: o evento gravado atrasado (com `criadoEm` mais velho) cai no
+ * lugar dele, não no topo. `noTopo` diz se todos ficaram acima dos que já estavam (a tela só antepõe).
+ */
 function subir(estado, novos) {
-  if (!novos.length) return { entraram: [], cortados: [] };
-  estado.eventos = [...novos, ...estado.eventos];
+  if (!novos.length) return { entraram: [], cortados: [], noTopo: true };
+  const topo = estado.eventos[0];
+  const ordenados = [...novos].sort(maisNovoPrimeiro);
+  const noTopo = !topo || maisNovoPrimeiro(ordenados.at(-1), topo) < 0;
+  estado.eventos = noTopo ? [...ordenados, ...estado.eventos] : [...ordenados, ...estado.eventos].sort(maisNovoPrimeiro);
   const cortados = estado.eventos.splice(LIMITE);
   // Cortar o fim deixa o cursor de "mostrar mais" apontando para depois do buraco: some o botão.
   if (cortados.length) estado.anteriores = null;
   if (cortados.some((e) => e.id === estado.aberto)) estado.aberto = null;
-  return { entraram: novos, cortados };
+  const caiu = new Set(cortados.map((e) => e.id));
+  return { entraram: ordenados.filter((e) => !caiu.has(e.id)), cortados, noTopo };
 }
 
 export function pausar(estado) {
@@ -69,6 +86,7 @@ export function retomar(estado) {
   estado.pausado = false;
   const novos = estado.pendentes;
   estado.pendentes = [];
+  estado.chegados = 0;
   return subir(estado, novos);
 }
 

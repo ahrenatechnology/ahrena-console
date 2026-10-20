@@ -242,9 +242,9 @@ export async function montar(area, ctx) {
     mostrarCorpo(cartaoLista);
   }
 
-  function desenharNovos({ entraram, cortados }) {
+  function desenharNovos({ entraram, cortados, noTopo }) {
     if (!entraram.length) return;
-    if (corpo.firstChild !== cartaoLista) return desenharTudo();
+    if (corpo.firstChild !== cartaoLista || !noTopo) return desenharTudo();
     for (const ev of cortados) {
       itens.get(ev.id)?.no.remove();
       itens.delete(ev.id);
@@ -256,7 +256,7 @@ export async function montar(area, ctx) {
   function desenharPausa() {
     botaoPausa.replaceChildren(icone(estado.pausado ? 'retomar' : 'pausar'), estado.pausado ? 'Retomar' : 'Pausar');
     botaoPausa.setAttribute('aria-pressed', estado.pausado ? 'true' : 'false');
-    const n = estado.pendentes.length;
+    const n = estado.chegados;
     aviso.hidden = !n;
     aviso.textContent = n ? `${n} ${n === 1 ? 'novo' : 'novos'}` : '';
   }
@@ -352,11 +352,16 @@ export async function montar(area, ctx) {
     }
   }, RELOGIO_MS);
 
-  await recarregar();
-
-  return () => {
+  function limpar() {
     clearInterval(relogio);
     clearTimeout(digitando);
     css?.remove();
-  };
+  }
+  // Sair durante a primeira carga aborta o sinal antes de a moldura receber a limpeza: liga aqui.
+  ctx.sinal?.addEventListener('abort', limpar, { once: true });
+
+  await recarregar();
+  if (ctx.sinal?.aborted) limpar();
+
+  return limpar;
 }
