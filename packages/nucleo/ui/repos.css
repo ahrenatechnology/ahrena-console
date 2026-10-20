@@ -87,8 +87,8 @@
 .rp-det-cab .dir { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .rp-det-cab .chips { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 34px; }
 
-.rp-abas { display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-.rp-abas > * { white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; padding: 9px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.rp-abas { display: flex; gap: 4px; box-shadow: inset 0 -1px 0 var(--border); overflow-x: auto; overflow-y: hidden; }
+.rp-abas > * { white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; padding: 9px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
 .rp-abas a:hover { color: var(--text); }
 .rp-abas a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
 .rp-abas [aria-current] { color: var(--text); border-bottom-color: var(--accent); }
