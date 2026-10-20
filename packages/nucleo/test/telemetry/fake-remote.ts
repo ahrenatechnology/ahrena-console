@@ -92,7 +92,10 @@ export async function startFakeRemote(state: Partial<FakeRemoteState> = {}, port
   return { port: bound, requests, state: s, close: () => closeServer(server) };
 }
 
-/** A port where nothing listens: bound for a moment and released. */
+/**
+ * A port where nothing listens: bound for a moment and released. Another test file running at the
+ * same time could take it in between; the window is a few microseconds and the risk is accepted.
+ */
 export async function closedPort(): Promise<number> {
   const server = createTcpServer();
   const port = await listen(server);

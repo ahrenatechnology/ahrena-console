@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
+import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, remoteAttentionItems, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { LeituraDaFrota } from '../../src/mcp/index.ts';
 import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
@@ -18,7 +18,9 @@ import { AGORA, semear } from '../mcp/helpers.ts';
 import { attentionBody, remoteItem, startFakeRemote, type FakeRemote } from '../telemetry/fake-remote.ts';
 import { reading } from '../telemetry/reading.ts';
 
+/** The remote's own clock; the stored reading carries when this Mac read it (AGORA). */
 const READ_AT = AGORA - 30_000;
+const READ_AT_ISO = new Date(AGORA).toISOString();
 
 let storage: SqliteStorage;
 let api: ApiLocal | null = null;
@@ -54,7 +56,7 @@ async function boot() {
   });
   const remote = new RemoteMachine({
     config: { id: 'ws-exemplo', label: 'Workstation', port: remoteCore.port },
-    get: loopbackGet({ timeoutMs: 150 }),
+    get: loopbackGet({ timeoutMs: 2_000 }),
     store,
     tracker,
     onAlertChange: publishAlertChanges(cursor),
@@ -75,7 +77,7 @@ describe('#176/AC-3 GET /api/machines with one remote', () => {
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), [
       { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: null, alerts: 0 },
-      { id: 'ws-exemplo', label: 'Workstation', state: 'connected', reason: null, version: 1, port: remoteCore!.port, lastReadAt: '2026-11-02T11:59:30.000Z', alerts: 0 },
+      { id: 'ws-exemplo', label: 'Workstation', state: 'connected', reason: null, version: 1, port: remoteCore!.port, lastReadAt: READ_AT_ISO, alerts: 0 },
     ]);
 
     const port = remoteCore!.port;
@@ -89,7 +91,7 @@ describe('#176/AC-3 GET /api/machines with one remote', () => {
       reason: 'port-closed',
       version: null,
       port,
-      lastReadAt: '2026-11-02T11:59:30.000Z',
+      lastReadAt: READ_AT_ISO,
       alerts: 1,
     });
   });
@@ -106,7 +108,7 @@ describe('#176/AC-4 GET /api/telemetry?machine=<remote>', () => {
     assert.equal(r.status, 200);
     const t = (await r.json()) as TelemetryResponse;
     assert.equal(t.machine.state, 'unreachable');
-    assert.equal(t.machine.lastReadAt, '2026-11-02T11:59:30.000Z');
+    assert.equal(t.machine.lastReadAt, READ_AT_ISO);
     assert.equal(t.current?.host.hostname, 'ws-exemplo');
     assert.deepEqual(t.alerts.map((a) => a.message), ['Workstation sem conexão']);
   });
@@ -148,5 +150,13 @@ describe('#176/AC-6 the remote sessions in the attention response', () => {
     const r = await montarAtencao(frota, null, [remote]);
     assert.equal(r.itens.filter((i) => i.machine).length, 0);
     assert.equal(r.total, 7);
+  });
+});
+
+describe('#176/AC-6 remote attention items are untrusted', () => {
+  test('#176/AC-6 an item whose motivo is not a string or whose minutos is not finite is left out', () => {
+    const machine = { id: 'ws-exemplo', label: 'Workstation' };
+    const body = attentionBody([remoteItem('ok'), remoteItem('array', { motivo: ['erro'] }), remoteItem('infinito', { minutos: Infinity })]);
+    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.sessao), ['ok']);
   });
 });

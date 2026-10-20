@@ -24,7 +24,8 @@ export type MachineState = (typeof MACHINE_STATES)[number];
  * Why a remote machine is `unreachable` (#176, decision 0008 section 3):
  * - `port-closed`: the local port the tunnel forwards refuses the connection (the tunnel is down);
  * - `no-response`: the port accepts, but the núcleo over there does not answer HTTP in time, closes
- *   at once or answers something that is not its telemetry (the tunnel is up, the núcleo is not).
+ *   at once or answers with an HTTP error other than 404 (the tunnel is up, the núcleo is not).
+ *   A 200 without a telemetry `version`, or a 404, is `incompatible-version` instead.
  */
 export const UNREACHABLE_REASONS = ['port-closed', 'no-response'] as const;
 export type UnreachableReason = (typeof UNREACHABLE_REASONS)[number];

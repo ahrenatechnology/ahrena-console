@@ -360,6 +360,10 @@ if (demo) {
   const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
   for (const config of machinesConfig.machines) {
+    if (config.port === porta) {
+      log(`machines: ${config.id} uses port ${config.port}, this núcleo's own; skipped`);
+      continue;
+    }
     const remote = new RemoteMachine({
       config,
       get,

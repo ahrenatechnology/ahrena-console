@@ -88,7 +88,7 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     const nivel = i.nivel as NivelDeAtencao;
     const sessao = text(i.sessao, 128);
     const desde = text(i.desde, 40);
-    if (!sessao || !desde || !Object.hasOwn(MOTIVO_CURTO, motivo) || !NIVEIS.includes(nivel) || typeof i.minutos !== 'number') continue;
+    if (!sessao || !desde || typeof i.motivo !== 'string' || !Object.hasOwn(MOTIVO_CURTO, motivo) || !NIVEIS.includes(nivel) || !Number.isFinite(i.minutos)) continue;
     const conta = isObject(i.conta) && typeof i.conta.rotulo === 'string' && typeof i.conta.cor === 'string' ? { rotulo: i.conta.rotulo.slice(0, 40), cor: i.conta.cor.slice(0, 16) } : null;
     out.push({
       sessao,
@@ -100,7 +100,7 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
       motivoCurto: MOTIVO_CURTO[motivo],
       motivoLongo: text(i.motivoLongo, 300) ?? MOTIVO_CURTO[motivo],
       desde,
-      minutos: i.minutos,
+      minutos: i.minutos as number,
       local: null,
       machine: { id: machine.id, label: machine.label },
     });
@@ -147,8 +147,8 @@ export async function montarAtencao(frota: LeituraDaFrota, cursor: string | null
     const body = r.attention();
     itens.push(...remoteAttentionItems(body, r));
     if (isObject(body)) {
-      if (typeof body.ativas === 'number' && body.ativas >= 0) ativas += body.ativas;
-      if (typeof body.comErro === 'number' && body.comErro >= 0) comErro += body.comErro;
+      if (Number.isInteger(body.ativas) && (body.ativas as number) >= 0) ativas += body.ativas as number;
+      if (Number.isInteger(body.comErro) && (body.comErro as number) >= 0) comErro += body.comErro as number;
     }
   }
   // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).

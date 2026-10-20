@@ -5,8 +5,9 @@
 // - The state: `connected`; `unreachable` with the reason (`port-closed`, `no-response`);
 //   `incompatible-version` when the `version` of its telemetry is not this one's (or it has no
 //   telemetry route at all). Until the first read ends, `unreachable` with no reason.
-// - The newest reading goes into the same `TelemetryStore`, under the remote's id: the screen opens
-//   with it, and with its age, while the machine is down.
+// - The newest reading goes into the same `TelemetryStore`, under the remote's id, projected and
+//   capped (storableReading) and stamped with the time this Mac read it: the screen opens with it,
+//   and with its age, while the machine is down.
 // - The alerts: the ones the remote computed over its own samples, plus `machine-unreachable`
 //   ("Workstation sem conexão") while it cannot be read. Each one that enters or exits is published,
 //   like this machine's (sampler.ts), so a machine that goes down or comes back reaches `/api/changes`.
@@ -18,7 +19,7 @@
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
-import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type MachineState, type TelemetryReading } from './model.ts';
+import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type TelemetryReading } from './model.ts';
 import type { RemoteGet, TelemetryStore } from './ports.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
 import type { MachineEntry, MachineStatus } from './service.ts';
@@ -50,42 +51,85 @@ export interface RemoteMachineOptions {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isNumberOrNull = (v: unknown) => v === null || isNumber(v);
+const text = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
+
+/** A stored remote reading never exceeds this, serialized (a real one is a few kB). */
+export const MAX_REMOTE_READING_BYTES = 256 * 1024;
+export const MAX_REMOTE_VOLUMES = 64;
+export const MAX_REMOTE_ALERTS = 50;
+/** The remote's alert kinds this núcleo knows; `machine-unreachable` is this Mac's to compute. */
+const REMOTE_ALERT_KINDS: readonly AlertKind[] = ['load-high', 'volume-full', 'port-exposed', 'tunnel-busy'];
 
 /**
- * Enough of a reading to store it: what `samplePointOf` reads, with the types the `telemetry_samples`
- * columns require. The rest is kept as the remote sent it.
+ * The remote's reading, projected onto `TelemetryReading`, with `takenAt` set to when THIS Mac read
+ * it: the remote's clock never decides what gets pruned or what is "latest", and `lastReadAt` is the
+ * age of the read. `null` when it lacks what a sample needs (the columns of `telemetry_samples`) or
+ * is too large. Groups beyond the series (`claude`, `topProcesses`, `docker`, `ports`, `tunnels`) are
+ * kept as sent, inside the size cap.
  */
-export function isStorableReading(v: unknown): v is TelemetryReading {
-  if (!isObject(v) || typeof v.takenAt !== 'string' || !Number.isFinite(Date.parse(v.takenAt))) return false;
-  const { cpu, memory, disk, network, gpu } = v;
-  if (!isObject(cpu) || !Number.isInteger(cpu.cores) || !isNumberOrNull(cpu.usedPct) || !isObject(cpu.load) || !isNumber(cpu.load.one)) return false;
-  if (!isObject(memory) || !isNumber(memory.usedBytes) || !isNumberOrNull(memory.swapUsedBytes)) return false;
-  if (!isObject(disk) || !Array.isArray(disk.volumes)) return false;
-  if (network !== null && !(isObject(network) && isNumberOrNull(network.rxBytesPerSec) && isNumberOrNull(network.txBytesPerSec))) return false;
-  if (gpu !== null && !(isObject(gpu) && isNumberOrNull(gpu.usedPct))) return false;
-  return true;
+export function storableReading(v: unknown, readAt: number): TelemetryReading | null {
+  if (!isObject(v)) return null;
+  const { host, cpu, memory, disk, network, gpu } = v;
+  if (!isObject(host) || !isObject(cpu) || !Number.isInteger(cpu.cores) || !isNumberOrNull(cpu.usedPct) || !isObject(cpu.load)) return null;
+  const { one, five, fifteen } = cpu.load;
+  if (!isNumber(one) || !isNumber(five) || !isNumber(fifteen)) return null;
+  if (!isObject(memory) || !isNumber(memory.totalBytes) || !isNumber(memory.usedBytes) || !isNumberOrNull(memory.swapUsedBytes) || !isNumberOrNull(memory.swapTotalBytes)) return null;
+  if (!isObject(disk) || !Array.isArray(disk.volumes)) return null;
+  if (network !== null && !(isObject(network) && isNumberOrNull(network.rxBytesPerSec) && isNumberOrNull(network.txBytesPerSec))) return null;
+  if (gpu !== null && !(isObject(gpu) && isNumberOrNull(gpu.usedPct))) return null;
+  const volumes = disk.volumes.slice(0, MAX_REMOTE_VOLUMES).flatMap((x) =>
+    isObject(x) && typeof x.mount === 'string' && isNumber(x.totalBytes) && isNumber(x.usedBytes) && isNumber(x.freeBytes) && isNumber(x.usedPct)
+      ? [{ mount: x.mount.slice(0, 256), totalBytes: x.totalBytes, usedBytes: x.usedBytes, freeBytes: x.freeBytes, usedPct: x.usedPct }]
+      : [],
+  );
+  const platform = host.platform === 'darwin' || host.platform === 'linux' || host.platform === 'simulated' ? host.platform : 'linux';
+  const reading = {
+    takenAt: new Date(readAt).toISOString(),
+    host: { hostname: text(host.hostname, 128) ?? '', platform, os: text(host.os, 128), arch: text(host.arch, 32) ?? '', uptimeSec: isNumber(host.uptimeSec) ? host.uptimeSec : 0 },
+    cpu: { cores: cpu.cores as number, model: text(cpu.model, 128), usedPct: cpu.usedPct as number | null, load: { one, five, fifteen } },
+    memory: {
+      totalBytes: memory.totalBytes,
+      usedBytes: memory.usedBytes,
+      swapTotalBytes: memory.swapTotalBytes as number | null,
+      swapUsedBytes: memory.swapUsedBytes as number | null,
+      pressure: memory.pressure === 'normal' || memory.pressure === 'warning' || memory.pressure === 'critical' ? memory.pressure : null,
+    },
+    gpu: gpu as TelemetryReading['gpu'],
+    disk: { volumes },
+    network: network as TelemetryReading['network'],
+    claude: (v.claude ?? null) as TelemetryReading['claude'],
+    topProcesses: Array.isArray(v.topProcesses) ? (v.topProcesses as TelemetryReading['topProcesses']) : null,
+    docker: (v.docker ?? null) as TelemetryReading['docker'],
+    ports: Array.isArray(v.ports) ? (v.ports as TelemetryReading['ports']) : null,
+    tunnels: Array.isArray(v.tunnels) ? (v.tunnels as TelemetryReading['tunnels']) : null,
+  } satisfies TelemetryReading;
+  return Buffer.byteLength(JSON.stringify(reading)) <= MAX_REMOTE_READING_BYTES ? reading : null;
 }
 
-/** The remote's own alerts that have the alert shape; `machine-unreachable` is this Mac's to compute. */
+/** The remote's own alerts that have the alert shape, with known kinds and capped texts; at most 50. */
 export function remoteAlerts(v: unknown): Alert[] {
   if (!Array.isArray(v)) return [];
-  return v.filter(
-    (a): a is Alert =>
-      isObject(a) &&
-      typeof a.id === 'string' &&
-      a.id !== 'machine-unreachable' &&
-      typeof a.kind === 'string' &&
-      (a.level === 'error' || a.level === 'warning') &&
-      typeof a.message === 'string' &&
-      (a.detail === null || typeof a.detail === 'string') &&
-      typeof a.since === 'string',
-  );
+  const out: Alert[] = [];
+  for (const a of v) {
+    if (out.length >= MAX_REMOTE_ALERTS) break;
+    if (!isObject(a) || typeof a.kind !== 'string' || !REMOTE_ALERT_KINDS.includes(a.kind as AlertKind)) continue;
+    const id = text(a.id, 128);
+    const message = text(a.message, 200);
+    const since = text(a.since, 40);
+    if (!id || !message || !since || (a.level !== 'error' && a.level !== 'warning') || (a.detail !== null && typeof a.detail !== 'string')) continue;
+    out.push({ id, kind: a.kind as AlertKind, level: a.level, message, detail: text(a.detail, 300), since });
+  }
+  return out;
 }
 
-/** The sessions in a remote attention answer, by id (for what entered and left). */
-function attentionSessions(body: unknown): Set<string> {
-  const items = isObject(body) && Array.isArray(body.itens) ? body.itens : [];
-  return new Set(items.flatMap((i) => (isObject(i) && typeof i.sessao === 'string' ? [`${i.sessao}:${String(i.motivo)}`] : [])));
+/** The sessions in a remote attention answer and the reason of each (for what entered, left or changed). */
+function attentionSessions(body: unknown): Map<string, string> {
+  const items = isObject(body) && Array.isArray(body.itens) ? body.itens.slice(0, 200) : [];
+  const out = new Map<string, string>();
+  for (const i of items) {
+    if (isObject(i) && typeof i.sessao === 'string' && typeof i.motivo === 'string' && (i.machine === null || i.machine === undefined)) out.set(i.sessao, i.motivo);
+  }
+  return out;
 }
 
 const INITIAL: MachineStatus = { state: 'unreachable', reason: null, version: null };
@@ -168,8 +212,8 @@ export class RemoteMachine implements MachineEntry {
     }
 
     if (next.state === 'connected' && t.kind === 'response' && isObject(t.body)) {
-      const reading = t.body.current;
-      if (isStorableReading(reading)) {
+      const reading = storableReading(t.body.current, now);
+      if (reading) {
         try {
           await store.putSample(this.id, reading, this.o.retentionMs ?? RETENTION_MS);
         } catch (err) {
@@ -182,11 +226,17 @@ export class RemoteMachine implements MachineEntry {
     }
     if (next.state === 'unreachable' && next.reason) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
 
+    const reasonChanged = this.current.reason !== null && next.reason !== null && this.current.reason !== next.reason;
     this.logTransition(next);
     this.current = next;
     this.publishAttention(attention);
     const update = tracker.update(this.id, alerts);
     for (const alert of update.entered) this.o.onAlertChange?.({ machineId: this.id, alert, change: 'entered' });
+    // From "the tunnel is down" to "the núcleo over there is down" (or back): same alert, new detail.
+    if (reasonChanged) {
+      const alert = update.active.find((a) => a.id === 'machine-unreachable');
+      if (alert && !update.entered.includes(alert)) this.o.onAlertChange?.({ machineId: this.id, alert, change: 'entered' });
+    }
     for (const alert of update.exited) this.o.onAlertChange?.({ machineId: this.id, alert, change: 'exited' });
     return next;
   }
@@ -195,10 +245,9 @@ export class RemoteMachine implements MachineEntry {
     const before = attentionSessions(this.lastAttention);
     const after = attentionSessions(next);
     this.lastAttention = next;
-    const changed = new Set<string>();
-    for (const k of before) if (!after.has(k)) changed.add(k.slice(0, k.lastIndexOf(':')));
-    for (const k of after) if (!before.has(k)) changed.add(k.slice(0, k.lastIndexOf(':')));
-    for (const sessionId of changed) this.o.onAttentionChange?.({ machineId: this.id, sessionId });
+    for (const sessionId of new Set([...before.keys(), ...after.keys()])) {
+      if (before.get(sessionId) !== after.get(sessionId)) this.o.onAttentionChange?.({ machineId: this.id, sessionId });
+    }
   }
 
   private logTransition(next: MachineStatus): void {
