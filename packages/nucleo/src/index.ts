@@ -21,6 +21,6 @@ export * from './cost/index.ts';
 export * from './plano/index.ts';
 export * from './context/index.ts';
 export * from './decisoes/index.ts';
-export * from './perfis/index.ts';
+export * from './profiles/index.ts';
 export * from './changes/index.ts';
 export * from './telemetry/index.ts';

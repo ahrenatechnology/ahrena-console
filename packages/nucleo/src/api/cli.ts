@@ -22,7 +22,7 @@ import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
-import { Perfis } from '../perfis/perfis.ts';
+import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
@@ -314,21 +314,21 @@ const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: l
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
 const historico = new SessionHistory({ storage, decisions: decisoes, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
 
-// Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
-// rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
-const perfis = demo ? null : new Perfis({ storage });
+// Profiles: the current account of each configuration folder goes to the port, with the org name
+// as its label. Re-read every minute, to pick up a new `claude auth login`.
+const perfis = demo ? null : new Profiles({ storage });
 const sincronizarPerfis = () =>
   perfis
-    ?.sincronizar()
+    ?.sync()
     .then((ps) => ps.length)
-    .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
-if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+    .catch((e) => (log(`profiles: ${(e as Error).message}`), 0));
+if (perfis) log(`profiles: ${await sincronizarPerfis()} configuration folder(s)`);
 // The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
 const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
 if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
 const agentConfig = demoAgentConfig
   ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
-  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
+  : createAgentConfigRoute({ folders: () => perfis!.list(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 

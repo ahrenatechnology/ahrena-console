@@ -5,12 +5,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { pastaDeConfiguracao, type PastaDeConfiguracao } from '../perfis/descoberta.ts';
+import { configFolder, type ConfigFolder } from '../profiles/discovery.ts';
 
 export interface DemoAgentConfig {
   /** The whole temporary folder. */
   root: string;
-  folders: PastaDeConfiguracao[];
+  folders: ConfigFolder[];
   /** The synthetic project (`<tmp>/motor-de-regras`). */
   project: string;
   backups: string;
@@ -24,7 +24,7 @@ const json = (o: unknown) => `${JSON.stringify(o, null, 2)}\n`;
 export function mountDemoAgentConfig(base = tmpdir()): DemoAgentConfig {
   const root = mkdtempSync(join(base, 'ahrena-console-demo-'));
   // `<tmp>/.claude` with `.claude.json` beside it: the same layout as the default folder (`~/.claude`).
-  const folder = pastaDeConfiguracao(join(root, '.claude'), 'padrao', root);
+  const folder = configFolder(join(root, '.claude'), 'padrao', root);
   const project = join(root, 'motor-de-regras');
   const write = (path: string, content: string) => {
     mkdirSync(dirname(path), { recursive: true });

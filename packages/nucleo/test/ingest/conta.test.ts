@@ -84,8 +84,8 @@ describe('resolução pelas ordens 1 e 2', () => {
     metadata: {},
   });
   const perfis = (daPasta: ClaudeAccount | null): PerfisDoHook => ({
-    contaDaPasta: async () => daPasta,
-    registrar: async (c) => conta(c.accountUuid, c.organizationUuid),
+    accountForFolder: async () => daPasta,
+    register: async (c) => conta(c.accountUuid, c.organizationUuid),
   });
   const ler = perfis(conta(CONTA_B, ORG_3));
   const nada = perfis(null);
@@ -175,11 +175,11 @@ describe('gravação da conta pela porta', () => {
   test('depois da primeira checagem, só o SessionStart relê a pasta', async () => {
     let leituras = 0;
     const perfis: PerfisDoHook = {
-      contaDaPasta: async () => {
+      accountForFolder: async () => {
         leituras++;
         return null;
       },
-      registrar: async () => assert.fail('sem conta no ambiente, nada a registrar'),
+      register: async () => assert.fail('sem conta no ambiente, nada a registrar'),
     };
     const env = { CLAUDE_CONFIG_DIR: '/cfg/chave-de-api' };
     await ingestHook(store, evento('UserPromptSubmit', 's-api', env), { receivedAt: at(0), perfis });
@@ -192,7 +192,7 @@ describe('gravação da conta pela porta', () => {
 
   test('precedência: env corrige a inferência, config não troca a conta do env', async () => {
     const s0 = { ...HOOK_PAYLOADS.SessionStart, session_id: 's-prec' };
-    await ingestHook(store, comEnv(s0, {}), { receivedAt: at(0), perfis: { contaDaPasta: async () => null, registrar: async () => assert.fail() } });
+    await ingestHook(store, comEnv(s0, {}), { receivedAt: at(0), perfis: { accountForFolder: async () => null, register: async () => assert.fail() } });
     const gravada = await store.getSession('s-prec');
     await store.putSession({ ...gravada!, accountId: `${CONTA_B}/${ORG_3}`, accountSource: 'transcript' });
 

@@ -9,7 +9,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import type { PastaDeConfiguracao } from '../perfis/descoberta.ts';
+import type { ConfigFolder } from '../profiles/discovery.ts';
 import { readFrontmatter } from './frontmatter.ts';
 import {
   AgentConfigError,
@@ -35,7 +35,7 @@ const MAX_COMMAND_DEPTH = 5;
 
 export interface AgentConfigRequest {
   /** The known user configuration folders (profiles), in discovery order. */
-  folders: readonly Pick<PastaDeConfiguracao, 'dir' | 'claudeJson'>[];
+  folders: readonly Pick<ConfigFolder, 'dir' | 'claudeJson'>[];
   /** The known project directories, most recent first (projects.ts). */
   projects: readonly string[];
   /** The request's `?project=`; `null` picks the most recent. */

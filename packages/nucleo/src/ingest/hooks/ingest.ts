@@ -10,12 +10,12 @@ import { applySessionAccount, type Session } from '../../model.ts';
 import type { StoragePort } from '../../storage-port.ts';
 import { atualizarPlano } from '../../plano/gravacao.ts';
 import { updateContextMeters } from '../../context/recording.ts';
-import { Perfis } from '../../perfis/perfis.ts';
+import { Profiles } from '../../profiles/profiles.ts';
 import { resolverConta, type PerfisDoHook } from './conta.ts';
 import { normalizeHook, type NormalizeOptions, type NormalizedHook } from './normalize.ts';
 
 export interface IngestOptions extends NormalizeOptions {
-  /** Perfis (#109), que leem a conta de uma pasta e gravam a `ClaudeAccount`; o padrão é um novo sobre a porta. */
+  /** Profiles (#109), which read a folder's account and write the `ClaudeAccount`; defaults to a new one over the port. */
   perfis?: PerfisDoHook;
 }
 
@@ -62,7 +62,7 @@ export async function ingestHook(storage: StoragePort, raw: unknown, opts: Inges
   }
 
   if (event.type === 'SessionStart' || next.metadata.accountCheckedAt === undefined) {
-    const r = await resolverConta(hints.env, hints.transcriptPath, opts.perfis ?? new Perfis({ storage }));
+    const r = await resolverConta(hints.env, hints.transcriptPath, opts.perfis ?? new Profiles({ storage }));
     if (r.conta) next = applySessionAccount(next, r.conta.account.id, r.conta.source);
     // O que um SessionStart anterior gravou do Desktop não vale mais se este não trouxe.
     const { desktopScope: _escopo, desktopScopeConflict: _conflito, ...anterior } = next.metadata;
