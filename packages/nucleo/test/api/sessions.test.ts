@@ -175,7 +175,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
     // The old values are still accepted (ENGLISH_VALUES_BY_PATH), on the new route too.
     assert.equal((await pedir(api.url, '/api/sessions?status=esperando&order=custo&direction=asc&page=1')).corpo, ok.corpo);
     const erros: Record<string, string> = {
-      'status=nenhuma': 'status: um de all, active, waiting, completed, error, abandoned',
+      'status=nenhuma': 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned',
       'order=nome': 'order: um de activity, duration, cost',
       'direction=lado': 'direction: um de desc, asc',
       'page=0': 'page: um inteiro a partir de 1',

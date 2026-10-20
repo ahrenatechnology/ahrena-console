@@ -15,6 +15,12 @@ export type SessionActivity = {
 
 export type SessionBanner = { type: 'question' | 'permission' | 'error'; text: string; footer: string; since: string }
 
+/** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the reason (packages/nucleo/src/api/attention.ts). */
+export type SessionAttention = {
+  level: 'blocked' | 'idle'
+  reason: 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt'
+}
+
 export type PanelSession = {
   id: string
   title: string
@@ -24,6 +30,8 @@ export type PanelSession = {
   state: InboxState
   reason: AwaitingReason | null
   urgent: boolean
+  /** `null` when the session is not waiting on you and not in error. */
+  attention: SessionAttention | null
   since: string
   turn: number
   activity: SessionActivity

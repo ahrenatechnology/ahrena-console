@@ -165,11 +165,11 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
     },
   },
   // Phase 2b layer 6: the Kanban columns are English in `/api/kanban?column=` (no old path; the old
-  // name `coluna` is global). The two views share `waiting` and `error`.
+  // name `coluna` is global). #245 split the old waiting column (`esperando`) into `blocked` and `idle`,
+  // which never had a Portuguese value, so `esperando` is no longer an alias.
   '/api/kanban': {
     column: {
       ativa: 'active',
-      esperando: 'waiting',
       concluida: 'completed',
       erro: 'error',
       abandonada: 'abandoned',
@@ -264,6 +264,8 @@ export function normalizeLegacyUrl(url: URL): URL {
 //   by that key, with the same selectors as `keys`: `{ status: { waiting: 'esperando' } }`.
 // - `opaque`: selectors whose value is copied untouched (tool inputs, payloads, data maps); the key
 //   itself is still renamed by `keys`.
+// - `drop`: selectors of keys that the old body never had and that are left out of it, so an old route
+//   keeps answering its old bytes when the new route gains a field (#245's `attention`).
 // - `dictKeys`: selectors whose value is an object keyed by DATA (a `Record<Scope, number>`): its
 //   keys are translated by `values[selector]`, never by `keys`, and its children are walked with the
 //   dict's key as their parent (a string child is translated by `values['dict.*']`).
@@ -277,6 +279,7 @@ export function normalizeLegacyUrl(url: URL): URL {
 /** How one body is translated; see the notes above. */
 export interface LegacyBodySpec {
   keys?: Readonly<Record<string, string>>;
+  drop?: readonly string[];
   values?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   dictKeys?: readonly string[];
   opaque?: readonly string[];
@@ -296,6 +299,7 @@ const scoped = <T>(parent: string, map: Readonly<Record<string, T>>): Record<str
 function merge(...specs: LegacyBodySpec[]): LegacyBodySpec {
   return {
     keys: Object.assign({}, ...specs.map((s) => s.keys ?? {})),
+    drop: specs.flatMap((s) => s.drop ?? []),
     values: Object.assign({}, ...specs.map((s) => s.values ?? {})),
     dictKeys: specs.flatMap((s) => s.dictKeys ?? []),
     opaque: specs.flatMap((s) => s.opaque ?? []),
@@ -417,6 +421,8 @@ const sessionCard = (parent: string): LegacyBodySpec => ({
     ...scoped('account', ACCOUNT_KEYS),
   },
   values: { 'activity.type': ACTIVITY_TYPES, 'banner.type': ACTIVITY_TYPES },
+  // #245: the card's English attention is new; the old body never had it.
+  drop: [`${parent}.attention`],
 });
 
 /** The plan (`PanelPlan`) held by `parent`, with its steps and owners. */
@@ -648,6 +654,8 @@ const ATTENTION: LegacyBodySpec = {
     ...scoped('account', { label: 'rotulo', color: 'cor' }),
   },
   values: { 'items.level': ATTENTION_LEVELS, 'items.reason': ATTENTION_REASONS },
+  // #245: the counts and the item's English attention are new; the old body never had them.
+  drop: ['.blocked', '.idle', 'items.attention'],
 };
 
 const CHANGE_TYPES = { session: 'sessao', state: 'estado', 'needs-you': 'precisa-de-voce', plan: 'plano', decision: 'decisao', account: 'conta' };
@@ -703,6 +711,8 @@ const WALL: LegacyBodySpec = {
     ...scoped('context', { used: 'usados', limit: 'limite', label: 'rotulo' }),
   },
   values: { 'activity.type': ACTIVITY_TYPES },
+  // #245: the blocked and idle counts and the card's English attention are new; the old body never had them.
+  drop: ['count.blocked', 'count.idle', 'cards.attention'],
 };
 
 /** `GET /api/load`, new → old (its golden holds only the key set: the counters move on their own). */
@@ -790,6 +800,8 @@ const EVENTS: LegacyBodySpec = {
       'from: depois do to': 'de: depois do ate',
     },
   },
+  // #245: the event's English attention is new; the old body never had it.
+  drop: ['events.attention'],
 };
 
 /** `GET /api/sessions`, new → old: the page, its rows and the errors that cite a parameter. */
@@ -811,13 +823,15 @@ const SESSIONS: LegacyBodySpec = {
   },
   values: {
     '.error': {
-      'status: um de all, active, waiting, completed, error, abandoned': 'status: um de todas, ativas, esperando, concluidas, erro, abandonadas',
+      'status: um de all, active, waiting, blocked, idle, completed, error, abandoned': 'status: um de todas, ativas, esperando, concluidas, erro, abandonadas',
       'order: um de activity, duration, cost': 'ordem: um de atividade, duracao, custo',
       'direction: um de desc, asc': 'sentido: um de desc, asc',
       'page: um inteiro a partir de 1': 'pagina: um inteiro a partir de 1',
       'search grande demais': 'busca grande demais',
     },
   },
+  // #245: the pill counts and the row's English attention are new; the old body never had them.
+  drop: ['.counts', 'items.attention'],
 };
 
 /** `GET /api/history`, new → old. */
@@ -1080,9 +1094,9 @@ const SESSION_WORKFLOW: LegacyBodySpec = {
 // costUsd, conta → account { label, color }) plus ultimoPrompt → lastPrompt, modelo → model; the agent
 // card: sessaoId → sessionId, principal → main, nome → name, descricao → description, motivo → reason,
 // modelo → model, inicio → start, ultimaAtividade → lastActivity, rodando → running, duracaoMs →
-// durationMs. Values: view sessoes → sessions, agentes → agents; column ativa → active, esperando →
-// waiting, concluida → completed, erro → error, abandonada → abandoned, trabalhando → working,
-// concluidos → done. Errors: `view:`, `column:`, `page:`.
+// durationMs. Values: view sessoes → sessions, agentes → agents; column ativa → active, concluida →
+// completed, erro → error, abandonada → abandoned, trabalhando → working, concluidos → done (#245: the old
+// waiting column, `esperando`, split into `blocked` and `idle`). Errors: `view:`, `column:`, `page:`.
 // ---------------------------------------------------------------------------------------------
 
 const GROUPINGS = { family: 'familia', session: 'sessao' };
@@ -1297,7 +1311,7 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => {
 };
 
 const isEmpty = (spec: LegacyBodySpec | undefined): boolean =>
-  !spec || ((!spec.keys || Object.keys(spec.keys).length === 0) && (!spec.values || Object.keys(spec.values).length === 0) && !spec.dictKeys?.length && !spec.opaque?.length);
+  !spec || ((!spec.keys || Object.keys(spec.keys).length === 0) && (!spec.values || Object.keys(spec.values).length === 0) && !spec.dictKeys?.length && !spec.opaque?.length && !spec.drop?.length);
 
 /** `node`, held by `key` inside an object whose own key is `parent`, translated by `spec`. */
 function walk(spec: LegacyBodySpec, node: unknown, key: string, parent: string): unknown {
@@ -1312,7 +1326,11 @@ function walk(spec: LegacyBodySpec, node: unknown, key: string, parent: string):
 
 /** The children of a plain object whose own key is `key`. */
 function walkObject(spec: LegacyBodySpec, node: Record<string, unknown>, key: string): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(node).map(([k, v]) => [pick(spec.keys, key, k) ?? k, listed(spec.opaque, key, k) ? v : walk(spec, v, k, key)]));
+  return Object.fromEntries(
+    Object.entries(node)
+      .filter(([k]) => !listed(spec.drop, key, k))
+      .map(([k, v]) => [pick(spec.keys, key, k) ?? k, listed(spec.opaque, key, k) ? v : walk(spec, v, k, key)]),
+  );
 }
 
 /** A value of a data-keyed dict: strings by `values['dict.*']`, objects with the dict's key as their parent. */

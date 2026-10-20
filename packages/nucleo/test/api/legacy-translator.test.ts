@@ -26,6 +26,13 @@ describe('#173 phase 2b: the back-translator', () => {
     assert.deepEqual(translateBody(spec, body), { total: 2, titulo: 'a', session: { nome: 'b', count: 3 }, other: { titulo: 'c' } });
   });
 
+  test('#245 drop: a key the old body never had is left out, globally or only inside its parent', () => {
+    const spec: LegacyBodySpec = { drop: ['items.attention', '.idle'], keys: { 'items.title': 'titulo' } };
+    const body = { idle: 2, items: [{ title: 'a', attention: { level: 'idle' } }], other: { idle: 1, attention: null } };
+    assert.equal(JSON.stringify(translateBody(spec, body)), '{"items":[{"titulo":"a"}],"other":{"idle":1,"attention":null}}');
+    assert.equal(JSON.stringify(translateBody({ drop: ['attention'] }, body)), '{"idle":2,"items":[{"title":"a"}],"other":{"idle":1}}');
+  });
+
   test('the key order is kept, so the JSON is the same text but for the names', () => {
     const out = translateBody({ keys: { b: 'bb' } }, { a: 1, b: 2, c: 3 });
     assert.equal(JSON.stringify(out), '{"a":1,"bb":2,"c":3}');
@@ -425,7 +432,8 @@ describe('every union member of the feed, the Sessions list and the History answ
   test('sessions: the old `?status=` and `?order=` values become the new ones; the new ones pass', () => {
     const STATUS = { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' };
     const ORDER = { atividade: 'activity', duracao: 'duration', custo: 'cost' };
-    assert.deepEqual(Object.values(STATUS), [...FILTROS_DE_STATUS], 'every status filter');
+    // #245's `blocked` and `idle` never had a Portuguese value: every other filter has its old one.
+    assert.deepEqual(Object.values(STATUS), FILTROS_DE_STATUS.filter((f) => f !== 'blocked' && f !== 'idle'), 'every status filter');
     assert.deepEqual(Object.values(ORDER), [...ORDENS], 'every order');
     for (const [old, status] of Object.entries(STATUS)) {
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`status=${old}`), '/api/sessions').get('status'), status, old);
@@ -782,10 +790,14 @@ describe('every union member of the Decisions of the /ui and the project kanban 
   });
 
   test('query: every old Kanban column becomes the new one, only on /api/kanban', () => {
-    const SESSION_COLUMNS = { ativa: 'active', esperando: 'waiting', concluida: 'completed', erro: 'error', abandonada: 'abandoned' };
-    const AGENT_COLUMNS = { trabalhando: 'working', esperando: 'waiting', concluidos: 'done', erro: 'error' };
-    assert.deepEqual(Object.values(SESSION_COLUMNS), COLUNAS_DAS_SESSOES.map((c) => c.id));
-    assert.deepEqual(Object.values(AGENT_COLUMNS), COLUNAS_DOS_AGENTES.map((c) => c.id));
+    // #245 split the old waiting column (`esperando`) into `blocked` and `idle`, which never had a Portuguese
+    // value, and moved the sessions' errors into `blocked`: every other column keeps its old value.
+    const SESSION_COLUMNS = { ativa: 'active', concluida: 'completed', abandonada: 'abandoned' };
+    const AGENT_COLUMNS = { trabalhando: 'working', concluidos: 'done', erro: 'error' };
+    const newOnes = ['blocked', 'idle'];
+    assert.deepEqual(Object.values(SESSION_COLUMNS), COLUNAS_DAS_SESSOES.map((c) => c.id).filter((c) => !newOnes.includes(c)));
+    assert.deepEqual(Object.values(AGENT_COLUMNS), COLUNAS_DOS_AGENTES.map((c) => c.id).filter((c) => !newOnes.includes(c)));
+    assert.equal(normalizeLegacyQuery(new URLSearchParams('coluna=esperando'), '/api/kanban').get('column'), 'esperando', 'the split column is no alias');
     for (const [old, column] of [...Object.entries(SESSION_COLUMNS), ...Object.entries(AGENT_COLUMNS)]) {
       for (const name of ['coluna', 'column']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/kanban').get('column'), column, `${name}=${old}`);
       assert.equal(normalizeLegacyQuery(new URLSearchParams(`column=${column}`), '/api/kanban').get('column'), column);

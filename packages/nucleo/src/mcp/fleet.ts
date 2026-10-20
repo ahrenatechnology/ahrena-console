@@ -16,7 +16,7 @@ import type { Agent, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from '../api/accounts.ts';
 import type { DesktopIndex, DesktopSession } from '../api/desktop-index.ts';
-import { atencaoDe, type MotivoDaAtencao } from '../api/attention.ts';
+import { atencaoDe, englishAttention, sessionAttention, SESSION_ATTENTION_REASONS, type SessionAttention, type SessionAttentionReason } from '../api/attention.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from '../api/summary.ts';
 import type { PanelAccount } from '../api/types.ts';
 import { safeToolName, safeTitle } from './output.ts';
@@ -26,20 +26,9 @@ import { safeToolName, safeTitle } from './output.ts';
  * the session until you act; the last three are "your turn" in the back-and-forth (the turn
  * ended, Esc, a new session at the prompt).
  */
-export type McpAttentionReason = 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt';
+export type McpAttentionReason = SessionAttentionReason;
 export type McpAttentionGroup = 'blocking' | 'your_turn';
-export const MCP_ATTENTION_REASONS: readonly McpAttentionReason[] = ['permission', 'question', 'plan', 'decision', 'error', 'turn_ended', 'interrupted', 'first_prompt'];
-
-const REASON_FROM_PANEL: Record<MotivoDaAtencao, McpAttentionReason> = {
-  permissao: 'permission',
-  pergunta: 'question',
-  plano: 'plan',
-  decisao: 'decision',
-  erro: 'error',
-  'sua-vez': 'turn_ended',
-  interrompida: 'interrupted',
-  'no-prompt': 'first_prompt',
-};
+export const MCP_ATTENTION_REASONS: readonly McpAttentionReason[] = SESSION_ATTENTION_REASONS;
 
 export interface FleetSession {
   session: Session;
@@ -158,6 +147,12 @@ export class FleetReader {
     return classify(s.inbox, r);
   }
 
+  /** The English attention of a live session (#245): `null` when it does not need you (src/api/attention.ts). */
+  async sessionAttention(s: FleetSession): Promise<SessionAttention | null> {
+    if (!s.inbox.needsYou) return null;
+    return sessionAttention(s.inbox, s.inbox.state === 'error' ? null : await this.summaries.ler(s.session.id, s.session.updatedAt));
+  }
+
   private async *all(query: { status: SessionStatus[] }, sinceDay?: string): AsyncGenerator<Session> {
     let cursor: string | null = null;
     do {
@@ -177,11 +172,10 @@ export class FleetReader {
  * "precisam de você"; here we only add what MCP shows beyond it, without conversation text.
  */
 export function classify(inbox: InboxReading, r: ResumoDosEventos): Attention {
-  const { nivel, porque } = atencaoDe(inbox, r);
-  const reason = REASON_FROM_PANEL[porque];
+  const { level, reason } = englishAttention(atencaoDe(inbox, r));
   return {
     reason,
-    group: nivel === 'precisa' ? 'blocking' : 'your_turn',
+    group: level === 'blocked' ? 'blocking' : 'your_turn',
     tool: reason === 'permission' ? safeToolName(r.ultimaFerramenta?.nome) : null,
     questionOptions: reason === 'question' ? r.ultimaPergunta?.opcoes || null : null,
     errorCode: reason === 'error' ? errorCodeOf(r.ultimoErro?.texto ?? null) : null,

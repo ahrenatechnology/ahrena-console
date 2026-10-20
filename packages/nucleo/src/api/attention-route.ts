@@ -18,12 +18,13 @@
 
 import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
+import { BLOCKED_REASONS, type SessionAttention } from './attention.ts';
 import type { NeedsYouItem } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
 
-/** O nível: o que trava a sessão (`needs`) e o que é só a sua vez; os valores do painel. */
+/** O nível: o que trava a sessão (`needs`) e o que é ociosa (`your-turn`); os valores do painel. */
 export type AttentionLevel = NeedsYouItem['level'];
 /** O motivo, com os valores do "precisam de você" do painel. */
 export type AttentionReason = NeedsYouItem['why'];
@@ -38,6 +39,15 @@ const MOTIVO: Record<McpAttentionReason, AttentionReason> = {
   interrupted: 'interrupted',
   first_prompt: 'no-prompt',
 };
+
+/** The panel's reason as the English attention's (#245): the inverse of `MOTIVO`. */
+const SESSION_REASON = Object.fromEntries(Object.entries(MOTIVO).map(([mcp, panel]) => [panel, mcp])) as Record<AttentionReason, McpAttentionReason>;
+
+/** The English attention (#245) of an item from its panel level and reason. */
+function attentionOf(reason: AttentionReason): SessionAttention {
+  const r = SESSION_REASON[reason];
+  return { level: (BLOCKED_REASONS as readonly string[]).includes(r) ? 'blocked' : 'idle', reason: r };
+}
 
 /** O motivo em poucas palavras, como a bandeja mostra ("Pede permissão · 2 min"). */
 export const MOTIVO_CURTO: Record<AttentionReason, string> = {
@@ -59,6 +69,8 @@ export interface ItemDaAtencao {
   account: { label: string; color: string } | null;
   level: AttentionLevel;
   reason: AttentionReason;
+  /** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the English reason; the same as `level` and `reason`. */
+  attention: SessionAttention;
   /** A frase curta em pt-BR (`MOTIVO_CURTO`). */
   shortReason: string;
   /** A frase do MCP ("pede permissão para usar Bash"); nunca texto da conversa. */
@@ -116,6 +128,7 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
       account,
       level,
       reason,
+      attention: attentionOf(reason),
       shortReason: MOTIVO_CURTO[reason],
       longReason: text(i.longReason, 300) ?? MOTIVO_CURTO[reason],
       since,
@@ -131,11 +144,15 @@ export interface RespostaDaAtencao {
   generatedAt: string;
   /** Para `GET /api/changes?since=`; `null` quando o núcleo subiu sem o cursor. */
   cursor: string | null;
-  /** Todas as da lista: o número da barra de menus. */
+  /** Todas as da lista, as que precisam de você e as ociosas. */
   total: number;
   /** As de nível `needs`. */
   needs: number;
   yourTurn: number;
+  /** #245: as que precisam de você (`attention.level` `blocked`, igual a `needs`): o número da barra de menus. */
+  blocked: number;
+  /** #245: as ociosas (`attention.level` `idle`, igual a `yourTurn`): sem número e sem notificação. */
+  idle: number;
   /** Vivas trabalhando (ativas, delegando, em segundo plano). */
   active: number;
   withError: number;
@@ -153,6 +170,7 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
       account: i.account ? { label: i.account.label, color: i.account.color } : null,
       level: i.group === 'blocking' ? 'needs' : 'your-turn',
       reason,
+      attention: { level: i.group === 'blocking' ? 'blocked' : 'idle', reason: i.reason },
       shortReason: MOTIVO_CURTO[reason],
       longReason: i.reasonText,
       since: i.waitingSince,
@@ -171,7 +189,7 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
       if (Number.isInteger(body.withError) && (body.withError as number) >= 0) withError += Math.min(body.withError as number, MAX_REMOTE_COUNT);
     }
   }
-  // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
+  // Precisa de você (0) antes de parada num erro (1), antes das ociosas (2).
   const grupo = (i: ItemDaAtencao) => (i.level === 'your-turn' ? 2 : i.reason === 'error' ? 1 : 0);
   items.sort((a, b) => grupo(a) - grupo(b) || a.since.localeCompare(b.since) || a.session.localeCompare(b.session) || (a.machine?.id ?? '').localeCompare(b.machine?.id ?? ''));
   for (const s of await frota.live()) {
@@ -185,6 +203,8 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
     total: items.length,
     needs,
     yourTurn: items.length - needs,
+    blocked: needs,
+    idle: items.length - needs,
     active,
     withError,
     items,

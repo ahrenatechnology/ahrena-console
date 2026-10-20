@@ -144,3 +144,61 @@ describe('GET /api/attention', () => {
     await outra.close();
   });
 });
+
+describe('#245 GET /api/attention: blocked and idle', () => {
+  test('#245/AC-3 #245/AC-4 each item carries `attention`, and the counts split blocked from idle; the old keys stay', async () => {
+    await seed(storage);
+    const r = await montarAtencao(frota, null);
+    assert.deepEqual(
+      r.items.map((i) => [i.session, i.attention]),
+      [
+        ['plano', { level: 'blocked', reason: 'plan' }],
+        ['permissao', { level: 'blocked', reason: 'permission' }],
+        ['pergunta', { level: 'blocked', reason: 'question' }],
+        ['erro', { level: 'blocked', reason: 'error' }],
+        ['sua-vez', { level: 'idle', reason: 'turn_ended' }],
+        ['interrompida', { level: 'idle', reason: 'interrupted' }],
+        ['abriu', { level: 'idle', reason: 'first_prompt' }],
+      ],
+    );
+    assert.deepEqual({ total: r.total, needs: r.needs, yourTurn: r.yourTurn, blocked: r.blocked, idle: r.idle }, { total: 7, needs: 4, yourTurn: 3, blocked: 4, idle: 3 });
+    for (const i of r.items) assert.equal(i.level === 'needs', i.attention.level === 'blocked', i.session);
+  });
+
+  test('a remote item gets its attention from its level and reason, whatever the remote sent', async () => {
+    const remote = {
+      id: 'workstation',
+      label: 'Workstation',
+      attention: () => ({
+        items: [
+          { session: 'r1', title: 't', project: null, account: null, level: 'needs', reason: 'question', since: '2026-11-02T11:00:00.000Z', minutes: 60, attention: { level: 'idle', reason: 'turn_ended' } },
+          { session: 'r2', title: 't', project: null, account: null, level: 'your-turn', reason: 'no-prompt', since: '2026-11-02T11:00:00.000Z', minutes: 60 },
+        ],
+      }),
+    };
+    const r = await montarAtencao(frota, null, [remote]);
+    assert.deepEqual(
+      r.items.map((i) => [i.session, i.attention]),
+      [
+        ['r1', { level: 'blocked', reason: 'question' }],
+        ['r2', { level: 'idle', reason: 'first_prompt' }],
+      ],
+    );
+    assert.deepEqual([r.blocked, r.idle], [1, 1]);
+  });
+
+  test('the old route /api/atencao answers neither the new counts nor `attention`', async () => {
+    await seed(storage);
+    const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
+    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota });
+    try {
+      const old = (await (await fetch(`${api.url}/api/atencao`)).json()) as Record<string, unknown> & { itens: Record<string, unknown>[] };
+      assert.deepEqual(Object.keys(old), ['geradoEm', 'cursor', 'total', 'precisam', 'suaVez', 'ativas', 'comErro', 'itens']);
+      for (const i of old.itens) assert.ok(!('attention' in i));
+      const fresh = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
+      assert.deepEqual([fresh.blocked, fresh.idle], [4, 3]);
+    } finally {
+      await api.close();
+    }
+  });
+});

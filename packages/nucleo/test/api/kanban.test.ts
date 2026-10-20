@@ -5,9 +5,12 @@ import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
+import { readSessionAttention, type SessionAttention } from '../../src/api/attention.ts';
+import { ResumosDeSessao } from '../../src/api/summary.ts';
 import {
   COLUNAS_DOS_AGENTES,
   COLUNAS_DAS_SESSOES,
+  colunaDaSessao,
   colunaDoAgente,
   pedidoDoKanban,
   QuadroKanban,
@@ -36,13 +39,13 @@ function pedir(url: string, caminho: string): Promise<{ status: number; corpo: s
   });
 }
 
-const COLUNA_DA_SESSAO = { active: 'active', waiting: 'waiting', completed: 'completed', error: 'error', abandoned: 'abandoned' } as const;
-
 describe('#31 GET /api/kanban com o simulador', () => {
   let storage: SqliteStorage;
   let quadro: QuadroKanban;
   let sessoes: Session[];
   let agentes: Agent[];
+  /** #245: the attention of each session, by the same rule as the route's. */
+  let atencao: Map<string, SessionAttention | null>;
   let api: LocalApi;
   const get = async (caminho: string) => {
     const r = await pedir(api.url, caminho);
@@ -64,6 +67,9 @@ describe('#31 GET /api/kanban com o simulador', () => {
     await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     agentes = (await Promise.all(sessoes.map((s) => storage.listAgents(s.id)))).flat();
+    const resumos = new ResumosDeSessao(storage, { agora: () => AGORA, maximo: 500 });
+    atencao = new Map();
+    for (const s of sessoes) atencao.set(s.id, await readSessionAttention(s, await storage.listAgents(s.id), resumos));
     const contas = new Accounts({ storage, file: null });
     quadro = new QuadroKanban({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
@@ -80,7 +86,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.ok(agentes.some((a) => a.type === 'subagent'));
   });
 
-  test('sem visão é a de sessões: as cinco colunas, na ordem, com rótulos', async () => {
+  test('#245 sem visão é a de sessões: as cinco colunas do wireframe, na ordem, com rótulos', async () => {
     const { status, corpo } = await get('/api/kanban');
     assert.equal(status, 200);
     assert.equal(corpo.view, 'sessions');
@@ -88,29 +94,35 @@ describe('#31 GET /api/kanban com o simulador', () => {
     assert.deepEqual(
       corpo.columns.map((c) => [c.id, c.label]),
       [
-        ['active', 'Ativa'],
-        ['waiting', 'Esperando você'],
-        ['completed', 'Concluída'],
-        ['error', 'Com erro'],
-        ['abandoned', 'Abandonada'],
+        ['active', 'Ativas'],
+        ['blocked', 'Precisam de você'],
+        ['idle', 'Ociosas'],
+        ['completed', 'Concluídas'],
+        ['abandoned', 'Abandonadas'],
       ],
     );
     assert.deepEqual(COLUNAS_DAS_SESSOES.map((c) => c.id), corpo.columns.map((c) => c.id));
   });
 
-  test('visão sessões: cada total bate com as sessões daquele status, e os cards são do status da coluna', async () => {
+  test('visão sessões: cada total bate com as sessões daquele status e atenção, e os cards são da coluna', async () => {
     const { corpo } = await get('/api/kanban?view=sessions');
+    const colunaDe = (s: Session) => colunaDaSessao(displayStatus(s), atencao.get(s.id) ?? null);
     let soma = 0;
     for (const c of corpo.columns) {
-      const esperado = sessoes.filter((s) => COLUNA_DA_SESSAO[displayStatus(s)] === c.id).length;
+      const esperado = sessoes.filter((s) => colunaDe(s) === c.id).length;
       assert.equal(c.total, esperado, c.id);
       assert.equal(c.page, 1);
       assert.equal(c.items.length, Math.min(10, esperado), c.id);
       assert.equal(c.hasMore, esperado > 10, c.id);
-      for (const card of c.items as CardDeSessao[]) assert.equal(COLUNA_DA_SESSAO[card.status], c.id, card.id);
+      for (const card of c.items as CardDeSessao[]) {
+        assert.equal(colunaDaSessao(card.status, card.attention), c.id, card.id);
+        assert.deepEqual(card.attention, atencao.get(card.id), card.id);
+      }
       soma += c.total;
     }
     assert.equal(soma, sessoes.length);
+    assert.ok(corpo.columns.find((c) => c.id === 'blocked')!.total > 0, 'o simulador tem sessões que precisam de você');
+    assert.ok(corpo.columns.find((c) => c.id === 'idle')!.total > 0, 'e ociosas');
   });
 
   test('o card de sessão: título, motivo só esperando, pedido sem quebra de linha, modelo legível, conta sem id', async () => {
@@ -168,19 +180,19 @@ describe('#31 GET /api/kanban com o simulador', () => {
   });
 
   test('só a coluna, na página 1 por padrão; página além do fim vem vazia', async () => {
-    const { corpo } = await get('/api/kanban?column=error');
+    const { corpo } = await get('/api/kanban?column=abandoned');
     assert.equal(corpo.columns.length, 1);
-    assert.equal(corpo.columns[0].id, 'error');
+    assert.equal(corpo.columns[0].id, 'abandoned');
     assert.equal(corpo.columns[0].page, 1);
     // The old parameter names and values still read the same (src/api/legacy-routes.ts).
-    assert.deepEqual((await get('/api/kanban?coluna=erro')).corpo, corpo);
-    const alem = await get('/api/kanban?column=error&page=999');
+    assert.deepEqual((await get('/api/kanban?coluna=abandonada')).corpo, corpo);
+    const alem = await get('/api/kanban?column=abandoned&page=999');
     assert.equal(alem.status, 200);
     assert.deepEqual(alem.corpo.columns[0].items, []);
     assert.equal(alem.corpo.columns[0].hasMore, false);
   });
 
-  test('visão agentes: as quatro colunas, na ordem, com rótulos', async () => {
+  test('#245 visão agentes: as cinco colunas do wireframe, na ordem, com rótulos', async () => {
     const { status, corpo } = await get('/api/kanban?view=agents');
     assert.equal(status, 200);
     assert.equal(corpo.view, 'agents');
@@ -188,7 +200,8 @@ describe('#31 GET /api/kanban com o simulador', () => {
       corpo.columns.map((c) => [c.id, c.label]),
       [
         ['working', 'Trabalhando'],
-        ['waiting', 'Esperando'],
+        ['blocked', 'Precisam de você'],
+        ['idle', 'Ociosos'],
         ['done', 'Concluídos'],
         ['error', 'Erro'],
       ],
@@ -205,7 +218,10 @@ describe('#31 GET /api/kanban com o simulador', () => {
     // Os totais batem com a regra de status, coluna a coluna.
     const porSessao = new Map(sessoes.map((s) => [s.id, s]));
     const esperado = new Map<string, number>();
-    for (const s of sessoes) esperado.set(colunaDoAgente(displayStatus(s)), (esperado.get(colunaDoAgente(displayStatus(s))) ?? 0) + 1);
+    for (const s of sessoes) {
+      const k = colunaDoAgente(displayStatus(s), atencao.get(s.id) ?? null);
+      esperado.set(k, (esperado.get(k) ?? 0) + 1);
+    }
     for (const a of subagentes) {
       const k = colunaDoAgente(QuadroKanban.statusDoSubagente(a, porSessao.get(a.sessionId)!));
       esperado.set(k, (esperado.get(k) ?? 0) + 1);
@@ -235,7 +251,10 @@ describe('#31 GET /api/kanban com o simulador', () => {
 
   test('regras de status do agente', () => {
     assert.equal(colunaDoAgente('active'), 'working');
-    assert.equal(colunaDoAgente('waiting'), 'waiting');
+    assert.equal(colunaDoAgente('waiting', { level: 'blocked', reason: 'permission' }), 'blocked');
+    assert.equal(colunaDoAgente('waiting', { level: 'idle', reason: 'turn_ended' }), 'idle');
+    assert.equal(colunaDoAgente('waiting', null), 'working', 'delegating: it is not your turn');
+    assert.equal(colunaDoAgente('error', { level: 'blocked', reason: 'error' }), 'error');
     assert.equal(colunaDoAgente('completed'), 'done');
     assert.equal(colunaDoAgente('abandoned'), 'done');
     assert.equal(colunaDoAgente('error'), 'error');
@@ -263,8 +282,9 @@ describe('#31 GET /api/kanban com o simulador', () => {
   test('400 para visão, coluna e página inválidas, citando o parâmetro novo', async () => {
     const errors: [string, string][] = [
       ['view=quadro', 'view: um de sessions, agents'],
-      ['view=agents&column=active', 'column: uma de working, waiting, done, error'],
-      ['column=working', 'column: uma de active, waiting, completed, error, abandoned'],
+      ['view=agents&column=active', 'column: uma de working, blocked, idle, done, error'],
+      ['column=working', 'column: uma de active, blocked, idle, completed, abandoned'],
+      ['column=waiting', 'column: uma de active, blocked, idle, completed, abandoned'],
       ['page=2', 'page: só com column'],
       ['column=active&page=0', 'page: um inteiro a partir de 1'],
     ];
