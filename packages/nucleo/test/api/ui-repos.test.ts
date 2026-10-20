@@ -29,7 +29,6 @@ import {
   languages,
   MINUS,
   thousand,
-  periodInUrl,
   periodFrom,
   percentage,
   relative,
@@ -45,47 +44,47 @@ const HORA = 60 * MIN;
 const DIA = 24 * HORA;
 
 interface Repo {
-  dono: string;
-  nome: string;
-  completo: string;
-  visibilidade: 'publico' | 'privado';
-  issuesAbertas: number;
-  prsAbertos: number;
-  sessoes: { ativas: number; precisam: number; noMes: number };
-  ultimoPush: string | null;
+  owner: string;
+  name: string;
+  fullName: string;
+  visibility: 'public' | 'private';
+  openIssues: number;
+  openPrs: number;
+  sessions: { active: number; needYou: number; thisMonth: number };
+  lastPush: string | null;
 }
 
-const repo = (dono: string, nome: string, o: Partial<Repo> = {}): Repo => ({
-  dono,
-  nome,
-  completo: `${dono}/${nome}`,
-  visibilidade: 'privado',
-  issuesAbertas: 0,
-  prsAbertos: 0,
-  sessoes: { ativas: 0, precisam: 0, noMes: 0 },
-  ultimoPush: null,
+const repo = (owner: string, name: string, o: Partial<Repo> = {}): Repo => ({
+  owner,
+  name,
+  fullName: `${owner}/${name}`,
+  visibility: 'private',
+  openIssues: 0,
+  openPrs: 0,
+  sessions: { active: 0, needYou: 0, thisMonth: 0 },
+  lastPush: null,
   ...o,
 });
 
 const GRUPOS = [
   {
-    dono: 'exemplo-labs',
-    tipo: 'org',
+    owner: 'exemplo-labs',
+    type: 'org',
     repos: [
-      repo('exemplo-labs', 'vitrine-demo', { visibilidade: 'publico', issuesAbertas: 14, prsAbertos: 3, sessoes: { ativas: 4, precisam: 1, noMes: 7 }, ultimoPush: '2026-10-20T10:00:00Z' }),
-      repo('exemplo-labs', 'motor-de-regras', { issuesAbertas: 9, prsAbertos: 5, sessoes: { ativas: 3, precisam: 2, noMes: 5 }, ultimoPush: '2026-10-20T11:00:00Z' }),
-      repo('exemplo-labs', 'gateway-sandbox', { issuesAbertas: 4, prsAbertos: 1, ultimoPush: '2026-10-19T10:00:00Z' }),
+      repo('exemplo-labs', 'vitrine-demo', { visibility: 'public', openIssues: 14, openPrs: 3, sessions: { active: 4, needYou: 1, thisMonth: 7 }, lastPush: '2026-10-20T10:00:00Z' }),
+      repo('exemplo-labs', 'motor-de-regras', { openIssues: 9, openPrs: 5, sessions: { active: 3, needYou: 2, thisMonth: 5 }, lastPush: '2026-10-20T11:00:00Z' }),
+      repo('exemplo-labs', 'gateway-sandbox', { openIssues: 4, openPrs: 1, lastPush: '2026-10-19T10:00:00Z' }),
     ],
   },
   {
-    dono: 'estudio-ficticio',
-    tipo: 'org',
-    repos: [repo('estudio-ficticio', 'catálogo-exemplo', { visibilidade: 'publico', sessoes: { ativas: 0, precisam: 0, noMes: 1 }, ultimoPush: null })],
+    owner: 'estudio-ficticio',
+    type: 'org',
+    repos: [repo('estudio-ficticio', 'catálogo-exemplo', { visibility: 'public', sessions: { active: 0, needYou: 0, thisMonth: 1 }, lastPush: null })],
   },
-  { dono: 'dev-sintetico', tipo: 'pessoal', repos: [repo('dev-sintetico', 'cli-de-notas', { visibilidade: 'publico', ultimoPush: '2026-10-18T10:00:00Z' })] },
+  { owner: 'dev-sintetico', type: 'personal', repos: [repo('dev-sintetico', 'cli-de-notas', { visibility: 'public', lastPush: '2026-10-18T10:00:00Z' })] },
 ];
 
-const nomes = (gs: { dono: string; repos: Repo[] }[]) => gs.map((g) => [g.dono, g.repos.map((r) => r.nome)]);
+const nomes = (gs: { owner: string; repos: Repo[] }[]) => gs.map((g) => [g.owner, g.repos.map((r) => r.name)]);
 
 describe('repos na /ui: os números', () => {
   test('#104 critério 2: inteiros pt-BR e o traço para o que não veio', () => {
@@ -166,16 +165,15 @@ describe('repos na /ui: os números', () => {
     assert.equal(ago(antes(30 * HORA), agora), 'ontem');
   });
 
-  test('#105 critério 6: o período vem de ?period= (1y na URL é o 1a da API) e cai no padrão se estranho', () => {
+  test('#105 critério 6: o período vem de ?period= (o valor da API, 1y para o ano) e cai no padrão se estranho', () => {
     assert.equal(periodFrom('?period=30d'), '30d');
-    assert.equal(periodFrom('?period=1y'), '1a');
+    assert.equal(periodFrom('?period=1y'), '1y');
+    assert.equal(periodFrom('?period=1a'), '90d', 'the old value is the shell router\'s job (legacyUrl)');
     assert.equal(periodFrom(''), '90d');
     assert.equal(periodFrom('?period=7d'), '90d');
     assert.equal(periodFrom('?periodo=30d'), '90d', 'the old query is the shell router\'s job (legacyUrl)');
-    assert.equal(periodInUrl('1a'), '1y');
-    assert.equal(periodInUrl('30d'), '30d');
     assert.equal(periodLabel('30d'), '30 dias');
-    assert.equal(periodLabel('1a'), '1 ano');
+    assert.equal(periodLabel('1y'), '1 ano');
   });
 });
 
@@ -189,7 +187,7 @@ describe('repos na /ui: a lista (C22)', () => {
 
   test('#104 critério 1: filtro por organização', () => {
     assert.deepEqual(
-      filterRepos(GRUPOS, { dono: 'dev-sintetico' }).map((g: { dono: string }) => g.dono),
+      filterRepos(GRUPOS, { dono: 'dev-sintetico' }).map((g: { owner: string }) => g.owner),
       ['dev-sintetico'],
     );
     assert.equal(filterRepos(GRUPOS, { dono: '' }).length, 3);
@@ -209,9 +207,9 @@ describe('repos na /ui: a lista (C22)', () => {
   });
 
   test('#104 critério 1: ordenação por atividade (padrão), nome, issues, PRs e sessões', () => {
-    const lab = (ordem: string) => filterRepos(GRUPOS, { dono: 'exemplo-labs', ordem })[0].repos.map((r: Repo) => r.nome);
+    const lab = (ordem: string) => filterRepos(GRUPOS, { dono: 'exemplo-labs', ordem })[0].repos.map((r: Repo) => r.name);
     assert.deepEqual(lab('recente'), ['motor-de-regras', 'vitrine-demo', 'gateway-sandbox']);
-    assert.deepEqual(filterRepos(GRUPOS, { dono: 'exemplo-labs' })[0].repos.map((r: Repo) => r.nome), lab('recente'));
+    assert.deepEqual(filterRepos(GRUPOS, { dono: 'exemplo-labs' })[0].repos.map((r: Repo) => r.name), lab('recente'));
     assert.deepEqual(lab('nome'), ['gateway-sandbox', 'motor-de-regras', 'vitrine-demo']);
     assert.deepEqual(lab('issues'), ['vitrine-demo', 'motor-de-regras', 'gateway-sandbox']);
     assert.deepEqual(lab('prs'), ['motor-de-regras', 'vitrine-demo', 'gateway-sandbox']);
@@ -247,8 +245,8 @@ describe('repos na /ui: as escalas dos gráficos', () => {
   test('#105 critério 1: frequência com adicionadas para cima e removidas para baixo, mesma escala', () => {
     const f = frequency(
       [
-        { semana: 'a', adicionadas: 100, removidas: 50 },
-        { semana: 'b', adicionadas: 20, removidas: 100 },
+        { week: 'a', added: 100, removed: 50 },
+        { week: 'b', added: 20, removed: 100 },
       ],
       200,
       64,
@@ -267,79 +265,79 @@ describe('repos na /ui: as escalas dos gráficos', () => {
     assert.deepEqual(slices([61, 4, 3]), [89.7, 5.9, 4.4]);
     assert.deepEqual(slices([0, 0]), [0, 0]);
     const l = languages([
-      { nome: 'CSS', bytes: 12, fatia: 0.12 },
-      { nome: 'TypeScript', bytes: 71, fatia: 0.71 },
-      { nome: 'HTML', bytes: 9, fatia: 0.09 },
-      { nome: 'Shell', bytes: 5, fatia: 0.05 },
-      { nome: 'JavaScript', bytes: 2, fatia: 0.02 },
-      { nome: 'Dockerfile', bytes: 1, fatia: 0.01 },
+      { name: 'CSS', bytes: 12, share: 0.12 },
+      { name: 'TypeScript', bytes: 71, share: 0.71 },
+      { name: 'HTML', bytes: 9, share: 0.09 },
+      { name: 'Shell', bytes: 5, share: 0.05 },
+      { name: 'JavaScript', bytes: 2, share: 0.02 },
+      { name: 'Dockerfile', bytes: 1, share: 0.01 },
     ]);
     assert.deepEqual(l.map((x: { nome: string }) => x.nome), ['TypeScript', 'CSS', 'HTML', 'Shell', 'Outras']);
     assert.equal(Math.round(l[4].pct), 3);
     assert.deepEqual(languages(null), []);
-    assert.equal(languages([{ nome: 'Go', bytes: 10, fatia: 1 }]).length, 1, 'sem resto, sem "Outras"');
+    assert.equal(languages([{ name: 'Go', bytes: 10, share: 1 }]).length, 1, 'sem resto, sem "Outras"');
   });
 });
 
 describe('repos na /ui: o que a tela mostra', () => {
-  const lista = (o = {}) => ({ estado: 'pronto', atualizadoEm: '2026-10-20T10:00:00Z', erro: null, grupos: [], ...o });
-  const metricas = (o = {}) => ({ estado: 'pronto', erro: null, calculando: [], repo: { completo: 'a/b' }, ...o });
+  const lista = (o = {}) => ({ state: 'ready', updatedAt: '2026-10-20T10:00:00Z', error: null, groups: [], ...o });
+  const metricas = (o = {}) => ({ state: 'ready', error: null, computing: [], repo: { fullName: 'a/b' }, ...o });
 
   test('#104 critério 3: estado da tela sem dado (carregando, lendo, sem GitHub, erro)', () => {
-    assert.deepEqual(screenState({}), { tela: 'carregando', faixa: null, reler: false });
-    const semDado = lista({ atualizadoEm: null });
+    assert.deepEqual(screenState({}), { tela: 'loading', faixa: null, reler: false });
+    const semDado = lista({ updatedAt: null });
     assert.equal(hasList(semDado), false);
-    assert.deepEqual(screenState({ dados: { ...semDado, estado: 'carregando' }, temDado: false }), { tela: 'lendo', faixa: null, reler: true });
-    assert.equal(screenState({ dados: { ...semDado, estado: 'sem-github' }, temDado: false }).tela, 'sem-github');
-    assert.equal(screenState({ dados: { ...semDado, estado: 'erro', erro: 'limite' }, temDado: false }).tela, 'erro');
-    assert.equal(screenState({ falha: new Error('sem núcleo'), temDado: false }).tela, 'erro');
-    assert.equal(screenState({ dados: semDado, temDado: false }).tela, 'vazio');
+    assert.deepEqual(screenState({ dados: { ...semDado, state: 'loading' }, temDado: false }), { tela: 'reading', faixa: null, reler: true });
+    assert.equal(screenState({ dados: { ...semDado, state: 'no-github' }, temDado: false }).tela, 'no-github');
+    assert.equal(screenState({ dados: { ...semDado, state: 'error', error: 'limite' }, temDado: false }).tela, 'error');
+    assert.equal(screenState({ falha: new Error('sem núcleo'), temDado: false }).tela, 'error');
+    assert.equal(screenState({ dados: semDado, temDado: false }).tela, 'empty');
   });
 
   test('#104 critério 3: erro com dado anterior mostra a faixa e os dados', () => {
-    const d = lista({ erro: 'dado de 24 h', grupos: [{ dono: 'x', tipo: 'org', repos: [] }] });
+    const d = lista({ error: 'dado de 24 h', groups: [{ owner: 'x', type: 'org', repos: [] }] });
     assert.equal(hasList(d), true);
-    assert.deepEqual(screenState({ dados: d, temDado: true }), { tela: 'dados', faixa: 'github', reler: false });
-    assert.equal(screenState({ dados: d, falha: new Error('caiu'), temDado: true }).faixa, 'conexao');
+    assert.deepEqual(screenState({ dados: d, temDado: true }), { tela: 'data', faixa: 'github', reler: false });
+    assert.equal(screenState({ dados: d, falha: new Error('caiu'), temDado: true }).faixa, 'connection');
     assert.equal(screenState({ dados: lista(), temDado: true }).faixa, null);
   });
 
   test('#105: estado das métricas (não encontrado, montagem parcial, calculando)', () => {
-    assert.equal(screenState({ dados: metricas({ estado: 'nao-encontrado', repo: null }), temDado: false }).tela, 'nao-encontrado');
-    const parcial = metricas({ estado: 'carregando' });
+    assert.equal(screenState({ dados: metricas({ state: 'not-found', repo: null }), temDado: false }).tela, 'not-found');
+    const parcial = metricas({ state: 'loading' });
     assert.equal(hasRepo(parcial), true);
-    assert.deepEqual(screenState({ dados: parcial, temDado: true }), { tela: 'dados', faixa: null, reler: true });
-    assert.equal(screenState({ dados: metricas({ calculando: ['commits'] }), temDado: true }).reler, true);
+    assert.deepEqual(screenState({ dados: parcial, temDado: true }), { tela: 'data', faixa: null, reler: true });
+    assert.equal(screenState({ dados: metricas({ computing: ['commits'] }), temDado: true }).reler, true);
     assert.equal(screenState({ dados: metricas(), temDado: true }).reler, false);
   });
 
   test('#105 critério 1: valor, "calculando…" ou "—", nunca número inventado', () => {
-    const d = metricas({ calculando: ['linhas'] });
-    assert.deepEqual(valueOrPending(48_300, d, 'linhas', thousand), { texto: '48,3 mil', pendente: false });
+    const d = metricas({ computing: ['lines'] });
+    assert.deepEqual(valueOrPending(48_300, d, 'lines', thousand), { texto: '48,3 mil', pendente: false });
     assert.deepEqual(valueOrPending(0, d, 'commits', integer), { texto: '0', pendente: false }, 'zero é valor');
-    assert.deepEqual(valueOrPending(null, d, 'linhas'), { texto: COMPUTING, pendente: true });
+    assert.deepEqual(valueOrPending(null, d, 'lines'), { texto: COMPUTING, pendente: true });
     assert.deepEqual(valueOrPending(null, d, 'commits'), { texto: DASH, pendente: false });
-    assert.equal(valueOrPending(null, metricas({ estado: 'carregando' }), 'prs').texto, COMPUTING, 'montagem parcial');
-    assert.equal(pending(metricas(), 'linhas'), false);
+    assert.equal(valueOrPending(null, metricas({ state: 'loading' }), 'prs').texto, COMPUTING, 'montagem parcial');
+    assert.equal(pending(metricas(), 'lines'), false);
   });
 
   test('#104 e #105: a mudança do Ao vivo que pede releitura (lista e a chave sem caixa)', () => {
-    assert.equal(changeMatters([{ type: 'repos', key: 'lista' }]), true);
-    assert.equal(changeMatters([{ type: 'repos', key: 'exemplo-labs/vitrine-demo' }]), false, 'a lista só relê por `lista`');
-    assert.equal(changeMatters([{ type: 'session', key: 'lista' }]), false);
+    assert.equal(changeMatters([{ type: 'repos', key: 'list' }]), true);
+    assert.equal(changeMatters([{ type: 'repos', key: 'exemplo-labs/vitrine-demo' }]), false, 'a lista só relê por `list`');
+    assert.equal(changeMatters([{ type: 'session', key: 'list' }]), false);
     assert.equal(changeMatters([{ type: 'repos', key: 'exemplo-labs/vitrine-demo' }], 'Exemplo-Labs/Vitrine-Demo'), true);
-    assert.equal(changeMatters([{ type: 'repos', key: 'lista' }], 'a/b'), true);
+    assert.equal(changeMatters([{ type: 'repos', key: 'list' }], 'a/b'), true);
     assert.equal(changeMatters([{ type: 'repos', key: 'a/c' }], 'a/b'), false);
     assert.equal(changeMatters([], 'a/b'), false);
   });
 
   test('#105 critério 5: o card de tráfego só com escrita; sem ela, "Comunidade"', () => {
-    assert.equal(trafficCardKind(metricas({ escrita: true, trafego: { visitas: 1 }, seguranca: {} })), 'trafego');
+    assert.equal(trafficCardKind(metricas({ canWrite: true, traffic: { views: 1 }, security: {} })), 'traffic');
     // Com escrita e a montagem ainda sem as chaves: o card fica, com "calculando…".
-    const parcial = metricas({ estado: 'carregando', escrita: true });
-    assert.equal(trafficCardKind(parcial), 'trafego');
-    assert.equal(valueOrPending(parcial.trafego, parcial, 'trafego').texto, COMPUTING);
-    assert.equal(trafficCardKind(metricas({ escrita: false })), 'comunidade');
+    const parcial = metricas({ state: 'loading', canWrite: true });
+    assert.equal(trafficCardKind(parcial), 'traffic');
+    assert.equal(valueOrPending(parcial.traffic, parcial, 'traffic').texto, COMPUTING);
+    assert.equal(trafficCardKind(metricas({ canWrite: false })), 'community');
   });
 
   test('#105: link externo só https em github.com', () => {

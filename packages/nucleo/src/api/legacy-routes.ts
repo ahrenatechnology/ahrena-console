@@ -125,7 +125,9 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   // (`/api/decisions?groupBy=`) are English in the handlers; each parameter has only that one reader.
   view: { sessoes: 'sessions', agentes: 'agents' },
   groupBy: { familia: 'family', sessao: 'session' },
-  period: { '1y': '1a' },
+  // Phase 2b layer 7: the repository period is English in `/api/repos/<owner>/<repo>?period=` (no old
+  // path; the old name `periodo` is global), and the year is `1y`.
+  period: { '1a': '1y' },
   // Phase 2b layer 3: the change types are English in `/api/changes?type=` (src/mudancas/cursor.ts).
   type: { sessao: 'session', estado: 'state', 'precisa-de-voce': 'needs-you', plano: 'plan', decisao: 'decision', conta: 'account' },
 };
@@ -654,6 +656,10 @@ const CHANGES: LegacyBodySpec = {
   },
   values: {
     'changes.type': CHANGE_TYPES,
+    // Phase 2b layer 7: the `repos` change of the repository list. `key` mixes this fixed value with
+    // data (session, decision and account ids, `<machine>:<alert>`, a repo's `owner/repo`); none of
+    // those is the bare word `list`.
+    'changes.key': { list: 'lista' },
     '.error': {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',

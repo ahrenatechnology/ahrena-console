@@ -17,6 +17,7 @@ import { PROJECT_ERROR_CODES } from '../../src/api/projeto.ts';
 import { ciDoPr, reviewDoPr } from '../../src/api/trabalho.ts';
 import { COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, VISOES } from '../../src/api/kanban.ts';
 import { DAYS_ERROR, DIAS_DO_CUSTO, TZ_ERROR } from '../../src/api/rota-analytics.ts';
+import { LIST_CHANGE_KEY, PERIODOS } from '../../src/api/repos.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -834,5 +835,22 @@ describe('every union member of the Decisions of the /ui and the project kanban 
     assert.deepEqual(route({ error: DAYS_ERROR }), { error: `dias: ${days}` });
     assert.deepEqual(route({ error: TZ_ERROR }), { error: TZ_ERROR.replace(/^tz:/, 'fuso:') });
     assert.equal(legacyResponseFor('/api/analytics/cost'), null, 'the new route is not translated');
+  });
+  test('repos: `?period=` takes `30d`, `90d` and `1y`, and the old `1a` under either name becomes `1y`', () => {
+    assert.deepEqual([...PERIODOS], ['30d', '90d', '1y']);
+    for (const name of ['period', 'periodo']) {
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=1a`), '/api/repos/o/r').get('period'), '1y', name);
+      for (const p of PERIODOS) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${p}`), '/api/repos/o/r').get('period'), p, `${name}=${p}`);
+    }
+  });
+
+  test('changes: the `repos` list key is `list`, answered as `lista` on the old route; data keys are untouched', () => {
+    assert.equal(LIST_CHANGE_KEY, 'list');
+    const route = legacyResponseFor('/api/mudancas')!;
+    const keys = [LIST_CHANGE_KEY, 'exemplo-labs/lista', '00000000-0000-4000-8000-000000000001', 'local:load-high'];
+    const body = { cursor: 'g.1', changes: keys.map((key, seq) => ({ type: 'repos', key, sessionId: null, accountId: null, seq })), reset: false, timedOut: false };
+    const out = route(body) as { mudancas: { chave: string }[] };
+    assert.deepEqual(out.mudancas.map((c) => c.chave), ['lista', ...keys.slice(1)]);
+    assert.equal(legacyResponseFor('/api/changes'), null);
   });
 });

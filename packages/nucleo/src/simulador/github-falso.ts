@@ -389,9 +389,9 @@ export function gitDaDemo(dados: DadosDoGithubFalso = DADOS_DA_DEMO) {
  * Sessões que o cenário do simulador não tem, somadas às de verdade na demonstração, para a tela
  * ficar como no wireframe (ativas e "precisam de você" em alguns repositórios). Só a demo usa.
  */
-export const SESSOES_EXTRAS_DA_DEMO: Record<string, { ativas: number; precisam: number; noMes: number }> = {
-  'exemplo-labs/vitrine-demo': { ativas: 3, precisam: 1, noMes: 6 },
-  'exemplo-labs/motor-de-regras': { ativas: 3, precisam: 2, noMes: 5 },
-  'exemplo-labs/painel-de-metricas': { ativas: 1, precisam: 1, noMes: 2 },
-  'estudio-ficticio/app-receitas': { ativas: 1, precisam: 0, noMes: 3 },
+export const SESSOES_EXTRAS_DA_DEMO: Record<string, { active: number; needYou: number; thisMonth: number }> = {
+  'exemplo-labs/vitrine-demo': { active: 3, needYou: 1, thisMonth: 6 },
+  'exemplo-labs/motor-de-regras': { active: 3, needYou: 2, thisMonth: 5 },
+  'exemplo-labs/painel-de-metricas': { active: 1, needYou: 1, thisMonth: 2 },
+  'estudio-ficticio/app-receitas': { active: 1, needYou: 0, thisMonth: 3 },
 };

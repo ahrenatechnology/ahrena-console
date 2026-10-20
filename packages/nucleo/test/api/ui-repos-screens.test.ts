@@ -33,95 +33,95 @@ const iso = (msAtras: number) => new Date(AGORA - msAtras).toISOString();
 
 // ---------- respostas de exemplo ----------
 
-const repoDaLista = (dono: string, nome: string, extra: Partial<RepoDaLista> = {}): RepoDaLista => ({
-  dono,
-  nome,
-  completo: `${dono}/${nome}`,
-  url: `https://github.com/${dono}/${nome}`,
-  visibilidade: 'publico',
-  linguagem: null,
+const repoDaLista = (owner: string, name: string, extra: Partial<RepoDaLista> = {}): RepoDaLista => ({
+  owner,
+  name,
+  fullName: `${owner}/${name}`,
+  url: `https://github.com/${owner}/${name}`,
+  visibility: 'public',
+  language: null,
   commits12: [],
-  issuesAbertas: 0,
-  prsAbertos: 0,
+  openIssues: 0,
+  openPrs: 0,
   ci: null,
-  sessoes: { ativas: 0, precisam: 0, noMes: 0 },
-  ultimoPush: null,
+  sessions: { active: 0, needYou: 0, thisMonth: 0 },
+  lastPush: null,
   ...extra,
 });
 
 function listaDeExemplo(): ListaDeRepos {
   return {
-    estado: 'pronto',
-    atualizadoEm: iso(0),
-    erro: null,
-    conta: 'dev-sintetico',
-    resumo: { organizacoes: 1, repositorios: 3, comSessoesNoMes: 1, prsAbertos: 4, prsEsperandoReview: 1, issuesAbertas: 14, issuesFechadasNaSemana: 2, ci: { taxaVerde: 0.9, execucoes: 20, dias: 7 } },
-    grupos: [
+    state: 'ready',
+    updatedAt: iso(0),
+    error: null,
+    account: 'dev-sintetico',
+    summary: { organizations: 1, repositories: 3, withSessionsThisMonth: 1, openPrs: 4, prsAwaitingReview: 1, openIssues: 14, issuesClosedThisWeek: 2, ci: { greenRate: 0.9, runs: 20, days: 7 } },
+    groups: [
       {
-        dono: 'exemplo-labs',
-        tipo: 'org',
+        owner: 'exemplo-labs',
+        type: 'org',
         repos: [
           repoDaLista('exemplo-labs', 'vitrine-demo', {
-            linguagem: 'TypeScript',
+            language: 'TypeScript',
             commits12: [1, 4, 2, 8, 5, 3, 9, 7, 6, 4, 10, 12],
-            issuesAbertas: 12,
-            prsAbertos: 3,
+            openIssues: 12,
+            openPrs: 3,
             ci: 'ok',
-            sessoes: { ativas: 2, precisam: 1, noMes: 5 },
-            ultimoPush: iso(2 * HORA + 60_000),
+            sessions: { active: 2, needYou: 1, thisMonth: 5 },
+            lastPush: iso(2 * HORA + 60_000),
           }),
-          repoDaLista('exemplo-labs', 'api-ficticia', { visibilidade: 'privado', linguagem: 'Python', issuesAbertas: 2, prsAbertos: 1, ci: 'falhou', ultimoPush: iso(30 * HORA) }),
+          repoDaLista('exemplo-labs', 'api-ficticia', { visibility: 'private', language: 'Python', openIssues: 2, openPrs: 1, ci: 'failed', lastPush: iso(30 * HORA) }),
         ],
       },
-      { dono: 'dev-sintetico', tipo: 'pessoal', repos: [repoDaLista('dev-sintetico', 'dotfiles', { ultimoPush: iso(40 * 24 * HORA) })] },
+      { owner: 'dev-sintetico', type: 'personal', repos: [repoDaLista('dev-sintetico', 'dotfiles', { lastPush: iso(40 * 24 * HORA) })] },
     ],
   };
 }
 
-const amostra = (lidos: number, total: number) => ({ lidos, total, truncado: lidos < total });
+const amostra = (read: number, total: number) => ({ read, total, truncated: read < total });
 
 function metricasDeExemplo(extra: Partial<MetricasDoRepo> = {}): MetricasDoRepo {
   return {
-    estado: 'pronto',
-    atualizadoEm: iso(0),
-    erro: null,
-    calculando: [],
-    periodo: '90d',
+    state: 'ready',
+    updatedAt: iso(0),
+    error: null,
+    computing: [],
+    period: '90d',
     repo: {
-      completo: 'exemplo-labs/vitrine-demo',
+      fullName: 'exemplo-labs/vitrine-demo',
       url: 'https://github.com/exemplo-labs/vitrine-demo',
-      visibilidade: 'publico',
+      visibility: 'public',
       ci: 'ok',
-      branchPadrao: 'main',
-      estrelas: 7,
+      defaultBranch: 'main',
+      stars: 7,
       forks: 1,
-      observadores: 3,
+      watchers: 3,
       release: null,
-      licenca: null,
+      license: null,
     },
-    abas: { issues: 12, prs: 3, sessoes: 5 },
-    linhas: { total: 48_300, noPeriodo: 6_100 },
-    commits: { total: 120, porSemana: 9, semanas: [5, 9, 12] },
-    frequencia: { semanas: [{ semana: iso(14 * 24 * HORA), adicionadas: 900, removidas: 200 }], adicionadas: 900, removidas: 200 },
-    issues: { porTipo: [{ tipo: 'Bug', fechadas: 4, abertas: 2 }], fechadas: 4, abertas: 2, medianaAteFecharMs: 2 * HORA, amostra: amostra(6, 6) },
+    tabs: { issues: 12, prs: 3, sessions: 5 },
+    lines: { total: 48_300, inPeriod: 6_100 },
+    commits: { total: 120, perWeek: 9, weeks: [5, 9, 12] },
+    frequency: { weeks: [{ week: iso(14 * 24 * HORA), added: 900, removed: 200 }], added: 900, removed: 200 },
+    issues: { byType: [{ type: 'Bug', closed: 4, open: 2 }], closed: 4, open: 2, medianTimeToCloseMs: 2 * HORA, sample: amostra(6, 6) },
     prs: {
-      mergeados: 10,
-      fechadosSemMerge: 1,
-      abertos: 3,
-      medianaAteMergeMs: 3 * HORA,
-      medianaAtePrimeiroReviewMs: HORA,
-      tamanhoMediano: { adicionadas: 120, removidas: 30 },
-      rodadasDeReview: 1.4,
-      fatiaPorAgentes: 0.6,
-      amostra: amostra(14, 14),
+      merged: 10,
+      closedUnmerged: 1,
+      open: 3,
+      medianTimeToMergeMs: 3 * HORA,
+      medianTimeToFirstReviewMs: HORA,
+      medianSize: { added: 120, removed: 30 },
+      reviewRounds: 1.4,
+      agentShare: 0.6,
+      sample: amostra(14, 14),
     },
-    ci: { taxaVerde: 0.92, execucoes: 50, duracaoMediaMs: 6 * 60_000 },
-    linguagens: [{ nome: 'TypeScript', bytes: 9000, fatia: 0.9 }],
-    contribuidores: [{ login: 'dev-sintetico', commits: 100, adicionadas: 5000, removidas: 1200 }],
+    ci: { greenRate: 0.92, runs: 50, averageDurationMs: 6 * 60_000 },
+    languages: [{ name: 'TypeScript', bytes: 9000, share: 0.9 }],
+    contributors: [{ login: 'dev-sintetico', commits: 100, added: 5000, removed: 1200 }],
     releases: 2,
-    releasesNoTotal: 5,
-    comunidade: 71,
-    escrita: false,
+    releasesTotal: 5,
+    community: 71,
+    canWrite: false,
     ...extra,
   };
 }
@@ -261,7 +261,7 @@ describe('Repositórios (C22) montada', () => {
 
 describe('Repositório (C23) montada', () => {
   test('#105 critério 5: sem escrita, Visitas e Dependabot não aparecem, e o card é "Comunidade"', async () => {
-    const { area } = await montarRepoCom(metricasDeExemplo({ escrita: false }));
+    const { area } = await montarRepoCom(metricasDeExemplo({ canWrite: false }));
     const t = texto(area);
     assert.doesNotMatch(t, /Visitas/);
     assert.doesNotMatch(t, /Clones/);
@@ -273,7 +273,7 @@ describe('Repositório (C23) montada', () => {
 
   test('#105 critério 5: com escrita, o card é "Tráfego e segurança", com Visitas e Dependabot', async () => {
     const { area } = await montarRepoCom(
-      metricasDeExemplo({ escrita: true, trafego: { visitas: 340, unicas: 41, clones: 12, origens: ['github.com'], dias: 14 }, seguranca: { dependabot: 2, codeScanning: null } }),
+      metricasDeExemplo({ canWrite: true, traffic: { views: 340, uniques: 41, clones: 12, referrers: ['github.com'], days: 14 }, security: { dependabot: 2, codeScanning: null } }),
     );
     const t = texto(area);
     assert.match(t, /Tráfego e segurança/);
@@ -284,8 +284,8 @@ describe('Repositório (C23) montada', () => {
 
   test('#105 critério 3: com amostra truncada, a nota diz sobre quantos itens o card foi calculado', async () => {
     const d = metricasDeExemplo();
-    d.issues!.amostra = amostra(100, 240);
-    d.prs!.amostra = amostra(100, 180);
+    d.issues!.sample = amostra(100, 240);
+    d.prs!.sample = amostra(100, 180);
     const { area } = await montarRepoCom(d);
     const notas = area.querySelectorAll('.repo-note').map((n) => texto(n));
     assert.ok(notas.includes('Por tipo sobre 100 de 240 issues lidas.'), notas.join(' | '));
@@ -315,14 +315,14 @@ describe('Repositório (C23) montada', () => {
     assert.equal(botao('90 dias').getAttribute('aria-pressed'), 'false');
 
     // A resposta do período velho chega depois da troca: a tela não a desenha.
-    const velho = metricasDeExemplo({ periodo: '90d' });
+    const velho = metricasDeExemplo({ period: '90d' });
     velho.commits!.total = 999;
     pendentes.get('90d')!(velho);
     await m.pronta;
     assert.doesNotMatch(texto(m.area), /999/);
     assert.match(texto(m.area), /Lendo 30 dias/);
 
-    const novo = metricasDeExemplo({ periodo: '30d' });
+    const novo = metricasDeExemplo({ period: '30d' });
     novo.commits!.total = 42;
     pendentes.get('30d')!(novo);
     await new Promise((r) => setImmediate(r));
