@@ -170,11 +170,11 @@ test('P4: parallel subagents and the child sessions', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /code-reviewer/ })).toBeDefined()
   // P1: até 3 linhas, os ativos primeiro; o concluído fica fora, e o pé abre o grafo (P11).
   expect((await ui.find({ key: 'show-subagents' }))?.props.label).toBe('+1 · grafo ›')
-  // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; "Sua vez" em âmbar à direita; "ver todas".
+  // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; a ociosa, "Ociosa" neutra à direita (#245); "ver todas".
   const children = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('child-')).map((b) => b.key)
   expect(children).toEqual(['child-sim-panel-catalogo-exemplo', 'child-sim-panel-fila-de-tarefas', 'child-sim-panel-blog-estatico'])
-  const yourTurn = await ui.find({ type: 'Text', text: 'Sua vez' })
-  expect(yourTurn?.props.color).toBe(paleta.yellow['500'])
+  const idle = await ui.find({ type: 'Text', text: 'Ociosa' })
+  expect(idle?.props.color).toBe(paleta.gray['200'])
   // Com as 3 à vista, sem "ver todas": o link seria redundante.
   expect(await ui.find({ key: 'show-children' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /CI … 3\/7/ })).toBeDefined()
@@ -943,8 +943,8 @@ test('P1: working children come first, then those that need you and those on you
     expect(all.slice(0, 6)).toEqual(['child-sim-filha-14', 'child-sim-filha-12', 'child-sim-filha-11', 'child-sim-filha-13', 'child-sim-filha-10', 'child-sim-filha-9'])
     expect(await ui.find({ type: 'Text', text: /· rodando Bash/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /· pensando/ })).toBeDefined()
-    // Três na sua vez: duas no fim do turno e uma depois do Esc.
-    expect((await ui.findAll({ type: 'Text', text: 'Sua vez' })).length).toBe(3)
+    // Três ociosas (#245): duas no fim do turno e uma depois do Esc.
+    expect((await ui.findAll({ type: 'Text', text: 'Ociosa' })).length).toBe(3)
     await ui.press({ key: 'back-session' })
     await ui.unmount()
   }
@@ -1055,7 +1055,82 @@ test('#140: who needs you is highlighted, with the reason; your turn adds up bes
   await f.timer.advance(5_000)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(WIDE, 120) })
   expect((await ui.find({ key: 'need-you' }))?.props.borderColor).toBe(paleta.yellow['500'])
-  expect((await ui.find({ key: 'need-you' }))?.text).toMatch(/2 precisam de você.*Pede decisão.*Pergunta.*1 na sua vez/s)
+  expect((await ui.find({ key: 'need-you' }))?.text).toMatch(/2 precisam de você.*Decisão pedida.*Pergunta.*1 na sua vez/s)
+  await ui.unmount()
+})
+
+// --- #245: precisa de você × ociosa ---
+
+test('#245 P2: blocked on a question, "Precisa de você" in yellow with the strong reason chip, in both widths', async ($, on) => {
+  const f = await open($, on, { scenario: 'p2' })
+  for (const pane of [PANE, WIDE]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(pane, 120) })
+    const card = await ui.find({ key: 'card-session' })
+    expect(card?.props.borderColor).toBe(paleta.yellow['500'])
+    expect(card?.text).toMatch(/● Precisa/)
+    expect(card?.text).toMatch(/\? Pergunta/)
+    expect(card?.text).not.toMatch(/Esperando|Ociosa/)
+    await ui.unmount()
+  }
+  expect(f.status.at(-1)).toBe('ahrena-console ◐ Precisa de você · ninguém mais')
+})
+
+test('#245 P6: the new session is idle, "○ Ociosa" and "No prompt", neutral, with no yellow', async ($, on) => {
+  const f = await open($, on, { scenario: 'p6' })
+  for (const pane of [PANE, WIDE]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(pane, 120) })
+    const card = await ui.find({ key: 'card-session' })
+    expect(card?.props.borderColor).not.toBe(paleta.yellow['500'])
+    expect(card?.props.backgroundColor).toBe(paleta.gray['800'])
+    const status = await ui.find({ type: 'Text', text: ' ○ Ociosa ' })
+    expect(status?.props.color).toBe(paleta.gray['200'])
+    const reason = await ui.find({ type: 'Text', text: ' ›_ No prompt ' })
+    expect(reason?.props.color).toBe(paleta.gray['200'])
+    expect(reason?.props.weight).not.toBe('bold')
+    await ui.unmount()
+  }
+  expect(f.status.at(-1)).toMatch(/^ahrena-console ◌ Ociosa · No prompt · /)
+})
+
+test("#245: the core's attention wins over the old state; idle after the turn ends never shows as blocked", async ($, on) => {
+  const f = await open($, on, { scenario: 'p2' })
+  const p2 = SCENARIOS.p2
+  f.state.panel = { ...p2, session: { ...p2.session!, banner: null, reason: 'stop', attention: { level: 'idle', reason: 'turn_ended' } } }
+  await f.timer.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(WIDE, 120) })
+  const card = await ui.find({ key: 'card-session' })
+  expect(card?.props.borderColor).not.toBe(paleta.yellow['500'])
+  expect(card?.text).toMatch(/○ Ociosa.*↵ Sua vez/s)
+  expect(f.status.at(-1)).toMatch(/◌ Ociosa · Sua vez/)
+  // A core from before #245, without the field: a permission is blocked, the end of the turn idle.
+  f.state.panel = { ...p2, session: { ...p2.session!, attention: undefined, reason: 'notification' } }
+  await f.timer.advance(5_000)
+  expect(f.status.at(-1)).toMatch(/◐ Precisa de você/)
+  await ui.unmount()
+})
+
+test('#245: the needs-you band counts only blocked sessions, with the new levels; idle stays beside it, neutral', async ($, on) => {
+  const f = await open($, on, { scenario: 'p7' })
+  const p7 = SCENARIOS.p7
+  const [a, b, c] = p7.needYou.machine
+  const machine = [
+    { ...a!, level: 'blocked' as const, why: 'plan' as const },
+    { ...b!, level: 'idle' as const, why: 'interrupted' as const },
+    { ...c!, level: 'idle' as const, why: 'first_prompt' as const },
+  ]
+  f.state.panel = { ...p7, needYou: { total: 1, idle: 2, byAccount: [], family: [], machine } }
+  await f.timer.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(WIDE, 120) })
+  const band = await ui.find({ key: 'need-you' })
+  expect(band?.props.borderColor).toBe(paleta.yellow['500'])
+  expect(band?.text).toMatch(/1 precisa de você · .*\(Plano para aprovar\) · 2 na sua vez/)
+  expect(band?.text).not.toMatch(/Interrompida|No prompt/)
+  await ui.press({ key: 'show-need-you' })
+  expect((await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 1/ }))).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /SUA VEZ · 2/ }))).toBeDefined()
+  const idle = await ui.find({ type: 'Text', text: ' ⏸ Interrompida ' })
+  expect(idle?.props.color).toBe(paleta.gray['200'])
+  expect((await ui.find({ type: 'Text', text: ' ☰ Plano para aprovar ' }))?.props.color).toBe(paleta.yellow['500'])
   await ui.unmount()
 })
 
@@ -1364,10 +1439,18 @@ test('0.0.30: the largest real case (long model, "12 d", "turno 1234") fits whol
 
 test(`0.0.30: the This session card's pills fit on one line in every state and every reason`, () => {
   const width = (l: { text: string }[]) => l.reduce((a, x) => a + [...x.text].length + 2, 0) + (l.length - 1)
-  expect(sessionPills('stop', 'waiting').map((x) => x.text)).toEqual(['● Esperando', '↵ Sua vez'])
-  expect(sessionPills('notification', 'waiting').map((x) => x.text)).toEqual(['●', '⛉ Pede permissão'])
-  for (const reason of ['notification', 'interrupted', 'stop', 'session_start', null] as const) {
-    for (const st of ['active', 'waiting', 'error', 'completed', 'abandoned'] as const) expect(width(sessionPills(reason, st))).toBeLessThanOrEqual(UNCUT_COLUMNS)
+  // #245: blocked, "● Precisa de você" shortens to "● Precisa" and then to the dot; idle fits whole.
+  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'question' }).map((x) => x.text)).toEqual(['● Precisa', '? Pergunta'])
+  expect(sessionPills('● Precisa de você', { level: 'blocked', reason: 'permission' }).map((x) => x.text)).toEqual(['●', '⛉ Pede permissão'])
+  expect(sessionPills('○ Ociosa', { level: 'idle', reason: 'first_prompt' }).map((x) => x.text)).toEqual(['○ Ociosa', '›_ No prompt'])
+  for (const status of ['● Ativa', '● Concluída', '● Com erro', '● Abandonada']) expect(width(sessionPills(status, null))).toBeLessThanOrEqual(UNCUT_COLUMNS)
+  for (const reason of ['permission', 'question', 'plan', 'decision', 'error'] as const) {
+    expect(width(sessionPills('● Precisa de você', { level: 'blocked', reason }))).toBeLessThanOrEqual(UNCUT_COLUMNS)
+  }
+  for (const reason of ['turn_ended', 'interrupted', 'first_prompt'] as const) {
+    const pills = sessionPills('○ Ociosa', { level: 'idle', reason })
+    expect(pills[0]!.text).toBe('○ Ociosa')
+    expect(width(pills)).toBeLessThanOrEqual(UNCUT_COLUMNS)
   }
 })
 

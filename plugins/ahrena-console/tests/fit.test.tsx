@@ -47,11 +47,25 @@ const LONG_TITLE = 'Revisar a migração do núcleo para porta aleatória com o 
 
 /** Os estados da sessão em que o card Esta sessão é desenhado. */
 const STATES: Record<string, Partial<PanelSession>> = {
-  active: { state: 'active', status: 'active', reason: null, activity: { type: 'tool', text: 'rodando Bash · npm test' } },
-  waiting: { state: 'waiting', status: 'waiting', reason: 'stop', activity: { type: 'your-turn', text: LONG_MESSAGE } },
-  permission: { state: 'waiting', status: 'waiting', reason: 'notification', activity: { type: 'permission', text: `Bash: ${'npm run migrate -- --all '.repeat(8)}` } },
-  error: { state: 'error', status: 'error', reason: null, activity: { type: 'error', text: `API 529: ${'sobrecarga no servidor '.repeat(10)}. Parou.` } },
-  completed: { state: 'completed', status: 'completed', reason: null, activity: { type: 'completed', text: LONG_MESSAGE } },
+  active: { state: 'active', status: 'active', reason: null, attention: null, activity: { type: 'tool', text: 'rodando Bash · npm test' } },
+  waiting: { state: 'waiting', status: 'waiting', reason: 'stop', attention: { level: 'idle', reason: 'turn_ended' }, activity: { type: 'your-turn', text: LONG_MESSAGE } },
+  permission: { state: 'waiting', status: 'waiting', reason: 'notification', attention: { level: 'blocked', reason: 'permission' }, activity: { type: 'permission', text: `Bash: ${'npm run migrate -- --all '.repeat(8)}` } },
+  error: { state: 'error', status: 'error', reason: null, attention: { level: 'blocked', reason: 'error' }, activity: { type: 'error', text: `API 529: ${'sobrecarga no servidor '.repeat(10)}. Parou.` } },
+  completed: { state: 'completed', status: 'completed', reason: null, attention: null, activity: { type: 'completed', text: LONG_MESSAGE } },
+  // #245: every reason of "Precisa de você" and of "Ociosa", and a core from before it (no field).
+  ...Object.fromEntries(
+    (['question', 'plan', 'decision', 'interrupted', 'first_prompt'] as const).map((reason) => [
+      reason,
+      {
+        state: 'waiting',
+        status: 'waiting',
+        reason: reason === 'interrupted' ? 'interrupted' : reason === 'first_prompt' ? 'session_start' : 'notification',
+        attention: { level: reason === 'interrupted' || reason === 'first_prompt' ? 'idle' : 'blocked', reason },
+        activity: { type: 'question', text: LONG_MESSAGE },
+      } satisfies Partial<PanelSession>,
+    ]),
+  ),
+  'old-core': { state: 'waiting', status: 'waiting', reason: 'stop', attention: undefined, activity: { type: 'your-turn', text: LONG_MESSAGE } },
 }
 
 /** Os painéis do guarda: os cenários, o caso real e o título longo, em cada estado. */
