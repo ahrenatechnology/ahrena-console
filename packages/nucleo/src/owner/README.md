@@ -135,11 +135,11 @@ Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--sub
 | Quem | Como |
 | --- | --- |
 | **App de bandeja** (#87, #221) | `node <núcleo>/src/owner/cli.ts start --installation app --data-dir <pasta de dados do app> --port 0 --parent <pid do app> --json`. Lê `porta`, `pid` e `subiu`, e recusa a linha se `installation` não for `app` ou se `dataDir` não for a pasta dele: nunca usa o núcleo de outra instalação. Ao sair, não sinaliza ninguém: o núcleo sai sozinho pelo `--parent` e apaga a entrada do registro ([apps/desktop/README.md](../../../../apps/desktop/README.md)) |
-| **Extensão `.mcpb` e a ponte stdio do MCP** | `npm run mcp` (src/mcp/cli.ts), no Node do Claude Desktop, já faz isso: chama `startOrAdopt` com `parent` no próprio pid e lê a porta da trava a cada pedido. Quando o Desktop fecha, a ponte sai e o núcleo sai junto, se ninguém mais estiver registrado |
+| **Extensão `.mcpb` e a ponte stdio do MCP** | `npm run mcp -- --installation <i>` (src/mcp/cli.ts) lê o registro a cada pedido: o núcleo da instalação dela, senão o vivo mais antigo. Sem nenhum da instalação dela, a `mcpb` chama `startOrAdopt` (porta `0`, `parent` no próprio pid); `dev` e `app` só quando nenhum núcleo está vivo. A regra está em [src/mcp/README.md](../mcp/README.md). Quando o Desktop fecha, a ponte sai e o núcleo que ela subiu sai junto, se ninguém mais estiver registrado |
 | **Terminal** | `npm run core -- start` (segundo plano) ou `npm run api` (primeiro plano), sem `--parent`. `npm run core -- status` e `stop` |
 | **Plugin e hooks** | Hoje ainda usam `AHRENA_CONSOLE_PORT` ou 4720. Na #221 passam a ler o registro e mandar para todos os núcleos vivos (decisão 0010, item 4) |
 
-A ponte do MCP continua passando a porta (4720 ou a de `AHRENA_CONSOLE_PORT`) até o PR da #221 que a leva ao registro; o app já usa só o próprio núcleo.
+A ponte do MCP acha o núcleo pelo registro (#221, 5a); o app usa só o próprio núcleo (#221, 4/5).
 
 O `scripts/medir-carga.mjs` sobe com `--sem-trava` numa porta à parte.
 
