@@ -52,7 +52,7 @@ describe('escrever (ler.js)', () => {
     assert.throws(() => escritorHttp({ base: 'https://127.0.0.1:4720', fetch: fetchFalso().f }), /só fala com o núcleo local/);
     const { f, pedidos } = fetchFalso();
     const escrever = escritorHttp({ base: 'http://localhost:4791', fetch: f });
-    for (const rota of ['/api/hooks', '/api/decisoes/d1/apagar', '/api/decisoes/d1/confirmar?x=1', '/api/decisoes/../hooks/confirmar', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisoes']) {
+    for (const rota of ['/api/hooks', '/api/decisoes/d1/apagar', '/api/decisoes/d1/confirmar?x=1', '/api/decisoes/../hooks/confirmar', '/api/decisoes/../confirmar', '/api/decisoes/.d1/confirmar', 'https://exemplo.com/api/decisoes/d1/confirmar', '/ui/decisoes']) {
       await assert.rejects(escrever(rota, { sessao: 's' }), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura, rota);
     }
     assert.equal(pedidos.length, 0, 'nada saiu');

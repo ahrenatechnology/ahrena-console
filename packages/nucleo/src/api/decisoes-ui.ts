@@ -520,7 +520,7 @@ export class DecisoesDaUi {
   }
 }
 
-const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const CHAVE_DO_GRUPO = /^[bfs]\.[A-Za-z0-9_-]{1,700}$/;
 const MAX_CORPO = 4096;
 const AGRUPAMENTOS: readonly AgrupamentoDasDecisoes[] = ['branch', 'familia', 'sessao'];

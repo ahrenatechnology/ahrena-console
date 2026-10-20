@@ -70,7 +70,7 @@ export function ler(rota, opcoes) {
 // aceita esse POST com o `Origin` da página (servidor.ts). O artefato troca o transporte com
 // `usarEscritor()`. As telas não chamam `fetch`: chamam `escrever(rota, corpo)`.
 
-const ROTA_DE_ESCRITA = /^\/api\/decisoes\/[A-Za-z0-9_.:-]{1,128}\/(confirmar|descartar|ajustar|desfazer|promover)$/;
+const ROTA_DE_ESCRITA = /^\/api\/decisoes\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirmar|descartar|ajustar|desfazer|promover)$/;
 
 export function escritorHttp({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
   const origem = new URL(base);
