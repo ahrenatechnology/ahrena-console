@@ -1,9 +1,9 @@
 // The telemetry routes (#175, decision 0008), `GET` only, behind the server's Origin and Host
 // defenses (decision 0003) like the others:
 //
-// - `GET /api/machines`: `[{ id, label, state, lastReadAt, alerts }]`, this machine first. `state`
-//   is `connected`, `unreachable`, `not-configured` or `incompatible-version` (remote machines are
-//   #176).
+// - `GET /api/machines`: `[{ id, label, state, reason, version, port, lastReadAt, alerts }]`, this
+//   machine first, then the remote ones of `machines.json` (#176). `state` is `connected`,
+//   `unreachable` (with `reason`), `not-configured` or `incompatible-version`.
 // - `GET /api/telemetry?machine=<id>&hours=1|12`: `{ version, machine, hours, current, series, alerts }`
 //   (src/telemetry/service.ts). `machine` defaults to `local`, `hours` to 1. An invalid parameter
 //   gives 400; a machine that does not exist, 404.

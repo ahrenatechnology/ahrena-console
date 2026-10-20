@@ -276,14 +276,15 @@ describe('#28 a tela Sessões', () => {
     }
   });
 
-  // A mesma regra para a tela Workflows (#96) e a aba Workflow do detalhe (#97), contra todo CSS da
-  // /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
-  test('o CSS de Workflows e da aba Workflow só tem classe própria com prefixo, e nenhuma de outra tela', () => {
+  // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97), o Dev Console (#179)
+  // e as Máquinas (#178), contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
+  test('o CSS de Workflows, da aba Workflow, do Dev Console e das Máquinas (#178) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
-    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-']] as const) {
+    // The machine screens (issue 178): `tm-`.
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

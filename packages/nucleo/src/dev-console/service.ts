@@ -15,7 +15,7 @@ import {
   type Scoreboard,
 } from './model.ts';
 import type { DevConsoleGithub, RepoSnapshot } from './reader.ts';
-import type { DependsOnYouItem, DevConsoleSessions } from './sessions.ts';
+import type { DecisionTodayItem, DependsOnYouItem, DevConsoleSessions } from './sessions.ts';
 
 export interface ContextSummary {
   id: string;
@@ -41,6 +41,8 @@ export interface DevConsoleView extends GithubFreshness {
   notReady: NotReadyItem[];
   board: Board;
   mergedLast24h: MergedPullRequestFact[];
+  /** Decisions in force taken today in the context's sessions (live or ended today), most recent first. */
+  decisionsToday: DecisionTodayItem[];
   /** Per context repository: `true` when a GitHub list came back partial (more than one page). */
   truncated: Record<string, boolean>;
 }
@@ -113,6 +115,7 @@ export class DevConsole {
         snapshots.flatMap((s) => s.merged),
         now,
       ),
+      decisionsToday: context.repos.flatMap((r) => sessions.decisionsToday.get(r) ?? []).sort((a, b) => b.decidedAt.localeCompare(a.decidedAt)),
       truncated: Object.fromEntries(snapshots.map((s) => [s.repo, s.truncated])),
       ...freshness(snapshots),
     };
