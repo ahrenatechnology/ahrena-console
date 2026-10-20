@@ -6,8 +6,8 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { SessionHistory, type HistoryResponse } from '../../src/history/reading.ts';
-import { ANTES_DO_CLEAR, DEPOIS_DO_CLEAR, semearHistoricoDoPainel } from '../../src/simulator/history-ended.ts';
-import { SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { BEFORE_CLEAR, AFTER_CLEAR, seedPanelHistory } from '../../src/simulator/history-ended.ts';
+import { PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -15,10 +15,10 @@ const AGORA = Date.parse(T0);
 async function subir(comHistorico = true) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisoes = new SqliteDecisionStore(storage.db);
-  await semearCenariosDoPainel(storage, 'p4', AGORA);
-  await semearDecisoesDoPainel(decisoes, 'p4', AGORA);
-  await semearHistoricoDoPainel(storage, decisoes, 'p4', AGORA);
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
+  await seedPanelScenario(storage, 'p4', AGORA);
+  await seedPanelDecisions(decisoes, 'p4', AGORA);
+  await seedPanelHistory(storage, decisoes, 'p4', AGORA);
+  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION });
   const historico = comHistorico ? new SessionHistory({ storage, decisions: decisoes, timeZone: 'UTC' }) : undefined;
   const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, historico });
   return {
@@ -43,8 +43,8 @@ describe('GET /api/history', () => {
       assert.equal(corpo.next, '2026-10-25');
       const depois = corpo.days[1].sessions[0];
       assert.deepEqual(Object.keys(depois).sort(), ['costUsd', 'durationMs', 'end', 'id', 'model', 'next', 'previous', 'project', 'start', 'status', 'title']);
-      assert.equal(depois.id, DEPOIS_DO_CLEAR);
-      assert.deepEqual(depois.previous, { id: ANTES_DO_CLEAR, title: 'Mapear o módulo de pagamentos' });
+      assert.equal(depois.id, AFTER_CLEAR);
+      assert.deepEqual(depois.previous, { id: BEFORE_CLEAR, title: 'Mapear o módulo de pagamentos' });
       assert.equal(depois.model, 'Opus 5.5');
     } finally {
       await fechar();

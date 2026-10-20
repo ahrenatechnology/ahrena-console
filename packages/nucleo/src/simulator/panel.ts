@@ -17,27 +17,27 @@ import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../githu
 import { stageOf } from '../github/work.ts';
 import { ROOT } from './vocabulary.ts';
 
-/** As checagens do CI como no P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
-const CHECKS_DO_P1: Record<string, CiCounts> = {
+/** The CI checks as in P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
+const P1_CHECKS: Record<string, CiCounts> = {
   SUCCESS: { total: 6, ok: 6, falhas: 0, rodando: 0 },
   PENDING: { total: 7, ok: 3, falhas: 0, rodando: 4 },
   FAILURE: { total: 7, ok: 5, falhas: 2, rodando: 0 },
 };
 
-export const CENARIOS_DO_PAINEL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9', 'p12', 'p13'] as const;
-export type CenarioDoPainel = (typeof CENARIOS_DO_PAINEL)[number];
-export const SESSAO_DO_PAINEL = 'sim-painel-esta';
-export const REPO_DO_SIMULADOR = 'exemplo/simulacao';
+export const PANEL_SCENARIOS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9', 'p12', 'p13'] as const;
+export type PanelScenario = (typeof PANEL_SCENARIOS)[number];
+export const PANEL_SESSION = 'sim-painel-esta';
+export const SIMULATOR_REPO = 'exemplo/simulacao';
 
-function contaSintetica(n: string, label: string, color: string, tipo: string, source: AccountSource) {
+function syntheticAccount(n: string, label: string, color: string, organizationType: string, source: AccountSource) {
   const accountUuid = `00000000-0000-4000-8000-00000000${n}a1`;
   const organizationUuid = `00000000-0000-4000-8000-00000000${n}b1`;
-  return { accountUuid, organizationUuid, id: claudeAccountId(accountUuid, organizationUuid), label, color, tipo, source };
+  return { accountUuid, organizationUuid, id: claudeAccountId(accountUuid, organizationUuid), label, color, organizationType, source };
 }
-// Cores da marca (packages/marca): rosa e verde, que não se confundem com os status.
-export const CONTAS = {
-  equipe: contaSintetica('0e', 'equipe', paleta.rose['500'], 'claude_team', 'env'),
-  cliente: contaSintetica('0c', 'cliente-exemplo', paleta.green['500'], 'claude_enterprise', 'config'),
+// Brand colors (packages/marca): rose and green, which do not get mixed up with the statuses.
+export const PANEL_ACCOUNTS = {
+  team: syntheticAccount('0e', 'equipe', paleta.rose['500'], 'claude_team', 'env'),
+  client: syntheticAccount('0c', 'cliente-exemplo', paleta.green['500'], 'claude_enterprise', 'config'),
 } as const;
 
 const MIN = 60_000;
@@ -45,554 +45,558 @@ const OPUS = 'claude-opus-5-5';
 const SONNET = 'claude-sonnet-5-5';
 
 interface Issue {
-  numero: number;
-  titulo: string;
+  number: number;
+  title: string;
   sub?: [number, number];
-  pr?: { numero: number; rascunho?: boolean; ci: LinkedPullRequest['ci']; review: LinkedPullRequest['review'] };
+  pr?: { number: number; draft?: boolean; ci: LinkedPullRequest['ci']; review: LinkedPullRequest['review'] };
 }
 
-type Passos = [string, 'completed' | 'in_progress' | 'pending'][];
+type PlanSteps = [string, 'completed' | 'in_progress' | 'pending'][];
 
-interface Esta {
-  titulo: string;
-  projeto: string;
-  modelo: string;
-  inicioMin: number;
+/** "This session": the one the panel shows. */
+interface ThisSession {
+  title: string;
+  project: string;
+  model: string;
+  startMin: number;
   status: SessionStatus;
-  espera?: { motivo: AwaitingReason; haMin: number };
-  turno: number;
-  contexto: number;
-  custo: number;
-  ferramenta?: { nome: string; resumo: string; entrada?: Record<string, unknown> };
-  notificacao?: string;
-  pergunta?: { texto: string; opcoes: number };
-  erro?: { texto: string; haMin: number };
+  wait?: { reason: AwaitingReason; minAgo: number };
+  turns: number;
+  context: number;
+  cost: number;
+  tool?: { name: string; summary: string; input?: Record<string, unknown> };
+  notification?: string;
+  question?: { text: string; options: number };
+  error?: { text: string; minAgo: number };
   background?: string[];
-  plano?: Passos;
-  /** Planos que a sessão já fechou antes do atual (issue #131), do mais antigo para o mais novo. */
-  anteriores?: { desdeMin: number; duracaoMin: number; passos: Passos }[];
-  /** `pai`: o índice, nesta lista, do subagente que disparou este (#146); sem ele, foi a sessão. */
-  subagentes?: { tipo: string; tarefa: string; status: Agent['status']; haMin: number; duracaoMin?: number; pai?: number }[];
-  /** #146: há quantos minutos começou cada turno; sem isso, os turnos ficam espalhados pela sessão. */
-  turnosMin?: number[];
-  filhas?: string[];
+  plan?: PlanSteps;
+  /** Plans the session already closed before the current one (issue #131), oldest first. */
+  previousPlans?: { sinceMin: number; durationMin: number; steps: PlanSteps }[];
+  /** `parent`: the index, in this list, of the subagent that started this one (#146); without it, the session did. */
+  subagents?: { type: string; task: string; status: Agent['status']; minAgo: number; durationMin?: number; parent?: number }[];
+  /** #146: how many minutes ago each turn started; without it, the turns are spread over the session. */
+  turnsMin?: number[];
+  children?: string[];
   branch: string;
-  semPush?: boolean;
+  notPushed?: boolean;
   issue?: Issue;
-  /** O esforço da sessão (`low`, `medium`, `high`…); sem ele, o do modelo (esforcoDe). */
-  esforco?: string;
+  /** The session's effort (`low`, `medium`, `high`…); without it, the model's (effortOf). */
+  effort?: string;
 }
 
-interface Outra {
+/** Another session of the scenario: the family and the "needs you" list. */
+interface OtherSession {
   slug: string;
-  titulo?: string;
-  modelo: string;
-  conta: keyof typeof CONTAS;
+  title?: string;
+  model: string;
+  account: keyof typeof PANEL_ACCOUNTS;
   status: SessionStatus;
-  espera?: { motivo: AwaitingReason; haMin: number };
-  texto?: string;
-  ferramenta?: { nome: string; resumo: string };
-  erro?: string;
-  relacao?: 'mae' | 'filha';
+  wait?: { reason: AwaitingReason; minAgo: number };
+  text?: string;
+  tool?: { name: string; summary: string };
+  error?: string;
+  relation?: 'parent' | 'child';
   updatedMin?: number;
-  /** O branch da sessão, como o wireframe C2 mostra no mural. */
+  /** The session's branch, as wireframe C2 shows on the wall. */
   branch?: string;
-  esforco?: string;
+  effort?: string;
 }
 
-/** O esforço que o simulador grava quando o cenário não diz: alto no Opus, médio no resto (como o C2). */
-const esforcoDe = (modelo: string) => (modelo === OPUS ? 'high' : 'medium');
+/** The effort the simulator writes when the scenario does not say: high on Opus, medium on the rest (as in C2). */
+const effortOf = (model: string) => (model === OPUS ? 'high' : 'medium');
 
-const PERMISSAO: Outra = {
-  slug: 'motor-de-regras', modelo: OPUS, conta: 'equipe', status: 'active', espera: { motivo: 'notification', haMin: 2 }, branch: 'feat/58-pedidos',
-  ferramenta: { nome: 'Bash', resumo: 'npm run migrate' }, texto: 'Claude needs your permission to use Bash',
+const PERMISSION: OtherSession = {
+  slug: 'motor-de-regras', model: OPUS, account: 'team', status: 'active', wait: { reason: 'notification', minAgo: 2 }, branch: 'feat/58-pedidos',
+  tool: { name: 'Bash', summary: 'npm run migrate' }, text: 'Claude needs your permission to use Bash',
 };
-const INTERROMPIDA: Outra = { slug: 'app-receitas', modelo: SONNET, conta: 'cliente', status: 'active', espera: { motivo: 'interrupted', haMin: 6 }, branch: 'feat/12-filtro' };
-const COM_ERRO: Outra = { slug: 'painel-de-metricas', modelo: OPUS, conta: 'cliente', status: 'error', erro: 'API 529 · overloaded_error', updatedMin: 3, branch: 'perf/47-relatorio' };
-const SUA_VEZ: Outra = {
-  slug: 'fila-de-tarefas', modelo: SONNET, conta: 'equipe', status: 'active', espera: { motivo: 'stop', haMin: 1 }, branch: 'feat/9-retry',
-  texto: 'Terminei a migração. Rodo os testes?',
+const INTERRUPTED: OtherSession = { slug: 'app-receitas', model: SONNET, account: 'client', status: 'active', wait: { reason: 'interrupted', minAgo: 6 }, branch: 'feat/12-filtro' };
+const WITH_ERROR: OtherSession = { slug: 'painel-de-metricas', model: OPUS, account: 'client', status: 'error', error: 'API 529 · overloaded_error', updatedMin: 3, branch: 'perf/47-relatorio' };
+const YOUR_TURN: OtherSession = {
+  slug: 'fila-de-tarefas', model: SONNET, account: 'team', status: 'active', wait: { reason: 'stop', minAgo: 1 }, branch: 'feat/9-retry',
+  text: 'Terminei a migração. Rodo os testes?',
 };
 
-const ESTA: Record<Exclude<CenarioDoPainel, 'p9' | 'p12' | 'p13'>, Esta> = {
+const THIS_SESSION: Record<Exclude<PanelScenario, 'p9' | 'p12' | 'p13'>, ThisSession> = {
   p1: {
-    titulo: 'Kanban de sessões no artefato', projeto: 'ahrena-demo', modelo: OPUS, inicioMin: 12, status: 'active', turno: 18,
-    contexto: 62_000, custo: 1.84, ferramenta: { nome: 'Bash', resumo: 'npm test' }, background: ['npm run dev', 'npm run watch'],
-    plano: [['Ler o artefato', 'completed'], ['Montar as raias', 'completed'], ['Ligar ao núcleo', 'completed'], ['Rodar a bateria', 'in_progress'], ['Abrir o PR', 'pending'], ['Pedir review', 'pending']],
-    anteriores: [
-      { desdeMin: 11, duracaoMin: 3, passos: [['Ler o wireframe do kanban', 'completed'], ['Listar os estados', 'completed'], ['Escolher as raias', 'completed']] },
-      { desdeMin: 8, duracaoMin: 2, passos: [['Prototipar o arrastar', 'completed'], ['Medir a latência', 'in_progress'], ['Trocar a biblioteca', 'pending'], ['Ajustar o tema', 'pending']] },
+    title: 'Kanban de sessões no artefato', project: 'ahrena-demo', model: OPUS, startMin: 12, status: 'active', turns: 18,
+    context: 62_000, cost: 1.84, tool: { name: 'Bash', summary: 'npm test' }, background: ['npm run dev', 'npm run watch'],
+    plan: [['Ler o artefato', 'completed'], ['Montar as raias', 'completed'], ['Ligar ao núcleo', 'completed'], ['Rodar a bateria', 'in_progress'], ['Abrir o PR', 'pending'], ['Pedir review', 'pending']],
+    previousPlans: [
+      { sinceMin: 11, durationMin: 3, steps: [['Ler o wireframe do kanban', 'completed'], ['Listar os estados', 'completed'], ['Escolher as raias', 'completed']] },
+      { sinceMin: 8, durationMin: 2, steps: [['Prototipar o arrastar', 'completed'], ['Medir a latência', 'in_progress'], ['Trocar a biblioteca', 'pending'], ['Ajustar o tema', 'pending']] },
     ],
-    subagentes: [{ tipo: 'Explore', tarefa: 'mapear usos', status: 'working', haMin: 0.7 }, { tipo: 'Plan', tarefa: 'plano', status: 'completed', haMin: 9, duracaoMin: 2 }],
-    branch: 'feat/42-kanban-de-sessoes', issue: { numero: 42, titulo: 'Kanban de sessões', sub: [2, 4], pr: { numero: 78, rascunho: true, ci: 'SUCCESS', review: null } },
+    subagents: [{ type: 'Explore', task: 'mapear usos', status: 'working', minAgo: 0.7 }, { type: 'Plan', task: 'plano', status: 'completed', minAgo: 9, durationMin: 2 }],
+    branch: 'feat/42-kanban-de-sessoes', issue: { number: 42, title: 'Kanban de sessões', sub: [2, 4], pr: { number: 78, draft: true, ci: 'SUCCESS', review: null } },
   },
   p2: {
-    titulo: 'Testes de integração da API', projeto: 'gateway-sandbox', modelo: OPUS, inicioMin: 26, status: 'active', espera: { motivo: 'notification', haMin: 4 },
-    turno: 11, contexto: 96_000, custo: 0.92, ferramenta: { nome: 'AskUserQuestion', resumo: 'SQLite ou Postgres' },
-    notificacao: 'Claude needs your input', pergunta: { texto: 'Nos testes de integração, sigo com SQLite em memória ou subo um Postgres no Docker?', opcoes: 3 },
+    title: 'Testes de integração da API', project: 'gateway-sandbox', model: OPUS, startMin: 26, status: 'active', wait: { reason: 'notification', minAgo: 4 },
+    turns: 11, context: 96_000, cost: 0.92, tool: { name: 'AskUserQuestion', summary: 'SQLite ou Postgres' },
+    notification: 'Claude needs your input', question: { text: 'Nos testes de integração, sigo com SQLite em memória ou subo um Postgres no Docker?', options: 3 },
     background: ['npm run dev'],
-    plano: [['Ler os testes atuais', 'completed'], ['Decidir o banco', 'in_progress'], ['Escrever os casos de borda', 'pending'], ['Rodar no CI', 'pending']],
-    subagentes: [{ tipo: 'Explore', tarefa: 'ler testes', status: 'completed', haMin: 15, duracaoMin: 1 }],
-    branch: 'feat/51-testes-de-integracao', semPush: true, issue: { numero: 51, titulo: 'Testes de integração', sub: [0, 3] },
+    plan: [['Ler os testes atuais', 'completed'], ['Decidir o banco', 'in_progress'], ['Escrever os casos de borda', 'pending'], ['Rodar no CI', 'pending']],
+    subagents: [{ type: 'Explore', task: 'ler testes', status: 'completed', minAgo: 15, durationMin: 1 }],
+    branch: 'feat/51-testes-de-integracao', notPushed: true, issue: { number: 51, title: 'Testes de integração', sub: [0, 3] },
   },
   p3: {
-    titulo: 'Migração do esquema de pedidos', projeto: 'motor-de-regras', modelo: OPUS, inicioMin: 34, status: 'active', espera: { motivo: 'notification', haMin: 2 },
-    turno: 22, contexto: 108_000, custo: 2.1, ferramenta: { nome: 'Bash', resumo: 'npm run migrate' }, notificacao: 'Claude needs your permission to use Bash',
-    plano: [['Mapear as tabelas', 'completed'], ['Escrever a migração', 'completed'], ['Testar a volta', 'completed'], ['Revisar índices', 'completed'], ['Aplicar a migração', 'in_progress'], ['Atualizar o seed', 'pending']],
-    subagentes: [{ tipo: 'Explore', tarefa: 'esquema atual', status: 'completed', haMin: 20, duracaoMin: 7 }],
-    branch: 'feat/58-esquema-de-pedidos', issue: { numero: 58, titulo: 'Esquema de pedidos', sub: [3, 5], pr: { numero: 91, ci: 'SUCCESS', review: 'REVIEW_REQUIRED' } },
+    title: 'Migração do esquema de pedidos', project: 'motor-de-regras', model: OPUS, startMin: 34, status: 'active', wait: { reason: 'notification', minAgo: 2 },
+    turns: 22, context: 108_000, cost: 2.1, tool: { name: 'Bash', summary: 'npm run migrate' }, notification: 'Claude needs your permission to use Bash',
+    plan: [['Mapear as tabelas', 'completed'], ['Escrever a migração', 'completed'], ['Testar a volta', 'completed'], ['Revisar índices', 'completed'], ['Aplicar a migração', 'in_progress'], ['Atualizar o seed', 'pending']],
+    subagents: [{ type: 'Explore', task: 'esquema atual', status: 'completed', minAgo: 20, durationMin: 7 }],
+    branch: 'feat/58-esquema-de-pedidos', issue: { number: 58, title: 'Esquema de pedidos', sub: [3, 5], pr: { number: 91, ci: 'SUCCESS', review: 'REVIEW_REQUIRED' } },
   },
   p4: {
-    titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 28, status: 'active', turno: 9, contexto: 114_000, custo: 3.47,
-    ferramenta: { nome: 'Agent', resumo: '3 subagentes em paralelo' },
-    plano: [['Mapear o módulo', 'completed'], ['Desenhar os serviços', 'completed'], ['Extrair a cobrança', 'in_progress'], ['Migrar os testes', 'pending'], ['Ajustar o deploy', 'pending'], ['Remover o código velho', 'pending']],
-    anteriores: [
-      { desdeMin: 27, duracaoMin: 4, passos: [['Ler o módulo de pagamentos', 'completed'], ['Listar os acoplamentos', 'completed']] },
-      { desdeMin: 22, duracaoMin: 6, passos: [['Separar por camadas', 'completed'], ['Mover os adaptadores', 'pending'], ['Trocar as injeções', 'pending']] },
-      { desdeMin: 15, duracaoMin: 5, passos: [['Escrever a decisão de serviços', 'completed'], ['Revisar com o time', 'completed']] },
+    title: 'Separar pagamentos em serviços', project: 'vitrine-demo', model: OPUS, startMin: 28, status: 'active', turns: 9, context: 114_000, cost: 3.47,
+    tool: { name: 'Agent', summary: '3 subagentes em paralelo' },
+    plan: [['Mapear o módulo', 'completed'], ['Desenhar os serviços', 'completed'], ['Extrair a cobrança', 'in_progress'], ['Migrar os testes', 'pending'], ['Ajustar o deploy', 'pending'], ['Remover o código velho', 'pending']],
+    previousPlans: [
+      { sinceMin: 27, durationMin: 4, steps: [['Ler o módulo de pagamentos', 'completed'], ['Listar os acoplamentos', 'completed']] },
+      { sinceMin: 22, durationMin: 6, steps: [['Separar por camadas', 'completed'], ['Mover os adaptadores', 'pending'], ['Trocar as injeções', 'pending']] },
+      { sinceMin: 15, durationMin: 5, steps: [['Escrever a decisão de serviços', 'completed'], ['Revisar com o time', 'completed']] },
     ],
-    subagentes: [
-      { tipo: 'Explore', tarefa: 'achar usos', status: 'working', haMin: 1 },
-      { tipo: 'code-reviewer', tarefa: 'diff', status: 'working', haMin: 0.7 },
-      { tipo: 'test-runner', tarefa: 'bateria', status: 'working', haMin: 0.2 },
-      { tipo: 'Plan', tarefa: 'plano', status: 'completed', haMin: 20, duracaoMin: 3 },
+    subagents: [
+      { type: 'Explore', task: 'achar usos', status: 'working', minAgo: 1 },
+      { type: 'code-reviewer', task: 'diff', status: 'working', minAgo: 0.7 },
+      { type: 'test-runner', task: 'bateria', status: 'working', minAgo: 0.2 },
+      { type: 'Plan', task: 'plano', status: 'completed', minAgo: 20, durationMin: 3 },
     ],
-    filhas: ['fila-de-tarefas', 'catalogo-exemplo', 'blog-estatico'],
-    branch: 'feat/63-separar-pagamentos', issue: { numero: 63, titulo: 'Separar pagamentos', sub: [2, 6], pr: { numero: 90, ci: 'PENDING', review: 'APPROVED' } },
+    children: ['fila-de-tarefas', 'catalogo-exemplo', 'blog-estatico'],
+    branch: 'feat/63-separar-pagamentos', issue: { number: 63, title: 'Separar pagamentos', sub: [2, 6], pr: { number: 90, ci: 'PENDING', review: 'APPROVED' } },
   },
   p5: {
-    titulo: 'Relatório mensal mais rápido', projeto: 'painel-de-metricas', modelo: OPUS, inicioMin: 58, status: 'error', turno: 23, contexto: 168_000, custo: 4.1,
-    erro: { texto: 'API 529 · overloaded_error. Parou depois de 3 tentativas, em Edit src/relatorio/consulta.ts', haMin: 3 },
-    ferramenta: { nome: 'Edit', resumo: 'src/relatorio/consulta.ts' }, background: ['npm test -- --watch'],
-    plano: [['Medir a consulta', 'completed'], ['Criar os índices', 'completed'], ['Cachear o total', 'completed'], ['Reescrever a consulta', 'in_progress']],
-    subagentes: [{ tipo: 'test-runner', tarefa: 'bateria', status: 'error', haMin: 5, duracaoMin: 2 }, { tipo: 'Explore', tarefa: 'índices', status: 'completed', haMin: 30, duracaoMin: 1 }],
-    branch: 'feat/47-acelerar-o-relatorio', issue: { numero: 47, titulo: 'Acelerar o relatório', sub: [3, 4], pr: { numero: 88, ci: 'FAILURE', review: 'CHANGES_REQUESTED' } },
+    title: 'Relatório mensal mais rápido', project: 'painel-de-metricas', model: OPUS, startMin: 58, status: 'error', turns: 23, context: 168_000, cost: 4.1,
+    error: { text: 'API 529 · overloaded_error. Parou depois de 3 tentativas, em Edit src/relatorio/consulta.ts', minAgo: 3 },
+    tool: { name: 'Edit', summary: 'src/relatorio/consulta.ts' }, background: ['npm test -- --watch'],
+    plan: [['Medir a consulta', 'completed'], ['Criar os índices', 'completed'], ['Cachear o total', 'completed'], ['Reescrever a consulta', 'in_progress']],
+    subagents: [{ type: 'test-runner', task: 'bateria', status: 'error', minAgo: 5, durationMin: 2 }, { type: 'Explore', task: 'índices', status: 'completed', minAgo: 30, durationMin: 1 }],
+    branch: 'feat/47-acelerar-o-relatorio', issue: { number: 47, title: 'Acelerar o relatório', sub: [3, 4], pr: { number: 88, ci: 'FAILURE', review: 'CHANGES_REQUESTED' } },
   },
   p6: {
-    titulo: 'Sessão nova, sem transcript', projeto: 'cli-de-notas', modelo: SONNET, inicioMin: 0, status: 'active', espera: { motivo: 'session_start', haMin: 0 },
-    turno: 0, contexto: 0, custo: 0, branch: 'main',
+    title: 'Sessão nova, sem transcript', project: 'cli-de-notas', model: SONNET, startMin: 0, status: 'active', wait: { reason: 'session_start', minAgo: 0 },
+    turns: 0, context: 0, cost: 0, branch: 'main',
   },
   p7: {
-    titulo: 'Kanban de sessões no artefato', projeto: 'ahrena-demo', modelo: OPUS, inicioMin: 12, status: 'active', turno: 18,
-    contexto: 62_000, custo: 1.84, ferramenta: { nome: 'Bash', resumo: 'npm test' }, background: ['npm run dev', 'npm run watch'],
-    branch: 'feat/42-kanban-de-sessoes', issue: { numero: 42, titulo: 'Kanban de sessões', sub: [2, 4], pr: { numero: 78, rascunho: true, ci: 'SUCCESS', review: null } },
+    title: 'Kanban de sessões no artefato', project: 'ahrena-demo', model: OPUS, startMin: 12, status: 'active', turns: 18,
+    context: 62_000, cost: 1.84, tool: { name: 'Bash', summary: 'npm test' }, background: ['npm run dev', 'npm run watch'],
+    branch: 'feat/42-kanban-de-sessoes', issue: { number: 42, title: 'Kanban de sessões', sub: [2, 4], pr: { number: 78, draft: true, ci: 'SUCCESS', review: null } },
   },
 };
 
 /**
- * #146: um subagente pelo minuto da sessão em que começou e terminou (`fim` nulo: ainda roda), no
- * formato do cenário (há quantos minutos). `t` é a duração da sessão.
+ * #146: a subagent by the session minute it started and ended (`end` null: still running), in the
+ * scenario's format (how many minutes ago). `t` is the session's duration.
  */
-const noMinuto = (t: number) => (tipo: string, tarefa: string, ini: number, fim: number | null, status: Agent['status'] = fim === null ? 'working' : 'completed', pai?: number) =>
-  fim === null ? { tipo, tarefa, status, haMin: t - ini, ...(pai === undefined ? {} : { pai }) } : { tipo, tarefa, status, haMin: t - fim, duracaoMin: fim - ini, ...(pai === undefined ? {} : { pai }) };
-const m12 = noMinuto(14);
-const m52 = noMinuto(52);
+const atMinute = (t: number) => (type: string, task: string, start: number, end: number | null, status: Agent['status'] = end === null ? 'working' : 'completed', parent?: number) =>
+  end === null ? { type, task, status, minAgo: t - start, ...(parent === undefined ? {} : { parent }) } : { type, task, status, minAgo: t - end, durationMin: end - start, ...(parent === undefined ? {} : { parent }) };
+const m12 = atMinute(14);
+const m52 = atMinute(52);
 
-/** P12 e P13 (#146): o grafo da sessão, simples e caótico, como nos wireframes. */
-const GRAFO: Record<'p12' | 'p13', Esta> = {
+/** P12 and P13 (#146): the session graph, simple and chaotic, as in the wireframes. */
+const GRAPH: Record<'p12' | 'p13', ThisSession> = {
   p12: {
-    titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 14, status: 'active', turno: 2, turnosMin: [13, 6],
-    contexto: 70_000, custo: 1.2, ferramenta: { nome: 'Agent', resumo: 'test-runner' },
-    subagentes: [m12('Plan', 'plano da extração', 2, 4), m12('Explore', 'achar usos', 9, 13), m12('test-runner', 'bateria', 11, null)],
-    branch: 'feat/63-separar-pagamentos', issue: { numero: 63, titulo: 'Separar pagamentos', sub: [2, 6], pr: { numero: 90, ci: 'PENDING', review: 'APPROVED' } },
+    title: 'Separar pagamentos em serviços', project: 'vitrine-demo', model: OPUS, startMin: 14, status: 'active', turns: 2, turnsMin: [13, 6],
+    context: 70_000, cost: 1.2, tool: { name: 'Agent', summary: 'test-runner' },
+    subagents: [m12('Plan', 'plano da extração', 2, 4), m12('Explore', 'achar usos', 9, 13), m12('test-runner', 'bateria', 11, null)],
+    branch: 'feat/63-separar-pagamentos', issue: { number: 63, title: 'Separar pagamentos', sub: [2, 6], pr: { number: 90, ci: 'PENDING', review: 'APPROVED' } },
   },
   p13: {
-    titulo: 'Separar pagamentos em serviços', projeto: 'vitrine-demo', modelo: OPUS, inicioMin: 52, status: 'active', turno: 5, turnosMin: [51.5, 42.5, 34.5, 19.5, 7.5],
-    contexto: 150_000, custo: 6.3, ferramenta: { nome: 'Agent', resumo: '4 subagentes em paralelo' },
-    subagentes: [
-      // Onda 1: seis Explore, todos concluídos.
+    title: 'Separar pagamentos em serviços', project: 'vitrine-demo', model: OPUS, startMin: 52, status: 'active', turns: 5, turnsMin: [51.5, 42.5, 34.5, 19.5, 7.5],
+    context: 150_000, cost: 6.3, tool: { name: 'Agent', summary: '4 subagentes em paralelo' },
+    subagents: [
+      // Wave 1: six Explore, all completed.
       m52('Explore', 'mapear módulos', 1, 9), m52('Explore', 'rotas', 1.5, 6), m52('Explore', 'modelos', 2, 7), m52('Explore', 'eventos', 2.5, 5), m52('Explore', 'filas', 3, 8), m52('Explore', 'configuração', 4, 9),
-      // Onda 2: cinco concluídos e um com erro.
+      // Wave 2: five completed and one with an error.
       m52('code-reviewer', 'diff inicial', 10, 14), m52('test-runner', 'lint e tipos', 11, 15, 'error'), m52('Explore', 'testes', 10, 12), m52('Explore', 'fixtures', 12, 16), m52('Explore', 'mocks', 13, 17), m52('Plan', 'fatias', 11, 16),
-      // Onda 3: um Plan.
+      // Wave 3: one Plan.
       m52('Plan', 'plano da migração', 18, 31),
-      // Onda 4: o general-purpose (13) disparou os seus; o de contratos (16), outros dois.
+      // Wave 4: the general-purpose one (13) started its own; the contracts one (16), two more.
       m52('general-purpose', 'migrar a cobrança', 33, null), m52('Explore', 'rotas de cobrança', 34, 36, 'completed', 13), m52('Explore', 'webhooks', 34, 37, 'completed', 13),
       m52('general-purpose', 'contratos', 38, 46, 'completed', 13), m52('Explore', 'esquemas', 39, 41, 'completed', 16), m52('Explore', 'clientes', 41, 44, 'completed', 16),
       m52('test-runner', 'api de cobrança', 47, null, 'working', 13), m52('code-reviewer', 'diff do serviço', 40, null), m52('test-runner', 'e2e', 44, null), m52('docs-writer', 'README do serviço', 35, 39),
-      // Onda 5: dois Explore.
+      // Wave 5: two Explore.
       m52('Explore', 'logs', 45, 47), m52('Explore', 'métricas', 46, 49),
     ],
-    branch: 'feat/63-separar-pagamentos', issue: { numero: 63, titulo: 'Separar pagamentos', sub: [2, 6], pr: { numero: 90, ci: 'PENDING', review: 'APPROVED' } },
+    branch: 'feat/63-separar-pagamentos', issue: { number: 63, title: 'Separar pagamentos', sub: [2, 6], pr: { number: 90, ci: 'PENDING', review: 'APPROVED' } },
   },
 };
 
-// P9: a sessão do P1, aberta há mais tempo, com as decisões dela e da sessão mãe (semearDecisoesDoPainel).
-const estaDo = (c: CenarioDoPainel): Esta => (c === 'p9' ? { ...ESTA.p1, inicioMin: 45 } : c === 'p12' || c === 'p13' ? GRAFO[c] : ESTA[c]);
+// P9: P1's session, open for longer, with its decisions and the parent session's (seedPanelDecisions).
+const thisSessionOf = (c: PanelScenario): ThisSession => (c === 'p9' ? { ...THIS_SESSION.p1, startMin: 45 } : c === 'p12' || c === 'p13' ? GRAPH[c] : THIS_SESSION[c]);
 
-const OUTRAS: Record<CenarioDoPainel, Outra[]> = {
-  p1: [PERMISSAO, INTERROMPIDA],
+const OTHERS: Record<PanelScenario, OtherSession[]> = {
+  p1: [PERMISSION, INTERRUPTED],
   p2: [],
-  p3: [{ ...INTERROMPIDA, relacao: 'mae' }],
-  p4: [{ ...SUA_VEZ, relacao: 'filha' }, { slug: 'catalogo-exemplo', modelo: SONNET, conta: 'equipe', status: 'active', relacao: 'filha', updatedMin: 6, branch: 'feat/31-csv' }, { slug: 'blog-estatico', modelo: SONNET, conta: 'equipe', status: 'completed', relacao: 'filha', updatedMin: 20, branch: 'fix/5-paginacao' }],
-  p5: [PERMISSAO, INTERROMPIDA],
-  p6: [PERMISSAO, INTERROMPIDA, COM_ERRO],
-  p7: [{ ...PERMISSAO, relacao: 'mae' }, COM_ERRO, { ...SUA_VEZ, relacao: 'filha' }],
-  // As duas últimas só existem para a página Decisões (C21): sessões encerradas, fora do "precisam de você".
-  p9: [PERMISSAO, INTERROMPIDA, { slug: 'vitrine-demo', titulo: 'Kanban da vitrine', modelo: OPUS, conta: 'equipe', status: 'completed', updatedMin: 7 }, { ...COM_ERRO, titulo: 'Relatório mensal mais rápido', status: 'completed', erro: undefined, updatedMin: 39 }],
-  p12: [{ ...SUA_VEZ, relacao: 'filha' }],
-  p13: [COM_ERRO],
+  p3: [{ ...INTERRUPTED, relation: 'parent' }],
+  p4: [{ ...YOUR_TURN, relation: 'child' }, { slug: 'catalogo-exemplo', model: SONNET, account: 'team', status: 'active', relation: 'child', updatedMin: 6, branch: 'feat/31-csv' }, { slug: 'blog-estatico', model: SONNET, account: 'team', status: 'completed', relation: 'child', updatedMin: 20, branch: 'fix/5-paginacao' }],
+  p5: [PERMISSION, INTERRUPTED],
+  p6: [PERMISSION, INTERRUPTED, WITH_ERROR],
+  p7: [{ ...PERMISSION, relation: 'parent' }, WITH_ERROR, { ...YOUR_TURN, relation: 'child' }],
+  // The last two only exist for the Decisions page (C21): ended sessions, out of "needs you".
+  p9: [PERMISSION, INTERRUPTED, { slug: 'vitrine-demo', title: 'Kanban da vitrine', model: OPUS, account: 'team', status: 'completed', updatedMin: 7 }, { ...WITH_ERROR, title: 'Relatório mensal mais rápido', status: 'completed', error: undefined, updatedMin: 39 }],
+  p12: [{ ...YOUR_TURN, relation: 'child' }],
+  p13: [WITH_ERROR],
 };
 
-/** O que o git e o GitHub falsos respondem no cenário em uso. */
-const estado: { cwd: string | null; esta: Esta | null } = { cwd: null, esta: null };
+/** What the fake git and GitHub answer in the scenario in use. */
+const current: { cwd: string | null; session: ThisSession | null } = { cwd: null, session: null };
 
-const iso = (agora: number, minAtras: number) => new Date(agora - minAtras * MIN).toISOString();
+const iso = (now: number, minAgo: number) => new Date(now - minAgo * MIN).toISOString();
 
-function sessaoBase(id: string, cwd: string, model: string, inicio: string, atualizada: string): Session {
+function baseSession(id: string, cwd: string, model: string, start: string, updated: string): Session {
   return {
-    id, name: null, status: 'active', cwd, model, source: 'startup', startedAt: inicio, endedAt: null,
-    awaitingInputSince: null, awaitingReason: null, updatedAt: atualizada, accountId: null, accountSource: null, metadata: { simulado: true },
+    id, name: null, status: 'active', cwd, model, source: 'startup', startedAt: start, endedAt: null,
+    awaitingInputSince: null, awaitingReason: null, updatedAt: updated, accountId: null, accountSource: null, metadata: { simulado: true },
   };
 }
 
-function agente(id: string, sessionId: string, tipo: Agent['type'], inicio: string, extra: Partial<Agent> = {}): Agent {
+function makeAgent(id: string, sessionId: string, type: Agent['type'], start: string, extra: Partial<Agent> = {}): Agent {
   return {
-    id, sessionId, name: null, type: tipo, subagentType: null, status: 'working', task: null, currentTool: null,
-    parentAgentId: null, startedAt: inicio, endedAt: null, updatedAt: inicio, metadata: { simulado: true }, ...extra,
+    id, sessionId, name: null, type, subagentType: null, status: 'working', task: null, currentTool: null,
+    parentAgentId: null, startedAt: start, endedAt: null, updatedAt: start, metadata: { simulado: true }, ...extra,
   };
 }
 
 let seq = 0;
-const PROMPTS_DE_EXEMPLO = [
+const SAMPLE_PROMPTS = [
   'Separe o cálculo de pagamentos num serviço próprio',
   'Rode os testes e me diga o que quebrou',
   'Pode seguir com o plano',
   'Ajuste o nome das variáveis para o padrão do projeto',
 ];
 
-async function evento(porta: StoragePort, sessionId: string, agentId: string | null, createdAt: string, type: string, toolName: string | null, summary: string | null, data: unknown = null) {
+async function addEvent(storage: StoragePort, sessionId: string, agentId: string | null, createdAt: string, type: string, toolName: string | null, summary: string | null, data: unknown = null) {
   const e = { id: `${sessionId}-e${String(++seq).padStart(4, '0')}`, sessionId, agentId, type, toolName, summary, data, createdAt };
-  await porta.appendEvent(e);
+  await storage.appendEvent(e);
   return e;
 }
 
-// Mensagens do assistente com uso, para o custo e os tokens saírem pelo caminho de verdade
-// (parcelas e buckets). O output de cada uma é calculado para somar perto de `custo`, com o
-// preço padrão do modelo (US$ por milhão: Opus 5.5 4/20 e leitura de cache 0,2; Sonnet 5.5 2/10 e 0,1).
-async function uso(porta: StoragePort, sessionId: string, model: string, inicio: number, fim: number, contexto: number, custo: number) {
-  if (custo <= 0) return;
+// Assistant messages with usage, so cost and tokens go through the real path (slices and buckets).
+// Each one's output is computed to add up close to `cost`, with the model's default price (US$ per
+// million: Opus 5.5 4/20 and cache read 0.2; Sonnet 5.5 2/10 and 0.1).
+async function addUsage(storage: StoragePort, sessionId: string, model: string, start: number, end: number, context: number, cost: number) {
+  if (cost <= 0) return;
   const [pin, pout, pread] = model === OPUS ? [4, 20, 0.2] : [2, 10, 0.1];
   const n = 16;
   const input = 1_500;
-  let fixo = 0;
-  const leituras: number[] = [];
+  let fixed = 0;
+  const reads: number[] = [];
   for (let i = 0; i < n; i++) {
-    // Cresce até o contexto final, sem passar dele: passar de 200 mil mudaria a janela (#140).
-    const leitura = Math.round(((i + 1) / n) * (contexto - 2_000) + 1_000);
-    leituras.push(leitura);
-    fixo += (input * pin + leitura * pread) / 1e6;
+    // Grows up to the final context, without passing it: passing 200k would change the window (#140).
+    const read = Math.round(((i + 1) / n) * (context - 2_000) + 1_000);
+    reads.push(read);
+    fixed += (input * pin + read * pread) / 1e6;
   }
-  const output = Math.max(50, Math.round(((custo - fixo) / n / pout) * 1e6));
+  const output = Math.max(50, Math.round(((cost - fixed) / n / pout) * 1e6));
   const total = emptyTokenCounts();
   for (let i = 0; i < n; i++) {
-    const tokens = { input, output, cacheRead: leituras[i], cacheWrite5m: 0, cacheWrite1h: 0 };
-    if (i === n - 1) tokens.cacheRead = Math.max(0, contexto - input - output);
+    const tokens = { input, output, cacheRead: reads[i], cacheWrite5m: 0, cacheWrite1h: 0 };
+    if (i === n - 1) tokens.cacheRead = Math.max(0, context - input - output);
     for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += tokens[k];
-    const em = new Date(inicio + ((fim - inicio) * (i + 1)) / (n + 1)).toISOString();
-    await evento(porta, sessionId, `${sessionId}:main`, em, 'AssistantMessage', null, null, {
+    const at = new Date(start + ((end - start) * (i + 1)) / (n + 1)).toISOString();
+    await addEvent(storage, sessionId, `${sessionId}:main`, at, 'AssistantMessage', null, null, {
       usage: { messageId: `${sessionId}-m${i}`, requestId: null, model, speed: 'standard', inferenceGeo: '', serviceTier: 'standard', contextSize: '', tokens, webSearchRequests: 0, webFetchRequests: 0, codeExecutionRequests: 0 },
     });
   }
   const bucket: TokenUsage = {
     sessionId, model, speed: 'standard', inferenceGeo: '', serviceTier: 'standard', contextSize: '', tokens: total,
-    webSearchRequests: 0, webFetchRequests: 0, codeExecutionRequests: 0, baseline: emptyTokenCounts(), updatedAt: new Date(fim).toISOString(),
+    webSearchRequests: 0, webFetchRequests: 0, codeExecutionRequests: 0, baseline: emptyTokenCounts(), updatedAt: new Date(end).toISOString(),
   };
-  await porta.putTokenUsage(bucket);
+  await storage.putTokenUsage(bucket);
 }
 
-async function gravarEsta(porta: StoragePort, e: Esta, agora: number, filhas: string[]) {
-  const id = SESSAO_DO_PAINEL;
-  const cwd = `${ROOT}/${e.projeto}`;
-  const inicio = iso(agora, e.inicioMin);
-  const s = sessaoBase(id, cwd, e.modelo, inicio, iso(agora, 0.05));
-  s.name = e.titulo;
+async function writeThisSession(storage: StoragePort, e: ThisSession, now: number, children: string[]) {
+  const id = PANEL_SESSION;
+  const cwd = `${ROOT}/${e.project}`;
+  const start = iso(now, e.startMin);
+  const s = baseSession(id, cwd, e.model, start, iso(now, 0.05));
+  s.name = e.title;
   s.status = e.status;
-  if (e.espera) {
-    s.awaitingInputSince = iso(agora, e.espera.haMin);
-    s.awaitingReason = e.espera.motivo;
+  if (e.wait) {
+    s.awaitingInputSince = iso(now, e.wait.minAgo);
+    s.awaitingReason = e.wait.reason;
   }
-  const background = Object.fromEntries((e.background ?? []).map((c, i) => [`bg-${i}`, { desde: inicio, comando: c }]));
-  s.accountId = CONTAS.equipe.id;
-  s.accountSource = CONTAS.equipe.source;
+  const background = Object.fromEntries((e.background ?? []).map((c, i) => [`bg-${i}`, { desde: start, comando: c }]));
+  s.accountId = PANEL_ACCOUNTS.team.id;
+  s.accountSource = PANEL_ACCOUNTS.team.source;
+  // Persisted metadata keys stay as they are (phase 5).
   s.metadata = {
     simulado: true,
     branch: e.branch,
-    esforco: e.esforco ?? esforcoDe(e.modelo),
-    familia: { filhas: filhas.map((slug) => `sim-painel-${slug}`) },
-    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.erro ? iso(agora, e.erro.haMin) : null, delegacoes: {}, background },
+    esforco: e.effort ?? effortOf(e.model),
+    familia: { filhas: children.map((slug) => `sim-painel-${slug}`) },
+    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.error ? iso(now, e.error.minAgo) : null, delegacoes: {}, background },
   };
-  if (e.inicioMin === 0 && e.turno === 0) return; // P6: o núcleo ainda não viu a sessão
-  await porta.putSession(s);
+  if (e.startMin === 0 && e.turns === 0) return; // P6: the core has not seen the session yet
+  await storage.putSession(s);
 
-  const tool = e.status === 'active' && !e.espera ? (e.ferramenta?.nome ?? null) : null;
-  await porta.putAgent(agente(`${id}:main`, id, 'main', inicio, { currentTool: tool, status: e.espera ? 'waiting' : e.status === 'error' ? 'error' : 'working' }));
-  for (const [i, sub] of (e.subagentes ?? []).entries()) {
-    const desde = iso(agora, sub.haMin + (sub.duracaoMin ?? 0));
-    await porta.putAgent(
-      agente(`${id}:a${i}`, id, 'subagent', desde, {
-        subagentType: sub.tipo, name: sub.tarefa, status: sub.status, endedAt: sub.status === 'working' ? null : iso(agora, sub.haMin),
-        parentAgentId: sub.pai === undefined ? `${id}:main` : `${id}:a${sub.pai}`,
+  const tool = e.status === 'active' && !e.wait ? (e.tool?.name ?? null) : null;
+  await storage.putAgent(makeAgent(`${id}:main`, id, 'main', start, { currentTool: tool, status: e.wait ? 'waiting' : e.status === 'error' ? 'error' : 'working' }));
+  for (const [i, sub] of (e.subagents ?? []).entries()) {
+    const since = iso(now, sub.minAgo + (sub.durationMin ?? 0));
+    await storage.putAgent(
+      makeAgent(`${id}:a${i}`, id, 'subagent', since, {
+        subagentType: sub.type, name: sub.task, status: sub.status, endedAt: sub.status === 'working' ? null : iso(now, sub.minAgo),
+        parentAgentId: sub.parent === undefined ? `${id}:main` : `${id}:a${sub.parent}`,
       }),
     );
   }
 
-  const t0 = Date.parse(inicio);
-  const turnos = e.turnosMin ? e.turnosMin.map((m) => iso(agora, m)) : Array.from({ length: e.turno }, (_, i) => new Date(t0 + (i * (agora - t0)) / (e.turno + 1)).toISOString());
-  // Prompts com cara de prompt: o Feed (#94) mostra o texto, e "prompt" sozinho não diz nada.
-  for (const [i, t] of turnos.entries()) await evento(porta, id, null, t, 'UserPromptSubmit', null, PROMPTS_DE_EXEMPLO[i % PROMPTS_DE_EXEMPLO.length]);
-  await uso(porta, id, e.modelo, t0, agora - 0.5 * MIN, e.contexto, e.custo);
-  if (e.plano) {
-    // Cada plano anterior entra pendente e sai como acabou; o atual começa logo depois do último.
-    // O plano vem antes da última ferramenta, que é a que pede permissão ou pergunta.
-    const todoWrite = (min: number, passos: Passos, pendente = false) => {
-      const todos = passos.map(([content, status]) => ({ content, status: pendente ? 'pending' : status, activeForm: content }));
-      return evento(porta, id, null, iso(agora, min), 'PreToolUse', 'TodoWrite', 'plano', { tool_name: 'TodoWrite', tool_input: { todos }, tool_use_id: `${id}-plano-${seq}` });
+  const t0 = Date.parse(start);
+  const turns = e.turnsMin ? e.turnsMin.map((m) => iso(now, m)) : Array.from({ length: e.turns }, (_, i) => new Date(t0 + (i * (now - t0)) / (e.turns + 1)).toISOString());
+  // Prompts that look like prompts: the Feed (#94) shows the text, and "prompt" alone says nothing.
+  for (const [i, t] of turns.entries()) await addEvent(storage, id, null, t, 'UserPromptSubmit', null, SAMPLE_PROMPTS[i % SAMPLE_PROMPTS.length]);
+  await addUsage(storage, id, e.model, t0, now - 0.5 * MIN, e.context, e.cost);
+  if (e.plan) {
+    // Each previous plan comes in pending and leaves as it ended; the current one starts right after the last.
+    // The plan comes before the last tool, which is the one asking for permission or asking a question.
+    const todoWrite = (min: number, steps: PlanSteps, pending = false) => {
+      const todos = steps.map(([content, status]) => ({ content, status: pending ? 'pending' : status, activeForm: content }));
+      return addEvent(storage, id, null, iso(now, min), 'PreToolUse', 'TodoWrite', 'plano', { tool_name: 'TodoWrite', tool_input: { todos }, tool_use_id: `${id}-plano-${seq}` });
     };
-    const eventos = [];
-    for (const a of e.anteriores ?? []) eventos.push(await todoWrite(a.desdeMin, a.passos, true), await todoWrite(a.desdeMin - a.duracaoMin, a.passos));
-    const ultimo = e.anteriores?.at(-1);
-    if (ultimo) eventos.push(await todoWrite(ultimo.desdeMin - ultimo.duracaoMin - 0.5, e.plano, true));
-    eventos.push(await todoWrite((e.espera?.haMin ?? 0.3) + 0.2, e.plano));
-    await updatePlan(porta, id, eventos);
+    const events = [];
+    for (const a of e.previousPlans ?? []) events.push(await todoWrite(a.sinceMin, a.steps, true), await todoWrite(a.sinceMin - a.durationMin, a.steps));
+    const last = e.previousPlans?.at(-1);
+    if (last) events.push(await todoWrite(last.sinceMin - last.durationMin - 0.5, e.plan, true));
+    events.push(await todoWrite((e.wait?.minAgo ?? 0.3) + 0.2, e.plan));
+    await updatePlan(storage, id, events);
   }
-  if (e.ferramenta) {
-    const entrada = e.pergunta ? { questions: [{ question: e.pergunta.texto, options: Array.from({ length: e.pergunta.opcoes }, (_, k) => ({ label: `opção ${k + 1}` })) }] } : { command: e.ferramenta.resumo };
-    await evento(porta, id, null, iso(agora, e.espera?.haMin ?? 0.3), 'PreToolUse', e.ferramenta.nome, e.ferramenta.resumo, { tool_name: e.ferramenta.nome, tool_input: entrada });
+  if (e.tool) {
+    const input = e.question ? { questions: [{ question: e.question.text, options: Array.from({ length: e.question.options }, (_, k) => ({ label: `opção ${k + 1}` })) }] } : { command: e.tool.summary };
+    await addEvent(storage, id, null, iso(now, e.wait?.minAgo ?? 0.3), 'PreToolUse', e.tool.name, e.tool.summary, { tool_name: e.tool.name, tool_input: input });
   }
-  if (e.notificacao) await evento(porta, id, null, iso(agora, e.espera?.haMin ?? 0), 'Notification', null, e.notificacao, { notification_type: e.pergunta ? 'elicitation_dialog' : 'permission_prompt' });
-  if (e.erro) await evento(porta, id, null, iso(agora, e.erro.haMin), 'APIError', null, e.erro.texto);
+  if (e.notification) await addEvent(storage, id, null, iso(now, e.wait?.minAgo ?? 0), 'Notification', null, e.notification, { notification_type: e.question ? 'elicitation_dialog' : 'permission_prompt' });
+  if (e.error) await addEvent(storage, id, null, iso(now, e.error.minAgo), 'APIError', null, e.error.text);
 }
 
-async function gravarOutra(porta: StoragePort, o: Outra, agora: number) {
+async function writeOtherSession(storage: StoragePort, o: OtherSession, now: number) {
   const id = `sim-painel-${o.slug}`;
-  const atualizada = iso(agora, o.updatedMin ?? o.espera?.haMin ?? 1);
-  const s = sessaoBase(id, `${ROOT}/${o.slug}`, o.modelo, iso(agora, 40), atualizada);
-  s.name = o.titulo ?? o.slug;
+  const updated = iso(now, o.updatedMin ?? o.wait?.minAgo ?? 1);
+  const s = baseSession(id, `${ROOT}/${o.slug}`, o.model, iso(now, 40), updated);
+  s.name = o.title ?? o.slug;
   s.status = o.status;
-  if (o.status === 'completed') s.endedAt = atualizada;
-  if (o.espera) {
-    s.awaitingInputSince = iso(agora, o.espera.haMin);
-    s.awaitingReason = o.espera.motivo;
+  if (o.status === 'completed') s.endedAt = updated;
+  if (o.wait) {
+    s.awaitingInputSince = iso(now, o.wait.minAgo);
+    s.awaitingReason = o.wait.reason;
   }
-  s.accountId = CONTAS[o.conta].id;
-  s.accountSource = CONTAS[o.conta].source;
+  s.accountId = PANEL_ACCOUNTS[o.account].id;
+  s.accountSource = PANEL_ACCOUNTS[o.account].source;
   s.metadata = {
     simulado: true,
     ...(o.branch ? { branch: o.branch } : {}),
-    esforco: o.esforco ?? esforcoDe(o.modelo),
-    familia: o.relacao === 'filha' ? { mae: SESSAO_DO_PAINEL } : {},
-    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? atualizada : null, delegacoes: {}, background: {} },
+    esforco: o.effort ?? effortOf(o.model),
+    familia: o.relation === 'child' ? { mae: PANEL_SESSION } : {},
+    estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: o.status === 'error' ? updated : null, delegacoes: {}, background: {} },
   };
-  await porta.putSession(s);
-  await porta.putAgent(agente(`${id}:main`, id, 'main', s.startedAt, { status: o.espera ? 'waiting' : o.status === 'completed' ? 'completed' : 'working' }));
-  if (o.ferramenta) await evento(porta, id, null, s.awaitingInputSince ?? atualizada, 'PreToolUse', o.ferramenta.nome, o.ferramenta.resumo, { tool_name: o.ferramenta.nome, tool_input: { command: o.ferramenta.resumo } });
-  if (o.espera?.motivo === 'notification') await evento(porta, id, null, s.awaitingInputSince!, 'Notification', null, o.texto ?? null, { notification_type: 'permission_prompt' });
-  if (o.espera?.motivo === 'stop' && o.texto) await evento(porta, id, `${id}:main`, s.awaitingInputSince!, 'AssistantMessage', null, o.texto);
-  if (o.erro) await evento(porta, id, null, atualizada, 'APIError', null, o.erro);
+  await storage.putSession(s);
+  await storage.putAgent(makeAgent(`${id}:main`, id, 'main', s.startedAt, { status: o.wait ? 'waiting' : o.status === 'completed' ? 'completed' : 'working' }));
+  if (o.tool) await addEvent(storage, id, null, s.awaitingInputSince ?? updated, 'PreToolUse', o.tool.name, o.tool.summary, { tool_name: o.tool.name, tool_input: { command: o.tool.summary } });
+  if (o.wait?.reason === 'notification') await addEvent(storage, id, null, s.awaitingInputSince!, 'Notification', null, o.text ?? null, { notification_type: 'permission_prompt' });
+  if (o.wait?.reason === 'stop' && o.text) await addEvent(storage, id, `${id}:main`, s.awaitingInputSince!, 'AssistantMessage', null, o.text);
+  if (o.error) await addEvent(storage, id, null, updated, 'APIError', null, o.error);
 }
 
-/** Grava o cenário pela porta. A mãe de "esta sessão" (relação `mae`) é ligada pelos metadados. */
-export async function semearCenariosDoPainel(porta: StoragePort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
-  const e = estaDo(cenario);
-  const outras = OUTRAS[cenario];
-  for (const c of Object.values(CONTAS)) {
-    await porta.putAccount({
-      id: c.id, accountUuid: c.accountUuid, organizationUuid: c.organizationUuid, organizationName: null, organizationType: c.tipo,
-      label: c.label, color: c.color, configDirs: [], firstSeenAt: iso(agora, 60), lastSeenAt: iso(agora, 0), metadata: { simulado: true },
+/** Writes the scenario through the port. The parent of "this session" (relation `parent`) is linked through the metadata. */
+export async function seedPanelScenario(storage: StoragePort, scenario: PanelScenario = 'p1', now = Date.now()): Promise<void> {
+  const e = thisSessionOf(scenario);
+  const others = OTHERS[scenario];
+  for (const c of Object.values(PANEL_ACCOUNTS)) {
+    await storage.putAccount({
+      id: c.id, accountUuid: c.accountUuid, organizationUuid: c.organizationUuid, organizationName: null, organizationType: c.organizationType,
+      label: c.label, color: c.color, configDirs: [], firstSeenAt: iso(now, 60), lastSeenAt: iso(now, 0), metadata: { simulado: true },
     });
   }
-  const filhas = [...(e.filhas ?? []), ...outras.filter((o) => o.relacao === 'filha' && !(e.filhas ?? []).includes(o.slug)).map((o) => o.slug)];
-  await gravarEsta(porta, e, agora, filhas);
-  const mae = outras.find((o) => o.relacao === 'mae');
-  if (mae) {
-    const s = await porta.getSession(SESSAO_DO_PAINEL);
-    if (s) await porta.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-painel-${mae.slug}` } } });
+  const children = [...(e.children ?? []), ...others.filter((o) => o.relation === 'child' && !(e.children ?? []).includes(o.slug)).map((o) => o.slug)];
+  await writeThisSession(storage, e, now, children);
+  const parent = others.find((o) => o.relation === 'parent');
+  if (parent) {
+    const s = await storage.getSession(PANEL_SESSION);
+    if (s) await storage.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-painel-${parent.slug}` } } });
   }
-  for (const o of outras) await gravarOutra(porta, o, agora);
-  estado.cwd = `${ROOT}/${e.projeto}`;
-  estado.esta = e;
+  for (const o of others) await writeOtherSession(storage, o, now);
+  current.cwd = `${ROOT}/${e.project}`;
+  current.session = e;
 }
 
-/** GitHub falso do cenário: a issue e o PR de "esta sessão", e nada mais. */
-export class FonteDeTrabalhoDoSimulador implements WorkSource {
-  /** git falso: o branch, o remote e o upstream do cenário. */
+/** The scenario's fake GitHub: the issue and the PR of "this session", and nothing else. */
+export class SimulatorWorkSource implements WorkSource {
+  /** Fake git: the scenario's branch, remote and upstream. */
   static git = async (_cwd: string, args: string[]): Promise<string | null> => {
-    const e = estado.esta;
+    const e = current.session;
     if (!e) return null;
     if (args[0] === 'branch') return e.branch;
-    if (args[0] === 'remote') return `https://github.com/${REPO_DO_SIMULADOR}.git`;
-    if (args[0] === 'rev-parse') return e.semPush ? null : `origin/${e.branch}`;
+    if (args[0] === 'remote') return `https://github.com/${SIMULATOR_REPO}.git`;
+    if (args[0] === 'rev-parse') return e.notPushed ? null : `origin/${e.branch}`;
     return null;
   };
 
-  private no(): WorkNode | null {
-    const i = estado.esta?.issue;
+  private node(): WorkNode | null {
+    const i = current.session?.issue;
     if (!i) return null;
     return {
-      key: `${REPO_DO_SIMULADOR}#${i.numero}`, repo: REPO_DO_SIMULADOR, number: i.numero, title: i.titulo,
-      url: `https://github.com/${REPO_DO_SIMULADOR}/issues/${i.numero}`, state: 'OPEN', updatedAt: new Date().toISOString(),
+      key: `${SIMULATOR_REPO}#${i.number}`, repo: SIMULATOR_REPO, number: i.number, title: i.title,
+      url: `https://github.com/${SIMULATOR_REPO}/issues/${i.number}`, state: 'OPEN', updatedAt: new Date().toISOString(),
       type: 'User Story', parent: null, progress: i.sub ? { completed: i.sub[0], total: i.sub[1], percent: Math.round((i.sub[0] / i.sub[1]) * 100) } : null,
     };
   }
 
   async listShallow(): Promise<WorkNode[]> {
-    const n = this.no();
+    const n = this.node();
     return n ? [n] : [];
   }
   async nodes(keys: readonly string[]): Promise<WorkNode[]> {
-    const n = this.no();
+    const n = this.node();
     return n && keys.includes(n.key) ? [n] : [];
   }
   async children(): Promise<ChildrenResult> {
     return { children: [], details: [] };
   }
   async detail(key: string): Promise<WorkDetail> {
-    const pr = estado.esta?.issue?.pr;
+    const pr = current.session?.issue?.pr;
     const prs: LinkedPullRequest[] = pr
-      ? [{ number: pr.numero, url: `https://github.com/${REPO_DO_SIMULADOR}/pull/${pr.numero}`, state: 'OPEN', isDraft: !!pr.rascunho, review: pr.review, ci: pr.ci, checks: CHECKS_DO_P1[pr.ci ?? ''] ?? null }]
+      ? [{ number: pr.number, url: `https://github.com/${SIMULATOR_REPO}/pull/${pr.number}`, state: 'OPEN', isDraft: !!pr.draft, review: pr.review, ci: pr.ci, checks: P1_CHECKS[pr.ci ?? ''] ?? null }]
       : [];
     return { key, state: 'OPEN', pullRequests: prs, stage: stageOf('OPEN', prs) };
   }
 }
 
-/** A sessão mãe do P9: a de ontem, antes do /clear. Só existe na porta das decisões. */
-export const MAE_DO_P9 = 'sim-painel-kanban-ontem';
+/** P9's parent session: yesterday's, before /clear. It only exists in the decisions port. */
+export const P9_PARENT = 'sim-painel-kanban-ontem';
 
 /**
- * As decisões do P9, pela porta das decisões e pelas regras de lá (número, cadeia, família):
- * a sessão mãe decidiu ontem; esta, ligada a ela por /clear, decidiu o resto. Textos sintéticos.
- * Com elas, as outras três famílias da página Decisões (C21). Nos outros cenários, nada.
+ * P9's decisions, through the decisions port and its rules (number, chain, family): the parent
+ * session decided yesterday; this one, linked to it by /clear, decided the rest. Synthetic texts.
+ * With them, the other three families of the Decisions page (C21). In the other scenarios, nothing.
  */
-export async function semearDecisoesDoPainel(porta: DecisionPort, cenario: CenarioDoPainel = 'p1', agora = Date.now()): Promise<void> {
-  if (cenario !== 'p9') return;
-  const repo = `${ROOT}/${ESTA.p1.projeto}`;
-  const branch = ESTA.p1.branch;
-  const agoraIso = iso(agora, 0);
+export async function seedPanelDecisions(port: DecisionPort, scenario: PanelScenario = 'p1', now = Date.now()): Promise<void> {
+  if (scenario !== 'p9') return;
+  const repo = `${ROOT}/${THIS_SESSION.p1.project}`;
+  const branch = THIS_SESSION.p1.branch;
+  const nowIso = iso(now, 0);
   let n = 0;
-  const decidir = (sessionId: string, haMin: number, d: Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft>) =>
+  const decide = (sessionId: string, minAgo: number, d: Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft>) =>
     registerDecision(
-      porta,
+      port,
       {
         sourceKey: `sim:p9:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
-        message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(agora, haMin), metadata: { simulado: true }, ...d,
+        message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...d,
       },
-      agoraIso,
+      nowIso,
     );
-  await decidir(MAE_DO_P9, 20 * 60, { origin: 'pergunta', topic: 'pergunta:kanban arrasta', choice: 'Kanban só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
-  await linkSession(porta, { sessionId: SESSAO_DO_PAINEL, parentSessionId: MAE_DO_P9, reason: 'clear', linkedAt: iso(agora, 45) }, agoraIso);
-  await decidir(SESSAO_DO_PAINEL, 40, { origin: 'plano', topic: 'plano', choice: 'Plano de 5 passos aprovado', alternatives: ['plano com drag-and-drop'] });
-  await decidir(SESSAO_DO_PAINEL, 33, { origin: 'pergunta', topic: 'pergunta:banco nos testes', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'] });
-  await decidir(SESSAO_DO_PAINEL, 14, { origin: 'correcao', topic: 'pergunta:banco nos testes', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'] });
-  await decidir(SESSAO_DO_PAINEL, 21, { origin: 'permissao', topic: 'permissao:Bash npm test', choice: 'Permitir npm test sem perguntar', alternatives: ['perguntar a cada vez'] });
-  await decidir(SESSAO_DO_PAINEL, 6, {
+  await decide(P9_PARENT, 20 * 60, { origin: 'pergunta', topic: 'pergunta:kanban arrasta', choice: 'Kanban só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await linkSession(port, { sessionId: PANEL_SESSION, parentSessionId: P9_PARENT, reason: 'clear', linkedAt: iso(now, 45) }, nowIso);
+  await decide(PANEL_SESSION, 40, { origin: 'plano', topic: 'plano', choice: 'Plano de 5 passos aprovado', alternatives: ['plano com drag-and-drop'] });
+  await decide(PANEL_SESSION, 33, { origin: 'pergunta', topic: 'pergunta:banco nos testes', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'] });
+  await decide(PANEL_SESSION, 14, { origin: 'correcao', topic: 'pergunta:banco nos testes', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'] });
+  await decide(PANEL_SESSION, 21, { origin: 'permissao', topic: 'permissao:Bash npm test', choice: 'Permitir npm test sem perguntar', alternatives: ['perguntar a cada vez'] });
+  await decide(PANEL_SESSION, 6, {
     origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:cards por coluna',
     choice: '10 cards por coluna, com "mostrar mais"', alternatives: ['20 por coluna', 'rolagem infinita'],
   });
-  await semearDecisoesDaPagina(porta, agora);
+  await seedDecisionsPage(port, now);
 }
 
-/** Os registros a que a demonstração já promoveu decisões, por pasta sob /simulacao. */
-const REGISTROS_DA_DEMO = {
+/** The records the demo already promoted decisions to, by folder under /simulacao. */
+const DEMO_RECORDS = {
   'vitrine-demo': ['0003-kanban-por-long-polling.md'],
   'motor-de-regras': ['0004-cobranca-em-servico-a-parte.md', '0005-contrato-da-cobranca-primeiro.md'],
   'painel-de-metricas': ['0006-cache-do-total-do-mes.md'],
   'ahrena-demo': [],
 } as const;
-const registro = (pasta: keyof typeof REGISTROS_DA_DEMO, i: number) => `docs/decisoes/${REGISTROS_DA_DEMO[pasta][i]}`;
+const recordPath = (folder: keyof typeof DEMO_RECORDS, i: number) => `docs/decisoes/${DEMO_RECORDS[folder][i]}`;
 
 /**
- * Para o "Promover a registro" da --demo gravar de verdade sem tocar em nada da máquina: uma pasta
- * por repositório sintético, sob `base` (uma pasta temporária), com `docs/decisoes` e os registros
- * já promovidos (só o título). Devolve a troca de `/simulacao/<pasta>` pela pasta de verdade.
+ * So the --demo's "Promover a registro" really writes without touching anything on the machine: one
+ * folder per synthetic repository, under `base` (a temporary folder), with `docs/decisoes` and the
+ * records already promoted (title only). Returns the swap of `/simulacao/<folder>` for the real folder.
  */
-export function pastasDosRegistrosDaDemo(base: string): (repo: string) => string | null {
-  for (const [pasta, nomes] of Object.entries(REGISTROS_DA_DEMO)) {
-    const dir = join(base, pasta, 'docs', 'decisoes');
+export function demoRecordFolders(base: string): (repo: string) => string | null {
+  for (const [folder, names] of Object.entries(DEMO_RECORDS)) {
+    const dir = join(base, folder, 'docs', 'decisoes');
     mkdirSync(dir, { recursive: true });
-    for (const nome of nomes) writeFileSync(join(dir, nome), `# ${nome.slice(0, 4)} · registro sintético da demonstração\n`);
+    for (const name of names) writeFileSync(join(dir, name), `# ${name.slice(0, 4)} · registro sintético da demonstração\n`);
   }
   return (repo) => {
-    const pasta = repo.startsWith(`${ROOT}/`) ? repo.slice(ROOT.length + 1) : null;
-    return pasta && Object.hasOwn(REGISTROS_DA_DEMO, pasta) ? join(base, pasta) : null;
+    const folder = repo.startsWith(`${ROOT}/`) ? repo.slice(ROOT.length + 1) : null;
+    return folder && Object.hasOwn(DEMO_RECORDS, folder) ? join(base, folder) : null;
   };
 }
 
 /**
- * O apelido do painel na --demo: o painel lateral (que manda o id real da sessão) vê a do cenário;
- * as sessões do simulador (`sim-…`), que a /ui manda ao decidir em nome da sessão dona, ficam como vieram.
+ * The panel's alias in the --demo: the side panel (which sends the session's real id) sees the
+ * scenario's; the simulator's sessions (`sim-…`), which the /ui sends when deciding on behalf of the
+ * owning session, stay as they came.
  */
-export const apelidoDaDemo = (sessionId: string): string => (sessionId.startsWith('sim-') ? sessionId : SESSAO_DO_PAINEL);
+export const demoAlias = (sessionId: string): string => (sessionId.startsWith('sim-') ? sessionId : PANEL_SESSION);
 
-/** A sessão mãe da vitrine: a de ontem, antes do /clear. Só existe na porta das decisões. */
-export const MAE_DA_VITRINE = 'sim-painel-vitrine-ontem';
+/** The vitrine's parent session: yesterday's, before /clear. It only exists in the decisions port. */
+export const VITRINE_PARENT = 'sim-painel-vitrine-ontem';
 
-type Rascunho = Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft> & { haMin: number; promovida?: string };
+type DemoDraft = Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft> & { minAgo: number; promotedTo?: string };
 
 /**
- * As outras três famílias da página Decisões (C21, docs/wireframes/capturas/console-decisoes.png),
- * cada uma num branch e numa pasta: `feat/42-kanban` (vitrine-demo, com a mãe de ontem),
- * `refactor/pagamentos` (motor-de-regras) e `perf/47-relatorio` (painel-de-metricas), com vigentes,
- * substituídas, promovidas a registro e a confirmar. Em ordem de `decidedAt`, para o número
- * na família (D1, D2…) seguir o tempo. Os caminhos dos registros são fictícios, como as pastas.
+ * The other three families of the Decisions page (C21, docs/wireframes/capturas/console-decisoes.png),
+ * each on a branch and in a folder: `feat/42-kanban` (vitrine-demo, with yesterday's parent),
+ * `refactor/pagamentos` (motor-de-regras) and `perf/47-relatorio` (painel-de-metricas), with
+ * decisions in force, replaced, promoted to a record and to confirm. In `decidedAt` order, so the
+ * number in the family (D1, D2…) follows time. The record paths are fictitious, as are the folders.
  */
-async function semearDecisoesDaPagina(porta: DecisionPort, agora: number): Promise<void> {
-  const agoraIso = iso(agora, 0);
+async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void> {
+  const nowIso = iso(now, 0);
   let n = 0;
-  const decidir = async (sessionId: string, repo: string, branch: string, d: Rascunho) => {
-    const { haMin, promovida, ...resto } = d;
+  const decide = async (sessionId: string, repo: string, branch: string, d: DemoDraft) => {
+    const { minAgo, promotedTo, ...rest } = d;
     const { decision } = await registerDecision(
-      porta,
+      port,
       {
         sourceKey: `sim:c21:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
-        message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(agora, haMin), metadata: { simulado: true }, ...resto,
+        message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...rest,
       },
-      agoraIso,
+      nowIso,
     );
-    if (promovida) await markPromoted(porta, decision.id, promovida, agoraIso);
+    if (promotedTo) await markPromoted(port, decision.id, promotedTo, nowIso);
   };
 
-  const vitrine = (sessionId: string, d: Rascunho) => decidir(sessionId, `${ROOT}/vitrine-demo`, 'feat/42-kanban', d);
+  const vitrine = (sessionId: string, d: DemoDraft) => decide(sessionId, `${ROOT}/vitrine-demo`, 'feat/42-kanban', d);
   const kanban = 'sim-painel-vitrine-demo';
-  await vitrine(MAE_DA_VITRINE, { haMin: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
-  await linkSession(porta, { sessionId: kanban, parentSessionId: MAE_DA_VITRINE, reason: 'clear', linkedAt: iso(agora, 60) }, agoraIso);
-  await vitrine(kanban, { haMin: 50, origin: 'plano', topic: 'plano', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'sessao' });
-  await vitrine(kanban, { haMin: 45, origin: 'pergunta', topic: 'kanban:banco', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'], scope: 'sessao' });
-  await vitrine(kanban, { haMin: 30, origin: 'permissao', topic: 'permissao:Bash npm run build', choice: 'Permitir npm run build sem perguntar', alternatives: ['perguntar a cada vez'], scope: 'sessao' });
+  await vitrine(VITRINE_PARENT, { minAgo: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await linkSession(port, { sessionId: kanban, parentSessionId: VITRINE_PARENT, reason: 'clear', linkedAt: iso(now, 60) }, nowIso);
+  await vitrine(kanban, { minAgo: 50, origin: 'plano', topic: 'plano', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'sessao' });
+  await vitrine(kanban, { minAgo: 45, origin: 'pergunta', topic: 'kanban:banco', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'], scope: 'sessao' });
+  await vitrine(kanban, { minAgo: 30, origin: 'permissao', topic: 'permissao:Bash npm run build', choice: 'Permitir npm run build sem perguntar', alternatives: ['perguntar a cada vez'], scope: 'sessao' });
   await vitrine(kanban, {
-    haMin: 25, origin: 'pergunta', topic: 'kanban:atualizar', choice: 'Kanban atualiza por long polling', alternatives: ['recarregar a cada 5 s'], scope: 'branch',
-    promovida: registro('vitrine-demo', 0),
+    minAgo: 25, origin: 'pergunta', topic: 'kanban:atualizar', choice: 'Kanban atualiza por long polling', alternatives: ['recarregar a cada 5 s'], scope: 'branch',
+    promotedTo: recordPath('vitrine-demo', 0),
   });
-  await vitrine(kanban, { haMin: 20, origin: 'pergunta', topic: 'kanban:card', choice: 'Card com 3 linhas: título, branch e PR', alternatives: ['card com o resumo da conversa'] });
-  await vitrine(kanban, { haMin: 16, origin: 'correcao', topic: 'kanban:banco', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'], scope: 'sessao' });
+  await vitrine(kanban, { minAgo: 20, origin: 'pergunta', topic: 'kanban:card', choice: 'Card com 3 linhas: título, branch e PR', alternatives: ['card com o resumo da conversa'] });
+  await vitrine(kanban, { minAgo: 16, origin: 'correcao', topic: 'kanban:banco', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'], scope: 'sessao' });
   await vitrine(kanban, {
-    haMin: 8, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:encerradas', scope: 'sessao',
+    minAgo: 8, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:encerradas', scope: 'sessao',
     choice: 'Esconder sessões encerradas há mais de 7 dias', alternatives: ['mostrar todas'],
   });
 
-  const pagamentos = (d: Rascunho) => decidir('sim-painel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
-  await pagamentos({
-    haMin: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
-    promovida: registro('motor-de-regras', 0),
+  const payments = (d: DemoDraft) => decide('sim-painel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
+  await payments({
+    minAgo: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
+    promotedTo: recordPath('motor-de-regras', 0),
   });
-  await pagamentos({ haMin: 50, origin: 'pergunta', topic: 'pagamentos:pr', choice: 'Abrir o PR direto', alternatives: ['review antes do PR'] });
-  await pagamentos({
-    haMin: 40, origin: 'plano', topic: 'plano', choice: 'Contrato da API de cobrança antes do código', alternatives: ['começar pelo código'],
-    promovida: registro('motor-de-regras', 1),
+  await payments({ minAgo: 50, origin: 'pergunta', topic: 'pagamentos:pr', choice: 'Abrir o PR direto', alternatives: ['review antes do PR'] });
+  await payments({
+    minAgo: 40, origin: 'plano', topic: 'plano', choice: 'Contrato da API de cobrança antes do código', alternatives: ['começar pelo código'],
+    promotedTo: recordPath('motor-de-regras', 1),
   });
-  await pagamentos({ haMin: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
-  await pagamentos({ haMin: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
+  await payments({ minAgo: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
+  await payments({ minAgo: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
 
-  const relatorio = (d: Rascunho) => decidir('sim-painel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
-  await relatorio({ haMin: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
-  await relatorio({ haMin: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
-  await relatorio({ haMin: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });
-  await relatorio({
-    haMin: 45, origin: 'pergunta', topic: 'relatorio:cache', choice: 'Cachear o total do mês por 5 min', alternatives: ['sem cache'], scope: 'branch',
-    promovida: registro('painel-de-metricas', 0),
+  const report = (d: DemoDraft) => decide('sim-painel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
+  await report({ minAgo: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
+  await report({ minAgo: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
+  await report({ minAgo: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });
+  await report({
+    minAgo: 45, origin: 'pergunta', topic: 'relatorio:cache', choice: 'Cachear o total do mês por 5 min', alternatives: ['sem cache'], scope: 'branch',
+    promotedTo: recordPath('painel-de-metricas', 0),
   });
-  await relatorio({
-    haMin: 40, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'relatorio:indice', scope: 'sessao',
+  await report({
+    minAgo: 40, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'relatorio:indice', scope: 'sessao',
     choice: 'Índice composto em (mes, conta)', alternatives: ['view materializada'],
   });
 }

@@ -8,8 +8,8 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
+import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
+import { seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { decimal, duration, modelName, percent, when, tokens } from '../../ui/screens/workflow-format.js';
@@ -45,9 +45,9 @@ describe('front de Workflows contra a demonstração do p4', () => {
   let api: ApiLocal;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
-    await semearWorkflowsDoDemo(storage, AGORA);
-    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+    await seedPanelScenario(storage, 'p4', AGORA);
+    await seedDemoWorkflows(storage, AGORA);
+    const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
     api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
   });

@@ -7,7 +7,7 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, LEGACY_BODIES, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, translateBody, type DecisaoDoPainel, type ListaDeDecisoes, type Painel } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel, type CenarioDoPainel } from '../../src/simulator/panel.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions, type PanelScenario } from '../../src/simulator/panel.ts';
 import { T0, session } from '../fixtures.ts';
 
 const AGORA = Date.parse(T0);
@@ -16,14 +16,14 @@ const REPO = '/simulacao/ahrena-demo';
 const EQUIPE = '00000000-0000-4000-8000-000000000ea1/00000000-0000-4000-8000-000000000eb1';
 const CLIENTE = '00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1';
 
-async function cenario(nome: CenarioDoPainel = 'p9') {
+async function cenario(nome: PanelScenario = 'p9') {
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisoes = new SqliteDecisionStore(storage.db);
-  await semearCenariosDoPainel(storage, nome, AGORA);
-  await semearDecisoesDoPainel(decisoes, nome, AGORA);
-  const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git: FonteDeTrabalhoDoSimulador.git, agora: () => AGORA });
+  await seedPanelScenario(storage, nome, AGORA);
+  await seedPanelDecisions(decisoes, nome, AGORA);
+  const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
   const montador = new MontadorDoPainel({
-    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL,
+    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION,
   });
   await montador.montar({ sessionId: 'qualquer' });
   await trabalho.esperar();
@@ -53,8 +53,8 @@ describe('decisões no painel', () => {
     await storage.close();
 
     const semPorta = openSqliteStorage({ path: ':memory:' });
-    await semearCenariosDoPainel(semPorta, 'p1', AGORA);
-    const m = new MontadorDoPainel({ storage: semPorta, contas: new Contas({ storage: semPorta, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA, apelido: () => SESSAO_DO_PAINEL });
+    await seedPanelScenario(semPorta, 'p1', AGORA);
+    const m = new MontadorDoPainel({ storage: semPorta, contas: new Contas({ storage: semPorta, arquivo: null }), desktop: null, trabalho: null, agora: () => AGORA, apelido: () => PANEL_SESSION });
     assert.equal((await m.montar({ sessionId: 'qualquer' })).decisions, null);
     await semPorta.close();
   });
@@ -164,7 +164,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(decisao.state, 'current');
       assert.equal(decisao.confirmedAt, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
-      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: SESSAO_DO_PAINEL, conta: EQUIPE, em: T0, antes: 'a_confirmar' });
+      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: PANEL_SESSION, conta: EQUIPE, em: T0, antes: 'a_confirmar' });
       assert.equal(gravada?.decidedBy, 'agente', 'quem propôs continua sendo o agente');
       assert.equal((await post(caminho, { session: 'qualquer' })).status, 409, 'já confirmada');
 
@@ -176,7 +176,7 @@ describe('API das decisões em 127.0.0.1', () => {
       const { decision: outra } = await registerDecision(
         decisoes,
         {
-          sourceKey: 'teste:sugerida-2', sessionId: SESSAO_DO_PAINEL, repo: REPO, branch: BRANCH, topic: 'kanban:filtro', context: null,
+          sourceKey: 'teste:sugerida-2', sessionId: PANEL_SESSION, repo: REPO, branch: BRANCH, topic: 'kanban:filtro', context: null,
           choice: 'Filtro por conta no topo', alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: T0,
         },
         T0,
@@ -221,7 +221,7 @@ describe('API das decisões em 127.0.0.1', () => {
         await registerDecision(
           decisoes,
           {
-            sourceKey: `teste:sug-${n}`, sessionId: SESSAO_DO_PAINEL, repo: REPO, branch: BRANCH, topic, context: 'Qual filtro primeiro?',
+            sourceKey: `teste:sug-${n}`, sessionId: PANEL_SESSION, repo: REPO, branch: BRANCH, topic, context: 'Qual filtro primeiro?',
             choice: `Filtro ${n} no topo`, alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: new Date(AGORA - 60_000).toISOString(),
           },
           T0,
@@ -249,7 +249,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(ajustada.status, 200);
       assert.equal(ajustada.decisao?.state, 'superseded');
       assert.equal(ajustada.decisao?.undo, 'adjust');
-      const nova = (await decisoes.listDecisions({ sessionId: SESSAO_DO_PAINEL, states: ['vigente'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
+      const nova = (await decisoes.listDecisions({ sessionId: PANEL_SESSION, states: ['vigente'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
       assert.equal(nova.origin, 'correcao');
       assert.equal(nova.inferred, false);
       assert.equal(nova.choice, 'Sim, filtro por conta no topo.');

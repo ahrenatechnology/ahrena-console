@@ -18,7 +18,7 @@ import {
 } from '../../src/api/kanban.ts';
 import { displayStatus, type Agent, type Session } from '../../src/model.ts';
 import { simulate } from '../../src/simulator/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
 
@@ -61,7 +61,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
     await simulate(storage, { seed: 31, sessions: 60, chaos: true, prices: true, now: () => AGORA });
-    await semearCenariosDoPainel(storage, 'p4', AGORA);
+    await seedPanelScenario(storage, 'p4', AGORA);
     sessoes = (await storage.listSessions({ limit: 500 })).items;
     agentes = (await Promise.all(sessoes.map((s) => storage.listAgents(s.id)))).flat();
     const contas = new Contas({ storage, arquivo: null });

@@ -88,7 +88,7 @@ import {
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS } from '../simulator/fake-github.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
 import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
 
@@ -600,14 +600,14 @@ export interface OpcoesDosReposDoNucleo {
 export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const fonte = demo
-    ? new GithubReposSource({ token: 'demo', fetch: criarGithubFalso(DADOS_DA_DEMO, { atrasoMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
+    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
     : semGithub
       ? null
       : new GithubReposSource();
   const sessoes = new SessoesPorRepo({
     frota,
     aoDescobrir: () => mudancas.record({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
-    ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
+    ...(demo ? { git: demoGit(), extras: DEMO_EXTRA_SESSIONS } : {}),
   });
   const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });
   return { repos, rota: criarRotaDosRepos(repos) };

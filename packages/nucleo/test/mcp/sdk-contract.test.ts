@@ -14,7 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from './helpers.ts';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '../../src/mcp/cli.ts');
@@ -57,7 +57,7 @@ async function exercise(transport: Transport) {
 
 for (const [name, seedWith] of [
   ['synthetic cases', seed],
-  ['simulator scenario p2', (s: SqliteStorage) => semearCenariosDoPainel(s, 'p2', NOW)],
+  ['simulator scenario p2', (s: SqliteStorage) => seedPanelScenario(s, 'p2', NOW)],
   ['empty database', async () => {}],
 ] as const) {
   describe(`contract with the official client: ${name}`, () => {

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
 import { FeedDeEventos, statusDoEvento, textoDeUmaLinha, type EventoDoFeed, type RespostaDoFeed } from '../../src/api/eventos.ts';
-import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 
@@ -283,7 +283,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
 
 describe('#94 GET /api/eventos: a rota HTTP, ponta a ponta', () => {
   test('sobe na porta 0 com o cenário do simulador; só GET; Origin de fora dá 403', async () => {
-    await semearCenariosDoPainel(storage, 'p4');
+    await seedPanelScenario(storage, 'p4');
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
     const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, eventos: feed });
     try {

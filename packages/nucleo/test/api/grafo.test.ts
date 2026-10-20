@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, aplicarEvento, iniciosDosTurnos, resumoVazio, subagentesDe } from '../../src/api/index.ts';
-import { SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { T0, agent, at, event, session } from '../fixtures.ts';
 
 const principal = agent({ id: 's1:main', type: 'main' });
@@ -82,8 +82,8 @@ describe('painel: o grafo montado dos eventos gravados', () => {
   test('P13: 25 subagentes em 5 ondas, 4 ativos, 1 com erro e aninhados em dois níveis', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const agora = Date.parse(T0);
-    await semearCenariosDoPainel(storage, 'p13', agora);
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => agora, apelido: () => SESSAO_DO_PAINEL });
+    await seedPanelScenario(storage, 'p13', agora);
+    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => agora, apelido: () => PANEL_SESSION });
     const p = await montador.montar({ sessionId: 'qualquer' });
     const itens = p.subagents.items;
     assert.equal(itens.length, 25);

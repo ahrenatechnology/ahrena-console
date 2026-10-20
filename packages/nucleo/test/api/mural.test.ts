@@ -13,7 +13,7 @@ import {
   type Mural,
   type SessaoDoDesktop,
 } from '../../src/api/index.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import type { StoragePort } from '../../src/storage-port.ts';
 import { T0, session } from '../fixtures.ts';
 
@@ -29,8 +29,8 @@ const iso = (minAtras: number) => new Date(AGORA - minAtras * MIN).toISOString()
  */
 async function semear() {
   const storage = openSqliteStorage({ path: ':memory:' });
-  await semearCenariosDoPainel(storage, 'p6', AGORA);
-  await semearCenariosDoPainel(storage, 'p4', AGORA);
+  await seedPanelScenario(storage, 'p6', AGORA);
+  await seedPanelScenario(storage, 'p4', AGORA);
   await storage.putSession(session({ id: 'sim-mural-abandonada', cwd: '/simulacao/abandonada', status: 'abandoned', endedAt: iso(200), updatedAt: iso(200), metadata: { simulado: true } }));
   await storage.putSession(session({ id: 'sim-mural-antiga', cwd: '/simulacao/antiga', status: 'completed', endedAt: iso(200), updatedAt: iso(200), metadata: { simulado: true } }));
   await storage.putSession(session({ id: 'sim-mural-erro-velho', cwd: '/simulacao/erro-velho', status: 'error', endedAt: iso(200), updatedAt: iso(200), metadata: { simulado: true } }));
@@ -82,7 +82,7 @@ describe('mural ao vivo (#34)', () => {
         // Precisam de você: urgentes e erro, o pedido mais recente primeiro; depois a sua vez.
         sim('motor-de-regras'), sim('painel-de-metricas'), sim('app-receitas'), sim('fila-de-tarefas'),
         // As outras, pela atividade mais recente; a concluída há 20 min ainda está aberta.
-        SESSAO_DO_PAINEL, sim('catalogo-exemplo'), sim('blog-estatico'),
+        PANEL_SESSION, sim('catalogo-exemplo'), sim('blog-estatico'),
       ],
     );
     assert.deepEqual(mural.count, { all: 7, waiting: 4, active: 2 });
@@ -99,7 +99,7 @@ describe('mural ao vivo (#34)', () => {
   test('o card de uma sessão com plano, subagentes, contexto e custo', async () => {
     const storage = await semear();
     const mural = await muralDe(storage).montar();
-    const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
+    const esta = mural.cards.find((c) => c.id === PANEL_SESSION)!;
     assert.equal(esta.title, 'Separar pagamentos em serviços');
     assert.equal(esta.project, 'vitrine-demo');
     assert.equal(esta.branch, 'feat/63-separar-pagamentos', 'sem o Desktop, o branch da metadata');
@@ -160,12 +160,12 @@ describe('mural ao vivo (#34)', () => {
       localId: `local_${cli}`, cliSessionId: cli, titulo: null, branch: null, cwd: null, maeLocalId: null, arquivada: false, contas: [], ...extra,
     });
     const doDesktop: Record<string, SessaoDoDesktop> = {
-      [SESSAO_DO_PAINEL]: sessao(SESSAO_DO_PAINEL, { esforco: 'max', branch: 'feat/63-do-desktop' }),
+      [PANEL_SESSION]: sessao(PANEL_SESSION, { esforco: 'max', branch: 'feat/63-do-desktop' }),
       [sim('catalogo-exemplo')]: sessao(sim('catalogo-exemplo'), { arquivada: true }),
     };
     const desktop = { atualizar: async () => {}, sessaoPorCli: (id: string) => doDesktop[id] ?? null, sessaoPorLocal: () => null, filhasDe: () => [] } as unknown as IndiceDoDesktop;
     const mural = await muralDe(storage, desktop).montar();
-    const esta = mural.cards.find((c) => c.id === SESSAO_DO_PAINEL)!;
+    const esta = mural.cards.find((c) => c.id === PANEL_SESSION)!;
     assert.equal(esta.effort, 'max', 'o Desktop vale mais que a metadata');
     assert.equal(esta.branch, 'feat/63-do-desktop');
     assert.equal(mural.cards.some((c) => c.id === sim('catalogo-exemplo')), false, 'a arquivada no Desktop sai do mural');
@@ -178,7 +178,7 @@ describe('mural ao vivo (#34)', () => {
     await storage.putSession(session({ id: 'sim-mural-terminal', cwd: '/simulacao/terminal', status: 'active', updatedAt: iso(1), metadata: { simulado: true } }));
     const pastas: string[] = [];
     const git = async (cwd: string, args: string[]) => (args[0] === 'branch' ? (pastas.push(cwd), cwd === '/simulacao/terminal' ? 'feat/7-terminal' : null) : null);
-    const trabalho = new TrabalhoPorBranch({ fonte: new FonteDeTrabalhoDoSimulador(), git, agora: () => AGORA });
+    const trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git, agora: () => AGORA });
     const mural = muralDoPainel(painelDe(storage, null, trabalho), { cacheMs: 0 });
     const doTerminal = async () => (await mural.montar()).cards.find((c) => c.id === 'sim-mural-terminal')?.branch;
     assert.equal(await doTerminal(), null, 'o primeiro pedido não espera o git');
