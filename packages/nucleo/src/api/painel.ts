@@ -191,6 +191,11 @@ export class MontadorDoPainel {
     return { sessionId, branch, repo: pasta, contaId: conta?.id ?? null };
   }
 
+  /**
+   * A sessão das decisões a partir do pedido: a pasta da porta, do pedido ou do Desktop; o branch do
+   * Desktop, dos metadados ou do git da pasta e, sem nenhum deles, o que a captura gravou nas decisões
+   * da própria sessão. É a mesma regra no Confirmar do painel e na aba e no Promover da /ui.
+   */
   private async alvoDoPedido(pedidoOriginal: PedidoDoPainel): Promise<AlvoDasDecisoes> {
     const pedido = { ...pedidoOriginal, sessionId: this.apelido(pedidoOriginal.sessionId) };
     this.contas.informar(pedido.sessionId, pedido.conta ?? null, pedido.org ?? null);
@@ -200,7 +205,14 @@ export class MontadorDoPainel {
     const conta = this.contas.daSessao(session ?? { id: pedido.sessionId, accountId: null, accountSource: null }, desktop);
     const pasta = session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null;
     const branch = desktop?.branch ?? (session?.metadata?.branch as string | undefined) ?? this.trabalho?.ler(pasta, null)?.branch ?? null;
-    return this.alvo(pedido.sessionId, pasta, branch, conta);
+    if (branch || !this.decisoes) return this.alvo(pedido.sessionId, pasta, branch, conta);
+    const gravado = await this.decisoes.gravadoNasProprias(pedido.sessionId);
+    return this.alvo(pedido.sessionId, gravado.branch ? (gravado.repo ?? pasta) : (pasta ?? gravado.repo), gravado.branch, conta);
+  }
+
+  /** A sessão das decisões só pelo id: a da aba e do Promover da /ui, igual à do Confirmar. */
+  alvoDaSessao(sessionId: string): Promise<AlvoDasDecisoes> {
+    return this.alvoDoPedido({ sessionId });
   }
 
   /** `GET /api/decisoes/<sessão>`: a lista de um escopo; `null` sem a porta das decisões. */

@@ -64,6 +64,17 @@ async function todas(port: DecisionPort, query: ListDecisionsQuery): Promise<Dec
   return out;
 }
 
+/** Vigentes e a confirmar: o que as contagens por escopo somam. */
+const CONTAVEIS: readonly DecisionState[] = ['vigente', 'a_confirmar'];
+const contaveis = (ds: readonly Decision[]) => ds.filter((d) => CONTAVEIS.includes(d.state)).length;
+
+/** O rótulo ("D2") de uma decisão pelo id: das já lidas, ou da porta; `null` sem id ou sem a decisão. */
+export async function rotuloPorId(port: DecisionPort, id: string | null, lidas: ReadonlyMap<string, Decision>): Promise<string | null> {
+  if (!id) return null;
+  const d = lidas.get(id) ?? (await port.getDecision(id));
+  return d ? decisionLabel(d) : null;
+}
+
 const maisRecentes = (a: Decision, b: Decision) => (a.decidedAt === b.decidedAt ? b.seq - a.seq : a.decidedAt < b.decidedAt ? 1 : -1);
 
 export class DecisoesDaSessao {
@@ -111,6 +122,26 @@ export class DecisoesDaSessao {
     return out.sort(maisRecentes);
   }
 
+  /**
+   * Vigentes e a confirmar em cada escopo. As do escopo pedido já vieram lidas (`doEscopo`, em
+   * qualquer estado) e não são consultadas de novo.
+   */
+  async porEscopo(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes, doEscopo: readonly Decision[]): Promise<Record<EscopoDasDecisoes, number>> {
+    const out = {} as Record<EscopoDasDecisoes, number>;
+    for (const e of ESCOPOS_DAS_DECISOES) out[e] = e === escopo ? contaveis(doEscopo) : (await this.doEscopo(alvo, e, CONTAVEIS)).length;
+    return out;
+  }
+
+  /**
+   * O branch e a pasta que a captura gravou nas decisões da própria sessão, para quando o ambiente
+   * não diz o branch (a sessão que só a porta das decisões conhece, ou sem git à mão).
+   */
+  async gravadoNasProprias(sessionId: string): Promise<{ branch: string | null; repo: string | null }> {
+    const proprias = (await this.port.listDecisions({ sessionId, limit: 50 })).items;
+    const comBranch = proprias.find((d) => d.branch);
+    return { branch: comBranch?.branch ?? null, repo: comBranch?.repo ?? proprias[0]?.repo ?? null };
+  }
+
   /** A linha do painel e, quando pedida, a lista aberta. */
   async doPainel(alvo: AlvoDasDecisoes, escopo: EscopoDasDecisoes | null): Promise<DecisoesDoPainel> {
     const familia = await this.doEscopo(alvo, 'familia', ['vigente', 'a_confirmar']);
@@ -127,20 +158,10 @@ export class DecisoesDaSessao {
     const todasDoEscopo = await this.doEscopo(alvo, escopo);
     const familyId = await familyOf(this.port, alvo.sessionId);
     const mae = (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null;
-    const rotulos = new Map(todasDoEscopo.map((d) => [d.id, decisionLabel(d)]));
+    const lidas = new Map(todasDoEscopo.map((d) => [d.id, d]));
     const itens: DecisaoDoPainel[] = [];
-    for (const d of todasDoEscopo.slice(0, MAX_ITENS)) {
-      let substituidaPor: string | null = null;
-      if (d.supersededBy) {
-        const nova = rotulos.has(d.supersededBy) ? null : await this.port.getDecision(d.supersededBy);
-        substituidaPor = rotulos.get(d.supersededBy) ?? (nova ? decisionLabel(nova) : null);
-      }
-      itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, substituidaPor));
-    }
-    const porEscopo = {} as Record<EscopoDasDecisoes, number>;
-    for (const e of ['sessao', 'familia', 'branch'] as const) {
-      porEscopo[e] = e === escopo ? todasDoEscopo.filter((d) => d.state === 'vigente' || d.state === 'a_confirmar').length : (await this.doEscopo(alvo, e, ['vigente', 'a_confirmar'])).length;
-    }
+    for (const d of todasDoEscopo.slice(0, MAX_ITENS)) itens.push(paraOPainel(d, alvo.sessionId, familyId, mae, await rotuloPorId(this.port, d.supersededBy, lidas)));
+    const porEscopo = await this.porEscopo(alvo, escopo, todasDoEscopo);
     return {
       escopo,
       vigentes: todasDoEscopo.filter((d) => d.state === 'vigente').length,

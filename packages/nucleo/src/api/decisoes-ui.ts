@@ -30,7 +30,7 @@ import type { Decision, DecisionState } from '../decisoes/modelo.ts';
 import type { DecisionPort, ListDecisionsQuery } from '../decisoes/porta.ts';
 import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisoes/registro.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
-import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, type AlvoDasDecisoes } from './decisoes.ts';
+import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
 
 export type AgrupamentoDasDecisoes = 'branch' | 'familia' | 'sessao';
@@ -111,6 +111,11 @@ export interface RascunhoDeRegistro {
 export interface OpcoesDasDecisoesDaUi {
   decisions: DecisionPort;
   storage: StoragePort;
+  /**
+   * A sessão a que a aba e as escritas se referem (pasta, branch e conta): a de
+   * `MontadorDoPainel.alvoDaSessao`, para a aba e o Confirmar enxergarem as mesmas decisões.
+   */
+  alvoDe: (sessionId: string) => Promise<AlvoDasDecisoes>;
   agora?: () => number;
   /** Grava o registro; padrão `writeFile` com a flag `wx` (nunca sobrescreve). Os testes injetam. */
   escrever?: (destino: string, markdown: string) => Promise<void>;
@@ -194,6 +199,7 @@ export class DecisoesDaUi {
   private readonly port: DecisionPort;
   private readonly storage: StoragePort;
   private readonly sessao: DecisoesDaSessao;
+  private readonly alvoDe: (sessionId: string) => Promise<AlvoDasDecisoes>;
   private readonly agora: () => number;
   private readonly escrever: (destino: string, markdown: string) => Promise<void>;
   private readonly raiz: (repo: string) => string | null;
@@ -205,6 +211,7 @@ export class DecisoesDaUi {
     this.port = o.decisions;
     this.storage = o.storage;
     this.sessao = new DecisoesDaSessao({ decisions: o.decisions, storage: o.storage });
+    this.alvoDe = o.alvoDe;
     this.agora = o.agora ?? Date.now;
     this.escrever = o.escrever ?? gravarSemSobrescrever;
     this.raiz = o.raiz ?? ((repo) => repo);
@@ -230,10 +237,8 @@ export class DecisoesDaUi {
   }
 
   /** O "D2" de uma decisão pelo id: das já lidas, ou da porta. */
-  private async rotuloDe(id: string | null, lidas: Map<string, Decision>): Promise<string | null> {
-    if (!id) return null;
-    const d = lidas.get(id) ?? (await this.port.getDecision(id));
-    return d ? decisionLabel(d) : null;
+  private rotuloDe(id: string | null, lidas: Map<string, Decision>): Promise<string | null> {
+    return rotuloPorId(this.port, id, lidas);
   }
 
   private async paraUi(d: Decision, ref: { sessionId: string; familyId: string; mae: string | null }, lidas: Map<string, Decision>): Promise<DecisaoDaUi> {
@@ -310,20 +315,14 @@ export class DecisoesDaUi {
   }
 
   /**
-   * A sessão a que a aba e as escritas se referem: a pasta e a conta da porta de armazenamento, o
-   * branch dos metadados ou, sem ele, o das decisões da própria sessão (gravado na captura).
-   * Uma sessão que só a porta das decisões conhece (a mãe de antes do /clear) também vale.
-   * `null` quando nenhuma das duas portas conhece a sessão.
+   * A sessão a que a aba e as escritas se referem, pela regra do painel (`alvoDe`). Uma sessão que só
+   * a porta das decisões conhece (a mãe de antes do /clear) também vale; `null` quando nenhuma das
+   * duas portas conhece a sessão.
    */
   private async alvo(sessionId: string): Promise<AlvoDasDecisoes | null> {
-    const s = await this.storage.getSession(sessionId);
-    const proprias = (await this.port.listDecisions({ sessionId, limit: 50 })).items;
-    if (!s && proprias.length === 0) return null;
-    const doMetadado = typeof s?.metadata?.branch === 'string' ? s.metadata.branch : null;
-    const comBranch = proprias.find((d) => d.branch);
-    const branch = doMetadado ?? comBranch?.branch ?? null;
-    const repo = doMetadado ? (s?.cwd ?? null) : (comBranch?.repo ?? s?.cwd ?? proprias[0]?.repo ?? null);
-    return { sessionId, branch, repo, contaId: s?.accountId ?? null };
+    const conhecida =
+      (await this.storage.getSession(sessionId)) !== null || (await this.port.listDecisions({ sessionId, limit: 1 })).items.length > 0;
+    return conhecida ? this.alvoDe(sessionId) : null;
   }
 
   /** A aba C20; `null` quando a sessão não existe. */
@@ -332,11 +331,9 @@ export class DecisoesDaUi {
     if (!alvo) return null;
     const doEscopo = await this.sessao.doEscopo(alvo, p.escopo);
     const lidas = new Map(doEscopo.map((d) => [d.id, d]));
-    const contaveis = (ds: Decision[]) => ds.filter((d) => d.state === 'vigente' || d.state === 'a_confirmar').length;
-    const porEscopo = {} as Record<EscopoDasDecisoes, number>;
-    for (const e of ESCOPOS_DAS_DECISOES) porEscopo[e] = e === p.escopo ? contaveis(doEscopo) : (await this.sessao.doEscopo(alvo, e, ['vigente', 'a_confirmar'])).length;
+    const porEscopo = await this.sessao.porEscopo(alvo, p.escopo, doEscopo);
 
-    const ref = { sessionId, familyId: await familyOf(this.port, sessionId), mae: (await this.port.getSessionLink(sessionId))?.parentSessionId ?? null };
+    const ref = { sessionId: alvo.sessionId, familyId: await familyOf(this.port, alvo.sessionId), mae: (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null };
     const itens: DecisaoDaUi[] = [];
     for (const d of doEscopo) if (DO_FILTRO[p.estado].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
 
@@ -514,7 +511,7 @@ export class DecisoesDaUi {
       await unlink(destino).catch(() => {});
       throw err;
     }
-    const ref = { sessionId: sessao, familyId: await familyOf(this.port, sessao), mae: (await this.port.getSessionLink(sessao))?.parentSessionId ?? null };
+    const ref = { sessionId: alvo.sessionId, familyId: await familyOf(this.port, alvo.sessionId), mae: (await this.port.getSessionLink(alvo.sessionId))?.parentSessionId ?? null };
     return { status: 201, corpo: { decisao: await this.paraUi(feita, ref, new Map()), caminho } };
   }
 }

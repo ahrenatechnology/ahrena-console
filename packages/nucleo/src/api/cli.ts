@@ -227,6 +227,8 @@ const pastaDaDemo = demo ? mkdtempSync(join(tmpdir(), 'ahrena-console-demo-')) :
 const decisoesUi = new DecisoesDaUi({
   decisions: decisoes,
   storage,
+  // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
+  alvoDe: (id) => montador.alvoDaSessao(id),
   ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
   localDe: async (id) => {
     await desktop?.atualizar();

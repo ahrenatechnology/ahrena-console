@@ -33,6 +33,7 @@ const JSON_ = { 'content-type': 'application/json' };
 interface Cenario {
   storage: SqliteStorage;
   decisoes: SqliteDecisionStore;
+  montador: MontadorDoPainel;
   /** As opções da `DecisoesDaUi` da API, para montar outra igual. */
   opcoes: ConstructorParameters<typeof DecisoesDaUi>[0];
   api: ApiLocal;
@@ -48,7 +49,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   await semearCenariosDoPainel(storage, 'p9', AGORA);
   await semearDecisoesDoPainel(decisoes, 'p9', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
-  const opcoesDaUi = { decisions: decisoes, storage, agora: () => AGORA, ...opcoes };
+  const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
   const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, decisoesUi });
   const host = new URL(api.url).host;
@@ -61,7 +62,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
     return { status: r.status, corpo: (await r.json()) as T };
   };
   return {
-    storage, decisoes, opcoes: opcoesDaUi, api, host, ler, postar,
+    storage, decisoes, montador, opcoes: opcoesDaUi, api, host, ler, postar,
     fechar: async () => {
       await api.close();
       await storage.close();
@@ -246,6 +247,33 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
 
     const esta = (await c.ler<DecisoesDaAba>(`/api/sessoes/${SESSAO_DO_PAINEL}/decisoes`)).corpo;
     assert.match(esta.injecao.texto, /^Decisões vigentes em feat\/42-kanban-de-sessoes:\n/);
+  });
+});
+
+describe('a aba e as escritas: o mesmo alvo do Confirmar do painel', () => {
+  test('aba e Promover pedem o alvo ao montador, e enxergam as decisões que o painel enxerga', async () => {
+    const pedidos: [string, unknown][] = [];
+    let montador: MontadorDoPainel | null = null;
+    const c = await cenario({
+      alvoDe: async (id) => {
+        const alvo = await montador!.alvoDaSessao(id);
+        pedidos.push([id, alvo]);
+        return alvo;
+      },
+    });
+    montador = c.montador;
+    try {
+      const aba = (await c.ler<DecisoesDaAba>(`/api/sessoes/${VITRINE}/decisoes?escopo=branch`)).corpo;
+      const d = aba.itens.find((i) => i.estado === 'vigente')!;
+      assert.equal((await c.postar(`/api/decisoes/${d.id}/promover`, { sessao: VITRINE })).status, 200);
+      const esperado = await c.montador.alvoDaSessao(VITRINE);
+      assert.deepEqual(esperado, { sessionId: VITRINE, branch: 'feat/42-kanban', repo: '/simulacao/vitrine-demo', contaId: esperado.contaId });
+      assert.deepEqual(pedidos, [[VITRINE, esperado], [VITRINE, esperado]], 'a aba e o Promover, pelo montador');
+      const doPainel = (await c.montador.listaDeDecisoes({ sessionId: VITRINE }, 'branch'))!;
+      assert.deepEqual(doPainel.porEscopo, aba.porEscopo, 'o painel (o alvo do Confirmar) conta o mesmo que a aba');
+    } finally {
+      await c.fechar();
+    }
   });
 });
 
