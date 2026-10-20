@@ -37,8 +37,7 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
 npm run api -- --demo --scenario p4      # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
                                          # o Detalhe da /ui: /ui/sessions/sim-detail-orders (pede permissão) e /ui/sessions/sim-panel-current
-                                         # os ids antigos (sim-painel-esta, sim-detalhe-pedidos…) abrem a mesma sessão até a fase 6 da #173 (src/simulator/legacy-ids.ts)
-npm run api -- --help                    # os nomes antigos (--porta, --banco, --cenario, --sem-github…) valem até a fase 6 da #173
+npm run api -- --help                    # as opções (os nomes antigos em português saíram na fase 6 da #173)
 npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```
 
@@ -48,7 +47,7 @@ npm run api -- --no-telemetry            # sem medir esta máquina (/api/machine
 npm run core -- status|start|stop       # start: adota ou sobe em segundo plano; --parent <pid>, --replace, --json
 ```
 
-As rotas antigas, em português (`/api/painel/<sessão>`, `/api/sessao/<sessão>`, `/abrir/<local_…>`, `/api/atencao`, `/api/mudancas?desde=&espera=`, `/api/sessoes`, `/api/historico?antes=&dias=&busca=`, `/api/decisoes/<sessão>?escopo=`…), continuam respondendo como alias das novas, com a mesma resposta, até o mod publicado e o app instalado migrarem (issue #173, fase 1). O mapa fica num lugar só, [src/api/legacy-routes.ts](src/api/legacy-routes.ts).
+As rotas antigas, em português (`/api/painel/<sessão>`, `/abrir/<local_…>`, `/api/atencao`, `/api/mudancas`…), os parâmetros, os valores e os corpos antigos foram alias das novas até a fase 6 da issue #173: agora uma rota antiga dá 404, como qualquer caminho desconhecido.
 
 | Rota | O quê |
 | --- | --- |
@@ -107,8 +106,6 @@ Os motivos são os do MCP (`reason` de `sessions_needing_attention`). Onde a tel
 | `GET /api/events` | cada evento: a que ele representa (pedido bloqueante e erro, `blocked`; fim de turno e Esc, `idle`) | — |
 | `GET /api/dev-console` | `board.<coluna>[].session.attention` | `scoreboard.idle` (fora de `waitingOnYou`) |
 
-As rotas antigas, em português, respondem o mesmo corpo de antes, sem `attention` nem os números novos (`drop` no tradutor de [src/api/legacy-routes.ts](src/api/legacy-routes.ts)).
-
 | Arquivo | O quê |
 | --- | --- |
 | [panel.ts](src/api/panel.ts) | Monta a resposta: estado e faixa pela máquina de estados, custo e tokens pelo item 1.6, plano atual e a lista dos planos da sessão (item 1.9 e #131, com o dono de cada passo), família, conta e "precisam de você" |
@@ -122,7 +119,6 @@ As rotas antigas, em português, respondem o mesmo corpo de antes, sem `attentio
 | [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [server.ts](src/api/server.ts) | As rotas |
 | [agent-config.ts](src/api/agent-config.ts) | As rotas da tela Agent Config, sobre [src/agent-config/](src/agent-config/) |
-| [legacy-routes.ts](src/api/legacy-routes.ts) | As rotas e os parâmetros antigos, em português, como alias das novas (#173) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
 **Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--scan-interval`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
@@ -133,7 +129,7 @@ node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 
 ### Mural ao vivo
 
-`GET /api/wall` (#34) responde `{ version: 1, generatedAt, count: { all, waiting, active, blocked, idle }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/types.ts](src/api/types.ts)); a rota antiga `/api/mural` continua respondendo o corpo antigo, com as chaves em português (#173). Cada card traz `id` (leva a `/ui/sessions/<id>`), `title`, `project` (o nome da pasta), `branch`, `status`, `state`, `reason`, `urgent`, `attention` (#245), `since`, a `activity` (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), `model`, `effort`, `agents` (`active`/`total`, o principal mais os subagentes), `cost` (`usd: null` é "sem preço"), `plan` (`done`/`total`/`current`) e `context` (`pct`/`used`/`limit`/`label`); `plan` e `context` são `null` quando a sessão não tem.
+`GET /api/wall` (#34) responde `{ version: 1, generatedAt, count: { all, waiting, active, blocked, idle }, cards }` (contrato `Mural` e `CardDoMural` em [src/api/types.ts](src/api/types.ts)). Cada card traz `id` (leva a `/ui/sessions/<id>`), `title`, `project` (o nome da pasta), `branch`, `status`, `state`, `reason`, `urgent`, `attention` (#245), `since`, a `activity` (a linha do meio: o que pede, o erro, "terminou sem erro" ou o que está fazendo), `model`, `effort`, `agents` (`active`/`total`, o principal mais os subagentes), `cost` (`usd: null` é "sem preço"), `plan` (`done`/`total`/`current`) e `context` (`pct`/`used`/`limit`/`label`); `plan` e `context` são `null` quando a sessão não tem.
 
 - **Aberta:** não arquivada no Claude Desktop, e `active` (o que inclui esperando, delegando e em background) ou `error` sem `endedAt`; a `completed` (ou o erro já encerrado) só enquanto a última atividade estiver dentro do `abandonMs` do vigia (180 min), o card "Terminou sem erro": fica pelo mesmo tempo que uma sessão parada leva para ser dada como abandonada. `abandoned` nunca entra.
 - **Ordem e urgência:** `urgent` é a espera `notification` ou `interrupted` e também o erro, como no "precisam de você" do painel. Primeiro as que precisam de você (`attention.level` `blocked`, as de erro incluídas), as urgentes antes, e entre elas o pedido mais recente; depois as ociosas (`idle`), a mais recente primeiro; depois as outras, pela atividade mais recente (#245).
@@ -155,8 +151,6 @@ O Detalhe da sessão (#29, #30 e #97) lê, só do banco ([src/api/session-detail
 - `GET /api/sessions/<id>/workflow`: `{ sessionId, start, end, durationMs, summary, nodes, edges, reviewRounds, changesRequested, timeline: { start, end, lanes: [{ nodeId, label, spans }] } }`; o nó tem `state` `active | completed | error` e `changesRequested` (os ajustes pedidos por um review); a aresta, `type` `opened | delivered | changes-requested` e `label` (o texto da tela: `plano`, `diff`, `v2`, `ajustes`).
 
 `GET /api/workflows?filter=all|active|completed&node=<id>` (#96) responde `{ filter, node, generatedAt, sessions, truncated, max, kpis, runs, graph }`: `kpis` (`averageDepth`, `subagentsPerSession`, `subagentSuccess`, `commonFlow: { label, fraction }`, `roundsPerPr`, `averageDurationMs`), `runs` (`name`, `state` `active | completed | error`, `model`, `project`, `sessionId`, `tools`, `tokens`, `durationMs`, `start`, `end`, `phases`, `loop`, `agents` com `state` `completed | running | changes-requested | error`) e `graph` (`columns` `origin | main | subagent | compaction | outcome`, `nodes` e `edges` `{ from, to, volume }`). Os nós são `origin:prompt`, `origin:resume`, `main`, `subagent:<tipo>`, `compaction:none`, `compaction:compacted` e `outcome:completed|error|active|abandoned`.
-
-As rotas antigas `/api/sessoes/<id>[/agentes|/conversa|/eventos|/workflow]` continuam respondendo o corpo antigo, com as chaves e os valores em português; `/api/workflows` não tem caminho antigo, mas ainda aceita `?filtro=`/`?no=` e os valores antigos (`todas`, `ativas`, `concluidas`, `principal`, `subagente:<tipo>`…) (#173).
 
 ## Agent Config (#63)
 
@@ -330,7 +324,7 @@ Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens 
 
 Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
 
-A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`SimulatorProject`, em `src/simulator/project.ts`).
+A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`SimulatorProject`, em `src/simulator/project.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
@@ -360,8 +354,6 @@ npm run simulate -- --help
 | `--real-time` | Grava cada operação na hora dela, em vez de tudo de uma vez. Ctrl+C para; o que foi gravado fica |
 | `--speed <x>` | Em tempo real, minutos simulados por minuto de relógio. Padrão 30 |
 | `--prices` | Grava preços **ilustrativos** para os modelos simulados que ainda não têm preço, para o custo aparecer |
-
-Os nomes antigos (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`, `--tempo-real`, `--velocidade`, `--precos`) e o `npm run simular` continuam aceitos até a fase 6 da #173; se vierem os dois, vale o novo.
 
 **Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `--speed` vezes mais rápido; as datas gravadas acompanham o relógio.
 
@@ -449,7 +441,7 @@ const summary = await simulate(storage, { seed: 42, chaos: true, mode: 'batch' }
 
   `command` é uma lista: o executável (caminho absoluto ou nome no PATH) e cada argumento, um por item, até 32 itens de até 1024 caracteres. Não há shell: nada de `~`, `$VAR`, `*`, `|`, `;` ou `&&`; quem precisa disso escreve um script e aponta para ele. `timeoutSeconds` é opcional, de 10 a 900, 180 por padrão. Um `reconnect` inválido vai para o log e a máquina fica como se não tivesse comando; o resto do arquivo continua valendo.
   - `POST /api/machines/<id>/reconnect` roda o comando (202 `{ reconnect }`, ou o que já roda: um por máquina), `DELETE` o cancela (200; 409 quando nada roda). 404 para `id` desconhecido, 409 sem comando ou com o `machines.json` inválido no momento (a última leitura boa continua na tela, mas nada roda até corrigir). Nada do pedido vira argumento: o corpo é ignorado e o comando vem da leitura mais recente do arquivo (um comando apagado não roda). Só a `/ui` de mesma origem e o pedido local sem `Origin` (a bandeja) chegam lá; outro `Origin` leva 403.
-  - O processo roda sem shell, num grupo próprio, com a entrada fechada, na sua pasta pessoal e com o seu ambiente menos as variáveis do console (`AHRENA_CONSOLE_*` e os nomes antigos). Passou do tempo, ou Cancelar: SIGTERM no grupo e, 5 s depois, SIGKILL. Saiu com 0: a máquina é lida na hora.
+  - O processo roda sem shell, num grupo próprio, com a entrada fechada, na sua pasta pessoal e com o seu ambiente menos as variáveis do console (`AHRENA_CONSOLE_*`). Passou do tempo, ou Cancelar: SIGTERM no grupo e, 5 s depois, SIGKILL. Saiu com 0: a máquina é lida na hora.
   - A saída (stdout e stderr) vai só para `reconnect.log`, na pasta de dados da instalação, com permissão só sua (0600): o núcleo entrega o descritor do arquivo ao processo e não lê nada, então a saída fica como o comando a escreveu, entre uma linha de início (hora, `id`, quem pediu) e uma de fim (estado, código, duração) escritas pelo núcleo. Um túnel deixado em segundo plano continua escrevendo ali, mesmo depois de o núcleo reiniciar. Passou de 1 MB, o arquivo vira `reconnect.log.1` antes da próxima reconexão. Se o arquivo não abre, uma linha no log do núcleo e a saída é descartada. A API mostra o estado, os horários, o código de saída e o caminho do log, nunca a saída.
   - **Segredo fica no script, não na lista.** O `command` aparece em `GET /api/machines` e na tela ("Roda: …"): não ponha senha, token ou chave como argumento; deixe-os dentro do script (ou no que ele lê) e aponte o `command` para o script.
   - O estado vai em cada item de `GET /api/machines`, em `reconnect` (`null` para esta máquina e para a workstation da `--demo`), e cada mudança sai em `/api/changes` como `alert`, chave `<id>:reconnect`.
@@ -474,8 +466,8 @@ O que deixa as telas ao vivo sem polling curto: o artefato, cujo `watchTool` tem
 - **Cursor.** [cursor.ts](src/changes/cursor.ts): uma sequência em memória que avança a cada mudança relevante, com tipo (`session`, `state`, `needs-you`, `plan`, `decision`, `account` e `alert`, o alerta de máquina da [telemetria](#telemetria-das-máquinas); a rota antiga `/api/mudancas` ainda responde e aceita os nomes antigos, `sessao`, `estado`, `precisa-de-voce`, `plano`, `decisao`, `conta`), chave (`key`), sessão e conta. Guarda as últimas 1.024 numa fila; registrar não lê o banco. O cursor é opaco (`<geração>.<seq>`): cursor vazio, de antes do núcleo reiniciar ou mais velho que a fila volta na hora com `reset: true` (releia tudo).
 - **Espera.** `awaitChanges(cursor, { filters, timeoutMs, signal })` responde na hora se já há novidade; senão segura até chegar uma que passe nos filtros (sessão, conta, tipo) ou até o timeout (padrão 25 s, máximo 110 s, abaixo dos ~130 s do app). Cada espera responde no mínimo 1 s depois de começar: com hooks chegando sem parar, quem faz long polling em laço acorda no máximo uma vez por segundo, e a rajada sai numa resposta só, uma vez por (tipo, chave). O cursor devolvido é sempre o de agora: as mudanças que os filtros deixaram de fora ficam para trás e não voltam num pedido seguinte com outros filtros. No máximo 256 esperas abertas; acima disso, `TooManyWaitersError` (503 no HTTP).
 - **Fontes.** [sources.ts](src/changes/sources.ts): `withChanges(storage, cursor)` embrulha a porta (`putSession`, `putPlan`, `putAccount`); `session` só é registrada quando muda um campo que as telas mostram (nome, status, pasta, modelo, fim, espera e motivo, conta), não a cada hook que só avança o `updatedAt`. Atividade nova (eventos) não é mudança por si: estado, plano e decisões têm os seus tipos. `decisionsWithChanges` a das decisões, e `onMachineChange` vai no `onChange` da máquina de estados (`state` e, quando entra ou sai do inbox, `needs-you`). A API (`cli.ts`) liga as três.
-- **HTTP.** `GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id|no-account>&type=<type>` (o antigo `sem-conta` ainda vale) ([http.ts](src/changes/http.ts)): `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`. O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
-- **MCP.** [mcp.ts](src/changes/mcp.ts): a ferramenta `wait_for_changes` no formato `Tool` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `createMcpServer`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types` (os tipos em inglês; os nomes antigos, `sessao`, `plano`…, ainda valem); saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.signal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/changes/sdk-contract.test.ts](test/changes/sdk-contract.test.ts).
+- **HTTP.** `GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id|no-account>&type=<type>` ([http.ts](src/changes/http.ts)): `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`. O cliente que fecha a conexão libera a espera; lotado, 503 com `Retry-After`.
+- **MCP.** [mcp.ts](src/changes/mcp.ts): a ferramenta `wait_for_changes` no formato `Tool` do [servidor MCP](src/mcp/README.md), registrada no `cli.ts` logo depois de `createMcpServer`. Argumentos `cursor`, `timeout` (segundos), `sessions`, `account` (rótulo, id ou `none`, como nas outras ferramentas) e `types` (os tipos em inglês); saída `{ cursor, reset, timedOut, changes }`, com a conta como rótulo e cor, nunca o id. Ouve `ctx.signal`: o cliente que desiste libera a espera. Contrato com o cliente oficial em [test/changes/sdk-contract.test.ts](test/changes/sdk-contract.test.ts).
 
 **Consumo.** Parado, cada espera aberta é só um timer; nada varre o banco. Para medir, parado e com hooks sintéticos pelo receptor de verdade:
 

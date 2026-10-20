@@ -19,7 +19,7 @@ import { chooseInstance, shouldStartOwn } from '../../src/mcp/target.ts';
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MCP_CLI = join(ROOT, 'src/mcp/cli.ts');
 const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
-const HOOKS_ONLY = ['--sem-historico', '--sem-desktop', '--sem-github', '--no-telemetry'];
+const HOOKS_ONLY = ['--no-history', '--no-desktop', '--no-github', '--no-telemetry'];
 const CORE_VARS = ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME', 'XDG_DATA_HOME', 'APPDATA'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -331,7 +331,7 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     let out = '';
     start.stdout!.on('data', (c) => (out += c));
     await new Promise((r) => start.once('close', r));
-    const legacy = JSON.parse(out) as { pid: number; porta: number };
+    const legacy = JSON.parse(out) as { pid: number; port: number };
     try {
       // As a core from before #221: up, with its lock, but without a registry entry.
       assert.ok(removeInstance(instanceId('mcpb', legacy.pid), { home: consoleDir }));
@@ -351,7 +351,7 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     const b = bridge('--no-start');
     const r = await b.call();
     assert.equal(r.isError, true);
-    assert.match(r.text, /npm run nucleo -- subir/);
+    assert.match(r.text, /npm run core -- start/);
     await b.close();
   });
 

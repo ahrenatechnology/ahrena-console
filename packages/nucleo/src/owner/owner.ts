@@ -65,7 +65,7 @@ export function codeWarning(running: { version: string; commit: string | null; p
     return `${who} roda o commit ${running.commit}, mais velho que este (${mine.commit}). Ele continua servindo; para trocar, suba com --substituir`;
   }
   if (c === 'other-code') {
-    return `${who} roda o commit ${running.commit}, que não é este (${mine.commit}) nem um ancestral dele. Ele continua servindo; pare-o (npm run nucleo -- parar) para subir este`;
+    return `${who} roda o commit ${running.commit}, que não é este (${mine.commit}) nem um ancestral dele. Ele continua servindo; pare-o (npm run core -- stop) para subir este`;
   }
   return null;
 }

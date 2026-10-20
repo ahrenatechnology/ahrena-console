@@ -1,10 +1,8 @@
 // The options of the API command line (`npm run api -- --help`), parsed apart from cli.ts so a test
 // can check them without starting a core.
 //
-// Old option names (`--porta`, `--banco`, `--projetos`, `--varredura`, `--sem-historico`, `--sem-desktop`,
-// `--sem-github`, `--cenario`, `--pai`, `--substituir`, `--sem-trava`) are still accepted until phase 6
-// of #173: src/owner/start.ts starts the API with `--porta` and `--pai`, and scripts/medir-*.mjs pass
-// the old ones too. They are hidden from the help, and the new one wins if both are given.
+// The old Portuguese names (`--porta`, `--banco`, `--cenario`…) left in phase 6 of #173: an unknown
+// option is an error.
 
 import { parseArgs } from 'node:util';
 
@@ -53,8 +51,6 @@ export const HELP = `Usage: npm run api -- [options]
                          --demo does not read it
   --help
 
-The old names (--porta, --banco, --projetos, --varredura, --sem-historico, --sem-desktop, --sem-github, --cenario, --pai, --substituir, --sem-trava) are accepted until phase 6.
-
 Project kanban (GET /api/project, POST /api/project/move): the Project in
 AHRENA_CONSOLE_PROJECT=owner/number, with the \`gh\` token (\`project\` scope) and the cache in the
 core's database. Without the variable there is no Project: the screen explains how to pick one.
@@ -63,7 +59,7 @@ If a core is already up for this installation, this one does not start another: 
 (prints the port and the version, warns if the code differs) and exits with 0. See src/owner/README.md.
 `;
 
-/** The API's options, with the old names already folded into the new ones. */
+/** The API's options. */
 export interface ApiCliOptions {
   port: string | undefined;
   installation: string | undefined;
@@ -106,37 +102,23 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
       'no-telemetry': { type: 'boolean', default: false },
       machines: { type: 'string' },
       help: { type: 'boolean', default: false },
-      // Old names, accepted until phase 6.
-      porta: { type: 'string' },
-      banco: { type: 'string' },
-      projetos: { type: 'string' },
-      varredura: { type: 'string' },
-      'sem-historico': { type: 'boolean', default: false },
-      'sem-desktop': { type: 'boolean', default: false },
-      'sem-github': { type: 'boolean', default: false },
-      cenario: { type: 'string' },
-      pai: { type: 'string' },
-      substituir: { type: 'boolean', default: false },
-      'sem-trava': { type: 'boolean', default: false },
     },
   });
-  // The new name wins; the old one is the fallback.
   return {
-    port: o.port ?? o.porta,
+    port: o.port,
     installation: o.installation,
     dataDir: o['data-dir'],
-    db: o.db ?? o.banco,
-    projects: o.projects ?? o.projetos,
-    scanInterval: o['scan-interval'] ?? o.varredura ?? '30',
-    noHistory: o['no-history'] || o['sem-historico'],
-    noDesktop: o['no-desktop'] || o['sem-desktop'],
-    noGithub: o['no-github'] || o['sem-github'],
+    db: o.db,
+    projects: o.projects,
+    scanInterval: o['scan-interval'] ?? '30',
+    noHistory: o['no-history'],
+    noDesktop: o['no-desktop'],
+    noGithub: o['no-github'],
     demo: o.demo,
-    // The panel scenario ids (p1…p13) have no old form; only session ids do (src/simulator/legacy-ids.ts).
-    scenario: o.scenario ?? o.cenario ?? 'p1',
-    parent: o.parent ?? o.pai,
-    replace: o.replace || o.substituir,
-    noLock: o['no-lock'] || o['sem-trava'],
+    scenario: o.scenario ?? 'p1',
+    parent: o.parent,
+    replace: o.replace,
+    noLock: o['no-lock'],
     noTelemetry: o['no-telemetry'],
     machines: o.machines,
     help: o.help,

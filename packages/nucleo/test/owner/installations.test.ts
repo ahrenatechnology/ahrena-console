@@ -35,7 +35,7 @@ import {
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const API_CLI = join(ROOT, 'src/api/cli.ts');
 const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
-const HOOKS_ONLY = ['--sem-historico', '--sem-desktop', '--sem-github', '--no-telemetry'];
+const HOOKS_ONLY = ['--no-history', '--no-desktop', '--no-github', '--no-telemetry'];
 const CORE_VARS = ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME', 'XDG_DATA_HOME', 'APPDATA'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -110,11 +110,11 @@ function run(cli: string, args: string[], env: NodeJS.ProcessEnv = {}): Run {
 const api = (...args: string[]) => run(API_CLI, [...args, ...HOOKS_ONLY]);
 
 interface StartJson {
-  estado: string;
+  state: string;
   url: string;
-  porta: number;
+  port: number;
   pid: number;
-  subiu: boolean;
+  started: boolean;
   installation: string;
   dataDir: string;
   instances?: Instance[];
@@ -262,20 +262,20 @@ describe('the start guard', () => {
 describe('cores per installation', { timeout: 120_000 }, () => {
   test('port 0: start announces the port it got, in --json, in the lock and in the registry', async () => {
     const s = await coreStart();
-    assert.equal(s.estado, 'de-pe');
-    assert.equal(s.subiu, true);
-    assert.ok(Number.isInteger(s.porta) && s.porta > 0, `port ${s.porta}`);
-    assert.equal(s.url, `http://127.0.0.1:${s.porta}`);
+    assert.equal(s.state, 'up');
+    assert.equal(s.started, true);
+    assert.ok(Number.isInteger(s.port) && s.port > 0, `port ${s.port}`);
+    assert.equal(s.url, `http://127.0.0.1:${s.port}`);
     assert.equal(s.installation, 'dev');
     assert.equal(s.dataDir, consoleDir);
     const lock = await liveLock(consoleDir);
-    assert.equal(lock.port, s.porta);
+    assert.equal(lock.port, s.port);
     assert.ok(existsSync(join(consoleDir, 'nucleo.sqlite')));
     assert.ok(existsSync(join(consoleDir, 'nucleo.log')));
-    assert.match(readFileSync(join(consoleDir, 'nucleo.log'), 'utf8'), new RegExp(`listening on port ${s.porta} · installation dev`));
+    assert.match(readFileSync(join(consoleDir, 'nucleo.log'), 'utf8'), new RegExp(`listening on port ${s.port} · installation dev`));
 
     const [i] = listInstances({ home: consoleDir });
-    assert.deepEqual({ ...i, startedAt: '' }, { id: `dev-${s.pid}`, installation: 'dev', pid: s.pid, port: s.porta, version: lock.version, commit: i.commit, dataDir: consoleDir, startedAt: '' });
+    assert.deepEqual({ ...i, startedAt: '' }, { id: `dev-${s.pid}`, installation: 'dev', pid: s.pid, port: s.port, version: lock.version, commit: i.commit, dataDir: consoleDir, startedAt: '' });
     assert.equal(i.startedAt, lock.startedAt);
     assert.ok(await verifyInstance(i));
     const raw = readFileSync(join(instancesDir(consoleDir), `${i.id}.json`), 'utf8');
@@ -289,7 +289,7 @@ describe('cores per installation', { timeout: 120_000 }, () => {
     assert.deepEqual(status.instances, [i]);
     assert.ok(!st.stdout.includes(lock.token));
     const text = await run(CORE_CLI, ['status']).done;
-    assert.match(text.stdout, new RegExp(`dev-${s.pid} · dev · port ${s.porta} · pid ${s.pid}`));
+    assert.match(text.stdout, new RegExp(`dev-${s.pid} · dev · port ${s.port} · pid ${s.pid}`));
 
     const stopped = await run(CORE_CLI, ['stop']).done;
     assert.equal(stopped.code, 0, stopped.stderr);
@@ -300,9 +300,9 @@ describe('cores per installation', { timeout: 120_000 }, () => {
   test('two installations at once: different ports, databases and entries; neither adopts the other', async () => {
     const dev = await coreStart();
     const app = await coreStart('--installation', 'app');
-    assert.equal(app.subiu, true, 'the app does not adopt the dev core');
+    assert.equal(app.started, true, 'the app does not adopt the dev core');
     assert.notEqual(app.pid, dev.pid);
-    assert.notEqual(app.porta, dev.porta);
+    assert.notEqual(app.port, dev.port);
     assert.equal(app.dataDir, appDir());
     assert.ok(existsSync(join(appDir(), 'nucleo.sqlite')));
     assert.ok(existsSync(join(consoleDir, 'nucleo.sqlite')));
@@ -319,9 +319,9 @@ describe('cores per installation', { timeout: 120_000 }, () => {
 
     // The same installation adopts its own core.
     const again = await coreStart('--installation', 'app');
-    assert.equal(again.subiu, false);
+    assert.equal(again.started, false);
     assert.equal(again.pid, app.pid);
-    assert.equal(again.porta, app.porta);
+    assert.equal(again.port, app.port);
 
     // Each answers on its own port, as itself.
     for (const i of live) assert.ok(await verifyInstance(i), i.id);
@@ -381,7 +381,7 @@ describe('cores per installation', { timeout: 120_000 }, () => {
     const envPort = await freePort();
     const r = await run(CORE_CLI, ['start', '--installation', 'app', '--json', '--', ...HOOKS_ONLY], { AHRENA_CONSOLE_CORE_PORT: String(envPort) }).done;
     assert.equal(r.code, 0, r.stderr);
-    assert.equal(JSON.parse(r.stdout).porta, envPort);
+    assert.equal(JSON.parse(r.stdout).port, envPort);
   });
 
   test('a forced port held by another installation\'s core is never adopted', async () => {

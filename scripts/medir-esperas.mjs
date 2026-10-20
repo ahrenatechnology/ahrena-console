@@ -61,8 +61,8 @@ const filho = spawn(
   [
     '--disable-warning=ExperimentalWarning',
     resolve(raiz, 'packages/nucleo/src/api/cli.ts'),
-    '--porta', String(porta), '--banco', join(pasta, 'nucleo.sqlite'),
-    '--sem-historico', '--sem-desktop', '--sem-github', '--sem-trava',
+    '--port', String(porta), '--db', join(pasta, 'nucleo.sqlite'),
+    '--no-history', '--no-desktop', '--no-github', '--no-lock',
   ],
   { stdio: ['ignore', 'ignore', 'inherit'] },
 );

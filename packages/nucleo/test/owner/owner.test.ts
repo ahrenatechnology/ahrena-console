@@ -36,10 +36,8 @@ const VERSION = API_VERSION.replaceAll('.', '\\.');
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const API_CLI = join(ROOT, 'src/api/cli.ts');
 const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
-/** The old path the desktop app runs until phase 4 of #173 (a shim). */
-const OLD_CORE_CLI = join(ROOT, 'src/dono/cli.ts');
 const MCP_CLI = join(ROOT, 'src/mcp/cli.ts');
-const HOOKS_ONLY = ['--sem-historico', '--sem-desktop', '--sem-github'];
+const HOOKS_ONLY = ['--no-history', '--no-desktop', '--no-github'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -113,7 +111,7 @@ function run(cli: string, args: string[], extra: { env?: NodeJS.ProcessEnv; stdi
   return { proc, done };
 }
 
-const api = (port: number, ...extra: string[]) => run(API_CLI, ['--porta', String(port), ...HOOKS_ONLY, ...extra]);
+const api = (port: number, ...extra: string[]) => run(API_CLI, ['--port', String(port), ...HOOKS_ONLY, ...extra]);
 const core = (...args: string[]) => run(CORE_CLI, args);
 
 /** Waits for the lock of a live core and returns it. */
@@ -218,12 +216,12 @@ describe('clients and the parent', () => {
 });
 
 describe('the command', () => {
-  test('--help shows the English names and only one line about the old ones', async () => {
+  test('--help shows the English names and none of the old ones', async () => {
     const r = await core('--help').done;
     assert.equal(r.code, 0);
     for (const name of ['start', 'stop', 'status', '--port <n>', '--parent <pid>', '--replace', '--json']) assert.ok(r.stdout.includes(name), name);
     assert.doesNotMatch(r.stdout, /--porta <n>|--pai <pid>|^\s+subir\s/m);
-    assert.match(r.stdout, /old names \(subir, parar, --porta, --pai, --substituir\) are accepted until phase 6/);
+    assert.doesNotMatch(r.stdout, /old names|subir|--porta/);
   });
 });
 
@@ -249,16 +247,16 @@ describe('start or adopt', { timeout: 60_000 }, () => {
     const outputs = await Promise.all(runs.map((r) => r.done));
     const json = outputs.map((s) => {
       assert.equal(s.code, 0, s.stderr);
-      return JSON.parse(s.stdout) as { pid: number; subiu: boolean; porta: number };
+      return JSON.parse(s.stdout) as { pid: number; started: boolean; port: number };
     });
     assert.equal(new Set(json.map((j) => j.pid)).size, 1, JSON.stringify(json));
-    assert.equal(json.filter((j) => j.subiu).length, 1, JSON.stringify(json));
-    assert.ok(json.every((j) => j.porta === port));
+    assert.equal(json.filter((j) => j.started).length, 1, JSON.stringify(json));
+    assert.ok(json.every((j) => j.port === port));
     const t = await liveLock();
     assert.equal(t.pid, json[0].pid);
     const st = await core('status', '--json').done;
     assert.equal(st.code, 0);
-    assert.equal(JSON.parse(st.stdout).estado, 'de-pe');
+    assert.equal(JSON.parse(st.stdout).state, 'up');
     assert.doesNotMatch(st.stdout, new RegExp(t.token), 'status does not show the token');
     const stopped = await core('stop').done;
     assert.equal(stopped.code, 0, stopped.stderr);
@@ -267,14 +265,23 @@ describe('start or adopt', { timeout: 60_000 }, () => {
     assert.equal((await core('status').done).code, 1);
   });
 
-  test('the new option names win over the old ones (--port over --porta, --parent over --pai)', async () => {
-    const [port, oldPort] = [await freePort(), await freePort()];
+  test('the old Portuguese names are refused (#173, phase 6): subir, parar, --porta, --pai, --substituir', async () => {
+    const port = await freePort();
+    for (const args of [['subir'], ['parar'], ['start', '--porta', String(port)], ['start', '--pai', String(process.pid)], ['start', '--substituir']]) {
+      const r = await core(...args, '--json').done;
+      assert.notEqual(r.code, 0, args.join(' '));
+    }
+    assert.equal(readLock(dir), null, 'nothing started');
+  });
+
+  test('start --json is English: state, port, parent, started', async () => {
+    const port = await freePort();
     const parent = idle();
-    const r = await core('start', '--port', String(port), '--porta', String(oldPort), '--parent', String(parent.pid), '--pai', String(await deadPid()), '--json', '--', ...HOOKS_ONLY).done;
+    const r = await core('start', '--port', String(port), '--parent', String(parent.pid), '--json', '--', ...HOOKS_ONLY).done;
     assert.equal(r.code, 0, r.stderr);
     const j = JSON.parse(r.stdout);
-    assert.equal(j.porta, port);
-    assert.equal(j.pai, parent.pid);
+    assert.deepEqual([j.state, j.port, j.parent, j.started], ['up', port, parent.pid, true]);
+    assert.ok(!('estado' in j) && !('porta' in j) && !('subiu' in j), r.stdout);
     assert.equal((await liveLock()).parent, parent.pid);
   });
 
@@ -288,15 +295,15 @@ describe('start or adopt', { timeout: 60_000 }, () => {
     assert.equal(t.port, port);
   });
 
-  test('an orphan lock with a live pid but a silent port is recovered (old names: subir --porta)', async () => {
+  test('an orphan lock with a live pid but a silent port is recovered', async () => {
     const [silent, port] = [await freePort(), await freePort()];
     writeLock({ pid: process.pid, port: silent, version: '0.0.1', startedAt: 'antes', token: 'velho', parent: null }, dir);
-    const s = core('subir', '--porta', String(port), '--json', '--', ...HOOKS_ONLY);
+    const s = core('start', '--port', String(port), '--json', '--', ...HOOKS_ONLY);
     const r = await s.done;
     assert.equal(r.code, 0, r.stderr);
     const j = JSON.parse(r.stdout);
-    assert.equal(j.subiu, true);
-    assert.equal(j.porta, port);
+    assert.equal(j.started, true);
+    assert.equal(j.port, port);
     assert.notEqual(j.pid, process.pid);
     assert.equal((await liveLock()).token.length, 64);
   });
@@ -323,7 +330,7 @@ describe('version', { timeout: 60_000 }, () => {
     assert.match(warned.stdout, /\(adotado\)/);
     assert.ok(isPidAlive(t.pid), 'without --substituir, the old one stays');
 
-    const fresh = api(port, '--substituir');
+    const fresh = api(port, '--replace');
     await until(() => old.proc.exitCode !== null || old.proc.signalCode !== null);
     const t2 = await liveLock();
     assert.equal(t2.pid, fresh.proc.pid);
@@ -336,7 +343,7 @@ describe('version', { timeout: 60_000 }, () => {
     api(port);
     const t = await liveLock();
     writeLock({ ...t, version: '9.0.0' }, dir);
-    const r = await api(port, '--substituir').done;
+    const r = await api(port, '--replace').done;
     assert.equal(r.code, 0);
     assert.doesNotMatch(r.stderr, /atenção/);
     assert.match(r.stdout, /versão 9\.0\.0 \(adotado\)/);
@@ -346,7 +353,7 @@ describe('version', { timeout: 60_000 }, () => {
 describe('--parent', { timeout: 60_000 }, () => {
   test('the core exits when the parent dies and deletes the lock', async () => {
     const parent = idle();
-    const a = api(await freePort(), '--pai', String(parent.pid));
+    const a = api(await freePort(), '--parent', String(parent.pid));
     const t = await liveLock();
     assert.equal(t.parent, parent.pid);
     parent.kill('SIGKILL');
@@ -356,15 +363,15 @@ describe('--parent', { timeout: 60_000 }, () => {
     assert.equal(readLock(dir), null);
   });
 
-  test('with another registered client, it stays until the last one is gone (the app\'s call, on the old path)', async () => {
+  test('with another registered client, it stays until the last one is gone (the app\'s call)', async () => {
     const port = await freePort();
     const app = idle();
     const extension = idle();
-    const a = api(port, '--pai', String(app.pid));
+    const a = api(port, '--parent', String(app.pid));
     await liveLock();
-    // What the desktop app runs until phase 4 of #173: the old path, `subir` and `--pai`.
-    const adopted = await run(OLD_CORE_CLI, ['subir', '--pai', String(extension.pid), '--json']).done;
-    assert.equal(JSON.parse(adopted.stdout).subiu, false);
+    // What the desktop app runs (apps/desktop/src-tauri/src/core.rs `start_args`).
+    const adopted = await run(CORE_CLI, ['start', '--parent', String(extension.pid), '--json']).done;
+    assert.equal(JSON.parse(adopted.stdout).started, false);
     assert.deepEqual(liveClients(dir), [extension.pid]);
 
     app.kill('SIGKILL');
@@ -415,14 +422,14 @@ describe('ownership and code', { timeout: 60_000 }, () => {
     assert.equal(a.proc.exitCode, null, 'and so is the real core');
   });
 
-  test('--demo and --sem-trava fail if the port already has a core', async () => {
+  test('--demo and --no-lock fail if the port already has a core', async () => {
     const port = await freePort();
     api(port);
     await liveLock();
-    for (const option of ['--demo', '--sem-trava']) {
-      const r = await run(API_CLI, ['--porta', String(port), ...HOOKS_ONLY, option]).done;
+    for (const option of ['--demo', '--no-lock']) {
+      const r = await run(API_CLI, ['--port', String(port), ...HOOKS_ONLY, option]).done;
       assert.equal(r.code, 1, option);
-      assert.match(r.stderr, /já tem um núcleo \(pid \d+\); a --(demo|sem-trava) precisa de uma porta livre/);
+      assert.match(r.stderr, /já tem um núcleo \(pid \d+\); a --(demo|no-lock) precisa de uma porta livre/);
       assert.equal(r.stdout, '');
     }
   });
@@ -501,7 +508,7 @@ describe('the MCP stdio bridge', { timeout: 60_000 }, () => {
   test('adopts the core that is up and registers as a client', async () => {
     const port = await freePort();
     const app = idle();
-    const a = api(port, '--pai', String(app.pid));
+    const a = api(port, '--parent', String(app.pid));
     await liveLock();
     const bridge = run(MCP_CLI, [], { env: { AHRENA_CONSOLE_PORT: String(await freePort()) }, stdin: true });
     assert.ok(await until(() => liveClients(dir).includes(bridge.proc.pid!)), 'the bridge is a client');
