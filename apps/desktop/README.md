@@ -61,7 +61,7 @@ A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since
 | [src-tauri/src/native.rs](src-tauri/src/native.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
 | [src-tauri/src/http.rs](src-tauri/src/http.rs) | HTTP/1.0 cru com `127.0.0.1` |
 | [src-tauri/src/updater.rs](src-tauri/src/updater.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
-| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
+| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos e no núcleo, o endpoint do updater e o identificador |
 | [src-tauri/src/shell_path.rs](src-tauri/src/shell_path.rs) | O PATH do shell de login, para achar o `node` aberto pelo Finder |
 
 ## Rodar
@@ -113,7 +113,7 @@ open --env AHRENA_CONSOLE_DEMO_PORT=4797 "src-tauri/target/release/bundle/macos/
 
 Para mantenedores. A release sai do [app-release.yml](../../.github/workflows/app-release.yml), com o `tauri-action`, num DMG por arquitetura (`aarch64` e `x64`), assinado ad hoc.
 
-1. Suba a versão nos três arquivos, iguais: `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `package.json` (o `cargo test` confere).
+1. Suba a versão nos quatro arquivos, iguais: `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` e o `packages/nucleo/package.json` do núcleo que vai dentro do app (o `cargo test` confere). O núcleo mostra essa versão no rodapé da /ui, no registro de instâncias e no MCP ([#261](https://github.com/ahrenatechnology/ahrena-console/issues/261)).
 2. Depois do merge, crie e envie a tag `app-vX.Y.Z` com essa versão. O workflow falha se a tag não bater com o `tauri.conf.json`.
 3. A release sai como **rascunho**, com os DMGs (e, com a chave do updater, os `.app.tar.gz`, `.sig` e o `latest.json`).
 4. Antes de publicar o rascunho à mão, abra o `latest.json` dele e confira que tem as duas plataformas, `darwin-aarch64` e `darwin-x86_64`: os dois jobs da matriz o atualizam em paralelo, e um pode sobrescrever o outro.

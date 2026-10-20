@@ -89,6 +89,8 @@ export interface OpcoesDoPainel {
   commitDaPasta?: () => string | null;
   /** A API abre a sessão no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   abreSessao?: boolean;
+  /** The version in the footer, `API_VERSION` by default; the goldens pin the one they were recorded with. */
+  version?: string;
 }
 
 type Porta = StoragePort;
@@ -146,6 +148,7 @@ export class MontadorDoPainel {
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
+  private readonly version: string;
   private readonly commit: string | null;
   private readonly commitDaPasta: () => string | null;
   private readonly abreSessao: boolean;
@@ -156,7 +159,8 @@ export class MontadorDoPainel {
   private sessoesRecentes: { em: number; sessoes: Session[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false, version = API_VERSION }: OpcoesDoPainel) {
+    this.version = version;
     this.commit = commit;
     this.commitDaPasta = commitDaPasta;
     this.abreSessao = abreSessao;
@@ -234,7 +238,7 @@ export class MontadorDoPainel {
 
     return {
       version: 1,
-      api: { version: API_VERSION, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      api: { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
       generatedAt: new Date(agora).toISOString(),
       session: sessao,
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
