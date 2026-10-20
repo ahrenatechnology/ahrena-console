@@ -157,6 +157,16 @@ for (const [label, env] of [['no live core in the registry', { AHRENA_CONSOLE_HO
   })
 }
 
+for (const [label, env] of [['an empty registry', { AHRENA_CONSOLE_HOME: HOME }], ['no registry at all', {}]] as const) {
+  test(`transition, ${label}: a core from before the registry, on 4720, still serves the panel`, async ($, on) => {
+    // The app 0.0.1 and old checkouts listen on 4720 and write no entry (decision 0010, item 7).
+    const f = await open($, fakes(on, [], { 4720: { pid: 4720, up: true } }, { ...env }))
+    expect(panelRequests(f).length).toBeGreaterThan(0)
+    expect(panelRequests(f).every((u) => u.startsWith('http://127.0.0.1:4720/'))).toBe(true)
+    await expectCard($, '127.0.0.1:4720')
+  })
+}
+
 test('a core restarted on a new port is found again on the next tick', async ($, on) => {
   const f = await open($, fakes(on, [entry('dev', 202, 51002, '2026-08-01T00:00:00Z')], { 51002: { pid: 202, up: true } }))
   await expectCard($, '127.0.0.1:51002')
