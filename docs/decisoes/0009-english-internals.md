@@ -3,6 +3,7 @@
 - **Status:** aceita para o código; a parte de comentários, docs, README, commits e PRs está **a confirmar pelo Fernando**
 - **Data:** 2026-10-20
 - **Issue:** [#173](https://github.com/ahrenatechnology/ahrena-console/issues/173)
+- **Regra para os agentes:** [AGENTS.md](../../AGENTS.md) na raiz; o `CLAUDE.md` só importa ele (`@AGENTS.md`)
 - **Guarda:** [test/english-internals.test.mjs](../../test/english-internals.test.mjs), com o legado em [test/english-internals.legacy.json](../../test/english-internals.legacy.json)
 
 ## Contexto
@@ -22,8 +23,23 @@ O código nasceu com os bastidores em pt-BR: rotas (`/api/atencao`, `/api/painel
 | Classes CSS e atributos `data-*` | `.kb-coluna`, `.det-aba` | `.kb-column`, `.det-tab` |
 | Chaves de JSON (API, MCP, arquivos de configuração) | `{ sessoes, proximo }` | `{ sessions, next }` |
 | Tabelas, colunas e índices do SQLite | `reprocessamentos` | `reprocessings` |
-| Opções de linha de comando e variáveis de ambiente | `--cenario`, `--porta` | `--scenario`, `--port` |
+| Opções de linha de comando | `--cenario`, `--porta` | `--scenario`, `--port` |
+| Variáveis de ambiente, sempre com o prefixo `AHRENA_CONSOLE_` | `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_CORE_PORT` (tabela abaixo) |
 | Nomes de teste (`test('…')`) e de fixture | | |
+
+### Variáveis de ambiente
+
+Todas com o prefixo `AHRENA_CONSOLE_`, como as que já nasceram assim (`AHRENA_CONSOLE_PORT`, `AHRENA_CONSOLE_URL`, `AHRENA_CONSOLE_DB`). O nome antigo continua aceito até a fase final da migração; quando os dois existem, vale o novo.
+
+| Antiga | Nova | Onde |
+| --- | --- | --- |
+| `AHRENA_NUCLEO_PORTA` | `AHRENA_CONSOLE_CORE_PORT` | app |
+| `AHRENA_NUCLEO_DIR` | `AHRENA_CONSOLE_CORE_DIR` | app e núcleo (dono) |
+| `AHRENA_NUCLEO_ENTRY` | `AHRENA_CONSOLE_CORE_ENTRY` | núcleo (dono) |
+| `AHRENA_DADOS_DIR` | `AHRENA_CONSOLE_DATA_DIR` | app e núcleo (dono) |
+| `AHRENA_ORIGEM` | `AHRENA_CONSOLE_LAUNCH_ORIGIN` | app |
+| `AHRENA_ABRIR_MENU` | `AHRENA_CONSOLE_OPEN_MENU_AFTER` | app |
+| `AHRENA_NODE` | `AHRENA_CONSOLE_NODE` | app (só o prefixo) |
 
 ### Em pt-BR
 
@@ -47,7 +63,8 @@ Enquanto não houver confirmação, o guarda **não olha** `docs/` nem comentár
 
 - rotas da API e URLs da /ui escritas em `packages/nucleo/src`, `packages/nucleo/ui` e `apps/desktop`;
 - nomes de arquivo e de pasta (fora de `docs/` e de `plugins/`, que é do mod e migra no ritmo dele);
-- classes CSS.
+- classes CSS;
+- variáveis de ambiente lidas ou passadas no código (`process.env`, `env::var`, `AHRENA_*`).
 
 Português é reconhecido por acento, por terminação (`-ção`, `-dade`, `-mento`…) e por um vocabulário tirado do próprio legado (`sessoes`, `painel`, `atencao`…). O que já existia quando a regra foi escrita, inclusive o que estava em PR aberto (#168, #169, #170, #172), está congelado em `english-internals.legacy.json`, que só encolhe: cada fase da migração tira de lá o que renomeou. Identificadores, chaves de JSON e colunas não têm guarda por script: dependem da revisão e do `CLAUDE.md`.
 
@@ -64,6 +81,6 @@ Em fases, um PR por fase, com o plano no corpo da issue #173: API (rotas novas c
 
 ## Consequências
 
-- Toda sessão lê a regra no `CLAUDE.md` da raiz.
+- Todo agente lê a regra no `AGENTS.md` da raiz; o Claude Code chega nele pelo `CLAUDE.md`.
 - Durante a migração convivem nomes antigos (no legado congelado) e novos; o guarda impede que o legado cresça.
 - As rotas antigas viram alias e saem num PR final, depois que o mod e o app migrarem.
