@@ -84,7 +84,7 @@ Object.assign(globalThis, {
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 const tela = await import('../../ui/screens/analytics.js');
-const { mount, quantidade, usd, dataCurta, nomeDoModelo, milhoes, porcento, topoDoEixo, fatiasPorModelo, classeDaConta, nomeDoArquivo } = tela;
+const { mount, quantity, usd, shortDate, modelName, millions, percent, axisTop, slicesByModel, accountClass, fileName } = tela;
 
 const comClasse = (r: No, c: string) => r.todos((e) => e.classes.includes(c));
 const porTag = (r: No, t: string) => r.todos((e) => e.tag === t);
@@ -137,7 +137,7 @@ function visao({ contas = [CONTA_A], sessoes = 412 } = {}) {
   };
 }
 
-function custo(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio: empty = false } = {}) {
+function cost(dias = 30, { contas = [CONTA_A], semPrecoNoDia = false, vazio: empty = false } = {}) {
   const lista = diasAte('2026-10-18', dias);
   const porDia = lista.map((dia, i) => ({ dia, usd: semPrecoNoDia && i === 3 ? null : 5 + (i % 7) }));
   return {
@@ -208,11 +208,11 @@ const ate = async (cond: () => boolean, ms = 2000) => {
 
 describe('Analytics: formatação', () => {
   test('quantidades em pt-BR, como no C12', () => {
-    assert.equal(quantidade(412), '412');
-    assert.equal(quantidade(1086), '1.086');
-    assert.equal(quantidade(48_100), '48,1 mil');
-    assert.equal(quantidade(2_100_000), '2,1 mi');
-    assert.equal(quantidade(1_900_000_000), '1,9 B');
+    assert.equal(quantity(412), '412');
+    assert.equal(quantity(1086), '1.086');
+    assert.equal(quantity(48_100), '48,1 mil');
+    assert.equal(quantity(2_100_000), '2,1 mi');
+    assert.equal(quantity(1_900_000_000), '1,9 B');
   });
   test('custo com "~US$"; null é "sem preço", nunca US$ 0', () => {
     assert.equal(usd(12.4), '~US$ 12,40');
@@ -223,52 +223,52 @@ describe('Analytics: formatação', () => {
     assert.equal(usd(null, { curto: true }), 'sem preço');
   });
   test('datas, milhões, porcentagem e o topo do eixo', () => {
-    assert.equal(dataCurta('2026-10-13'), '13 out');
-    assert.equal(dataCurta('2026-01-02'), '2 jan');
-    assert.equal(milhoes(1_180_000_000), '1.180');
-    assert.equal(milhoes(4_240_000), '4,2');
-    assert.equal(porcento(71.4), '71%');
-    assert.equal(porcento(null), '—');
-    assert.equal(porcento(0.4), '<1%');
-    assert.equal(porcento(0), '0%');
-    assert.equal(topoDoEixo(18.4), 20);
-    assert.equal(topoDoEixo(0.7), 1);
-    assert.equal(topoDoEixo(0), 1);
+    assert.equal(shortDate('2026-10-13'), '13 out');
+    assert.equal(shortDate('2026-01-02'), '2 jan');
+    assert.equal(millions(1_180_000_000), '1.180');
+    assert.equal(millions(4_240_000), '4,2');
+    assert.equal(percent(71.4), '71%');
+    assert.equal(percent(null), '—');
+    assert.equal(percent(0.4), '<1%');
+    assert.equal(percent(0), '0%');
+    assert.equal(axisTop(18.4), 20);
+    assert.equal(axisTop(0.7), 1);
+    assert.equal(axisTop(0), 1);
   });
   test('nome do modelo', () => {
-    assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus 5.5');
-    assert.equal(nomeDoModelo('claude-sonnet-5'), 'Sonnet 5');
-    assert.equal(nomeDoModelo('claude-haiku-4-5-20251001'), 'Haiku 4.5');
-    assert.equal(nomeDoModelo('claude-opus-4-20250514'), 'Opus 4');
-    assert.equal(nomeDoModelo('claude-3-5-sonnet-20241022'), 'Sonnet 3.5');
-    assert.equal(nomeDoModelo('claude-opus-5-5[1m]'), 'Opus 5.5');
-    assert.equal(nomeDoModelo('outro-modelo'), 'outro-modelo');
-    assert.equal(nomeDoModelo(null), null);
+    assert.equal(modelName('claude-opus-5-5'), 'Opus 5.5');
+    assert.equal(modelName('claude-sonnet-5'), 'Sonnet 5');
+    assert.equal(modelName('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+    assert.equal(modelName('claude-opus-4-20250514'), 'Opus 4');
+    assert.equal(modelName('claude-3-5-sonnet-20241022'), 'Sonnet 3.5');
+    assert.equal(modelName('claude-opus-5-5[1m]'), 'Opus 5.5');
+    assert.equal(modelName('outro-modelo'), 'outro-modelo');
+    assert.equal(modelName(null), null);
   });
   test('rosca: até quatro modelos; mais que isso vira "Outros"; sem preço fica fora do arco', () => {
     const m = (modelo: string, v: number | null, pct: number | null) => ({ modelo, usd: v, pct, totalDeTokens: 1 });
-    const cinco = fatiasPorModelo([m('claude-opus-5-5', 50, 50), m('claude-sonnet-5-5', 20, 20), m('claude-haiku-5-5', 10, 10), m('a', 10, 10), m('b', 10, 10), m('c', null, null)]);
+    const cinco = slicesByModel([m('claude-opus-5-5', 50, 50), m('claude-sonnet-5-5', 20, 20), m('claude-haiku-5-5', 10, 10), m('a', 10, 10), m('b', 10, 10), m('c', null, null)]);
     assert.deepEqual(
       cinco.map((f: { nome: string; pct: number | null }) => [f.nome, f.pct]),
       [['Opus 5.5', 50], ['Sonnet 5.5', 20], ['Haiku 5.5', 10], ['Outros (2)', 20], ['c', null]],
     );
   });
   test('a cor da conta vira classe só quando é uma cor da marca; senão, nenhuma', () => {
-    assert.equal(classeDaConta('#df285d'), null, 'sem getComputedStyle, sem classe');
+    assert.equal(accountClass('#df285d'), null, 'sem getComputedStyle, sem classe');
     const vars: Record<string, string> = { '--rose-500': ' #df285d', '--green-500': '#1baf7a', '--yellow-500': '#ffc30a', '--gray-200': '#a6a6aa' };
     Object.assign(globalThis, { getComputedStyle: () => ({ getPropertyValue: (k: string) => vars[k] ?? '' }) });
     try {
-      assert.equal(classeDaConta('#DF285D'), 'an-account-pink');
-      assert.equal(classeDaConta('#1baf7a'), 'an-account-green');
-      assert.equal(classeDaConta('#123456'), null);
-      assert.equal(classeDaConta(null), null);
+      assert.equal(accountClass('#DF285D'), 'an-account-pink');
+      assert.equal(accountClass('#1baf7a'), 'an-account-green');
+      assert.equal(accountClass('#123456'), null);
+      assert.equal(accountClass(null), null);
     } finally {
       delete (globalThis as { getComputedStyle?: unknown }).getComputedStyle;
     }
   });
   test('o nome do arquivo exportado', () => {
-    assert.equal(nomeDoArquivo('visao', { ate: '2026-10-18' }, 30), 'ahrena-analytics-2026-10-18.json');
-    assert.equal(nomeDoArquivo('custo', { ate: '2026-10-18' }, 7), 'ahrena-analytics-custo-7d-2026-10-18.json');
+    assert.equal(fileName('overview', { ate: '2026-10-18' }, 30), 'ahrena-analytics-2026-10-18.json');
+    assert.equal(fileName('cost', { ate: '2026-10-18' }, 7), 'ahrena-analytics-cost-7d-2026-10-18.json');
   });
 });
 
@@ -285,7 +285,7 @@ describe('Analytics: Visão geral', () => {
       assert.match(texto, /Exportar/);
 
       const stats = comClasse(area, 'an-stat');
-      assert.deepEqual(stats.map((s) => s.getAttribute('data-card')), ['sessoes', 'agentes', 'tokens', 'custo', 'eventos']);
+      assert.deepEqual(stats.map((s) => s.getAttribute('data-card')), ['sessions', 'agents', 'tokens', 'cost', 'events']);
       assert.deepEqual(
         stats.map((s) => s.textContent),
         ['Sessões4124 ativas', 'Agentes1.0867 ativos', 'Tokens1,9 B71% de cache', 'Custo~US$ 341estimativa · 30 dias', 'Eventos48,1 mil~117 por sessão'],
@@ -327,7 +327,7 @@ describe('Analytics: Visão geral', () => {
   test('com duas contas, o custo leva a divisão por conta', async () => {
     const { area, limpar } = await montarTela({ read: async () => visao({ contas: [CONTA_A, CONTA_B] }) });
     try {
-      const custoCard = comClasse(area, 'an-stat').find((s) => s.getAttribute('data-card') === 'custo')!;
+      const custoCard = comClasse(area, 'an-stat').find((s) => s.getAttribute('data-card') === 'cost')!;
       const linhas = porTag(comClasse(custoCard, 'an-accounts')[0]!, 'li');
       assert.deepEqual(linhas.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
       assert.equal(linhas[0]!.getAttribute('title'), null);
@@ -345,7 +345,7 @@ describe('Analytics: Visão geral', () => {
     const { area, limpar } = await montarTela({ read: async () => d });
     try {
       const linhas = porTag(comClasse(area, 'an-accounts')[0]!, 'li');
-      assert.deepEqual(linhas.map((l) => [l.getAttribute('data-account'), l.textContent]), [[CONTA_A.id, 'pessoal~US$ 300,00'], ['sem-conta', 'Sem contasem preço']]);
+      assert.deepEqual(linhas.map((l) => [l.getAttribute('data-account'), l.textContent]), [[CONTA_A.id, 'pessoal~US$ 300,00'], ['no-account', 'Sem contasem preço']]);
       assert.equal(comClasse(area, 'an-cell').length, 358);
     } finally {
       limpar();
@@ -408,7 +408,7 @@ describe('Analytics: Visão geral', () => {
 
 describe('Analytics: Custo', () => {
   test('seletor 7/30/90, quatro números, linha, rosca e por projeto; trocar o período relê com ?days=', async () => {
-    const { area, rotas, limpar } = await montarTela({ aba: 'cost', read: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
+    const { area, rotas, limpar } = await montarTela({ aba: 'cost', read: async (rota) => cost(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
     try {
       assert.match(rotas[0]!, /^\/api\/analytics\/cost\?days=30&tz=[^&]+$/);
       const texto = area.textContent;
@@ -448,19 +448,19 @@ describe('Analytics: Custo', () => {
   });
 
   test('com duas contas, hoje e o período levam a divisão por conta (parcial quando falta preço); com uma, não', async () => {
-    const duas = await montarTela({ aba: 'cost', read: async () => custo(30, { contas: [CONTA_A, CONTA_B] }) });
+    const duas = await montarTela({ aba: 'cost', read: async () => cost(30, { contas: [CONTA_A, CONTA_B] }) });
     try {
       const card = (id: string) => comClasse(duas.area, 'an-stat').find((s) => s.getAttribute('data-card') === id)!;
-      const periodo = porTag(comClasse(card('periodo'), 'an-accounts')[0]!, 'li');
+      const periodo = porTag(comClasse(card('period'), 'an-accounts')[0]!, 'li');
       assert.deepEqual(periodo.map((l) => l.textContent), ['pessoal~US$ 300,00', 'equipe~US$ 41,20 · parcial']);
       assert.equal(periodo[1]!.getAttribute('title'), 'Parcial: sem preço para modelo-novo');
-      const hoje = porTag(comClasse(card('hoje'), 'an-accounts')[0]!, 'li');
+      const hoje = porTag(comClasse(card('today'), 'an-accounts')[0]!, 'li');
       assert.deepEqual(hoje.map((l) => l.textContent), ['pessoal~US$ 9,30', 'equipesem preço'], 'usd null é "sem preço", não parcial');
       assert.equal(hoje[1]!.getAttribute('title'), null);
     } finally {
       duas.limpar();
     }
-    const uma = await montarTela({ aba: 'cost', read: async () => custo(30) });
+    const uma = await montarTela({ aba: 'cost', read: async () => cost(30) });
     try {
       assert.equal(comClasse(uma.area, 'an-accounts').length, 0);
     } finally {
@@ -469,7 +469,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('custo sem preço no período mostra "sem preço", não US$ 0', async () => {
-    const d = custo(30);
+    const d = cost(30);
     d.periodo = { usd: null, mediaPorDia: null };
     d.resumoDeHoje = { usd: null, sessoes: 2, porConta: [] };
     const { area, limpar } = await montarTela({ aba: 'cost', read: async () => d });
@@ -483,7 +483,7 @@ describe('Analytics: Custo', () => {
   });
 
   test('período sem custo: o estado vazio, com o seletor no ar', async () => {
-    const { area, limpar } = await montarTela({ aba: 'cost', read: async () => custo(7, { vazio: true }) });
+    const { area, limpar } = await montarTela({ aba: 'cost', read: async () => cost(7, { vazio: true }) });
     try {
       assert.match(area.textContent, /Nenhum custo nos últimos 30 dias/);
       assert.equal(porTag(area, 'button').filter((b) => b.getAttribute('data-days')).length, 3);
@@ -529,9 +529,9 @@ test('the registry: Analytics in the sidebar; /ui/analytics/cost opens the same 
 
 test('as rotas e os períodos da tela são os do núcleo', async () => {
   const { ROTA_DO_ANALYTICS, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/rota-analytics.ts');
-  assert.equal(tela.ROTA_DA_VISAO, ROTA_DO_ANALYTICS);
-  assert.equal(tela.ROTA_DO_CUSTO, COST_ROUTE);
-  assert.deepEqual(tela.PERIODOS, [...DIAS_DO_CUSTO]);
+  assert.equal(tela.OVERVIEW_ROUTE, ROTA_DO_ANALYTICS);
+  assert.equal(tela.COST_ROUTE, COST_ROUTE);
+  assert.deepEqual(tela.PERIODS, [...DIAS_DO_CUSTO]);
 });
 
 test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de fora nem põem estilo inline', () => {

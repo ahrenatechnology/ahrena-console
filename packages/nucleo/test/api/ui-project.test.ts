@@ -9,7 +9,7 @@ import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFals
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { WriteError, ReadError, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
-import { filtrar, mount, tipoDoCard } from '../../ui/screens/project.js';
+import { filter, mount, cardType } from '../../ui/screens/project.js';
 // @ts-expect-error: idem
 import { findScreen, SCREENS } from '../../ui/screens.js';
 
@@ -17,7 +17,7 @@ instalarDomFalso();
 
 type Card = Record<string, unknown> & { itemId: string; raiaId: string | null; marco: string | null };
 type Raia = { id: string | null; nome: string; cor: string | null; cards: Card[] };
-type Quadro = { projeto: Record<string, unknown>; raias: Raia[]; marcos: string[]; total: number; lidoEm: number; desatualizado: boolean; motivo: string | null; fonte: string };
+type Quadro = { projeto: Record<string, unknown>; raias: Raia[]; marcos: string[]; total: number; lidoEm: number; desatualizado: boolean; reason: string | null; fonte: string };
 
 const card = (itemId: string, raiaId: string | null, extra: Record<string, unknown>): Card => ({
   itemId,
@@ -184,11 +184,11 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('o tipo do GitHub vira o rótulo do wireframe', () => {
-    const r = (tipoDaIssue: string | null, tipo = 'Issue') => tipoDoCard({ tipoDaIssue, tipo }).rotulo;
+    const r = (tipoDaIssue: string | null, tipo = 'Issue') => cardType({ tipoDaIssue, tipo }).rotulo;
     assert.deepEqual(['Story', 'User Story', 'Tech Task', 'Task', 'Spike', 'Bug', 'Epic'].map((t) => r(t)), ['História', 'História', 'Tarefa técnica', 'Tarefa técnica', 'Spike', 'Bug', 'Epic']);
     assert.equal(r(null, 'DraftIssue'), 'Rascunho');
-    assert.equal(tipoDoCard({ tipoDaIssue: 'Spike' }).classe, 'spike');
-    assert.equal(filtrar([{ marco: 'a' }, { marco: 'b' }], 'a').length, 1);
+    assert.equal(cardType({ tipoDaIssue: 'Spike' }).classe, 'spike');
+    assert.equal(filter([{ marco: 'a' }, { marco: 'b' }], 'a').length, 1);
   });
 
   test('o filtro Marco mostra só os cards do marco, e "Todos os marcos" volta tudo', async () => {
@@ -256,8 +256,8 @@ describe('Kanban do projeto (C11)', () => {
     await esperar();
     assert.deepEqual(tela.nomesNaRaia('In Review'), ['I-92', 'I-64']);
     assert.deepEqual(tela.nomesNaRaia('Done'), ['I-40']);
-    const faixa = tela.area.querySelector('.error-band')!;
-    assert.match(texto(faixa), /O GitHub não aceitou mover #92\. O GitHub recusou a mudança\. O card voltou para In Review\./);
+    const band = tela.area.querySelector('.error-band')!;
+    assert.match(texto(band), /O GitHub não aceitou mover #92\. O GitHub recusou a mudança\. O card voltou para In Review\./);
     assert.equal(tela.area.querySelector('.prj-toast'), null);
   });
 
@@ -471,18 +471,18 @@ describe('Kanban do projeto (C11)', () => {
 
   test('o foco fica no card numa releitura, e a faixa de aviso não é refeita sem mudar', async () => {
     tela = await montarTela({ read: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
-    const faixa = tela.area.querySelector('.error-band');
+    const band = tela.area.querySelector('.error-band');
     tela.area.querySelector('[data-item="I-92"]')!.focus();
     for (const f of tela.onRestart) f();
     await esperar();
-    assert.equal(tela.area.querySelector('.error-band'), faixa, 'o mesmo nó: o alerta não é anunciado de novo');
+    assert.equal(tela.area.querySelector('.error-band'), band, 'o mesmo nó: o alerta não é anunciado de novo');
     assert.equal(documentoFalso.activeElement?.getAttribute('data-item'), 'I-92');
     assert.notEqual(documentoFalso.activeElement, null);
   });
 
   test('tipo com nome de Object.prototype não derruba o card', () => {
-    assert.deepEqual(tipoDoCard({ tipoDaIssue: 'Constructor' }), { rotulo: 'Constructor', classe: 'other' });
-    assert.deepEqual(tipoDoCard({ tipoDaIssue: '__proto__' }), { rotulo: '__proto__', classe: 'other' });
+    assert.deepEqual(cardType({ tipoDaIssue: 'Constructor' }), { rotulo: 'Constructor', classe: 'other' });
+    assert.deepEqual(cardType({ tipoDaIssue: '__proto__' }), { rotulo: '__proto__', classe: 'other' });
   });
 
   test('sair da tela cancela a releitura do "Ao vivo" que estava marcada', async () => {

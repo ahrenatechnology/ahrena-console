@@ -12,15 +12,15 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
-const ROTA = '/api/project';
-const ESTILO = '/ui/project.css';
-const ROTA_MOVER = '/api/project/move';
-const TEMPO_DO_TOAST = 8000;
-const ESPERA_DO_AO_VIVO = 1000;
-const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
+const ROUTE = '/api/project';
+const STYLE = '/ui/project.css';
+const MOVE_ROUTE = '/api/project/move';
+const TOAST_MS = 8000;
+const LIVE_WAIT = 1000;
+const SCOPE_COMMAND = 'gh auth refresh -s project';
 
 // O tipo da issue no GitHub vira o rótulo do wireframe; a cor vem da classe.
-const TIPOS = new Map([
+const TYPES = new Map([
   ['story', ['História', 'story']],
   ['user story', ['História', 'story']],
   ['tech task', ['Tarefa técnica', 'task']],
@@ -30,11 +30,11 @@ const TIPOS = new Map([
 ]);
 
 /** `{ rotulo, classe }` do tipo de um card. Tipo desconhecido sai com o nome cru. */
-export function tipoDoCard(card) {
-  const cru = typeof card?.tipoDaIssue === 'string' ? card.tipoDaIssue.trim() : '';
-  if (cru) {
-    const [rotulo, classe] = TIPOS.get(cru.toLowerCase()) ?? [cru, 'other'];
-    return { rotulo, classe };
+export function cardType(card) {
+  const raw = typeof card?.tipoDaIssue === 'string' ? card.tipoDaIssue.trim() : '';
+  if (raw) {
+    const [label, className] = TYPES.get(raw.toLowerCase()) ?? [raw, 'other'];
+    return { rotulo: label, classe: className };
   }
   if (card?.tipo === 'PullRequest') return { rotulo: 'Pull request', classe: 'other' };
   if (card?.tipo === 'DraftIssue') return { rotulo: 'Rascunho', classe: 'other' };
@@ -53,150 +53,150 @@ const REVIEW = new Map([
 ]);
 
 /** Os cards de uma raia que passam no filtro de marco (`''` = todos). */
-export function filtrar(cards, marco) {
-  return marco ? cards.filter((c) => c.marco === marco) : cards;
+export function filter(cards, milestone) {
+  return milestone ? cards.filter((c) => c.marco === milestone) : cards;
 }
 
-const hora = (ms) => {
+const hour = (ms) => {
   const d = new Date(ms);
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
 };
 
-const codigoDe = (e) => e?.body?.codigo ?? null;
-const comandoDe = (e) => e?.body?.comando ?? (codigoDe(e) === 'sem-escopo' ? COMANDO_DO_ESCOPO : null);
-const nomeDoCard = (card) => (card.numero != null ? `#${card.numero}` : `“${card.titulo}”`);
-const esperaDe = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
-const comComando = (no, comando) => (comando ? (no.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, comando)), no) : no);
+const codeOf = (e) => e?.body?.codigo ?? null;
+const commandOf = (e) => e?.body?.comando ?? (codeOf(e) === 'sem-escopo' ? SCOPE_COMMAND : null);
+const cardName = (card) => (card.numero != null ? `#${card.numero}` : `“${card.titulo}”`);
+const waitOf = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
+const withCommand = (node, command) => (command ? (node.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, command)), node) : node);
 
 /** O CSS da tela, uma vez por página (fica carregado quando se troca de tela). */
-function carregarEstilo() {
+function loadStyle() {
   const doc = globalThis.document;
-  if (!doc?.head || typeof doc.querySelector !== 'function' || doc.querySelector(`link[href="${ESTILO}"]`)) return;
-  doc.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
+  if (!doc?.head || typeof doc.querySelector !== 'function' || doc.querySelector(`link[href="${STYLE}"]`)) return;
+  doc.head.append(el('link', { rel: 'stylesheet', href: STYLE }));
 }
 
 export async function mount(area, ctx) {
-  carregarEstilo();
-  let quadro = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
-  let marco = '';
-  let falhaDeLeitura = null; // leitura que falhou com um quadro já na tela
-  let aviso = null; // movimento recusado: { titulo, texto, comando }
+  loadStyle();
+  let board = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
+  let milestone = '';
+  let readFailure = null; // leitura que falhou com um quadro já na tela
+  let notice = null; // movimento recusado: { titulo, texto, comando }
   let toast = null; // { card, nome, de }
-  let arrastando = null; // { card, de }
-  let redesenhoPendente = false; // redesenho que esperou o arrasto terminar
-  let emVoo = 0; // movimentos sem resposta
-  let lendo = 0; // leituras sem resposta
-  let leitura = 0; // a leitura mais nova; as outras são descartadas
-  let adiada = null; // releitura que esperou um movimento ou arrasto: { forcar }
-  let timerDoToast = null;
-  let timerDoAoVivo = null;
-  let focar = null; // itemId que recebe o foco no próximo desenho (movimento pelo teclado)
-  let chaveDasFaixas = '';
+  let dragging = null; // { card, de }
+  let pendingRedraw = false; // redesenho que esperou o arrasto terminar
+  let inFlight = 0; // movimentos sem resposta
+  let pendingReads = 0; // leituras sem resposta
+  let latestRead = 0; // a leitura mais nova; as outras são descartadas
+  let deferred = null; // releitura que esperou um movimento ou arrasto: { forcar }
+  let toastTimer = null;
+  let liveTimer = null;
+  let focus = null; // itemId que recebe o foco no próximo desenho (movimento pelo teclado)
+  let bandsKey = '';
 
   // ---------- a estrutura (fica de pé entre os redesenhos) ----------
 
-  const seletor = el('select', { class: 'prj-sel', 'aria-label': 'Filtrar por marco' });
-  seletor.addEventListener('change', () => {
-    marco = seletor.value;
-    desenharQuadro();
+  const selector = el('select', { class: 'prj-sel', 'aria-label': 'Filtrar por marco' });
+  selector.addEventListener('change', () => {
+    milestone = selector.value;
+    drawBoard();
   });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar({ forcar: true }) }, icon('refresh'), 'Atualizar');
+  const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => draw({ forcar: true }) }, icon('refresh'), 'Atualizar');
   // O cabeçalho fica: a pílula "Ao vivo" é dele, e a moldura a mantém em dia.
-  const cab = header({
+  const head = header({
     icon: 'github',
     title: 'Kanban do projeto',
     sub: 'GitHub Project · por Status · arraste para mudar',
-    actions: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), seletor, icon('chevron-down')), botaoAtualizar],
+    actions: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), selector, icon('chevron-down')), refreshButton],
   });
-  const sub = cab.querySelector('.sub');
+  const sub = head.querySelector('.sub');
   // O toast mora numa região viva fixa, logo depois do cabeçalho: o leitor de tela anuncia o que entra
   // nela, e o Tab chega ao Desfazer sem atravessar o quadro. Foco ou mouse em cima seguram o tempo.
-  const caixaDoToast = el('div', { class: 'prj-toast-box', role: 'status', 'aria-live': 'polite' });
-  caixaDoToast.addEventListener('focusin', () => clearTimeout(timerDoToast));
-  caixaDoToast.addEventListener('mouseenter', () => clearTimeout(timerDoToast));
-  caixaDoToast.addEventListener('focusout', () => armarToast());
-  caixaDoToast.addEventListener('mouseleave', () => armarToast());
-  const caixaDasFaixas = el('div', { class: 'prj-bands', hidden: true });
-  const caixaDoQuadro = el('div', { class: 'prj-board' });
-  let estruturaNaTela = false;
+  const toastBox = el('div', { class: 'prj-toast-box', role: 'status', 'aria-live': 'polite' });
+  toastBox.addEventListener('focusin', () => clearTimeout(toastTimer));
+  toastBox.addEventListener('mouseenter', () => clearTimeout(toastTimer));
+  toastBox.addEventListener('focusout', () => armToast());
+  toastBox.addEventListener('mouseleave', () => armToast());
+  const bandsBox = el('div', { class: 'prj-bands', hidden: true });
+  const boardBox = el('div', { class: 'prj-board' });
+  let screenShape = false;
 
-  function desenharCabecalho() {
-    if (sub) sub.textContent = `GitHub Project “${quadro.projeto?.titulo ?? ''}” · por Status · arraste para mudar`;
-    const marcos = Array.isArray(quadro.marcos) ? quadro.marcos : [];
-    if (marco && !marcos.includes(marco)) marco = '';
-    seletor.replaceChildren(el('option', { value: '' }, 'Todos os marcos'), ...marcos.map((m) => el('option', { value: m }, m)));
-    seletor.value = marco;
+  function drawHeader() {
+    if (sub) sub.textContent = `GitHub Project “${board.projeto?.titulo ?? ''}” · por Status · arraste para mudar`;
+    const milestones = Array.isArray(board.marcos) ? board.marcos : [];
+    if (milestone && !milestones.includes(milestone)) milestone = '';
+    selector.replaceChildren(el('option', { value: '' }, 'Todos os marcos'), ...milestones.map((m) => el('option', { value: m }, m)));
+    selector.value = milestone;
   }
 
-  function trocarArea(...nos) {
-    estruturaNaTela = false;
-    area.replaceChildren(cab, ...nos);
+  function switchArea(...nodes) {
+    screenShape = false;
+    area.replaceChildren(head, ...nodes);
   }
 
   // ---------- leitura ----------
 
-  async function desenhar({ forcar = false } = {}) {
+  async function draw({ forcar: force = false } = {}) {
     // Com um movimento sem resposta ou um card no ar, ler agora traria o quadro de antes: fica para depois.
-    if (emVoo || arrastando) {
-      adiada = { forcar: forcar || Boolean(adiada?.forcar) };
+    if (inFlight || dragging) {
+      deferred = { forcar: force || Boolean(deferred?.forcar) };
       return;
     }
-    const minha = ++leitura;
-    lendo++;
-    if (!quadro) trocarArea(loading({ label: 'Lendo o GitHub Project' }));
-    if (forcar) botaoAtualizar.setAttribute('aria-busy', 'true');
+    const mine = ++latestRead;
+    pendingReads++;
+    if (!board) switchArea(loading({ label: 'Lendo o GitHub Project' }));
+    if (force) refreshButton.setAttribute('aria-busy', 'true');
     try {
-      const novo = await ctx.read(forcar ? `${ROTA}?refresh=1` : ROTA);
-      if (minha !== leitura) return;
-      quadro = novo;
-      falhaDeLeitura = null;
-      desenharQuadro();
+      const fresh = await ctx.read(force ? `${ROUTE}?refresh=1` : ROUTE);
+      if (mine !== latestRead) return;
+      board = fresh;
+      readFailure = null;
+      drawBoard();
     } catch (e) {
-      if (e?.name === 'AbortError' || minha !== leitura) return;
-      if (quadro) {
-        falhaDeLeitura = e;
-        desenharQuadro();
-      } else desenharFalha(e);
+      if (e?.name === 'AbortError' || mine !== latestRead) return;
+      if (board) {
+        readFailure = e;
+        drawBoard();
+      } else drawFailure(e);
     } finally {
-      if (--lendo === 0) botaoAtualizar.removeAttribute('aria-busy');
+      if (--pendingReads === 0) refreshButton.removeAttribute('aria-busy');
     }
   }
 
   /** O arrasto acabou (soltou fora de uma raia, ou na mesma): o redesenho e a leitura que esperaram. */
-  function fimDoArrasto() {
-    if (!arrastando && !redesenhoPendente) return lerAdiada();
-    arrastando = null;
-    if (redesenhoPendente) desenharQuadro();
-    lerAdiada();
+  function dragEnd() {
+    if (!dragging && !pendingRedraw) return deferredRead();
+    dragging = null;
+    if (pendingRedraw) drawBoard();
+    deferredRead();
   }
 
   // Rede de segurança: o fim do arrasto também é ouvido no documento.
   const doc = globalThis.document;
-  doc?.addEventListener?.('dragend', fimDoArrasto);
-  doc?.addEventListener?.('drop', fimDoArrasto);
+  doc?.addEventListener?.('dragend', dragEnd);
+  doc?.addEventListener?.('drop', dragEnd);
 
   /** Lê de novo o que ficou adiado, quando nada mais segura a leitura. */
-  function lerAdiada() {
-    if (!adiada || emVoo || arrastando) return;
-    const { forcar } = adiada;
-    adiada = null;
-    desenhar({ forcar });
+  function deferredRead() {
+    if (!deferred || inFlight || dragging) return;
+    const { forcar: force } = deferred;
+    deferred = null;
+    draw({ forcar: force });
   }
 
-  function desenharFalha(e) {
-    const codigo = codigoDe(e);
-    if (codigo === 'sem-projeto') {
-      const caixa = empty({
+  function drawFailure(e) {
+    const code = codeOf(e);
+    if (code === 'sem-projeto') {
+      const box = empty({
         icon: 'github',
         title: 'Escolha o GitHub Project',
         text: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
       });
-      caixa.append(el('code', { class: 'prj-command mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
-      trocarArea(caixa);
+      box.append(el('code', { class: 'prj-command mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
+      switchArea(box);
       return;
     }
-    if (e?.status === 503 || codigo === 'desligado') {
-      trocarArea(
+    if (e?.status === 503 || code === 'desligado') {
+      switchArea(
         empty({
           icon: 'github',
           title: 'O núcleo subiu sem GitHub',
@@ -205,91 +205,91 @@ export async function mount(area, ctx) {
       );
       return;
     }
-    if (e?.status === 401 || codigo === 'sem-escopo') {
-      const caixa = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => desenhar({ forcar: true }) });
-      caixa.insertBefore(el('code', { class: 'prj-command mono' }, comandoDe(e)), caixa.lastChild);
-      trocarArea(caixa);
+    if (e?.status === 401 || code === 'sem-escopo') {
+      const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ forcar: true }) });
+      box.insertBefore(el('code', { class: 'prj-command mono' }, commandOf(e)), box.lastChild);
+      switchArea(box);
       return;
     }
-    const titulo = e?.status === 0 || e?.status === undefined ? undefined : 'GitHub indisponível';
-    trocarArea(error({ title: titulo, text: `${e?.message ?? String(e)}${esperaDe(e)}`, retry: () => desenhar({ forcar: true }) }));
+    const title = e?.status === 0 || e?.status === undefined ? undefined : 'GitHub indisponível';
+    switchArea(error({ title, text: `${e?.message ?? String(e)}${waitOf(e)}`, retry: () => draw({ forcar: true }) }));
   }
 
   // ---------- o quadro ----------
 
   /** As faixas de cima. Só são refeitas quando o que dizem muda: um alerta é anunciado uma vez. */
-  function desenharFaixas() {
-    const faixas = [];
-    if (aviso) faixas.push({ title: aviso.titulo, text: aviso.texto, comando: aviso.comando, action: { label: 'Fechar', onClick: () => ((aviso = null), desenharQuadro()) } });
-    if (falhaDeLeitura) {
-      faixas.push({
+  function drawBands() {
+    const bands = [];
+    if (notice) bands.push({ title: notice.titulo, text: notice.texto, comando: notice.comando, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
+    if (readFailure) {
+      bands.push({
         title: 'Não deu para reler o quadro.',
-        text: `${falhaDeLeitura.message} Mostrando a última leitura.${esperaDe(falhaDeLeitura)}`,
-        comando: codigoDe(falhaDeLeitura) === 'sem-escopo' ? comandoDe(falhaDeLeitura) : null,
-        action: { label: 'Tentar agora', onClick: () => desenhar({ forcar: true }) },
+        text: `${readFailure.message} Mostrando a última leitura.${waitOf(readFailure)}`,
+        comando: codeOf(readFailure) === 'sem-escopo' ? commandOf(readFailure) : null,
+        action: { label: 'Tentar agora', onClick: () => draw({ forcar: true }) },
       });
-    } else if (quadro.desatualizado) {
-      const quando = hora(quadro.lidoEm);
-      faixas.push({
+    } else if (board.desatualizado) {
+      const when = hour(board.lidoEm);
+      bands.push({
         title: 'GitHub indisponível.',
-        text: `Mostrando o quadro em cache${quando ? `, de ${quando}` : ''}.${quadro.motivo ? ` ${quadro.motivo}` : ''}`,
-        action: { label: 'Tentar agora', onClick: () => desenhar({ forcar: true }) },
+        text: `Mostrando o quadro em cache${when ? `, de ${when}` : ''}.${board.motivo ? ` ${board.motivo}` : ''}`,
+        action: { label: 'Tentar agora', onClick: () => draw({ forcar: true }) },
       });
     }
-    const chave = JSON.stringify(faixas.map(({ title, text, comando }) => [title, text, comando]));
-    if (chave === chaveDasFaixas) return;
-    chaveDasFaixas = chave;
-    if (faixas.length) caixaDasFaixas.removeAttribute('hidden');
-    else caixaDasFaixas.setAttribute('hidden', '');
-    caixaDasFaixas.replaceChildren(...faixas.map((f) => comComando(errorBand(f), f.comando)));
+    const key = JSON.stringify(bands.map(({ title, text, comando: command }) => [title, text, command]));
+    if (key === bandsKey) return;
+    bandsKey = key;
+    if (bands.length) bandsBox.removeAttribute('hidden');
+    else bandsBox.setAttribute('hidden', '');
+    bandsBox.replaceChildren(...bands.map((f) => withCommand(errorBand(f), f.comando)));
   }
 
-  function desenharQuadro() {
-    if (!quadro) return;
+  function drawBoard() {
+    if (!board) return;
     // Trocar os cards no meio de um arrasto tira do DOM o card que está no ar, e o `dragend` dele
     // pode não chegar (Firefox): o redesenho espera o arrasto acabar.
-    if (arrastando) {
-      redesenhoPendente = true;
+    if (dragging) {
+      pendingRedraw = true;
       return;
     }
-    redesenhoPendente = false;
+    pendingRedraw = false;
     // Quem estava num card continua nele depois do redesenho (ou no card que acabou de mover).
-    const ativo = globalThis.document?.activeElement;
-    const itemAtivo = focar ?? ativo?.getAttribute?.('data-item') ?? null;
-    desenharCabecalho();
-    if (!estruturaNaTela) {
-      chaveDasFaixas = null;
-      area.replaceChildren(cab, caixaDoToast, caixaDasFaixas, caixaDoQuadro);
-      estruturaNaTela = true;
+    const active = globalThis.document?.activeElement;
+    const activeItem = focus ?? active?.getAttribute?.('data-item') ?? null;
+    drawHeader();
+    if (!screenShape) {
+      bandsKey = null;
+      area.replaceChildren(head, toastBox, bandsBox, boardBox);
+      screenShape = true;
     }
-    desenharFaixas();
+    drawBands();
 
-    const raias = Array.isArray(quadro.raias) ? quadro.raias : [];
-    const nos = new Map();
-    caixaDoQuadro.replaceChildren(
-      raias.length
-        ? el('div', { class: 'prj-columns' }, ...raias.map((raia, i) => coluna(raia, i, raias, nos)))
-        : empty({ icon: 'github', title: 'O projeto não tem raias', text: `O campo ${quadro.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
+    const lanes = Array.isArray(board.raias) ? board.raias : [];
+    const nodes = new Map();
+    boardBox.replaceChildren(
+      lanes.length
+        ? el('div', { class: 'prj-columns' }, ...lanes.map((lane, i) => column(lane, i, lanes, nodes)))
+        : empty({ icon: 'github', title: 'O projeto não tem raias', text: `O campo ${board.projeto?.campo ?? 'Status'} do GitHub Project não tem opções.` }),
     );
-    if (itemAtivo && nos.has(itemAtivo)) nos.get(itemAtivo).focus();
+    if (activeItem && nodes.has(activeItem)) nodes.get(activeItem).focus();
   }
 
-  function coluna(raia, indice, raias, nos) {
-    const cards = filtrar(Array.isArray(raia.cards) ? raia.cards : [], marco);
-    const aceita = raia.id !== null && raia.id !== undefined;
+  function column(lane, index, lanes, nodes) {
+    const cards = filter(Array.isArray(lane.cards) ? lane.cards : [], milestone);
+    const accepts = lane.id !== null && lane.id !== undefined;
     const col = el(
       'section',
-      { class: 'prj-col', 'data-lane': aceita ? raia.id : 'sem-status', 'aria-label': `${raia.nome}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
-      el('div', { class: 'head' }, el('span', { class: 'dot' }), el('span', { class: 'name' }, raia.nome), el('span', { class: 'n' }, String(cards.length))),
+      { class: 'prj-col', 'data-lane': accepts ? lane.id : 'no-status', 'aria-label': `${lane.nome}: ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}` },
+      el('div', { class: 'head' }, el('span', { class: 'dot' }), el('span', { class: 'name' }, lane.nome), el('span', { class: 'n' }, String(cards.length))),
       ...cards.map((card) => {
-        const no = cartao(card, raia, indice, raias);
-        nos.set(card.itemId, no);
-        return no;
+        const node = cardEl(card, lane, index, lanes);
+        nodes.set(card.itemId, node);
+        return node;
       }),
     );
-    if (aceita) {
+    if (accepts) {
       col.addEventListener('dragover', (ev) => {
-        if (!arrastando || arrastando.de === raia.id) return;
+        if (!dragging || dragging.de === lane.id) return;
         ev.preventDefault();
         if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
         col.classList.add('target');
@@ -302,180 +302,180 @@ export async function mount(area, ctx) {
       col.addEventListener('drop', (ev) => {
         ev.preventDefault();
         col.classList.remove('target');
-        const indo = arrastando;
-        arrastando = null;
-        if (indo && indo.de !== raia.id) mover(indo.card.itemId, raia.id);
-        else fimDoArrasto();
+        const going = dragging;
+        dragging = null;
+        if (going && going.de !== lane.id) move(going.card.itemId, lane.id);
+        else dragEnd();
       });
     }
     return col;
   }
 
-  function cartao(card, raia, indice, raias) {
-    const { rotulo, classe } = tipoDoCard(card);
-    const pe = [];
-    if (card.subIssues && card.subIssues.total) pe.push(el('span', { title: 'Sub-issues feitas' }, icon('list-checks'), `${card.subIssues.feitas}/${card.subIssues.total}`));
+  function cardEl(card, lane, index, lanes) {
+    const { rotulo: label, classe: className } = cardType(card);
+    const foot = [];
+    if (card.subIssues && card.subIssues.total) foot.push(el('span', { title: 'Sub-issues feitas' }, icon('list-checks'), `${card.subIssues.feitas}/${card.subIssues.total}`));
     if (card.pr) {
-      pe.push(el('span', { title: 'Pull request' }, icon('git-pull-request'), `#${card.pr.numero}`));
+      foot.push(el('span', { title: 'Pull request' }, icon('git-pull-request'), `#${card.pr.numero}`));
       const ci = CI.get(card.pr.ci);
       const review = REVIEW.get(card.pr.review);
-      if (ci) pe.push(el('span', { class: `prj-pill ${ci[1]}` }, ci[0]));
-      if (review) pe.push(el('span', { class: `prj-pill ${review[1]}` }, review[0]));
+      if (ci) foot.push(el('span', { class: `prj-pill ${ci[1]}` }, ci[0]));
+      if (review) foot.push(el('span', { class: `prj-pill ${review[1]}` }, review[0]));
     }
-    const no = el(
+    const node = el(
       'article',
       {
         class: 'card prj-card',
         draggable: 'true',
         tabindex: '0',
         'data-item': card.itemId,
-        'aria-label': `${rotulo} ${card.numero != null ? `#${card.numero} ` : ''}${card.titulo}, em ${raia.nome}`,
+        'aria-label': `${label} ${card.numero != null ? `#${card.numero} ` : ''}${card.titulo}, em ${lane.nome}`,
         'aria-keyshortcuts': 'Alt+ArrowLeft Alt+ArrowRight',
       },
       el(
         'div',
         { class: 'type' },
-        el('b', { class: `prj-type ${classe}` }, rotulo),
+        el('b', { class: `prj-type ${className}` }, label),
         card.numero != null ? el('span', { class: 'num mono' }, `#${card.numero}`) : null,
         el('span', { class: 'grip', title: 'Arraste para outra raia (ou Alt+← / Alt+→)' }, icon('grip-vertical')),
       ),
       el('div', { class: 'tt' }, card.titulo),
-      pe.length ? el('div', { class: 'foot' }, ...pe) : null,
+      foot.length ? el('div', { class: 'foot' }, ...foot) : null,
     );
-    no.addEventListener('dragstart', (ev) => {
-      arrastando = { card, de: raia.id ?? null };
+    node.addEventListener('dragstart', (ev) => {
+      dragging = { card, de: lane.id ?? null };
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = 'move';
         ev.dataTransfer.setData('text/plain', card.itemId);
       }
-      no.classList.add('dragging');
+      node.classList.add('dragging');
     });
-    no.addEventListener('dragend', () => {
-      no.classList.remove('dragging');
-      fimDoArrasto();
+    node.addEventListener('dragend', () => {
+      node.classList.remove('dragging');
+      dragEnd();
     });
-    no.addEventListener('keydown', (ev) => {
+    node.addEventListener('keydown', (ev) => {
       if (!ev.altKey || (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft')) return;
-      const passo = ev.key === 'ArrowRight' ? 1 : -1;
-      for (let i = indice + passo; i >= 0 && i < raias.length; i += passo) {
-        if (raias[i].id === null || raias[i].id === undefined) continue;
+      const step = ev.key === 'ArrowRight' ? 1 : -1;
+      for (let i = index + step; i >= 0 && i < lanes.length; i += step) {
+        if (lanes[i].id === null || lanes[i].id === undefined) continue;
         ev.preventDefault();
-        mover(card.itemId, raias[i].id, { teclado: true });
+        move(card.itemId, lanes[i].id, { teclado: true });
         return;
       }
     });
-    return no;
+    return node;
   }
 
   // ---------- mover ----------
 
-  function acharCard(itemId) {
-    for (const raia of quadro?.raias ?? []) {
-      const i = (raia.cards ?? []).findIndex((c) => c.itemId === itemId);
-      if (i >= 0) return { raia, i, card: raia.cards[i] };
+  function findCard(itemId) {
+    for (const lane of board?.raias ?? []) {
+      const i = (lane.cards ?? []).findIndex((c) => c.itemId === itemId);
+      if (i >= 0) return { raia: lane, i, card: lane.cards[i] };
     }
     return null;
   }
 
   /** Muda o card de raia aqui na tela: no fim da raia, ou na posição `onde` (a de antes, ao voltar). */
-  function moverAqui(itemId, para, onde = null) {
-    const achado = acharCard(itemId);
-    const destino = quadro?.raias?.find((r) => r.id === para);
-    if (!achado || !destino) return;
-    achado.raia.cards.splice(achado.i, 1);
-    achado.card.raiaId = para;
-    const cards = (destino.cards ??= []);
-    cards.splice(onde ?? cards.length, 0, achado.card);
+  function moveHere(itemId, to, where = null) {
+    const found = findCard(itemId);
+    const target = board?.raias?.find((r) => r.id === to);
+    if (!found || !target) return;
+    found.raia.cards.splice(found.i, 1);
+    found.card.raiaId = to;
+    const cards = (target.cards ??= []);
+    cards.splice(where ?? cards.length, 0, found.card);
   }
 
-  const nomeDaRaia = (id) => quadro?.raias?.find((r) => r.id === id)?.nome ?? 'Sem status';
+  const laneName = (id) => board?.raias?.find((r) => r.id === id)?.nome ?? 'Sem status';
 
-  async function mover(itemId, para, { teclado = false } = {}) {
-    const antes = acharCard(itemId);
-    if (para === null || para === undefined || !antes || antes.raia.id === para) return lerAdiada();
+  async function move(itemId, to, { teclado: keyboard = false } = {}) {
+    const before = findCard(itemId);
+    if (to === null || to === undefined || !before || before.raia.id === to) return deferredRead();
     // Uma leitura em voo saiu antes deste movimento: o que ela trouxer não vale, e relê-se depois.
-    if (lendo) {
-      leitura++;
-      adiada = { forcar: Boolean(adiada?.forcar) };
+    if (pendingReads) {
+      latestRead++;
+      deferred = { forcar: Boolean(deferred?.forcar) };
     }
     // O movimento otimista mexe numa cópia: o quadro que veio da leitura fica como veio.
-    quadro = structuredClone(quadro);
-    const { card, i: ondeEstava, raia } = acharCard(itemId);
-    const de = raia.id ?? null;
-    moverAqui(itemId, para);
-    aviso = null;
-    mostrarToast(null);
-    emVoo++;
-    focar = teclado ? itemId : null;
-    desenharQuadro();
+    board = structuredClone(board);
+    const { card, i: wasAt, raia: lane } = findCard(itemId);
+    const from = lane.id ?? null;
+    moveHere(itemId, to);
+    notice = null;
+    showToast(null);
+    inFlight++;
+    focus = keyboard ? itemId : null;
+    drawBoard();
     try {
-      const r = await ctx.write(ROTA_MOVER, { itemId, optionId: para });
+      const r = await ctx.write(MOVE_ROUTE, { itemId, optionId: to });
       // Só o último movimento em voo pode trocar o quadro inteiro; os de antes já estão na tela.
-      if (r?.quadro && emVoo === 1) quadro = r.quadro;
-      else if (emVoo > 1) adiada = { forcar: Boolean(adiada?.forcar) };
-      mostrarToast({ card, nome: nomeDaRaia(para), de: r?.movido && r.movido.de !== undefined ? r.movido.de : de });
+      if (r?.quadro && inFlight === 1) board = r.quadro;
+      else if (inFlight > 1) deferred = { forcar: Boolean(deferred?.forcar) };
+      showToast({ card, nome: laneName(to), de: r?.movido && r.movido.de !== undefined ? r.movido.de : from });
     } catch (e) {
       if (e?.name === 'AbortError') return;
-      moverAqui(itemId, de, ondeEstava);
-      const comando = codigoDe(e) === 'sem-escopo' ? comandoDe(e) : null;
-      aviso = {
-        titulo: `O GitHub não aceitou mover ${nomeDoCard(card)}.`,
-        texto: `${e?.message ?? String(e)}${esperaDe(e)} O card voltou para ${nomeDaRaia(de)}.${comando ? ' Rode:' : ''}`,
-        comando,
+      moveHere(itemId, from, wasAt);
+      const command = codeOf(e) === 'sem-escopo' ? commandOf(e) : null;
+      notice = {
+        titulo: `O GitHub não aceitou mover ${cardName(card)}.`,
+        texto: `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
+        comando: command,
       };
       // O quadro mudou por fora (404, 422) ou outro movimento está em voo: só a releitura acerta a tela.
-      if (e?.status === 404 || e?.status === 422 || emVoo > 1) adiada = { forcar: Boolean(adiada?.forcar) };
+      if (e?.status === 404 || e?.status === 422 || inFlight > 1) deferred = { forcar: Boolean(deferred?.forcar) };
     } finally {
-      emVoo--;
+      inFlight--;
     }
-    desenharQuadro();
-    focar = null;
-    lerAdiada();
+    drawBoard();
+    focus = null;
+    deferredRead();
   }
 
   // ---------- toast ----------
 
-  function armarToast() {
-    clearTimeout(timerDoToast);
-    if (toast) timerDoToast = setTimeout(() => mostrarToast(null), TEMPO_DO_TOAST);
+  function armToast() {
+    clearTimeout(toastTimer);
+    if (toast) toastTimer = setTimeout(() => showToast(null), TOAST_MS);
   }
 
   /** Troca o conteúdo da região viva do toast, sem redesenhar o quadro. */
-  function mostrarToast(novo) {
-    toast = novo;
+  function showToast(fresh) {
+    toast = fresh;
     if (!toast) {
-      clearTimeout(timerDoToast);
-      caixaDoToast.replaceChildren();
+      clearTimeout(toastTimer);
+      toastBox.replaceChildren();
       return;
     }
-    const { card, de, nome } = toast;
-    caixaDoToast.replaceChildren(
+    const { card, de: from, nome: name } = toast;
+    toastBox.replaceChildren(
       el(
         'div',
         { class: 'prj-toast' },
         icon('check-circle-2'),
-        el('span', {}, el('b', {}, nomeDoCard(card)), ' movido para ', el('b', {}, nome), ' no GitHub'),
-        de !== null && de !== undefined ? el('button', { type: 'button', class: 'prj-undo', onClick: () => mover(card.itemId, de, { teclado: true }) }, 'Desfazer') : null,
+        el('span', {}, el('b', {}, cardName(card)), ' movido para ', el('b', {}, name), ' no GitHub'),
+        from !== null && from !== undefined ? el('button', { type: 'button', class: 'prj-undo', onClick: () => move(card.itemId, from, { teclado: true }) }, 'Desfazer') : null,
       ),
     );
-    armarToast();
+    armToast();
   }
 
   // ---------- ao vivo ----------
 
-  ctx.onRestart(() => desenhar());
+  ctx.onRestart(() => draw());
   ctx.onChange(() => {
-    clearTimeout(timerDoAoVivo);
-    timerDoAoVivo = setTimeout(() => desenhar(), ESPERA_DO_AO_VIVO);
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => draw(), LIVE_WAIT);
   });
 
-  await desenhar();
+  await draw();
 
   return () => {
-    doc?.removeEventListener?.('dragend', fimDoArrasto);
-    doc?.removeEventListener?.('drop', fimDoArrasto);
-    clearTimeout(timerDoToast);
-    clearTimeout(timerDoAoVivo);
-    leitura++;
+    doc?.removeEventListener?.('dragend', dragEnd);
+    doc?.removeEventListener?.('drop', dragEnd);
+    clearTimeout(toastTimer);
+    clearTimeout(liveTimer);
+    latestRead++;
   };
 }

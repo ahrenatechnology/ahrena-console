@@ -13,74 +13,74 @@ import { loading, error, errorBand, empty } from '../states.js';
 
 // ---------- Funções puras (testadas em test/api/ui-kanban.test.ts) ----------
 
-export const VISOES = ['sessoes', 'agentes'];
+export const VIEWS = ['sessions', 'agents'];
 
 /** A visão pedida na query; qualquer outra coisa é `sessoes`. */
-export function visaoDaUrl(search) {
-  const v = { sessions: 'sessoes', agents: 'agentes' }[new URLSearchParams(search ?? '').get('view')];
-  return VISOES.includes(v) ? v : 'sessoes';
+export function viewFromUrl(search) {
+  const v = new URLSearchParams(search ?? '').get('view');
+  return VIEWS.includes(v) ? v : 'sessions';
 }
 
 /** A query da URL do navegador para uma visão: sessões é o padrão e não aparece. */
-export function queryDaVisao(visao) {
-  return visao === 'agentes' ? '?view=agents' : '';
+export function viewQuery(view) {
+  return view === 'agents' ? '?view=agents' : '';
 }
 
 /** A rota da API: o quadro todo, ou uma página de uma coluna. */
-export function rotaDoKanban(visao, coluna = null, pagina = null) {
-  const q = new URLSearchParams({ view: visao === 'agentes' ? 'agents' : 'sessions' });
-  if (coluna) {
-    q.set('column', coluna);
-    q.set('page', String(pagina ?? 1));
+export function kanbanRoute(view, column = null, page = null) {
+  const q = new URLSearchParams({ view });
+  if (column) {
+    q.set('column', column);
+    q.set('page', String(page ?? 1));
   }
   return `/api/kanban?${q}`;
 }
 
 /** Duração legível: "40 s", "12 min", "3 h 10", "2 h". */
-export function formatarDuracao(ms) {
+export function formatDuration(ms) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '—';
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s} s`;
   const min = Math.floor(s / 60);
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
-  const resto = min % 60;
-  return resto ? `${h} h ${String(resto).padStart(2, '0')}` : `${h} h`;
+  const rest = min % 60;
+  return rest ? `${h} h ${String(rest).padStart(2, '0')}` : `${h} h`;
 }
 
-const REAIS = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const REAL_ONES = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Custo estimado: "~US$ 1,84"; sem custo, `null` (a linha some). */
-export function formatarCusto(usd) {
+export function formatCost(usd) {
   if (typeof usd !== 'number' || !Number.isFinite(usd)) return null;
-  return `~US$ ${REAIS.format(usd)}`;
+  return `~US$ ${REAL_ONES.format(usd)}`;
 }
 
 /** Os 8 primeiros caracteres do id. */
-export function idCurto(id) {
+export function shortId(id) {
   return String(id ?? '').slice(0, 8);
 }
 
 /** "1 agente", "3 agentes". */
-export function rotuloAgentes(n) {
+export function agentsLabel(n) {
   const k = Number.isFinite(n) ? n : 0;
   return `${k} agente${k === 1 ? '' : 's'}`;
 }
 
 /** O motivo da espera: rótulo, ícone e se é urgente (peso maior no selo). */
-const MOTIVOS = {
+const REASONS = {
   notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
   interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
   stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
   session_start: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
 };
 
-export function motivo(m) {
-  return MOTIVOS[m] ?? null;
+export function reason(m) {
+  return REASONS[m] ?? null;
 }
 
-export function rotuloMotivo(m) {
-  return MOTIVOS[m]?.rotulo ?? null;
+export function reasonLabel(m) {
+  return REASONS[m]?.rotulo ?? null;
 }
 
 /** Status da sessão ou do agente → a cor (classe) e o rótulo do selo. O agente "working" é ativo. */
@@ -98,7 +98,7 @@ export function status(st) {
 }
 
 /** A cor da coluna, pelo id dela (as duas visões). */
-const COR_DA_COLUNA = {
+const COLUMN_COLOR = {
   ativa: 'active',
   trabalhando: 'active',
   esperando: 'waiting',
@@ -108,38 +108,38 @@ const COR_DA_COLUNA = {
   abandonada: 'abandoned',
 };
 
-export function corDaColuna(id) {
-  return COR_DA_COLUNA[id] ?? 'abandoned';
+export function columnColor(id) {
+  return COLUMN_COLOR[id] ?? 'abandoned';
 }
 
 /** Quantos faltam mostrar numa coluna. */
-export function faltam(coluna, mostrados) {
-  return Math.max(0, (coluna?.total ?? 0) - mostrados);
+export function missing(column, shown) {
+  return Math.max(0, (column?.total ?? 0) - shown);
 }
 
 /** Uma mudança do long polling que mexe no quadro. */
-const TIPOS_QUE_MEXEM = new Set(['sessao', 'estado', 'precisa-de-voce']);
-export function mexeNoQuadro(mudancas) {
-  return Array.isArray(mudancas) && mudancas.some((m) => TIPOS_QUE_MEXEM.has(m?.tipo));
+const TYPES_THAT_MATTER = new Set(['sessao', 'estado', 'precisa-de-voce']);
+export function touchesBoard(changes) {
+  return Array.isArray(changes) && changes.some((m) => TYPES_THAT_MATTER.has(m?.tipo));
 }
 
 // ---------- Peças ----------
 
 const SUB = {
-  sessoes: 'As sessões por status, só leitura',
-  agentes: 'Os agentes por status, só leitura',
+  sessions: 'As sessões por status, só leitura',
+  agents: 'Os agentes por status, só leitura',
 };
 
-const VAZIO = {
-  sessoes: { title: 'Nenhuma sessão ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
-  agentes: { title: 'Nenhum agente ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
+const EMPTY = {
+  sessions: { title: 'Nenhuma sessão ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
+  agents: { title: 'Nenhum agente ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
 };
 
-const hrefDaSessao = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
+const sessionHref = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
-function selos(st, mot) {
+function badges(st, reasonKey) {
   const s = status(st);
-  const m = motivo(mot);
+  const m = reason(reasonKey);
   return el(
     'div',
     { class: 'kb-badges' },
@@ -148,185 +148,185 @@ function selos(st, mot) {
   );
 }
 
-function avatar(nome) {
-  return el('span', { class: 'kb-av' }, icon(nome));
+function avatar(name) {
+  return el('span', { class: 'kb-av' }, icon(name));
 }
 
-function info(nomeDoIcone, texto, classe = null) {
-  return el('span', { class: classe }, icon(nomeDoIcone), el('span', { class: 'kb-t' }, texto));
+function info(iconName, text, className = null) {
+  return el('span', { class: className }, icon(iconName), el('span', { class: 'kb-t' }, text));
 }
 
-function cardDeSessao(s) {
-  const custo = formatarCusto(s.custoUsd);
+function sessionCard(s) {
+  const cost = formatCost(s.custoUsd);
   return el(
     'a',
-    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
-    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
-    selos(s.status, s.motivo),
+    { class: `card kb-kc kb-st-${status(s.status).cor}`, href: sessionHref(s.id), title: s.titulo || null },
+    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, shortId(s.id)))),
+    badges(s.status, s.motivo),
     s.ultimoPrompt ? el('blockquote', {}, s.ultimoPrompt) : null,
     s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
     el(
       'div',
       { class: 'kb-foot' },
-      info('bot', rotuloAgentes(s.agentes)),
+      info('bot', agentsLabel(s.agentes)),
       s.modelo ? info('model', s.modelo) : null,
-      custo ? info('coins', custo) : null,
-      info('duration', formatarDuracao(s.duracaoMs), s.rodando ? 'kb-dur kb-running' : 'kb-dur'),
+      cost ? info('coins', cost) : null,
+      info('duration', formatDuration(s.duracaoMs), s.rodando ? 'kb-dur kb-running' : 'kb-dur'),
     ),
   );
 }
 
-function cardDeAgente(a) {
+function agentCard(a) {
   return el(
     'a',
-    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: hrefDaSessao(a.sessaoId), title: a.descricao || a.nome || null },
+    { class: `card kb-kc kb-agent kb-st-${status(a.status).cor}`, href: sessionHref(a.sessaoId), title: a.descricao || a.nome || null },
     el('div', { class: 'kb-l1' }, avatar(a.principal ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
-    selos(a.status, a.motivo),
-    el('div', { class: 'kb-foot' }, a.modelo ? info('model', a.modelo) : null, info('duration', formatarDuracao(a.duracaoMs), a.rodando ? 'kb-dur kb-running' : 'kb-dur')),
+    badges(a.status, a.motivo),
+    el('div', { class: 'kb-foot' }, a.modelo ? info('model', a.modelo) : null, info('duration', formatDuration(a.duracaoMs), a.rodando ? 'kb-dur kb-running' : 'kb-dur')),
   );
 }
 
 // ---------- A tela ----------
 
 export async function mount(area, ctx) {
-  const folha = ligarFolha();
+  const sheet = attachSheet();
   ctx.title('Kanban');
-  let visao = visaoDaUrl(location.search);
-  let leitura = 0; // descarta resposta de leitura velha
-  let quadroNoAr = false;
+  let view = viewFromUrl(location.search);
+  let reading = 0; // descarta resposta de leitura velha
+  let boardInFlight = false;
 
-  const botoes = Object.fromEntries(
-    VISOES.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === visao), onClick: () => trocar(v) }, v === 'agentes' ? 'Agentes' : 'Sessões')]),
+  const buttons = Object.fromEntries(
+    VIEWS.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === view), onClick: () => switchTo(v) }, v === 'agents' ? 'Agentes' : 'Sessões')]),
   );
-  const alternador = el('div', { class: 'kb-seg', role: 'group', 'aria-label': 'Visão do Kanban' }, botoes.agentes, botoes.sessoes);
-  const atualizar = el('button', { type: 'button', class: 'btn', onClick: () => desenhar() }, icon('refresh'), 'Atualizar');
-  const cab = header({ icon: 'kanban', title: 'Kanban', sub: SUB[visao], actions: [alternador, atualizar] });
-  const sub = cab.querySelector('.sub');
+  const toggle = el('div', { class: 'kb-seg', role: 'group', 'aria-label': 'Visão do Kanban' }, buttons.agents, buttons.sessions);
+  const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
+  const head = header({ icon: 'kanban', title: 'Kanban', sub: SUB[view], actions: [toggle, refresh] });
+  const sub = head.querySelector('.sub');
 
-  function trocar(v) {
-    if (v === visao) return;
-    visao = v;
-    for (const [k, b] of Object.entries(botoes)) b.setAttribute('aria-pressed', String(k === visao));
-    sub.textContent = SUB[visao];
-    history.replaceState(history.state, '', `${location.pathname}${queryDaVisao(visao)}`);
-    quadroNoAr = false;
-    desenhar();
+  function switchTo(v) {
+    if (v === view) return;
+    view = v;
+    for (const [k, b] of Object.entries(buttons)) b.setAttribute('aria-pressed', String(k === view));
+    sub.textContent = SUB[view];
+    history.replaceState(history.state, '', `${location.pathname}${viewQuery(view)}`);
+    boardInFlight = false;
+    draw();
   }
 
-  async function desenhar() {
-    const minha = ++leitura;
-    const v = visao;
-    if (!quadroNoAr) area.replaceChildren(cab, loading({ label: 'Carregando o quadro', blocks: 2 }));
-    atualizar.disabled = true;
+  async function draw() {
+    const mine = ++reading;
+    const v = view;
+    if (!boardInFlight) area.replaceChildren(head, loading({ label: 'Carregando o quadro', blocks: 2 }));
+    refresh.disabled = true;
     try {
-      const dados = await ctx.read(rotaDoKanban(v));
-      if (minha !== leitura) return;
-      const colunas = Array.isArray(dados?.colunas) ? dados.colunas : [];
-      if (!colunas.some((c) => c.total > 0)) {
-        quadroNoAr = false;
-        area.replaceChildren(cab, empty(VAZIO[v]));
+      const data = await ctx.read(kanbanRoute(v));
+      if (mine !== reading) return;
+      const columns = Array.isArray(data?.colunas) ? data.colunas : [];
+      if (!columns.some((c) => c.total > 0)) {
+        boardInFlight = false;
+        area.replaceChildren(head, empty(EMPTY[v]));
       } else {
         // A releitura ao vivo não joga a rolagem horizontal para o começo.
-        const rolagem = quadroNoAr ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;
-        quadroNoAr = true;
-        area.replaceChildren(cab, quadro(v, colunas));
-        const novo = area.querySelector('.kb-kanban');
-        if (novo) novo.scrollLeft = rolagem;
+        const scroll = boardInFlight ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;
+        boardInFlight = true;
+        area.replaceChildren(head, board(v, columns));
+        const fresh = area.querySelector('.kb-kanban');
+        if (fresh) fresh.scrollLeft = scroll;
       }
     } catch (e) {
-      if (e?.name === 'AbortError' || minha !== leitura) return;
-      const texto = e?.message ?? String(e);
-      if (quadroNoAr) {
+      if (e?.name === 'AbortError' || mine !== reading) return;
+      const text = e?.message ?? String(e);
+      if (boardInFlight) {
         // O quadro de antes fica; a faixa diz que esta leitura falhou.
         area.querySelector('.error-band')?.remove();
-        cab.after(errorBand({ title: 'O quadro não atualizou.', text: texto, action: { label: 'Tentar de novo', onClick: () => desenhar() } }));
+        head.after(errorBand({ title: 'O quadro não atualizou.', text, action: { label: 'Tentar de novo', onClick: () => draw() } }));
       } else {
-        area.replaceChildren(cab, error({ text: texto, retry: () => desenhar() }));
+        area.replaceChildren(head, error({ text, retry: () => draw() }));
       }
     } finally {
-      if (minha === leitura) atualizar.disabled = false;
+      if (mine === reading) refresh.disabled = false;
     }
   }
 
-  function quadro(v, colunas) {
-    return el('div', { class: 'kb-kanban', role: 'region', 'aria-label': v === 'agentes' ? 'Agentes por status' : 'Sessões por status', tabindex: '0' }, ...colunas.map((c) => coluna(v, c)));
+  function board(v, columns) {
+    return el('div', { class: 'kb-kanban', role: 'region', 'aria-label': v === 'agents' ? 'Agentes por status' : 'Sessões por status', tabindex: '0' }, ...columns.map((c) => column(v, c)));
   }
 
-  function coluna(v, c) {
-    const card = v === 'agentes' ? cardDeAgente : cardDeSessao;
-    const cor = corDaColuna(c.id);
-    const lista = el('div', { class: 'kb-cards' }, ...(c.itens ?? []).map(card));
-    const contador = el('span', { class: 'kb-n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
-    let pagina = c.pagina ?? 1;
+  function column(v, c) {
+    const card = v === 'agents' ? agentCard : sessionCard;
+    const color = columnColor(c.id);
+    const list = el('div', { class: 'kb-cards' }, ...(c.itens ?? []).map(card));
+    const counter = el('span', { class: 'kb-n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
+    let page = c.pagina ?? 1;
     // A ordem é pela última atividade: entre uma página e a próxima um card pode ter subido ou descido,
     // então o que já está na coluna não entra de novo.
-    const vistos = new Set((c.itens ?? []).map((i) => i.id));
-    let mostrados = vistos.size;
-    let temMais = Boolean(c.temMais);
-    const mais = el('button', { type: 'button', class: 'kb-more' });
+    const seen = new Set((c.itens ?? []).map((i) => i.id));
+    let shown = seen.size;
+    let hasMore = Boolean(c.temMais);
+    const more = el('button', { type: 'button', class: 'kb-more' });
 
-    function rotular(texto = null) {
-      const n = faltam({ total: Number(contador.textContent) }, mostrados);
-      mais.hidden = !temMais || n === 0;
-      mais.textContent = texto ?? `mostrar mais ${n}`;
+    function setLabel(text = null) {
+      const n = missing({ total: Number(counter.textContent) }, shown);
+      more.hidden = !hasMore || n === 0;
+      more.textContent = text ?? `mostrar mais ${n}`;
     }
 
-    mais.addEventListener('click', async () => {
-      const desta = leitura;
-      mais.disabled = true;
-      rotular('carregando…');
+    more.addEventListener('click', async () => {
+      const ofThis = reading;
+      more.disabled = true;
+      setLabel('carregando…');
       try {
-        const r = await ctx.read(rotaDoKanban(v, c.id, pagina + 1));
-        if (desta !== leitura) return; // o quadro foi relido nesse meio-tempo
+        const r = await ctx.read(kanbanRoute(v, c.id, page + 1));
+        if (ofThis !== reading) return; // o quadro foi relido nesse meio-tempo
         const col = r?.colunas?.find((x) => x.id === c.id);
         if (!col) throw new Error('a coluna não veio');
-        const novos = (col.itens ?? []).filter((i) => !vistos.has(i.id));
-        for (const i of novos) vistos.add(i.id);
-        lista.append(...novos.map(card));
-        mostrados += novos.length;
-        pagina = col.pagina ?? pagina + 1;
-        temMais = Boolean(col.temMais);
-        contador.textContent = String(col.total ?? contador.textContent);
-        rotular();
+        const newOnes = (col.itens ?? []).filter((i) => !seen.has(i.id));
+        for (const i of newOnes) seen.add(i.id);
+        list.append(...newOnes.map(card));
+        shown += newOnes.length;
+        page = col.pagina ?? page + 1;
+        hasMore = Boolean(col.temMais);
+        counter.textContent = String(col.total ?? counter.textContent);
+        setLabel();
       } catch (e) {
-        if (e?.name === 'AbortError' || desta !== leitura) return;
-        rotular('não carregou · tentar de novo');
+        if (e?.name === 'AbortError' || ofThis !== reading) return;
+        setLabel('não carregou · tentar de novo');
       } finally {
-        mais.disabled = false;
+        more.disabled = false;
       }
     });
-    rotular();
+    setLabel();
 
     return el(
       'section',
       { class: 'kb-col', 'aria-label': `${c.rotulo}: ${c.total}` },
-      el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${cor}` }), el('span', { class: `kb-c-${cor}`, title: c.rotulo }, c.rotulo), contador),
-      lista,
-      mais,
+      el('h2', { class: 'kb-head' }, el('span', { class: `kb-dot kb-d-${color}` }), el('span', { class: `kb-c-${color}`, title: c.rotulo }, c.rotulo), counter),
+      list,
+      more,
     );
   }
 
   // Ao vivo: junta as mudanças de sessão numa releitura só.
-  let espera = null;
-  ctx.onChange((mudancas) => {
-    if (!mexeNoQuadro(mudancas)) return;
-    clearTimeout(espera);
-    espera = setTimeout(() => desenhar(), 400);
+  let wait = null;
+  ctx.onChange((changes) => {
+    if (!touchesBoard(changes)) return;
+    clearTimeout(wait);
+    wait = setTimeout(() => draw(), 400);
   });
-  ctx.onRestart(() => desenhar());
+  ctx.onRestart(() => draw());
 
   // A limpeza vale mesmo se a pessoa sair antes da primeira leitura voltar.
   ctx.signal.addEventListener('abort', () => {
-    clearTimeout(espera);
-    folha.remove();
+    clearTimeout(wait);
+    sheet.remove();
   });
-  await desenhar();
+  await draw();
 }
 
 /** Põe `kanban.css` no <head>, uma vez só; devolve o <link> para a limpeza. */
-function ligarFolha() {
-  const ja = document.head.querySelector('link[data-screen="kanban"]');
-  if (ja) return ja;
+function attachSheet() {
+  const already = document.head.querySelector('link[data-screen="kanban"]');
+  if (already) return already;
   const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-screen': 'kanban' });
   document.head.append(link);
   return link;

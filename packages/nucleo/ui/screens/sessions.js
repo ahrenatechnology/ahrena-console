@@ -6,7 +6,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
-export const PILULAS = [
+export const PILLS = [
   ['todas', 'Todas'],
   ['ativas', 'Ativas'],
   ['esperando', 'Esperando'],
@@ -16,7 +16,7 @@ export const PILULAS = [
 ];
 
 // O rótulo da ordem diz também o sentido: o ⇅ ao lado inverte.
-const ORDENS = {
+const ORDERS = {
   atividade: { desc: 'Atividade: recente', asc: 'Atividade: antiga' },
   duracao: { desc: 'Duração: maior', asc: 'Duração: menor' },
   custo: { desc: 'Custo: maior', asc: 'Custo: menor' },
@@ -31,48 +31,48 @@ export const STATUS = {
 };
 
 // Os motivos da espera, como no wireframe: os dois primeiros travam a sessão (urgentes).
-export const MOTIVOS = {
+export const REASONS = {
   notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
   interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
   stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 
-const PADRAO = { status: 'todas', search: '', dir: '', order: 'atividade', direction: 'desc', page: 1 };
+const DEFAULTS = { status: 'todas', search: '', dir: '', order: 'atividade', direction: 'desc', page: 1 };
 
 /** The screen state from the query (`?status=esperando&page=2`); what is not valid falls back to the default. */
-export function estadoDaQuery(query) {
+export function stateFromQuery(query) {
   const p = new URLSearchParams(query);
-  const pagina = Number(p.get('page'));
+  const page = Number(p.get('page'));
   return {
-    status: PILULAS.some(([v]) => v === p.get('status')) ? p.get('status') : PADRAO.status,
+    status: PILLS.some(([v]) => v === p.get('status')) ? p.get('status') : DEFAULTS.status,
     search: (p.get('search') ?? '').slice(0, 200),
     dir: (p.get('dir') ?? '').startsWith('/') ? p.get('dir') : '',
-    order: p.get('order') in ORDENS ? p.get('order') : PADRAO.order,
+    order: p.get('order') in ORDERS ? p.get('order') : DEFAULTS.order,
     direction: p.get('direction') === 'asc' ? 'asc' : 'desc',
-    page: Number.isInteger(pagina) && pagina > 1 ? pagina : 1,
+    page: Number.isInteger(page) && page > 1 ? page : 1,
   };
 }
 
 /** A query do estado, só com o que difere do padrão (`''` quando é tudo padrão). */
-export function queryDoEstado(estado) {
+export function queryFromState(state) {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(estado)) if (v !== PADRAO[k] && v !== '') p.set(k, String(v));
+  for (const [k, v] of Object.entries(state)) if (v !== DEFAULTS[k] && v !== '') p.set(k, String(v));
   const q = p.toString();
   return q ? `?${q}` : '';
 }
 
 /** A rota da API para o estado: sempre com status, ordem, sentido e página. */
-export function rotaDaLista(estado) {
-  const p = new URLSearchParams({ status: estado.status, order: estado.order, direction: estado.direction, page: String(estado.page) });
-  if (estado.search.trim()) p.set('search', estado.search.trim());
-  if (estado.dir) p.set('dir', estado.dir);
+export function listRoute(state) {
+  const p = new URLSearchParams({ status: state.status, order: state.order, direction: state.direction, page: String(state.page) });
+  if (state.search.trim()) p.set('search', state.search.trim());
+  if (state.dir) p.set('dir', state.dir);
   return `/api/sessions?${p}`;
 }
 
 /** "agora", "há 2 min", "há 1 h", "há 3 d". */
-export function idade(iso, agora = Date.now()) {
-  const min = Math.floor((agora - Date.parse(iso)) / 60_000);
+export function age(iso, now = Date.now()) {
+  const min = Math.floor((now - Date.parse(iso)) / 60_000);
   if (!(min >= 1)) return 'agora';
   if (min < 60) return `há ${min} min`;
   if (min < 60 * 24) return `há ${Math.floor(min / 60)} h`;
@@ -80,7 +80,7 @@ export function idade(iso, agora = Date.now()) {
 }
 
 /** "< 1 min", "12 min", "3 h 10", "2 d 4 h". */
-export function duracao(ms) {
+export function duration(ms) {
   const min = Math.floor(ms / 60_000);
   if (min < 1) return '< 1 min';
   if (min < 60) return `${min} min`;
@@ -90,25 +90,25 @@ export function duracao(ms) {
 }
 
 /** "~US$ 1,84", ou "sem preço" quando o uso não tem preço. */
-export function custo(usd) {
+export function cost(usd) {
   if (usd === null || usd === undefined) return 'sem preço';
   return `~US$ ${usd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** "1–10 de 12"; "0 de 0" sem nada. */
-export function faixa({ total, pagina, porPagina }) {
+export function band({ total, pagina: page, porPagina: perPage }) {
   if (!total) return '0 de 0';
-  const de = (pagina - 1) * porPagina + 1;
-  return `${de}–${Math.min(total, pagina * porPagina)} de ${total}`;
+  const from = (page - 1) * perPage + 1;
+  return `${from}–${Math.min(total, page * perPage)} de ${total}`;
 }
 
 /** O id curto da linha: os 8 primeiros de um UUID; o id inteiro nos outros casos. */
-export function idCurto(id) {
+export function shortId(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) ? id.slice(0, 8) : id;
 }
 
 // As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
-export const COLUNAS = [
+export const COLUMNS = [
   ['c-session', 'Sessão'],
   ['c-status', 'Status'],
   ['c-activity', 'Última atividade'],
@@ -119,29 +119,29 @@ export const COLUNAS = [
   ['c-arrow', ''],
 ];
 
-const COR = /^#[0-9a-f]{3,8}$/i;
-const ultimoPedaco = (cwd) => cwd.replace(/\/+$/, '').split('/').pop() || cwd;
+const COLOR = /^#[0-9a-f]{3,8}$/i;
+const lastPart = (cwd) => cwd.replace(/\/+$/, '').split('/').pop() || cwd;
 
-function seletor(rotulo, opcoes, valor, aoMudar) {
-  const s = el('select', { class: 'field-sel', 'aria-label': rotulo });
-  for (const [v, texto] of opcoes) s.append(el('option', { value: v, selected: v === valor }, texto));
-  s.addEventListener('change', () => aoMudar(s.value));
+function selector(label, options, value, onChange) {
+  const s = el('select', { class: 'field-sel', 'aria-label': label });
+  for (const [v, text] of options) s.append(el('option', { value: v, selected: v === value }, text));
+  s.addEventListener('change', () => onChange(s.value));
   return el('label', { class: 'field' }, s, icon('open-list'));
 }
 
-function selo(status, motivo) {
-  const m = motivo ? MOTIVOS[motivo] : null;
+function badgeEl(status, reason) {
+  const m = reason ? REASONS[reason] : null;
   return [
     el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status] ?? status),
     m ? el('span', { class: m.urgente ? 'reason' : 'reason soft' }, icon(m.icone), m.rotulo) : null,
   ];
 }
 
-function conta(c) {
+function account(c) {
   if (!c) return null;
-  const ponto = el('i', { class: 'account-dot' });
-  if (COR.test(c.cor)) ponto.style.setProperty('--cor-da-conta', c.cor);
-  return el('span', { class: 'account' }, ponto, c.rotulo);
+  const dot = el('i', { class: 'account-dot' });
+  if (COLOR.test(c.cor)) dot.style.setProperty('--cor-da-conta', c.cor);
+  return el('span', { class: 'account' }, dot, c.rotulo);
 }
 
 export async function mount(area, ctx) {
@@ -150,144 +150,144 @@ export async function mount(area, ctx) {
     document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' }));
   }
 
-  let estado = estadoDaQuery(location.search);
-  let ultima = null;
-  let pedido = 0;
+  let state = stateFromQuery(location.search);
+  let last = null;
+  let request = 0;
 
-  const cab = header({
+  const head = header({
     icon: 'sessions',
     title: 'Sessões',
     sub: '…',
     actions: [el('button', { type: 'button', class: 'btn', onClick: () => read() }, icon('refresh'), 'Atualizar')],
   });
-  const sub = cab.querySelector('.sub');
+  const sub = head.querySelector('.sub');
 
   // ---------- filtros ----------
-  const busca = el('input', { type: 'search', placeholder: 'Buscar sessões…', 'aria-label': 'Buscar sessões', value: estado.search, maxlength: 200 });
-  let esperaDaBusca = null;
-  busca.addEventListener('input', () => {
-    clearTimeout(esperaDaBusca);
-    esperaDaBusca = setTimeout(() => mudar({ search: busca.value, page: 1 }), 250);
+  const search = el('input', { type: 'search', placeholder: 'Buscar sessões…', 'aria-label': 'Buscar sessões', value: state.search, maxlength: 200 });
+  let searchWait = null;
+  search.addEventListener('input', () => {
+    clearTimeout(searchWait);
+    searchWait = setTimeout(() => change({ search: search.value, page: 1 }), 250);
   });
-  const campoBusca = el('label', { class: 'field search' }, icon('search'), busca);
-  const lugarDoDir = el('span', { class: 'dir-slot' });
-  const lugarDaOrdem = el('span', { class: 'order-slot' });
-  const inverter = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => mudar({ direction: estado.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
-  const pilulas = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
-  for (const [v, rotulo] of PILULAS) pilulas.append(el('button', { type: 'button', 'data-status': v, onClick: () => mudar({ status: v, page: 1 }) }, rotulo));
-  const filtros = el('div', { class: 'card filters' }, campoBusca, lugarDoDir, lugarDaOrdem, inverter, pilulas);
+  const searchField = el('label', { class: 'field search' }, icon('search'), search);
+  const dirSlot = el('span', { class: 'dir-slot' });
+  const orderSlot = el('span', { class: 'order-slot' });
+  const invert = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => change({ direction: state.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
+  const pills = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
+  for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label));
+  const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, pills);
 
-  const corpo = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
-  area.replaceChildren(cab, filtros, corpo);
+  const body = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
+  area.replaceChildren(head, filters, body);
 
-  function desenharFiltros(diretorios) {
-    const dirs = estado.dir && !diretorios.includes(estado.dir) ? [...diretorios, estado.dir] : diretorios;
-    lugarDoDir.replaceChildren(seletor('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, ultimoPedaco(d)])], estado.dir, (dir) => mudar({ dir, page: 1 })));
-    lugarDaOrdem.replaceChildren(seletor('Ordenar por', Object.entries(ORDENS).map(([v, r]) => [v, r[estado.direction]]), estado.order, (ordem) => mudar({ order: ordem, page: 1 })));
-    for (const b of pilulas.children) b.setAttribute('aria-pressed', String(b.dataset.status === estado.status));
+  function drawFilters(directories) {
+    const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
+    dirSlot.replaceChildren(selector('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, lastPart(d)])], state.dir, (dir) => change({ dir, page: 1 })));
+    orderSlot.replaceChildren(selector('Ordenar por', Object.entries(ORDERS).map(([v, r]) => [v, r[state.direction]]), state.order, (order) => change({ order: order, page: 1 })));
+    for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.status === state.status));
   }
 
-  function mudar(parcial) {
-    estado = { ...estado, ...parcial };
-    history.replaceState(null, '', `${location.pathname}${queryDoEstado(estado)}`);
+  function change(partial) {
+    state = { ...state, ...partial };
+    history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     read();
   }
 
   // ---------- tabela ----------
-  function linha(s) {
-    const destino = `/ui/sessions/${encodeURIComponent(s.id)}`;
+  function row(s) {
+    const target = `/ui/sessions/${encodeURIComponent(s.id)}`;
     const tr = el(
       'tr',
       { class: 'session-row' },
-      el('td', { class: 'nm' }, el('a', { href: destino, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, idCurto(s.id)), conta(s.conta))),
-      el('td', { class: 'st' }, ...selo(s.status, s.motivo)),
-      el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, idade(s.ultimaAtividade)),
+      el('td', { class: 'nm' }, el('a', { href: target, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.conta))),
+      el('td', { class: 'st' }, ...badgeEl(s.status, s.motivo)),
+      el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, age(s.ultimaAtividade)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
-      el('td', { class: 'mono dur' }, s.rodando ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.rodando ? ' ' : null, el('span', {}, duracao(s.duracaoMs))),
+      el('td', { class: 'mono dur' }, s.rodando ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.rodando ? ' ' : null, el('span', {}, duration(s.duracaoMs))),
       el('td', { class: 'mono' }, String(s.agentes)),
-      el('td', { class: 'mono' }, custo(s.custoUsd)),
+      el('td', { class: 'mono' }, cost(s.custoUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       el('td', { class: 'c-muted arrow' }, icon('chevron-right')),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
-      ctx.navigate(destino);
+      ctx.navigate(target);
     });
     return tr;
   }
 
-  function tabela(lista) {
+  function table(list) {
     return el(
       'div',
       { class: 'card' },
-      el('table', { class: 'table' }, el('thead', {}, el('tr', {}, ...COLUNAS.map(([classe, c]) => el('th', { scope: 'col', class: classe }, c)))), el('tbody', {}, ...lista.itens.map(linha))),
+      el('table', { class: 'table' }, el('thead', {}, el('tr', {}, ...COLUMNS.map(([className, c]) => el('th', { scope: 'col', class: className }, c)))), el('tbody', {}, ...list.itens.map(row))),
     );
   }
 
-  function rodape(lista) {
+  function footer(list) {
     return el(
       'div',
       { class: 'sessions-footer' },
-      el('span', {}, faixa(lista)),
+      el('span', {}, band(list)),
       el(
         'span',
         { class: 'pages' },
-        el('button', { type: 'button', class: 'btn outline', disabled: lista.pagina <= 1, onClick: () => mudar({ page: lista.pagina - 1 }) }, 'Anterior'),
-        el('button', { type: 'button', class: 'btn outline', disabled: lista.pagina >= lista.paginas, onClick: () => mudar({ page: lista.pagina + 1 }) }, 'Próxima'),
+        el('button', { type: 'button', class: 'btn outline', disabled: list.pagina <= 1, onClick: () => change({ page: list.pagina - 1 }) }, 'Anterior'),
+        el('button', { type: 'button', class: 'btn outline', disabled: list.pagina >= list.paginas, onClick: () => change({ page: list.pagina + 1 }) }, 'Próxima'),
       ),
     );
   }
 
-  function desenhar(lista) {
-    sub.textContent = lista.registradas === 1 ? '1 sessão registrada' : `${lista.registradas} sessões registradas`;
+  function draw(list) {
+    sub.textContent = list.registradas === 1 ? '1 sessão registrada' : `${list.registradas} sessões registradas`;
     // A página pedida pode ter sumido (a lista encolheu): fica a que o núcleo devolveu.
-    if (lista.pagina !== estado.page) {
-      estado = { ...estado, page: lista.pagina };
-      history.replaceState(null, '', `${location.pathname}${queryDoEstado(estado)}`);
+    if (list.pagina !== state.page) {
+      state = { ...state, page: list.pagina };
+      history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
-    desenharFiltros(lista.diretorios);
-    if (lista.itens.length) return corpo.replaceChildren(tabela(lista), rodape(lista));
-    const filtrando = estado.status !== 'todas' || estado.search.trim() || estado.dir;
-    corpo.replaceChildren(
-      filtrando
-        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((busca.value = ''), mudar({ status: 'todas', search: '', dir: '', page: 1 })) } })
+    drawFilters(list.diretorios);
+    if (list.itens.length) return body.replaceChildren(table(list), footer(list));
+    const filtering = state.status !== 'todas' || state.search.trim() || state.dir;
+    body.replaceChildren(
+      filtering
+        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'todas', search: '', dir: '', page: 1 })) } })
         : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
     );
   }
 
   async function read() {
-    const meu = ++pedido;
+    const mine = ++request;
     try {
-      const lista = await ctx.read(rotaDaLista(estado));
-      if (meu !== pedido) return;
-      ultima = lista;
-      desenhar(lista);
+      const list = await ctx.read(listRoute(state));
+      if (mine !== request) return;
+      last = list;
+      draw(list);
     } catch (e) {
-      if (e?.name === 'AbortError' || meu !== pedido) return;
+      if (e?.name === 'AbortError' || mine !== request) return;
       // Com uma lista na tela, ela fica e a faixa avisa; sem lista, o erro ocupa o lugar.
-      if (ultima) {
-        corpo.querySelector('.error-band')?.remove();
-        corpo.prepend(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => read() } }));
-      } else corpo.replaceChildren(error({ text: e.message, retry: () => read() }));
+      if (last) {
+        body.querySelector('.error-band')?.remove();
+        body.prepend(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => read() } }));
+      } else body.replaceChildren(error({ text: e.message, retry: () => read() }));
     }
   }
 
   // Ao vivo: qualquer mudança de sessão relê a página atual, no máximo uma vez por segundo.
-  let esperaAoVivo = null;
+  let liveWait = null;
   ctx.onChange(() => {
-    if (esperaAoVivo) return;
-    esperaAoVivo = setTimeout(() => {
-      esperaAoVivo = null;
+    if (liveWait) return;
+    liveWait = setTimeout(() => {
+      liveWait = null;
       read();
     }, 1000);
   });
   ctx.onRestart(() => read());
 
-  desenharFiltros([]);
+  drawFilters([]);
   await read();
   return () => {
-    clearTimeout(esperaDaBusca);
-    clearTimeout(esperaAoVivo);
+    clearTimeout(searchWait);
+    clearTimeout(liveWait);
   };
 }

@@ -95,7 +95,7 @@ Object.assign(globalThis, {
 const tela = await import('../../ui/screens/wall.js');
 // @ts-expect-error: idem
 const { findScreen } = await import('../../ui/screens.js');
-const { custo, esforco, mount, nomeDoModelo, oQueOCardMostra } = tela;
+const { cost, effort, mount, modelName, cardContent } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
 const ate = async (cond: () => boolean, ms = 3000) => {
@@ -167,30 +167,30 @@ async function montarTela(read: (rota: string) => Promise<unknown>) {
 
 describe('Mural: formatação', () => {
   test('custo em pt-BR, sempre com "~" e sem "US$", como no wireframe; sem preço é traço', () => {
-    assert.equal(custo(1.84), '~1,84');
-    assert.equal(custo(0), '~0,00');
-    assert.equal(custo(1234.5), '~1.234,50');
-    assert.equal(custo(null), '—');
+    assert.equal(cost(1.84), '~1,84');
+    assert.equal(cost(0), '~0,00');
+    assert.equal(cost(1234.5), '~1.234,50');
+    assert.equal(cost(null), '—');
   });
   test('modelo pela primeira palavra; esforço em português; sem valor é traço', () => {
-    assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus');
-    assert.equal(nomeDoModelo('claude-haiku-4-5-20251001'), 'Haiku');
-    assert.equal(nomeDoModelo('Sonnet 5.5'), 'Sonnet');
-    assert.equal(nomeDoModelo(null), '—');
-    assert.equal(nomeDoModelo(' opus'), 'Opus');
-    assert.equal(nomeDoModelo('claude-3-5-sonnet-20241022'), 'Sonnet');
-    assert.equal(nomeDoModelo('   '), '—');
-    assert.deepEqual(['low', 'medium', 'high', 'outro', null].map(esforco), ['baixo', 'médio', 'alto', 'outro', '—']);
+    assert.equal(modelName('claude-opus-5-5'), 'Opus');
+    assert.equal(modelName('claude-haiku-4-5-20251001'), 'Haiku');
+    assert.equal(modelName('Sonnet 5.5'), 'Sonnet');
+    assert.equal(modelName(null), '—');
+    assert.equal(modelName(' opus'), 'Opus');
+    assert.equal(modelName('claude-3-5-sonnet-20241022'), 'Sonnet');
+    assert.equal(modelName('   '), '—');
+    assert.deepEqual(['low', 'medium', 'high', 'outro', null].map(effort), ['baixo', 'médio', 'alto', 'outro', '—']);
   });
   test('plano nulo é "Plano 0/0"; contexto nulo é "contexto —"; contexto alto a partir de 80%', () => {
-    const [, espera1, espera2, erro1] = MURAL.cards.map(oQueOCardMostra) as any[];
+    const [, espera1, espera2, erro1] = MURAL.cards.map(cardContent) as any[];
     assert.equal(espera1.plano.rotulo, 'Plano 0/0');
     assert.equal(espera1.grade[1][1], '—');
     assert.equal(espera2.contexto.rotulo, 'contexto —');
     assert.equal(espera2.contexto.alto, false);
     assert.equal(erro1.contexto.rotulo, 'contexto 84%');
     assert.equal(erro1.contexto.alto, true);
-    assert.equal(oQueOCardMostra(MURAL.cards[0]).contexto.alto, false);
+    assert.equal(cardContent(MURAL.cards[0]).contexto.alto, false);
   });
 });
 
@@ -205,7 +205,7 @@ describe('Mural: a tela montada', () => {
       const filtros = area.todos((e) => e.getAttribute('data-filter') !== null);
       assert.deepEqual(filtros.map((f) => f.textContent), ['Todas', 'Esperando', 'Ativas']);
       assert.equal(filtros[0]!.getAttribute('aria-pressed'), 'true');
-      assert.ok(area.todos((e) => e.getAttribute('data-action') === 'atualizar').length === 1, 'o Atualizar do wireframe');
+      assert.ok(area.todos((e) => e.getAttribute('data-action') === 'refresh').length === 1, 'o Atualizar do wireframe');
 
       const cards = comClasse(area, 'wall-card');
       assert.equal(cards.length, 5);
@@ -298,7 +298,7 @@ describe('Mural: a tela montada', () => {
       assert.deepEqual(rotas, ['/api/wall'], 'só a primeira leitura');
 
       dados = soAtivas;
-      area.todos((e) => e.getAttribute('data-action') === 'atualizar')[0]!.click();
+      area.todos((e) => e.getAttribute('data-action') === 'refresh')[0]!.click();
       await ate(() => rotas.length === 2 && comClasse(area, 'wall-card').length === 1);
       botao('esperando').click();
       assert.equal(comClasse(area, 'wall-card').length, 0);
@@ -341,7 +341,7 @@ describe('Mural: a tela montada', () => {
       assert.equal(rotas.length, 2);
 
       falhar = true;
-      area.todos((e) => e.getAttribute('data-action') === 'atualizar')[0]!.click();
+      area.todos((e) => e.getAttribute('data-action') === 'refresh')[0]!.click();
       await ate(() => comClasse(area, 'error-band').length === 1);
       assert.match(comClasse(area, 'error-band')[0]!.textContent, /O mural não atualizou/);
       assert.equal(comClasse(area, 'wall-card').length, 5, 'os cards de antes continuam');
@@ -394,7 +394,7 @@ describe('Mural: ao vivo com atividade contínua', () => {
       await ate(() => comClasse(area, 'wall-card').length === 5);
       const antes = comClasse(area, 'wall-card').find((c) => c.getAttribute('data-session') === 'espera-2')!;
       antes.focus();
-      area.todos((e) => e.getAttribute('data-action') === 'atualizar')[0]!.click();
+      area.todos((e) => e.getAttribute('data-action') === 'refresh')[0]!.click();
       await ate(() => rotas.length === 2 && comClasse(area, 'wall-card')[0] !== undefined && !comClasse(area, 'wall-card').includes(antes));
       const doc = (globalThis as unknown as { document: { activeElement: Elemento } }).document;
       assert.notEqual(doc.activeElement, antes);
@@ -425,7 +425,7 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
 
 test('a rota da tela é a do núcleo', async () => {
   const { WALL_ROUTE } = await import('../../src/api/index.ts');
-  assert.equal(tela.ROTA_DO_MURAL, WALL_ROUTE);
+  assert.equal(tela.WALL_ROUTE, WALL_ROUTE);
 });
 
 // O CSS de cada tela fica carregado quando se troca de tela: classe com o mesmo nome em duas telas

@@ -12,73 +12,73 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
-export const ROTA_DA_VISAO = '/api/analytics';
-export const ROTA_DO_CUSTO = '/api/analytics/cost';
-export const PERIODOS = [7, 30, 90];
-const ESTILO = '/ui/analytics.css';
-const RELER_MS = 4000;
+export const OVERVIEW_ROUTE = '/api/analytics';
+export const COST_ROUTE = '/api/analytics/cost';
+export const PERIODS = [7, 30, 90];
+const STYLE = '/ui/analytics.css';
+const REREAD_MS = 4000;
 
-const SUB_VISAO = 'Uso, custo e produtividade das sessões';
-const SUB_CUSTO = 'Custo estimado pelo transcript, com o preço de cada modelo';
+const OVERVIEW_SUB = 'Uso, custo e produtividade das sessões';
+const COST_SUB = 'Custo estimado pelo transcript, com o preço de cada modelo';
 
 // ---------- Formatação (pt-BR) ----------
 
-const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-const umaCasa = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
-const duasCasas = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const oneDigit = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+const twoDigits = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 /** 412, 1.086, 48,1 mil, 2,1 mi, 1,9 B. */
-export function quantidade(n) {
+export function quantity(n) {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—';
   const a = Math.abs(n);
-  if (a < 10_000) return inteiro.format(n);
-  if (a < 1e6) return `${umaCasa.format(n / 1e3)} mil`;
-  if (a < 1e9) return `${umaCasa.format(n / 1e6)} mi`;
-  return `${umaCasa.format(n / 1e9)} B`;
+  if (a < 10_000) return integer.format(n);
+  if (a < 1e6) return `${oneDigit.format(n / 1e3)} mil`;
+  if (a < 1e9) return `${oneDigit.format(n / 1e6)} mi`;
+  return `${oneDigit.format(n / 1e9)} B`;
 }
 
 /** Custo estimado: "~US$ 12,40"; `curto` arredonda de 100 para cima ("~US$ 341"); `null` é "sem preço". */
-export function usd(v, { curto = false } = {}) {
+export function usd(v, { curto: short = false } = {}) {
   if (v === null || v === undefined || !Number.isFinite(v)) return 'sem preço';
-  if (curto && Math.abs(v) >= 100) return `~US$ ${inteiro.format(v)}`;
-  return `~US$ ${duasCasas.format(v)}`;
+  if (short && Math.abs(v) >= 100) return `~US$ ${integer.format(v)}`;
+  return `~US$ ${twoDigits.format(v)}`;
 }
 
 /** "71%"; sem dado, traço. */
-export function porcento(p) {
+export function percent(p) {
   if (p === null || p === undefined || !Number.isFinite(p)) return '—';
-  return p > 0 && p < 1 ? '<1%' : `${inteiro.format(p)}%`;
+  return p > 0 && p < 1 ? '<1%' : `${integer.format(p)}%`;
 }
 
 /** "2026-10-13" vira "13 out". */
-export function dataCurta(dia) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia ?? '');
-  return m ? `${Number(m[3])} ${MESES[Number(m[2]) - 1]}` : String(dia ?? '');
+export function shortDate(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day ?? '');
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}` : String(day ?? '');
 }
 
 /** Tokens em milhões, como no C12: 1180, 4,2, 0,3. */
-export function milhoes(tokens) {
+export function millions(tokens) {
   const m = tokens / 1e6;
-  return m >= 10 ? inteiro.format(m) : umaCasa.format(m);
+  return m >= 10 ? integer.format(m) : oneDigit.format(m);
 }
 
-const FAMILIAS = ['opus', 'sonnet', 'haiku', 'fable'];
-const nomeDaFamilia = (f) => f[0].toUpperCase() + f.slice(1);
+const FAMILIES = ['opus', 'sonnet', 'haiku', 'fable'];
+const familyName = (f) => f[0].toUpperCase() + f.slice(1);
 
 /** O nome amigável do modelo: claude-opus-5-5 vira "Opus 5.5". Se não reconhecer, o id como veio. */
-export function nomeDoModelo(id) {
+export function modelName(id) {
   if (id === null || id === undefined) return null;
-  const limpo = String(id).replace(/\[1m\]$/, '');
-  let m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(limpo);
-  if (m && FAMILIAS.includes(m[1])) return `${nomeDaFamilia(m[1])} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
-  m = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?$/.exec(limpo);
-  if (m && FAMILIAS.includes(m[3])) return `${nomeDaFamilia(m[3])} ${m[1]}${m[2] ? `.${m[2]}` : ''}`;
+  const clean = String(id).replace(/\[1m\]$/, '');
+  let m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(clean);
+  if (m && FAMILIES.includes(m[1])) return `${familyName(m[1])} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
+  m = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?$/.exec(clean);
+  if (m && FAMILIES.includes(m[3])) return `${familyName(m[3])} ${m[1]}${m[2] ? `.${m[2]}` : ''}`;
   return String(id);
 }
 
 /** A cor de um modelo segue a família, não a posição: a mesma nas duas abas. */
-export function classeDoModelo(id) {
+export function modelClass(id) {
   const s = String(id ?? '');
   if (/opus/.test(s)) return 'an-m0';
   if (/sonnet/.test(s)) return 'an-m1';
@@ -86,145 +86,145 @@ export function classeDoModelo(id) {
   return 'an-m3';
 }
 
-const plural = (n, um, varios) => `${inteiro.format(n)} ${n === 1 ? um : varios}`;
+const plural = (n, one, many) => `${integer.format(n)} ${n === 1 ? one : many}`;
 
 // ---------- Cor da conta ----------
 
 // A cor da conta chega como valor; aqui ela só vira classe quando é uma das cores da marca que o
 // núcleo dá às contas (perfis/cores.ts). Uma cor própria fora da paleta fica só com o rótulo.
-const CORES_DAS_CONTAS = { 'an-account-pink': '--rose-500', 'an-account-green': '--green-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
+const ACCOUNT_COLORS = { 'an-account-pink': '--rose-500', 'an-account-green': '--green-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
 
-export function classeDaConta(cor) {
-  if (typeof cor !== 'string' || typeof getComputedStyle !== 'function') return null;
-  let estilo;
+export function accountClass(color) {
+  if (typeof color !== 'string' || typeof getComputedStyle !== 'function') return null;
+  let computed;
   try {
-    estilo = getComputedStyle(document.documentElement);
+    computed = getComputedStyle(document.documentElement);
   } catch {
     return null;
   }
-  const alvo = cor.trim().toLowerCase();
-  for (const [classe, variavel] of Object.entries(CORES_DAS_CONTAS)) if (estilo.getPropertyValue(variavel).trim().toLowerCase() === alvo) return classe;
+  const target = color.trim().toLowerCase();
+  for (const [className, variable] of Object.entries(ACCOUNT_COLORS)) if (computed.getPropertyValue(variable).trim().toLowerCase() === target) return className;
   return null;
 }
 
-function divisaoPorConta(linhas) {
+function splitByAccount(rows) {
   return el(
     'ul',
     { class: 'an-accounts', 'aria-label': 'Divisão por conta' },
-    ...linhas.map((l) => {
-      const classe = classeDaConta(l.cor);
+    ...rows.map((l) => {
+      const className = accountClass(l.cor);
       // Com preço só para parte dos modelos, o valor é parcial: a dica diz quais ficaram de fora.
-      const parcial = l.usd !== null && l.usd !== undefined && (l.semPreco ?? []).length > 0;
+      const partial = l.usd !== null && l.usd !== undefined && (l.semPreco ?? []).length > 0;
       return el(
         'li',
-        { 'data-account': l.conta ?? 'sem-conta', title: parcial ? `Parcial: sem preço para ${l.semPreco.map(nomeDoModelo).join(', ')}` : null },
-        el('span', { class: classe ? `an-dot ${classe}` : 'an-dot', 'aria-hidden': 'true' }),
+        { 'data-account': l.conta ?? 'no-account', title: partial ? `Parcial: sem preço para ${l.semPreco.map(modelName).join(', ')}` : null },
+        el('span', { class: className ? `an-dot ${className}` : 'an-dot', 'aria-hidden': 'true' }),
         el('span', { class: 'an-trunc' }, l.rotulo),
-        el('b', {}, usd(l.usd), parcial ? el('span', { class: 'an-partial' }, ' · parcial') : null),
+        el('b', {}, usd(l.usd), partial ? el('span', { class: 'an-partial' }, ' · parcial') : null),
       );
     }),
   );
 }
 
 /** As linhas da divisão por conta do C12, ou `null` com uma conta só. */
-export function contasDaVisao(dados) {
-  const contas = dados?.contas ?? [];
-  const por = dados?.numeros?.custo?.porConta ?? [];
-  if (contas.length < 2 || por.length < 2) return null;
-  return por.map((p) => {
-    const c = contas.find((x) => x.id === p.conta);
+export function overviewAccounts(data) {
+  const accounts = data?.contas ?? [];
+  const by = data?.numeros?.custo?.porConta ?? [];
+  if (accounts.length < 2 || by.length < 2) return null;
+  return by.map((p) => {
+    const c = accounts.find((x) => x.id === p.conta);
     return { conta: p.conta, rotulo: c?.rotulo ?? 'Sem conta', cor: c?.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] };
   });
 }
 
 /** As linhas da divisão por conta do C13 (do período, ou de hoje com `por`), ou `null` com uma conta só. */
-export function contasDoCusto(dados, por = dados?.porConta ?? []) {
-  if ((dados?.contas ?? []).length < 2 || (por ?? []).length < 2) return null;
-  return por.map((p) => ({ conta: p.conta, rotulo: p.rotulo ?? 'Sem conta', cor: p.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] }));
+export function costAccounts(data, by = data?.porConta ?? []) {
+  if ((data?.contas ?? []).length < 2 || (by ?? []).length < 2) return null;
+  return by.map((p) => ({ conta: p.conta, rotulo: p.rotulo ?? 'Sem conta', cor: p.cor ?? null, usd: p.usd, semPreco: p.semPreco ?? [] }));
 }
 
 // ---------- SVG ----------
 
 const NS = 'http://www.w3.org/2000/svg';
 
-function svg(tag, atributos = {}, ...filhos) {
-  const no = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(atributos)) if (v !== null && v !== undefined && v !== false) no.setAttribute(k, String(v));
-  for (const f of filhos.flat()) {
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attributes)) if (v !== null && v !== undefined && v !== false) node.setAttribute(k, String(v));
+  for (const f of children.flat()) {
     if (f === null || f === undefined || f === false) continue;
-    no.append(f instanceof Node ? f : document.createTextNode(String(f)));
+    node.append(f instanceof Node ? f : document.createTextNode(String(f)));
   }
-  return no;
+  return node;
 }
-const dica = (texto) => svg('title', {}, texto);
+const tip = (text) => svg('title', {}, text);
 const r1 = (n) => Math.round(n * 10) / 10;
 
 /** Uma barra horizontal: o trilho (CSS) e a parte cheia, um SVG com a largura em % por atributo
  *  (sem estilo inline) e as pontas redondas em px. */
-function barra(pct, classe = 'an-m0', texto = null) {
+function bar(pct, className = 'an-m0', text = null) {
   const p = Math.max(0, Math.min(100, pct || 0));
   return el(
     'div',
     { class: 'an-bar' },
-    p > 0 ? svg('svg', { width: `${r1(Math.max(p, 1.5))}%`, height: 6, 'aria-hidden': 'true' }, svg('rect', { class: `an-fill ${classe}`, width: '100%', height: '100%', rx: 3 }, texto ? dica(texto) : null)) : null,
+    p > 0 ? svg('svg', { width: `${r1(Math.max(p, 1.5))}%`, height: 6, 'aria-hidden': 'true' }, svg('rect', { class: `an-fill ${className}`, width: '100%', height: '100%', rx: 3 }, text ? tip(text) : null)) : null,
   );
 }
 
 /** Heatmap de atividade: uma célula por dia, colunas por semana, linhas de seg a dom. */
-export function heatmap(dias) {
-  const PASSO = 13;
-  const CEL = 10;
-  const ESQ = 30;
-  const TOPO = 14;
-  const dow = (dia) => (new Date(`${dia}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const desloc = dias.length ? dow(dias[0].dia) : 0;
-  const colunas = Math.max(1, Math.ceil((dias.length + desloc) / 7));
-  const max = Math.max(0, ...dias.map((d) => d.eventos ?? 0));
-  const nivel = (v) => (v > 0 && max > 0 ? Math.min(4, Math.max(1, Math.ceil((v / max) * 4))) : 0);
-  const filhos = [];
-  let ultimaColunaComMes = -10;
-  dias.forEach((d, i) => {
-    const p = i + desloc;
+export function heatmap(days) {
+  const STEP = 13;
+  const CELL = 10;
+  const LEFT = 30;
+  const TOP = 14;
+  const dow = (day) => (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const shift = days.length ? dow(days[0].dia) : 0;
+  const columns = Math.max(1, Math.ceil((days.length + shift) / 7));
+  const max = Math.max(0, ...days.map((d) => d.eventos ?? 0));
+  const level = (v) => (v > 0 && max > 0 ? Math.min(4, Math.max(1, Math.ceil((v / max) * 4))) : 0);
+  const children = [];
+  let lastColumnWithMonth = -10;
+  days.forEach((d, i) => {
+    const p = i + shift;
     const col = Math.floor(p / 7);
-    if (d.dia.slice(8) === '01' && col - ultimaColunaComMes >= 3) {
-      filhos.push(svg('text', { x: ESQ + col * PASSO, y: 9 }, MESES[Number(d.dia.slice(5, 7)) - 1]));
-      ultimaColunaComMes = col;
+    if (d.dia.slice(8) === '01' && col - lastColumnWithMonth >= 3) {
+      children.push(svg('text', { x: LEFT + col * STEP, y: 9 }, MONTHS[Number(d.dia.slice(5, 7)) - 1]));
+      lastColumnWithMonth = col;
     }
   });
-  ['seg', 'qua', 'sex'].forEach((n, i) => filhos.push(svg('text', { x: 0, y: TOPO + i * 2 * PASSO + 8 }, n)));
-  dias.forEach((d, i) => {
-    const p = i + desloc;
-    filhos.push(
-      svg('rect', { class: `an-cell an-n${nivel(d.eventos)}`, x: ESQ + Math.floor(p / 7) * PASSO, y: TOPO + (p % 7) * PASSO, width: CEL, height: CEL, rx: 2 }, dica(`${dataCurta(d.dia)}: ${plural(d.eventos ?? 0, 'evento', 'eventos')}`)),
+  ['seg', 'qua', 'sex'].forEach((n, i) => children.push(svg('text', { x: 0, y: TOP + i * 2 * STEP + 8 }, n)));
+  days.forEach((d, i) => {
+    const p = i + shift;
+    children.push(
+      svg('rect', { class: `an-cell an-n${level(d.eventos)}`, x: LEFT + Math.floor(p / 7) * STEP, y: TOP + (p % 7) * STEP, width: CELL, height: CELL, rx: 2 }, tip(`${shortDate(d.dia)}: ${plural(d.eventos ?? 0, 'evento', 'eventos')}`)),
     );
   });
   return [
-    svg('svg', { class: 'an-chart', viewBox: `0 0 ${ESQ + colunas * PASSO} ${TOPO + 7 * PASSO}`, role: 'img', 'aria-label': `Eventos por dia nas últimas ${Math.round(dias.length / 7)} semanas` }, filhos),
+    svg('svg', { class: 'an-chart', viewBox: `0 0 ${LEFT + columns * STEP} ${TOP + 7 * STEP}`, role: 'img', 'aria-label': `Eventos por dia nas últimas ${Math.round(days.length / 7)} semanas` }, children),
     el('div', { class: 'an-leg' }, el('span', {}, 'menos'), ...[0, 1, 2, 3, 4].map((n) => el('span', { class: `an-sample an-n${n}`, 'aria-hidden': 'true' })), el('span', {}, 'mais')),
   ];
 }
 
 /** Colunas dos últimos 30 dias, sessões por dia; o dia de hoje em destaque. A altura vem do CSS
  *  (o SVG estica sem manter a proporção), por isso as datas das pontas ficam fora dele, em HTML. */
-export function barras30(dias) {
+export function bars30(days) {
   const W = 300;
   const H = 100;
-  const passo = W / Math.max(1, dias.length);
-  const largura = r1(passo * 0.7);
-  const max = Math.max(1, ...dias.map((d) => d.sessoes ?? 0));
-  const filhos = dias.map((d, i) => {
+  const step = W / Math.max(1, days.length);
+  const width = r1(step * 0.7);
+  const max = Math.max(1, ...days.map((d) => d.sessoes ?? 0));
+  const children = days.map((d, i) => {
     const h = r1(((d.sessoes ?? 0) / max) * (H - 4));
-    return svg('rect', { class: `an-col${i === dias.length - 1 ? ' an-current' : ''}`, x: r1(i * passo), y: r1(H - h), width: largura, height: h }, dica(`${dataCurta(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
+    return svg('rect', { class: `an-col${i === days.length - 1 ? ' an-current' : ''}`, x: r1(i * step), y: r1(H - h), width: width, height: h }, tip(`${shortDate(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
   });
-  filhos.push(svg('line', { class: 'an-axis', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
+  children.push(svg('line', { class: 'an-axis', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
   return [
-    svg('svg', { class: 'an-chart an-columns', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Sessões por dia nos últimos 30 dias' }, filhos),
-    dias.length ? el('div', { class: 'an-leg an-tips an-dates' }, el('span', {}, dataCurta(dias[0].dia)), el('span', {}, dataCurta(dias.at(-1).dia))) : null,
+    svg('svg', { class: 'an-chart an-columns', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Sessões por dia nos últimos 30 dias' }, children),
+    days.length ? el('div', { class: 'an-leg an-tips an-dates' }, el('span', {}, shortDate(days[0].dia)), el('span', {}, shortDate(days.at(-1).dia))) : null,
   ];
 }
 
 /** O topo "redondo" do eixo: 20 para um pico de 18,40. */
-export function topoDoEixo(v) {
+export function axisTop(v) {
   if (!(v > 0)) return 1;
   const e = 10 ** Math.floor(Math.log10(v));
   for (const m of [1, 2, 2.5, 4, 5, 10]) if (m * e >= v) return m * e;
@@ -232,183 +232,183 @@ export function topoDoEixo(v) {
 }
 
 /** Custo por dia: linha com área, eixo em US$; um dia sem preço interrompe a linha. */
-export function linhaDoCusto(porDia) {
+export function costRow(byDay) {
   const W = 600;
   const H = 170;
   const P = 30;
-  const n = porDia.length;
-  const max = topoDoEixo(Math.max(0, ...porDia.map((d) => d.usd ?? 0)));
+  const n = byDay.length;
+  const max = axisTop(Math.max(0, ...byDay.map((d) => d.usd ?? 0)));
   const x = (i) => r1(n > 1 ? P + (i * (W - P - 10)) / (n - 1) : (P + W - 10) / 2);
   const y = (v) => r1(H - 20 - (v / max) * (H - 36));
-  const filhos = [];
+  const children = [];
   for (let t = 0; t <= 4; t++) {
     const v = (max / 4) * t;
-    filhos.push(svg('line', { class: 'an-grid', x1: P, x2: W - 10, y1: y(v), y2: y(v) }), svg('text', { x: P - 6, y: y(v) + 3, 'text-anchor': 'end' }, umaCasa.format(v)));
+    children.push(svg('line', { class: 'an-grid', x1: P, x2: W - 10, y1: y(v), y2: y(v) }), svg('text', { x: P - 6, y: y(v) + 3, 'text-anchor': 'end' }, oneDigit.format(v)));
   }
   // Trechos contínuos com preço.
-  let trecho = [];
-  const trechos = [];
-  porDia.forEach((d, i) => {
+  let segment = [];
+  const segments = [];
+  byDay.forEach((d, i) => {
     if (d.usd === null || d.usd === undefined) {
-      if (trecho.length) trechos.push(trecho);
-      trecho = [];
-    } else trecho.push([x(i), y(d.usd)]);
+      if (segment.length) segments.push(segment);
+      segment = [];
+    } else segment.push([x(i), y(d.usd)]);
   });
-  if (trecho.length) trechos.push(trecho);
-  for (const t of trechos) {
+  if (segment.length) segments.push(segment);
+  for (const t of segments) {
     const pts = t.map(([a, b]) => `${a},${b}`).join(' ');
-    filhos.push(svg('polygon', { class: 'an-area', points: `${t[0][0]},${y(0)} ${pts} ${t.at(-1)[0]},${y(0)}` }), svg('polyline', { class: 'an-row', points: pts }));
+    children.push(svg('polygon', { class: 'an-area', points: `${t[0][0]},${y(0)} ${pts} ${t.at(-1)[0]},${y(0)}` }), svg('polyline', { class: 'an-row', points: pts }));
   }
-  const fim = trechos.at(-1)?.at(-1);
-  if (fim) filhos.push(svg('circle', { class: 'an-tip', cx: fim[0], cy: fim[1], r: 4 }));
+  const end = segments.at(-1)?.at(-1);
+  if (end) children.push(svg('circle', { class: 'an-tip', cx: end[0], cy: end[1], r: 4 }));
   // Alvos de passar o mouse, um por dia, maiores que a linha.
-  const meio = n > 1 ? (W - P - 10) / (n - 1) / 2 : 10;
-  porDia.forEach((d, i) => filhos.push(svg('rect', { class: 'an-target', x: r1(x(i) - meio), y: 8, width: r1(meio * 2), height: H - 28 }, dica(`${dataCurta(d.dia)}: ${usd(d.usd)}`))));
-  if (n) filhos.push(svg('text', { x: P, y: H - 4 }, dataCurta(porDia[0].dia)), svg('text', { x: W - 10, y: H - 4, 'text-anchor': 'end' }, dataCurta(porDia.at(-1).dia)));
-  return svg('svg', { class: 'an-chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Custo estimado por dia, em dólares' }, filhos);
+  const middle = n > 1 ? (W - P - 10) / (n - 1) / 2 : 10;
+  byDay.forEach((d, i) => children.push(svg('rect', { class: 'an-target', x: r1(x(i) - middle), y: 8, width: r1(middle * 2), height: H - 28 }, tip(`${shortDate(d.dia)}: ${usd(d.usd)}`))));
+  if (n) children.push(svg('text', { x: P, y: H - 4 }, shortDate(byDay[0].dia)), svg('text', { x: W - 10, y: H - 4, 'text-anchor': 'end' }, shortDate(byDay.at(-1).dia)));
+  return svg('svg', { class: 'an-chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Custo estimado por dia, em dólares' }, children);
 }
 
 /** As fatias da rosca: até quatro modelos com preço; o resto vira "Outros". */
-export function fatiasPorModelo(porModelo) {
-  const com = porModelo.filter((m) => m.usd !== null && m.usd !== undefined);
-  const sem = porModelo.filter((m) => m.usd === null || m.usd === undefined);
-  const fatias = com.slice(0, com.length > 4 ? 3 : 4).map((m) => ({ nome: nomeDoModelo(m.modelo), classe: classeDoModelo(m.modelo), usd: m.usd, pct: m.pct }));
-  if (com.length > 4) {
-    const resto = com.slice(3);
-    fatias.push({ nome: `Outros (${resto.length})`, classe: 'an-others', usd: resto.reduce((s, m) => s + m.usd, 0), pct: resto.reduce((s, m) => s + (m.pct ?? 0), 0) });
+export function slicesByModel(byModel) {
+  const withValue = byModel.filter((m) => m.usd !== null && m.usd !== undefined);
+  const without = byModel.filter((m) => m.usd === null || m.usd === undefined);
+  const slices = withValue.slice(0, withValue.length > 4 ? 3 : 4).map((m) => ({ nome: modelName(m.modelo), classe: modelClass(m.modelo), usd: m.usd, pct: m.pct }));
+  if (withValue.length > 4) {
+    const rest = withValue.slice(3);
+    slices.push({ nome: `Outros (${rest.length})`, classe: 'an-others', usd: rest.reduce((s, m) => s + m.usd, 0), pct: rest.reduce((s, m) => s + (m.pct ?? 0), 0) });
   }
-  return [...fatias, ...sem.map((m) => ({ nome: nomeDoModelo(m.modelo), classe: null, usd: null, pct: null }))];
+  return [...slices, ...without.map((m) => ({ nome: modelName(m.modelo), classe: null, usd: null, pct: null }))];
 }
 
-function rosca(porModelo, total, dias) {
+function donut(byModel, total, days) {
   const R = 52;
   const C = 2 * Math.PI * R;
-  const fatias = fatiasPorModelo(porModelo);
+  const slices = slicesByModel(byModel);
   let a = 0;
-  const arcos = fatias
+  const arcs = slices
     .filter((f) => f.pct > 0)
     .map((f) => {
-      const comprimento = (C * f.pct) / 100;
-      const arco = svg('circle', { class: `an-slice ${f.classe}`, cx: 70, cy: 70, r: R, 'stroke-dasharray': `${r1(Math.max(0, comprimento - 2))} ${r1(C)}`, 'stroke-dashoffset': r1((-C * a) / 100), transform: 'rotate(-90 70 70)' }, dica(`${f.nome}: ${usd(f.usd)} (${porcento(f.pct)})`));
+      const length = (C * f.pct) / 100;
+      const arc = svg('circle', { class: `an-slice ${f.classe}`, cx: 70, cy: 70, r: R, 'stroke-dasharray': `${r1(Math.max(0, length - 2))} ${r1(C)}`, 'stroke-dashoffset': r1((-C * a) / 100), transform: 'rotate(-90 70 70)' }, tip(`${f.nome}: ${usd(f.usd)} (${percent(f.pct)})`));
       a += f.pct;
-      return arco;
+      return arc;
     });
   return el(
     'div',
     { class: 'an-donut' },
     svg(
       'svg',
-      { class: 'an-chart', width: 140, height: 140, viewBox: '0 0 140 140', role: 'img', 'aria-label': `Custo por modelo nos últimos ${dias} dias` },
+      { class: 'an-chart', width: 140, height: 140, viewBox: '0 0 140 140', role: 'img', 'aria-label': `Custo por modelo nos últimos ${days} dias` },
       svg('circle', { class: 'an-bg', cx: 70, cy: 70, r: R }),
-      arcos,
+      arcs,
       svg('text', { class: 'an-center', x: 70, y: 68, 'text-anchor': 'middle' }, usd(total, { curto: true })),
-      svg('text', { x: 70, y: 84, 'text-anchor': 'middle' }, `${dias} dias`),
+      svg('text', { x: 70, y: 84, 'text-anchor': 'middle' }, `${days} dias`),
     ),
     el(
       'ul',
       { class: 'an-legend' },
-      ...fatias.map((f) => el('li', {}, f.classe ? el('span', { class: `an-dot ${f.classe}`, 'aria-hidden': 'true' }) : el('span', { class: 'an-dot an-empty', 'aria-hidden': 'true' }), el('span', { class: 'an-trunc' }, f.nome), el('span', { class: 'an-q' }, f.pct === null ? 'sem preço' : porcento(f.pct)))),
+      ...slices.map((f) => el('li', {}, f.classe ? el('span', { class: `an-dot ${f.classe}`, 'aria-hidden': 'true' }) : el('span', { class: 'an-dot an-empty', 'aria-hidden': 'true' }), el('span', { class: 'an-trunc' }, f.nome), el('span', { class: 'an-q' }, f.pct === null ? 'sem preço' : percent(f.pct)))),
     ),
   );
 }
 
 // ---------- Peças ----------
 
-function stat({ id, rotulo, valor, sub, icone: nome, cor, contas = null, dica: titulo = null }) {
+function stat({ id, rotulo: label, valor: value, sub, icone: name, cor: color, contas: accounts = null, dica: title = null }) {
   return el(
     'div',
-    { class: 'card an-stat', 'data-card': id, title: titulo },
-    el('span', { class: 'an-label' }, rotulo),
-    el('span', { class: `an-ic an-color-${cor}` }, icon(nome)),
-    el('span', { class: 'an-v' }, valor),
+    { class: 'card an-stat', 'data-card': id, title: title },
+    el('span', { class: 'an-label' }, label),
+    el('span', { class: `an-ic an-color-${color}` }, icon(name)),
+    el('span', { class: 'an-v' }, value),
     el('span', { class: 'an-s' }, sub),
-    contas ? divisaoPorConta(contas) : null,
+    accounts ? splitByAccount(accounts) : null,
   );
 }
 
-function cartao(titulo, direita, ...corpo) {
-  return el('section', { class: 'card an-card' }, el('div', { class: 'an-ttl' }, el('h2', {}, titulo), direita ? el('span', { class: 'an-r' }, direita) : null), ...corpo);
+function card(title, right, ...body) {
+  return el('section', { class: 'card an-card' }, el('div', { class: 'an-ttl' }, el('h2', {}, title), right ? el('span', { class: 'an-r' }, right) : null), ...body);
 }
 
-function lista(linhas, vazioTexto) {
-  if (!linhas.length) return el('p', { class: 'an-none' }, vazioTexto);
-  const max = Math.max(...linhas.map((l) => l.valor ?? 0), 0) || 1;
+function list(rows, emptyText) {
+  if (!rows.length) return el('p', { class: 'an-none' }, emptyText);
+  const max = Math.max(...rows.map((l) => l.valor ?? 0), 0) || 1;
   return el(
     'ul',
     { class: 'an-list' },
-    ...linhas.map((l) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: l.nomeLongo ?? l.nome }, l.nome), barra(((l.valor ?? 0) / max) * 100, l.classe, l.dica), el('span', { class: 'an-q' }, l.texto))),
+    ...rows.map((l) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: l.nomeLongo ?? l.nome }, l.nome), bar(((l.valor ?? 0) / max) * 100, l.classe, l.dica), el('span', { class: 'an-q' }, l.texto))),
   );
 }
 
-function abas(atual) {
-  const aba = (id, rotulo, href) => el('a', { href, class: atual === id ? 'an-on' : null, 'aria-current': atual === id ? 'page' : null }, rotulo);
-  return el('nav', { class: 'an-seg an-tabs', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/cost'));
+function tabs(current) {
+  const tab = (id, label, href) => el('a', { href, class: current === id ? 'an-on' : null, 'aria-current': current === id ? 'page' : null }, label);
+  return el('nav', { class: 'an-seg an-tabs', 'aria-label': 'Abas do Analytics' }, tab('overview', 'Visão geral', '/ui/analytics'), tab('cost', 'Custo', '/ui/analytics/cost'));
 }
 
-function rodape(esquerda, direita) {
-  return el('div', { class: 'an-leg an-tips' }, el('span', {}, ...esquerda), el('span', {}, ...direita));
+function footer(left, right) {
+  return el('div', { class: 'an-leg an-tips' }, el('span', {}, ...left), el('span', {}, ...right));
 }
 
 // ---------- Visão geral (C12) ----------
 
-export function telaDaVisao(d) {
+export function overviewScreen(d) {
   const n = d.numeros;
-  const semPreco = n.custo.semPreco ?? [];
+  const noPrice = n.custo.semPreco ?? [];
   const u30 = d.ultimos30 ?? { dias: [], pico: null, total: 0 };
   return [
     el(
       'div',
       { class: 'an-stats an-five' },
-      stat({ id: 'sessoes', rotulo: 'Sessões', valor: quantidade(n.sessoes.total), sub: plural(n.sessoes.ativas, 'ativa', 'ativas'), icone: 'sessions', cor: 'accent' }),
-      stat({ id: 'agentes', rotulo: 'Agentes', valor: quantidade(n.agentes.total), sub: plural(n.agentes.ativos, 'ativo', 'ativos'), icone: 'an-bot', cor: 'active' }),
-      stat({ id: 'tokens', rotulo: 'Tokens', valor: quantidade(n.tokens.total), sub: n.tokens.cachePct === null ? 'cache sem dado' : `${porcento(n.tokens.cachePct)} de cache`, icone: 'port', cor: 'accent' }),
+      stat({ id: 'sessions', rotulo: 'Sessões', valor: quantity(n.sessoes.total), sub: plural(n.sessoes.ativas, 'ativa', 'ativas'), icone: 'sessions', cor: 'accent' }),
+      stat({ id: 'agents', rotulo: 'Agentes', valor: quantity(n.agentes.total), sub: plural(n.agentes.ativos, 'ativo', 'ativos'), icone: 'an-bot', cor: 'active' }),
+      stat({ id: 'tokens', rotulo: 'Tokens', valor: quantity(n.tokens.total), sub: n.tokens.cachePct === null ? 'cache sem dado' : `${percent(n.tokens.cachePct)} de cache`, icone: 'port', cor: 'accent' }),
       stat({
-        id: 'custo',
+        id: 'cost',
         rotulo: 'Custo',
         valor: usd(n.custo.usd, { curto: true }),
-        sub: `estimativa · ${n.custo.dias ?? 30} dias${semPreco.length ? ` · ${plural(semPreco.length, 'modelo', 'modelos')} sem preço` : ''}`,
+        sub: `estimativa · ${n.custo.dias ?? 30} dias${noPrice.length ? ` · ${plural(noPrice.length, 'modelo', 'modelos')} sem preço` : ''}`,
         icone: 'an-dollar',
         cor: 'completed',
-        contas: contasDaVisao(d),
+        contas: overviewAccounts(d),
       }),
-      stat({ id: 'eventos', rotulo: 'Eventos', valor: quantidade(n.eventos.total), sub: n.eventos.porSessao === null ? 'por sessão: —' : `~${quantidade(Math.round(n.eventos.porSessao))} por sessão`, icone: 'an-bolt', cor: 'waiting' }),
+      stat({ id: 'events', rotulo: 'Eventos', valor: quantity(n.eventos.total), sub: n.eventos.porSessao === null ? 'por sessão: —' : `~${quantity(Math.round(n.eventos.porSessao))} por sessão`, icone: 'an-bolt', cor: 'waiting' }),
     ),
-    abas('visao'),
+    tabs('overview'),
     el(
       'div',
       { class: 'an-grid-2 an-wide' },
-      cartao(`Atividade · últimas ${d.atividade?.semanas ?? 52} semanas`, 'eventos por dia', ...heatmap(d.atividade?.dias ?? [])),
-      cartao(
+      card(`Atividade · últimas ${d.atividade?.semanas ?? 52} semanas`, 'eventos por dia', ...heatmap(d.atividade?.dias ?? [])),
+      card(
         'Últimos 30 dias',
         'sessões por dia',
-        ...barras30(u30.dias),
-        rodape(u30.pico ? ['Pico ', el('b', {}, inteiro.format(u30.pico.sessoes)), ` em ${dataCurta(u30.pico.dia)}`] : ['Sem sessões no período'], ['Total ', el('b', {}, inteiro.format(u30.total ?? 0))]),
+        ...bars30(u30.dias),
+        footer(u30.pico ? ['Pico ', el('b', {}, integer.format(u30.pico.sessoes)), ` em ${shortDate(u30.pico.dia)}`] : ['Sem sessões no período'], ['Total ', el('b', {}, integer.format(u30.total ?? 0))]),
       ),
     ),
     el(
       'div',
       { class: 'an-grid-3' },
-      cartao(
+      card(
         'Tokens por modelo',
         'milhões',
-        lista(
-          (d.tokensPorModelo ?? []).map((m) => ({ nome: nomeDoModelo(m.modelo), nomeLongo: m.modelo, valor: m.tokens, texto: milhoes(m.tokens), classe: classeDoModelo(m.modelo), dica: `${nomeDoModelo(m.modelo)}: ${quantidade(m.tokens)} tokens` })),
+        list(
+          (d.tokensPorModelo ?? []).map((m) => ({ nome: modelName(m.modelo), nomeLongo: m.modelo, valor: m.tokens, texto: millions(m.tokens), classe: modelClass(m.modelo), dica: `${modelName(m.modelo)}: ${quantity(m.tokens)} tokens` })),
           'Nenhum token no período.',
         ),
       ),
-      cartao(
+      card(
         'Ferramentas',
         '30 dias',
-        lista(
-          (d.ferramentas ?? []).slice(0, 5).map((f) => ({ nome: f.nome, valor: f.usos, texto: inteiro.format(f.usos), dica: `${f.nome}: ${plural(f.usos, 'uso', 'usos')}` })),
+        list(
+          (d.ferramentas ?? []).slice(0, 5).map((f) => ({ nome: f.nome, valor: f.usos, texto: integer.format(f.usos), dica: `${f.nome}: ${plural(f.usos, 'uso', 'usos')}` })),
           'Nenhuma ferramenta usada no período.',
         ),
       ),
-      cartao(
+      card(
         'Por dia da semana',
         'sessões',
-        lista(
-          (d.diaDaSemana ?? []).map((s) => ({ nome: rotuloDoDia(s.dia), valor: s.sessoes, texto: inteiro.format(s.sessoes), dica: `${rotuloDoDia(s.dia)}: ${plural(s.sessoes, 'sessão', 'sessões')}` })),
+        list(
+          (d.diaDaSemana ?? []).map((s) => ({ nome: dayLabel(s.dia), valor: s.sessoes, texto: integer.format(s.sessoes), dica: `${dayLabel(s.dia)}: ${plural(s.sessoes, 'sessão', 'sessões')}` })),
           'Nenhuma sessão ainda.',
         ),
       ),
@@ -419,57 +419,57 @@ export function telaDaVisao(d) {
 // ---------- Custo (C13) ----------
 
 /** O custo de hoje: `resumoDeHoje` (`hoje` é o dia, "AAAA-MM-DD"). */
-const custoDeHoje = (d) => d.resumoDeHoje ?? { usd: null, sessoes: 0 };
+const todayCost = (d) => d.resumoDeHoje ?? { usd: null, sessoes: 0 };
 
-export function telaDoCusto(d) {
-  const hoje = custoDeHoje(d);
-  const semPreco = d.semPreco?.modelos ?? [];
+export function costScreen(d) {
+  const today = todayCost(d);
+  const noPrice = d.semPreco?.modelos ?? [];
   const max = Math.max(0, ...(d.porProjeto ?? []).map((p) => p.usd ?? 0)) || 1;
   return [
-    abas('custo'),
+    tabs('cost'),
     el(
       'div',
       { class: 'an-stats an-four' },
-      stat({ id: 'hoje', rotulo: 'Hoje', valor: usd(hoje.usd), sub: plural(hoje.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dollar', cor: 'completed', contas: contasDoCusto(d, hoje.porConta) }),
+      stat({ id: 'today', rotulo: 'Hoje', valor: usd(today.usd), sub: plural(today.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dollar', cor: 'completed', contas: costAccounts(d, today.porConta) }),
       stat({
-        id: 'periodo',
+        id: 'period',
         rotulo: `${d.dias} dias`,
         valor: usd(d.periodo?.usd, { curto: true }),
         sub: d.periodo?.mediaPorDia === null || d.periodo?.mediaPorDia === undefined ? 'média: sem preço' : `média ${usd(d.periodo.mediaPorDia)} por dia`,
         icone: 'an-calendar',
         cor: 'accent',
-        contas: contasDoCusto(d),
+        contas: costAccounts(d),
       }),
-      stat({ id: 'cache', rotulo: 'Cache', valor: porcento(d.cache?.pct), sub: 'dos tokens de entrada', icone: 'an-layers', cor: 'accent' }),
+      stat({ id: 'cache', rotulo: 'Cache', valor: percent(d.cache?.pct), sub: 'dos tokens de entrada', icone: 'an-layers', cor: 'accent' }),
       stat({
-        id: 'sem-preco',
+        id: 'no-price',
         rotulo: 'Sem preço',
-        valor: inteiro.format(semPreco.length),
-        sub: semPreco.length === 1 ? 'modelo sem tabela' : 'modelos sem tabela',
+        valor: integer.format(noPrice.length),
+        sub: noPrice.length === 1 ? 'modelo sem tabela' : 'modelos sem tabela',
         icone: 'an-alert',
-        cor: semPreco.length ? 'waiting' : 'muted',
-        dica: semPreco.length ? `Sem tabela de preço: ${semPreco.map(nomeDoModelo).join(', ')}` : 'Todos os modelos têm preço',
+        cor: noPrice.length ? 'waiting' : 'muted',
+        dica: noPrice.length ? `Sem tabela de preço: ${noPrice.map(modelName).join(', ')}` : 'Todos os modelos têm preço',
       }),
     ),
     el(
       'div',
       { class: 'an-grid-2 an-mean' },
-      cartao(
+      card(
         'Custo por dia',
         'US$',
-        linhaDoCusto(d.porDia ?? []),
-        rodape(d.pico ? ['Pico ', el('b', {}, usd(d.pico.usd)), ` em ${dataCurta(d.pico.dia)}`] : ['Sem custo no período'], ['Total ', el('b', {}, usd(d.periodo?.usd, { curto: true }))]),
+        costRow(d.porDia ?? []),
+        footer(d.pico ? ['Pico ', el('b', {}, usd(d.pico.usd)), ` em ${shortDate(d.pico.dia)}`] : ['Sem custo no período'], ['Total ', el('b', {}, usd(d.periodo?.usd, { curto: true }))]),
       ),
-      cartao('Por modelo', null, rosca(d.porModelo ?? [], d.periodo?.usd, d.dias)),
+      card('Por modelo', null, donut(d.porModelo ?? [], d.periodo?.usd, d.dias)),
     ),
-    cartao(
+    card(
       'Por projeto',
       `${d.dias} dias`,
       (d.porProjeto ?? []).length
         ? el(
             'ul',
             { class: 'an-list an-projects' },
-            ...d.porProjeto.map((p) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: p.projeto }, p.projeto), barra(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.projeto}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
+            ...d.porProjeto.map((p) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: p.projeto }, p.projeto), bar(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.projeto}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
           )
         : el('p', { class: 'an-none' }, 'Nenhum projeto com custo no período.'),
     ),
@@ -479,25 +479,25 @@ export function telaDoCusto(d) {
 // ---------- Exportar ----------
 
 /** Baixa o JSON já lido (o que está na tela), sem ir ao núcleo de novo. */
-export function nomeDoArquivo(aba, dados, dias) {
-  const dia = typeof dados?.ate === 'string' ? dados.ate : typeof dados?.hoje === 'string' ? dados.hoje : 'hoje';
-  return aba === 'custo' ? `ahrena-analytics-custo-${dias}d-${dia}.json` : `ahrena-analytics-${dia}.json`;
+export function fileName(tab, data, days) {
+  const day = typeof data?.ate === 'string' ? data.ate : typeof data?.hoje === 'string' ? data.hoje : 'hoje';
+  return tab === 'cost' ? `ahrena-analytics-cost-${days}d-${day}.json` : `ahrena-analytics-${day}.json`;
 }
 
-function baixar(nome, dados) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }));
-  el('a', { href: url, download: nome }).click();
+function download(name, data) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  el('a', { href: url, download: name }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---------- A tela ----------
 
-function carregarEstilo() {
-  if (typeof document.querySelector === 'function' && document.querySelector(`link[href="${ESTILO}"]`)) return;
-  document.head?.append(el('link', { rel: 'stylesheet', href: ESTILO }));
+function loadStyle() {
+  if (typeof document.querySelector === 'function' && document.querySelector(`link[href="${STYLE}"]`)) return;
+  document.head?.append(el('link', { rel: 'stylesheet', href: STYLE }));
 }
 
-function fusoDoNavegador() {
+function browserTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
@@ -505,107 +505,107 @@ function fusoDoNavegador() {
   }
 }
 
-function horaDe(iso, fuso) {
+function timeOf(iso, timeZone) {
   const t = Date.parse(iso ?? '');
   if (!Number.isFinite(t)) return null;
   try {
-    return new Date(t).toLocaleTimeString('pt-BR', { timeZone: fuso, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return new Date(t).toLocaleTimeString('pt-BR', { timeZone: timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch {
     return null;
   }
 }
 
 /** O dia da semana como a tela escreve: a API manda `sab`, a tela mostra `sáb`. */
-const rotuloDoDia = (dia) => (dia === 'sab' ? 'sáb' : dia);
+const dayLabel = (day) => (day === 'sab' ? 'sáb' : day);
 
-export async function mount(area, ctx, { releituraMs = RELER_MS } = {}) {
-  carregarEstilo();
-  const pedida = ctx.params?.tab;
-  const aba = pedida === undefined ? 'visao' : pedida === 'cost' ? 'custo' : null;
-  const sub = aba === 'custo' ? SUB_CUSTO : SUB_VISAO;
-  const fuso = fusoDoNavegador();
-  let dias = 30;
-  let ultimo = null; // a última resposta, para exportar e para manter a tela numa releitura que falha
-  let nos = null;
-  let vez = 0;
-  let espera = null;
+export async function mount(area, ctx, { releituraMs: rereadMs = REREAD_MS } = {}) {
+  loadStyle();
+  const requested = ctx.params?.tab;
+  const tab = requested === undefined ? 'overview' : requested === 'cost' ? 'cost' : null;
+  const sub = tab === 'cost' ? COST_SUB : OVERVIEW_SUB;
+  const timeZone = browserTimeZone();
+  let days = 30;
+  let last = null; // a última resposta, para exportar e para manter a tela numa releitura que falha
+  let nodes = null;
+  let turn = 0;
+  let wait = null;
 
-  const cab = (acoes = []) => {
-    const c = header({ icon: 'analytics', title: 'Analytics', sub, actions: acoes });
+  const head = (actions = []) => {
+    const c = header({ icon: 'analytics', title: 'Analytics', sub, actions });
     c.setAttribute('class', 'cc-head an-head'); // an-cab: as ações descem numa janela estreita
     return c;
   };
 
-  if (!aba) {
+  if (!tab) {
     ctx.title?.('Analytics');
-    area.replaceChildren(cab(), empty({ title: 'Aba não encontrada', text: `O Analytics não tem a aba "${pedida}".`, action: { label: 'Ir para a Visão geral', onClick: () => ctx.navigate('/ui/analytics') } }));
+    area.replaceChildren(head(), empty({ title: 'Aba não encontrada', text: `O Analytics não tem a aba "${requested}".`, action: { label: 'Ir para a Visão geral', onClick: () => ctx.navigate('/ui/analytics') } }));
     return () => {};
   }
-  ctx.title?.(aba === 'custo' ? 'Analytics · Custo' : 'Analytics');
+  ctx.title?.(tab === 'cost' ? 'Analytics · Custo' : 'Analytics');
 
-  const botaoExportar = () =>
-    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', onClick: () => ultimo && baixar(nomeDoArquivo(aba, ultimo, dias), ultimo) }, icon('an-download'), 'Exportar');
+  const exportButton = () =>
+    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', onClick: () => last && download(fileName(tab, last, days), last) }, icon('an-download'), 'Exportar');
 
-  function seletor() {
+  function selector() {
     return el(
       'div',
       { class: 'an-seg', role: 'group', 'aria-label': 'Período' },
-      ...PERIODOS.map((p) =>
-        el('button', { type: 'button', 'aria-pressed': p === dias ? 'true' : 'false', 'data-days': p, onClick: () => p !== dias && ((dias = p), desenhar()) }, `${p} dias`),
+      ...PERIODS.map((p) =>
+        el('button', { type: 'button', 'aria-pressed': p === days ? 'true' : 'false', 'data-days': p, onClick: () => p !== days && ((days = p), draw()) }, `${p} dias`),
       ),
     );
   }
 
-  function acoes(dados) {
-    if (aba === 'custo') return [seletor(), botaoExportar()];
-    const hora = horaDe(dados?.geradoEm, fuso);
-    return [hora ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icon('an-clock'), hora) : null, botaoExportar()].filter(Boolean);
+  function actions(data) {
+    if (tab === 'cost') return [selector(), exportButton()];
+    const hour = timeOf(data?.geradoEm, timeZone);
+    return [hour ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icon('an-clock'), hour) : null, exportButton()].filter(Boolean);
   }
 
-  function semNada(dados) {
-    if (aba === 'visao') return (dados?.numeros?.sessoes?.total ?? 0) === 0;
-    return (dados?.porModelo ?? []).length === 0 && (dados?.porProjeto ?? []).length === 0;
+  function withNothing(data) {
+    if (tab === 'overview') return (data?.numeros?.sessoes?.total ?? 0) === 0;
+    return (data?.porModelo ?? []).length === 0 && (data?.porProjeto ?? []).length === 0;
   }
 
-  async function desenhar({ silencioso = false } = {}) {
-    const minha = ++vez;
-    if (!silencioso) area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), ...(aba === 'custo' ? [abas('custo')] : []), loading());
-    const z = encodeURIComponent(fuso);
-    const rota = aba === 'custo' ? `${ROTA_DO_CUSTO}?days=${dias}&tz=${z}` : `${ROTA_DA_VISAO}?tz=${z}`;
+  async function draw({ silencioso: quiet = false } = {}) {
+    const mine = ++turn;
+    if (!quiet) area.replaceChildren(head(tab === 'cost' ? [selector()] : []), ...(tab === 'cost' ? [tabs('cost')] : []), loading());
+    const z = encodeURIComponent(timeZone);
+    const route = tab === 'cost' ? `${COST_ROUTE}?days=${days}&tz=${z}` : `${OVERVIEW_ROUTE}?tz=${z}`;
     try {
-      const dados = await ctx.read(rota);
-      if (minha !== vez) return;
-      ultimo = dados;
-      if (semNada(dados)) {
-        nos =
-          aba === 'visao'
-            ? [cab(), empty({ title: 'Nenhuma sessão ainda', text: 'Os números aparecem quando o console registrar a primeira sessão do Claude Code.' })]
-            : [cab([seletor()]), abas('custo'), empty({ title: `Nenhum custo nos últimos ${dias} dias`, text: 'Escolha um período maior ou volte depois de usar o Claude Code.' })];
-      } else nos = [cab(acoes(dados)), ...(aba === 'custo' ? telaDoCusto(dados) : telaDaVisao(dados))];
-      area.replaceChildren(...nos);
+      const data = await ctx.read(route);
+      if (mine !== turn) return;
+      last = data;
+      if (withNothing(data)) {
+        nodes =
+          tab === 'overview'
+            ? [head(), empty({ title: 'Nenhuma sessão ainda', text: 'Os números aparecem quando o console registrar a primeira sessão do Claude Code.' })]
+            : [head([selector()]), tabs('cost'), empty({ title: `Nenhum custo nos últimos ${days} dias`, text: 'Escolha um período maior ou volte depois de usar o Claude Code.' })];
+      } else nodes = [head(actions(data)), ...(tab === 'cost' ? costScreen(data) : overviewScreen(data))];
+      area.replaceChildren(...nodes);
     } catch (e) {
-      if (e?.name === 'AbortError' || minha !== vez) return;
-      if (silencioso && nos) {
-        area.replaceChildren(nos[0], errorBand({ title: 'Não deu para atualizar.', text: `${e?.message ?? e}. Os números abaixo são da última leitura.`, action: { label: 'Tentar de novo', onClick: () => desenhar({ silencioso: true }) } }), ...nos.slice(1));
+      if (e?.name === 'AbortError' || mine !== turn) return;
+      if (quiet && nodes) {
+        area.replaceChildren(nodes[0], errorBand({ title: 'Não deu para atualizar.', text: `${e?.message ?? e}. Os números abaixo são da última leitura.`, action: { label: 'Tentar de novo', onClick: () => draw({ silencioso: true }) } }), ...nodes.slice(1));
         return;
       }
-      nos = null;
-      area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), error({ text: e?.message ?? String(e), retry: () => desenhar() }));
+      nodes = null;
+      area.replaceChildren(head(tab === 'cost' ? [selector()] : []), error({ text: e?.message ?? String(e), retry: () => draw() }));
     }
   }
 
   ctx.onChange(() => {
-    if (espera) return;
-    espera = setTimeout(() => {
-      espera = null;
-      desenhar({ silencioso: true });
-    }, releituraMs);
+    if (wait) return;
+    wait = setTimeout(() => {
+      wait = null;
+      draw({ silencioso: true });
+    }, rereadMs);
   });
-  ctx.onRestart(() => desenhar({ silencioso: true }));
-  await desenhar();
+  ctx.onRestart(() => draw({ silencioso: true }));
+  await draw();
   return () => {
-    clearTimeout(espera);
-    espera = null;
-    vez++;
+    clearTimeout(wait);
+    wait = null;
+    turn++;
   };
 }

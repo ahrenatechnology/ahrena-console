@@ -8,19 +8,19 @@ import { PASTA_DA_UI, responderUi } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { findScreen, SCREENS } from '../../ui/screens.js';
 import {
-  corDaColuna,
-  faltam,
-  formatarCusto,
-  formatarDuracao,
-  idCurto,
-  mexeNoQuadro,
-  motivo,
-  queryDaVisao,
-  rotaDoKanban,
-  rotuloAgentes,
-  rotuloMotivo,
+  columnColor,
+  missing,
+  formatCost,
+  formatDuration,
+  shortId,
+  touchesBoard,
+  reason,
+  viewQuery,
+  kanbanRoute,
+  agentsLabel,
+  reasonLabel,
   status,
-  visaoDaUrl,
+  viewFromUrl,
   // @ts-expect-error: idem
 } from '../../ui/screens/kanban.js';
 
@@ -28,43 +28,43 @@ const ARQUIVOS = ['screens/kanban.js', 'kanban.css'];
 
 describe('Kanban: funções da tela', () => {
   test('duração: segundos, minutos e horas com minutos', () => {
-    assert.equal(formatarDuracao(40_000), '40 s');
-    assert.equal(formatarDuracao(0), '0 s');
-    assert.equal(formatarDuracao(59_999), '59 s');
-    assert.equal(formatarDuracao(60_000), '1 min');
-    assert.equal(formatarDuracao(12 * 60_000 + 30_000), '12 min');
-    assert.equal(formatarDuracao((3 * 60 + 10) * 60_000), '3 h 10');
-    assert.equal(formatarDuracao((3 * 60 + 5) * 60_000), '3 h 05');
-    assert.equal(formatarDuracao(2 * 3_600_000), '2 h');
-    for (const ruim of [null, undefined, -1, Number.NaN, '12']) assert.equal(formatarDuracao(ruim), '—');
+    assert.equal(formatDuration(40_000), '40 s');
+    assert.equal(formatDuration(0), '0 s');
+    assert.equal(formatDuration(59_999), '59 s');
+    assert.equal(formatDuration(60_000), '1 min');
+    assert.equal(formatDuration(12 * 60_000 + 30_000), '12 min');
+    assert.equal(formatDuration((3 * 60 + 10) * 60_000), '3 h 10');
+    assert.equal(formatDuration((3 * 60 + 5) * 60_000), '3 h 05');
+    assert.equal(formatDuration(2 * 3_600_000), '2 h');
+    for (const ruim of [null, undefined, -1, Number.NaN, '12']) assert.equal(formatDuration(ruim), '—');
   });
 
   test('custo em pt-BR, com til; sem custo, nada', () => {
-    assert.equal(formatarCusto(1.84), '~US$ 1,84');
-    assert.equal(formatarCusto(0), '~US$ 0,00');
-    assert.equal(formatarCusto(1234.5), '~US$ 1.234,50');
-    assert.equal(formatarCusto(0.004), '~US$ 0,00');
-    assert.equal(formatarCusto(null), null);
-    assert.equal(formatarCusto(undefined), null);
+    assert.equal(formatCost(1.84), '~US$ 1,84');
+    assert.equal(formatCost(0), '~US$ 0,00');
+    assert.equal(formatCost(1234.5), '~US$ 1.234,50');
+    assert.equal(formatCost(0.004), '~US$ 0,00');
+    assert.equal(formatCost(null), null);
+    assert.equal(formatCost(undefined), null);
   });
 
   test('id curto, contagem de agentes', () => {
-    assert.equal(idCurto('7f3a2c1e-4b5d-4e6f-8a9b-0c1d2e3f4a5b'), '7f3a2c1e');
-    assert.equal(idCurto('abc'), 'abc');
-    assert.equal(idCurto(null), '');
-    assert.equal(rotuloAgentes(1), '1 agente');
-    assert.equal(rotuloAgentes(3), '3 agentes');
-    assert.equal(rotuloAgentes(0), '0 agentes');
+    assert.equal(shortId('7f3a2c1e-4b5d-4e6f-8a9b-0c1d2e3f4a5b'), '7f3a2c1e');
+    assert.equal(shortId('abc'), 'abc');
+    assert.equal(shortId(null), '');
+    assert.equal(agentsLabel(1), '1 agente');
+    assert.equal(agentsLabel(3), '3 agentes');
+    assert.equal(agentsLabel(0), '0 agentes');
   });
 
   test('motivo da espera: rótulo e peso', () => {
-    assert.equal(rotuloMotivo('notification'), 'Pede permissão');
-    assert.equal(rotuloMotivo('interrupted'), 'Interrompida');
-    assert.equal(rotuloMotivo('stop'), 'Sua vez');
-    assert.equal(rotuloMotivo('session_start'), 'Sua vez');
-    assert.equal(rotuloMotivo(null), null);
-    assert.equal(motivo('notification').urgente, true);
-    assert.equal(motivo('stop').urgente, false);
+    assert.equal(reasonLabel('notification'), 'Pede permissão');
+    assert.equal(reasonLabel('interrupted'), 'Interrompida');
+    assert.equal(reasonLabel('stop'), 'Sua vez');
+    assert.equal(reasonLabel('session_start'), 'Sua vez');
+    assert.equal(reasonLabel(null), null);
+    assert.equal(reason('notification').urgente, true);
+    assert.equal(reason('stop').urgente, false);
   });
 
   test('status: sessão e agente no mesmo selo; colunas das duas visões na cor certa', () => {
@@ -74,30 +74,30 @@ describe('Kanban: funções da tela', () => {
     assert.equal(status('completed').rotulo, 'Concluída');
     assert.equal(status('error').rotulo, 'Com erro');
     assert.equal(status('abandoned').rotulo, 'Abandonada');
-    const cores = (ids: string[]) => ids.map(corDaColuna);
+    const cores = (ids: string[]) => ids.map(columnColor);
     assert.deepEqual(cores(['ativa', 'esperando', 'concluida', 'erro', 'abandonada']), ['active', 'waiting', 'completed', 'error', 'abandoned']);
     assert.deepEqual(cores(['trabalhando', 'esperando', 'concluidos', 'erro']), ['active', 'waiting', 'completed', 'error']);
   });
 
   test('visão na URL e rotas da API', () => {
-    assert.equal(visaoDaUrl(''), 'sessoes');
-    assert.equal(visaoDaUrl('?view=agents'), 'agentes');
-    assert.equal(visaoDaUrl('?view=sessions'), 'sessoes');
-    assert.equal(visaoDaUrl('?view=<x>'), 'sessoes');
-    assert.equal(visaoDaUrl('?visao=agentes'), 'sessoes', 'the old query is the shell router\'s job (legacyUrl)');
-    assert.equal(queryDaVisao('agentes'), '?view=agents');
-    assert.equal(queryDaVisao('sessoes'), '');
-    assert.equal(rotaDoKanban('sessoes'), '/api/kanban?view=sessions');
-    assert.equal(rotaDoKanban('agentes', 'esperando', 2), '/api/kanban?view=agents&column=esperando&page=2');
+    assert.equal(viewFromUrl(''), 'sessions');
+    assert.equal(viewFromUrl('?view=agents'), 'agents');
+    assert.equal(viewFromUrl('?view=sessions'), 'sessions');
+    assert.equal(viewFromUrl('?view=<x>'), 'sessions');
+    assert.equal(viewFromUrl('?visao=agentes'), 'sessions', 'the old query is the shell router\'s job (legacyUrl)');
+    assert.equal(viewQuery('agents'), '?view=agents');
+    assert.equal(viewQuery('sessions'), '');
+    assert.equal(kanbanRoute('sessions'), '/api/kanban?view=sessions');
+    assert.equal(kanbanRoute('agents', 'esperando', 2), '/api/kanban?view=agents&column=esperando&page=2');
   });
 
   test('"mostrar mais N": o que falta; ao vivo só relê com mudança de sessão', () => {
-    assert.equal(faltam({ total: 13 }, 10), 3);
-    assert.equal(faltam({ total: 4 }, 10), 0);
-    assert.equal(mexeNoQuadro([{ tipo: 'sessao' }]), true);
-    assert.equal(mexeNoQuadro([{ tipo: 'estado' }]), true);
-    assert.equal(mexeNoQuadro([{ tipo: 'decisao' }, { tipo: 'conta' }]), false);
-    assert.equal(mexeNoQuadro(null), false);
+    assert.equal(missing({ total: 13 }, 10), 3);
+    assert.equal(missing({ total: 4 }, 10), 0);
+    assert.equal(touchesBoard([{ tipo: 'sessao' }]), true);
+    assert.equal(touchesBoard([{ tipo: 'estado' }]), true);
+    assert.equal(touchesBoard([{ tipo: 'decisao' }, { tipo: 'conta' }]), false);
+    assert.equal(touchesBoard(null), false);
   });
 });
 

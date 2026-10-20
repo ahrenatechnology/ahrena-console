@@ -7,56 +7,56 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
 /** Quantos dias cada página traz. */
-export const DIAS_POR_PAGINA = 7;
+export const DAYS_PER_PAGE = 7;
 
-const ESPERA_DA_BUSCA_MS = 300;
-const ESPERA_DO_AO_VIVO_MS = 500;
-const ESPERA_MAXIMA_DO_AO_VIVO_MS = 2000;
+const SEARCH_DEBOUNCE_MS = 300;
+const LIVE_WAIT_MS = 500;
+const LIVE_MAX_WAIT_MS = 2000;
 /** O tamanho máximo da busca: o núcleo recusa mais que isso (BUSCA_MAXIMA em src/historico/modelo.ts). */
-export const BUSCA_MAXIMA = 100;
+export const MAX_SEARCH = 100;
 
 // ---------- Funções puras ----------
 
 /** A rota da API do histórico, só com os parâmetros presentes. */
-export function rotaDoHistorico({ antes = null, busca = '', dias = DIAS_POR_PAGINA } = {}) {
-  const partes = [];
-  if (antes) partes.push(`before=${encodeURIComponent(antes)}`);
-  if (dias) partes.push(`days=${encodeURIComponent(dias)}`);
-  if (busca) partes.push(`search=${encodeURIComponent(busca)}`);
-  return partes.length ? `/api/history?${partes.join('&')}` : '/api/history';
+export function historyRoute({ antes: before = null, busca: search = '', dias: days = DAYS_PER_PAGE } = {}) {
+  const parts = [];
+  if (before) parts.push(`before=${encodeURIComponent(before)}`);
+  if (days) parts.push(`days=${encodeURIComponent(days)}`);
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
+  return parts.length ? `/api/history?${parts.join('&')}` : '/api/history';
 }
 
-const SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const WEEK = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
-const mesmoDia = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 /**
  * O rótulo de um dia (`AAAA-MM-DD`, lido como data local): "Hoje · sábado, 18 out", "Ontem · sexta,
  * 17 out", "quinta, 16 out" e, se o ano não é o de `hoje`, "quinta, 16 out 2025".
  */
-export function rotuloDoDia(dia, hoje = new Date()) {
-  const [a, m, d] = String(dia).split('-').map(Number);
+export function dayLabel(day, today = new Date()) {
+  const [a, m, d] = String(day).split('-').map(Number);
   const data = new Date(a, m - 1, d);
   // Data inexistente (30 de fevereiro) não volta igual: sai como veio.
-  if (!a || !m || !d || data.getFullYear() !== a || data.getMonth() !== m - 1 || data.getDate() !== d) return String(dia);
-  const base = `${SEMANA[data.getDay()]}, ${data.getDate()} ${MESES[data.getMonth()]}${data.getFullYear() !== hoje.getFullYear() ? ` ${data.getFullYear()}` : ''}`;
-  if (mesmoDia(data, hoje)) return `Hoje · ${base}`;
-  if (mesmoDia(data, new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1))) return `Ontem · ${base}`;
+  if (!a || !m || !d || data.getFullYear() !== a || data.getMonth() !== m - 1 || data.getDate() !== d) return String(day);
+  const base = `${WEEK[data.getDay()]}, ${data.getDate()} ${MONTHS[data.getMonth()]}${data.getFullYear() !== today.getFullYear() ? ` ${data.getFullYear()}` : ''}`;
+  if (sameDay(data, today)) return `Hoje · ${base}`;
+  if (sameDay(data, new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))) return `Ontem · ${base}`;
   return base;
 }
 
 /** "~US$ 1,96"; abaixo de meio centavo, "<US$ 0,01"; sem valor, "—". */
-export function formatarCusto(usd) {
+export function formatCost(usd) {
   if (usd === null || usd === undefined || typeof usd !== 'number' || !Number.isFinite(usd)) return '—';
   if (usd > 0 && usd < 0.005) return '<US$ 0,01';
-  const [inteiro, centavos] = Math.abs(usd).toFixed(2).split('.');
-  const milhar = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `~US$ ${usd < 0 ? '-' : ''}${milhar},${centavos}`;
+  const [integer, cents] = Math.abs(usd).toFixed(2).split('.');
+  const thousands = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `~US$ ${usd < 0 ? '-' : ''}${thousands},${cents}`;
 }
 
 /** "<1 min", "52 min", "1 h 12 min", "2 h"; sem valor, "—". */
-export function formatarDuracao(ms) {
+export function formatDuration(ms) {
   if (ms === null || ms === undefined || typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '—';
   if (ms < 60_000) return '<1 min';
   const total = Math.round(ms / 60_000);
@@ -67,29 +67,29 @@ export function formatarDuracao(ms) {
 }
 
 /** Os 8 primeiros caracteres do id. */
-export const idCurto = (id) => String(id ?? '').slice(0, 8);
+export const shortId = (id) => String(id ?? '').slice(0, 8);
 
 /**
  * Ao vivo: a primeira página relida (`novos`) mais os dias já carregados que são mais antigos que o
  * dia mais antigo dela. Primeira página vazia: lista vazia.
  */
-export function juntarDias(atuais, novos) {
-  if (!novos?.length) return [];
-  const maisAntigo = novos[novos.length - 1].dia;
-  return [...novos, ...(atuais ?? []).filter((d) => d.dia < maisAntigo)];
+export function mergeDays(currentOnes, newOnes) {
+  if (!newOnes?.length) return [];
+  const oldest = newOnes[newOnes.length - 1].dia;
+  return [...newOnes, ...(currentOnes ?? []).filter((d) => d.dia < oldest)];
 }
 
 /** Anexa uma página seguinte: se o primeiro dia novo é o último carregado, as sessões vão juntas. */
-export function anexarDias(atuais, novos) {
-  const lista = [...(atuais ?? [])];
-  for (const dia of novos ?? []) {
-    const ultimo = lista[lista.length - 1];
-    if (ultimo && ultimo.dia === dia.dia) {
-      const ids = new Set(ultimo.sessoes.map((s) => s.id));
-      lista[lista.length - 1] = { ...ultimo, sessoes: [...ultimo.sessoes, ...dia.sessoes.filter((s) => !ids.has(s.id))] };
-    } else lista.push(dia);
+export function appendDays(currentOnes, newOnes) {
+  const list = [...(currentOnes ?? [])];
+  for (const day of newOnes ?? []) {
+    const last = list[list.length - 1];
+    if (last && last.dia === day.dia) {
+      const ids = new Set(last.sessoes.map((s) => s.id));
+      list[list.length - 1] = { ...last, sessoes: [...last.sessoes, ...day.sessoes.filter((s) => !ids.has(s.id))] };
+    } else list.push(day);
   }
-  return lista;
+  return list;
 }
 
 // ---------- Peças ----------
@@ -103,15 +103,15 @@ const STATUS = {
 };
 
 function badge(status) {
-  const conhecido = Object.hasOwn(STATUS, status);
-  return el('span', { class: `badge b-${conhecido ? status : 'abandoned'}` }, el('span', { class: 'p' }), conhecido ? STATUS[status] : String(status ?? '—'));
+  const known = Object.hasOwn(STATUS, status);
+  return el('span', { class: `badge b-${known ? status : 'abandoned'}` }, el('span', { class: 'p' }), known ? STATUS[status] : String(status ?? '—'));
 }
 
-const rotaDaSessao = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
+const sessionRoute = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
 
-function linha(s) {
+function row(s) {
   const id = String(s.id);
-  const anterior = s.anterior
+  const previous = s.anterior
     ? el(
         'div',
         { class: 'hist-o hist-trunc hist-continued' },
@@ -119,30 +119,30 @@ function linha(s) {
         ' continuou depois do ',
         el('code', {}, '/clear'),
         ' em ',
-        el('a', { class: 'hist-accent hist-previous', href: rotaDaSessao(String(s.anterior.id)) }, s.anterior.titulo || idCurto(s.anterior.id)),
+        el('a', { class: 'hist-accent hist-previous', href: sessionRoute(String(s.anterior.id)) }, s.anterior.titulo || shortId(s.anterior.id)),
       )
     : null;
   return el(
     'div',
     { class: 'hist-row' },
     badge(s.status),
-    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: rotaDaSessao(id) }, el('b', { class: 'hist-title' }, s.titulo || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, idCurto(id)), anterior),
+    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.titulo || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id)), previous),
     el('span', { class: 'hist-o mono hist-trunc hist-project' }, s.projeto || '—'),
     el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.modelo || '—'),
-    el('span', { class: 'hist-o mono hist-duration' }, formatarDuracao(s.duracaoMs)),
-    el('span', { class: 'mono hist-cost' }, formatarCusto(s.custoUsd)),
+    el('span', { class: 'hist-o mono hist-duration' }, formatDuration(s.duracaoMs)),
+    el('span', { class: 'mono hist-cost' }, formatCost(s.custoUsd)),
     el('span', { class: 'hist-muted hist-arrow' }, icon('chevron-right')),
   );
 }
 
-function grupo(dia, hoje) {
-  const rotulo = rotuloDoDia(dia.dia, hoje);
-  const n = dia.sessoes.length;
+function group(day, today) {
+  const label = dayLabel(day.dia, today);
+  const n = day.sessoes.length;
   return el(
     'section',
-    { class: 'hist-group', 'aria-label': rotulo },
-    el('h2', { class: 'eyebrow hist-day' }, icon('calendar'), rotulo, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
-    el('div', { class: 'card hist-rows' }, ...dia.sessoes.map(linha)),
+    { class: 'hist-group', 'aria-label': label },
+    el('h2', { class: 'eyebrow hist-day' }, icon('calendar'), label, el('span', { class: 'hist-n' }, `${n} ${n === 1 ? 'sessão' : 'sessões'}`)),
+    el('div', { class: 'card hist-rows' }, ...day.sessoes.map(row)),
   );
 }
 
@@ -153,208 +153,208 @@ export function mount(area, ctx) {
   if (!document.querySelector('link[data-screen="history"]')) {
     document.head.append(el('link', { rel: 'stylesheet', href: '/ui/history.css', 'data-screen': 'history' }));
   }
-  const entrada = el('input', { type: 'search', placeholder: 'Buscar…', 'aria-label': 'Buscar no histórico', maxlength: BUSCA_MAXIMA, autocomplete: 'off', spellcheck: 'false' });
-  const campo = el('label', { class: 'hist-search' }, icon('search'), entrada);
-  const cab = header({ icon: 'history', title: 'Histórico', sub: 'Sessões encerradas, por dia', actions: [campo] });
+  const input = el('input', { type: 'search', placeholder: 'Buscar…', 'aria-label': 'Buscar no histórico', maxlength: MAX_SEARCH, autocomplete: 'off', spellcheck: 'false' });
+  const field = el('label', { class: 'hist-search' }, icon('search'), input);
+  const head = header({ icon: 'history', title: 'Histórico', sub: 'Sessões encerradas, por dia', actions: [field] });
   // Três regiões: a faixa do ao vivo, a lista e o rodapé (faixa da página seguinte ou sentinela).
   // As faixas são nós estáveis: um redesenho da lista não as recria nem as anuncia de novo.
-  const topo = el('div', { class: 'hist-region', hidden: true });
-  const lista = el('div', { class: 'hist-region' });
-  const rodape = el('div', { class: 'hist-region', hidden: true });
-  const sentinela = el('div', { class: 'hist-sentinel', 'aria-hidden': 'true' });
-  const corpo = el('div', { class: 'hist-body' }, topo, lista, rodape);
-  area.replaceChildren(cab, corpo);
+  const top = el('div', { class: 'hist-region', hidden: true });
+  const list = el('div', { class: 'hist-region' });
+  const footer = el('div', { class: 'hist-region', hidden: true });
+  const sentinel = el('div', { class: 'hist-sentinel', 'aria-hidden': 'true' });
+  const body = el('div', { class: 'hist-body' }, top, list, footer);
+  area.replaceChildren(head, body);
 
-  let busca = '';
-  let dias = [];
-  let proximo = null;
-  let geracao = 0;
-  let controle = null; // um por geração: mudar de geração cancela o que ela pediu
-  let pronto = false; // a primeira leitura deu certo: o ao vivo pode reler
-  let carregandoMais = false;
-  let faixaAoVivo = null;
-  let faixaMais = null;
-  let vezDoAoVivo = 0;
-  let esperaBusca = null;
-  let esperaAoVivo = null;
-  let primeiraPendente = null;
-  let encerrada = false;
+  let search = '';
+  let days = [];
+  let next = null;
+  let generation = 0;
+  let control = null; // um por geração: mudar de geração cancela o que ela pediu
+  let ready = false; // a primeira leitura deu certo: o ao vivo pode reler
+  let loadingMore = false;
+  let liveBand = null;
+  let moreBand = null;
+  let liveTurn = 0;
+  let searchWait = null;
+  let liveWait = null;
+  let firstPending = null;
+  let ended = false;
 
-  const observador =
+  const observer =
     typeof IntersectionObserver === 'function'
-      ? new IntersectionObserver((entradas) => entradas.some((e) => e.isIntersecting) && carregarMais(), { root: area, rootMargin: '0px 0px 300px 0px' })
+      ? new IntersectionObserver((inputs) => inputs.some((e) => e.isIntersecting) && loadMore(), { root: area, rootMargin: '0px 0px 300px 0px' })
       : null;
 
-  const abortou = (e) => e?.name === 'AbortError' || encerrada;
+  const aborted = (e) => e?.name === 'AbortError' || ended;
 
-  function novaGeracao() {
-    controle?.abort();
-    controle = new AbortController();
-    return ++geracao;
+  function newGeneration() {
+    control?.abort();
+    control = new AbortController();
+    return ++generation;
   }
 
   // O `ctx.ler` põe o sinal da tela antes das opções: o nosso o substituiria, então vão os dois juntos.
-  function read(rota) {
-    const sinal = ctx.signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, controle.signal]) : controle.signal;
-    return ctx.read(rota, { signal: sinal });
+  function read(route) {
+    const signal = ctx.signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, control.signal]) : control.signal;
+    return ctx.read(route, { signal: signal });
   }
 
-  function porNa(regiao, no) {
-    if (regiao.firstChild !== no || regiao.childNodes.length !== (no ? 1 : 0)) regiao.replaceChildren(...(no ? [no] : []));
-    regiao.hidden = !no;
+  function pickLane(region, node) {
+    if (region.firstChild !== node || region.childNodes.length !== (node ? 1 : 0)) region.replaceChildren(...(node ? [node] : []));
+    region.hidden = !node;
   }
 
-  function focarDepoisDeTentar(link) {
-    if (corpo.contains(document.activeElement)) return;
-    (link ?? lista.querySelector('a.hist-target') ?? entrada).focus();
+  function focusAfterRetry(link) {
+    if (body.contains(document.activeElement)) return;
+    (link ?? list.querySelector('a.hist-target') ?? input).focus();
   }
 
-  function desenharLista() {
+  function drawList() {
     // Quem navega pelo teclado não perde o lugar quando a lista é redesenhada.
-    const focado = lista.contains(document.activeElement) ? document.activeElement : null;
-    const foco = focado?.matches('a[href]') ? { href: focado.getAttribute('href'), classe: focado.className } : null;
+    const focused = list.contains(document.activeElement) ? document.activeElement : null;
+    const focusTarget = focused?.matches('a[href]') ? { href: focused.getAttribute('href'), classe: focused.className } : null;
 
-    const hoje = new Date();
-    const filhos = [];
-    if (!dias.length && (!proximo || !observador)) {
-      filhos.push(
-        busca
-          ? empty({ title: 'Nenhuma sessão encontrada', text: `Nada com “${busca}” no histórico.` })
+    const today = new Date();
+    const children = [];
+    if (!days.length && (!next || !observer)) {
+      children.push(
+        search
+          ? empty({ title: 'Nenhuma sessão encontrada', text: `Nada com “${search}” no histórico.` })
           : empty({ title: 'Nenhuma sessão encerrada ainda', text: 'As sessões aparecem aqui quando terminam.' }),
       );
-    } else if (!dias.length) filhos.push(loading()); // páginas vazias: o sentinela segue buscando
-    for (const dia of dias) filhos.push(grupo(dia, hoje));
-    lista.replaceChildren(...filhos);
+    } else if (!days.length) children.push(loading()); // páginas vazias: o sentinela segue buscando
+    for (const day of days) children.push(group(day, today));
+    list.replaceChildren(...children);
 
-    if (foco) {
-      for (const a of lista.querySelectorAll('a[href]')) {
-        if (a.getAttribute('href') === foco.href && a.className === foco.classe) {
+    if (focusTarget) {
+      for (const a of list.querySelectorAll('a[href]')) {
+        if (a.getAttribute('href') === focusTarget.href && a.className === focusTarget.classe) {
           a.focus({ preventScroll: true });
           break;
         }
       }
     }
-    porNa(topo, faixaAoVivo);
-    const comSentinela = !faixaMais && proximo && observador;
-    porNa(rodape, faixaMais ?? (comSentinela ? sentinela : null));
+    pickLane(top, liveBand);
+    const withSentinel = !moreBand && next && observer;
+    pickLane(footer, moreBand ?? (withSentinel ? sentinel : null));
     // Observar de novo dispara a checagem: numa tela alta, o sentinela já visível pede a próxima página.
-    observador?.disconnect();
-    if (comSentinela) observador.observe(sentinela);
+    observer?.disconnect();
+    if (withSentinel) observer.observe(sentinel);
   }
 
-  async function recomecar() {
-    const g = novaGeracao();
-    clearTimeout(esperaAoVivo);
-    primeiraPendente = null;
-    dias = [];
-    proximo = null;
-    pronto = false;
-    carregandoMais = false;
-    faixaAoVivo = null;
-    faixaMais = null;
-    observador?.disconnect();
-    porNa(topo, null);
-    porNa(rodape, null);
-    lista.replaceChildren(loading());
+  async function restart() {
+    const g = newGeneration();
+    clearTimeout(liveWait);
+    firstPending = null;
+    days = [];
+    next = null;
+    ready = false;
+    loadingMore = false;
+    liveBand = null;
+    moreBand = null;
+    observer?.disconnect();
+    pickLane(top, null);
+    pickLane(footer, null);
+    list.replaceChildren(loading());
     try {
-      const r = await read(rotaDoHistorico({ busca }));
-      if (g !== geracao || encerrada) return;
-      dias = r?.dias ?? [];
-      proximo = r?.proximo ?? null;
-      pronto = true;
-      desenharLista();
+      const r = await read(historyRoute({ busca: search }));
+      if (g !== generation || ended) return;
+      days = r?.dias ?? [];
+      next = r?.proximo ?? null;
+      ready = true;
+      drawList();
     } catch (e) {
-      if (abortou(e) || g !== geracao) return;
+      if (aborted(e) || g !== generation) return;
       // Status 0: o núcleo não respondeu (o título padrão). Outro status: ele respondeu com erro.
-      lista.replaceChildren(error({ title: e?.status ? 'Não deu para ler o histórico' : undefined, text: e?.message ?? String(e), retry: recomecar }));
+      list.replaceChildren(error({ title: e?.status ? 'Não deu para ler o histórico' : undefined, text: e?.message ?? String(e), retry: restart }));
     }
   }
 
-  async function carregarMais() {
-    if (!pronto || !proximo || carregandoMais) return;
-    const g = geracao;
-    carregandoMais = true;
+  async function loadMore() {
+    if (!ready || !next || loadingMore) return;
+    const g = generation;
+    loadingMore = true;
     try {
-      const r = await read(rotaDoHistorico({ antes: proximo, busca }));
-      if (g !== geracao || encerrada) return;
-      dias = anexarDias(dias, r?.dias ?? []);
-      proximo = r?.proximo ?? null;
-      faixaMais = null;
+      const r = await read(historyRoute({ antes: next, busca: search }));
+      if (g !== generation || ended) return;
+      days = appendDays(days, r?.dias ?? []);
+      next = r?.proximo ?? null;
+      moreBand = null;
     } catch (e) {
-      if (abortou(e) || g !== geracao) return;
-      faixaMais ??= errorBand({ title: 'Não deu para carregar mais dias', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: tentarMais } });
+      if (aborted(e) || g !== generation) return;
+      moreBand ??= errorBand({ title: 'Não deu para carregar mais dias', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: retryMore } });
     }
-    carregandoMais = false;
-    desenharLista();
+    loadingMore = false;
+    drawList();
   }
 
-  async function tentarMais() {
-    const antes = lista.querySelectorAll('a.hist-target').length;
-    await carregarMais();
+  async function retryMore() {
+    const before = list.querySelectorAll('a.hist-target').length;
+    await loadMore();
     // Deu certo: o foco vai para a primeira sessão que chegou.
-    focarDepoisDeTentar(lista.querySelectorAll('a.hist-target')[antes]);
+    focusAfterRetry(list.querySelectorAll('a.hist-target')[before]);
   }
 
-  async function releer() {
-    if (!pronto) return;
-    const g = geracao;
-    const vez = ++vezDoAoVivo;
+  async function reread() {
+    if (!ready) return;
+    const g = generation;
+    const turn = ++liveTurn;
     try {
-      const r = await read(rotaDoHistorico({ busca }));
-      if (g !== geracao || vez !== vezDoAoVivo || encerrada) return;
-      const novos = r?.dias ?? [];
-      const maisAntigo = novos.length ? novos[novos.length - 1].dia : null;
+      const r = await read(historyRoute({ busca: search }));
+      if (g !== generation || turn !== liveTurn || ended) return;
+      const newOnes = r?.dias ?? [];
+      const oldest = newOnes.length ? newOnes[newOnes.length - 1].dia : null;
       // Os dias já carregados além da primeira página ficam, e o cursor deles também.
-      const guardaAntigos = maisAntigo !== null && dias.some((d) => d.dia < maisAntigo);
-      dias = juntarDias(dias, novos);
-      if (!guardaAntigos) proximo = r?.proximo ?? null;
-      faixaAoVivo = null;
+      const keepOld = oldest !== null && days.some((d) => d.dia < oldest);
+      days = mergeDays(days, newOnes);
+      if (!keepOld) next = r?.proximo ?? null;
+      liveBand = null;
     } catch (e) {
-      if (abortou(e) || g !== geracao || vez !== vezDoAoVivo) return;
-      faixaAoVivo ??= errorBand({ title: 'Não deu para atualizar o histórico', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: tentarAoVivo } });
+      if (aborted(e) || g !== generation || turn !== liveTurn) return;
+      liveBand ??= errorBand({ title: 'Não deu para atualizar o histórico', text: e?.message ?? String(e), action: { label: 'Tentar de novo', onClick: retryLive } });
     }
-    desenharLista();
+    drawList();
   }
 
-  async function tentarAoVivo() {
-    await releer();
-    focarDepoisDeTentar(null);
+  async function retryLive() {
+    await reread();
+    focusAfterRetry(null);
   }
 
-  entrada.addEventListener('input', () => {
-    clearTimeout(esperaBusca);
-    esperaBusca = setTimeout(() => {
-      const valor = entrada.value.trim();
-      if (valor === busca) return;
-      busca = valor;
-      recomecar();
-    }, ESPERA_DA_BUSCA_MS);
+  input.addEventListener('input', () => {
+    clearTimeout(searchWait);
+    searchWait = setTimeout(() => {
+      const value = input.value.trim();
+      if (value === search) return;
+      search = value;
+      restart();
+    }, SEARCH_DEBOUNCE_MS);
   });
 
   // Espera a rajada de mudanças assentar, mas relê no máximo ESPERA_MAXIMA_DO_AO_VIVO_MS depois da
   // primeira mudança pendente, mesmo que elas não parem.
-  ctx.onChange((mudancas) => {
-    if (!mudancas?.some((m) => m.tipo === 'sessao')) return;
-    const agora = Date.now();
-    primeiraPendente ??= agora;
-    clearTimeout(esperaAoVivo);
-    const atraso = Math.max(0, Math.min(ESPERA_DO_AO_VIVO_MS, primeiraPendente + ESPERA_MAXIMA_DO_AO_VIVO_MS - agora));
-    esperaAoVivo = setTimeout(() => {
-      primeiraPendente = null;
-      releer();
-    }, atraso);
+  ctx.onChange((changes) => {
+    if (!changes?.some((m) => m.tipo === 'sessao')) return;
+    const now = Date.now();
+    firstPending ??= now;
+    clearTimeout(liveWait);
+    const delay = Math.max(0, Math.min(LIVE_WAIT_MS, firstPending + LIVE_MAX_WAIT_MS - now));
+    liveWait = setTimeout(() => {
+      firstPending = null;
+      reread();
+    }, delay);
   });
   // Núcleo reiniciado ou conexão de volta: com a lista no ar, relê sem perder páginas nem rolagem.
-  ctx.onRestart(() => (pronto ? releer() : recomecar()));
+  ctx.onRestart(() => (ready ? reread() : restart()));
 
-  recomecar();
+  restart();
 
   return () => {
-    encerrada = true;
-    geracao++;
-    controle?.abort();
-    observador?.disconnect();
-    clearTimeout(esperaBusca);
-    clearTimeout(esperaAoVivo);
+    ended = true;
+    generation++;
+    control?.abort();
+    observer?.disconnect();
+    clearTimeout(searchWait);
+    clearTimeout(liveWait);
   };
 }
