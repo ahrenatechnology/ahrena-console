@@ -20,6 +20,8 @@ import {
   type ApiLocal,
 } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
+import { DecisoesDaUi } from '../../src/api/decisoes-ui.ts';
+import { criarReposDoNucleo } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { GithubProject } from '../../src/github/project.ts';
@@ -60,6 +62,8 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     await semearDetalhe(storage, AGORA);
     await semearHistoricoDoPainel(storage, decisoes, 'p4', AGORA);
     const mcp = criarServidorMcp({ storage, contas, desktop: null, log: () => {} });
+    const repos = criarReposDoNucleo({ demo: true, semGithub: false, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }), frota: mcp.frota, mudancas, log: () => {} });
+    const decisoesUi = new DecisoesDaUi({ decisions: decisoes, storage, alvoDe: (id) => montador.alvoDaSessao(id), localDe: async () => null });
     const kanban = new GithubProject({ source: new ProjetoDoSimulador(), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }), project: PROJECT_DO_SIMULADOR });
     api = await iniciarApiLocal({
       montador,
@@ -76,6 +80,8 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       sessoes: new ListaDeSessoes({ storage, contas, agora: () => AGORA }),
       historico: new HistoricoDeSessoes({ storage, decisoes, fusoHorario: 'UTC' }),
       kanban: new QuadroKanban({ storage, contas, agora: () => AGORA }),
+      decisoesUi,
+      repos: repos.rota,
     });
     host = new URL(api.url).host;
     const lista = (await (await fetch(`${api.url}/api/decisions/${SESSAO_DO_PAINEL}?scope=family`)).json()) as { itens: { id: string; estado: string }[] };
@@ -197,6 +203,17 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       ['/api/kanban?view=quadro', '/api/kanban?visao=quadro'],
       ['/api/workflows?filter=ativas', '/api/workflows?filtro=ativas'],
       ['/api/workflows?filter=todas&node=principal', '/api/workflows?filtro=todas&no=principal'],
+      ['/api/decisions', '/api/decisoes'],
+      ['/api/decisions?groupBy=family&state=a_confirmar&q=kanban', '/api/decisoes?agrupar=familia&estado=a_confirmar&q=kanban'],
+      ['/api/decisions?groupBy=session', '/api/decisoes?agrupar=sessao'],
+      ['/api/decisions?groupBy=nada', '/api/decisoes?agrupar=nada'],
+      [`/api/sessions/${s}/decisions`, `/api/sessoes/${s}/decisoes`],
+      [`/api/sessions/${s}/decisions?scope=branch&state=vigentes`, `/api/sessoes/${s}/decisoes?escopo=branch&estado=vigentes`],
+      ['/api/repos', '/api/repos'],
+      ['/api/repos?refresh=1', '/api/repos?atualizar=1'],
+      ['/api/repos/exemplo-labs/vitrine-demo?period=30d', '/api/repos/exemplo-labs/vitrine-demo?periodo=30d'],
+      ['/api/repos/exemplo-labs/vitrine-demo?period=1y', '/api/repos/exemplo-labs/vitrine-demo?periodo=1a'],
+      ['/api/repos/exemplo-labs/vitrine-demo?period=2y', '/api/repos/exemplo-labs/vitrine-demo?periodo=2y'],
     ];
     for (const [next, old] of pairs) {
       const r = await same(next, old);
@@ -240,17 +257,22 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     assert.ok(opened.every((u) => u === `claude://claude.ai/epitaxy/${LOCAL}`));
   });
 
-  test('POST on the decisions: new actions answer like the old ones; Origin is still refused', async () => {
+  test('POST on the decisions: new actions answer like the old ones, with the same Origin rules', async () => {
     const json = { 'content-type': 'application/json' };
     const post = (path: string, body: unknown, headers: Record<string, string> = json) => call(path, { method: 'POST', headers, body: JSON.stringify(body) });
-    for (const [next, old] of [['confirm', 'confirmar'], ['dismiss', 'descartar'], ['adjust', 'ajustar'], ['undo', 'desfazer']]) {
-      for (const [n, o] of [[`/api/decisions/nao-existe/${next}`, `/api/decisoes/nao-existe/${old}`]]) {
-        assert.deepEqual(await post(n, { sessao: SESSAO_DO_PAINEL }), await post(o, { sessao: SESSAO_DO_PAINEL }), n);
-        assert.deepEqual(await post(n, {}), await post(o, {}), `${n} without the session`);
-        assert.equal((await post(n, { sessao: SESSAO_DO_PAINEL }, { ...json, origin: `http://${host}` })).status, 403, n);
-        assert.equal((await post(o, { sessao: SESSAO_DO_PAINEL }, { ...json, origin: `http://${host}` })).status, 403, o);
-        assert.equal((await call(n)).status, 405, `${n}: GET`);
+    const self = { ...json, origin: `http://${host}` };
+    for (const [next, old] of [['confirm', 'confirmar'], ['dismiss', 'descartar'], ['adjust', 'ajustar'], ['undo', 'desfazer'], ['promote', 'promover']]) {
+      const [n, o] = [`/api/decisions/nao-existe/${next}`, `/api/decisoes/nao-existe/${old}`];
+      assert.deepEqual(await post(n, { sessao: SESSAO_DO_PAINEL }), await post(o, { sessao: SESSAO_DO_PAINEL }), n);
+      assert.deepEqual(await post(n, {}), await post(o, {}), `${n} without the session`);
+      // The page's own Origin passes on both (#103); another site's, or a query, does not.
+      assert.deepEqual(await post(n, { sessao: SESSAO_DO_PAINEL }, self), await post(o, { sessao: SESSAO_DO_PAINEL }, self), `${n}: page Origin`);
+      assert.notEqual((await post(n, { sessao: SESSAO_DO_PAINEL }, self)).status, 403, n);
+      for (const path of [n, o]) {
+        assert.equal((await post(path, { sessao: SESSAO_DO_PAINEL }, { ...json, origin: 'https://exemplo.com' })).status, 403, path);
+        assert.equal((await post(`${path}?x=1`, { sessao: SESSAO_DO_PAINEL }, self)).status, 403, `${path}?x=1`);
       }
+      assert.equal((await call(n)).status, 405, `${n}: GET`);
     }
     // A real one: confirm on the new route, undo on the old one.
     const confirmed = await post(`/api/decisions/${encodeURIComponent(decisionId)}/confirm`, { sessao: SESSAO_DO_PAINEL });

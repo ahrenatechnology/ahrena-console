@@ -652,5 +652,15 @@
     "wfd-painel",
     "wfd-ponta",
     "wfd-rotulo"
+  ],
+  "envVars": [
+    "AHRENA_ABRIR_MENU",
+    "AHRENA_DADOS_DIR",
+    "AHRENA_NUCLEO_DIR",
+    "AHRENA_NUCLEO_ENTRY",
+    "AHRENA_NUCLEO_PORTA",
+    "AHRENA_ORIGEM",
+    "PORTA",
+    "TOKEN_SESSAO"
   ]
 }

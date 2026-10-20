@@ -1,9 +1,10 @@
 // Guard for decision 0009 (issue #173): internals in English, pt-BR only on screen.
-// Fails when a NEW API route, /ui URL, file or folder name, or CSS class is in Portuguese.
+// Fails when a NEW API route, /ui URL, file or folder name, CSS class or environment variable is
+// in Portuguese.
 // What already existed when the rule was written is frozen in english-internals.legacy.json
 // and leaves that list as the migration phases rename it.
 //
-// Run with: node --test test/
+// Run with: node --test 'test/*.test.mjs'
 // Freeze the names of a tree (adds to the legacy list, never removes):
 //   FREEZE_LEGACY_NAMES=1 ROOT=<checkout> node --test test/english-internals.test.mjs
 import { test } from 'node:test'
@@ -23,6 +24,7 @@ const SKIPPED_TREES = ['plugins/', 'docs/']
 // Where routes and /ui URLs are written.
 const ROUTE_SOURCES = ['packages/nucleo/src/', 'packages/nucleo/ui/', 'apps/desktop/src-tauri/src/', 'apps/desktop/pagina/']
 const CSS_SOURCES = /\.(css|html)$/
+const CODE = /\.(ts|js|mjs|cjs|rs|json|ya?ml|sh|toml)$/
 
 // Words of the legacy internals and their family. A new name with any of them, an accent or a
 // Portuguese ending (-ção, -dade, -mento…) is refused.
@@ -41,7 +43,7 @@ const PORTUGUESE = new Set(`
   janela
   leitura ler ligacao limite linha linhas lista
   maquina maquinas marca medicao medir migracao modelo moldura mover mudanca mudancas mural
-  nativo nome nova novas novo novos nucleo
+  nativo nome nova novas novo novos nucleo origem
   painel pagina paginas para pasta pastas perfil perfis piso plano planos porta precos projeto
   projetos proximo
   quadro
@@ -140,6 +142,22 @@ function expand(raw) {
   return out.filter((r) => r !== '')
 }
 
+/**
+ * Environment variables a source reads or sets: `process.env.X`, `env::var("X")`, `.env("X", …)`,
+ * `env: { X: … }` and any `AHRENA_*` name.
+ */
+export function envVars(source) {
+  const found = new Set()
+  const patterns = [
+    /process\.env(?:\.|\[\s*['"`])([A-Z_][A-Z0-9_]*)/g,
+    /env::var(?:_os)?\(\s*"([A-Z_][A-Z0-9_]*)"/g,
+    /\.(?:env|env_remove)\(\s*"([A-Z_][A-Z0-9_]*)"/g,
+    /\b(AHRENA_[A-Z0-9_]*[A-Z0-9])\b/g,
+  ]
+  for (const re of patterns) for (const m of source.matchAll(re)) found.add(m[1])
+  return found
+}
+
 /** Class selectors of a stylesheet (or of the <style> in an HTML page). */
 export function cssClasses(source) {
   const css = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/url\([^)]*\)/g, '')
@@ -153,15 +171,17 @@ function current() {
   const read = (f) => readFileSync(join(ROOT, f), 'utf8')
   const routeSet = new Set()
   const classSet = new Set()
+  const envSet = new Set()
   for (const f of list) {
+    if (!SKIPPED_TREES.some((t) => f.startsWith(t)) && CODE.test(f) && !f.endsWith('.legacy.json') && !f.endsWith('-lock.json') && !f.endsWith('.lock')) for (const v of envVars(read(f))) envSet.add(v)
     if (ROUTE_SOURCES.some((s) => f.startsWith(s)) && /\.(ts|js|rs|html)$/.test(f)) for (const r of routes(read(f))) routeSet.add(r)
     if (!SKIPPED_TREES.some((t) => f.startsWith(t)) && !f.startsWith('spikes/') && CSS_SOURCES.test(f)) for (const c of cssClasses(read(f))) classSet.add(c)
   }
-  return { routes: routeSet, paths: paths(list), cssClasses: classSet }
+  return { routes: routeSet, paths: paths(list), cssClasses: classSet, envVars: envSet }
 }
 
 const sorted = (set) => [...set].sort()
-const legacy = existsSync(LEGACY_FILE) ? JSON.parse(readFileSync(LEGACY_FILE, 'utf8')) : { routes: [], paths: [], cssClasses: [] }
+const legacy = { routes: [], paths: [], cssClasses: [], envVars: [], ...(existsSync(LEGACY_FILE) ? JSON.parse(readFileSync(LEGACY_FILE, 'utf8')) : {}) }
 const now = current()
 
 if (process.env.FREEZE_LEGACY_NAMES === '1') {
@@ -171,6 +191,7 @@ if (process.env.FREEZE_LEGACY_NAMES === '1') {
     routes: freeze('routes', (r) => r),
     paths: freeze('paths', ownName),
     cssClasses: freeze('cssClasses', (c) => c),
+    envVars: freeze('envVars', (v) => v),
   }
   writeFileSync(LEGACY_FILE, JSON.stringify(next, null, 2) + '\n')
 }
@@ -203,9 +224,18 @@ test('the guard recognizes Portuguese and leaves English alone', () => {
     '/api/decisions/*/dismiss',
   ])
   assert.deepEqual(sorted(routes("rota: '/ui/sessions/:id', arquivo: '/ui/screens/a.js'; // src/api/x.ts")), ['/ui/screens', '/ui/sessions/*'])
+  assert.deepEqual(portugueseWords('AHRENA_NUCLEO_PORTA'), ['nucleo', 'porta'])
+  assert.deepEqual(portugueseWords('AHRENA_CONSOLE_CORE_PORT'), [])
+  assert.deepEqual(sorted(envVars('process.env.AHRENA_X; env::var("HOME"); cmd.env("AHRENA_CONSOLE_DATA_DIR", d); process.env["NODE_ENV"]')), [
+    'AHRENA_CONSOLE_DATA_DIR',
+    'AHRENA_X',
+    'HOME',
+    'NODE_ENV',
+  ])
   assert.deepEqual(sorted(cssClasses('.kb-col > .card:hover, .b-ok { color: red } /* .nada {} */')), ['b-ok', 'card', 'kb-col'])
 })
 
 test('no new API route or /ui URL in Portuguese', () => check('routes', 'Route or /ui URL', (r) => r))
 test('no new file or folder name in Portuguese', () => check('paths', 'File or folder name', ownName))
 test('no new CSS class in Portuguese', () => check('cssClasses', 'CSS class', (c) => c))
+test('no new environment variable in Portuguese', () => check('envVars', 'Environment variable', (v) => v))

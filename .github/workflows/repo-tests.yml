@@ -28,4 +28,4 @@ jobs:
           node-version: 24
 
       - name: Tests
-        run: node --test test/
+        run: node --test 'test/*.test.mjs'

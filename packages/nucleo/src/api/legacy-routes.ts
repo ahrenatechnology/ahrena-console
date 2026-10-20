@@ -17,10 +17,11 @@ const LEGACY_PATHS: readonly (readonly [RegExp, (m: RegExpExecArray) => string])
   [/^\/api\/carga$/, () => '/api/load'],
   [/^\/api\/sessoes$/, () => '/api/sessions'],
   [/^\/api\/sessoes\/([^/]+)$/, (m) => `/api/sessions/${m[1]}`],
-  [/^\/api\/sessoes\/([^/]+)\/(agentes|conversa|eventos|workflow)$/, (m) => `/api/sessions/${m[1]}/${LEGACY_SEGMENTS[m[2]!]}`],
+  [/^\/api\/sessoes\/([^/]+)\/(agentes|conversa|eventos|workflow|decisoes)$/, (m) => `/api/sessions/${m[1]}/${LEGACY_SEGMENTS[m[2]!]}`],
   [/^\/api\/historico$/, () => '/api/history'],
   [/^\/api\/decisoes\/([^/]+)$/, (m) => `/api/decisions/${m[1]}`],
-  [/^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/, (m) => `/api/decisions/${m[1]}/${LEGACY_SEGMENTS[m[2]!]}`],
+  [/^\/api\/decisoes$/, () => '/api/decisions'],
+  [/^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer|promover)$/, (m) => `/api/decisions/${m[1]}/${LEGACY_SEGMENTS[m[2]!]}`],
   [/^\/api\/projeto$/, () => '/api/project'],
   [/^\/api\/projeto\/mover$/, () => '/api/project/move'],
   [/^\/api\/analytics\/custo$/, () => '/api/analytics/cost'],
@@ -31,10 +32,12 @@ const LEGACY_SEGMENTS: Readonly<Record<string, string>> = {
   conversa: 'conversation',
   eventos: 'events',
   workflow: 'workflow',
+  decisoes: 'decisions',
   confirmar: 'confirm',
   descartar: 'dismiss',
   ajustar: 'adjust',
   desfazer: 'undo',
+  promover: 'promote',
 };
 
 /** Old query parameter → new, on every API route. When both come, the new one wins. */
@@ -65,6 +68,11 @@ export const LEGACY_PARAMS: Readonly<Record<string, string>> = {
   ate: 'to',
   filtro: 'filter',
   no: 'node',
+  estado: 'state',
+  agrupar: 'groupBy',
+  grupo: 'group',
+  periodo: 'period',
+  atualizar: 'refresh',
 };
 
 /**
@@ -76,6 +84,8 @@ const ENGLISH_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>>
   scope: { session: 'sessao', family: 'familia' },
   decisions: { session: 'sessao', family: 'familia' },
   view: { sessions: 'sessoes', agents: 'agentes' },
+  groupBy: { family: 'familia', session: 'sessao' },
+  period: { '1y': '1a' },
 };
 
 /** The new path of an old one; any other path comes back as it is. */
