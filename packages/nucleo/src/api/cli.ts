@@ -39,6 +39,7 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
 import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
 import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
@@ -257,6 +258,7 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  if (cenario === 'p4') await semearWorkflowsDoDemo(storage); // #96 e #97: as sessões das telas Workflows
   // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
   await semearHistorico(storage);
   await semearDetalhe(storage);
