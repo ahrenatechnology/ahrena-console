@@ -142,36 +142,36 @@ function selos(st, mot) {
   const m = motivo(mot);
   return el(
     'div',
-    { class: 'selos' },
-    el('span', { class: `selo-st b-${s.cor}` }, el('span', { class: 'p' }), s.rotulo),
-    m ? el('span', { class: `selo-mot${m.urgente ? '' : ' leve'}` }, icone(m.icone), m.rotulo) : null,
+    { class: 'kb-selos' },
+    el('span', { class: `kb-selo-st kb-b-${s.cor}` }, el('span', { class: 'kb-p' }), s.rotulo),
+    m ? el('span', { class: `kb-selo-mot${m.urgente ? '' : ' kb-leve'}` }, icone(m.icone), m.rotulo) : null,
   );
 }
 
 function avatar(nome) {
-  return el('span', { class: 'av' }, icone(nome));
+  return el('span', { class: 'kb-av' }, icone(nome));
 }
 
 function info(nomeDoIcone, texto, classe = null) {
-  return el('span', { class: classe }, icone(nomeDoIcone), el('span', { class: 't' }, texto));
+  return el('span', { class: classe }, icone(nomeDoIcone), el('span', { class: 'kb-t' }, texto));
 }
 
 function cardDeSessao(s) {
   const custo = formatarCusto(s.custoUsd);
   return el(
     'a',
-    { class: `cartao kc st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
-    el('div', { class: 'l1' }, avatar('pasta'), el('div', { class: 'nome' }, el('div', { class: 'tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
+    { class: `cartao kb-kc kb-st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
+    el('div', { class: 'kb-l1' }, avatar('pasta'), el('div', { class: 'kb-nome' }, el('div', { class: 'kb-tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
     selos(s.status, s.motivo),
     s.ultimoPrompt ? el('blockquote', {}, s.ultimoPrompt) : null,
-    s.cwd ? el('div', { class: 'cwd' }, s.cwd) : null,
+    s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
     el(
       'div',
-      { class: 'pe' },
+      { class: 'kb-pe' },
       info('bot', rotuloAgentes(s.agentes)),
       s.modelo ? info('modelo', s.modelo) : null,
       custo ? info('moedas', custo) : null,
-      info('duracao', formatarDuracao(s.duracaoMs), s.rodando ? 'dur rodando' : 'dur'),
+      info('duracao', formatarDuracao(s.duracaoMs), s.rodando ? 'kb-dur kb-rodando' : 'kb-dur'),
     ),
   );
 }
@@ -179,10 +179,10 @@ function cardDeSessao(s) {
 function cardDeAgente(a) {
   return el(
     'a',
-    { class: `cartao kc agente st-${status(a.status).cor}`, href: hrefDaSessao(a.sessaoId), title: a.descricao || a.nome || null },
-    el('div', { class: 'l1' }, avatar(a.principal ? 'bot' : 'subagente'), el('div', { class: 'nome' }, el('div', { class: 'tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
+    { class: `cartao kb-kc kb-agente kb-st-${status(a.status).cor}`, href: hrefDaSessao(a.sessaoId), title: a.descricao || a.nome || null },
+    el('div', { class: 'kb-l1' }, avatar(a.principal ? 'bot' : 'subagente'), el('div', { class: 'kb-nome' }, el('div', { class: 'kb-tt' }, a.nome || '(sem nome)'), a.descricao ? el('small', {}, a.descricao) : null)),
     selos(a.status, a.motivo),
-    el('div', { class: 'pe' }, a.modelo ? info('modelo', a.modelo) : null, info('duracao', formatarDuracao(a.duracaoMs), a.rodando ? 'dur rodando' : 'dur')),
+    el('div', { class: 'kb-pe' }, a.modelo ? info('modelo', a.modelo) : null, info('duracao', formatarDuracao(a.duracaoMs), a.rodando ? 'kb-dur kb-rodando' : 'kb-dur')),
   );
 }
 
@@ -198,7 +198,7 @@ export async function montar(area, ctx) {
   const botoes = Object.fromEntries(
     VISOES.map((v) => [v, el('button', { type: 'button', 'aria-pressed': String(v === visao), aoClicar: () => trocar(v) }, v === 'agentes' ? 'Agentes' : 'Sessões')]),
   );
-  const alternador = el('div', { class: 'seg', role: 'group', 'aria-label': 'Visão do Kanban' }, botoes.agentes, botoes.sessoes);
+  const alternador = el('div', { class: 'kb-seg', role: 'group', 'aria-label': 'Visão do Kanban' }, botoes.agentes, botoes.sessoes);
   const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar');
   const cab = cabecalho({ icone: 'kanban', titulo: 'Kanban', sub: SUB[visao], acoes: [alternador, atualizar] });
   const sub = cab.querySelector('.sub');
@@ -227,10 +227,10 @@ export async function montar(area, ctx) {
         area.replaceChildren(cab, vazio(VAZIO[v]));
       } else {
         // A releitura ao vivo não joga a rolagem horizontal para o começo.
-        const rolagem = quadroNoAr ? (area.querySelector('.kanban')?.scrollLeft ?? 0) : 0;
+        const rolagem = quadroNoAr ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;
         quadroNoAr = true;
         area.replaceChildren(cab, quadro(v, colunas));
-        const novo = area.querySelector('.kanban');
+        const novo = area.querySelector('.kb-kanban');
         if (novo) novo.scrollLeft = rolagem;
       }
     } catch (e) {
@@ -249,21 +249,21 @@ export async function montar(area, ctx) {
   }
 
   function quadro(v, colunas) {
-    return el('div', { class: 'kanban', role: 'region', 'aria-label': v === 'agentes' ? 'Agentes por status' : 'Sessões por status', tabindex: '0' }, ...colunas.map((c) => coluna(v, c)));
+    return el('div', { class: 'kb-kanban', role: 'region', 'aria-label': v === 'agentes' ? 'Agentes por status' : 'Sessões por status', tabindex: '0' }, ...colunas.map((c) => coluna(v, c)));
   }
 
   function coluna(v, c) {
     const card = v === 'agentes' ? cardDeAgente : cardDeSessao;
     const cor = corDaColuna(c.id);
-    const lista = el('div', { class: 'cards' }, ...(c.itens ?? []).map(card));
-    const contador = el('span', { class: 'n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
+    const lista = el('div', { class: 'kb-cards' }, ...(c.itens ?? []).map(card));
+    const contador = el('span', { class: 'kb-n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
     let pagina = c.pagina ?? 1;
     // A ordem é pela última atividade: entre uma página e a próxima um card pode ter subido ou descido,
     // então o que já está na coluna não entra de novo.
     const vistos = new Set((c.itens ?? []).map((i) => i.id));
     let mostrados = vistos.size;
     let temMais = Boolean(c.temMais);
-    const mais = el('button', { type: 'button', class: 'mais' });
+    const mais = el('button', { type: 'button', class: 'kb-mais' });
 
     function rotular(texto = null) {
       const n = faltam({ total: Number(contador.textContent) }, mostrados);
@@ -299,8 +299,8 @@ export async function montar(area, ctx) {
 
     return el(
       'section',
-      { class: 'col', 'aria-label': `${c.rotulo}: ${c.total}` },
-      el('h2', { class: 'cab' }, el('span', { class: `ponto d-${cor}` }), el('span', { class: `c-${cor}`, title: c.rotulo }, c.rotulo), contador),
+      { class: 'kb-col', 'aria-label': `${c.rotulo}: ${c.total}` },
+      el('h2', { class: 'kb-cab' }, el('span', { class: `kb-ponto kb-d-${cor}` }), el('span', { class: `kb-c-${cor}`, title: c.rotulo }, c.rotulo), contador),
       lista,
       mais,
     );

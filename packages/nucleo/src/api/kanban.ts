@@ -21,9 +21,7 @@
 // `tituloSeguro`, como no MCP. Os itens vêm pela atividade mais recente, desempate pelo id.
 
 import type { ServerResponse } from 'node:http';
-import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
-import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
 import { PRECOS_PADRAO } from '../custo/precos-padrao.ts';
 import { precosVigentes } from '../custo/tabela.ts';
 import { tituloSeguro } from '../mcp/saida.ts';
@@ -32,6 +30,7 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 import { ResumosDeSessao } from './resumo.ts';
+import { custoDaSessao, duracaoDe, tituloDe, type LinhaDeSessao } from './sessoes.ts';
 
 export const ROTA_DO_KANBAN = '/api/kanban';
 export const POR_PAGINA = 10;
@@ -80,26 +79,12 @@ export function colunaDoAgente(status: DisplayStatus): ColunaDeAgente {
   return DO_AGENTE[status];
 }
 
-export interface CardDeSessao {
-  id: string;
-  titulo: string;
-  status: DisplayStatus;
-  /** Por que espera, quando espera. */
-  motivo: AwaitingReason | null;
+/** A linha da tela Sessões (`GET /api/sessoes`, #28) com o último prompt e o modelo. */
+export interface CardDeSessao extends LinhaDeSessao {
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
   ultimoPrompt: string | null;
-  ultimaAtividade: string;
-  inicio: string;
-  /** Ativa ou esperando: a duração ainda corre. */
-  rodando: boolean;
-  duracaoMs: number;
-  agentes: number;
   /** Rótulo legível ("Opus 5.5"); o id cru quando a tabela não conhece o modelo. */
   modelo: string | null;
-  /** Estimativa; `null` quando há uso e nada dele tem preço. */
-  custoUsd: number | null;
-  cwd: string | null;
-  conta: { rotulo: string; cor: string } | null;
 }
 
 export interface CardDeAgente {
@@ -267,7 +252,7 @@ export class QuadroKanban {
       ultimaAtividade: s.updatedAt,
       inicio: s.startedAt,
       rodando: status === 'active' || status === 'waiting',
-      duracaoMs: duracaoDaSessao(s, agora),
+      duracaoMs: duracaoDe(s, agora),
       agentes: (await this.agentesDe(s)).length,
       modelo: rotuloDoModelo(s.model),
       custoUsd: await this.custoDe(s, precos),
@@ -306,9 +291,7 @@ export class QuadroKanban {
   private async custoDe(s: Session, precos: ModelPricing[]): Promise<number | null> {
     const c = this.custos.get(s.id);
     if (c && c.updatedAt === s.updatedAt) return c.usd;
-    const parcelas = await parcelasDaSessao(this.storage, s.id, precos);
-    const { total } = relatorioDeCusto(parcelas);
-    const usd = total.custoUsd ?? (total.totalDeTokens === 0 ? 0 : null);
+    const usd = await custoDaSessao(this.storage, s.id, precos);
     this.custos.set(s.id, { updatedAt: s.updatedAt, usd });
     return usd;
   }
@@ -327,7 +310,7 @@ function principalDe({ s, status, titulo }: SessaoLida, agora: number): CardDeAg
     inicio: s.startedAt,
     ultimaAtividade: s.updatedAt,
     rodando: status === 'active' || status === 'waiting',
-    duracaoMs: duracaoDaSessao(s, agora),
+    duracaoMs: duracaoDe(s, agora),
   };
 }
 
@@ -361,15 +344,6 @@ function maisRecente(da: string, ia: string, db: string, ib: string): number {
 function paginar<T>(itens: T[], pagina: number): { pagina: number; temMais: boolean; fatia: T[] } {
   const inicio = (pagina - 1) * POR_PAGINA;
   return { pagina, temMais: itens.length > inicio + POR_PAGINA, fatia: itens.slice(inicio, inicio + POR_PAGINA) };
-}
-
-function duracaoDaSessao(s: Session, agora: number): number {
-  const fim = s.status === 'active' ? agora : Date.parse(s.endedAt ?? s.updatedAt);
-  return Math.max(0, fim - Date.parse(s.startedAt));
-}
-
-function tituloDe(s: Session, d: SessaoDoDesktop | null): string {
-  return tituloSeguro(d?.titulo) ?? tituloSeguro(s.name) ?? (s.cwd ? tituloSeguro(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
 /** Numa linha: sem controle nem quebra, espaços colapsados, cortado com "…". */

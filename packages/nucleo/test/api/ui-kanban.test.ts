@@ -1,7 +1,7 @@
 // A tela do Kanban na /ui (#31): as funções puras dos cards, o registro da tela e os arquivos dela
 // (telas/kanban.js e kanban.css), que o núcleo serve e que seguem as regras da /ui.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI, responderUi } from '../../src/api/ui.ts';
@@ -119,6 +119,24 @@ describe('Kanban: registro e arquivos', () => {
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
       assert.doesNotMatch(texto, /style=|innerHTML|\bfetch\(/, `${a} usa estilo inline, innerHTML ou fetch direto`);
     }
+  });
+
+  // O CSS de cada tela fica carregado depois que ela abre: classe com o mesmo nome em duas telas
+  // desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões). Tudo do Kanban é `kb-`.
+  test('o CSS do Kanban só estiliza classe kb- ou da moldura, e nenhuma de outra tela', () => {
+    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const daMoldura = classes('moldura.css');
+    const minhas = [...classes('kanban.css')].filter((c) => !daMoldura.has(c));
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('kb-')), [], 'classe própria sem o prefixo kb-');
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['kanban.css', 'moldura.css', 'marca.css'].includes(a));
+    for (const outra of outras) {
+      const delas = classes(outra);
+      assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `kanban.css e ${outra} estilizam as mesmas classes`);
+    }
+    // E a tela só usa classes que existem (as kb- do CSS, as da moldura e o `cartao`).
+    const js = readFileSync(`${PASTA_DA_UI}telas/kanban.js`, 'utf8');
+    const usadas = new Set([...js.matchAll(/\bkb-[a-z0-9-]+/g)].map((m) => m[0]).filter((c) => !c.endsWith('-')));
+    for (const c of usadas) assert.ok(minhas.includes(c), `${c} não está no kanban.css`);
   });
 
   test('o núcleo serve telas/kanban.js e kanban.css com o tipo certo', async () => {
