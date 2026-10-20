@@ -1,0 +1,214 @@
+// Kanban do projeto na API (#80, wireframe C11): o quadro de um GitHub Project e o mover de um card.
+//
+// | Rota                          | O quê                                                          |
+// | ----------------------------- | -------------------------------------------------------------- |
+// | `GET /api/projeto`            | O quadro: raias, cards, marcos. `?forcar=1` relê (mínimo de 30 s) |
+// | `POST /api/projeto/mover`     | `{ itemId, optionId }`: muda o Status no GitHub e devolve o quadro |
+//
+// Os dados saem do `GithubProject` (cache da decisão 0001): com o GitHub fora e algo no cache, o
+// GET responde 200 com `desatualizado: true`. A escrita aceita a própria `/ui` (Origin igual a
+// `http://<Host>`), só nesta rota (`mesmaOrigemMovendo`); as outras defesas da 0003 continuam.
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { NoDataError, RateLimitedError } from '../github/cache.ts';
+import {
+  PROJECT_SCOPE_HINT,
+  ProjectItemUnknownError,
+  ProjectOptionUnknownError,
+  ProjectPermissionError,
+  type BoardLane,
+  type ProjectBoard,
+  type ProjectCard,
+  type ProjectMoveResult,
+} from '../github/project.ts';
+import { send } from '../ingest/hooks/receiver.ts';
+import { ciDoPr, reviewDoPr } from './trabalho.ts';
+
+export const ROTA_DO_PROJETO = '/api/projeto';
+export const ROTA_DE_MOVER = '/api/projeto/mover';
+/** O comando que dá ao token do `gh` o escopo `project`. */
+export const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
+
+const MAX_CORPO = 4096;
+const ITEM = /^PVTI_[A-Za-z0-9_-]{1,96}$/;
+const OPCAO = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** O que a API usa do kanban: o `GithubProject` cumpre. */
+export interface KanbanDoProjeto {
+  readonly project: { owner: string; number: number; field: string };
+  board(opts?: { force?: boolean }): Promise<ProjectBoard>;
+  move(itemId: string, optionId: string): Promise<ProjectMoveResult>;
+  pauseLeftMs(): number;
+}
+
+export interface OpcoesDoProjeto {
+  /** `null` com `--sem-github`: as duas rotas respondem 503. */
+  kanban: KanbanDoProjeto | null;
+  /** `demo` quando o kanban é o GitHub falso do simulador. */
+  fonte: 'github' | 'demo';
+  log?: (mensagem: string) => void;
+}
+
+export interface CardDoProjeto {
+  itemId: string;
+  tipo: ProjectCard['kind'];
+  tipoDaIssue: string | null;
+  numero: number | null;
+  titulo: string;
+  url: string | null;
+  repo: string | null;
+  estado: string;
+  marco: string | null;
+  subIssues: { feitas: number; total: number } | null;
+  pr: { numero: number; url: string; ci: 'ok' | 'falhou' | 'rodando' | null; review: 'aprovado' | 'ajustes' | 'pendente' | null } | null;
+  raiaId: string | null;
+}
+
+export interface QuadroDoProjeto {
+  projeto: { dono: string; numero: number; titulo: string; url: string; campo: string };
+  raias: { id: string | null; nome: string; cor: string | null; cards: CardDoProjeto[] }[];
+  marcos: string[];
+  total: number;
+  lidoEm: number;
+  desatualizado: boolean;
+  motivo: string | null;
+  fonte: 'github' | 'demo';
+}
+
+function cardDe(c: ProjectCard, raia: BoardLane): CardDoProjeto {
+  const p = c.pullRequest ?? null;
+  return {
+    itemId: c.itemId,
+    tipo: c.kind,
+    tipoDaIssue: c.type,
+    numero: c.number,
+    titulo: c.title,
+    url: c.url,
+    repo: c.repo,
+    estado: c.state,
+    marco: c.milestone ?? null,
+    subIssues: c.subIssues ? { feitas: c.subIssues.completed, total: c.subIssues.total } : null,
+    pr: p ? { numero: p.number, url: p.url, ci: ciDoPr(p), review: reviewDoPr(p) } : null,
+    // A raia onde o card aparece: um Status que sumiu do campo cai em "Sem status" (id null).
+    raiaId: raia.id,
+  };
+}
+
+/** O quadro do núcleo no formato da API, em pt-BR. */
+export function quadroDe(b: ProjectBoard, fonte: QuadroDoProjeto['fonte']): QuadroDoProjeto {
+  const raias = b.lanes.map((l) => ({ id: l.id, nome: l.name, cor: l.color, cards: l.items.map((c) => cardDe(c, l)) }));
+  const marcos = [...new Set(raias.flatMap((r) => r.cards.map((c) => c.marco)).filter((m): m is string => m !== null))].sort((a, z) => a.localeCompare(z, 'pt-BR'));
+  return {
+    projeto: { dono: b.owner, numero: b.number, titulo: b.title, url: b.url, campo: b.field },
+    raias,
+    marcos,
+    total: b.count,
+    lidoEm: b.fetchedAt,
+    desatualizado: b.stale,
+    motivo: b.staleReason,
+    fonte,
+  };
+}
+
+/** A própria `/ui` movendo um card: `POST /api/projeto/mover` com `Origin` exatamente `http://<Host>`, e o Host é o nosso. */
+export function mesmaOrigemMovendo(req: IncomingMessage, port: number): boolean {
+  const host = req.headers.host;
+  const origem = req.headers.origin;
+  if (req.method !== 'POST' || typeof origem !== 'string') return false;
+  if (new URL(req.url ?? '/', 'http://x').pathname !== ROTA_DE_MOVER) return false;
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
+  return origem === `http://${host}`;
+}
+
+export const ehDoProjeto = (caminho: string) => caminho === ROTA_DO_PROJETO || caminho === ROTA_DE_MOVER;
+
+type Erro = { status: number; codigo: string; error: string; headers?: Record<string, string>; extra?: Record<string, unknown> };
+
+const segundos = (ms: number) => String(Math.max(1, Math.ceil(ms / 1000)));
+
+/** Erro do GitHub (ou do cache) → status, código e mensagem do contrato. */
+function erroDe(err: unknown, kanban: KanbanDoProjeto, falhou: 'github-fora' | 'github-recusou'): Erro {
+  const causa = err instanceof NoDataError ? err.cause : err;
+  if (causa instanceof ProjectPermissionError)
+    return { status: 401, codigo: 'sem-escopo', error: `sem permissão no GitHub Project: ${PROJECT_SCOPE_HINT}`, extra: { comando: COMANDO_DO_ESCOPO } };
+  const pausa = causa instanceof RateLimitedError ? causa.retryAfterMs : kanban.pauseLeftMs();
+  if (causa instanceof RateLimitedError || (err instanceof NoDataError && pausa > 0))
+    return { status: 429, codigo: 'limitado', error: 'o GitHub limitou as chamadas; tente de novo em instantes', headers: { 'retry-after': segundos(pausa) } };
+  if (err instanceof ProjectOptionUnknownError) return { status: 422, codigo: 'raia-desconhecida', error: err.message };
+  if (err instanceof ProjectItemUnknownError) return { status: 404, codigo: 'item-desconhecido', error: err.message };
+  const motivo = causa instanceof Error ? causa.message : String(causa);
+  return { status: 502, codigo: falhou, error: falhou === 'github-fora' ? `o GitHub não respondeu e não há quadro no cache: ${motivo}` : `o GitHub recusou: ${motivo}` };
+}
+
+function enviarErro(res: ServerResponse, e: Erro): void {
+  if (e.headers) for (const [k, v] of Object.entries(e.headers)) res.setHeader(k, v);
+  send(res, e.status, { error: e.error, codigo: e.codigo, ...(e.extra ?? {}) });
+}
+
+const DESLIGADO: Erro = { status: 503, codigo: 'desligado', error: 'o núcleo subiu sem o GitHub (--sem-github): não há quadro' };
+
+function lerCorpo(req: IncomingMessage): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    if (Number(req.headers['content-length']) > MAX_CORPO) {
+      req.resume();
+      req.on('end', () => resolve(null));
+      return;
+    }
+    let corpo = '';
+    let grande = false;
+    req.setEncoding('utf8');
+    req.on('data', (parte: string) => {
+      if (grande) return;
+      corpo += parte;
+      if (Buffer.byteLength(corpo) > MAX_CORPO) grande = true;
+    });
+    req.on('end', () => resolve(grande ? null : corpo));
+    req.on('error', reject);
+  });
+}
+
+/** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
+export function criarRotaDoProjeto({ kanban, fonte, log = () => {} }: OpcoesDoProjeto) {
+  async function ler(res: ServerResponse, url: URL) {
+    if (!kanban) return enviarErro(res, DESLIGADO);
+    const forcar = url.searchParams.get('forcar') === '1';
+    try {
+      send(res, 200, quadroDe(await kanban.board({ force: forcar }), fonte));
+    } catch (err) {
+      enviarErro(res, erroDe(err, kanban, 'github-fora'));
+    }
+  }
+
+  async function mover(req: IncomingMessage, res: ServerResponse) {
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json', codigo: 'invalido' });
+    const texto = await lerCorpo(req);
+    if (texto === null) return send(res, 413, { error: 'corpo grande demais', codigo: 'invalido' });
+    let corpo: { itemId?: unknown; optionId?: unknown } | null;
+    try {
+      corpo = JSON.parse(texto) as typeof corpo;
+    } catch {
+      return send(res, 400, { error: 'JSON inválido', codigo: 'invalido' });
+    }
+    const itemId = corpo?.itemId;
+    const optionId = corpo?.optionId;
+    if (typeof itemId !== 'string' || !ITEM.test(itemId)) return send(res, 400, { error: 'itemId inválido: o id do item no Project (PVTI_…)', codigo: 'invalido' });
+    if (typeof optionId !== 'string' || !OPCAO.test(optionId)) return send(res, 400, { error: 'optionId inválido: o id da raia de destino', codigo: 'invalido' });
+    if (!kanban) return enviarErro(res, DESLIGADO);
+    try {
+      const r = await kanban.move(itemId, optionId);
+      log(`projeto: ${itemId} de ${r.moved.from ?? 'sem status'} para ${r.moved.to ?? 'sem status'}`);
+      send(res, 200, { quadro: quadroDe(r, fonte), movido: { itemId: r.moved.itemId, de: r.moved.from, para: r.moved.to } });
+    } catch (err) {
+      enviarErro(res, erroDe(err, kanban, 'github-recusou'));
+    }
+  }
+
+  return async function rotaDoProjeto(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    if (url.pathname === ROTA_DE_MOVER) {
+      if (req.method !== 'POST') return send(res, 405, { error: 'use POST', codigo: 'invalido' });
+      return mover(req, res);
+    }
+    if (req.method !== 'GET') return send(res, 405, { error: 'use GET', codigo: 'invalido' });
+    return ler(res, url);
+  };
+}

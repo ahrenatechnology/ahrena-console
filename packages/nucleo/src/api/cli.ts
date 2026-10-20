@@ -19,6 +19,7 @@ import { criarServidorMcp } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/historico/files.ts';
 import { followTranscripts } from '../ingest/historico/follower.ts';
 import { Perfis } from '../perfis/perfis.ts';
@@ -38,6 +39,7 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
@@ -62,10 +64,12 @@ const AJUDA = `Uso: npm run api -- [opções]
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
-  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub
+  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, e o kanban do
+                      projeto (/api/projeto) responde 503
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
-                      seja qual for, mostra o cenário
+                      seja qual for, mostra o cenário, e o kanban do projeto é o do
+                      wireframe C11, num GitHub falso (mover vale em memória)
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
   --pai <pid>         Sai quando este processo some (o app ou a extensão), a menos que outro
                       cliente esteja registrado. Se adotar, registra o pid como cliente
@@ -73,6 +77,10 @@ const AJUDA = `Uso: npm run api -- [opções]
                       deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
+
+Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
+AHRENA_CONSOLE_PROJECT=dono/número (padrão ahrenatechnology/3), com o token do \`gh\` (escopo
+\`project\`) e o cache no banco do núcleo.
 
 Se já há um núcleo de pé nesta máquina, este não sobe outro: adota o de pé (imprime a porta e a
 versão, avisa se o código é outro) e sai com 0. Ver src/dono/README.md.
@@ -180,6 +188,19 @@ const trabalho = new TrabalhoPorBranch({
   cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
+// O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
+function projetoDoAmbiente(valor = process.env.AHRENA_CONSOLE_PROJECT ?? 'ahrenatechnology/3'): ProjectRef {
+  const m = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/(\d{1,9})$/.exec(valor.trim());
+  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: dono/número, como ahrenatechnology/3 (veio "${valor}")`);
+  return { owner: m[1], number: Number(m[2]) };
+}
+const cacheDoProjeto = new GithubCache({ store: new SqliteCacheStore(storage.db) });
+const kanban = demo
+  ? new GithubProject({ source: new ProjetoDoSimulador(), cache: cacheDoProjeto, project: PROJECT_DO_SIMULADOR })
+  : o['sem-github']
+    ? null
+    : createGithubProject({ project: projetoDoAmbiente(), cache: cacheDoProjeto, token: () => ghCliToken() });
+
 // O commit do checkout da API, para o rodapé do painel dizer qual versão está no ar.
 function commitDoCheckout(): string | null {
   try {
@@ -272,6 +293,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  projeto: { kanban, fonte: demo ? 'demo' : 'github', log },
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

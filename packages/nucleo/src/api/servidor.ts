@@ -15,12 +15,15 @@
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
+// | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada. A escrita nas
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo o
+// `POST /api/projeto/mover` da própria `/ui`, com o mesmo `Origin` (api/projeto.ts). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -36,6 +39,7 @@ import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 
 export { VERSAO_DA_API };
 
@@ -59,6 +63,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** O kanban do GitHub Project (#80). Sem ele, `/api/projeto` responde 503. */
+  projeto?: OpcoesDoProjeto;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -123,6 +129,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
+  const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
   const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
   let port = 0;
 
@@ -195,7 +202,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemMovendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -206,6 +213,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
       return decidir(req, res, decodeURIComponent(escrita[1]), escrita[2] as AcaoNaDecisao, url);
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
+    if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
