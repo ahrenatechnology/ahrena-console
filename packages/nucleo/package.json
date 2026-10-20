@@ -7,7 +7,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./simulador": "./src/simulador/index.ts",
+    "./simulator": "./src/simulator/index.ts",
+    "./simulador": "./src/simulator/index.ts",
     "./api": "./src/api/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./owner": "./src/owner/index.ts",
@@ -18,7 +19,8 @@
   },
   "scripts": {
     "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
-    "simular": "node --disable-warning=ExperimentalWarning src/simulador/cli.ts",
+    "simulate": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
+    "simular": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts",
     "core": "node --disable-warning=ExperimentalWarning src/owner/cli.ts",

@@ -17,7 +17,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [test/storage-contract.ts](test/storage-contract.ts) | Contrato da porta. Todo adaptador roda a mesma bateria |
 | [src/ingest/history/](src/ingest/history/) | Importação do histórico de `~/.claude/projects` (item 1.2) e o seguidor em tempo real (item 1.3) |
 | [src/github/](src/github/) | Trabalho do GitHub: hierarquia, PR, CI e review por item, e o kanban de um Project (seção abaixo) |
-| [src/simulador/](src/simulador/) | Simulador de sessões, com modo caos (ver abaixo) |
+| [src/simulator/](src/simulator/) | Simulador de sessões, com modo caos (ver abaixo) |
 | [src/states/](src/states/) | Máquina de estados: transições, vigia, sonda de processo e leitura do inbox (item 1.5) |
 | [src/decisions/](src/decisions/README.md) | Decisões da sessão: modelo, porta, captura pelos hooks e pelo transcript, e a cadeia de substituição (#99) |
 | [src/api/](src/api/) | API local mínima para o painel lateral (seção abaixo) |
@@ -299,7 +299,7 @@ Pela decisão 0001: a leitura usa `fieldValueByName(name: "Status")`, 100 itens 
 
 Ler e mover pedem o escopo `project` no token do `gh`. Sem ele, `move` e `board` lançam `ProjectPermissionError`, com a instrução `gh auth refresh -s project`; com o cache vazio, `board` lança `NoDataError` e o erro da fonte vem em `cause`. Opção ou item desconhecidos lançam `ProjectOptionUnknownError` e `ProjectItemUnknownError`, sem chamar o GitHub. Quando o GitHub limita, a mutação pausa as chamadas como as leituras, e o quadro continua saindo do cache.
 
-A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulador/projeto.ts`).
+A API local expõe o quadro em `GET /api/project` e `POST /api/project/move`, com o corpo na tabela das rotas acima (as rotas antigas, `/api/projeto` e `/api/projeto/mover`, respondem o corpo antigo, em português; ver [docs/kanban-do-projeto.md](../../docs/kanban-do-projeto.md#no-núcleo-80-wireframe-c11)); a `--demo` usa o Project falso do C11 (`ProjetoDoSimulador`, em `src/simulator/project.ts`).
 
 Os testes usam a leitura real do Project 3 gravada em `test/github/fixtures/project.json` (uma chamada, sem mutação). Para regravar:
 
@@ -312,25 +312,27 @@ node test/github/gravar-project.ts > test/github/fixtures/project.json
 Gera sessões, agentes e subagentes, eventos e uso de tokens plausíveis e grava pela porta, para testar e demonstrar o painel e o artefato sem dados reais. Item 6.4 do backlog.
 
 ```bash
-npm run simular                            # 12 sessões das últimas 6 h, de uma vez, em simulacao.sqlite
-npm run simular -- --caos --seed 42        # com falhas, reproduzível
-npm run simular -- --caos --tempo-real --velocidade 60 --precos
-npm run simular -- --help
+npm run simulate                           # 12 sessões das últimas 6 h, de uma vez, em simulacao.sqlite
+npm run simulate -- --chaos --seed 42      # com falhas, reproduzível
+npm run simulate -- --chaos --real-time --speed 60 --prices
+npm run simulate -- --help
 ```
 
 | Opção | O quê |
 | --- | --- |
-| `--banco <arquivo>` | Banco SQLite de destino. Padrão `simulacao.sqlite` (ignorado pelo git) |
+| `--db <arquivo>` | Banco SQLite de destino. Padrão `simulacao.sqlite` (ignorado pelo git) |
 | `--seed <semente>` | A mesma semente com as mesmas opções grava os mesmos dados. Sem ela, uma é sorteada e exibida |
-| `--sessoes <n>` | Número de sessões. Padrão 12 |
-| `--duracao <min>` | Janela simulada. Padrão 360; o abandono precisa de pelo menos ~240 |
-| `--caos` | Liga o modo caos |
-| `--intensidade <0..1>` | Fração extra de sessões com caos, além de uma de cada tipo. Padrão 0.4 |
-| `--tempo-real` | Grava cada operação na hora dela, em vez de tudo de uma vez. Ctrl+C para; o que foi gravado fica |
-| `--velocidade <x>` | Em tempo real, minutos simulados por minuto de relógio. Padrão 30 |
-| `--precos` | Grava preços **ilustrativos** para os modelos simulados que ainda não têm preço, para o custo aparecer |
+| `--sessions <n>` | Número de sessões. Padrão 12 |
+| `--duration <min>` | Janela simulada. Padrão 360; o abandono precisa de pelo menos ~240 |
+| `--chaos` | Liga o modo caos |
+| `--intensity <0..1>` | Fração extra de sessões com caos, além de uma de cada tipo. Padrão 0.4 |
+| `--real-time` | Grava cada operação na hora dela, em vez de tudo de uma vez. Ctrl+C para; o que foi gravado fica |
+| `--speed <x>` | Em tempo real, minutos simulados por minuto de relógio. Padrão 30 |
+| `--prices` | Grava preços **ilustrativos** para os modelos simulados que ainda não têm preço, para o custo aparecer |
 
-**Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `velocidade` vezes mais rápido; as datas gravadas acompanham o relógio.
+Os nomes antigos (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`, `--tempo-real`, `--velocidade`, `--precos`) e o `npm run simular` continuam aceitos até a fase 6 da #173; se vierem os dois, vale o novo.
+
+**Lote** grava a janela inteira terminando agora: as sessões já aconteceram e as que começaram tarde ficam em andamento. **Tempo real** começa agora e corre `--speed` vezes mais rápido; as datas gravadas acompanham o relógio.
 
 O **modo caos** garante pelo menos uma sessão de cada falha:
 
@@ -349,7 +351,7 @@ Tudo é sintético: projetos inventados sob `/simulacao/`, nenhum nome de pessoa
 Pelo código:
 
 ```ts
-import { simular } from '@ahrena-console/nucleo/simulador';
+import { simular } from '@ahrena-console/nucleo/simulator';
 
 const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 ```
@@ -392,7 +394,7 @@ const resumo = await simular(porta, { semente: 42, caos: true, modo: 'lote' });
 - **Amostras.** A tabela `telemetry_samples` (uma linha por máquina e hora: as colunas das séries e a leitura inteira em JSON). A poda vai na mesma transação da gravação: nada passa de 12 h. A série de 1 h tem um ponto por amostra (120); a de 12 h, baldes de 2 min com a média (360).
 - **Alertas.** Carga de 1 min acima dos núcleos em todas as amostras dos últimos 5 min (`load-high`), volume acima de 85% (`volume-full:<ponto>`), porta em todas as interfaces (`port-exposed:<porta>`) e porta do túnel ocupada por outro processo (`tunnel-busy:<porta>`). Cada um com `level`, `message` e `detail` em pt-BR e `since`. A entrada e a saída viram a mudança `alert` em `/api/changes` (`?type=alert` só elas), com a chave `<máquina>:<alerta>`.
 - **Túnel.** A sonda conecta em `127.0.0.1:<porta>` e não escreve nada: a conexão que fica aberta 1 s é `up` (o outro lado responde), a que fecha antes é `idle` (o `ssh` aceitou e lá não há ninguém), a recusada é `down`; outro processo escutando a porta é `busy`.
-- **No ar.** O `cli.ts` liga o amostrador na subida e o para no desligamento; sem coletor para a plataforma, ou com `--no-telemetry`, as duas rotas dão 404. Na `--demo`, as leituras são do simulador ([src/simulador/telemetry.ts](src/simulador/telemetry.ts)): esta máquina (`mac-exemplo`) e a máquina remota sintética `workstation` (`ws-exemplo`), com 12 h já semeadas e os alertas dos wireframes; a carga da workstation passa dos núcleos por uns 15 min a cada 40, então o alerta entra e sai sozinho.
+- **No ar.** O `cli.ts` liga o amostrador na subida e o para no desligamento; sem coletor para a plataforma, ou com `--no-telemetry`, as duas rotas dão 404. Na `--demo`, as leituras são do simulador ([src/simulator/telemetry.ts](src/simulator/telemetry.ts)): esta máquina (`mac-exemplo`) e a máquina remota sintética `workstation` (`ws-exemplo`), com 12 h já semeadas e os alertas dos wireframes; a carga da workstation passa dos núcleos por uns 15 min a cada 40, então o alerta entra e sai sozinho.
 - **Testes.** Os coletores rodam sobre saídas escritas à mão em [test/fixtures/telemetry](test/fixtures/telemetry/) (Mac e Linux), nunca sobre o sistema.
 
 ### Máquinas remotas

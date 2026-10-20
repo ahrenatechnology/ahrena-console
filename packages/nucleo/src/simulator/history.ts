@@ -1,16 +1,16 @@
-// Histórico simulado para a demonstração da tela Analytics (#95, #32): sessões encerradas espalhadas
-// pelos últimos ~90 dias, mais ralas até 52 semanas, nas duas contas do simulador. Determinístico pela
-// semente e pelo `agora`. Só para a --demo: nada aqui é dado real.
+// Simulated history for the Analytics screen demo (#95, #32): ended sessions spread over the last
+// ~90 days, sparser up to 52 weeks, on the simulator's two accounts. Deterministic from the seed and
+// `agora`. Only for --demo: nothing here is real data.
 //
-// Cada dia sorteado vira um cenário do simulador (gerarCenario) de poucas sessões, num horário do dia.
-// Sem o modo caos, e o que o cenário deixa em andamento é encerrado no último instante gravado: as
-// sessões semeadas ficam todas concluídas e no passado (de ontem para trás), sem espera nem erro,
-// para não aparecerem no painel como "precisa de você" nem disputarem com as do cenário do painel.
+// Each drawn day becomes a simulator scenario (gerarCenario) of a few sessions, at a time of day.
+// Without chaos mode, and whatever the scenario leaves running is ended at the last written instant:
+// the seeded sessions are all completed and in the past (yesterday and before), with no wait or
+// error, so they do not show in the panel as "needs you" nor compete with the panel scenario's.
 
 import type { Agent, ClaudeAccount, Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { Aleatorio } from './aleatorio.ts';
-import { gerarCenario } from './cenario.ts';
+import { Aleatorio } from './random.ts';
+import { gerarCenario } from './scenario.ts';
 
 export interface OpcoesDoHistorico {
   semente?: string | number;

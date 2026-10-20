@@ -11,7 +11,7 @@ import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
 import { withChanges, ChangeCursor } from '../../src/changes/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: idem

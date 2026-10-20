@@ -1,19 +1,20 @@
-// O Detalhe da sessão na demonstração (#29 e #30): `npm run api -- --demo` grava, além do cenário
-// do painel, o que as abas Agentes, Conversa e Linha do tempo precisam para não ficarem vazias.
+// The session Detail in the demo (#29 and #30): `npm run api -- --demo` writes, besides the panel
+// scenario, what the Agents, Conversation and Timeline tabs need so they are not empty.
 //
-// - Uma sessão que espera permissão (C5 e C6): "Migração do esquema de pedidos", com a conversa, as
-//   ferramentas com resultado, o Bash parado no pedido de permissão e um subagente que terminou.
-// - Na sessão do painel (a do P4 e as outras): chamadas de ferramenta e o uso dos subagentes, para
-//   os números, as ferramentas mais usadas e o custo por nó do C4. Tudo antes da última ferramenta
-//   do cenário, que é a que o painel mostra.
+// - A session waiting for permission (C5 and C6): "Migração do esquema de pedidos", with the
+//   conversation, tools with results, the Bash stopped at the permission request and a subagent that
+//   finished.
+// - In the panel session (P4's and the others): tool calls and the subagents' usage, for C4's
+//   numbers, most used tools and cost per node. All before the scenario's last tool, which is the one
+//   the panel shows.
 //
-// Tudo sintético, sob /simulacao, com o vocabulário do simulador.
+// All synthetic, under /simulacao, with the simulator's vocabulary.
 
 import type { Agent, SessionEvent, TokenCounts, TokenUsage } from '../model.ts';
 import { emptyTokenCounts } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { SESSAO_DO_PAINEL } from './painel.ts';
-import { RAIZ } from './vocabulario.ts';
+import { SESSAO_DO_PAINEL } from './panel.ts';
+import { RAIZ } from './vocabulary.ts';
 
 export const SESSAO_DO_DETALHE = 'sim-detalhe-pedidos';
 /** O `local_…` sintético da sessão do Detalhe: a demonstração mostra o "Abrir no Claude Desktop". */

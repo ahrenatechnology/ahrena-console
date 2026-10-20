@@ -1,5 +1,5 @@
-// Vocabulário sintético. Tudo aqui é inventado: nenhum nome de pessoa, projeto de cliente
-// ou caminho de máquina real. Os caminhos ficam sob /simulacao para deixar isso evidente.
+// Synthetic vocabulary. Everything here is made up: no person's name, client project or real
+// machine path. Paths live under /simulacao to make that obvious.
 
 export const PROJETOS = [
   'vitrine-demo',

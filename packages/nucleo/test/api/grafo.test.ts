@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, MontadorDoPainel, aplicarEvento, iniciosDosTurnos, resumoVazio, subagentesDe } from '../../src/api/index.ts';
-import { SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { SESSAO_DO_PAINEL, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { T0, agent, at, event, session } from '../fixtures.ts';
 
 const principal = agent({ id: 's1:main', type: 'main' });

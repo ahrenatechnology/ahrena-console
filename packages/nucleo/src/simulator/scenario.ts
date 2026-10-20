@@ -1,9 +1,9 @@
-// Gera o roteiro da simulação: a lista ordenada de gravações (sessão, agente, evento, uso)
-// que o executor aplica pela porta. Função pura da semente e das opções: nada de relógio
-// nem de Math.random aqui dentro.
+// Generates the simulation script: the ordered list of writes (session, agent, event, usage) the
+// runner applies through the port. A pure function of the seed and the options: no clock and no
+// Math.random in here.
 //
-// Os estados são gravados como dados, do jeito que a máquina de estados (item 1.5) gravaria;
-// o simulador não decide transições, só encena roteiros plausíveis.
+// States are written as data, the way the state machine (item 1.5) would write them; the simulator
+// does not decide transitions, it only stages plausible scripts.
 
 import {
   claudeAccountId,
@@ -17,8 +17,8 @@ import {
   type TokenCounts,
   type TokenUsage,
 } from '../model.ts';
-import { Aleatorio, hash32 } from './aleatorio.ts';
-import * as V from './vocabulario.ts';
+import { Aleatorio, hash32 } from './random.ts';
+import * as V from './vocabulary.ts';
 
 export const TIPOS_DE_CAOS = ['travada', 'erro', 'abandono', 'estouro', 'enxame'] as const;
 /**

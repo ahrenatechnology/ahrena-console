@@ -12,7 +12,7 @@ import {
   gerarCenario,
   simular,
   type OpcoesDaSimulacao,
-} from '../src/simulador/index.ts';
+} from '../src/simulator/index.ts';
 import { T0 } from './fixtures.ts';
 
 const AGORA = Date.parse(T0);

@@ -46,13 +46,13 @@ import {
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
-} from '../simulador/painel.ts';
-import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
-import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
+} from '../simulator/panel.ts';
+import { semearWorkflowsDoDemo } from '../simulator/workflows.ts';
+import { semearHistoricoDoPainel } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
-import { semearHistorico } from '../simulador/historico.ts';
-import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulator/project.ts';
+import { semearHistorico } from '../simulator/history.ts';
+import { localDaDemo, semearDetalhe } from '../simulator/detail.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
@@ -77,7 +77,7 @@ import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
-import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
 import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
@@ -87,7 +87,7 @@ import { loadMachinesConfig } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
-import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
+import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 

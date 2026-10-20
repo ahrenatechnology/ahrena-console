@@ -1,9 +1,9 @@
-// Executor: aplica o roteiro pela porta de armazenamento, de uma vez (lote) ou no ritmo
-// do relógio (tempo real). Relógio e espera são injetáveis para os testes.
+// Runner: applies the script through the storage port, all at once (batch) or at the pace of the
+// clock (real time). Clock and wait are injectable for the tests.
 
 import type { ModelPricing } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { gerarCenario, type Operacao, type Roteiro } from './cenario.ts';
+import { gerarCenario, type Operacao, type Roteiro } from './scenario.ts';
 
 export type Modo = 'lote' | 'tempo-real';
 

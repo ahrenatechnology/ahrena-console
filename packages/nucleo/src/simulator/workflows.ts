@@ -10,8 +10,8 @@
 
 import type { Agent, AgentStatus, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { CONTAS } from './painel.ts';
-import { RAIZ } from './vocabulario.ts';
+import { CONTAS } from './panel.ts';
+import { RAIZ } from './vocabulary.ts';
 
 const MIN = 60_000;
 const OPUS = 'claude-opus-5-5';

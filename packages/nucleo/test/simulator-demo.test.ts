@@ -1,10 +1,10 @@
-// A --demo da API (#103): o apelido do painel e as pastas temporárias onde o Promover grava.
+// The API's --demo (#103): the panel alias and the temporary folders where Promote writes.
 import assert from 'node:assert/strict';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { apelidoDaDemo, pastasDosRegistrosDaDemo, SESSAO_DO_PAINEL } from '../src/simulador/painel.ts';
+import { apelidoDaDemo, pastasDosRegistrosDaDemo, SESSAO_DO_PAINEL } from '../src/simulator/panel.ts';
 
 describe('apelidoDaDemo', () => {
   test('o id real do painel lateral vira a sessão do cenário; as do simulador ficam como vieram', () => {

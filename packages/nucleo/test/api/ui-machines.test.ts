@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { seedTelemetry, SimulatedCollector } from '../../src/simulador/telemetry.ts';
+import { seedTelemetry, SimulatedCollector } from '../../src/simulator/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { TELEMETRY_VERSION, type MachineState, type UnreachableReason } from '../../src/telemetry/model.ts';

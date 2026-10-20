@@ -19,11 +19,11 @@ import { SessionHistory } from '../../src/history/reading.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { withChanges, SessionAccounts, decisionsWithChanges } from '../../src/changes/sources.ts';
-import { localDaDemo, semearDetalhe } from '../../src/simulador/detalhe.ts';
-import { semearHistoricoDoPainel } from '../../src/simulador/historico-encerradas.ts';
-import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulador/painel.ts';
-import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulador/projeto.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
+import { localDaDemo, semearDetalhe } from '../../src/simulator/detail.ts';
+import { semearHistoricoDoPainel } from '../../src/simulator/history-ended.ts';
+import { FonteDeTrabalhoDoSimulador, SESSAO_DO_PAINEL, semearCenariosDoPainel, semearDecisoesDoPainel } from '../../src/simulator/panel.ts';
+import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../../src/simulator/project.ts';
+import { semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
 
 export const NOW = Date.parse('2026-10-20T15:00:00Z');
 export const LOCAL = 'local_0b0e1d2c-3a4b-4c5d-8e6f-7a8b9c0d1e2f';

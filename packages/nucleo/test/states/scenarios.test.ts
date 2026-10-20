@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { readInbox, transition, checkWatcherRules, type SessionState } from '../../src/states/index.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
-import { gerarCenario, type Roteiro } from '../../src/simulador/index.ts';
+import { gerarCenario, type Roteiro } from '../../src/simulator/index.ts';
 
 const START = Date.parse('2026-11-02T06:00:00.000Z');
 const scenario = gerarCenario({ semente: 15, caos: true, sessoes: 16, relogio: (ms) => new Date(START + ms).toISOString() });

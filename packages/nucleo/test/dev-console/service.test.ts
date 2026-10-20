@@ -16,7 +16,7 @@ import {
   DEV_CONSOLE_SIMULATOR_RULES,
   devConsoleSimulatorGit,
   SimulatedDevConsoleSource,
-} from '../../src/simulador/dev-console.ts';
+} from '../../src/simulator/dev-console.ts';
 import { agent, at, event, session, T0 } from '../fixtures.ts';
 import { clock, type Clock } from '../github/helpers.ts';
 

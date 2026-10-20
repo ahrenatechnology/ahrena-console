@@ -88,7 +88,7 @@ import {
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulador/github-falso.ts';
+import { criarGithubFalso, DADOS_DA_DEMO, gitDaDemo, SESSOES_EXTRAS_DA_DEMO } from '../simulator/fake-github.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
 import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
 
@@ -581,7 +581,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
 }
 
 export interface OpcoesDosReposDoNucleo {
-  /** Demonstração: o GitHub falso (src/simulador/github-falso.ts), nunca a API real. */
+  /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
   /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
   semGithub: boolean;

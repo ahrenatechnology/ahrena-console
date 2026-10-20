@@ -6,7 +6,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, montarAtencao, MontadorDoPainel, type ApiLocal, type RespostaDaAtencao } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;

@@ -1,10 +1,10 @@
-// GitHub falso do kanban do projeto (#80, wireframe C11): o Project "Ahrena Console" com as raias
-// Backlog, Ready, In Progress, In Review e Done e os 11 cards do wireframe. Mover muda o Status
-// em memória, como a mutação do GitHub faria. Só dados sintéticos: o repositório é o do simulador.
+// Fake GitHub for the project kanban (#80, wireframe C11): the "Ahrena Console" Project with the
+// Backlog, Ready, In Progress, In Review and Done lanes and the wireframe's 11 cards. Moving changes
+// the Status in memory, as GitHub's mutation would. Synthetic data only: the repository is the simulator's.
 
 import type { ProjectBoardValue, ProjectCard, ProjectRef, ProjectSource } from '../github/project.ts';
 import { workKey, type CiState, type ReviewDecision } from '../github/work.ts';
-import { REPO_DO_SIMULADOR } from './painel.ts';
+import { REPO_DO_SIMULADOR } from './panel.ts';
 
 /** O Project da demonstração: dono e número que a API mostra. */
 export const PROJECT_DO_SIMULADOR: Required<ProjectRef> = { owner: 'exemplo', number: 3, field: 'Status' };

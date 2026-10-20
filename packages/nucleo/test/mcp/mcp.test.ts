@@ -19,7 +19,7 @@ import {
   type Tool,
   type JsonRpcResponse,
 } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel } from '../../src/simulator/panel.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 import { NOW, c2, MESSAGE, QUESTION, SECRET, seed } from './helpers.ts';
 

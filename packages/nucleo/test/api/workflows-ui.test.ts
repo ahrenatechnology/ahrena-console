@@ -8,8 +8,8 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
-import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
-import { semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
+import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulator/panel.ts';
+import { semearWorkflowsDoDemo } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { decimal, duration, modelName, percent, when, tokens } from '../../ui/screens/workflow-format.js';

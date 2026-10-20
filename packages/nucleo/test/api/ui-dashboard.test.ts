@@ -7,7 +7,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
-import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
+import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulator/panel.ts';
 
 // ---------- Um DOM mínimo: só o que dom.js, states.js e a tela usam ----------
 
