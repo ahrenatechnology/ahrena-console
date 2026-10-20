@@ -51,6 +51,9 @@ export function escritaDaConfigNaMesmaOrigem(req: IncomingMessage, port: number)
   return origem === `http://${host}`;
 }
 
+/** Quanto o 413 espera o resto de um corpo grande demais antes de derrubar o pedido. */
+const CORTE_DO_CORPO_MS = 1000;
+
 /** O corpo, ou `null` assim que passa de `max`: aí para de ler (o resto nem chega a ser consumido). */
 function lerCorpo(req: IncomingMessage, max: number): Promise<string | null> {
   return new Promise((resolve, reject) => {
@@ -70,10 +73,17 @@ function lerCorpo(req: IncomingMessage, max: number): Promise<string | null> {
   });
 }
 
-/** 413 sem ler o resto do corpo: a resposta sai com `Connection: close` e o pedido é destruído depois dela. */
+/**
+ * 413 sem guardar o resto do corpo. A conexão não cai na hora: quem ainda está mandando o corpo
+ * receberia EPIPE antes de ler o 413. O resto é descartado por no máximo `CORTE_DO_CORPO_MS` e, se
+ * não acabar até lá (um corpo sem fim), o pedido é destruído.
+ */
 function grandeDemais(req: IncomingMessage, res: ServerResponse): void {
-  res.setHeader('connection', 'close');
-  res.on('finish', () => req.destroy());
+  const corte = setTimeout(() => req.destroy(), CORTE_DO_CORPO_MS);
+  corte.unref();
+  req.once('end', () => clearTimeout(corte));
+  req.once('close', () => clearTimeout(corte));
+  req.resume();
   send(res, 413, { error: 'corpo grande demais' });
 }
 

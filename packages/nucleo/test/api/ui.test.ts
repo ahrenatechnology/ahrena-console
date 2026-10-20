@@ -124,8 +124,8 @@ describe('/ui no núcleo', () => {
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
-      // A política de conteúdo bloqueia estilo inline: nem atributo, nem `.style`.
-      assert.doesNotMatch(texto, /style="|\.style\b|\.innerHTML\s*=(?!\s*ICONES)/, `${a} usa estilo inline ou innerHTML`);
+      // A política de conteúdo bloqueia o atributo `style="..."` (o CSSOM, `.style.setProperty`, passa).
+      assert.doesNotMatch(texto, /style="|\.innerHTML\s*=(?!\s*ICONES)/, `${a} usa estilo inline ou innerHTML`);
     }
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
     for (const [, ref] of pagina.matchAll(/(?:href|src)="\/ui\/([^"]+)"/g)) assert.ok(readdirSync(PASTA_DA_UI).includes(ref!), `index.html cita ${ref}, que não existe`);
@@ -242,7 +242,7 @@ describe('escrever(rota, corpo): a escrita da /ui (#63)', () => {
     await assert.rejects(escrever('/api/config/skill', {}), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura && e.status === 409 && /mudou/.test(e.message));
     await assert.rejects(escrever('/ui', {}), /rota fora da API/);
     await assert.rejects(escrever('/api/../../ui', {}), /rota fora do núcleo/);
-    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720' }), /só lê o núcleo local/);
+    assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720' }), /só escreve no núcleo local/);
     assert.equal(pedidos.length, 2);
   });
 });
