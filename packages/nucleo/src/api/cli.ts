@@ -53,6 +53,7 @@ import {
   reprocessarHistorico,
 } from './reprocessamento.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
+import { ListaDeSessoes } from './sessoes.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
@@ -278,6 +279,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   frota: mcp.frota,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
+  sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

@@ -41,6 +41,10 @@ const ICONES = {
   'an-alerta': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   'an-baixar': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
   'an-relogio': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  // Sessões (C3, #28)
+  buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'abrir-lista': '<path d="m6 9 6 6 6-6"/>',
+  inverter: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
 };
 
 const SVG = 'http://www.w3.org/2000/svg';

@@ -1,7 +1,7 @@
 // A tela Analytics da /ui (#95 e #32, C12 e C13): a formatação, o que cada parte mostra e a
 // montagem da tela num DOM mínimo, com respostas sintéticas no formato de /api/analytics.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
@@ -308,7 +308,7 @@ describe('Analytics: Visão geral', () => {
 
       const colunas = comClasse(area, 'an-col');
       assert.equal(colunas.length, 30);
-      assert.ok(colunas.at(-1)!.classes.includes('atual'));
+      assert.ok(colunas.at(-1)!.classes.includes('an-atual'));
       assert.match(texto, /Pico 47 em 13 out/);
       assert.match(texto, /Total 742/);
 
@@ -542,4 +542,18 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
     assert.deepEqual(urls, [], `${arquivo} chama endereço de fora`);
     assert.doesNotMatch(texto, /innerHTML|style=|\.style\b|'style'/, `${arquivo} põe HTML ou estilo inline`);
   }
+
+  // O CSS de cada tela fica carregado depois que ela abre: classe própria sem prefixo, ou repetida
+  // em outra tela, desmonta a outra (o `.linha` do Dashboard desmontava a tabela de Sessões, #151).
+  test('analytics.css só estiliza classes an-* ou da moldura, e nenhuma de outra tela', () => {
+    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const daMoldura = classes('moldura.css');
+    const minhas = [...classes('analytics.css')].filter((c) => !daMoldura.has(c));
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('an-')), [], 'classe própria do Analytics sem o prefixo an-');
+    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['analytics.css', 'moldura.css', 'marca.css'].includes(a));
+    for (const outra of outras) {
+      const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
+      assert.deepEqual(comuns, [], `analytics.css e ${outra} estilizam as mesmas classes`);
+    }
+  });
 });

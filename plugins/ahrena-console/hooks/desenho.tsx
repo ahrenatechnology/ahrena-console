@@ -64,7 +64,7 @@ export const CARD_W = 34
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.29'
+export const VERSAO_DO_PLUGIN = '0.0.30'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -499,7 +499,25 @@ const GLIFO_DA_ATIVIDADE: Record<string, string> = {
 }
 /** A atividade da sessão como texto: a do erro, a primeira frase; a última mensagem, sem o markdown cru. */
 const textoDaAtividade = (s: SessaoDoPainel) => semMarkdown(s.atividade.tipo === 'erro' ? s.atividade.texto.split('.')[0]! : s.atividade.texto)
-const linhaDoModelo = (s: SessaoDoPainel, agora: number) => `${modelo(s.modelo)} · ${desde(s.iniciadaEm, agora)} · turno ${s.turno}`
+/**
+ * Colunas que uma linha de texto do card ocupa sem cortar no Desktop. A conta nominal é UTIL (30), mas
+ * o Desktop acrescenta respiro ao Box com borda: "Opus 5.5 · 12 min · turno 18" (28) cabe, e a linha
+ * de uma sessão de dias com o modelo 1M ("Opus 5.5 1M · 2 d · turno 262", 29) saiu cortada.
+ */
+export const COLUNAS_SEM_CORTE = UTIL - 2
+
+/**
+ * A linha do modelo no card Esta sessão, que nunca corta com reticências: inteira se couber; senão o
+ * modelo sem a versão ("Opus 5.5" → "Opus"); depois o turno curto ("turno 262" → "t262"). Se nem
+ * assim couber, a linha quebra (o desenho usa `wrap`).
+ */
+export function linhaDoModelo(s: Pick<SessaoDoPainel, 'modelo' | 'iniciadaEm' | 'turno'>, agora: number, max = COLUNAS_SEM_CORTE): string {
+  const nome = modelo(s.modelo)
+  const curto = nome.replace(/^(Opus|Sonnet|Haiku|Fable) \d+(?:\.\d+)?/, '$1')
+  const tempo = desde(s.iniciadaEm, agora)
+  const opcoes = [`${nome} · ${tempo} · turno ${s.turno}`, `${curto} · ${tempo} · turno ${s.turno}`, `${curto} · ${tempo} · t${s.turno}`]
+  return opcoes.find((x) => [...x].length <= max) ?? opcoes.at(-1)!
+}
 /**
  * O card "Esta sessão" (pnEstado do P1): a duração à direita do cabeçalho, as pills, o título, o
  * modelo e o que ela faz agora, cada um numa linha. No card de altura fixa, o título e a atividade
@@ -519,14 +537,18 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
     'card-sessao',
     [
       cabecalho(c, '∿', 'ESTA SESSÃO', desde(s.iniciadaEm, c.agora)),
-      <Box flexDirection="row" gap={1}>
-        {pilulaDeStatus(c, 'status', s.estado)}
-        {st === 'waiting' && s.motivo && pilulaDeMotivo(c, 'motivo', s.motivo)}
+      // Uma linha só, em qualquer estado (ver pilulasDaSessao): duas pills largas quebravam a linha, e
+      // o card de altura fixa esmagava a linha do modelo.
+      <Box flexDirection="row" gap={1} flexWrap="nowrap">
+        {pilulasDaSessao(st === 'waiting' ? s.motivo : null, statusDe(s.estado)).map((x, i) =>
+          i === 0 ? pilula(c, 'status', x.texto, cor.cor, cor.fundo) : pilula(c, 'motivo', x.texto, AMARELO, BADGE.amarelo, MOTIVOS[s.motivo!].urgente),
+        )}
       </Box>,
       <Text mono weight="bold" wrap="truncate-end">
         {s.titulo}
       </Text>,
-      <Text mono size="footnote" dimColor wrap="truncate-end">
+      // Nunca com reticências: encurta e, em último caso, quebra (ver linhaDoModelo).
+      <Text mono size="footnote" dimColor wrap="wrap">
         {linhaDoModelo(s, c.agora)}
       </Text>,
       <Text mono size="footnote" wrap="truncate-end">
@@ -539,6 +561,22 @@ function cardSessao(c: Contexto, s: SessaoDoPainel) {
     cor.borda,
     tinta ? cor.fundo : FUNDO_CARTAO,
   )
+}
+
+/**
+ * As pills do card Esta sessão, numa linha que cabe em COLUNAS_SEM_CORTE. Cada pill ocupa o texto e
+ * um espaço de cada lado; entre elas, uma coluna. Sem caber, "Esperando você" vira "Esperando" e,
+ * por último, o status fica só com o glifo: o motivo, que diz por que a sessão espera, fica inteiro.
+ */
+export function pilulasDaSessao(motivo: SessaoDoPainel['motivo'] | null, st: ReturnType<typeof statusDe>): { texto: string }[] {
+  const status = `● ${STATUS[st].rotulo}`
+  if (!motivo) return [{ texto: status }]
+  const m = MOTIVOS[motivo]
+  const motivoInteiro = `${m.glifo} ${m.rotulo}`
+  const opcoes: [string, string][] = [[status, motivoInteiro], ['● Esperando', motivoInteiro], ['●', motivoInteiro]]
+  const largura = ([a, b]: [string, string]) => [...a].length + 2 + 1 + [...b].length + 2
+  const [a, b] = opcoes.find((o) => largura(o) <= COLUNAS_SEM_CORTE) ?? opcoes.at(-1)!
+  return [{ texto: a }, { texto: b }]
 }
 
 /**
@@ -980,7 +1018,9 @@ const LINHAS_DA_LISTA = 3
 function peDosSubagentes(fora: SubagenteDoPainel[]): string {
   if (fora.length === 0) return 'ver o grafo ›'
   const erros = fora.filter((i) => i.status === 'error').length
-  return `+${fora.length}${erros ? ` · ${erros} com erro` : ''} · grafo ›`
+  const longo = `+${fora.length}${erros ? ` · ${erros} com erro` : ''} · grafo ›`
+  // O botão nativo não quebra: sem caber, o erro vira o glifo ("+22 · 1 ✕ · grafo ›").
+  return [...longo].length <= COLUNAS_SEM_CORTE ? longo : `+${fora.length}${erros ? ` · ${erros} ✕` : ''} · grafo ›`
 }
 
 /**

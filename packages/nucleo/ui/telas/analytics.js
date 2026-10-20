@@ -214,7 +214,7 @@ export function barras30(dias) {
   const max = Math.max(1, ...dias.map((d) => d.sessoes ?? 0));
   const filhos = dias.map((d, i) => {
     const h = r1(((d.sessoes ?? 0) / max) * (H - 4));
-    return svg('rect', { class: `an-col${i === dias.length - 1 ? ' atual' : ''}`, x: r1(i * passo), y: r1(H - h), width: largura, height: h }, dica(`${dataCurta(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
+    return svg('rect', { class: `an-col${i === dias.length - 1 ? ' an-atual' : ''}`, x: r1(i * passo), y: r1(H - h), width: largura, height: h }, dica(`${dataCurta(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
   });
   filhos.push(svg('line', { class: 'an-eixo', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
   return [
@@ -341,7 +341,7 @@ function lista(linhas, vazioTexto) {
 }
 
 function abas(atual) {
-  const aba = (id, rotulo, href) => el('a', { href, class: atual === id ? 'on' : null, 'aria-current': atual === id ? 'page' : null }, rotulo);
+  const aba = (id, rotulo, href) => el('a', { href, class: atual === id ? 'an-on' : null, 'aria-current': atual === id ? 'page' : null }, rotulo);
   return el('nav', { class: 'an-seg an-abas', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/custo'));
 }
 
