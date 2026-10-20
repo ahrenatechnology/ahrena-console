@@ -179,6 +179,7 @@ describe('batch simulation through the port', () => {
 });
 
 describe('chaos mode', () => {
+  // `metadata.roteiro` keeps the stored (Portuguese) value of each script: STORED_SCRIPT in scenario.ts.
   const byScript = async (seed: number) => {
     const { storage, data } = await run({ seed, chaos: true, sessions: 10 });
     const sessions = data.sessions.map((s, i) => ({ s, ...data.rest[i] }));
@@ -187,7 +188,7 @@ describe('chaos mode', () => {
 
   test('stuck: keeps waiting for input, without ending', async () => {
     const { storage, of } = await byScript(11);
-    const stuck = of('stuck');
+    const stuck = of('travada');
     assert.ok(stuck.length > 0);
     for (const { s, events } of stuck) {
       assert.equal(s.status, 'active');
@@ -200,19 +201,19 @@ describe('chaos mode', () => {
 
   test('error: the tool fails and the session stays in error', async () => {
     const { storage, of } = await byScript(12);
-    for (const { s, agents, events } of of('error')) {
+    for (const { s, agents, events } of of('erro')) {
       assert.equal(s.status, 'error');
       assert.equal(agents[0].status, 'error');
       assert.equal(events.at(-1)!.type, 'PostToolUseFailure');
     }
-    assert.ok(of('error').length > 0);
+    assert.ok(of('erro').length > 0);
     await storage.close();
   });
 
   test(`abandonment: no activity for ${MINUTES_UNTIL_ABANDONED} min and written as abandoned`, async () => {
     const { storage, of } = await byScript(13);
-    assert.ok(of('abandonment').length > 0);
-    for (const { s, events } of of('abandonment')) {
+    assert.ok(of('abandono').length > 0);
+    for (const { s, events } of of('abandono')) {
       assert.equal(s.status, 'abandoned');
       const last = Date.parse(events.at(-1)!.createdAt);
       assert.ok(Date.parse(s.endedAt!) - last >= MINUTES_UNTIL_ABANDONED * 60_000);
@@ -222,8 +223,8 @@ describe('chaos mode', () => {
 
   test('overflow: token spikes overflow the context at least twice, with the compaction floor', async () => {
     const { storage, of } = await byScript(14);
-    assert.ok(of('overflow').length > 0);
-    for (const { s, events, usages } of of('overflow')) {
+    assert.ok(of('estouro').length > 0);
+    for (const { s, events, usages } of of('estouro')) {
       const context = s.metadata.contexto as { estouros: number; limite: number };
       assert.ok(context.estouros >= 2);
       assert.equal(context.limite, CONTEXT_LIMIT);
@@ -237,8 +238,8 @@ describe('chaos mode', () => {
 
   test('swarm: at least 8 subagents working at the same time', async () => {
     const { storage, of } = await byScript(15);
-    assert.ok(of('swarm').length > 0);
-    for (const { agents } of of('swarm')) {
+    assert.ok(of('enxame').length > 0);
+    for (const { agents } of of('enxame')) {
       const subs = agents.filter((a) => a.type === 'subagent');
       // Concurrency peak: at the start of each subagent, how many are running.
       const concurrent = Math.max(...subs.map((x) => subs.filter((a) => a.startedAt <= x.startedAt && a.endedAt! > x.startedAt).length));
