@@ -18,7 +18,7 @@ const num = (n) => NUM.format(n ?? 0);
 const ESCOPOS = { sessao: 'Sessão', familia: 'Família', branch: 'Branch' };
 
 /** A rota da leitura da aba. */
-export function rotaDaAba(base, { escopo = 'familia', estado = 'todas', q = '' } = {}) {
+export function rotaDaAba(base, { escopo = 'sessao', estado = 'todas', q = '' } = {}) {
   const p = new URLSearchParams({ escopo });
   if (estado !== 'todas') p.set('estado', estado);
   if (q) p.set('q', q.slice(0, 200));
@@ -71,7 +71,8 @@ function cartaoDoPromover() {
 }
 
 export function criar(ctx, base, { cabeca = () => null, rotular = () => {} } = {}) {
-  const filtros = { escopo: 'familia', estado: 'todas', q: '' };
+  // Abre em Sessão, como o C20; Família e Branch somam as das outras sessões.
+  const filtros = { escopo: 'sessao', estado: 'todas', q: '' };
   let alvo = null;
   let ultimo = null;
   let pedido = 0;

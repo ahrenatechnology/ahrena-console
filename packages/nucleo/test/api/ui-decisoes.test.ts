@@ -132,7 +132,7 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.equal(rotaDasDecisoes(), '/api/decisoes?agrupar=branch');
     assert.equal(rotaDasDecisoes({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisoes?agrupar=familia&estado=a_confirmar&q=banco+de+testes&grupo=b%3Aabc');
     assert.equal(rotaDasDecisoes({ q: 'x'.repeat(500) }).length, '/api/decisoes?agrupar=branch&q='.length + 200);
-    assert.equal(rotaDaAba('/api/sessoes/s1'), '/api/sessoes/s1/decisoes?escopo=familia');
+    assert.equal(rotaDaAba('/api/sessoes/s1'), '/api/sessoes/s1/decisoes?escopo=sessao');
     assert.equal(rotaDaAba('/api/sessoes/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessoes/s1/decisoes?escopo=branch&estado=vigentes&q=kanban');
   });
 
@@ -156,7 +156,7 @@ describe('a página (C21) e a aba (C20)', () => {
     assert.equal(typeof aba.mostrar, 'function');
     assert.equal(typeof aba.esconder, 'function');
     await aba.atualizar();
-    assert.deepEqual(lidas, ['/api/sessoes/s1/decisoes?escopo=familia'], 'o escopo padrão é a família');
+    assert.deepEqual(lidas, ['/api/sessoes/s1/decisoes?escopo=sessao'], 'a aba abre em Sessão, como o C20');
     assert.deepEqual(rotulos, ['4'], 'o texto entre parênteses');
     assert.equal(ouvintes.length, 1, 'a aba escuta as mudanças de decisão');
   });
