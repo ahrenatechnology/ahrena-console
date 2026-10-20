@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/{decision}/desfazer",
     "body": {
-      "sessao": "sim-painel-esta"
+      "sessao": "sim-panel-current"
     }
   },
   "status": 409,

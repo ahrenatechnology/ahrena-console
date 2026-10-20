@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/{current}/promover",
     "body": {
-      "sessao": "sim-painel-esta"
+      "sessao": "sim-panel-current"
     }
   },
   "status": 200,
@@ -12,8 +12,8 @@
   "body": {
     "rascunho": {
       "caminho": "docs/decisoes/0001-sqlite-em-memoria-nos-testes.md",
-      "markdown": "# 0001 · SQLite em memória nos testes\n\n- **Status:** aceita\n- **Data:** 2026-10-20\n- **Origem:** D4 da sessão `sim-painel-esta` (Correção sua, você corrigiu), escopo família, branch `feat/42-kanban-de-sessoes`\n- **Substitui:** D3 · Postgres no Docker nos testes\n- **Conversa:** `/ui/sessions/sim-painel-esta` no console\n\n## Contexto\n\nA captura não registrou a pergunta ou o pedido que levou a esta decisão.\n\n## Decisão\n\nSQLite em memória nos testes\n\n## Alternativas consideradas\n\n- Postgres no Docker\n\n## Consequências\n\n- No console, a decisão tem escopo família: segue a sessão pelo /clear, pela compactação e nas sessões filhas. Aqui, ela passa a valer pelo repositório, sem depender do banco local.\n- O que fica mais fácil e o que fica mais difícil: a completar por quem promoveu, antes do merge.\n",
-      "hash": "7d2d6934ac0e6fc0181850c380d6247fc2a1b2ff1b440e0b145bb362fb4e7379",
+      "markdown": "# 0001 · SQLite em memória nos testes\n\n- **Status:** aceita\n- **Data:** 2026-10-20\n- **Origem:** D4 da sessão `sim-panel-current` (Correção sua, você corrigiu), escopo família, branch `feat/42-kanban-de-sessoes`\n- **Substitui:** D3 · Postgres no Docker nos testes\n- **Conversa:** `/ui/sessions/sim-panel-current` no console\n\n## Contexto\n\nA captura não registrou a pergunta ou o pedido que levou a esta decisão.\n\n## Decisão\n\nSQLite em memória nos testes\n\n## Alternativas consideradas\n\n- Postgres no Docker\n\n## Consequências\n\n- No console, a decisão tem escopo família: segue a sessão pelo /clear, pela compactação e nas sessões filhas. Aqui, ela passa a valer pelo repositório, sem depender do banco local.\n- O que fica mais fácil e o que fica mais difícil: a completar por quem promoveu, antes do merge.\n",
+      "hash": "c7ef66c8e3feaab0bb638706af9ff1fc4c33c07e80a9e2781cbe12ed46a91617",
       "repo": "/simulacao/ahrena-demo",
       "podeGravar": false,
       "motivo": "a pasta /simulacao/ahrena-demo não existe nesta máquina"

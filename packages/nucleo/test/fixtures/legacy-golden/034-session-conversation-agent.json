@@ -2,38 +2,38 @@
   "name": "session-conversation-agent",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/conversa?agente=qualquer"
+    "path": "/api/sessoes/sim-panel-current/conversa?agente=qualquer"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
   "body": {
     "agentes": [
       {
-        "id": "sim-painel-esta:main",
+        "id": "sim-panel-current:main",
         "nome": "Agente principal"
       },
       {
-        "id": "sim-painel-esta:a3",
+        "id": "sim-panel-current:a3",
         "nome": "Plan"
       },
       {
-        "id": "sim-painel-esta:a0",
+        "id": "sim-panel-current:a0",
         "nome": "Explore"
       },
       {
-        "id": "sim-painel-esta:a1",
+        "id": "sim-panel-current:a1",
         "nome": "code-reviewer"
       },
       {
-        "id": "sim-painel-esta:a2",
+        "id": "sim-panel-current:a2",
         "nome": "test-runner"
       }
     ],
-    "agente": "sim-painel-esta:main",
+    "agente": "sim-panel-current:main",
     "total": 18,
     "mensagens": [
       {
-        "id": "sim-painel-esta-e0001",
+        "id": "sim-panel-current-e0001",
         "papel": "voce",
         "em": "2026-10-20T14:32:00.000Z",
         "texto": "Separe o cálculo de pagamentos num serviço próprio",
@@ -42,7 +42,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0001",
+        "id": "sim-panel-current-d0001",
         "papel": "assistente",
         "em": "2026-10-20T14:32:30.000Z",
         "texto": null,
@@ -58,7 +58,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-25",
+            "id": "sim-panel-current-plano-25",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -92,7 +92,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0002",
+        "id": "sim-panel-current-e0002",
         "papel": "voce",
         "em": "2026-10-20T14:34:48.000Z",
         "texto": "Rode os testes e me diga o que quebrou",
@@ -101,7 +101,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0009",
+        "id": "sim-panel-current-d0009",
         "papel": "assistente",
         "em": "2026-10-20T14:35:23.333Z",
         "texto": null,
@@ -133,7 +133,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-26",
+            "id": "sim-panel-current-plano-26",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -151,7 +151,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0003",
+        "id": "sim-panel-current-e0003",
         "papel": "voce",
         "em": "2026-10-20T14:37:36.000Z",
         "texto": "Pode seguir com o plano",
@@ -160,7 +160,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-e0028",
+        "id": "sim-panel-current-e0028",
         "papel": "assistente",
         "em": "2026-10-20T14:38:00.000Z",
         "texto": null,
@@ -168,7 +168,7 @@
         "tokens": null,
         "ferramentas": [
           {
-            "id": "sim-painel-esta-plano-27",
+            "id": "sim-panel-current-plano-27",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -202,7 +202,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0004",
+        "id": "sim-panel-current-e0004",
         "papel": "voce",
         "em": "2026-10-20T14:40:24.000Z",
         "texto": "Ajuste o nome das variáveis para o padrão do projeto",
@@ -211,7 +211,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0023",
+        "id": "sim-panel-current-d0023",
         "papel": "assistente",
         "em": "2026-10-20T14:40:26.666Z",
         "texto": null,
@@ -253,7 +253,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0005",
+        "id": "sim-panel-current-e0005",
         "papel": "voce",
         "em": "2026-10-20T14:43:12.000Z",
         "texto": "Separe o cálculo de pagamentos num serviço próprio",
@@ -262,7 +262,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0031",
+        "id": "sim-panel-current-d0031",
         "papel": "assistente",
         "em": "2026-10-20T14:43:20.000Z",
         "texto": null,
@@ -278,7 +278,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-28",
+            "id": "sim-panel-current-plano-28",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -302,7 +302,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-29",
+            "id": "sim-panel-current-plano-29",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -320,7 +320,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0006",
+        "id": "sim-panel-current-e0006",
         "papel": "voce",
         "em": "2026-10-20T14:46:00.000Z",
         "texto": "Rode os testes e me diga o que quebrou",
@@ -329,7 +329,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0039",
+        "id": "sim-panel-current-d0039",
         "papel": "assistente",
         "em": "2026-10-20T14:46:13.333Z",
         "texto": null,
@@ -371,7 +371,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0007",
+        "id": "sim-panel-current-e0007",
         "papel": "voce",
         "em": "2026-10-20T14:48:48.000Z",
         "texto": "Pode seguir com o plano",
@@ -380,7 +380,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0047",
+        "id": "sim-panel-current-d0047",
         "papel": "assistente",
         "em": "2026-10-20T14:49:06.666Z",
         "texto": null,
@@ -404,7 +404,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-30",
+            "id": "sim-panel-current-plano-30",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -412,7 +412,7 @@
             "resultado": null
           },
           {
-            "id": "sim-painel-esta-plano-31",
+            "id": "sim-panel-current-plano-31",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -438,7 +438,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0008",
+        "id": "sim-panel-current-e0008",
         "papel": "voce",
         "em": "2026-10-20T14:51:36.000Z",
         "texto": "Ajuste o nome das variáveis para o padrão do projeto",
@@ -447,7 +447,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0055",
+        "id": "sim-panel-current-d0055",
         "papel": "assistente",
         "em": "2026-10-20T14:52:00.000Z",
         "texto": null,
@@ -489,7 +489,7 @@
         ]
       },
       {
-        "id": "sim-painel-esta-e0009",
+        "id": "sim-panel-current-e0009",
         "papel": "voce",
         "em": "2026-10-20T14:54:24.000Z",
         "texto": "Separe o cálculo de pagamentos num serviço próprio",
@@ -498,7 +498,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0063",
+        "id": "sim-panel-current-d0063",
         "papel": "assistente",
         "em": "2026-10-20T14:54:53.333Z",
         "texto": null,
@@ -546,7 +546,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-32",
+            "id": "sim-panel-current-plano-32",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -554,7 +554,7 @@
             "resultado": null
           },
           {
-            "id": "sim-painel-esta-e0034",
+            "id": "sim-panel-current-e0034",
             "nome": "Agent",
             "resumo": "3 subagentes em paralelo",
             "estado": "rodando",

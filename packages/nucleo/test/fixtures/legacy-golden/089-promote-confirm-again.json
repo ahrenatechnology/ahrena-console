@@ -4,7 +4,7 @@
     "method": "POST",
     "path": "/api/decisoes/{current}/promover",
     "body": {
-      "sessao": "sim-painel-esta",
+      "sessao": "sim-panel-current",
       "confirmar": true,
       "caminho": "{recordPath}",
       "hash": "{recordHash}"

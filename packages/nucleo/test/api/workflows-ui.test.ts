@@ -38,7 +38,7 @@ function pedir(url: string, caminho: string): Promise<any> {
   });
 }
 
-const curto = (id: string) => id.replace('sim-wf-pagamentos:', '');
+const curto = (id: string) => id.replace('sim-wf-payments:', '');
 
 describe('front de Workflows contra a demonstração do p4', () => {
   let storage: SqliteStorage;
@@ -57,12 +57,12 @@ describe('front de Workflows contra a demonstração do p4', () => {
   });
 
   test('C7: o laço dev → review → ajustes vira colunas pelas dependências, com o ramo mais longo na linha do principal', async () => {
-    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const w = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
     const { colunas, linhas, pos } = graphLayout(w.nodes, w.edges);
     const col = Object.fromEntries(Object.entries(pos).map(([id, p]: [string, any]) => [curto(id), p.coluna]));
     assert.deepEqual(col, { main: 0, ex1: 1, pl: 1, ex2: 1, d1: 2, r1: 3, d2: 4, r2: 5, tr: 5 });
     assert.equal(colunas, 6);
-    const linha = (id: string) => pos[`sim-wf-pagamentos:${id}`].linha;
+    const linha = (id: string) => pos[`sim-wf-payments:${id}`].linha;
     // O tronco (principal → Plan → dev → review → dev → review) numa linha só; os ramos fora dela.
     for (const id of ['pl', 'd1', 'r1', 'd2', 'r2']) assert.equal(linha(id), linha('main'), id);
     assert.ok(linha('ex2') < linha('main'), 'o segundo Explore sobe');
@@ -75,8 +75,8 @@ describe('front de Workflows contra a demonstração do p4', () => {
   });
 
   test('C7: o nó mostra a rodada, os ajustes pedidos no review, e tarefa · tempo nos outros', async () => {
-    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
-    const no = (id: string) => w.nodes.find((n: any) => n.id === `sim-wf-pagamentos:${id}`);
+    const w = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
+    const no = (id: string) => w.nodes.find((n: any) => n.id === `sim-wf-payments:${id}`);
     assert.equal(nodeName(no('d1')), 'dev · r1');
     assert.equal(nodeName(no('ex2')), 'Explore');
     assert.deepEqual(nodeDetail(no('r1')), { texto: '3 ajustes pedidos', ajustes: true });
@@ -90,7 +90,7 @@ describe('front de Workflows contra a demonstração do p4', () => {
   });
 
   test('C7: uma faixa por agente, na escala da sessão; o trecho aberto vai até o fim', async () => {
-    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const w = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
     const escala = timelineScale(w.timeline);
     assert.equal(escala.marcas.length, 5);
     assert.equal(escala.marcas[0], '0');

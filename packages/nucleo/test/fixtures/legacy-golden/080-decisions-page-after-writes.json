@@ -29,7 +29,7 @@
         "total": 6,
         "itens": [
           {
-            "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+            "id": "dec:7555fc23396627a5f58dd96044d1df1b",
             "rotulo": "D6",
             "origem": "sugerida",
             "estado": "a_confirmar",
@@ -47,16 +47,16 @@
             "substituidaPor": null,
             "sessao": "esta",
             "toolUseId": "sim-toolu-p9-6",
-            "sessionId": "sim-painel-esta",
+            "sessionId": "sim-panel-current",
             "escopo": "familia",
             "substitui": null,
             "promovidaPara": null,
             "branch": "feat/42-kanban-de-sessoes",
             "repo": "/simulacao/ahrena-demo",
-            "conversa": "/ui/sessions/sim-painel-esta"
+            "conversa": "/ui/sessions/sim-panel-current"
           },
           {
-            "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+            "id": "dec:351173aa6d7ef78de44261bf91a9a171",
             "rotulo": "D4",
             "origem": "correcao",
             "estado": "vigente",
@@ -73,16 +73,16 @@
             "substituidaPor": null,
             "sessao": "esta",
             "toolUseId": "sim-toolu-p9-4",
-            "sessionId": "sim-painel-esta",
+            "sessionId": "sim-panel-current",
             "escopo": "familia",
             "substitui": "D3",
             "promovidaPara": null,
             "branch": "feat/42-kanban-de-sessoes",
             "repo": "/simulacao/ahrena-demo",
-            "conversa": "/ui/sessions/sim-painel-esta"
+            "conversa": "/ui/sessions/sim-panel-current"
           },
           {
-            "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+            "id": "dec:e6f1aba616931c76fd3a139c8f61daa6",
             "rotulo": "D5",
             "origem": "permissao",
             "estado": "vigente",
@@ -99,13 +99,13 @@
             "substituidaPor": null,
             "sessao": "esta",
             "toolUseId": "sim-toolu-p9-5",
-            "sessionId": "sim-painel-esta",
+            "sessionId": "sim-panel-current",
             "escopo": "familia",
             "substitui": null,
             "promovidaPara": null,
             "branch": "feat/42-kanban-de-sessoes",
             "repo": "/simulacao/ahrena-demo",
-            "conversa": "/ui/sessions/sim-painel-esta"
+            "conversa": "/ui/sessions/sim-panel-current"
           }
         ],
         "mais": 3

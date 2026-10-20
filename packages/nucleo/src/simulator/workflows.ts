@@ -4,9 +4,9 @@
 // the loop comes from the subagents' types and order and from each review's last message ("3 ajustes
 // pedidos"); the Workflow tool runs, from the main agent's `Workflow` call and `Agent.metadata.workflow`.
 //
-// Wireframe C7's loop is `sim-wf-pagamentos` (active); `sim-wf-csv` has three rounds and a
-// test-runner with an error; `sim-wf-categoria` approves on the first. The runs: dev-review (active,
-// in `sim-wf-pagamentos`), triagem-de-bugs (yesterday) and comparar-bibliotecas (2 days ago), completed.
+// Wireframe C7's loop is `sim-wf-payments` (active); `sim-wf-csv` has three rounds and a
+// test-runner with an error; `sim-wf-category` approves on the first. The runs: dev-review (active,
+// in `sim-wf-payments`), triagem-de-bugs (yesterday) and comparar-bibliotecas (2 days ago), completed.
 
 import type { Agent, AgentStatus, Session, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -53,7 +53,7 @@ interface Demo {
 
 const DEMOS: Demo[] = [
   {
-    id: 'sim-wf-pagamentos', title: 'Separar pagamentos em serviços', project: 'motor-de-regras', model: OPUS, account: 'team', status: 'active', source: 'startup',
+    id: 'sim-wf-payments', title: 'Separar pagamentos em serviços', project: 'motor-de-regras', model: OPUS, account: 'team', status: 'active', source: 'startup',
     minAgo: 28, durationMin: null, branch: 'feat/63-separar-pagamentos',
     run: { id: 'toolu_sim_wf_devreview', name: 'dev-review', phases: ['Implementar', 'Revisar', 'Corrigir', 'Testar'], loopBack: 'volta para Corrigir enquanto o review pedir ajustes', startMin: 0.5, endMin: null },
     subs: [
@@ -68,7 +68,7 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: 'sim-wf-triagem', title: 'Triagem dos bugs abertos', project: 'vitrine-demo', model: SONNET, account: 'client', status: 'completed', source: 'resume',
+    id: 'sim-wf-triage', title: 'Triagem dos bugs abertos', project: 'vitrine-demo', model: SONNET, account: 'client', status: 'completed', source: 'resume',
     minAgo: 26 * 60, durationMin: 12, compacted: true,
     run: { id: 'toolu_sim_wf_triagem', name: 'triagem-de-bugs', phases: ['Coletar', 'Classificar', 'Reproduzir', 'Resumir'], startMin: 0, endMin: 12 },
     subs: [
@@ -79,7 +79,7 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: 'sim-wf-bibliotecas', title: 'Comparar clientes HTTP', project: 'gateway-sandbox', model: OPUS, account: 'team', status: 'completed', source: 'startup',
+    id: 'sim-wf-libraries', title: 'Comparar clientes HTTP', project: 'gateway-sandbox', model: OPUS, account: 'team', status: 'completed', source: 'startup',
     minAgo: 2 * 24 * 60 + 90, durationMin: 9,
     run: { id: 'toolu_sim_wf_bibliotecas', name: 'comparar-bibliotecas', phases: ['Pesquisar', 'Comparar', 'Recomendar'], startMin: 0, endMin: 9 },
     subs: [
@@ -89,7 +89,7 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: 'sim-wf-categoria', title: 'Filtro por categoria', project: 'vitrine-demo', model: OPUS, account: 'team', status: 'completed', source: 'startup',
+    id: 'sim-wf-category', title: 'Filtro por categoria', project: 'vitrine-demo', model: OPUS, account: 'team', status: 'completed', source: 'startup',
     minAgo: 300, durationMin: 35,
     subs: [
       { id: 'ex', type: 'Explore', task: 'ler a listagem', start: 0, end: 3, tokens: 8_000, tools: 4 },
@@ -124,7 +124,7 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: 'sim-wf-erros', title: 'Tratamento de erros da API', project: 'gateway-sandbox', model: OPUS, account: 'client', status: 'completed', source: 'resume',
+    id: 'sim-wf-errors', title: 'Tratamento de erros da API', project: 'gateway-sandbox', model: OPUS, account: 'client', status: 'completed', source: 'resume',
     minAgo: 720, durationMin: 31,
     subs: [
       { id: 'ex', type: 'Explore', task: 'achar os catch vazios', start: 0, end: 4, tokens: 10_000, tools: 6 },
@@ -132,7 +132,7 @@ const DEMOS: Demo[] = [
       { id: 'r1', type: 'code-reviewer', task: 'revisa o diff', start: 22, end: 27, result: 'Aprovado, LGTM', tokens: 20_000, tools: 4 },
     ],
   },
-  { id: 'sim-wf-cadastro', title: 'Ajustar o layout do cadastro', project: 'vitrine-demo', model: SONNET, account: 'team', status: 'completed', source: 'startup', minAgo: 200, durationMin: 14, subs: [] },
+  { id: 'sim-wf-signup', title: 'Ajustar o layout do cadastro', project: 'vitrine-demo', model: SONNET, account: 'team', status: 'completed', source: 'startup', minAgo: 200, durationMin: 14, subs: [] },
   {
     id: 'sim-wf-cache', title: 'Migração do cache de sessões', project: 'gateway-sandbox', model: SONNET, account: 'client', status: 'error', source: 'resume',
     minAgo: 90, durationMin: 21, compacted: true,
@@ -142,7 +142,7 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: 'sim-wf-retomada', title: 'Rotas do gateway', project: 'gateway-sandbox', model: OPUS, account: 'team', status: 'active', source: 'resume',
+    id: 'sim-wf-resume', title: 'Rotas do gateway', project: 'gateway-sandbox', model: OPUS, account: 'team', status: 'active', source: 'resume',
     minAgo: 15, durationMin: null,
     subs: [
       { id: 'ex1', type: 'Explore', task: 'rotas atuais', start: 2, end: 5, tokens: 7_000, tools: 4 },

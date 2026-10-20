@@ -12,7 +12,7 @@
         "dia": "2026-10-20",
         "sessoes": [
           {
-            "id": "sim-painel-blog-estatico",
+            "id": "sim-panel-blog-estatico",
             "titulo": "blog-estatico",
             "projeto": "blog-estatico",
             "modelo": "Sonnet 5.5",
@@ -38,7 +38,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-wf-cadastro",
+            "id": "sim-wf-signup",
             "titulo": "Ajustar o layout do cadastro",
             "projeto": "vitrine-demo",
             "modelo": "Sonnet 5.5",
@@ -51,7 +51,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-wf-categoria",
+            "id": "sim-wf-category",
             "titulo": "Filtro por categoria",
             "projeto": "vitrine-demo",
             "modelo": "Opus 5.5",
@@ -90,7 +90,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-wf-erros",
+            "id": "sim-wf-errors",
             "titulo": "Tratamento de erros da API",
             "projeto": "gateway-sandbox",
             "modelo": "Opus 5.5",
@@ -108,7 +108,7 @@
         "dia": "2026-10-19",
         "sessoes": [
           {
-            "id": "sim-historico-extrair-cobranca",
+            "id": "sim-history-extract-billing",
             "titulo": "Extrair a cobrança",
             "projeto": "vitrine-demo",
             "modelo": "Opus 5.5",
@@ -118,13 +118,13 @@
             "duracaoMs": 6600000,
             "custoUsd": 1.3,
             "anterior": {
-              "id": "sim-historico-mapear-pagamentos",
+              "id": "sim-history-map-payments",
               "titulo": "Mapear o módulo de pagamentos"
             },
             "seguinte": null
           },
           {
-            "id": "sim-wf-triagem",
+            "id": "sim-wf-triage",
             "titulo": "Triagem dos bugs abertos",
             "projeto": "vitrine-demo",
             "modelo": "Sonnet 5.5",
@@ -137,7 +137,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-historico-mapear-pagamentos",
+            "id": "sim-history-map-payments",
             "titulo": "Mapear o módulo de pagamentos",
             "projeto": "vitrine-demo",
             "modelo": "Opus 5.5",
@@ -148,7 +148,7 @@
             "custoUsd": 2.1,
             "anterior": null,
             "seguinte": {
-              "id": "sim-historico-extrair-cobranca",
+              "id": "sim-history-extract-billing",
               "titulo": "Extrair a cobrança"
             }
           }
@@ -158,7 +158,7 @@
         "dia": "2026-10-18",
         "sessoes": [
           {
-            "id": "sim-historico-relatorio-mensal",
+            "id": "sim-history-monthly-report",
             "titulo": "Relatório mensal mais rápido",
             "projeto": "painel-de-metricas",
             "modelo": "Opus 5.5",
@@ -171,7 +171,7 @@
             "seguinte": null
           },
           {
-            "id": "sim-wf-bibliotecas",
+            "id": "sim-wf-libraries",
             "titulo": "Comparar clientes HTTP",
             "projeto": "gateway-sandbox",
             "modelo": "Opus 5.5",

@@ -2,7 +2,7 @@
   "name": "scope-decisions-branch",
   "request": {
     "method": "GET",
-    "path": "/api/decisoes/sim-painel-esta?escopo=branch"
+    "path": "/api/decisoes/sim-panel-current?escopo=branch"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
@@ -12,7 +12,7 @@
     "aConfirmar": 1,
     "itens": [
       {
-        "id": "dec:4b1fc2d63bedbe4d5f12f4872295b249",
+        "id": "dec:7555fc23396627a5f58dd96044d1df1b",
         "rotulo": "D6",
         "origem": "sugerida",
         "estado": "a_confirmar",
@@ -32,7 +32,7 @@
         "toolUseId": "sim-toolu-p9-6"
       },
       {
-        "id": "dec:721f725b29038c452e1e8d1fd8c5b308",
+        "id": "dec:351173aa6d7ef78de44261bf91a9a171",
         "rotulo": "D4",
         "origem": "correcao",
         "estado": "vigente",
@@ -51,7 +51,7 @@
         "toolUseId": "sim-toolu-p9-4"
       },
       {
-        "id": "dec:cda960a6daa8bb39fe98ffa6da7a598f",
+        "id": "dec:e6f1aba616931c76fd3a139c8f61daa6",
         "rotulo": "D5",
         "origem": "permissao",
         "estado": "vigente",
@@ -70,7 +70,7 @@
         "toolUseId": "sim-toolu-p9-5"
       },
       {
-        "id": "dec:38854e93da5d477d7ed844642a6eb1a3",
+        "id": "dec:d5ee4bed66ced719990de9176451ddf4",
         "rotulo": "D3",
         "origem": "pergunta",
         "estado": "substituida",
@@ -89,7 +89,7 @@
         "toolUseId": "sim-toolu-p9-3"
       },
       {
-        "id": "dec:0d2116499443e79f4a9757d2ad01f803",
+        "id": "dec:634f28df18d1aa230e4c3c171df8b7cd",
         "rotulo": "D2",
         "origem": "plano",
         "estado": "vigente",
@@ -108,7 +108,7 @@
         "toolUseId": "sim-toolu-p9-2"
       },
       {
-        "id": "dec:0768d762322f78a8e1990a0955accbc9",
+        "id": "dec:0194779532443b9794883c3674a86bab",
         "rotulo": "D1",
         "origem": "pergunta",
         "estado": "vigente",

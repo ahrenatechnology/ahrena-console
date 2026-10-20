@@ -26,7 +26,7 @@
     ],
     "itens": [
       {
-        "id": "sim-painel-fila-de-tarefas",
+        "id": "sim-panel-fila-de-tarefas",
         "titulo": "fila-de-tarefas",
         "status": "waiting",
         "motivo": "stop",
@@ -43,7 +43,7 @@
         }
       },
       {
-        "id": "sim-detalhe-pedidos",
+        "id": "sim-detail-orders",
         "titulo": "Migração do esquema de pedidos",
         "status": "waiting",
         "motivo": "notification",

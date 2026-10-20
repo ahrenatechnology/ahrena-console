@@ -13,11 +13,12 @@
 import type { Agent, SessionEvent, TokenCounts, TokenUsage } from '../model.ts';
 import { emptyTokenCounts } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
+import { currentDemoId } from './legacy-ids.ts';
 import { PANEL_SESSION } from './panel.ts';
 import { ROOT } from './vocabulary.ts';
 
 /** The Detail's session: the one waiting for permission. */
-export const DETAIL_SESSION = 'sim-detalhe-pedidos';
+export const DETAIL_SESSION = 'sim-detail-orders';
 /** The Detail session's synthetic `local_…`: the demo shows "Abrir no Claude Desktop". */
 export const DETAIL_LOCAL = 'local_00000000-0000-4000-8000-0000000000d1';
 
@@ -170,5 +171,5 @@ export async function seedDetail(storage: StoragePort, now = Date.now()): Promis
   await enrichPanelSession(storage, now);
 }
 
-/** The demo's `local_…`: only the Detail session has one. */
-export const demoLocal = (sessionId: string): string | null => (sessionId === DETAIL_SESSION ? DETAIL_LOCAL : null);
+/** The demo's `local_…`: only the Detail session has one (also under its old id, legacy-ids.ts). */
+export const demoLocal = (sessionId: string): string | null => (currentDemoId(sessionId) === DETAIL_SESSION ? DETAIL_LOCAL : null);

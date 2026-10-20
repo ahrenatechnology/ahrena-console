@@ -36,7 +36,8 @@ Um servidor HTTP em `127.0.0.1:4720` que roda o importador, o seguidor, o recept
 ```bash
 npm run api                              # histórico real, banco em ~/.ahrena-console/nucleo.sqlite
 npm run api -- --demo --cenario p4       # banco em memória com um cenário do painel (P1 a P7), dados sintéticos
-                                         # o Detalhe da /ui: /ui/sessoes/sim-detalhe-pedidos (pede permissão) e /ui/sessoes/sim-painel-esta
+                                         # o Detalhe da /ui: /ui/sessions/sim-detail-orders (pede permissão) e /ui/sessions/sim-panel-current
+                                         # os ids antigos (sim-painel-esta, sim-detalhe-pedidos…) abrem a mesma sessão até a fase 6 da #173 (src/simulator/legacy-ids.ts)
 npm run api -- --help
 npm run api -- --no-telemetry            # sem medir esta máquina (/api/machines e /api/telemetry dão 404)
 ```

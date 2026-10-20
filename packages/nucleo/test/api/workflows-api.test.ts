@@ -43,10 +43,10 @@ describe('Workflows na API, com a demonstração do p4', () => {
   });
 
   test('#97/AC-1 #97/AC-2 #97/AC-4 Dado a sessão do laço, quando abro a aba Workflow, vejo os agentes, a volta do review e as contas', async () => {
-    const primeiro = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const primeiro = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
     assert.equal(primeiro.status, 200);
     await trabalho.esperar();
-    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
     const w = corpo as WorkflowDaSessao;
     assert.deepEqual(
       w.nodes.map((n) => `${n.name}${n.round ? `·r${n.round}` : ''}:${n.state}`),
@@ -58,14 +58,14 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.equal(w.summary, 'dev → review até aprovar · termina no PR #90');
     assert.equal(w.durationMs, 28 * 60_000);
     // The old route answers the old body: the same graph, Portuguese keys and values.
-    const antigo = (await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow')).corpo;
+    const antigo = (await pedir(api.url, '/api/sessoes/sim-wf-payments/workflow')).corpo;
     assert.deepEqual(antigo.nos.map((n: any) => n.estado), w.nodes.map((n) => ({ active: 'ativo', completed: 'concluido', error: 'erro' })[n.state]));
     assert.deepEqual(antigo.arestas.map((e: any) => e.tipo), w.edges.map((e) => ({ opened: 'abriu', delivered: 'entregou', 'changes-requested': 'ajustes' })[e.type]));
     assert.deepEqual([antigo.rodadasDeReview, antigo.ajustes, antigo.linhaDoTempo.faixas.length], [2, 3, w.timeline.lanes.length]);
   });
 
   test('#97/AC-3 Dado a sessão do laço, a linha do tempo vai do início dela até agora, uma faixa por agente', async () => {
-    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-payments/workflow');
     const w = corpo as WorkflowDaSessao;
     assert.equal(w.timeline.end, T0);
     assert.deepEqual(w.timeline.lanes.map((f) => [f.label, f.spans.length]), [

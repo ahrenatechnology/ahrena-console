@@ -2,7 +2,7 @@
   "name": "session-detail",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta"
+    "path": "/api/sessoes/sim-panel-current"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
@@ -10,7 +10,7 @@
     "versao": 1,
     "geradoEm": "2026-10-20T15:00:00.000Z",
     "sessao": {
-      "id": "sim-painel-esta",
+      "id": "sim-panel-current",
       "titulo": "Separar pagamentos em serviços",
       "modelo": "claude-opus-5-5",
       "iniciadaEm": "2026-10-20T14:32:00.000Z",

@@ -1,7 +1,7 @@
 // Side panel scenarios (P1 to P7 and P9 of the wireframes, docs/wireframes), to demo and capture
 // the panel without real data: `npm run api -- --demo p1`. All synthetic, with the simulator's
 // vocabulary: projects under /simulacao, repository `exemplo/simulacao` and two synthetic accounts
-// (all-zero UUIDs). The panel's session, whatever id it sends, becomes `sim-painel-esta`.
+// (all-zero UUIDs). The panel's session, whatever id it sends, becomes `sim-panel-current`.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,6 +15,7 @@ import { linkSession, markPromoted, registerDecision, type DecisionDraft } from 
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
+import { currentDemoId } from './legacy-ids.ts';
 import { ROOT } from './vocabulary.ts';
 
 /** The CI checks as in P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
@@ -26,7 +27,7 @@ const P1_CHECKS: Record<string, CiCounts> = {
 
 export const PANEL_SCENARIOS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p9', 'p12', 'p13'] as const;
 export type PanelScenario = (typeof PANEL_SCENARIOS)[number];
-export const PANEL_SESSION = 'sim-painel-esta';
+export const PANEL_SESSION = 'sim-panel-current';
 export const SIMULATOR_REPO = 'exemplo/simulacao';
 
 function syntheticAccount(n: string, label: string, color: string, organizationType: string, source: AccountSource) {
@@ -322,7 +323,7 @@ async function writeThisSession(storage: StoragePort, e: ThisSession, now: numbe
     simulado: true,
     branch: e.branch,
     esforco: e.effort ?? effortOf(e.model),
-    familia: { filhas: children.map((slug) => `sim-painel-${slug}`) },
+    familia: { filhas: children.map((slug) => `sim-panel-${slug}`) },
     estados: { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: e.error ? iso(now, e.error.minAgo) : null, delegacoes: {}, background },
   };
   if (e.startMin === 0 && e.turns === 0) return; // P6: the core has not seen the session yet
@@ -368,7 +369,7 @@ async function writeThisSession(storage: StoragePort, e: ThisSession, now: numbe
 }
 
 async function writeOtherSession(storage: StoragePort, o: OtherSession, now: number) {
-  const id = `sim-painel-${o.slug}`;
+  const id = `sim-panel-${o.slug}`;
   const updated = iso(now, o.updatedMin ?? o.wait?.minAgo ?? 1);
   const s = baseSession(id, `${ROOT}/${o.slug}`, o.model, iso(now, 40), updated);
   s.name = o.title ?? o.slug;
@@ -410,7 +411,7 @@ export async function seedPanelScenario(storage: StoragePort, scenario: PanelSce
   const parent = others.find((o) => o.relation === 'parent');
   if (parent) {
     const s = await storage.getSession(PANEL_SESSION);
-    if (s) await storage.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-painel-${parent.slug}` } } });
+    if (s) await storage.putSession({ ...s, metadata: { ...s.metadata, familia: { ...(s.metadata.familia as object), mae: `sim-panel-${parent.slug}` } } });
   }
   for (const o of others) await writeOtherSession(storage, o, now);
   current.cwd = `${ROOT}/${e.project}`;
@@ -460,7 +461,7 @@ export class SimulatorWorkSource implements WorkSource {
 }
 
 /** P9's parent session: yesterday's, before /clear. It only exists in the decisions port. */
-export const P9_PARENT = 'sim-painel-kanban-ontem';
+export const P9_PARENT = 'sim-panel-kanban-yesterday';
 
 /**
  * P9's decisions, through the decisions port and its rules (number, chain, family): the parent
@@ -524,12 +525,12 @@ export function demoRecordFolders(base: string): (repo: string) => string | null
 /**
  * The panel's alias in the --demo: the side panel (which sends the session's real id) sees the
  * scenario's; the simulator's sessions (`sim-…`), which the /ui sends when deciding on behalf of the
- * owning session, stay as they came.
+ * owning session, stay as they came, with an old id read as its new one (legacy-ids.ts).
  */
-export const demoAlias = (sessionId: string): string => (sessionId.startsWith('sim-') ? sessionId : PANEL_SESSION);
+export const demoAlias = (sessionId: string): string => (sessionId.startsWith('sim-') ? currentDemoId(sessionId) : PANEL_SESSION);
 
 /** The vitrine's parent session: yesterday's, before /clear. It only exists in the decisions port. */
-export const VITRINE_PARENT = 'sim-painel-vitrine-ontem';
+export const VITRINE_PARENT = 'sim-panel-vitrine-yesterday';
 
 type DemoDraft = Pick<DecisionDraft, 'origin' | 'choice' | 'alternatives' | 'topic'> & Partial<DecisionDraft> & { minAgo: number; promotedTo?: string };
 
@@ -557,7 +558,7 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
   };
 
   const vitrine = (sessionId: string, d: DemoDraft) => decide(sessionId, `${ROOT}/vitrine-demo`, 'feat/42-kanban', d);
-  const kanban = 'sim-painel-vitrine-demo';
+  const kanban = 'sim-panel-vitrine-demo';
   await vitrine(VITRINE_PARENT, { minAgo: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
   await linkSession(port, { sessionId: kanban, parentSessionId: VITRINE_PARENT, reason: 'clear', linkedAt: iso(now, 60) }, nowIso);
   await vitrine(kanban, { minAgo: 50, origin: 'plano', topic: 'plano', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'sessao' });
@@ -574,7 +575,7 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
     choice: 'Esconder sessões encerradas há mais de 7 dias', alternatives: ['mostrar todas'],
   });
 
-  const payments = (d: DemoDraft) => decide('sim-painel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
+  const payments = (d: DemoDraft) => decide('sim-panel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
   await payments({
     minAgo: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
     promotedTo: recordPath('motor-de-regras', 0),
@@ -587,7 +588,7 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
   await payments({ minAgo: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
   await payments({ minAgo: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
 
-  const report = (d: DemoDraft) => decide('sim-painel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
+  const report = (d: DemoDraft) => decide('sim-panel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
   await report({ minAgo: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
   await report({ minAgo: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
   await report({ minAgo: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });

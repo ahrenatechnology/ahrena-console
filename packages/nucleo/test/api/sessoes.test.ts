@@ -250,7 +250,7 @@ describe('#28 a tela Sessões', () => {
     assert.equal(band({ total: 12, page: 2, perPage: 10 }), '11–12 de 12');
     assert.equal(band({ total: 0, page: 1, perPage: 10 }), '0 de 0');
     assert.equal(shortId('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
-    assert.equal(shortId('sim-painel-esta'), 'sim-painel-esta');
+    assert.equal(shortId('sim-panel-current'), 'sim-panel-current');
   });
 
   // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),

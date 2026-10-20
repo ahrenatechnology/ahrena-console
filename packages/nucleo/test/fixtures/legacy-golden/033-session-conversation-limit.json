@@ -2,38 +2,38 @@
   "name": "session-conversation-limit",
   "request": {
     "method": "GET",
-    "path": "/api/sessoes/sim-painel-esta/conversa?limite=2"
+    "path": "/api/sessoes/sim-panel-current/conversa?limite=2"
   },
   "status": 200,
   "contentType": "application/json; charset=utf-8",
   "body": {
     "agentes": [
       {
-        "id": "sim-painel-esta:main",
+        "id": "sim-panel-current:main",
         "nome": "Agente principal"
       },
       {
-        "id": "sim-painel-esta:a3",
+        "id": "sim-panel-current:a3",
         "nome": "Plan"
       },
       {
-        "id": "sim-painel-esta:a0",
+        "id": "sim-panel-current:a0",
         "nome": "Explore"
       },
       {
-        "id": "sim-painel-esta:a1",
+        "id": "sim-panel-current:a1",
         "nome": "code-reviewer"
       },
       {
-        "id": "sim-painel-esta:a2",
+        "id": "sim-panel-current:a2",
         "nome": "test-runner"
       }
     ],
-    "agente": "sim-painel-esta:main",
+    "agente": "sim-panel-current:main",
     "total": 18,
     "mensagens": [
       {
-        "id": "sim-painel-esta-e0009",
+        "id": "sim-panel-current-e0009",
         "papel": "voce",
         "em": "2026-10-20T14:54:24.000Z",
         "texto": "Separe o cálculo de pagamentos num serviço próprio",
@@ -42,7 +42,7 @@
         "ferramentas": []
       },
       {
-        "id": "sim-painel-esta-d0063",
+        "id": "sim-panel-current-d0063",
         "papel": "assistente",
         "em": "2026-10-20T14:54:53.333Z",
         "texto": null,
@@ -90,7 +90,7 @@
             "resultado": "{\n  \"success\": true\n}"
           },
           {
-            "id": "sim-painel-esta-plano-32",
+            "id": "sim-panel-current-plano-32",
             "nome": "TodoWrite",
             "resumo": "plano",
             "estado": null,
@@ -98,7 +98,7 @@
             "resultado": null
           },
           {
-            "id": "sim-painel-esta-e0034",
+            "id": "sim-panel-current-e0034",
             "nome": "Agent",
             "resumo": "3 subagentes em paralelo",
             "estado": "rodando",

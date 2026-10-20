@@ -30,7 +30,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
     assert.deepEqual(d.numbers.agents, { active: 1, sessions: 1 });
     assert.deepEqual(d.numbers.subagents, { active: 1, sessions: 1 });
     let eventos = 0;
-    for (const id of [PANEL_SESSION, 'sim-painel-motor-de-regras', 'sim-painel-app-receitas']) eventos += (await storage.listEvents(id, { limit: 500 })).items.length;
+    for (const id of [PANEL_SESSION, 'sim-panel-motor-de-regras', 'sim-panel-app-receitas']) eventos += (await storage.listEvents(id, { limit: 500 })).items.length;
     assert.deepEqual(d.numbers.events, { today: eventos, lastHour: eventos, total: eventos });
     assert.equal(d.numbers.cost.usd, 1.84);
     assert.equal(d.numbers.cost.days, 30);
@@ -44,8 +44,8 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
       d.agents.map((a) => [a.session, a.status]),
       [
         [PANEL_SESSION, 'active'],
-        ['sim-painel-motor-de-regras', 'waiting'],
-        ['sim-painel-app-receitas', 'waiting'],
+        ['sim-panel-motor-de-regras', 'waiting'],
+        ['sim-panel-app-receitas', 'waiting'],
       ],
     );
     const esta = d.agents[0]!;
