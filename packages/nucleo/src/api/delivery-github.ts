@@ -81,7 +81,7 @@ export class DeliveryGithub {
       const hit = hits[i];
       const failedAt = Math.max(this.failures.get(repo)?.at ?? -Infinity, this.noTokenAt.get(repo) ?? -Infinity);
       // A failed read is retried after `RETRY_AFTER_FAILURE_MS`, not on every request.
-      if ((!hit || this.now() - hit.fetchedAt >= this.ttlMs) && this.now() - failedAt >= RETRY_AFTER_FAILURE_MS) this.refresh(repo);
+      if ((!hit || this.now() - hit.fetchedAt >= this.ttlMs) && this.now() - failedAt >= RETRY_AFTER_FAILURE_MS) this.refresh(repo, hit?.value ?? null);
       if (this.running.has(repo)) out.pending++;
       if (!hit?.value) continue;
       out.repos.set(repo, hit.value);
@@ -108,14 +108,20 @@ export class DeliveryGithub {
     while (this.running.size > 0) await Promise.all(this.running.values());
   }
 
-  private refresh(repo: string): void {
+  private refresh(repo: string, shown: DeliveryRaw | null): void {
     if (this.running.has(repo)) return;
     const [owner, name] = repo.split('/');
     const since = diaIso(this.now() - DELIVERY_FETCH_DAYS * DIA_MS);
     const before = this.outcomeOf(repo);
     const fail = (why: string) => this.failures.set(repo, { reason: `${repo}: ${why}`, at: this.now() });
     const run = this.cache
-      .get<DeliveryRaw | null>(deliveryCacheKey(repo), this.ttlMs, async () => ({ value: await this.queue.run(() => this.source!.delivery(owner, name, since)) }))
+      .get<DeliveryRaw | null>(deliveryCacheKey(repo), this.ttlMs, async () => {
+        const raw = await this.queue.run(() => this.source!.delivery(owner, name, since));
+        // A sample cut by a page that failed never replaces a longer one already cached: it fails, and
+        // the cache keeps serving the old one as stale with the reason (#269, src/api/repos.ts).
+        if (raw?.incomplete && shown && (raw.prs.length < shown.prs.length || raw.issues.length < shown.issues.length)) throw new Error(raw.incomplete);
+        return { value: raw };
+      })
       .then((r) => {
         this.noToken = false;
         this.noTokenAt.delete(repo);

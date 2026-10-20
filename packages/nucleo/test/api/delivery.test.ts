@@ -410,6 +410,49 @@ describe('#266 DeliveryGithub: the screen learns of every outcome', () => {
     assert.equal(calls, 2);
   });
 
+  test('#266/AC-8: a sample cut by a page that failed never replaces a longer one: the cached one is served as stale (#269)', async () => {
+    let now = NOW;
+    const full: DeliveryRaw = { repo: 'exemplo-labs/alpha', since: '2026-07-21', openPrs: 0, openIssues: 0, prs: [pr(daysAgo(2), daysAgo(1)), pr(daysAgo(3), daysAgo(2))], issues: [], open: [], truncated: [] };
+    const note = 'amostra de PRs incompleta: 1 lidos, o resto falhou (o GitHub respondeu 502)';
+    let answer: DeliveryRaw = full;
+    const g = new DeliveryGithub({ source: { delivery: async () => answer }, cache: new GithubCache({ store: new MemoryCacheStore(), now: () => now }), now: () => now });
+    await g.read(['exemplo-labs/alpha']);
+    await g.settle();
+    now += 10 * 60_000;
+    answer = { ...full, prs: full.prs.slice(0, 1), truncated: [note], incomplete: note };
+    await g.read(['exemplo-labs/alpha']);
+    await g.settle();
+    const r = await g.read(['exemplo-labs/alpha']);
+    assert.equal(r.status, 'stale');
+    assert.equal(r.readAt, NOW);
+    assert.match(r.error ?? '', /incompleta/);
+    assert.equal(r.repos.get('exemplo-labs/alpha')?.prs.length, 2, 'the longer cached sample is kept');
+
+    // With nothing longer cached, the cut sample is stored and says so.
+    const first = new DeliveryGithub({ source: { delivery: async () => answer }, cache: new GithubCache({ store: new MemoryCacheStore(), now: () => now }), now: () => now });
+    await first.read(['exemplo-labs/alpha']);
+    await first.settle();
+    const cut = await first.read(['exemplo-labs/alpha']);
+    assert.equal(cut.status, 'connected');
+    assert.equal(cut.repos.get('exemplo-labs/alpha')?.prs.length, 1);
+    assert.deepEqual(cut.truncated, [`exemplo-labs/alpha: ${note}`]);
+  });
+
+  test('#266/AC-8: a following page that fails marks the read incomplete, with the nodes read so far', async () => {
+    const node = (d: string) => ({ createdAt: d, mergedAt: null, reviews: { nodes: [] } });
+    const page = (nodes: unknown[], hasNextPage: boolean) => ({ issueCount: 3, pageInfo: { hasNextPage, endCursor: hasNextPage ? 'c' : null }, nodes });
+    const github = {
+      query: async <T,>(name: string): Promise<T> => {
+        if (name === 'RepoDeliveryPage') throw new Error('o GitHub respondeu 502');
+        return { repository: { nameWithOwner: 'exemplo-labs/alpha', issues: { totalCount: 0 }, pullRequests: { totalCount: 0 } }, prs: page([node(daysAgo(1))], true), issues: page([], false), open: { issueCount: 0, nodes: [] } } as T;
+      },
+    };
+    const d = await new GithubDeliverySource(github as never).delivery('exemplo-labs', 'alpha', '2026-07-21');
+    assert.ok(d);
+    assert.equal(d.prs.length, 1);
+    assert.match(d.incomplete ?? '', /amostra de PRs incompleta: 1 lidos.*502/);
+  });
+
   test('#266/AC-5: the Projects never wait for GitHub: the last read answers while the next one runs', async () => {
     let release: () => void = () => {};
     const recorded: string[] = [];

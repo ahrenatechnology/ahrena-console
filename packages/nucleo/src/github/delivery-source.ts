@@ -82,6 +82,8 @@ export interface DeliveryRaw {
   open: DeliveryOpenRaw[];
   /** Samples cut by the page cap or by a page that failed (screen text). */
   truncated: string[];
+  /** Set when a following page failed: the reason (screen text); the sample is shorter than GitHub's. */
+  incomplete?: string;
 }
 
 /** Port of the Delivery tab's GitHub read. `null`: the repository does not exist or is not visible. */
@@ -151,8 +153,9 @@ export class GithubDeliverySource implements DeliverySource {
     }
     if (!data.repository) return null;
     const truncated: string[] = [];
-    const prs = await this.remainingPages(searches.prs, data.prs, DELIVERY_PR_PAGES, DELIVERY_PR_PAGE, 'PRs', truncated);
-    const issues = await this.remainingPages(searches.issues, data.issues, DELIVERY_ISSUE_PAGES, DELIVERY_ISSUE_PAGE, 'issues', truncated);
+    const failed: string[] = [];
+    const prs = await this.remainingPages(searches.prs, data.prs, DELIVERY_PR_PAGES, DELIVERY_PR_PAGE, 'PRs', truncated, failed);
+    const issues = await this.remainingPages(searches.issues, data.issues, DELIVERY_ISSUE_PAGES, DELIVERY_ISSUE_PAGE, 'issues', truncated, failed);
     return {
       repo: data.repository.nameWithOwner,
       since,
@@ -162,11 +165,12 @@ export class GithubDeliverySource implements DeliverySource {
       issues: issues as DeliveryIssueRaw[],
       open: data.open.nodes.filter((n): n is DeliveryOpenRaw => n?.__typename === 'PullRequest' || n?.__typename === 'Issue'),
       truncated,
+      ...(failed.length > 0 ? { incomplete: failed.join('; ') } : {}),
     };
   }
 
   /** The following pages, serially, up to `max` pages; a page that fails ends the sample and says so. */
-  private async remainingPages<T>(q: string, first: SearchPage<T>, max: number, size: number, what: string, truncated: string[]): Promise<Partial<T>[]> {
+  private async remainingPages<T>(q: string, first: SearchPage<T>, max: number, size: number, what: string, truncated: string[], failed: string[]): Promise<Partial<T>[]> {
     const nodes = first.nodes.filter((n) => n && Object.keys(n).length > 0);
     let page = first;
     let i = 1;
@@ -175,7 +179,9 @@ export class GithubDeliverySource implements DeliverySource {
         page = (await this.github.query<{ search: SearchPage<T> }>('RepoDeliveryPage', DELIVERY_QUERIES.page, { q, first: size, after: page.pageInfo.endCursor })).search;
       } catch (err) {
         if (err instanceof SemGithubError || err instanceof RateLimitedError) throw err;
-        truncated.push(`amostra de ${what} incompleta: ${nodes.length} lidos, o resto falhou (${err instanceof Error ? err.message : String(err)})`);
+        const note = `amostra de ${what} incompleta: ${nodes.length} lidos, o resto falhou (${err instanceof Error ? err.message : String(err)})`;
+        truncated.push(note);
+        failed.push(note);
         return nodes;
       }
       nodes.push(...page.nodes.filter((n) => n && Object.keys(n).length > 0));
