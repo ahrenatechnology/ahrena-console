@@ -1,0 +1,14 @@
+    1   0.3  11328 /sbin/launchd
+  401  14.0 412000 /opt/homebrew/Cellar/node/24.1.0/bin/node
+  402   6.0 300000 /Users/dev/.local/bin/claude
+  403   3.1 280000 /Users/dev/.local/bin/claude
+  410   4.0 520000 /Applications/Claude.app/Contents/MacOS/Claude
+  411   2.0 300000 /Applications/Claude.app/Contents/Frameworks/Claude Helper (Renderer).app/Contents/MacOS/Claude Helper (Renderer)
+  412   0.8 120000 /Users/dev/Library/Application Support/Claude/claude-code/2.1.0/claude
+  420   4.2 210000 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  430   1.0   9000 /usr/bin/ssh
+  431   0.1   8000 /usr/bin/ssh
+  440   1.1  50000 /usr/sbin/mds
+  450   0.0 100000 /opt/homebrew/opt/postgresql@16/bin/postgres
+  460   2.5 150000 /opt/homebrew/Cellar/node/24.1.0/bin/node
+  470   0.4  90000 /Applications/Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper
