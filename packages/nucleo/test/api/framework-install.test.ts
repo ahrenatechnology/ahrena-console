@@ -12,7 +12,7 @@ import {
   type FrameworkInstallPlan,
   type InstallAnswer,
 } from '../../src/api/framework-install.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
@@ -619,14 +619,14 @@ describe('#184 opening the pull request, through the service', () => {
 });
 
 describe('#184 the /api/framework-install routes', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   let s: Setup;
   let port: number;
   before(async () => {
     s = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, frameworkInstall: createFrameworkInstallRoute(s.service) });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, frameworkInstall: createFrameworkInstallRoute(s.service) });
     port = Number(new URL(api.url).port);
   });
   after(() => api.close());
