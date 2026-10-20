@@ -277,8 +277,9 @@ export class DarwinCollector extends PlatformCollector {
    * eles, os `LocalForward` do `ssh -G`. Só os do usuário: o `ps -ax` lista os de todas as contas, e
    * o `ssh -G` roda como nós o `Match exec` do arquivo que lê, então o `-F` de outra conta (ou um
    * arquivo que outra conta possa escrever) seria código dela rodando como nós. Um `-F` que não passa
-   * nessa conferência deixa o `ssh` sem o `ssh -G`. Um `ssh -G` por arquivo e destino, todos juntos. A porta fica com o `ssh` que a escuta (dois `ssh` para o mesmo
-   * destino pegam a mesma configuração, e só o primeiro consegue a porta); o estado:
+   * nessa conferência deixa o `ssh` sem o `ssh -G`. Um `ssh -G` por arquivo e destino, todos
+   * juntos. A porta fica com o `ssh` que a escuta (dois `ssh` para o mesmo destino pegam a mesma
+   * configuração, e só o primeiro consegue a porta); o estado:
    * - escutada por um `ssh` (este, ou o mestre do ControlMaster): a sonda diz `up` ou `idle`;
    * - escutada por outro processo: `busy`;
    * - ninguém escuta: `down`.

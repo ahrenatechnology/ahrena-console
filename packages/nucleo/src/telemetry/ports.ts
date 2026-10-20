@@ -41,17 +41,17 @@ export type FileReader = (path: string) => Promise<string | null>;
 export type StatFs = (mount: string) => Promise<{ totalBytes: number; freeBytes: number; availableBytes: number } | null>;
 
 /**
- * Sonda de uma porta local, para o estado do túnel:
- * - `open`: conectou e a conexão ficou aberta;
- * - `closed`: conectou e fechou logo (o `ssh` aceitou e o outro lado não tinha ninguém);
- * - `refused`: ninguém escuta aqui.
- */
-/**
  * Dono e modo de um arquivo, pelo `fs.stat` (segue o link). `null` quando não existe ou não dá
  * para ler. Serve para o `-F` de um `ssh`: só se repassa ao `ssh -G` o arquivo do próprio usuário.
  */
 export type FileOwner = (path: string) => Promise<{ uid: number; mode: number } | null>;
 
+/**
+ * Sonda de uma porta local, para o estado do túnel:
+ * - `open`: conectou e a conexão ficou aberta;
+ * - `closed`: conectou e fechou logo (o `ssh` aceitou e o outro lado não tinha ninguém);
+ * - `refused`: ninguém escuta aqui.
+ */
 export type PortProbe = (port: number) => Promise<'open' | 'closed' | 'refused'>;
 
 export interface CpuTimes {
