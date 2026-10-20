@@ -5,6 +5,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
 import { FeedDeEventos, statusDoEvento, textoDeUmaLinha, type EventoDoFeed, type RespostaDoFeed } from '../../src/api/eventos.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
+import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { agent, at, event, session } from '../fixtures.ts';
 
 let storage: SqliteStorage;
@@ -16,8 +17,9 @@ beforeEach(() => {
 });
 afterEach(() => storage.close());
 
+// The handlers read the English parameters; the old ones in these strings pass through the alias map.
 async function pedir(busca = ''): Promise<{ status: number; corpo: RespostaDoFeed & { error?: string } }> {
-  const r = await feed.responder(new URLSearchParams(busca));
+  const r = await feed.responder(normalizeLegacyQuery(new URLSearchParams(busca)));
   return r as { status: number; corpo: RespostaDoFeed & { error?: string } };
 }
 async function ok(busca = ''): Promise<RespostaDoFeed> {
@@ -272,7 +274,7 @@ describe('#94 GET /api/eventos: a montagem', () => {
       }),
     });
     for (let i = 0; i < 30; i++) await storage.appendEvent(event({ id: `x${i}`, sessionId: 's1', agentId: 'sub1', createdAt: at(30 + i) }));
-    const r = await contada.responder(new URLSearchParams('limite=40'));
+    const r = await contada.responder(new URLSearchParams('limit=40'));
     assert.equal(r.status, 200);
     assert.ok(sessoes <= 2, `sessões lidas: ${sessoes}`);
     assert.ok(agentes <= 4, `agentes lidos: ${agentes}`);

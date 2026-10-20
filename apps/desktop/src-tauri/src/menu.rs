@@ -1,4 +1,4 @@
-// O menu da bandeja como dados, montado do JSON de `GET /api/atencao` e do estado do núcleo.
+// O menu da bandeja como dados, montado do JSON de `GET /api/attention` e do estado do núcleo.
 //
 // Fica separado do Tauri para ser testado sem abrir o app: `montar` devolve a lista de itens na
 // ordem dos wireframes A1 (0 esperando), A2 (3 esperando) e A4 (núcleo parado), e `main.rs` só a
@@ -6,7 +6,7 @@
 
 use serde::Deserialize;
 
-/// Um item de `GET /api/atencao` (packages/nucleo/src/api/rota-atencao.ts).
+/// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ItemDaAtencao {
     pub sessao: String,
@@ -82,7 +82,7 @@ pub enum Item {
 pub struct Entrada<'a> {
     pub nucleo: &'a EstadoDoNucleo,
     pub atencao: Option<&'a Atencao>,
-    /// O núcleo de pé não tem `/api/atencao` (um de antes da #87).
+    /// O núcleo de pé não tem `/api/attention` (um de antes da #87).
     pub sem_atencao: bool,
     pub notificacoes: bool,
     pub login: bool,
@@ -208,7 +208,7 @@ fn ativas(n: u64) -> String {
 mod testes {
     use super::*;
 
-    // O JSON de `/api/atencao`, no formato da rota (campos a mais são ignorados).
+    // O JSON de `/api/attention`, no formato da rota (campos a mais são ignorados).
     const TRES: &str = r##"{
       "geradoEm": "2026-10-18T23:10:00.000Z", "cursor": "c42", "total": 3, "precisam": 2, "suaVez": 1,
       "ativas": 4, "comErro": 1,

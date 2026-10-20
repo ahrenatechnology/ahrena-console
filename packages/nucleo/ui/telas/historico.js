@@ -20,10 +20,10 @@ export const BUSCA_MAXIMA = 100;
 /** A rota da API do histórico, só com os parâmetros presentes. */
 export function rotaDoHistorico({ antes = null, busca = '', dias = DIAS_POR_PAGINA } = {}) {
   const partes = [];
-  if (antes) partes.push(`antes=${encodeURIComponent(antes)}`);
-  if (dias) partes.push(`dias=${encodeURIComponent(dias)}`);
-  if (busca) partes.push(`busca=${encodeURIComponent(busca)}`);
-  return partes.length ? `/api/historico?${partes.join('&')}` : '/api/historico';
+  if (antes) partes.push(`before=${encodeURIComponent(antes)}`);
+  if (dias) partes.push(`days=${encodeURIComponent(dias)}`);
+  if (busca) partes.push(`search=${encodeURIComponent(busca)}`);
+  return partes.length ? `/api/history?${partes.join('&')}` : '/api/history';
 }
 
 const SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];

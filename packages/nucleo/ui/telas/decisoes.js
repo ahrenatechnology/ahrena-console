@@ -1,10 +1,10 @@
 // A página Decisões (C21, issue 103): todas as decisões, agrupadas por branch, família ou sessão, com
-// busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma. Lê `GET /api/decisoes`
+// busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma. Lê `GET /api/decisions`
 // (src/api/decisoes-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (ler.js).
 
 import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
-import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao } from './decisoes-comum.js';
+import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisoes-comum.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);
@@ -12,11 +12,11 @@ const num = (n) => NUM.format(n ?? 0);
 /** A rota da leitura, com os filtros que não são o padrão. */
 export function rotaDasDecisoes({ agrupar = 'branch', estado = 'todas', q = '', grupo = null } = {}) {
   const p = new URLSearchParams();
-  p.set('agrupar', agrupar);
-  if (estado !== 'todas') p.set('estado', estado);
+  p.set('groupBy', VALOR_DA_API[agrupar] ?? agrupar);
+  if (estado !== 'todas') p.set('state', estado);
   if (q) p.set('q', q.slice(0, 200));
-  if (grupo) p.set('grupo', grupo);
-  return `/api/decisoes?${p}`;
+  if (grupo) p.set('group', grupo);
+  return `/api/decisions?${p}`;
 }
 
 /** "vitrine-demo · 6 vigentes · 1 a confirmar". */

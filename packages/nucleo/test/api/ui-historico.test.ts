@@ -115,10 +115,10 @@ describe('Histórico: registro e arquivo', () => {
 describe('Histórico: funções puras', () => {
   test('rotaDoHistorico só leva os parâmetros presentes', () => {
     assert.equal(DIAS_POR_PAGINA, 7);
-    assert.equal(rotaDoHistorico({}), '/api/historico?dias=7');
-    assert.equal(rotaDoHistorico({ antes: '2025-10-11' }), '/api/historico?antes=2025-10-11&dias=7');
-    assert.equal(rotaDoHistorico({ busca: 'fetch nativo & cia' }), '/api/historico?dias=7&busca=fetch%20nativo%20%26%20cia');
-    assert.equal(rotaDoHistorico({ antes: '2025-10-11', busca: '', dias: 3 }), '/api/historico?antes=2025-10-11&dias=3');
+    assert.equal(rotaDoHistorico({}), '/api/history?days=7');
+    assert.equal(rotaDoHistorico({ antes: '2025-10-11' }), '/api/history?before=2025-10-11&days=7');
+    assert.equal(rotaDoHistorico({ busca: 'fetch nativo & cia' }), '/api/history?days=7&search=fetch%20nativo%20%26%20cia');
+    assert.equal(rotaDoHistorico({ antes: '2025-10-11', busca: '', dias: 3 }), '/api/history?before=2025-10-11&days=3');
   });
 
   test('rotuloDoDia: hoje, ontem, outro dia e outro ano', () => {

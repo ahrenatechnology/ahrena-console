@@ -100,13 +100,13 @@ describe('o card de uma decisão', () => {
   });
 
   test('os pedidos de escrita: Confirmar, Descartar e as duas fases do Promover', () => {
-    assert.deepEqual(pedidoDaAcao('d1', 'confirmar', { sessao: 's1' }), { rota: '/api/decisoes/d1/confirmar', corpo: { sessao: 's1' } });
+    assert.deepEqual(pedidoDaAcao('d1', 'confirmar', { sessao: 's1' }), { rota: '/api/decisions/d1/confirm', corpo: { sessao: 's1' } });
     // O id do núcleo tem `:` ("dec:…"): vai cru, como a regra de origem do servidor espera.
-    assert.equal(pedidoDaAcao('dec:4b1f', 'confirmar', { sessao: 's1' }).rota, '/api/decisoes/dec:4b1f/confirmar');
-    assert.deepEqual(pedidoDaAcao('d1', 'descartar', { sessao: 's1' }), { rota: '/api/decisoes/d1/descartar', corpo: { sessao: 's1' } });
-    assert.deepEqual(pedidoDePromover('d1', 's1'), { rota: '/api/decisoes/d1/promover', corpo: { sessao: 's1' } });
+    assert.equal(pedidoDaAcao('dec:4b1f', 'confirmar', { sessao: 's1' }).rota, '/api/decisions/dec:4b1f/confirm');
+    assert.deepEqual(pedidoDaAcao('d1', 'descartar', { sessao: 's1' }), { rota: '/api/decisions/d1/dismiss', corpo: { sessao: 's1' } });
+    assert.deepEqual(pedidoDePromover('d1', 's1'), { rota: '/api/decisions/d1/promote', corpo: { sessao: 's1' } });
     assert.deepEqual(pedidoDePromover('d1', 's1', { caminho: 'docs/decisoes/0008-x.md' }), {
-      rota: '/api/decisoes/d1/promover',
+      rota: '/api/decisions/d1/promote',
       corpo: { sessao: 's1', confirmar: true, caminho: 'docs/decisoes/0008-x.md' },
     });
     assert.deepEqual(pedidoDePromover('d1', 's1', { caminho: 'docs/decisoes/0008-x.md', hash: 'ab'.repeat(32) }).corpo, {
@@ -130,11 +130,11 @@ describe('a página (C21) e a aba (C20)', () => {
   });
 
   test('as rotas de leitura levam só os filtros que não são o padrão', () => {
-    assert.equal(rotaDasDecisoes(), '/api/decisoes?agrupar=branch');
-    assert.equal(rotaDasDecisoes({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisoes?agrupar=familia&estado=a_confirmar&q=banco+de+testes&grupo=b%3Aabc');
-    assert.equal(rotaDasDecisoes({ q: 'x'.repeat(500) }).length, '/api/decisoes?agrupar=branch&q='.length + 200);
-    assert.equal(rotaDaAba('/api/sessoes/s1'), '/api/sessoes/s1/decisoes?escopo=sessao');
-    assert.equal(rotaDaAba('/api/sessoes/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessoes/s1/decisoes?escopo=branch&estado=vigentes&q=kanban');
+    assert.equal(rotaDasDecisoes(), '/api/decisions?groupBy=branch');
+    assert.equal(rotaDasDecisoes({ agrupar: 'familia', estado: 'a_confirmar', q: 'banco de testes', grupo: 'b:abc' }), '/api/decisions?groupBy=family&state=a_confirmar&q=banco+de+testes&group=b%3Aabc');
+    assert.equal(rotaDasDecisoes({ q: 'x'.repeat(500) }).length, '/api/decisions?groupBy=branch&q='.length + 200);
+    assert.equal(rotaDaAba('/api/sessions/s1'), '/api/sessions/s1/decisions?scope=session');
+    assert.equal(rotaDaAba('/api/sessions/s1', { escopo: 'branch', estado: 'vigentes', q: 'kanban' }), '/api/sessions/s1/decisions?scope=branch&state=vigentes&q=kanban');
   });
 
   test('o resumo do grupo e a chamada do MCP', () => {
@@ -153,11 +153,11 @@ describe('a página (C21) e a aba (C20)', () => {
       ler: async (rota: string) => (lidas.push(rota), { sessao: 's1', total: 4, itens: [], porEscopo: { sessao: 4, familia: 5, branch: 6 }, injecao: {}, mcp: {} }),
       aoMudar: (f: (m: { tipo: string }[]) => void) => ouvintes.push(f),
     };
-    const aba = criar(ctx, '/api/sessoes/s1', { cabeca: () => null, rotular: (t: string | null) => rotulos.push(t) });
+    const aba = criar(ctx, '/api/sessions/s1', { cabeca: () => null, rotular: (t: string | null) => rotulos.push(t) });
     assert.equal(typeof aba.mostrar, 'function');
     assert.equal(typeof aba.esconder, 'function');
     await aba.atualizar();
-    assert.deepEqual(lidas, ['/api/sessoes/s1/decisoes?escopo=sessao'], 'a aba abre em Sessão, como o C20');
+    assert.deepEqual(lidas, ['/api/sessions/s1/decisions?scope=session'], 'a aba abre em Sessão, como o C20');
     assert.deepEqual(rotulos, ['4'], 'o texto entre parênteses');
     assert.equal(ouvintes.length, 1, 'a aba escuta as mudanças de decisão');
   });

@@ -1,5 +1,5 @@
 // `GET /api/dashboard`: o que o Dashboard (C1, #27) desenha além do "precisam de você", que vem
-// de `GET /api/atencao` (#87). Os seis números, os agentes ativos com os subagentes e a atividade
+// de `GET /api/attention` (#87). Os seis números, os agentes ativos com os subagentes e a atividade
 // recente, num pedido.
 //
 // Tudo pela porta e por caches em memória (decisão 0004): nenhum transcript é lido.

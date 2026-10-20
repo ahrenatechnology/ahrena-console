@@ -158,7 +158,7 @@ describe('Kanban do projeto (C11)', () => {
   test('desenha o cabeçalho, as raias com contagem e os cards com tipo, número, sub-issues, PR, CI e review', async () => {
     tela = await montarTela({ ler: async () => quadroFalso() });
     const { area } = tela;
-    assert.deepEqual(tela.leituras, ['/api/projeto']);
+    assert.deepEqual(tela.leituras, ['/api/project']);
     const cab = area.querySelector('header.cc-cab')!;
     assert.match(texto(cab), /Kanban do projeto Ao vivo/);
     assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · por Status · arraste para mudar');
@@ -203,13 +203,13 @@ describe('Kanban do projeto (C11)', () => {
     assert.equal(tela.area.querySelectorAll('article.pj-card').length, 7);
   });
 
-  test('Atualizar lê com ?forcar=1; o "Ao vivo" relê sem forçar', async () => {
+  test('Atualizar lê com ?refresh=1; o "Ao vivo" relê sem forçar', async () => {
     tela = await montarTela({ ler: async () => quadroFalso() });
     tela.area.querySelectorAll('header button').find((b) => texto(b) === 'Atualizar')!.click();
     await esperar();
     for (const f of tela.aoReiniciar) f();
     await esperar();
-    assert.deepEqual(tela.leituras, ['/api/projeto', '/api/projeto?forcar=1', '/api/projeto']);
+    assert.deepEqual(tela.leituras, ['/api/project', '/api/project?refresh=1', '/api/project']);
   });
 
   test('arrastar move otimista, manda o POST e mostra o toast; Desfazer manda a raia de antes', async () => {
@@ -229,7 +229,7 @@ describe('Kanban do projeto (C11)', () => {
     // Otimista: antes da resposta, o card já está na raia nova.
     assert.deepEqual(tela.nomesNaRaia('In Review'), ['I-92', 'I-64', 'I-80']);
     assert.deepEqual(tela.nomesNaRaia('Backlog'), []);
-    assert.deepEqual(tela.escritas, [{ rota: '/api/projeto/mover', corpo: { itemId: 'I-80', optionId: 'rv' } }]);
+    assert.deepEqual(tela.escritas, [{ rota: '/api/project/move', corpo: { itemId: 'I-80', optionId: 'rv' } }]);
     soltar();
     await esperar();
     assert.deepEqual(tela.nomesNaRaia('In Review'), ['I-92', 'I-64', 'I-80']);
@@ -240,7 +240,7 @@ describe('Kanban do projeto (C11)', () => {
     assert.deepEqual(tela.nomesNaRaia('Backlog'), ['I-80'], 'desfazer também é otimista');
     soltar();
     await esperar();
-    assert.deepEqual(tela.escritas.at(-1), { rota: '/api/projeto/mover', corpo: { itemId: 'I-80', optionId: 'bk' } });
+    assert.deepEqual(tela.escritas.at(-1), { rota: '/api/project/move', corpo: { itemId: 'I-80', optionId: 'bk' } });
     assert.deepEqual(tela.nomesNaRaia('Backlog'), ['I-80']);
     assert.equal(texto(tela.area.querySelector('.pj-toast')), '#80 movido para Backlog no GitHub Desfazer');
   });

@@ -1,5 +1,5 @@
 // O Feed de atividade (C8, #94): todos os eventos das sessões, ao vivo, com filtros, pausa e uma
-// linha aberta com o detalhe. Lê `GET /api/eventos`; o estado (lista, cursor, pausa) está em
+// linha aberta com o detalhe. Lê `GET /api/events`; o estado (lista, cursor, pausa) está em
 // `feed-estado.js`, e esta tela só desenha.
 //
 // - Primeira leitura (ou filtro novo, ou "Atualizar", ou o núcleo reiniciado): a página do topo.
@@ -32,7 +32,7 @@ import {
 
 const CSS = '/ui/feed.css';
 const RELOGIO_MS = 5000;
-/** O `limite` padrão de `/api/eventos`: um lote do ao vivo com esse tamanho diz que há mais. */
+/** O `limit` padrão de `/api/events`: um lote do ao vivo com esse tamanho diz que há mais. */
 const LOTE_DO_AO_VIVO = 50;
 const DIGITANDO_MS = 300;
 

@@ -3,7 +3,6 @@
   "routes": [
     "/abrir",
     "/abrir/*",
-    "/abrir/local_",
     "/api/analytics/custo",
     "/api/atencao",
     "/api/carga",
@@ -19,7 +18,6 @@
     "/api/historico",
     "/api/mudancas",
     "/api/mural",
-    "/api/painel",
     "/api/painel/*",
     "/api/projeto",
     "/api/projeto/mover",

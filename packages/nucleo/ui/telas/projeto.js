@@ -1,9 +1,9 @@
 // Kanban do projeto (C11): o GitHub Project por Status, ao vivo; arrastar um card muda o Status no GitHub.
 //
-// - Lê `GET /api/projeto` (o botão Atualizar manda `?forcar=1`) e relê a cada novidade do "Ao vivo":
+// - Lê `GET /api/project` (o botão Atualizar manda `?refresh=1`) e relê a cada novidade do "Ao vivo":
 //   o núcleo guarda o quadro em cache, reler é barato.
 // - Arrastar (ou Alt+← / Alt+→ no card focado) é otimista: o card muda de raia na hora e vai
-//   `POST /api/projeto/mover`. Se o GitHub recusar, o card volta e a faixa diz por quê. Deu certo, o
+//   `POST /api/project/move`. Se o GitHub recusar, o card volta e a faixa diz por quê. Deu certo, o
 //   toast oferece Desfazer, que é outro POST com a raia de antes.
 // - A raia "Sem status" (id null) não recebe card: o GitHub não tem como voltar um item para lá.
 // - Enquanto um movimento ou um arrasto está em curso, a releitura espera: um quadro lido antes do
@@ -12,9 +12,9 @@
 import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 
-const ROTA = '/api/projeto';
+const ROTA = '/api/project';
 const ESTILO = '/ui/projeto.css';
-const ROTA_MOVER = '/api/projeto/mover';
+const ROTA_MOVER = '/api/project/move';
 const TEMPO_DO_TOAST = 8000;
 const ESPERA_DO_AO_VIVO = 1000;
 const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
@@ -146,7 +146,7 @@ export async function montar(area, ctx) {
     if (!quadro) trocarArea(carregando({ rotulo: 'Lendo o GitHub Project' }));
     if (forcar) botaoAtualizar.setAttribute('aria-busy', 'true');
     try {
-      const novo = await ctx.ler(forcar ? `${ROTA}?forcar=1` : ROTA);
+      const novo = await ctx.ler(forcar ? `${ROTA}?refresh=1` : ROTA);
       if (minha !== leitura) return;
       quadro = novo;
       falhaDeLeitura = null;

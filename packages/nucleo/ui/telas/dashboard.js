@@ -1,5 +1,5 @@
 // Dashboard (C1, #27): os seis números, "precisam de você" em destaque, os agentes ativos com os
-// subagentes e a atividade recente. Lê `GET /api/dashboard` e `GET /api/atencao` (#87).
+// subagentes e a atividade recente. Lê `GET /api/dashboard` e `GET /api/attention` (#87).
 // O título da inbox conta o `total` da atenção (trava + sua vez), como o C1 e a barra de menus.
 //
 // As funções sem DOM (formatação e o que cada parte mostra) saem exportadas para o teste.
@@ -11,7 +11,7 @@ const ESTILO = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ROTA_DA_ATENCAO` de src/api/rota-atencao.ts (#87):
 // se o nome mudar lá, muda aqui.
 export const ROTA_DO_DASHBOARD = '/api/dashboard';
-export const ROTA_DA_ATENCAO = '/api/atencao';
+export const ROTA_DA_ATENCAO = '/api/attention';
 /** Releitura depois de uma rajada de mudanças, e a releitura de fundo das idades ("2 min"). */
 const ESPERA_MS = 400;
 const FUNDO_MS = 30_000;
@@ -89,7 +89,7 @@ export function cards(numeros) {
 }
 
 /**
- * Os cartões do "precisam de você": a ordem e o texto da `/api/atencao`; o pedido ("Bash: npm run
+ * Os cartões do "precisam de você": a ordem e o texto da `/api/attention`; o pedido ("Bash: npm run
  * migrate") e o modelo vêm do card do agente, quando a sessão está entre os ativos.
  */
 export function cartoesDaInbox(atencao, agentes) {

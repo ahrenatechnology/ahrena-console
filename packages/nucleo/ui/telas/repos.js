@@ -254,7 +254,7 @@ export async function montar(area, ctx) {
     timer = null;
     const n = ++pedido;
     try {
-      const d = await ctx.ler(forcar ? '/api/repos?atualizar=1' : '/api/repos');
+      const d = await ctx.ler(forcar ? '/api/repos?refresh=1' : '/api/repos');
       if (n !== pedido) return;
       dados = d;
       falha = null;

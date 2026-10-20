@@ -3,9 +3,11 @@
 //
 // | Parâmetro | Valores                                                  | Padrão    |
 // | --------- | -------------------------------------------------------- | --------- |
-// | `visao`   | `sessoes` ou `agentes`                                   | `sessoes` |
-// | `coluna`  | uma coluna da visão; sem ela, vêm todas, na página 1     | —         |
-// | `pagina`  | a partir de 1, com `POR_PAGINA` itens; só com `coluna`   | 1         |
+// | `view`    | `sessions` ou `agents` (ou `sessoes` e `agentes`)        | `sessoes` |
+// | `column`  | uma coluna da visão; sem ela, vêm todas, na página 1     | —         |
+// | `page`    | a partir de 1, com `POR_PAGINA` itens; só com `column`   | 1         |
+//
+// The old parameter names (and route) are aliases: src/api/legacy-routes.ts.
 //
 // Visão sessões: `ativa`, `esperando`, `concluida`, `erro`, `abandonada` (o `DisplayStatus`).
 // Visão agentes: `trabalhando`, `esperando`, `concluidos`, `erro`; o principal de cada sessão (o
@@ -79,7 +81,7 @@ export function colunaDoAgente(status: DisplayStatus): ColunaDeAgente {
   return DO_AGENTE[status];
 }
 
-/** A linha da tela Sessões (`GET /api/sessoes`, #28) com o último prompt e o modelo. */
+/** A linha da tela Sessões (`GET /api/sessions`, #28) com o último prompt e o modelo. */
 export interface CardDeSessao extends LinhaDeSessao {
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
   ultimoPrompt: string | null;
@@ -132,14 +134,14 @@ export class ErroDoPedidoDoKanban extends Error {}
 /** Os parâmetros da URL, validados; parâmetro inválido lança `ErroDoPedidoDoKanban` (400). */
 export function pedidoDoKanban(url: URL): PedidoDoKanban {
   const p = url.searchParams;
-  const visao = p.get('visao') || 'sessoes';
+  const visao = p.get('view') || 'sessoes';
   if (!VISOES.includes(visao as Visao)) throw new ErroDoPedidoDoKanban(`visao: um de ${VISOES.join(', ')}`);
   const colunas: readonly { id: string }[] = visao === 'sessoes' ? COLUNAS_DAS_SESSOES : COLUNAS_DOS_AGENTES;
-  const coluna = p.get('coluna') || null;
+  const coluna = p.get('column') || null;
   if (coluna !== null && !colunas.some((c) => c.id === coluna)) {
     throw new ErroDoPedidoDoKanban(`coluna: uma de ${colunas.map((c) => c.id).join(', ')}`);
   }
-  const textoDaPagina = p.get('pagina');
+  const textoDaPagina = p.get('page');
   if (textoDaPagina !== null && coluna === null) throw new ErroDoPedidoDoKanban('pagina: só com coluna');
   const pagina = textoDaPagina === null ? 1 : Number(textoDaPagina);
   if (!/^\d+$/.test(textoDaPagina ?? '1') || !Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) {

@@ -2,9 +2,12 @@
 //
 // | Rota                                   | O quê                                                        |
 // | -------------------------------------- | ------------------------------------------------------------ |
-// | `GET /api/decisoes`                    | A página Decisões (C21): todas, agrupadas, com busca          |
-// | `GET /api/sessoes/<id>/decisoes`       | A aba Decisões do Detalhe (C20): o escopo, a injeção e o MCP |
-// | `POST /api/decisoes/<id>/promover`     | O "Promover a registro": rascunho, ou grava com `confirmar`  |
+// | `GET /api/decisions`                   | A página Decisões (C21): todas, agrupadas, com busca (`?state=`, `?groupBy=`, `?group=`, `?q=`) |
+// | `GET /api/sessions/<id>/decisions`     | A aba Decisões do Detalhe (C20): o escopo (`?scope=`), a injeção e o MCP |
+// | `POST /api/decisions/<id>/promote`     | O "Promover a registro": rascunho, ou grava com `confirmar`  |
+//
+// The old `/api/decisoes`, `/api/sessoes/<id>/decisoes`, `/api/decisoes/<id>/promover` and parameter
+// names (`estado`, `agrupar`, `grupo`, `escopo`) are aliases: src/api/legacy-routes.ts.
 //
 // Lê e escreve só pela porta das decisões; o escopo, a conta e a cadeia são de `DecisoesDaSessao` e
 // de src/decisoes/registro.ts, não daqui.
@@ -32,6 +35,9 @@ import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../d
 import type { Page, StoragePort } from '../storage-port.ts';
 import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisoes.ts';
 import type { DecisaoDoPainel, EscopoDasDecisoes } from './tipos.ts';
+
+/** The Decisions page of the /ui (C21). */
+export const DECISIONS_PAGE_ROUTE = '/api/decisions';
 
 export type AgrupamentoDasDecisoes = 'branch' | 'familia' | 'sessao';
 export type FiltroDeEstado = 'todas' | 'vigentes' | 'a_confirmar';
@@ -69,7 +75,7 @@ export interface GrupoDeDecisoes {
   mais: number;
 }
 
-/** `GET /api/decisoes` (C21). */
+/** `GET /api/decisions` (C21). */
 export interface DecisoesDaPagina {
   agrupar: AgrupamentoDasDecisoes;
   estado: FiltroDeEstado;
@@ -79,7 +85,7 @@ export interface DecisoesDaPagina {
   grupos: GrupoDeDecisoes[];
 }
 
-/** `GET /api/sessoes/<id>/decisoes` (C20). */
+/** `GET /api/sessions/<id>/decisions` (C20). */
 export interface DecisoesDaAba {
   sessao: string;
   escopo: EscopoDasDecisoes;
@@ -551,7 +557,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 
 /** O `estado` e o `q` da busca; quando algum não vale, a mensagem de erro (uma string) no lugar deles. */
 function filtrosDe(url: URL): { estado: FiltroDeEstado; q: string | null } | string {
-  const estado = (url.searchParams.get('estado') ?? 'todas') as FiltroDeEstado;
+  const estado = (url.searchParams.get('state') ?? 'todas') as FiltroDeEstado;
   if (!FILTROS.includes(estado)) return 'estado: todas, vigentes ou a_confirmar';
   const q = url.searchParams.get('q')?.trim() || null;
   if (q && q.length > MAX_BUSCA) return `busca de até ${MAX_BUSCA} caracteres`;
@@ -563,24 +569,24 @@ function filtrosDe(url: URL): { estado: FiltroDeEstado; q: string | null } | str
  * já foi conferida pelo servidor (decisão 0003); a escrita pede ainda JSON e a sessão no corpo.
  */
 export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerResponse, url: URL, ui: DecisoesDaUi, log: (m: string) => void = () => {}): Promise<boolean> {
-  if (url.pathname === '/api/decisoes') {
+  if (url.pathname === DECISIONS_PAGE_ROUTE) {
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;
-    const agrupar = (url.searchParams.get('agrupar') ?? 'branch') as AgrupamentoDasDecisoes;
+    const agrupar = (url.searchParams.get('groupBy') ?? 'branch') as AgrupamentoDasDecisoes;
     if (!AGRUPAMENTOS.includes(agrupar)) return send(res, 400, { error: 'agrupar: branch, familia ou sessao' }), true;
-    const grupo = url.searchParams.get('grupo');
+    const grupo = url.searchParams.get('group');
     if (grupo !== null && !CHAVE_DO_GRUPO.test(grupo)) return send(res, 400, { error: 'grupo inválido' }), true;
     send(res, 200, await ui.pagina({ agrupar, ...f, grupo }));
     return true;
   }
 
-  const aba = /^\/api\/sessoes\/([^/]+)\/decisoes$/.exec(url.pathname);
+  const aba = /^\/api\/sessions\/([^/]+)\/decisions$/.exec(url.pathname);
   if (aba) {
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const sessao = decodificado(aba[1]!);
     if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
-    const escopo = (url.searchParams.get('escopo') ?? 'familia') as EscopoDasDecisoes;
+    const escopo = (url.searchParams.get('scope') ?? 'familia') as EscopoDasDecisoes;
     if (!ESCOPOS_DAS_DECISOES.includes(escopo)) return send(res, 400, { error: 'escopo: sessao, familia ou branch' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;
@@ -590,7 +596,7 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     return true;
   }
 
-  const promover = /^\/api\/decisoes\/([^/]+)\/promover$/.exec(url.pathname);
+  const promover = /^\/api\/decisions\/([^/]+)\/promote$/.exec(url.pathname);
   if (promover) {
     if (req.method !== 'POST') return send(res, 405, { error: 'use POST' }), true;
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' }), true;

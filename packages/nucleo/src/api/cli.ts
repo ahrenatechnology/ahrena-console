@@ -80,7 +80,7 @@ const AJUDA = `Uso: npm run api -- [opções]
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
-                      projeto (/api/projeto) responde 503 e os repositórios (/api/repos)
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos)
                       respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
@@ -98,7 +98,7 @@ const AJUDA = `Uso: npm run api -- [opções]
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
 
-Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
+Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 

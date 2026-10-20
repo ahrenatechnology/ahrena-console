@@ -3,10 +3,10 @@
 // | Rota                                          | Resposta (src/api/repos-tipos.ts) |
 // | --------------------------------------------- | --------------------------------- |
 // | `GET /api/repos`                              | `ListaDeRepos`                    |
-// | `GET /api/repos/<dono>/<repo>?periodo=90d`    | `MetricasDoRepo`                  |
+// | `GET /api/repos/<dono>/<repo>?period=90d`     | `MetricasDoRepo`                  |
 //
-// `?periodo=` é `30d`, `90d` (padrão) ou `1a`, e vale para a resposta inteira (#105 critério 6);
-// outro valor dá 400. `?atualizar=1` é o botão Atualizar: relê o GraphQL ignorando o TTL, com o
+// `?period=` é `30d`, `90d` (padrão) ou `1y` (ou `1a`), e vale para a resposta inteira (#105 critério 6);
+// outro valor dá 400. `?refresh=1` é o botão Atualizar: relê o GraphQL ignorando o TTL, com o
 // intervalo mínimo de 30 s do cache (decisão 0001). `<dono>` e `<repo>` passam pelo padrão de
 // nome do GitHub antes de qualquer coisa; fora dele, 400.
 //
@@ -555,7 +555,7 @@ export const ROTA_DOS_REPOS = '/api/repos';
 
 export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
   return async (res, url) => {
-    const atualizar = url.searchParams.get('atualizar') === '1';
+    const atualizar = url.searchParams.get('refresh') === '1';
     if (url.pathname === ROTA_DOS_REPOS || url.pathname === `${ROTA_DOS_REPOS}/`) return send(res, 200, await repos.lista({ atualizar }));
     const m = /^\/api\/repos\/([^/]+)\/([^/]+)\/?$/.exec(url.pathname);
     if (!m) return send(res, 404, { error: 'não encontrado' });
@@ -568,7 +568,7 @@ export function criarRotaDosRepos(repos: ReposDoGithub): RotaDosRepos {
       return send(res, 400, { error: 'repositório inválido' });
     }
     if (!NOME_DO_DONO.test(dono) || !NOME_DO_REPO.test(nome)) return send(res, 400, { error: 'repositório inválido: use <dono>/<repo> com o nome do GitHub' });
-    const periodo = url.searchParams.get('periodo') ?? PERIODO_PADRAO;
+    const periodo = url.searchParams.get('period') ?? PERIODO_PADRAO;
     if (!(PERIODOS as readonly string[]).includes(periodo)) return send(res, 400, { error: `periodo: um de ${PERIODOS.join(', ')}` });
     send(res, 200, await repos.metricas(dono, nome, periodo as Periodo, { atualizar }));
   };

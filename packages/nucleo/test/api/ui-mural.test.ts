@@ -295,7 +295,7 @@ describe('Mural: a tela montada', () => {
       assert.equal(botao('todas').getAttribute('aria-pressed'), 'false');
       botao('ativas').click();
       assert.deepEqual(comClasse(area, 'mural-card').map((c) => c.getAttribute('data-sessao')), ['ativa-1']);
-      assert.deepEqual(rotas, ['/api/mural'], 'só a primeira leitura');
+      assert.deepEqual(rotas, ['/api/wall'], 'só a primeira leitura');
 
       dados = soAtivas;
       area.todos((e) => e.getAttribute('data-acao') === 'atualizar')[0]!.click();
@@ -424,8 +424,8 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
 });
 
 test('a rota da tela é a do núcleo', async () => {
-  const { ROTA_DO_MURAL } = await import('../../src/api/index.ts');
-  assert.equal(tela.ROTA_DO_MURAL, ROTA_DO_MURAL);
+  const { WALL_ROUTE } = await import('../../src/api/index.ts');
+  assert.equal(tela.ROTA_DO_MURAL, WALL_ROUTE);
 });
 
 // O CSS de cada tela fica carregado quando se troca de tela: classe com o mesmo nome em duas telas

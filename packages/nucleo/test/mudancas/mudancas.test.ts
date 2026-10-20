@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal } from '../../src/api/index.ts';
+import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
@@ -326,7 +326,8 @@ describe('fontes das mudanças', () => {
 
 describe('rota HTTP', () => {
   test('lê e valida os parâmetros', () => {
-    const p = (q: string) => lerPedidoDeMudancas(new URL(`http://x/api/mudancas?${q}`));
+    // The old parameter names pass through the alias map, as on the server.
+    const p = (q: string) => lerPedidoDeMudancas(normalizeLegacyUrl(new URL(`http://x/api/mudancas?${q}`)));
     assert.deepEqual(p('desde=g1.3&espera=5&sessao=s1,s2&conta=a&conta=sem-conta&tipo=plano'), {
       cursor: 'g1.3',
       timeoutMs: 5000,

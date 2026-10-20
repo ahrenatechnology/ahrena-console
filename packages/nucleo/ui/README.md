@@ -8,7 +8,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `telas.js` | **O registro das telas** (rota, item da barra, arquivo) |
 | `ler.js` | A camada de leitura, `ler(rota)`, e de escrita: `escrever(rota, corpo)` (POST JSON na `/api/`) e `abrirNoDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `usarLeitor()`, `usarEscritor()` e `usarAbridor()` |
-| `ao-vivo.js` | Long polling em `GET /api/mudancas?desde=<cursor>&espera=25` |
+| `ao-vivo.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `estados.js` | Os três estados de toda tela (C19): `carregando`, `vazio`, `erro`, e a `faixaDeErro` |
 | `dom.js` | `el()`, `icone()` e `cabecalho()` |
 | `moldura.css` | O estilo. Toda cor é variável da marca |
@@ -16,8 +16,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
-| `telas/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes`; `historico.js` (C15, #33) lê `GET /api/historico`; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?periodo=`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`, `historico.css`, `repos.css`), carregado pela própria tela |
-| `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessoes/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
+| `telas/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `mural.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessions`; `historico.js` (C15, #33) lê `GET /api/history`; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`telas/detalhe.css`) ou em `ui/` (`dashboard.css`, `mural.css`, `sessoes.css`, `historico.css`, `repos.css`), carregado pela própria tela |
+| `telas/detalhe.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessions/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
 | `telas/kanban.js` | O Kanban ([#31](https://github.com/ahrenatechnology/ahrena-console/issues/31)): sessões ou agentes em colunas por status, só leitura, em `/ui/kanban` (`?visao=agentes` para os agentes) |
 | `kanban.css` | O estilo do Kanban, carregado pela tela só enquanto ela está aberta |
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
@@ -29,10 +29,10 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 
 | Tela | Rota | Lê | Arquivo |
 | --- | --- | --- | --- |
-| Analytics · Visão geral (C12) | `/ui/analytics` | `GET /api/analytics?fuso=` | `telas/analytics.js` |
-| Analytics · Custo (C13) | `/ui/analytics/custo` | `GET /api/analytics/custo?dias=7\|30\|90&fuso=` | `telas/analytics.js` |
+| Analytics · Visão geral (C12) | `/ui/analytics` | `GET /api/analytics?tz=` | `telas/analytics.js` |
+| Analytics · Custo (C13) | `/ui/analytics/custo` | `GET /api/analytics/cost?days=7\|30\|90&tz=` | `telas/analytics.js` |
 | Repositórios (C22) | `/ui/repos` | `GET /api/repos` | `telas/repos.js` |
-| Repositório (C23) | `/ui/repos/:dono/:repo` | `GET /api/repos/<dono>/<repo>?periodo=30d\|90d\|1a` | `telas/repo.js` |
+| Repositório (C23) | `/ui/repos/:dono/:repo` | `GET /api/repos/<dono>/<repo>?period=30d\|90d\|1y` | `telas/repo.js` |
 
 O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `analytics` (item da barra) e a `analytics-aba` (`/ui/analytics/:aba`, acende Analytics). A tela lê `ctx.params.aba`: só `custo` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
 | `decisoes.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisoes-comum.js` põe o `<link>` no `<head>` ao montar |
@@ -112,7 +112,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?visao=`. A mo
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
 - **Toda leitura passa por `ler()`, toda escrita por `escrever()`** (ou `abrirNoDesktop()`), nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
-- **As escritas com o `Origin` da página** são só três: o "Abrir no Claude Desktop" (`POST /abrir/<local_…>`), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
+- **As escritas com o `Origin` da página** são só três: o "Abrir no Claude Desktop" (`POST /open/<local_…>`), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.

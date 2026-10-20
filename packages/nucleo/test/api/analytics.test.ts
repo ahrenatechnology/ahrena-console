@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/rota-analytics.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { semearHistorico } from '../../src/simulador/historico.ts';
@@ -67,8 +67,9 @@ function rota(storage: SqliteStorage, relogio = { agora: AGORA }) {
   return new RotaAnalytics({ storage, contas: new Contas({ storage, arquivo: null }), agora: () => relogio.agora });
 }
 
+// The handlers read the English parameters; the old ones in these strings pass through the alias map.
 async function pedirRota(r: RotaAnalytics, caminho: string) {
-  return r.responder(new URL(caminho, 'http://127.0.0.1'));
+  return r.responder(normalizeLegacyUrl(new URL(caminho, 'http://127.0.0.1')));
 }
 
 /** As respostas lidas nos testes. */

@@ -166,8 +166,8 @@ describe('Feed de atividade: estado', () => {
   });
 
   test('a consulta codifica cada parâmetro e pula os vazios', () => {
-    assert.equal(E.consulta({}), '/api/eventos');
-    assert.equal(E.consulta({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/eventos?depois=k%201&sessao=x%2Fy&busca=a%26b%3Dc');
+    assert.equal(E.consulta({}), '/api/events');
+    assert.equal(E.consulta({ busca: ' a&b=c ', tipo: '', sessao: 'x/y' }, { depois: 'k 1' }), '/api/events?after=k%201&session=x%2Fy&search=a%26b%3Dc');
     assert.ok(E.temFiltro({ status: 'error' }));
     assert.ok(!E.temFiltro({ status: '', busca: '  ' }));
   });
@@ -273,7 +273,7 @@ describe('Feed de atividade: a tela', () => {
     const area = new Elemento('main');
     const limpar = await montar(area, f.ctx);
 
-    assert.equal(f.pedidos[0], '/api/eventos');
+    assert.equal(f.pedidos[0], '/api/events');
     assert.ok(documento.head.querySelector('link[data-tela="feed"]'), 'o CSS da tela entrou no head');
     assert.deepEqual(linhasDe(area), ['e2', 'e1']);
     const [l2, l1] = area.querySelectorAll('.feed-item');
@@ -308,7 +308,7 @@ describe('Feed de atividade: a tela', () => {
     fila = [{ eventos: [evento('e3', 1)], cursor: 'k3', anteriores: null, opcoes: null }];
     f.mudar();
     await espera();
-    assert.equal(f.pedidos.at(-1), '/api/eventos?depois=k2');
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
     fila = [{ eventos: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', anteriores: null, opcoes: null }];
     f.mudar();
     await espera();
@@ -331,7 +331,7 @@ describe('Feed de atividade: a tela', () => {
     let soltar: (v: unknown) => void = () => {};
     let n = 0;
     const f = ctxFalso((rota) => {
-      if (!rota.includes('depois')) return { eventos: [evento('a', 30)], cursor: 'k1', anteriores: 'v1', opcoes: null };
+      if (!rota.includes('after=')) return { eventos: [evento('a', 30)], cursor: 'k1', anteriores: 'v1', opcoes: null };
       n++;
       return new Promise((r) => (soltar = r));
     });
@@ -346,7 +346,7 @@ describe('Feed de atividade: a tela', () => {
     await espera();
     await espera();
     assert.equal(n, 2);
-    assert.equal(f.pedidos.at(-1), '/api/eventos?depois=k2');
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
     soltar({ eventos: [], cursor: 'k2', anteriores: null });
     await espera();
     assert.deepEqual(linhasDe(area), ['b', 'a']);
@@ -371,14 +371,14 @@ describe('Feed de atividade: a tela', () => {
     limpar();
 
     const mais = ctxFalso((rota) =>
-      rota.includes('antes=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
+      rota.includes('before=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
     );
     limpar = await montar(area, mais.ctx);
     const botao = area.querySelector('.feed-mais')!;
     assert.equal(botao.hidden, false);
     botao.click();
     await espera();
-    assert.equal(mais.pedidos.at(-1), '/api/eventos?antes=v%201');
+    assert.equal(mais.pedidos.at(-1), '/api/events?before=v%201');
     assert.deepEqual(linhasDe(area), ['novo', 'velho']);
     assert.equal(botao.hidden, true);
     limpar();

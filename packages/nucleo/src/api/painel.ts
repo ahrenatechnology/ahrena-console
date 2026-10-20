@@ -1,4 +1,4 @@
-// Monta a resposta de `GET /api/painel/<sessão>` (4.1, 4.2, 4.3 e 4.8): esta sessão, o que roda
+// Monta a resposta de `GET /api/panel/<session>` (4.1, 4.2, 4.3 e 4.8): esta sessão, o que roda
 // dentro dela, o trabalho pelo branch, a conta e quem precisa de você em todas as contas.
 //
 // Tudo sai do banco e de caches em memória: nenhum pedido varre transcripts (decisão 0004).
@@ -87,7 +87,7 @@ export interface OpcoesDoPainel {
   commit?: string | null;
   /** O commit da pasta agora: diferente do `commit`, a pasta mudou e a API precisa reiniciar. */
   commitDaPasta?: () => string | null;
-  /** A API abre a sessão no Claude Desktop (`POST /abrir/<local_…>`): no macOS. */
+  /** A API abre a sessão no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   abreSessao?: boolean;
 }
 
@@ -278,13 +278,13 @@ export class MontadorDoPainel {
     return this.alvoDoPedido({ sessionId });
   }
 
-  /** `GET /api/decisoes/<sessão>`: a lista de um escopo; `null` sem a porta das decisões. */
+  /** `GET /api/decisions/<session>`: a lista de um escopo; `null` sem a porta das decisões. */
   async listaDeDecisoes(pedido: PedidoDoPainel, escopo: EscopoDasDecisoes): Promise<ListaDeDecisoes | null> {
     if (!this.decisoes) return null;
     return this.decisoes.lista(await this.alvoDoPedido(pedido), escopo);
   }
 
-  /** `POST /api/decisoes/<id>/confirmar|descartar`, em nome da sessão do painel. */
+  /** `POST /api/decisions/<id>/confirm|dismiss`, em nome da sessão do painel. */
   async decidir(pedido: PedidoDoPainel, id: string, acao: AcaoNaDecisao, texto: string | null = null): Promise<DecisaoDoPainel | null> {
     if (!this.decisoes) return null;
     return this.decisoes.decidir(await this.alvoDoPedido(pedido), id, acao, new Date(this.agora()).toISOString(), texto);
