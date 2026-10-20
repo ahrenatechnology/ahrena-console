@@ -27,7 +27,7 @@ import { parcelasDaSessao, relatorioDeCusto } from '../custo/agregacao.ts';
 import { PRECOS_PADRAO } from '../custo/precos-padrao.ts';
 import { precosVigentes } from '../custo/tabela.ts';
 import { tituloSeguro } from '../mcp/saida.ts';
-import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type Session } from '../model.ts';
+import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
@@ -87,7 +87,7 @@ export interface CardDeSessao {
   /** Por que espera, quando espera. */
   motivo: AwaitingReason | null;
   /** O último prompt da pessoa, numa linha, até `TEXTO_MAXIMO` caracteres. */
-  ultimoPedido: string | null;
+  ultimoPrompt: string | null;
   ultimaAtividade: string;
   inicio: string;
   /** Ativa ou esperando: a duração ainda corre. */
@@ -175,7 +175,7 @@ export interface OpcoesDoKanban {
   storage: StoragePort;
   contas: Contas;
   desktop?: IndiceDoDesktop | null;
-  /** Os resumos de eventos (o último prompt); o `cli.ts` passa os do painel, para dividir o cache. */
+  /** Os resumos de eventos (o último prompt). Sem eles, o Kanban tem os seus (256), para não varrer o cache do painel (64). */
   resumos?: ResumosDeSessao;
   agora?: () => number;
 }
@@ -218,7 +218,8 @@ export class QuadroKanban {
   async montar(pedido: PedidoDoKanban): Promise<KanbanHttp> {
     await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
     const sessoes = await this.lerSessoes();
-    const colunas = pedido.visao === 'sessoes' ? await this.colunasDeSessoes(sessoes, pedido) : await this.colunasDeAgentes(sessoes, pedido);
+    const colunas =
+      pedido.visao === 'sessoes' ? await this.colunasDeSessoes(sessoes, pedido, await precosVigentes(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
     return { visao: pedido.visao, porPagina: POR_PAGINA, colunas };
   }
 
@@ -233,10 +234,13 @@ export class QuadroKanban {
       }
       cursor = page.nextCursor;
     } while (cursor);
+    // Sessão que saiu do banco sai dos caches também.
+    const ids = new Set(todas.map((x) => x.s.id));
+    for (const cache of [this.custos, this.agentes]) for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
     return todas;
   }
 
-  private async colunasDeSessoes(sessoes: SessaoLida[], pedido: PedidoDoKanban): Promise<Coluna<CardDeSessao>[]> {
+  private async colunasDeSessoes(sessoes: SessaoLida[], pedido: PedidoDoKanban, precos: ModelPricing[]): Promise<Coluna<CardDeSessao>[]> {
     const ordenadas = [...sessoes].sort((a, b) => maisRecente(a.s.updatedAt, a.s.id, b.s.updatedAt, b.s.id));
     const pedidas = COLUNAS_DAS_SESSOES.filter((c) => pedido.coluna === null || c.id === pedido.coluna);
     const agora = this.agora();
@@ -245,13 +249,13 @@ export class QuadroKanban {
       const daColuna = ordenadas.filter((x) => DA_SESSAO[x.status] === c.id);
       const { pagina, temMais, fatia } = paginar(daColuna, pedido.pagina);
       const itens: CardDeSessao[] = [];
-      for (const x of fatia) itens.push(await this.cardDeSessao(x, agora));
+      for (const x of fatia) itens.push(await this.cardDeSessao(x, agora, precos));
       colunas.push({ id: c.id, rotulo: c.rotulo, total: daColuna.length, pagina, temMais, itens });
     }
     return colunas;
   }
 
-  private async cardDeSessao({ s, status, desktop, titulo }: SessaoLida, agora: number): Promise<CardDeSessao> {
+  private async cardDeSessao({ s, status, desktop, titulo }: SessaoLida, agora: number, precos: ModelPricing[]): Promise<CardDeSessao> {
     const conta = this.contas.daSessao(s, desktop);
     const resumo = await this.resumos.ler(s.id, s.updatedAt);
     return {
@@ -259,14 +263,14 @@ export class QuadroKanban {
       titulo,
       status,
       motivo: status === 'waiting' ? s.awaitingReason : null,
-      ultimoPedido: umaLinha(resumo.ultimoPrompt, TEXTO_MAXIMO),
+      ultimoPrompt: umaLinha(resumo.ultimoPrompt, TEXTO_MAXIMO),
       ultimaAtividade: s.updatedAt,
       inicio: s.startedAt,
       rodando: status === 'active' || status === 'waiting',
       duracaoMs: duracaoDaSessao(s, agora),
       agentes: (await this.agentesDe(s)).length,
       modelo: rotuloDoModelo(s.model),
-      custoUsd: await this.custoDe(s),
+      custoUsd: await this.custoDe(s, precos),
       cwd: s.cwd,
       conta: conta ? { rotulo: conta.rotulo, cor: conta.cor } : null,
     };
@@ -299,10 +303,10 @@ export class QuadroKanban {
     return agentes;
   }
 
-  private async custoDe(s: Session): Promise<number | null> {
+  private async custoDe(s: Session, precos: ModelPricing[]): Promise<number | null> {
     const c = this.custos.get(s.id);
     if (c && c.updatedAt === s.updatedAt) return c.usd;
-    const parcelas = await parcelasDaSessao(this.storage, s.id, await precosVigentes(this.storage));
+    const parcelas = await parcelasDaSessao(this.storage, s.id, precos);
     const { total } = relatorioDeCusto(parcelas);
     const usd = total.custoUsd ?? (total.totalDeTokens === 0 ? 0 : null);
     this.custos.set(s.id, { updatedAt: s.updatedAt, usd });

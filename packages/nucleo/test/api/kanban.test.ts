@@ -123,16 +123,16 @@ describe('#31 GET /api/kanban com o simulador', () => {
       else assert.equal(c.motivo, null, c.id);
       assert.equal(c.rodando, c.status === 'active' || c.status === 'waiting');
       assert.ok(c.duracaoMs >= 0);
-      if (c.ultimoPedido !== null) {
-        assert.ok(c.ultimoPedido.length <= 120, c.ultimoPedido);
-        assert.doesNotMatch(c.ultimoPedido, /[\n\r]/);
+      if (c.ultimoPrompt !== null) {
+        assert.ok(c.ultimoPrompt.length <= 120, c.ultimoPrompt);
+        assert.doesNotMatch(c.ultimoPrompt, /[\n\r]/);
       }
       assert.ok(c.agentes >= 1, c.id);
       if (c.modelo !== null) assert.doesNotMatch(c.modelo, /^claude-/, c.modelo);
       assert.ok(c.custoUsd === null || c.custoUsd >= 0);
       if (c.conta) assert.deepEqual(Object.keys(c.conta).sort(), ['cor', 'rotulo']);
     }
-    assert.ok(cards.some((c) => c.ultimoPedido !== null), 'o simulador grava prompts');
+    assert.ok(cards.some((c) => c.ultimoPrompt !== null), 'o simulador grava prompts');
     // Nenhum id de conta nem de org, em parte alguma da resposta (decisão 0006).
     for (const s of sessoes) {
       if (!s.accountId) continue;

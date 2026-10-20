@@ -276,7 +276,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   frota: mcp.frota,
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
-  kanban: new QuadroKanban({ storage, contas, desktop, resumos: montador.resumos }),
+  kanban: new QuadroKanban({ storage, contas, desktop }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

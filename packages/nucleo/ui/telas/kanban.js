@@ -163,7 +163,7 @@ function cardDeSessao(s) {
     { class: `cartao kc st-${status(s.status).cor}`, href: hrefDaSessao(s.id), title: s.titulo || null },
     el('div', { class: 'l1' }, avatar('pasta'), el('div', { class: 'nome' }, el('div', { class: 'tt' }, s.titulo || '(sem título)'), el('small', {}, idCurto(s.id)))),
     selos(s.status, s.motivo),
-    s.ultimoPedido ? el('blockquote', {}, s.ultimoPedido) : null,
+    s.ultimoPrompt ? el('blockquote', {}, s.ultimoPrompt) : null,
     s.cwd ? el('div', { class: 'cwd' }, s.cwd) : null,
     el(
       'div',
@@ -226,8 +226,12 @@ export async function montar(area, ctx) {
         quadroNoAr = false;
         area.replaceChildren(cab, vazio(VAZIO[v]));
       } else {
+        // A releitura ao vivo não joga a rolagem horizontal para o começo.
+        const rolagem = quadroNoAr ? (area.querySelector('.kanban')?.scrollLeft ?? 0) : 0;
         quadroNoAr = true;
         area.replaceChildren(cab, quadro(v, colunas));
+        const novo = area.querySelector('.kanban');
+        if (novo) novo.scrollLeft = rolagem;
       }
     } catch (e) {
       if (e?.name === 'AbortError' || minha !== leitura) return;
@@ -254,7 +258,10 @@ export async function montar(area, ctx) {
     const lista = el('div', { class: 'cards' }, ...(c.itens ?? []).map(card));
     const contador = el('span', { class: 'n', 'aria-label': `${c.total} no total` }, String(c.total ?? 0));
     let pagina = c.pagina ?? 1;
-    let mostrados = (c.itens ?? []).length;
+    // A ordem é pela última atividade: entre uma página e a próxima um card pode ter subido ou descido,
+    // então o que já está na coluna não entra de novo.
+    const vistos = new Set((c.itens ?? []).map((i) => i.id));
+    let mostrados = vistos.size;
     let temMais = Boolean(c.temMais);
     const mais = el('button', { type: 'button', class: 'mais' });
 
@@ -273,8 +280,10 @@ export async function montar(area, ctx) {
         if (desta !== leitura) return; // o quadro foi relido nesse meio-tempo
         const col = r?.colunas?.find((x) => x.id === c.id);
         if (!col) throw new Error('a coluna não veio');
-        lista.append(...(col.itens ?? []).map(card));
-        mostrados += (col.itens ?? []).length;
+        const novos = (col.itens ?? []).filter((i) => !vistos.has(i.id));
+        for (const i of novos) vistos.add(i.id);
+        lista.append(...novos.map(card));
+        mostrados += novos.length;
         pagina = col.pagina ?? pagina + 1;
         temMais = Boolean(col.temMais);
         contador.textContent = String(col.total ?? contador.textContent);
