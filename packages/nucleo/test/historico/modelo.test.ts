@@ -5,6 +5,7 @@ import { describe, test } from 'node:test';
 import {
   DIAS_PADRAO,
   encerradaDe,
+  nomeDoModelo,
   lerPedidoDoHistorico,
   paginaDoHistorico,
   type SessaoEncerrada,
@@ -22,13 +23,21 @@ describe('histórico: quem entra', () => {
     assert.equal(encerradaDe(session({ endedAt: null })), null);
     const s = session({ id: 'x1', status: 'completed', cwd: '/simulacao/vitrine-demo', startedAt: '2026-11-02T10:00:00.000Z', endedAt: '2026-11-02T10:45:00.000Z' });
     assert.deepEqual(encerradaDe(s), {
-      id: 'x1', titulo: 'ajuste do login', projeto: 'vitrine-demo', modelo: 'claude-opus-5-5', status: 'completed',
+      id: 'x1', titulo: 'ajuste do login', projeto: 'vitrine-demo', modelo: 'Opus 5.5', status: 'completed',
       inicio: '2026-11-02T10:00:00.000Z', fim: '2026-11-02T10:45:00.000Z',
     });
     assert.equal(encerradaDe(s, 'título do Desktop')?.titulo, 'título do Desktop');
     assert.equal(encerradaDe({ ...s, cwd: null, name: null })?.projeto, null);
     assert.equal(encerradaDe({ ...s, cwd: null, name: null })?.titulo, null);
   });
+});
+
+test('o modelo pelo nome da tabela de preços; fora dela, o id', () => {
+  assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus 5.5');
+  assert.equal(nomeDoModelo('claude-sonnet-5-5-20261001'), 'Sonnet 5.5');
+  assert.equal(nomeDoModelo('claude-opus-5-5[1m]'), 'Opus 5.5 1M');
+  assert.equal(nomeDoModelo('modelo-desconhecido'), 'modelo-desconhecido');
+  assert.equal(nomeDoModelo(null), null);
 });
 
 describe('histórico: dias', () => {

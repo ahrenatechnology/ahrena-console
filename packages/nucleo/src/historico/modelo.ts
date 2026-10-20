@@ -10,7 +10,9 @@
 
 import { basename } from 'node:path';
 import { diaDe } from '../custo/agregacao.ts';
+import { PRECOS_PADRAO, type PrecoPadrao } from '../custo/precos-padrao.ts';
 import type { Session, SessionStatus } from '../model.ts';
+import { resolvePricing } from '../pricing.ts';
 
 export const DIAS_PADRAO = 7;
 export const DIAS_MAXIMO = 31;
@@ -22,7 +24,7 @@ export interface SessaoEncerrada {
   titulo: string | null;
   /** A pasta da sessão (`basename` do `cwd`). */
   projeto: string | null;
-  /** O id do modelo: o núcleo não tem nome legível para ele. */
+  /** O nome legível do modelo (`nomeDoModelo`). */
   modelo: string | null;
   status: SessionStatus;
   inicio: string;
@@ -49,6 +51,18 @@ export interface PaginaDoHistorico<T> {
   proximo: string | null;
 }
 
+/**
+ * `claude-opus-5-5` → "Opus 5.5", pelo nome da tabela de preços padrão; `[1m]` vira " 1M". Modelo
+ * que não está na tabela fica com o id.
+ */
+export function nomeDoModelo(model: string | null): string | null {
+  if (!model) return null;
+  const longo = /\[1m\]$/i.test(model);
+  const id = model.replace(/\[1m\]$/i, '');
+  const nome = (resolvePricing(id, PRECOS_PADRAO) as PrecoPadrao | null)?.nome.replace(/^Claude /, '');
+  return nome ? `${nome}${longo ? ' 1M' : ''}` : model;
+}
+
 /** A sessão do histórico, ou `null` se ela não terminou. `titulo` troca o nome da sessão (ex.: o do Desktop). */
 export function encerradaDe(s: Session, titulo?: string | null): SessaoEncerrada | null {
   if (!s.endedAt) return null;
@@ -56,7 +70,7 @@ export function encerradaDe(s: Session, titulo?: string | null): SessaoEncerrada
     id: s.id,
     titulo: titulo ?? s.name ?? null,
     projeto: s.cwd ? basename(s.cwd) || null : null,
-    modelo: s.model,
+    modelo: nomeDoModelo(s.model),
     status: s.status,
     inicio: s.startedAt,
     fim: s.endedAt,

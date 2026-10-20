@@ -3,6 +3,7 @@ export type { DecisionFilter, DecisionPort, ListDecisionsQuery } from './porta.t
 export { SqliteDecisionStore } from './sqlite.ts';
 export {
   DecisionStateError,
+  clearNeighbours,
   confirmDecision,
   currentDecisionsFor,
   decisionChain,
