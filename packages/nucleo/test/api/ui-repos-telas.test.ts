@@ -8,7 +8,7 @@ import { ElementoFalso, instalarDomFalso, texto } from './dom-falso.ts';
 instalarDomFalso();
 
 // O que a tela Repositório usa do navegador além do DOM: a URL e o histórico.
-const local = { pathname: '/ui/repos/ahrenatechnology/ahrena-console', search: '' };
+const local = { pathname: '/ui/repos/exemplo-labs/vitrine-demo', search: '' };
 Object.assign(globalThis, {
   location: local,
   history: {
@@ -54,14 +54,14 @@ function listaDeExemplo(): ListaDeRepos {
     estado: 'pronto',
     atualizadoEm: iso(0),
     erro: null,
-    conta: 'fseguim',
+    conta: 'dev-sintetico',
     resumo: { organizacoes: 1, repositorios: 3, comSessoesNoMes: 1, prsAbertos: 4, prsEsperandoReview: 1, issuesAbertas: 14, issuesFechadasNaSemana: 2, ci: { taxaVerde: 0.9, execucoes: 20, dias: 7 } },
     grupos: [
       {
-        dono: 'ahrenatechnology',
+        dono: 'exemplo-labs',
         tipo: 'org',
         repos: [
-          repoDaLista('ahrenatechnology', 'ahrena-console', {
+          repoDaLista('exemplo-labs', 'vitrine-demo', {
             linguagem: 'TypeScript',
             commits12: [1, 4, 2, 8, 5, 3, 9, 7, 6, 4, 10, 12],
             issuesAbertas: 12,
@@ -70,10 +70,10 @@ function listaDeExemplo(): ListaDeRepos {
             sessoes: { ativas: 2, precisam: 1, noMes: 5 },
             ultimoPush: iso(2 * HORA + 60_000),
           }),
-          repoDaLista('ahrenatechnology', 'gabi-api', { visibilidade: 'privado', linguagem: 'Python', issuesAbertas: 2, prsAbertos: 1, ci: 'falhou', ultimoPush: iso(30 * HORA) }),
+          repoDaLista('exemplo-labs', 'api-ficticia', { visibilidade: 'privado', linguagem: 'Python', issuesAbertas: 2, prsAbertos: 1, ci: 'falhou', ultimoPush: iso(30 * HORA) }),
         ],
       },
-      { dono: 'fseguim', tipo: 'pessoal', repos: [repoDaLista('fseguim', 'dotfiles', { ultimoPush: iso(40 * 24 * HORA) })] },
+      { dono: 'dev-sintetico', tipo: 'pessoal', repos: [repoDaLista('dev-sintetico', 'dotfiles', { ultimoPush: iso(40 * 24 * HORA) })] },
     ],
   };
 }
@@ -88,8 +88,8 @@ function metricasDeExemplo(extra: Partial<MetricasDoRepo> = {}): MetricasDoRepo 
     calculando: [],
     periodo: '90d',
     repo: {
-      completo: 'ahrenatechnology/ahrena-console',
-      url: 'https://github.com/ahrenatechnology/ahrena-console',
+      completo: 'exemplo-labs/vitrine-demo',
+      url: 'https://github.com/exemplo-labs/vitrine-demo',
       visibilidade: 'publico',
       ci: 'ok',
       branchPadrao: 'main',
@@ -117,7 +117,7 @@ function metricasDeExemplo(extra: Partial<MetricasDoRepo> = {}): MetricasDoRepo 
     },
     ci: { taxaVerde: 0.92, execucoes: 50, duracaoMediaMs: 6 * 60_000 },
     linguagens: [{ nome: 'TypeScript', bytes: 9000, fatia: 0.9 }],
-    contribuidores: [{ login: 'fseguim', commits: 100, adicionadas: 5000, removidas: 1200 }],
+    contribuidores: [{ login: 'dev-sintetico', commits: 100, adicionadas: 5000, removidas: 1200 }],
     releases: 2,
     releasesNoTotal: 5,
     comunidade: 71,
@@ -170,7 +170,7 @@ const montarListaCom = async (lista: ListaDeRepos) => {
 
 const montarRepoCom = async (dados: MetricasDoRepo) => {
   local.search = '';
-  const m = montar(montarRepo, async () => dados, { dono: 'ahrenatechnology', repo: 'ahrena-console' });
+  const m = montar(montarRepo, async () => dados, { dono: 'exemplo-labs', repo: 'vitrine-demo' });
   await m.pronta;
   return m;
 };
@@ -188,8 +188,8 @@ describe('Repositórios (C22) montada', () => {
   test('#104 critério 1: a lista agrupa por organização, com a conta pessoal como "você (pessoal)"', async () => {
     const { area, leituras } = await montarListaCom(listaDeExemplo());
     assert.deepEqual(leituras, ['/api/repos']);
-    assert.deepEqual(gruposNaTela(area), ['ahrenatechnology', 'você (pessoal)']);
-    assert.deepEqual(reposNaTela(area), ['ahrena-console', 'gabi-api', 'dotfiles']);
+    assert.deepEqual(gruposNaTela(area), ['exemplo-labs', 'você (pessoal)']);
+    assert.deepEqual(reposNaTela(area), ['vitrine-demo', 'api-ficticia', 'dotfiles']);
     const contagens = area.querySelectorAll('.repo-grupo-cab span').map((s) => texto(s));
     assert.deepEqual(contagens, ['2 repositórios', '1 repositório']);
   });
@@ -197,23 +197,23 @@ describe('Repositórios (C22) montada', () => {
   test('#104 critério 1: o filtro de organização mostra só o grupo escolhido', async () => {
     const { area } = await montarListaCom(listaDeExemplo());
     const orgs = area.querySelector('select[aria-label="Organização"]')!;
-    assert.deepEqual(orgs.querySelectorAll('option').map((o) => texto(o)), ['Todas as organizações', 'ahrenatechnology', 'você (pessoal)']);
-    orgs.value = 'fseguim';
+    assert.deepEqual(orgs.querySelectorAll('option').map((o) => texto(o)), ['Todas as organizações', 'exemplo-labs', 'você (pessoal)']);
+    orgs.value = 'dev-sintetico';
     disparar(orgs, 'change');
     assert.deepEqual(gruposNaTela(area), ['você (pessoal)']);
     assert.deepEqual(reposNaTela(area), ['dotfiles']);
     orgs.value = '';
     disparar(orgs, 'change');
-    assert.deepEqual(reposNaTela(area), ['ahrena-console', 'gabi-api', 'dotfiles']);
+    assert.deepEqual(reposNaTela(area), ['vitrine-demo', 'api-ficticia', 'dotfiles']);
   });
 
   test('#104 critério 1: a busca filtra pelo nome, sem caixa, e diz quando nada casa', async () => {
     const { area } = await montarListaCom(listaDeExemplo());
     const busca = area.querySelector('input[type="search"]')!;
-    busca.value = 'GABI';
+    busca.value = 'FICTICIA';
     disparar(busca, 'input');
-    assert.deepEqual(gruposNaTela(area), ['ahrenatechnology']);
-    assert.deepEqual(reposNaTela(area), ['gabi-api']);
+    assert.deepEqual(gruposNaTela(area), ['exemplo-labs']);
+    assert.deepEqual(reposNaTela(area), ['api-ficticia']);
     busca.value = 'nada-assim';
     disparar(busca, 'input');
     assert.deepEqual(reposNaTela(area), []);
@@ -225,7 +225,7 @@ describe('Repositórios (C22) montada', () => {
     const privados = area.querySelectorAll('.repo-seg button').find((b) => texto(b) === 'Privados')!;
     privados.click();
     assert.equal(privados.getAttribute('aria-pressed'), 'true');
-    assert.deepEqual(reposNaTela(area), ['gabi-api']);
+    assert.deepEqual(reposNaTela(area), ['api-ficticia']);
   });
 
   test('#104 critério 2: a linha mostra linguagem, issues, PRs, CI, sessões e último push', async () => {
@@ -234,7 +234,7 @@ describe('Repositórios (C22) montada', () => {
     const celulas = tr.children;
     assert.equal(celulas.length, 9);
     const [nome, linguagem, commits, issues, prs, ci, sessoes, push] = celulas;
-    assert.equal(nome!.querySelector('a')!.getAttribute('href'), '/ui/repos/ahrenatechnology/ahrena-console');
+    assert.equal(nome!.querySelector('a')!.getAttribute('href'), '/ui/repos/exemplo-labs/vitrine-demo');
     assert.equal(texto(linguagem!), 'TypeScript');
     assert.ok(commits!.querySelector('svg polyline'), 'a sparkline dos commits');
     assert.equal(texto(issues!), '12');
@@ -303,13 +303,13 @@ describe('Repositório (C23) montada', () => {
     const m = montar(
       montarRepo,
       (rota) => new Promise((resolver) => pendentes.set(new URLSearchParams(rota.split('?')[1]).get('periodo')!, resolver as (d: MetricasDoRepo) => void)),
-      { dono: 'ahrenatechnology', repo: 'ahrena-console' },
+      { dono: 'exemplo-labs', repo: 'vitrine-demo' },
     );
-    assert.deepEqual(m.leituras, ['/api/repos/ahrenatechnology/ahrena-console?periodo=90d']);
+    assert.deepEqual(m.leituras, ['/api/repos/exemplo-labs/vitrine-demo?periodo=90d']);
 
     const botao = (rotulo: string) => m.area.querySelectorAll('.repo-seg button').find((b) => texto(b) === rotulo)!;
     botao('30 dias').click();
-    assert.deepEqual(m.leituras.at(-1), '/api/repos/ahrenatechnology/ahrena-console?periodo=30d');
+    assert.deepEqual(m.leituras.at(-1), '/api/repos/exemplo-labs/vitrine-demo?periodo=30d');
     assert.equal(local.search, '?periodo=30d');
     assert.equal(botao('30 dias').getAttribute('aria-pressed'), 'true');
     assert.equal(botao('90 dias').getAttribute('aria-pressed'), 'false');
@@ -335,7 +335,7 @@ describe('Repositório (C23) montada', () => {
     const { area } = await montarRepoCom(metricasDeExemplo());
     const aba = area.querySelectorAll('nav.repo-abas a').find((a) => texto(a).startsWith('Sessões'))!;
     assert.equal(texto(aba), 'Sessões (5)');
-    assert.equal(aba.getAttribute('href'), '/ui/sessoes?busca=ahrena-console');
+    assert.equal(aba.getAttribute('href'), '/ui/sessoes?busca=vitrine-demo');
   });
 
   test('a aba Métricas usa o ícone do Analytics', async () => {
