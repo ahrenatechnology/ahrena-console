@@ -242,19 +242,19 @@ describe('#28 a tela Sessões', () => {
     const css = readFileSync(`${PASTA_DA_UI}sessions.css`, 'utf8');
     const corte = css.indexOf('@media (max-width: 900px)');
     assert.ok(corte > 0, 'falta a faixa de 900 px');
-    const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.tabela \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
+    const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.table \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
     const largas = larguras(css.slice(0, corte));
     const estreitas = { ...largas, ...larguras(css.slice(corte)) };
     const classes = COLUNAS.map(([c]: [string]) => c);
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
     assert.equal(classes.filter((c: string) => c !== 'c-dir').reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'sem o Diretório, o resto soma 100');
-    assert.match(css, /\.tabela \{ table-layout: fixed; \}/);
-    assert.match(css.slice(corte), /\.tabela \.c-dir, \.tabela \.dir \{ display: none; \}/);
+    assert.match(css, /\.table \{ table-layout: fixed; \}/);
+    assert.match(css.slice(corte), /\.table \.c-dir, \.table \.dir \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-sessao': 180, 'c-status': 140, 'c-atividade': 90, 'c-duracao': 85, 'c-agentes': 74, 'c-custo': 85, 'c-dir': 100, 'c-seta': 24 };
-    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-sessao': 130, 'c-atividade': 70, 'c-duracao': 75, 'c-agentes': 60, 'c-custo': 80 };
+    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-arrow': 24 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
     for (const c of classes) {
       assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
       if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
@@ -262,10 +262,10 @@ describe('#28 a tela Sessões', () => {
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
-  // telas desmonta a outra (o `.linha` do Dashboard, que é flex, desmontava as linhas desta tabela).
+  // telas desmonta a outra (o `.row` do Dashboard, que é flex, desmontava as linhas desta tabela).
   test('o CSS desta tela não estiliza classe de outra tela, fora os selos de status em comum', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     // As da moldura (`.icone`, `.btn`) são de todas as telas.
     const daMoldura = classes('shell.css');
     const minhas = new Set([...classes('sessions.css')].filter((c) => !daMoldura.has(c)));
@@ -280,7 +280,7 @@ describe('#28 a tela Sessões', () => {
   // /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
   test('o CSS de Workflows e da aba Workflow só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-']] as const) {

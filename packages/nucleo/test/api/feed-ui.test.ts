@@ -274,7 +274,7 @@ describe('Feed de atividade: a tela', () => {
     const limpar = await montar(area, f.ctx);
 
     assert.equal(f.pedidos[0], '/api/events');
-    assert.ok(documento.head.querySelector('link[data-tela="feed"]'), 'o CSS da tela entrou no head');
+    assert.ok(documento.head.querySelector('link[data-screen="feed"]'), 'o CSS da tela entrou no head');
     assert.deepEqual(linhasDe(area), ['e2', 'e1']);
     const [l2, l1] = area.querySelectorAll('.feed-item');
     assert.match(l1!.textContent, /Esperando você/);
@@ -287,22 +287,22 @@ describe('Feed de atividade: a tela', () => {
     assert.deepEqual(area.querySelectorAll('select')[1]!.childNodes.map((o) => o.textContent), ['Tipo de evento', 'PreToolUse', 'Stop']);
 
     // Abre o detalhe de e1 pela seta; abrir e2 fecha e1.
-    l1!.querySelector('.feed-seta')!.click();
-    let det = area.querySelector('.feed-detalhe')!;
+    l1!.querySelector('.feed-arrow')!.click();
+    let det = area.querySelector('.feed-detail')!;
     assert.match(det.textContent, /EventoPreToolUse/);
     assert.match(det.textContent, /Sessãoc3f09b52-4e1/);
     assert.match(det.textContent, /Agentetest-runner · a7c2/);
     assert.match(det.textContent, /Call idtoolu_01/);
     assert.match(det.textContent, /Ferramenta—/);
-    assert.equal(area.querySelector('.feed-seta')!.getAttribute('aria-expanded'), 'false');
-    area.querySelectorAll('.feed-item')[0]!.querySelector('.feed-linha')!.click();
-    assert.equal(area.querySelectorAll('.feed-detalhe').length, 1);
-    det = area.querySelector('.feed-detalhe')!;
+    assert.equal(area.querySelector('.feed-arrow')!.getAttribute('aria-expanded'), 'false');
+    area.querySelectorAll('.feed-item')[0]!.querySelector('.feed-row')!.click();
+    assert.equal(area.querySelectorAll('.feed-detail').length, 1);
+    det = area.querySelector('.feed-detail')!;
     assert.match(det.textContent, /npm test -- cobranca/);
     assert.ok(det.closest('.feed-item')!.getAttribute('data-id') === 'e2');
 
     // Pausa: os novos esperam no aviso.
-    const [pausa] = area.querySelector('.acoes')!.querySelectorAll('button');
+    const [pausa] = area.querySelector('.actions')!.querySelectorAll('button');
     pausa!.click();
     assert.match(pausa!.textContent, /Retomar/);
     fila = [{ eventos: [evento('e3', 1)], cursor: 'k3', anteriores: null, opcoes: null }];
@@ -312,7 +312,7 @@ describe('Feed de atividade: a tela', () => {
     fila = [{ eventos: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', anteriores: null, opcoes: null }];
     f.mudar();
     await espera();
-    const aviso = area.querySelector('.feed-novos')!;
+    const aviso = area.querySelector('.feed-new')!;
     assert.equal(aviso.hidden, false);
     assert.equal(aviso.textContent, '2 novos');
     assert.deepEqual(linhasDe(area), ['e2', 'e1'], 'pausado, a lista não mexe');
@@ -324,7 +324,7 @@ describe('Feed de atividade: a tela', () => {
     assert.match(pausa!.textContent, /Pausar/);
 
     limpar();
-    assert.equal(documento.head.querySelector('link[data-tela="feed"]'), null, 'a limpeza tira o CSS');
+    assert.equal(documento.head.querySelector('link[data-screen="feed"]'), null, 'a limpeza tira o CSS');
   });
 
   test('um pedido do ao vivo em voo por vez; mudança no meio pede um só a mais', async () => {
@@ -374,7 +374,7 @@ describe('Feed de atividade: a tela', () => {
       rota.includes('before=') ? { eventos: [evento('velho', 900)], cursor: null, anteriores: null } : { eventos: [evento('novo', 1)], cursor: 'k', anteriores: 'v 1', opcoes: null },
     );
     limpar = await montar(area, mais.ctx);
-    const botao = area.querySelector('.feed-mais')!;
+    const botao = area.querySelector('.feed-more')!;
     assert.equal(botao.hidden, false);
     botao.click();
     await espera();
@@ -401,7 +401,7 @@ describe('Feed de atividade: a tela', () => {
   // a outra. As do Feed levam o prefixo `feed-`; em comum, só as da moldura e os selos de status.
   test('o feed.css só estiliza classes com o prefixo feed-, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
-    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const minhas = [...classes('feed.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('feed-')), [], 'classe própria sem o prefixo feed-');

@@ -291,7 +291,7 @@ describe('registro das telas', () => {
     const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
     assert.match(app, /sidebarSections\(\)/);
     assert.match(app, /'cc-nav-section'/);
-    assert.match(app, /'cc-nav-title olhinho'/);
+    assert.match(app, /'cc-nav-title eyebrow'/);
     const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-section \{/);
     assert.match(css, /\.cc-nav-title \{/);

@@ -92,7 +92,7 @@ const plural = (n, um, varios) => `${inteiro.format(n)} ${n === 1 ? um : varios}
 
 // A cor da conta chega como valor; aqui ela só vira classe quando é uma das cores da marca que o
 // núcleo dá às contas (perfis/cores.ts). Uma cor própria fora da paleta fica só com o rótulo.
-const CORES_DAS_CONTAS = { 'an-conta-rosa': '--rose-500', 'an-conta-verde': '--green-500', 'an-conta-amarela': '--yellow-500', 'an-conta-cinza': '--gray-200' };
+const CORES_DAS_CONTAS = { 'an-account-pink': '--rose-500', 'an-account-green': '--green-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
 
 export function classeDaConta(cor) {
   if (typeof cor !== 'string' || typeof getComputedStyle !== 'function') return null;
@@ -110,17 +110,17 @@ export function classeDaConta(cor) {
 function divisaoPorConta(linhas) {
   return el(
     'ul',
-    { class: 'an-contas', 'aria-label': 'Divisão por conta' },
+    { class: 'an-accounts', 'aria-label': 'Divisão por conta' },
     ...linhas.map((l) => {
       const classe = classeDaConta(l.cor);
       // Com preço só para parte dos modelos, o valor é parcial: a dica diz quais ficaram de fora.
       const parcial = l.usd !== null && l.usd !== undefined && (l.semPreco ?? []).length > 0;
       return el(
         'li',
-        { 'data-conta': l.conta ?? 'sem-conta', title: parcial ? `Parcial: sem preço para ${l.semPreco.map(nomeDoModelo).join(', ')}` : null },
-        el('span', { class: classe ? `an-ponto ${classe}` : 'an-ponto', 'aria-hidden': 'true' }),
+        { 'data-account': l.conta ?? 'sem-conta', title: parcial ? `Parcial: sem preço para ${l.semPreco.map(nomeDoModelo).join(', ')}` : null },
+        el('span', { class: classe ? `an-dot ${classe}` : 'an-dot', 'aria-hidden': 'true' }),
         el('span', { class: 'an-trunc' }, l.rotulo),
-        el('b', {}, usd(l.usd), parcial ? el('span', { class: 'an-parcial' }, ' · parcial') : null),
+        el('b', {}, usd(l.usd), parcial ? el('span', { class: 'an-partial' }, ' · parcial') : null),
       );
     }),
   );
@@ -165,8 +165,8 @@ function barra(pct, classe = 'an-m0', texto = null) {
   const p = Math.max(0, Math.min(100, pct || 0));
   return el(
     'div',
-    { class: 'an-barra' },
-    p > 0 ? svg('svg', { width: `${r1(Math.max(p, 1.5))}%`, height: 6, 'aria-hidden': 'true' }, svg('rect', { class: `an-cheia ${classe}`, width: '100%', height: '100%', rx: 3 }, texto ? dica(texto) : null)) : null,
+    { class: 'an-bar' },
+    p > 0 ? svg('svg', { width: `${r1(Math.max(p, 1.5))}%`, height: 6, 'aria-hidden': 'true' }, svg('rect', { class: `an-fill ${classe}`, width: '100%', height: '100%', rx: 3 }, texto ? dica(texto) : null)) : null,
   );
 }
 
@@ -195,12 +195,12 @@ export function heatmap(dias) {
   dias.forEach((d, i) => {
     const p = i + desloc;
     filhos.push(
-      svg('rect', { class: `an-cel an-n${nivel(d.eventos)}`, x: ESQ + Math.floor(p / 7) * PASSO, y: TOPO + (p % 7) * PASSO, width: CEL, height: CEL, rx: 2 }, dica(`${dataCurta(d.dia)}: ${plural(d.eventos ?? 0, 'evento', 'eventos')}`)),
+      svg('rect', { class: `an-cell an-n${nivel(d.eventos)}`, x: ESQ + Math.floor(p / 7) * PASSO, y: TOPO + (p % 7) * PASSO, width: CEL, height: CEL, rx: 2 }, dica(`${dataCurta(d.dia)}: ${plural(d.eventos ?? 0, 'evento', 'eventos')}`)),
     );
   });
   return [
-    svg('svg', { class: 'an-graf', viewBox: `0 0 ${ESQ + colunas * PASSO} ${TOPO + 7 * PASSO}`, role: 'img', 'aria-label': `Eventos por dia nas últimas ${Math.round(dias.length / 7)} semanas` }, filhos),
-    el('div', { class: 'an-leg' }, el('span', {}, 'menos'), ...[0, 1, 2, 3, 4].map((n) => el('span', { class: `an-amostra an-n${n}`, 'aria-hidden': 'true' })), el('span', {}, 'mais')),
+    svg('svg', { class: 'an-chart', viewBox: `0 0 ${ESQ + colunas * PASSO} ${TOPO + 7 * PASSO}`, role: 'img', 'aria-label': `Eventos por dia nas últimas ${Math.round(dias.length / 7)} semanas` }, filhos),
+    el('div', { class: 'an-leg' }, el('span', {}, 'menos'), ...[0, 1, 2, 3, 4].map((n) => el('span', { class: `an-sample an-n${n}`, 'aria-hidden': 'true' })), el('span', {}, 'mais')),
   ];
 }
 
@@ -214,12 +214,12 @@ export function barras30(dias) {
   const max = Math.max(1, ...dias.map((d) => d.sessoes ?? 0));
   const filhos = dias.map((d, i) => {
     const h = r1(((d.sessoes ?? 0) / max) * (H - 4));
-    return svg('rect', { class: `an-col${i === dias.length - 1 ? ' an-atual' : ''}`, x: r1(i * passo), y: r1(H - h), width: largura, height: h }, dica(`${dataCurta(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
+    return svg('rect', { class: `an-col${i === dias.length - 1 ? ' an-current' : ''}`, x: r1(i * passo), y: r1(H - h), width: largura, height: h }, dica(`${dataCurta(d.dia)}: ${plural(d.sessoes ?? 0, 'sessão', 'sessões')}`));
   });
-  filhos.push(svg('line', { class: 'an-eixo', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
+  filhos.push(svg('line', { class: 'an-axis', x1: 0, x2: W, y1: H, y2: H, 'vector-effect': 'non-scaling-stroke' }));
   return [
-    svg('svg', { class: 'an-graf an-colunas', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Sessões por dia nos últimos 30 dias' }, filhos),
-    dias.length ? el('div', { class: 'an-leg an-pontas an-datas' }, el('span', {}, dataCurta(dias[0].dia)), el('span', {}, dataCurta(dias.at(-1).dia))) : null,
+    svg('svg', { class: 'an-chart an-columns', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Sessões por dia nos últimos 30 dias' }, filhos),
+    dias.length ? el('div', { class: 'an-leg an-tips an-dates' }, el('span', {}, dataCurta(dias[0].dia)), el('span', {}, dataCurta(dias.at(-1).dia))) : null,
   ];
 }
 
@@ -243,7 +243,7 @@ export function linhaDoCusto(porDia) {
   const filhos = [];
   for (let t = 0; t <= 4; t++) {
     const v = (max / 4) * t;
-    filhos.push(svg('line', { class: 'an-grade', x1: P, x2: W - 10, y1: y(v), y2: y(v) }), svg('text', { x: P - 6, y: y(v) + 3, 'text-anchor': 'end' }, umaCasa.format(v)));
+    filhos.push(svg('line', { class: 'an-grid', x1: P, x2: W - 10, y1: y(v), y2: y(v) }), svg('text', { x: P - 6, y: y(v) + 3, 'text-anchor': 'end' }, umaCasa.format(v)));
   }
   // Trechos contínuos com preço.
   let trecho = [];
@@ -257,15 +257,15 @@ export function linhaDoCusto(porDia) {
   if (trecho.length) trechos.push(trecho);
   for (const t of trechos) {
     const pts = t.map(([a, b]) => `${a},${b}`).join(' ');
-    filhos.push(svg('polygon', { class: 'an-area', points: `${t[0][0]},${y(0)} ${pts} ${t.at(-1)[0]},${y(0)}` }), svg('polyline', { class: 'an-linha', points: pts }));
+    filhos.push(svg('polygon', { class: 'an-area', points: `${t[0][0]},${y(0)} ${pts} ${t.at(-1)[0]},${y(0)}` }), svg('polyline', { class: 'an-row', points: pts }));
   }
   const fim = trechos.at(-1)?.at(-1);
-  if (fim) filhos.push(svg('circle', { class: 'an-ponta', cx: fim[0], cy: fim[1], r: 4 }));
+  if (fim) filhos.push(svg('circle', { class: 'an-tip', cx: fim[0], cy: fim[1], r: 4 }));
   // Alvos de passar o mouse, um por dia, maiores que a linha.
   const meio = n > 1 ? (W - P - 10) / (n - 1) / 2 : 10;
-  porDia.forEach((d, i) => filhos.push(svg('rect', { class: 'an-alvo', x: r1(x(i) - meio), y: 8, width: r1(meio * 2), height: H - 28 }, dica(`${dataCurta(d.dia)}: ${usd(d.usd)}`))));
+  porDia.forEach((d, i) => filhos.push(svg('rect', { class: 'an-target', x: r1(x(i) - meio), y: 8, width: r1(meio * 2), height: H - 28 }, dica(`${dataCurta(d.dia)}: ${usd(d.usd)}`))));
   if (n) filhos.push(svg('text', { x: P, y: H - 4 }, dataCurta(porDia[0].dia)), svg('text', { x: W - 10, y: H - 4, 'text-anchor': 'end' }, dataCurta(porDia.at(-1).dia)));
-  return svg('svg', { class: 'an-graf', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Custo estimado por dia, em dólares' }, filhos);
+  return svg('svg', { class: 'an-chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Custo estimado por dia, em dólares' }, filhos);
 }
 
 /** As fatias da rosca: até quatro modelos com preço; o resto vira "Outros". */
@@ -275,7 +275,7 @@ export function fatiasPorModelo(porModelo) {
   const fatias = com.slice(0, com.length > 4 ? 3 : 4).map((m) => ({ nome: nomeDoModelo(m.modelo), classe: classeDoModelo(m.modelo), usd: m.usd, pct: m.pct }));
   if (com.length > 4) {
     const resto = com.slice(3);
-    fatias.push({ nome: `Outros (${resto.length})`, classe: 'an-outros', usd: resto.reduce((s, m) => s + m.usd, 0), pct: resto.reduce((s, m) => s + (m.pct ?? 0), 0) });
+    fatias.push({ nome: `Outros (${resto.length})`, classe: 'an-others', usd: resto.reduce((s, m) => s + m.usd, 0), pct: resto.reduce((s, m) => s + (m.pct ?? 0), 0) });
   }
   return [...fatias, ...sem.map((m) => ({ nome: nomeDoModelo(m.modelo), classe: null, usd: null, pct: null }))];
 }
@@ -289,25 +289,25 @@ function rosca(porModelo, total, dias) {
     .filter((f) => f.pct > 0)
     .map((f) => {
       const comprimento = (C * f.pct) / 100;
-      const arco = svg('circle', { class: `an-fatia ${f.classe}`, cx: 70, cy: 70, r: R, 'stroke-dasharray': `${r1(Math.max(0, comprimento - 2))} ${r1(C)}`, 'stroke-dashoffset': r1((-C * a) / 100), transform: 'rotate(-90 70 70)' }, dica(`${f.nome}: ${usd(f.usd)} (${porcento(f.pct)})`));
+      const arco = svg('circle', { class: `an-slice ${f.classe}`, cx: 70, cy: 70, r: R, 'stroke-dasharray': `${r1(Math.max(0, comprimento - 2))} ${r1(C)}`, 'stroke-dashoffset': r1((-C * a) / 100), transform: 'rotate(-90 70 70)' }, dica(`${f.nome}: ${usd(f.usd)} (${porcento(f.pct)})`));
       a += f.pct;
       return arco;
     });
   return el(
     'div',
-    { class: 'an-rosca' },
+    { class: 'an-donut' },
     svg(
       'svg',
-      { class: 'an-graf', width: 140, height: 140, viewBox: '0 0 140 140', role: 'img', 'aria-label': `Custo por modelo nos últimos ${dias} dias` },
-      svg('circle', { class: 'an-fundo', cx: 70, cy: 70, r: R }),
+      { class: 'an-chart', width: 140, height: 140, viewBox: '0 0 140 140', role: 'img', 'aria-label': `Custo por modelo nos últimos ${dias} dias` },
+      svg('circle', { class: 'an-bg', cx: 70, cy: 70, r: R }),
       arcos,
-      svg('text', { class: 'an-centro', x: 70, y: 68, 'text-anchor': 'middle' }, usd(total, { curto: true })),
+      svg('text', { class: 'an-center', x: 70, y: 68, 'text-anchor': 'middle' }, usd(total, { curto: true })),
       svg('text', { x: 70, y: 84, 'text-anchor': 'middle' }, `${dias} dias`),
     ),
     el(
       'ul',
-      { class: 'an-legenda' },
-      ...fatias.map((f) => el('li', {}, f.classe ? el('span', { class: `an-ponto ${f.classe}`, 'aria-hidden': 'true' }) : el('span', { class: 'an-ponto an-vazio', 'aria-hidden': 'true' }), el('span', { class: 'an-trunc' }, f.nome), el('span', { class: 'an-q' }, f.pct === null ? 'sem preço' : porcento(f.pct)))),
+      { class: 'an-legend' },
+      ...fatias.map((f) => el('li', {}, f.classe ? el('span', { class: `an-dot ${f.classe}`, 'aria-hidden': 'true' }) : el('span', { class: 'an-dot an-empty', 'aria-hidden': 'true' }), el('span', { class: 'an-trunc' }, f.nome), el('span', { class: 'an-q' }, f.pct === null ? 'sem preço' : porcento(f.pct)))),
     ),
   );
 }
@@ -317,9 +317,9 @@ function rosca(porModelo, total, dias) {
 function stat({ id, rotulo, valor, sub, icone: nome, cor, contas = null, dica: titulo = null }) {
   return el(
     'div',
-    { class: 'cartao an-stat', 'data-card': id, title: titulo },
-    el('span', { class: 'an-rot' }, rotulo),
-    el('span', { class: `an-ic an-cor-${cor}` }, icone(nome)),
+    { class: 'card an-stat', 'data-card': id, title: titulo },
+    el('span', { class: 'an-label' }, rotulo),
+    el('span', { class: `an-ic an-color-${cor}` }, icone(nome)),
     el('span', { class: 'an-v' }, valor),
     el('span', { class: 'an-s' }, sub),
     contas ? divisaoPorConta(contas) : null,
@@ -327,26 +327,26 @@ function stat({ id, rotulo, valor, sub, icone: nome, cor, contas = null, dica: t
 }
 
 function cartao(titulo, direita, ...corpo) {
-  return el('section', { class: 'cartao an-cartao' }, el('div', { class: 'an-ttl' }, el('h2', {}, titulo), direita ? el('span', { class: 'an-r' }, direita) : null), ...corpo);
+  return el('section', { class: 'card an-card' }, el('div', { class: 'an-ttl' }, el('h2', {}, titulo), direita ? el('span', { class: 'an-r' }, direita) : null), ...corpo);
 }
 
 function lista(linhas, vazioTexto) {
-  if (!linhas.length) return el('p', { class: 'an-nada' }, vazioTexto);
+  if (!linhas.length) return el('p', { class: 'an-none' }, vazioTexto);
   const max = Math.max(...linhas.map((l) => l.valor ?? 0), 0) || 1;
   return el(
     'ul',
-    { class: 'an-lista' },
-    ...linhas.map((l) => el('li', { class: 'an-linha-lista' }, el('span', { class: 'an-n an-trunc', title: l.nomeLongo ?? l.nome }, l.nome), barra(((l.valor ?? 0) / max) * 100, l.classe, l.dica), el('span', { class: 'an-q' }, l.texto))),
+    { class: 'an-list' },
+    ...linhas.map((l) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: l.nomeLongo ?? l.nome }, l.nome), barra(((l.valor ?? 0) / max) * 100, l.classe, l.dica), el('span', { class: 'an-q' }, l.texto))),
   );
 }
 
 function abas(atual) {
   const aba = (id, rotulo, href) => el('a', { href, class: atual === id ? 'an-on' : null, 'aria-current': atual === id ? 'page' : null }, rotulo);
-  return el('nav', { class: 'an-seg an-abas', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/cost'));
+  return el('nav', { class: 'an-seg an-tabs', 'aria-label': 'Abas do Analytics' }, aba('visao', 'Visão geral', '/ui/analytics'), aba('custo', 'Custo', '/ui/analytics/cost'));
 }
 
 function rodape(esquerda, direita) {
-  return el('div', { class: 'an-leg an-pontas' }, el('span', {}, ...esquerda), el('span', {}, ...direita));
+  return el('div', { class: 'an-leg an-tips' }, el('span', {}, ...esquerda), el('span', {}, ...direita));
 }
 
 // ---------- Visão geral (C12) ----------
@@ -358,25 +358,25 @@ export function telaDaVisao(d) {
   return [
     el(
       'div',
-      { class: 'an-stats an-cinco' },
-      stat({ id: 'sessoes', rotulo: 'Sessões', valor: quantidade(n.sessoes.total), sub: plural(n.sessoes.ativas, 'ativa', 'ativas'), icone: 'sessoes', cor: 'acento' }),
-      stat({ id: 'agentes', rotulo: 'Agentes', valor: quantidade(n.agentes.total), sub: plural(n.agentes.ativos, 'ativo', 'ativos'), icone: 'an-bot', cor: 'ativa' }),
-      stat({ id: 'tokens', rotulo: 'Tokens', valor: quantidade(n.tokens.total), sub: n.tokens.cachePct === null ? 'cache sem dado' : `${porcento(n.tokens.cachePct)} de cache`, icone: 'porta', cor: 'acento' }),
+      { class: 'an-stats an-five' },
+      stat({ id: 'sessoes', rotulo: 'Sessões', valor: quantidade(n.sessoes.total), sub: plural(n.sessoes.ativas, 'ativa', 'ativas'), icone: 'sessions', cor: 'accent' }),
+      stat({ id: 'agentes', rotulo: 'Agentes', valor: quantidade(n.agentes.total), sub: plural(n.agentes.ativos, 'ativo', 'ativos'), icone: 'an-bot', cor: 'active' }),
+      stat({ id: 'tokens', rotulo: 'Tokens', valor: quantidade(n.tokens.total), sub: n.tokens.cachePct === null ? 'cache sem dado' : `${porcento(n.tokens.cachePct)} de cache`, icone: 'port', cor: 'accent' }),
       stat({
         id: 'custo',
         rotulo: 'Custo',
         valor: usd(n.custo.usd, { curto: true }),
         sub: `estimativa · ${n.custo.dias ?? 30} dias${semPreco.length ? ` · ${plural(semPreco.length, 'modelo', 'modelos')} sem preço` : ''}`,
-        icone: 'an-dolar',
-        cor: 'concluida',
+        icone: 'an-dollar',
+        cor: 'completed',
         contas: contasDaVisao(d),
       }),
-      stat({ id: 'eventos', rotulo: 'Eventos', valor: quantidade(n.eventos.total), sub: n.eventos.porSessao === null ? 'por sessão: —' : `~${quantidade(Math.round(n.eventos.porSessao))} por sessão`, icone: 'an-raio', cor: 'esperando' }),
+      stat({ id: 'eventos', rotulo: 'Eventos', valor: quantidade(n.eventos.total), sub: n.eventos.porSessao === null ? 'por sessão: —' : `~${quantidade(Math.round(n.eventos.porSessao))} por sessão`, icone: 'an-bolt', cor: 'waiting' }),
     ),
     abas('visao'),
     el(
       'div',
-      { class: 'an-grade-2 an-larga' },
+      { class: 'an-grid-2 an-wide' },
       cartao(`Atividade · últimas ${d.atividade?.semanas ?? 52} semanas`, 'eventos por dia', ...heatmap(d.atividade?.dias ?? [])),
       cartao(
         'Últimos 30 dias',
@@ -387,7 +387,7 @@ export function telaDaVisao(d) {
     ),
     el(
       'div',
-      { class: 'an-grade-3' },
+      { class: 'an-grid-3' },
       cartao(
         'Tokens por modelo',
         'milhões',
@@ -429,31 +429,31 @@ export function telaDoCusto(d) {
     abas('custo'),
     el(
       'div',
-      { class: 'an-stats an-quatro' },
-      stat({ id: 'hoje', rotulo: 'Hoje', valor: usd(hoje.usd), sub: plural(hoje.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dolar', cor: 'concluida', contas: contasDoCusto(d, hoje.porConta) }),
+      { class: 'an-stats an-four' },
+      stat({ id: 'hoje', rotulo: 'Hoje', valor: usd(hoje.usd), sub: plural(hoje.sessoes ?? 0, 'sessão', 'sessões'), icone: 'an-dollar', cor: 'completed', contas: contasDoCusto(d, hoje.porConta) }),
       stat({
         id: 'periodo',
         rotulo: `${d.dias} dias`,
         valor: usd(d.periodo?.usd, { curto: true }),
         sub: d.periodo?.mediaPorDia === null || d.periodo?.mediaPorDia === undefined ? 'média: sem preço' : `média ${usd(d.periodo.mediaPorDia)} por dia`,
-        icone: 'an-calendario',
-        cor: 'acento',
+        icone: 'an-calendar',
+        cor: 'accent',
         contas: contasDoCusto(d),
       }),
-      stat({ id: 'cache', rotulo: 'Cache', valor: porcento(d.cache?.pct), sub: 'dos tokens de entrada', icone: 'an-camadas', cor: 'acento' }),
+      stat({ id: 'cache', rotulo: 'Cache', valor: porcento(d.cache?.pct), sub: 'dos tokens de entrada', icone: 'an-layers', cor: 'accent' }),
       stat({
         id: 'sem-preco',
         rotulo: 'Sem preço',
         valor: inteiro.format(semPreco.length),
         sub: semPreco.length === 1 ? 'modelo sem tabela' : 'modelos sem tabela',
-        icone: 'an-alerta',
-        cor: semPreco.length ? 'esperando' : 'apagada',
+        icone: 'an-alert',
+        cor: semPreco.length ? 'waiting' : 'muted',
         dica: semPreco.length ? `Sem tabela de preço: ${semPreco.map(nomeDoModelo).join(', ')}` : 'Todos os modelos têm preço',
       }),
     ),
     el(
       'div',
-      { class: 'an-grade-2 an-media' },
+      { class: 'an-grid-2 an-mean' },
       cartao(
         'Custo por dia',
         'US$',
@@ -468,10 +468,10 @@ export function telaDoCusto(d) {
       (d.porProjeto ?? []).length
         ? el(
             'ul',
-            { class: 'an-lista an-projetos' },
-            ...d.porProjeto.map((p) => el('li', { class: 'an-linha-lista' }, el('span', { class: 'an-n an-trunc', title: p.projeto }, p.projeto), barra(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.projeto}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
+            { class: 'an-list an-projects' },
+            ...d.porProjeto.map((p) => el('li', { class: 'an-list-row' }, el('span', { class: 'an-n an-trunc', title: p.projeto }, p.projeto), barra(((p.usd ?? 0) / max) * 100, 'an-m0', `${p.projeto}: ${usd(p.usd)}`), el('span', { class: 'an-q' }, usd(p.usd)))),
           )
-        : el('p', { class: 'an-nada' }, 'Nenhum projeto com custo no período.'),
+        : el('p', { class: 'an-none' }, 'Nenhum projeto com custo no período.'),
     ),
   ];
 }
@@ -532,7 +532,7 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
 
   const cab = (acoes = []) => {
     const c = cabecalho({ icone: 'analytics', titulo: 'Analytics', sub, acoes });
-    c.setAttribute('class', 'cc-cab an-cab'); // an-cab: as ações descem numa janela estreita
+    c.setAttribute('class', 'cc-head an-head'); // an-cab: as ações descem numa janela estreita
     return c;
   };
 
@@ -544,14 +544,14 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   ctx.titulo?.(aba === 'custo' ? 'Analytics · Custo' : 'Analytics');
 
   const botaoExportar = () =>
-    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', aoClicar: () => ultimo && baixar(nomeDoArquivo(aba, ultimo, dias), ultimo) }, icone('an-baixar'), 'Exportar');
+    el('button', { type: 'button', class: 'btn', title: 'Baixar o JSON do que está na tela', aoClicar: () => ultimo && baixar(nomeDoArquivo(aba, ultimo, dias), ultimo) }, icone('an-download'), 'Exportar');
 
   function seletor() {
     return el(
       'div',
       { class: 'an-seg', role: 'group', 'aria-label': 'Período' },
       ...PERIODOS.map((p) =>
-        el('button', { type: 'button', 'aria-pressed': p === dias ? 'true' : 'false', 'data-dias': p, aoClicar: () => p !== dias && ((dias = p), desenhar()) }, `${p} dias`),
+        el('button', { type: 'button', 'aria-pressed': p === dias ? 'true' : 'false', 'data-days': p, aoClicar: () => p !== dias && ((dias = p), desenhar()) }, `${p} dias`),
       ),
     );
   }
@@ -559,7 +559,7 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
   function acoes(dados) {
     if (aba === 'custo') return [seletor(), botaoExportar()];
     const hora = horaDe(dados?.geradoEm, fuso);
-    return [hora ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icone('an-relogio'), hora) : null, botaoExportar()].filter(Boolean);
+    return [hora ? el('span', { class: 'an-chip', title: 'Hora em que o núcleo calculou estes números' }, icone('an-clock'), hora) : null, botaoExportar()].filter(Boolean);
   }
 
   function semNada(dados) {

@@ -14,7 +14,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |
 | `brand.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `shell.css` |
-| `wall.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `shell.css` |
+| `wall.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `wall-`), para não disputar `shell.css` |
 | `sessions.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `shell.css` |
 | `screens/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `wall.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas/Esperando/Ativas no cliente; `sessions.js` (C3, #28) lê `GET /api/sessions`; `history.js` (C15, #33) lê `GET /api/history`; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`screens/session-detail.css`) ou em `ui/` (`dashboard.css`, `wall.css`, `sessions.css`, `history.css`, `repos.css`), carregado pela própria tela |
 | `screens/session-detail.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessions/<id>…` (`src/api/detalhe.ts`). Uma aba nova é uma linha no registro `ABAS` e um módulo `screens/session-detail-<tab>.js` que exporta `criar(ctx, base, { cabeca, rotular })` (o contrato está no começo do `ABAS`) |
@@ -23,7 +23,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
 | `repos.css` | O estilo das telas Repositórios e Repositório (classes `repo-`), carregado por `<link>` pela própria tela |
 | `repos-format.js` | Formatos, filtros, escalas e o que as telas de repositórios mostram, sem DOM (o teste importa direto) |
-| `agent-config.css` | O estilo próprio da Agent Config (classes `ac-`), posto no `<head>` pela tela (`link[data-tela="agent-config"]`) |
+| `agent-config.css` | O estilo próprio da Agent Config (classes `ac-`), posto no `<head>` pela tela (`link[data-screen="agent-config"]`) |
 
 ## As telas
 
@@ -72,13 +72,13 @@ Item da barra só para tela que existe: nada de placeholder para as telas que n�
 
 ## O CSS de uma tela
 
-O que é de uma tela só fica num arquivo dela, `ui/<name>.css`, e não em `shell.css`. A tela o põe no `<head>` ao montar, marcado com `data-tela`, sem duplicar, e o tira quando a pessoa sai:
+O que é de uma tela só fica num arquivo dela, `ui/<name>.css`, e não em `shell.css`. A tela o põe no `<head>` ao montar, marcado com `data-screen`, sem duplicar, e o tira quando a pessoa sai:
 
 ```js
 function ligarFolha() {
-  const ja = document.head.querySelector('link[data-tela="kanban"]');
+  const ja = document.head.querySelector('link[data-screen="kanban"]');
   if (ja) return ja;
-  const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-tela': 'kanban' });
+  const link = el('link', { rel: 'stylesheet', href: '/ui/kanban.css', 'data-screen': 'kanban' });
   document.head.append(link);
   return link;
 }
@@ -116,7 +116,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `brand.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
-- **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.mot`, `.leve`, `.p`).
+- **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.reason`, `.soft`, `.p`).
 - **Nada rola na horizontal** em 1100 nem em 1440 de janela: `min-width: 0` nos filhos de flex e grid, `overflow-wrap: anywhere` em título, branch, caminho e mono, `pre` com `white-space: pre-wrap`, sem `overflow-x: auto`.
 - Exceção: nos Repositórios, a largura das barras que vem de dado entra por variável CSS via CSSOM (`el.style.setProperty('--w', …)`), nunca por atributo `style` no HTML.
 

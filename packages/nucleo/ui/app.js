@@ -8,9 +8,9 @@ import { erro, vazio } from './states.js';
 import { findScreen, legacyUrl, sidebarSections } from './screens.js';
 
 const nav = document.getElementById('nav');
-const area = document.getElementById('conteudo');
-const cartaoAoVivo = document.getElementById('ao-vivo');
-const porta = document.getElementById('porta');
+const area = document.getElementById('content');
+const cartaoAoVivo = document.getElementById('live');
+const porta = document.getElementById('port');
 
 porta.textContent = location.host;
 
@@ -23,11 +23,11 @@ for (const section of sidebarSections()) {
   const group = el(
     'div',
     { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
-    titleId && el('div', { class: 'cc-nav-title olhinho', id: titleId }, section.label),
+    titleId && el('div', { class: 'cc-nav-title eyebrow', id: titleId }, section.label),
   );
   for (const tela of section.items) {
     const q = el('span', { class: 'q', hidden: true });
-    const a = el('a', { class: 'cc-nav', href: tela.route, 'data-tela': tela.id }, icone(tela.item.icon), el('span', {}, tela.item.label), q);
+    const a = el('a', { class: 'cc-nav', href: tela.route, 'data-screen': tela.id }, icone(tela.item.icon), el('span', {}, tela.item.label), q);
     itens.set(tela.id, { a, q });
     group.append(a);
   }
@@ -77,15 +77,15 @@ const ROTULOS = { conectando: 'Conectando', 'ao-vivo': 'Ao vivo', 'sem-conexao':
 function desenharAoVivo() {
   const { estado, erro: e, proximaTentativa } = estadoAoVivo;
   const segundos = proximaTentativa ? Math.max(1, Math.round((proximaTentativa - Date.now()) / 1000)) : null;
-  cartaoAoVivo.dataset.estado = estado;
+  cartaoAoVivo.dataset.state = estado;
   cartaoAoVivo.title = estado === 'sem-conexao' ? `${e?.message ?? 'O núcleo não respondeu'}. Tentando de novo${segundos ? ` em ${segundos} s` : ''}.` : '';
   cartaoAoVivo.replaceChildren(
-    icone(estado === 'sem-conexao' ? 'sem-conexao' : 'ao-vivo'),
+    icone(estado === 'sem-conexao' ? 'offline' : 'live'),
     el('b', {}, ROTULOS[estado]),
-    el('span', { class: 'versao mono' }, versao ? `v${versao}` : ''),
+    el('span', { class: 'version mono' }, versao ? `v${versao}` : ''),
   );
-  for (const p of document.querySelectorAll('[data-ao-vivo]')) {
-    p.dataset.estado = estado;
+  for (const p of document.querySelectorAll('[data-live]')) {
+    p.dataset.state = estado;
     p.textContent = ROTULOS[estado];
   }
 }

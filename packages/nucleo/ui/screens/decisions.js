@@ -25,16 +25,16 @@ export function resumoDoGrupo(g) {
 }
 
 function numero({ rotulo, valor, detalhe, icone: nome, cor }) {
-  return el('div', { class: 'cartao dec-numero' }, el('div', { class: 'olhinho' }, rotulo), el('span', { class: `dec-numero-ico dec-cor-${cor}` }, icone(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
+  return el('div', { class: 'card dec-number' }, el('div', { class: 'eyebrow' }, rotulo), el('span', { class: `dec-number-ico dec-color-${cor}` }, icone(nome)), el('b', {}, num(valor)), el('small', {}, detalhe));
 }
 
 export async function montar(area, ctx) {
   carregarCssDasDecisoes();
   const filtros = { agrupar: 'branch', estado: 'todas', q: '', grupo: null };
 
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar');
+  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
   const cab = cabecalho({
-    icone: 'decisao',
+    icone: 'decision',
     titulo: 'Decisões',
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     acoes: [
@@ -42,14 +42,14 @@ export async function montar(area, ctx) {
       atualizar,
     ],
   });
-  const numeros = el('div', { class: 'dec-numeros' });
+  const numeros = el('div', { class: 'dec-numbers' });
   const barra = el(
     'div',
-    { class: 'dec-barra' },
+    { class: 'dec-bar' },
     campoDeBusca({ placeholder: 'Buscar: "banco de testes", "kanban", "review"…', aoBuscar: (q) => ((filtros.q = q), desenhar()) }),
     alternador({ rotulo: 'Estado', opcoes: [['todas', 'Todas'], ['vigentes', 'Vigentes'], ['a_confirmar', 'A confirmar']], atual: filtros.estado, aoTrocar: (v) => ((filtros.estado = v), desenhar()) }),
   );
-  const lista = el('div', { class: 'dec-grupos', 'aria-live': 'polite' });
+  const lista = el('div', { class: 'dec-groups', 'aria-live': 'polite' });
   const faixa = el('div', {});
 
   let ultimo = null;
@@ -58,33 +58,33 @@ export async function montar(area, ctx) {
   function grupo(g) {
     const cabeca = el(
       'div',
-      { class: 'dec-grupo-cab' },
-      icone(g.tipo === 'branch' ? 'branch' : 'sessoes'),
-      el('span', { class: g.tipo === 'branch' ? 'mono dec-nome' : 'dec-nome' }, g.titulo),
-      el('span', { class: 'dec-resumo' }, resumoDoGrupo(g)),
+      { class: 'dec-group-head' },
+      icone(g.tipo === 'branch' ? 'branch' : 'sessions'),
+      el('span', { class: g.tipo === 'branch' ? 'mono dec-name' : 'dec-name' }, g.titulo),
+      el('span', { class: 'dec-summary' }, resumoDoGrupo(g)),
       filtros.grupo
-        ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, icone('voltar'), 'Todos os grupos')
+        ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = null), desenhar()) }, icone('back'), 'Todos os grupos')
         : g.mais > 0
-          ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)})`, icone('chevron-direita'))
+          ? el('button', { type: 'button', class: 'dec-link', aoClicar: () => ((filtros.grupo = g.chave), desenhar()) }, `Ver todas (${num(g.total)})`, icone('chevron-right'))
           : null,
     );
     const agora = Date.now();
-    return el('section', { class: 'dec-grupo', 'aria-label': g.titulo }, cabeca, ...g.itens.map((d) => cartaoDeDecisao(d, { sessao: d.sessionId, aoMudar: desenhar, agora })));
+    return el('section', { class: 'dec-group', 'aria-label': g.titulo }, cabeca, ...g.itens.map((d) => cartaoDeDecisao(d, { sessao: d.sessionId, aoMudar: desenhar, agora })));
   }
 
   function desenharDados(r) {
     const c = r.contagens;
     numeros.replaceChildren(
       numero({ rotulo: 'Vigentes', valor: c.vigentes, detalhe: `em ${num(c.branches)} ${c.branches === 1 ? 'branch' : 'branches'}`, icone: 'ok', cor: 'completed' }),
-      numero({ rotulo: 'A confirmar', valor: c.aConfirmar, detalhe: 'sugeridas pelo agente', icone: 'sugerida', cor: 'waiting' }),
-      numero({ rotulo: 'Substituídas', valor: c.substituidas30d, detalhe: 'nos últimos 30 dias', icone: 'repetir', cor: 'muted' }),
-      numero({ rotulo: 'Promovidas', valor: c.promovidas, detalhe: 'viraram registro de decisão no repositório', icone: 'promover', cor: 'accent' }),
+      numero({ rotulo: 'A confirmar', valor: c.aConfirmar, detalhe: 'sugeridas pelo agente', icone: 'suggested', cor: 'waiting' }),
+      numero({ rotulo: 'Substituídas', valor: c.substituidas30d, detalhe: 'nos últimos 30 dias', icone: 'repeat', cor: 'muted' }),
+      numero({ rotulo: 'Promovidas', valor: c.promovidas, detalhe: 'viraram registro de decisão no repositório', icone: 'promote', cor: 'accent' }),
     );
     const total = c.vigentes + c.aConfirmar + c.substituidas30d;
     if (r.grupos.length) lista.replaceChildren(...r.grupos.map(grupo));
     else if (!total && !filtros.q && filtros.estado === 'todas')
-      lista.replaceChildren(vazio({ icone: 'decisao', titulo: 'Nenhuma decisão ainda', texto: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
-    else lista.replaceChildren(vazio({ icone: 'buscar', titulo: 'Nada com esses filtros', texto: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
+      lista.replaceChildren(vazio({ icone: 'decision', titulo: 'Nenhuma decisão ainda', texto: 'Quando você responder uma pergunta, aprovar um plano ou corrigir um agente, a decisão aparece aqui.' }));
+    else lista.replaceChildren(vazio({ icone: 'search', titulo: 'Nada com esses filtros', texto: filtros.q ? `Nenhuma decisão fala de "${filtros.q}".` : 'Troque o filtro de estado para ver as outras.' }));
   }
 
   async function desenhar() {

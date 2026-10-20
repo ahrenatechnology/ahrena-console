@@ -7,7 +7,7 @@
 .kb-seg button:hover { color: var(--text); }
 .kb-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .kb-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.cc-cab .btn:disabled { opacity: .6; cursor: progress; }
+.cc-head .btn:disabled { opacity: .6; cursor: progress; }
 
 /* ---------- o quadro ---------- */
 /* Colunas lado a lado; se não couberem, o quadro rola na horizontal. Ele ocupa o resto da altura e
@@ -16,26 +16,26 @@
 .kb-kanban:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
 
 .kb-col { container-type: inline-size; background: color-mix(in srgb, var(--surface) 60%, var(--bg)); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.kb-col .kb-cab { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: var(--weight-semibold); padding: 2px 4px; }
-.kb-col .kb-cab > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kb-col .kb-cab .kb-n { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); background: var(--raised); border-radius: 99px; padding: 0 8px; letter-spacing: 0; }
+.kb-col .kb-head { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: var(--weight-semibold); padding: 2px 4px; }
+.kb-col .kb-head > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-col .kb-head .kb-n { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); background: var(--raised); border-radius: 99px; padding: 0 8px; letter-spacing: 0; }
 .kb-col .kb-cards { display: flex; flex-direction: column; gap: 10px; }
 .kb-col .kb-cards:empty { display: none; }
 
-.kb-ponto { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.kb-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .kb-d-active { background: var(--status-active-dot); } .kb-d-waiting { background: var(--status-waiting-dot); } .kb-d-completed { background: var(--status-completed-dot); }
 .kb-d-error { background: var(--status-error-dot); } .kb-d-abandoned { background: var(--status-abandoned-dot); }
 .kb-c-active { color: var(--status-active-text); } .kb-c-waiting { color: var(--status-waiting-text); } .kb-c-completed { color: var(--status-completed-text); }
 .kb-c-error { color: var(--status-error-text); } .kb-c-abandoned { color: var(--status-abandoned-text); }
 
-.kb-mais { font-size: 11.5px; color: var(--muted); background: none; padding: 6px; border: 1px dashed var(--border); border-radius: 8px; }
-.kb-mais:hover:not(:disabled) { color: var(--text); background: var(--raised); }
-.kb-mais:disabled { cursor: progress; }
-.kb-mais:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kb-more { font-size: 11.5px; color: var(--muted); background: none; padding: 6px; border: 1px dashed var(--border); border-radius: 8px; }
+.kb-more:hover:not(:disabled) { color: var(--text); background: var(--raised); }
+.kb-more:disabled { cursor: progress; }
+.kb-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- cards ---------- */
 .kb-kc { padding: 11px 12px; min-height: 196px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; border-left: 3px solid var(--border); min-width: 0; }
-.kb-kc.kb-agente { min-height: 128px; }
+.kb-kc.kb-agent { min-height: 128px; }
 .kb-kc > * { flex: none; }
 .kb-kc:hover { background: var(--raised); }
 .kb-kc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -44,38 +44,38 @@
 
 .kb-kc .kb-l1 { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
 .kb-kc .kb-av { width: 24px; height: 24px; border-radius: 7px; background: var(--raised); display: grid; place-items: center; color: var(--muted); flex: none; font-size: 14px; }
-.kb-kc .kb-nome { flex: 1; min-width: 0; }
+.kb-kc .kb-name { flex: 1; min-width: 0; }
 .kb-kc .kb-tt { font-size: 12.5px; font-weight: var(--weight-semibold); }
 .kb-kc small { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
 .kb-kc .kb-tt, .kb-kc small, .kb-kc blockquote, .kb-kc .kb-cwd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .kb-kc blockquote { margin: 0; padding-left: 9px; border-left: 2px solid var(--border); font-size: 11.5px; color: var(--muted); font-style: italic; }
 .kb-kc .kb-cwd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
-.kb-kc .kb-pe { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; white-space: nowrap; font-size: 11px; color: var(--muted); }
-.kb-kc .kb-pe > span { display: flex; gap: 4px; align-items: center; min-width: 0; }
-.kb-kc .kb-pe > span > svg { flex: none; }
-.kb-kc .kb-pe .kb-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kb-kc .kb-foot { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; white-space: nowrap; font-size: 11px; color: var(--muted); }
+.kb-kc .kb-foot > span { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.kb-kc .kb-foot > span > svg { flex: none; }
+.kb-kc .kb-foot .kb-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* A duração fica sempre na coluna da direita, mesmo sem modelo ou custo. */
-.kb-kc .kb-pe .kb-dur { grid-column: 2; }
-.kb-kc .kb-pe .kb-rodando { color: var(--status-active-text); }
+.kb-kc .kb-foot .kb-dur { grid-column: 2; }
+.kb-kc .kb-foot .kb-running { color: var(--status-active-text); }
 
 /* Coluna estreita (a janela de 1100 px com as cinco colunas): o pé do card vira uma coluna só. */
 @container (max-width: 200px) {
-  .kb-col .kb-cab { gap: 4px; font-size: 10.5px; letter-spacing: .03em; padding: 2px 0; }
-  .kb-col .kb-cab .kb-n { padding: 0 6px; }
+  .kb-col .kb-head { gap: 4px; font-size: 10.5px; letter-spacing: .03em; padding: 2px 0; }
+  .kb-col .kb-head .kb-n { padding: 0 6px; }
   .kb-kc { padding: 10px; }
-  .kb-kc .kb-pe { grid-template-columns: 1fr; }
-  .kb-kc .kb-pe .kb-dur { grid-column: auto; }
+  .kb-kc .kb-foot { grid-template-columns: 1fr; }
+  .kb-kc .kb-foot .kb-dur { grid-column: auto; }
 }
 
 /* Selo de status e selo do motivo da espera. */
-.kb-kc .kb-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.kb-selo-st { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-medium); white-space: nowrap; }
-.kb-selo-st .kb-p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.kb-kc .kb-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.kb-badge-st { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-medium); white-space: nowrap; }
+.kb-badge-st .kb-p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .kb-b-active { background: var(--status-active-badge); color: var(--status-active-text); }
 .kb-b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .kb-b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
 .kb-b-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .kb-b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
-.kb-selo-mot { display: inline-flex; align-items: center; gap: 4px; height: 17px; padding: 0 7px; border-radius: 99px; font-size: 10px; font-weight: var(--weight-semibold); white-space: nowrap;
+.kb-badge-reason { display: inline-flex; align-items: center; gap: 4px; height: 17px; padding: 0 7px; border-radius: 99px; font-size: 10px; font-weight: var(--weight-semibold); white-space: nowrap;
   background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
-.kb-selo-mot.kb-leve { font-weight: var(--weight-medium); }
+.kb-badge-reason.kb-soft { font-weight: var(--weight-medium); }

@@ -19,9 +19,9 @@ export const CONTEXTO_ALTO = 80;
 export const ROTULO_DO_STATUS = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 // Os motivos do "esperando", como no wireframe: urgente em negrito, o resto leve.
 const MOTIVOS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permissao', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrompida', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
+  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
+  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
+  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
   session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 const ESFORCOS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
@@ -93,43 +93,43 @@ function usarEstilo() {
   document.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
 }
 
-const badge = (status) => el('span', { class: `mural-badge mural-b-${status}` }, el('span', { class: 'p' }), ROTULO_DO_STATUS[status] ?? status);
+const badge = (status) => el('span', { class: `wall-badge wall-b-${status}` }, el('span', { class: 'p' }), ROTULO_DO_STATUS[status] ?? status);
 
 function linhaDoCard(l) {
   if (l.tipo === 'pede') {
-    const chip = l.motivo ? el('span', { class: `mural-mot${l.motivo.urgente ? '' : ' leve'}` }, icone(l.motivo.icone), l.motivo.rotulo) : null;
-    return el('div', { class: 'mural-linha' }, chip, el('span', { class: 'mural-trunc mural-apagada' }, l.texto));
+    const chip = l.motivo ? el('span', { class: `wall-reason${l.motivo.urgente ? '' : ' soft'}` }, icone(l.motivo.icone), l.motivo.rotulo) : null;
+    return el('div', { class: 'wall-row' }, chip, el('span', { class: 'wall-trunc wall-muted' }, l.texto));
   }
-  if (l.tipo === 'erro') return el('div', { class: 'mural-linha mural-erro' }, icone('erro'), el('span', { class: 'mural-trunc' }, l.texto));
-  if (l.tipo === 'concluida') return el('div', { class: 'mural-linha mural-concluida' }, icone('mural-check'), el('span', { class: 'mural-trunc' }, l.texto));
-  if (l.tipo === 'parada') return el('div', { class: 'mural-linha mural-apagada' }, el('span', { class: 'mural-trunc' }, l.texto));
-  return el('div', { class: 'mural-linha mural-apagada' }, icone('mural-loader'), el('span', { class: 'mural-trunc' }, l.texto));
+  if (l.tipo === 'erro') return el('div', { class: 'wall-row wall-error' }, icone('error'), el('span', { class: 'wall-trunc' }, l.texto));
+  if (l.tipo === 'concluida') return el('div', { class: 'wall-row wall-completed' }, icone('wall-check'), el('span', { class: 'wall-trunc' }, l.texto));
+  if (l.tipo === 'parada') return el('div', { class: 'wall-row wall-muted' }, el('span', { class: 'wall-trunc' }, l.texto));
+  return el('div', { class: 'wall-row wall-muted' }, icone('wall-loader'), el('span', { class: 'wall-trunc' }, l.texto));
 }
 
 /** A barra: `<progress>` estilizado, a largura vem do `value`. */
 function barra({ valor, max, rotulo, alto = false, tipo }) {
-  return el('progress', { class: `mural-barra${alto ? ' mural-alto' : ''}`, 'data-barra': tipo, max: max > 0 ? max : 1, value: max > 0 ? Math.min(valor, max) : 0, 'aria-label': rotulo });
+  return el('progress', { class: `wall-bar${alto ? ' wall-high' : ''}`, 'data-bar': tipo, max: max > 0 ? max : 1, value: max > 0 ? Math.min(valor, max) : 0, 'aria-label': rotulo });
 }
 
 function card(c) {
   const v = oQueOCardMostra(c);
   return el(
     'a',
-    { class: `cartao mural-card mural-st-${v.status}`, href: v.href, 'data-sessao': v.id },
-    el('div', { class: 'mural-l1' }, el('span', { class: 'mural-tt mural-trunc', title: v.titulo }, v.titulo), badge(v.status)),
-    el('div', { class: 'mural-pj mural-trunc' }, v.origem),
+    { class: `card wall-card wall-st-${v.status}`, href: v.href, 'data-session': v.id },
+    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.titulo }, v.titulo), badge(v.status)),
+    el('div', { class: 'wall-prj wall-trunc' }, v.origem),
     linhaDoCard(v.linha),
     el(
       'div',
-      { class: 'mural-gr' },
+      { class: 'wall-gr' },
       ...v.grade.map(([rotulo, valor]) =>
-        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'mural-trunc' }, valor)),
+        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'wall-trunc' }, valor)),
       ),
     ),
-    el('div', { class: 'mural-linhaplano' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
+    el('div', { class: 'wall-planrow' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
     el(
       'div',
-      { class: 'mural-barras' },
+      { class: 'wall-bars' },
       barra({ tipo: 'plano', valor: v.plano.feitos, max: v.plano.total, rotulo: `Plano: ${v.plano.feitos} de ${v.plano.total}` }),
       barra({ tipo: 'contexto', valor: v.contexto.pct ?? 0, max: 100, alto: v.contexto.alto, rotulo: v.contexto.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.contexto.pct}%` }),
     ),
@@ -150,15 +150,15 @@ export async function montar(area, ctx) {
   const botoes = new Map();
   const seletor = el(
     'div',
-    { class: 'mural-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
+    { class: 'wall-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
     ...FILTROS.map((f) => {
-      const b = el('button', { type: 'button', 'data-filtro': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', aoClicar: () => escolher(f.id) }, f.rotulo);
+      const b = el('button', { type: 'button', 'data-filter': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', aoClicar: () => escolher(f.id) }, f.rotulo);
       botoes.set(f.id, b);
       return b;
     }),
   );
-  const atualizar = el('button', { type: 'button', class: 'btn', 'data-acao': 'atualizar', aoClicar: () => ler() }, icone('atualizar'), 'Atualizar');
-  const cab = cabecalho({ icone: 'mural', titulo: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', acoes: [seletor, atualizar] });
+  const atualizar = el('button', { type: 'button', class: 'btn', 'data-action': 'atualizar', aoClicar: () => ler() }, icone('refresh'), 'Atualizar');
+  const cab = cabecalho({ icone: 'wall', titulo: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', acoes: [seletor, atualizar] });
 
   function escolher(id) {
     filtro = id;
@@ -176,12 +176,12 @@ export async function montar(area, ctx) {
     const faixa = falha ? faixaDeErro({ titulo: 'O mural não atualizou.', texto: falha.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null;
     const nos = cards.map(card);
     const corpo = cards.length
-      ? el('div', { class: 'mural-grade' }, ...nos)
-      : vazio({ icone: 'mural', titulo: f.vazio, texto: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+      ? el('div', { class: 'wall-grid' }, ...nos)
+      : vazio({ icone: 'wall', titulo: f.vazio, texto: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
-    const focado = globalThis.document?.activeElement?.closest?.('[data-sessao]')?.getAttribute('data-sessao') ?? null;
+    const focado = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
     area.replaceChildren(...[cab, faixa, corpo].filter(Boolean));
-    if (focado) nos.find((n) => n.getAttribute('data-sessao') === focado)?.focus();
+    if (focado) nos.find((n) => n.getAttribute('data-session') === focado)?.focus();
   }
 
   async function ler() {

@@ -37,8 +37,8 @@ const LOTE_DO_AO_VIVO = 50;
 const DIGITANDO_MS = 300;
 
 function ligarCss() {
-  if (document.head.querySelector('link[data-tela="feed"]')) return null;
-  const link = el('link', { rel: 'stylesheet', href: CSS, 'data-tela': 'feed' });
+  if (document.head.querySelector('link[data-screen="feed"]')) return null;
+  const link = el('link', { rel: 'stylesheet', href: CSS, 'data-screen': 'feed' });
   document.head.append(link);
   return link;
 }
@@ -59,18 +59,18 @@ export async function montar(area, ctx) {
   // ---------- cabeçalho ----------
 
   const botaoPausa = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', aoClicar: () => (estado.pausado ? soltar() : congelar()) });
-  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => recarregar() }, icone('atualizar'), 'Atualizar');
-  const cab = cabecalho({ icone: 'atividade', titulo: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', acoes: [botaoPausa, botaoAtualizar] });
+  const botaoAtualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => recarregar() }, icone('refresh'), 'Atualizar');
+  const cab = cabecalho({ icone: 'activity', titulo: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', acoes: [botaoPausa, botaoAtualizar] });
 
   // ---------- sobre ----------
 
   const sobre = el(
     'details',
-    { class: 'cartao feed-sobre' },
+    { class: 'card feed-about' },
     el('summary', {}, icone('info'), el('b', {}, 'Sobre eventos, filtros e agrupamento'), el('span', {}, ' · como ler as pílulas, o ciclo de vida e os filtros')),
     el(
       'div',
-      { class: 'feed-sobre-corpo' },
+      { class: 'feed-about-body' },
       el('p', {}, 'Cada linha é um evento gravado pelo núcleo, do mais novo para o mais velho. A pílula diz em que estado a sessão ficou depois dele: Ativa, Esperando você, Concluída ou Com erro.'),
       el('p', {}, 'Uma sessão nasce, roda turnos, chama ferramentas e subagentes, e termina. O caminho projeto › sessão › agente diz de onde o evento veio; "Sessão" abre o detalhe dela.'),
       el('p', {}, 'Os filtros se somam. A busca olha o resumo e a ferramenta. Com a pausa, a lista para de mexer e os eventos novos esperam no aviso "novos".'),
@@ -79,10 +79,10 @@ export async function montar(area, ctx) {
 
   // ---------- filtros ----------
 
-  const busca = el('input', { type: 'search', class: 'feed-entrada', maxlength: '100', placeholder: 'Buscar no resumo ou na ferramenta…', 'aria-label': 'Buscar no resumo ou na ferramenta' });
-  const de = el('input', { type: 'date', class: 'feed-entrada', 'aria-label': 'De' });
-  const ate = el('input', { type: 'date', class: 'feed-entrada', 'aria-label': 'Até' });
-  const seletor = (rotulo) => el('select', { class: 'feed-chip feed-seletor', 'aria-label': rotulo }, el('option', { value: '' }, rotulo));
+  const busca = el('input', { type: 'search', class: 'feed-input', maxlength: '100', placeholder: 'Buscar no resumo ou na ferramenta…', 'aria-label': 'Buscar no resumo ou na ferramenta' });
+  const de = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'De' });
+  const ate = el('input', { type: 'date', class: 'feed-input', 'aria-label': 'Até' });
+  const seletor = (rotulo) => el('select', { class: 'feed-chip feed-selector', 'aria-label': rotulo }, el('option', { value: '' }, rotulo));
   const sStatus = seletor('Status');
   const sTipo = seletor('Tipo de evento');
   const sFerramenta = seletor('Ferramenta');
@@ -91,15 +91,15 @@ export async function montar(area, ctx) {
 
   const cartaoFiltros = el(
     'div',
-    { class: 'cartao feed-filtros' },
+    { class: 'card feed-filters' },
     el(
       'div',
-      { class: 'feed-filtros-linha' },
-      el('label', { class: 'feed-campo feed-busca' }, icone('filtro'), busca),
-      el('label', { class: 'feed-campo feed-dia' }, icone('calendario'), el('span', {}, 'De'), de),
-      el('label', { class: 'feed-campo feed-dia' }, icone('calendario'), el('span', {}, 'Até'), ate),
+      { class: 'feed-filters-row' },
+      el('label', { class: 'feed-field feed-search' }, icone('filter'), busca),
+      el('label', { class: 'feed-field feed-day' }, icone('calendar'), el('span', {}, 'De'), de),
+      el('label', { class: 'feed-field feed-day' }, icone('calendar'), el('span', {}, 'Até'), ate),
     ),
-    el('div', { class: 'feed-filtros-linha' }, sStatus, sTipo, sFerramenta, sSessao),
+    el('div', { class: 'feed-filters-row' }, sStatus, sTipo, sFerramenta, sSessao),
   );
 
   function lerFiltros() {
@@ -136,12 +136,12 @@ export async function montar(area, ctx) {
 
   // ---------- aviso de novos, faixa e corpo ----------
 
-  const aviso = el('button', { type: 'button', class: 'btn contorno feed-novos', hidden: true, aoClicar: () => soltar() });
-  const faixa = el('div', { class: 'feed-faixa' });
-  const corpo = el('div', { class: 'feed-corpo' });
-  const listaEl = el('div', { class: 'feed-lista' });
-  const botaoMais = el('button', { type: 'button', class: 'btn contorno feed-mais', aoClicar: () => mostrarMais() }, 'Mostrar mais');
-  const cartaoLista = el('div', { class: 'cartao feed-linhas' }, listaEl, el('div', { class: 'feed-pe' }, botaoMais));
+  const aviso = el('button', { type: 'button', class: 'btn outline feed-new', hidden: true, aoClicar: () => soltar() });
+  const faixa = el('div', { class: 'feed-band' });
+  const corpo = el('div', { class: 'feed-body' });
+  const listaEl = el('div', { class: 'feed-list' });
+  const botaoMais = el('button', { type: 'button', class: 'btn outline feed-more', aoClicar: () => mostrarMais() }, 'Mostrar mais');
+  const cartaoLista = el('div', { class: 'card feed-rows' }, listaEl, el('div', { class: 'feed-foot' }, botaoMais));
 
   area.replaceChildren(cab, sobre, cartaoFiltros, aviso, faixa, corpo);
   desenharPausa();
@@ -158,8 +158,8 @@ export async function montar(area, ctx) {
     const status = STATUS[ev.status] ? ev.status : 'completed';
     const seta = el(
       'button',
-      { type: 'button', class: 'feed-seta', 'aria-expanded': aberta ? 'true' : 'false', 'aria-label': aberta ? 'Fechar o detalhe' : 'Abrir o detalhe' },
-      icone(aberta ? 'chevron-baixo' : 'chevron-direita'),
+      { type: 'button', class: 'feed-arrow', 'aria-expanded': aberta ? 'true' : 'false', 'aria-label': aberta ? 'Fechar o detalhe' : 'Abrir o detalhe' },
+      icone(aberta ? 'chevron-down' : 'chevron-right'),
     );
     seta.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -168,15 +168,15 @@ export async function montar(area, ctx) {
     const caminho = trilha(ev);
     const cabeca = el(
       'div',
-      { class: `feed-linha${aberta ? ' feed-aberta' : ''}` },
+      { class: `feed-row${aberta ? ' feed-open' : ''}` },
       seta,
-      el('span', { class: 'feed-o mono feed-hora' }, horaCurta(ev.criadoEm)),
+      el('span', { class: 'feed-o mono feed-time' }, horaCurta(ev.criadoEm)),
       el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
-      el('span', { class: 'feed-o feed-trunc feed-trilha', title: caminho }, caminho),
-      el('span', { class: 'feed-trunc feed-resumo', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
+      el('span', { class: 'feed-o feed-trunc feed-trail', title: caminho }, caminho),
+      el('span', { class: 'feed-trunc feed-summary', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
       ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
       el('span', { class: 'feed-o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
-      rota ? el('a', { class: 'btn contorno feed-sessao', href: rota }, 'Sessão', icone('externo')) : null,
+      rota ? el('a', { class: 'btn outline feed-session', href: rota }, 'Sessão', icone('external')) : null,
     );
     cabeca.addEventListener('click', (e) => {
       if (e.target?.closest?.('a, button')) return;
@@ -197,12 +197,12 @@ export async function montar(area, ctx) {
       ['Call id', d.callId],
     ];
     const bloco = ev.ferramenta
-      ? el('div', { class: 'feed-ferrbloco' }, icone('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
-      : el('p', { class: 'feed-texto' }, ev.resumo ?? d.entrada ?? '—');
+      ? el('div', { class: 'feed-toolblock' }, icone('terminal'), el('span', { class: 'feed-n' }, ev.ferramenta), el('span', { class: 'feed-cmd feed-trunc', title: d.entrada ?? '' }, d.entrada ?? ''))
+      : el('p', { class: 'feed-text' }, ev.resumo ?? d.entrada ?? '—');
     return el(
       'div',
-      { class: 'feed-detalhe' },
-      el('div', { class: 'cartao feed-bloco' }, el('div', { class: 'olhinho' }, 'Resumo'), bloco, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-texto' }, ev.resumo) : null),
+      { class: 'feed-detail' },
+      el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), bloco, ev.ferramenta && ev.resumo ? el('p', { class: 'feed-text' }, ev.resumo) : null),
       el('dl', { class: 'feed-kv mono' }, ...pares.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
     );
   }
@@ -254,7 +254,7 @@ export async function montar(area, ctx) {
   }
 
   function desenharPausa() {
-    botaoPausa.replaceChildren(icone(estado.pausado ? 'retomar' : 'pausar'), estado.pausado ? 'Retomar' : 'Pausar');
+    botaoPausa.replaceChildren(icone(estado.pausado ? 'resume' : 'pause'), estado.pausado ? 'Retomar' : 'Pausar');
     botaoPausa.setAttribute('aria-pressed', estado.pausado ? 'true' : 'false');
     const n = estado.chegados;
     aviso.hidden = !n;

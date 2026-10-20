@@ -13,24 +13,24 @@ import { escrever } from '../api.js';
 let cssCarregado = false;
 /** As duas telas usam o mesmo `ui/decisions.css` (na raiz, como o das outras telas); a primeira que abrir o põe no `<head>`. */
 export function carregarCssDasDecisoes() {
-  if (cssCarregado || typeof document === 'undefined' || document.querySelector('link[data-tela="decisoes"]')) return;
+  if (cssCarregado || typeof document === 'undefined' || document.querySelector('link[data-screen="decisions"]')) return;
   cssCarregado = true;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/decisions.css', 'data-tela': 'decisoes' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/decisions.css', 'data-screen': 'decisions' }));
 }
 
 // ---------- Rótulos (funções puras) ----------
 
 const TIPOS = {
-  sugerida: { rotulo: 'Sugerida', icone: 'sugerida' },
-  correcao: { rotulo: 'Correção sua', icone: 'continuou' },
-  permissao: { rotulo: 'Permissão', icone: 'permissao' },
-  pergunta: { rotulo: 'Pergunta', icone: 'pergunta' },
-  plano: { rotulo: 'Plano', icone: 'plano' },
+  sugerida: { rotulo: 'Sugerida', icone: 'suggested' },
+  correcao: { rotulo: 'Correção sua', icone: 'continued' },
+  permissao: { rotulo: 'Permissão', icone: 'permission' },
+  pergunta: { rotulo: 'Pergunta', icone: 'question' },
+  plano: { rotulo: 'Plano', icone: 'plan' },
 };
 
 /** A pílula de tipo: "Sugerida", "Correção sua", "Permissão", "Pergunta", "Plano". */
 export const rotuloDoTipo = (origem) => TIPOS[origem]?.rotulo ?? 'Decisão';
-export const iconeDoTipo = (origem) => TIPOS[origem]?.icone ?? 'decisao';
+export const iconeDoTipo = (origem) => TIPOS[origem]?.icone ?? 'decision';
 
 /** Quem decidiu, como o card escreve. */
 export function quemDecidiu(d) {
@@ -94,8 +94,12 @@ export const linkDaConversa = (d) => (typeof d.conversa === 'string' && /^\/ui\/
 
 // ---------- Peças ----------
 
+// The class of each decision state (the API value stays as it comes): `dec-e-<state>`.
+const STATE_CLASS = { a_confirmar: 'to-confirm', vigente: 'current', descartada: 'dismissed', substituida: 'superseded' };
+export const stateClass = (estado) => `dec-e-${STATE_CLASS[estado] ?? estado}`;
+
 export function pilulaDeEstado(estado) {
-  return el('span', { class: `dec-pilula dec-e-${estado}` }, rotuloDoEstado(estado));
+  return el('span', { class: `dec-pill ${stateClass(estado)}` }, rotuloDoEstado(estado));
 }
 
 /** Alternador em segmentos (Sessão/Família/Branch, Todas/Vigentes/A confirmar). */
@@ -120,7 +124,7 @@ export function campoDeBusca({ placeholder, aoBuscar, espera = 250 }) {
     clearTimeout(t);
     t = setTimeout(() => aoBuscar(campo.value.trim()), espera);
   });
-  return el('label', { class: 'dec-busca' }, icone('buscar'), campo);
+  return el('label', { class: 'dec-search' }, icone('search'), campo);
 }
 
 /**
@@ -128,16 +132,16 @@ export function campoDeBusca({ placeholder, aoBuscar, espera = 250 }) {
  * decisão; na aba, a sessão aberta). `aoMudar()` é chamado depois de uma escrita que deu certo.
  */
 export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, agora = Date.now() } = {}) {
-  const aviso = el('span', { class: 'dec-aviso', role: 'status' });
+  const aviso = el('span', { class: 'dec-notice', role: 'status' });
   const rastro = [
     d.nao?.length ? `Descartado: ${d.nao.join('; ')}` : null,
     d.substituidaPor ? ['substituída por ', el('b', {}, d.substituidaPor)] : d.substitui ? ['substitui ', el('b', {}, d.substitui)] : null,
   ].filter(Boolean);
 
-  const acoes = el('div', { class: 'dec-acoes' });
+  const acoes = el('div', { class: 'dec-actions' });
   if (d.estado === 'a_confirmar') {
-    const confirmar = el('button', { type: 'button', class: 'btn cheio' }, 'Confirmar');
-    const descartar = el('button', { type: 'button', class: 'btn contorno' }, 'Descartar');
+    const confirmar = el('button', { type: 'button', class: 'btn filled' }, 'Confirmar');
+    const descartar = el('button', { type: 'button', class: 'btn outline' }, 'Descartar');
     const agir = (acao) => async () => {
       confirmar.disabled = descartar.disabled = true;
       aviso.textContent = '';
@@ -157,19 +161,19 @@ export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, a
     const conversa = linkDaConversa(d);
     if (conversa) acoes.append(el('a', { class: 'dec-link', href: conversa }, 'Ver na conversa'));
     if (d.estado === 'vigente') {
-      if (d.promovidaPara) acoes.append(el('span', { class: 'dec-promovida mono', title: d.promovidaPara }, icone('promover'), 'Promovida'));
+      if (d.promovidaPara) acoes.append(el('span', { class: 'dec-promoted mono', title: d.promovidaPara }, icone('promote'), 'Promovida'));
       else acoes.append(el('button', { type: 'button', class: 'dec-link', aoClicar: () => abrirPromover(d, sessao, { aoGravar: aoMudar }) }, 'Promover a registro'));
     }
   }
 
   return el(
     'article',
-    { class: `cartao dec-card dec-e-${d.estado}`, 'data-decisao': d.id },
+    { class: `card dec-card ${stateClass(d.estado)}`, 'data-decision': d.id },
     el('span', { class: 'dec-ico' }, icone(iconeDoTipo(d.origem))),
-    el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-rot' }, d.rotulo), el('b', { class: 'dec-titulo', title: d.titulo }, d.titulo), pilulaDeEstado(d.estado)),
-    el('time', { class: 'dec-quando', datetime: d.decididaEm, title: new Date(d.decididaEm).toLocaleString('pt-BR') }, haQuanto(d.decididaEm, agora)),
+    el('div', { class: 'dec-l1' }, el('span', { class: 'mono dec-label' }, d.rotulo), el('b', { class: 'dec-title', title: d.titulo }, d.titulo), pilulaDeEstado(d.estado)),
+    el('time', { class: 'dec-when', datetime: d.decididaEm, title: new Date(d.decididaEm).toLocaleString('pt-BR') }, haQuanto(d.decididaEm, agora)),
     el('div', { class: 'dec-l2' }, ...rastro.flatMap((r, i) => (i ? [' · ', r] : [r]))),
-    el('div', { class: 'dec-l3' }, el('span', { class: 'dec-tipo' }, rotuloDoTipo(d.origem)), el('span', {}, quemDecidiu(d)), el('span', {}, rotuloDoEscopo(d)), aviso),
+    el('div', { class: 'dec-l3' }, el('span', { class: 'dec-type' }, rotuloDoTipo(d.origem)), el('span', {}, quemDecidiu(d)), el('span', {}, rotuloDoEscopo(d)), aviso),
     acoes,
   );
 }
@@ -181,12 +185,12 @@ export function cartaoDeDecisao(d, { sessao = d.sessionId, aoMudar = () => {}, a
  * caminho, e só grava com a confirmação explícita (a caixa "Confirmo" e o botão).
  */
 export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
-  const corpo = el('div', { class: 'dec-dlg-corpo' }, el('p', { class: 'dec-dlg-nota' }, 'Gerando o rascunho…'));
-  const fechar = el('button', { type: 'button', class: 'btn contorno', value: 'fechar' }, 'Fechar');
+  const corpo = el('div', { class: 'dec-dlg-body' }, el('p', { class: 'dec-dlg-note' }, 'Gerando o rascunho…'));
+  const fechar = el('button', { type: 'button', class: 'btn outline', value: 'fechar' }, 'Fechar');
   const dialogo = el(
     'dialog',
     { class: 'dec-dlg', 'aria-label': `Promover ${d.rotulo} a registro` },
-    el('header', {}, icone('promover'), el('h2', {}, `Promover ${d.rotulo} a registro de decisão`)),
+    el('header', {}, icone('promote'), el('h2', {}, `Promover ${d.rotulo} a registro de decisão`)),
     corpo,
     el('footer', {}, fechar),
   );
@@ -201,11 +205,11 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
       const { rota, corpo: pedido } = pedidoDePromover(d.id, sessao);
       rascunho = (await escrever(rota, pedido)).rascunho;
     } catch (e) {
-      corpo.replaceChildren(el('p', { class: 'dec-erro', role: 'alert' }, `Não deu para gerar o rascunho: ${e.message}`));
+      corpo.replaceChildren(el('p', { class: 'dec-error', role: 'alert' }, `Não deu para gerar o rascunho: ${e.message}`));
       return;
     }
-    const aviso = el('p', { class: 'dec-dlg-nota', role: 'status' });
-    const copiar = el('button', { type: 'button', class: 'btn contorno' }, icone('copiar'), 'Copiar');
+    const aviso = el('p', { class: 'dec-dlg-note', role: 'status' });
+    const copiar = el('button', { type: 'button', class: 'btn outline' }, icone('copy'), 'Copiar');
     copiar.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(rascunho.markdown);
@@ -216,7 +220,7 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
     });
     const pode = !!rascunho.podeGravar;
     const confirmo = el('input', { type: 'checkbox', disabled: !pode });
-    const gravar = el('button', { type: 'button', class: 'btn cheio dec-gravar', disabled: true, title: pode ? null : rascunho.motivo ?? 'Não dá para gravar daqui' }, `Gravar em ${rascunho.caminho}`);
+    const gravar = el('button', { type: 'button', class: 'btn filled dec-save', disabled: true, title: pode ? null : rascunho.motivo ?? 'Não dá para gravar daqui' }, `Gravar em ${rascunho.caminho}`);
     confirmo.addEventListener('change', () => (gravar.disabled = !confirmo.checked));
     gravar.addEventListener('click', async () => {
       if (!confirmo.checked) return;
@@ -235,12 +239,12 @@ export function abrirPromover(d, sessao, { aoGravar = () => {} } = {}) {
       }
     });
     corpo.replaceChildren(
-      el('div', { class: 'dec-dlg-caminho' }, el('span', { class: 'olhinho' }, 'Rascunho'), el('span', { class: 'mono' }, rascunho.caminho), rascunho.repo ? el('span', { class: 'mono dec-repo' }, `em ${rascunho.repo}`) : null),
+      el('div', { class: 'dec-dlg-path' }, el('span', { class: 'eyebrow' }, 'Rascunho'), el('span', { class: 'mono' }, rascunho.caminho), rascunho.repo ? el('span', { class: 'mono dec-repo' }, `em ${rascunho.repo}`) : null),
       el('pre', { class: 'mono dec-md' }, rascunho.markdown),
-      el('div', { class: 'dec-dlg-acoes' }, copiar),
+      el('div', { class: 'dec-dlg-actions' }, copiar),
       el(
         'div',
-        { class: 'dec-dlg-gravar' },
+        { class: 'dec-dlg-save' },
         el('label', { class: pode ? null : 'dec-off' }, confirmo, el('span', {}, pode ? `Confirmo: gravar ${rascunho.caminho} no repositório.` : `Não dá para gravar: ${rascunho.motivo ?? 'sem motivo informado'}.`)),
         gravar,
       ),

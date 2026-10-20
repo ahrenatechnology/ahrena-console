@@ -33,12 +33,12 @@ export function rotaDosWorkflows(filtro, no) {
 /** As seis KPIs do C14, já escritas: `{ id, rotulo, valor, sub, icone, cor }`. `null` vira "—". */
 export function kpisEscritas(k) {
   return [
-    { id: 'profundidade', rotulo: 'Profundidade', valor: decimal(k.profundidadeMedia), sub: 'níveis de agente', icone: 'subagente', cor: 'acento' },
-    { id: 'subagentes', rotulo: 'Subagentes', valor: decimal(k.subagentesPorSessao), sub: 'por sessão', icone: 'usuarios', cor: 'acento' },
-    { id: 'sucesso', rotulo: 'Sucesso', valor: porcento(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
-    { id: 'fluxo', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${porcento(k.fluxoComum.fracao)} das sessões` : null, icone: 'repetir', cor: 'acento' },
-    { id: 'rodadas', rotulo: 'Rodadas', valor: decimal(k.rodadasPorPr), sub: 'de review por PR', icone: 'atualizar', cor: 'acento' },
-    { id: 'duracao', rotulo: 'Duração', valor: duracao(k.duracaoMediaMs), sub: 'média', icone: 'cronometro', cor: 'espera' },
+    { id: 'depth', rotulo: 'Profundidade', valor: decimal(k.profundidadeMedia), sub: 'níveis de agente', icone: 'subagent', cor: 'accent' },
+    { id: 'subagents', rotulo: 'Subagentes', valor: decimal(k.subagentesPorSessao), sub: 'por sessão', icone: 'people', cor: 'accent' },
+    { id: 'success', rotulo: 'Sucesso', valor: porcento(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
+    { id: 'flow', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${porcento(k.fluxoComum.fracao)} das sessões` : null, icone: 'repeat', cor: 'accent' },
+    { id: 'rounds', rotulo: 'Rodadas', valor: decimal(k.rodadasPorPr), sub: 'de review por PR', icone: 'refresh', cor: 'accent' },
+    { id: 'duration', rotulo: 'Duração', valor: duracao(k.duracaoMediaMs), sub: 'média', icone: 'timer', cor: 'wait' },
   ];
 }
 
@@ -144,8 +144,8 @@ function svg(tag, atributos = {}, ...filhos) {
 }
 
 function carregarCss() {
-  if (document.querySelector('link[data-tela="workflows"]')) return;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-tela': 'workflows' }));
+  if (document.querySelector('link[data-screen="workflows"]')) return;
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-screen': 'workflows' }));
 }
 
 function selo(texto, cor) {
@@ -159,9 +159,9 @@ function kpis(k) {
     ...kpisEscritas(k).map((c) =>
       el(
         'div',
-        { class: `cartao wf-kpi wf-kpi-${c.id}` },
-        el('span', { class: 'wf-kpi-rot' }, c.rotulo),
-        el('span', { class: `wf-kpi-ic wf-cor-${c.cor}` }, icone(c.icone)),
+        { class: `card wf-kpi wf-kpi-${c.id}` },
+        el('span', { class: 'wf-kpi-label' }, c.rotulo),
+        el('span', { class: `wf-kpi-ic wf-color-${c.cor}` }, icone(c.icone)),
         el('span', { class: 'wf-kpi-v mono' }, c.valor),
         el('span', { class: 'wf-kpi-s' }, c.sub ?? ''),
       ),
@@ -170,7 +170,7 @@ function kpis(k) {
 }
 
 function painel(titulo, direita, ...corpo) {
-  return el('section', { class: 'cartao wf-painel' }, el('div', { class: 'wf-ttl' }, ...titulo, el('span', { class: 'wf-ttl-r' }, direita)), ...corpo);
+  return el('section', { class: 'card wf-panel' }, el('div', { class: 'wf-ttl' }, ...titulo, el('span', { class: 'wf-ttl-r' }, direita)), ...corpo);
 }
 
 function chip(texto, extra = '') {
@@ -180,7 +180,7 @@ function chip(texto, extra = '') {
 function linhaDoRun(run, aberto, alternar, ctx) {
   const [rotulo, cor] = ESTADO_DO_RUN[run.estado] ?? ESTADO_DO_RUN.concluida;
   const destino = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
-  const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icone('externo'));
+  const link = el('a', { class: 'wf-run-link', href: `${destino}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icone('external'));
   // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
   link.addEventListener('click', (ev) => {
     if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
@@ -190,14 +190,14 @@ function linhaDoRun(run, aberto, alternar, ctx) {
   });
   const cab = el(
     'div',
-    { class: 'wf-run-cab' },
+    { class: 'wf-run-head' },
     el(
       'button',
-      { type: 'button', class: 'wf-run-abrir', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', aoClicar: alternar },
-      el('span', { class: 'wf-mudo' }, icone(aberto ? 'chevron-baixo' : 'chevron-direita')),
+      { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': aberto ? 'true' : 'false', aoClicar: alternar },
+      el('span', { class: 'wf-mute' }, icone(aberto ? 'chevron-down' : 'chevron-right')),
       el('b', {}, run.nome),
       selo(rotulo, cor),
-      aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' wf-chip-modelo mono') : null,
+      aberto && run.modelo ? chip(nomeDoModelo(run.modelo), ' wf-chip-model mono') : null,
       el('span', { class: 'wf-meta' }, metaDoRun(run)),
     ),
     link,
@@ -207,17 +207,17 @@ function linhaDoRun(run, aberto, alternar, ctx) {
   const fases = run.fases.length
     ? el(
         'div',
-        { class: 'wf-fases' },
-        el('span', { class: 'wf-mudo' }, icone('camadas')),
-        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mudo' }, icone('seta-direita')) : null, chip(f.nome)]),
-        run.volta ? el('span', { class: 'wf-volta' }, run.volta) : null,
+        { class: 'wf-phases' },
+        el('span', { class: 'wf-mute' }, icone('layers')),
+        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icone('arrow-right')) : null, chip(f.nome)]),
+        run.volta ? el('span', { class: 'wf-back' }, run.volta) : null,
       )
     : null;
 
   const tabela = el(
     'table',
-    { class: 'wf-tabela' },
-    el('colgroup', {}, ...['agente', 'fase', 'estado', 'tokens', 'ferramentas', 'duracao'].map((c) => el('col', { class: `wf-col-${c}` }))),
+    { class: 'wf-table' },
+    el('colgroup', {}, ...['agent', 'phase', 'state', 'tokens', 'tools', 'duration'].map((c) => el('col', { class: `wf-col-${c}` }))),
     el('thead', {}, el('tr', {}, el('th', {}, 'Agente'), el('th', {}, 'Fase'), el('th', {}, 'Estado'), el('th', { class: 'wf-num' }, 'Tokens'), el('th', { class: 'wf-num' }, 'Ferramentas'), el('th', { class: 'wf-num' }, 'Duração'))),
     el(
       'tbody',
@@ -227,9 +227,9 @@ function linhaDoRun(run, aberto, alternar, ctx) {
         return el(
           'tr',
           {},
-          el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-tipo' }, `· ${a.tipo}`) : null),
-          el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mudo' }, '—')),
-          el('td', {}, el('span', { class: `wf-pilula b-${c}` }, texto)),
+          el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-type' }, `· ${a.tipo}`) : null),
+          el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mute' }, '—')),
+          el('td', {}, el('span', { class: `wf-pill b-${c}` }, texto)),
           el('td', { class: 'wf-num mono' }, tokens(a.tokens)),
           el('td', { class: 'wf-num mono' }, num(a.ferramentas)),
           el('td', { class: 'wf-num mono' }, duracao(a.duracaoMs)),
@@ -237,24 +237,24 @@ function linhaDoRun(run, aberto, alternar, ctx) {
       }),
     ),
   );
-  return el('div', { class: 'wf-run wf-run-aberto' }, cab, fases, el('div', { class: 'wf-tabela-caixa' }, tabela));
+  return el('div', { class: 'wf-run wf-run-open' }, cab, fases, el('div', { class: 'wf-table-box' }, tabela));
 }
 
 function grafoSvg(grafo, largura, selecionado, escolher) {
   const g = layoutDaOrquestracao(grafo, largura);
   const { largura: W, altura: H } = g.no;
-  const raiz = svg('svg', { class: 'wf-orq', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
-  for (const c of g.colunas) raiz.append(svg('text', { class: 'wf-orq-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
-  for (const a of g.arestas) raiz.append(svg('path', { class: `wf-aresta${a.erro ? ' wf-aresta-erro' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
+  const raiz = svg('svg', { class: 'wf-orch', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
+  for (const c of g.colunas) raiz.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
+  for (const a of g.arestas) raiz.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
   for (const n of g.nos) {
-    const cls = ['wf-no', n.id === 'resultado:concluida' ? 'wf-no-ok' : '', n.id === 'resultado:erro' ? 'wf-no-erro' : '', n.id === selecionado ? 'wf-no-sel' : ''].filter(Boolean).join(' ');
+    const cls = ['wf-node', n.id === 'resultado:concluida' ? 'wf-node-ok' : '', n.id === 'resultado:erro' ? 'wf-node-error' : '', n.id === selecionado ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
     const grupo = svg(
       'g',
-      { class: cls, 'data-no': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selecionado ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selecionado ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
+      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selecionado ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selecionado ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
       svg('title', {}, `${n.rotulo} · ${n.id === selecionado ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
       svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 7 }),
-      svg('text', { class: 'wf-no-rot', x: n.x + 8, y: n.y + 19 }, n.texto),
-      svg('text', { class: 'wf-no-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
+      svg('text', { class: 'wf-node-label', x: n.x + 8, y: n.y + 19 }, n.texto),
+      svg('text', { class: 'wf-node-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
     );
     grupo.addEventListener('click', () => escolher(n.id));
     grupo.addEventListener('keydown', (ev) => {
@@ -303,7 +303,7 @@ export async function montar(area, ctx) {
     ler();
   }
 
-  const caixaDoGrafo = el('div', { class: 'wf-orq-caixa' });
+  const caixaDoGrafo = el('div', { class: 'wf-orch-box' });
   let larguraDoGrafo = 0;
   function desenharGrafo() {
     const largura = Math.floor(caixaDoGrafo.clientWidth);
@@ -336,19 +336,19 @@ export async function montar(area, ctx) {
           linhaDoRun(r, abertos.has(r.id), () => {
             abertos.has(r.id) ? abertos.delete(r.id) : abertos.add(r.id);
             desenhar();
-            [...area.querySelectorAll('.wf-run-abrir')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
+            [...area.querySelectorAll('.wf-run-expand')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
           }, ctx),
         )
-      : [el('p', { class: 'wf-nada' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
+      : [el('p', { class: 'wf-none' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
 
     // O grafo é desenhado depois, na largura que o painel tem na tela (e de novo quando ela muda).
     const grafo = d.grafo.nos.length
       ? caixaDoGrafo
       : el(
           'div',
-          { class: 'wf-nada' },
+          { class: 'wf-none' },
           el('p', {}, 'Nenhuma sessão para desenhar.'),
-          no ? el('button', { type: 'button', class: 'btn contorno', aoClicar: () => escolherNo(no) }, 'Limpar o filtro do nó') : null,
+          no ? el('button', { type: 'button', class: 'btn outline', aoClicar: () => escolherNo(no) }, 'Limpar o filtro do nó') : null,
         );
 
     const partes = [
@@ -365,7 +365,7 @@ export async function montar(area, ctx) {
     area.replaceChildren(...partes.filter(Boolean));
     if (d.grafo.nos.length) desenharGrafo();
     if (foco) {
-      [...area.querySelectorAll('.wf-no')].find((g) => g.getAttribute('data-no') === foco)?.focus();
+      [...area.querySelectorAll('.wf-node')].find((g) => g.getAttribute('data-node') === foco)?.focus();
       foco = null;
     }
   }

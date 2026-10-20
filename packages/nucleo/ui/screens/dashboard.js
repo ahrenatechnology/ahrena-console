@@ -20,13 +20,13 @@ const NA_INBOX = 4;
 export const ROTULO_DO_STATUS = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 const STATUS_DO_SUBAGENTE = { working: 'active', waiting: 'waiting', completed: 'completed', error: 'error' };
 const ICONE_DO_MOTIVO = {
-  permissao: 'permissao',
-  pergunta: 'pergunta',
-  plano: 'plano',
-  decisao: 'decisao',
-  erro: 'erro',
-  'sua-vez': 'sua-vez',
-  interrompida: 'interrompida',
+  permissao: 'permission',
+  pergunta: 'question',
+  plano: 'plan',
+  decisao: 'decision',
+  erro: 'error',
+  'sua-vez': 'your-turn',
+  interrompida: 'interrupted',
   'no-prompt': 'no-prompt',
 };
 
@@ -72,16 +72,16 @@ export function cards(numeros) {
   const { sessoes, agentes, subagentes, eventos, custo: c } = numeros;
   const detalhe = [sessoes.esperando ? `${sessoes.esperando} esperando` : null, sessoes.comErro ? `${sessoes.comErro} com erro` : null].filter(Boolean);
   return [
-    { id: 'sessoes', rotulo: 'Sessões', icone: 'sessoes', cor: 'acento', valor: inteiro.format(sessoes.total), extra: `${sessoes.ativas} ${sessoes.ativas === 1 ? 'ativa' : 'ativas'}`, sub: detalhe.length ? detalhe.join(' · ') : 'nenhuma esperando' },
-    { id: 'agentes', rotulo: 'Agentes ativos', icone: 'bot', cor: 'ativa', valor: inteiro.format(agentes.ativos), sub: emSessoes(agentes.sessoes) },
-    { id: 'subagentes', rotulo: 'Subagentes ativos', icone: 'subagente', cor: 'acento', valor: inteiro.format(subagentes.ativos), sub: emSessoes(subagentes.sessoes) },
-    { id: 'eventos-hoje', rotulo: 'Eventos hoje', icone: 'eventos', cor: 'esperando', valor: quantidade(eventos.hoje), sub: `+${quantidade(eventos.ultimaHora)} na última hora` },
-    { id: 'eventos-total', rotulo: 'Eventos no total', icone: 'atividade', cor: 'apagada', valor: quantidade(eventos.total), sub: 'desde a importação' },
+    { id: 'sessoes', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: inteiro.format(sessoes.total), extra: `${sessoes.ativas} ${sessoes.ativas === 1 ? 'ativa' : 'ativas'}`, sub: detalhe.length ? detalhe.join(' · ') : 'nenhuma esperando' },
+    { id: 'agentes', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: inteiro.format(agentes.ativos), sub: emSessoes(agentes.sessoes) },
+    { id: 'subagentes', rotulo: 'Subagentes ativos', icone: 'subagent', cor: 'accent', valor: inteiro.format(subagentes.ativos), sub: emSessoes(subagentes.sessoes) },
+    { id: 'eventos-hoje', rotulo: 'Eventos hoje', icone: 'events', cor: 'waiting', valor: quantidade(eventos.hoje), sub: `+${quantidade(eventos.ultimaHora)} na última hora` },
+    { id: 'eventos-total', rotulo: 'Eventos no total', icone: 'activity', cor: 'muted', valor: quantidade(eventos.total), sub: 'desde a importação' },
     {
       id: 'custo',
       rotulo: 'Custo',
-      icone: 'custo',
-      cor: 'concluida',
+      icone: 'cost',
+      cor: 'completed',
       valor: custo(c.usd),
       sub: c.usd === null ? `sem preço para ${c.semPreco.join(', ')}` : `estimativa · ${c.dias} dias`,
     },
@@ -118,15 +118,15 @@ const badge = (status) => el('span', { class: `badge b-${status}` }, el('span', 
 
 function chipDoMotivo(c) {
   if (c.motivo === 'erro') return badge('error');
-  return el('span', { class: `mot${c.urgente ? '' : ' leve'}` }, icone(ICONE_DO_MOTIVO[c.motivo] ?? 'sua-vez'), c.motivoCurto);
+  return el('span', { class: `reason${c.urgente ? '' : ' soft'}` }, icone(ICONE_DO_MOTIVO[c.motivo] ?? 'your-turn'), c.motivoCurto);
 }
 
 function cardDeNumero(c) {
   return el(
     'div',
-    { class: 'cartao stat', 'data-card': c.id },
-    el('span', { class: 'rot' }, c.rotulo),
-    el('span', { class: `ic cor-${c.cor}` }, icone(c.icone)),
+    { class: 'card stat', 'data-card': c.id },
+    el('span', { class: 'label' }, c.rotulo),
+    el('span', { class: `ic color-${c.cor}` }, icone(c.icone)),
     el('span', { class: 'v' }, c.valor, c.extra ? el('small', {}, c.extra) : null),
     el('span', { class: 's' }, c.sub),
   );
@@ -137,35 +137,35 @@ function inbox(atencao, agentes) {
   const titulo = el(
     'div',
     { class: 'ttl' },
-    icone('sino'),
-    el('span', { class: total ? 'c-esperando' : 'c-apagada' }, tituloDaInbox(total)),
-    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icone('chevron-direita')),
+    icone('bell'),
+    el('span', { class: total ? 'c-waiting' : 'c-dim' }, tituloDaInbox(total)),
+    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icone('chevron-right')),
   );
-  if (!total) return el('section', { class: 'cartao inbox calma', 'aria-label': 'Precisam de você' }, titulo);
+  if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, titulo);
   const mini = cartoesDaInbox(atencao, agentes).map((c) =>
     el(
       'a',
-      { class: 'cartao mini', href: c.href, 'data-sessao': c.sessao },
-      el('div', { class: 'l1' }, chipDoMotivo(c), el('span', { class: 'idade' }, c.idade)),
+      { class: 'card mini', href: c.href, 'data-session': c.sessao },
+      el('div', { class: 'l1' }, chipDoMotivo(c), el('span', { class: 'age' }, c.idade)),
       el('div', { class: 'n trunc' }, c.nome),
       el('div', { class: 'x trunc' }, c.texto),
-      el('div', { class: 'pe' }, el('span', {}, c.pe), el('b', {}, 'Abrir ›')),
+      el('div', { class: 'foot' }, el('span', {}, c.pe), el('b', {}, 'Abrir ›')),
     ),
   );
-  return el('section', { class: 'cartao inbox', 'aria-label': 'Precisam de você' }, titulo, el('div', { class: 'grade4' }, ...mini));
+  return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, titulo, el('div', { class: 'grid4' }, ...mini));
 }
 
 function arvore(a) {
   return el(
     'ul',
-    { class: 'arvore', id: `subs-${a.sessao}` },
+    { class: 'tree', id: `subs-${a.sessao}` },
     ...a.subagentes.map((s) =>
       el(
         'li',
-        { class: 'cartao filho', 'data-subagente': s.id },
-        el('span', { class: 'av' }, icone('subagente')),
+        { class: 'card child', 'data-subagent': s.id },
+        el('span', { class: 'av' }, icone('subagent')),
         el('div', { class: 'trunc' }, el('b', {}, s.tipo ?? 'Subagente'), s.tarefa ? el('span', { class: 'meta' }, ` · ${s.tarefa}`) : null),
-        el('span', { class: 'idade' }, idade(s.ate ?? s.desde)),
+        el('span', { class: 'age' }, idade(s.ate ?? s.desde)),
         badge(STATUS_DO_SUBAGENTE[s.status] ?? 'active'),
       ),
     ),
@@ -177,12 +177,12 @@ function cardDoAgente(a, abertos, alternar) {
   const aberto = n > 0 && abertos.has(a.sessao);
   const ativos = a.subagentes.filter((s) => s.status === 'working').length;
   const exp = n
-    ? el('button', { type: 'button', class: `exp${aberto ? ' aberto' : ''}`, 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, 'aria-label': aberto ? 'Esconder os subagentes' : 'Mostrar os subagentes', aoClicar: () => alternar(a.sessao) }, icone('chevron-direita'))
-    : el('span', { class: 'exp' }, icone('ponto'));
+    ? el('button', { type: 'button', class: `exp${aberto ? ' open' : ''}`, 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, 'aria-label': aberto ? 'Esconder os subagentes' : 'Mostrar os subagentes', aoClicar: () => alternar(a.sessao) }, icone('chevron-right'))
+    : el('span', { class: 'exp' }, icone('dot'));
   const mensagens = a.mensagens.length ? a.mensagens : ['(sem mensagens)'];
   const card = el(
     'a',
-    { class: `cartao ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.sessao)}`, 'data-sessao': a.sessao },
+    { class: `card ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.sessao)}`, 'data-session': a.sessao },
     el(
       'div',
       { class: 'l1' },
@@ -193,40 +193,40 @@ function cardDoAgente(a, abertos, alternar) {
     el('blockquote', {}, ...mensagens.map((m) => el('span', { class: 'trunc' }, m))),
     el(
       'div',
-      { class: 'rodape' },
-      a.modelo ? el('span', {}, icone('modelo'), nomeDoModelo(a.modelo)) : null,
-      el('span', {}, icone('moedas'), custo(a.custoUsd)),
-      el('span', {}, icone('relogio'), idade(a.ultimaAtividade)),
-      a.tarefa ? el('span', { class: 'trunc tarefa' }, a.tarefa) : null,
+      { class: 'footer' },
+      a.modelo ? el('span', {}, icone('model'), nomeDoModelo(a.modelo)) : null,
+      el('span', {}, icone('coins'), custo(a.custoUsd)),
+      el('span', {}, icone('clock'), idade(a.ultimaAtividade)),
+      a.tarefa ? el('span', { class: 'trunc task' }, a.tarefa) : null,
       el('span', { class: 'id' }, a.sessao.slice(0, 8)),
     ),
   );
   const subs = n
-    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, aoClicar: () => alternar(a.sessao) }, icone('subagente'), plural(n, 'subagente', 'subagentes'), ativos && ativos < n ? ` · ${ativos} ${ativos === 1 ? 'ativo' : 'ativos'}` : null)
+    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(aberto), 'aria-controls': `subs-${a.sessao}`, aoClicar: () => alternar(a.sessao) }, icone('subagent'), plural(n, 'subagente', 'subagentes'), ativos && ativos < n ? ` · ${ativos} ${ativos === 1 ? 'ativo' : 'ativos'}` : null)
     : null;
-  return el('div', { class: 'agente' }, exp, el('div', { class: 'coluna' }, card, subs, aberto ? arvore(a) : null));
+  return el('div', { class: 'agent' }, exp, el('div', { class: 'column' }, card, subs, aberto ? arvore(a) : null));
 }
 
 function agentesAtivos(agentes, abertos, alternar) {
   const titulo = el('div', { class: 'ttl' }, 'Agentes ativos');
-  if (!agentes.length) return el('div', { class: 'coluna' }, titulo, vazio({ icone: 'bot', titulo: 'Nenhum agente ativo', texto: 'Quando uma sessão estiver aberta, o agente dela aparece aqui.' }));
-  return el('div', { class: 'coluna' }, titulo, ...agentes.map((a) => cardDoAgente(a, abertos, alternar)));
+  if (!agentes.length) return el('div', { class: 'column' }, titulo, vazio({ icone: 'bot', titulo: 'Nenhum agente ativo', texto: 'Quando uma sessão estiver aberta, o agente dela aparece aqui.' }));
+  return el('div', { class: 'column' }, titulo, ...agentes.map((a) => cardDoAgente(a, abertos, alternar)));
 }
 
 function atividadeRecente(atividade) {
-  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessions' }, 'Ver tudo', icone('seta-direita')));
-  if (!atividade.length) return el('div', { class: 'coluna' }, titulo, vazio({ icone: 'atividade', titulo: 'Nada ainda', texto: 'Os eventos das sessões aparecem aqui assim que chegam.' }));
+  const titulo = el('div', { class: 'ttl' }, 'Atividade recente', el('a', { class: 'r', href: '/ui/sessions' }, 'Ver tudo', icone('arrow-right')));
+  if (!atividade.length) return el('div', { class: 'column' }, titulo, vazio({ icone: 'activity', titulo: 'Nada ainda', texto: 'Os eventos das sessões aparecem aqui assim que chegam.' }));
   return el(
     'div',
-    { class: 'coluna' },
+    { class: 'column' },
     titulo,
     el(
       'div',
-      { class: 'cartao linhas' },
+      { class: 'card rows' },
       ...atividade.map((l) =>
         el(
           'a',
-          { class: 'linha', href: `/ui/sessions/${encodeURIComponent(l.sessao)}`, 'data-sessao': l.sessao },
+          { class: 'row', href: `/ui/sessions/${encodeURIComponent(l.sessao)}`, 'data-session': l.sessao },
           badge(l.status),
           el('span', { class: 'trunc' }, l.texto),
           l.projeto ? el('span', { class: 'o mono trunc' }, l.projeto) : null,
@@ -246,7 +246,7 @@ function usarEstilo() {
 
 export async function montar(area, ctx) {
   usarEstilo();
-  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar');
+  const atualizar = el('button', { type: 'button', class: 'btn', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar');
   const cab = cabecalho({ icone: 'dashboard', titulo: 'Dashboard', sub: 'O agora das suas sessões', acoes: [atualizar] });
   area.replaceChildren(cab, carregando({ rotulo: 'Lendo as sessões' }));
 
@@ -264,7 +264,7 @@ export async function montar(area, ctx) {
     const partes = [cab, el('div', { class: 'stats' }, ...cards(dashboard.numeros).map(cardDeNumero))];
     if (atencao.ok) partes.push(inbox(atencao.valor, dashboard.agentes));
     else partes.push(faixaDeErro({ titulo: 'Não deu para ler quem precisa de você.', texto: atencao.erro.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => desenhar() } }));
-    partes.push(el('div', { class: 'duas' }, agentesAtivos(dashboard.agentes, abertos, alternar), atividadeRecente(dashboard.atividade)));
+    partes.push(el('div', { class: 'two' }, agentesAtivos(dashboard.agentes, abertos, alternar), atividadeRecente(dashboard.atividade)));
     area.replaceChildren(...partes);
   }
 

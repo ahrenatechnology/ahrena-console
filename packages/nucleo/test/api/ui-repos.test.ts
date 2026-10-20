@@ -364,7 +364,7 @@ describe('repos na /ui: o que a tela mostra', () => {
 // telas desmonta a outra. Toda classe própria começa com `repo-`; as comuns são as da moldura e os
 // selos de status.
 describe('repos na /ui: as classes', () => {
-  const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+  const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
   const classesDoCss = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
   const daMoldura = classesDoCss('shell.css');
   const permitida = (c: string) => c.startsWith('repo-') || SELOS.has(c) || daMoldura.has(c);

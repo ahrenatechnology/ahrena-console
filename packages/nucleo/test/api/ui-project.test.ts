@@ -124,7 +124,7 @@ async function montarTela({
     navegar: () => {},
   };
   const limpar = await montar(area, ctx);
-  const raia = (nome: string) => area.querySelectorAll('section.pj-col').find((s) => texto(s.querySelector('.nome')) === nome)!;
+  const raia = (nome: string) => area.querySelectorAll('section.prj-col').find((s) => texto(s.querySelector('.name')) === nome)!;
   return {
     area,
     leituras,
@@ -133,7 +133,7 @@ async function montarTela({
     aoReiniciar,
     limpar: () => (sair.abort(), limpar()),
     raia,
-    nomesNaRaia: (nome) => raia(nome).querySelectorAll('article.pj-card').map((c) => c.getAttribute('data-item')!),
+    nomesNaRaia: (nome) => raia(nome).querySelectorAll('article.prj-card').map((c) => c.getAttribute('data-item')!),
   };
 }
 
@@ -159,27 +159,27 @@ describe('Kanban do projeto (C11)', () => {
     tela = await montarTela({ ler: async () => quadroFalso() });
     const { area } = tela;
     assert.deepEqual(tela.leituras, ['/api/project']);
-    const cab = area.querySelector('header.cc-cab')!;
+    const cab = area.querySelector('header.cc-head')!;
     assert.match(texto(cab), /Kanban do projeto Ao vivo/);
     assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · por Status · arraste para mudar');
-    assert.equal(texto(cab.querySelector('.pj-marco')), 'Marco: Todos os marcos M1 · Local M2 · Artefato');
+    assert.equal(texto(cab.querySelector('.prj-milestone')), 'Marco: Todos os marcos M1 · Local M2 · Artefato');
     assert.ok(cab.querySelectorAll('button').some((b) => texto(b) === 'Atualizar'));
 
-    const cabecas = area.querySelectorAll('section.pj-col .cab').map(texto);
+    const cabecas = area.querySelectorAll('section.prj-col .head').map(texto);
     assert.deepEqual(cabecas, ['Sem status 1', 'Backlog 1', 'Ready 1', 'In Progress 1', 'In Review 2', 'Done 1']);
 
     const c = (id: string) => area.querySelector(`[data-item="${id}"]`)!;
-    assert.equal(texto(c('I-42').querySelector('.tipo')), 'História #42');
-    assert.ok(c('I-42').querySelector('.pj-tipo')!.classList.contains('historia'));
+    assert.equal(texto(c('I-42').querySelector('.type')), 'História #42');
+    assert.ok(c('I-42').querySelector('.prj-type')!.classList.contains('story'));
     assert.equal(texto(c('I-42').querySelector('.tt')), 'Kanban de sessões');
-    assert.equal(texto(c('I-42').querySelector('.pe')), '2/4 #78 CI …');
-    assert.equal(texto(c('I-80').querySelector('.pj-tipo')), 'Tarefa técnica');
-    assert.equal(texto(c('I-92').querySelector('.pe')), '#93 CI ✓ review');
-    assert.equal(texto(c('I-64').querySelector('.pe')), '#69 CI ✕ ajustes');
-    assert.ok(c('I-64').querySelector('.pj-tipo')!.classList.contains('bug'));
-    assert.equal(texto(c('I-40').querySelector('.pe')), '#67 CI ✓ aprovado');
-    assert.equal(texto(c('I-1').querySelector('.pj-tipo')), 'Epic', 'tipo desconhecido sai cru');
-    assert.equal(c('I-1').querySelector('.pe'), null, 'sem PR nem sub-issues, sem pé');
+    assert.equal(texto(c('I-42').querySelector('.foot')), '2/4 #78 CI …');
+    assert.equal(texto(c('I-80').querySelector('.prj-type')), 'Tarefa técnica');
+    assert.equal(texto(c('I-92').querySelector('.foot')), '#93 CI ✓ review');
+    assert.equal(texto(c('I-64').querySelector('.foot')), '#69 CI ✕ ajustes');
+    assert.ok(c('I-64').querySelector('.prj-type')!.classList.contains('bug'));
+    assert.equal(texto(c('I-40').querySelector('.foot')), '#67 CI ✓ aprovado');
+    assert.equal(texto(c('I-1').querySelector('.prj-type')), 'Epic', 'tipo desconhecido sai cru');
+    assert.equal(c('I-1').querySelector('.foot'), null, 'sem PR nem sub-issues, sem pé');
     assert.equal(c('I-42').getAttribute('draggable'), 'true');
   });
 
@@ -193,14 +193,14 @@ describe('Kanban do projeto (C11)', () => {
 
   test('o filtro Marco mostra só os cards do marco, e "Todos os marcos" volta tudo', async () => {
     tela = await montarTela({ ler: async () => quadroFalso() });
-    const sel = tela.area.querySelector('select.pj-sel')!;
+    const sel = tela.area.querySelector('select.prj-sel')!;
     sel.value = 'M2 · Artefato';
     sel.dispatchEvent({ type: 'change' });
-    assert.deepEqual(tela.area.querySelectorAll('article.pj-card').map((c) => c.getAttribute('data-item')), ['I-80']);
+    assert.deepEqual(tela.area.querySelectorAll('article.prj-card').map((c) => c.getAttribute('data-item')), ['I-80']);
     assert.equal(texto(tela.raia('In Review').querySelector('.n')), '0');
     sel.value = '';
     sel.dispatchEvent({ type: 'change' });
-    assert.equal(tela.area.querySelectorAll('article.pj-card').length, 7);
+    assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
   });
 
   test('Atualizar lê com ?refresh=1; o "Ao vivo" relê sem forçar', async () => {
@@ -233,7 +233,7 @@ describe('Kanban do projeto (C11)', () => {
     soltar();
     await esperar();
     assert.deepEqual(tela.nomesNaRaia('In Review'), ['I-92', 'I-64', 'I-80']);
-    const toast = tela.area.querySelector('.pj-toast')!;
+    const toast = tela.area.querySelector('.prj-toast')!;
     assert.equal(texto(toast), '#80 movido para In Review no GitHub Desfazer');
 
     toast.querySelector('button')!.click();
@@ -242,7 +242,7 @@ describe('Kanban do projeto (C11)', () => {
     await esperar();
     assert.deepEqual(tela.escritas.at(-1), { rota: '/api/project/move', corpo: { itemId: 'I-80', optionId: 'bk' } });
     assert.deepEqual(tela.nomesNaRaia('Backlog'), ['I-80']);
-    assert.equal(texto(tela.area.querySelector('.pj-toast')), '#80 movido para Backlog no GitHub Desfazer');
+    assert.equal(texto(tela.area.querySelector('.prj-toast')), '#80 movido para Backlog no GitHub Desfazer');
   });
 
   test('o GitHub recusa: o card volta para a raia de antes e a faixa diz por quê', async () => {
@@ -256,9 +256,9 @@ describe('Kanban do projeto (C11)', () => {
     await esperar();
     assert.deepEqual(tela.nomesNaRaia('In Review'), ['I-92', 'I-64']);
     assert.deepEqual(tela.nomesNaRaia('Done'), ['I-40']);
-    const faixa = tela.area.querySelector('.faixa-erro')!;
+    const faixa = tela.area.querySelector('.error-band')!;
     assert.match(texto(faixa), /O GitHub não aceitou mover #92\. O GitHub recusou a mudança\. O card voltou para In Review\./);
-    assert.equal(tela.area.querySelector('.pj-toast'), null);
+    assert.equal(tela.area.querySelector('.prj-toast'), null);
   });
 
   test('a recusa por falta de escopo mostra o comando do gh', async () => {
@@ -271,7 +271,7 @@ describe('Kanban do projeto (C11)', () => {
     arrastar(tela, 'I-35', 'In Progress');
     await esperar();
     assert.deepEqual(tela.nomesNaRaia('Ready'), ['I-35']);
-    assert.equal(texto(tela.area.querySelector('.faixa-erro code')), 'gh auth refresh -s project');
+    assert.equal(texto(tela.area.querySelector('.error-band code')), 'gh auth refresh -s project');
   });
 
   test('a raia "Sem status" não aceita card, e soltar na mesma raia não escreve', async () => {
@@ -315,7 +315,7 @@ describe('Kanban do projeto (C11)', () => {
         throw erroDoNucleo(ErroDeLeitura, 401, { error: 'O token do gh não tem o escopo project.', codigo: 'sem-escopo', comando: 'gh auth refresh -s project' });
       },
     });
-    const caixa = tela.area.querySelector('section.estado')!;
+    const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), 'alert');
     assert.match(texto(caixa), /Falta o escopo project no gh/);
     assert.equal(texto(caixa.querySelector('code')), 'gh auth refresh -s project');
@@ -328,7 +328,7 @@ describe('Kanban do projeto (C11)', () => {
         throw erroDoNucleo(ErroDeLeitura, 503, { error: 'Sem GitHub.', codigo: 'desligado' });
       },
     });
-    const caixa = tela.area.querySelector('section.estado')!;
+    const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
     assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--sem-github/);
   });
@@ -339,7 +339,7 @@ describe('Kanban do projeto (C11)', () => {
         throw erroDoNucleo(ErroDeLeitura, 503, { error: 'Nenhum Project.', codigo: 'sem-projeto' });
       },
     });
-    const caixa = tela.area.querySelector('section.estado')!;
+    const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
     assert.match(texto(caixa), /Escolha o GitHub Project/);
     assert.equal(texto(caixa.querySelector('code')!), 'AHRENA_CONSOLE_PROJECT=dono/número');
@@ -353,16 +353,16 @@ describe('Kanban do projeto (C11)', () => {
         return quadroFalso();
       },
     });
-    assert.match(texto(tela.area.querySelector('section.estado')), /GitHub indisponível O GitHub não respondeu\./);
-    tela.area.querySelector('section.estado button')!.click();
+    assert.match(texto(tela.area.querySelector('section.state')), /GitHub indisponível O GitHub não respondeu\./);
+    tela.area.querySelector('section.state button')!.click();
     await esperar();
-    assert.equal(tela.area.querySelectorAll('section.pj-col').length, 6);
+    assert.equal(tela.area.querySelectorAll('section.prj-col').length, 6);
   });
 
   test('desatualizado: o quadro fica na tela com a faixa e o motivo', async () => {
     tela = await montarTela({ ler: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'O GitHub limitou as consultas.' }) });
-    assert.equal(tela.area.querySelectorAll('article.pj-card').length, 7);
-    assert.match(texto(tela.area.querySelector('.faixa-erro')), /GitHub indisponível\. Mostrando o quadro em cache, de .*\. O GitHub limitou as consultas\./);
+    assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
+    assert.match(texto(tela.area.querySelector('.error-band')), /GitHub indisponível\. Mostrando o quadro em cache, de .*\. O GitHub limitou as consultas\./);
   });
 
   test('releitura que falha com o quadro na tela vira faixa, sem apagar o quadro', async () => {
@@ -375,8 +375,8 @@ describe('Kanban do projeto (C11)', () => {
     });
     for (const f of tela.aoReiniciar) f();
     await esperar();
-    assert.equal(tela.area.querySelectorAll('article.pj-card').length, 7);
-    assert.match(texto(tela.area.querySelector('.faixa-erro')), /Não deu para reler o quadro\./);
+    assert.equal(tela.area.querySelectorAll('article.prj-card').length, 7);
+    assert.match(texto(tela.area.querySelector('.error-band')), /Não deu para reler o quadro\./);
   });
 
   test('uma leitura em voo antes do movimento não desfaz o card na tela; relê depois', async () => {
@@ -471,18 +471,18 @@ describe('Kanban do projeto (C11)', () => {
 
   test('o foco fica no card numa releitura, e a faixa de aviso não é refeita sem mudar', async () => {
     tela = await montarTela({ ler: async () => ({ ...quadroFalso(), desatualizado: true, motivo: 'Limitado.' }) });
-    const faixa = tela.area.querySelector('.faixa-erro');
+    const faixa = tela.area.querySelector('.error-band');
     tela.area.querySelector('[data-item="I-92"]')!.focus();
     for (const f of tela.aoReiniciar) f();
     await esperar();
-    assert.equal(tela.area.querySelector('.faixa-erro'), faixa, 'o mesmo nó: o alerta não é anunciado de novo');
+    assert.equal(tela.area.querySelector('.error-band'), faixa, 'o mesmo nó: o alerta não é anunciado de novo');
     assert.equal(documentoFalso.activeElement?.getAttribute('data-item'), 'I-92');
     assert.notEqual(documentoFalso.activeElement, null);
   });
 
   test('tipo com nome de Object.prototype não derruba o card', () => {
-    assert.deepEqual(tipoDoCard({ tipoDaIssue: 'Constructor' }), { rotulo: 'Constructor', classe: 'outro' });
-    assert.deepEqual(tipoDoCard({ tipoDaIssue: '__proto__' }), { rotulo: '__proto__', classe: 'outro' });
+    assert.deepEqual(tipoDoCard({ tipoDaIssue: 'Constructor' }), { rotulo: 'Constructor', classe: 'other' });
+    assert.deepEqual(tipoDoCard({ tipoDaIssue: '__proto__' }), { rotulo: '__proto__', classe: 'other' });
   });
 
   test('sair da tela cancela a releitura do "Ao vivo" que estava marcada', async () => {
@@ -506,18 +506,18 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   // O CSS de cada tela fica na página depois que ela abre: uma classe de nome igual em duas telas quebra a outra.
-  test('o CSS da tela fica em project.css, que a tela carrega, com as classes próprias em pj-', () => {
+  test('o CSS da tela fica em project.css, que a tela carrega, com as classes próprias em prj-', () => {
     const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const css = semComentario('project.css');
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(|https?:\/\//i);
-    assert.doesNotMatch(semComentario('shell.css'), /\.pj-/, 'nada da tela na moldura');
+    assert.doesNotMatch(semComentario('shell.css'), /\.prj-/, 'nada da tela na moldura');
     assert.match(readFileSync(`${PASTA_DA_UI}screens/project.js`, 'utf8'), /'\/ui\/project\.css'/);
-    // Toda regra começa por uma classe pj-: o resto (.cab, .tipo, .pe…) só vale dentro dela.
+    // Toda regra começa por uma classe prj-: o resto (.head, .type, .foot…) só vale dentro dela.
     for (const regra of css.split('}').map((r) => r.split('{')[0]!.trim()).filter((r) => r && !r.startsWith('@'))) {
-      for (const seletor of regra.split(',')) assert.match(seletor.trim(), /^\.pj-/, seletor);
+      for (const seletor of regra.split(',')) assert.match(seletor.trim(), /^\.prj-/, seletor);
     }
     const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && a !== 'project.css');
-    for (const outra of outras) assert.doesNotMatch(semComentario(outra), /\.pj-/, outra);
+    for (const outra of outras) assert.doesNotMatch(semComentario(outra), /\.prj-/, outra);
   });
 });
 

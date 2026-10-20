@@ -70,7 +70,7 @@ const STATUS = { active: 'Ativa', working: 'Ativa', waiting: 'Esperando você', 
 const COR = { active: 'active', working: 'active', waiting: 'waiting', error: 'error', completed: 'completed', abandoned: 'abandoned' };
 
 function pilulaDeStatus(status, rotulo = STATUS[status] ?? status) {
-  return el('span', { class: `det-status det-s-${COR[status] ?? 'abandoned'}` }, rotulo);
+  return el('span', { class: `sd-status sd-s-${COR[status] ?? 'abandoned'}` }, rotulo);
 }
 
 /** O motivo da espera, como no A5: "Pede permissão", "Pergunta", "Sua vez"… */
@@ -84,25 +84,25 @@ function motivoDe(sessao) {
 /** Texto com `código` entre crases: cada pedaço vira nó de texto ou `<code>`, nunca HTML. */
 function comCodigo(texto) {
   const partes = String(texto ?? '').split(/`([^`\n]+)`/);
-  return partes.map((p, i) => (i % 2 ? el('code', { class: 'det-code' }, p) : p));
+  return partes.map((p, i) => (i % 2 ? el('code', { class: 'sd-code' }, p) : p));
 }
 
-const ICONE_DA_FERRAMENTA = { Bash: 'terminal', Edit: 'editar', Write: 'editar', MultiEdit: 'editar', Read: 'arquivo', Agent: 'robo', Task: 'robo', Grep: 'busca', Glob: 'busca', TaskUpdate: 'tarefas', TaskCreate: 'tarefas', TodoWrite: 'tarefas' };
+const ICONE_DA_FERRAMENTA = { Bash: 'terminal', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', Read: 'file', Agent: 'robot', Task: 'robot', Grep: 'search', Glob: 'search', TaskUpdate: 'tasks', TaskCreate: 'tasks', TodoWrite: 'tasks' };
 
 function botaoCopiar(texto, rotulo) {
-  const b = el('button', { type: 'button', class: 'det-copiar', title: `Copiar ${rotulo}`, 'aria-label': `Copiar ${rotulo}` }, icone('copiar'));
+  const b = el('button', { type: 'button', class: 'sd-copy', title: `Copiar ${rotulo}`, 'aria-label': `Copiar ${rotulo}` }, icone('copy'));
   b.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(texto);
-      b.classList.add('det-copiado');
-      setTimeout(() => b.classList.remove('det-copiado'), 1200);
+      b.classList.add('sd-copied');
+      setTimeout(() => b.classList.remove('sd-copied'), 1200);
     } catch {}
   });
   return b;
 }
 
 function pilula(icon, ...filhos) {
-  return el('span', { class: 'det-pilula mono' }, icon ? icone(icon) : null, ...filhos);
+  return el('span', { class: 'sd-pill mono' }, icon ? icone(icon) : null, ...filhos);
 }
 
 // ---------- A tela ----------
@@ -114,27 +114,27 @@ function pilula(icon, ...filhos) {
 // - `rotular(texto)` põe o "(…)" ao lado do nome da aba; `null` tira.
 // A aba carrega o próprio CSS, se tiver.
 const ABAS = [
-  { id: 'agents', rotulo: 'Agentes', icone: 'robo', criar: abaAgentes },
-  { id: 'conversation', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
-  { id: 'timeline', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
-  { id: 'workflow', rotulo: 'Workflow', icone: 'grafo', criar: abaWorkflow },
-  { id: 'decisions', rotulo: 'Decisões', icone: 'decisao', criar: abaDecisoes },
+  { id: 'agents', rotulo: 'Agentes', icone: 'robot', criar: abaAgentes },
+  { id: 'conversation', rotulo: 'Conversa', icone: 'conversation', criar: abaConversa },
+  { id: 'timeline', rotulo: 'Linha do tempo', icone: 'list', criar: abaTempo },
+  { id: 'workflow', rotulo: 'Workflow', icone: 'graph', criar: abaWorkflow },
+  { id: 'decisions', rotulo: 'Decisões', icone: 'decision', criar: abaDecisoes },
 ];
 
 let cssCarregado = false;
 function carregarCss() {
-  if (cssCarregado || document.querySelector('link[data-tela="detalhe"]')) return;
+  if (cssCarregado || document.querySelector('link[data-screen="session-detail"]')) return;
   cssCarregado = true;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail.css', 'data-tela': 'detalhe' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail.css', 'data-screen': 'session-detail' }));
 }
 
 export async function montar(area, ctx) {
   carregarCss();
   const id = ctx.params.id;
   const base = `/api/sessions/${encodeURIComponent(id)}`;
-  const topo = el('div', { class: 'det-topo' });
-  const abas = el('nav', { class: 'det-abas', role: 'tablist', 'aria-label': 'Abas da sessão' });
-  const corpo = el('div', { class: 'det-corpo', role: 'tabpanel' });
+  const topo = el('div', { class: 'sd-top' });
+  const abas = el('nav', { class: 'sd-tabs', role: 'tablist', 'aria-label': 'Abas da sessão' });
+  const corpo = el('div', { class: 'sd-body', role: 'tabpanel' });
   area.replaceChildren(carregando({ rotulo: 'Carregando a sessão' }));
 
   let cabeca = null;
@@ -151,7 +151,7 @@ export async function montar(area, ctx) {
         const padrao = { agents: cabeca?.contagens.agentes, timeline: cabeca ? num(cabeca.contagens.eventos) : null }[a.id];
         const rotulo = rotulos[a.id] ?? padrao;
         const sufixo = rotulo === undefined || rotulo === null ? '' : ` (${rotulo})`;
-        const b = el('button', { type: 'button', role: 'tab', class: `det-aba${a.id === aba ? ' on' : ''}`, 'aria-selected': a.id === aba ? 'true' : 'false', 'data-aba': a.id }, icone(a.icone), `${a.rotulo}${sufixo}`);
+        const b = el('button', { type: 'button', role: 'tab', class: `sd-tab${a.id === aba ? ' on' : ''}`, 'aria-selected': a.id === aba ? 'true' : 'false', 'data-tab': a.id }, icone(a.icone), `${a.rotulo}${sufixo}`);
         b.addEventListener('click', () => trocar(a.id));
         return b;
       }),
@@ -180,11 +180,11 @@ export async function montar(area, ctx) {
       if (!cabeca) {
         area.replaceChildren(
           e.status === 404
-            ? vazio({ titulo: 'Sessão não encontrada', texto: `O núcleo não conhece a sessão ${id}.`, acao: { rotulo: 'Voltar para Sessões', icone: 'voltar', aoClicar: () => ctx.navegar('/ui/sessions') } })
+            ? vazio({ titulo: 'Sessão não encontrada', texto: `O núcleo não conhece a sessão ${id}.`, acao: { rotulo: 'Voltar para Sessões', icone: 'back', aoClicar: () => ctx.navegar('/ui/sessions') } })
             : erro({ texto: e.message, tentar: () => primeira() }),
         );
       } else {
-        topo.querySelector('.faixa-erro')?.remove();
+        topo.querySelector('.error-band')?.remove();
         topo.append(faixaDeErro({ titulo: 'Não deu para atualizar.', texto: e.message, acao: { rotulo: 'Tentar de novo', aoClicar: atualizarTudo } }));
       }
       return false;
@@ -229,23 +229,23 @@ function desenharTopo(c, atualizar) {
   const fim = s.status === 'active' || s.status === 'waiting' ? agora : Date.parse(c.encerradaEm ?? s.desde);
   const linha1 = el(
     'div',
-    { class: 'det-linha' },
-    el('a', { class: 'det-voltar', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icone('voltar')),
+    { class: 'sd-row' },
+    el('a', { class: 'sd-back', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icone('back')),
     el('h1', {}, s.titulo),
     pilulaDeStatus(s.status),
-    motivo && s.status === 'waiting' ? el('span', { class: `det-motivo${s.urgente ? ' det-urgente' : ''}` }, s.faixa?.tipo === 'permissao' ? icone('escudo') : null, motivo) : null,
-    el('button', { type: 'button', class: 'det-atualizar', title: 'Atualizar', 'aria-label': 'Atualizar', aoClicar: atualizar }, icone('atualizar')),
+    motivo && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgente ? ' sd-urgent' : ''}` }, s.faixa?.tipo === 'permissao' ? icone('shield') : null, motivo) : null,
+    el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', aoClicar: atualizar }, icone('refresh')),
   );
   const pilulas = el(
     'div',
-    { class: 'det-pilulas' },
+    { class: 'sd-pills' },
     pilula(null, s.id.slice(0, 12), botaoCopiar(s.id, 'o id da sessão')),
-    s.modelo ? pilula('porta', nomeDoModelo(s.modelo)) : null,
-    pilula('relogio', `${quando(s.iniciadaEm)} (${duracao(fim - Date.parse(s.iniciadaEm))})`),
-    c.custo ? el('span', { class: 'det-pilula mono det-custo', title: 'Estimativa' }, usd(c.custo.usd)) : null,
+    s.modelo ? pilula('port', nomeDoModelo(s.modelo)) : null,
+    pilula('clock', `${quando(s.iniciadaEm)} (${duracao(fim - Date.parse(s.iniciadaEm))})`),
+    c.custo ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.custo.usd)) : null,
     c.branch ? pilula('branch', c.branch) : null,
   );
-  const pasta = s.cwd ? el('div', { class: 'det-pasta mono' }, icone('pasta'), el('span', {}, s.cwd), botaoCopiar(s.cwd, 'a pasta')) : null;
+  const pasta = s.cwd ? el('div', { class: 'sd-folder mono' }, icone('folder'), el('span', {}, s.cwd), botaoCopiar(s.cwd, 'a pasta')) : null;
   return [linha1, pilulas, pasta, s.faixa ? faixa(c) : null].filter(Boolean);
 }
 
@@ -253,15 +253,18 @@ function desenharTopo(c, atualizar) {
 function comComando(texto, comando) {
   const i = comando ? texto.indexOf(comando) : -1;
   if (i < 0) return comCodigo(texto);
-  return [texto.slice(0, i), el('code', { class: 'det-code' }, comando), texto.slice(i + comando.length)];
+  return [texto.slice(0, i), el('code', { class: 'sd-code' }, comando), texto.slice(i + comando.length)];
 }
 
+// The class of each band type and tool state (the API value stays as it comes).
+const BAND_CLASS = { permissao: 'permission', pergunta: 'question', erro: 'error' };
+const TOOL_STATE_CLASS = { ok: 'ok', erro: 'error', permissao: 'permission', rodando: 'running' };
 const TITULO_DA_FAIXA = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
 
 function faixa(c) {
   const f = c.sessao.faixa;
-  const aviso = el('span', { class: 'det-aviso', role: 'status' });
-  const botao = el('button', { type: 'button', class: 'btn contorno', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icone('externo'));
+  const aviso = el('span', { class: 'sd-notice', role: 'status' });
+  const botao = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icone('external'));
   botao.addEventListener('click', async () => {
     aviso.textContent = '';
     try {
@@ -274,8 +277,8 @@ function faixa(c) {
   });
   return el(
     'section',
-    { class: `det-faixa det-t-${f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
-    icone(f.tipo === 'erro' ? 'erro' : 'escudo'),
+    { class: `sd-band sd-t-${BAND_CLASS[f.tipo] ?? f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
+    icone(f.tipo === 'erro' ? 'error' : 'shield'),
     el('p', {}, el('b', {}, TITULO_DA_FAIXA[f.tipo] ?? ''), ' ', ...comComando(f.texto, c.comando), `. Há ${ha(f.desde).replace('agora', 'menos de 1 min')}.`, aviso),
     botao,
   );
@@ -305,64 +308,64 @@ function abaAgentes(ctx, base) {
 }
 
 function numero(icon, rotulo, valor, detalhe) {
-  return el('div', { class: 'cartao det-numero' }, el('div', { class: 'olhinho' }, icone(icon), rotulo), el('div', { class: 'det-valor' }, el('b', { class: 'mono' }, valor), detalhe ? el('small', {}, detalhe) : null));
+  return el('div', { class: 'card sd-number' }, el('div', { class: 'eyebrow' }, icone(icon), rotulo), el('div', { class: 'sd-value' }, el('b', { class: 'mono' }, valor), detalhe ? el('small', {}, detalhe) : null));
 }
 
 function agentes(a) {
   const n = a.numeros;
   const numeros = el(
     'div',
-    { class: 'det-numeros' },
-    numero('raio', 'Eventos', num(n.eventos), `${num(n.porMinuto)}/min`),
-    numero('chave', 'Ferramentas', num(n.ferramentas), `${num(n.ferramentasUnicas)} únicas`),
-    numero('subagente', 'Subagentes', num(n.subagentes), '+1 principal'),
-    numero('camadas', 'Compactações', num(n.compactacoes)),
-    numero('alerta', 'Erros', num(n.erros)),
-    numero('cronometro', 'Duração', `${num(n.duracaoMin)} min`, n.rodando ? 'rodando' : null),
+    { class: 'sd-numbers' },
+    numero('bolt', 'Eventos', num(n.eventos), `${num(n.porMinuto)}/min`),
+    numero('key', 'Ferramentas', num(n.ferramentas), `${num(n.ferramentasUnicas)} únicas`),
+    numero('subagent', 'Subagentes', num(n.subagentes), '+1 principal'),
+    numero('layers', 'Compactações', num(n.compactacoes)),
+    numero('alert', 'Erros', num(n.erros)),
+    numero('timer', 'Duração', `${num(n.duracaoMin)} min`, n.rodando ? 'rodando' : null),
   );
 
   const maior = Math.max(1, ...a.ferramentas.map((f) => f.n));
   const ferramentas = el(
     'section',
-    { class: 'cartao det-bloco' },
-    el('header', {}, el('div', { class: 'olhinho' }, icone('chave'), 'Ferramentas mais usadas'), el('small', {}, `${num(n.ferramentasUnicas)} no total`)),
+    { class: 'card sd-block' },
+    el('header', {}, el('div', { class: 'eyebrow' }, icone('key'), 'Ferramentas mais usadas'), el('small', {}, `${num(n.ferramentasUnicas)} no total`)),
     a.ferramentas.length
       ? el(
           'ul',
-          { class: 'det-barras' },
+          { class: 'sd-bars' },
           ...a.ferramentas.map((f) => {
-            const barra = el('span', { class: 'det-cheia' });
+            const barra = el('span', { class: 'sd-full' });
             barra.style.setProperty('--w', `${(f.n / maior) * 100}%`);
-            return el('li', {}, el('span', { class: 'det-ico' }, icone(ICONE_DA_FERRAMENTA[f.nome] ?? 'chave')), el('span', { class: 'mono det-nome' }, f.nome), el('span', { class: 'det-trilho' }, barra), el('span', { class: 'mono det-n' }, num(f.n)));
+            return el('li', {}, el('span', { class: 'sd-ico' }, icone(ICONE_DA_FERRAMENTA[f.nome] ?? 'key')), el('span', { class: 'mono sd-name' }, f.nome), el('span', { class: 'sd-rail' }, barra), el('span', { class: 'mono sd-n' }, num(f.n)));
           }),
         )
-      : el('p', { class: 'det-nada' }, 'Nenhuma ferramenta ainda.'),
+      : el('p', { class: 'sd-none' }, 'Nenhuma ferramenta ainda.'),
   );
 
   const t = a.tarefas;
   const tarefas = el(
     'section',
-    { class: 'cartao det-bloco' },
-    el('header', {}, el('div', { class: 'olhinho' }, icone('tarefas'), 'Progresso das tarefas')),
-    t && t.total ? progresso(t) : el('p', { class: 'det-nada' }, 'Sem plano nesta sessão.'),
+    { class: 'card sd-block' },
+    el('header', {}, el('div', { class: 'eyebrow' }, icone('tasks'), 'Progresso das tarefas')),
+    t && t.total ? progresso(t) : el('p', { class: 'sd-none' }, 'Sem plano nesta sessão.'),
   );
 
   const k = a.tokens;
   const fluxo = el(
     'section',
-    { class: 'cartao det-bloco' },
-    el('header', {}, el('div', { class: 'olhinho' }, icone('moedas'), 'Fluxo de tokens'), k ? el('small', {}, `${tokens(k.total)} no total`) : null),
-    k && k.total ? fluxoDeTokens(k) : el('p', { class: 'det-nada' }, 'Nenhum uso medido ainda.'),
+    { class: 'card sd-block' },
+    el('header', {}, el('div', { class: 'eyebrow' }, icone('coins'), 'Fluxo de tokens'), k ? el('small', {}, `${tokens(k.total)} no total`) : null),
+    k && k.total ? fluxoDeTokens(k) : el('p', { class: 'sd-none' }, 'Nenhum uso medido ainda.'),
   );
 
   const arvore = el(
     'section',
-    { class: 'det-arvore' },
-    el('div', { class: 'olhinho' }, icone('robo'), `Agentes · ${a.agentes.length}`),
+    { class: 'sd-tree' },
+    el('div', { class: 'eyebrow' }, icone('robot'), `Agentes · ${a.agentes.length}`),
     ...a.agentes.map((g) => no(g)),
   );
 
-  return [numeros, el('div', { class: 'det-duas' }, ferramentas, tarefas), fluxo, arvore];
+  return [numeros, el('div', { class: 'sd-two' }, ferramentas, tarefas), fluxo, arvore];
 }
 
 function progresso(t) {
@@ -371,9 +374,9 @@ function progresso(t) {
   const volta = 2 * Math.PI * r;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 64 64');
-  svg.setAttribute('class', 'det-anel');
+  svg.setAttribute('class', 'sd-ring');
   svg.setAttribute('aria-hidden', 'true');
-  for (const [cls, dash] of [['det-fundo', `${volta} ${volta}`], ['det-frente', `${(volta * pct) / 100} ${volta}`]]) {
+  for (const [cls, dash] of [['sd-bg', `${volta} ${volta}`], ['sd-front', `${(volta * pct) / 100} ${volta}`]]) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     for (const [k, v] of Object.entries({ cx: 32, cy: 32, r, class: cls, 'stroke-dasharray': dash, transform: 'rotate(-90 32 32)' })) c.setAttribute(k, String(v));
     svg.append(c);
@@ -385,20 +388,20 @@ function progresso(t) {
   const resto = t.passos.length - passos.length;
   return el(
     'div',
-    { class: 'det-tarefas' },
-    el('div', { class: 'det-anel-caixa' }, svg, el('b', { class: 'det-pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.feitos} / ${t.total} concluídas`), t.atual ? el('div', { class: 'det-atual' }, `Atual: ${t.atual}`) : null)),
+    { class: 'sd-tasks' },
+    el('div', { class: 'sd-ring-box' }, svg, el('b', { class: 'sd-pct' }, `${pct}%`), el('div', {}, el('b', {}, `${t.feitos} / ${t.total} concluídas`), t.atual ? el('div', { class: 'sd-current' }, `Atual: ${t.atual}`) : null)),
     el(
       'div',
-      { class: 'det-legenda' },
-      el('span', { class: 'det-l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
-      el('span', { class: 'det-l-andamento' }, 'Em andamento ', el('b', {}, num(andamento))),
-      el('span', { class: 'det-l-pendente' }, 'Pendentes ', el('b', {}, num(pendentes))),
+      { class: 'sd-legend' },
+      el('span', { class: 'sd-l-ok' }, 'Concluídas ', el('b', {}, num(t.feitos))),
+      el('span', { class: 'sd-l-progress' }, 'Em andamento ', el('b', {}, num(andamento))),
+      el('span', { class: 'sd-l-pending' }, 'Pendentes ', el('b', {}, num(pendentes))),
     ),
     el(
       'ul',
-      { class: 'det-passos' },
+      { class: 'sd-steps' },
       ...passos.map((p, i) =>
-        el('li', { class: `det-p-${p.estado}` }, icone(p.estado === 'completed' ? 'feito' : 'circulo'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === passos.length - 1 && resto > 0 ? el('span', { class: 'det-mais' }, ` · +${resto}`) : null),
+        el('li', { class: `sd-p-${p.estado}` }, icone(p.estado === 'completed' ? 'done' : 'circle'), p.estado === 'in_progress' ? (p.textoAtivo ?? p.texto) : p.texto, i === passos.length - 1 && resto > 0 ? el('span', { class: 'sd-more' }, ` · +${resto}`) : null),
       ),
     ),
   );
@@ -406,19 +409,19 @@ function progresso(t) {
 
 function fluxoDeTokens(k) {
   const partes = [
-    ['lido', 'Cache lido', k.cacheLido],
-    ['gravado', 'Cache gravado', k.cacheGravado],
-    ['entrada', 'Entrada', k.entrada],
-    ['saida', 'Saída', k.saida],
+    ['read', 'Cache lido', k.cacheLido],
+    ['written', 'Cache gravado', k.cacheGravado],
+    ['input', 'Entrada', k.entrada],
+    ['output', 'Saída', k.saida],
   ];
-  const barra = el('div', { class: 'det-fluxo', role: 'img', 'aria-label': partes.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
+  const barra = el('div', { class: 'sd-flow', role: 'img', 'aria-label': partes.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
   for (const [cls, , v] of partes) {
     if (!v) continue;
-    const p = el('span', { class: `det-f-${cls}` });
+    const p = el('span', { class: `sd-f-${cls}` });
     p.style.setProperty('--w', `${(v / k.total) * 100}%`);
     barra.append(p);
   }
-  return el('div', {}, barra, el('div', { class: 'det-legenda' }, ...partes.map(([cls, r, v]) => el('span', { class: `det-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
+  return el('div', {}, barra, el('div', { class: 'sd-legend' }, ...partes.map(([cls, r, v]) => el('span', { class: `sd-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
 }
 
 function no(g) {
@@ -429,10 +432,10 @@ function no(g) {
       : [g.tarefa, duracao(fim - Date.parse(g.inicio))];
   return el(
     'div',
-    { class: `cartao det-no${g.tipo === 'subagente' ? ' det-sub' : ''}` },
-    el('span', { class: 'det-ico' }, icone(g.tipo === 'principal' ? 'robo' : 'subagente')),
-    el('div', { class: 'det-texto' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
-    el('span', { class: 'mono det-custo' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
+    { class: `card sd-node${g.tipo === 'subagente' ? ' sd-sub' : ''}` },
+    el('span', { class: 'sd-ico' }, icone(g.tipo === 'principal' ? 'robot' : 'subagent')),
+    el('div', { class: 'sd-text' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
+    el('span', { class: 'mono sd-cost' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
     pilulaDeStatus(g.status),
   );
 }
@@ -441,9 +444,9 @@ function no(g) {
 
 const ESTADO_DA_FERRAMENTA = {
   ok: { rotulo: 'OK', icone: 'ok' },
-  erro: { rotulo: 'Erro', icone: 'erro' },
-  permissao: { rotulo: 'Aguardando permissão', icone: 'ampulheta' },
-  rodando: { rotulo: 'Rodando', icone: 'relogio' },
+  erro: { rotulo: 'Erro', icone: 'error' },
+  permissao: { rotulo: 'Aguardando permissão', icone: 'hourglass' },
+  rodando: { rotulo: 'Rodando', icone: 'clock' },
 };
 
 function abaConversa(ctx, base) {
@@ -451,22 +454,22 @@ function abaConversa(ctx, base) {
   let agente = null;
   const abertas = new Set();
   const fechadas = new Set();
-  const lista = el('div', { class: 'cartao det-mensagens' });
-  const seletor = el('select', { class: 'det-select', 'aria-label': 'Agente' });
-  const contagem = el('span', { class: 'det-pilula mono' });
+  const lista = el('div', { class: 'card sd-messages' });
+  const seletor = el('select', { class: 'sd-select', 'aria-label': 'Agente' });
+  const contagem = el('span', { class: 'sd-pill mono' });
   seletor.addEventListener('change', () => {
     agente = seletor.value;
     desenhar();
   });
-  const barra = el('div', { class: 'det-barra' }, seletor, contagem, el('button', { type: 'button', class: 'btn contorno', aoClicar: () => desenhar() }, icone('atualizar'), 'Atualizar'));
+  const barra = el('div', { class: 'sd-bar' }, seletor, contagem, el('button', { type: 'button', class: 'btn outline', aoClicar: () => desenhar() }, icone('refresh'), 'Atualizar'));
 
   async function desenhar() {
     try {
       const c = await ctx.ler(`${base}/conversation${agente ? `?agent=${encodeURIComponent(agente)}` : ''}`);
       agente = c.agente;
       seletor.replaceChildren(...c.agentes.map((a) => el('option', { value: a.id, selected: a.id === c.agente }, a.nome)));
-      contagem.replaceChildren(icone('conversa'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
-      lista.replaceChildren(...(c.mensagens.length ? c.mensagens.map(mensagem) : [el('p', { class: 'det-nada' }, 'Nenhuma mensagem deste agente ainda.')]));
+      contagem.replaceChildren(icone('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
+      lista.replaceChildren(...(c.mensagens.length ? c.mensagens.map(mensagem) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
       alvo?.replaceChildren(barra, lista);
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -478,17 +481,17 @@ function abaConversa(ctx, base) {
     const voce = m.papel === 'voce';
     return el(
       'article',
-      { class: `det-msg ${voce ? 'det-voce' : 'det-assistente'}` },
-      el('span', { class: 'det-avatar' }, icone(voce ? 'pessoa' : 'robo')),
+      { class: `sd-msg ${voce ? 'sd-you' : 'sd-assistant'}` },
+      el('span', { class: 'sd-avatar' }, icone(voce ? 'person' : 'robot')),
       el(
         'div',
-        { class: 'det-conteudo' },
+        { class: 'sd-content' },
         el(
           'header',
           {},
           el('b', {}, voce ? 'Você' : 'Assistente'),
-          m.modelo ? el('span', { class: 'det-pilula mono' }, nomeDoModelo(m.modelo)) : null,
-          m.tokens ? el('span', { class: 'det-pilula mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.entrada)} · ↑ ${tokens(m.tokens.saida)}`) : null,
+          m.modelo ? el('span', { class: 'sd-pill mono' }, nomeDoModelo(m.modelo)) : null,
+          m.tokens ? el('span', { class: 'sd-pill mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.entrada)} · ↑ ${tokens(m.tokens.saida)}`) : null,
           el('time', { class: 'mono', datetime: m.em }, HORA.format(new Date(m.em))),
         ),
         m.texto ? el('p', {}, ...comCodigo(m.texto)) : null,
@@ -503,28 +506,28 @@ function abaConversa(ctx, base) {
     const est = ESTADO_DA_FERRAMENTA[f.estado];
     const detalhe = el(
       'div',
-      { class: 'det-ferramenta-corpo', hidden: !aberta },
-      f.entrada ? el('div', {}, el('div', { class: 'olhinho' }, 'Entrada'), el('pre', { class: 'mono det-pre' }, f.entrada)) : null,
-      f.resultado ? el('div', {}, el('div', { class: 'olhinho' }, 'Resultado'), el('pre', { class: 'mono det-pre' }, f.resultado)) : null,
-      !f.entrada && !f.resultado ? el('p', { class: 'det-nada' }, 'Sem entrada nem resultado guardados.') : null,
+      { class: 'sd-tool-body', hidden: !aberta },
+      f.entrada ? el('div', {}, el('div', { class: 'eyebrow' }, 'Entrada'), el('pre', { class: 'mono sd-pre' }, f.entrada)) : null,
+      f.resultado ? el('div', {}, el('div', { class: 'eyebrow' }, 'Resultado'), el('pre', { class: 'mono sd-pre' }, f.resultado)) : null,
+      !f.entrada && !f.resultado ? el('p', { class: 'sd-none' }, 'Sem entrada nem resultado guardados.') : null,
     );
     const cabeca = el(
       'button',
-      { type: 'button', class: 'det-ferramenta-cab', 'aria-expanded': aberta ? 'true' : 'false' },
-      icone(aberta ? 'chevron-baixo' : 'chevron-direita'),
-      el('b', { class: 'mono det-nome' }, f.nome),
-      el('span', { class: 'mono det-resumo' }, f.resumo ?? ''),
-      est ? el('span', { class: `mono det-situacao det-e-${f.estado}` }, icone(est.icone), est.rotulo) : null,
+      { type: 'button', class: 'sd-tool-head', 'aria-expanded': aberta ? 'true' : 'false' },
+      icone(aberta ? 'chevron-down' : 'chevron-right'),
+      el('b', { class: 'mono sd-name' }, f.nome),
+      el('span', { class: 'mono sd-summary' }, f.resumo ?? ''),
+      est ? el('span', { class: `mono sd-situation sd-e-${TOOL_STATE_CLASS[f.estado] ?? f.estado}` }, icone(est.icone), est.rotulo) : null,
     );
     cabeca.addEventListener('click', () => {
       const abrir = detalhe.hidden;
       detalhe.hidden = !abrir;
       cabeca.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cabeca.firstChild.replaceWith(icone(abrir ? 'chevron-baixo' : 'chevron-direita'));
+      cabeca.firstChild.replaceWith(icone(abrir ? 'chevron-down' : 'chevron-right'));
       (abrir ? abertas : fechadas).add(f.id);
       (abrir ? fechadas : abertas).delete(f.id);
     });
-    return el('div', { class: `det-ferramenta${f.estado === 'permissao' ? ' det-pede' : ''}` }, cabeca, detalhe);
+    return el('div', { class: `sd-tool${f.estado === 'permissao' ? ' sd-asks' : ''}` }, cabeca, detalhe);
   }
 
   return {
@@ -548,14 +551,14 @@ function abaTempo(ctx, base, { rotular }) {
   const abertos = new Set();
   const filtros = { q: '', de: '', ate: '', status: '', tipo: '', ferramenta: '', agente: '' };
 
-  const busca = el('input', { type: 'search', class: 'det-campo', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
-  const de = el('input', { type: 'datetime-local', class: 'det-campo det-data', 'aria-label': 'De' });
-  const ate = el('input', { type: 'datetime-local', class: 'det-campo det-data', 'aria-label': 'Até' });
+  const busca = el('input', { type: 'search', class: 'sd-field', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
+  const de = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'De' });
+  const ate = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'Até' });
   const selects = {
-    status: el('select', { class: 'det-chip mono', 'aria-label': 'Status' }),
-    tipo: el('select', { class: 'det-chip mono', 'aria-label': 'Tipo de evento' }),
-    ferramenta: el('select', { class: 'det-chip mono', 'aria-label': 'Ferramenta' }),
-    agente: el('select', { class: 'det-chip mono', 'aria-label': 'Agente' }),
+    status: el('select', { class: 'sd-chip mono', 'aria-label': 'Status' }),
+    tipo: el('select', { class: 'sd-chip mono', 'aria-label': 'Tipo de evento' }),
+    ferramenta: el('select', { class: 'sd-chip mono', 'aria-label': 'Ferramenta' }),
+    agente: el('select', { class: 'sd-chip mono', 'aria-label': 'Agente' }),
   };
   let pausa = null;
   busca.addEventListener('input', () => {
@@ -568,12 +571,12 @@ function abaTempo(ctx, base, { rotular }) {
 
   const painelDeFiltros = el(
     'section',
-    { class: 'cartao det-filtros' },
-    el('div', { class: 'det-filtros-linha' }, el('label', { class: 'det-busca' }, icone('filtro'), busca), el('label', { class: 'det-data' }, icone('calendario'), el('span', {}, 'De'), de), el('label', { class: 'det-data' }, icone('calendario'), el('span', {}, 'Até'), ate)),
-    el('div', { class: 'det-filtros-linha' }, ...Object.values(selects)),
+    { class: 'card sd-filters' },
+    el('div', { class: 'sd-filters-row' }, el('label', { class: 'sd-search' }, icone('filter'), busca), el('label', { class: 'sd-date' }, icone('calendar'), el('span', {}, 'De'), de), el('label', { class: 'sd-date' }, icone('calendar'), el('span', {}, 'Até'), ate)),
+    el('div', { class: 'sd-filters-row' }, ...Object.values(selects)),
   );
-  const lista = el('div', { class: 'cartao det-eventos' });
-  const rodape = el('div', { class: 'det-rodape' });
+  const lista = el('div', { class: 'card sd-events' });
+  const rodape = el('div', { class: 'sd-footer' });
 
   function opcoes(sel, rotulo, itens, atual) {
     sel.replaceChildren(el('option', { value: '' }, rotulo), ...itens.map(([v, r]) => el('option', { value: v, selected: v === atual }, r)));
@@ -604,11 +607,11 @@ function abaTempo(ctx, base, { rotular }) {
       opcoes(selects.tipo, 'Tipo de evento', r.opcoes.tipos.map((t) => [t, t]), filtros.tipo);
       opcoes(selects.ferramenta, 'Ferramenta', r.opcoes.ferramentas.map((t) => [t, t]), filtros.ferramenta);
       opcoes(selects.agente, 'Agente', r.opcoes.agentes.map((a) => [a.id, a.nome]), filtros.agente);
-      lista.replaceChildren(...(r.itens.length ? r.itens.map(linha) : [el('p', { class: 'det-nada' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
+      lista.replaceChildren(...(r.itens.length ? r.itens.map(linha) : [el('p', { class: 'sd-none' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
       rodape.replaceChildren(
         ...[
           r.itens.length ? el('small', {}, `Mostrando ${num(r.itens.length)} de ${num(r.filtrados)}`) : null,
-          r.proximo ? el('button', { type: 'button', class: 'btn contorno', aoClicar: () => ((quantos += POR_PAGINA), desenhar()) }, 'Carregar mais') : null,
+          r.proximo ? el('button', { type: 'button', class: 'btn outline', aoClicar: () => ((quantos += POR_PAGINA), desenhar()) }, 'Carregar mais') : null,
         ].filter(Boolean),
       );
       alvo?.replaceChildren(painelDeFiltros, lista, rodape);
@@ -620,26 +623,26 @@ function abaTempo(ctx, base, { rotular }) {
 
   function linha(e) {
     const aberto = abertos.has(e.id);
-    const dados = el('pre', { class: 'mono det-pre det-dados', hidden: !aberto }, e.dados ?? 'Sem dados guardados.');
+    const dados = el('pre', { class: 'mono sd-pre sd-data', hidden: !aberto }, e.dados ?? 'Sem dados guardados.');
     const cab = el(
       'button',
-      { type: 'button', class: 'det-evento-cab', 'aria-expanded': aberto ? 'true' : 'false' },
-      icone(aberto ? 'chevron-baixo' : 'chevron-direita'),
+      { type: 'button', class: 'sd-event-head', 'aria-expanded': aberto ? 'true' : 'false' },
+      icone(aberto ? 'chevron-down' : 'chevron-right'),
       el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ha(e.em)),
       pilulaDeStatus(e.status),
-      el('span', { class: 'mono det-tipo' }, e.tipo),
-      el('span', { class: 'det-resumo' }, e.resumo ?? ''),
-      e.ferramenta ? el('span', { class: 'det-chip mono' }, e.ferramenta) : null,
+      el('span', { class: 'mono sd-type' }, e.tipo),
+      el('span', { class: 'sd-summary' }, e.resumo ?? ''),
+      e.ferramenta ? el('span', { class: 'sd-chip mono' }, e.ferramenta) : null,
     );
     cab.addEventListener('click', () => {
       const abrir = dados.hidden;
       dados.hidden = !abrir;
       cab.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-      cab.firstChild.replaceWith(icone(abrir ? 'chevron-baixo' : 'chevron-direita'));
+      cab.firstChild.replaceWith(icone(abrir ? 'chevron-down' : 'chevron-right'));
       if (abrir) abertos.add(e.id);
       else abertos.delete(e.id);
     });
-    return el('div', { class: 'det-evento' }, cab, dados);
+    return el('div', { class: 'sd-event' }, cab, dados);
   }
 
   return {

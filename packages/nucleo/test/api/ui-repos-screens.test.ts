@@ -179,8 +179,8 @@ const disparar = (no: ElementoFalso | null, tipo: string) => {
   assert.ok(no, `sem elemento para ${tipo}`);
   no.dispatchEvent({ type: tipo });
 };
-const gruposNaTela = (area: ElementoFalso) => area.querySelectorAll('.repo-grupo-cab h2').map((h) => texto(h));
-const reposNaTela = (area: ElementoFalso) => area.querySelectorAll('tr.repo-linha').map((tr) => texto(tr.querySelector('.repo-nome a')));
+const gruposNaTela = (area: ElementoFalso) => area.querySelectorAll('.repo-group-head h2').map((h) => texto(h));
+const reposNaTela = (area: ElementoFalso) => area.querySelectorAll('tr.repo-row').map((tr) => texto(tr.querySelector('.repo-name a')));
 
 // ---------- Repositórios (C22) ----------
 
@@ -190,7 +190,7 @@ describe('Repositórios (C22) montada', () => {
     assert.deepEqual(leituras, ['/api/repos']);
     assert.deepEqual(gruposNaTela(area), ['exemplo-labs', 'você (pessoal)']);
     assert.deepEqual(reposNaTela(area), ['vitrine-demo', 'api-ficticia', 'dotfiles']);
-    const contagens = area.querySelectorAll('.repo-grupo-cab span').map((s) => texto(s));
+    const contagens = area.querySelectorAll('.repo-group-head span').map((s) => texto(s));
     assert.deepEqual(contagens, ['2 repositórios', '1 repositório']);
   });
 
@@ -230,7 +230,7 @@ describe('Repositórios (C22) montada', () => {
 
   test('#104 critério 2: a linha mostra linguagem, issues, PRs, CI, sessões e último push', async () => {
     const { area } = await montarListaCom(listaDeExemplo());
-    const tr = area.querySelectorAll('tr.repo-linha')[0]!;
+    const tr = area.querySelectorAll('tr.repo-row')[0]!;
     const celulas = tr.children;
     assert.equal(celulas.length, 9);
     const [nome, linguagem, commits, issues, prs, ci, sessoes, push] = celulas;
@@ -247,7 +247,7 @@ describe('Repositórios (C22) montada', () => {
 
   test('#104 critério 2: o que não veio sai como traço, sem número inventado', async () => {
     const { area } = await montarListaCom(listaDeExemplo());
-    const tr = area.querySelectorAll('tr.repo-linha').find((l) => texto(l.querySelector('.repo-nome a')) === 'dotfiles')!;
+    const tr = area.querySelectorAll('tr.repo-row').find((l) => texto(l.querySelector('.repo-name a')) === 'dotfiles')!;
     const [, linguagem, commits, , , ci, sessoes, push] = tr.children;
     assert.equal(texto(linguagem!), '—');
     assert.equal(texto(commits!), '—');
@@ -287,14 +287,14 @@ describe('Repositório (C23) montada', () => {
     d.issues!.amostra = amostra(100, 240);
     d.prs!.amostra = amostra(100, 180);
     const { area } = await montarRepoCom(d);
-    const notas = area.querySelectorAll('.repo-nota').map((n) => texto(n));
+    const notas = area.querySelectorAll('.repo-note').map((n) => texto(n));
     assert.ok(notas.includes('Por tipo sobre 100 de 240 issues lidas.'), notas.join(' | '));
     assert.ok(notas.includes('Medianas sobre 100 de 180 PRs lidos.'), notas.join(' | '));
   });
 
   test('#105 critério 3: com a amostra inteira, nenhuma nota de amostra', async () => {
     const { area } = await montarRepoCom(metricasDeExemplo());
-    assert.deepEqual(area.querySelectorAll('.repo-nota').map((n) => texto(n)).filter((n) => / sobre /.test(n)), []);
+    assert.deepEqual(area.querySelectorAll('.repo-note').map((n) => texto(n)).filter((n) => / sobre /.test(n)), []);
   });
 
   test('#105 critério 6: trocar o período relê com o novo periodo e descarta a resposta do período velho', async () => {
@@ -326,21 +326,21 @@ describe('Repositório (C23) montada', () => {
     novo.commits!.total = 42;
     pendentes.get('30d')!(novo);
     await new Promise((r) => setImmediate(r));
-    const commits = m.area.querySelectorAll('section.repo-stat').find((s) => texto(s.querySelector('.repo-stat-rot')) === 'Commits')!;
+    const commits = m.area.querySelectorAll('section.repo-stat').find((s) => texto(s.querySelector('.repo-stat-label')) === 'Commits')!;
     assert.equal(texto(commits.querySelector('.repo-stat-v')), '42');
     assert.match(texto(m.area), /\+6,1 mil em 30 dias/);
   });
 
   test('a aba Sessões leva à tela Sessões buscando o nome do repositório', async () => {
     const { area } = await montarRepoCom(metricasDeExemplo());
-    const aba = area.querySelectorAll('nav.repo-abas a').find((a) => texto(a).startsWith('Sessões'))!;
+    const aba = area.querySelectorAll('nav.repo-tabs a').find((a) => texto(a).startsWith('Sessões'))!;
     assert.equal(texto(aba), 'Sessões (5)');
     assert.equal(aba.getAttribute('href'), '/ui/sessions?search=vitrine-demo');
   });
 
   test('a aba Métricas usa o ícone do Analytics', async () => {
     const { area } = await montarRepoCom(metricasDeExemplo());
-    const atual = area.querySelector('nav.repo-abas [aria-current="page"]')!;
+    const atual = area.querySelector('nav.repo-tabs [aria-current="page"]')!;
     assert.equal(texto(atual), 'Métricas');
     assert.ok(atual.querySelector('svg')!.innerHTMLFalso.includes('M3 3v16a2 2 0 0 0 2 2h16'));
   });

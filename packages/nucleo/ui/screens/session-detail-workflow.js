@@ -146,6 +146,9 @@ export function detalheDoNo(n) {
 }
 
 const ESTADO = { ativo: 'Ativa', concluido: 'Concluída', erro: 'Erro' };
+// The class of each node state (the API value stays as it comes): `wfd-e-<state>`.
+const STATE_CLASS = { ativo: 'active', concluido: 'completed', erro: 'error' };
+const stateClass = (estado) => `wfd-e-${STATE_CLASS[estado] ?? estado}`;
 
 // ---------- DOM ----------
 
@@ -159,8 +162,8 @@ function svg(tag, atributos = {}, ...filhos) {
 const curto = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
 function carregarCss() {
-  if (document.querySelector('link[data-tela="detalhe-workflow"]')) return;
-  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail-workflow.css', 'data-tela': 'detalhe-workflow' }));
+  if (document.querySelector('link[data-screen="session-detail-workflow"]')) return;
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail-workflow.css', 'data-screen': 'session-detail-workflow' }));
 }
 
 // As medidas do C7 (6 colunas em ~980 px): o SVG encolhe para caber no painel, o texto junto.
@@ -175,9 +178,9 @@ function grafo(w) {
   const largura = MARGEM * 2 + (lay.colunas - 1) * PASSO_X + NO_L;
   const altura = MARGEM * 2 + (lay.linhas - 1) * PASSO_Y + NO_A;
   const xy = (id) => ({ x: MARGEM + lay.pos[id].coluna * PASSO_X, y: MARGEM + lay.pos[id].linha * PASSO_Y });
-  const raiz = svg('svg', { class: largura > 720 ? 'wfd-grafo wfd-largo' : 'wfd-grafo', viewBox: `0 0 ${largura} ${altura}`, width: largura, height: altura, role: 'img', 'aria-label': 'Grafo dos agentes da sessão' });
+  const raiz = svg('svg', { class: largura > 720 ? 'wfd-graph wfd-wide' : 'wfd-graph', viewBox: `0 0 ${largura} ${altura}`, width: largura, height: altura, role: 'img', 'aria-label': 'Grafo dos agentes da sessão' });
   const seta = (id, cls) => svg('marker', { id, viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' }, svg('path', { d: 'M0,0 L8,4 L0,8 Z', class: cls }));
-  raiz.append(svg('defs', {}, seta('wfd-seta', 'wfd-ponta'), seta('wfd-seta-aj', 'wfd-ponta wfd-aj')));
+  raiz.append(svg('defs', {}, seta('wfd-arrow', 'wfd-tip'), seta('wfd-arrow-adj', 'wfd-tip wfd-adj')));
 
   for (const a of w.arestas) {
     if (!lay.pos[a.de] || !lay.pos[a.para]) continue;
@@ -189,8 +192,8 @@ function grafo(w) {
     const y2 = B.y + NO_A / 2;
     const m = (x1 + x2) / 2;
     const aj = a.tipo === 'ajustes';
-    raiz.append(svg('path', { class: `wfd-aresta${aj ? ' wfd-aj' : ''}`, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, 'marker-end': `url(#${aj ? 'wfd-seta-aj' : 'wfd-seta'})` }));
-    if (a.rotulo) raiz.append(svg('text', { class: `wfd-rotulo${aj ? ' wfd-aj' : ''}`, x: m, y: (y1 + y2) / 2 - 6, 'text-anchor': 'middle' }, a.rotulo));
+    raiz.append(svg('path', { class: `wfd-edge${aj ? ' wfd-adj' : ''}`, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, 'marker-end': `url(#${aj ? 'wfd-arrow-adj' : 'wfd-arrow'})` }));
+    if (a.rotulo) raiz.append(svg('text', { class: `wfd-label${aj ? ' wfd-adj' : ''}`, x: m, y: (y1 + y2) / 2 - 6, 'text-anchor': 'middle' }, a.rotulo));
   }
 
   for (const n of w.nos) {
@@ -201,27 +204,27 @@ function grafo(w) {
     raiz.append(
       svg(
         'g',
-        { class: `wfd-no wfd-e-${n.estado}` },
+        { class: `wfd-node ${stateClass(n.estado)}` },
         svg('title', {}, [nomeDoNo(n), n.tarefa, duracao(n.duracaoMs), estado].filter(Boolean).join(' · ')),
-        svg('rect', { class: 'wfd-caixa', x, y, width: NO_L, height: NO_A, rx: 8 }),
-        svg('rect', { class: 'wfd-borda', x, y: y + 1, width: 3, height: NO_A - 2, rx: 1.5 }),
-        svg('text', { class: 'wfd-no-nome', x: x + 11, y: y + 19 }, curto(nomeDoNo(n), 18)),
-        svg('text', { class: `wfd-no-det${det.ajustes ? ' wfd-aj' : ''}`, x: x + 11, y: y + 36 }, curto(det.texto, 20)),
-        n.estado === 'ativo' ? svg('circle', { class: 'wfd-no-ponto', cx: x + 15, cy: y + 49, r: 3.5 }) : null,
-        svg('text', { class: 'wfd-no-estado', x: x + (n.estado === 'ativo' ? 22 : 11), y: y + 53 }, n.estado === 'concluido' ? `✓ ${estado}` : n.estado === 'erro' ? `✕ ${estado}` : estado),
+        svg('rect', { class: 'wfd-box', x, y, width: NO_L, height: NO_A, rx: 8 }),
+        svg('rect', { class: 'wfd-border', x, y: y + 1, width: 3, height: NO_A - 2, rx: 1.5 }),
+        svg('text', { class: 'wfd-node-name', x: x + 11, y: y + 19 }, curto(nomeDoNo(n), 18)),
+        svg('text', { class: `wfd-node-detail${det.ajustes ? ' wfd-adj' : ''}`, x: x + 11, y: y + 36 }, curto(det.texto, 20)),
+        n.estado === 'ativo' ? svg('circle', { class: 'wfd-node-dot', cx: x + 15, cy: y + 49, r: 3.5 }) : null,
+        svg('text', { class: 'wfd-node-state', x: x + (n.estado === 'ativo' ? 22 : 11), y: y + 53 }, n.estado === 'concluido' ? `✓ ${estado}` : n.estado === 'erro' ? `✕ ${estado}` : estado),
       ),
     );
   }
-  return el('div', { class: 'wfd-rolar' }, raiz);
+  return el('div', { class: 'wfd-scroll' }, raiz);
 }
 
 function legenda(w) {
-  const tracejado = svg('svg', { class: 'wfd-tracejado', viewBox: '0 0 18 4', width: 18, height: 4, 'aria-hidden': 'true' }, svg('line', { x1: 0, y1: 2, x2: 18, y2: 2 }));
+  const tracejado = svg('svg', { class: 'wfd-dashed', viewBox: '0 0 18 4', width: 18, height: 4, 'aria-hidden': 'true' }, svg('line', { x1: 0, y1: 2, x2: 18, y2: 2 }));
   return el(
     'div',
-    { class: 'wfd-legenda' },
-    el('span', {}, el('i', { class: 'wfd-bola wfd-e-ativo' }), 'Ativo'),
-    el('span', {}, el('i', { class: 'wfd-bola wfd-e-concluido' }), 'Concluído'),
+    { class: 'wfd-legend' },
+    el('span', {}, el('i', { class: 'wfd-ball wfd-e-active' }), 'Ativo'),
+    el('span', {}, el('i', { class: 'wfd-ball wfd-e-completed' }), 'Concluído'),
     el('span', {}, tracejado, 'review pediu ajustes: volta para o dev'),
     el('span', {}, 'Rodadas de review ', el('b', { class: 'mono' }, num(w.rodadasDeReview))),
     el('span', {}, 'Ajustes ', el('b', { class: 'mono' }, num(w.ajustes))),
@@ -233,20 +236,20 @@ function linhaDoTempo(w) {
   const faixas = w.linhaDoTempo.faixas.map((f) =>
     el(
       'div',
-      { class: 'wfd-faixa' },
-      el('span', { class: 'mono wfd-nome', title: f.rotulo }, f.rotulo),
+      { class: 'wfd-band' },
+      el('span', { class: 'mono wfd-name', title: f.rotulo }, f.rotulo),
       svg(
         'svg',
-        { class: 'wfd-pista', width: '100%', height: 16, 'aria-hidden': 'true' },
-        svg('rect', { class: 'wfd-fundo', x: 0, y: 0, width: '100%', height: 16, rx: 4 }),
-        ...trechosDaFaixa(f, escala).map((t) => svg('rect', { class: `wfd-trecho wfd-e-${t.estado}`, x: `${t.x}%`, y: 2, width: `${t.largura}%`, height: 12, rx: 3 })),
+        { class: 'wfd-lane', width: '100%', height: 16, 'aria-hidden': 'true' },
+        svg('rect', { class: 'wfd-bg', x: 0, y: 0, width: '100%', height: 16, rx: 4 }),
+        ...trechosDaFaixa(f, escala).map((t) => svg('rect', { class: `wfd-segment ${stateClass(t.estado)}`, x: `${t.x}%`, y: 2, width: `${t.largura}%`, height: 12, rx: 3 })),
       ),
     ),
   );
-  const eixo = el('div', { class: 'wfd-faixa wfd-eixo mono' }, el('span', {}), el('div', {}, ...escala.marcas.map((m) => el('span', {}, m))));
+  const eixo = el('div', { class: 'wfd-band wfd-axis mono' }, el('span', {}), el('div', {}, ...escala.marcas.map((m) => el('span', {}, m))));
   return el(
     'section',
-    { class: 'cartao wfd-painel' },
+    { class: 'card wfd-panel' },
     el('div', { class: 'wfd-ttl' }, icone('gantt'), 'Linha do tempo dos agentes', el('span', { class: 'wfd-ttl-r' }, `${escala.resumo} · concorrência`)),
     ...faixas,
     eixo,
@@ -257,8 +260,8 @@ function desenho(w) {
   return [
     el(
       'section',
-      { class: 'cartao wfd-painel' },
-      el('div', { class: 'wfd-ttl' }, icone('subagente'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.resumo ?? '')),
+      { class: 'card wfd-panel' },
+      el('div', { class: 'wfd-ttl' }, icone('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.resumo ?? '')),
       grafo(w),
       legenda(w),
     ),
