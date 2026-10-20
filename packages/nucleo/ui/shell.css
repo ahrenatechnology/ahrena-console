@@ -29,6 +29,12 @@ button { font: inherit; cursor: pointer; }
 .cc-nav .icon { font-size: 16px; }
 .cc-nav:hover { color: var(--text); }
 .cc-nav.on { background: var(--raised); color: var(--text); box-shadow: inset 2px 0 0 var(--rose); }
+/* The state dot of a remote machine (C24, issue 178): green connected, gray down, yellow another version. */
+.cc-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-nav-dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--status-abandoned-dot); }
+.cc-nav-dot[data-state="connected"] { background: var(--status-completed-dot); }
+.cc-nav-dot[data-state="incompatible-version"] { background: var(--status-waiting-dot); }
+.cc-nav .cc-nav-dot + .q { margin-left: 6px; }
 .cc-nav .q { margin-left: auto; font-size: 10.5px; font-weight: var(--weight-semibold); padding: 0 7px; border-radius: 99px; background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .cc-nav:focus-visible, .btn:focus-visible, .cc-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

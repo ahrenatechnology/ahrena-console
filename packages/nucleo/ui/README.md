@@ -33,6 +33,23 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | Analytics · Custo (C13) | `/ui/analytics/cost` | `GET /api/analytics/cost?days=7\|30\|90&tz=` | `screens/analytics.js` |
 | Repositórios (C22) | `/ui/repos` | `GET /api/repos` | `screens/repos.js` |
 | Repositório (C23) | `/ui/repos/:owner/:repo` | `GET /api/repos/<dono>/<repo>?period=30d\|90d\|1y` | `screens/repo.js` |
+| Esta máquina (C24) | `/ui/machines/local` | `GET /api/telemetry?machine=local&hours=1\|12`, `GET /api/machines`, `GET /api/attention` | `screens/machine.js` |
+| Máquina remota (C25, C26) | `/ui/machines/:id` | o mesmo, com `machine=<id>`; e a telemetria daqui para a coluna "No Mac" | `screens/machine.js` |
+| Dev Console (C27) | `/ui/dev-console` (`?context=<id>`, `?tab=merge-queue`) | `GET /api/dev-console` e `GET /api/dev-console?context=<id>` | `screens/dev-console.js` e `screens/dev-console.css` (classes `dev-`) |
+
+As máquinas (issue 178, decisão 0008): as duas rotas abrem a mesma tela, `screens/machine.js`, com o que cada cartão mostra em `screens/machine-format.js` (sem DOM; o teste importa direto) e o estilo em `screens/machine.css` (classes `tm-`). Um grupo `null` da leitura não vira cartão; o que uma remota manda com outro formato é descartado campo a campo, sem derrubar a tela. A tela só mostra: nenhum botão sobe, derruba ou encaminha túnel ("Tentar agora" só relê). Relê a cada 30 s (amostra nova não publica mudança) e na hora quando chega um `alert` desta máquina ou um `<id>:machine-unreachable`.
+
+**Os itens das remotas na barra.** O registro é estático, e as remotas vêm do `machines.json`, que só o núcleo lê. Por isso a barra (`nav.js`, `createNav`) lê `GET /api/machines` (ao conectar, a cada `alert` em `/api/changes` e a cada 60 s) e se redesenha com `sidebarSections([...SCREENS, ...machineItems(list)])`: cada remota vira um item do bloco Máquinas, depois de "Esta máquina", com o ponto do estado (`.cc-nav-dot`, em `shell.css`, com `role="img"` e o estado por extenso no `aria-label`). Os contadores e o item aceso sobrevivem ao redesenho. Sem remota, só "Esta máquina". A rota `/ui/machines/:id` acende o item da máquina aberta por `highlights(params)`, que pode ser uma função (`litItem` em `screens.js`).
+
+**O que fica de fora do wireframe, e por quê.** A telemetria v1 (`src/telemetry/model.ts`) não traz estes dados, e a tela não inventa:
+
+- Stacks Docker: sem as colunas CPU e "Sessão dona". A leitura tem, por stack, só containers rodando e parados e as portas publicadas; nem a CPU por stack nem a pasta de onde ela subiu.
+- Processos do Claude: sem a linha "Núcleo do console". A leitura agrupa só o CLI e o Claude Desktop; o núcleo aparece, se aparecer, entre "Os que mais usam CPU".
+- "De quem" das portas: só o que a leitura permite dizer: o núcleo do console (a porta desta janela, ou a do outro lado do túnel), o túnel (`túnel para <destino>`), quem segura uma porta do túnel e a stack Docker que publica a porta. Sem "sistema" para a 22 (a leitura não diz o dono do processo) e sem agrupar as portas de stacks diferentes em "3 stacks": cada stack fica na linha dela.
+- "O que é, lido do núcleo de lá", no túnel: o núcleo da remota (a porta do `machines.json`) e, quando a leitura da remota está à mão, o processo que escuta lá; sem o projeto ("vite · catalogo-exemplo").
+- O cartão Sessões conta os itens da `/api/attention` daquela máquina, com quantos "precisam de você": a API não dá o total de sessões vivas por máquina.
+- Versão diferente: compara a versão da telemetria (v1), não a do núcleo (0.0.1 contra 0.0.2).
+- Rede: a interface da rota padrão, sem o tipo ("Wi-Fi").
 
 O Analytics tem duas abas, que são a mesma tela: em `screens.js`, a entrada `analytics` (item da barra) e a `analytics-tab` (`/ui/analytics/:tab`, acende Analytics). A tela lê `ctx.params.tab`: só `cost` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
 | `decisions.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisions-common.js` põe o `<link>` no `<head>` ao montar |
