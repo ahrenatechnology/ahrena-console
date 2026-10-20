@@ -59,11 +59,11 @@ import { alturaDaGrade, BORDA_DO_CARD, ESPACO, LINHAS_DO_CARD, linhasDoTexto } f
 import { paleta, status as STATUS_COR } from './marca'
 
 export const CARD_W = 34
-/** Todo card tem a mesma altura, 180 px no Desktop (ver LINHAS_DO_CARD): a borda e as linhas de conteúdo. */
+/** Todo card tem a mesma altura, ~190 px no Desktop (ver LINHAS_DO_CARD): a borda e as linhas de conteúdo. */
 export const CARD_H = BORDA_DO_CARD + LINHAS_DO_CARD
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const VERSAO_DO_PLUGIN = '0.0.27'
+export const VERSAO_DO_PLUGIN = '0.0.28'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISOES_NO_ESTREITO = 3
@@ -269,11 +269,11 @@ function cabecalho(c: Contexto, icone: string, titulo: string, direita: string, 
 }
 
 /**
- * O respiro de todo card, num lugar só: dos lados, uma coluna (o que já estava bom); embaixo, um
- * espaço (~10 px no Desktop), para o conteúdo nunca encostar na borda de baixo. Em cima, o respiro
- * que o Desktop já dá ao Box com borda.
+ * O respiro de todo card, num lugar só: dos lados, uma coluna (o que já estava bom); embaixo, dois
+ * espaços (~20 px no Desktop), para o pé nunca encostar na borda de baixo. Em cima, o respiro que o
+ * Desktop já dá ao Box com borda.
  */
-export const RESPIRO_DO_CARD = { paddingX: 1, paddingBottom: 1 } as const
+export const RESPIRO_DO_CARD = { paddingX: 1, paddingBottom: 2 } as const
 
 /**
  * Todo card do P1: a mesma largura, a mesma altura fixa, a mesma borda, o mesmo raio e o mesmo

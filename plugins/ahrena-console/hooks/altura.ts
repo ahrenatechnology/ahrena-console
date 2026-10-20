@@ -5,12 +5,12 @@
 /** Borda de cima e de baixo de um card. */
 export const BORDA_DO_CARD = 2
 /**
- * Linhas internas de todo card: a mesma altura para todos, 180 px no Desktop (pedido do Fernando),
- * que cabe o Contexto e custo com os quatro tiles com borda. Uma linha do Desktop tem ~19 px (um
- * card de 7 linhas media ~133 px): 180 / 19 ≈ 9,47, então o card tem 9,5 linhas (~180,5 px), a
- * borda e 7,5 de conteúdo.
+ * Linhas internas de todo card: a mesma altura para todos, ~190 px no Desktop. Uma linha do Desktop
+ * tem ~19 px; o card tem 10 linhas, a borda e 8 de conteúdo. A conta, pelo print do Contexto: o
+ * cabeçalho e os tiles vão até ~147 px, a linha de pé soma ~23 e o respiro de baixo (2 espaços,
+ * ~20 px) fecha em ~190.
  */
-export const LINHAS_DO_CARD = 7.5
+export const LINHAS_DO_CARD = 8
 
 /**
  * Um espaço de 1 (`gap`, `rowGap`, `paddingY`), em linhas do corpo. Medido no Desktop: um card de

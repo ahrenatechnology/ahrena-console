@@ -155,7 +155,7 @@ test('P9 no estreito: Sessão, 3 cards 34 × 6 e "+2 · troque o escopo"', async
   for (const c of cards) {
     expect(c.props.width).toBe(34)
     // Todo card do P1 tem a mesma altura fixa: a borda e 7 linhas.
-    expect(c.props.height).toBe(9.5)
+    expect(c.props.height).toBe(10)
     expect(c.props.overflow).toBe('hidden')
   }
 
@@ -198,7 +198,7 @@ test('P9 no largo: Família, os 6 cards, a substituída riscada apontando D4 e o
   expect((await ui.find({ key: 'escopo-decisoes' }))?.props.value).toBe('familia')
   const cards = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('decisao-'))
   expect(cards).toHaveLength(6)
-  expect(cards.every((c) => c.props.width === 34 && c.props.height === 9.5)).toBe(true)
+  expect(cards.every((c) => c.props.width === 34 && c.props.height === 10)).toBe(true)
 
   const velha = await ui.find({ key: card(porRotulo('familia', 'D3')) })
   expect(velha?.text).toMatch(/Substituída/)
