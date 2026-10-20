@@ -101,6 +101,21 @@ interface Candidata {
 
 const UM_MIN = 60_000;
 
+/** O que o painel calcula de uma sessão já gravada, com os mesmos caches: o card do mural (#34) sai daqui. */
+export interface LeituraDaSessao {
+  sessao: SessaoDoPainel;
+  inbox: LeituraDoInbox;
+  desktop: SessaoDoDesktop | null;
+  /** O branch da sessão: o do Desktop ou da metadata e, sem eles, o do git (só `git branch`, em cache). */
+  branch: string | null;
+  /** O esforço: o `effort` do índice do Desktop e, sem ele, `metadata.esforco` (o simulador grava). */
+  esforco: string | null;
+  custo: CustoDoPainel | null;
+  plano: PlanoDoPainel | null;
+  contexto: ContextoDoPainel | null;
+  subagentes: { ativos: number; itens: SubagenteDoPainel[] };
+}
+
 function minutos(desde: string, agora: number): string {
   const m = Math.max(0, Math.round((agora - Date.parse(desde)) / UM_MIN));
   if (m < 1) return 'agora';
@@ -109,11 +124,12 @@ function minutos(desde: string, agora: number): string {
 }
 
 export class MontadorDoPainel {
-  private readonly storage: Porta;
+  /** Público para o mural (#34), que lista as sessões pela mesma porta. */
+  readonly storage: Porta;
   private readonly contas: Contas;
   private readonly desktop: IndiceDoDesktop | null;
   private readonly trabalho: TrabalhoPorBranch | null;
-  private readonly agora: () => number;
+  readonly agora: () => number;
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
@@ -141,6 +157,44 @@ export class MontadorDoPainel {
     this.precisamMs = precisamMs;
     this.resumos = new ResumosDeSessao(storage, { agora });
     this.decisoes = decisoes ? new DecisoesDaSessao({ decisions: decisoes, storage }) : null;
+  }
+
+  /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
+  desktopDaSessao(sessionId: string): SessaoDoDesktop | null {
+    return this.desktop?.sessaoPorCli(sessionId) ?? null;
+  }
+
+  /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
+  async atualizarFontes(): Promise<void> {
+    await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
+  }
+
+  /**
+   * Uma sessão já gravada, como o painel a vê: o card "Esta sessão", o custo (pelo cache `custos`),
+   * o plano, o contexto e os subagentes. Para o mural (#34); quem chama faz `atualizarFontes()` antes.
+   */
+  async leituraDaSessao(session: Session): Promise<LeituraDaSessao> {
+    const agora = this.agora();
+    const desktop = this.desktopDaSessao(session.id);
+    const agentes = await this.storage.listAgents(session.id);
+    const resumo = await this.resumos.ler(session.id, session.updatedAt);
+    const conta = this.contas.daSessao(session, desktop);
+    const planos = await this.storage.listPlanRecords(session.id);
+    const sessao = this.sessaoDe(session, agentes, resumo, desktop, conta, agora);
+    const pasta = session.cwd ?? desktop?.cwd ?? null;
+    return {
+      sessao,
+      inbox: lerInbox(session, agentes),
+      desktop,
+      // O que o trabalho por branch já sabe e, sem isso, só o `git branch` da pasta (em cache, nunca o
+      // GitHub): o mural lê todas as abertas.
+      branch: sessao.branch ?? this.trabalho?.espiar(pasta)?.branch ?? this.trabalho?.branchDaPasta(pasta) ?? null,
+      esforco: desktop?.esforco ?? (typeof session.metadata?.esforco === 'string' ? session.metadata.esforco : null),
+      custo: (await this.custoDe(session)).custo,
+      plano: planoDe(await this.planoAtual(session.id, planos), resumo, agentes),
+      contexto: contextoDe(session, resumo, await this.storage.listContextMeters(session.id)),
+      subagentes: subagentesDe(agentes),
+    };
   }
 
   /** `literal`: o id pedido, sem o apelido da demonstração (o Detalhe da /ui lê qualquer sessão). */
