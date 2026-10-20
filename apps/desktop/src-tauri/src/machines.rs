@@ -151,7 +151,11 @@ pub fn parse_iso_ms(iso: &str) -> Option<u64> {
     if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || !matches!(b[10], b'T' | b't' | b' ') || b[13] != b':' || b[16] != b':' {
         return None;
     }
-    let num = |from: usize, to: usize| -> Option<i64> { iso.get(from..to).filter(|s| s.bytes().all(|b| b.is_ascii_digit()))?.parse().ok() };
+    // An unsigned decimal field: digits only, so a sign such as "-1" does not pass `parse`.
+    let digit_field = |text: &str, from: usize, to: usize| -> Option<i64> {
+        text.get(from..to).filter(|s| s.bytes().all(|b| b.is_ascii_digit()))?.parse().ok()
+    };
+    let num = |from: usize, to: usize| digit_field(iso, from, to);
     let (year, month, day) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
     let (hour, minute, second) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
@@ -172,7 +176,7 @@ pub fn parse_iso_ms(iso: &str) -> Option<u64> {
         "Z" | "z" => 0,
         _ if rest.len() == 6 && (rest.starts_with('+') || rest.starts_with('-')) && rest.as_bytes()[3] == b':' => {
             let sign = if rest.starts_with('-') { -1 } else { 1 };
-            sign * (rest[1..3].parse::<i64>().ok()? * 60 + rest[4..6].parse::<i64>().ok()?)
+            sign * (digit_field(rest, 1, 3)? * 60 + digit_field(rest, 4, 6)?)
         }
         _ => return None,
     };
@@ -253,7 +257,7 @@ mod tests {
         assert_eq!(parse_iso_ms("1970-01-01T00:00:00Z"), Some(0));
         assert_eq!(parse_iso_ms("2026-10-18T23:10:00.5Z"), Some(1_792_365_000_500));
         assert_eq!(parse_iso_ms("2026-10-18T20:10:00-03:00"), Some(1_792_365_000_000));
-        for bad in ["", "ontem", "2026-13-01T00:00:00Z", "2026-10-18T23:10:00", "2026-10-18T23:10:00.Z", "2026-10-18T-1:10:00Z"] {
+        for bad in ["", "ontem", "2026-13-01T00:00:00Z", "2026-10-18T23:10:00", "2026-10-18T23:10:00.Z", "2026-10-18T-1:10:00Z", "2026-10-18T20:10:00+-1:30"] {
             assert_eq!(parse_iso_ms(bad), None, "{bad:?}");
         }
     }
