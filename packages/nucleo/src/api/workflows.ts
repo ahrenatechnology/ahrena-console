@@ -143,6 +143,8 @@ export interface RespostaDosWorkflows {
   sessoes: number;
   /** O teto de sessões lidas (`MAXIMO_DE_SESSOES`) cortou: a conta não cobre todas. */
   truncado: boolean;
+  /** O teto de sessões lidas efetivamente usado; a tela o cita quando `truncado`. */
+  maximo: number;
   kpis: KpisDosWorkflows;
   runs: RunDoWorkflow[];
   grafo: GrafoDeOrquestracao;
@@ -402,6 +404,8 @@ export interface OpcoesDosWorkflows {
   agora: number;
   /** A leitura parou no teto de sessões. */
   truncado?: boolean;
+  /** O teto de sessões usado na leitura; padrão `MAXIMO_DE_SESSOES`. */
+  maximo?: number;
 }
 
 export const NO_DO_GRAFO = /^(?:principal|origem:(?:prompt|retomada)|compactacao:(?:sem|compactou)|resultado:(?:concluida|erro|andamento|abandonada)|subagente:[A-Za-z0-9_.:-]{1,64})$/;
@@ -660,11 +664,11 @@ export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestr
 
 const PESO_DO_RUN: Record<EstadoDoRun, number> = { ativa: 0, erro: 1, concluida: 2 };
 
-export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'todas', no = null, agora, truncado = false }: OpcoesDosWorkflows): RespostaDosWorkflows {
+export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'todas', no = null, agora, truncado = false, maximo = MAXIMO_DE_SESSOES }: OpcoesDosWorkflows): RespostaDosWorkflows {
   let sessoes = todas.filter((x) => passaNoFiltro(x.session, filtro));
   if (no) sessoes = sessoes.filter((x) => nosDaSessao(x).has(no));
   const runs = sessoes.flatMap((x) => runsDaSessao(x, agora)).sort((a, b) => PESO_DO_RUN[a.estado] - PESO_DO_RUN[b.estado] || b.inicio.localeCompare(a.inicio));
-  return { filtro, no, geradoEm: new Date(agora).toISOString(), sessoes: sessoes.length, truncado, kpis: kpisDe(sessoes, agora), runs, grafo: grafoDe(sessoes) };
+  return { filtro, no, geradoEm: new Date(agora).toISOString(), sessoes: sessoes.length, truncado, maximo, kpis: kpisDe(sessoes, agora), runs, grafo: grafoDe(sessoes) };
 }
 
 // ---------- Rotas ----------
@@ -767,8 +771,9 @@ export async function responderWorkflows(res: ServerResponse, url: URL, fontes: 
       send(res, 400, { error: 'no: um id de nó do grafo (ex.: subagente:Explore)' });
       return true;
     }
-    const { sessoes, truncado } = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows, fontes.maximoDeSessoes);
-    send(res, 200, montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora, truncado }));
+    const maximo = fontes.maximoDeSessoes ?? MAXIMO_DE_SESSOES;
+    const { sessoes, truncado } = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows, maximo);
+    send(res, 200, montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora, truncado, maximo }));
     return true;
   }
   const m = DA_SESSAO.exec(url.pathname);

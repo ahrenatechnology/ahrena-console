@@ -329,7 +329,7 @@ export async function montar(area, ctx) {
     if (abertos === null) abertos = new Set(d.runs.length ? [d.runs[0].id] : []);
     const rotuloDoNo = no ? (d.grafo.nos.find((n) => n.id === no)?.rotulo ?? no) : null;
     // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
-    const resumo = `${FILTROS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? ', das 500 mais recentes' : ''}`;
+    const resumo = `${FILTROS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? `, das ${d.maximo ?? 500} mais recentes` : ''}`;
 
     const runs = d.runs.length
       ? d.runs.map((r) =>

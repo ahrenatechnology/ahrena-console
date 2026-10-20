@@ -5,7 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
 import { FonteDeTrabalhoDoSimulador, semearCenariosDoPainel } from '../../src/simulador/painel.ts';
-import { lerSessoesDosWorkflows, montarWorkflows } from '../../src/api/workflows.ts';
+import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
 import { SESSOES_DOS_WORKFLOWS, semearWorkflowsDoDemo } from '../../src/simulador/workflows.ts';
 import { T0 } from '../fixtures.ts';
 
@@ -84,6 +84,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.equal(r.filtro, 'todas');
     assert.equal(r.no, null);
     assert.equal(r.truncado, false);
+    assert.equal(r.maximo, MAXIMO_DE_SESSOES, 'o teto usado vai no JSON');
     for (const k of Object.keys(r.kpis) as (keyof typeof r.kpis)[]) assert.notEqual(r.kpis[k], null, `KPI ${k}`);
     assert.equal(r.kpis.fluxoComum!.rotulo, 'dev → review');
     assert.deepEqual(r.runs.map((x) => [x.nome, x.estado, x.projeto]), [
@@ -133,6 +134,9 @@ describe('Workflows na API, com a demonstração do p4', () => {
     assert.deepEqual([cortada.sessoes.length, cortada.truncado], [n - 1, true]);
     const exata = await lerSessoesDosWorkflows(storage, 'todas', n);
     assert.deepEqual([exata.sessoes.length, exata.truncado], [n, false], 'o teto exato não corta');
-    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncado, true);
+    assert.deepEqual(
+      (({ truncado, maximo }) => [truncado, maximo])(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado, maximo: n - 1 })),
+      [true, n - 1],
+    );
   });
 });
