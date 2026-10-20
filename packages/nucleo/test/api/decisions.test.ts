@@ -39,7 +39,7 @@ async function deOutraSessao(storage: ReturnType<typeof openSqliteStorage>, deci
     decisoes,
     {
       sourceKey: `teste:${id}`, sessionId: id, repo: REPO, branch: BRANCH, topic: `outro:${id}`, context: null, choice, alternatives: [],
-      decidedBy: 'usuario', origin: 'pergunta', inferred: false, scope: 'branch', decidedAt: new Date(AGORA - 2 * 60_000).toISOString(),
+      decidedBy: 'user', origin: 'question', inferred: false, scope: 'branch', decidedAt: new Date(AGORA - 2 * 60_000).toISOString(),
     },
     T0,
   );
@@ -115,18 +115,18 @@ describe('decisões no painel', () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const decisoes = new SqliteDecisionStore(storage.db);
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
-    const gravar = (sessionId: string, scope: 'sessao' | 'branch', choice: string) =>
+    const gravar = (sessionId: string, scope: 'session' | 'branch', choice: string) =>
       registerDecision(
         decisoes,
         {
           sourceKey: `teste:${sessionId}`, sessionId, repo: '/r', branch: 'feat/x', topic: `t:${sessionId}`, context: null, choice, alternatives: [],
-          decidedBy: 'usuario', origin: 'pergunta', inferred: false, scope, decidedAt: new Date(AGORA - 60_000).toISOString(),
+          decidedBy: 'user', origin: 'question', inferred: false, scope, decidedAt: new Date(AGORA - 60_000).toISOString(),
         },
         T0,
       );
     await storage.putSession(session({ id: 'sess-a', cwd: null }));
     await storage.putSession(session({ id: 'sess-b', cwd: '/r' }));
-    await gravar('sess-a', 'sessao', 'A própria');
+    await gravar('sess-a', 'session', 'A própria');
     await gravar('sess-b', 'branch', 'De outra família');
 
     const doPainel = (await montador.montar({ sessionId: 'sess-a', decisoes: 'branch' })).decisions!.list!;
@@ -164,8 +164,8 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(decisao.state, 'current');
       assert.equal(decisao.confirmedAt, T0);
       const gravada = await decisoes.getDecision(sugerida.id);
-      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: PANEL_SESSION, conta: EQUIPE, em: T0, antes: 'a_confirmar' });
-      assert.equal(gravada?.decidedBy, 'agente', 'quem propôs continua sendo o agente');
+      assert.deepEqual(gravada?.metadata.painel, { acao: 'confirmar', por: 'usuario', sessao: PANEL_SESSION, conta: EQUIPE, em: T0, antes: 'to_confirm' });
+      assert.equal(gravada?.decidedBy, 'agent', 'quem propôs continua sendo o agente');
       assert.equal((await post(caminho, { session: 'qualquer' })).status, 409, 'já confirmada');
 
       const depois = (await (await fetch(`${api.url}/api/panel/qualquer`)).json()) as Painel;
@@ -177,12 +177,12 @@ describe('API das decisões em 127.0.0.1', () => {
         decisoes,
         {
           sourceKey: 'teste:sugerida-2', sessionId: PANEL_SESSION, repo: REPO, branch: BRANCH, topic: 'kanban:filtro', context: null,
-          choice: 'Filtro por conta no topo', alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: T0,
+          choice: 'Filtro por conta no topo', alternatives: [], decidedBy: 'agent', origin: 'suggested', inferred: true, decidedAt: T0,
         },
         T0,
       );
       assert.equal((await post(`/api/decisions/${encodeURIComponent(outra.id)}/dismiss`, { session: 'qualquer' })).status, 200);
-      assert.equal((await decisoes.getDecision(outra.id))?.state, 'descartada');
+      assert.equal((await decisoes.getDecision(outra.id))?.state, 'dismissed');
       assert.equal(((await decisoes.getDecision(outra.id))?.metadata.painel as { acao: string }).acao, 'descartar');
       const semEla = (await (await fetch(`${api.url}/api/decisions/qualquer?scope=session`)).json()) as ListaDeDecisoes;
       assert.ok(!semEla.items.some((i) => i.id === outra.id));
@@ -193,12 +193,12 @@ describe('API das decisões em 127.0.0.1', () => {
         decisoes,
         {
           sourceKey: 'teste:alheia', sessionId: 'sim-de-fora', repo: '/simulacao/outro', branch: 'main', topic: null, context: null,
-          choice: 'Algo de outra conta', alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: T0,
+          choice: 'Algo de outra conta', alternatives: [], decidedBy: 'agent', origin: 'suggested', inferred: true, decidedAt: T0,
         },
         T0,
       );
       assert.equal((await post(`/api/decisions/${encodeURIComponent(alheia.id)}/confirm`, { session: 'qualquer' })).status, 404);
-      assert.equal((await decisoes.getDecision(alheia.id))?.state, 'a_confirmar');
+      assert.equal((await decisoes.getDecision(alheia.id))?.state, 'to_confirm');
       assert.equal((await post(`/api/decisions/nao-existe/confirm`, { session: 'qualquer' })).status, 404);
       // The old body `{ sessao }` is read on the new route too.
       assert.equal((await post(`/api/decisions/nao-existe/confirm`, { sessao: 'qualquer' })).status, 404);
@@ -222,7 +222,7 @@ describe('API das decisões em 127.0.0.1', () => {
           decisoes,
           {
             sourceKey: `teste:sug-${n}`, sessionId: PANEL_SESSION, repo: REPO, branch: BRANCH, topic, context: 'Qual filtro primeiro?',
-            choice: `Filtro ${n} no topo`, alternatives: [], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: new Date(AGORA - 60_000).toISOString(),
+            choice: `Filtro ${n} no topo`, alternatives: [], decidedBy: 'agent', origin: 'suggested', inferred: true, decidedAt: new Date(AGORA - 60_000).toISOString(),
           },
           T0,
         )
@@ -235,7 +235,7 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(volta.status, 200);
       assert.equal(volta.decisao?.state, 'to_confirm');
       assert.equal(volta.decisao?.undo, null);
-      assert.equal((await decisoes.getDecision(a.id))?.state, 'a_confirmar');
+      assert.equal((await decisoes.getDecision(a.id))?.state, 'to_confirm');
       assert.equal((await post(a.id, 'undo')).status, 409, 'nada mais a desfazer');
 
       // Confirmar e desfazer.
@@ -249,8 +249,8 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal(ajustada.status, 200);
       assert.equal(ajustada.decisao?.state, 'superseded');
       assert.equal(ajustada.decisao?.undo, 'adjust');
-      const nova = (await decisoes.listDecisions({ sessionId: PANEL_SESSION, states: ['vigente'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
-      assert.equal(nova.origin, 'correcao');
+      const nova = (await decisoes.listDecisions({ sessionId: PANEL_SESSION, states: ['current'] })).items.find((d) => d.metadata.ajusteDe === a.id)!;
+      assert.equal(nova.origin, 'correction');
       assert.equal(nova.inferred, false);
       assert.equal(nova.choice, 'Sim, filtro por conta no topo.');
       assert.equal(nova.metadata.texto, ajuste);
@@ -264,7 +264,7 @@ describe('API das decisões em 127.0.0.1', () => {
       // Desfazer o ajuste: a correção sai, a sugerida volta a confirmar.
       const desfeito = await post(a.id, 'undo');
       assert.equal(desfeito.decisao?.state, 'to_confirm');
-      assert.equal((await decisoes.getDecision(nova.id))?.state, 'revertida');
+      assert.equal((await decisoes.getDecision(nova.id))?.state, 'reverted');
 
       // Ajustar uma vigente sem assunto: as duas ficam no mesmo assunto, a nova vale.
       const b = await sugerida(2, null);

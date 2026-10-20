@@ -401,7 +401,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         model: 'claude-opus-5-5',
         usedTokens: 62_600,
         windowTokens: 200_000,
-        windowSource: 'modelo',
+        windowSource: 'model',
         compactions: 2,
         compactionsTranscript: 2,
         compactionsHook: 1,

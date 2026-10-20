@@ -38,3 +38,18 @@ export class SqliteCacheStore implements CachePort {
     this.db.prepare('DELETE FROM github_cache WHERE key = ?').run(key);
   }
 }
+
+/**
+ * #173 phase 5: the cache keys that had Portuguese segments (`repos:detalhe:…`, `repos:lista`,
+ * `repos:resumo`, `painel:issue:…`, the `1a` period) are written under English keys now. The old rows
+ * would never be read again: the migration deletes them (it is a cache). The table may not exist yet.
+ */
+export function deleteLegacyGithubCacheKeys(db: DatabaseSync): void {
+  const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'github_cache'`).get();
+  if (!exists) return;
+  db.exec(`DELETE FROM github_cache
+    WHERE substr(key, 1, 14) = 'repos:detalhe:'
+       OR key IN ('repos:lista', 'repos:resumo')
+       OR substr(key, 1, 13) = 'painel:issue:'
+       OR substr(key, -3) = ':1a'`);
+}

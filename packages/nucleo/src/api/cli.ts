@@ -65,10 +65,10 @@ import { RotaAnalytics } from './analytics-route.ts';
 import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
-  LIMPEZA_DAS_DECISOES,
+  DECISION_NOISE_CLEANUP,
   limparDecisoes,
-  REPROCESSAMENTO,
-  REPROCESSAMENTO_DO_CONTEXTO,
+  PLANS_AND_DECISIONS_REPROCESSING,
+  CONTEXT_REPROCESSING,
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
@@ -602,20 +602,20 @@ if (follower) {
 // da captura existir, a limpeza do que a captura antiga gravou e não é decisão, e os medidores
 // de contexto das sessões importadas antes do item 1.7.
 async function reprocessarUmaVez() {
-  if (!storage.reprocessado(REPROCESSAMENTO)) {
+  if (!storage.isReprocessed(PLANS_AND_DECISIONS_REPROCESSING)) {
     const inicio = Date.now();
     const r = await reprocessarHistorico({ storage, decisoes, raiz: o.projetos ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    storage.markReprocessed(PLANS_AND_DECISIONS_REPROCESSING, new Date().toISOString());
     log(`reprocessado em ${Math.round((Date.now() - inicio) / 1000)} s: ${r.sessoes} sessões, ${r.planos} planos em ${r.comPlano}, ${r.decisoes} decisões`);
   }
-  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+  if (!storage.isReprocessed(DECISION_NOISE_CLEANUP)) {
     const r = await limparDecisoes(storage, decisoes);
-    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    storage.markReprocessed(DECISION_NOISE_CLEANUP, new Date().toISOString());
     log(`decisões limpas: ${r.ruido} fora das listas, ${r.encurtadas} com o título encurtado`);
   }
-  if (!storage.reprocessado(REPROCESSAMENTO_DO_CONTEXTO)) {
+  if (!storage.isReprocessed(CONTEXT_REPROCESSING)) {
     const r = await reprocessarContexto({ storage, raiz: o.projetos ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO_DO_CONTEXTO, new Date().toISOString());
+    storage.markReprocessed(CONTEXT_REPROCESSING, new Date().toISOString());
     log(`medidor de contexto refeito: ${r.medidores} medidores em ${r.sessoes} sessões`);
   }
 }

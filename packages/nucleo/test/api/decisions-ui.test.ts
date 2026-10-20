@@ -197,12 +197,12 @@ describe('C21: a janela de 30 dias das substituídas', () => {
     const c = await cenario();
     try {
       const antes = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.counts;
-      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-panel-motor-de-regras', states: ['vigente'] })).items;
+      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-panel-motor-de-regras', states: ['current'] })).items;
       assert.ok(vigentes.length >= 3);
       const ha = (dias: number) => new Date(AGORA - dias * 86_400_000).toISOString();
       const nova = vigentes[2]!.id;
-      await c.decisoes.putDecision({ ...vigentes[0]!, state: 'substituida', supersededBy: nova, updatedAt: ha(31) });
-      await c.decisoes.putDecision({ ...vigentes[1]!, state: 'substituida', supersededBy: nova, updatedAt: ha(29) });
+      await c.decisoes.putDecision({ ...vigentes[0]!, state: 'superseded', supersededBy: nova, updatedAt: ha(31) });
+      await c.decisoes.putDecision({ ...vigentes[1]!, state: 'superseded', supersededBy: nova, updatedAt: ha(29) });
       const depois = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.counts;
       assert.equal(depois.current, antes.current - 2);
       assert.equal(depois.superseded30d, antes.superseded30d + 1, 'só a de 29 dias entra');
@@ -310,14 +310,14 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
   });
   after(() => c.fechar());
 
-  const sugeridaDe = async (sessionId: string) => (await c.decisoes.listDecisions({ sessionId, states: ['a_confirmar'] })).items[0]!;
+  const sugeridaDe = async (sessionId: string) => (await c.decisoes.listDecisions({ sessionId, states: ['to_confirm'] })).items[0]!;
 
   test('Origin igual a http://<Host>, caminho exato e JSON: passa; o resto, 403 ou 415', async () => {
     const nossa = { ...JSON_, origin: `http://${c.host}` };
     const d = await sugeridaDe(VITRINE);
     const ok = await c.postar<{ decision: DecisaoDaUi }>(`/api/decisions/${d.id}/confirm`, { session: VITRINE }, nossa);
     assert.equal(ok.status, 200);
-    assert.equal((await c.decisoes.getDecision(d.id))?.state, 'vigente');
+    assert.equal((await c.decisoes.getDecision(d.id))?.state, 'current');
 
     const outra = await sugeridaDe('sim-panel-painel-de-metricas');
     for (const origin of ['http://evil.example', `https://${c.host}`, 'null', 'http://localhost:1', `http://${c.host}.exemplo.com`]) {
@@ -325,7 +325,7 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
     }
     assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar?x=1`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 403, 'query na URL');
     assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-panel-painel-de-metricas' }, { 'content-type': 'text/plain', origin: `http://${c.host}` })).status, 415);
-    assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'a_confirmar', 'nada mudou');
+    assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'to_confirm', 'nada mudou');
 
     // O promover também é da exceção; o resto das escritas e dos hooks, não.
     assert.equal((await c.postar(`/api/decisoes/${outra.id}/promover`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 200);
@@ -378,7 +378,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
           sourceKey: `teste:${sessionId}`, sessionId, repo, branch: 'feat/9-relatorio', topic: 'relatorio:indice',
           context: 'A consulta do relatório mensal varre a tabela inteira. Qual índice?',
           choice: 'Índice composto em (mês, conta)', alternatives: ['view materializada', 'sem índice'],
-          decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: new Date(AGORA - 5 * 60_000).toISOString(),
+          decidedBy: 'user', origin: 'question', inferred: false, decidedAt: new Date(AGORA - 5 * 60_000).toISOString(),
         },
         T0,
       )
@@ -508,7 +508,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const repo = await repoComRegistros();
-      for (const state of ['descartada', 'revertida'] as const) {
+      for (const state of ['dismissed', 'reverted'] as const) {
         const d = await comRepo(c, `teste-${state}`, repo);
         await c.decisoes.putDecision({ ...d, state });
         const rota = `/api/decisoes/${d.id}/promover`;

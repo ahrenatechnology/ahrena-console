@@ -56,17 +56,17 @@ beforeEach(async () => {
   await live({ id: 'trabalhando', name: 'Separar pagamentos', cwd: '/sim/vitrine-demo' });
   await live({ id: 'delegada', name: 'Cupom por categoria', cwd: '/sim/ahrena-demo' });
   await live(
-    { id: 'plano', name: 'Migração do esquema', cwd: '/sim/motor-de-regras', awaitingInputSince: at(-9), awaitingReason: 'notification' },
+    { id: 'plan', name: 'Migração do esquema', cwd: '/sim/motor-de-regras', awaitingInputSince: at(-9), awaitingReason: 'notification' },
     [{ type: 'PreToolUse', toolName: 'ExitPlanMode', summary: null, data: { tool_use_id: 'p1', tool_input: { plan: 'passos' } } }],
   );
   await live(
-    { id: 'permissao', name: 'Rodar a migração', cwd: '/outra/ahrena-demo', awaitingInputSince: at(-2), awaitingReason: 'notification' },
+    { id: 'permission', name: 'Rodar a migração', cwd: '/outra/ahrena-demo', awaitingInputSince: at(-2), awaitingReason: 'notification' },
     [{ type: 'Notification', toolName: null, summary: 'Claude needs your permission', data: { notification_type: 'permission_prompt' } }],
   );
   await live({ id: 'fora', name: 'Fora do contexto', cwd: '/sim/cli-de-notas' });
   await registerDecision(
     decisions,
-    { sourceKey: 'sugerida:1', sessionId: 'trabalhando', topic: 'cards', context: null, choice: '10 cards por coluna', alternatives: ['20 por coluna'], decidedBy: 'agente', origin: 'sugerida', inferred: true, decidedAt: at(-6) },
+    { sourceKey: 'sugerida:1', sessionId: 'trabalhando', topic: 'cards', context: null, choice: '10 cards por coluna', alternatives: ['20 por coluna'], decidedBy: 'agent', origin: 'suggested', inferred: true, decidedAt: at(-6) },
     at(-6),
   );
 });
@@ -100,9 +100,9 @@ describe('Dev Console of one context', () => {
     assert.deepEqual(
       v.dependsOnYou.map((d) => [d.kind, d.sessionId, d.kind === 'session' ? d.reason : d.choice, d.issue]),
       [
-        ['session', 'plano', 'plan', 58],
+        ['session', 'plan', 'plan', 58],
         ['suggested-decision', 'trabalhando', '10 cards por coluna', 61],
-        ['session', 'permissao', 'permission', 68],
+        ['session', 'permission', 'permission', 68],
       ],
     );
     const s = v.dependsOnYou[0];
@@ -124,14 +124,14 @@ describe('Dev Console of one context', () => {
     assert.deepEqual(numbers(v.board.blocked), [55]);
     assert.deepEqual(numbers(v.board.done), [52, 50, 49]);
     // Two sessions on #68's branch: the card shows the one waiting on you.
-    assert.deepEqual(v.board.delegated[0].session, { id: 'permissao', title: 'Rodar a migração', waitingOnYou: true });
+    assert.deepEqual(v.board.delegated[0].session, { id: 'permission', title: 'Rodar a migração', waitingOnYou: true });
     const review = v.board['in-review'];
     assert.deepEqual(review.map((c) => [c.number, c.pullRequest?.number, c.ci]), [
       [31, 81, 'ok'],
       [47, 77, 'failing'],
       [58, 79, 'ok'],
     ]);
-    assert.deepEqual(review[2].session, { id: 'plano', title: 'Migração do esquema', waitingOnYou: true });
+    assert.deepEqual(review[2].session, { id: 'plan', title: 'Migração do esquema', waitingOnYou: true });
     assert.deepEqual(Object.keys(v.board.todo[0]).sort(), ['ci', 'number', 'pullRequest', 'repo', 'session', 'title', 'url']);
   });
 
@@ -192,11 +192,11 @@ describe('Dev Console of one context', () => {
     const decide = (sessionId: string, key: string, choice: string, minutesAgo: number) =>
       registerDecision(
         decisions,
-        { sourceKey: key, sessionId, topic: key, context: null, choice, alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-minutesAgo) },
+        { sourceKey: key, sessionId, topic: key, context: null, choice, alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: at(-minutesAgo) },
         at(-minutesAgo),
       );
     await decide('trabalhando', 'q1', 'SQLite em memória nos testes', 14);
-    await decide('plano', 'q2', 'Cobrança vira um serviço à parte', 25);
+    await decide('plan', 'q2', 'Cobrança vira um serviço à parte', 25);
     await decide('fora', 'q3', 'Fora do contexto', 5);
     // T0 is 12:00 UTC: 13 h ago is yesterday.
     await decide('trabalhando', 'q4', 'De ontem', 13 * 60);
@@ -205,7 +205,7 @@ describe('Dev Console of one context', () => {
       v.decisionsToday.map((d) => [d.sessionId, d.choice, d.minutes]),
       [
         ['trabalhando', 'SQLite em memória nos testes', 14],
-        ['plano', 'Cobrança vira um serviço à parte', 25],
+        ['plan', 'Cobrança vira um serviço à parte', 25],
       ],
     );
     assert.match(v.decisionsToday[0].label, /^D\d+$/);
@@ -216,7 +216,7 @@ describe('Dev Console of one context', () => {
     await storage.putSession(session({ id: 'ended', name: 'Encerrada', cwd: '/sim/motor-de-regras', status: 'completed', startedAt: at(-120), updatedAt: at(-5), endedAt: at(-5) }));
     await registerDecision(
       decisions,
-      { sourceKey: 'e1', sessionId: 'ended', topic: 'e1', context: null, choice: 'Decidida numa sessão encerrada', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-20) },
+      { sourceKey: 'e1', sessionId: 'ended', topic: 'e1', context: null, choice: 'Decidida numa sessão encerrada', alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: at(-20) },
       at(-20),
     );
     const v = (await devConsole.view('loja'))!;
@@ -229,11 +229,11 @@ describe('Dev Console of one context', () => {
     const cached = createDevConsole({ storage, frota, decisions, source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit, now });
     await registerDecision(
       decisions,
-      { sourceKey: 'c1', sessionId: 'plano', topic: 'c1', context: null, choice: 'Uma vez só', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-3) },
+      { sourceKey: 'c1', sessionId: 'plan', topic: 'c1', context: null, choice: 'Uma vez só', alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: at(-3) },
       at(-3),
     );
     await cached.view('loja');
-    const s = (await storage.getSession('plano'))!;
+    const s = (await storage.getSession('plan'))!;
     await storage.putSession({ ...s, status: 'completed', endedAt: at(-1), updatedAt: at(-1) });
     const v = (await cached.view('loja'))!;
     assert.deepEqual(v.decisionsToday.filter((d) => d.choice === 'Uma vez só').length, 1);
@@ -243,7 +243,7 @@ describe('Dev Console of one context', () => {
     const decide = (key: string, choice: string, minutesAgo: number) =>
       registerDecision(
         decisions,
-        { sourceKey: key, sessionId: 'trabalhando', topic: key, context: null, choice, alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: at(-minutesAgo) },
+        { sourceKey: key, sessionId: 'trabalhando', topic: key, context: null, choice, alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: at(-minutesAgo) },
         at(-minutesAgo),
       );
     // T0 is 12:00 UTC, 09:00 in São Paulo: 04:00 UTC is 01:00 there (today), 01:00 UTC is 22:00 there (yesterday).

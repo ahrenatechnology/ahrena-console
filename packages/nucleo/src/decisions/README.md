@@ -25,9 +25,9 @@ await captureTranscriptFile(decisions, transcriptPath, new Date().toISOString())
 
 ## Modelo
 
-- **Origem:** `pergunta`, `plano`, `permissao`, `correcao` ("correção sua") e `sugerida`.
-- **Estado:** `vigente`, `substituida` (com `supersededBy`), `revertida`, `a_confirmar` e `descartada` (o "Descartar" de uma sugerida, que fica no histórico em vez de sumir).
-- **Escopo:** `sessao`, `familia` (o padrão) ou `branch`. Uma decisão de escopo `sessao` não atravessa o `/clear`.
+- **Origem:** `question`, `plan`, `permission`, `correction` ("correção sua") e `suggested`.
+- **Estado:** `current`, `superseded` (com `supersededBy`), `reverted`, `to_confirm` e `dismissed` (o "Descartar" de uma sugerida, que fica no histórico em vez de sumir).
+- **Escopo:** `session`, `family` (o padrão) ou `branch`. Uma decisão de escopo `session` não atravessa o `/clear`.
 - **Número:** `seq` conta na família; `decisionLabel(d)` dá o "D4".
 - **Link:** `message` guarda o `uuid` da linha, o `tool_use_id` e o caminho do transcript, nunca o texto da mensagem.
 - **Outros:** `inferred` marca o que a captura deduziu; `textReleased` libera o texto para o hub; `promotedTo` é o registro em `docs/decisoes/` (#103).
@@ -36,13 +36,13 @@ await captureTranscriptFile(decisions, transcriptPath, new Date().toISOString())
 
 Cada decisão tem um assunto (`topic`). Na mesma família, as decisões vigentes e substituídas de um assunto formam uma fila por `decidedAt`: cada uma é substituída pela seguinte, e só a última vale. A fila é refeita a cada mudança, então a cadeia fica certa mesmo quando a captura chega fora de ordem (o hook agora, o transcript depois). `decisionChain(port, id)` devolve a cadeia inteira, da mais antiga à mais nova, a partir de qualquer elo.
 
-- Uma decisão `a_confirmar` não substitui nada. Ao confirmar (`confirmDecision`), entra na fila.
+- Uma decisão `to_confirm` não substitui nada. Ao confirmar (`confirmDecision`), entra na fila.
 - Reverter (`revertDecision`) tira a decisão da fila, e a anterior volta a valer.
-- Os assuntos: `pergunta:<pergunta normalizada>`, `plano`, `permissao:<ferramenta e comando>`. A correção herda o assunto da proposta que contraria quando dá para saber qual é.
+- Os assuntos: `question:<pergunta normalizada>`, `plan`, `permission:<ferramenta e comando>`. A correção herda o assunto da proposta que contraria quando dá para saber qual é.
 
 ## Família
 
-`linkSession(port, { sessionId, parentSessionId, reason })` liga uma sessão à anterior. Os motivos são `clear`, `compact`, `resume` e `filha`. A sessão entra na família da mãe, e o que ela já tinha decidido vai junto, com número novo. Quem descobre a mãe é a ligação de sessões do histórico (#33). A compactação mantém o `session_id`, então nada muda nela.
+`linkSession(port, { sessionId, parentSessionId, reason })` liga uma sessão à anterior. Os motivos são `clear`, `compact`, `resume` e `child`. A sessão entra na família da mãe, e o que ela já tinha decidido vai junto, com número novo. Quem descobre a mãe é a ligação de sessões do histórico (#33). A compactação mantém o `session_id`, então nada muda nela.
 
 `currentDecisionsFor(port, { sessionId, branch, repo }, level)` devolve as vigentes que valem para a sessão. É o que a injeção (#100) e a ferramenta MCP (#101) consultam.
 
@@ -63,7 +63,7 @@ Determinística, nos dois caminhos. A chave de origem é a mesma (`tool:<tool_us
 
 A correção inferida é conservadora. Só conta uma mensagem que começa com "não", "na verdade", "em vez de", "actually", "instead"… logo depois de uma fala do agente. Ela entra na cadeia de um assunto só quando o turno teve uma decisão só.
 
-**Inferência por modelo pequeno:** `DecisionInferrer` é só a interface, e nada aqui chama API de modelo. O que o inferidor devolve entra como `sugerida`, do agente, `a_confirmar`.
+**Inferência por modelo pequeno:** `DecisionInferrer` é só a interface, e nada aqui chama API de modelo. O que o inferidor devolve entra como `suggested`, do agente, `to_confirm`.
 
 ## Conteúdo não confiável
 

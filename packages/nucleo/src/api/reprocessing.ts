@@ -26,8 +26,8 @@ import { isPlanEvent } from '../plan/extraction.ts';
 import { rebuildPlan } from '../plan/recording.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
 
-/** O nome do reprocessamento; um nome novo faz rodar de novo em todo banco. */
-export const REPROCESSAMENTO = 'planos-e-decisoes-1';
+/** The reprocessing's name; a new name makes it run again in every database. */
+export const PLANS_AND_DECISIONS_REPROCESSING = 'plans-and-decisions-1';
 
 const DECISORAS = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -91,8 +91,8 @@ export async function reprocessarHistorico(o: {
   return r;
 }
 
-/** A limpeza das decisões que a captura antiga gravou e não são decisão. */
-export const LIMPEZA_DAS_DECISOES = 'decisoes-ruido-1';
+/** The cleanup of the decisions the old capture saved that are not decisions. */
+export const DECISION_NOISE_CLEANUP = 'decision-noise-1';
 
 /**
  * Uma passada pelas decisões gravadas, com as regras de hoje:
@@ -100,7 +100,7 @@ export const LIMPEZA_DAS_DECISOES = 'decisoes-ruido-1';
  * - "correção" inferida de uma mensagem que não responde "não, …" a uma pergunta do agente
  *   (longa, pergunta, dúvida, desabafo) sai das listas, se a pessoa ainda não mexeu nela;
  * - a correção que fica ganha o título curto, com o texto inteiro no detalhe.
- * O que sai fica `descartada`, com o motivo em `metadata.ruido`: no histórico, fora das listas.
+ * O que sai fica `dismissed`, com o motivo em `metadata.ruido`: no histórico, fora das listas.
  */
 export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPort, agora = new Date().toISOString()): Promise<{ ruido: number; encurtadas: number }> {
   const r = { ruido: 0, encurtadas: 0 };
@@ -116,16 +116,16 @@ export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPor
         c = p.nextCursor;
       } while (c);
       for (const d of todas) {
-        if (d.state === 'descartada' || d.state === 'revertida') continue;
-        if (d.origin === 'pergunta' && isDismissedAnswer(d.choice)) {
+        if (d.state === 'dismissed' || d.state === 'reverted') continue;
+        if (d.origin === 'question' && isDismissedAnswer(d.choice)) {
           await markNoise(decisoes, d.id, 'pergunta fechada sem resposta', agora);
           r.ruido++;
           continue;
         }
-        if (d.origin !== 'correcao') continue;
+        if (d.origin !== 'correction') continue;
         const texto = typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice;
         const respondePergunta = d.context?.trim().endsWith('?') === true;
-        if (d.inferred && d.state === 'a_confirmar' && !d.metadata?.painel && (!respondePergunta || !looksLikeCorrection(texto))) {
+        if (d.inferred && d.state === 'to_confirm' && !d.metadata?.painel && (!respondePergunta || !looksLikeCorrection(texto))) {
           await markNoise(decisoes, d.id, 'mensagem que não contraria uma proposta', agora);
           r.ruido++;
           continue;
@@ -142,8 +142,8 @@ export async function limparDecisoes(storage: StoragePort, decisoes: DecisionPor
   return r;
 }
 
-/** O reprocessamento do medidor de contexto; um nome novo faz rodar de novo em todo banco. */
-export const REPROCESSAMENTO_DO_CONTEXTO = 'contexto-1';
+/** The context meter's reprocessing; a new name makes it run again in every database. */
+export const CONTEXT_REPROCESSING = 'context-1';
 
 /** Os transcripts dos subagentes da sessão, ao lado do principal (`<sessão>/subagents/agent-*.jsonl`). */
 function transcriptsDosSubagentes(principal: string): string[] {

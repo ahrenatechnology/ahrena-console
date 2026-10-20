@@ -2,15 +2,56 @@
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { CONTEXT_MIGRATION_DESCRIPTION, CONTEXT_MIGRATION_SQL } from '../../context/migration.ts';
-import { DECISIONS_MIGRATION_DESCRIPTION, DECISIONS_MIGRATION_SQL } from '../../decisions/migration.ts';
+import { CONTEXT_ENGLISH_SQL, CONTEXT_MIGRATION_DESCRIPTION, CONTEXT_MIGRATION_SQL } from '../../context/migration.ts';
+import {
+  DECISIONS_ENGLISH_SQL,
+  DECISIONS_MIGRATION_DESCRIPTION,
+  DECISIONS_MIGRATION_SQL,
+  rekeyDecisions,
+} from '../../decisions/migration.ts';
+import { deleteLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 
 export interface Migration {
   version: number;
   description: string;
   sql: string;
+  /** What SQL alone does not do (hashing, JSON), run after `sql` in the same transaction. */
+  up?: (db: DatabaseSync) => void;
 }
+
+/**
+ * #173 phase 5: the names of the reprocessings already done, old → new. A reprocessing done under
+ * the old name stays done under the new one.
+ */
+export const REPROCESSING_NAMES: Readonly<Record<string, string>> = {
+  'planos-e-decisoes-1': 'plans-and-decisions-1',
+  'decisoes-ruido-1': 'decision-noise-1',
+  'contexto-1': 'context-1',
+};
+
+const reprocessingNameCase = `CASE nome ${Object.entries(REPROCESSING_NAMES)
+  .map(([from, to]) => `WHEN '${from}' THEN '${to}'`)
+  .join(' ')} ELSE nome END`;
+
+/** #173 phase 5: tables, columns, trigger and stored values in English (decision 0009). */
+const ENGLISH_SCHEMA_SQL = `
+  CREATE TABLE reprocessings (
+    name TEXT PRIMARY KEY,
+    done_at TEXT NOT NULL
+  ) STRICT;
+  INSERT INTO reprocessings (name, done_at) SELECT ${reprocessingNameCase}, feito_em FROM reprocessamentos;
+  DROP TABLE reprocessamentos;
+
+  DROP TRIGGER events_seq_faltando;
+  -- A process from before migration 8, with the database already open, writes without seq: the trigger fills it.
+  CREATE TRIGGER events_seq_missing AFTER INSERT ON events WHEN NEW.seq IS NULL
+  BEGIN
+    UPDATE events SET seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM events) WHERE rowid = NEW.rowid;
+  END;
+  ${CONTEXT_ENGLISH_SQL}
+  ${DECISIONS_ENGLISH_SQL}
+`;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -202,6 +243,16 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   // The telemetry samples schema lives in its own folder (src/telemetry/migration.ts).
   { version: 9, description: TELEMETRY_MIGRATION_DESCRIPTION, sql: TELEMETRY_MIGRATION_SQL },
+  {
+    version: 10,
+    description: 'English schema: tables, columns, trigger and stored values (#173)',
+    // Rebuilds the tables whose CHECK lists Portuguese values; the rows are copied with the values mapped.
+    sql: ENGLISH_SCHEMA_SQL,
+    up: (db) => {
+      rekeyDecisions(db);
+      deleteLegacyGithubCacheKeys(db);
+    },
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {
@@ -225,6 +276,7 @@ export function migrate(db: DatabaseSync, migrations: readonly Migration[] = MIG
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(m.sql);
+      m.up?.(db);
       db.exec(`PRAGMA user_version = ${m.version}`);
       db.exec('COMMIT');
     } catch (err) {
