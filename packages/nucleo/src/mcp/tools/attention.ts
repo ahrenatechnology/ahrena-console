@@ -9,7 +9,7 @@
 
 import { ArgumentError, type Tool, type JsonObject } from '../protocol.ts';
 import { matchesAccountFilter, minutesSince, MCP_ATTENTION_REASONS, projectOf, type Attention, type McpAttentionGroup, type FleetReader, type McpAttentionReason, type FleetSession } from '../fleet.ts';
-import { LOCAL_DO_DESKTOP } from '../../api/servidor.ts';
+import { LOCAL_DO_DESKTOP } from '../../api/server.ts';
 import { COMMON_ARGS, ACCOUNT_SCHEMA, objectSchema, timeAgo, parseCommonArgs, arrayOf, strictObject, nullable, paginate, T } from '../output.ts';
 import { outputAccount, accountLabel, type OutputAccount } from './common.ts';
 

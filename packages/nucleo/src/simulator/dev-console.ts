@@ -7,7 +7,7 @@
 // #68's, not pushed yet, which puts that issue in `delegated`.
 
 import { basename } from 'node:path';
-import type { Git } from '../api/trabalho.ts';
+import type { Git } from '../api/work.ts';
 import type { DevConsoleContext } from '../dev-console/contexts.ts';
 import type { IssueFact, MergedPullRequestFact, PullRequestFact } from '../dev-console/model.ts';
 import type { DevConsoleSource, RepoBranches, RepoIssues, RepoPullRequests } from '../dev-console/source.ts';

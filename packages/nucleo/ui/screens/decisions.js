@@ -1,6 +1,6 @@
 // A página Decisões (C21, issue 103): todas as decisões, agrupadas por branch, família ou sessão, com
 // busca. Responde "o que decidimos sobre X?" sem abrir sessão nenhuma. Lê `GET /api/decisions`
-// (src/api/decisoes-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (api.js).
+// (src/api/decisions-ui.ts); Confirmar, Descartar e Promover escrevem por `escrever()` (api.js).
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';

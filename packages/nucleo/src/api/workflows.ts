@@ -69,8 +69,8 @@ import type { MessageUsage } from '../ingest/history/transcript.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import { subagentesDe } from './painel.ts';
-import type { TrabalhoPorBranch } from './trabalho.ts';
+import { subagentesDe } from './panel.ts';
+import type { TrabalhoPorBranch } from './work.ts';
 
 // ---------- Contrato ----------
 //

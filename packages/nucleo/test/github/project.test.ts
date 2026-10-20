@@ -16,7 +16,7 @@ import {
 } from '../../src/index.ts';
 import { clock, replayFetch, REPO, type Recorded } from './helpers.ts';
 
-/** Leitura real do Project 3, gravada por `gravar-project.ts`. */
+/** Leitura real do Project 3, gravada por `record-project.ts`. */
 const recordedBoard: Recorded[] = JSON.parse(readFileSync(new URL('./fixtures/project.json', import.meta.url), 'utf8'));
 const PROJECT = { owner: 'ahrenatechnology', number: 3 };
 const raw = recordedBoard[0].body.data!.repositoryOwner as { projectV2: { id: string; field: { id: string } } };

@@ -55,7 +55,7 @@ Comum às duas:
 
 ### `sessions_needing_attention`
 
-As sessões que esperam por você, em dois grupos, como o dono pediu. A divisão é a do "precisam de você" do painel: `atencaoDe` em [src/api/atencao.ts](../api/atencao.ts) (#140), usada pelas duas superfícies, para que contem igual.
+As sessões que esperam por você, em dois grupos, como o dono pediu. A divisão é a do "precisam de você" do painel: `atencaoDe` em [src/api/attention.ts](../api/attention.ts) (#140), usada pelas duas superfícies, para que contem igual.
 
 | `group` | `reason` | Quando |
 | --- | --- | --- |

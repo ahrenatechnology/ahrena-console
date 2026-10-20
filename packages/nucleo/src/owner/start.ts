@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VERSAO_DA_API } from '../api/versao.ts';
+import { VERSAO_DA_API } from '../api/version.ts';
 import { registerClient } from './clients.ts';
 import { codeCommit, isOlderCommit } from './commit.ts';
 import { codeWarning, examine, planStart } from './owner.ts';

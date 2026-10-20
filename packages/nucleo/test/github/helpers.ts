@@ -15,8 +15,8 @@ export interface Recorded {
   body: { data?: Record<string, unknown> & { rateLimit?: { cost: number } }; errors?: unknown[] };
 }
 
-/** Respostas reais do GitHub, gravadas por `gravar-fixtures.ts`. */
-export const recorded: Recorded[] = JSON.parse(readFileSync(new URL('./fixtures/respostas.json', import.meta.url), 'utf8'));
+/** Respostas reais do GitHub, gravadas por `record-fixtures.ts`. */
+export const recorded: Recorded[] = JSON.parse(readFileSync(new URL('./fixtures/responses.json', import.meta.url), 'utf8'));
 
 export interface ReplayFetch {
   (input: string | URL | Request, init?: RequestInit): Promise<Response>;

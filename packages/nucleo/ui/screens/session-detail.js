@@ -1,5 +1,5 @@
 // O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes (C4), Conversa (C5) e Linha do
-// tempo (C6), sobre `GET /api/sessions/<id>…` (src/api/detalhe.ts). Workflow e Decisões não entram
+// tempo (C6), sobre `GET /api/sessions/<id>…` (src/api/session-detail.ts). Workflow e Decisões não entram
 // nesta versão.
 //
 // Tudo o que vem do núcleo, e o texto da conversa mais ainda, é conteúdo não confiável: entra por

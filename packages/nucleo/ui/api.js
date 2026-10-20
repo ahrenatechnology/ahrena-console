@@ -131,7 +131,7 @@ export function write(route, body, options) {
 // ---------- The page's only open-in-desktop write ----------
 //
 // The session detail's "Abrir no Claude Desktop": `POST /open/<local_…>` on its own origin, in JSON.
-// The core accepts this POST with the page's `Origin` and no other (servidor.ts). The artifact swaps
+// The core accepts this POST with the page's `Origin` and no other (server.ts). The artifact swaps
 // the transport with `useOpener()`.
 
 const DESKTOP_LOCAL_ID = /^local_[0-9a-f-]{36}$/;

@@ -1,10 +1,10 @@
 // O cálculo das telas de repositórios (#104 e #105), sem rede e sem relógio próprio: recebe o que
 // a fonte devolveu (src/github/repos-source.ts) e o instante de agora, devolve os números das
-// respostas (src/api/repos-tipos.ts). O período (30 dias, 90 dias, 1 ano) recorta tudo o que tem
+// respostas (src/api/repos-types.ts). O período (30 dias, 90 dias, 1 ano) recorta tudo o que tem
 // data; o que o GitHub só dá por janela fixa (tráfego: 14 dias) fica como vem.
 
-import type { CiDoRepo, GrupoDeRepos, MetricasDoRepo, Periodo, RepoDaLista, ResumoDosRepos, SemanaDeFrequencia } from '../api/repos-tipos.ts';
-import type { Amostra } from '../api/repos-tipos.ts';
+import type { CiDoRepo, GrupoDeRepos, MetricasDoRepo, Periodo, RepoDaLista, ResumoDosRepos, SemanaDeFrequencia } from '../api/repos-types.ts';
+import type { Amostra } from '../api/repos-types.ts';
 import type { ContagensCruas, InfoCrua, IssueCrua, ListaCrua, PrCru, RepoCru, ResumoCru } from './repos-source.ts';
 
 export const DIA_MS = 24 * 60 * 60_000;

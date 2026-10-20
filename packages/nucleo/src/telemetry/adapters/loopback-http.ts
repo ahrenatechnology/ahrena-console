@@ -2,7 +2,7 @@
 // port the user's tunnel forwards to a remote núcleo.
 //
 // - `Host: 127.0.0.1:4720`: the remote núcleo listens on its own 4720 and its Host defense
-//   (decision 0003, src/api/servidor.ts) refuses any other Host, the forwarded port included.
+//   (decision 0003, src/api/server.ts) refuses any other Host, the forwarded port included.
 // - No `Origin`, `GET` only, no body: nothing on this Mac writes to the remote machine.
 // - One deadline for the whole exchange (3 s by default, injectable for tests): a núcleo that
 //   accepts and never answers, or answers slowly, is `no-response` at the deadline.
