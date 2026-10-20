@@ -2,7 +2,9 @@
 // alone, on made-up specs; the route specs themselves are proved by the goldens (legacy-golden.test.ts).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
+import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, normalizeLegacyQuery, rawPathnameOf, translateBody, type LegacyBodySpec } from '../../src/api/legacy-routes.ts';
+import { TIPOS_DE_MUDANCA } from '../../src/mudancas/cursor.ts';
+import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -111,7 +113,7 @@ describe('#173 phase 2b: the back-translator', () => {
 
   test('a route whose spec is still empty gives its body back as it is', () => {
     const body = { sessao: 's', texto: 't', itens: [{ estado: 'a_confirmar' }] };
-    for (const path of ['/api/atencao', '/api/projeto/mover']) {
+    for (const path of ['/api/eventos', '/api/projeto/mover']) {
       assert.equal(legacyResponseFor(path)!(body), body, path);
       assert.equal(legacyRequestBody(path, body), body, path);
     }
@@ -254,5 +256,95 @@ describe('#173 phase 2b: the back-translator', () => {
         for (const [name, field, oldField] of cases)
           assert.equal(JSON.stringify(route(list(scope, decision(field)))), JSON.stringify(oldList(oldScope, oldDecision(oldField))), `${scope} ${name}`);
     });
+  });
+});
+
+// Phase 2b layer 3: every member of the unions of the attention, the changes, the wall and the load,
+// new → the old value on the old route (the goldens only see what the demo emits).
+describe('every union member of the installed app and the live group answers the old value on the old route', () => {
+  const LEVEL = { needs: 'precisa', 'your-turn': 'sua-vez' };
+  const REASON = { permission: 'permissao', question: 'pergunta', plan: 'plano', decision: 'decisao', error: 'erro', 'your-turn': 'sua-vez', interrupted: 'interrompida', 'no-prompt': 'no-prompt' };
+  const CHANGE = { session: 'sessao', state: 'estado', 'needs-you': 'precisa-de-voce', plan: 'plano', decision: 'decisao', account: 'conta', repos: 'repos', alert: 'alert' };
+  const ACTIVITY = { tool: 'ferramenta', delegating: 'delegando', question: 'pergunta', permission: 'permissao', error: 'erro', prompt: 'prompt', 'your-turn': 'sua-vez', interrupted: 'interrompida', completed: 'concluida', abandoned: 'abandonada', idle: 'ociosa' };
+  const HISTORY = { ready: 'pronto', importing: 'importando', off: 'desligado' };
+
+  test('attention: level and reason, with the whole item and top in the old keys and order', () => {
+    assert.deepEqual(Object.keys(REASON).sort(), Object.keys(MOTIVO_CURTO).sort(), 'every reason the route answers');
+    const route = legacyResponseFor('/api/atencao')!;
+    for (const [level, oldLevel] of Object.entries(LEVEL))
+      for (const [reason, oldReason] of Object.entries(REASON)) {
+        const item = { session: 's', title: 't', project: null, account: { label: 'L', color: '#fff' }, level, reason, shortReason: 'x', longReason: 'y', since: 'd', minutes: 1, local: null };
+        const body = { generatedAt: 'g', cursor: 'c', total: 1, needs: 1, yourTurn: 0, active: 2, withError: 0, items: [item] };
+        assert.equal(
+          JSON.stringify(route(body)),
+          JSON.stringify({
+            geradoEm: 'g', cursor: 'c', total: 1, precisam: 1, suaVez: 0, ativas: 2, comErro: 0,
+            itens: [{ sessao: 's', titulo: 't', projeto: null, conta: { rotulo: 'L', cor: '#fff' }, nivel: oldLevel, motivo: oldReason, motivoCurto: 'x', motivoLongo: 'y', desde: 'd', minutos: 1, local: null }],
+          }),
+          `${level} ${reason}`,
+        );
+      }
+  });
+
+  test('changes: every type, the keys of a change and of the answer, and the errors that cite a parameter', () => {
+    assert.deepEqual(Object.keys(CHANGE), [...TIPOS_DE_MUDANCA], 'every change type');
+    const route = legacyResponseFor('/api/mudancas')!;
+    for (const [type, old] of Object.entries(CHANGE)) {
+      const body = { cursor: 'g.2', changes: [{ type, key: 'k', sessionId: null, accountId: null, seq: 2 }], reset: false, timedOut: false };
+      assert.equal(JSON.stringify(route(body)), JSON.stringify({ cursor: 'g.2', mudancas: [{ tipo: old, chave: 'k', sessionId: null, accountId: null, seq: 2 }], reiniciar: false, expirou: false }), type);
+    }
+    const errors = {
+      'session inválida': 'sessao inválida',
+      'account inválida': 'conta inválida',
+      'wait inválida': 'espera inválida',
+      [`type: um de ${TIPOS_DE_MUDANCA.join(', ')}`]: 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert',
+      'esperas abertas demais (máximo 2)': 'esperas abertas demais (máximo 2)',
+    };
+    for (const [error, old] of Object.entries(errors)) assert.deepEqual(route({ error }), { error: old }, error);
+  });
+
+  test('changes: the old `?type=` values (alone or in a list) become the new ones; the new ones pass', () => {
+    for (const [type, old] of Object.entries(CHANGE)) {
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`tipo=${old}`)).get('type'), type, old);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`type=${type}`)).get('type'), type, type);
+    }
+    assert.equal(normalizeLegacyQuery(new URLSearchParams('tipo=sessao,decisao,alert')).get('type'), 'session,decision,alert');
+    // An event type is not a change type: it passes as it came.
+    assert.equal(normalizeLegacyQuery(new URLSearchParams('tipo=PreToolUse')).get('type'), 'PreToolUse');
+  });
+
+  test('wall: the activity types of a card, its keys and the counts', () => {
+    const route = legacyResponseFor('/api/mural')!;
+    for (const [type, old] of Object.entries(ACTIVITY)) {
+      const card = {
+        id: 'i', title: 't', project: 'p', branch: null, status: 'waiting', state: 'waiting', reason: 'notification', urgent: true, since: 'd',
+        activity: { type, text: 'x' }, model: 'm', effort: null, agents: { active: 1, total: 2 }, cost: { usd: null, estimate: true },
+        plan: { done: 1, total: 2, current: 'c' }, context: { pct: 1, used: 2, limit: 3, label: 'l' },
+      };
+      assert.equal(
+        JSON.stringify(route({ version: 1, generatedAt: 'g', count: { all: 1, waiting: 1, active: 0 }, cards: [card] })),
+        JSON.stringify({
+          versao: 1, geradoEm: 'g', contagem: { todas: 1, esperando: 1, ativas: 0 },
+          cards: [{
+            id: 'i', titulo: 't', projeto: 'p', branch: null, status: 'waiting', estado: 'waiting', motivo: 'notification', urgente: true, desde: 'd',
+            atividade: { tipo: old, texto: 'x' }, modelo: 'm', esforco: null, agentes: { ativos: 1, total: 2 }, custo: { usd: null, estimativa: true },
+            plano: { feitos: 1, total: 2, atual: 'c' }, contexto: { pct: 1, usados: 2, limite: 3, rotulo: 'l' },
+          }],
+        }),
+        type,
+      );
+    }
+  });
+
+  test('load: every counter and the history state; the follower and the work counters stay', () => {
+    const route = legacyResponseFor('/api/carga')!;
+    for (const [history, old] of Object.entries(HISTORY)) {
+      const follower = { rounds: 1, scans: 1, filesImported: 2, filesKnown: 3, watching: true };
+      assert.equal(
+        JSON.stringify(route({ requests: 1, panel: 2, panelMs: 3, eventsRead: 4, openWaits: 0, history, follower, desktopRead: 5, work: { github: 0, git: 1 } })),
+        JSON.stringify({ pedidos: 1, painel: 2, msPainel: 3, eventosLidos: 4, esperasAbertas: 0, historico: old, seguidor: follower, desktopLidos: 5, trabalho: { github: 0, git: 1 } }),
+        history,
+      );
+    }
   });
 });

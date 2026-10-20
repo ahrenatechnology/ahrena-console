@@ -266,7 +266,7 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
             Some(c) => format!("/api/changes?since={}&wait=25", http::codificar(c)),
             None => "/api/changes?wait=25".into(),
         };
-        // Volta com mudanças, com `reiniciar` ou depois de 25 s sem nada: em todos os casos relê,
+        // Volta com mudanças, com `reset` ou depois de 25 s sem nada: em todos os casos relê,
         // o que também atualiza os minutos de espera. Sem `/api/changes` (núcleo antigo), relê a cada 25 s.
         if http::get(porta, &caminho, Duration::from_secs(40)).is_none() {
             let resto = Duration::from_secs(25).saturating_sub(inicio.elapsed());

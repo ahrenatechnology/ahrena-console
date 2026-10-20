@@ -100,6 +100,6 @@ export class TelemetrySampler {
 /** Publishes each alert transition on the change cursor, as `alert` with the key `<machine>:<alert>`. */
 export function publishAlertChanges(cursor: CursorDeMudancas): (change: AlertChange) => void {
   return ({ machineId, alert }) => {
-    cursor.registrar({ tipo: 'alert', chave: `${machineId}:${alert.id}`, sessionId: null, accountId: null });
+    cursor.registrar({ type: 'alert', key: `${machineId}:${alert.id}`, sessionId: null, accountId: null });
   };
 }

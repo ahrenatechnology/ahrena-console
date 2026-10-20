@@ -45,11 +45,35 @@ function listen(server: TcpServer, port = 0): Promise<number> {
 
 const closeServer = (server: TcpServer) => new Promise<void>((resolve) => server.close(() => resolve()));
 
+/** A remote's `GET /api/attention` answer, English (#173 phase 2b). */
 export function attentionBody(items: unknown[], over: Record<string, unknown> = {}) {
+  return { generatedAt: '2026-11-02T12:00:00.000Z', cursor: 'g.1', total: items.length, needs: items.length, yourTurn: 0, active: 1, withError: 0, items, ...over };
+}
+
+export function remoteItem(session: string, over: Record<string, unknown> = {}) {
+  return {
+    session,
+    title: `Sessão ${session}`,
+    project: 'projeto-exemplo',
+    account: { label: 'equipe', color: '#3366ff' },
+    level: 'needs',
+    reason: 'permission',
+    shortReason: 'Pede permissão',
+    longReason: 'pede permissão para usar Bash',
+    since: '2026-11-02T11:55:00.000Z',
+    minutes: 5,
+    local: 'local_00000000-0000-4000-8000-000000000009',
+    machine: null,
+    ...over,
+  };
+}
+
+/** The same answer from a remote núcleo released before #173 phase 2b: Portuguese keys and values. */
+export function oldAttentionBody(items: unknown[], over: Record<string, unknown> = {}) {
   return { geradoEm: '2026-11-02T12:00:00.000Z', cursor: 'g.1', total: items.length, precisam: items.length, suaVez: 0, ativas: 1, comErro: 0, itens: items, ...over };
 }
 
-export function remoteItem(sessao: string, over: Record<string, unknown> = {}) {
+export function oldRemoteItem(sessao: string, over: Record<string, unknown> = {}) {
   return {
     sessao,
     titulo: `Sessão ${sessao}`,

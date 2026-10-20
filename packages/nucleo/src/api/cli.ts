@@ -439,10 +439,10 @@ const api: ApiLocal = await iniciarApiLocal({
   agentConfig,
   telemetry: telemetryService,
   carga: () => ({
-    historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
-    seguidor: follower?.stats() ?? null,
-    desktopLidos: desktop?.lidos ?? 0,
-    trabalho: trabalho.chamadas,
+    history: follower ? (historicoPronto ? 'ready' : 'importing') : 'off',
+    follower: follower?.stats() ?? null,
+    desktopRead: desktop?.lidos ?? 0,
+    work: trabalho.chamadas,
   }),
 }).catch(async (e: NodeJS.ErrnoException) => {
   if (e.code !== 'EADDRINUSE') throw e;

@@ -1,10 +1,12 @@
 // A rota do long polling na API local, para o app de bandeja e o painel:
 //
-//   GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id>&type=<tipo>
+//   GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id>&type=<type>
 //
 // (The old `/api/mudancas?desde=&espera=&sessao=&conta=&tipo=` is an alias: src/api/legacy-routes.ts.)
 //
-// - `since` vazio volta na hora com o cursor de agora e `reiniciar: true`.
+// - `since` vazio volta na hora com o cursor de agora e `reset: true`.
+// - A resposta: `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`
+//   (#173 phase 2b; the old route answers `{ cursor, mudancas: [{ tipo, chave, … }], reiniciar, expirou }`).
 // - `wait` em segundos (padrão 25, máximo 110; 0 não espera).
 // - `session`, `account` e `type` aceitam vírgula ou repetição; `account=sem-conta` pede "Sem conta".
 // - O cliente que fecha a conexão libera a espera na hora.
@@ -31,24 +33,24 @@ export function lerPedidoDeMudancas(url: URL): { cursor: string | null; timeoutM
   const filtros: FiltrosDeMudanca = {};
   const sessoes = lista(url, 'session');
   if (sessoes) {
-    if (!sessoes.every((s) => ID.test(s))) return 'sessao inválida';
+    if (!sessoes.every((s) => ID.test(s))) return 'session inválida';
     filtros.sessionIds = sessoes;
   }
   const contas = lista(url, 'account');
   if (contas) {
-    if (!contas.every((c) => ID.test(c))) return 'conta inválida';
+    if (!contas.every((c) => ID.test(c))) return 'account inválida';
     filtros.accountIds = contas.map((c) => (c === SEM_CONTA ? null : c));
   }
   const tipos = lista(url, 'type');
   if (tipos) {
     if (!tipos.every((t): t is TipoDeMudanca => (TIPOS_DE_MUDANCA as readonly string[]).includes(t))) {
-      return `tipo: um de ${TIPOS_DE_MUDANCA.join(', ')}`;
+      return `type: um de ${TIPOS_DE_MUDANCA.join(', ')}`;
     }
     filtros.tipos = tipos as TipoDeMudanca[];
   }
   const espera = url.searchParams.get('wait');
   const segundos = espera === null || espera === '' ? ESPERA_PADRAO_MS / 1000 : Number(espera);
-  if (!Number.isFinite(segundos) || segundos < 0) return 'espera inválida';
+  if (!Number.isFinite(segundos) || segundos < 0) return 'wait inválida';
   return { cursor: url.searchParams.get('since'), timeoutMs: segundos * 1000, filtros };
 }
 

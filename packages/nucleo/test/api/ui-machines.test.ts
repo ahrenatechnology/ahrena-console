@@ -87,14 +87,14 @@ const setRemote = (state: MachineState, reason: UnreachableReason | null = null,
 
 const ATTENTION = {
   total: 6,
-  itens: [
-    { sessao: 'l1', titulo: 'Rodar a migração', projeto: 'vitrine-demo', nivel: 'precisa', motivo: 'permissao', motivoCurto: 'Pede permissão', motivoLongo: 'pede permissão', minutos: 2, machine: null },
-    { sessao: 'r1', titulo: 'Migração do esquema de pedidos', projeto: 'motor-de-regras', nivel: 'precisa', motivo: 'pergunta', motivoCurto: 'Fez uma pergunta', motivoLongo: 'x', minutos: 2, machine: { id: WS.id, label: WS.label } },
-    { sessao: 'r2', titulo: 'Relatório mensal mais rápido', projeto: 'painel-de-metricas', nivel: 'precisa', motivo: 'erro', motivoCurto: 'Com erro', motivoLongo: 'x', minutos: 3, machine: { id: WS.id, label: WS.label } },
-    { sessao: 'r3', titulo: 'Endpoint de exportação em CSV', projeto: 'catalogo-exemplo', nivel: 'sua-vez', motivo: 'sua-vez', motivoCurto: 'Sua vez', motivoLongo: 'x', minutos: 0, machine: { id: WS.id, label: WS.label } },
-    { sessao: 'r4', titulo: 'Separar pagamentos', projeto: 'motor-de-regras', nivel: 'sua-vez', motivo: 'sua-vez', motivoCurto: 'Sua vez', motivoLongo: 'x', minutos: 0, machine: { id: WS.id, label: WS.label } },
-    { sessao: 'r5', titulo: 'Quinta', projeto: 'x', nivel: 'sua-vez', motivo: 'sua-vez', motivoCurto: 'Sua vez', motivoLongo: 'x', minutos: 1, machine: { id: WS.id, label: WS.label } },
-    { sessao: 'o1', titulo: 'De outra máquina', projeto: 'y', nivel: 'precisa', motivo: 'pergunta', motivoCurto: 'Fez uma pergunta', motivoLongo: 'x', minutos: 1, machine: { id: 'lab', label: 'Lab' } },
+  items: [
+    { session: 'l1', title: 'Rodar a migração', project: 'vitrine-demo', level: 'needs', reason: 'permission', shortReason: 'Pede permissão', longReason: 'pede permissão', minutes: 2, machine: null },
+    { session: 'r1', title: 'Migração do esquema de pedidos', project: 'motor-de-regras', level: 'needs', reason: 'question', shortReason: 'Fez uma pergunta', longReason: 'x', minutes: 2, machine: { id: WS.id, label: WS.label } },
+    { session: 'r2', title: 'Relatório mensal mais rápido', project: 'painel-de-metricas', level: 'needs', reason: 'error', shortReason: 'Com erro', longReason: 'x', minutes: 3, machine: { id: WS.id, label: WS.label } },
+    { session: 'r3', title: 'Endpoint de exportação em CSV', project: 'catalogo-exemplo', level: 'your-turn', reason: 'your-turn', shortReason: 'Sua vez', longReason: 'x', minutes: 0, machine: { id: WS.id, label: WS.label } },
+    { session: 'r4', title: 'Separar pagamentos', project: 'motor-de-regras', level: 'your-turn', reason: 'your-turn', shortReason: 'Sua vez', longReason: 'x', minutes: 0, machine: { id: WS.id, label: WS.label } },
+    { session: 'r5', title: 'Quinta', project: 'x', level: 'your-turn', reason: 'your-turn', shortReason: 'Sua vez', longReason: 'x', minutes: 1, machine: { id: WS.id, label: WS.label } },
+    { session: 'o1', title: 'De outra máquina', project: 'y', level: 'needs', reason: 'question', shortReason: 'Fez uma pergunta', longReason: 'x', minutes: 1, machine: { id: 'lab', label: 'Lab' } },
   ],
 };
 
@@ -474,28 +474,28 @@ describe('machine-format.js', () => {
 
 describe('#178 criterion 6: live through /api/changes, with simulator data', () => {
   test('an alert of this machine or a machine going down re-reads; another machine\'s alert or a repos change does not', async () => {
-    assert.equal(format.touchesMachine([{ tipo: 'alert', chave: 'ws-exemplo:volume-full:/' }], 'ws-exemplo'), true);
-    assert.equal(format.touchesMachine([{ tipo: 'alert', chave: 'lab:machine-unreachable' }], 'local'), true);
-    assert.equal(format.touchesMachine([{ tipo: 'alert', chave: 'lab:volume-full:/' }], 'ws-exemplo'), false);
-    assert.equal(format.touchesMachine([{ tipo: 'precisa-de-voce', chave: 'ws-exemplo:s1' }], 'ws-exemplo'), true);
-    assert.equal(format.touchesMachine([{ tipo: 'precisa-de-voce', chave: 'lab:s1' }], 'ws-exemplo'), false);
-    assert.equal(format.touchesMachine([{ tipo: 'sessao', chave: 's1' }], 'local'), true);
-    assert.equal(format.touchesMachine([{ tipo: 'repos', chave: 'lista' }, null], 'local'), false);
+    assert.equal(format.touchesMachine([{ type: 'alert', key: 'ws-exemplo:volume-full:/' }], 'ws-exemplo'), true);
+    assert.equal(format.touchesMachine([{ type: 'alert', key: 'lab:machine-unreachable' }], 'local'), true);
+    assert.equal(format.touchesMachine([{ type: 'alert', key: 'lab:volume-full:/' }], 'ws-exemplo'), false);
+    assert.equal(format.touchesMachine([{ type: 'needs-you', key: 'ws-exemplo:s1' }], 'ws-exemplo'), true);
+    assert.equal(format.touchesMachine([{ type: 'needs-you', key: 'lab:s1' }], 'ws-exemplo'), false);
+    assert.equal(format.touchesMachine([{ type: 'session', key: 's1' }], 'local'), true);
+    assert.equal(format.touchesMachine([{ type: 'repos', key: 'lista' }, null], 'local'), false);
 
     const m = mount(WS.id);
     await m.ready;
     assert.doesNotMatch(texto(m.area), /Sem conexão com a Workstation/);
-    m.change([{ tipo: 'repos', chave: 'lista' }]);
+    m.change([{ type: 'repos', key: 'lista' }]);
     await new Promise((r) => setTimeout(r, 450));
     const before = m.reads.length;
     // The tunnel drops: the core publishes `ws-exemplo:machine-unreachable` and the screen follows.
     setRemote('unreachable', 'port-closed');
-    m.change([{ tipo: 'alert', chave: 'ws-exemplo:machine-unreachable', sessionId: null, accountId: null }]);
+    m.change([{ type: 'alert', key: 'ws-exemplo:machine-unreachable', sessionId: null, accountId: null }]);
     await until(() => /Sem conexão com a Workstation/.test(texto(m.area)));
     assert.ok(m.reads.length > before);
     // And it comes back.
     setRemote('connected');
-    m.change([{ tipo: 'alert', chave: 'ws-exemplo:machine-unreachable', sessionId: null, accountId: null }]);
+    m.change([{ type: 'alert', key: 'ws-exemplo:machine-unreachable', sessionId: null, accountId: null }]);
     await until(() => !/Sem conexão com a Workstation/.test(texto(m.area)) && /Conectada/.test(texto(m.area)));
   });
 });
@@ -504,20 +504,20 @@ describe('#178 criterion 6: live through /api/changes, with simulator data', () 
 
 describe('Dashboard: remote sessions (supports #176/#178): the machine label and no link', () => {
   test('inboxCards: an item with `machine` carries the label and has no href; a local one keeps its link', () => {
-    const cards = dashboard.inboxCards(ATTENTION, [{ sessao: 'r1', modelo: 'claude-opus-5-5', tarefa: 'Bash: rm' }]);
+    const cards = dashboard.inboxCards(ATTENTION, [{ session: 'r1', model: 'claude-opus-5-5', task: 'Bash: rm' }]);
     assert.equal(cards[0].href, '/ui/sessions/l1');
     assert.equal(cards[0].machine, null);
     assert.equal(cards[1].href, null);
     assert.deepEqual(cards[1].machine, { id: WS.id, label: 'Workstation' });
-    assert.equal(cards[1].pe, 'Workstation', 'the machine, not a local agent of the same id');
+    assert.equal(cards[1].foot, 'Workstation', 'the machine, not a local agent of the same id');
   });
 
   test('mounted: the remote card is not a link and shows the machine', async () => {
-    const numbers = { sessoes: { total: 1, ativas: 1, esperando: 0, comErro: 0 }, agentes: { ativos: 0, sessoes: 0 }, subagentes: { ativos: 0, sessoes: 0 }, eventos: { hoje: 0, ultimaHora: 0, total: 0 }, custo: { usd: 0, dias: 30, semPreco: [] } };
+    const numbers = { sessions: { total: 1, active: 1, waiting: 0, withError: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
     const area = new ElementoFalso('main');
     const signal = new AbortController();
     const cleanup = await dashboard.mount(area, {
-      read: async (route: string) => (route === '/api/dashboard' ? { numeros: numbers, agentes: [], atividade: [] } : ATTENTION),
+      read: async (route: string) => (route === '/api/dashboard' ? { numbers, agents: [], activity: [] } : ATTENTION),
       signal: signal.signal,
       onChange: () => {},
       onRestart: () => {},
@@ -691,7 +691,7 @@ describe('#178 criterion 6: leaving the screen stops the re-reads', () => {
       await m.ready;
       const after = m.reads.length;
       mock.timers.tick(5 * 30_000);
-      m.change([{ tipo: 'alert', chave: 'ws-exemplo:machine-unreachable' }]);
+      m.change([{ type: 'alert', key: 'ws-exemplo:machine-unreachable' }]);
       mock.timers.tick(1000);
       await new Promise((r) => setImmediate(r));
       assert.equal(m.reads.length, after, 'nothing read after leaving');
@@ -715,7 +715,7 @@ describe('#178 criterion 2: the focus stays on the button through a repaint', ()
     // A re-read (an alert of this machine) repaints everything again.
     const reads = m.reads.length;
     const old = active();
-    m.change([{ tipo: 'alert', chave: 'local:port-exposed:5432' }]);
+    m.change([{ type: 'alert', key: 'local:port-exposed:5432' }]);
     await until(() => m.reads.length > reads && active() !== old);
     assert.equal(active().getAttribute('data-filter'), 'exposed');
     assert.ok(part(m.area, 'ports')!.contains(active()));

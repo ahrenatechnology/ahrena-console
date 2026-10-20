@@ -1,5 +1,5 @@
 // The Dev Console sessions (decision 0008, section 4): which repository and branch each session is
-// on, which belong to the context, who is working, who needs you (the `/api/atencao` rule) and the
+// on, which belong to the context, who is working, who needs you (the `/api/attention` rule) and the
 // suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
@@ -37,7 +37,7 @@ export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now 
 }
 
 /**
- * The depends-on-you reasons: every `/api/atencao` reason where the session needs you
+ * The depends-on-you reasons: every `/api/attention` reason where the session needs you
  * (permission, question, plan, decision, error, interrupted), except your turn in the back and
  * forth (`turn_ended`) and a new session at its first prompt (`first_prompt`).
  */
@@ -52,7 +52,7 @@ export interface WaitingSessionItem {
   repo: string;
   issue: number | null;
   reason: DependsOnYouReason;
-  /** The pt-BR phrase `/api/atencao` builds ("pede permissão para usar Bash"); never conversation text. */
+  /** The pt-BR phrase `/api/attention` builds ("pede permissão para usar Bash"); never conversation text. */
   reasonText: string;
   since: string;
   minutes: number;

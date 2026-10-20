@@ -32,6 +32,19 @@ export const WAIT_FOR_CHANGES = 'wait_for_changes';
 export const TIPOS_DO_MCP = TIPOS_DE_MUDANCA.filter((t): t is Exclude<TipoDeMudanca, 'repos'> => t !== 'repos');
 export type TipoDoMcp = (typeof TIPOS_DO_MCP)[number];
 
+/**
+ * The Portuguese change types `types` took before #173 phase 2b, still accepted (and mapped to the
+ * English ones) until phase 6; the answer always carries the English ones.
+ */
+export const LEGACY_CHANGE_TYPES: Readonly<Record<string, TipoDoMcp>> = {
+  sessao: 'session',
+  estado: 'state',
+  'precisa-de-voce': 'needs-you',
+  plano: 'plan',
+  decisao: 'decision',
+  conta: 'account',
+};
+
 const PERMITIDOS = ['cursor', 'timeout', 'sessions', 'account', 'types'] as const;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
@@ -75,6 +88,7 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
       `ou depois de timeout segundos (padrão ${ESPERA_PADRAO_MS / 1000}, máximo ${ESPERA_MAXIMA_MS / 1000}). ` +
       'Chame sem cursor para receber o atual; depois passe sempre o cursor da última resposta. Com reset=true, releia tudo ' +
       '(sessions_needing_attention, fleet_overview) antes de continuar. O cursor devolvido pula as mudanças que os filtros deixaram de fora. ' +
+      'Desde a #173, o changes[].type da resposta vem em inglês; os nomes antigos em português ainda valem em types. ' +
       'Não devolve texto das conversas.',
     entrada: esquema({
       cursor: { type: 'string', description: 'O cursor da última resposta. Sem ele, volta na hora com o atual e reset=true.' },
@@ -90,7 +104,11 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
         description: 'Só estas contas do Claude: o rótulo ou o id, um ou vários; "none" pede as sessões "Sem conta".',
         anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, maxItems: 20 }],
       },
-      types: { type: 'array', items: { type: 'string', enum: [...TIPOS_DO_MCP] }, description: 'Só estes tipos de mudança.' },
+      types: {
+        type: 'array',
+        items: { type: 'string', enum: [...TIPOS_DO_MCP, ...Object.keys(LEGACY_CHANGE_TYPES)] },
+        description: `Só estes tipos de mudança: ${TIPOS_DO_MCP.join(', ')}. Os nomes antigos (${Object.keys(LEGACY_CHANGE_TYPES).join(', ')}) ainda valem.`,
+      },
     }),
     saida: objeto({
       cursor: T.texto,
@@ -112,20 +130,20 @@ export function waitForChanges({ mudancas, contas }: OpcoesDoWaitForChanges): Fe
       }
       const dados: SaidaDoWaitForChanges = {
         cursor: r.cursor,
-        reset: r.reiniciar,
-        timedOut: r.expirou,
-        changes: r.mudancas.flatMap((m) => (m.tipo === 'repos' ? [] : [saida(m as MudancaRegistrada & { tipo: TipoDoMcp }, conta(m.accountId))])),
+        reset: r.reset,
+        timedOut: r.timedOut,
+        changes: r.changes.flatMap((m) => (m.type === 'repos' ? [] : [saida(m as MudancaRegistrada & { type: TipoDoMcp }, conta(m.accountId))])),
       };
       return { texto: texto(dados), dados: dados as unknown as ObjetoJson };
     },
   };
 }
 
-function saida(m: MudancaRegistrada & { tipo: TipoDoMcp }, c: { label: string; color: string } | null): MudancaDeSaida {
+function saida(m: MudancaRegistrada & { type: TipoDoMcp }, c: { label: string; color: string } | null): MudancaDeSaida {
   return {
-    type: m.tipo,
+    type: m.type,
     sessionId: m.sessionId,
-    decisionId: m.tipo === 'decisao' ? m.chave : null,
+    decisionId: m.type === 'decision' ? m.key : null,
     account: c ? { label: c.label, color: c.color } : null,
   };
 }
@@ -172,10 +190,11 @@ function lerArgumentos(args: ObjetoJson): Pedido {
     contasPedidas = (l as string[]).map((x) => x.trim());
   }
   if (types != null) {
-    if (!Array.isArray(types) || !types.every((t) => typeof t === 'string' && (TIPOS_DO_MCP as readonly string[]).includes(t))) {
+    const normalized = Array.isArray(types) ? types.map((t) => (typeof t === 'string' && Object.hasOwn(LEGACY_CHANGE_TYPES, t) ? LEGACY_CHANGE_TYPES[t] : t)) : null;
+    if (!normalized || !normalized.every((t) => typeof t === 'string' && (TIPOS_DO_MCP as readonly string[]).includes(t))) {
       throw new ErroDeArgumento(`types: uma lista com ${TIPOS_DO_MCP.join(', ')}`);
     }
-    if (types.length) filtros.tipos = types as TipoDoMcp[];
+    if (normalized.length) filtros.tipos = normalized as TipoDoMcp[];
   }
   // Sem `types`, todos os do MCP: uma mudança `repos` não passa no filtro e não acorda a espera.
   filtros.tipos ??= TIPOS_DO_MCP;

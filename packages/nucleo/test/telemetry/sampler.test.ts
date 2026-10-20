@@ -76,13 +76,13 @@ describe('#175/AC-3 alerts on /api/changes', () => {
     const s = new TelemetrySampler({ machineId: 'local', collector, store: new MemoryTelemetryStore(), tracker: new AlertTracker(), onAlertChange: publishAlertChanges(cursor) });
     await s.sampleOnce();
     const r1 = await cursor.aguardar(start, { timeoutMs: 0 });
-    assert.deepEqual(r1.mudancas.map((m) => [m.tipo, m.chave, m.sessionId, m.accountId]), [['alert', 'local:port-exposed:5432', null, null]]);
+    assert.deepEqual(r1.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['alert', 'local:port-exposed:5432', null, null]]);
     await s.sampleOnce(); // continues: nothing new
-    assert.equal((await cursor.aguardar(r1.cursor, { timeoutMs: 0 })).mudancas.length, 0);
+    assert.equal((await cursor.aguardar(r1.cursor, { timeoutMs: 0 })).changes.length, 0);
     await s.sampleOnce(); // exited
     const r3 = await cursor.aguardar(r1.cursor, { timeoutMs: 0 });
-    assert.deepEqual(r3.mudancas.map((m) => m.chave), ['local:port-exposed:5432']);
-    assert.deepEqual((await cursor.aguardar(r1.cursor, { timeoutMs: 0, filtros: { tipos: ['alert'] } })).mudancas.length, 1);
+    assert.deepEqual(r3.changes.map((m) => m.key), ['local:port-exposed:5432']);
+    assert.deepEqual((await cursor.aguardar(r1.cursor, { timeoutMs: 0, filtros: { tipos: ['alert'] } })).changes.length, 1);
   });
 
   test('load above the cores for 5 min, over the recorded samples', async () => {

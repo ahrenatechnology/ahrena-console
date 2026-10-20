@@ -237,15 +237,15 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   const mcp = opts.mcp ? criarRotaMcp(opts.mcp) : null;
   const projeto = criarRotaDoProjeto(opts.projeto ?? { kanban: null, fonte: 'github', log });
   const mural = muralDoPainel(opts.montador);
-  const contadores = { pedidos: 0, painel: 0, msPainel: 0 };
+  const contadores = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
   async function painel(res: ServerResponse, sessionId: string, url: URL) {
     if (!ID.test(sessionId)) return send(res, 400, { error: 'id de sessão inválido' });
     const t0 = performance.now();
     const corpo = await opts.montador.montar(pedidoDe(sessionId, url));
-    contadores.painel++;
-    contadores.msPainel += performance.now() - t0;
+    contadores.panel++;
+    contadores.panelMs += performance.now() - t0;
     send(res, 200, corpo);
   }
 
@@ -310,7 +310,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    contadores.pedidos++;
+    contadores.requests++;
     // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
     const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const url = normalizeLegacyUrl(raw);
@@ -336,7 +336,9 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     const abrir = OPEN_IN_DESKTOP.exec(url.pathname);
     if (abrir) return abrirNoDesktop(res, abrir[1]!);
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
-    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
+    // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
+    // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
+    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: VERSAO_DA_API });
     if (url.pathname === CHANGES_ROUTE && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
     if (url.pathname === WALL_ROUTE) return responderMural(res, mural);
     if (url.pathname === EVENTS_ROUTE && opts.eventos) return responderEventos(res, url, opts.eventos);
@@ -355,8 +357,8 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...contadores,
-        eventosLidos: opts.montador.resumos.eventosLidos,
-        ...(opts.mudancas ? { esperasAbertas: opts.mudancas.abertas } : {}),
+        eventsRead: opts.montador.resumos.eventosLidos,
+        ...(opts.mudancas ? { openWaits: opts.mudancas.abertas } : {}),
         ...(opts.carga?.() ?? {}),
       });
     }

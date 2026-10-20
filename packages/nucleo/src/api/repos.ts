@@ -20,7 +20,7 @@
 // métricas de vários repositórios ao mesmo tempo), passam por uma fila só (`chamar()`): uma de cada
 // vez, nunca em paralelo (decisão 0001, item 6), e cada pedido tem teto de 20 s, para um pedido
 // pendurado não travar a fila (o estouro vira `erro`). Quando a montagem muda a resposta, o núcleo
-// registra no cursor `{ tipo: 'repos', chave: 'lista' }` ou `{ tipo: 'repos', chave: '<dono>/<repo>' }`
+// registra no cursor `{ type: 'repos', key: 'lista' }` ou `{ type: 'repos', key: '<dono>/<repo>' }`
 // em minúsculas (`chaveDoRepo`, seja qual for a caixa da rota), e a tela relê. A descoberta de
 // sessões novas num repositório também registra `lista`. As métricas guardam em memória no máximo
 // `MAXIMO_DE_ENTRADAS` combinações de repositório e período, as menos lidas saem primeiro.
@@ -301,7 +301,7 @@ export class ReposDoGithub {
   private publicar<T>(e: Entrada<T>, valor: T, chave: string): void {
     const antes = e.valor === null ? null : JSON.stringify(e.valor);
     e.valor = valor;
-    if (antes !== JSON.stringify(valor)) this.mudancas?.registrar({ tipo: 'repos', chave, sessionId: null, accountId: null });
+    if (antes !== JSON.stringify(valor)) this.mudancas?.registrar({ type: 'repos', key: chave, sessionId: null, accountId: null });
   }
 
   private async contagens(): Promise<Map<string, SessoesDoRepo> | null> {
@@ -600,7 +600,7 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
       : new GithubReposSource();
   const sessoes = new SessoesPorRepo({
     frota,
-    aoDescobrir: () => mudancas.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null }),
+    aoDescobrir: () => mudancas.registrar({ type: 'repos', key: 'lista', sessionId: null, accountId: null }),
     ...(demo ? { git: gitDaDemo(), extras: SESSOES_EXTRAS_DA_DEMO } : {}),
   });
   const repos = new ReposDoGithub({ fonte, cache, sessoes, mudancas, log });

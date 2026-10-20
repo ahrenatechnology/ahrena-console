@@ -118,7 +118,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 | `read(route)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
 | `write(route, body)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
 | `signal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
-| `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ tipo, chave, sessionId, accountId }`) |
+| `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ type, key, sessionId, accountId, seq }`) |
 | `onRestart(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
 | `liveState()` | `'connecting'`, `'live'` ou `'offline'` |
 | `counter(id, n)` | O número no item da barra (o "4" do Dashboard); `0` esconde |

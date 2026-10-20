@@ -8,7 +8,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 
 const STYLE = '/ui/dashboard.css';
-// As rotas do núcleo, num lugar só. A da atenção é a `ROTA_DA_ATENCAO` de src/api/rota-atencao.ts (#87):
+// As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/rota-atencao.ts (#87):
 // se o nome mudar lá, muda aqui.
 export const DASHBOARD_ROUTE = '/api/dashboard';
 export const ATTENTION_ROUTE = '/api/attention';
@@ -19,16 +19,8 @@ const IN_INBOX = 4;
 
 export const STATUS_LABEL = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 const SUBAGENT_STATUS = { working: 'active', waiting: 'waiting', completed: 'completed', error: 'error' };
-const REASON_ICON = {
-  permissao: 'permission',
-  pergunta: 'question',
-  plano: 'plan',
-  decisao: 'decision',
-  erro: 'error',
-  'sua-vez': 'your-turn',
-  interrompida: 'interrupted',
-  'no-prompt': 'no-prompt',
-};
+// The `reason` values of `/api/attention` are the icon names.
+const REASON_ICON = new Set(['permission', 'question', 'plan', 'decision', 'error', 'your-turn', 'interrupted', 'no-prompt']);
 
 // ---------- Formatação ----------
 
@@ -69,13 +61,13 @@ const inSessions = (n) => `em ${plural(n, 'sessão', 'sessões')}`;
 
 /** Os seis cards, na ordem do C1. */
 export function cards(numbers) {
-  const { sessoes: sessions, agentes: agents, subagentes: subagents, eventos: events, custo: c } = numbers;
-  const detail = [sessions.esperando ? `${sessions.esperando} esperando` : null, sessions.comErro ? `${sessions.comErro} com erro` : null].filter(Boolean);
+  const { sessions, agents, subagents, events, cost: c } = numbers;
+  const detail = [sessions.waiting ? `${sessions.waiting} esperando` : null, sessions.withError ? `${sessions.withError} com erro` : null].filter(Boolean);
   return [
-    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.ativas} ${sessions.ativas === 1 ? 'ativa' : 'ativas'}`, sub: detail.length ? detail.join(' · ') : 'nenhuma esperando' },
-    { id: 'agents', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: integer.format(agents.ativos), sub: inSessions(agents.sessoes) },
-    { id: 'subagents', rotulo: 'Subagentes ativos', icone: 'subagent', cor: 'accent', valor: integer.format(subagents.ativos), sub: inSessions(subagents.sessoes) },
-    { id: 'events-today', rotulo: 'Eventos hoje', icone: 'events', cor: 'waiting', valor: quantity(events.hoje), sub: `+${quantity(events.ultimaHora)} na última hora` },
+    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.active} ${sessions.active === 1 ? 'ativa' : 'ativas'}`, sub: detail.length ? detail.join(' · ') : 'nenhuma esperando' },
+    { id: 'agents', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: integer.format(agents.active), sub: inSessions(agents.sessions) },
+    { id: 'subagents', rotulo: 'Subagentes ativos', icone: 'subagent', cor: 'accent', valor: integer.format(subagents.active), sub: inSessions(subagents.sessions) },
+    { id: 'events-today', rotulo: 'Eventos hoje', icone: 'events', cor: 'waiting', valor: quantity(events.today), sub: `+${quantity(events.lastHour)} na última hora` },
     { id: 'events-total', rotulo: 'Eventos no total', icone: 'activity', cor: 'muted', valor: quantity(events.total), sub: 'desde a importação' },
     {
       id: 'cost',
@@ -83,7 +75,7 @@ export function cards(numbers) {
       icone: 'cost',
       cor: 'completed',
       valor: cost(c.usd),
-      sub: c.usd === null ? `sem preço para ${c.semPreco.join(', ')}` : `estimativa · ${c.dias} dias`,
+      sub: c.usd === null ? `sem preço para ${c.unpriced.join(', ')}` : `estimativa · ${c.days} dias`,
     },
   ];
 }
@@ -93,24 +85,24 @@ export function cards(numbers) {
  * migrate") e o modelo vêm do card do agente, quando a sessão está entre os ativos.
  */
 export function inboxCards(attention, agents) {
-  const bySession = new Map((agents ?? []).map((a) => [a.sessao, a]));
-  return attention.itens.slice(0, IN_INBOX).map((i) => {
+  const bySession = new Map((agents ?? []).map((a) => [a.session, a]));
+  return attention.items.slice(0, IN_INBOX).map((i) => {
     const machine = i.machine && typeof i.machine.id === 'string' ? { id: i.machine.id, label: typeof i.machine.label === 'string' && i.machine.label ? i.machine.label : i.machine.id } : null;
     // A remote session is not in this core's agents: its model would be another session's.
-    const a = machine ? undefined : bySession.get(i.sessao);
+    const a = machine ? undefined : bySession.get(i.session);
     return {
-      sessao: i.sessao,
-      motivo: i.motivo,
-      motivoCurto: i.motivoCurto,
-      urgente: i.nivel === 'precisa',
-      idade: i.minutos < 1 ? 'agora' : `${i.minutos} min`,
-      nome: i.projeto ?? i.titulo,
-      texto: (i.motivo === 'permissao' && a?.tarefa) || i.motivoLongo,
-      pe: machine ? machine.label : (modelName(a?.modelo) ?? i.conta?.rotulo ?? ''),
+      session: i.session,
+      reason: i.reason,
+      shortReason: i.shortReason,
+      urgent: i.level === 'needs',
+      age: i.minutes < 1 ? 'agora' : `${i.minutes} min`,
+      name: i.project ?? i.title,
+      text: (i.reason === 'permission' && a?.task) || i.longReason,
+      foot: machine ? machine.label : (modelName(a?.model) ?? i.account?.label ?? ''),
       // A remote session (issue 178): this core does not serve its detail, so the card names the machine
       // and does not link.
       machine,
-      href: machine ? null : `/ui/sessions/${encodeURIComponent(i.sessao)}`,
+      href: machine ? null : `/ui/sessions/${encodeURIComponent(i.session)}`,
     };
   });
 }
@@ -122,8 +114,8 @@ export const inboxTitle = (total) => (total === 0 ? 'Ninguém precisa de você a
 const badge = (status) => el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS_LABEL[status] ?? status);
 
 function reasonChip(c) {
-  if (c.motivo === 'erro') return badge('error');
-  return el('span', { class: `reason${c.urgente ? '' : ' soft'}` }, icon(REASON_ICON[c.motivo] ?? 'your-turn'), c.motivoCurto);
+  if (c.reason === 'error') return badge('error');
+  return el('span', { class: `reason${c.urgent ? '' : ' soft'}` }, icon(REASON_ICON.has(c.reason) ? c.reason : 'your-turn'), c.shortReason);
 }
 
 function numberCard(c) {
@@ -150,11 +142,11 @@ function inbox(attention, agents) {
   const mini = inboxCards(attention, agents).map((c) =>
     el(
       c.href ? 'a' : 'div',
-      { class: 'card mini', href: c.href, 'data-session': c.sessao, 'data-machine': c.machine?.id },
-      el('div', { class: 'l1' }, reasonChip(c), el('span', { class: 'age' }, c.idade)),
-      el('div', { class: 'n trunc' }, c.nome),
-      el('div', { class: 'x trunc' }, c.texto),
-      el('div', { class: 'foot' }, c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.pe}` }, icon('server'), ` ${c.pe}`) : el('span', {}, c.pe), c.href ? el('b', {}, 'Abrir ›') : null),
+      { class: 'card mini', href: c.href, 'data-session': c.session, 'data-machine': c.machine?.id },
+      el('div', { class: 'l1' }, reasonChip(c), el('span', { class: 'age' }, c.age)),
+      el('div', { class: 'n trunc' }, c.name),
+      el('div', { class: 'x trunc' }, c.text),
+      el('div', { class: 'foot' }, c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot}`) : el('span', {}, c.foot), c.href ? el('b', {}, 'Abrir ›') : null),
     ),
   );
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));
@@ -163,14 +155,14 @@ function inbox(attention, agents) {
 function tree(a) {
   return el(
     'ul',
-    { class: 'tree', id: `subs-${a.sessao}` },
-    ...a.subagentes.map((s) =>
+    { class: 'tree', id: `subs-${a.session}` },
+    ...a.subagents.map((s) =>
       el(
         'li',
         { class: 'card child', 'data-subagent': s.id },
         el('span', { class: 'av' }, icon('subagent')),
-        el('div', { class: 'trunc' }, el('b', {}, s.tipo ?? 'Subagente'), s.tarefa ? el('span', { class: 'meta' }, ` · ${s.tarefa}`) : null),
-        el('span', { class: 'age' }, age(s.ate ?? s.desde)),
+        el('div', { class: 'trunc' }, el('b', {}, s.type ?? 'Subagente'), s.task ? el('span', { class: 'meta' }, ` · ${s.task}`) : null),
+        el('span', { class: 'age' }, age(s.until ?? s.since)),
         badge(SUBAGENT_STATUS[s.status] ?? 'active'),
       ),
     ),
@@ -178,36 +170,36 @@ function tree(a) {
 }
 
 function agentCard(a, expanded, toggleOne) {
-  const n = a.subagentes.length;
-  const isOpen = n > 0 && expanded.has(a.sessao);
-  const activeCount = a.subagentes.filter((s) => s.status === 'working').length;
+  const n = a.subagents.length;
+  const isOpen = n > 0 && expanded.has(a.session);
+  const activeCount = a.subagents.filter((s) => s.status === 'working').length;
   const exp = n
-    ? el('button', { type: 'button', class: `exp${isOpen ? ' open' : ''}`, 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.sessao}`, 'aria-label': isOpen ? 'Esconder os subagentes' : 'Mostrar os subagentes', onClick: () => toggleOne(a.sessao) }, icon('chevron-right'))
+    ? el('button', { type: 'button', class: `exp${isOpen ? ' open' : ''}`, 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.session}`, 'aria-label': isOpen ? 'Esconder os subagentes' : 'Mostrar os subagentes', onClick: () => toggleOne(a.session) }, icon('chevron-right'))
     : el('span', { class: 'exp' }, icon('dot'));
-  const messages = a.mensagens.length ? a.mensagens : ['(sem mensagens)'];
+  const messages = a.messages.length ? a.messages : ['(sem mensagens)'];
   const card = el(
     'a',
-    { class: `card ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.sessao)}`, 'data-session': a.sessao },
+    { class: `card ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.session)}`, 'data-session': a.session },
     el(
       'div',
       { class: 'l1' },
       el('span', { class: 'av' }, icon('bot')),
-      el('div', { class: 'trunc' }, el('div', { class: 'tt trunc' }, `Agente principal · ${a.titulo}`), el('div', { class: 'meta trunc' }, [a.projeto, plural(n, 'subagente', 'subagentes'), plural(a.turnos, 'turno', 'turnos')].filter(Boolean).join(' · '))),
+      el('div', { class: 'trunc' }, el('div', { class: 'tt trunc' }, `Agente principal · ${a.title}`), el('div', { class: 'meta trunc' }, [a.project, plural(n, 'subagente', 'subagentes'), plural(a.turns, 'turno', 'turnos')].filter(Boolean).join(' · '))),
       badge(a.status),
     ),
     el('blockquote', {}, ...messages.map((m) => el('span', { class: 'trunc' }, m))),
     el(
       'div',
       { class: 'footer' },
-      a.modelo ? el('span', {}, icon('model'), modelName(a.modelo)) : null,
-      el('span', {}, icon('coins'), cost(a.custoUsd)),
-      el('span', {}, icon('clock'), age(a.ultimaAtividade)),
-      a.tarefa ? el('span', { class: 'trunc task' }, a.tarefa) : null,
-      el('span', { class: 'id' }, a.sessao.slice(0, 8)),
+      a.model ? el('span', {}, icon('model'), modelName(a.model)) : null,
+      el('span', {}, icon('coins'), cost(a.costUsd)),
+      el('span', {}, icon('clock'), age(a.lastActivity)),
+      a.task ? el('span', { class: 'trunc task' }, a.task) : null,
+      el('span', { class: 'id' }, a.session.slice(0, 8)),
     ),
   );
   const subs = n
-    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.sessao}`, onClick: () => toggleOne(a.sessao) }, icon('subagent'), plural(n, 'subagente', 'subagentes'), activeCount && activeCount < n ? ` · ${activeCount} ${activeCount === 1 ? 'ativo' : 'ativos'}` : null)
+    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.session}`, onClick: () => toggleOne(a.session) }, icon('subagent'), plural(n, 'subagente', 'subagentes'), activeCount && activeCount < n ? ` · ${activeCount} ${activeCount === 1 ? 'ativo' : 'ativos'}` : null)
     : null;
   return el('div', { class: 'agent' }, exp, el('div', { class: 'column' }, card, subs, isOpen ? tree(a) : null));
 }
@@ -231,11 +223,11 @@ function recentActivity(activity) {
       ...activity.map((l) =>
         el(
           'a',
-          { class: 'row', href: `/ui/sessions/${encodeURIComponent(l.sessao)}`, 'data-session': l.sessao },
+          { class: 'row', href: `/ui/sessions/${encodeURIComponent(l.session)}`, 'data-session': l.session },
           badge(l.status),
-          el('span', { class: 'trunc' }, l.texto),
-          l.projeto ? el('span', { class: 'o mono trunc' }, l.projeto) : null,
-          el('span', { class: 't' }, age(l.em)),
+          el('span', { class: 'trunc' }, l.text),
+          l.project ? el('span', { class: 'o mono trunc' }, l.project) : null,
+          el('span', { class: 't' }, age(l.at)),
         ),
       ),
     ),
@@ -266,10 +258,10 @@ export async function mount(area, ctx) {
   }
 
   function paint({ dashboard, atencao: attention }) {
-    const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numeros).map(numberCard))];
-    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agentes));
+    const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numbers).map(numberCard))];
+    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents));
     else parts.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: attention.erro.message, action: { label: 'Tentar de novo', onClick: () => draw() } }));
-    parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agentes, expanded, toggleOne), recentActivity(dashboard.atividade)));
+    parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agents, expanded, toggleOne), recentActivity(dashboard.activity)));
     area.replaceChildren(...parts);
   }
 

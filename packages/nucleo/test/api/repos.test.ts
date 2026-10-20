@@ -94,7 +94,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   const frota = new LeituraDaFrota({ storage, contas: new Contas({ storage, arquivo: null }), agora, fusoHorario: 'UTC' });
   const cursor = new CursorDeMudancas({ geracao: 'g', agruparMs: 0, intervaloMinimoMs: 0 });
   const inicio = cursor.atual;
-  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null }) });
+  const sessoes = new SessoesPorRepo({ frota, git: gitDaDemo(base), cacheMs: 0, aoDescobrir: () => cursor.registrar({ type: 'repos', key: 'lista', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
   const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
   const logs: string[] = [];
@@ -117,7 +117,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
     pedidos,
     cache,
     logs,
-    mudancas: async () => (await cursor.aguardar(inicio, { timeoutMs: 0 })).mudancas,
+    mudancas: async () => (await cursor.aguardar(inicio, { timeoutMs: 0 })).changes,
   };
 }
 
@@ -195,7 +195,7 @@ describe('#104 CA2: o que cada linha mostra', () => {
     assert.deepEqual(linha(l, 'dev-sintetico/cli-de-notas').sessoes, { ativas: 0, precisam: 0, noMes: 0 });
     assert.equal(l.resumo.comSessoesNoMes, 2);
     // A descoberta do repositório de um cwd novo avisa a tela.
-    assert.ok((await m.mudancas()).some((x) => x.tipo === 'repos' && x.chave === 'lista'));
+    assert.ok((await m.mudancas()).some((x) => x.type === 'repos' && x.key === 'lista'));
   });
 });
 
@@ -336,8 +336,8 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
   test('a leitura que muda a lista registra a mudança `repos`/`lista` no cursor', async () => {
     const m = await montar();
     await listaPronta(m);
-    const repos = (await m.mudancas()).filter((x) => x.tipo === 'repos');
-    assert.ok(repos.some((x) => x.chave === 'lista' && x.sessionId === null));
+    const repos = (await m.mudancas()).filter((x) => x.type === 'repos');
+    assert.ok(repos.some((x) => x.key === 'lista' && x.sessionId === null));
   });
 });
 
@@ -380,7 +380,7 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     const m = await montar();
     const d = await metricasProntas(m, 'Org-A', 'Motor-de-Regras');
     assert.equal(d.repo?.completo, 'org-a/motor-de-regras');
-    const chaves = (await m.mudancas()).filter((x) => x.tipo === 'repos').map((x) => x.chave);
+    const chaves = (await m.mudancas()).filter((x) => x.type === 'repos').map((x) => x.key);
     assert.ok(chaves.includes('org-a/motor-de-regras'));
     assert.ok(!chaves.some((c) => c !== c.toLowerCase()), chaves.join(','));
     // A mesma entrada para as duas caixas: dentro da validade, nenhuma chamada nova.
@@ -441,7 +441,7 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     assert.equal(m.logs.length, 2);
     assert.match(m.logs[0], /^repos: a montagem de lista falhou: /);
     assert.match(m.logs[1], /^repos: a montagem de org-a\/motor-de-regras falhou: /);
-    assert.ok((await m.mudancas()).some((x) => x.tipo === 'repos' && x.chave === 'org-a/motor-de-regras'));
+    assert.ok((await m.mudancas()).some((x) => x.type === 'repos' && x.key === 'org-a/motor-de-regras'));
   });
 
   test('no máximo 50 combinações de repositório e período em memória: a lida há mais tempo sai', async () => {

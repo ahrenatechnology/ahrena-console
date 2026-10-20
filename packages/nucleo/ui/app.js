@@ -42,7 +42,7 @@ function restart() {
 
 async function readVersion() {
   try {
-    version = (await read('/api/overview')).versao ?? null;
+    version = (await read('/api/overview')).version ?? null;
   } catch {}
   drawLive();
 }
@@ -76,7 +76,7 @@ startLive({
   onRestart: restart,
   onChange(changes) {
     // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
-    if (changes.some((c) => c.tipo === 'alert')) readMachines();
+    if (changes.some((c) => c.type === 'alert')) readMachines();
     for (const f of listeners.change) f(changes);
   },
 });

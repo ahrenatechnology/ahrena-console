@@ -114,12 +114,12 @@ export class MontadorDoMural {
     });
     const cards = lidas.map(({ leitura }) => cardDe(leitura));
     const mural: Mural = {
-      versao: 1,
-      geradoEm: new Date(agora).toISOString(),
-      contagem: {
-        todas: cards.length,
-        esperando: cards.filter((c) => PRECISA.has(c.estado)).length,
-        ativas: cards.filter((c) => ATIVA.has(c.estado)).length,
+      version: 1,
+      generatedAt: new Date(agora).toISOString(),
+      count: {
+        all: cards.length,
+        waiting: cards.filter((c) => PRECISA.has(c.state)).length,
+        active: cards.filter((c) => ATIVA.has(c.state)).length,
       },
       cards,
     };
@@ -155,28 +155,28 @@ export class MontadorDoMural {
 const urgenteDe = (l: LeituraDaSessao) => l.inbox.urgente || l.inbox.estado === 'error';
 
 /** O agente principal conta como um dos agentes da sessão (o wireframe mostra "1" na sessão sem subagentes). */
-const principalRodando = (estado: CardDoMural['estado']) => estado === 'active' || estado === 'delegating' || estado === 'background';
+const principalRodando = (estado: CardDoMural['state']) => estado === 'active' || estado === 'delegating' || estado === 'background';
 
 function cardDe(leitura: LeituraDaSessao): CardDoMural {
   const { sessao, desktop, branch, custo, plano, contexto, subagentes } = leitura;
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {
     id: sessao.id,
-    titulo: sessao.title,
-    projeto: pasta ? basename(pasta) : null,
+    title: sessao.title,
+    project: pasta ? basename(pasta) : null,
     branch,
     status: sessao.status,
-    estado: sessao.state,
-    motivo: sessao.reason,
-    urgente: urgenteDe(leitura),
-    desde: sessao.since,
-    atividade: sessao.activity,
-    modelo: sessao.model,
-    esforco: leitura.esforco,
-    agentes: { ativos: subagentes.active + (principalRodando(sessao.state) ? 1 : 0), total: subagentes.items.length + 1 },
-    custo: { usd: custo?.usd ?? null, estimativa: true },
-    plano: plano ? { feitos: plano.done, total: plano.total, atual: plano.current } : null,
-    contexto: contexto ? { pct: contexto.pct, usados: contexto.used, limite: contexto.limit, rotulo: contexto.label } : null,
+    state: sessao.state,
+    reason: sessao.reason,
+    urgent: urgenteDe(leitura),
+    since: sessao.since,
+    activity: sessao.activity,
+    model: sessao.model,
+    effort: leitura.esforco,
+    agents: { active: subagentes.active + (principalRodando(sessao.state) ? 1 : 0), total: subagentes.items.length + 1 },
+    cost: { usd: custo?.usd ?? null, estimate: true },
+    plan: plano ? { done: plano.done, total: plano.total, current: plano.current } : null,
+    context: contexto ? { pct: contexto.pct, used: contexto.used, limit: contexto.limit, label: contexto.label } : null,
   };
 }
 

@@ -100,6 +100,8 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
       ['/api/changes?wait=0', '/api/mudancas?espera=0'],
       ['/api/changes?since=&wait=0', '/api/mudancas?desde=&espera=0'],
       ['/api/changes?since=nada&wait=0&type=sessao', '/api/mudancas?desde=nada&espera=0&tipo=sessao'],
+      ['/api/changes?since=nada&wait=0&type=session,decision', '/api/mudancas?desde=nada&espera=0&tipo=sessao,decisao'],
+      ['/api/changes?wait=0&type=nada', '/api/mudancas?espera=0&tipo=nada'],
       ['/api/changes?wait=x', '/api/mudancas?espera=x'],
       [`/api/panel/${s}`, `/api/painel/${s}`],
       [`/api/panel/${s}`, `/api/sessao/${s}`],
@@ -167,7 +169,9 @@ describe('#173 phase 1: English routes, Portuguese aliases', () => {
     const b = await call('/api/carga');
     assert.equal(a.status, 200);
     assert.equal(b.status, 200);
-    assert.deepEqual(Object.keys(b.body as object).sort(), Object.keys(a.body as object).sort());
+    assert.deepEqual(Object.keys(b.body as object).sort(), Object.keys(asOld('/api/carga', a).body as object).sort());
+    // The new route answers the English counters (#173 phase 2b), the old one the Portuguese ones.
+    assert.deepEqual(Object.keys(a.body as object).sort(), ['eventsRead', 'openWaits', 'panel', 'panelMs', 'requests']);
   });
 
   test('GET /open/<local_…> redirects like /abrir/<local_…>', async () => {

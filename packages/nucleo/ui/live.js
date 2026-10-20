@@ -1,7 +1,7 @@
 // "Ao vivo": long polling on `GET /api/changes?since=<cursor>&wait=25`, through the read layer.
 //
-// - The first request goes without a cursor and comes back at once with `reiniciar: true`.
-// - `reiniciar: true` (core restarted, stale cursor) calls `onRestart`: the screens re-read everything.
+// - The first request goes without a cursor and comes back at once with `reset: true`.
+// - `reset: true` (core restarted, stale cursor) calls `onRestart`: the screens re-read everything.
 // - News calls `onChange(changes)`; a timeout without news just keeps looping.
 // - A failure switches the state to `offline` and tries again, with a growing wait (or the
 //   `Retry-After` of a 503). When it comes back, the state goes back to `live` and calls `onRestart`,
@@ -46,8 +46,8 @@ export function startLive({
         failures = 0;
         change('live');
         cursor = r.cursor;
-        if (r.reiniciar || recovered) onRestart(r);
-        else if (r.mudancas?.length) onChange(r.mudancas);
+        if (r.reset || recovered) onRestart(r);
+        else if (r.changes?.length) onChange(r.changes);
       } catch (e) {
         if (stop.signal.aborted) break;
         failures++;

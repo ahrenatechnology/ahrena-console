@@ -22,7 +22,7 @@ Um núcleo por máquina, não importa quem o suba: o app de bandeja, a extensão
 
 - **Atômica e exclusiva:** grava um temporário na mesma pasta e o liga com `link`, que falha se já há trava: de dois núcleos que a criam ao mesmo tempo (em portas diferentes), um só consegue, e o outro fecha e adota. Para tirar uma trava (órfã, ou a própria ao sair), move com `rename` e confere o token; se não era a esperada, ela volta para o lugar. Quem lê vê uma trava inteira, nunca metade.
 - **Permissão:** o arquivo é 0600 e a pasta, 0700. A pasta é fechada também quando já existia aberta (o `mkdir` de antes dava 0755), porque o banco mora nela. O `token` é aleatório (32 bytes) e é dos clientes locais: provar que leram a trava, para rotas que mudam estado. Ele não aparece no `status` nem no log.
-- **Viva** quando o pid existe **e** a porta responde `/api/overview` com `"nome": "ahrena-console"` **e o mesmo `pid`**. Pid morto, porta muda, porta de outro processo (o pid da trava foi reaproveitado) ou arquivo ilegível: **órfã**, e quem sobe a recupera.
+- **Viva** quando o pid existe **e** a porta responde `/api/overview` com `"name": "ahrena-console"` (ou `"nome"`, num núcleo de antes da #173 fase 2b) **e o mesmo `pid`**. Pid morto, porta muda, porta de outro processo (o pid da trava foi reaproveitado) ou arquivo ilegível: **órfã**, e quem sobe a recupera.
 - **Nunca sinaliza um estranho:** `parar` e `--substituir` só mandam SIGTERM ou SIGKILL depois de conferir, antes de cada sinal, que a porta responde com aquele pid (ou, com a porta já fechada, que o processo ainda é o `node … src/api/cli.ts`).
 
 ## Subir ou adotar

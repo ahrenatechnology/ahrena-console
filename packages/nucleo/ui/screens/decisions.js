@@ -107,7 +107,7 @@ export async function mount(area, ctx) {
   // Ao vivo: qualquer decisão que muda relê a página, juntando as que chegam perto.
   let wait = null;
   ctx.onChange((changes) => {
-    if (!changes.some((m) => m.tipo === 'decisao')) return;
+    if (!changes.some((m) => m.type === 'decision')) return;
     clearTimeout(wait);
     wait = setTimeout(draw, 400);
   });

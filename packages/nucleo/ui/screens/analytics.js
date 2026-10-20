@@ -3,7 +3,7 @@
 //
 // - Lê `GET /api/analytics?tz=` (Visão geral) e `GET /api/analytics/cost?days=&tz=` (Custo),
 //   sempre por `ctx.ler`, com o fuso do navegador.
-// - Ao vivo: uma mudança relê depois de alguns segundos (uma releitura por rajada); reiniciar relê já.
+// - Ao vivo: uma mudança relê depois de alguns segundos (uma releitura por rajada); reset relê já.
 // - Os gráficos são SVG desenhado aqui, sem biblioteca. Tamanho e posição são atributos SVG; cor só
 //   por classe (analytics.css), com as variáveis de marca.css.
 // - Custo é estimativa: `usd: null` quer dizer "sem preço" (modelo fora da tabela), nunca US$ 0.

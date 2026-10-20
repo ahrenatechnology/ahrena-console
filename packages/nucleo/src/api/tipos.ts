@@ -349,42 +349,42 @@ export interface DecisoesDoPainel {
  * máquina. "Aberta" e a ordem estão em api/mural.ts. Datas em ISO 8601 (UTC).
  */
 export interface Mural {
-  versao: 1;
-  geradoEm: string;
+  version: 1;
+  generatedAt: string;
   /**
-   * Para o seletor Todas / Esperando / Ativas. `esperando`: estado `waiting` ou `error` (precisa de
-   * você); `ativas`: estado `active`, `delegating` ou `background`. As concluídas só contam em `todas`.
+   * Para o seletor Todas / Esperando / Ativas. `waiting`: estado `waiting` ou `error` (precisa de
+   * você); `active`: estado `active`, `delegating` ou `background`. As concluídas só contam em `all`.
    */
-  contagem: { todas: number; esperando: number; ativas: number };
+  count: { all: number; waiting: number; active: number };
   /** Primeiro as que precisam de você (as urgentes antes), depois a atividade mais recente. */
   cards: CardDoMural[];
 }
 
 export interface CardDoMural {
-  /** Id da sessão: o card leva a `/ui/sessoes/<id>`. */
+  /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
-  /** Como `SessaoDoPainel.titulo`. */
-  titulo: string;
+  /** Como `SessaoDoPainel.title`. */
+  title: string;
   /** O nome da pasta da sessão (basename do cwd); `null` sem pasta. */
-  projeto: string | null;
+  project: string | null;
   branch: string | null;
   /** O badge. */
   status: DisplayStatus;
-  estado: EstadoDoInbox;
-  motivo: AwaitingReason | null;
-  /** Espera `notification` ou `interrupted`, e o erro (como `PrecisaDeVoce.urgente`). */
-  urgente: boolean;
+  state: EstadoDoInbox;
+  reason: AwaitingReason | null;
+  /** Espera `notification` ou `interrupted`, e o erro (como `PrecisaDeVoce.urgent`). */
+  urgent: boolean;
   /** Desde quando está no estado atual (a espera, o erro, ou a última atividade). */
-  desde: string;
+  since: string;
   /** A linha do meio: o que pede (waiting), o erro, "terminou sem erro", ou o que está fazendo. */
-  atividade: AtividadeDaSessao;
-  modelo: string | null;
+  activity: AtividadeDaSessao;
+  model: string | null;
   /** O esforço (`effort`) da sessão, do índice do Claude Desktop; `null` quando o núcleo não sabe. */
-  esforco: string | null;
+  effort: string | null;
   /** Agentes: o principal mais os subagentes; os trabalhando agora e todos os que a sessão já teve. */
-  agentes: { ativos: number; total: number };
+  agents: { active: number; total: number };
   /** `usd: null`: há uso, mas sem preço ("sem preço", nunca zero). */
-  custo: { usd: number | null; estimativa: true };
-  plano: { feitos: number; total: number; atual: string | null } | null;
-  contexto: { pct: number; usados: number; limite: number; rotulo: string } | null;
+  cost: { usd: number | null; estimate: true };
+  plan: { done: number; total: number; current: string | null } | null;
+  context: { pct: number; used: number; limit: number; label: string } | null;
 }

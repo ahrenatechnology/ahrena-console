@@ -94,9 +94,9 @@ describe('Kanban: funções da tela', () => {
   test('"mostrar mais N": o que falta; ao vivo só relê com mudança de sessão', () => {
     assert.equal(missing({ total: 13 }, 10), 3);
     assert.equal(missing({ total: 4 }, 10), 0);
-    assert.equal(touchesBoard([{ tipo: 'sessao' }]), true);
-    assert.equal(touchesBoard([{ tipo: 'estado' }]), true);
-    assert.equal(touchesBoard([{ tipo: 'decisao' }, { tipo: 'conta' }]), false);
+    assert.equal(touchesBoard([{ type: 'session' }]), true);
+    assert.equal(touchesBoard([{ type: 'state' }]), true);
+    assert.equal(touchesBoard([{ type: 'decision' }, { type: 'account' }]), false);
     assert.equal(touchesBoard(null), false);
   });
 });

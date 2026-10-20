@@ -334,7 +334,7 @@ export function mount(area, ctx) {
   // Espera a rajada de mudanças assentar, mas relê no máximo ESPERA_MAXIMA_DO_AO_VIVO_MS depois da
   // primeira mudança pendente, mesmo que elas não parem.
   ctx.onChange((changes) => {
-    if (!changes?.some((m) => m.tipo === 'sessao')) return;
+    if (!changes?.some((m) => m.type === 'session')) return;
     const now = Date.now();
     firstPending ??= now;
     clearTimeout(liveWait);

@@ -391,7 +391,7 @@ export async function mount(area, ctx) {
   }
 
   ctx.onChange((changes) => {
-    if (!changes.some((m) => m.tipo === 'sessao' || m.tipo === 'estado')) return;
+    if (!changes.some((m) => m.type === 'session' || m.type === 'state')) return;
     clearTimeout(wait);
     wait = setTimeout(read, 400);
   });

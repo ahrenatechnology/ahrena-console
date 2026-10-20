@@ -191,11 +191,11 @@ export function queueNote(item, queue) {
   return parts.join(' · ');
 }
 
-const LIVE_KINDS = new Set(['sessao', 'estado', 'precisa-de-voce', 'decisao']);
+const LIVE_KINDS = new Set(['session', 'state', 'needs-you', 'decision']);
 
 /** Whether a batch of `/api/changes` touches what the Dev Console shows. */
 export function touchesDevConsole(changes) {
-  return Array.isArray(changes) && changes.some((c) => LIVE_KINDS.has(c?.tipo));
+  return Array.isArray(changes) && changes.some((c) => LIVE_KINDS.has(c?.type));
 }
 
 // ---------- DOM ----------

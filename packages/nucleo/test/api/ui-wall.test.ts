@@ -112,34 +112,34 @@ type Card = Record<string, unknown>;
 function cardDeExemplo(id: string, extra: Card = {}): Card {
   return {
     id,
-    titulo: `Sessão ${id}`,
-    projeto: 'projeto-exemplo',
+    title: `Sessão ${id}`,
+    project: 'projeto-exemplo',
     branch: 'feat/1-exemplo',
     status: 'active',
-    estado: 'active',
-    motivo: null,
-    urgente: false,
-    desde: '2026-10-20T12:00:00Z',
-    atividade: { type: 'tool', text: 'Rodar a bateria' },
-    modelo: 'claude-opus-5-5',
-    esforco: 'high',
-    agentes: { ativos: 1, total: 2 },
-    custo: { usd: 1.84, estimativa: true },
-    plano: { feitos: 3, total: 5, atual: 'Escrever o teste' },
-    contexto: { pct: 31, usados: 62_000, limite: 200_000, rotulo: '62 mil / 200 mil' },
+    state: 'active',
+    reason: null,
+    urgent: false,
+    since: '2026-10-20T12:00:00Z',
+    activity: { type: 'tool', text: 'Rodar a bateria' },
+    model: 'claude-opus-5-5',
+    effort: 'high',
+    agents: { active: 1, total: 2 },
+    cost: { usd: 1.84, estimate: true },
+    plan: { done: 3, total: 5, current: 'Escrever o teste' },
+    context: { pct: 31, used: 62_000, limit: 200_000, label: '62 mil / 200 mil' },
     ...extra,
   };
 }
 const MURAL = {
-  versao: 1,
-  geradoEm: '2026-10-20T12:00:00Z',
-  contagem: { todas: 5, esperando: 2, ativas: 1 },
+  version: 1,
+  generatedAt: '2026-10-20T12:00:00Z',
+  count: { all: 5, waiting: 2, active: 1 },
   cards: [
     cardDeExemplo('ativa-1'),
-    cardDeExemplo('espera-1', { status: 'waiting', estado: 'waiting', motivo: 'notification', urgente: true, atividade: { type: 'permission', text: 'Bash: npm run migrate' }, esforco: null, plano: null }),
-    cardDeExemplo('espera-2', { status: 'waiting', estado: 'waiting', motivo: 'stop', atividade: { type: 'your-turn', text: 'Rodo os testes?' }, contexto: null }),
-    cardDeExemplo('erro-1', { status: 'error', estado: 'error', urgente: true, atividade: { type: 'error', text: 'API 529 · overloaded_error' }, contexto: { pct: 84, usados: 168_000, limite: 200_000, rotulo: '' } }),
-    cardDeExemplo('feita-1', { titulo: '<b>negrito</b>', status: 'completed', estado: 'completed', atividade: { type: 'completed', text: '' }, custo: { usd: null, estimativa: true }, modelo: null }),
+    cardDeExemplo('espera-1', { status: 'waiting', state: 'waiting', reason: 'notification', urgent: true, activity: { type: 'permission', text: 'Bash: npm run migrate' }, effort: null, plan: null }),
+    cardDeExemplo('espera-2', { status: 'waiting', state: 'waiting', reason: 'stop', activity: { type: 'your-turn', text: 'Rodo os testes?' }, context: null }),
+    cardDeExemplo('erro-1', { status: 'error', state: 'error', urgent: true, activity: { type: 'error', text: 'API 529 · overloaded_error' }, context: { pct: 84, used: 168_000, limit: 200_000, label: '' } }),
+    cardDeExemplo('feita-1', { title: '<b>negrito</b>', status: 'completed', state: 'completed', activity: { type: 'completed', text: '' }, cost: { usd: null, estimate: true }, model: null }),
   ],
 };
 
@@ -184,13 +184,13 @@ describe('Mural: formatação', () => {
   });
   test('plano nulo é "Plano 0/0"; contexto nulo é "contexto —"; contexto alto a partir de 80%', () => {
     const [, espera1, espera2, erro1] = MURAL.cards.map(cardContent) as any[];
-    assert.equal(espera1.plano.rotulo, 'Plano 0/0');
+    assert.equal(espera1.plan.label, 'Plano 0/0');
     assert.equal(espera1.grade[1][1], '—');
-    assert.equal(espera2.contexto.rotulo, 'contexto —');
-    assert.equal(espera2.contexto.alto, false);
-    assert.equal(erro1.contexto.rotulo, 'contexto 84%');
-    assert.equal(erro1.contexto.alto, true);
-    assert.equal(cardContent(MURAL.cards[0]).contexto.alto, false);
+    assert.equal(espera2.context.label, 'contexto —');
+    assert.equal(espera2.context.high, false);
+    assert.equal(erro1.context.label, 'contexto 84%');
+    assert.equal(erro1.context.high, true);
+    assert.equal(cardContent(MURAL.cards[0]).context.high, false);
   });
 });
 
@@ -246,7 +246,7 @@ describe('Mural: a tela montada', () => {
   });
 
   test('esperando sem motivo: só o texto da atividade, sem chip', async () => {
-    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', estado: 'waiting', motivo: null, atividade: { type: 'your-turn', text: 'Aguardando você' } });
+    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', state: 'waiting', reason: null, activity: { type: 'your-turn', text: 'Aguardando você' } });
     const { area, sair } = await montarTela(async () => ({ ...MURAL, cards: [semMotivo] }));
     try {
       await ate(() => comClasse(area, 'wall-card').length === 1);
@@ -355,9 +355,9 @@ describe('Mural: a tela montada', () => {
     const { area, rotas, ouvintes, sair } = await montarTela(async () => dados);
     try {
       await ate(() => comClasse(area, 'wall-card').length === 5);
-      dados = { ...MURAL, cards: [cardDeExemplo('nova-1', { titulo: 'Sessão nova' }), ...MURAL.cards] };
-      for (const f of ouvintes.mudar) f([{ tipo: 'sessao', chave: 'nova-1' }]);
-      for (const f of ouvintes.mudar) f([{ tipo: 'plano', chave: 'nova-1' }]);
+      dados = { ...MURAL, cards: [cardDeExemplo('nova-1', { title: 'Sessão nova' }), ...MURAL.cards] };
+      for (const f of ouvintes.mudar) f([{ type: 'session', key: 'nova-1' }]);
+      for (const f of ouvintes.mudar) f([{ type: 'plan', key: 'nova-1' }]);
       await ate(() => comClasse(area, 'wall-card').length === 6);
       assert.equal(rotas.length, 2, 'a rajada vira uma leitura só');
       assert.equal(comClasse(area, 'wall-card')[0]!.getAttribute('href'), '/ui/sessions/nova-1');
@@ -379,7 +379,7 @@ describe('Mural: ao vivo com atividade contínua', () => {
       await ate(() => comClasse(area, 'wall-card').length === 5);
       const fim = Date.now() + 1_500;
       while (Date.now() < fim) {
-        for (const f of ouvintes.mudar) f([{ tipo: 'sessao', chave: 'ativa-1' }]);
+        for (const f of ouvintes.mudar) f([{ type: 'session', key: 'ativa-1' }]);
         await new Promise((ok) => setTimeout(ok, 100));
       }
       assert.ok(rotas.length >= 3, `releu ${rotas.length - 1} vez(es) em 1,5 s`);
