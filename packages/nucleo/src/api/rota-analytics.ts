@@ -15,8 +15,11 @@
 //   `PostToolUse` não conta (seria a mesma chamada de novo);
 // - projeto: o último segmento do `cwd` da sessão; sem `cwd`, `(sem pasta)`.
 //
-// A leitura pode ser pesada (todos os eventos de 52 semanas): a resposta fica em memória por alguns
-// segundos por (rota, parâmetros), e os eventos são lidos em páginas.
+// A leitura pode ser pesada (os eventos de 52 semanas):
+// - os eventos são lidos em páginas, de algumas sessões em paralelo; os de fora da janela de 30 dias
+//   só entram na contagem por dia do heatmap e não ficam em memória;
+// - a resposta fica em memória por (rota, parâmetros, dia de hoje): 30 s na Visão geral, 10 s no Custo.
+//   Com `versao` (a posição do cursor de mudanças), fica enquanto nada mudar, até 5 min.
 
 import type { Session, SessionEvent } from '../model.ts';
 import { diaDe, parcelasDaSessao, relatorioDeCusto, type LinhaDeCusto, type Parcela } from '../custo/agregacao.ts';
@@ -42,9 +45,18 @@ export interface OpcoesDoAnalytics {
   /** Rótulo e cor das contas, as mesmas do painel. Sem ela, "conta 1", "conta 2"… sem cor. */
   contas?: Pick<Contas, 'atualizar' | 'daSessao'> | null;
   agora?: () => number;
-  /** Quanto a resposta fica em memória. Padrão 10 s. */
-  cacheMs?: number;
+  /** Quanto a resposta da Visão geral fica em memória mesmo com mudanças. Padrão 30 s. */
+  cacheMsDaVisao?: number;
+  /** O mesmo para o Custo. Padrão 10 s. */
+  cacheMsDoCusto?: number;
+  /** A posição do cursor de mudanças (`CursorDeMudancas.atual`): sem mudança, a resposta vale até 5 min. */
+  versao?: () => string;
 }
+
+/** Quanto a resposta vale, sem mudança no cursor. */
+const CACHE_MAXIMO_MS = 5 * 60_000;
+/** Sessões lidas em paralelo. */
+const LEITURAS_EM_PARALELO = 6;
 
 export interface ContaDoAnalytics {
   id: string | null;
@@ -75,11 +87,11 @@ export function validarFuso(v: string | null): string {
   if (v === null || v === '') return 'UTC';
   if (!FUSO.test(v)) throw new ParametroInvalido('fuso: um fuso IANA, como America/Sao_Paulo');
   try {
-    new Intl.DateTimeFormat('en-CA', { timeZone: v });
+    // A forma canônica: `america/sao_paulo` vira `America/Sao_Paulo`.
+    return new Intl.DateTimeFormat('en-CA', { timeZone: v }).resolvedOptions().timeZone;
   } catch {
     throw new ParametroInvalido('fuso: um fuso IANA, como America/Sao_Paulo');
   }
-  return v;
 }
 
 const arredondar = (v: number | null, casas = 4): number | null => (v === null ? null : Math.round(v * 10 ** casas) / 10 ** casas);
@@ -98,7 +110,22 @@ function pico<T extends { dia: string }>(dias: readonly T[], valor: (d: T) => nu
 
 interface SessaoLida {
   sessao: Session;
+  /** Todos os eventos da sessão, só quando ela teve atividade na janela guardada; senão vazio. */
   eventos: SessionEvent[];
+}
+
+/** `fn` para cada item, com no máximo `limite` em andamento; a ordem do resultado é a dos itens. */
+async function emParalelo<T, R>(itens: readonly T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(itens.length);
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < itens.length) {
+      const i = proximo++;
+      out[i] = await fn(itens[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, trabalhador));
+  return out;
 }
 
 async function sessoesDesde(porta: Porta, desde: string, fuso: string): Promise<Session[]> {
@@ -116,12 +143,16 @@ async function sessoesDesde(porta: Porta, desde: string, fuso: string): Promise<
   return out;
 }
 
-async function eventosDa(porta: Porta, sessionId: string): Promise<SessionEvent[]> {
+/** Pagina os eventos da sessão, chamando `aoLer` em cada um; guarda a lista só se `guardar`. */
+async function eventosDa(porta: Porta, sessionId: string, guardar: boolean, aoLer: ((e: SessionEvent) => void) | null): Promise<SessionEvent[]> {
   const out: SessionEvent[] = [];
   let cursor: string | null = null;
   do {
     const page = await porta.listEvents(sessionId, { limit: 500, cursor });
-    out.push(...page.items);
+    for (const e of page.items) {
+      aoLer?.(e);
+      if (guardar) out.push(e);
+    }
     cursor = page.nextCursor;
   } while (cursor);
   return out;
@@ -149,14 +180,16 @@ export class RotaAnalytics {
   private readonly porta: Porta;
   private readonly contas: Pick<Contas, 'atualizar' | 'daSessao'> | null;
   private readonly agora: () => number;
-  private readonly cacheMs: number;
-  private readonly cache = new Map<string, { em: number; corpo: Promise<unknown> }>();
+  private readonly cacheMs: { visao: number; custo: number };
+  private readonly versao: (() => string) | null;
+  private readonly cache = new Map<string, { em: number; versao: string | null; ttl: number; corpo: Promise<unknown> }>();
 
-  constructor({ storage, contas = null, agora = Date.now, cacheMs = 10_000 }: OpcoesDoAnalytics) {
+  constructor({ storage, contas = null, agora = Date.now, cacheMsDaVisao = 30_000, cacheMsDoCusto = 10_000, versao }: OpcoesDoAnalytics) {
     this.porta = storage;
     this.contas = contas;
     this.agora = agora;
-    this.cacheMs = cacheMs;
+    this.cacheMs = { visao: cacheMsDaVisao, custo: cacheMsDoCusto };
+    this.versao = versao ?? null;
   }
 
   /** `true` quando o caminho é desta rota. */
@@ -167,11 +200,12 @@ export class RotaAnalytics {
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
       const fuso = validarFuso(url.searchParams.get('fuso'));
-      if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}`, () => this.visaoGeral(fuso)) };
+      const hoje = diaDe(new Date(this.agora()).toISOString(), fuso);
+      if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
       if (url.pathname === ROTA_DO_CUSTO) {
         const dias = Number(url.searchParams.get('dias') ?? 30);
         if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido('dias: 7, 30 ou 90');
-        return { status: 200, corpo: await this.emCache(`custo?${dias}&${fuso}`, () => this.custo(dias, fuso)) };
+        return { status: 200, corpo: await this.emCache(`custo?${dias}&${fuso}&${hoje}`, this.cacheMs.custo, () => this.custo(dias, fuso)) };
       }
       return { status: 404, corpo: { error: 'não encontrado' } };
     } catch (err) {
@@ -180,13 +214,17 @@ export class RotaAnalytics {
     }
   }
 
-  private emCache(chave: string, calcular: () => Promise<unknown>): Promise<unknown> {
+  // Vale enquanto é nova (`ttl`) ou, com o cursor, enquanto nada mudou (até `CACHE_MAXIMO_MS`).
+  private emCache(chave: string, ttl: number, calcular: () => Promise<unknown>): Promise<unknown> {
     const agora = this.agora();
-    for (const [k, v] of this.cache) if (agora - v.em >= this.cacheMs) this.cache.delete(k);
+    const versao = this.versao?.() ?? null;
+    const vale = (v: { em: number; versao: string | null; ttl: number }) =>
+      agora - v.em < v.ttl || (versao !== null && v.versao === versao && agora - v.em < CACHE_MAXIMO_MS);
+    for (const [k, v] of this.cache) if (!vale(v)) this.cache.delete(k);
     const tem = this.cache.get(chave);
     if (tem) return tem.corpo;
     const corpo = calcular();
-    this.cache.set(chave, { em: agora, corpo });
+    this.cache.set(chave, { em: agora, versao, ttl, corpo });
     corpo.catch(() => this.cache.delete(chave));
     return corpo;
   }
@@ -197,12 +235,17 @@ export class RotaAnalytics {
     return c ? { id: c.id, rotulo: c.rotulo, cor: c.cor } : { id: null, rotulo: SEM_CONTA, cor: null };
   }
 
-  private async lerJanela(desde: string, fuso: string): Promise<SessaoLida[]> {
+  /**
+   * As sessões com `updatedAt` desde `desde`, com os eventos guardados só das que têm `updatedAt` desde
+   * `guardarDesde`. `aoLer` vê todo evento lido, guardado ou não (o heatmap conta por ele).
+   */
+  private async lerJanela(desde: string, guardarDesde: string, fuso: string, aoLer: ((e: SessionEvent) => void) | null = null): Promise<SessaoLida[]> {
     await this.contas?.atualizar();
     const sessoes = await sessoesDesde(this.porta, desde, fuso);
-    const out: SessaoLida[] = [];
-    for (const sessao of sessoes) out.push({ sessao, eventos: await eventosDa(this.porta, sessao.id) });
-    return out;
+    return emParalelo(sessoes, LEITURAS_EM_PARALELO, async (sessao) => {
+      const guardar = diaDe(sessao.updatedAt, fuso) >= guardarDesde;
+      return { sessao, eventos: await eventosDa(this.porta, sessao.id, guardar, aoLer) };
+    });
   }
 
   /** Parcelas de cada sessão dentro de [desde, ate], com a conta de cada sessão. */
@@ -234,10 +277,14 @@ export class RotaAnalytics {
     const desde = somarDias(hoje, -(DIAS_DA_VISAO - 1));
     // 52 semanas alinhadas à segunda: começa na segunda de 51 semanas antes da semana de hoje.
     const desdeHeatmap = somarDias(hoje, -indiceDaSemana(hoje) - 7 * (SEMANAS_DO_HEATMAP - 1));
-    const lidas = await this.lerJanela(desdeHeatmap, fuso);
+    const eventosPorDia = new Map<string, number>();
+    const contarNoHeatmap = (e: SessionEvent) => {
+      const dia = diaDe(e.createdAt, fuso);
+      if (dia >= desdeHeatmap && dia <= hoje) eventosPorDia.set(dia, (eventosPorDia.get(dia) ?? 0) + 1);
+    };
+    const lidas = await this.lerJanela(desdeHeatmap, desde, fuso, contarNoHeatmap);
     const { porSessao, contaDaSessao, todas } = await this.parcelasDaJanela(lidas, desde, hoje, fuso);
 
-    const eventosPorDia = new Map<string, number>();
     const sessoesPorDia = new Map<string, Set<string>>();
     const marcar = (dia: string, id: string) => {
       if (dia < desde || dia > hoje) return;
@@ -254,9 +301,7 @@ export class RotaAnalytics {
       let ativa = false;
       for (const e of eventos) {
         const dia = diaDe(e.createdAt, fuso);
-        if (dia < desdeHeatmap || dia > hoje) continue;
-        eventosPorDia.set(dia, (eventosPorDia.get(dia) ?? 0) + 1);
-        if (dia < desde) continue;
+        if (dia < desde || dia > hoje) continue;
         ativa = true;
         eventosNaJanela++;
         marcar(dia, sessao.id);
@@ -290,7 +335,8 @@ export class RotaAnalytics {
     const contas = RotaAnalytics.contasDistintas(comAtividade.map((s) => contaDaSessao.get(s.id) ?? this.contaDe(s)));
     const porConta = contas.map((c) => {
       const ps = todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id);
-      return { conta: c.id, usd: arredondar(relatorioDeCusto(ps, fuso).total.custoUsd) };
+      const total = relatorioDeCusto(ps, fuso).total;
+      return { conta: c.id, usd: arredondar(total.custoUsd), semPreco: total.semPreco.modelos };
     });
 
     const ultimos = diasEntre(desde, hoje).map((dia) => ({ dia, sessoes: sessoesPorDia.get(dia)?.size ?? 0 }));
@@ -340,7 +386,7 @@ export class RotaAnalytics {
     const geradoEm = new Date(this.agora()).toISOString();
     const hoje = diaDe(geradoEm, fuso);
     const desde = somarDias(hoje, -(dias - 1));
-    const lidas = await this.lerJanela(desde, fuso);
+    const lidas = await this.lerJanela(desde, desde, fuso);
     const { porSessao, contaDaSessao, todas } = await this.parcelasDaJanela(lidas, desde, hoje, fuso);
     const relatorio = relatorioDeCusto(todas, fuso);
     const calendario = diasEntre(desde, hoje);
@@ -365,6 +411,7 @@ export class RotaAnalytics {
 
     const sessoesComUso = [...porSessao].filter(([, ps]) => ps.length > 0).map(([id]) => id);
     const contas = RotaAnalytics.contasDistintas(sessoesComUso.map((id) => contaDaSessao.get(id)!));
+    const porConta = contas.map((c) => ({ c, r: relatorioDeCusto(todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id), fuso) }));
 
     return {
       geradoEm,
@@ -379,6 +426,11 @@ export class RotaAnalytics {
       resumoDeHoje: {
         usd: linhaDeHoje ? arredondar(linhaDeHoje.custoUsd) : 0,
         sessoes: new Set(todas.filter((p) => p.dia === hoje).map((p) => p.sessionId)).size,
+        // A divisão por conta (decisão 0006), do dia de hoje de cada uma; conta sem uso hoje vale 0.
+        porConta: porConta.map(({ c, r }) => {
+          const l = r.porDia.find((d) => d.chave === hoje);
+          return { conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: l ? arredondar(l.custoUsd) : 0, semPreco: l?.semPreco.modelos ?? [] };
+        }),
       },
       periodo: {
         usd: arredondar(relatorio.total.custoUsd),
@@ -397,13 +449,14 @@ export class RotaAnalytics {
       porProjeto: [...projetos]
         .map(([projeto, ps]) => ({ projeto, usd: arredondar(relatorioDeCusto(ps, fuso).total.custoUsd) }))
         .sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1) || a.projeto.localeCompare(b.projeto)),
-      porConta: contas.map((c) => {
-        const r = relatorioDeCusto(
-          todas.filter((p) => (contaDaSessao.get(p.sessionId)?.id ?? null) === c.id),
-          fuso,
-        );
-        return { conta: c.id, rotulo: c.rotulo, cor: c.cor, usd: arredondar(r.total.custoUsd), semPreco: r.total.semPreco.modelos, porDia: porDiaDe(r) };
-      }),
+      porConta: porConta.map(({ c, r }) => ({
+        conta: c.id,
+        rotulo: c.rotulo,
+        cor: c.cor,
+        usd: arredondar(r.total.custoUsd),
+        semPreco: r.total.semPreco.modelos,
+        porDia: porDiaDe(r),
+      })),
     };
   }
 }

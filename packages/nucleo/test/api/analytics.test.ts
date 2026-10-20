@@ -148,7 +148,7 @@ describe('GET /api/analytics (Visão geral)', () => {
     assert.equal((await pedirRota(r, '/api/analytics/outra')).status, 404);
   });
 
-  test('a resposta fica em memória por alguns segundos por rota e parâmetros', async () => {
+  test('a Visão geral fica 30 s em memória por rota e parâmetros', async () => {
     const relogio = { agora: AGORA };
     const r = rota(storage, relogio);
     const a = (await pedirRota(r, '/api/analytics')).corpo as Json;
@@ -159,9 +159,46 @@ describe('GET /api/analytics (Visão geral)', () => {
     assert.equal(b.numeros.eventos.total, 11);
     const outroFuso = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
     assert.notEqual(outroFuso.geradoEm, a.geradoEm);
-    relogio.agora += 10_000;
+    relogio.agora += 20_000;
+    assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, '25 s: ainda a mesma');
+    relogio.agora += 6_000;
     const c = (await pedirRota(r, '/api/analytics')).corpo as Json;
     assert.equal(c.numeros.eventos.total, 12);
+  });
+
+  test('com o cursor de mudanças, vale enquanto nada muda (até 5 min) e refaz quando muda', async () => {
+    const s = await fixtures();
+    try {
+      const relogio = { agora: AGORA };
+      const cursor = { atual: 'g:1' };
+      const r = new RotaAnalytics({ storage: s, agora: () => relogio.agora, versao: () => cursor.atual });
+      const a = (await pedirRota(r, '/api/analytics')).corpo as Json;
+      relogio.agora += 4 * 60_000;
+      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, 'sem mudança, 4 min');
+      cursor.atual = 'g:2';
+      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, a.geradoEm, 'mudou e já passou de 30 s');
+      const b = (await pedirRota(r, '/api/analytics')).corpo as Json;
+      relogio.agora += 10_000;
+      cursor.atual = 'g:3';
+      assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, b.geradoEm, 'mudou, mas a resposta tem só 10 s');
+      relogio.agora += 6 * 60_000;
+      assert.notEqual(((await pedirRota(r, '/api/analytics')).corpo as Json).geradoEm, b.geradoEm, 'passou de 5 min');
+    } finally {
+      await s.close();
+    }
+  });
+
+  test('o fuso volta na forma canônica, na resposta e na chave do cache', async () => {
+    const r = rota(storage);
+    const a = (await pedirRota(r, '/api/analytics?fuso=america/sao_paulo')).corpo as Json;
+    assert.equal(a.fusoHorario, 'America/Sao_Paulo');
+    const b = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
+    assert.equal(b, a, 'a mesma entrada do cache');
+  });
+
+  test('o custo por conta traz os modelos sem preço de cada conta', async () => {
+    const v = (await pedirRota(rota(storage), '/api/analytics')).corpo as Json;
+    assert.deepEqual(v.numeros.custo.porConta.map((c: Json) => c.semPreco), [[], ['modelo-sem-preco'], []]);
   });
 });
 
@@ -177,6 +214,12 @@ describe('GET /api/analytics/custo (Custo)', () => {
     assert.deepEqual([c.dias, c.hoje, c.desde, c.ate, c.estimativa, c.moeda], [7, '2026-10-20', '2026-10-14', '2026-10-20', true, 'USD']);
     perto(c.resumoDeHoje.usd, OPUS + HAIKU);
     assert.equal(c.resumoDeHoje.sessoes, 2);
+    const hoje = c.resumoDeHoje.porConta;
+    assert.deepEqual(hoje.map((x: Json) => [x.rotulo, x.semPreco]), [['Conta 1', []], ['Conta 2', []], ['Sem conta', []]]);
+    perto(hoje[0].usd, OPUS);
+    assert.equal(hoje[1].usd, 0, 'conta 2 sem uso hoje');
+    perto(hoje[2].usd, HAIKU);
+    assert.equal(hoje[0].cor, c.contas[0].cor);
     perto(c.periodo.usd, OPUS + SONNET + HAIKU);
     perto(c.periodo.mediaPorDia, (OPUS + SONNET + HAIKU) / 7);
     assert.equal(c.cache.pct, 18.2);

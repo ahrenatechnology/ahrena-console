@@ -278,6 +278,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mudancas,
   frota: mcp.frota,
   analytics: new RotaAnalytics({ storage, contas }),
+  analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
