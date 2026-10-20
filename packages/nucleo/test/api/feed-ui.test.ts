@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import * as E from '../../ui/screens/feed-state.js';
 
@@ -408,12 +408,12 @@ describe('Feed de atividade: a tela', () => {
   // O CSS de cada tela fica carregado depois que ela abre: classe com o mesmo nome em duas telas quebra
   // a outra. As do Feed levam o prefixo `feed-`; em comum, só as da moldura e os selos de status.
   test('o feed.css só estiliza classes com o prefixo feed-, e nenhuma de outra tela', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const minhas = [...classes('feed.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('feed-')), [], 'classe própria sem o prefixo feed-');
-    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'shell.css', 'brand.css'].includes(a))) {
+    for (const outra of readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['feed.css', 'shell.css', 'brand.css'].includes(a))) {
       const delas = classes(outra);
       assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `feed.css e ${outra} estilizam as mesmas classes`);
     }
@@ -421,7 +421,7 @@ describe('Feed de atividade: a tela', () => {
 
   test('a tela não usa fetch, innerHTML nem estilo inline', () => {
     for (const a of ['screens/feed.js', 'screens/feed-state.js']) {
-      const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
+      const texto = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
       assert.doesNotMatch(texto, /\bfetch\(|innerHTML|\.style\.|style=/, a);
     }
   });

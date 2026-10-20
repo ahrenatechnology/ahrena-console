@@ -36,7 +36,7 @@ import type { IndiceDoDesktop, SessaoDoDesktop } from './desktop-index.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { custoDaSessao, duracaoDe, tituloDe } from './sessions.ts';
 
-export const ROTA_DO_KANBAN = '/api/kanban';
+export const KANBAN_ROUTE = '/api/kanban';
 export const POR_PAGINA = 10;
 /** O último prompt e a descrição do subagente, numa linha, até aqui. */
 export const TEXTO_MAXIMO = 120;

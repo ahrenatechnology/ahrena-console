@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto, type EventoFalso } from './fake-dom.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { WriteError, ReadError, httpWriter } from '../../ui/api.js';
@@ -495,11 +495,11 @@ describe('Kanban do projeto (C11)', () => {
   });
 
   test('a tela não escreve cor à mão nem cita endereço externo, e está no registro', () => {
-    const fonte = readFileSync(`${PASTA_DA_UI}screens/project.js`, 'utf8');
+    const fonte = readFileSync(`${UI_FOLDER}screens/project.js`, 'utf8');
     assert.doesNotMatch(fonte, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i);
     assert.doesNotMatch(fonte, /https?:\/\//);
     assert.doesNotMatch(fonte, /innerHTML|style=|\bfetch\(/);
-    assert.ok(readdirSync(`${PASTA_DA_UI}screens`).includes('project.js'));
+    assert.ok(readdirSync(`${UI_FOLDER}screens`).includes('project.js'));
     const achada = findScreen('/ui/project');
     assert.equal(achada.screen.id, 'project');
     assert.equal(achada.screen.file, '/ui/screens/project.js');
@@ -508,16 +508,16 @@ describe('Kanban do projeto (C11)', () => {
 
   // O CSS de cada tela fica na página depois que ela abre: uma classe de nome igual em duas telas quebra a outra.
   test('o CSS da tela fica em project.css, que a tela carrega, com as classes próprias em prj-', () => {
-    const semComentario = (arquivo: string) => readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const semComentario = (arquivo: string) => readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const css = semComentario('project.css');
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(|https?:\/\//i);
     assert.doesNotMatch(semComentario('shell.css'), /\.prj-/, 'nada da tela na moldura');
-    assert.match(readFileSync(`${PASTA_DA_UI}screens/project.js`, 'utf8'), /'\/ui\/project\.css'/);
+    assert.match(readFileSync(`${UI_FOLDER}screens/project.js`, 'utf8'), /'\/ui\/project\.css'/);
     // Toda regra começa por uma classe prj-: o resto (.head, .type, .foot…) só vale dentro dela.
     for (const regra of css.split('}').map((r) => r.split('{')[0]!.trim()).filter((r) => r && !r.startsWith('@'))) {
       for (const seletor of regra.split(',')) assert.match(seletor.trim(), /^\.prj-/, seletor);
     }
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && a !== 'project.css');
+    const outras = readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && a !== 'project.css');
     for (const outra of outras) assert.doesNotMatch(semComentario(outra), /\.prj-/, outra);
   });
 });

@@ -11,7 +11,7 @@ import {
   ResumosDeSessao,
   TrabalhoPorBranch,
   aplicarEvento,
-  iniciarApiLocal,
+  startLocalApi,
   issueDoBranch,
   repoDoRemote,
   resumoVazio,
@@ -302,7 +302,7 @@ describe('servidor da API local', () => {
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-    const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);

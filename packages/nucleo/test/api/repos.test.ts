@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
 import { SessoesPorRepo } from '../../src/api/repos-sessions.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
@@ -525,13 +525,13 @@ describe('#105 CA6: o período vale para a tela inteira', () => {
 });
 
 describe('#104 e #105: a rota /api/repos no núcleo', () => {
-  let api: ApiLocal;
+  let api: LocalApi;
   let m: Montagem;
   before(async () => {
     m = await montar();
     const storage = openSqliteStorage({ path: ':memory:' });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
   });
   after(() => api.close());
 

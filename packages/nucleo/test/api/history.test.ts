@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
+import { Contas, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { SessionHistory, type HistoryResponse } from '../../src/history/reading.ts';
 import { BEFORE_CLEAR, AFTER_CLEAR, seedPanelHistory } from '../../src/simulator/history-ended.ts';
@@ -20,7 +20,7 @@ async function subir(comHistorico = true) {
   await seedPanelHistory(storage, decisoes, 'p4', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION });
   const historico = comHistorico ? new SessionHistory({ storage, decisions: decisoes, timeZone: 'UTC' }) : undefined;
-  const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, historico });
+  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, history: historico });
   return {
     get: (q = '') => fetch(`${api.url}/api/history${q}`),
     fechar: async () => {

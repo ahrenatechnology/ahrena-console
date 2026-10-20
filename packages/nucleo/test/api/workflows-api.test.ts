@@ -1,9 +1,9 @@
-// #96 e #97 pela API, contra a demonstração `--demo --cenario p4` (simulator/workflows.ts).
+// #96 e #97 pela API, contra a demonstração `--demo --scenario p4` (simulator/workflows.ts).
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, TrabalhoPorBranch, type ApiLocal, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
 import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
 import { WORKFLOW_SESSIONS, seedDemoWorkflows } from '../../src/simulator/workflows.ts';
@@ -27,7 +27,7 @@ function pedir(url: string, caminho: string): Promise<{ status: number; corpo: a
 
 describe('Workflows na API, com a demonstração do p4', () => {
   let storage: SqliteStorage;
-  let api: ApiLocal;
+  let api: LocalApi;
   let trabalho: TrabalhoPorBranch;
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
@@ -35,7 +35,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     await seedDemoWorkflows(storage, AGORA);
     trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho, agora: () => AGORA });
-    api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {} });
+    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {
     await api.close();

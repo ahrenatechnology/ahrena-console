@@ -12,7 +12,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Contas, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
 import { ChangeCursor, withChanges, waitForChanges, WAIT_FOR_CHANGES, type WaitForChangesOutput } from '../../src/changes/index.ts';
 import { c1, c2, seed } from '../mcp/helpers.ts';
@@ -24,7 +24,7 @@ describe('wait_for_changes with the official client', () => {
   let sqlite: SqliteStorage;
   let storage: SqliteStorage;
   let changes: ChangeCursor;
-  let api: ApiLocal;
+  let api: LocalApi;
   before(async () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
     await seed(sqlite);
@@ -33,7 +33,7 @@ describe('wait_for_changes with the official client', () => {
     const accounts = new Contas({ storage, arquivo: null });
     const { server } = createMcpServer({ storage, accounts });
     server.register(waitForChanges({ changes, accounts }));
-    api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server, mudancas: changes });
+    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server, changes });
   });
   after(async () => {
     await api.close();

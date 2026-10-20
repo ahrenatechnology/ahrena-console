@@ -48,7 +48,7 @@ import type {
   SubagenteDoPainel,
 } from './types.ts';
 import type { TrabalhoPorBranch } from './work.ts';
-import { VERSAO_DA_API } from './version.ts';
+import { API_VERSION } from './version.ts';
 
 export const LIMITE_PADRAO_DE_CONTEXTO = DEFAULT_WINDOW;
 const LIMITE_LONGO_DE_CONTEXTO = LONG_WINDOW;
@@ -234,7 +234,7 @@ export class MontadorDoPainel {
 
     return {
       version: 1,
-      api: { version: VERSAO_DA_API, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      api: { version: API_VERSION, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
       generatedAt: new Date(agora).toISOString(),
       session: sessao,
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
