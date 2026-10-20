@@ -66,7 +66,7 @@ function cartaoDoPromover() {
     'section',
     { class: 'cartao dec-lado' },
     el('div', { class: 'dec-lado-ttl' }, icone('promover'), el('h3', {}, 'Promover a registro de decisão')),
-    el('p', {}, 'Gera um rascunho em ', el('code', { class: 'mono' }, 'docs/decisoes/'), ' no formato do projeto, com contexto, decisão, alternativas e o link para a conversa.'),
+    el('p', {}, 'Gera um rascunho de registro de decisão para o repositório da sessão, com contexto, decisão, alternativas e o link para a conversa. O caminho vem do núcleo e aparece antes de gravar.'),
   );
 }
 

@@ -205,6 +205,17 @@ function classesDoJs(texto: string): string[] {
   return achadas;
 }
 
+describe('sem padrão interno', () => {
+  // A pasta dos registros, o repositório e o host vêm do núcleo (o rascunho traz o caminho); a tela não
+  // aponta para recurso nenhum da Ahrena nem supõe a pasta de um projeto.
+  test('o front das Decisões não cita org, repositório, host, caminho de máquina nem pasta de registros', () => {
+    for (const arquivo of [...JS_DA_TELA, TELA, 'ler.js']) {
+      const texto = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+      for (const proibido of [/ahrena/i, /github|gitlab/i, /\/Users\/|\/home\//, /docs\/decisoes/, /\b[a-z0-9-]+\.(com|io|dev|ai)\b/i]) assert.doesNotMatch(texto, proibido, `${arquivo}: ${proibido}`);
+    }
+  });
+});
+
 describe('o estilo das Decisões (ui/decisoes.css)', () => {
   test('o CSS fica na raiz de ui/, como o das outras telas, e as duas telas carregam de lá', () => {
     assert.ok(readdirSync(PASTA_DA_UI).includes(TELA));
