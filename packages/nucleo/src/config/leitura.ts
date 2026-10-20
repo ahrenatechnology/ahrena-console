@@ -24,7 +24,7 @@ import {
   type SkillListada,
   type SubagenteListado,
 } from './modelo.ts';
-import { NOME_DE_SKILL } from './skills.ts';
+import { skillEditavel } from './skills.ts';
 
 /** O máximo de itens lidos por pasta (skills, agentes, comandos, memória): uma pasta enorme não trava a resposta. */
 const MAX_POR_PASTA = 500;
@@ -176,7 +176,7 @@ async function lerSkills(raiz: RaizDaConfig): Promise<SkillListada[]> {
       raiz: raiz.id,
       caminho,
       editadoEm: Math.round(info.mtimeMs),
-      editavel: NOME_DE_SKILL.test(nome) && !nome.includes('..'),
+      editavel: await skillEditavel(raiz, nome),
     });
   }
   return skills;

@@ -101,6 +101,12 @@ async function caminhosDaSkill(raiz: RaizDaConfig, nome: string, criar: boolean)
     if (criar) throw new ErroDaConfig(404, 'a pasta da raiz não existe');
     return null;
   }
+  // A `.claude` do projeto como symlink para fora do projeto (um repositório clonado pode trazer
+  // uma) faria a skill "do projeto" cair em outra pasta, até na de usuário.
+  if (raiz.tipo === 'claude-projeto') {
+    const realProjeto = await realpath(dirname(raiz.caminho)).catch(() => null);
+    if (!realProjeto || !realRaiz.startsWith(realProjeto + sep)) throw new ErroDaConfig(403, 'fora da raiz: a .claude do projeto aponta (symlink) para fora dele');
+  }
   const skills = join(raiz.caminho, 'skills');
   const pasta = join(skills, nome);
   for (const p of [skills, pasta]) {
@@ -125,6 +131,23 @@ async function caminhosDaSkill(raiz: RaizDaConfig, nome: string, criar: boolean)
   }
   return { pasta, arquivo };
 }
+
+/**
+ * Se a gravação aceitaria esta skill: o nome passa, as pastas ficam dentro da raiz e o `SKILL.md`
+ * não é symlink. É o `editavel` da listagem, com as mesmas regras da gravação.
+ */
+export async function skillEditavel(raiz: RaizDaConfig, nome: string): Promise<boolean> {
+  try {
+    validarNome(nome);
+    const c = await caminhosDaSkill(raiz, nome, false);
+    return c !== null && !(await lstat(c.arquivo)).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** Gravações em fila por arquivo: duas no mesmo `SKILL.md` não passam juntas pela conferência da versão. */
+const filas = new Map<string, Promise<unknown>>();
 
 export async function lerSkill(raiz: RaizDaConfig, nomePedido: unknown): Promise<SkillLida | null> {
   const nome = validarNome(nomePedido);
@@ -154,6 +177,17 @@ export async function gravarSkill(p: PedidoDeGravacao): Promise<SkillGravada> {
   const versaoPedida = typeof p.versao === 'string' ? p.versao : null;
 
   const { pasta, arquivo } = (await caminhosDaSkill(p.raiz, nome, true))!;
+  const anterior = filas.get(arquivo) ?? Promise.resolve();
+  const feito = anterior.catch(() => undefined).then(() => gravarAgora(p, nome, pasta, arquivo, versaoPedida, p.conteudo as string));
+  const fim = feito.catch(() => undefined);
+  filas.set(arquivo, fim);
+  void fim.then(() => {
+    if (filas.get(arquivo) === fim) filas.delete(arquivo);
+  });
+  return feito;
+}
+
+async function gravarAgora(p: PedidoDeGravacao, nome: string, pasta: string, arquivo: string, versaoPedida: string | null, conteudo: string): Promise<SkillGravada> {
   const atual = await readFile(arquivo).catch((e: NodeJS.ErrnoException) => {
     if (e.code === 'ENOENT') return null;
     throw e;
@@ -166,21 +200,21 @@ export async function gravarSkill(p: PedidoDeGravacao): Promise<SkillGravada> {
   if (atual) {
     const agora = (p.agora ?? (() => new Date()))();
     const carimbo = agora.toISOString().replace(/[:.]/g, '-');
-    backup = join(p.backups, carimbo.slice(0, 10), pastaSeguraDa(p.raiz), nome, `SKILL.md.bak-${carimbo}`);
+    backup = join(p.backups, carimbo.slice(0, 10), pastaSeguraDa(p.raiz), nome, `SKILL.md.bak-${carimbo}-${randomBytes(3).toString('hex')}`);
     await mkdir(dirname(backup), { recursive: true, mode: 0o700 });
     await writeFile(backup, atual, { flag: 'wx', mode: 0o600 });
   }
 
   const tmp = join(pasta, `.SKILL.md.tmp-${process.pid}-${randomBytes(6).toString('hex')}`);
   try {
-    await writeFile(tmp, p.conteudo, { flag: 'wx', mode: 0o644 });
+    await writeFile(tmp, conteudo, { flag: 'wx', mode: 0o644 });
     await rename(tmp, arquivo);
   } catch (e) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw e;
   }
   const info = await stat(arquivo);
-  return { ok: true, caminho: arquivo, backup, versao: versaoDe(p.conteudo), editadoEm: Math.round(info.mtimeMs) };
+  return { ok: true, caminho: arquivo, backup, versao: versaoDe(conteudo), editadoEm: Math.round(info.mtimeMs) };
 }
 
 /**

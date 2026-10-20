@@ -195,7 +195,7 @@ describe('#63 GET /api/config: a leitura', () => {
     mkdirSync(join(pasta.dir, 'skills'), { recursive: true });
     symlinkSync(join(fora, 'alvo'), join(pasta.dir, 'skills', 'link'));
     const r = await lerConfigDoAgente({ pastas: [pasta], projetos: [] });
-    assert.deepEqual(r.skills.map((s) => s.nome), ['link']);
+    assert.deepEqual(r.skills.map((s) => [s.nome, s.editavel]), [['link', false]]);
   });
 });
 
@@ -344,7 +344,7 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal(readFileSync(r.json.caminho as string, 'utf8'), 'versão nova\n');
     const backup = r.json.backup as string;
     assert.ok(backup.startsWith(join(backups, '2026-10-20') + '/'), backup);
-    assert.match(backup, /\/revisar-pr\/SKILL\.md\.bak-2026-10-20T12-34-56-789Z$/);
+    assert.match(backup, /\/revisar-pr\/SKILL\.md\.bak-2026-10-20T12-34-56-789Z-[0-9a-f]{6}$/);
     assert.equal(readFileSync(backup, 'utf8'), antes.json.conteudo);
     // Nenhum temporário ficou para trás.
     assert.deepEqual(readdirSync(join(home.dir, 'skills', 'revisar-pr')), ['SKILL.md']);
@@ -409,6 +409,41 @@ describe('#63 /api/config e /api/config/skill', () => {
     assert.equal((await postar({ raiz: 'u0', nome: 'ok', conteudo: 42 })).status, 400);
     assert.equal((await postar({ raiz: 'u0', nome: 'grande', conteudo: 'a'.repeat(MAX_CONTEUDO + 1) })).status, 413);
     assert.equal((await postar({ raiz: 'u0', nome: 'no-limite', conteudo: 'a'.repeat(MAX_CONTEUDO) })).status, 200);
+  });
+
+  test('duas gravações juntas com a mesma versão: uma passa, a outra dá 409', async () => {
+    const lida = await pedir(api.url, '/api/config/skill?raiz=u0&nome=nova-skill');
+    const [a, b] = await Promise.all([
+      postar({ raiz: 'u0', nome: 'nova-skill', conteudo: 'aba A', versao: lida.json.versao }),
+      postar({ raiz: 'u0', nome: 'nova-skill', conteudo: 'aba B', versao: lida.json.versao }),
+    ]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+    const venceu = a.status === 200 ? 'aba A' : 'aba B';
+    assert.equal(readFileSync(join(home.dir, 'skills', 'nova-skill', 'SKILL.md'), 'utf8'), venceu);
+  });
+
+  test('a .claude do projeto como symlink para fora do projeto é recusada', async () => {
+    const t3 = mkdtempSync(join(tmpdir(), 'config-claude-link-'));
+    try {
+      const proj = join(t3, 'clonado');
+      mkdirSync(proj);
+      mkdirSync(join(t3, 'outra'));
+      symlinkSync(join(t3, 'outra'), join(proj, '.claude'));
+      const rota = criarRotaDaConfig({ pastas: async () => [], projetos: async () => [proj], backups: join(t3, 'b') });
+      const sqlite3 = openSqliteStorage({ path: ':memory:' });
+      const montador = new MontadorDoPainel({ storage: sqlite3, contas: new Contas({ storage: sqlite3, arquivo: null }), desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite3.db) }) }) });
+      const api3 = await iniciarApiLocal({ montador, hooks: { storage: sqlite3 }, port: 0, log: () => {}, config: rota });
+      try {
+        const r = await pedir(api3.url, '/api/config/skill', { method: 'POST', headers: json, corpo: JSON.stringify({ raiz: 'p', nome: 'nova', conteudo: 'x' }) });
+        assert.equal(r.status, 403, r.corpo);
+        assert.ok(!existsSync(join(t3, 'outra', 'skills')));
+      } finally {
+        await api3.close();
+        await sqlite3.close();
+      }
+    } finally {
+      rmSync(t3, { recursive: true, force: true });
+    }
   });
 
   test('a pasta skills inteira como symlink para fora também é recusada', async () => {

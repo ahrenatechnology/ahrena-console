@@ -117,11 +117,11 @@ Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, 
 
 **A edição de uma skill.** `GET /api/config/skill?raiz=&nome=` devolve `{ raiz, nome, escopo, caminho, conteudo, versao, editadoEm }`, com `versao` = sha256 do conteúdo. `POST /api/config/skill` com `{ raiz, nome, conteudo, versao? }` grava:
 
-- skill que existe: copia o `SKILL.md` atual para `~/.ahrena-console/backups/<aaaa-mm-dd>/<pasta>-<hash>/<nome>/SKILL.md.bak-<data>` e só então troca, por um temporário na mesma pasta e `rename`;
+- skill que existe: copia o `SKILL.md` atual para `~/.ahrena-console/backups/<aaaa-mm-dd>/<pasta>-<hash>/<nome>/SKILL.md.bak-<data>-<sufixo>` e só então troca, por um temporário na mesma pasta e `rename`;
 - skill que não existe: cria `skills/<nome>/SKILL.md` (o botão "Nova"), com `backup: null`; na raiz `p`, cria a `.claude` do projeto se faltar;
 - `versao` que não bate com a atual, ou que veio para uma skill que não existe: 409, nada gravado.
 
-Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `raiz` só um id conhecido de tipo `home` ou `claude-projeto` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz, e o `SKILL.md` gravado não pode ser symlink (403); só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
+Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `raiz` só um id conhecido de tipo `home` ou `claude-projeto` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz, o `SKILL.md` gravado não pode ser symlink, e a `.claude` do projeto tem de ficar dentro do projeto (403; a listagem marca essas skills com `editavel: false`); duas gravações no mesmo arquivo passam uma de cada vez, então a segunda com a mesma `versao` dá 409; só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
 
 **Na `--demo`.** Nada da `~/.claude` real é lido: a API monta num temporário do sistema uma pasta de configuração e um projeto fictícios (`motor-de-regras`), com as skills do wireframe, agentes, comandos, `CLAUDE.md`, settings com hooks e plugins, `.claude.json` e `.mcp.json` ([demo.ts](src/config/demo.ts)). Os backups também ficam lá, e a pasta é apagada quando a API sai.
 
