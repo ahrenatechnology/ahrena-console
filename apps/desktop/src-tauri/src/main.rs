@@ -84,7 +84,10 @@ fn main() {
             }
             estado.lock().unwrap().avisos = Avisos::abrir(notificacoes::caminho(app.path().app_data_dir().ok()));
             #[cfg(target_os = "macos")]
-            aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: abrir_console_na_sessao, no_desktop: abrir_no_desktop, silenciar });
+            {
+                let principal = objc2::MainThreadMarker::new().expect("o setup do Tauri roda na thread principal");
+                aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: abrir_console_na_sessao, no_desktop: abrir_no_desktop, silenciar }, principal);
+            }
             TrayIconBuilder::with_id(BANDEJA)
                 .icon(Image::from_bytes(ICONE)?)
                 .icon_as_template(true)
@@ -348,13 +351,17 @@ fn abrir_sessao(app: &AppHandle, estado: &Compartilhado, sessao: &str) {
     abrir_no_desktop(app, local);
 }
 
-/// `POST /abrir/<local_…>` no núcleo; sem `local`, o console.
+/// `POST /abrir/<local_…>` no núcleo; sem `local`, ou com um que o núcleo recusaria, o console.
 fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
-    let porta = match app.state::<Compartilhado>().lock().unwrap().nucleo {
+    let porta = match app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).nucleo {
         EstadoDoNucleo::DePe { porta } => porta,
         _ => return,
     };
     let Some(local) = local else { return abrir_console(app) };
+    if !notificacoes::local_valido(&local) {
+        eprintln!("[ahrena-console] abrir: local inválido {local:?}, abrindo o console");
+        return abrir_console(app);
+    }
     std::thread::spawn(move || {
         let r = http::post_json(porta, &format!("/abrir/{local}"), "{}");
         if r.as_ref().map(|r| r.status) != Some(200) {
@@ -374,7 +381,7 @@ fn abrir_console_na_sessao(app: &AppHandle, sessao: &str) {
 }
 
 fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
-    let porta = match app.state::<Compartilhado>().lock().unwrap().nucleo {
+    let porta = match app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).nucleo {
         EstadoDoNucleo::DePe { porta } => porta,
         _ => nucleo::PORTA_PADRAO,
     };
@@ -396,7 +403,7 @@ fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
 /// A ação "Silenciar" da notificação: cala a sessão e grava.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn silenciar(app: &AppHandle, sessao: &str) {
-    app.state::<Compartilhado>().lock().unwrap().avisos.silenciar(sessao);
+    app.state::<Compartilhado>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).avisos.silenciar(sessao);
 }
 
 /// Mostra os avisos: pelo `UNUserNotificationCenter` (com clique e ações) quando ele liga; senão

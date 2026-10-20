@@ -1,15 +1,17 @@
 // A notificação do A3 com clique e ações, direto no `UNUserNotificationCenter`.
 //
-// O plugin de notificação do Tauri mostra o aviso, mas no macOS não diz ao app em qual ação o
-// usuário clicou. Aqui o app registra a categoria com "Abrir", "Abrir no Claude Desktop" e
-// "Silenciar", põe a sessão e o `local_…` no `userInfo` e responde pelo delegate.
+// O plugin de notificação do Tauri tem `on_action` e `register_action_types` no desktop, mas no
+// macOS só reporta o clique pelo `NSUserNotification` (obsoleto), com as ações num menu "Opções".
+// Aqui o app usa o `UNUserNotificationCenter`: registra a categoria com "Abrir", "Abrir no Claude
+// Desktop" e "Silenciar", põe a sessão e o `local_…` no `userInfo`, pede a apresentação também com
+// o app em primeiro plano e responde pelo delegate.
 //
 // O `UNUserNotificationCenter` derruba o processo quando o app não roda de um bundle (um
 // `cargo run` puro: o `mainBundle` sem `bundleIdentifier`). Nesse caso este módulo não liga, e o
-// main.rs cai no plugin, sem clique.
+// main.rs cai no plugin; o app não registra `on_action` nele, por isso fica sem clique nem ações.
 //
 // O centro só guarda referência fraca ao delegate: ele fica vivo num `thread_local` da thread
-// principal. Os callbacks podem chegar fora dela; o trabalho de janela vai por `run_on_main_thread`.
+// principal (o `MainThreadMarker` de `iniciar` garante a thread). Os callbacks podem chegar fora dela; o trabalho de janela vai por `run_on_main_thread`.
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,7 +20,7 @@ use std::sync::OnceLock;
 use block2::{DynBlock, RcBlock};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, ProtocolObject};
-use objc2::{define_class, msg_send, AllocAnyThread};
+use objc2::{define_class, msg_send, AllocAnyThread, MainThreadMarker};
 use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSSet, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationAction, UNNotificationActionOptions, UNNotificationCategory, UNNotificationCategoryOptions, UNNotificationDefaultActionIdentifier,
@@ -61,7 +63,9 @@ define_class!(
     // SAFETY: `NSObjectProtocol` não tem exigências.
     unsafe impl NSObjectProtocol for Delegado {}
 
-    // SAFETY: as assinaturas são as do protocolo.
+    // SAFETY: as assinaturas são as do protocolo (objc2-user-notifications 0.3), e cada método
+    // chama o completion handler exatamente uma vez. O `Delegado` não tem ivars nem estado da
+    // thread principal, então pode ser chamado de qualquer fila.
     unsafe impl UNUserNotificationCenterDelegate for Delegado {
         /// Com o app em primeiro plano (a janela do console aberta), o macOS não mostraria nada.
         #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
@@ -71,8 +75,8 @@ define_class!(
 
         #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
         fn ao_responder(&self, _centro: &UNUserNotificationCenter, resposta: &UNNotificationResponse, pronto: &DynBlock<dyn Fn()>) {
-            responder(resposta);
             pronto.call(());
+            responder(resposta);
         }
     }
 );
@@ -91,8 +95,9 @@ fn tem_bundle() -> bool {
 }
 
 /// Liga o centro: delegate, categoria com as ações do A3 e o pedido de autorização (alerta e som).
-/// Na thread principal, no `setup`. Devolve `false` sem bundle; aí o main.rs usa o plugin.
-pub fn iniciar(app: &AppHandle, acoes: Acoes) -> bool {
+/// Na thread principal, no `setup` (o `MainThreadMarker` prova): o `thread_local` do delegate é o
+/// dela. Devolve `false` sem bundle; aí o main.rs usa o plugin.
+pub fn iniciar(app: &AppHandle, acoes: Acoes, _principal: MainThreadMarker) -> bool {
     if !tem_bundle() {
         eprintln!("[ahrena-console] sem bundle: notificações sem clique (plugin do Tauri)");
         return false;
@@ -148,7 +153,8 @@ pub fn enviar(a: &Aviso) {
     let chaves: Vec<&NSString> = chaves.iter().map(|c| &**c).collect();
     let valores: Vec<&NSString> = valores.iter().map(|v| &**v).collect();
     let info = NSDictionary::<NSString, NSString>::from_slices(&chaves, &valores);
-    // SAFETY: chaves e valores são NSString, objetos válidos como `id` num `userInfo`.
+    // SAFETY: chaves e valores são NSString, tipos de property list, como o `userInfo` exige; o
+    // cast só alarga os genéricos para `AnyObject`.
     unsafe { conteudo.setUserInfo(info.cast_unchecked::<AnyObject, AnyObject>()) };
 
     let pedido = UNNotificationRequest::requestWithIdentifier_content_trigger(&NSString::from_str(&a.sessao), &conteudo, None);

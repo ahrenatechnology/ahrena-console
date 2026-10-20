@@ -9,7 +9,7 @@
 // geral do menu ("Notificações") e as sessões caladas pela ação "Silenciar" da notificação.
 
 use std::collections::{BTreeSet, HashMap};
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -122,7 +122,10 @@ impl Silencio {
         }
         let texto = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
         let tmp = caminho.with_extension("json.tmp");
-        std::fs::write(&tmp, texto)?;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(texto.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
         std::fs::rename(&tmp, caminho)
     }
 }
@@ -170,9 +173,19 @@ impl Avisos {
     }
 }
 
-/// A tela de detalhe da sessão na `/ui` do núcleo, aonde "Abrir" leva.
+/// A tela de detalhe da sessão na `/ui` do núcleo, aonde "Abrir" leva. Vazia, "." ou ".." não
+/// formam um segmento de caminho: aí, a `/ui`.
 pub fn caminho_da_sessao(sessao: &str) -> String {
+    if matches!(sessao, "" | "." | "..") {
+        return "/ui".into();
+    }
     format!("/ui/sessoes/{}", http::codificar(sessao))
+}
+
+/// O `local_…` que o `POST /abrir/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.
+pub fn local_valido(local: &str) -> bool {
+    let Some(resto) = local.strip_prefix("local_") else { return false };
+    (8..=64).contains(&resto.len()) && resto.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
 /// Onde fica o JSON: em `AHRENA_DADOS_DIR`, se houver, ou no diretório de dados do app.
@@ -297,6 +310,22 @@ mod testes {
     fn caminho_da_tela_da_sessao() {
         assert_eq!(caminho_da_sessao("c3f09b52"), "/ui/sessoes/c3f09b52");
         assert_eq!(caminho_da_sessao("a:b/c"), "/ui/sessoes/a%3Ab%2Fc");
+        for vazia in ["", ".", ".."] {
+            assert_eq!(caminho_da_sessao(vazia), "/ui", "{vazia:?}");
+        }
+    }
+
+    #[test]
+    fn local_como_o_nucleo() {
+        assert!(local_valido("local_716ecd97-6a9b-4452-9770-e2c155279784"));
+        assert!(local_valido("local_ABCDEF01"));
+        assert!(local_valido(&format!("local_{}", "a".repeat(64))));
+        assert!(!local_valido("local_1234567"), "menos de 8");
+        assert!(!local_valido(&format!("local_{}", "a".repeat(65))), "mais de 64");
+        assert!(!local_valido("local_1234567g"));
+        assert!(!local_valido("local_12345678/../x"));
+        assert!(!local_valido("remoto_12345678"));
+        assert!(!local_valido(""));
     }
 
     #[test]
@@ -323,6 +352,17 @@ mod testes {
         assert_eq!(sessoes(&a.ler(&atencao(vec![item("s1", "a", "erro"), item("s2", "b", "erro")]))), ["s2"]);
         assert!(!a.alternar());
         assert!(a.ler(&atencao(vec![item("s3", "c", "erro")])).is_empty());
+    }
+
+    #[test]
+    fn silencio_global_nao_para_o_detector() {
+        let p = Pasta::nova("global-desligado");
+        let mut a = Avisos::abrir(Some(p.0.join(ARQUIVO)));
+        a.ler(&atencao(vec![]));
+        assert!(!a.alternar());
+        assert!(a.ler(&atencao(vec![item("s1", "a", "erro")])).is_empty(), "desligado não avisa");
+        assert!(a.alternar());
+        assert!(a.ler(&atencao(vec![item("s1", "a", "erro")])).is_empty(), "religar não avisa quem já estava");
     }
 
     #[test]
