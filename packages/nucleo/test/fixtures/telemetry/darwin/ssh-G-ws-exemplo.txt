@@ -1,0 +1,8 @@
+user dev
+hostname ws-exemplo.invalid
+port 22
+addressfamily any
+controlmaster false
+localforward 14720 [127.0.0.1]:4720
+localforward [localhost]:13000 [localhost]:3000
+serveraliveinterval 30

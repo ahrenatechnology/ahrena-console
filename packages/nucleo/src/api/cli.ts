@@ -69,6 +69,15 @@ import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
+import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
+import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulador/dev-console.ts';
+import { AlertTracker } from '../telemetry/alerts.ts';
+import { collectorFor } from '../telemetry/adapters/system.ts';
+import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
+import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
+import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
+import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulador/telemetry.ts';
 
 const AJUDA = `Uso: npm run api -- [opções]
 
@@ -97,6 +106,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       deste), para ele e sobe este. De outro código, só avisa
   --sem-trava         Não lê nem grava ~/.ahrena-console/nucleo.json (medições numa porta à
                       parte). A --demo já é sem trava. As duas falham se a porta tem dono
+  --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
+                      Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
 
 Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
@@ -121,6 +132,7 @@ const { values: o } = parseArgs({
     pai: { type: 'string' },
     substituir: { type: 'boolean', default: false },
     'sem-trava': { type: 'boolean', default: false },
+    'no-telemetry': { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
   },
 });
@@ -317,6 +329,39 @@ const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
 const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
+// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const devConsole = createDevConsole({
+  storage,
+  frota: mcp.frota,
+  decisions: decisoes,
+  cache: cacheDoGithub,
+  source: demo ? new SimulatedDevConsoleSource() : o['sem-github'] ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
+  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+});
+
+// Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
+// alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
+// 12 h already seeded, plus the "workstation" that #176 will read for real through the tunnel.
+const sampleStore = new SqliteTelemetryStore(sqlite.db);
+const alertTracker = new AlertTracker();
+const machineEntries: MachineEntry[] = [localMachine()];
+const samplers: TelemetrySampler[] = [];
+function addSampler(machineId: string, collector: TelemetryCollector) {
+  samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(mudancas), log }));
+}
+if (demo) {
+  machineEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  await seedTelemetry(sampleStore, 'local', 'local');
+  await seedTelemetry(sampleStore, SIMULATED_WORKSTATION.id, 'workstation');
+  addSampler('local', new SimulatedCollector('local'));
+  addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
+} else if (!o['no-telemetry']) {
+  const platformCollector = collectorFor();
+  if (platformCollector) addSampler('local', platformCollector);
+  else log(`telemetry: no collector for ${process.platform}`);
+}
+const telemetryService = samplers.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+
 let historicoPronto = false;
 const follower =
   demo || o['sem-historico']
@@ -359,7 +404,9 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  devConsole,
   agentConfig,
+  telemetry: telemetryService,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -393,6 +440,7 @@ const pararDeVigiarPai =
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
+for (const a of samplers) a.start();
 if (follower) {
   follower
     .start()
@@ -432,6 +480,7 @@ async function desligar() {
   pararDeVigiarPai();
   if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
+  await Promise.all(samplers.map((a) => a.stop()));
   await api.close().catch(() => undefined);
   await storage.close();
   if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
