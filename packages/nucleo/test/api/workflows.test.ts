@@ -25,7 +25,7 @@ const LACO = [
   sub('ex1', 'Explore', 0, 2, { name: 'mapear o módulo' }),
   sub('pl', 'Plan', 1, 4, { name: 'plano' }),
   sub('d1', 'general-purpose', 4, 12, { name: 'implementa' }),
-  sub('r1', 'code-reviewer', 12, 15, { name: 'revisa o diff', metadata: { ajustes: 3 } }),
+  sub('r1', 'code-reviewer', 12, 15, { name: 'revisa o diff', metadata: { adjustments: 3 } }),
   sub('d2', 'general-purpose', 15, 22, { name: 'corrige' }),
   sub('r2', 'code-reviewer', 22, null, { name: 'revisa a v2' }),
   sub('tr', 'test-runner', 25, null, { name: 'bateria' }),
@@ -37,14 +37,14 @@ describe('papel e ajustes de um subagente', () => {
     assert.equal(papelDe(sub('a', 'code-reviewer', 0, 1)), 'review');
     assert.equal(papelDe(sub('a', 'general-purpose', 0, 1)), 'dev');
     assert.equal(papelDe(sub('a', 'Explore', 0, 1)), 'Explore');
-    assert.equal(papelDe(sub('a', 'general-purpose', 0, 1, { metadata: { workflow: { papel: 'review' } } })), 'review');
+    assert.equal(papelDe(sub('a', 'general-purpose', 0, 1, { metadata: { workflow: { role: 'review' } } })), 'review');
     assert.equal(papelDe(sub('a', 'x', 0, 1, { subagentType: null })), 'subagente');
   });
 
   test('os ajustes vêm dos metadados, ou da última mensagem do review; sem nada, null', () => {
     const r = sub('r', 'code-reviewer', 0, 1);
     const msg = (summary: string, n: number): SessionEvent => event({ id: `m${n}`, agentId: r.id, type: 'AssistantMessage', toolName: null, summary, createdAt: at(n) });
-    assert.equal(ajustesDe({ ...r, metadata: { workflow: { ajustes: 2 } } }), 2);
+    assert.equal(ajustesDe({ ...r, metadata: { workflow: { adjustments: 2 } } }), 2);
     assert.equal(ajustesDe(r, [msg('olhando o diff', 0), msg('Pedi 4 ajustes no serviço', 1)]), 4);
     assert.equal(ajustesDe(r, [msg('Aprovado, pode seguir', 1)]), 0);
     assert.equal(ajustesDe(r, [msg('olhando', 1)]), null);
@@ -61,8 +61,8 @@ describe('papel e ajustes de um subagente', () => {
     assert.equal(ajustesDe(r, msg('3 pequenos ajustes e depois mais 1 ajuste')), 1);
     assert.equal(ajustesDe(r, msg('Found 4 issues')), 4);
     assert.equal(ajustesDe(r, msg('Sem ajustes, aprovado')), 0);
-    assert.equal(ajustesDe({ ...r, metadata: { workflow: { ajustes: 5 } } }, msg('Aprovado')), 5);
-    assert.equal(ajustesDe({ ...r, metadata: { ajustes: 0 } }, msg('Revisei 12 changes e peço 2 ajustes')), 0);
+    assert.equal(ajustesDe({ ...r, metadata: { workflow: { adjustments: 5 } } }, msg('Aprovado')), 5);
+    assert.equal(ajustesDe({ ...r, metadata: { adjustments: 0 } }, msg('Revisei 12 changes e peço 2 ajustes')), 0);
   });
 });
 
@@ -121,7 +121,7 @@ describe('#97 workflowDaSessao: o grafo dos agentes da sessão', () => {
   });
 
   test('#97/AC-2 um review que aprova (0 ajustes) não volta para o dev: o dev seguinte foi aberto pela sessão', () => {
-    const agentes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 7, { metadata: { ajustes: 0 } }), sub('d2', 'general-purpose', 8, 9)];
+    const agentes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 7, { metadata: { adjustments: 0 } }), sub('d2', 'general-purpose', 8, 9)];
     const w = workflowDaSessao(s, agentes, [], { agora: AGORA });
     assert.deepEqual(w.edges.find((e) => e.to === 's1:d2'), { from: 's1:main', to: 's1:d2', type: 'opened', label: null });
     assert.equal(w.summary, 'dev → review', 'aprovado na primeira rodada: sem laço');
@@ -166,21 +166,21 @@ const usoDe = (agentId: string, sid: string, n: number, input: number, output: n
   event({ id: `${sid}-u${n}`, sessionId: sid, agentId, type: 'AssistantMessage', toolName: null, summary: null, createdAt: at(n), data: { usage: { tokens: { input, output, cacheRead: 99_999, cacheWrite5m: 10, cacheWrite1h: 0 } } } });
 const ferramenta = (agentId: string, sid: string, n: number, type = 'PreToolUse'): SessionEvent =>
   event({ id: `${sid}-f${n}-${type}`, sessionId: sid, agentId, type, toolName: 'Read', createdAt: at(n) });
-const wf = (run: string, fase: string, extra: Record<string, unknown> = {}) => ({ metadata: { workflow: { run, fase, ...extra } } });
+const wf = (run: string, phase: string, extra: Record<string, unknown> = {}) => ({ metadata: { workflow: { run, phase, ...extra } } });
 
 function comRun(): SessaoDosWorkflows {
   const sid = 'w1';
   const agentes = [
     principal(sid),
     sub('d1', 'general-purpose', 1, 9, wf('toolu_1', 'Implementar'), sid),
-    sub('r1', 'code-reviewer', 9, 12, wf('toolu_1', 'Revisar', { ajustes: 3 }), sid),
+    sub('r1', 'code-reviewer', 9, 12, wf('toolu_1', 'Revisar', { adjustments: 3 }), sid),
     sub('d2', 'general-purpose', 12, 19, wf('toolu_1', 'Corrigir'), sid),
     sub('r2', 'code-reviewer', 19, null, wf('toolu_1', 'Revisar'), sid),
-    sub('t', 'test-runner', 25, null, wf('toolu_1', 'Testar', { rotulo: 'test' }), sid),
+    sub('t', 'test-runner', 25, null, wf('toolu_1', 'Testar', { label: 'test' }), sid),
     sub('ex', 'Explore', 0, 1, {}, sid),
   ];
   const eventos: SessionEvent[] = [
-    event({ id: 'w1-wf', sessionId: sid, agentId: `${sid}:main`, type: 'PreToolUse', toolName: 'Workflow', createdAt: at(1), data: { tool_use_id: 'toolu_1', tool_input: { name: 'dev-review', fases: ['Implementar', 'Revisar', 'Corrigir', 'Testar'], model: 'claude-opus-5-5' } } }),
+    event({ id: 'w1-wf', sessionId: sid, agentId: `${sid}:main`, type: 'PreToolUse', toolName: 'Workflow', createdAt: at(1), data: { tool_use_id: 'toolu_1', tool_input: { name: 'dev-review', phases: ['Implementar', 'Revisar', 'Corrigir', 'Testar'], model: 'claude-opus-5-5' } } }),
     usoDe(`${sid}:d1`, sid, 2, 1000, 500),
     usoDe(`${sid}:d1`, sid, 3, 2000, 500),
     ferramenta(`${sid}:d1`, sid, 2),
@@ -266,7 +266,7 @@ describe('#96 montarWorkflows: os runs do Workflow tool', () => {
     const sid = 'w2';
     const semChamada: SessaoDosWorkflows = {
       ...concluida(sid),
-      agentes: [principal(sid), sub('a', 'Explore', 1, 3, wf('toolu_9', 'Coletar', { nome: 'triagem-de-bugs' }), sid), sub('b', 'general-purpose', 3, 6, wf('toolu_9', 'Classificar'), sid)],
+      agentes: [principal(sid), sub('a', 'Explore', 1, 3, wf('toolu_9', 'Coletar', { name: 'triagem-de-bugs' }), sid), sub('b', 'general-purpose', 3, 6, wf('toolu_9', 'Classificar'), sid)],
     };
     const run = montarWorkflows([semChamada], { agora: AGORA }).runs[0];
     assert.deepEqual([run.name, run.state, run.end, run.model, run.loop], ['triagem-de-bugs', 'completed', at(6), 'claude-opus-5-5', null]);
@@ -356,7 +356,7 @@ describe('ajustes lidos da mensagem do review (M1)', () => {
     assert.equal(com('Aprovado, sem ajustes'), 0);
     assert.equal(com('Nenhum ajuste'), 0);
     assert.equal(com('LGTM'), 0);
-    assert.equal(ajustesDe({ ...r, metadata: { workflow: { ajustes: 2 } } }, [event({ id: 'm', agentId: r.id, type: 'AssistantMessage', toolName: null, summary: 'Aprovado' })]), 2);
+    assert.equal(ajustesDe({ ...r, metadata: { workflow: { adjustments: 2 } } }, [event({ id: 'm', agentId: r.id, type: 'AssistantMessage', toolName: null, summary: 'Aprovado' })]), 2);
   });
 });
 

@@ -70,10 +70,10 @@ import { RotaAnalytics } from './analytics-route.ts';
 import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
-  LIMPEZA_DAS_DECISOES,
+  DECISION_NOISE_CLEANUP,
   limparDecisoes,
-  REPROCESSAMENTO,
-  REPROCESSAMENTO_DO_CONTEXTO,
+  PLANS_AND_DECISIONS_REPROCESSING,
+  CONTEXT_REPROCESSING,
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
@@ -534,20 +534,20 @@ if (follower) {
 // capture existed, the cleanup of what the old capture wrote that is not a decision, and the context
 // meters of the sessions imported before item 1.7.
 async function reprocessOnce() {
-  if (!storage.reprocessado(REPROCESSAMENTO)) {
+  if (!storage.isReprocessed(PLANS_AND_DECISIONS_REPROCESSING)) {
     const start = Date.now();
     const r = await reprocessarHistorico({ storage, decisoes: decisions, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    storage.markReprocessed(PLANS_AND_DECISIONS_REPROCESSING, new Date().toISOString());
     log(`reprocessed in ${Math.round((Date.now() - start) / 1000)} s: ${r.sessoes} sessions, ${r.planos} plans in ${r.comPlano}, ${r.decisoes} decisions`);
   }
-  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+  if (!storage.isReprocessed(DECISION_NOISE_CLEANUP)) {
     const r = await limparDecisoes(storage, decisions);
-    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    storage.markReprocessed(DECISION_NOISE_CLEANUP, new Date().toISOString());
     log(`decisions cleaned: ${r.ruido} outside the lists, ${r.encurtadas} with a shortened title`);
   }
-  if (!storage.reprocessado(REPROCESSAMENTO_DO_CONTEXTO)) {
+  if (!storage.isReprocessed(CONTEXT_REPROCESSING)) {
     const r = await reprocessarContexto({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO_DO_CONTEXTO, new Date().toISOString());
+    storage.markReprocessed(CONTEXT_REPROCESSING, new Date().toISOString());
     log(`context meter rebuilt: ${r.medidores} meters in ${r.sessoes} sessions`);
   }
 }

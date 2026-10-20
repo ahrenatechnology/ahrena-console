@@ -76,7 +76,7 @@ export function emptyMeter(sessionId: string, agentId: string | null, at: string
     model: null,
     usedTokens: 0,
     windowTokens: windowFor(null, null, 0).tokens,
-    windowSource: 'modelo',
+    windowSource: 'model',
     compactions: 0,
     compactionsTranscript: 0,
     compactionsHook: 0,

@@ -8,7 +8,7 @@
 // - end without a new plan: the list became empty (`/clear`, empty TodoWrite, deleted steps).
 //
 // The state (number of the open plan, its start and the steps inherited from the previous one) lives
-// in `metadata.historico` of the stored plan; each plan of the history is a `PlanRecord` in the port.
+// in `metadata.history` of the stored plan; each plan of the history is a `PlanRecord` in the port.
 
 import type { SessionEvent } from '../model.ts';
 import type { PlanRecord, PlanStep, SessionPlan } from './model.ts';
@@ -54,27 +54,27 @@ export function splitPlan(previous: readonly PlanStep[], next: readonly PlanStep
   return similarity(previous, next) < MIN_SIMILARITY ? 'new' : 'continue';
 }
 
-/** History state, kept in `metadata.historico` of the stored plan. The fields are persisted: they keep their names. */
+/** History state, kept in `metadata.history` of the stored plan. The field names are persisted data. */
 export interface PlanHistoryState {
   /** Number of the last plan opened in the session (0: none yet). */
   seq: number;
-  aberto: boolean;
+  open: boolean;
   /** Start of the open plan. */
-  inicio: string | null;
+  start: string | null;
   /** Steps the open plan inherited, already done, from the previous one (`<id>\0<text>`): they are not its own. */
-  herdados: string[];
+  inherited: string[];
 }
 
 const keyOf = (s: PlanStep) => `${s.id}\u0000${s.text}`;
 
 export function planHistoryOf(plan: SessionPlan | null): PlanHistoryState {
-  const h = plan?.metadata?.historico as Partial<PlanHistoryState> | undefined;
+  const h = plan?.metadata?.history as Partial<PlanHistoryState> | undefined;
   if (h && typeof h.seq === 'number') {
-    return { seq: h.seq, aberto: h.aberto === true, inicio: h.inicio ?? null, herdados: Array.isArray(h.herdados) ? h.herdados : [] };
+    return { seq: h.seq, open: h.open === true, start: h.start ?? null, inherited: Array.isArray(h.inherited) ? h.inherited : [] };
   }
   // A plan stored before the history: it is the first one, open since its last change.
-  if (plan && plan.steps.length > 0) return { seq: 1, aberto: true, inicio: plan.changedAt, herdados: [] };
-  return { seq: 0, aberto: false, inicio: null, herdados: [] };
+  if (plan && plan.steps.length > 0) return { seq: 1, open: true, start: plan.changedAt, inherited: [] };
+  return { seq: 0, open: false, start: null, inherited: [] };
 }
 
 const ownSteps = (steps: readonly PlanStep[], inherited: readonly string[]) => {
@@ -96,7 +96,7 @@ function recordOf(plan: SessionPlan, h: PlanHistoryState, steps: PlanStep[], end
     sessionId: plan.sessionId,
     seq: h.seq,
     source: plan.source,
-    startedAt: h.inicio!,
+    startedAt: h.start!,
     endedAt: end,
     result: end === null ? 'current' : done === steps.length ? 'completed' : 'abandoned',
     steps,
@@ -110,7 +110,7 @@ function recordOf(plan: SessionPlan, h: PlanHistoryState, steps: PlanStep[], end
 
 /**
  * Follows the history on a plan change: `before` is the stored plan, `after` what the extraction
- * returned for the event `e`. Returns the plan to write (with `metadata.historico` updated) and the
+ * returned for the event `e`. Returns the plan to write (with `metadata.history` updated) and the
  * history plans that changed: the one that closed and the open one.
  */
 export function followHistory(
@@ -119,14 +119,14 @@ export function followHistory(
   e: SessionEvent,
 ): { plan: SessionPlan; records: PlanRecord[] } {
   let h = planHistoryOf(before);
-  const previous = h.aberto && before ? ownSteps(before.steps, h.herdados) : [];
-  const split = splitPlan(previous, ownSteps(after.steps, h.herdados), isIncrementalChange(e));
+  const previous = h.open && before ? ownSteps(before.steps, h.inherited) : [];
+  const split = splitPlan(previous, ownSteps(after.steps, h.inherited), isIncrementalChange(e));
   const records: PlanRecord[] = [];
-  const at = e.createdAt < (h.inicio ?? '') ? h.inicio! : e.createdAt;
+  const at = e.createdAt < (h.start ?? '') ? h.start! : e.createdAt;
 
-  if (split !== 'continue' && h.aberto && before) {
+  if (split !== 'continue' && h.open && before) {
     records.push(recordOf(before, h, previous, at));
-    h = { ...h, aberto: false, inicio: null, herdados: [] };
+    h = { ...h, open: false, start: null, inherited: [] };
   }
   if (split === 'new') {
     // A new plan after a finished one: the done steps that came from it stay in the list
@@ -134,11 +134,11 @@ export function followHistory(
     const finished = previous.length > 0 && previous.every((s) => s.status === 'completed');
     const fromBefore = new Set((before?.steps ?? []).map(keyOf));
     const inherited = finished ? after.steps.filter((s) => s.status === 'completed' && fromBefore.has(keyOf(s))).map(keyOf) : [];
-    h = { seq: h.seq + 1, aberto: true, inicio: at, herdados: inherited };
+    h = { seq: h.seq + 1, open: true, start: at, inherited: inherited };
   }
-  if (h.aberto) {
-    const steps = ownSteps(after.steps, h.herdados);
+  if (h.open) {
+    const steps = ownSteps(after.steps, h.inherited);
     if (steps.length > 0) records.push(recordOf(after, h, steps, null));
   }
-  return { plan: { ...after, metadata: { ...after.metadata, historico: h } }, records };
+  return { plan: { ...after, metadata: { ...after.metadata, history: h } }, records };
 }
