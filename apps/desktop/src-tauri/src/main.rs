@@ -40,7 +40,7 @@ use tauri::menu::{CheckMenuItem, IconMenuItem, IsMenuItem, Menu, MenuItem, Prede
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
-use login::Registro;
+use login::Registration;
 use machines::Machine;
 use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
 use notifications::{Aviso, Avisos};
@@ -77,7 +77,7 @@ type Compartilhado = Arc<Mutex<Estado>>;
 struct Laco(Mutex<Sender<()>>);
 
 fn main() {
-    shell_path::corrigir_path();
+    shell_path::fix_path();
 
     let estado: Compartilhado = Arc::new(Mutex::new(Estado {
         nucleo: EstadoDoNucleo::Procurando,
@@ -102,13 +102,13 @@ fn main() {
         .setup(move |app| {
             // O Apple Event de abertura ainda está em curso aqui, no `applicationDidFinishLaunching`.
             let variavel = std::env::var("AHRENA_ORIGEM").ok();
-            let (origem, fonte) = login::descobrir(variavel.as_deref(), login::evento_de_abertura());
-            eprintln!("[ahrena-console] origem: {} ({fonte})", origem.nome());
-            let abrir_na_partida = login::abrir_janela_na_partida(origem);
+            let (origem, fonte) = login::detect(variavel.as_deref(), login::launch_event());
+            eprintln!("[ahrena-console] origem: {} ({fonte})", origem.name());
+            let abrir_na_partida = login::opens_window_at_launch(origem);
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                native::ouvir();
+                native::listen();
             }
             estado.lock().unwrap().avisos = Avisos::abrir(notifications::caminho(app.path().app_data_dir().ok()));
             #[cfg(target_os = "macos")]
@@ -126,13 +126,13 @@ fn main() {
             if let Some(b) = app.tray_by_id(BANDEJA) {
                 let _ = b.with_inner_tray_icon(|t| {
                     if let Some(item) = t.ns_status_item() {
-                        native::icone_template(&item, &[ICONE, ICONE_2X]);
+                        native::template_icon(&item, &[ICONE, ICONE_2X]);
                     }
                 });
             }
             redesenhar(app.handle(), &estado);
             let para_o_menu = estado.clone();
-            if let Err(e) = updater::vigiar(app.handle(), move |app, versao| mudar(app, &para_o_menu, |e| e.atualizacao = Some(versao))) {
+            if let Err(e) = updater::watch(app.handle(), move |app, versao| mudar(app, &para_o_menu, |e| e.atualizacao = Some(versao))) {
                 eprintln!("[ahrena-console] updater: {e}");
             }
 
@@ -226,10 +226,10 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, core: &core::Core, sinais: &s
     let porta = core.port;
     let mut cursor: Option<String> = None;
     loop {
-        let resposta = http::get_com_status(porta, "/api/attention", Duration::from_secs(15));
+        let resposta = http::get_with_status(porta, "/api/attention", Duration::from_secs(15));
         match resposta {
             Some(r) if r.status == 200 => {
-                let Some(atencao) = Atencao::do_json(&r.corpo) else { return };
+                let Some(atencao) = Atencao::do_json(&r.body) else { return };
                 cursor = atencao.cursor.clone().or(cursor);
                 // Sessions first: a slow `/api/machines` must not hold back their notices.
                 let mut novos = Vec::new();
@@ -286,7 +286,7 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, core: &core::Core, sinais: &s
         while sinais.try_recv().is_ok() {}
         let inicio = Instant::now();
         let caminho = match &cursor {
-            Some(c) => format!("/api/changes?since={}&wait=25", http::codificar(c)),
+            Some(c) => format!("/api/changes?since={}&wait=25", http::encode(c)),
             None => "/api/changes?wait=25".into(),
         };
         // Volta com mudanças, com `reset` ou depois de 25 s sem nada: em todos os casos relê,
@@ -314,7 +314,7 @@ enum MachinesRead {
 /// not come leaves that machine with its summary only.
 fn read_machines(porta: u16) -> MachinesRead {
     let wait = Duration::from_secs(5);
-    let r = match http::get_com_status(porta, "/api/machines", wait) {
+    let r = match http::get_with_status(porta, "/api/machines", wait) {
         Some(r) if r.status == 404 => return MachinesRead::NoTelemetry,
         Some(r) if r.status == 200 => r,
         Some(r) => {
@@ -326,7 +326,7 @@ fn read_machines(porta: u16) -> MachinesRead {
             return MachinesRead::NoAnswer;
         }
     };
-    let summaries = match machines::summaries_from_json(&r.corpo) {
+    let summaries = match machines::summaries_from_json(&r.body) {
         Ok(summaries) => summaries,
         Err(err) => {
             eprintln!("[ahrena-console] máquinas: /api/machines não leu: {err}");
@@ -340,7 +340,7 @@ fn read_machines(porta: u16) -> MachinesRead {
         summaries
             .into_iter()
             .map(|summary| {
-                let path = format!("/api/telemetry?machine={}", http::codificar(&summary.id));
+                let path = format!("/api/telemetry?machine={}", http::encode(&summary.id));
                 let telemetry = http::get(porta, &path, wait).and_then(|t| {
                     machines::telemetry_from_json(&t)
                         .map_err(|err| eprintln!("[ahrena-console] máquinas: telemetria de {}: {err}", summary.id))
@@ -381,7 +381,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
     let _ = app.run_on_main_thread(move || {
         let mut e = estado.lock().unwrap();
         // Relido sempre: o usuário pode tirar o item em Ajustes.
-        e.login = login::marcado(login::DoSistema.status());
+        e.login = login::checked(login::SystemRegistration.status());
         let versao = handle.package_info().version.to_string();
         let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.avisos.silencio.ligadas, login: e.login, versao: &versao, atualizacao: e.atualizacao.as_deref(), machines: e.machines.as_deref(), now_ms: now_ms() });
         let titulo = menu::titulo_da_bandeja(&e.nucleo, e.atencao.as_ref());
@@ -393,7 +393,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
             Ok(m) => {
                 let _ = bandeja.set_menu(Some(m));
                 #[cfg(target_os = "macos")]
-                native::ajustar("Ahrena Console", &ajustes(&itens));
+                native::apply("Ahrena Console", &ajustes(&itens));
             }
             Err(err) => eprintln!("[ahrena-console] menu: {err}"),
         }
@@ -443,20 +443,20 @@ fn nativo_do_menu(app: &AppHandle, itens: &[Item]) -> tauri::Result<Menu<Wry>> {
 }
 
 #[cfg(target_os = "macos")]
-fn ajustes(itens: &[Item]) -> Vec<native::Ajuste> {
-    use native::Ajuste;
+fn ajustes(itens: &[Item]) -> Vec<native::Tweak> {
+    use native::Tweak;
     let mut a = Vec::new();
     for i in itens {
         match i {
-            Item::Cabecalho { alternativo, .. } => a.push(Ajuste::Alternativo(alternativo.clone())),
+            Item::Cabecalho { alternativo, .. } => a.push(Tweak::Alternate(alternativo.clone())),
             Item::Sessao { texto, alternativo, dica, .. } => {
-                a.push(Ajuste::Dica { titulo: texto.clone(), dica: dica.clone() });
+                a.push(Tweak::Tooltip { title: texto.clone(), tooltip: dica.clone() });
                 if let Some(alternativo) = alternativo {
-                    a.push(Ajuste::Alternativo(alternativo.clone()));
-                    a.push(Ajuste::Dica { titulo: alternativo.clone(), dica: dica.clone() });
+                    a.push(Tweak::Alternate(alternativo.clone()));
+                    a.push(Tweak::Tooltip { title: alternativo.clone(), tooltip: dica.clone() });
                 }
             }
-            Item::Detalhe(t) => a.push(Ajuste::Recuo(t.clone())),
+            Item::Detalhe(t) => a.push(Tweak::Indent(t.clone())),
             _ => {}
         }
     }
@@ -513,11 +513,11 @@ fn clique(app: &AppHandle, id: &str) {
             e.avisos.alternar();
         }),
         menu::ID_LOGIN => {
-            login::clicar(&login::DoSistema);
+            login::click(&login::SystemRegistration);
             // O clique já inverteu a marca nativa: refaz o menu mesmo sem mudança (erro, aprovação).
             mudar(app, &estado, |e| e.ultimo = None);
         }
-        menu::ID_ATUALIZAR => updater::instalar(app),
+        menu::ID_ATUALIZAR => updater::install(app),
         menu::ID_PROCURAR => {
             let _ = app.state::<Laco>().0.lock().unwrap().send(());
         }
@@ -557,7 +557,7 @@ fn abrir_no_desktop(app: &AppHandle, local: Option<String>) {
     std::thread::spawn(move || {
         let r = http::post_json(porta, &format!("/open/{local}"), "{}");
         if r.as_ref().map(|r| r.status) != Some(200) {
-            eprintln!("[ahrena-console] abrir {local}: {}", r.map(|r| format!("{} {}", r.status, r.corpo)).unwrap_or_else(|| "sem resposta".into()));
+            eprintln!("[ahrena-console] abrir {local}: {}", r.map(|r| format!("{} {}", r.status, r.body)).unwrap_or_else(|| "sem resposta".into()));
         }
     });
 }

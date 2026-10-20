@@ -121,7 +121,7 @@ pub fn machine_path(id: &str) -> String {
     if matches!(id, "" | "." | "..") {
         return "/ui".into();
     }
-    format!("/ui/machines/{}", http::codificar(id))
+    format!("/ui/machines/{}", http::encode(id))
 }
 
 /// A number the pt-BR way, with one decimal: `24,6`.

@@ -1,313 +1,313 @@
-// Abrir no login (issue #89): o registro pelo `SMAppService.mainApp` do macOS 13+, sem LaunchAgent,
-// e a partida pelo login só na bandeja.
+// Open at login (issue #89): the registration through macOS 13+'s `SMAppService.mainApp`, without a
+// LaunchAgent, and the launch at login with the tray only.
 //
-// A lógica é pura e testada com um registro falso; o real fala com o ServiceManagement. O item
-// "Abrir no login" só fica marcado com o status `enabled`, relido a cada menu: o usuário pode tirar
-// o item em Ajustes › Geral › Itens de Início.
+// The logic is pure and tested with a fake registration; the real one talks to ServiceManagement.
+// The "Abrir no login" item is only checked with the `enabled` status, reread on every menu: the
+// user may remove the item in Ajustes › Geral › Itens de Início.
 
-/// O status do `SMAppService`, com nomes nossos.
+/// The `SMAppService` status, with our own names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// `enabled`: registrado e liberado.
-    Ligado,
+    /// `enabled`: registered and allowed.
+    Enabled,
     /// `notRegistered`.
-    Desligado,
-    /// `requiresApproval`: registrado, mas o usuário desligou (ou ainda não liberou) em Ajustes.
-    PedeAprovacao,
+    Disabled,
+    /// `requiresApproval`: registered, but the user turned it off (or has not allowed it yet) in Ajustes.
+    RequiresApproval,
     /// `notFound`.
-    NaoEncontrado,
+    NotFound,
 }
 
-/// O que o app pede ao sistema. O real é o `SMAppService`; nos testes, um falso.
-pub trait Registro {
+/// What the app asks the system. The real one is `SMAppService`; in the tests, a fake.
+pub trait Registration {
     fn status(&self) -> Status;
-    fn registrar(&self) -> Result<(), String>;
-    fn remover(&self) -> Result<(), String>;
-    /// Ajustes › Itens de Início, onde o usuário aprova.
-    fn abrir_ajustes(&self);
+    fn register(&self) -> Result<(), String>;
+    fn unregister(&self) -> Result<(), String>;
+    /// Ajustes › Itens de Início, where the user approves.
+    fn open_settings(&self);
 }
 
-/// O item fica marcado só com o registro ligado.
-pub fn marcado(s: Status) -> bool {
-    s == Status::Ligado
+/// The item is only checked with the registration enabled.
+pub fn checked(s: Status) -> bool {
+    s == Status::Enabled
 }
 
-/// O clique em "Abrir no login": desliga o ligado, liga o desligado e, se falta aprovar, abre os
-/// Ajustes. Devolve sempre o status relido, e não o desejado.
-pub fn clicar(r: &dyn Registro) -> Status {
-    let resultado = match r.status() {
-        Status::Ligado => r.remover().map_err(|e| format!("remover: {e}")),
-        Status::Desligado | Status::NaoEncontrado => r.registrar().map_err(|e| format!("registrar: {e}")),
-        Status::PedeAprovacao => {
-            r.abrir_ajustes();
+/// The click on "Abrir no login": turns off the enabled, turns on the disabled and, if approval is
+/// missing, opens Ajustes. Always returns the reread status, not the wanted one.
+pub fn click(r: &dyn Registration) -> Status {
+    let result = match r.status() {
+        Status::Enabled => r.unregister().map_err(|e| format!("unregister: {e}")),
+        Status::Disabled | Status::NotFound => r.register().map_err(|e| format!("register: {e}")),
+        Status::RequiresApproval => {
+            r.open_settings();
             Ok(())
         }
     };
-    if let Err(e) = resultado {
-        eprintln!("[ahrena-console] abrir no login: {e}");
+    if let Err(e) = result {
+        eprintln!("[ahrena-console] open at login: {e}");
     }
     r.status()
 }
 
-/// De onde veio a partida do app.
+/// Where the app's launch came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Origem {
-    /// Aberto pelo login: só a bandeja.
+pub enum LaunchOrigin {
+    /// Opened at login: only the tray.
     Login,
-    /// Aberto à mão (Finder, Dock, `open`): abre também o console.
+    /// Opened by hand (Finder, Dock, `open`): also opens the console.
     Manual,
 }
 
-impl Origem {
-    pub fn nome(self) -> &'static str {
+impl LaunchOrigin {
+    pub fn name(self) -> &'static str {
         match self {
-            Origem::Login => "login",
-            Origem::Manual => "manual",
+            LaunchOrigin::Login => "login",
+            LaunchOrigin::Manual => "manual",
         }
     }
 }
 
-pub fn abrir_janela_na_partida(o: Origem) -> bool {
-    o == Origem::Manual
+pub fn opens_window_at_launch(o: LaunchOrigin) -> bool {
+    o == LaunchOrigin::Manual
 }
 
-/// `AHRENA_ORIGEM=login|manual` finge a origem, para testar à mão.
-pub fn origem_da_variavel(v: Option<&str>) -> Option<Origem> {
+/// `AHRENA_ORIGEM=login|manual` fakes the origin, for testing by hand.
+pub fn origin_from_variable(v: Option<&str>) -> Option<LaunchOrigin> {
     match v?.trim() {
-        "login" => Some(Origem::Login),
-        "manual" => Some(Origem::Manual),
+        "login" => Some(LaunchOrigin::Login),
+        "manual" => Some(LaunchOrigin::Manual),
         _ => None,
     }
 }
 
-const fn codigo(c: &[u8; 4]) -> u32 {
+const fn four_cc(c: &[u8; 4]) -> u32 {
     u32::from_be_bytes(*c)
 }
 
-/// `kCoreEventClass`, `kAEOpenApplication`, `keyAEPropData` e `keyAELaunchedAsLogInItem`.
-pub const AEVT: u32 = codigo(b"aevt");
-pub const OAPP: u32 = codigo(b"oapp");
-pub const PRDT: u32 = codigo(b"prdt");
-pub const LGIT: u32 = codigo(b"lgit");
+/// `kCoreEventClass`, `kAEOpenApplication`, `keyAEPropData` and `keyAELaunchedAsLogInItem`.
+pub const AEVT: u32 = four_cc(b"aevt");
+pub const OAPP: u32 = four_cc(b"oapp");
+pub const PRDT: u32 = four_cc(b"prdt");
+pub const LGIT: u32 = four_cc(b"lgit");
 
-/// O Apple Event de abertura (`aevt`/`oapp`) diz se veio do login no parâmetro `prdt` == `lgit`,
-/// como o `wasOpenedAtLogin` do Electron. Outro evento não diz nada.
-pub fn origem_do_evento(classe: u32, id: u32, prdt: Option<u32>) -> Option<Origem> {
-    if classe != AEVT || id != OAPP {
+/// The launch Apple Event (`aevt`/`oapp`) says whether it came from the login in its `prdt`
+/// parameter == `lgit`, like Electron's `wasOpenedAtLogin`. Any other event says nothing.
+pub fn origin_from_event(class: u32, id: u32, prdt: Option<u32>) -> Option<LaunchOrigin> {
+    if class != AEVT || id != OAPP {
         return None;
     }
-    Some(if prdt == Some(LGIT) { Origem::Login } else { Origem::Manual })
+    Some(if prdt == Some(LGIT) { LaunchOrigin::Login } else { LaunchOrigin::Manual })
 }
 
-/// A origem e de onde ela saiu: a variável, o evento ou o padrão (manual).
-pub fn descobrir(variavel: Option<&str>, evento: Option<(u32, u32, Option<u32>)>) -> (Origem, &'static str) {
-    if let Some(o) = origem_da_variavel(variavel) {
-        return (o, "variável");
+/// The origin and where it came from: the variable, the event or the default (manual).
+pub fn detect(variable: Option<&str>, event: Option<(u32, u32, Option<u32>)>) -> (LaunchOrigin, &'static str) {
+    if let Some(o) = origin_from_variable(variable) {
+        return (o, "variable");
     }
-    if let Some(o) = evento.and_then(|(c, i, p)| origem_do_evento(c, i, p)) {
-        return (o, "evento");
+    if let Some(o) = event.and_then(|(c, i, p)| origin_from_event(c, i, p)) {
+        return (o, "event");
     }
-    (Origem::Manual, "padrão")
+    (LaunchOrigin::Manual, "default")
 }
 
-/// O Apple Event em curso, lido no `setup` (que roda dentro do `applicationDidFinishLaunching`).
+/// The Apple Event in progress, read in `setup` (which runs inside `applicationDidFinishLaunching`).
 #[cfg(target_os = "macos")]
-pub fn evento_de_abertura() -> Option<(u32, u32, Option<u32>)> {
+pub fn launch_event() -> Option<(u32, u32, Option<u32>)> {
     use objc2::msg_send;
     use objc2::rc::Retained;
     use objc2_foundation::{NSAppleEventDescriptor, NSAppleEventManager};
 
     let ev = NSAppleEventManager::sharedAppleEventManager().currentAppleEvent()?;
-    // SAFETY: `eventClass`, `eventID` e `paramDescriptorForKeyword:` são do NSAppleEventDescriptor,
-    // com códigos de quatro letras (u32); o objc2-foundation só os expõe com o objc2-core-services.
-    let (classe, id, prdt): (u32, u32, Option<Retained<NSAppleEventDescriptor>>) =
+    // SAFETY: `eventClass`, `eventID` and `paramDescriptorForKeyword:` are NSAppleEventDescriptor's,
+    // with four-letter codes (u32); objc2-foundation only exposes them with objc2-core-services.
+    let (class, id, prdt): (u32, u32, Option<Retained<NSAppleEventDescriptor>>) =
         unsafe { (msg_send![&*ev, eventClass], msg_send![&*ev, eventID], msg_send![&*ev, paramDescriptorForKeyword: PRDT]) };
-    Some((classe, id, prdt.map(|d| d.enumCodeValue())))
+    Some((class, id, prdt.map(|d| d.enumCodeValue())))
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn evento_de_abertura() -> Option<(u32, u32, Option<u32>)> {
+pub fn launch_event() -> Option<(u32, u32, Option<u32>)> {
     None
 }
 
-/// O registro do próprio app (`SMAppService.mainApp`).
-pub struct DoSistema;
+/// The app's own registration (`SMAppService.mainApp`).
+pub struct SystemRegistration;
 
 #[cfg(target_os = "macos")]
-impl Registro for DoSistema {
+impl Registration for SystemRegistration {
     fn status(&self) -> Status {
         use objc2_service_management::{SMAppService, SMAppServiceStatus};
-        // SAFETY: chamadas sem argumentos do ServiceManagement, macOS 13+ (o mínimo do app).
+        // SAFETY: argument-less ServiceManagement calls, macOS 13+ (the app's minimum).
         match unsafe { SMAppService::mainAppService().status() } {
-            SMAppServiceStatus::Enabled => Status::Ligado,
-            SMAppServiceStatus::RequiresApproval => Status::PedeAprovacao,
-            SMAppServiceStatus::NotFound => Status::NaoEncontrado,
-            _ => Status::Desligado,
+            SMAppServiceStatus::Enabled => Status::Enabled,
+            SMAppServiceStatus::RequiresApproval => Status::RequiresApproval,
+            SMAppServiceStatus::NotFound => Status::NotFound,
+            _ => Status::Disabled,
         }
     }
 
-    fn registrar(&self) -> Result<(), String> {
-        // SAFETY: idem.
+    fn register(&self) -> Result<(), String> {
+        // SAFETY: as above.
         unsafe { objc2_service_management::SMAppService::mainAppService().registerAndReturnError() }.map_err(|e| e.localizedDescription().to_string())
     }
 
-    fn remover(&self) -> Result<(), String> {
-        // SAFETY: idem.
+    fn unregister(&self) -> Result<(), String> {
+        // SAFETY: as above.
         unsafe { objc2_service_management::SMAppService::mainAppService().unregisterAndReturnError() }.map_err(|e| e.localizedDescription().to_string())
     }
 
-    fn abrir_ajustes(&self) {
-        // SAFETY: idem.
+    fn open_settings(&self) {
+        // SAFETY: as above.
         unsafe { objc2_service_management::SMAppService::openSystemSettingsLoginItems() }
     }
 }
 
-/// Fora do macOS ainda não há registro: fica desligado.
+/// Outside macOS there is no registration yet: it stays disabled.
 #[cfg(not(target_os = "macos"))]
-impl Registro for DoSistema {
+impl Registration for SystemRegistration {
     fn status(&self) -> Status {
-        Status::Desligado
+        Status::Disabled
     }
-    fn registrar(&self) -> Result<(), String> {
-        Err("só no macOS".into())
+    fn register(&self) -> Result<(), String> {
+        Err("macOS only".into())
     }
-    fn remover(&self) -> Result<(), String> {
+    fn unregister(&self) -> Result<(), String> {
         Ok(())
     }
-    fn abrir_ajustes(&self) {}
+    fn open_settings(&self) {}
 }
 
 #[cfg(test)]
-mod testes {
+mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
 
-    /// Um registro falso que conta as chamadas e pode falhar.
-    struct Falso {
+    /// A fake registration that counts the calls and may fail.
+    struct Fake {
         status: Cell<Status>,
-        falhar: bool,
-        chamadas: RefCell<Vec<&'static str>>,
+        fail: bool,
+        calls: RefCell<Vec<&'static str>>,
     }
 
-    impl Falso {
-        fn com(s: Status) -> Self {
-            Falso { status: Cell::new(s), falhar: false, chamadas: RefCell::new(Vec::new()) }
+    impl Fake {
+        fn with(s: Status) -> Self {
+            Fake { status: Cell::new(s), fail: false, calls: RefCell::new(Vec::new()) }
         }
-        fn falhando(s: Status) -> Self {
-            Falso { falhar: true, ..Falso::com(s) }
+        fn failing(s: Status) -> Self {
+            Fake { fail: true, ..Fake::with(s) }
         }
-        fn chamadas(&self) -> Vec<&'static str> {
-            self.chamadas.borrow().clone()
+        fn calls(&self) -> Vec<&'static str> {
+            self.calls.borrow().clone()
         }
     }
 
-    impl Registro for Falso {
+    impl Registration for Fake {
         fn status(&self) -> Status {
             self.status.get()
         }
-        fn registrar(&self) -> Result<(), String> {
-            self.chamadas.borrow_mut().push("registrar");
-            if self.falhar {
-                return Err("negado".into());
+        fn register(&self) -> Result<(), String> {
+            self.calls.borrow_mut().push("register");
+            if self.fail {
+                return Err("denied".into());
             }
-            self.status.set(Status::Ligado);
+            self.status.set(Status::Enabled);
             Ok(())
         }
-        fn remover(&self) -> Result<(), String> {
-            self.chamadas.borrow_mut().push("remover");
-            if self.falhar {
-                return Err("negado".into());
+        fn unregister(&self) -> Result<(), String> {
+            self.calls.borrow_mut().push("unregister");
+            if self.fail {
+                return Err("denied".into());
             }
-            self.status.set(Status::Desligado);
+            self.status.set(Status::Disabled);
             Ok(())
         }
-        fn abrir_ajustes(&self) {
-            self.chamadas.borrow_mut().push("abrir_ajustes");
+        fn open_settings(&self) {
+            self.calls.borrow_mut().push("open_settings");
         }
     }
 
     #[test]
-    fn so_o_ligado_marca() {
-        assert!(marcado(Status::Ligado));
-        assert!(!marcado(Status::Desligado));
-        assert!(!marcado(Status::PedeAprovacao));
-        assert!(!marcado(Status::NaoEncontrado));
+    fn only_enabled_checks() {
+        assert!(checked(Status::Enabled));
+        assert!(!checked(Status::Disabled));
+        assert!(!checked(Status::RequiresApproval));
+        assert!(!checked(Status::NotFound));
     }
 
     #[test]
-    fn clicar_desligado_registra_e_marca() {
-        let r = Falso::com(Status::Desligado);
-        assert_eq!(clicar(&r), Status::Ligado);
-        assert!(marcado(r.status()));
-        assert_eq!(r.chamadas(), ["registrar"]);
+    fn clicking_disabled_registers_and_checks() {
+        let r = Fake::with(Status::Disabled);
+        assert_eq!(click(&r), Status::Enabled);
+        assert!(checked(r.status()));
+        assert_eq!(r.calls(), ["register"]);
     }
 
     #[test]
-    fn clicar_nao_encontrado_registra() {
-        let r = Falso::com(Status::NaoEncontrado);
-        assert_eq!(clicar(&r), Status::Ligado);
-        assert_eq!(r.chamadas(), ["registrar"]);
+    fn clicking_not_found_registers() {
+        let r = Fake::with(Status::NotFound);
+        assert_eq!(click(&r), Status::Enabled);
+        assert_eq!(r.calls(), ["register"]);
     }
 
     #[test]
-    fn clicar_ligado_remove_e_desmarca() {
-        let r = Falso::com(Status::Ligado);
-        assert_eq!(clicar(&r), Status::Desligado);
-        assert!(!marcado(r.status()));
-        assert_eq!(r.chamadas(), ["remover"]);
+    fn clicking_enabled_unregisters_and_unchecks() {
+        let r = Fake::with(Status::Enabled);
+        assert_eq!(click(&r), Status::Disabled);
+        assert!(!checked(r.status()));
+        assert_eq!(r.calls(), ["unregister"]);
     }
 
     #[test]
-    fn pede_aprovacao_fica_desmarcado_e_abre_os_ajustes() {
-        let r = Falso::com(Status::PedeAprovacao);
-        assert!(!marcado(r.status()));
-        assert_eq!(clicar(&r), Status::PedeAprovacao);
-        assert_eq!(r.chamadas(), ["abrir_ajustes"]);
+    fn requires_approval_stays_unchecked_and_opens_settings() {
+        let r = Fake::with(Status::RequiresApproval);
+        assert!(!checked(r.status()));
+        assert_eq!(click(&r), Status::RequiresApproval);
+        assert_eq!(r.calls(), ["open_settings"]);
     }
 
     #[test]
-    fn erro_ao_registrar_mostra_o_status_relido() {
-        let r = Falso::falhando(Status::Desligado);
-        assert_eq!(clicar(&r), Status::Desligado);
-        assert_eq!(r.chamadas(), ["registrar"]);
+    fn register_error_shows_the_reread_status() {
+        let r = Fake::failing(Status::Disabled);
+        assert_eq!(click(&r), Status::Disabled);
+        assert_eq!(r.calls(), ["register"]);
     }
 
     #[test]
-    fn erro_ao_remover_mostra_o_status_relido() {
-        let r = Falso::falhando(Status::Ligado);
-        assert_eq!(clicar(&r), Status::Ligado);
-        assert_eq!(r.chamadas(), ["remover"]);
+    fn unregister_error_shows_the_reread_status() {
+        let r = Fake::failing(Status::Enabled);
+        assert_eq!(click(&r), Status::Enabled);
+        assert_eq!(r.calls(), ["unregister"]);
     }
 
     #[test]
-    fn pelo_login_so_a_bandeja_e_a_mao_abre_o_console() {
-        assert!(!abrir_janela_na_partida(Origem::Login));
-        assert!(abrir_janela_na_partida(Origem::Manual));
+    fn at_login_only_the_tray_and_by_hand_opens_the_console() {
+        assert!(!opens_window_at_launch(LaunchOrigin::Login));
+        assert!(opens_window_at_launch(LaunchOrigin::Manual));
     }
 
     #[test]
-    fn a_variavel_finge_a_origem() {
-        assert_eq!(origem_da_variavel(Some("login")), Some(Origem::Login));
-        assert_eq!(origem_da_variavel(Some("manual")), Some(Origem::Manual));
-        assert_eq!(origem_da_variavel(Some("outra")), None);
-        assert_eq!(origem_da_variavel(Some("")), None);
-        assert_eq!(origem_da_variavel(None), None);
+    fn the_variable_fakes_the_origin() {
+        assert_eq!(origin_from_variable(Some("login")), Some(LaunchOrigin::Login));
+        assert_eq!(origin_from_variable(Some("manual")), Some(LaunchOrigin::Manual));
+        assert_eq!(origin_from_variable(Some("other")), None);
+        assert_eq!(origin_from_variable(Some("")), None);
+        assert_eq!(origin_from_variable(None), None);
     }
 
     #[test]
-    fn o_evento_de_abertura_pelo_login() {
-        assert_eq!(origem_do_evento(AEVT, OAPP, Some(LGIT)), Some(Origem::Login));
-        assert_eq!(origem_do_evento(AEVT, OAPP, None), Some(Origem::Manual));
-        assert_eq!(origem_do_evento(AEVT, OAPP, Some(codigo(b"xxxx"))), Some(Origem::Manual));
-        // `odoc` (abrir um arquivo) não diz de onde veio.
-        assert_eq!(origem_do_evento(AEVT, codigo(b"odoc"), Some(LGIT)), None);
+    fn the_launch_event_at_login() {
+        assert_eq!(origin_from_event(AEVT, OAPP, Some(LGIT)), Some(LaunchOrigin::Login));
+        assert_eq!(origin_from_event(AEVT, OAPP, None), Some(LaunchOrigin::Manual));
+        assert_eq!(origin_from_event(AEVT, OAPP, Some(four_cc(b"xxxx"))), Some(LaunchOrigin::Manual));
+        // `odoc` (open a document) does not say where it came from.
+        assert_eq!(origin_from_event(AEVT, four_cc(b"odoc"), Some(LGIT)), None);
     }
 
     #[test]
-    fn a_variavel_vence_o_evento_e_o_padrao_e_manual() {
-        assert_eq!(descobrir(Some("login"), Some((AEVT, OAPP, None))), (Origem::Login, "variável"));
-        assert_eq!(descobrir(None, Some((AEVT, OAPP, Some(LGIT)))), (Origem::Login, "evento"));
-        assert_eq!(descobrir(Some("?"), Some((AEVT, OAPP, None))), (Origem::Manual, "evento"));
-        assert_eq!(descobrir(None, None), (Origem::Manual, "padrão"));
+    fn the_variable_beats_the_event_and_the_default_is_manual() {
+        assert_eq!(detect(Some("login"), Some((AEVT, OAPP, None))), (LaunchOrigin::Login, "variable"));
+        assert_eq!(detect(None, Some((AEVT, OAPP, Some(LGIT)))), (LaunchOrigin::Login, "event"));
+        assert_eq!(detect(Some("?"), Some((AEVT, OAPP, None))), (LaunchOrigin::Manual, "event"));
+        assert_eq!(detect(None, None), (LaunchOrigin::Manual, "default"));
     }
 }
