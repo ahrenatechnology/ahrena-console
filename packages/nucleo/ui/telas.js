@@ -53,6 +53,15 @@ export const TELAS = [
     arquivo: '/ui/telas/feed.js', // #94
   },
   {
+    id: 'projeto',
+    rota: '/ui/projeto',
+    item: { rotulo: 'Kanban do projeto', icone: 'github' },
+    titulo: 'Kanban do projeto',
+    sub: 'O GitHub Project por Status',
+    icone: 'github',
+    arquivo: '/ui/telas/projeto.js', // #80 (C11)
+  },
+  {
     id: 'analytics',
     rota: '/ui/analytics',
     item: { rotulo: 'Analytics', icone: 'analytics' },
