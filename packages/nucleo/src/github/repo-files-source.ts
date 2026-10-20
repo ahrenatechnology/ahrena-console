@@ -12,9 +12,8 @@
 
 import { isInstructionFile } from '../agent-instructions/imports.ts';
 import { DECISION_DIRS, isDecisionFile } from '../adrs/parse.ts';
-import { RateLimitedError } from './cache.ts';
-import { GithubScopeError } from './github-source.ts';
-import { SemGithubError, type RespostaRest } from './repos-source.ts';
+import { GraphqlResponseError } from './github-source.ts';
+import type { RespostaRest } from './repos-source.ts';
 
 /** Até quantos arquivos cabem numa consulta de conteúdo. */
 export const BLOB_BATCH = 50;
@@ -195,8 +194,10 @@ export class RepoFilesSource {
   /**
    * A descoberta repositório a repositório, para quem lê muitos de uma vez (as ADRs, #174): um erro num
    * repositório (FORBIDDEN de uma organização com SAML, tempo de servidor numa árvore enorme) não leva
-   * os outros do lote. O lote que falha se divide ao meio e tenta de novo, até sobrar o repositório do
-   * erro, que volta como `{ error }`. Limite, escopo e falta de token valem para todos: sobem.
+   * os outros do lote. Só uma resposta com `errors` do GraphQL (`GraphqlResponseError`) divide o lote ao
+   * meio e tenta de novo, até sobrar o repositório do erro, que volta como `{ error }`. Uma falha do
+   * transporte (HTTP 5xx, rede, teto de tempo), o limite, o escopo e a falta de token valem para o lote
+   * inteiro: sobem, sem nova chamada.
    */
   async discoverEach(repos: readonly { owner: string; name: string }[]): Promise<({ value: RepoFilesDiscovery | null } | { error: string })[]> {
     const out: ({ value: RepoFilesDiscovery | null } | { error: string })[] = [];
@@ -204,7 +205,7 @@ export class RepoFilesSource {
       try {
         for (const value of await this.discoverMany(batch)) out.push({ value });
       } catch (err) {
-        if (err instanceof RateLimitedError || err instanceof GithubScopeError || err instanceof SemGithubError) throw err;
+        if (!(err instanceof GraphqlResponseError)) throw err;
         if (batch.length === 1) return void out.push({ error: err instanceof Error ? err.message : String(err) });
         const half = Math.ceil(batch.length / 2);
         await run(batch.slice(0, half));

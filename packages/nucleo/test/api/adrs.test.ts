@@ -38,7 +38,7 @@ function data(repos = REPOS): FakeGithubData {
   return { login: 'dev-sintetico', organizations: ['org-a'], awaitingReview: 0, closedThisWeek: 0, repos: Object.entries(repos).map(([name, files]) => ({ ...base, owner: 'org-a', name, files })) };
 }
 
-type Mode = 'ok' | 'down' | 'limited' | 'no-blobs' | 'forbidden';
+type Mode = 'ok' | 'down' | 'limited' | 'no-blobs' | 'forbidden' | 'bad-gateway';
 
 interface Setup {
   service: DecisionsService;
@@ -66,6 +66,7 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
     if (mode.current === 'down') throw new Error('rede fora');
     if (mode.current === 'limited') return new Response(JSON.stringify({ message: 'API rate limit exceeded' }), { status: 403, headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor((clock.now + 120_000) / 1000)) } });
     if (mode.current === 'no-blobs' && body.includes('RepoBlobs')) throw new Error('lote de conteúdo fora');
+    if (mode.current === 'bad-gateway') return new Response('<html>502</html>', { status: 502 });
     // Uma organização com SAML não autorizado: a consulta que pede `mixed` falha inteira, como no GitHub.
     if (mode.current === 'forbidden' && body.includes('RepoFilesDiscovery') && Object.values(JSON.parse(body).variables).includes('mixed'))
       return new Response(JSON.stringify({ data: null, errors: [{ type: 'FORBIDDEN', message: 'Resource protected by organization SAML enforcement' }] }), { status: 200 });
@@ -231,6 +232,15 @@ describe('#174 the decision list, through the service', () => {
     assert.match(l.error!, /SAML/);
     assert.equal((await repo(s, 'mixed')).state, 'error');
     assert.equal((await repo(s, 'madr')).error, null);
+  });
+
+  test('a general failure (HTTP 502) fails the whole batch in one call, without splitting it', async () => {
+    const s = setup({ many: 21 });
+    s.mode.current = 'bad-gateway';
+    const l = await list(s);
+    assert.equal(s.bodies.filter((b) => b.includes('RepoFilesDiscovery')).length, 2, 'one call per batch of 20');
+    assert.equal(l.groups.length, 0);
+    assert.match(l.error!, /502/);
   });
 
   test('a push known from the account list also invalidates the repository tab', async () => {
