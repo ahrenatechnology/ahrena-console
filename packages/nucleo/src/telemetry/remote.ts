@@ -116,7 +116,9 @@ export function remoteAlerts(v: unknown): Alert[] {
     const id = text(a.id, 128);
     const message = text(a.message, 200);
     const since = text(a.since, 40);
-    if (!id || !message || !since || (a.level !== 'error' && a.level !== 'warning') || (a.detail !== null && typeof a.detail !== 'string')) continue;
+    // The id is namespaced by its kind (`load-high`, `volume-full:/`), so a remote can never open an
+    // alert under an id this Mac computes (`machine-unreachable`).
+    if (!id || (id !== a.kind && !id.startsWith(`${a.kind}:`)) || !message || !since || (a.level !== 'error' && a.level !== 'warning') || (a.detail !== null && typeof a.detail !== 'string')) continue;
     out.push({ id, kind: a.kind as AlertKind, level: a.level, message, detail: text(a.detail, 300), since });
   }
   return out;
@@ -127,7 +129,11 @@ function attentionSessions(body: unknown): Map<string, string> {
   const items = isObject(body) && Array.isArray(body.itens) ? body.itens.slice(0, 200) : [];
   const out = new Map<string, string>();
   for (const i of items) {
-    if (isObject(i) && typeof i.sessao === 'string' && typeof i.motivo === 'string' && (i.machine === null || i.machine === undefined)) out.set(i.sessao, i.motivo);
+    // The same basic checks as the attention route's `remoteAttentionItems`, and the same 128-char
+    // session id, so a published change always matches an item the route serves.
+    if (!isObject(i) || typeof i.sessao !== 'string' || !i.sessao || typeof i.motivo !== 'string' || typeof i.nivel !== 'string' || !isNumber(i.minutos)) continue;
+    if (i.machine !== null && i.machine !== undefined) continue;
+    out.set(i.sessao.slice(0, 128), i.motivo);
   }
   return out;
 }

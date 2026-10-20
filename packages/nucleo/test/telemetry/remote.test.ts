@@ -265,11 +265,13 @@ describe('#176/AC-5 a remote going down and coming back', () => {
 describe('#176/AC-5 the remote alerts are untrusted', () => {
   test('#176/AC-5 unknown kinds and a remote machine-unreachable are dropped, texts capped, at most 50', async () => {
     const many: Alert[] = Array.from({ length: 80 }, (_, i) => ({ ...volumeAlert, id: `volume-full:/v${i}`, message: 'm'.repeat(500) }));
-    const f = await fake({ current: remoteReading(), alerts: [{ ...volumeAlert, kind: 'bogus' as Alert['kind'] }, { ...volumeAlert, id: 'machine-unreachable', kind: 'machine-unreachable' }, ...many] });
+    const f = await fake({ current: remoteReading(), alerts: [{ ...volumeAlert, kind: 'bogus' as Alert['kind'] }, { ...volumeAlert, id: 'machine-unreachable', kind: 'machine-unreachable' }, { ...volumeAlert, id: 'machine-unreachable' }, ...many] });
     const { remote, tracker } = setup(f.port);
     await remote.pollOnce();
     const active = tracker.active('ws-exemplo');
     assert.equal(active.length, 50);
+    assert.ok(!active.some((a) => a.id === 'machine-unreachable'), 'a remote cannot open the id this Mac computes');
+    assert.equal(active[0]!.id, 'volume-full:/v0');
     assert.ok(active.every((a) => a.kind === 'volume-full' && a.message.length === 200));
   });
 
