@@ -1,7 +1,7 @@
 // A tela Sessões (C3, #28): a rota `GET /api/sessoes` (filtros, ordem e página no servidor) com
 // dados do simulador, e as peças da tela que não precisam de navegador.
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -11,7 +11,7 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { semearCenariosDoPainel, SESSAO_DO_PAINEL } from '../../src/simulador/painel.ts';
 import { simular } from '../../src/simulador/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/telas/sessoes.js';
+import { COLUNAS, custo, duracao, estadoDaQuery, faixa, idade, idCurto, queryDoEstado, rotaDaLista } from '../../ui/telas/sessoes.js';
 // @ts-expect-error: idem
 import { acharTela } from '../../ui/telas.js';
 
@@ -233,5 +233,31 @@ describe('#28 a tela Sessões', () => {
     assert.equal(faixa({ total: 0, pagina: 1, porPagina: 10 }), '0 de 0');
     assert.equal(idCurto('7f3a2c1e-1111-2222-3333-444455556666'), '7f3a2c1e');
     assert.equal(idCurto('sim-painel-esta'), 'sim-painel-esta');
+  });
+
+  // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),
+  // a tabela tem 830 px; abaixo de 900 px de janela, 610 px e sem o Diretório. Cada coluna precisa
+  // do mínimo que o texto mais largo dela pede (medido no navegador), senão corta ou rola.
+  test('a tabela cabe em 1100 px sem rolagem horizontal, e abaixo de 900 px sem o Diretório', () => {
+    const css = readFileSync(`${PASTA_DA_UI}sessoes.css`, 'utf8');
+    const corte = css.indexOf('@media (max-width: 900px)');
+    assert.ok(corte > 0, 'falta a faixa de 900 px');
+    const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.tabela \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
+    const largas = larguras(css.slice(0, corte));
+    const estreitas = { ...largas, ...larguras(css.slice(corte)) };
+    const classes = COLUNAS.map(([c]: [string]) => c);
+    assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
+    assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
+    assert.equal(classes.filter((c: string) => c !== 'c-dir').reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'sem o Diretório, o resto soma 100');
+    assert.match(css, /\.tabela \{ table-layout: fixed; \}/);
+    assert.match(css.slice(corte), /\.tabela \.c-dir, \.tabela \.dir \{ display: none; \}/);
+    assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
+    // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
+    const MINIMO: Record<string, number> = { 'c-sessao': 180, 'c-status': 140, 'c-atividade': 90, 'c-duracao': 85, 'c-agentes': 74, 'c-custo': 85, 'c-dir': 100, 'c-seta': 24 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-sessao': 130, 'c-atividade': 70, 'c-duracao': 75, 'c-agentes': 60, 'c-custo': 80 };
+    for (const c of classes) {
+      assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
+      if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
+    }
   });
 });

@@ -107,6 +107,18 @@ export function idCurto(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) ? id.slice(0, 8) : id;
 }
 
+// As colunas, na ordem; a classe dá a largura de cada uma (sessoes.css).
+export const COLUNAS = [
+  ['c-sessao', 'Sessão'],
+  ['c-status', 'Status'],
+  ['c-atividade', 'Última atividade'],
+  ['c-duracao', 'Duração'],
+  ['c-agentes', 'Agentes'],
+  ['c-custo', 'Custo'],
+  ['c-dir', 'Diretório'],
+  ['c-seta', ''],
+];
+
 const COR = /^#[0-9a-f]{3,8}$/i;
 const ultimoPedaco = (cwd) => cwd.replace(/\/+$/, '').split('/').pop() || cwd;
 
@@ -187,13 +199,15 @@ export async function montar(area, ctx) {
     const tr = el(
       'tr',
       { class: 'linha' },
-      el('td', { class: 'nm' }, el('a', { href: destino }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, idCurto(s.id)), conta(s.conta))),
+      el('td', { class: 'nm' }, el('a', { href: destino, title: s.titulo }, el('b', {}, s.titulo)), el('small', {}, el('span', { class: 'mono' }, idCurto(s.id)), conta(s.conta))),
       el('td', { class: 'st' }, ...selo(s.status, s.motivo)),
       el('td', { class: 'c-muted', title: new Date(s.ultimaAtividade).toLocaleString('pt-BR') }, idade(s.ultimaAtividade)),
-      el('td', { class: 'mono' }, s.rodando ? [el('span', { class: 'c-active' }, 'rodando'), ' · '] : null, duracao(s.duracaoMs)),
+      // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
+      el('td', { class: 'mono dur' }, s.rodando ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.rodando ? ' ' : null, el('span', {}, duracao(s.duracaoMs))),
       el('td', { class: 'mono' }, String(s.agentes)),
       el('td', { class: 'mono' }, custo(s.custoUsd)),
-      el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ?? '—'),
+      // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
+      el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       el('td', { class: 'c-muted seta' }, icone('seguir')),
     );
     tr.addEventListener('click', (ev) => {
@@ -204,11 +218,10 @@ export async function montar(area, ctx) {
   }
 
   function tabela(lista) {
-    const cabecas = ['Sessão', 'Status', 'Última atividade', 'Duração', 'Agentes', 'Custo', 'Diretório', ''];
     return el(
       'div',
-      { class: 'cartao rolagem' },
-      el('table', { class: 'tabela' }, el('thead', {}, el('tr', {}, ...cabecas.map((c) => el('th', { scope: 'col' }, c)))), el('tbody', {}, ...lista.itens.map(linha))),
+      { class: 'cartao' },
+      el('table', { class: 'tabela' }, el('thead', {}, el('tr', {}, ...COLUNAS.map(([classe, c]) => el('th', { scope: 'col', class: classe }, c)))), el('tbody', {}, ...lista.itens.map(linha))),
     );
   }
 
