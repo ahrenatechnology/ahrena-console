@@ -13,11 +13,11 @@ import { freeColor } from './colors.ts';
 import { defaultProfilesFile, discoverFolders, normalizeFolder, looksLikeConfigFolder, configFolder, type ConfigFolder } from './discovery.ts';
 import { readClaudeJsonAccount, type ProfileAccount } from './reading.ts';
 
-/** A configuration folder with its current account. Goes out as JSON in `/api/agent-config`: field names stay. */
+/** A configuration folder with its current account. */
 export interface Profile extends ConfigFolder {
-  /** A conta logada agora na pasta; `null` sem login OAuth (sem login, ou chave de API). */
-  conta: ProfileAccount | null;
-  /** `ClaudeAccount.id` da conta atual, ou `null`. */
+  /** The account logged in to the folder now; `null` without an OAuth login (no login, or an API key). */
+  account: ProfileAccount | null;
+  /** `ClaudeAccount.id` of the current account, or `null`. */
   accountId: string | null;
 }
 
@@ -59,7 +59,7 @@ export class Profiles {
   /** Lists the profiles and writes each one's account to the port. */
   async sync(): Promise<Profile[]> {
     const profiles = await this.list();
-    for (const p of profiles) if (p.conta) await this.save(p.conta, p.dir);
+    for (const p of profiles) if (p.account) await this.save(p.account, p.dir);
     return profiles;
   }
 
@@ -72,8 +72,8 @@ export class Profiles {
     const folder = configFolder(await this.canonicalPath(dir), 'hook', this.home);
     if (!(await looksLikeConfigFolder(folder))) return null;
     this.reveal(folder.dir);
-    const { conta } = await this.readProfile(folder);
-    return conta ? this.save(conta, folder.dir) : null;
+    const { account } = await this.readProfile(folder);
+    return account ? this.save(account, folder.dir) : null;
   }
 
   /**
@@ -93,8 +93,8 @@ export class Profiles {
   }
 
   private async readProfile(p: ConfigFolder): Promise<Profile> {
-    const conta = await readClaudeJsonAccount(p.claudeJson);
-    return { ...p, conta, accountId: conta ? claudeAccountId(conta.accountUuid, conta.organizationUuid) : null };
+    const account = await readClaudeJsonAccount(p.claudeJson);
+    return { ...p, account, accountId: account ? claudeAccountId(account.accountUuid, account.organizationUuid) : null };
   }
 
   private save(account: ProfileAccount, dir: string | null): Promise<ClaudeAccount> {

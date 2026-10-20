@@ -7,23 +7,20 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-/**
- * Where the core learned about the folder; the first origin that revealed it stays. The values
- * go out in the agent-config folders (`/api/agent-config`): they stay as they are.
- */
-export type ProfileOrigin = 'padrao' | 'nome' | 'configurada' | 'hook';
+/** Where the core learned about the folder: the first origin that revealed it stays. */
+export type ProfileOrigin = 'default' | 'name' | 'configured' | 'hook';
 
-/** A configuration folder. Its fields go out as JSON in `/api/agent-config`: they keep their names. */
+/** A configuration folder. */
 export interface ConfigFolder {
-  /** Caminho absoluto da pasta (ex.: `/Users/x/.claude-cliente`). */
+  /** Absolute path of the folder (e.g. `/Users/x/.claude-cliente`). */
   dir: string;
-  /** Onde fica o `.claude.json`: `~/.claude.json` na pasta padrão, dentro da pasta nas outras. */
+  /** Where the `.claude.json` lives: `~/.claude.json` for the default folder, inside the folder for the others. */
   claudeJson: string;
-  /** Pasta dos transcripts (`<dir>/projects`). */
-  projetos: string;
-  /** A pasta padrão (`~/.claude`), que o Claude Desktop também usa. */
-  padrao: boolean;
-  origem: ProfileOrigin;
+  /** The transcripts folder (`<dir>/projects`). */
+  projectsDir: string;
+  /** The default folder (`~/.claude`), which Claude Desktop also uses. */
+  isDefault: boolean;
+  origin: ProfileOrigin;
 }
 
 /** Entries only a Claude Code configuration folder has. One is enough. */
@@ -46,9 +43,9 @@ export function configFolder(dir: string, origin: ProfileOrigin, home = homedir(
   return {
     dir: abs,
     claudeJson: isDefault ? join(home, '.claude.json') : join(abs, '.claude.json'),
-    projetos: join(abs, 'projects'),
-    padrao: isDefault,
-    origem: isDefault ? 'padrao' : origin,
+    projectsDir: join(abs, 'projects'),
+    isDefault,
+    origin: isDefault ? 'default' : origin,
   };
 }
 
@@ -71,7 +68,7 @@ export async function looksLikeConfigFolder(p: ConfigFolder): Promise<boolean> {
   } catch {
     return false;
   }
-  if (p.padrao) return true;
+  if (p.isDefault) return true;
   try {
     const entries = new Set(await readdir(p.dir));
     return MARKERS.some((m) => entries.has(m));
@@ -94,14 +91,14 @@ export interface DiscoveryOptions {
  * the structure of a configuration folder come in.
  */
 export async function discoverFolders({ home = homedir(), file = defaultProfilesFile(home), revealed = [] }: DiscoveryOptions = {}): Promise<ConfigFolder[]> {
-  const candidates: ConfigFolder[] = [configFolder(join(home, '.claude'), 'padrao', home)];
+  const candidates: ConfigFolder[] = [configFolder(join(home, '.claude'), 'default', home)];
   try {
     const names = (await readdir(home)).filter((n) => n.startsWith('.claude-')).sort();
-    for (const n of names) candidates.push(configFolder(join(home, n), 'nome', home));
+    for (const n of names) candidates.push(configFolder(join(home, n), 'name', home));
   } catch {
     // Unreadable HOME: only the configured and the revealed ones.
   }
-  for (const d of await configuredFolders(file, home)) candidates.push(configFolder(d, 'configurada', home));
+  for (const d of await configuredFolders(file, home)) candidates.push(configFolder(d, 'configured', home));
   for (const d of revealed) candidates.push(configFolder(d, 'hook', home));
 
   // A symlink and its target are the same folder: the real path decides what repeats.
