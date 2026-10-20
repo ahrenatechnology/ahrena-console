@@ -72,7 +72,7 @@ import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './mural.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
 import { HISTORY_ROUTE, responderHistorico } from './historico.ts';
-import type { HistoricoDeSessoes } from '../historico/leitura.ts';
+import type { SessionHistory } from '../history/reading.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './eventos.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
@@ -126,7 +126,7 @@ export interface OpcoesDaApi {
   /** A lista da tela Sessões; liga `GET /api/sessions`. */
   sessoes?: ListaDeSessoes;
   /** As sessões encerradas por dia; liga `GET /api/history` (#33). */
-  historico?: HistoricoDeSessoes;
+  historico?: SessionHistory;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
   /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */

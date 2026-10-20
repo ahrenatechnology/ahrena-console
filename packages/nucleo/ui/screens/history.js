@@ -12,7 +12,7 @@ export const DAYS_PER_PAGE = 7;
 const SEARCH_DEBOUNCE_MS = 300;
 const LIVE_WAIT_MS = 500;
 const LIVE_MAX_WAIT_MS = 2000;
-/** O tamanho máximo da busca: o núcleo recusa mais que isso (BUSCA_MAXIMA em src/historico/modelo.ts). */
+/** O tamanho máximo da busca: o núcleo recusa mais que isso (MAX_SEARCH_LENGTH em src/history/model.ts). */
 export const MAX_SEARCH = 100;
 
 // ---------- Funções puras ----------

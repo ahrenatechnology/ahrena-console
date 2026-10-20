@@ -42,7 +42,7 @@ import {
 } from '../simulador/painel.ts';
 import { semearWorkflowsDoDemo } from '../simulador/workflows.ts';
 import { semearHistoricoDoPainel } from '../simulador/historico-encerradas.ts';
-import { HistoricoDeSessoes } from '../historico/leitura.ts';
+import { SessionHistory } from '../history/reading.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
@@ -312,7 +312,7 @@ if (demo) {
 const detalhe = new LeiturasDoDetalhe({ storage, montador, ...(demo ? { local: localDaDemo } : {}) });
 
 // O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
-const historico = new HistoricoDeSessoes({ storage, decisoes, tituloDe: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
+const historico = new SessionHistory({ storage, decisions: decisoes, titleOf: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.

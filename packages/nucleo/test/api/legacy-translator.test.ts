@@ -6,7 +6,7 @@ import { LEGACY_BODIES, legacyRequestBody, legacyResponseFor, legacyRouteOf, nor
 import { CHANGE_TYPES } from '../../src/changes/cursor.ts';
 import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
 import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
-import { BUSCA_MAXIMA as HISTORY_SEARCH_MAX, DIAS_MAXIMO } from '../../src/historico/modelo.ts';
+import { MAX_SEARCH_LENGTH as HISTORY_SEARCH_MAX, MAX_DAYS } from '../../src/history/model.ts';
 import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
 import { AGENT_STATUSES, AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
 import { DETAIL_AGENT_TYPES, MESSAGE_ROLES, TOOL_STATES } from '../../src/api/detalhe.ts';
@@ -475,7 +475,7 @@ describe('every union member of the feed, the Sessions list and the History answ
     const route = legacyResponseFor('/api/historico')!;
     const errors = {
       'before: um dia AAAA-MM-DD': 'antes: um dia AAAA-MM-DD',
-      [`days: um inteiro de 1 a ${DIAS_MAXIMO}`]: `dias: um inteiro de 1 a ${DIAS_MAXIMO}`,
+      [`days: um inteiro de 1 a ${MAX_DAYS}`]: `dias: um inteiro de 1 a ${MAX_DAYS}`,
       [`search: até ${HISTORY_SEARCH_MAX} caracteres`]: `busca: até ${HISTORY_SEARCH_MAX} caracteres`,
       'o núcleo subiu sem o histórico': 'o núcleo subiu sem o histórico',
     };
@@ -488,7 +488,7 @@ describe('every union member of the feed, the Sessions list and the History answ
       assert.ok(Object.hasOwn(LEGACY_BODIES[route].response?.values?.['.error'] ?? {}, message), `${route}: ${message}`);
     has('events', `limit: um inteiro de 1 a ${LIMITE_MAXIMO}`);
     has('events', `search: até ${SEARCH_MAX} caracteres`);
-    has('history', `days: um inteiro de 1 a ${DIAS_MAXIMO}`);
+    has('history', `days: um inteiro de 1 a ${MAX_DAYS}`);
     has('history', `search: até ${HISTORY_SEARCH_MAX} caracteres`);
   });
 });

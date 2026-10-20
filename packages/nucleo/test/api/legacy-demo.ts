@@ -15,7 +15,7 @@ import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { GithubProject } from '../../src/github/project.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
-import { HistoricoDeSessoes } from '../../src/historico/leitura.ts';
+import { SessionHistory } from '../../src/history/reading.ts';
 import { criarServidorMcp } from '../../src/mcp/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { withChanges, SessionAccounts, decisionsWithChanges } from '../../src/changes/sources.ts';
@@ -92,7 +92,7 @@ export async function startLegacyDemo(): Promise<LegacyDemo> {
     frota: mcp.frota,
     analytics: new RotaAnalytics({ storage, contas: accounts, agora: clock }),
     sessoes: new ListaDeSessoes({ storage, contas: accounts, agora: clock }),
-    historico: new HistoricoDeSessoes({ storage, decisoes: decisions, fusoHorario: 'UTC' }),
+    historico: new SessionHistory({ storage, decisions, timeZone: 'UTC' }),
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
     decisoesUi: decisionsUi,
     repos: repos.rota,
