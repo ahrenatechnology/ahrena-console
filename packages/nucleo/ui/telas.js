@@ -17,6 +17,15 @@ export const TELAS = [
     arquivo: '/ui/telas/dashboard.js',
   },
   {
+    id: 'mural',
+    rota: '/ui/mural',
+    item: { rotulo: 'Mural ao vivo', icone: 'mural' },
+    titulo: 'Mural ao vivo',
+    sub: 'Um card por sessão aberta nesta máquina',
+    icone: 'mural',
+    arquivo: '/ui/telas/mural.js', // #34
+  },
+  {
     id: 'sessoes',
     rota: '/ui/sessoes',
     item: { rotulo: 'Sessões', icone: 'sessoes' },
