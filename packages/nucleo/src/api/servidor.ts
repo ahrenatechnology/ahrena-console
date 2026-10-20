@@ -79,7 +79,7 @@ import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './detalhe.ts';
 import type { LeituraDaFrota } from '../mcp/frota.ts';
-import { montarAtencao, ATTENTION_ROUTE } from './rota-atencao.ts';
+import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './rota-atencao.ts';
 import { montarDashboard, ROTA_DO_DASHBOARD } from './rota-dashboard.ts';
 import { RotaAnalytics } from './rota-analytics.ts';
 import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
@@ -118,6 +118,8 @@ export interface OpcoesDaApi {
   eventos?: FeedDeEventos;
   /** A leitura da frota do MCP; liga `GET /api/attention`. */
   frota?: LeituraDaFrota;
+  /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
+  remoteAttention?: readonly RemoteAttentionSource[];
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
   analytics?: RotaAnalytics;
   /** A lista da tela Sessões; liga `GET /api/sessions`. */
@@ -335,7 +337,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     if (url.pathname === CHANGES_ROUTE && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
     if (url.pathname === WALL_ROUTE) return responderMural(res, mural);
     if (url.pathname === EVENTS_ROUTE && opts.eventos) return responderEventos(res, url, opts.eventos);
-    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null));
+    if (url.pathname === ATTENTION_ROUTE && opts.frota) return send(res, 200, await montarAtencao(opts.frota, opts.mudancas?.atual ?? null, opts.remoteAttention));
     if (url.pathname === ROTA_DO_DASHBOARD && opts.frota) return send(res, 200, await montarDashboard(opts.frota));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);

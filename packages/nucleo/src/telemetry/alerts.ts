@@ -3,7 +3,8 @@
 // - `load-high`: the 1 min load above the core count in every sample of the last 5 min;
 // - `volume-full`: a volume above 85%;
 // - `port-exposed`: a port listening on all interfaces;
-// - `tunnel-busy`: a tunnel port that another process on this Mac holds.
+// - `tunnel-busy`: a tunnel port that another process on this Mac holds;
+// - `machine-unreachable` (#176): a remote machine this Mac cannot read (`machineUnreachableAlert`).
 //
 // `computeAlerts` is pure: the current reading and the recent samples give the alerts that hold now.
 // `AlertTracker` keeps each machine's open alerts, keeps the `since` of when each one entered and
@@ -16,6 +17,7 @@ import {
   type Alert,
   type SamplePoint,
   type TelemetryReading,
+  type UnreachableReason,
 } from './model.ts';
 
 const formatNumber = (n: number, digits = 1) => n.toLocaleString('pt-BR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
@@ -112,6 +114,25 @@ export function computeAlerts(reading: TelemetryReading, points: readonly Sample
     }
   }
   return alerts;
+}
+
+/**
+ * A remote machine that does not answer, as the screen says it: "Workstation sem conexão". The
+ * detail tells the two cases of decision 0008 section 3 apart: the tunnel down, or the tunnel up
+ * and the núcleo over there not answering.
+ */
+export function machineUnreachableAlert(label: string, port: number, reason: UnreachableReason, since: string): Alert {
+  return {
+    id: 'machine-unreachable',
+    kind: 'machine-unreachable',
+    level: 'error',
+    message: `${label} sem conexão`,
+    detail:
+      reason === 'port-closed'
+        ? `A porta ${port} deste Mac não aceita conexão: o túnel está caído`
+        : `O túnel está de pé na porta ${port}, mas o núcleo de lá não respondeu`,
+    since,
+  };
 }
 
 export interface AlertChange {

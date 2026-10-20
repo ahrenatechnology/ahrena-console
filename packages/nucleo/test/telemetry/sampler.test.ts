@@ -102,9 +102,9 @@ describe('#175/AC-4 and AC-5 the routes reading', () => {
     const store = new MemoryTelemetryStore();
     const tracker = new AlertTracker();
     const service = new TelemetryService({ store, tracker, machines: [localMachine()], now: () => T0 });
-    assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', lastReadAt: null, alerts: 0 }]);
+    assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: null, alerts: 0 }]);
     await new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposed(T0)]), store, tracker }).sampleOnce();
-    assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 1 }]);
+    assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 1 }]);
   });
 
   test('telemetry: version, current reading, window series and alerts; an unknown machine is null', async () => {
