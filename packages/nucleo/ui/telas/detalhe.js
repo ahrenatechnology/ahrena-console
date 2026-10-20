@@ -1,5 +1,5 @@
 // O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes (C4), Conversa (C5) e Linha do
-// tempo (C6), sobre `GET /api/sessoes/<id>…` (src/api/detalhe.ts). Workflow e Decisões não entram
+// tempo (C6), sobre `GET /api/sessions/<id>…` (src/api/detalhe.ts). Workflow e Decisões não entram
 // nesta versão.
 //
 // Tudo o que vem do núcleo, e o texto da conversa mais ainda, é conteúdo não confiável: entra por
@@ -9,6 +9,7 @@ import { el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 import { abrirNoDesktop } from '../ler.js';
 import { criar as abaWorkflow } from './detalhe-workflow.js';
+import { criar as abaDecisoes } from './detalhe-decisoes.js';
 
 // ---------- Formatos ----------
 
@@ -109,7 +110,7 @@ function pilula(icon, ...filhos) {
 // O registro das abas, na ordem da barra. Uma aba nova é uma linha aqui e um módulo em
 // `ui/telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` e devolve
 // `{ mostrar(corpo), esconder(), atualizar() }`:
-// - `base` é `/api/sessoes/<id>`; `cabeca()` é o topo já lido (`GET /api/sessoes/<id>`);
+// - `base` é `/api/sessions/<id>`; `cabeca()` é o topo já lido (`GET /api/sessions/<id>`);
 // - `rotular(texto)` põe o "(…)" ao lado do nome da aba; `null` tira.
 // A aba carrega o próprio CSS, se tiver.
 const ABAS = [
@@ -117,6 +118,7 @@ const ABAS = [
   { id: 'conversa', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
   { id: 'tempo', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
   { id: 'workflow', rotulo: 'Workflow', icone: 'grafo', criar: abaWorkflow },
+  { id: 'decisoes', rotulo: 'Decisões', icone: 'decisao', criar: abaDecisoes },
 ];
 
 let cssCarregado = false;
@@ -129,7 +131,7 @@ function carregarCss() {
 export async function montar(area, ctx) {
   carregarCss();
   const id = ctx.params.id;
-  const base = `/api/sessoes/${encodeURIComponent(id)}`;
+  const base = `/api/sessions/${encodeURIComponent(id)}`;
   const topo = el('div', { class: 'det-topo' });
   const abas = el('nav', { class: 'det-abas', role: 'tablist', 'aria-label': 'Abas da sessão' });
   const corpo = el('div', { class: 'det-corpo', role: 'tabpanel' });
@@ -266,7 +268,7 @@ function faixa(c) {
       await abrirNoDesktop(c.local);
     } catch (e) {
       // Sem quem abra (fora do macOS, ou a demonstração): o link de reserva leva ao `claude://`.
-      if (e.status === 501) return void (location.href = `/abrir/${c.local}`);
+      if (e.status === 501) return void (location.href = `/open/${c.local}`);
       aviso.textContent = e.message;
     }
   });
@@ -285,7 +287,7 @@ function abaAgentes(ctx, base) {
   let alvo = null;
   async function desenhar() {
     try {
-      const a = await ctx.ler(`${base}/agentes`);
+      const a = await ctx.ler(`${base}/agents`);
       alvo?.replaceChildren(...agentes(a));
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -460,7 +462,7 @@ function abaConversa(ctx, base) {
 
   async function desenhar() {
     try {
-      const c = await ctx.ler(`${base}/conversa${agente ? `?agente=${encodeURIComponent(agente)}` : ''}`);
+      const c = await ctx.ler(`${base}/conversation${agente ? `?agent=${encodeURIComponent(agente)}` : ''}`);
       agente = c.agente;
       seletor.replaceChildren(...c.agentes.map((a) => el('option', { value: a.id, selected: a.id === c.agente }, a.nome)));
       contagem.replaceChildren(icone('conversa'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
@@ -580,11 +582,12 @@ function abaTempo(ctx, base, { rotular }) {
 
   function consulta() {
     const p = new URLSearchParams();
-    for (const k of ['q', 'status', 'tipo', 'ferramenta', 'agente']) if (filtros[k]) p.set(k, filtros[k]);
+    // The filter state keeps its names; the API reads the English parameters.
+    for (const [k, nome] of [['q', 'q'], ['status', 'status'], ['tipo', 'type'], ['ferramenta', 'tool'], ['agente', 'agent']]) if (filtros[k]) p.set(nome, filtros[k]);
     // `datetime-local` é a hora do lugar; a API quer ISO em UTC.
-    for (const k of ['de', 'ate']) if (filtros[k]) p.set(k, new Date(filtros[k]).toISOString());
-    p.set('limite', String(quantos));
-    return `${base}/eventos?${p}`;
+    for (const [k, nome] of [['de', 'from'], ['ate', 'to']]) if (filtros[k]) p.set(nome, new Date(filtros[k]).toISOString());
+    p.set('limit', String(quantos));
+    return `${base}/events?${p}`;
   }
 
   function recomecar() {

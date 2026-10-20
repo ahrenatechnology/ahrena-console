@@ -25,8 +25,8 @@ export const systemRunner: CommandRunner = (command, args, options = {}) =>
       { timeout: options.timeoutMs ?? COMMAND_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' }, windowsHide: true },
       (err, stdout) => {
         if (!err) return resolve(stdout);
-        const morto = (err as { killed?: boolean }).killed === true;
-        resolve(!morto && stdout ? stdout : null);
+        const killed = (err as { killed?: boolean }).killed === true;
+        resolve(!killed && stdout ? stdout : null);
       },
     );
   });
@@ -56,22 +56,22 @@ export const PROBE_HOLD_MS = 1_000;
 
 export const systemProbe: PortProbe = (port) =>
   new Promise((resolve) => {
-    let feito = false;
-    const fim = (r: 'open' | 'closed' | 'refused') => {
-      if (feito) return;
-      feito = true;
-      clearTimeout(limite);
+    let done = false;
+    const end = (r: 'open' | 'closed' | 'refused') => {
+      if (done) return;
+      done = true;
+      clearTimeout(deadline);
       socket.destroy();
       resolve(r);
     };
     const socket = connect({ host: '127.0.0.1', port });
-    const limite = setTimeout(() => fim('refused'), 2 * PROBE_HOLD_MS);
+    const deadline = setTimeout(() => end('refused'), 2 * PROBE_HOLD_MS);
     socket.once('connect', () => {
-      clearTimeout(limite);
-      const segurar = setTimeout(() => fim('open'), PROBE_HOLD_MS);
-      socket.once('close', () => (clearTimeout(segurar), fim('closed')));
+      clearTimeout(deadline);
+      const hold = setTimeout(() => end('open'), PROBE_HOLD_MS);
+      socket.once('close', () => (clearTimeout(hold), end('closed')));
     });
-    socket.once('error', () => fim('refused'));
+    socket.once('error', () => end('refused'));
     socket.on('data', () => {});
   });
 

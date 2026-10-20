@@ -104,8 +104,8 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
   });
 
   test('túnel: o ssh com -L, o estado de cada porta (up, idle, busy) e o ssh sem -L que não ganhou a porta fica de fora', async () => {
-    const sondadas: number[] = [];
-    const { deps, calls } = darwin({ probe: async (p) => (sondadas.push(p), ({ 14720: 'open', 13000: 'open', 15173: 'closed' }) as Record<number, 'open' | 'closed'>)[p] ?? 'refused' });
+    const probed: number[] = [];
+    const { deps, calls } = darwin({ probe: async (p) => (probed.push(p), ({ 14720: 'open', 13000: 'open', 15173: 'closed' }) as Record<number, 'open' | 'closed'>)[p] ?? 'refused' });
     const r = await new DarwinCollector(deps).collect();
     assert.deepEqual(r.tunnels, [
       {
@@ -120,7 +120,7 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
         ],
       },
     ]);
-    assert.deepEqual(sondadas.sort(), [13000, 14720, 15173]);
+    assert.deepEqual(probed.sort(), [13000, 14720, 15173]);
     // O `ssh ws-exemplo` sem -L leu o LocalForward pelo `ssh -G`; o mestre do ControlMaster não, e o
     // `ssh -F …` de outra conta (uid 502) também não.
     assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-G', '--', 'ws-exemplo']]);
@@ -149,14 +149,14 @@ describe('#175/AC-1 coletor do Mac, sobre saídas gravadas', () => {
       '  482   501    00:10:00 ssh -F /Users/dev/.ssh/aberto ws-c',
       '  483   501    00:10:00 ssh -F relativo ws-d',
     ].join('\n');
-    const donos: Record<string, { uid: number; mode: number }> = {
+    const owners: Record<string, { uid: number; mode: number }> = {
       '/Users/dev/.ssh/meu': { uid: 501, mode: 0o100600 },
       '/tmp/de-outro': { uid: 502, mode: 0o100644 },
       '/Users/dev/.ssh/aberto': { uid: 501, mode: 0o100666 },
     };
     const { deps, calls } = darwin({
       commands: { ...DARWIN_COMMANDS, 'ps -axo pid=,uid=,etime=,args=': ps },
-      fileOwner: async (path) => donos[path] ?? null,
+      fileOwner: async (path) => owners[path] ?? null,
     });
     await new DarwinCollector(deps).collect();
     assert.deepEqual(calls.filter((c) => c.command === 'ssh').map((c) => c.args), [['-F', '/Users/dev/.ssh/meu', '-G', '--', 'ws-a']]);

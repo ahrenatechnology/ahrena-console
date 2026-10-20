@@ -1,4 +1,4 @@
-// "Ao vivo": long polling em `GET /api/mudancas?desde=<cursor>&espera=25`, pela camada de leitura.
+// "Ao vivo": long polling em `GET /api/changes?since=<cursor>&wait=25`, pela camada de leitura.
 //
 // - O primeiro pedido vai sem cursor e volta na hora com `reiniciar: true`.
 // - `reiniciar: true` (núcleo reiniciado, cursor velho) chama `aoReiniciar`: as telas releem tudo.
@@ -41,7 +41,7 @@ export function iniciarAoVivo({
     let falhas = 0;
     while (!parar.signal.aborted) {
       try {
-        const r = await ler(`/api/mudancas?desde=${encodeURIComponent(cursor)}&espera=${espera}`, { signal: parar.signal });
+        const r = await ler(`/api/changes?since=${encodeURIComponent(cursor)}&wait=${espera}`, { signal: parar.signal });
         const voltou = falhas > 0;
         falhas = 0;
         mudar('ao-vivo');

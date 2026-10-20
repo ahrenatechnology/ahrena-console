@@ -3,9 +3,10 @@
 // | Rota                              | O quê                                                        |
 // | --------------------------------- | ------------------------------------------------------------ |
 // | `GET /api/workflows`              | KPIs, runs do Workflow tool e o grafo de orquestração         |
-// | `GET /api/sessoes/<id>/workflow`  | O grafo dos agentes da sessão, o laço e a linha do tempo (404 sem a sessão) |
+// | `GET /api/sessions/<id>/workflow` | O grafo dos agentes da sessão, o laço e a linha do tempo (404 sem a sessão) |
 //
-// `GET /api/workflows?filtro=todas|ativas|concluidas&no=<id do nó>`: o filtro vale para a tela inteira.
+// `GET /api/workflows?filter=todas|ativas|concluidas&node=<id do nó>`: o filtro vale para a tela inteira
+// (`filtro=` and `no=`, and `/api/sessoes/<id>/workflow`, are aliases: src/api/legacy-routes.ts).
 // `ativas` são as sessões com status `active`; `concluidas`, as que terminaram (`completed`, `error`,
 // `abandoned`). `no` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
 // passam por aquele nó (`principal` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
@@ -683,7 +684,7 @@ export interface FontesDosWorkflows {
 }
 
 export const ROTA_DOS_WORKFLOWS = '/api/workflows';
-const DA_SESSAO = /^\/api\/sessoes\/([^/]+)\/workflow$/;
+const DA_SESSAO = /^\/api\/sessions\/([^/]+)\/workflow$/;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 export const MAXIMO_DE_SESSOES = 500;
 
@@ -755,18 +756,18 @@ export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: Filtr
 
 /**
  * Responde as duas rotas, quando o pedido é de uma delas (`GET`); devolve `false` para o resto, e o
- * servidor segue. `/api/sessoes/<id>/workflow` não colide com `/api/sessoes/<id>` nem com
- * `/api/sessoes/<id>/(agentes|conversa|eventos)`.
+ * servidor segue. `/api/sessions/<id>/workflow` não colide com `/api/sessions/<id>` nem com
+ * `/api/sessions/<id>/(agents|conversation|events)`.
  */
 export async function responderWorkflows(res: ServerResponse, url: URL, fontes: FontesDosWorkflows): Promise<boolean> {
   const agora = (fontes.agora ?? Date.now)();
   if (url.pathname === ROTA_DOS_WORKFLOWS) {
-    const filtro = url.searchParams.get('filtro') ?? 'todas';
+    const filtro = url.searchParams.get('filter') ?? 'todas';
     if (!FILTROS_DOS_WORKFLOWS.includes(filtro as FiltroDosWorkflows)) {
       send(res, 400, { error: 'filtro: todas, ativas ou concluidas' });
       return true;
     }
-    const no = url.searchParams.get('no');
+    const no = url.searchParams.get('node');
     if (no !== null && !NO_DO_GRAFO.test(no)) {
       send(res, 400, { error: 'no: um id de nó do grafo (ex.: subagente:Explore)' });
       return true;

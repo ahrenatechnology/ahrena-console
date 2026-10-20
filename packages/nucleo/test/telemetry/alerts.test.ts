@@ -6,13 +6,13 @@ import { AlertTracker, computeAlerts, formatBytes, loadHighSince } from '../../s
 import { iso, point, reading, T0 } from './reading.ts';
 
 const MIN = 60_000;
-const altas = (n: number, load1 = 20) => Array.from({ length: n }, (_, i) => point(T0 - i * 30_000, { load1 }));
+const highPoints = (n: number, load1 = 20) => Array.from({ length: n }, (_, i) => point(T0 - i * 30_000, { load1 }));
 
 describe('#175/AC-3 alertas sobre as amostras', () => {
   test('carga acima dos núcleos há 5 min entra; há 4,5 min ainda não', () => {
     const r = reading({ cpu: { cores: 12, model: null, usedPct: 99, load: { one: 20, five: 18, fifteen: 10 } } });
-    assert.deepEqual(computeAlerts(r, altas(10)).map((a) => a.id), []); // 0 a 4,5 min
-    const [a] = computeAlerts(r, altas(11)); // 0 a 5 min
+    assert.deepEqual(computeAlerts(r, highPoints(10)).map((a) => a.id), []); // 0 a 4,5 min
+    const [a] = computeAlerts(r, highPoints(11)); // 0 a 5 min
     assert.equal(a.id, 'load-high');
     assert.equal(a.level, 'error');
     assert.equal(a.message, 'CPU saturada: carga de 20 em 12 núcleos');
@@ -20,7 +20,7 @@ describe('#175/AC-3 alertas sobre as amostras', () => {
   });
 
   test('uma amostra abaixo no meio zera a contagem', () => {
-    const pts = altas(14);
+    const pts = highPoints(14);
     pts[3] = point(T0 - 3 * 30_000, { load1: 4 });
     assert.equal(loadHighSince(pts), T0 - 2 * 30_000);
     const r = reading({ cpu: { cores: 12, model: null, usedPct: 99, load: { one: 20, five: 18, fifteen: 10 } } });

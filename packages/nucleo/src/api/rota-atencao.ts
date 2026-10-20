@@ -1,4 +1,4 @@
-// `GET /api/atencao`: quem precisa de você, em todas as contas, para a bandeja do app (#87).
+// `GET /api/attention`: quem precisa de você, em todas as contas, para a bandeja do app (#87).
 //
 // A lista é a do `sessions_needing_attention` do MCP (`precisamDeVoce`, src/mcp): as que esperam
 // você ou pararam num erro, com a divisão do painel (#140) entre o que trava a sessão ("precisa")
@@ -7,13 +7,15 @@
 // mais tempo. A conta sai só com rótulo e cor, nunca o id. Sem texto da conversa.
 //
 // Para acompanhar, o cliente lê esta rota e depois espera em
-// `GET /api/mudancas?desde=<cursor>&espera=25`, a partir do `cursor` daqui; com `reiniciar: true`,
+// `GET /api/changes?since=<cursor>&wait=25`, a partir do `cursor` daqui; com `reiniciar: true`,
 // relê tudo.
 
 import { ESTADOS_VIVOS, type LeituraDaFrota, type Motivo } from '../mcp/frota.ts';
 import { precisamDeVoce } from '../mcp/ferramentas/atencao.ts';
 import type { MotivoDaAtencao, NivelDeAtencao } from './atencao.ts';
 
+export const ATTENTION_ROUTE = '/api/attention';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DA_ATENCAO = '/api/atencao';
 
 const MOTIVO: Record<Motivo, MotivoDaAtencao> = {
@@ -52,13 +54,13 @@ export interface ItemDaAtencao {
   motivoLongo: string;
   desde: string;
   minutos: number;
-  /** O `local_…` do Claude Desktop, quando ele conhece a sessão (`POST /abrir/<local_…>`). */
+  /** O `local_…` do Claude Desktop, quando ele conhece a sessão (`POST /open/<local_…>`). */
   local: string | null;
 }
 
 export interface RespostaDaAtencao {
   geradoEm: string;
-  /** Para `GET /api/mudancas?desde=`; `null` quando o núcleo subiu sem o cursor. */
+  /** Para `GET /api/changes?since=`; `null` quando o núcleo subiu sem o cursor. */
   cursor: string | null;
   /** Todas as da lista: o número da barra de menus. */
   total: number;

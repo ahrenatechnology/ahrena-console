@@ -16,7 +16,7 @@ import type { TelemetryService } from '../telemetry/service.ts';
 export const MACHINES_ROUTE = '/api/machines';
 export const TELEMETRY_ROUTE = '/api/telemetry';
 
-const SEM_TELEMETRIA = { error: 'o núcleo subiu sem a telemetria' };
+const NO_TELEMETRY = { error: 'o núcleo subiu sem a telemetria' };
 
 export function isTelemetryRoute(pathname: string): boolean {
   return pathname === MACHINES_ROUTE || pathname === TELEMETRY_ROUTE;
@@ -27,18 +27,18 @@ export function readTelemetryRequest(params: URLSearchParams): { machine: string
   const machine = params.get('machine') ?? LOCAL_MACHINE_ID;
   if (!MACHINE_ID.test(machine)) return 'machine inválida: letras minúsculas, números e hífen';
   // Ausente ou vazio vale o padrão; fora isso, só `1` ou `12` escritos assim (`012` e `1.0` não).
-  const bruto = params.get('hours') || '1';
-  if (!/^(1|12)$/.test(bruto)) return 'hours: 1 ou 12';
-  const hours = Number(bruto) as WindowHours;
+  const raw = params.get('hours') || '1';
+  if (!/^(1|12)$/.test(raw)) return 'hours: 1 ou 12';
+  const hours = Number(raw) as WindowHours;
   return { machine, hours };
 }
 
 export async function respondTelemetry(res: ServerResponse, url: URL, telemetry: TelemetryService | null | undefined): Promise<void> {
-  if (!telemetry) return send(res, 404, SEM_TELEMETRIA);
+  if (!telemetry) return send(res, 404, NO_TELEMETRY);
   if (url.pathname === MACHINES_ROUTE) return send(res, 200, await telemetry.machines());
-  const pedido = readTelemetryRequest(url.searchParams);
-  if (typeof pedido === 'string') return send(res, 400, { error: pedido });
-  const corpo = await telemetry.telemetry(pedido.machine, pedido.hours);
-  if (!corpo) return send(res, 404, { error: `máquina desconhecida: ${pedido.machine}` });
-  send(res, 200, corpo);
+  const query = readTelemetryRequest(url.searchParams);
+  if (typeof query === 'string') return send(res, 400, { error: query });
+  const body = await telemetry.telemetry(query.machine, query.hours);
+  if (!body) return send(res, 404, { error: `máquina desconhecida: ${query.machine}` });
+  send(res, 200, body);
 }

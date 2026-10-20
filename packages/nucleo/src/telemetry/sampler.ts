@@ -1,6 +1,6 @@
 // O amostrador (#175): uma leitura a cada 30 s enquanto o núcleo está de pé, gravada com a poda de
 // 12 h, e os alertas recalculados sobre as amostras recentes. O alerta que entra ou sai vira uma
-// mudança `alert` no cursor de `/api/mudancas`, para a tela e a bandeja reagirem sem recarregar.
+// mudança `alert` no cursor de `/api/changes`, para a tela e a bandeja reagirem sem recarregar.
 //
 // - Sem sobreposição: se a leitura anterior ainda não acabou (um comando lento), a vez é pulada.
 // - Leitura que falha (o coletor rejeitou, o banco recusou) só vai para o log: a próxima tenta de novo.

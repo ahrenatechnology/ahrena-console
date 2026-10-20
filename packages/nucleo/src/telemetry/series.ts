@@ -5,15 +5,15 @@
 
 import { MAX_SERIES_POINTS, type SamplePoint, type TelemetrySeries } from './model.ts';
 
-type Metrica = Exclude<keyof TelemetrySeries, 'at'>;
-const METRICAS: readonly Metrica[] = ['cpuUsedPct', 'load1', 'memoryUsedBytes', 'swapUsedBytes', 'rxBytesPerSec', 'txBytesPerSec', 'gpuUsedPct'];
+type Metric = Exclude<keyof TelemetrySeries, 'at'>;
+const METRICS: readonly Metric[] = ['cpuUsedPct', 'load1', 'memoryUsedBytes', 'swapUsedBytes', 'rxBytesPerSec', 'txBytesPerSec', 'gpuUsedPct'];
 
 export function emptySeries(): TelemetrySeries {
   return { at: [], cpuUsedPct: [], load1: [], memoryUsedBytes: [], swapUsedBytes: [], rxBytesPerSec: [], txBytesPerSec: [], gpuUsedPct: [] };
 }
 
-function media(valores: (number | null)[]): number | null {
-  const ns = valores.filter((v): v is number => v !== null);
+function mean(values: (number | null)[]): number | null {
+  const ns = values.filter((v): v is number => v !== null);
   if (ns.length === 0) return null;
   return ns.reduce((a, b) => a + b, 0) / ns.length;
 }
@@ -24,26 +24,26 @@ function media(valores: (number | null)[]): number | null {
  * cada um na hora do seu começo.
  */
 export function buildSeries(points: readonly SamplePoint[], fromMs: number, toMs: number, maxPoints = MAX_SERIES_POINTS): TelemetrySeries {
-  const dentro = points.filter((p) => p.takenAt > fromMs && p.takenAt <= toMs).sort((a, b) => a.takenAt - b.takenAt);
+  const inWindow = points.filter((p) => p.takenAt > fromMs && p.takenAt <= toMs).sort((a, b) => a.takenAt - b.takenAt);
   const s = emptySeries();
-  if (dentro.length <= maxPoints) {
-    for (const p of dentro) {
+  if (inWindow.length <= maxPoints) {
+    for (const p of inWindow) {
       s.at.push(new Date(p.takenAt).toISOString());
-      for (const m of METRICAS) s[m].push(p[m]);
+      for (const m of METRICS) s[m].push(p[m]);
     }
     return s;
   }
-  const balde = Math.ceil((toMs - fromMs + 1) / maxPoints);
-  const grupos = new Map<number, SamplePoint[]>();
-  for (const p of dentro) {
-    const i = Math.floor((p.takenAt - fromMs) / balde);
-    const g = grupos.get(i);
+  const bucketMs = Math.ceil((toMs - fromMs + 1) / maxPoints);
+  const groups = new Map<number, SamplePoint[]>();
+  for (const p of inWindow) {
+    const i = Math.floor((p.takenAt - fromMs) / bucketMs);
+    const g = groups.get(i);
     if (g) g.push(p);
-    else grupos.set(i, [p]);
+    else groups.set(i, [p]);
   }
-  for (const [i, g] of [...grupos].sort((a, b) => a[0] - b[0])) {
-    s.at.push(new Date(fromMs + i * balde).toISOString());
-    for (const m of METRICAS) s[m].push(media(g.map((p) => p[m])));
+  for (const [i, g] of [...groups].sort((a, b) => a[0] - b[0])) {
+    s.at.push(new Date(fromMs + i * bucketMs).toISOString());
+    for (const m of METRICS) s[m].push(mean(g.map((p) => p[m])));
   }
   return s;
 }

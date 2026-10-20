@@ -17,34 +17,34 @@ import { listenInterfaceOf, mergePorts, parsePsArgs, parsePsStats, PlatformColle
 
 /** `/proc/meminfo` → os campos em bytes (o arquivo diz kB). */
 export function parseMeminfo(out: string): Record<string, number> {
-  const campos: Record<string, number> = {};
-  for (const m of out.matchAll(/^(\w+(?:\(\w+\))?):\s+(\d+)(?:\s+kB)?\s*$/gm)) campos[m[1]] = Number(m[2]) * 1024;
-  return campos;
+  const fields: Record<string, number> = {};
+  for (const m of out.matchAll(/^(\w+(?:\(\w+\))?):\s+(\d+)(?:\s+kB)?\s*$/gm)) fields[m[1]] = Number(m[2]) * 1024;
+  return fields;
 }
 
 /** `nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits`, a primeira placa. */
 export function parseNvidiaSmi(out: string): GpuReading | null {
-  const linha = out.split('\n').find((l) => l.trim());
-  if (!linha) return null;
-  const [name, uso, usada, total] = linha.split(',').map((s) => s.trim());
-  const num = (s: string | undefined) => (s !== undefined && /^\d+(\.\d+)?$/.test(s) ? Number(s) : null);
+  const line = out.split('\n').find((l) => l.trim());
+  if (!line) return null;
+  const [name, utilization, used, total] = line.split(',').map((s) => s.trim());
+  const toNumber = (s: string | undefined) => (s !== undefined && /^\d+(\.\d+)?$/.test(s) ? Number(s) : null);
   const mib = (s: string | undefined) => {
-    const v = num(s);
+    const v = toNumber(s);
     return v === null ? null : Math.round(v * 1024 * 1024);
   };
-  return { name: name || null, usedPct: num(uso), memoryUsedBytes: mib(usada), memoryTotalBytes: mib(total) };
+  return { name: name || null, usedPct: toNumber(utilization), memoryUsedBytes: mib(used), memoryTotalBytes: mib(total) };
 }
 
 /** `/proc/net/route`: a interface da rota padrão (destino e máscara zero), a de menor métrica. */
 export function parseProcNetRoute(out: string): string | null {
-  let melhor: { iface: string; metric: number } | null = null;
+  let best: { iface: string; metric: number } | null = null;
   for (const l of out.split('\n').slice(1)) {
     const t = l.trim().split(/\s+/);
     if (t.length < 8 || t[1] !== '00000000' || t[7] !== '00000000') continue;
     const metric = Number(t[6]) || 0;
-    if (!melhor || metric < melhor.metric) melhor = { iface: t[0], metric };
+    if (!best || metric < best.metric) best = { iface: t[0], metric };
   }
-  return melhor?.iface ?? null;
+  return best?.iface ?? null;
 }
 
 /** `/proc/net/dev`: bytes recebidos (1ª coluna) e enviados (9ª) da interface. */
@@ -92,11 +92,11 @@ export class LinuxCollector extends PlatformCollector {
     const out = await this.deps.readFile('/proc/meminfo');
     const m = out ? parseMeminfo(out) : {};
     const total = m.MemTotal ?? os.totalmem();
-    const livre = m.MemAvailable ?? os.freemem();
+    const available = m.MemAvailable ?? os.freemem();
     const swapTotal = m.SwapTotal ?? null;
     return {
       totalBytes: total,
-      usedBytes: Math.max(0, total - livre),
+      usedBytes: Math.max(0, total - available),
       swapTotalBytes: swapTotal,
       swapUsedBytes: swapTotal !== null && m.SwapFree !== undefined ? Math.max(0, swapTotal - m.SwapFree) : null,
       pressure: null,
@@ -109,8 +109,8 @@ export class LinuxCollector extends PlatformCollector {
   }
 
   protected async netCounters(): Promise<Omit<NetCounters, 'atMs'> | null> {
-    const rota = await this.deps.readFile('/proc/net/route');
-    const iface = rota ? parseProcNetRoute(rota) : null;
+    const routeOut = await this.deps.readFile('/proc/net/route');
+    const iface = routeOut ? parseProcNetRoute(routeOut) : null;
     if (!iface) return null;
     const dev = await this.deps.readFile('/proc/net/dev');
     const c = dev ? parseProcNetDev(dev, iface) : null;

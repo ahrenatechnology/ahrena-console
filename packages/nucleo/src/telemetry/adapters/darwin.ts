@@ -42,19 +42,19 @@ export function parseVmStat(out: string): { pageSize: number; pages: Record<stri
 export function usedFromVmStat(vm: { pageSize: number; pages: Record<string, number> }): number | null {
   const p = vm.pages;
   const wired = p['Pages wired down'];
-  const comprimida = p['Pages occupied by compressor'] ?? 0;
+  const compressed = p['Pages occupied by compressor'] ?? 0;
   const apps = p['Anonymous pages'] !== undefined ? p['Anonymous pages'] - (p['Pages purgeable'] ?? 0) : p['Pages active'];
   if (wired === undefined || apps === undefined) return null;
-  return (Math.max(0, apps) + wired + comprimida) * vm.pageSize;
+  return (Math.max(0, apps) + wired + compressed) * vm.pageSize;
 }
 
-const MEGA: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
+const SWAP_UNITS: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
 
 /** `vm.swapusage: total = 2048.00M  used = 819.25M  free = 1228.75M  (encrypted)`. */
 export function parseSwapUsage(out: string): { totalBytes: number; usedBytes: number } | null {
   const v = (k: string) => {
     const m = new RegExp(`${k} = ([\\d.]+)([KMGT])`).exec(out);
-    return m ? Math.round(Number(m[1]) * MEGA[m[2]]) : null;
+    return m ? Math.round(Number(m[1]) * SWAP_UNITS[m[2]]) : null;
   };
   const totalBytes = v('total');
   const usedBytes = v('used');
@@ -71,13 +71,13 @@ export function parsePressureLevel(out: string): MemoryPressure | null {
 
 /** O primeiro acelerador de `ioreg -c IOAccelerator`: nome, uso e a memória que ele usa. */
 export function parseIoregGpu(out: string): GpuReading | null {
-  const uso = /"Device Utilization %"\s*=\s*(\d+)/.exec(out);
-  if (!uso) return null;
-  const emUso = /"In use system memory"\s*=\s*(\d+)/.exec(out);
+  const utilization = /"Device Utilization %"\s*=\s*(\d+)/.exec(out);
+  if (!utilization) return null;
+  const inUse = /"In use system memory"\s*=\s*(\d+)/.exec(out);
   return {
     name: /"model"\s*=\s*"([^"]+)"/.exec(out)?.[1] ?? null,
-    usedPct: Number(uso[1]),
-    memoryUsedBytes: emUso ? Number(emUso[1]) : null,
+    usedPct: Number(utilization[1]),
+    memoryUsedBytes: inUse ? Number(inUse[1]) : null,
     // Memória unificada: não há um total da GPU separado do da máquina.
     memoryTotalBytes: null,
   };
@@ -116,11 +116,11 @@ export function parseLsofListen(out: string): ListeningPort[] {
     const t = l.trim().split(/\s+/);
     const i = t.indexOf('(LISTEN)');
     if (i < 2) continue;
-    const nome = t[i - 1];
-    const sep = nome.lastIndexOf(':');
-    const port = Number(nome.slice(sep + 1));
+    const name = t[i - 1];
+    const sep = name.lastIndexOf(':');
+    const port = Number(name.slice(sep + 1));
     if (sep < 0 || !Number.isInteger(port)) continue;
-    ports.push({ port, ...listenInterfaceOf(nome.slice(0, sep)), process: t[0].replace(/\\x20/g, ' '), pid: Number(t[1]) || null });
+    ports.push({ port, ...listenInterfaceOf(name.slice(0, sep)), process: t[0].replace(/\\x20/g, ' '), pid: Number(t[1]) || null });
   }
   return mergePorts(ports);
 }
@@ -135,7 +135,7 @@ export interface Forward {
 }
 
 /** As opções do `ssh` que levam argumento (man ssh). */
-const COM_ARGUMENTO = new Set('BbcDEeFIiJLlmOoPpQRSWw');
+const OPTIONS_WITH_ARGUMENT = new Set('BbcDEeFIiJLlmOoPpQRSWw');
 
 /** `[bind:]porta:host:porta`, com IPv6 entre colchetes. Socket Unix fica de fora. */
 export function parseForwardSpec(spec: string): Forward | null {
@@ -146,19 +146,19 @@ export function parseForwardSpec(spec: string): Forward | null {
 
 /**
  * O `-o LocalForward` da linha de comando, em `[bind:]porta:host:porta`. O `ps` perde as aspas, então
- * `-o "LocalForward 14720 127.0.0.1:4720"` chega em três palavras: `valor` é a primeira e `resto` dá
- * as seguintes. Devolve a especificação e quantas palavras de `resto` ela consumiu; `null` quando
- * `valor` não é um `LocalForward`.
+ * `-o "LocalForward 14720 127.0.0.1:4720"` chega em três palavras: `value` é a primeira e `rest` dá
+ * as seguintes. Devolve a especificação e quantas palavras de `rest` ela consumiu; `null` quando
+ * `value` não é um `LocalForward`.
  */
-export function localForwardOption(valor: string, resto: readonly string[]): { spec: string | null; consumed: number } | null {
-  const m = /^localforward(?:\s*=\s*|\s+|$)(.*)$/i.exec(valor);
+export function localForwardOption(value: string, rest: readonly string[]): { spec: string | null; consumed: number } | null {
+  const m = /^localforward(?:\s*=\s*|\s+|$)(.*)$/i.exec(value);
   if (!m) return null;
-  const partes = m[1].trim() ? m[1].trim().split(/\s+/) : [];
+  const parts = m[1].trim() ? m[1].trim().split(/\s+/) : [];
   let consumed = 0;
   // `LocalForward = 14720 …`: o `=` solto também vem como palavra.
-  if (partes.length === 0 && resto[0] === '=') consumed++;
-  while (partes.length < 2 && consumed < resto.length) partes.push(resto[consumed++]);
-  return { spec: partes.length === 2 ? `${partes[0]}:${partes[1]}` : null, consumed };
+  if (parts.length === 0 && rest[0] === '=') consumed++;
+  while (parts.length < 2 && consumed < rest.length) parts.push(rest[consumed++]);
+  return { spec: parts.length === 2 ? `${parts[0]}:${parts[1]}` : null, consumed };
 }
 
 export interface SshCommand {
@@ -184,22 +184,22 @@ export function parseSshArgs(args: string): SshCommand | null {
     if (!tok.startsWith('-') || tok === '-') return { destination: tok, forwards, configFile };
     for (let j = 1; j < tok.length; j++) {
       const op = tok[j];
-      if (!COM_ARGUMENTO.has(op)) continue;
-      const valor = tok.length > j + 1 ? tok.slice(j + 1) : t[++i];
-      if (valor === undefined) return null;
+      if (!OPTIONS_WITH_ARGUMENT.has(op)) continue;
+      const value = tok.length > j + 1 ? tok.slice(j + 1) : t[++i];
+      if (value === undefined) return null;
       if (op === 'L') {
-        const f = parseForwardSpec(valor);
+        const f = parseForwardSpec(value);
         if (f) forwards.push(f);
       }
       if (op === 'o') {
-        const lf = localForwardOption(valor, t.slice(i + 1));
+        const lf = localForwardOption(value, t.slice(i + 1));
         if (lf) {
           i += lf.consumed;
           const f = lf.spec ? parseForwardSpec(lf.spec) : null;
           if (f) forwards.push(f);
         }
       }
-      if (op === 'F') configFile = valor;
+      if (op === 'F') configFile = value;
       break;
     }
   }
@@ -215,7 +215,7 @@ export function parseSshG(out: string): Forward[] {
   return fs;
 }
 
-const desde = (agora: number, a: PsArgsRow) => (a.elapsedSec === null ? null : new Date(agora - a.elapsedSec * 1000).toISOString());
+const since = (now: number, a: PsArgsRow) => (a.elapsedSec === null ? null : new Date(now - a.elapsedSec * 1000).toISOString());
 
 // ---------------------------------------------------------------------------------------------
 
@@ -229,21 +229,21 @@ export class DarwinCollector extends PlatformCollector {
 
   protected async memory(): Promise<MemoryReading> {
     const { os } = this.deps;
-    const [vm, swap, pressao] = await Promise.all([
+    const [vm, swap, pressureOut] = await Promise.all([
       this.run('vm_stat', []),
       this.run('sysctl', ['vm.swapusage']),
       this.run('sysctl', ['-n', 'kern.memorystatus_vm_pressure_level']),
     ]);
-    const lido = vm ? parseVmStat(vm) : null;
+    const parsed = vm ? parseVmStat(vm) : null;
     const total = os.totalmem();
-    const usada = lido ? usedFromVmStat(lido) : null;
+    const used = parsed ? usedFromVmStat(parsed) : null;
     const s = swap ? parseSwapUsage(swap) : null;
     return {
       totalBytes: total,
-      usedBytes: Math.min(total, usada ?? total - os.freemem()),
+      usedBytes: Math.min(total, used ?? total - os.freemem()),
       swapTotalBytes: s?.totalBytes ?? null,
       swapUsedBytes: s?.usedBytes ?? null,
-      pressure: pressao ? parsePressureLevel(pressao) : null,
+      pressure: pressureOut ? parsePressureLevel(pressureOut) : null,
     };
   }
 
@@ -253,8 +253,8 @@ export class DarwinCollector extends PlatformCollector {
   }
 
   protected async netCounters(): Promise<Omit<NetCounters, 'atMs'> | null> {
-    const rota = await this.run('route', ['-n', 'get', 'default']);
-    const iface = rota ? parseRouteDefault(rota) : null;
+    const routeOut = await this.run('route', ['-n', 'get', 'default']);
+    const iface = routeOut ? parseRouteDefault(routeOut) : null;
     if (!iface) return null;
     const out = await this.run('netstat', ['-ibn']);
     const c = out ? parseNetstatIbn(out, iface) : null;
@@ -286,43 +286,43 @@ export class DarwinCollector extends PlatformCollector {
    */
   protected async tunnels(ps: ProcessSnapshot | null, ports: ListeningPort[] | null): Promise<TunnelReading[] | null> {
     if (!ps) return null;
-    const agora = this.now();
+    const now = this.now();
     const uid = this.deps.os.uid();
     if (uid === null) return null;
-    const meus: { row: PsArgsRow; cmd: SshCommand }[] = [];
+    const own: { row: PsArgsRow; cmd: SshCommand }[] = [];
     for (const row of ps.args) {
       if (row.uid !== uid) continue;
       const cmd = parseSshArgs(row.args);
-      if (cmd) meus.push({ row, cmd });
+      if (cmd) own.push({ row, cmd });
     }
-    const chave = (cmd: SshCommand) => `${cmd.configFile ?? ''}\0${cmd.destination}`;
-    const lidos = new Map<string, Promise<Forward[]>>();
-    for (const { cmd } of meus) {
-      if (cmd.forwards.length > 0 || lidos.has(chave(cmd))) continue;
-      lidos.set(chave(cmd), this.sshG(cmd, uid));
+    const keyOf = (cmd: SshCommand) => `${cmd.configFile ?? ''}\0${cmd.destination}`;
+    const pending = new Map<string, Promise<Forward[]>>();
+    for (const { cmd } of own) {
+      if (cmd.forwards.length > 0 || pending.has(keyOf(cmd))) continue;
+      pending.set(keyOf(cmd), this.sshG(cmd, uid));
     }
-    const candidatos: { row: PsArgsRow; cmd: SshCommand }[] = [];
-    for (const { row, cmd } of meus) {
-      if (cmd.forwards.length === 0) cmd.forwards = await (lidos.get(chave(cmd)) ?? Promise.resolve([]));
-      if (cmd.forwards.length > 0) candidatos.push({ row, cmd });
+    const candidates: { row: PsArgsRow; cmd: SshCommand }[] = [];
+    for (const { row, cmd } of own) {
+      if (cmd.forwards.length === 0) cmd.forwards = await (pending.get(keyOf(cmd)) ?? Promise.resolve([]));
+      if (cmd.forwards.length > 0) candidates.push({ row, cmd });
     }
-    const escuta = new Map<number, ListeningPort>();
-    for (const p of ports ?? []) if (!escuta.has(p.port) || p.process === 'ssh') escuta.set(p.port, p);
-    const dono = new Map<number, number>();
-    for (const { row, cmd } of candidatos) {
+    const listeners = new Map<number, ListeningPort>();
+    for (const p of ports ?? []) if (!listeners.has(p.port) || p.process === 'ssh') listeners.set(p.port, p);
+    const owner = new Map<number, number>();
+    for (const { row, cmd } of candidates) {
       for (const f of cmd.forwards) {
         // Quem escuta a porta fica com ela; senão, o primeiro que a pede.
-        if (escuta.get(f.localPort)?.pid === row.pid) dono.set(f.localPort, row.pid);
-        else if (!dono.has(f.localPort)) dono.set(f.localPort, row.pid);
+        if (listeners.get(f.localPort)?.pid === row.pid) owner.set(f.localPort, row.pid);
+        else if (!owner.has(f.localPort)) owner.set(f.localPort, row.pid);
       }
     }
 
     const tunnels: TunnelReading[] = [];
-    for (const { row, cmd } of candidatos) {
-      const fs = cmd.forwards.filter((f) => dono.get(f.localPort) === row.pid);
+    for (const { row, cmd } of candidates) {
+      const fs = cmd.forwards.filter((f) => owner.get(f.localPort) === row.pid);
       if (fs.length === 0) continue;
-      const portas = await Promise.all(fs.map((f) => this.tunnelPort(f, escuta.get(f.localPort) ?? null)));
-      tunnels.push({ pid: row.pid, destination: cmd.destination, since: desde(agora, row), ports: portas });
+      const tunnelPorts = await Promise.all(fs.map((f) => this.tunnelPort(f, listeners.get(f.localPort) ?? null)));
+      tunnels.push({ pid: row.pid, destination: cmd.destination, since: since(now, row), ports: tunnelPorts });
     }
     return tunnels;
   }
@@ -331,17 +331,17 @@ export class DarwinCollector extends PlatformCollector {
   private async sshG(cmd: SshCommand, uid: number): Promise<Forward[]> {
     if (cmd.configFile !== null) {
       if (!cmd.configFile.startsWith('/')) return [];
-      const dono = await this.deps.fileOwner(cmd.configFile).catch(() => null);
-      if (!dono || dono.uid !== uid || (dono.mode & 0o022) !== 0) return [];
+      const owner = await this.deps.fileOwner(cmd.configFile).catch(() => null);
+      if (!owner || owner.uid !== uid || (owner.mode & 0o022) !== 0) return [];
     }
     const g = await this.run('ssh', [...(cmd.configFile !== null ? ['-F', cmd.configFile] : []), '-G', '--', cmd.destination]);
     return g ? parseSshG(g) : [];
   }
 
-  private async tunnelPort(f: Forward, quem: ListeningPort | null): Promise<TunnelPort> {
+  private async tunnelPort(f: Forward, holder: ListeningPort | null): Promise<TunnelPort> {
     const base = { localPort: f.localPort, remoteHost: f.remoteHost, remotePort: f.remotePort };
     // Sem a lista de portas (lsof falhou), a sonda decide sozinha.
-    if (quem && quem.process !== 'ssh') return { ...base, state: 'busy', heldBy: quem.process };
+    if (holder && holder.process !== 'ssh') return { ...base, state: 'busy', heldBy: holder.process };
     const r = await this.deps.probe(f.localPort).catch(() => 'refused' as const);
     return { ...base, state: r === 'open' ? 'up' : r === 'closed' ? 'idle' : 'down', heldBy: null };
   }

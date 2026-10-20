@@ -25,8 +25,8 @@ export const FILTROS = [
 
 /** A rota da API para o filtro e o nó escolhidos. */
 export function rotaDosWorkflows(filtro, no) {
-  const q = new URLSearchParams({ filtro });
-  if (no) q.set('no', no);
+  const q = new URLSearchParams({ filter: filtro });
+  if (no) q.set('node', no);
   return `/api/workflows?${q}`;
 }
 

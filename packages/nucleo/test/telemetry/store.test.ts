@@ -14,10 +14,10 @@ import { reading, T0 } from './reading.ts';
 
 const H = 3_600_000;
 
-function contract(nome: string, abrir: () => { store: TelemetryStore; fechar: () => Promise<void> }) {
-  describe(`#175/AC-2 armazenamento das amostras: ${nome}`, () => {
+function contract(name: string, openStore: () => { store: TelemetryStore; close: () => Promise<void> }) {
+  describe(`#175/AC-2 armazenamento das amostras: ${name}`, () => {
     test('poda na escrita: só as últimas 12 h da máquina; a outra máquina fica', async () => {
-      const { store, fechar } = abrir();
+      const { store, close } = openStore();
       try {
         await store.putSample('workstation', reading({}, T0 - 20 * H), RETENTION_MS);
         for (const h of [13, 12.5, 11, 6, 0]) await store.putSample('local', reading({}, T0 - h * H), RETENTION_MS);
@@ -25,12 +25,12 @@ function contract(nome: string, abrir: () => { store: TelemetryStore; fechar: ()
         assert.deepEqual(pts.map((p) => (T0 - p.takenAt) / H), [11, 6, 0]);
         assert.equal((await store.listPoints('workstation', 0)).length, 1);
       } finally {
-        await fechar();
+        await close();
       }
     });
 
     test('a janela pedida, do mais velho ao mais novo, com as colunas da série', async () => {
-      const { store, fechar } = abrir();
+      const { store, close } = openStore();
       try {
         await store.putSample('local', reading({ cpu: { cores: 8, model: null, usedPct: null, load: { one: 9.5, five: 1, fifteen: 1 } } }, T0), RETENTION_MS);
         await store.putSample('local', reading({}, T0 - 2 * H), RETENTION_MS);
@@ -41,12 +41,12 @@ function contract(nome: string, abrir: () => { store: TelemetryStore; fechar: ()
         assert.equal(pts[1].cpuUsedPct, null);
         assert.equal(pts[1].load1, 9.5);
       } finally {
-        await fechar();
+        await close();
       }
     });
 
     test('a leitura mais nova, inteira; a mesma hora substitui; sem amostra é null', async () => {
-      const { store, fechar } = abrir();
+      const { store, close } = openStore();
       try {
         assert.equal(await store.latest('local'), null);
         await store.putSample('local', reading({}, T0 - 30_000), RETENTION_MS);
@@ -55,7 +55,7 @@ function contract(nome: string, abrir: () => { store: TelemetryStore; fechar: ()
         assert.deepEqual(await store.latest('local'), reading({}, T0));
         assert.equal((await store.listPoints('local', 0)).length, 2);
       } finally {
-        await fechar();
+        await close();
       }
     });
   });
@@ -63,9 +63,9 @@ function contract(nome: string, abrir: () => { store: TelemetryStore; fechar: ()
 
 contract('SQLite', () => {
   const storage = openSqliteStorage({ path: ':memory:' });
-  return { store: new SqliteTelemetryStore(storage.db), fechar: () => storage.close() };
+  return { store: new SqliteTelemetryStore(storage.db), close: () => storage.close() };
 });
-contract('dublê em memória', () => ({ store: new MemoryTelemetryStore(), fechar: async () => {} }));
+contract('dublê em memória', () => ({ store: new MemoryTelemetryStore(), close: async () => {} }));
 
 describe('#175/AC-2 migração da tabela de amostras', () => {
   test('aditiva sobre um banco da versão 8; sem ela, o adaptador recusa o banco', () => {

@@ -21,37 +21,37 @@ const GiB = 1024 ** 3;
 const MIN = 60_000;
 
 /** Ruído em [0, 1) pelo instante (a cada 30 s) e pelo nome da métrica. */
-const ruido = (nome: string, at: number) => hash32(`${nome}:${Math.floor(at / SAMPLE_INTERVAL_MS)}`) / 2 ** 32;
-const onda = (at: number, periodoMin: number, fase = 0) => Math.sin((2 * Math.PI * at) / (periodoMin * MIN) + fase);
+const noise = (name: string, at: number) => hash32(`${name}:${Math.floor(at / SAMPLE_INTERVAL_MS)}`) / 2 ** 32;
+const wave = (at: number, periodMin: number, phase = 0) => Math.sin((2 * Math.PI * at) / (periodMin * MIN) + phase);
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
-function grupo(count: number, cpuPct: number, memoryBytes: number) {
+function group(count: number, cpuPct: number, memoryBytes: number) {
   return { count, cpuPct: r1(cpuPct), memoryBytes: Math.round(memoryBytes) };
 }
 
 function localReading(at: number): TelemetryReading {
-  const cpu = Math.max(2, 32 + 14 * onda(at, 23) + 8 * ruido('cpu', at));
-  const load = 4 + 1.6 * onda(at, 23) + ruido('load', at);
-  const rx = Math.round(2.4e6 * (0.6 + 0.8 * ruido('rx', at)));
-  const tx = Math.round(310e3 * (0.6 + 0.8 * ruido('tx', at)));
-  const desdeBoot = (at % (7 * 86_400_000)) / 1000;
-  const cli = grupo(4, 11.2 + 3 * ruido('cli', at), 1.4 * GB);
-  const desktop = grupo(7, 6.8 + 2 * ruido('desk', at), 1.2 * GB);
+  const cpu = Math.max(2, 32 + 14 * wave(at, 23) + 8 * noise('cpu', at));
+  const load = 4 + 1.6 * wave(at, 23) + noise('load', at);
+  const rx = Math.round(2.4e6 * (0.6 + 0.8 * noise('rx', at)));
+  const tx = Math.round(310e3 * (0.6 + 0.8 * noise('tx', at)));
+  const sinceBoot = (at % (7 * 86_400_000)) / 1000;
+  const cli = group(4, 11.2 + 3 * noise('cli', at), 1.4 * GB);
+  const desktop = group(7, 6.8 + 2 * noise('desk', at), 1.2 * GB);
   return {
     takenAt: new Date(at).toISOString(),
-    host: { hostname: 'mac-exemplo', platform: 'simulated', os: 'macOS 26.1', arch: 'arm64', uptimeSec: Math.round(3 * 86_400 + desdeBoot) },
+    host: { hostname: 'mac-exemplo', platform: 'simulated', os: 'macOS 26.1', arch: 'arm64', uptimeSec: Math.round(3 * 86_400 + sinceBoot) },
     cpu: { cores: 12, model: 'Apple M-exemplo', usedPct: r1(Math.min(100, cpu)), load: { one: r2(load), five: r2(load * 0.95), fifteen: r2(load * 0.85) } },
-    memory: { totalBytes: 36 * GiB, usedBytes: Math.round((21.4 + 1.2 * onda(at, 90)) * GB), swapTotalBytes: 2 * GiB, swapUsedBytes: Math.round(0.8 * GB), pressure: 'normal' },
-    gpu: { name: 'Apple M-exemplo', usedPct: Math.round(8 + 6 * ruido('gpu', at)), memoryUsedBytes: Math.round(1.6 * GB), memoryTotalBytes: null },
+    memory: { totalBytes: 36 * GiB, usedBytes: Math.round((21.4 + 1.2 * wave(at, 90)) * GB), swapTotalBytes: 2 * GiB, swapUsedBytes: Math.round(0.8 * GB), pressure: 'normal' },
+    gpu: { name: 'Apple M-exemplo', usedPct: Math.round(8 + 6 * noise('gpu', at)), memoryUsedBytes: Math.round(1.6 * GB), memoryTotalBytes: null },
     disk: {
       volumes: [
         { mount: '/', totalBytes: 612 * GB, usedBytes: 232 * GB, freeBytes: 380 * GB, usedPct: 37.9 },
         { mount: '/Volumes/Dados', totalBytes: 2000 * GB, usedBytes: 900 * GB, freeBytes: 1100 * GB, usedPct: 45 },
       ],
     },
-    network: { interface: 'en0', rxBytesPerSec: rx, txBytesPerSec: tx, rxBytesTotal: Math.round(41 * GB + desdeBoot * 1e5), txBytesTotal: Math.round(6 * GB + desdeBoot * 1.5e4) },
-    claude: { processes: grupo(cli.count + desktop.count, cli.cpuPct + desktop.cpuPct, cli.memoryBytes + desktop.memoryBytes), cli, desktop },
+    network: { interface: 'en0', rxBytesPerSec: rx, txBytesPerSec: tx, rxBytesTotal: Math.round(41 * GB + sinceBoot * 1e5), txBytesTotal: Math.round(6 * GB + sinceBoot * 1.5e4) },
+    claude: { processes: group(cli.count + desktop.count, cli.cpuPct + desktop.cpuPct, cli.memoryBytes + desktop.memoryBytes), cli, desktop },
     topProcesses: [
       { pid: 401, name: 'node', cpuPct: 14, memoryBytes: 420e6 },
       { pid: 402, name: 'claude', cpuPct: 6, memoryBytes: 310e6 },
@@ -88,16 +88,16 @@ function localReading(at: number): TelemetryReading {
 
 function workstationReading(at: number): TelemetryReading {
   // Período de 40 min: acima de 16 quando a onda passa de 1/3, uns 15 min seguidos.
-  const load = 14 + 6 * onda(at, 40) + 0.6 * ruido('load', at);
-  const cpu = Math.min(100, Math.max(5, (load / 16) * 70 + 10 * ruido('cpu', at)));
-  const desdeBoot = (at % (30 * 86_400_000)) / 1000;
-  const cli = grupo(12, 18 + 6 * ruido('cli', at), 3.1 * GB);
+  const load = 14 + 6 * wave(at, 40) + 0.6 * noise('load', at);
+  const cpu = Math.min(100, Math.max(5, (load / 16) * 70 + 10 * noise('cpu', at)));
+  const sinceBoot = (at % (30 * 86_400_000)) / 1000;
+  const cli = group(12, 18 + 6 * noise('cli', at), 3.1 * GB);
   return {
     takenAt: new Date(at).toISOString(),
-    host: { hostname: 'ws-exemplo', platform: 'simulated', os: 'Ubuntu 24.04.1 LTS', arch: 'x64', uptimeSec: Math.round(12 * 86_400 + desdeBoot) },
+    host: { hostname: 'ws-exemplo', platform: 'simulated', os: 'Ubuntu 24.04.1 LTS', arch: 'x64', uptimeSec: Math.round(12 * 86_400 + sinceBoot) },
     cpu: { cores: 16, model: 'CPU Exemplo de 16 vCPUs', usedPct: r1(cpu), load: { one: r2(load), five: r2(load * 0.93), fifteen: r2(load * 0.8) } },
-    memory: { totalBytes: 62 * GiB, usedBytes: Math.round((29 + 2 * onda(at, 120)) * GB), swapTotalBytes: 124 * GiB, swapUsedBytes: Math.round(8.2 * GB), pressure: null },
-    gpu: { name: 'GPU Exemplo T4', usedPct: Math.round(2 + 3 * ruido('gpu', at)), memoryUsedBytes: Math.round(1.8 * GB), memoryTotalBytes: 15 * GiB },
+    memory: { totalBytes: 62 * GiB, usedBytes: Math.round((29 + 2 * wave(at, 120)) * GB), swapTotalBytes: 124 * GiB, swapUsedBytes: Math.round(8.2 * GB), pressure: null },
+    gpu: { name: 'GPU Exemplo T4', usedPct: Math.round(2 + 3 * noise('gpu', at)), memoryUsedBytes: Math.round(1.8 * GB), memoryTotalBytes: 15 * GiB },
     disk: {
       volumes: [
         { mount: '/', totalBytes: 170 * GB, usedBytes: 146 * GB, freeBytes: 24 * GB, usedPct: 85.9 },
@@ -105,8 +105,8 @@ function workstationReading(at: number): TelemetryReading {
         { mount: '/tmp', totalBytes: 206 * GB, usedBytes: 23 * GB, freeBytes: 183 * GB, usedPct: 11.2 },
       ],
     },
-    network: { interface: 'ens5', rxBytesPerSec: Math.round(900e3 * (0.5 + ruido('rx', at))), txBytesPerSec: Math.round(400e3 * (0.5 + ruido('tx', at))), rxBytesTotal: Math.round(800 * GB + desdeBoot * 4e5), txBytesTotal: Math.round(120 * GB + desdeBoot * 1e5) },
-    claude: { processes: cli, cli, desktop: grupo(0, 0, 0) },
+    network: { interface: 'ens5', rxBytesPerSec: Math.round(900e3 * (0.5 + noise('rx', at))), txBytesPerSec: Math.round(400e3 * (0.5 + noise('tx', at))), rxBytesTotal: Math.round(800 * GB + sinceBoot * 4e5), txBytesTotal: Math.round(120 * GB + sinceBoot * 1e5) },
+    claude: { processes: cli, cli, desktop: group(0, 0, 0) },
     topProcesses: [
       { pid: 2001, name: 'java', cpuPct: 310, memoryBytes: 4.1e9 },
       { pid: 2050, name: 'postgres', cpuPct: 120, memoryBytes: 1.2e9 },
@@ -170,9 +170,9 @@ export class SimulatedCollector implements TelemetryCollector {
  * para os gráficos de 1 h e 12 h já abrirem cheios. Devolve quantas gravou.
  */
 export async function seedTelemetry(store: TelemetryStore, machineId: string, profile: SimulatedProfile, now = Date.now(), hours = 12): Promise<number> {
-  const fim = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;
+  const end = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;
   let n = 0;
-  for (let at = fim - hours * 3_600_000 + SAMPLE_INTERVAL_MS; at <= fim; at += SAMPLE_INTERVAL_MS) {
+  for (let at = end - hours * 3_600_000 + SAMPLE_INTERVAL_MS; at <= end; at += SAMPLE_INTERVAL_MS) {
     await store.putSample(machineId, simulatedReading(profile, at), RETENTION_MS);
     n++;
   }

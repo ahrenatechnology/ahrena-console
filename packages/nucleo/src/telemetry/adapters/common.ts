@@ -61,13 +61,13 @@ export interface DfRow {
 
 /** `df -P` no Mac (blocos de 512) e no Linux (de 1024): o tamanho do bloco vem do cabeçalho. */
 export function parseDfP(out: string): DfRow[] {
-  const linhas = out.split('\n');
-  const bloco = Number(/(\d+)-blocks/.exec(linhas[0] ?? '')?.[1] ?? 1024);
+  const lines = out.split('\n');
+  const blockSize = Number(/(\d+)-blocks/.exec(lines[0] ?? '')?.[1] ?? 1024);
   const rows: DfRow[] = [];
-  for (const l of linhas.slice(1)) {
+  for (const l of lines.slice(1)) {
     const m = /^(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+%|-)\s+(\/.*)$/.exec(l.trimEnd());
     if (!m) continue;
-    rows.push({ filesystem: m[1], mount: m[6], totalBytes: n(m[2]) * bloco, usedBytes: n(m[3]) * bloco, availableBytes: n(m[4]) * bloco });
+    rows.push({ filesystem: m[1], mount: m[6], totalBytes: n(m[2]) * blockSize, usedBytes: n(m[3]) * blockSize, availableBytes: n(m[4]) * blockSize });
   }
   return rows;
 }
@@ -159,7 +159,7 @@ export const baseName = (comm: string) => comm.slice(comm.lastIndexOf('/') + 1);
 /** Processo do Claude Desktop: o app e os helpers dele, todos dentro de `Claude.app`. */
 export const isClaudeDesktop = (comm: string) => comm.includes('/Claude.app/');
 
-const grupo = (rows: PsRow[]): ProcessGroup => ({
+const group = (rows: PsRow[]): ProcessGroup => ({
   count: rows.length,
   cpuPct: round1(rows.reduce((a, r) => a + r.cpuPct, 0)),
   memoryBytes: rows.reduce((a, r) => a + r.rssBytes, 0),
@@ -167,11 +167,11 @@ const grupo = (rows: PsRow[]): ProcessGroup => ({
 
 /** CLI (`claude`, pela linha de comando) e Claude Desktop, somados e em separado. */
 export function claudeOf(stats: PsRow[], args: PsArgsRow[]): ClaudeProcesses {
-  const linha = new Map(args.map((a) => [a.pid, a.args]));
+  const line = new Map(args.map((a) => [a.pid, a.args]));
   const desktop = stats.filter((r) => isClaudeDesktop(r.comm));
   // O pacote npm roda no node com `process.title = 'claude'`: o `comm` diz o que a linha de comando não diz.
-  const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || ehClaude(linha.get(r.pid) ?? r.comm)));
-  return { processes: grupo([...cli, ...desktop]), cli: grupo(cli), desktop: grupo(desktop) };
+  const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || ehClaude(line.get(r.pid) ?? r.comm)));
+  return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
 }
 
 export function topProcessesOf(stats: PsRow[], k = TOP_PROCESSES): TopProcess[] {
@@ -187,15 +187,15 @@ export function topProcessesOf(stats: PsRow[], k = TOP_PROCESSES): TopProcess[] 
 export const DOCKER_PS_ARGS = ['ps', '-a', '--no-trunc', '--format', '{{.State}}\t{{.Label "com.docker.compose.project"}}\t{{.Ports}}'];
 export const DOCKER_DF_ARGS = ['system', 'df', '--format', '{{.Type}}\t{{.TotalCount}}\t{{.Active}}\t{{.Size}}\t{{.Reclaimable}}'];
 
-const RODANDO = new Set(['running', 'restarting']);
+const RUNNING_STATES = new Set(['running', 'restarting']);
 
 /** As portas publicadas no host de `{{.Ports}}` (`0.0.0.0:15432->5432/tcp, :::15432->5432/tcp`). */
 export function publishedPorts(ports: string): number[] {
   const out = new Set<number>();
   for (const m of ports.matchAll(/:(\d+)(?:-(\d+))?->/g)) {
-    const de = n(m[1]);
-    const ate = m[2] ? n(m[2]) : de;
-    for (let p = de; p <= ate && p - de < 64; p++) out.add(p);
+    const from = n(m[1]);
+    const to = m[2] ? n(m[2]) : from;
+    for (let p = from; p <= to && p - from < 64; p++) out.add(p);
   }
   return [...out].sort((a, b) => a - b);
 }
@@ -208,27 +208,27 @@ export function parseDockerPs(out: string): Omit<DockerReading, 'space'> {
   for (const l of out.split('\n')) {
     if (!l.trim()) continue;
     const [state = '', project = '', ports = ''] = l.split('\t');
-    const vivo = RODANDO.has(state.trim());
-    if (vivo) running++;
+    const isRunning = RUNNING_STATES.has(state.trim());
+    if (isRunning) running++;
     else stopped++;
-    const nome = project.trim();
-    if (!nome) continue;
-    const s = stacks.get(nome) ?? { name: nome, running: 0, stopped: 0, ports: [] };
-    if (vivo) s.running++;
+    const name = project.trim();
+    if (!name) continue;
+    const s = stacks.get(name) ?? { name: name, running: 0, stopped: 0, ports: [] };
+    if (isRunning) s.running++;
     else s.stopped++;
     s.ports = [...new Set([...s.ports, ...publishedPorts(ports)])].sort((a, b) => a - b);
-    stacks.set(nome, s);
+    stacks.set(name, s);
   }
   return { running, stopped, stacks: [...stacks.values()].sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
-const UNIDADE: Record<string, number> = { b: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, pb: 1e15 };
+const UNIT_FACTORS: Record<string, number> = { b: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, pb: 1e15 };
 
 /** `25.2GB`, `0B`, `8.7GB (34%)`: o Docker escreve em unidades de 1000. */
 export function parseDockerSize(s: string): number | null {
   const m = /^\s*([\d.]+)\s*([kKmMgGtTpP]?B)\b/.exec(s);
   if (!m) return null;
-  const f = UNIDADE[m[2].toLowerCase()];
+  const f = UNIT_FACTORS[m[2].toLowerCase()];
   return f === undefined ? null : Math.round(n(m[1]) * f);
 }
 
@@ -261,30 +261,30 @@ export function listenInterfaceOf(host: string): { interface: ListenInterface; a
 
 /** Uma linha por porta e processo, a interface mais aberta quando o mesmo processo escuta em IPv4 e IPv6. */
 export function mergePorts(ports: ListeningPort[]): ListeningPort[] {
-  const ordem: Record<ListenInterface, number> = { all: 0, address: 1, loopback: 2 };
-  const porChave = new Map<string, ListeningPort>();
+  const rank: Record<ListenInterface, number> = { all: 0, address: 1, loopback: 2 };
+  const byKey = new Map<string, ListeningPort>();
   for (const p of ports) {
     const k = `${p.port}\0${p.pid ?? p.process ?? ''}`;
-    const atual = porChave.get(k);
-    if (!atual || ordem[p.interface] < ordem[atual.interface]) porChave.set(k, p);
+    const current = byKey.get(k);
+    if (!current || rank[p.interface] < rank[current.interface]) byKey.set(k, p);
   }
-  return [...porChave.values()].sort((a, b) => a.port - b.port || (a.pid ?? 0) - (b.pid ?? 0));
+  return [...byKey.values()].sort((a, b) => a.port - b.port || (a.pid ?? 0) - (b.pid ?? 0));
 }
 
 // ---------------------------------------------------------------------------------------------
 // CPU e rede: pela diferença entre duas medidas
 
-const ocupado = (t: CpuTimes) => t.user + t.nice + t.sys + t.irq;
-const total = (t: CpuTimes) => ocupado(t) + t.idle;
+const busyTime = (t: CpuTimes) => t.user + t.nice + t.sys + t.irq;
+const total = (t: CpuTimes) => busyTime(t) + t.idle;
 
 /** Uso de todos os núcleos entre duas medidas de `os.cpus()`, 0 a 100; `null` sem diferença. */
-export function cpuUsedPct(antes: { times: CpuTimes }[], depois: { times: CpuTimes }[]): number | null {
-  if (antes.length === 0 || antes.length !== depois.length) return null;
+export function cpuUsedPct(before: { times: CpuTimes }[], after: { times: CpuTimes }[]): number | null {
+  if (before.length === 0 || before.length !== after.length) return null;
   let o = 0;
   let t = 0;
-  for (let i = 0; i < depois.length; i++) {
-    o += ocupado(depois[i].times) - ocupado(antes[i].times);
-    t += total(depois[i].times) - total(antes[i].times);
+  for (let i = 0; i < after.length; i++) {
+    o += busyTime(after[i].times) - busyTime(before[i].times);
+    t += total(after[i].times) - total(before[i].times);
   }
   if (!(t > 0) || o < 0) return null;
   return round1(Math.min(100, (o / t) * 100));
@@ -298,15 +298,15 @@ export interface NetCounters {
 }
 
 /** A taxa entre duas medidas da mesma interface; `null` quando mudou de interface ou o contador voltou. */
-export function networkOf(atual: NetCounters, anterior: NetCounters | null): NetworkReading {
-  const dt = anterior ? (atual.atMs - anterior.atMs) / 1000 : 0;
-  const ok = anterior !== null && anterior.interface === atual.interface && dt > 0 && atual.rxBytes >= anterior.rxBytes && atual.txBytes >= anterior.txBytes;
+export function networkOf(current: NetCounters, previous: NetCounters | null): NetworkReading {
+  const dt = previous ? (current.atMs - previous.atMs) / 1000 : 0;
+  const ok = previous !== null && previous.interface === current.interface && dt > 0 && current.rxBytes >= previous.rxBytes && current.txBytes >= previous.txBytes;
   return {
-    interface: atual.interface,
-    rxBytesPerSec: ok ? Math.round((atual.rxBytes - anterior!.rxBytes) / dt) : null,
-    txBytesPerSec: ok ? Math.round((atual.txBytes - anterior!.txBytes) / dt) : null,
-    rxBytesTotal: atual.rxBytes,
-    txBytesTotal: atual.txBytes,
+    interface: current.interface,
+    rxBytesPerSec: ok ? Math.round((current.rxBytes - previous!.rxBytes) / dt) : null,
+    txBytesPerSec: ok ? Math.round((current.txBytes - previous!.txBytes) / dt) : null,
+    rxBytesTotal: current.rxBytes,
+    txBytesTotal: current.txBytes,
   };
 }
 
@@ -321,8 +321,8 @@ export interface ProcessSnapshot {
 
 export abstract class PlatformCollector implements TelemetryCollector {
   protected readonly deps: CollectorDeps;
-  private cpuAntes: { times: CpuTimes }[] | null = null;
-  private redeAntes: NetCounters | null = null;
+  private prevCpus: { times: CpuTimes }[] | null = null;
+  private prevNet: NetCounters | null = null;
   private osName: string | null | undefined = undefined;
 
   constructor(deps: CollectorDeps) {
@@ -346,17 +346,17 @@ export abstract class PlatformCollector implements TelemetryCollector {
     return this.deps.run(command, args, { timeoutMs }).catch(() => null);
   }
 
-  private async rede(): Promise<NetCounters | null> {
+  private async netSample(): Promise<NetCounters | null> {
     const c = await orNull(() => this.netCounters());
     return c ? { ...c, atMs: this.now() } : null;
   }
 
   async collect(): Promise<TelemetryReading> {
     const os = this.deps.os;
-    if (this.cpuAntes === null) {
+    if (this.prevCpus === null) {
       // A primeira: uma medida, a espera e a segunda, para CPU e rede saírem já na primeira amostra.
-      this.cpuAntes = os.cpus();
-      this.redeAntes = await this.rede();
+      this.prevCpus = os.cpus();
+      this.prevNet = await this.netSample();
       await (this.deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(PRIME_MS);
     }
     if (this.osName === undefined) this.osName = await orNull(() => this.readOsName());
@@ -366,22 +366,22 @@ export abstract class PlatformCollector implements TelemetryCollector {
     const cpu: CpuReading = {
       cores: cpus.length,
       model: cpus[0]?.model?.trim() || null,
-      usedPct: cpuUsedPct(this.cpuAntes, cpus),
+      usedPct: cpuUsedPct(this.prevCpus, cpus),
       load: { one: round2(load1), five: round2(load5), fifteen: round2(load15) },
     };
-    this.cpuAntes = cpus;
+    this.prevCpus = cpus;
 
-    const [memory, gpu, df, rede, ps, ports, docker] = await Promise.all([
+    const [memory, gpu, df, netSample, ps, ports, docker] = await Promise.all([
       this.memory().catch(() => ({ totalBytes: os.totalmem(), usedBytes: os.totalmem() - os.freemem(), swapTotalBytes: null, swapUsedBytes: null, pressure: null })),
       orNull(() => this.gpu()),
       this.run('df', ['-P']),
-      this.rede(),
+      this.netSample(),
       orNull(() => this.processes()),
       orNull(() => this.listeningPorts()),
       orNull(() => this.docker()),
     ]);
-    const network = rede ? networkOf(rede, this.redeAntes) : null;
-    this.redeAntes = rede;
+    const network = netSample ? networkOf(netSample, this.prevNet) : null;
+    this.prevNet = netSample;
     const tunnels = await orNull(() => this.tunnels(ps, ports));
 
     const host: HostInfo = { hostname: os.hostname(), platform: this.platform, os: this.osName ?? null, arch: os.arch(), uptimeSec: Math.round(os.uptime()) };

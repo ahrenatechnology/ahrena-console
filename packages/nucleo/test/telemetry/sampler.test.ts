@@ -10,7 +10,7 @@ import { localMachine, TelemetryService } from '../../src/telemetry/service.ts';
 import { MemoryTelemetryStore, ScriptedCollector } from './doubles.ts';
 import { reading, T0 } from './reading.ts';
 
-const exposta = (at: number) => reading({ ports: [{ port: 5432, interface: 'all', address: null, process: 'postgres', pid: 7 }] }, at);
+const exposed = (at: number) => reading({ ports: [{ port: 5432, interface: 'all', address: null, process: 'postgres', pid: 7 }] }, at);
 
 function fakeTimers() {
   const fns: (() => void)[] = [];
@@ -39,15 +39,15 @@ describe('#175/AC-2 amostrador', () => {
   });
 
   test('sem sobreposição: o tique durante uma leitura lenta é pulado', async () => {
-    let solta!: () => void;
-    const lenta = { calls: 0, collect: () => (lenta.calls++, new Promise<ReturnType<typeof reading>>((r) => (solta = () => r(reading()))) ) };
+    let release!: () => void;
+    const slow = { calls: 0, collect: () => (slow.calls++, new Promise<ReturnType<typeof reading>>((r) => (release = () => r(reading()))) ) };
     const t = fakeTimers();
-    const s = new TelemetrySampler({ machineId: 'local', collector: lenta, store: new MemoryTelemetryStore(), tracker: new AlertTracker(), timers: t.timers });
+    const s = new TelemetrySampler({ machineId: 'local', collector: slow, store: new MemoryTelemetryStore(), tracker: new AlertTracker(), timers: t.timers });
     s.start();
     t.fire();
     t.fire();
-    assert.equal(lenta.calls, 1);
-    solta();
+    assert.equal(slow.calls, 1);
+    release();
     await s.stop();
   });
 
@@ -71,11 +71,11 @@ describe('#175/AC-2 amostrador', () => {
 describe('#175/AC-3 alertas em /api/mudancas', () => {
   test('a entrada e a saída de um alerta viram mudanças `alert`, uma vez cada', async () => {
     const cursor = new CursorDeMudancas({ geracao: 'g1', intervaloMinimoMs: 0, agruparMs: 0 });
-    const inicio = cursor.atual;
-    const collector = new ScriptedCollector([exposta(T0), exposta(T0 + 30_000), reading({}, T0 + 60_000)]);
+    const start = cursor.atual;
+    const collector = new ScriptedCollector([exposed(T0), exposed(T0 + 30_000), reading({}, T0 + 60_000)]);
     const s = new TelemetrySampler({ machineId: 'local', collector, store: new MemoryTelemetryStore(), tracker: new AlertTracker(), onAlertChange: publishAlertChanges(cursor) });
     await s.sampleOnce();
-    const r1 = await cursor.aguardar(inicio, { timeoutMs: 0 });
+    const r1 = await cursor.aguardar(start, { timeoutMs: 0 });
     assert.deepEqual(r1.mudancas.map((m) => [m.tipo, m.chave, m.sessionId, m.accountId]), [['alert', 'local:port-exposed:5432', null, null]]);
     await s.sampleOnce(); // continua: nada novo
     assert.equal((await cursor.aguardar(r1.cursor, { timeoutMs: 0 })).mudancas.length, 0);
@@ -86,8 +86,8 @@ describe('#175/AC-3 alertas em /api/mudancas', () => {
   });
 
   test('carga acima dos núcleos por 5 min, sobre as amostras gravadas', async () => {
-    const alta = (i: number) => reading({ cpu: { cores: 4, model: null, usedPct: 100, load: { one: 9, five: 7, fifteen: 5 } } }, T0 + i * 30_000);
-    const collector = new ScriptedCollector(Array.from({ length: 11 }, (_, i) => alta(i)));
+    const high = (i: number) => reading({ cpu: { cores: 4, model: null, usedPct: 100, load: { one: 9, five: 7, fifteen: 5 } } }, T0 + i * 30_000);
+    const collector = new ScriptedCollector(Array.from({ length: 11 }, (_, i) => high(i)));
     const tracker = new AlertTracker();
     const s = new TelemetrySampler({ machineId: 'local', collector, store: new MemoryTelemetryStore(), tracker });
     for (let i = 0; i < 10; i++) await s.sampleOnce();
@@ -103,14 +103,14 @@ describe('#175/AC-4 e AC-5 a leitura das rotas', () => {
     const tracker = new AlertTracker();
     const service = new TelemetryService({ store, tracker, machines: [localMachine()], now: () => T0 });
     assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', lastReadAt: null, alerts: 0 }]);
-    await new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposta(T0)]), store, tracker }).sampleOnce();
+    await new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposed(T0)]), store, tracker }).sampleOnce();
     assert.deepEqual(await service.machines(), [{ id: 'local', label: 'Esta máquina', state: 'connected', lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 1 }]);
   });
 
   test('telemetria: versão, leitura atual, série da janela e alertas; máquina desconhecida é null', async () => {
     const store = new MemoryTelemetryStore();
     const tracker = new AlertTracker();
-    const s = new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposta(T0 - 2 * 3_600_000), exposta(T0 - 60_000), exposta(T0)]), store, tracker });
+    const s = new TelemetrySampler({ machineId: 'local', collector: new ScriptedCollector([exposed(T0 - 2 * 3_600_000), exposed(T0 - 60_000), exposed(T0)]), store, tracker });
     for (let i = 0; i < 3; i++) await s.sampleOnce();
     const service = new TelemetryService({ store, tracker, machines: [localMachine()], now: () => T0 });
     const t = await service.telemetry('local', 1);

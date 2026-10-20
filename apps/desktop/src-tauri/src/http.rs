@@ -43,7 +43,7 @@ pub fn post_json(porta: u16, caminho: &str, corpo: &str) -> Option<Resposta> {
     pedir(porta, "POST", caminho, Some(corpo), Duration::from_secs(10))
 }
 
-/// Codifica um valor para a query string (o cursor de `/api/mudancas`).
+/// Codifica um valor para a query string (o cursor de `/api/changes`).
 pub fn codificar(v: &str) -> String {
     v.bytes()
         .map(|b| match b {

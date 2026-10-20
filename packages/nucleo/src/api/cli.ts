@@ -6,8 +6,8 @@
 // e a versão e sai com 0) em vez de subir outro.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -32,9 +32,10 @@ import { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { aoMudarDaMaquina, comMudancas, ContasDasSessoes, decisoesComMudancas } from '../mudancas/fontes.ts';
 import { waitForChanges } from '../mudancas/mcp.ts';
 import {
+  apelidoDaDemo,
   CENARIOS_DO_PAINEL,
   FonteDeTrabalhoDoSimulador,
-  SESSAO_DO_PAINEL,
+  pastasDosRegistrosDaDemo,
   semearCenariosDoPainel,
   semearDecisoesDoPainel,
   type CenarioDoPainel,
@@ -45,7 +46,10 @@ import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
+import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
+import { DecisoesDaUi } from './decisoes-ui.ts';
 import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
@@ -60,6 +64,7 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessamento.ts';
+import { criarReposDoNucleo } from './repos.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { ListaDeSessoes } from './sessoes.ts';
 import { FeedDeEventos } from './eventos.ts';
@@ -81,12 +86,15 @@ const AJUDA = `Uso: npm run api -- [opções]
   --varredura <s>     Varredura de reserva do seguidor, em segundos. Padrão 30: o fs.watch
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
-  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, e o kanban do
-                      projeto (/api/projeto) responde 503
+  --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos)
+                      respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
-                      wireframe C11, num GitHub falso (mover vale em memória)
+                      wireframe C11, num GitHub falso (mover vale em memória). A tela
+                      Agent Config lê uma pasta de configuração e um projeto fictícios
+                      num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
                       (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
@@ -99,7 +107,7 @@ const AJUDA = `Uso: npm run api -- [opções]
   --no-telemetry      Não mede esta máquina: /api/machines e /api/telemetry respondem 404.
                       Na --demo, a telemetria é sintética (esta máquina e uma "workstation")
 
-Kanban do projeto (GET /api/projeto, POST /api/projeto/mover): o Project em
+Kanban do projeto (GET /api/project, POST /api/project/move): o Project em
 AHRENA_CONSOLE_PROJECT=dono/número, com o token do \`gh\` (escopo \`project\`) e o cache no
 banco do núcleo. Sem a variável, não há Project: a tela explica como escolher um.
 
@@ -205,9 +213,11 @@ const maquina = new MaquinaDeEstados({
 });
 const desktop = demo || o['sem-desktop'] ? null : new IndiceDoDesktop();
 const fonte = demo ? new FonteDeTrabalhoDoSimulador() : o['sem-github'] ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+// Um cache do GitHub só, no banco, para o trabalho e os repositórios: a pausa por limite vale para os dois.
+const cacheDoGithub = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const trabalho = new TrabalhoPorBranch({
   fonte,
-  cache: new GithubCache({ store: new SqliteCacheStore(storage.db) }),
+  cache: cacheDoGithub,
   ...(demo ? { git: FonteDeTrabalhoDoSimulador.git } : {}),
 });
 // O kanban do projeto (#80): o GitHub falso do C11 na --demo; senão o Project de AHRENA_CONSOLE_PROJECT.
@@ -260,7 +270,22 @@ const montador = new MontadorDoPainel({
   desktop,
   trabalho,
   decisoes,
-  ...(demo ? { apelido: () => SESSAO_DO_PAINEL } : {}),
+  ...(demo ? { apelido: apelidoDaDemo } : {}),
+});
+
+// A página e a aba Decisões da /ui (#103). Na demo, o Promover grava numa pasta temporária, criada
+// agora e apagada na saída, no lugar de /simulacao; fora da demo, no próprio repositório da decisão.
+const pastaDaDemo = demo ? mkdtempSync(join(tmpdir(), 'ahrena-console-demo-')) : null;
+const decisoesUi = new DecisoesDaUi({
+  decisions: decisoes,
+  storage,
+  // A aba e o Promover enxergam a sessão como o Confirmar do painel: a mesma regra, a do montador.
+  alvoDe: (id) => montador.alvoDaSessao(id),
+  ...(pastaDaDemo ? { raiz: pastasDosRegistrosDaDemo(pastaDaDemo) } : {}),
+  localDe: async (id) => {
+    await desktop?.atualizar();
+    return desktop?.sessaoPorCli(id)?.localId ?? null;
+  },
 });
 
 if (demo) {
@@ -288,35 +313,42 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+// The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
+const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
+if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
+const agentConfig = demoAgentConfig
+  ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
+  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.frota, mudancas, log });
 
 // Telemetria das máquinas (#175, decisão 0008): uma amostra a cada 30 s, 12 h no banco, e o alerta
 // que entra ou sai em /api/mudancas. Na --demo, as leituras sintéticas do simulador, já com 12 h
 // semeadas, e a "workstation" que a #176 vai ler de verdade pelo túnel.
-const amostras = new SqliteTelemetryStore(sqlite.db);
-const alertas = new AlertTracker();
-const maquinas: MachineEntry[] = [localMachine()];
-const amostradores: TelemetrySampler[] = [];
-function amostrador(machineId: string, collector: TelemetryCollector) {
-  amostradores.push(new TelemetrySampler({ machineId, collector, store: amostras, tracker: alertas, onAlertChange: publishAlertChanges(mudancas), log }));
+const sampleStore = new SqliteTelemetryStore(sqlite.db);
+const alertTracker = new AlertTracker();
+const machineEntries: MachineEntry[] = [localMachine()];
+const samplers: TelemetrySampler[] = [];
+function addSampler(machineId: string, collector: TelemetryCollector) {
+  samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(mudancas), log }));
 }
 if (demo) {
-  maquinas.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
-  await seedTelemetry(amostras, 'local', 'local');
-  await seedTelemetry(amostras, SIMULATED_WORKSTATION.id, 'workstation');
-  amostrador('local', new SimulatedCollector('local'));
-  amostrador(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
+  machineEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  await seedTelemetry(sampleStore, 'local', 'local');
+  await seedTelemetry(sampleStore, SIMULATED_WORKSTATION.id, 'workstation');
+  addSampler('local', new SimulatedCollector('local'));
+  addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
 } else if (!o['no-telemetry']) {
-  const coletor = collectorFor();
-  if (coletor) amostrador('local', coletor);
+  const platformCollector = collectorFor();
+  if (platformCollector) addSampler('local', platformCollector);
   else log(`telemetria: sem coletor para ${process.platform}`);
 }
-const telemetria = amostradores.length > 0 ? new TelemetryService({ store: amostras, tracker: alertas, machines: maquinas }) : null;
+const telemetryService = samplers.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
 let historicoPronto = false;
 const follower =
@@ -350,6 +382,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  decisoesUi,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o['sem-github'] && !projetoEscolhido, log },
   detalhe,
   eventos: new FeedDeEventos({ storage }),
@@ -358,7 +391,9 @@ const api: ApiLocal = await iniciarApiLocal({
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
-  telemetry: telemetria,
+  repos: repos.rota,
+  agentConfig,
+  telemetry: telemetryService,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
@@ -392,7 +427,7 @@ const pararDeVigiarPai =
 
 // A importação inicial roda depois que a porta já responde: o painel não espera o histórico.
 const pararVigia = demo ? () => {} : maquina.iniciar();
-for (const a of amostradores) a.start();
+for (const a of samplers) a.start();
 if (follower) {
   follower
     .start()
@@ -432,9 +467,10 @@ async function desligar() {
   pararDeVigiarPai();
   if (trava && !('conflito' in trava)) liberarTrava(trava.token);
   await follower?.stop().catch(() => undefined);
-  await Promise.all(amostradores.map((a) => a.stop()));
+  await Promise.all(samplers.map((a) => a.stop()));
   await api.close().catch(() => undefined);
   await storage.close();
+  if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
 process.on('SIGINT', () => void desligar());

@@ -130,7 +130,7 @@ export function escrever(rota, corpo, opcoes) {
 
 // ---------- A única escrita da página ----------
 //
-// O "Abrir no Claude Desktop" do Detalhe: `POST /abrir/<local_…>` na própria origem, em JSON. O núcleo
+// O "Abrir no Claude Desktop" do Detalhe: `POST /open/<local_…>` na própria origem, em JSON. O núcleo
 // aceita esse POST com o `Origin` da página e nenhum outro (servidor.ts). O artefato troca o
 // transporte com `usarAbridor()`.
 
@@ -141,7 +141,7 @@ export function abridorHttp({ base = globalThis.location?.origin, fetch = global
   if (origem.protocol !== 'http:' || !LOCAIS.has(origem.hostname)) throw new ErroDeLeitura(`o console só fala com o núcleo local, não ${origem.origin}`);
   return async function abrirPorHttp(local) {
     if (typeof local !== 'string' || !LOCAL_DO_DESKTOP.test(local)) throw new ErroDeLeitura(`id de sessão do Desktop inválido: ${local}`);
-    const rota = `/abrir/${local}`;
+    const rota = `/open/${local}`;
     let resposta;
     try {
       resposta = await fetch(new URL(rota, origem), { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: '{}', credentials: 'omit', cache: 'no-store' });

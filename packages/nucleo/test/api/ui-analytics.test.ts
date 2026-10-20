@@ -278,7 +278,7 @@ describe('Analytics: Visão geral', () => {
   test('cabeçalho, os cinco números, as duas abas e os gráficos', async () => {
     const { area, rotas, limpar } = await montarTela({ ler: async () => visao() });
     try {
-      assert.match(rotas[0]!, /^\/api\/analytics\?fuso=[^&]+$/);
+      assert.match(rotas[0]!, /^\/api\/analytics\?tz=[^&]+$/);
       const texto = area.textContent;
       assert.match(texto, /Analytics/);
       assert.match(texto, /Uso, custo e produtividade das sessões/);
@@ -407,10 +407,10 @@ describe('Analytics: Visão geral', () => {
 // ---------- Custo (C13) ----------
 
 describe('Analytics: Custo', () => {
-  test('seletor 7/30/90, quatro números, linha, rosca e por projeto; trocar o período relê com ?dias=', async () => {
-    const { area, rotas, limpar } = await montarTela({ aba: 'custo', ler: async (rota) => custo(Number(/dias=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
+  test('seletor 7/30/90, quatro números, linha, rosca e por projeto; trocar o período relê com ?days=', async () => {
+    const { area, rotas, limpar } = await montarTela({ aba: 'custo', ler: async (rota) => custo(Number(/days=(\d+)/.exec(rota)![1]), { semPrecoNoDia: true }) });
     try {
-      assert.match(rotas[0]!, /^\/api\/analytics\/custo\?dias=30&fuso=[^&]+$/);
+      assert.match(rotas[0]!, /^\/api\/analytics\/cost\?days=30&tz=[^&]+$/);
       const texto = area.textContent;
       assert.match(texto, /Custo estimado pelo transcript, com o preço de cada modelo/);
       const botoes = porTag(area, 'button').filter((b) => b.getAttribute('data-dias'));
@@ -438,7 +438,7 @@ describe('Analytics: Custo', () => {
 
       botoes[0]!.click();
       await ate(() => rotas.length === 2);
-      assert.match(rotas[1]!, /^\/api\/analytics\/custo\?dias=7&fuso=/);
+      assert.match(rotas[1]!, /^\/api\/analytics\/cost\?days=7&tz=/);
       await ate(() => comClasse(area, 'an-alvo').length === 7);
       assert.match(area.textContent, /7 dias~US\$ 341/);
       assert.equal(porTag(area, 'button').find((b) => b.getAttribute('data-dias') === '7')!.getAttribute('aria-pressed'), 'true');
@@ -519,7 +519,7 @@ describe('Analytics: Custo', () => {
 test('o registro: Analytics na barra; /ui/analytics/custo abre a mesma tela e acende Analytics', () => {
   const a = acharTela('/ui/analytics');
   assert.equal(a.tela.id, 'analytics');
-  assert.deepEqual(a.tela.item, { rotulo: 'Analytics', icone: 'analytics' });
+  assert.deepEqual(a.tela.item, { rotulo: 'Analytics', icone: 'analytics', section: 'main' });
   const c = acharTela('/ui/analytics/custo');
   assert.equal(c.tela.acende, 'analytics');
   assert.deepEqual(c.params, { aba: 'custo' });
@@ -528,9 +528,9 @@ test('o registro: Analytics na barra; /ui/analytics/custo abre a mesma tela e ac
 });
 
 test('as rotas e os períodos da tela são os do núcleo', async () => {
-  const { ROTA_DO_ANALYTICS, ROTA_DO_CUSTO, DIAS_DO_CUSTO } = await import('../../src/api/rota-analytics.ts');
+  const { ROTA_DO_ANALYTICS, COST_ROUTE, DIAS_DO_CUSTO } = await import('../../src/api/rota-analytics.ts');
   assert.equal(tela.ROTA_DA_VISAO, ROTA_DO_ANALYTICS);
-  assert.equal(tela.ROTA_DO_CUSTO, ROTA_DO_CUSTO);
+  assert.equal(tela.ROTA_DO_CUSTO, COST_ROUTE);
   assert.deepEqual(tela.PERIODOS, [...DIAS_DO_CUSTO]);
 });
 

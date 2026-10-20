@@ -1,6 +1,6 @@
 // As notificações do sistema (wireframe A3, issue #88) como dados: quando avisar, o quê e quem cala.
 //
-// Fica separado do Tauri para ser testado sem abrir o app. A bandeja relê `/api/atencao` a cada
+// Fica separado do Tauri para ser testado sem abrir o app. A bandeja relê `/api/attention` a cada
 // mudança e a cada 25 s; avisar a cada leitura seria barulho. O `Detector` guarda o motivo de cada
 // sessão na leitura anterior e só avisa quem entrou na lista ou trocou de motivo. A primeira
 // leitura (ao abrir, ou depois de perder o núcleo) só grava: quem já esperava não vira aviso.
@@ -182,7 +182,7 @@ pub fn caminho_da_sessao(sessao: &str) -> String {
     format!("/ui/sessoes/{}", http::codificar(sessao))
 }
 
-/// O `local_…` que o `POST /abrir/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.
+/// O `local_…` que o `POST /open/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.
 pub fn local_valido(local: &str) -> bool {
     let Some(resto) = local.strip_prefix("local_") else { return false };
     (8..=64).contains(&resto.len()) && resto.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')

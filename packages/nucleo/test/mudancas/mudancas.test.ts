@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal } from '../../src/api/index.ts';
+import { Contas, MontadorDoPainel, TrabalhoPorBranch, iniciarApiLocal, normalizeLegacyUrl } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisoes/sqlite.ts';
 import { GithubCache } from '../../src/github/cache.ts';
 import { SqliteCacheStore } from '../../src/github/sqlite-cache.ts';
@@ -326,7 +326,8 @@ describe('fontes das mudanças', () => {
 
 describe('rota HTTP', () => {
   test('lê e valida os parâmetros', () => {
-    const p = (q: string) => lerPedidoDeMudancas(new URL(`http://x/api/mudancas?${q}`));
+    // The old parameter names pass through the alias map, as on the server.
+    const p = (q: string) => lerPedidoDeMudancas(normalizeLegacyUrl(new URL(`http://x/api/mudancas?${q}`)));
     assert.deepEqual(p('desde=g1.3&espera=5&sessao=s1,s2&conta=a&conta=sem-conta&tipo=plano'), {
       cursor: 'g1.3',
       timeoutMs: 5000,
@@ -416,6 +417,30 @@ describe('ferramenta MCP wait_for_changes', () => {
     const semConta = f.executar({ cursor: 'g1.3', timeout: 30, account: 'none' }, ctx());
     cursor.registrar(sessao('s3'));
     assert.deepEqual(((await semConta).dados.changes as any[]).map((m) => [m.type, m.sessionId, m.account]), [['sessao', 's3', null]]);
+    await storage.close();
+  });
+
+  test('uma mudança `repos` não acorda a espera nem aparece, sem filtro ou com account "none"; e não é tipo válido', async () => {
+    const { cursor } = novo();
+    const storage = openSqliteStorage({ path: ':memory:' });
+    const f = waitForChanges({ mudancas: cursor, contas: new Contas({ storage, arquivo: null }) });
+    const c = cursor.atual;
+    const semFiltro = observar(f.executar({ cursor: c, timeout: 30 }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
+    const semConta = observar(f.executar({ cursor: c, timeout: 30, account: 'none' }, ctx()).then((r) => r.dados as unknown as RespostaDaEspera));
+    cursor.registrar({ tipo: 'repos', chave: 'lista', sessionId: null, accountId: null });
+    cursor.registrar({ tipo: 'repos', chave: 'org/repo', sessionId: null, accountId: null });
+    await tique();
+    assert.equal(semFiltro.valor, null, 'acordou com `repos`');
+    assert.equal(semConta.valor, null, 'acordou com `repos` em account "none"');
+    cursor.registrar(sessao('s1'));
+    const [a, b] = (await Promise.all([semFiltro.p, semConta.p])) as unknown as { changes: { type: string }[] }[];
+    assert.deepEqual(a.changes.map((x) => x.type), ['sessao']);
+    assert.deepEqual(b.changes.map((x) => x.type), ['sessao']);
+    // Já registrada antes do pedido: também não sai.
+    const depois = await f.executar({ cursor: c, timeout: 0 }, ctx());
+    assert.ok(!JSON.stringify(depois.dados).includes('repos'));
+    await assert.rejects(f.executar({ types: ['repos'] }, ctx()), ErroDeArgumento);
+    assert.ok(!JSON.stringify(f.entrada).includes('"repos"') && !JSON.stringify(f.saida).includes('"repos"'));
     await storage.close();
   });
 

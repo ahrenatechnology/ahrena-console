@@ -45,7 +45,7 @@ export const LINUX_FILES: Recorded = {
 
 export const T0 = Date.parse('2026-11-02T12:00:00.000Z');
 
-const tempos = (user: number, sys: number, idle: number): CpuTimes => ({ user, nice: 0, sys, idle, irq: 0 });
+const cpuTimesOf = (user: number, sys: number, idle: number): CpuTimes => ({ user, nice: 0, sys, idle, irq: 0 });
 
 export interface Call {
   command: string;
@@ -66,13 +66,13 @@ export function fixtureDeps(opts: {
   hostname?: string;
 }) {
   const calls: Call[] = [];
-  const vezes = new Map<string, number>();
-  const pegar = (mapa: Recorded, k: string): string | null => {
-    const v = mapa[k];
+  const counts = new Map<string, number>();
+  const pick = (map: Recorded, k: string): string | null => {
+    const v = map[k];
     if (v === undefined || v === null) return null;
     if (!Array.isArray(v)) return v;
-    const i = vezes.get(k) ?? 0;
-    vezes.set(k, i + 1);
+    const i = counts.get(k) ?? 0;
+    counts.set(k, i + 1);
     return v[Math.min(i, v.length - 1)];
   };
   let t = T0 - 1000;
@@ -81,9 +81,9 @@ export function fixtureDeps(opts: {
   const deps: CollectorDeps = {
     run: async (command, args, o) => {
       calls.push({ command, args, timeoutMs: o?.timeoutMs });
-      return pegar(opts.commands ?? {}, [command, ...args].join(' '));
+      return pick(opts.commands ?? {}, [command, ...args].join(' '));
     },
-    readFile: async (path) => pegar(opts.files ?? {}, path),
+    readFile: async (path) => pick(opts.files ?? {}, path),
     statfs: opts.statfs ?? (async () => null),
     fileOwner: opts.fileOwner ?? (async () => null),
     probe: opts.probe ?? (async () => 'refused'),
@@ -96,7 +96,7 @@ export function fixtureDeps(opts: {
       loadavg: () => [4.111, 3.8, 3.2],
       // A primeira medida e as seguintes: metade do tempo ocupado entre elas (50%).
       uid: () => (opts.uid === undefined ? 501 : opts.uid),
-      cpus: () => Array.from({ length: cores }, () => ({ model: 'CPU Exemplo', times: cpuCalls++ < cores ? tempos(1000, 500, 8500) : tempos(1200, 600, 8800) })),
+      cpus: () => Array.from({ length: cores }, () => ({ model: 'CPU Exemplo', times: cpuCalls++ < cores ? cpuTimesOf(1000, 500, 8500) : cpuTimesOf(1200, 600, 8800) })),
     },
     now: () => t,
     sleep: async (ms) => {

@@ -1,5 +1,5 @@
 // Mural ao vivo (C2, #34): um card por sessão aberta nesta máquina, do mesmo tamanho, três por linha.
-// Lê `GET /api/mural`, que já vem ordenado pelo núcleo; o seletor Todas/Esperando/Ativas filtra no
+// Lê `GET /api/wall`, que já vem ordenado pelo núcleo; o seletor Todas/Esperando/Ativas filtra no
 // cliente, sem novo pedido. Ao vivo: qualquer mudança relê o mural (com uma pequena espera, para
 // juntar a rajada); `aoReiniciar` relê na hora.
 //
@@ -10,7 +10,7 @@ import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 
 const ESTILO = '/ui/mural.css';
-export const ROTA_DO_MURAL = '/api/mural';
+export const ROTA_DO_MURAL = '/api/wall';
 /** Releitura depois de uma rajada de mudanças. */
 export const ESPERA_MS = 400;
 /** Contexto a partir daqui pinta a barra com a cor de erro. */

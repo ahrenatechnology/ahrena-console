@@ -8,7 +8,7 @@ import type { TelemetryStore } from '../ports.ts';
 
 type Row = Record<string, unknown>;
 
-const inteiro = (n: number | null) => (n === null ? null : Math.round(n));
+const toInteger = (n: number | null) => (n === null ? null : Math.round(n));
 
 export class SqliteTelemetryStore implements TelemetryStore {
   private readonly db: DatabaseSync;
@@ -43,8 +43,8 @@ export class SqliteTelemetryStore implements TelemetryStore {
         p.cpuUsedPct,
         p.load1,
         p.cores,
-        inteiro(p.memoryUsedBytes),
-        inteiro(p.swapUsedBytes),
+        toInteger(p.memoryUsedBytes),
+        toInteger(p.swapUsedBytes),
         p.rxBytesPerSec,
         p.txBytesPerSec,
         p.gpuUsedPct,

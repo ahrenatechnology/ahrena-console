@@ -86,8 +86,8 @@ describe('Kanban: funções da tela', () => {
     assert.equal(visaoDaUrl('?visao=<x>'), 'sessoes');
     assert.equal(queryDaVisao('agentes'), '?visao=agentes');
     assert.equal(queryDaVisao('sessoes'), '');
-    assert.equal(rotaDoKanban('sessoes'), '/api/kanban?visao=sessoes');
-    assert.equal(rotaDoKanban('agentes', 'esperando', 2), '/api/kanban?visao=agentes&coluna=esperando&pagina=2');
+    assert.equal(rotaDoKanban('sessoes'), '/api/kanban?view=sessions');
+    assert.equal(rotaDoKanban('agentes', 'esperando', 2), '/api/kanban?view=agents&column=esperando&page=2');
   });
 
   test('"mostrar mais N": o que falta; ao vivo só relê com mudança de sessão', () => {
@@ -107,7 +107,7 @@ describe('Kanban: registro e arquivos', () => {
     const { tela } = acharTela('/ui/kanban');
     assert.equal(tela.id, 'kanban');
     assert.equal(tela.arquivo, '/ui/telas/kanban.js');
-    assert.deepEqual(tela.item, { rotulo: 'Kanban', icone: 'kanban' });
+    assert.deepEqual(tela.item, { rotulo: 'Kanban', icone: 'kanban', section: 'main' });
     assert.match(readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8'), /\n {2}kanban: '/);
   });
 

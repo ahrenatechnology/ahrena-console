@@ -1,9 +1,9 @@
 // A aba Workflow do detalhe da sessão (#97, C7): o grafo dos agentes, com o laço dev → review →
-// ajustes, e a linha do tempo dos agentes, sobre `GET /api/sessoes/<id>/workflow`
+// ajustes, e a linha do tempo dos agentes, sobre `GET /api/sessions/<id>/workflow`
 // (src/api/workflows.ts).
 //
 // O contrato das abas do detalhe: `criar(ctx, base, { cabeca, rotular })` devolve
-// `{ mostrar(corpo), esconder(), atualizar() }`. `base` é `/api/sessoes/<id>`. A mudança da sessão
+// `{ mostrar(corpo), esconder(), atualizar() }`. `base` é `/api/sessions/<id>`. A mudança da sessão
 // chega pelo `atualizar()` do detalhe; como subagente que começa ou termina não gera mudança, enquanto
 // houver agente ativo a aba relê a cada 10 s, e para quando sai de cena (`esconder()`).
 //
