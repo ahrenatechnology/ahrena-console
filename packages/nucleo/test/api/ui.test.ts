@@ -347,7 +347,7 @@ describe('registro das telas', () => {
     const app = readFileSync(`${PASTA_DA_UI}app.js`, 'utf8');
     assert.match(app, /createNav\(\{ nav, read \}\)/);
     assert.match(app, /highlight\(litItem\(screen, params\)\)/);
-    assert.match(app, /changes\.some\(\(c\) => c\.tipo === 'alert'\)\) readMachines\(\)/);
+    assert.match(app, /changes\.some\(\(c\) => c\.type === 'alert'\)\) readMachines\(\)/);
     const css = readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8');
     assert.match(css, /\.cc-nav-dot \{/);
     assert.match(css, /\.cc-nav-dot\[data-state="connected"\]/);

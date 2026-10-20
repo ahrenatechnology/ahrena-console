@@ -247,7 +247,7 @@ export const levelOf = (pct) => (pct >= 90 ? 'bad' : pct >= VOLUME_FULL_PCT ? 'w
 export function sessionsOf(attention, machineId) {
   if (!isObject(attention)) return null;
   const local = machineId === LOCAL_ID;
-  return list(attention.itens, 500).filter((i) => isObject(i) && (local ? !i.machine : isObject(i.machine) && i.machine.id === machineId));
+  return list(attention.items, 500).filter((i) => isObject(i) && (local ? !i.machine : isObject(i.machine) && i.machine.id === machineId));
 }
 
 /**
@@ -294,7 +294,7 @@ export function statCards(reading, { local, sessions = null, alerts = [], now = 
     cards.push({ id: 'docker', label: 'Docker', icon: 'container', value: f0.format(docker.running + docker.stopped), unit: null, sub, tone: 'ok' });
   }
   if (sessions) {
-    const urgent = sessions.filter((i) => i.nivel === 'precisa').length;
+    const urgent = sessions.filter((i) => i.level === 'needs').length;
     cards.push({ id: 'sessions', label: local ? 'Sessões' : 'Sessões lá', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub: urgent ? `${urgent} ${urgent === 1 ? 'precisa' : 'precisam'} de você` : sessions.length ? 'na sua vez' : 'ninguém esperando você', tone: 'session' });
   }
   return cards;
@@ -563,15 +563,15 @@ export function bandText(machine, reading, now = Date.now()) {
 
 /** The pill of a session in the attention list: with error, needing you, or your turn. */
 export function sessionPill(item) {
-  if (item.motivo === 'erro') return ['b-error', 'Com erro'];
-  if (item.nivel === 'precisa') return ['b-waiting', typeof item.motivoCurto === 'string' ? item.motivoCurto.slice(0, 40) : 'Esperando você'];
+  if (item.reason === 'error') return ['b-error', 'Com erro'];
+  if (item.level === 'needs') return ['b-waiting', typeof item.shortReason === 'string' ? item.shortReason.slice(0, 40) : 'Esperando você'];
   return ['b-active', 'Sua vez'];
 }
 
 /** "motor-de-regras · 2 min" under a session's name. */
 export function sessionMeta(item) {
-  const age = Number.isFinite(item.minutos) ? (item.minutos < 1 ? 'agora' : `${Math.round(item.minutos)} min`) : null;
-  return [typeof item.projeto === 'string' ? item.projeto.slice(0, 200) : null, age].filter(Boolean).join(' · ');
+  const age = Number.isFinite(item.minutes) ? (item.minutes < 1 ? 'agora' : `${Math.round(item.minutes)} min`) : null;
+  return [typeof item.project === 'string' ? item.project.slice(0, 200) : null, age].filter(Boolean).join(' · ');
 }
 
 /** The example `machines.json`, with the keys the core reads (src/telemetry/machines-config.ts). */
@@ -589,9 +589,9 @@ export const START_CORE_COMMAND = 'node packages/nucleo/src/dono/cli.ts subir';
 export function touchesMachine(changes, machineId) {
   const local = machineId === LOCAL_ID;
   return (changes ?? []).some((c) => {
-    if (!isObject(c) || typeof c.chave !== 'string') return false;
-    if (c.tipo === 'alert') return c.chave.startsWith(`${machineId}:`) || c.chave.endsWith(':machine-unreachable');
-    if (c.tipo === 'precisa-de-voce') return local || c.chave.startsWith(`${machineId}:`);
-    return local && c.tipo === 'sessao';
+    if (!isObject(c) || typeof c.key !== 'string') return false;
+    if (c.type === 'alert') return c.key.startsWith(`${machineId}:`) || c.key.endsWith(':machine-unreachable');
+    if (c.type === 'needs-you') return local || c.key.startsWith(`${machineId}:`);
+    return local && c.type === 'session';
   });
 }

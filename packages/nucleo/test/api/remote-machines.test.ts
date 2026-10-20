@@ -46,12 +46,12 @@ async function boot() {
     attention: attentionBody(
       [
         remoteItem('remota-1'),
-        remoteItem('remota-2', { nivel: 'sua-vez', motivo: 'sua-vez', motivoCurto: 'Sua vez', desde: '2026-11-02T11:00:00.000Z' }),
+        remoteItem('remota-2', { level: 'your-turn', reason: 'your-turn', shortReason: 'Sua vez', since: '2026-11-02T11:00:00.000Z' }),
         // A remote's own remote is not passed on, nor is an item without the shape.
         remoteItem('de-outra', { machine: { id: 'outra', label: 'Outra' } }),
-        { sessao: 'sem-forma' },
+        { session: 'sem-forma' },
       ],
-      { ativas: 2, comErro: 1 },
+      { active: 2, withError: 1 },
     ),
   });
   const remote = new RemoteMachine({
@@ -119,26 +119,26 @@ describe('#176/AC-6 the remote sessions in the attention response', () => {
     const { remote, get } = await boot();
     await remote.pollOnce();
     const r = (await (await get('/api/attention')).json()) as RespostaDaAtencao;
-    const remotes = r.itens.filter((i) => i.machine);
+    const remotes = r.items.filter((i) => i.machine);
     assert.deepEqual(
-      remotes.map((i) => [i.sessao, i.machine, i.local, i.nivel]),
+      remotes.map((i) => [i.session, i.machine, i.local, i.level]),
       [
-        ['remota-1', { id: 'ws-exemplo', label: 'Workstation' }, null, 'precisa'],
-        ['remota-2', { id: 'ws-exemplo', label: 'Workstation' }, null, 'sua-vez'],
+        ['remota-1', { id: 'ws-exemplo', label: 'Workstation' }, null, 'needs'],
+        ['remota-2', { id: 'ws-exemplo', label: 'Workstation' }, null, 'your-turn'],
       ],
     );
     // This machine's sessions are marked with no machine and keep their Desktop id.
-    assert.ok(r.itens.filter((i) => !i.machine).every((i) => i.machine === null));
+    assert.ok(r.items.filter((i) => !i.machine).every((i) => i.machine === null));
     assert.equal(r.total, 9);
-    assert.equal(r.precisam, 5);
-    assert.equal(r.suaVez, 4);
+    assert.equal(r.needs, 5);
+    assert.equal(r.yourTurn, 4);
     // Urgent first: the remote permission comes before every "sua vez", the remote one included.
-    const order = r.itens.map((i) => i.sessao);
+    const order = r.items.map((i) => i.session);
     assert.ok(order.indexOf('remota-1') < order.indexOf('erro'));
     assert.ok(order.indexOf('remota-2') > order.indexOf('erro'));
     // The remote's active and errored sessions add to this machine's (2 active, 1 with error).
-    assert.equal(r.ativas, 4);
-    assert.equal(r.comErro, 2);
+    assert.equal(r.active, 4);
+    assert.equal(r.withError, 2);
   });
 
   test('#176/AC-6 a remote that is down contributes no session', async () => {
@@ -148,39 +148,39 @@ describe('#176/AC-6 the remote sessions in the attention response', () => {
     remoteCore = null;
     await remote.pollOnce();
     const r = await montarAtencao(frota, null, [remote]);
-    assert.equal(r.itens.filter((i) => i.machine).length, 0);
+    assert.equal(r.items.filter((i) => i.machine).length, 0);
     assert.equal(r.total, 7);
   });
 });
 
 describe('#176/AC-6 remote attention items are untrusted', () => {
-  test('#176/AC-6 an item whose motivo is not a string or whose minutos is not finite is left out', () => {
+  test('#176/AC-6 an item whose reason is not a string or whose minutes is not finite is left out', () => {
     const machine = { id: 'ws-exemplo', label: 'Workstation' };
-    const body = attentionBody([remoteItem('ok'), remoteItem('array', { motivo: ['erro'] }), remoteItem('infinito', { minutos: Infinity })]);
-    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.sessao), ['ok']);
+    const body = attentionBody([remoteItem('ok'), remoteItem('array', { reason: ['error'] }), remoteItem('infinito', { minutes: Infinity })]);
+    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.session), ['ok']);
   });
 
   test('#176/AC-6 an account color that is not #rrggbb is not passed through', () => {
     const machine = { id: 'ws-exemplo', label: 'Workstation' };
-    const body = attentionBody([remoteItem('hex'), remoteItem('url', { conta: { rotulo: 'equipe', cor: 'url(//x.y/a)' } })]);
+    const body = attentionBody([remoteItem('hex'), remoteItem('url', { account: { label: 'equipe', color: 'url(//x.y/a)' } })]);
     const [hex, url] = remoteAttentionItems(body, machine);
-    assert.equal(hex.conta?.cor, '#3366ff');
-    assert.match(url.conta?.cor ?? '', /^#[0-9a-f]{6}$/i);
-    assert.notEqual(url.conta?.cor, 'url(//x.y/a)');
+    assert.equal(hex.account?.color, '#3366ff');
+    assert.match(url.account?.color ?? '', /^#[0-9a-f]{6}$/i);
+    assert.notEqual(url.account?.color, 'url(//x.y/a)');
   });
 
-  test('#176/AC-6 an item whose desde is not a date or whose minutos is negative is left out', () => {
+  test('#176/AC-6 an item whose since is not a date or whose minutes is negative is left out', () => {
     const machine = { id: 'ws-exemplo', label: 'Workstation' };
-    const body = attentionBody([remoteItem('ok'), remoteItem('sem-data', { desde: 'not a date' }), remoteItem('negativo', { minutos: -5 })]);
-    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.sessao), ['ok']);
+    const body = attentionBody([remoteItem('ok'), remoteItem('sem-data', { since: 'not a date' }), remoteItem('negativo', { minutes: -5 })]);
+    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.session), ['ok']);
   });
 
-  test('#176/AC-6 a remote adds at most 10000 to ativas and to comErro', async () => {
+  test('#176/AC-6 a remote adds at most 10000 to active and to withError', async () => {
     const { frota } = await boot();
     const local = await montarAtencao(frota, null, []);
-    const huge = { id: 'ws-exemplo', label: 'Workstation', attention: () => attentionBody([], { ativas: 1e15, comErro: 1e15 }) };
+    const huge = { id: 'ws-exemplo', label: 'Workstation', attention: () => attentionBody([], { active: 1e15, withError: 1e15 }) };
     const r = await montarAtencao(frota, null, [huge]);
-    assert.equal(r.ativas, local.ativas + 10_000);
-    assert.equal(r.comErro, local.comErro + 10_000);
+    assert.equal(r.active, local.active + 10_000);
+    assert.equal(r.withError, local.withError + 10_000);
   });
 });

@@ -252,7 +252,7 @@ function sessionsCard(items) {
     el(
       'ul',
       { class: 'tm-sessions' },
-      ...shown.map((i) => el('li', { 'data-session': String(i.sessao ?? '') }, el('div', { class: 'tm-session-name' }, el('b', {}, String(i.titulo || i.projeto || i.sessao || '')), el('small', { class: 'mono' }, sessionMeta(i))), pill(sessionPill(i)))),
+      ...shown.map((i) => el('li', { 'data-session': String(i.session ?? '') }, el('div', { class: 'tm-session-name' }, el('b', {}, String(i.title || i.project || i.session || '')), el('small', { class: 'mono' }, sessionMeta(i))), pill(sessionPill(i)))),
     ),
     rest > 0 ? el('p', { class: 'tm-muted tm-small' }, `e mais ${rest} · as que esperam também vão para a bandeja`) : null,
   );

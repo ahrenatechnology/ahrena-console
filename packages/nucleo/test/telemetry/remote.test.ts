@@ -11,10 +11,10 @@ import { loopbackGet, REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from '../../src/te
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert } from '../../src/telemetry/model.ts';
 import type { RemoteGet } from '../../src/telemetry/ports.ts';
-import { publishRemoteAttentionChanges, RemoteMachine, type RemoteMachineOptions } from '../../src/telemetry/remote.ts';
+import { englishAttentionBody, publishRemoteAttentionChanges, RemoteMachine, type RemoteMachineOptions } from '../../src/telemetry/remote.ts';
 import { publishAlertChanges } from '../../src/telemetry/sampler.ts';
 import { TelemetryService } from '../../src/telemetry/service.ts';
-import { attentionBody, closedPort, remoteItem, startFakeRemote, startMuteServer, type FakeRemote } from './fake-remote.ts';
+import { attentionBody, closedPort, oldAttentionBody, oldRemoteItem, remoteItem, startFakeRemote, startMuteServer, type FakeRemote } from './fake-remote.ts';
 import { reading, T0 } from './reading.ts';
 
 /** Short, and only for the servers that never answer or close at once, so they do not wait 3 s. */
@@ -239,7 +239,7 @@ describe('#176/AC-5 a remote going down and coming back', () => {
       since: '2026-11-02T12:00:00.000Z',
     });
     const wentDown = await cursor.aguardar(start, { timeoutMs: 0 });
-    assert.deepEqual(wentDown.mudancas.map((m) => [m.tipo, m.chave]).sort(), [
+    assert.deepEqual(wentDown.changes.map((m) => [m.type, m.key]).sort(), [
       ['alert', 'ws-exemplo:machine-unreachable'],
       ['alert', 'ws-exemplo:volume-full:/'],
     ]);
@@ -248,7 +248,7 @@ describe('#176/AC-5 a remote going down and coming back', () => {
     await remote.pollOnce();
     assert.deepEqual(tracker.active('ws-exemplo'), []);
     const cameBack = await cursor.aguardar(wentDown.cursor, { timeoutMs: 0 });
-    assert.deepEqual(cameBack.mudancas.map((m) => [m.tipo, m.chave, m.sessionId]), [['alert', 'ws-exemplo:machine-unreachable', null]]);
+    assert.deepEqual(cameBack.changes.map((m) => [m.type, m.key, m.sessionId]), [['alert', 'ws-exemplo:machine-unreachable', null]]);
   });
 
   test('#176/AC-5 the tunnel up and the núcleo down says so in the detail, with the label', async () => {
@@ -287,7 +287,7 @@ describe('#176/AC-5 the remote alerts are untrusted', () => {
     port = mute.port;
     await remote.pollOnce();
     const r = await cursor.aguardar(after, { timeoutMs: 0 });
-    assert.deepEqual(r.mudancas.map((m) => [m.tipo, m.chave]), [['alert', 'ws-exemplo:machine-unreachable']]);
+    assert.deepEqual(r.changes.map((m) => [m.type, m.key]), [['alert', 'ws-exemplo:machine-unreachable']]);
     assert.match(tracker.active('ws-exemplo')[0]!.detail!, /núcleo de lá não respondeu/);
   });
 });
@@ -298,15 +298,63 @@ describe('#176/AC-6 the remote sessions that need you', () => {
     const { remote, cursor } = setup(f.port);
     const start = cursor.atual;
     await remote.pollOnce();
-    assert.equal((remote.attention() as { itens: unknown[] }).itens.length, 1);
+    assert.equal((remote.attention() as { items: unknown[] }).items.length, 1);
     const entered = await cursor.aguardar(start, { timeoutMs: 0 });
-    assert.deepEqual(entered.mudancas.map((m) => [m.tipo, m.chave, m.sessionId, m.accountId]), [['precisa-de-voce', 'ws-exemplo:s1', null, null]]);
+    assert.deepEqual(entered.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['needs-you', 'ws-exemplo:s1', null, null]]);
 
     await f.close();
     cleanup.length = 0;
     await remote.pollOnce();
     assert.equal(remote.attention(), null);
     const left = await cursor.aguardar(entered.cursor, { timeoutMs: 0 });
-    assert.ok(left.mudancas.some((m) => m.tipo === 'precisa-de-voce' && m.chave === 'ws-exemplo:s1'));
+    assert.ok(left.changes.some((m) => m.type === 'needs-you' && m.key === 'ws-exemplo:s1'));
+  });
+});
+
+describe('#173 phase 2b: a remote núcleo from before the English keys', () => {
+  test('its Portuguese attention answer is kept as the English one, and its changes are published', async () => {
+    const f = await fake({ current: remoteReading(), attention: oldAttentionBody([oldRemoteItem('s1')], { ativas: 3, comErro: 1 }) });
+    const { remote, cursor } = setup(f.port);
+    const start = cursor.atual;
+    await remote.pollOnce();
+    assert.deepEqual(remote.attention(), {
+      active: 3,
+      withError: 1,
+      items: [
+        {
+          session: 's1',
+          title: 'Sessão s1',
+          project: 'projeto-exemplo',
+          account: { label: 'equipe', color: '#3366ff' },
+          level: 'needs',
+          reason: 'permission',
+          longReason: 'pede permissão para usar Bash',
+          since: '2026-11-02T11:55:00.000Z',
+          minutes: 5,
+          local: 'local_00000000-0000-4000-8000-000000000009',
+          machine: null,
+        },
+      ],
+    });
+    const entered = await cursor.aguardar(start, { timeoutMs: 0 });
+    assert.deepEqual(entered.changes.map((m) => [m.type, m.key]), [['needs-you', 'ws-exemplo:s1']]);
+  });
+
+  test('every old level and reason reads as the new one; an English body and unknown values pass untouched', () => {
+    const levels = { precisa: 'needs', 'sua-vez': 'your-turn' };
+    const reasons = { permissao: 'permission', pergunta: 'question', plano: 'plan', decisao: 'decision', erro: 'error', 'sua-vez': 'your-turn', interrompida: 'interrupted', 'no-prompt': 'no-prompt', outro: 'outro' };
+    for (const [old, now] of Object.entries(levels)) {
+      const r = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { nivel: old })])) as { items: { level: string }[] };
+      assert.equal(r.items[0]!.level, now, old);
+    }
+    for (const [old, now] of Object.entries(reasons)) {
+      const r = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { motivo: old })])) as { items: { reason: string }[] };
+      assert.equal(r.items[0]!.reason, now, old);
+    }
+    const english = attentionBody([remoteItem('s1')]);
+    assert.equal(englishAttentionBody(english), english);
+    const oldNoAccount = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { conta: null }), 'not an item'])) as { items: unknown[] };
+    assert.equal((oldNoAccount.items[0] as { account: unknown }).account, null);
+    assert.equal(oldNoAccount.items[1], 'not an item');
   });
 });

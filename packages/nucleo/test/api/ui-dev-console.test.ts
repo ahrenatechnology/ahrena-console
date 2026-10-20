@@ -227,10 +227,10 @@ describe('Dev Console: pure parts', () => {
   });
 
   test('#179 live: only session, state, needs-you and decision changes re-read the screen', () => {
-    assert.equal(touchesDevConsole([{ tipo: 'sessao' }]), true);
-    assert.equal(touchesDevConsole([{ tipo: 'conta' }, { tipo: 'decisao' }]), true);
-    assert.equal(touchesDevConsole([{ tipo: 'precisa-de-voce' }]), true);
-    assert.equal(touchesDevConsole([{ tipo: 'conta' }, { tipo: 'plano' }]), false);
+    assert.equal(touchesDevConsole([{ type: 'session' }]), true);
+    assert.equal(touchesDevConsole([{ type: 'account' }, { type: 'decision' }]), true);
+    assert.equal(touchesDevConsole([{ type: 'needs-you' }]), true);
+    assert.equal(touchesDevConsole([{ type: 'account' }, { type: 'plan' }]), false);
     assert.equal(touchesDevConsole(null), false);
   });
 });
@@ -415,11 +415,11 @@ describe('Dev Console mounted on the simulator data', () => {
     const m = mount(readerOf(() => devConsole));
     await m.ready;
     const before = m.reads.length;
-    m.change([{ tipo: 'conta' }]);
+    m.change([{ type: 'account' }]);
     await new Promise((r) => setTimeout(r, 450));
     assert.equal(m.reads.length, before);
-    m.change([{ tipo: 'decisao' }]);
-    m.change([{ tipo: 'sessao' }]);
+    m.change([{ type: 'decision' }]);
+    m.change([{ type: 'session' }]);
     await until(() => m.reads.length === before + 2);
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(m.reads.length, before + 2, 'two changes in a row read once (overview and context)');
@@ -531,7 +531,7 @@ describe('Dev Console mounted on the simulator data', () => {
     const gate = new Promise<void>((r) => (release = r));
     const read = readerOf(() => devConsole);
     const m = mount(async (r) => (await gate, read(r)));
-    m.change([{ tipo: 'sessao' }]);
+    m.change([{ type: 'session' }]);
     m.leave();
     release();
     await m.ready.catch(() => {});

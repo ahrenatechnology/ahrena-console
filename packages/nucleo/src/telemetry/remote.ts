@@ -124,16 +124,56 @@ export function remoteAlerts(v: unknown): Alert[] {
   return out;
 }
 
+// A remote núcleo released before #173 phase 2b answers `/api/attention` with the Portuguese body
+// (the one the old `/api/atencao` keeps until phase 6): `itens[{ sessao, titulo, projeto, conta {
+// rotulo, cor }, nivel, motivo, motivoLongo, desde, minutos, local, machine }]`, `ativas`, `comErro`.
+// `englishAttentionBody` reads it as the English one, so the attention route and the changes read one
+// shape; a body that already has `items` passes untouched.
+const OLD_ATTENTION_LEVELS: Readonly<Record<string, string>> = { precisa: 'needs', 'sua-vez': 'your-turn' };
+const OLD_ATTENTION_REASONS: Readonly<Record<string, string>> = {
+  permissao: 'permission',
+  pergunta: 'question',
+  plano: 'plan',
+  decisao: 'decision',
+  erro: 'error',
+  'sua-vez': 'your-turn',
+  interrompida: 'interrupted',
+};
+const englishValue = (map: Readonly<Record<string, string>>, v: unknown) => (typeof v === 'string' && Object.hasOwn(map, v) ? map[v] : v);
+
+/** A remote attention answer with the English keys and values (src/api/rota-atencao.ts `RespostaDaAtencao`). */
+export function englishAttentionBody(body: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(body.items) || !Array.isArray(body.itens)) return body;
+  const items = body.itens.slice(0, 200).map((i) =>
+    isObject(i)
+      ? {
+          session: i.sessao,
+          title: i.titulo,
+          project: i.projeto,
+          account: isObject(i.conta) ? { label: i.conta.rotulo, color: i.conta.cor } : i.conta,
+          level: englishValue(OLD_ATTENTION_LEVELS, i.nivel),
+          reason: englishValue(OLD_ATTENTION_REASONS, i.motivo),
+          longReason: i.motivoLongo,
+          since: i.desde,
+          minutes: i.minutos,
+          local: i.local,
+          machine: i.machine,
+        }
+      : i,
+  );
+  return { active: body.ativas, withError: body.comErro, items };
+}
+
 /** The sessions in a remote attention answer and the reason of each (for what entered, left or changed). */
 function attentionSessions(body: unknown): Map<string, string> {
-  const items = isObject(body) && Array.isArray(body.itens) ? body.itens.slice(0, 200) : [];
+  const items = isObject(body) && Array.isArray(body.items) ? body.items.slice(0, 200) : [];
   const out = new Map<string, string>();
   for (const i of items) {
     // The same basic checks as the attention route's `remoteAttentionItems`, and the same 128-char
     // session id, so a published change always matches an item the route serves.
-    if (!isObject(i) || typeof i.sessao !== 'string' || !i.sessao || typeof i.motivo !== 'string' || typeof i.nivel !== 'string' || !isNumber(i.minutos)) continue;
+    if (!isObject(i) || typeof i.session !== 'string' || !i.session || typeof i.reason !== 'string' || typeof i.level !== 'string' || !isNumber(i.minutes)) continue;
     if (i.machine !== null && i.machine !== undefined) continue;
-    out.set(i.sessao.slice(0, 128), i.motivo);
+    out.set(i.session.slice(0, 128), i.reason);
   }
   return out;
 }
@@ -228,7 +268,7 @@ export class RemoteMachine implements MachineEntry {
       }
       alerts = remoteAlerts(t.body.alerts);
       const a = await get(this.port, REMOTE_ATTENTION_PATH);
-      attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? a.body : null;
+      attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? englishAttentionBody(a.body) : null;
     }
     if (next.state === 'unreachable' && next.reason) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
 
@@ -265,11 +305,11 @@ export class RemoteMachine implements MachineEntry {
 }
 
 /**
- * Publishes each remote session that enters or leaves the attention list as `precisa-de-voce`, with
+ * Publishes each remote session that enters or leaves the attention list as `needs-you`, with
  * the key `<machine>:<session>`; no local session or account, since the session is not this Mac's.
  */
 export function publishRemoteAttentionChanges(cursor: CursorDeMudancas): (change: RemoteSessionChange) => void {
   return ({ machineId, sessionId }) => {
-    cursor.registrar({ tipo: 'precisa-de-voce', chave: `${machineId}:${sessionId}`, sessionId: null, accountId: null });
+    cursor.registrar({ type: 'needs-you', key: `${machineId}:${sessionId}`, sessionId: null, accountId: null });
   };
 }

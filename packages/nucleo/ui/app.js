@@ -76,7 +76,7 @@ startLive({
   onRestart: restart,
   onChange(changes) {
     // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
-    if (changes.some((c) => c.tipo === 'alert')) readMachines();
+    if (changes.some((c) => c.type === 'alert')) readMachines();
     for (const f of listeners.change) f(changes);
   },
 });
