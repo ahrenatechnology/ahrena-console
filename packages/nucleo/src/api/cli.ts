@@ -111,8 +111,9 @@ const AJUDA = `Uso: npm run api -- [opções]
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
-                      projeto (/api/project) responde 503 e os repositórios (/api/repos) e as
-                      instruções dos agentes (/api/agent-instructions) respondem "sem-github"
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos), as
+                      instruções dos agentes (/api/agent-instructions) e as ADRs e PDRs
+                      (/api/adrs, /api/pdrs) respondem "no-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do

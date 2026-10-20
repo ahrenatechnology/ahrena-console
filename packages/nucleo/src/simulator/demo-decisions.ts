@@ -1,17 +1,17 @@
-// The demo's decision records (#174, wireframes C28 to C31 and C38): ADRs and PDRs in several formats,
-// in the demo repositories of the fake GitHub (fake-github.ts). Synthetic: no client, no real person,
-// no internal infrastructure. The text of each record is in the repository's language (painel-de-metricas
-// and cli-de-notas write in English); only the screen is pt-BR.
+// Os registros de decisão da demo (#174, wireframes C28 a C31 e C38): ADRs e PDRs em vários formatos,
+// nos repositórios da demo do GitHub falso (fake-github.ts). Sintéticos: nenhum cliente, nenhuma pessoa
+// real, nenhuma infraestrutura interna. O texto de cada registro fica na língua do repositório
+// (painel-de-metricas e cli-de-notas escrevem em inglês); só a tela é pt-BR.
 //
-// - `exemplo-labs/motor-de-regras`: docs/adr, MADR 4, nine ADRs with the chain 0005 → 0007 → 0008, an
-//   obsolete one and one without consequences;
-// - `exemplo-labs/vitrine-demo`: docs/decisoes, a mixed folder in free pt-BR: ADRs and two PDRs
-//   separated by the field "Tipo: produto";
-// - `exemplo-labs/painel-de-metricas`: doc/adr, adr-tools (Nygard), in English, one rejected;
-// - `estudio-ficticio/app-receitas`: docs/decisions with a Y-statement and an incomplete ADR (no status,
-//   no date), and docs/product-decisions, a PDR-only folder in MADR 4 with a supersede chain;
-// - `dev-sintetico/cli-de-notas`: adr/, the adr-tools first record;
-// - the other three: no decision folder (the "Sem ADR em 3 repositórios" line).
+// - `exemplo-labs/motor-de-regras`: docs/adr, MADR 4, nove ADRs com a cadeia 0005 → 0007 → 0008, uma
+//   obsoleta e uma sem consequências;
+// - `exemplo-labs/vitrine-demo`: docs/decisoes, pasta mista em pt-BR livre: ADRs e duas PDRs separadas
+//   pelo campo "Tipo: produto";
+// - `exemplo-labs/painel-de-metricas`: doc/adr, adr-tools (Nygard), em inglês, com uma rejeitada;
+// - `estudio-ficticio/app-receitas`: docs/decisions com um Y-statement e uma ADR incompleta (sem status
+//   e sem data), e docs/product-decisions, pasta só de PDR em MADR 4, com uma cadeia de substituição;
+// - `dev-sintetico/cli-de-notas`: adr/, o primeiro registro do adr-tools;
+// - os outros três: nenhuma pasta de decisão (a linha "Sem ADR em 3 repositórios").
 
 const madr4 = (o: { status: string; date: string; makers: string; consulted?: string; informed?: string; title: string; context: string; drivers?: string[]; options: string[]; chosen: string; because: string; good: string[]; bad: string[]; confirmation?: string; pros?: Record<string, { good: string[]; bad: string[] }>; more?: string }) =>
   [
@@ -203,7 +203,7 @@ const notas: Record<string, string> = {
   'adr/0001-record-architecture-decisions.md': nygard({ n: 1, title: 'Record architecture decisions', date: '2026-01-05', status: 'Accepted', context: 'We need to record the architectural decisions made on this project.', decision: 'We will use Architecture Decision Records.', consequences: 'New contributors can read why things are the way they are.' }),
 };
 
-/** The decision files of each demo repository, path → text, added to its other files. */
+/** Os arquivos de decisão de cada repositório da demo, caminho → texto, somados aos outros arquivos dele. */
 export const DEMO_DECISION_FILES: Record<string, Record<string, string>> = {
   'exemplo-labs/motor-de-regras': motor,
   'exemplo-labs/vitrine-demo': vitrine,

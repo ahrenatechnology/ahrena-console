@@ -128,6 +128,8 @@ describe('/ui no núcleo', () => {
   const LINK_TARGETS: Record<string, string[]> = {
     'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
+    // ADR e PDR (#174): "Como escrever uma ADR", no vazio.
+    'screens/adrs-common.js': ['https://adr.github.io/'],
   };
   const externalUrls = (file: string, text: string) => {
     const allowed = LINK_TARGETS[file] ?? [];
@@ -253,19 +255,26 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Das sessões; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, Analytics, Workflows e Histórico; em Entrega Repositórios, o Kanban do projeto e Dev Console; em Decisões, Das sessões, ADR e PDR; em Máquinas Esta máquina e, em Controle, Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
         ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'analytics', 'workflows', 'history']],
         ['delivery', 'Entrega', ['repos', 'project', 'dev-console']],
-        ['decisions', 'Decisões', ['decisions']],
+        ['decisions', 'Decisões', ['decisions', 'adrs', 'pdrs']],
         ['machines', 'Máquinas', ['this-machine']],
         ['control', 'Controle', ['agent-config']],
       ],
     );
     assert.equal(findScreen('/ui/decisions').screen.file, '/ui/screens/decisions.js');
+    // ADR e PDR (#174): a mesma tela de lista; o registro aberto acende o item do tipo.
+    assert.equal(findScreen('/ui/adrs').screen.file, '/ui/screens/adrs.js');
+    assert.equal(findScreen('/ui/pdrs').screen.file, '/ui/screens/adrs.js');
+    const adr = findScreen('/ui/adrs/exemplo-labs/motor-de-regras/0008-regras-em-tabela');
+    assert.deepEqual([adr.screen.id, adr.screen.highlights, adr.params], ['adr', 'adrs', { owner: 'exemplo-labs', repo: 'motor-de-regras', id: '0008-regras-em-tabela' }]);
+    assert.equal(findScreen('/ui/pdrs/a/b/PDR-001-x').screen.highlights, 'pdrs');
+    assert.equal(findScreen('/ui/repos/a/b/adrs').screen.id, 'repo-tab');
     assert.equal(findScreen('/ui/wall').screen.id, 'wall');
     assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');
     assert.equal(findScreen('/ui/feed').screen.file, '/ui/screens/feed.js');

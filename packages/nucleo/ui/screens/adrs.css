@@ -1,0 +1,193 @@
+/* ADR e PDR (C28 a C31 e C38, issue 174): a lista geral, o registro aberto e a aba do repositório.
+   Toda classe própria tem o prefixo `adr-`. Nada rola na horizontal em 1100: as grades dividem a
+   largura com `minmax(0, …)` e os textos longos cortam com reticências. */
+
+.adr-muted { color: var(--muted); }
+.adr-small { font-size: 11.5px; }
+.adr-accent { color: var(--accent-text); display: inline-flex; vertical-align: middle; }
+.adr-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.adr-old { color: var(--muted); }
+.adr-tone-accent { color: var(--accent-text); }
+.adr-tone-ok { color: var(--status-completed-text); }
+.adr-tone-wait { color: var(--status-waiting-text); }
+.adr-tone-error { color: var(--status-error-text); }
+.adr-tone-muted { color: var(--muted); }
+.adr-none { margin: 0; padding: 14px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- o status ---------- */
+.adr-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; flex: none; }
+.adr-pill[data-status="accepted"] { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.adr-pill[data-status="proposed"] { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.adr-pill[data-status="superseded"], .adr-pill[data-status="deprecated"] { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.adr-pill[data-status="rejected"] { background: var(--status-error-badge); color: var(--status-error-text); }
+.adr-pill[data-status="unknown"] { background: var(--raised); color: var(--muted); border: 1px solid var(--border); font-weight: var(--weight-medium); }
+.adr-kind { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--border); }
+.adr-kind[data-kind="pdr"] { color: var(--accent-text); }
+
+.adr-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; white-space: nowrap; padding: 0 9px; border-radius: 7px; font-size: 11.5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); max-width: 100%; min-width: 0; }
+.adr-chip .icon { flex: none; }
+a.adr-chip:hover { color: var(--text); }
+
+/* ---------- a faixa do GitHub limitado (C31) ---------- */
+.adr-bands { display: flex; flex-direction: column; gap: 8px; }
+.adr-bands:empty { display: none; }
+.adr-band { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--status-waiting-text) 55%, var(--border)); background: var(--status-waiting-badge); font-size: 12.5px; }
+.adr-band > .icon { color: var(--status-waiting-text); flex: none; font-size: 16px; }
+.adr-band p { margin: 0; flex: 1; min-width: 0; line-height: 1.5; }
+.adr-band b { color: var(--status-waiting-text); }
+
+/* ---------- os cards do topo (C28) ---------- */
+.adr-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.adr-stat { position: relative; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.adr-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); }
+.adr-stat-ic { position: absolute; top: 12px; right: 12px; font-size: 16px; }
+.adr-stat-v { font-size: 22px; font-weight: var(--weight-semibold); line-height: 1.2; }
+.adr-stat-s { font-size: 11.5px; color: var(--muted); }
+
+/* ---------- os filtros ---------- */
+.adr-filters { padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; min-width: 0; }
+.adr-filters-row { flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.adr-field { flex: 1 1 300px; display: flex; gap: 8px; align-items: center; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; min-width: 0; }
+.adr-field input { flex: 1; min-width: 0; height: 100%; padding: 0; background: none; border: 0; color: var(--text); font: inherit; outline: none; }
+.adr-field input::placeholder { color: var(--muted); }
+.adr-field:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.adr-select { height: 34px; width: 190px; max-width: 100%; padding: 0 10px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font: inherit; font-size: 12.5px; }
+.adr-sort { margin-left: auto; width: 200px; color: var(--muted); }
+.adr-status-slot { min-width: 0; }
+
+.adr-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); max-width: 100%; }
+.adr-seg button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 7px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.adr-seg button:hover { color: var(--text); }
+.adr-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); font-weight: var(--weight-medium); }
+.adr-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- os grupos e as linhas ---------- */
+.adr-groups { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.adr-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.adr-group-head { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); min-width: 0; }
+.adr-group-repo { color: var(--text); font-size: 12.5px; font-weight: var(--weight-semibold); white-space: nowrap; }
+.adr-group-repo:hover { color: var(--accent-text); }
+.adr-group-meta { flex: 1; }
+.adr-group-more { margin-left: auto; color: var(--accent-text); font-weight: var(--weight-medium); white-space: nowrap; }
+.adr-list { overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.adr-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 86px 16px; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text); min-width: 0; }
+.adr-row:last-child { border-bottom: 0; }
+.adr-row:hover { background: var(--raised); }
+.adr-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.adr-row-n { font-size: 11.5px; color: var(--muted); }
+.adr-row-t { display: flex; flex-direction: column; min-width: 0; }
+.adr-row-t b { font-weight: var(--weight-medium); }
+.adr-row-note { font-size: 11px; color: var(--muted); }
+.adr-row-s { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-start; min-width: 96px; }
+.adr-row-wide { display: none; font-size: 11.5px; color: var(--muted); }
+.adr-row-d { font-size: 11px; color: var(--muted); text-align: right; }
+.adr-row-go { color: var(--muted); display: inline-flex; }
+/* Em 1440 a linha ganha a coluna das ligações e do que falta; em 1100 isso fica embaixo do título. */
+@media (min-width: 1300px) {
+  .adr-groups .adr-row { grid-template-columns: 44px minmax(0, 1fr) auto 240px 86px 16px; }
+  .adr-groups .adr-row-wide { display: block; }
+  .adr-groups .adr-row-note { display: none; }
+}
+
+.adr-without { padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--muted); min-width: 0; }
+.adr-without b { color: var(--text); font-weight: var(--weight-medium); }
+.adr-without-text { flex: 1; min-width: 0; }
+.adr-folders { margin-left: auto; }
+.adr-folders summary { cursor: pointer; color: var(--accent-text); list-style: none; white-space: nowrap; }
+.adr-folders summary::-webkit-details-marker { display: none; }
+.adr-folders p { margin: 8px 0 0; line-height: 1.7; }
+.adr-folders[open] { flex-basis: 100%; }
+.adr-folders code, .adr-empty code { font-family: var(--font-mono); font-size: 11.5px; }
+
+/* ---------- a cadeia de substituição ---------- */
+.adr-chain { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.adr-chain + .adr-chain { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.adr-chain-by { display: inline-flex; gap: 4px; align-items: center; padding-left: 14px; font-size: 11px; color: var(--muted); }
+.adr-node { display: flex; flex-direction: column; gap: 3px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); color: var(--text); min-width: 0; }
+.adr-node:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.adr-node-here { border-color: var(--accent); }
+.adr-node-top { display: flex; gap: 8px; align-items: center; font-size: 11px; min-width: 0; }
+.adr-node-pill { margin-left: auto; }
+.adr-node-title { font-size: 12px; }
+
+/* ---------- a aba do repositório (C29) ---------- */
+.adr-repo { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adr-repo-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adr-kind-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.adr-kind-hint { font-size: 12px; min-width: 0; }
+.adr-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.adr-repo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; align-items: start; min-width: 0; }
+.adr-repo-grid .adr-row { grid-template-columns: 44px minmax(0, 1fr) auto 86px 16px; }
+.adr-where { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.adr-where b { color: var(--text); font-weight: var(--weight-medium); }
+.adr-empty { min-height: 300px; }
+.adr-empty p { max-width: 60ch; }
+@media (max-width: 900px) {
+  .adr-repo-grid { grid-template-columns: minmax(0, 1fr); }
+  .adr-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- o registro aberto (C30) ---------- */
+.adr-record { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adr-head { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.adr-head-l1 { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.adr-head-l1 h1 { margin: 0; font-size: 19px; font-weight: var(--weight-semibold); min-width: 0; }
+.adr-head-n { font-size: 15px; color: var(--muted); }
+.adr-back { color: var(--muted); font-size: 18px; display: inline-flex; }
+.adr-back:hover { color: var(--text); }
+.adr-head-r { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.adr-gh-long { display: none; }
+@media (min-width: 1300px) { .adr-gh-long { display: inline; } }
+.adr-chips { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 28px; min-width: 0; }
+
+.adr-links { padding: 10px 14px; display: flex; gap: 10px 24px; flex-wrap: wrap; align-items: center; font-size: 12.5px; min-width: 0; }
+.adr-links > .icon { color: var(--muted); }
+.adr-link { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--text); }
+.adr-link:hover .adr-trunc { text-decoration: underline; }
+.adr-link-kind { white-space: nowrap; }
+.adr-conflict { display: inline-flex; gap: 6px; align-items: center; color: var(--status-waiting-text); font-size: 12px; flex-basis: 100%; }
+
+.adr-body { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; align-items: start; min-width: 0; }
+@media (min-width: 1300px) { .adr-body { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (max-width: 900px) { .adr-body { grid-template-columns: minmax(0, 1fr); } }
+.adr-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adr-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adr-sec { padding: 14px 16px; font-size: 12.5px; display: flex; flex-direction: column; gap: 8px; min-width: 0; scroll-margin-top: 16px; }
+.adr-sec-ttl { margin: 0; display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: var(--weight-semibold); }
+.adr-sec-ttl .icon { color: var(--muted); }
+.adr-sec-r { margin-left: auto; font-size: 11.5px; font-weight: var(--weight-regular); color: var(--muted); }
+.adr-p { margin: 0; font-size: 12.5px; line-height: 1.6; }
+.adr-ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
+.adr-decision { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.adr-chosen { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; }
+.adr-missing { border-style: dashed; background: var(--bg); }
+.adr-missing-text, .adr-dash { margin: 0; color: var(--muted); font-size: 12px; font-style: italic; }
+.adr-dash { border: 1px dashed var(--border); border-radius: 6px; padding: 0 6px; justify-self: start; }
+
+.adr-opts { display: flex; flex-direction: column; }
+.adr-opt { border-top: 1px solid var(--border); }
+.adr-opt summary { list-style: none; cursor: pointer; }
+.adr-opt summary::-webkit-details-marker { display: none; }
+.adr-opt-line { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 12.5px; }
+.adr-opt-chosen { font-weight: var(--weight-medium); }
+.adr-opt-count { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.adr-opt[open] .adr-opt-count .icon { transform: rotate(180deg); }
+.adr-opt .adr-two { padding: 0 0 10px 30px; }
+.adr-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.adr-two .eyebrow { margin-bottom: 4px; }
+
+.adr-other { padding: 10px 14px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.adr-other summary { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.adr-other summary::-webkit-details-marker { display: none; }
+.adr-other[open] summary .icon { transform: rotate(90deg); }
+.adr-other-sec { color: var(--text); padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--border); }
+.adr-other-sec h3 { margin: 0 0 6px; font-size: 12.5px; font-weight: var(--weight-semibold); }
+
+.adr-side-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.adr-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; font-size: 12px; align-items: center; }
+.adr-status-raw { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.adr-status-raw .mono { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.adr-toc a { font-size: 12px; color: var(--muted); }
+.adr-toc a:hover { color: var(--text); }
+.adr-toc .adr-toc-missing { text-decoration: line-through dashed; }
+.adr-markdown { padding: 16px 18px; min-width: 0; overflow-wrap: anywhere; }

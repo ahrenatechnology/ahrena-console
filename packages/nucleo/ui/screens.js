@@ -10,7 +10,7 @@
 
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
 // Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
-// and, later, the architecture (ADR) and product (PDR) records.
+// and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
 export const SECTIONS = [
   { id: 'main', label: null },
   { id: 'delivery', label: 'Entrega' },
@@ -166,6 +166,45 @@ export const SCREENS = [
     sub: 'O que você e os agentes decidiram, em todas as sessões',
     icon: 'decision',
     file: '/ui/screens/decisions.js', // issue 103
+  },
+  {
+    // As decisões de arquitetura dos repositórios da conta (C28, issue 174).
+    id: 'adrs',
+    route: '/ui/adrs',
+    item: { label: 'ADR', icon: 'scroll-text', section: 'decisions' },
+    title: 'ADR',
+    sub: 'Decisões de arquitetura dos repositórios da sua conta',
+    icon: 'scroll-text',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // As decisões de produto (C38): a mesma tela, com outro rótulo.
+    id: 'pdrs',
+    route: '/ui/pdrs',
+    item: { label: 'PDR', icon: 'lightbulb', section: 'decisions' },
+    title: 'PDR',
+    sub: 'Decisões de produto dos repositórios da sua conta',
+    icon: 'lightbulb',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // Um registro aberto (C30): /ui/adrs/<owner>/<repo>/<id>; acende ADR.
+    id: 'adr',
+    route: '/ui/adrs/:owner/:repo/:id',
+    highlights: 'adrs',
+    title: 'ADR',
+    sub: null,
+    icon: 'scroll-text',
+    file: '/ui/screens/adr-record.js',
+  },
+  {
+    id: 'pdr',
+    route: '/ui/pdrs/:owner/:repo/:id',
+    highlights: 'pdrs',
+    title: 'PDR',
+    sub: null,
+    icon: 'lightbulb',
+    file: '/ui/screens/adr-record.js',
   },
   {
     // This machine (C24, issue 178): always in the sidebar, before the remote ones.

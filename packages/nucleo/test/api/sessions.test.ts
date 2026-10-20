@@ -302,7 +302,7 @@ describe('#28 a tela Sessões', () => {
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     // The machine screens (issue 178): `tm-`.
-    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-']] as const) {
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

@@ -781,7 +781,7 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
 const withFiles = (repo: FakeRepo): FakeRepo => {
   const key = `${repo.owner}/${repo.name}`;
   const extra = DEMO_INSTRUCTION_FILES[key];
-  // The decision records (#174) join the instruction files; a repository without either keeps only its README.
+  // Os registros de decisão (#174) somam-se aos arquivos de instrução; sem nenhum dos dois, fica só o README.
   const decisions = DEMO_DECISION_FILES[key];
   if (!extra && !decisions) return repo;
   const files = { ...(extra?.files ?? { 'README.md': `# ${repo.name}\n` }), ...decisions };
