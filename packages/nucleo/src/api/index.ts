@@ -8,3 +8,4 @@ export { ResumosDeSessao, aplicarEvento, iniciosDosTurnos, resumoVazio, type Res
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './trabalho.ts';
 export { iniciarApiLocal, VERSAO_DA_API, type ApiLocal, type OpcoesDaApi } from './servidor.ts';
 export { criarRotaDoProjeto, quadroDe, mesmaOrigemMovendo, type CardDoProjeto, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from './projeto.ts';
+export { montarAtencao, MOTIVO_CURTO, ROTA_DA_ATENCAO, type ItemDaAtencao, type RespostaDaAtencao } from './rota-atencao.ts';

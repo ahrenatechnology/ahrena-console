@@ -1,0 +1,15 @@
+{
+  "name": "ahrena-console-desktop",
+  "version": "0.0.1",
+  "private": true,
+  "description": "App desktop do Ahrena Console: a bandeja na barra de menus (decisão 0005)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "tauri": "tauri",
+    "icones": "tauri icon ../../docs/brand/logo-laranja.svg -o src-tauri/icons",
+    "build": "tauri build --bundles app,dmg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}

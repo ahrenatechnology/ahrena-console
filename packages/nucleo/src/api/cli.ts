@@ -294,6 +294,7 @@ const api: ApiLocal = await iniciarApiLocal({
   commit,
   mudancas,
   projeto: { kanban, fonte: demo ? 'demo' : 'github', log },
+  frota: mcp.frota,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
