@@ -24,6 +24,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/mcp/](src/mcp/README.md) | Servidor MCP em `/mcp` e por stdio: `sessions_needing_attention` e `fleet_overview` (#21) |
 | [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
+| [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
 
 ## API local
@@ -50,6 +51,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `POST /api/hooks` | O receptor de hooks, na mesma porta |
 | `POST /mcp` | O servidor MCP ([src/mcp](src/mcp/README.md)); `npm run mcp` dá o mesmo por stdio |
 | `GET /api/mudancas?desde=<cursor>&espera=<s>` | Long polling: responde quando algo muda ou no timeout (item 2.4, seção abaixo) |
+| `GET /api/historico?antes=<AAAA-MM-DD>&dias=<N>&busca=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?antes=` na próxima página. `dias` padrão 7, máximo 31; `busca` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
 
 `?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa.
@@ -62,6 +64,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [trabalho.ts](src/api/trabalho.ts) | Issue e PR pelo nome do branch, com o cache do GitHub (decisão 0001), sem o pedido esperar o GitHub |
 | [indice-desktop.ts](src/api/indice-desktop.ts) | Índice do Claude Desktop: título, branch, sessão mãe (`spawnedFrom`) e conta pela pasta, relido só quando muda |
 | [contas.ts](src/api/contas.ts) | A conta de cada sessão pela ordem da decisão 0006 e os rótulos de `~/.ahrena-console/contas.json` |
+| [historico.ts](src/api/historico.ts) | `GET /api/historico`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 

@@ -38,6 +38,8 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearHistoricoDoPainel } from '../simulador/historico.ts';
+import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
 import { MontadorDoPainel } from './painel.ts';
@@ -222,7 +224,11 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  await semearHistoricoDoPainel(storage, decisoes, cenario);
 }
+
+// O histórico das sessões encerradas (#33), com o título do índice do Desktop quando há.
+const historico = new HistoricoDeSessoes({ storage, decisoes, tituloDe: (s) => desktop?.sessaoPorCli(s.id)?.titulo ?? null });
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
 // rótulo. Relido a cada minuto, para pegar um `claude auth login` novo.
@@ -272,6 +278,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  historico,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

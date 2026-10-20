@@ -14,6 +14,7 @@
 // | `POST /api/decisoes/<id>/ajustar` e `/desfazer` | O ajuste escrito pela pessoa (`{ texto }`) e o Desfazer da última ação |
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
+// | `GET /api/historico`          | As sessões encerradas por dia (`?antes=`, `?dias=`, `?busca=`; api/historico.ts, #33) |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
@@ -35,6 +36,8 @@ import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
+import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
+import type { HistoricoDeSessoes } from '../historico/leitura.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 
 export { VERSAO_DA_API };
@@ -59,6 +62,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** As sessões encerradas por dia; liga `GET /api/historico` (#33). */
+  historico?: HistoricoDeSessoes;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -213,6 +218,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (url.pathname === ROTA_DO_HISTORICO) return responderHistorico(res, url, opts.historico);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,
