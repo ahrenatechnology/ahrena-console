@@ -72,91 +72,91 @@ describe('#97 workflowDaSessao: o grafo dos agentes da sessão', () => {
   test('#97/AC-1 cada agente é um nó com nome, tarefa, tempo e estado; o principal leva o modelo', () => {
     const w = workflowDaSessao(s, LACO, [], { agora: AGORA });
     assert.deepEqual(
-      w.nos.map((n) => [n.nome, n.rodada, n.tarefa, n.estado]),
+      w.nodes.map((n) => [n.name, n.round, n.task, n.state]),
       [
-        ['Principal', null, null, 'ativo'],
-        ['Explore', null, 'mapear o módulo', 'concluido'],
-        ['Plan', null, 'plano', 'concluido'],
-        ['dev', 1, 'implementa', 'concluido'],
-        ['review', 1, 'revisa o diff', 'concluido'],
-        ['dev', 2, 'corrige', 'concluido'],
-        ['review', 2, 'revisa a v2', 'ativo'],
-        ['test-runner', null, 'bateria', 'ativo'],
-        ['Explore', null, 'achar usos', 'ativo'],
+        ['Principal', null, null, 'active'],
+        ['Explore', null, 'mapear o módulo', 'completed'],
+        ['Plan', null, 'plano', 'completed'],
+        ['dev', 1, 'implementa', 'completed'],
+        ['review', 1, 'revisa o diff', 'completed'],
+        ['dev', 2, 'corrige', 'completed'],
+        ['review', 2, 'revisa a v2', 'active'],
+        ['test-runner', null, 'bateria', 'active'],
+        ['Explore', null, 'achar usos', 'active'],
       ],
     );
-    assert.equal(w.nos[0].modelo, 'claude-opus-5-5');
-    assert.equal(w.nos[1].modelo, null);
-    assert.equal(w.nos[0].duracaoMs, 28 * MIN);
-    assert.equal(w.nos[3].duracaoMs, 8 * MIN);
-    assert.equal(w.nos[6].duracaoMs, 6 * MIN, 'o que roda conta até agora');
-    assert.equal(w.duracaoMs, 28 * MIN);
+    assert.equal(w.nodes[0].model, 'claude-opus-5-5');
+    assert.equal(w.nodes[1].model, null);
+    assert.equal(w.nodes[0].durationMs, 28 * MIN);
+    assert.equal(w.nodes[3].durationMs, 8 * MIN);
+    assert.equal(w.nodes[6].durationMs, 6 * MIN, 'o que roda conta até agora');
+    assert.equal(w.durationMs, 28 * MIN);
   });
 
   test('#97/AC-1 #97/AC-2 as arestas: quem abriu, quem entregou e a volta do review para o dev', () => {
     const w = workflowDaSessao(s, LACO, [], { agora: AGORA });
     assert.deepEqual(
-      w.arestas.map((e) => [e.de.slice(3), e.para.slice(3), e.tipo, e.rotulo]),
+      w.edges.map((e) => [e.from.slice(3), e.to.slice(3), e.type, e.label]),
       [
-        ['main', 'ex1', 'abriu', null],
-        ['main', 'pl', 'abriu', null],
-        ['pl', 'd1', 'entregou', 'plano'],
-        ['d1', 'r1', 'entregou', 'diff'],
-        ['r1', 'd2', 'ajustes', 'ajustes'],
-        ['d2', 'r2', 'entregou', 'v2'],
-        ['d2', 'tr', 'entregou', null],
-        ['main', 'ex2', 'abriu', null],
+        ['main', 'ex1', 'opened', null],
+        ['main', 'pl', 'opened', null],
+        ['pl', 'd1', 'delivered', 'plano'],
+        ['d1', 'r1', 'delivered', 'diff'],
+        ['r1', 'd2', 'changes-requested', 'ajustes'],
+        ['d2', 'r2', 'delivered', 'v2'],
+        ['d2', 'tr', 'delivered', null],
+        ['main', 'ex2', 'opened', null],
       ],
     );
   });
 
   test('#97/AC-2 #97/AC-4 o review mostra a rodada e os ajustes; a sessão, as rodadas e o total de ajustes', () => {
     const w = workflowDaSessao(s, LACO, [], { agora: AGORA, pr: 90 });
-    const r1 = w.nos.find((n) => n.id === 's1:r1')!;
-    assert.deepEqual([r1.rodada, r1.ajustes], [1, 3]);
-    assert.equal(w.nos.find((n) => n.id === 's1:r2')!.ajustes, null, 'o review que ainda roda não disse');
-    assert.equal(w.nos.find((n) => n.id === 's1:d1')!.ajustes, null, 'só review pede ajustes');
-    assert.deepEqual([w.rodadasDeReview, w.ajustes], [2, 3]);
-    assert.equal(w.resumo, 'dev → review até aprovar · termina no PR #90');
+    const r1 = w.nodes.find((n) => n.id === 's1:r1')!;
+    assert.deepEqual([r1.round, r1.changesRequested], [1, 3]);
+    assert.equal(w.nodes.find((n) => n.id === 's1:r2')!.changesRequested, null, 'o review que ainda roda não disse');
+    assert.equal(w.nodes.find((n) => n.id === 's1:d1')!.changesRequested, null, 'só review pede ajustes');
+    assert.deepEqual([w.reviewRounds, w.changesRequested], [2, 3]);
+    assert.equal(w.summary, 'dev → review até aprovar · termina no PR #90');
   });
 
   test('#97/AC-2 um review que aprova (0 ajustes) não volta para o dev: o dev seguinte foi aberto pela sessão', () => {
     const agentes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 7, { metadata: { ajustes: 0 } }), sub('d2', 'general-purpose', 8, 9)];
     const w = workflowDaSessao(s, agentes, [], { agora: AGORA });
-    assert.deepEqual(w.arestas.find((e) => e.para === 's1:d2'), { de: 's1:main', para: 's1:d2', tipo: 'abriu', rotulo: null });
-    assert.equal(w.resumo, 'dev → review', 'aprovado na primeira rodada: sem laço');
-    assert.equal(w.ajustes, 0);
+    assert.deepEqual(w.edges.find((e) => e.to === 's1:d2'), { from: 's1:main', to: 's1:d2', type: 'opened', label: null });
+    assert.equal(w.summary, 'dev → review', 'aprovado na primeira rodada: sem laço');
+    assert.equal(w.changesRequested, 0);
   });
 
   test('#97/AC-1 o subagente aninhado sai do subagente que o disparou', () => {
     const agentes = [principal(), sub('gp', 'Explore', 0, 10), sub('ex', 'Explore', 1, 2, { parentAgentId: 's1:gp' })];
     const w = workflowDaSessao(s, agentes, [], { agora: AGORA });
-    assert.deepEqual(w.arestas.map((e) => [e.de, e.para]), [['s1:main', 's1:gp'], ['s1:gp', 's1:ex']]);
+    assert.deepEqual(w.edges.map((e) => [e.from, e.to]), [['s1:main', 's1:gp'], ['s1:gp', 's1:ex']]);
   });
 
   test('#97/AC-3 a linha do tempo tem uma faixa por agente, na escala da sessão; o mesmo rótulo junta os trechos', () => {
     const w = workflowDaSessao(s, LACO, [], { agora: AGORA });
-    assert.equal(w.linhaDoTempo.inicio, T0);
-    assert.equal(w.linhaDoTempo.fim, at(28), 'a sessão viva vai até agora');
-    assert.deepEqual(w.linhaDoTempo.faixas.map((f) => f.rotulo), ['Agente principal', 'Explore', 'Plan', 'dev · r1', 'review · r1', 'dev · r2', 'review · r2', 'test-runner']);
-    const explore = w.linhaDoTempo.faixas[1];
-    assert.deepEqual(explore.trechos.map((t) => [t.inicio, t.fim, t.estado]), [[at(0), at(2), 'concluido'], [at(26), null, 'ativo']]);
-    assert.equal(explore.noId, 's1:ex1');
+    assert.equal(w.timeline.start, T0);
+    assert.equal(w.timeline.end, at(28), 'a sessão viva vai até agora');
+    assert.deepEqual(w.timeline.lanes.map((f) => f.label), ['Agente principal', 'Explore', 'Plan', 'dev · r1', 'review · r1', 'dev · r2', 'review · r2', 'test-runner']);
+    const explore = w.timeline.lanes[1];
+    assert.deepEqual(explore.spans.map((t) => [t.start, t.end, t.state]), [[at(0), at(2), 'completed'], [at(26), null, 'active']]);
+    assert.equal(explore.nodeId, 's1:ex1');
   });
 
   test('sem subagentes, só o principal; sem review, resumo nulo; a sessão que acabou tem fim', () => {
     const fim = session({ status: 'completed', endedAt: at(10) });
     const w = workflowDaSessao(fim, [principal()], [], { agora: AGORA });
-    assert.deepEqual(w.nos.map((n) => [n.nome, n.estado, n.fim]), [['Principal', 'concluido', at(10)]]);
-    assert.deepEqual([w.arestas, w.resumo, w.rodadasDeReview, w.ajustes], [[], null, 0, 0]);
-    assert.equal(w.linhaDoTempo.fim, at(10));
-    assert.equal(w.duracaoMs, 10 * MIN);
+    assert.deepEqual(w.nodes.map((n) => [n.name, n.state, n.end]), [['Principal', 'completed', at(10)]]);
+    assert.deepEqual([w.edges, w.summary, w.reviewRounds, w.changesRequested], [[], null, 0, 0]);
+    assert.equal(w.timeline.end, at(10));
+    assert.equal(w.durationMs, 10 * MIN);
   });
 
   test('sem o agente principal gravado, o nó sai da sessão; a sessão com erro dá o principal com erro', () => {
     const w = workflowDaSessao(session({ status: 'error', endedAt: at(3) }), [sub('a', 'Explore', 0, 1, { status: 'error' })], [], { agora: AGORA });
-    assert.deepEqual(w.nos.map((n) => [n.id, n.estado]), [['s1:main', 'erro'], ['s1:a', 'erro']]);
-    assert.equal(w.arestas[0].de, 's1:main');
+    assert.deepEqual(w.nodes.map((n) => [n.id, n.state]), [['s1:main', 'error'], ['s1:a', 'error']]);
+    assert.equal(w.edges[0].from, 's1:main');
   });
 });
 
@@ -210,23 +210,23 @@ describe('#96 montarWorkflows: KPIs de orquestração', () => {
     ];
     const { kpis } = montarWorkflows(sessoes, { agora: AGORA });
     // w1: 2 níveis; a: 3 (o Explore aninhado no review); b: 1.
-    assert.equal(kpis.profundidadeMedia, 2);
-    assert.equal(kpis.subagentesPorSessao, (6 + 3 + 0) / 3);
+    assert.equal(kpis.averageDepth, 2);
+    assert.equal(kpis.subagentsPerSession, (6 + 3 + 0) / 3);
     // Terminados: w1 tem 4 concluídos (ex, d1, r1, d2); a tem 2 concluídos e 1 erro.
-    assert.equal(kpis.sucessoSubagentes, 6 / 7);
-    assert.deepEqual(kpis.fluxoComum, { rotulo: 'dev → review', fracao: 2 / 3 });
-    assert.equal(kpis.rodadasPorPr, (2 + 1) / 2);
+    assert.equal(kpis.subagentSuccess, 6 / 7);
+    assert.deepEqual(kpis.commonFlow, { label: 'dev → review', fraction: 2 / 3 });
+    assert.equal(kpis.roundsPerPr, (2 + 1) / 2);
     // w1 roda há 28 min (desde T0); a e b duraram 10.
-    assert.equal(kpis.duracaoMediaMs, ((28 + 10 + 10) / 3) * MIN);
+    assert.equal(kpis.averageDurationMs, ((28 + 10 + 10) / 3) * MIN);
   });
 
   test('#96/AC-1 sem sessões, os KPIs são nulos, não zero', () => {
     const r = montarWorkflows([], { agora: AGORA });
-    assert.deepEqual(r.kpis, { profundidadeMedia: null, subagentesPorSessao: null, sucessoSubagentes: null, fluxoComum: null, rodadasPorPr: null, duracaoMediaMs: null });
-    assert.deepEqual([r.runs, r.grafo.nos, r.grafo.arestas, r.sessoes], [[], [], [], 0]);
-    assert.equal(r.truncado, false);
-    assert.equal(montarWorkflows([], { agora: AGORA, truncado: true }).truncado, true);
-    assert.equal(r.grafo.colunas.length, 5);
+    assert.deepEqual(r.kpis, { averageDepth: null, subagentsPerSession: null, subagentSuccess: null, commonFlow: null, roundsPerPr: null, averageDurationMs: null });
+    assert.deepEqual([r.runs, r.graph.nodes, r.graph.edges, r.sessions], [[], [], [], 0]);
+    assert.equal(r.truncated, false);
+    assert.equal(montarWorkflows([], { agora: AGORA, truncado: true }).truncated, true);
+    assert.equal(r.graph.columns.length, 5);
   });
 });
 
@@ -234,34 +234,34 @@ describe('#96 montarWorkflows: os runs do Workflow tool', () => {
   test('#96/AC-2 o run traz nome, estado, modelo, projeto, as fases e a tabela agente, fase, estado, tokens, ferramentas e duração', () => {
     const [run] = montarWorkflows([comRun()], { agora: AGORA }).runs;
     assert.equal(run.id, 'toolu_1');
-    assert.deepEqual([run.nome, run.estado, run.modelo, run.projeto, run.sessaoId, run.inicio, run.fim], ['dev-review', 'ativa', 'claude-opus-5-5', 'motor-de-regras', 'w1', at(1), null]);
-    assert.deepEqual(run.fases.map((f) => f.nome), ['Implementar', 'Revisar', 'Corrigir', 'Testar']);
-    assert.equal(run.volta, 'volta para Corrigir enquanto o review pedir ajustes');
+    assert.deepEqual([run.name, run.state, run.model, run.project, run.sessionId, run.start, run.end], ['dev-review', 'active', 'claude-opus-5-5', 'motor-de-regras', 'w1', at(1), null]);
+    assert.deepEqual(run.phases.map((f) => f.name), ['Implementar', 'Revisar', 'Corrigir', 'Testar']);
+    assert.equal(run.loop, 'volta para Corrigir enquanto o review pedir ajustes');
     assert.deepEqual(
-      run.agentes.map((a) => [a.rotulo, a.tipo, a.fase, a.estado, a.ajustes]),
+      run.agents.map((a) => [a.label, a.type, a.phase, a.state, a.changesRequested]),
       [
-        ['dev:r1', 'general-purpose', 'Implementar', 'concluido', null],
-        ['review:r1', 'code-reviewer', 'Revisar', 'ajustes', 3],
-        ['dev:r2', 'general-purpose', 'Corrigir', 'concluido', null],
-        ['review:r2', 'code-reviewer', 'Revisar', 'rodando', null],
-        ['test', 'test-runner', 'Testar', 'rodando', null],
+        ['dev:r1', 'general-purpose', 'Implementar', 'completed', null],
+        ['review:r1', 'code-reviewer', 'Revisar', 'changes-requested', 3],
+        ['dev:r2', 'general-purpose', 'Corrigir', 'completed', null],
+        ['review:r2', 'code-reviewer', 'Revisar', 'running', null],
+        ['test', 'test-runner', 'Testar', 'running', null],
       ],
     );
-    const d1 = run.agentes[0];
+    const d1 = run.agents[0];
     // input + output + escrita de cache das duas mensagens; a leitura de cache não entra.
     assert.equal(d1.tokens, 1000 + 500 + 10 + 2000 + 500 + 10);
-    assert.equal(d1.ferramentas, 2, 'hook e transcript contam a mesma chamada: vale o maior');
-    assert.equal(d1.duracaoMs, 8 * MIN);
-    assert.deepEqual([run.tokens, run.ferramentas, run.duracaoMs], [4020, 3, 27 * MIN]);
+    assert.equal(d1.tools, 2, 'hook e transcript contam a mesma chamada: vale o maior');
+    assert.equal(d1.durationMs, 8 * MIN);
+    assert.deepEqual([run.tokens, run.tools, run.durationMs], [4020, 3, 27 * MIN]);
   });
 
   test('#96/AC-2 o fim da chamada fecha o run; a falha dá erro; sem a chamada, nome e fases dos metadados', () => {
     const base = comRun();
     const fim = event({ id: 'w1-fim', sessionId: 'w1', agentId: 'w1:main', type: 'PostToolUse', toolName: 'Workflow', createdAt: at(27), data: { tool_use_id: 'toolu_1' } });
     const fechado = montarWorkflows([{ ...base, eventos: [...base.eventos!, fim] }], { agora: AGORA }).runs[0];
-    assert.deepEqual([fechado.estado, fechado.fim, fechado.duracaoMs], ['concluida', at(27), 26 * MIN]);
+    assert.deepEqual([fechado.state, fechado.end, fechado.durationMs], ['completed', at(27), 26 * MIN]);
     const falhou = montarWorkflows([{ ...base, eventos: [...base.eventos!, { ...fim, type: 'PostToolUseFailure' }] }], { agora: AGORA }).runs[0];
-    assert.equal(falhou.estado, 'erro');
+    assert.equal(falhou.state, 'error');
 
     const sid = 'w2';
     const semChamada: SessaoDosWorkflows = {
@@ -269,14 +269,14 @@ describe('#96 montarWorkflows: os runs do Workflow tool', () => {
       agentes: [principal(sid), sub('a', 'Explore', 1, 3, wf('toolu_9', 'Coletar', { nome: 'triagem-de-bugs' }), sid), sub('b', 'general-purpose', 3, 6, wf('toolu_9', 'Classificar'), sid)],
     };
     const run = montarWorkflows([semChamada], { agora: AGORA }).runs[0];
-    assert.deepEqual([run.nome, run.estado, run.fim, run.modelo, run.volta], ['triagem-de-bugs', 'concluida', at(6), 'claude-opus-5-5', null]);
-    assert.deepEqual(run.fases.map((f) => f.nome), ['Coletar', 'Classificar']);
-    assert.deepEqual(run.agentes.map((a) => [a.tokens, a.ferramentas]), [[0, 0], [0, 0]], 'sem eventos, zero, não inventado');
+    assert.deepEqual([run.name, run.state, run.end, run.model, run.loop], ['triagem-de-bugs', 'completed', at(6), 'claude-opus-5-5', null]);
+    assert.deepEqual(run.phases.map((f) => f.name), ['Coletar', 'Classificar']);
+    assert.deepEqual(run.agents.map((a) => [a.tokens, a.tools]), [[0, 0], [0, 0]], 'sem eventos, zero, não inventado');
   });
 
   test('#96/AC-2 sessão sem subagente marcado não tem run; os ativos vêm primeiro', () => {
     const r = montarWorkflows([concluida('x', { agentes: [principal('x'), sub('a', 'Explore', 1, 2, wf('t2', 'F'), 'x')] }), comRun(), concluida('y')], { agora: AGORA });
-    assert.deepEqual(r.runs.map((x) => [x.sessaoId, x.estado]), [['w1', 'ativa'], ['x', 'concluida']]);
+    assert.deepEqual(r.runs.map((x) => [x.sessionId, x.state]), [['w1', 'active'], ['x', 'completed']]);
   });
 });
 
@@ -288,53 +288,53 @@ describe('#96 montarWorkflows: o grafo de orquestração', () => {
   ];
 
   test('#96/AC-3 colunas origem, principal, tipos de subagente, compactação e resultado, com o volume de cada nó e aresta', () => {
-    const { grafo } = montarWorkflows(sessoes(), { agora: AGORA });
-    assert.deepEqual(grafo.colunas.map((c) => c.id), ['origem', 'principal', 'subagente', 'compactacao', 'resultado']);
+    const { graph } = montarWorkflows(sessoes(), { agora: AGORA });
+    assert.deepEqual(graph.columns.map((c) => c.id), ['origin', 'main', 'subagent', 'compaction', 'outcome']);
     assert.deepEqual(
-      grafo.nos.map((n) => [n.id, n.rotulo, n.volume]),
+      graph.nodes.map((n) => [n.id, n.label, n.volume]),
       [
-        ['origem:prompt', 'Prompt novo', 2],
-        ['origem:retomada', 'Retomada', 1],
-        ['principal', 'Agente principal', 3],
-        ['subagente:Explore', 'Explore', 3],
-        ['subagente:code-reviewer', 'code-reviewer', 2],
-        ['subagente:general-purpose', 'general-purpose', 2],
-        ['subagente:test-runner', 'test-runner', 1],
-        ['compactacao:sem', 'Sem compactação', 2],
-        ['compactacao:compactou', 'Compactou', 1],
-        ['resultado:concluida', 'Concluída', 1],
-        ['resultado:erro', 'Com erro', 1],
-        ['resultado:andamento', 'Em andamento', 1],
+        ['origin:prompt', 'Prompt novo', 2],
+        ['origin:resume', 'Retomada', 1],
+        ['main', 'Agente principal', 3],
+        ['subagent:Explore', 'Explore', 3],
+        ['subagent:code-reviewer', 'code-reviewer', 2],
+        ['subagent:general-purpose', 'general-purpose', 2],
+        ['subagent:test-runner', 'test-runner', 1],
+        ['compaction:none', 'Sem compactação', 2],
+        ['compaction:compacted', 'Compactou', 1],
+        ['outcome:completed', 'Concluída', 1],
+        ['outcome:error', 'Com erro', 1],
+        ['outcome:active', 'Em andamento', 1],
       ],
     );
-    const aresta = (de: string, para: string) => grafo.arestas.find((e) => e.de === de && e.para === para)?.volume ?? 0;
-    assert.equal(aresta('origem:prompt', 'principal'), 2);
-    assert.equal(aresta('principal', 'subagente:Explore'), 3, 'principal → tipo conta subagentes');
-    assert.equal(aresta('subagente:Explore', 'compactacao:compactou'), 1, 'tipo → compactação conta sessões');
-    assert.equal(aresta('subagente:Explore', 'compactacao:sem'), 1);
-    assert.equal(aresta('principal', 'compactacao:sem'), 1, 'a sessão sem subagente vai direto');
-    assert.equal(aresta('compactacao:sem', 'resultado:erro'), 1);
-    assert.equal(aresta('compactacao:compactou', 'resultado:concluida'), 1);
+    const aresta = (de: string, para: string) => graph.edges.find((e) => e.from === de && e.to === para)?.volume ?? 0;
+    assert.equal(aresta('origin:prompt', 'main'), 2);
+    assert.equal(aresta('main', 'subagent:Explore'), 3, 'principal → tipo conta subagentes');
+    assert.equal(aresta('subagent:Explore', 'compaction:compacted'), 1, 'tipo → compactação conta sessões');
+    assert.equal(aresta('subagent:Explore', 'compaction:none'), 1);
+    assert.equal(aresta('main', 'compaction:none'), 1, 'a sessão sem subagente vai direto');
+    assert.equal(aresta('compaction:none', 'outcome:error'), 1);
+    assert.equal(aresta('compaction:compacted', 'outcome:completed'), 1);
   });
 
   test('#96/AC-3 clicar num nó filtra a tela: KPIs, runs e o grafo só das sessões que passam por ele', () => {
-    const r = montarWorkflows(sessoes(), { agora: AGORA, no: 'subagente:Explore' });
-    assert.equal(r.no, 'subagente:Explore');
-    assert.equal(r.sessoes, 2);
-    assert.equal(r.grafo.nos.find((n) => n.id === 'principal')!.volume, 2);
+    const r = montarWorkflows(sessoes(), { agora: AGORA, no: 'subagent:Explore' });
+    assert.equal(r.node, 'subagent:Explore');
+    assert.equal(r.sessions, 2);
+    assert.equal(r.graph.nodes.find((n) => n.id === 'main')!.volume, 2);
     assert.equal(r.runs.length, 1);
-    const retomada = montarWorkflows(sessoes(), { agora: AGORA, no: 'origem:retomada' });
-    assert.deepEqual([retomada.sessoes, retomada.runs.length, retomada.kpis.subagentesPorSessao], [1, 0, 2]);
-    assert.equal(montarWorkflows(sessoes(), { agora: AGORA, no: 'principal' }).sessoes, 3);
+    const retomada = montarWorkflows(sessoes(), { agora: AGORA, no: 'origin:resume' });
+    assert.deepEqual([retomada.sessions, retomada.runs.length, retomada.kpis.subagentsPerSession], [1, 0, 2]);
+    assert.equal(montarWorkflows(sessoes(), { agora: AGORA, no: 'main' }).sessions, 3);
   });
 
   test('#96/AC-4 o filtro Todas, Só ativas e Concluídas vale para a tela inteira', () => {
-    const ativas = montarWorkflows(sessoes(), { agora: AGORA, filtro: 'ativas' });
-    assert.deepEqual([ativas.filtro, ativas.sessoes, ativas.runs.length], ['ativas', 1, 1]);
-    assert.deepEqual(ativas.grafo.nos.filter((n) => n.coluna === 'resultado').map((n) => n.id), ['resultado:andamento']);
-    const concl = montarWorkflows(sessoes(), { agora: AGORA, filtro: 'concluidas' });
-    assert.deepEqual([concl.sessoes, concl.runs.length, concl.kpis.duracaoMediaMs], [2, 0, 10 * MIN]);
-    assert.equal(montarWorkflows(sessoes(), { agora: AGORA }).sessoes, 3);
+    const ativas = montarWorkflows(sessoes(), { agora: AGORA, filtro: 'active' });
+    assert.deepEqual([ativas.filter, ativas.sessions, ativas.runs.length], ['active', 1, 1]);
+    assert.deepEqual(ativas.graph.nodes.filter((n) => n.column === 'outcome').map((n) => n.id), ['outcome:active']);
+    const concl = montarWorkflows(sessoes(), { agora: AGORA, filtro: 'completed' });
+    assert.deepEqual([concl.sessions, concl.runs.length, concl.kpis.averageDurationMs], [2, 0, 10 * MIN]);
+    assert.equal(montarWorkflows(sessoes(), { agora: AGORA }).sessions, 3);
   });
 });
 
@@ -365,13 +365,13 @@ describe('a volta review → dev só quando o review terminou (I3)', () => {
   test('#97/AC-2 review ainda rodando: o dev seguinte foi aberto, não é volta', () => {
     const agentes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, null), sub('d2', 'general-purpose', 7, null)];
     const w = workflowDaSessao(s, agentes, [], { agora: AGORA });
-    assert.deepEqual(w.arestas.find((e) => e.para === 's1:d2'), { de: 's1:main', para: 's1:d2', tipo: 'abriu', rotulo: null });
+    assert.deepEqual(w.edges.find((e) => e.to === 's1:d2'), { from: 's1:main', to: 's1:d2', type: 'opened', label: null });
   });
   test('#97/AC-2 review que terminou depois de o dev começar também não é volta; antes, com ajustes desconhecidos, é', () => {
     const depois = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 9), sub('d2', 'general-purpose', 7, null)];
-    assert.equal(workflowDaSessao(s, depois, [], { agora: AGORA }).arestas.find((e) => e.para === 's1:d2')!.tipo, 'abriu');
+    assert.equal(workflowDaSessao(s, depois, [], { agora: AGORA }).edges.find((e) => e.to === 's1:d2')!.type, 'opened');
     const antes = [principal(), sub('d1', 'general-purpose', 0, 5), sub('r1', 'code-reviewer', 5, 7), sub('d2', 'general-purpose', 7, null)];
-    assert.equal(workflowDaSessao(s, antes, [], { agora: AGORA }).arestas.find((e) => e.para === 's1:d2')!.tipo, 'ajustes');
+    assert.equal(workflowDaSessao(s, antes, [], { agora: AGORA }).edges.find((e) => e.to === 's1:d2')!.type, 'changes-requested');
   });
 });
 
@@ -413,15 +413,15 @@ describe('runs com o formato que o importer grava (B1)', () => {
     const r = montarWorkflows([base([toolUse('toolu_wf', 'Workflow', 1), toolUse('toolu_agent', 'Agent', 9), resultado('toolu_wf', 12)])], { agora: AGORA });
     assert.equal(r.runs.length, 1);
     const run = r.runs[0];
-    assert.deepEqual([run.id, run.nome, run.estado, run.inicio, run.fim, run.modelo, run.projeto], ['toolu_wf', 'workflow', 'concluida', at(1), at(12), 'claude-opus-5-5', 'gateway-sandbox']);
-    assert.deepEqual(run.fases, [], 'sem tool_input nem fase nos agentes: nenhuma fase, não inventada');
-    assert.deepEqual(run.agentes.map((a) => [a.id, a.rotulo, a.tokens]), [['imp:a', 'dev:r1', 1_100], ['imp:b', 'review:r1', 550]]);
+    assert.deepEqual([run.id, run.name, run.state, run.start, run.end, run.model, run.project], ['toolu_wf', 'workflow', 'completed', at(1), at(12), 'claude-opus-5-5', 'gateway-sandbox']);
+    assert.deepEqual(run.phases, [], 'sem tool_input nem fase nos agentes: nenhuma fase, não inventada');
+    assert.deepEqual(run.agents.map((a) => [a.id, a.label, a.tokens]), [['imp:a', 'dev:r1', 1_100], ['imp:b', 'review:r1', 550]]);
     assert.equal(run.tokens, 1_650);
   });
 
   test('#96/AC-2 o ToolResult com erro fecha o run com erro; sem a chamada Workflow, não há run', () => {
     const erro = montarWorkflows([base([toolUse('toolu_wf', 'Workflow', 1), resultado('toolu_wf', 12, true)])], { agora: AGORA });
-    assert.equal(erro.runs[0].estado, 'erro');
+    assert.equal(erro.runs[0].state, 'error');
     assert.deepEqual(montarWorkflows([base([toolUse('toolu_wf', 'Agent', 1)])], { agora: AGORA }).runs, []);
   });
 
@@ -429,7 +429,7 @@ describe('runs com o formato que o importer grava (B1)', () => {
     const chamada = toolUse('toolu_wf', 'Workflow', 1);
     chamada.data = { ...(chamada.data as object), tool_input: { name: 'dev-review', phases: [{ name: 'Implementar' }, { name: 'Revisar' }] } };
     const run = montarWorkflows([base([chamada])], { agora: AGORA }).runs[0];
-    assert.deepEqual([run.nome, run.fases.map((f) => f.nome)], ['dev-review', ['Implementar', 'Revisar']]);
+    assert.deepEqual([run.name, run.phases.map((f) => f.name)], ['dev-review', ['Implementar', 'Revisar']]);
   });
 });
 
@@ -437,12 +437,12 @@ describe('o teto de sessões (M5)', () => {
   test('#96 truncado diz que o teto cortou a leitura', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     for (let i = 0; i < 3; i++) await storage.putSession(session({ id: `t${i}`, updatedAt: at(i) }));
-    const cortada = await lerSessoesDosWorkflows(storage, 'todas', 2);
+    const cortada = await lerSessoesDosWorkflows(storage, 'all', 2);
     assert.deepEqual([cortada.sessoes.length, cortada.truncado], [2, true]);
-    const inteira = await lerSessoesDosWorkflows(storage, 'todas', 3);
+    const inteira = await lerSessoesDosWorkflows(storage, 'all', 3);
     assert.deepEqual([inteira.sessoes.length, inteira.truncado], [3, false]);
-    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncado, true);
-    assert.equal(montarWorkflows(inteira.sessoes, { agora: AGORA }).truncado, false);
+    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncated, true);
+    assert.equal(montarWorkflows(inteira.sessoes, { agora: AGORA }).truncated, false);
     await storage.close();
   });
 });

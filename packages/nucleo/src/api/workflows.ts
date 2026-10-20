@@ -5,13 +5,14 @@
 // | `GET /api/workflows`              | KPIs, runs do Workflow tool e o grafo de orquestração         |
 // | `GET /api/sessions/<id>/workflow` | O grafo dos agentes da sessão, o laço e a linha do tempo (404 sem a sessão) |
 //
-// `GET /api/workflows?filter=todas|ativas|concluidas&node=<id do nó>`: o filtro vale para a tela inteira
-// (`filtro=` and `no=`, and `/api/sessoes/<id>/workflow`, are aliases: src/api/legacy-routes.ts).
-// `ativas` são as sessões com status `active`; `concluidas`, as que terminaram (`completed`, `error`,
-// `abandoned`). `no` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
-// passam por aquele nó (`principal` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
-// A resposta devolve o `no` aplicado, para a tela destacar. Lê as 500 sessões mais recentes no máximo;
-// `truncado: true` diz que o teto cortou.
+// `GET /api/workflows?filter=all|active|completed&node=<id do nó>`: o filtro vale para a tela inteira
+// (`filtro=` and `no=` with the old values `todas|ativas|concluidas` and node ids, and
+// `/api/sessoes/<id>/workflow`, are aliases: src/api/legacy-routes.ts).
+// `active` são as sessões com status `active`; `completed`, as que terminaram (`completed`, `error`,
+// `abandoned`). `node` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
+// passam por aquele nó (`main` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
+// A resposta devolve o `node` aplicado, para a tela destacar. Lê as 500 sessões mais recentes no máximo;
+// `truncated: true` diz que o teto cortou.
 //
 // O modelo não tem "run do Workflow tool" nem "rodada de review". A representação é derivada do que
 // já existe, sem tabela nova:
@@ -27,12 +28,12 @@
 //   peço 2 ajustes" dá 2), ou de "changes"/"issues" sem eles; "sem ajustes"/"nenhum ajuste" dá 0;
 //   "aprovado"/"LGTM" dá 0, mas não negado ("não aprovado", "reprovado" ficam `null`). Sem nada, `null`.
 // - O laço (grafo da sessão): cada subagente tem uma aresta de entrada. Plan concluído antes do dev r1
-//   dá `plano → dev r1` (`entregou`, "plano"); o dev mais recente que terminou antes de um review dá
-//   `dev → review` (`entregou`, "diff" na rodada 1, "v<n>" depois); um review seguido de um dev da
-//   rodada seguinte dá `review → dev` (`ajustes`) quando o review terminou antes de o dev começar e não
+//   dá `plano → dev r1` (`delivered`, "plano"); o dev mais recente que terminou antes de um review dá
+//   `dev → review` (`delivered`, "diff" na rodada 1, "v<n>" depois); um review seguido de um dev da
+//   rodada seguinte dá `review → dev` (`changes-requested`) quando o review terminou antes de o dev começar e não
 //   pediu 0 ajustes (um review ainda rodando não conta); o
-//   test-runner que começa depois de um dev terminar sai desse dev (`entregou`). Os demais saem de quem
-//   os disparou (`abriu`): o subagente pai (`subagentesDe`, #146) ou o principal.
+//   test-runner que começa depois de um dev terminar sai desse dev (`delivered`). Os demais saem de quem
+//   os disparou (`opened`): o subagente pai (`subagentesDe`, #146) ou o principal.
 // - Run do Workflow tool: os subagentes agrupados pelo id da chamada da ferramenta `Workflow`. O id vem de
 //   `Agent.metadata.workflow.run` (simulador) ou, nos dados reais, de `Agent.metadata.toolUseId` (o
 //   importer grava o id da chamada que abriu o subagente) quando esse id é de um evento `ToolUse`/
@@ -72,140 +73,149 @@ import { subagentesDe } from './painel.ts';
 import type { TrabalhoPorBranch } from './trabalho.ts';
 
 // ---------- Contrato ----------
+//
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5): `GET /api/workflows` has no
+// old alias, and the old `/api/sessoes/<id>/workflow` answers its old body through src/api/legacy-routes.ts.
+// The labels shown on the screen (`label`, the edge labels `plano`/`diff`/`ajustes`, the node names) stay pt-BR.
 
-export const FILTROS_DOS_WORKFLOWS = ['todas', 'ativas', 'concluidas'] as const;
+export const FILTROS_DOS_WORKFLOWS = ['all', 'active', 'completed'] as const;
 export type FiltroDosWorkflows = (typeof FILTROS_DOS_WORKFLOWS)[number];
 
 export interface KpisDosWorkflows {
   /** Níveis de agente por sessão, em média: só o principal é 1; com subagente, 2; aninhado, 3... */
-  profundidadeMedia: number | null;
-  subagentesPorSessao: number | null;
+  averageDepth: number | null;
+  subagentsPerSession: number | null;
   /** Concluídos sobre os que terminaram (concluídos e com erro), de 0 a 1. */
-  sucessoSubagentes: number | null;
+  subagentSuccess: number | null;
   /** O par de papéis seguidos mais comum (`dev → review`) e a fração das sessões que o têm. */
-  fluxoComum: { rotulo: string; fracao: number } | null;
+  commonFlow: { label: string; fraction: number } | null;
   /** Rodadas de review por sessão que teve review (a sessão faz as vezes do PR). */
-  rodadasPorPr: number | null;
-  duracaoMediaMs: number | null;
+  roundsPerPr: number | null;
+  averageDurationMs: number | null;
 }
 
-export type EstadoDoRun = 'ativa' | 'concluida' | 'erro';
-export type EstadoDoAgenteDoRun = 'concluido' | 'rodando' | 'ajustes' | 'erro';
+export const RUN_STATES = ['active', 'completed', 'error'] as const;
+export type EstadoDoRun = (typeof RUN_STATES)[number];
+export const RUN_AGENT_STATES = ['completed', 'running', 'changes-requested', 'error'] as const;
+export type EstadoDoAgenteDoRun = (typeof RUN_AGENT_STATES)[number];
 
 export interface AgenteDoRun {
   id: string;
   /** `dev:r1`, `review:r2`, `test-runner`. */
-  rotulo: string;
+  label: string;
   /** `subagentType` (`general-purpose`, `code-reviewer`...). */
-  tipo: string | null;
-  fase: string | null;
-  estado: EstadoDoAgenteDoRun;
-  ajustes: number | null;
+  type: string | null;
+  phase: string | null;
+  state: EstadoDoAgenteDoRun;
+  changesRequested: number | null;
   tokens: number;
-  ferramentas: number;
-  duracaoMs: number;
+  tools: number;
+  durationMs: number;
 }
 
 export interface RunDoWorkflow {
   /** O `tool_use_id` da chamada do Workflow tool. */
   id: string;
-  nome: string;
-  estado: EstadoDoRun;
+  name: string;
+  state: EstadoDoRun;
   /** Id do modelo (`claude-opus-5-5`); a tela escreve "Opus 5.5". */
-  modelo: string | null;
-  projeto: string | null;
-  sessaoId: string;
-  /** Soma dos agentes do run. O número de agentes é `agentes.length`. */
-  ferramentas: number;
+  model: string | null;
+  project: string | null;
+  sessionId: string;
+  /** Soma dos agentes do run. O número de agentes é `agents.length`. */
+  tools: number;
   tokens: number;
-  duracaoMs: number;
-  inicio: string;
-  fim: string | null;
-  fases: { nome: string }[];
+  durationMs: number;
+  start: string;
+  end: string | null;
+  phases: { name: string }[];
   /** "volta para Corrigir enquanto o review pedir ajustes"; `null` sem volta conhecida. */
-  volta: string | null;
-  agentes: AgenteDoRun[];
+  loop: string | null;
+  agents: AgenteDoRun[];
 }
 
-export type ColunaDoGrafo = 'origem' | 'principal' | 'subagente' | 'compactacao' | 'resultado';
+export const GRAPH_COLUMNS = ['origin', 'main', 'subagent', 'compaction', 'outcome'] as const;
+export type ColunaDoGrafo = (typeof GRAPH_COLUMNS)[number];
 
 export interface GrafoDeOrquestracao {
-  colunas: { id: ColunaDoGrafo; rotulo: string }[];
-  /** Ids: `origem:prompt`, `origem:retomada`, `principal`, `subagente:<tipo>`, `compactacao:sem`, `compactacao:compactou`, `resultado:concluida|erro|andamento|abandonada`. */
-  nos: { id: string; coluna: ColunaDoGrafo; rotulo: string; volume: number }[];
-  arestas: { de: string; para: string; volume: number }[];
+  columns: { id: ColunaDoGrafo; label: string }[];
+  /** Ids: `origin:prompt`, `origin:resume`, `main`, `subagent:<tipo>`, `compaction:none`, `compaction:compacted`, `outcome:completed|error|active|abandoned`. */
+  nodes: { id: string; column: ColunaDoGrafo; label: string; volume: number }[];
+  edges: { from: string; to: string; volume: number }[];
 }
 
 export interface RespostaDosWorkflows {
-  filtro: FiltroDosWorkflows;
-  no: string | null;
-  geradoEm: string;
+  filter: FiltroDosWorkflows;
+  node: string | null;
+  generatedAt: string;
   /** Quantas sessões entraram na conta (depois do filtro e do nó). */
-  sessoes: number;
+  sessions: number;
   /** O teto de sessões lidas (`MAXIMO_DE_SESSOES`) cortou: a conta não cobre todas. */
-  truncado: boolean;
-  /** O teto de sessões lidas efetivamente usado; a tela o cita quando `truncado`. */
-  maximo: number;
+  truncated: boolean;
+  /** O teto de sessões lidas efetivamente usado; a tela o cita quando `truncated`. */
+  max: number;
   kpis: KpisDosWorkflows;
   runs: RunDoWorkflow[];
-  grafo: GrafoDeOrquestracao;
+  graph: GrafoDeOrquestracao;
 }
 
-export type EstadoDoNo = 'ativo' | 'concluido' | 'erro';
+export const NODE_STATES = ['active', 'completed', 'error'] as const;
+export type EstadoDoNo = (typeof NODE_STATES)[number];
 
 export interface NoDoWorkflow {
   /** O id do agente. */
   id: string;
   /** `Principal`, `dev`, `review`, `Explore`, `Plan`, `test-runner`... */
-  nome: string;
+  name: string;
   /** `subagentType`; `null` no principal. */
-  tipo: string | null;
-  rodada: number | null;
-  tarefa: string | null;
+  type: string | null;
+  round: number | null;
+  task: string | null;
   /** Só no principal: o modelo da sessão. */
-  modelo: string | null;
-  duracaoMs: number;
-  estado: EstadoDoNo;
+  model: string | null;
+  durationMs: number;
+  state: EstadoDoNo;
   /** Só nos reviews: quantos ajustes pediu (`null`: não sabemos). */
-  ajustes: number | null;
-  inicio: string;
-  fim: string | null;
+  changesRequested: number | null;
+  start: string;
+  end: string | null;
 }
 
-export type TipoDaAresta = 'abriu' | 'entregou' | 'ajustes';
+export const EDGE_TYPES = ['opened', 'delivered', 'changes-requested'] as const;
+export type TipoDaAresta = (typeof EDGE_TYPES)[number];
 
 export interface ArestaDoWorkflow {
-  de: string;
-  para: string;
-  tipo: TipoDaAresta;
-  /** `plano`, `diff`, `v2`, `ajustes`; `null` sem rótulo. */
-  rotulo: string | null;
+  from: string;
+  to: string;
+  type: TipoDaAresta;
+  /** `plano`, `diff`, `v2`, `ajustes` (screen text); `null` sem rótulo. */
+  label: string | null;
 }
 
 export interface TrechoDaFaixa {
-  noId: string;
-  inicio: string;
-  fim: string | null;
-  estado: EstadoDoNo;
+  nodeId: string;
+  start: string;
+  end: string | null;
+  state: EstadoDoNo;
 }
 
 export interface WorkflowDaSessao {
-  sessaoId: string;
-  inicio: string;
-  fim: string | null;
-  duracaoMs: number;
+  sessionId: string;
+  start: string;
+  end: string | null;
+  durationMs: number;
   /** "dev → review até aprovar · termina no PR #90"; `null` sem review. */
-  resumo: string | null;
-  nos: NoDoWorkflow[];
-  arestas: ArestaDoWorkflow[];
-  rodadasDeReview: number;
-  ajustes: number;
-  linhaDoTempo: {
-    inicio: string;
+  summary: string | null;
+  nodes: NoDoWorkflow[];
+  edges: ArestaDoWorkflow[];
+  reviewRounds: number;
+  changesRequested: number;
+  timeline: {
+    start: string;
     /** O fim da sessão, ou agora enquanto ela roda. */
-    fim: string;
+    end: string;
     /** Uma faixa por rótulo (`Agente principal`, `dev · r1`, `Explore`): o mesmo rótulo junta os trechos. */
-    faixas: { noId: string; rotulo: string; trechos: TrechoDaFaixa[] }[];
+    lanes: { nodeId: string; label: string; spans: TrechoDaFaixa[] }[];
   };
 }
 
@@ -259,8 +269,8 @@ export function ajustesDe(a: Agent, eventos: readonly SessionEvent[] = []): numb
   return APROVADO.test(ultima) ? 0 : null;
 }
 
-const estadoDoAgente = (a: Agent): EstadoDoNo => (a.status === 'error' ? 'erro' : a.status === 'completed' ? 'concluido' : 'ativo');
-const estadoDaSessao = (s: SessionStatus): EstadoDoNo => (s === 'error' ? 'erro' : s === 'active' ? 'ativo' : 'concluido');
+const estadoDoAgente = (a: Agent): EstadoDoNo => (a.status === 'error' ? 'error' : a.status === 'completed' ? 'completed' : 'active');
+const estadoDaSessao = (s: SessionStatus): EstadoDoNo => (s === 'error' ? 'error' : s === 'active' ? 'active' : 'completed');
 const porInicio = (a: Agent, b: Agent) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id);
 
 interface Classificado {
@@ -299,16 +309,16 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
   const fimDaSessao = session.status === 'active' ? null : (session.endedAt ?? main?.endedAt ?? session.updatedAt);
   const principal: NoDoWorkflow = {
     id: principalId,
-    nome: 'Principal',
-    tipo: null,
-    rodada: null,
-    tarefa: null,
-    modelo: session.model,
-    duracaoMs: duracao(session.startedAt, fimDaSessao, agora),
-    estado: estadoDaSessao(session.status),
-    ajustes: null,
-    inicio: session.startedAt,
-    fim: fimDaSessao,
+    name: 'Principal',
+    type: null,
+    round: null,
+    task: null,
+    model: session.model,
+    durationMs: duracao(session.startedAt, fimDaSessao, agora),
+    state: estadoDaSessao(session.status),
+    changesRequested: null,
+    start: session.startedAt,
+    end: fimDaSessao,
   };
 
   const subs = classificar(agentes);
@@ -317,16 +327,16 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
   for (const { a, papel, rodada } of subs) {
     nos.push({
       id: a.id,
-      nome: papel,
-      tipo: a.subagentType,
-      rodada,
-      tarefa: a.name ?? a.task,
-      modelo: null,
-      duracaoMs: duracao(a.startedAt, a.endedAt, agora),
-      estado: estadoDoAgente(a),
-      ajustes: papel === 'review' ? ajustesDe(a, eventos) : null,
-      inicio: a.startedAt,
-      fim: a.endedAt,
+      name: papel,
+      type: a.subagentType,
+      round: rodada,
+      task: a.name ?? a.task,
+      model: null,
+      durationMs: duracao(a.startedAt, a.endedAt, agora),
+      state: estadoDoAgente(a),
+      changesRequested: papel === 'review' ? ajustesDe(a, eventos) : null,
+      start: a.startedAt,
+      end: a.endedAt,
     });
   }
   const noDe = new Map(nos.map((n) => [n.id, n]));
@@ -340,52 +350,52 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
     let aresta: ArestaDoWorkflow | null = null;
     if (c.papel === 'dev' && c.rodada === 1) {
       const plano = subs.filter((x) => x.papel === 'Plan' && x.a.status === 'completed' && x.a.endedAt !== null && x.a.endedAt <= c.a.startedAt).at(-1);
-      if (plano) aresta = { de: plano.a.id, para: c.a.id, tipo: 'entregou', rotulo: 'plano' };
+      if (plano) aresta = { from: plano.a.id, to: c.a.id, type: 'delivered', label: 'plano' };
     } else if (c.papel === 'dev' && c.rodada !== null && c.rodada > 1) {
       const review = subs.find((x) => x.papel === 'review' && x.rodada === c.rodada! - 1);
       // Só a volta de um review que já terminou quando o dev começou, e que não aprovou (0 ajustes).
       const terminou = !!review && review.a.endedAt !== null && review.a.endedAt <= c.a.startedAt;
-      if (review && terminou && noDe.get(review.a.id)!.ajustes !== 0) aresta = { de: review.a.id, para: c.a.id, tipo: 'ajustes', rotulo: 'ajustes' };
+      if (review && terminou && noDe.get(review.a.id)!.changesRequested !== 0) aresta = { from: review.a.id, to: c.a.id, type: 'changes-requested', label: 'ajustes' };
     } else if (c.papel === 'review') {
       const dev = terminouAntes('dev', c);
-      if (dev) aresta = { de: dev.a.id, para: c.a.id, tipo: 'entregou', rotulo: dev.rodada === 1 ? 'diff' : `v${dev.rodada}` };
+      if (dev) aresta = { from: dev.a.id, to: c.a.id, type: 'delivered', label: dev.rodada === 1 ? 'diff' : `v${dev.rodada}` };
     } else if (c.papel === 'test-runner') {
       const dev = terminouAntes('dev', c);
-      if (dev) aresta = { de: dev.a.id, para: c.a.id, tipo: 'entregou', rotulo: null };
+      if (dev) aresta = { from: dev.a.id, to: c.a.id, type: 'delivered', label: null };
     }
-    aresta ??= { de: pais.get(c.a.id) ?? principalId, para: c.a.id, tipo: 'abriu', rotulo: null };
+    aresta ??= { from: pais.get(c.a.id) ?? principalId, to: c.a.id, type: 'opened', label: null };
     arestas.push(aresta);
   }
 
-  const reviews = nos.filter((n) => n.nome === 'review');
-  const ajustes = reviews.reduce((t, n) => t + (n.ajustes ?? 0), 0);
-  const laco = reviews.length > 1 || arestas.some((e) => e.tipo === 'ajustes');
+  const reviews = nos.filter((n) => n.name === 'review');
+  const ajustes = reviews.reduce((t, n) => t + (n.changesRequested ?? 0), 0);
+  const laco = reviews.length > 1 || arestas.some((e) => e.type === 'changes-requested');
   const resumo = reviews.length === 0 ? null : `dev → review${laco ? ' até aprovar' : ''}${pr !== null ? ` · termina no PR #${pr}` : ''}`;
 
-  const faixas: WorkflowDaSessao['linhaDoTempo']['faixas'] = [];
+  const faixas: WorkflowDaSessao['timeline']['lanes'] = [];
   const porRotulo = new Map<string, (typeof faixas)[number]>();
   for (const n of nos) {
-    const rotulo = n === principal ? 'Agente principal' : rotuloDoNo(n.nome, n.rodada);
+    const rotulo = n === principal ? 'Agente principal' : rotuloDoNo(n.name, n.round);
     let f = porRotulo.get(rotulo);
     if (!f) {
-      f = { noId: n.id, rotulo, trechos: [] };
+      f = { nodeId: n.id, label: rotulo, spans: [] };
       porRotulo.set(rotulo, f);
       faixas.push(f);
     }
-    f.trechos.push({ noId: n.id, inicio: n.inicio, fim: n.fim, estado: n.estado });
+    f.spans.push({ nodeId: n.id, start: n.start, end: n.end, state: n.state });
   }
 
   return {
-    sessaoId: session.id,
-    inicio: session.startedAt,
-    fim: fimDaSessao,
-    duracaoMs: principal.duracaoMs,
-    resumo,
-    nos,
-    arestas,
-    rodadasDeReview: reviews.length,
-    ajustes,
-    linhaDoTempo: { inicio: session.startedAt, fim: fimDaSessao ?? new Date(agora).toISOString(), faixas },
+    sessionId: session.id,
+    start: session.startedAt,
+    end: fimDaSessao,
+    durationMs: principal.durationMs,
+    summary: resumo,
+    nodes: nos,
+    edges: arestas,
+    reviewRounds: reviews.length,
+    changesRequested: ajustes,
+    timeline: { start: session.startedAt, end: fimDaSessao ?? new Date(agora).toISOString(), lanes: faixas },
   };
 }
 
@@ -409,42 +419,46 @@ export interface OpcoesDosWorkflows {
   maximo?: number;
 }
 
-export const NO_DO_GRAFO = /^(?:principal|origem:(?:prompt|retomada)|compactacao:(?:sem|compactou)|resultado:(?:concluida|erro|andamento|abandonada)|subagente:[A-Za-z0-9_.:-]{1,64})$/;
+export const NO_DO_GRAFO = /^(?:main|origin:(?:prompt|resume)|compaction:(?:none|compacted)|outcome:(?:completed|error|active|abandoned)|subagent:[A-Za-z0-9_.:-]{1,64})$/;
 
-const COLUNAS: GrafoDeOrquestracao['colunas'] = [
-  { id: 'origem', rotulo: 'Origem' },
-  { id: 'principal', rotulo: 'Agente principal' },
-  { id: 'subagente', rotulo: 'Tipos de subagente' },
-  { id: 'compactacao', rotulo: 'Compactação' },
-  { id: 'resultado', rotulo: 'Resultado' },
+const COLUNAS: GrafoDeOrquestracao['columns'] = [
+  { id: 'origin', label: 'Origem' },
+  { id: 'main', label: 'Agente principal' },
+  { id: 'subagent', label: 'Tipos de subagente' },
+  { id: 'compaction', label: 'Compactação' },
+  { id: 'outcome', label: 'Resultado' },
 ];
-const ROTULOS: Record<string, string> = {
-  'origem:prompt': 'Prompt novo',
-  'origem:retomada': 'Retomada',
-  principal: 'Agente principal',
-  'compactacao:sem': 'Sem compactação',
-  'compactacao:compactou': 'Compactou',
-  'resultado:concluida': 'Concluída',
-  'resultado:erro': 'Com erro',
-  'resultado:andamento': 'Em andamento',
-  'resultado:abandonada': 'Abandonada',
+/** The fixed node ids of the graph (a subagent type's node, `subagent:<type>`, is the only other). */
+export const GRAPH_NODE_LABELS: Readonly<Record<string, string>> = {
+  'origin:prompt': 'Prompt novo',
+  'origin:resume': 'Retomada',
+  main: 'Agente principal',
+  'compaction:none': 'Sem compactação',
+  'compaction:compacted': 'Compactou',
+  'outcome:completed': 'Concluída',
+  'outcome:error': 'Com erro',
+  'outcome:active': 'Em andamento',
+  'outcome:abandoned': 'Abandonada',
 };
-const RESULTADO: Record<SessionStatus, string> = { completed: 'resultado:concluida', error: 'resultado:erro', active: 'resultado:andamento', abandoned: 'resultado:abandonada' };
+const RESULTADO: Record<SessionStatus, string> = { completed: 'outcome:completed', error: 'outcome:error', active: 'outcome:active', abandoned: 'outcome:abandoned' };
+/** The node of a subagent with no type: its label stays the screen's "subagente". */
+// A subagent with no type and one whose type is literally `subagent` share the node `subagent:subagent` (accepted edge; before it was `subagente`).
+const UNTYPED_SUBAGENT = 'subagent';
 
-const origemDe = (s: Session) => (s.source === 'resume' ? 'origem:retomada' : 'origem:prompt');
-const compactacaoDe = (x: SessaoDosWorkflows) => (x.compactou ? 'compactacao:compactou' : 'compactacao:sem');
-const tipoDe = (a: Agent) => `subagente:${a.subagentType ?? 'subagente'}`;
+const origemDe = (s: Session) => (s.source === 'resume' ? 'origin:resume' : 'origin:prompt');
+const compactacaoDe = (x: SessaoDosWorkflows) => (x.compactou ? 'compaction:compacted' : 'compaction:none');
+const tipoDe = (a: Agent) => `subagent:${a.subagentType ?? UNTYPED_SUBAGENT}`;
 
 /** Os nós do grafo por onde a sessão passa. */
 export function nosDaSessao(x: SessaoDosWorkflows): Set<string> {
-  const nos = new Set([origemDe(x.session), 'principal', compactacaoDe(x), RESULTADO[x.session.status]]);
+  const nos = new Set([origemDe(x.session), 'main', compactacaoDe(x), RESULTADO[x.session.status]]);
   for (const a of x.agentes) if (a.type === 'subagent') nos.add(tipoDe(a));
   return nos;
 }
 
 export function passaNoFiltro(s: Session, filtro: FiltroDosWorkflows): boolean {
-  if (filtro === 'ativas') return s.status === 'active';
-  if (filtro === 'concluidas') return s.status !== 'active';
+  if (filtro === 'active') return s.status === 'active';
+  if (filtro === 'completed') return s.status !== 'active';
   return true;
 }
 
@@ -481,12 +495,12 @@ export function kpisDe(sessoes: readonly SessaoDosWorkflows[], agora: number): K
   const [rotulo, n] = [...pares].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0];
 
   return {
-    profundidadeMedia: media(sessoes.map((x) => profundidade(x.agentes))),
-    subagentesPorSessao: sessoes.length ? subs.length / sessoes.length : null,
-    sucessoSubagentes: ok + erro ? ok / (ok + erro) : null,
-    fluxoComum: rotulo ? { rotulo, fracao: n / sessoes.length } : null,
-    rodadasPorPr: media(rodadas),
-    duracaoMediaMs: media(sessoes.map((x) => duracao(x.session.startedAt, x.session.status === 'active' ? null : (x.session.endedAt ?? x.session.updatedAt), agora))),
+    averageDepth: media(sessoes.map((x) => profundidade(x.agentes))),
+    subagentsPerSession: sessoes.length ? subs.length / sessoes.length : null,
+    subagentSuccess: ok + erro ? ok / (ok + erro) : null,
+    commonFlow: rotulo ? { label: rotulo, fraction: n / sessoes.length } : null,
+    roundsPerPr: media(rodadas),
+    averageDurationMs: media(sessoes.map((x) => duracao(x.session.startedAt, x.session.status === 'active' ? null : (x.session.endedAt ?? x.session.updatedAt), agora))),
   };
 }
 
@@ -568,20 +582,20 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
     const entrada = obj(obj(chamada?.data)?.tool_input);
     const agentes: AgenteDoRun[] = membros.map(({ a, papel, rodada }) => {
       const ajustes = papel === 'review' ? ajustesDe(a, eventos) : null;
-      const estado: EstadoDoAgenteDoRun = a.status === 'error' ? 'erro' : a.status !== 'completed' ? 'rodando' : ajustes ? 'ajustes' : 'concluido';
+      const estado: EstadoDoAgenteDoRun = a.status === 'error' ? 'error' : a.status !== 'completed' ? 'running' : ajustes ? 'changes-requested' : 'completed';
       return {
         id: a.id,
-        rotulo: str(wf(a)?.rotulo) ?? (rodada === null ? papel : `${papel}:r${rodada}`),
-        tipo: a.subagentType,
-        fase: str(wf(a)?.fase),
-        estado,
-        ajustes,
+        label: str(wf(a)?.rotulo) ?? (rodada === null ? papel : `${papel}:r${rodada}`),
+        type: a.subagentType,
+        phase: str(wf(a)?.fase),
+        state: estado,
+        changesRequested: ajustes,
         tokens: tokensDe(a, eventos),
-        ferramentas: ferramentasDe(a.id, eventos),
-        duracaoMs: duracao(a.startedAt, a.endedAt, agora),
+        tools: ferramentasDe(a.id, eventos),
+        durationMs: duracao(a.startedAt, a.endedAt, agora),
       };
     });
-    const vistas = [...new Set(agentes.map((a) => a.fase).filter((f): f is string => f !== null))];
+    const vistas = [...new Set(agentes.map((a) => a.phase).filter((f): f is string => f !== null))];
     const fases = fasesDa(entrada?.fases) ?? fasesDa(entrada?.phases) ?? vistas;
     const inicio = chamada?.createdAt ?? membros[0].a.startedAt;
     const algumErro = membros.some((m) => m.a.status === 'error');
@@ -589,31 +603,31 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
     let estado: EstadoDoRun;
     let termino: string | null;
     if (fim) {
-      estado = fim.type === 'PostToolUseFailure' || obj(fim.data)?.isError === true || algumErro ? 'erro' : 'concluida';
+      estado = fim.type === 'PostToolUseFailure' || obj(fim.data)?.isError === true || algumErro ? 'error' : 'completed';
       termino = fim.createdAt;
     } else if (x.session.status === 'active') {
       // Sem o fim da chamada, a sessão viva ainda pode abrir a próxima fase.
-      estado = !rodando && algumErro ? 'erro' : 'ativa';
+      estado = !rodando && algumErro ? 'error' : 'active';
       termino = null;
     } else {
-      estado = algumErro ? 'erro' : 'concluida';
+      estado = algumErro ? 'error' : 'completed';
       termino = membros.map((m) => m.a.endedAt).filter((t): t is string => t !== null).sort().at(-1) ?? x.session.endedAt;
     }
     runs.push({
       id,
-      nome: str(entrada?.name) ?? str(entrada?.workflow) ?? str(wf(membros[0].a)?.nome) ?? 'workflow',
-      estado,
-      modelo: str(entrada?.model) ?? x.session.model,
-      projeto: x.session.cwd ? basename(x.session.cwd) : null,
-      sessaoId: x.session.id,
-      ferramentas: agentes.reduce((t, a) => t + a.ferramentas, 0),
+      name: str(entrada?.name) ?? str(entrada?.workflow) ?? str(wf(membros[0].a)?.nome) ?? 'workflow',
+      state: estado,
+      model: str(entrada?.model) ?? x.session.model,
+      project: x.session.cwd ? basename(x.session.cwd) : null,
+      sessionId: x.session.id,
+      tools: agentes.reduce((t, a) => t + a.tools, 0),
       tokens: agentes.reduce((t, a) => t + a.tokens, 0),
-      duracaoMs: duracao(inicio, termino, agora),
-      inicio,
-      fim: termino,
-      fases: fases.map((nome) => ({ nome })),
-      volta: str(entrada?.volta) ?? voltaDe(agentes),
-      agentes,
+      durationMs: duracao(inicio, termino, agora),
+      start: inicio,
+      end: termino,
+      phases: fases.map((name) => ({ name })),
+      loop: str(entrada?.volta) ?? voltaDe(agentes),
+      agents: agentes,
     });
   }
   return runs;
@@ -621,9 +635,9 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
 
 /** A volta vista nos dados: um review que pediu ajustes seguido de um agente de outra fase. */
 function voltaDe(agentes: AgenteDoRun[]): string | null {
-  const i = agentes.findIndex((a) => a.estado === 'ajustes' || (a.ajustes ?? 0) > 0);
-  const depois = i >= 0 ? agentes.slice(i + 1).find((a) => a.fase !== null && a.fase !== agentes[i].fase) : undefined;
-  return depois?.fase ? `volta para ${depois.fase} enquanto o review pedir ajustes` : null;
+  const i = agentes.findIndex((a) => a.state === 'changes-requested' || (a.changesRequested ?? 0) > 0);
+  const depois = i >= 0 ? agentes.slice(i + 1).find((a) => a.phase !== null && a.phase !== agentes[i].phase) : undefined;
+  return depois?.phase ? `volta para ${depois.phase} enquanto o review pedir ajustes` : null;
 }
 
 export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestracao {
@@ -635,41 +649,42 @@ export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestr
     const origem = origemDe(x.session);
     const compactacao = compactacaoDe(x);
     const resultado = RESULTADO[x.session.status];
-    for (const k of [origem, 'principal', compactacao, resultado]) somar(volume, k);
-    ligar(origem, 'principal');
+    for (const k of [origem, 'main', compactacao, resultado]) somar(volume, k);
+    ligar(origem, 'main');
     const tipos = new Map<string, number>();
     for (const a of x.agentes) if (a.type === 'subagent') somar(tipos, tipoDe(a));
     for (const [t, n] of tipos) {
       somar(volume, t, n);
-      ligar('principal', t, n);
+      ligar('main', t, n);
       ligar(t, compactacao);
     }
-    if (tipos.size === 0) ligar('principal', compactacao);
+    if (tipos.size === 0) ligar('main', compactacao);
     ligar(compactacao, resultado);
   }
-  const ordem = Object.keys(ROTULOS);
-  const coluna = (id: string): ColunaDoGrafo => (id === 'principal' ? 'principal' : (id.split(':')[0] as ColunaDoGrafo));
+  const ordem = Object.keys(GRAPH_NODE_LABELS);
+  const coluna = (id: string): ColunaDoGrafo => (id === 'main' ? 'main' : (id.split(':')[0] as ColunaDoGrafo));
   const pos = (id: string) => COLUNAS.findIndex((c) => c.id === coluna(id));
+  const typeLabel = (id: string) => (id === `subagent:${UNTYPED_SUBAGENT}` ? 'subagente' : id.slice('subagent:'.length));
   const nos = [...volume]
-    .map(([id, v]) => ({ id, coluna: coluna(id), rotulo: ROTULOS[id] ?? id.slice('subagente:'.length), volume: v }))
-    .sort((a, b) => pos(a.id) - pos(b.id) || (a.coluna === 'subagente' ? b.volume - a.volume || a.rotulo.localeCompare(b.rotulo) : ordem.indexOf(a.id) - ordem.indexOf(b.id)));
+    .map(([id, v]) => ({ id, column: coluna(id), label: GRAPH_NODE_LABELS[id] ?? typeLabel(id), volume: v }))
+    .sort((a, b) => pos(a.id) - pos(b.id) || (a.column === 'subagent' ? b.volume - a.volume || a.label.localeCompare(b.label) : ordem.indexOf(a.id) - ordem.indexOf(b.id)));
   return {
-    colunas: COLUNAS.map((c) => ({ ...c })),
-    nos,
-    arestas: [...arestas].map(([k, v]) => {
-      const [de, para] = k.split('\u0000');
-      return { de, para, volume: v };
+    columns: COLUNAS.map((c) => ({ ...c })),
+    nodes: nos,
+    edges: [...arestas].map(([k, v]) => {
+      const [from, to] = k.split('\u0000');
+      return { from, to, volume: v };
     }),
   };
 }
 
-const PESO_DO_RUN: Record<EstadoDoRun, number> = { ativa: 0, erro: 1, concluida: 2 };
+const PESO_DO_RUN: Record<EstadoDoRun, number> = { active: 0, error: 1, completed: 2 };
 
-export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'todas', no = null, agora, truncado = false, maximo = MAXIMO_DE_SESSOES }: OpcoesDosWorkflows): RespostaDosWorkflows {
+export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'all', no = null, agora, truncado = false, maximo = MAXIMO_DE_SESSOES }: OpcoesDosWorkflows): RespostaDosWorkflows {
   let sessoes = todas.filter((x) => passaNoFiltro(x.session, filtro));
   if (no) sessoes = sessoes.filter((x) => nosDaSessao(x).has(no));
-  const runs = sessoes.flatMap((x) => runsDaSessao(x, agora)).sort((a, b) => PESO_DO_RUN[a.estado] - PESO_DO_RUN[b.estado] || b.inicio.localeCompare(a.inicio));
-  return { filtro, no, geradoEm: new Date(agora).toISOString(), sessoes: sessoes.length, truncado, maximo, kpis: kpisDe(sessoes, agora), runs, grafo: grafoDe(sessoes) };
+  const runs = sessoes.flatMap((x) => runsDaSessao(x, agora)).sort((a, b) => PESO_DO_RUN[a.state] - PESO_DO_RUN[b.state] || b.start.localeCompare(a.start));
+  return { filter: filtro, node: no, generatedAt: new Date(agora).toISOString(), sessions: sessoes.length, truncated: truncado, max: maximo, kpis: kpisDe(sessoes, agora), runs, graph: grafoDe(sessoes) };
 }
 
 // ---------- Rotas ----------
@@ -737,7 +752,7 @@ async function eventosDosRuns(storage: StoragePort, session: Session, agentes: A
 
 /** As sessões do filtro, com o que a montagem pede; os eventos só das que têm run do Workflow tool. */
 export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: FiltroDosWorkflows, maximo = MAXIMO_DE_SESSOES): Promise<LeituraDosWorkflows> {
-  const status: SessionStatus[] | undefined = filtro === 'ativas' ? ['active'] : filtro === 'concluidas' ? ['completed', 'error', 'abandoned'] : undefined;
+  const status: SessionStatus[] | undefined = filtro === 'active' ? ['active'] : filtro === 'completed' ? ['completed', 'error', 'abandoned'] : undefined;
   const sessoes: Session[] = [];
   let cursor: string | null = null;
   do {
@@ -762,14 +777,14 @@ export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: Filtr
 export async function responderWorkflows(res: ServerResponse, url: URL, fontes: FontesDosWorkflows): Promise<boolean> {
   const agora = (fontes.agora ?? Date.now)();
   if (url.pathname === ROTA_DOS_WORKFLOWS) {
-    const filtro = url.searchParams.get('filter') ?? 'todas';
+    const filtro = url.searchParams.get('filter') ?? 'all';
     if (!FILTROS_DOS_WORKFLOWS.includes(filtro as FiltroDosWorkflows)) {
-      send(res, 400, { error: 'filtro: todas, ativas ou concluidas' });
+      send(res, 400, { error: 'filter: all, active ou completed' });
       return true;
     }
     const no = url.searchParams.get('node');
     if (no !== null && !NO_DO_GRAFO.test(no)) {
-      send(res, 400, { error: 'no: um id de nó do grafo (ex.: subagente:Explore)' });
+      send(res, 400, { error: 'node: um id de nó do grafo (ex.: subagent:Explore)' });
       return true;
     }
     const maximo = fontes.maximoDeSessoes ?? MAXIMO_DE_SESSOES;

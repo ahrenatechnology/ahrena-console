@@ -57,8 +57,8 @@ describe('front de Workflows contra a demonstração do p4', () => {
   });
 
   test('C7: o laço dev → review → ajustes vira colunas pelas dependências, com o ramo mais longo na linha do principal', async () => {
-    const w = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
-    const { colunas, linhas, pos } = graphLayout(w.nos, w.arestas);
+    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const { colunas, linhas, pos } = graphLayout(w.nodes, w.edges);
     const col = Object.fromEntries(Object.entries(pos).map(([id, p]: [string, any]) => [curto(id), p.coluna]));
     assert.deepEqual(col, { main: 0, ex1: 1, pl: 1, ex2: 1, d1: 2, r1: 3, d2: 4, r2: 5, tr: 5 });
     assert.equal(colunas, 6);
@@ -75,97 +75,98 @@ describe('front de Workflows contra a demonstração do p4', () => {
   });
 
   test('C7: o nó mostra a rodada, os ajustes pedidos no review, e tarefa · tempo nos outros', async () => {
-    const w = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
-    const no = (id: string) => w.nos.find((n: any) => n.id === `sim-wf-pagamentos:${id}`);
+    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const no = (id: string) => w.nodes.find((n: any) => n.id === `sim-wf-pagamentos:${id}`);
     assert.equal(nodeName(no('d1')), 'dev · r1');
     assert.equal(nodeName(no('ex2')), 'Explore');
     assert.deepEqual(nodeDetail(no('r1')), { texto: '3 ajustes pedidos', ajustes: true });
     assert.deepEqual(nodeDetail(no('d2')), { texto: 'corrige · 7 min', ajustes: false });
     assert.match(nodeDetail(no('main')).texto, /^Opus 5\.5 · \d+ min$/);
-    assert.deepEqual(nodeDetail({ nome: 'review', rodada: 1, tarefa: 'x', modelo: null, duracaoMs: 60_000, ajustes: 1 }), { texto: '1 ajuste pedido', ajustes: true });
+    assert.deepEqual(nodeDetail({ name: 'review', round: 1, task: 'x', model: null, durationMs: 60_000, changesRequested: 1 }), { texto: '1 ajuste pedido', ajustes: true });
     // A aresta "ajustes" é própria, e a legenda conta as rodadas e os ajustes.
-    assert.ok(w.arestas.some((a: any) => a.tipo === 'ajustes' && curto(a.de) === 'r1' && curto(a.para) === 'd2'));
-    assert.equal(w.rodadasDeReview, 2);
-    assert.equal(w.ajustes, 3);
+    assert.ok(w.edges.some((a: any) => a.type === 'changes-requested' && curto(a.from) === 'r1' && curto(a.to) === 'd2'));
+    assert.equal(w.reviewRounds, 2);
+    assert.equal(w.changesRequested, 3);
   });
 
   test('C7: uma faixa por agente, na escala da sessão; o trecho aberto vai até o fim', async () => {
-    const w = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
-    const escala = timelineScale(w.linhaDoTempo);
+    const w = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
+    const escala = timelineScale(w.timeline);
     assert.equal(escala.marcas.length, 5);
     assert.equal(escala.marcas[0], '0');
     for (const m of escala.marcas.slice(1)) assert.match(m, /^\d+ min$/);
     assert.equal(escala.resumo, `0 a ${escala.marcas[4].replace(' min', '')} min`);
-    const principal = bandSegments(w.linhaDoTempo.faixas[0], escala);
-    assert.deepEqual(principal, [{ x: 0, largura: 100, estado: 'ativo' }]);
-    const explore = w.linhaDoTempo.faixas.find((f: any) => f.rotulo === 'Explore');
+    const principal = bandSegments(w.timeline.lanes[0], escala);
+    assert.deepEqual(principal, [{ x: 0, largura: 100, state: 'active' }]);
+    const explore = w.timeline.lanes.find((f: any) => f.label === 'Explore');
     const [primeiro, segundo] = bandSegments(explore, escala);
-    assert.equal(primeiro.estado, 'concluido');
-    assert.equal(segundo.estado, 'ativo');
+    assert.equal(primeiro.state, 'completed');
+    assert.equal(segundo.state, 'active');
     assert.ok(primeiro.x < segundo.x && Math.abs(segundo.x + segundo.largura - 100) < 0.02);
   });
 
   test('C14: o grafo de orquestração põe todo nó na sua coluna e engrossa a aresta pelo volume', async () => {
-    const d = await pedir(api.url, '/api/workflows?filtro=todas');
-    const g = orchestrationLayout(d.grafo, 960);
-    assert.deepEqual(g.colunas.map((c: any) => c.rotulo), ['Origem', 'Agente principal', 'Tipos de subagente', 'Compactação', 'Resultado']);
-    assert.equal(g.nos.length, d.grafo.nos.length);
-    const xDaColuna = new Map(d.grafo.colunas.map((c: any, i: number) => [c.id, i]));
-    for (const n of g.nos) assert.ok(n.y >= 0 && n.y + g.no.altura <= g.altura, n.id);
+    const d = await pedir(api.url, '/api/workflows?filter=all');
+    const g = orchestrationLayout(d.graph, 960);
+    assert.deepEqual(g.columns.map((c: any) => c.label), ['Origem', 'Agente principal', 'Tipos de subagente', 'Compactação', 'Resultado']);
+    assert.equal(g.nodes.length, d.graph.nodes.length);
+    const xDaColuna = new Map(d.graph.columns.map((c: any, i: number) => [c.id, i]));
+    for (const n of g.nodes) assert.ok(n.y >= 0 && n.y + g.no.altura <= g.altura, n.id);
     // Colunas da esquerda para a direita, na ordem da API.
-    const xs = [...new Set(g.nos.sort((a: any, b: any) => (xDaColuna.get(a.coluna) as number) - (xDaColuna.get(b.coluna) as number)).map((n: any) => n.x))];
+    const xs = [...new Set(g.nodes.sort((a: any, b: any) => (xDaColuna.get(a.column) as number) - (xDaColuna.get(b.column) as number)).map((n: any) => n.x))];
     assert.deepEqual(xs, [...xs].sort((a: any, b: any) => a - b));
-    const maior = Math.max(...g.arestas.map((a: any) => a.volume));
-    for (const a of g.arestas) {
+    const maior = Math.max(...g.edges.map((a: any) => a.volume));
+    for (const a of g.edges) {
       assert.match(a.d, /^M[\d.]+,[\d.]+ C/);
       assert.equal(a.espessura, thickness(a.volume, maior));
     }
-    assert.equal(Math.max(...g.arestas.map((a: any) => a.espessura)), 22);
-    assert.ok(g.arestas.filter((a: any) => a.erro).every((a: any) => a.para === 'resultado:erro'));
+    assert.equal(Math.max(...g.edges.map((a: any) => a.espessura)), 22);
+    assert.ok(g.edges.filter((a: any) => a.erro).every((a: any) => a.to === 'outcome:error'));
     // Na janela de 1100 px o painel tem ~800 px: as 5 colunas dividem a largura e nada passa dela.
     for (const largura of [802, 1100, 640]) {
-      const h = orchestrationLayout(d.grafo, largura);
+      const h = orchestrationLayout(d.graph, largura);
       assert.equal(h.largura, largura);
       assert.ok(h.no.largura >= 104 && h.no.largura <= 152, `nó com ${h.no.largura} px`);
-      for (const n of h.nos) {
+      for (const n of h.nodes) {
         assert.ok(n.x >= 0 && n.x + h.no.largura <= largura, `${n.id} sai de ${largura} px`);
         assert.ok((n.texto.length + n.volumeEscrito.length) * 5.8 + 22 <= h.no.largura + 6, `${n.id}: "${n.texto}" não cabe`);
       }
     }
     // Em 1100 px os rótulos cabem inteiros; mais estreito, encolhem com reticências.
-    assert.ok(orchestrationLayout(d.grafo, 787).nos.every((n: any) => n.texto === n.rotulo));
-    const estreito = orchestrationLayout(d.grafo, 640).nos.find((n: any) => n.id === 'compactacao:sem');
+    assert.ok(orchestrationLayout(d.graph, 787).nodes.every((n: any) => n.texto === n.label));
+    const estreito = orchestrationLayout(d.graph, 640).nodes.find((n: any) => n.id === 'compaction:none');
     assert.match(estreito.texto, /…$/);
-    assert.equal(estreito.rotulo, 'Sem compactação');
+    assert.equal(estreito.label, 'Sem compactação');
     assert.equal(thickness(0, 10), 1.2);
     assert.equal(thickness(5, 0), 1.2);
   });
 
   test('C14: KPIs, a linha do run, o estado dos agentes e quando reler', async () => {
-    const d = await pedir(api.url, '/api/workflows?filtro=todas');
+    const d = await pedir(api.url, '/api/workflows?filter=all');
     const k = writtenKpis(d.kpis);
     assert.deepEqual(k.map((x: any) => x.rotulo), ['Profundidade', 'Subagentes', 'Sucesso', 'Fluxo comum', 'Rodadas', 'Duração']);
     assert.deepEqual(k.map((x: any) => x.sub).filter((s: string) => !s.includes('%')), ['níveis de agente', 'por sessão', 'dos subagentes', 'de review por PR', 'média']);
     assert.equal(k[3].valor, 'dev → review');
     assert.match(k[3].sub, /^\d+% das sessões$/);
     assert.match(k[2].valor, /^\d+%$/);
-    const vazias = writtenKpis({ profundidadeMedia: null, subagentesPorSessao: null, sucessoSubagentes: null, fluxoComum: null, rodadasPorPr: null, duracaoMediaMs: null });
+    const vazias = writtenKpis({ averageDepth: null, subagentsPerSession: null, subagentSuccess: null, commonFlow: null, roundsPerPr: null, averageDurationMs: null });
     assert.deepEqual(vazias.map((x: any) => x.valor), ['—', '—', '—', '—', '—', '—']);
 
-    const run = d.runs.find((r: any) => r.nome === 'dev-review');
+    const run = d.runs.find((r: any) => r.name === 'dev-review');
     assert.match(runMeta(run), /^motor-de-regras · 5 agentes · 36 ferramentas · 223 k tokens · \d+ min$/);
-    const feito = d.runs.find((r: any) => r.nome === 'triagem-de-bugs');
+    const feito = d.runs.find((r: any) => r.name === 'triagem-de-bugs');
     assert.equal(runMeta(feito, new Date(AGORA)), 'vitrine-demo · 4 agentes · 22 ferramentas · 140 k tokens · 12 min · ontem');
-    assert.deepEqual(run.agentes.map((a: any) => agentState(a)[0]), ['Concluído', '3 ajustes', 'Concluído', 'Rodando', 'Rodando']);
-    assert.deepEqual(agentState({ estado: 'erro' }), ['Erro', 'error']);
+    assert.deepEqual(run.agents.map((a: any) => agentState(a)[0]), ['Concluído', '3 ajustes', 'Concluído', 'Rodando', 'Rodando']);
+    assert.deepEqual(agentState({ state: 'error' }), ['Erro', 'error']);
+    assert.deepEqual(agentState({ state: 'changes-requested', changesRequested: null }), ['Ajustes', 'error']);
     assert.ok(hasActive(d));
-    assert.equal(hasActive(await pedir(api.url, '/api/workflows?filtro=concluidas')), false);
+    assert.equal(hasActive(await pedir(api.url, '/api/workflows?filter=completed')), false);
   });
 
   test('a aba lê `<base>/workflow`, para de reler ao esconder e não lê sem corpo', async () => {
     const lidas: string[] = [];
     const sair = new AbortController();
-    const aba = create({ read: async (r: string) => (lidas.push(r), { nos: [] }), signal: sair.signal }, '/api/sessoes/x', { head: () => null, setLabel: () => {} });
+    const aba = create({ read: async (r: string) => (lidas.push(r), { nodes: [] }), signal: sair.signal }, '/api/sessions/x', { head: () => null, setLabel: () => {} });
     assert.deepEqual(Object.keys(aba).sort(), ['hide', 'refresh', 'show']);
     await aba.refresh();
     assert.deepEqual(lidas, [], 'escondida, não lê');
@@ -197,7 +198,7 @@ describe('formatos e registro', () => {
   });
 
   test('escala curta: menos de 4 min fica com uma casa', () => {
-    const e = timelineScale({ inicio: '2026-10-20T10:00:00.000Z', fim: '2026-10-20T10:02:00.000Z' });
+    const e = timelineScale({ start: '2026-10-20T10:00:00.000Z', end: '2026-10-20T10:02:00.000Z' });
     assert.deepEqual(e.marcas, ['0', '0,5 min', '1 min', '1,5 min', '2 min']);
     assert.equal(e.fracao('2026-10-20T10:01:00.000Z'), 0.5);
     assert.equal(e.fracao(null), 1);
@@ -205,14 +206,14 @@ describe('formatos e registro', () => {
 
   test('layout sobrevive a ciclo e a nó solto', () => {
     const nos = ['a', 'b', 'c', 'solto'].map((id) => ({ id }));
-    const { pos } = graphLayout(nos, [{ de: 'a', para: 'b' }, { de: 'b', para: 'c' }, { de: 'c', para: 'b' }, { de: 'x', para: 'a' }]);
+    const { pos } = graphLayout(nos, [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'c', to: 'b' }, { from: 'x', to: 'a' }]);
     assert.deepEqual(Object.keys(pos).sort(), ['a', 'b', 'c', 'solto']);
     assert.equal(pos.a.coluna, 0);
   });
 
   test('a rota leva o filtro e o nó', () => {
-    assert.equal(workflowsRoute('todas', null), '/api/workflows?filter=todas');
-    assert.equal(workflowsRoute('ativas', 'subagente:code-reviewer'), '/api/workflows?filter=ativas&node=subagente%3Acode-reviewer');
+    assert.equal(workflowsRoute('all', null), '/api/workflows?filter=all');
+    assert.equal(workflowsRoute('active', 'subagent:code-reviewer'), '/api/workflows?filter=active&node=subagent%3Acode-reviewer');
   });
 
   test('Workflows está na barra depois de Analytics, como no wireframe, e todo ícone usado existe', () => {

@@ -8,7 +8,9 @@ import { MOTIVO_CURTO } from '../../src/api/rota-atencao.ts';
 import { LIMITE_MAXIMO, MAIN_AGENT, SEARCH_MAX, STATUS_DO_EVENTO, SUBAGENT } from '../../src/api/eventos.ts';
 import { BUSCA_MAXIMA as HISTORY_SEARCH_MAX, DIAS_MAXIMO } from '../../src/historico/modelo.ts';
 import { FILTROS_DE_STATUS, ORDENS } from '../../src/api/sessoes.ts';
-import { AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
+import { AGENT_STATUSES, AWAITING_REASONS, SESSION_STATUSES } from '../../src/model.ts';
+import { DETAIL_AGENT_TYPES, MESSAGE_ROLES, TOOL_STATES } from '../../src/api/detalhe.ts';
+import { EDGE_TYPES, FILTROS_DOS_WORKFLOWS, GRAPH_NODE_LABELS, NODE_STATES, NO_DO_GRAFO } from '../../src/api/workflows.ts';
 
 describe('#173 phase 2b: the back-translator', () => {
   test('global keys rename every object; scoped ones only inside their parent, and win', () => {
@@ -481,5 +483,158 @@ describe('every union member of the feed, the Sessions list and the History answ
     has('events', `search: até ${SEARCH_MAX} caracteres`);
     has('history', `days: um inteiro de 1 a ${DIAS_MAXIMO}`);
     has('history', `search: até ${HISTORY_SEARCH_MAX} caracteres`);
+  });
+});
+
+describe('every union member of the session Detail and the workflows answers the old value on the old route', () => {
+  const card = { id: 's', title: 'T', model: 'm', startedAt: 'a', status: 'waiting', state: 'permission', reason: 'notification', urgent: true, since: 'b', turn: 2, activity: { type: 'permission', text: 'x' }, banner: { type: 'permission', text: 'y', footer: null, since: 'b' }, account: { id: 'c', label: 'L', color: '#fff', source: 'env' }, branch: 'br', cwd: '/d' };
+  const oldCard = { id: 's', titulo: 'T', modelo: 'm', iniciadaEm: 'a', status: 'waiting', estado: 'permission', motivo: 'notification', urgente: true, desde: 'b', turno: 2, atividade: { tipo: 'permissao', texto: 'x' }, faixa: { tipo: 'permissao', texto: 'y', rodape: null, desde: 'b' }, conta: { id: 'c', rotulo: 'L', cor: '#fff', fonte: 'env' }, branch: 'br', cwd: '/d' };
+
+  test('session top: the whole body in the old keys and order, with the panel card and cost', () => {
+    const route = legacyResponseFor('/api/sessoes/s')!;
+    const body = { version: 1, generatedAt: 'g', session: card, cost: { usd: 1, series: [0, 1], estimate: true }, branch: 'br', local: null, opensSession: false, command: 'npm test', endedAt: null, counts: { agents: 2, events: 9 } };
+    assert.equal(
+      JSON.stringify(route(body)),
+      JSON.stringify({ versao: 1, geradoEm: 'g', sessao: oldCard, custo: { usd: 1, serie: [0, 1], estimativa: true }, branch: 'br', local: null, abreSessao: false, comando: 'npm test', encerradaEm: null, contagens: { agentes: 2, eventos: 9 } }),
+    );
+    for (const error of ['id de sessão inválido', 'o núcleo não conhece esta sessão']) assert.deepEqual(route({ error }), { error });
+  });
+
+  test('agents tab: every agent type and status, the numbers, tools, tokens and the plan in the old keys and order', () => {
+    const route = legacyResponseFor('/api/sessoes/s/agentes')!;
+    const OLD_TYPE = { main: 'principal', subagent: 'subagente' };
+    assert.deepEqual(Object.keys(OLD_TYPE), [...DETAIL_AGENT_TYPES]);
+    for (const type of DETAIL_AGENT_TYPES)
+      for (const status of AGENT_STATUSES) {
+        const agent = { id: 'a', type, name: 'Agente principal', task: null, model: 'm', turns: 3, status, start: 's', end: null, costUsd: 0.5, parent: null };
+        const body = {
+          numbers: { events: 9, perMinute: 1, tools: 4, uniqueTools: 2, subagents: 1, compactions: 0, errors: 0, durationMin: 9, running: true },
+          tools: [{ name: 'Bash', n: 3 }],
+          tasks: { done: 1, total: 2, current: 'c', next: null, remaining: 0, currentOwner: { type: 'main', name: null, agentId: 'a' }, changedAt: 'x', steps: [{ id: '1', text: 't', activeText: 'at', state: 'pending', owner: { type: 'subagent', name: 'Explore', agentId: 'b' } }] },
+          tokens: { cacheRead: 1, cacheWrite: 2, input: 3, output: 4, total: 10 },
+          agents: [agent],
+        };
+        assert.equal(
+          JSON.stringify(route(body)),
+          JSON.stringify({
+            numeros: { eventos: 9, porMinuto: 1, ferramentas: 4, ferramentasUnicas: 2, subagentes: 1, compactacoes: 0, erros: 0, duracaoMin: 9, rodando: true },
+            ferramentas: [{ nome: 'Bash', n: 3 }],
+            tarefas: { feitos: 1, total: 2, atual: 'c', proximo: null, restantes: 0, atualDono: { tipo: 'principal', nome: null, agenteId: 'a' }, mudouEm: 'x', passos: [{ id: '1', texto: 't', textoAtivo: 'at', estado: 'pending', dono: { tipo: 'subagente', nome: 'Explore', agenteId: 'b' } }] },
+            tokens: { cacheLido: 1, cacheGravado: 2, entrada: 3, saida: 4, total: 10 },
+            agentes: [{ id: 'a', tipo: OLD_TYPE[type], nome: 'Agente principal', tarefa: null, modelo: 'm', turnos: 3, status, inicio: 's', fim: null, custoUsd: 0.5, pai: null }],
+          }),
+          `${type} ${status}`,
+        );
+      }
+  });
+
+  test('conversation: every role and tool state; the text and the tool summary, input and result are data', () => {
+    const route = legacyResponseFor('/api/sessoes/s/conversa')!;
+    const OLD_ROLE = { you: 'voce', assistant: 'assistente' };
+    const OLD_STATE = { ok: 'ok', error: 'erro', permission: 'permissao', running: 'rodando' };
+    assert.deepEqual(Object.keys(OLD_ROLE), [...MESSAGE_ROLES]);
+    assert.deepEqual(Object.keys(OLD_STATE), [...TOOL_STATES]);
+    for (const role of MESSAGE_ROLES)
+      for (const state of [...TOOL_STATES, null]) {
+        // Data that looks like the fixed values or the keys: never translated.
+        const tool = { id: 't', name: 'Bash', summary: 'error', state, input: '{ "state": "error", "role": "you" }', result: 'running' };
+        const body = { agents: [{ id: 'a', name: 'Agente principal' }], agent: 'a', total: 1, messages: [{ id: 'm', role, at: 'x', text: role, model: null, tokens: { input: 1, output: 2 }, tools: [tool] }] };
+        assert.equal(
+          JSON.stringify(route(body)),
+          JSON.stringify({
+            agentes: [{ id: 'a', nome: 'Agente principal' }],
+            agente: 'a',
+            total: 1,
+            mensagens: [{ id: 'm', papel: OLD_ROLE[role], em: 'x', texto: role, modelo: null, tokens: { entrada: 1, saida: 2 }, ferramentas: [{ id: 't', nome: 'Bash', resumo: 'error', estado: state === null ? null : OLD_STATE[state], entrada: tool.input, resultado: 'running' }] }],
+          }),
+          `${role} ${state}`,
+        );
+      }
+  });
+
+  test('timeline (events tab): the page, every status and the options in the old keys and order; summary and data are data', () => {
+    const route = legacyResponseFor('/api/sessoes/s/eventos')!;
+    for (const status of ['active', 'waiting', 'error'] as const) {
+      const body = {
+        total: 2,
+        filtered: 1,
+        items: [{ id: 'e', at: 'x', type: 'PreToolUse', tool: 'Bash', summary: 'type', agent: { id: 'a', name: 'Explore' }, status, data: '{ "agent": { "name": "main" } }' }],
+        next: null,
+        options: { types: ['PreToolUse'], tools: ['Bash'], agents: [{ id: 'a', name: 'Agente principal' }], status: ['active', 'waiting', 'error'] },
+      };
+      assert.equal(
+        JSON.stringify(route(body)),
+        JSON.stringify({
+          total: 2,
+          filtrados: 1,
+          itens: [{ id: 'e', em: 'x', tipo: 'PreToolUse', ferramenta: 'Bash', resumo: 'type', agente: { id: 'a', nome: 'Explore' }, status, dados: body.items[0]!.data }],
+          proximo: null,
+          opcoes: { tipos: ['PreToolUse'], ferramentas: ['Bash'], agentes: [{ id: 'a', nome: 'Agente principal' }], status: ['active', 'waiting', 'error'] },
+        }),
+        status,
+      );
+    }
+  });
+
+  test('session workflow: every node and span state and every edge type, in the old keys and order', () => {
+    const route = legacyResponseFor('/api/sessoes/s/workflow')!;
+    const OLD_STATE = { active: 'ativo', completed: 'concluido', error: 'erro' };
+    const OLD_EDGE = { opened: 'abriu', delivered: 'entregou', 'changes-requested': 'ajustes' };
+    assert.deepEqual(Object.keys(OLD_STATE), [...NODE_STATES]);
+    assert.deepEqual(Object.keys(OLD_EDGE), [...EDGE_TYPES]);
+    for (const state of NODE_STATES)
+      for (const type of EDGE_TYPES) {
+        const body = {
+          sessionId: 's', start: 'a', end: null, durationMs: 1, summary: 'dev → review',
+          nodes: [{ id: 'n', name: 'review', type: 'code-reviewer', round: 1, task: 'diff', model: null, durationMs: 1, state, changesRequested: 2, start: 'a', end: null }],
+          edges: [{ from: 'm', to: 'n', type, label: 'ajustes' }],
+          reviewRounds: 1, changesRequested: 2,
+          timeline: { start: 'a', end: 'b', lanes: [{ nodeId: 'n', label: 'review · r1', spans: [{ nodeId: 'n', start: 'a', end: null, state }] }] },
+        };
+        assert.equal(
+          JSON.stringify(route(body)),
+          JSON.stringify({
+            sessaoId: 's', inicio: 'a', fim: null, duracaoMs: 1, resumo: 'dev → review',
+            nos: [{ id: 'n', nome: 'review', tipo: 'code-reviewer', rodada: 1, tarefa: 'diff', modelo: null, duracaoMs: 1, estado: OLD_STATE[state], ajustes: 2, inicio: 'a', fim: null }],
+            arestas: [{ de: 'm', para: 'n', tipo: OLD_EDGE[type], rotulo: 'ajustes' }],
+            rodadasDeReview: 1, ajustes: 2,
+            linhaDoTempo: { inicio: 'a', fim: 'b', faixas: [{ noId: 'n', rotulo: 'review · r1', trechos: [{ noId: 'n', inicio: 'a', fim: null, estado: OLD_STATE[state] }] }] },
+          }),
+          `${state} ${type}`,
+        );
+      }
+    for (const error of ['id de sessão inválido', 'sessão não encontrada']) assert.deepEqual(route({ error }), { error });
+  });
+
+  test('workflows: the old `?filter=`/`?filtro=` values and every old node id become the new ones, only on /api/workflows', () => {
+    const FILTER = { todas: 'all', ativas: 'active', concluidas: 'completed' };
+    assert.deepEqual(Object.values(FILTER), [...FILTROS_DOS_WORKFLOWS]);
+    for (const [old, filter] of Object.entries(FILTER)) {
+      for (const name of ['filtro', 'filter']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/workflows').get('filter'), filter, `${name}=${old}`);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`filter=${filter}`), '/api/workflows').get('filter'), filter);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`filter=${old}`), '/api/sessions').get('filter'), old, 'only on /api/workflows');
+    }
+    const NODE = {
+      principal: 'main',
+      'origem:prompt': 'origin:prompt',
+      'origem:retomada': 'origin:resume',
+      'compactacao:sem': 'compaction:none',
+      'compactacao:compactou': 'compaction:compacted',
+      'resultado:concluida': 'outcome:completed',
+      'resultado:erro': 'outcome:error',
+      'resultado:andamento': 'outcome:active',
+      'resultado:abandonada': 'outcome:abandoned',
+      'subagente:subagente': 'subagent:subagent',
+      'subagente:Explore': 'subagent:Explore',
+      'subagente:code-reviewer': 'subagent:code-reviewer',
+    };
+    // Every fixed node of the graph has its old id here.
+    for (const id of Object.keys(GRAPH_NODE_LABELS)) assert.ok(Object.values(NODE).includes(id), id);
+    for (const [old, node] of Object.entries(NODE)) {
+      assert.ok(NO_DO_GRAFO.test(node), node);
+      for (const name of ['no', 'node']) assert.equal(normalizeLegacyQuery(new URLSearchParams(`${name}=${old}`), '/api/workflows').get('node'), node, `${name}=${old}`);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`node=${node}`), '/api/workflows').get('node'), node, node);
+      assert.equal(normalizeLegacyQuery(new URLSearchParams(`node=${old}`), '/api/events').get('node'), old, 'only on /api/workflows');
+    }
   });
 });
