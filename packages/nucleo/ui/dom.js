@@ -35,10 +35,6 @@ const ICONES = {
   mural: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
   'mural-loader': '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
   'mural-check': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
-  'mural-permissao': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
-  'mural-interrompida': '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
-  'mural-sua-vez': '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
-  'mural-prompt': '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
   // Sessões (C3, #28)
   buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   'abrir-lista': '<path d="m6 9 6 6 6-6"/>',

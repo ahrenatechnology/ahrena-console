@@ -1,7 +1,7 @@
 // A tela Mural ao vivo da /ui (#34, C2): a formatação, o que cada card mostra e a montagem da tela
 // num DOM mínimo, com um Mural de exemplo (dados inventados) no lugar de `GET /api/mural`.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 
@@ -200,42 +200,42 @@ describe('Mural: a tela montada', () => {
   test('cabeçalho, seletor só com os rótulos e um card por sessão, cada um levando ao detalhe', async () => {
     const { area, sair } = await montarTela(async () => MURAL);
     try {
-      await ate(() => comClasse(area, 'mu-card').length > 0);
+      await ate(() => comClasse(area, 'mural-card').length > 0);
       assert.match(area.textContent, /Mural ao vivo.*Um card por sessão aberta nesta máquina/);
       const filtros = area.todos((e) => e.getAttribute('data-filtro') !== null);
       assert.deepEqual(filtros.map((f) => f.textContent), ['Todas', 'Esperando', 'Ativas']);
       assert.equal(filtros[0]!.getAttribute('aria-pressed'), 'true');
       assert.ok(area.todos((e) => e.getAttribute('data-acao') === 'atualizar').length === 1, 'o Atualizar do wireframe');
 
-      const cards = comClasse(area, 'mu-card');
+      const cards = comClasse(area, 'mural-card');
       assert.equal(cards.length, 5);
       assert.ok(cards.every((c) => c.tag === 'a'));
       assert.deepEqual(
         cards.map((c) => c.getAttribute('href')),
         ['/ui/sessoes/ativa-1', '/ui/sessoes/espera-1', '/ui/sessoes/espera-2', '/ui/sessoes/erro-1', '/ui/sessoes/feita-1'],
       );
-      assert.ok(cards[1]!.classes.includes('st-waiting'));
+      assert.ok(cards[1]!.classes.includes('mural-st-waiting'));
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
       assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
       assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%$/);
-      const [plano, contexto] = comClasse(cards[0]!, 'mu-barra');
+      const [plano, contexto] = comClasse(cards[0]!, 'mural-barra');
       assert.equal(plano!.tag, 'progress');
       assert.deepEqual([plano!.getAttribute('value'), plano!.getAttribute('max')], ['3', '5']);
       assert.deepEqual([contexto!.getAttribute('value'), contexto!.getAttribute('max')], ['31', '100']);
-      assert.ok(!contexto!.classes.includes('alto'));
+      assert.ok(!contexto!.classes.includes('mural-alto'));
 
       // Esperando: chip do motivo + o que pede; sem plano é 0/0 e a barra vazia.
       assert.match(cards[1]!.textContent, /Esperando vocêprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
       assert.match(cards[1]!.textContent, /Esforço—.*Plano 0\/0/);
-      assert.deepEqual(comClasse(cards[1]!, 'mu-mot').map((m) => m.classes.includes('leve')), [false]);
-      assert.equal(comClasse(cards[1]!, 'mu-barra')[0]!.getAttribute('value'), '0');
-      assert.ok(comClasse(cards[2]!, 'mu-mot')[0]!.classes.includes('leve'), 'Sua vez é leve');
+      assert.deepEqual(comClasse(cards[1]!, 'mural-mot').map((m) => m.classes.includes('leve')), [false]);
+      assert.equal(comClasse(cards[1]!, 'mural-barra')[0]!.getAttribute('value'), '0');
+      assert.ok(comClasse(cards[2]!, 'mural-mot')[0]!.classes.includes('leve'), 'Sua vez é leve');
       assert.match(cards[2]!.textContent, /Sua vezRodo os testes\?.*contexto —$/);
 
       // Erro: o texto do erro; contexto 84% pinta a barra de erro.
       assert.match(cards[3]!.textContent, /Com erro.*API 529 · overloaded_error/);
-      assert.ok(comClasse(cards[3]!, 'mu-barra')[1]!.classes.includes('alto'));
+      assert.ok(comClasse(cards[3]!, 'mural-barra')[1]!.classes.includes('mural-alto'));
 
       // Concluída: "Terminou sem erro", sem modelo é traço, sem preço é traço.
       assert.match(cards[4]!.textContent, /Terminou sem erro.*Modelo—.*Custo—/);
@@ -249,10 +249,10 @@ describe('Mural: a tela montada', () => {
     const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', estado: 'waiting', motivo: null, atividade: { tipo: 'sua-vez', texto: 'Aguardando você' } });
     const { area, sair } = await montarTela(async () => ({ ...MURAL, cards: [semMotivo] }));
     try {
-      await ate(() => comClasse(area, 'mu-card').length === 1);
-      const card = comClasse(area, 'mu-card')[0]!;
-      assert.equal(comClasse(card, 'mu-mot').length, 0);
-      assert.equal(comClasse(card, 'mu-linha')[0]!.textContent, 'Aguardando você');
+      await ate(() => comClasse(area, 'mural-card').length === 1);
+      const card = comClasse(area, 'mural-card')[0]!;
+      assert.equal(comClasse(card, 'mural-mot').length, 0);
+      assert.equal(comClasse(card, 'mural-linha')[0]!.textContent, 'Aguardando você');
     } finally {
       await sair();
     }
@@ -271,9 +271,9 @@ describe('Mural: a tela montada', () => {
   test('o título do núcleo entra como texto: <b> não vira HTML', async () => {
     const { area, sair } = await montarTela(async () => MURAL);
     try {
-      await ate(() => comClasse(area, 'mu-card').length > 0);
-      const feita = comClasse(area, 'mu-card')[4]!;
-      const titulo = comClasse(feita, 'mu-tt')[0]!;
+      await ate(() => comClasse(area, 'mural-card').length > 0);
+      const feita = comClasse(area, 'mural-card')[4]!;
+      const titulo = comClasse(feita, 'mural-tt')[0]!;
       assert.equal(titulo.textContent, '<b>negrito</b>');
       assert.equal(titulo.todos(() => true).length, 0, 'nenhum elemento dentro do título');
       assert.equal(titulo.html, '');
@@ -287,21 +287,21 @@ describe('Mural: a tela montada', () => {
     let dados: unknown = MURAL;
     const { area, rotas, sair } = await montarTela(async () => dados);
     try {
-      await ate(() => comClasse(area, 'mu-card').length === 5);
+      await ate(() => comClasse(area, 'mural-card').length === 5);
       const botao = (id: string) => area.todos((e) => e.getAttribute('data-filtro') === id)[0]!;
       botao('esperando').click();
-      assert.deepEqual(comClasse(area, 'mu-card').map((c) => c.getAttribute('data-sessao')), ['espera-1', 'espera-2', 'erro-1'], 'o erro também precisa de você, como na contagem do núcleo');
+      assert.deepEqual(comClasse(area, 'mural-card').map((c) => c.getAttribute('data-sessao')), ['espera-1', 'espera-2', 'erro-1'], 'o erro também precisa de você, como na contagem do núcleo');
       assert.equal(botao('esperando').getAttribute('aria-pressed'), 'true');
       assert.equal(botao('todas').getAttribute('aria-pressed'), 'false');
       botao('ativas').click();
-      assert.deepEqual(comClasse(area, 'mu-card').map((c) => c.getAttribute('data-sessao')), ['ativa-1']);
+      assert.deepEqual(comClasse(area, 'mural-card').map((c) => c.getAttribute('data-sessao')), ['ativa-1']);
       assert.deepEqual(rotas, ['/api/mural'], 'só a primeira leitura');
 
       dados = soAtivas;
       area.todos((e) => e.getAttribute('data-acao') === 'atualizar')[0]!.click();
-      await ate(() => rotas.length === 2 && comClasse(area, 'mu-card').length === 1);
+      await ate(() => rotas.length === 2 && comClasse(area, 'mural-card').length === 1);
       botao('esperando').click();
-      assert.equal(comClasse(area, 'mu-card').length, 0);
+      assert.equal(comClasse(area, 'mural-card').length, 0);
       assert.match(area.textContent, /Nenhuma sessão esperando você/);
     } finally {
       await sair();
@@ -318,7 +318,7 @@ describe('Mural: a tela montada', () => {
       await pronta;
       assert.equal(comClasse(area, 'carregando').length, 0);
       assert.match(area.textContent, /Nenhuma sessão aberta/);
-      assert.equal(comClasse(area, 'mu-card').length, 0);
+      assert.equal(comClasse(area, 'mural-card').length, 0);
     } finally {
       await sair();
     }
@@ -333,18 +333,18 @@ describe('Mural: a tela montada', () => {
     try {
       await ate(() => /Sem conexão com o núcleo/.test(area.textContent));
       assert.match(area.textContent, /não respondeu.*Tentar de novo/);
-      assert.equal(comClasse(area, 'mu-card').length, 0);
+      assert.equal(comClasse(area, 'mural-card').length, 0);
 
       falhar = false;
       area.todos((e) => e.tag === 'button' && /Tentar de novo/.test(e.textContent))[0]!.click();
-      await ate(() => comClasse(area, 'mu-card').length === 5);
+      await ate(() => comClasse(area, 'mural-card').length === 5);
       assert.equal(rotas.length, 2);
 
       falhar = true;
       area.todos((e) => e.getAttribute('data-acao') === 'atualizar')[0]!.click();
       await ate(() => comClasse(area, 'faixa-erro').length === 1);
       assert.match(comClasse(area, 'faixa-erro')[0]!.textContent, /O mural não atualizou/);
-      assert.equal(comClasse(area, 'mu-card').length, 5, 'os cards de antes continuam');
+      assert.equal(comClasse(area, 'mural-card').length, 5, 'os cards de antes continuam');
     } finally {
       await sair();
     }
@@ -354,17 +354,17 @@ describe('Mural: a tela montada', () => {
     let dados: typeof MURAL = MURAL;
     const { area, rotas, ouvintes, sair } = await montarTela(async () => dados);
     try {
-      await ate(() => comClasse(area, 'mu-card').length === 5);
+      await ate(() => comClasse(area, 'mural-card').length === 5);
       dados = { ...MURAL, cards: [cardDeExemplo('nova-1', { titulo: 'Sessão nova' }), ...MURAL.cards] };
       for (const f of ouvintes.mudar) f([{ tipo: 'sessao', chave: 'nova-1' }]);
       for (const f of ouvintes.mudar) f([{ tipo: 'plano', chave: 'nova-1' }]);
-      await ate(() => comClasse(area, 'mu-card').length === 6);
+      await ate(() => comClasse(area, 'mural-card').length === 6);
       assert.equal(rotas.length, 2, 'a rajada vira uma leitura só');
-      assert.equal(comClasse(area, 'mu-card')[0]!.getAttribute('href'), '/ui/sessoes/nova-1');
+      assert.equal(comClasse(area, 'mural-card')[0]!.getAttribute('href'), '/ui/sessoes/nova-1');
 
       dados = MURAL;
       for (const f of ouvintes.reiniciar) f();
-      await ate(() => comClasse(area, 'mu-card').length === 5);
+      await ate(() => comClasse(area, 'mural-card').length === 5);
       assert.equal(rotas.length, 3);
     } finally {
       await sair();
@@ -376,7 +376,7 @@ describe('Mural: ao vivo com atividade contínua', () => {
   test('mudanças a cada 100 ms não adiam a releitura para sempre', async () => {
     const { area, rotas, ouvintes, sair } = await montarTela(async () => MURAL);
     try {
-      await ate(() => comClasse(area, 'mu-card').length === 5);
+      await ate(() => comClasse(area, 'mural-card').length === 5);
       const fim = Date.now() + 1_500;
       while (Date.now() < fim) {
         for (const f of ouvintes.mudar) f([{ tipo: 'sessao', chave: 'ativa-1' }]);
@@ -391,11 +391,11 @@ describe('Mural: ao vivo com atividade contínua', () => {
   test('o foco do teclado volta ao card da mesma sessão depois de redesenhar', async () => {
     const { area, rotas, sair } = await montarTela(async () => MURAL);
     try {
-      await ate(() => comClasse(area, 'mu-card').length === 5);
-      const antes = comClasse(area, 'mu-card').find((c) => c.getAttribute('data-sessao') === 'espera-2')!;
+      await ate(() => comClasse(area, 'mural-card').length === 5);
+      const antes = comClasse(area, 'mural-card').find((c) => c.getAttribute('data-sessao') === 'espera-2')!;
       antes.focus();
       area.todos((e) => e.getAttribute('data-acao') === 'atualizar')[0]!.click();
-      await ate(() => rotas.length === 2 && comClasse(area, 'mu-card')[0] !== undefined && !comClasse(area, 'mu-card').includes(antes));
+      await ate(() => rotas.length === 2 && comClasse(area, 'mural-card')[0] !== undefined && !comClasse(area, 'mural-card').includes(antes));
       const doc = (globalThis as unknown as { document: { activeElement: Elemento } }).document;
       assert.notEqual(doc.activeElement, antes);
       assert.equal(doc.activeElement.getAttribute('data-sessao'), 'espera-2');
@@ -426,4 +426,17 @@ test('a tela e o estilo dela não escrevem cor à mão, não chamam endereço de
 test('a rota da tela é a do núcleo', async () => {
   const { ROTA_DO_MURAL } = await import('../../src/api/index.ts');
   assert.equal(tela.ROTA_DO_MURAL, ROTA_DO_MURAL);
+});
+
+// O CSS de cada tela fica carregado quando se troca de tela: classe com o mesmo nome em duas telas
+// desmonta a outra. As do mural levam `mural-`; em comum só a moldura e os selos de status.
+test('o mural.css não estiliza classe de outra tela: as próprias levam mural-', () => {
+  const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+  const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+  const daMoldura = classes('moldura.css');
+  const minhas = [...classes('mural.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
+  assert.deepEqual(minhas.filter((c) => !c.startsWith('mural-')), [], 'classe própria sem o prefixo mural-');
+  for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['mural.css', 'moldura.css', 'marca.css'].includes(a))) {
+    assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `mural.css e ${outra} estilizam as mesmas classes`);
+  }
 });

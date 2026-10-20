@@ -14,7 +14,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `moldura.css` | O estilo. Toda cor é variável da marca |
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
-| `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mu-`), para não disputar `moldura.css` |
+| `mural.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `mural-`), para não disputar `moldura.css` |
 | `sessoes.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `moldura.css` |
 | `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao`; `mural.js` (C2, #34) lê `GET /api/mural`, com o filtro Todas/Esperando/Ativas no cliente; `sessoes.js` (C3, #28) lê `GET /api/sessoes` |
 

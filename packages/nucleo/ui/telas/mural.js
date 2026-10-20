@@ -19,10 +19,10 @@ export const CONTEXTO_ALTO = 80;
 export const ROTULO_DO_STATUS = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 // Os motivos do "esperando", como no wireframe: urgente em negrito, o resto leve.
 const MOTIVOS = {
-  notification: { rotulo: 'Pede permissão', icone: 'mural-permissao', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'mural-interrompida', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'mural-sua-vez', urgente: false },
-  session_start: { rotulo: 'No prompt', icone: 'mural-prompt', urgente: false },
+  notification: { rotulo: 'Pede permissão', icone: 'permissao', urgente: true },
+  interrupted: { rotulo: 'Interrompida', icone: 'interrompida', urgente: true },
+  stop: { rotulo: 'Sua vez', icone: 'sua-vez', urgente: false },
+  session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
 };
 const ESFORCOS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
 
@@ -93,43 +93,43 @@ function usarEstilo() {
   document.head.append(el('link', { rel: 'stylesheet', href: ESTILO }));
 }
 
-const badge = (status) => el('span', { class: `mu-badge mu-b-${status}` }, el('span', { class: 'p' }), ROTULO_DO_STATUS[status] ?? status);
+const badge = (status) => el('span', { class: `mural-badge mural-b-${status}` }, el('span', { class: 'p' }), ROTULO_DO_STATUS[status] ?? status);
 
 function linhaDoCard(l) {
   if (l.tipo === 'pede') {
-    const chip = l.motivo ? el('span', { class: `mu-mot${l.motivo.urgente ? '' : ' leve'}` }, icone(l.motivo.icone), l.motivo.rotulo) : null;
-    return el('div', { class: 'mu-linha' }, chip, el('span', { class: 'mu-trunc mu-apagada' }, l.texto));
+    const chip = l.motivo ? el('span', { class: `mural-mot${l.motivo.urgente ? '' : ' leve'}` }, icone(l.motivo.icone), l.motivo.rotulo) : null;
+    return el('div', { class: 'mural-linha' }, chip, el('span', { class: 'mural-trunc mural-apagada' }, l.texto));
   }
-  if (l.tipo === 'erro') return el('div', { class: 'mu-linha mu-erro' }, icone('erro'), el('span', { class: 'mu-trunc' }, l.texto));
-  if (l.tipo === 'concluida') return el('div', { class: 'mu-linha mu-concluida' }, icone('mural-check'), el('span', { class: 'mu-trunc' }, l.texto));
-  if (l.tipo === 'parada') return el('div', { class: 'mu-linha mu-apagada' }, el('span', { class: 'mu-trunc' }, l.texto));
-  return el('div', { class: 'mu-linha mu-apagada' }, icone('mural-loader'), el('span', { class: 'mu-trunc' }, l.texto));
+  if (l.tipo === 'erro') return el('div', { class: 'mural-linha mural-erro' }, icone('erro'), el('span', { class: 'mural-trunc' }, l.texto));
+  if (l.tipo === 'concluida') return el('div', { class: 'mural-linha mural-concluida' }, icone('mural-check'), el('span', { class: 'mural-trunc' }, l.texto));
+  if (l.tipo === 'parada') return el('div', { class: 'mural-linha mural-apagada' }, el('span', { class: 'mural-trunc' }, l.texto));
+  return el('div', { class: 'mural-linha mural-apagada' }, icone('mural-loader'), el('span', { class: 'mural-trunc' }, l.texto));
 }
 
 /** A barra: `<progress>` estilizado, a largura vem do `value`. */
 function barra({ valor, max, rotulo, alto = false, tipo }) {
-  return el('progress', { class: `mu-barra${alto ? ' alto' : ''}`, 'data-barra': tipo, max: max > 0 ? max : 1, value: max > 0 ? Math.min(valor, max) : 0, 'aria-label': rotulo });
+  return el('progress', { class: `mural-barra${alto ? ' mural-alto' : ''}`, 'data-barra': tipo, max: max > 0 ? max : 1, value: max > 0 ? Math.min(valor, max) : 0, 'aria-label': rotulo });
 }
 
 function card(c) {
   const v = oQueOCardMostra(c);
   return el(
     'a',
-    { class: `cartao mu-card st-${v.status}`, href: v.href, 'data-sessao': v.id },
-    el('div', { class: 'mu-l1' }, el('span', { class: 'mu-tt mu-trunc', title: v.titulo }, v.titulo), badge(v.status)),
-    el('div', { class: 'mu-pj mu-trunc' }, v.origem),
+    { class: `cartao mural-card mural-st-${v.status}`, href: v.href, 'data-sessao': v.id },
+    el('div', { class: 'mural-l1' }, el('span', { class: 'mural-tt mural-trunc', title: v.titulo }, v.titulo), badge(v.status)),
+    el('div', { class: 'mural-pj mural-trunc' }, v.origem),
     linhaDoCard(v.linha),
     el(
       'div',
-      { class: 'mu-gr' },
+      { class: 'mural-gr' },
       ...v.grade.map(([rotulo, valor]) =>
-        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'mu-trunc' }, valor)),
+        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'mural-trunc' }, valor)),
       ),
     ),
-    el('div', { class: 'mu-linhaplano' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
+    el('div', { class: 'mural-linhaplano' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
     el(
       'div',
-      { class: 'mu-barras' },
+      { class: 'mural-barras' },
       barra({ tipo: 'plano', valor: v.plano.feitos, max: v.plano.total, rotulo: `Plano: ${v.plano.feitos} de ${v.plano.total}` }),
       barra({ tipo: 'contexto', valor: v.contexto.pct ?? 0, max: 100, alto: v.contexto.alto, rotulo: v.contexto.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.contexto.pct}%` }),
     ),
@@ -150,7 +150,7 @@ export async function montar(area, ctx) {
   const botoes = new Map();
   const seletor = el(
     'div',
-    { class: 'mu-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
+    { class: 'mural-seg', role: 'group', 'aria-label': 'Filtrar sessões' },
     ...FILTROS.map((f) => {
       const b = el('button', { type: 'button', 'data-filtro': f.id, 'aria-pressed': f.id === filtro ? 'true' : 'false', aoClicar: () => escolher(f.id) }, f.rotulo);
       botoes.set(f.id, b);
@@ -176,7 +176,7 @@ export async function montar(area, ctx) {
     const faixa = falha ? faixaDeErro({ titulo: 'O mural não atualizou.', texto: falha.message, acao: { rotulo: 'Tentar de novo', aoClicar: () => ler() } }) : null;
     const nos = cards.map(card);
     const corpo = cards.length
-      ? el('div', { class: 'mu-grade' }, ...nos)
+      ? el('div', { class: 'mural-grade' }, ...nos)
       : vazio({ icone: 'mural', titulo: f.vazio, texto: filtro === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     const focado = globalThis.document?.activeElement?.closest?.('[data-sessao]')?.getAttribute('data-sessao') ?? null;

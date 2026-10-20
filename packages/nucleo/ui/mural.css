@@ -1,67 +1,67 @@
 /* O Mural ao vivo (C2, #34): a tela carrega este arquivo. Toda cor vem de marca.css. As classes levam
-   `mu-` para não disputar com moldura.css nem com o estilo de outra tela já carregado. */
+   `mural-` para não disputar com moldura.css nem com o estilo de outra tela já carregado. */
 
-.mu-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mu-apagada { color: var(--muted); }
+.mural-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mural-apagada { color: var(--muted); }
 
 /* ---------- seletor Todas / Esperando / Ativas ---------- */
-.mu-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
-.mu-seg button { font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.mu-seg button:hover { color: var(--text); }
-.mu-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
-.mu-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mural-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.mural-seg button { font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mural-seg button:hover { color: var(--text); }
+.mural-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.mural-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- badge de status e motivo (o formato do Dashboard) ---------- */
-.mu-badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
-.mu-badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.mu-b-active { background: var(--status-active-badge); color: var(--status-active-text); }
-.mu-b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
-.mu-b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
-.mu-b-error { background: var(--status-error-badge); color: var(--status-error-text); }
-.mu-b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
-.mu-mot { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; flex: none;
+.mural-badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.mural-badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.mural-b-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.mural-b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.mural-b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.mural-b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.mural-b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.mural-mot { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; flex: none;
   background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
-.mu-mot.leve { font-weight: var(--weight-medium); }
+.mural-mot.leve { font-weight: var(--weight-medium); }
 
 /* ---------- a grade: cards do mesmo tamanho, três por linha ---------- */
-.mu-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.mu-card { padding: 14px; height: 214px; display: flex; flex-direction: column; gap: 9px; border-top: 3px solid var(--border); overflow: hidden; min-width: 0; }
-.mu-card:hover { background: var(--raised); }
-.mu-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mu-card.st-active { border-top-color: var(--status-active-dot); }
-.mu-card.st-waiting { border-top-color: var(--status-waiting-dot); }
-.mu-card.st-error { border-top-color: var(--status-error-dot); }
+.mural-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mural-card { padding: 14px; height: 214px; display: flex; flex-direction: column; gap: 9px; border-top: 3px solid var(--border); overflow: hidden; min-width: 0; }
+.mural-card:hover { background: var(--raised); }
+.mural-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mural-card.mural-st-active { border-top-color: var(--status-active-dot); }
+.mural-card.mural-st-waiting { border-top-color: var(--status-waiting-dot); }
+.mural-card.mural-st-error { border-top-color: var(--status-error-dot); }
 
-.mu-l1 { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.mu-l1 .mu-badge { margin-left: auto; }
-.mu-tt { font-size: 13.5px; font-weight: var(--weight-semibold); }
-.mu-pj { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.mural-l1 { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.mural-l1 .mural-badge { margin-left: auto; }
+.mural-tt { font-size: 13.5px; font-weight: var(--weight-semibold); }
+.mural-pj { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 
-.mu-linha { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-width: 0; }
-.mu-linha.mu-erro { color: var(--status-error-text); }
-.mu-linha.mu-concluida { color: var(--status-completed-text); }
+.mural-linha { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-width: 0; }
+.mural-linha.mural-erro { color: var(--status-error-text); }
+.mural-linha.mural-concluida { color: var(--status-completed-text); }
 
-.mu-gr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.mu-gr div { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: var(--weight-semibold); min-width: 0; }
-.mu-gr b { display: block; font-size: 13px; color: var(--text); font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-weight: var(--weight-medium); margin-top: 2px; }
+.mural-gr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mural-gr div { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: var(--weight-semibold); min-width: 0; }
+.mural-gr b { display: block; font-size: 13px; color: var(--text); font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-weight: var(--weight-medium); margin-top: 2px; }
 
-.mu-linhaplano { font-size: 11.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.mural-linhaplano { font-size: 11.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 
 /* ---------- as barras: <progress>, sem estilo inline ---------- */
-.mu-barras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.mu-barra { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 6px; border: 0; border-radius: 99px; overflow: hidden; background: var(--raised); color: var(--accent); }
-.mu-barra::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
-.mu-barra::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
-.mu-barra::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
-.mu-barra.alto { color: var(--status-error-dot); }
-.mu-barra.alto::-webkit-progress-value { background: var(--status-error-dot); }
-.mu-barra.alto::-moz-progress-bar { background: var(--status-error-dot); }
+.mural-barras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mural-barra { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 6px; border: 0; border-radius: 99px; overflow: hidden; background: var(--raised); color: var(--accent); }
+.mural-barra::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
+.mural-barra::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
+.mural-barra::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
+.mural-barra.mural-alto { color: var(--status-error-dot); }
+.mural-barra.mural-alto::-webkit-progress-value { background: var(--status-error-dot); }
+.mural-barra.mural-alto::-moz-progress-bar { background: var(--status-error-dot); }
 
-/* Janela mais estreita: duas colunas, depois uma. */
-@media (max-width: 1100px) {
-  .mu-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Três por linha até a janela do app (1100 de largura); mais estreita, duas, depois uma. */
+@media (max-width: 900px) {
+  .mural-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-width: 720px) {
-  .mu-grade { grid-template-columns: minmax(0, 1fr); }
-  .cc-cab:has(.mu-seg) { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .mural-grade { grid-template-columns: minmax(0, 1fr); }
+  .cc-cab:has(.mural-seg) { flex-wrap: wrap; }
 }
