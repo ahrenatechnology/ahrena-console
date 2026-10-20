@@ -83,6 +83,9 @@ export const IMPORT_STATUS = {
 
 export const IMPORT_ICON = { ok: 'file-text', 'outside-repo': 'monitor', missing: 'error', cycle: 'repeat', 'too-deep': 'layers' };
 
+/** A configuração cujo texto o núcleo nunca devolve (src/agent-instructions/read.ts, `CONFIG_PATHS`). */
+const CONFIG_PATHS = new Set(['.claude/settings.json', '.mcp.json']);
+
 const lineCount = (text) => String(text ?? '').replace(/\n$/, '').split('\n').length;
 
 /** O import abre sozinho quando é um arquivo de instrução do primeiro salto (o `@AGENTS.md` do CLAUDE.md, C32). */
@@ -101,7 +104,7 @@ function importBlock(node, opts) {
         { class: 'ins-import-head' },
         icon(status === 'ok' ? 'file-text' : IMPORT_ICON[status]),
         el('span', { class: 'mono ins-import-ref' }, ref),
-        el('span', { class: 'ins-import-why' }, status === 'ok' ? 'achado, sem o texto lido' : IMPORT_STATUS[status]),
+        el('span', { class: 'ins-import-why' }, status !== 'ok' ? IMPORT_STATUS[status] : CONFIG_PATHS.has(node.path) ? 'conteúdo não exibido: da configuração só sai o resumo, nos cards de .claude/' : 'achado, sem o texto lido'),
       ),
     );
     return box;
@@ -244,7 +247,8 @@ function inline(src, r) {
       }
       continue;
     }
-    if (c === '[' || (c === '!' && src[i + 1] === '[')) {
+    // Dentro do rótulo de um link, nada vira outro link (`<a>` dentro de `<a>`): fica texto.
+    if (!r.noLinks && (c === '[' || (c === '!' && src[i + 1] === '['))) {
       const image = c === '!';
       const link = parseLink(src, image ? i + 1 : i);
       if (link) {
@@ -253,12 +257,12 @@ function inline(src, r) {
         const original = src.slice(i, link.end);
         if (!href) out.push(el('span', { class: 'ins-md-unsafe', title: 'Link fora de http(s) e do repositório: mostrado como texto' }, original));
         else if (image) out.push(el('a', { class: 'ins-md-link', href, target: '_blank', rel: 'noopener noreferrer' }, `imagem: ${link.label || link.dest}`));
-        else out.push(el('a', { class: 'ins-md-link', href, target: '_blank', rel: 'noopener noreferrer', title: href }, ...inline(link.label, r)));
+        else out.push(el('a', { class: 'ins-md-link', href, target: '_blank', rel: 'noopener noreferrer', title: href }, ...inline(link.label, { ...r, noLinks: true })));
         i = link.end;
         continue;
       }
     }
-    if (c === '<') {
+    if (c === '<' && !r.noLinks) {
       const m = /^<(https?:\/\/[^\s<>]+)>/i.exec(src.slice(i));
       const href = m ? safeHref(m[1], r) : null;
       if (href) {
@@ -268,7 +272,7 @@ function inline(src, r) {
         continue;
       }
     }
-    if (c === 'h' && (i === 0 || /[\s(]/.test(prev))) {
+    if (c === 'h' && !r.noLinks && (i === 0 || /[\s(]/.test(prev))) {
       const m = BARE_URL.exec(src.slice(i));
       const href = m ? safeHref(m[0], r) : null;
       if (href) {

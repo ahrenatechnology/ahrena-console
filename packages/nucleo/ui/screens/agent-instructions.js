@@ -22,7 +22,7 @@ const SEARCH_MAX = 60;
 const HOW_TO_CLAUDE_MD = 'https://docs.claude.com/en/docs/claude-code/memory';
 
 export function loadInstructionsStyle() {
-  if (!document.querySelector('link[data-screen="agent-instructions"]')) document.head.append(el('link', { rel: 'stylesheet', href: '/ui/agent-instructions.css', 'data-screen': 'agent-instructions' }));
+  if (!document.querySelector('link[data-screen="agent-instructions"]')) document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/agent-instructions.css', 'data-screen': 'agent-instructions' }));
 }
 
 /** A mudança ao vivo diz respeito a este repositório. */
@@ -111,7 +111,11 @@ const noClaudeFolder = (d) => d.settings === 'none' && !d.rules.length && !d.ski
 /** Sem acento e sem caixa, para a busca. */
 const fold = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-/** As linhas que casam com a busca num arquivo aberto e nos imports dele: `[{ path, via, line, text }]`. */
+/**
+ * As linhas que casam com a busca num arquivo aberto e nos imports dele: `[{ path, via, line, text }]`.
+ * `via`: os `@ref` do arquivo aberto até o import onde a linha está (vazio no próprio arquivo), para
+ * abrir em sequência os blocos ancestrais.
+ */
 export function searchFile(view, query) {
   const q = fold(query);
   const out = [];
@@ -123,27 +127,48 @@ export function searchFile(view, query) {
       if (fold(t).includes(q)) out.push({ path, via, line: k + 1, text: t });
     });
   };
-  visit(view.path, view.text, null);
-  const walk = (node) => {
+  visit(view.path, view.text, []);
+  const walk = (node, via) => {
     for (const n of node.imports ?? []) {
-      if (n.status === 'ok' && n.path) visit(n.path, n.text, n.ref);
-      walk(n);
+      const chain = [...via, n.ref];
+      if (n.status === 'ok' && n.path) visit(n.path, n.text, chain);
+      walk(n, chain);
     }
   };
-  walk(view.tree ?? {});
+  walk(view.tree ?? {}, []);
   return out;
 }
 
-/** O trecho com o que casou em `<mark>`, por `textContent`. */
-function highlighted(text, query) {
-  const f = fold(text);
+/**
+ * O texto dobrado (`fold`) caractere a caractere, com `at[j]`: o índice no original de onde veio o
+ * j-ésimo caractere dobrado. Um caractere pode dobrar em zero (acento solto) ou mais caracteres.
+ */
+export function foldWithMap(text) {
+  let folded = '';
+  const at = [];
+  let i = 0;
+  for (const ch of String(text)) {
+    const f = fold(ch);
+    for (let k = 0; k < f.length; k++) at.push(i);
+    folded += f;
+    i += ch.length;
+  }
+  return { folded, at };
+}
+
+/** O trecho com o que casou em `<mark>`, por `textContent`; os índices do texto dobrado voltam ao original pelo mapa. */
+export function highlighted(text, query) {
+  const { folded, at: origin } = foldWithMap(text);
   const q = fold(query);
+  const toOriginal = (j) => (j < origin.length ? origin[j] : text.length);
   const parts = [];
   let at = 0;
-  for (let k = f.indexOf(q); k >= 0 && q; k = f.indexOf(q, k + q.length)) {
-    if (k > at) parts.push(text.slice(at, k));
-    parts.push(el('mark', { class: 'ins-mark' }, text.slice(k, k + q.length)));
-    at = k + q.length;
+  for (let k = q ? folded.indexOf(q) : -1; k >= 0; k = folded.indexOf(q, k + q.length)) {
+    const start = toOriginal(k);
+    const end = toOriginal(k + q.length);
+    if (start > at) parts.push(text.slice(at, start));
+    parts.push(el('mark', { class: 'ins-mark' }, text.slice(start, end)));
+    at = end;
   }
   if (at < text.length) parts.push(text.slice(at));
   return parts;
@@ -448,8 +473,15 @@ export async function mountInstructions(area, ctx, { owner, name }) {
     if (mode === 'markdown') content.replaceChildren(el('pre', { class: 'ins-raw' }, el('code', {}, v.text)));
     else content.replaceChildren(renderMarkdown(v.text, { repo: data.repo, commit: data.commit, from: v.path, imports: v.tree?.imports ?? [] }));
     if (pendingRef && mode === 'rendered') {
-      const block = Array.from(content.querySelectorAll('.ins-import')).find((b) => b.getAttribute('data-ref') === pendingRef);
-      block?.open?.(true);
+      // Abre em sequência os blocos do caminho (`via` da busca), cada um dentro do anterior.
+      let scope = content;
+      let block = null;
+      for (const ref of [].concat(pendingRef)) {
+        const next = Array.from(scope.querySelectorAll('.ins-import')).find((b) => b.getAttribute('data-ref') === ref);
+        if (!next) break;
+        next.open?.(true);
+        block = scope = next;
+      }
       block?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     }
     pendingRef = null;
@@ -478,8 +510,8 @@ export async function mountInstructions(area, ctx, { owner, name }) {
             { class: 'ins-hits' },
             title,
             ...shown.map((h) => {
-              const b = el('button', { type: 'button', class: 'ins-hit' }, el('span', { class: 'mono ins-hit-where' }, `${h.via ? `@${h.via} · ` : ''}${h.line}`), el('span', { class: 'ins-hit-text' }, ...highlighted(h.text.trim(), q)));
-              b.addEventListener('click', () => open(f.path, h.via));
+              const b = el('button', { type: 'button', class: 'ins-hit' }, el('span', { class: 'mono ins-hit-where' }, `${h.via.length ? `@${h.via.at(-1)} · ` : ''}${h.line}`), el('span', { class: 'ins-hit-text' }, ...highlighted(h.text.trim(), q)));
+              b.addEventListener('click', () => open(f.path, h.via.length ? h.via : null));
               return b;
             }),
           );

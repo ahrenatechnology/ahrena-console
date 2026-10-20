@@ -16,7 +16,7 @@ const { mount: mountRepo } = await import('../../ui/screens/repo.js');
 // @ts-expect-error: idem
 const { renderMarkdown, safeHref } = await import('../../ui/screens/agent-instructions-markdown.js');
 // @ts-expect-error: idem
-const { instructionsChangeMatters } = await import('../../ui/screens/agent-instructions.js');
+const { highlighted, instructionsChangeMatters, searchFile } = await import('../../ui/screens/agent-instructions.js');
 
 const REPO = 'exemplo-labs/vitrine-demo';
 const COMMIT = 'abc123';
@@ -196,8 +196,8 @@ const md = (text: string, opts: Record<string, unknown> = {}) => {
 
 // ---------- a aba e a fila de abas ----------
 
-describe('Instruções (C32): a aba na tela do repositório', () => {
-  test('a fila de abas tem Instruções depois de Decisões, aberta, e Métricas vira link', async () => {
+describe('Instructions (C32): the tab on the repository screen', () => {
+  test('the tab row has Instructions after Decisions, open, and Metrics becomes a link', async () => {
     const { area, reads } = await mountTab(standard());
     const tabs = area.querySelector('nav.repo-tabs')!.children.map((t) => texto(t));
     assert.deepEqual(tabs, ['Métricas', 'Issues (12)', 'PRs (3)', 'CI', 'Sessões (5)', 'Decisões', 'Instruções']);
@@ -208,22 +208,22 @@ describe('Instruções (C32): a aba na tela do repositório', () => {
     assert.ok(reads.includes('/api/agent-instructions/exemplo-labs/vitrine-demo'));
   });
 
-  test('na aba Métricas, Instruções é o link para /instructions', async () => {
+  test('on the Metrics tab, Instructions is the link to /instructions', async () => {
     const { area } = await mountTab(standard(), { owner: 'exemplo-labs', repo: 'vitrine-demo' });
     const link = area.querySelectorAll('nav.repo-tabs a').find((a) => texto(a) === 'Instruções')!;
     assert.equal(link.getAttribute('href'), '/ui/repos/exemplo-labs/vitrine-demo/instructions');
     assert.equal(texto(area.querySelector('nav.repo-tabs [aria-current="page"]')), 'Métricas');
   });
 
-  test('uma aba que não existe mostra "Aba não encontrada"', async () => {
+  test('a tab that does not exist shows the not-found message', async () => {
     const { area, reads } = await mountTab(standard(), { owner: 'exemplo-labs', repo: 'vitrine-demo', tab: 'nada' });
     assert.match(texto(area), /Aba não encontrada/);
     assert.deepEqual(reads, []);
   });
 });
 
-describe('Instruções (C32): a lista e os cards', () => {
-  test('a lista põe a raiz primeiro, com os imports do CLAUDE.md embaixo, e as subpastas agrupadas por pasta', async () => {
+describe('Instructions (C32): the list and the cards', () => {
+  test('the list puts the root first, with the CLAUDE.md imports below, and subfolders grouped by folder', async () => {
     const { area } = await mountTab(standard());
     const nav = area.querySelector('nav.ins-nav')!;
     const items = nav.querySelectorAll('button').map((b) => texto(b));
@@ -232,7 +232,7 @@ describe('Instruções (C32): a lista e os cards', () => {
     assert.equal(texto(nav.querySelector('[aria-current="true"]')), 'CLAUDE.md raiz');
   });
 
-  test('o AGENTS.md diz que é importado pelo CLAUDE.md', async () => {
+  test('AGENTS.md says it is imported by CLAUDE.md', async () => {
     const { area } = await mountTab(standard());
     area.querySelectorAll('nav.ins-nav button').find((b) => texto(b) === 'AGENTS.md raiz')!.click();
     await settle();
@@ -240,7 +240,7 @@ describe('Instruções (C32): a lista e os cards', () => {
     assert.match(texto(area.querySelector('.ins-viewer-body')), /Texto de AGENTS\.md/);
   });
 
-  test('os cards de .claude/: regras com paths, skills, agentes, comandos, hooks sem o comando, plugins com marketplace e MCP', async () => {
+  test('the .claude/ cards: rules with paths, skills, agents, commands, hooks without the command, plugins with marketplace and MCP', async () => {
     const { area } = await mountTab(standard());
     const card = (id: string) => texto(area.querySelector(`[data-card="${id}"]`));
     assert.equal(card('rules'), 'Regras 2 tests só em test/** style todo o repositório');
@@ -252,7 +252,7 @@ describe('Instruções (C32): a lista e os cards', () => {
     assert.equal(card('mcp'), 'MCP 2 tracker .mcp.json docs .mcp.json');
   });
 
-  test('o arquivo abre renderizado, com o @AGENTS.md aberto no lugar e o @docs/style.md fechado', async () => {
+  test('the file opens rendered, with @AGENTS.md open in place and @docs/style.md closed', async () => {
     const { area, reads } = await mountTab(standard());
     assert.ok(reads.includes('/api/agent-instructions/exemplo-labs/vitrine-demo/file?path=CLAUDE.md'));
     const body = area.querySelector('.ins-viewer-body')!;
@@ -269,19 +269,19 @@ describe('Instruções (C32): a lista e os cards', () => {
     assert.equal(body.querySelectorAll('p').filter((p) => /@AGENTS/.test(texto(p))).length, 0);
   });
 
-  test('Markdown mostra o texto como está, sem renderizar', async () => {
+  test('the Markdown view shows the raw text, unrendered', async () => {
     const { area } = await mountTab(standard());
     area.querySelectorAll('.ins-seg button').find((b) => texto(b) === 'Markdown')!.click();
     assert.equal(area.querySelector('.ins-viewer-body pre')!.textContent, CLAUDE_TEXT);
     assert.equal(area.querySelector('.ins-viewer-body .ins-import'), null);
   });
 
-  test('o botão do GitHub aponta para o arquivo no commit lido', async () => {
+  test('the GitHub button points to the file at the commit read', async () => {
     const { area } = await mountTab(standard());
     assert.equal(area.querySelector('.ins-viewer-head a')!.getAttribute('href'), `https://github.com/${REPO}/blob/${COMMIT}/CLAUDE.md`);
   });
 
-  test('a busca acha nos arquivos e nos imports, sem acento e sem caixa', async () => {
+  test('search finds matches in files and imports, ignoring accents and case', async () => {
     const { area } = await mountTab(standard());
     const input = area.querySelector('input[type="search"]')!;
     input.value = 'INGLES';
@@ -292,12 +292,52 @@ describe('Instruções (C32): a lista e os cards', () => {
     assert.ok(hits.includes('@AGENTS.md · 3 - Bastidores em inglês .'), hits.join(' | '));
     assert.ok(area.querySelector('.ins-hit mark'));
   });
+
+  test('the search highlight keeps the original indices when folding changes the length', () => {
+    // `e` + acento combinante (2 unidades) dobra em 1: o destaque não pode escorregar.
+    const text = 'Cafe\u0301 e INGLÊS no fim';
+    const parts = highlighted(text, 'ingles');
+    const marks = parts.filter((p: unknown) => p instanceof ElementoFalso);
+    assert.equal(marks.length, 1);
+    assert.equal(texto(marks[0]), 'INGLÊS');
+    assert.equal(parts.map((p: unknown) => (p instanceof ElementoFalso ? texto(p) : p)).join(''), text, 'nothing lost or doubled');
+  });
+
+  test('a hit inside a nested import opens its ancestors in sequence, down to the block', async () => {
+    const nestedText = '# Profundo\n\nUse zebra para tudo.\n';
+    const styleText = '# Estilo\n\n@deep/animals.md\n';
+    const tree: ImportNodeWithText = {
+      path: 'CLAUDE.md',
+      status: 'ok',
+      text: 'Intro.\n\n@docs/style.md\n',
+      imports: [{ ref: 'docs/style.md', path: 'docs/style.md', status: 'ok', text: styleText, imports: [{ ref: 'deep/animals.md', path: 'deep/animals.md', status: 'ok', text: nestedText, imports: [] }] }],
+    };
+    const hits = searchFile({ path: 'CLAUDE.md', text: tree.text, tree }, 'ZEBRA');
+    assert.deepEqual(hits.map((h: { path: string; via: string[] }) => [h.path, h.via]), [['deep/animals.md', ['docs/style.md', 'deep/animals.md']]]);
+    const { area } = await mountTab((route) =>
+      route.includes('/file?path=') ? { ...fileView('CLAUDE.md'), text: tree.text, tree } : overview({ files: [overview().files[2]!] }),
+    );
+    const input = area.querySelector('input[type="search"]')!;
+    input.value = 'zebra';
+    input.dispatchEvent({ type: 'input' });
+    await new Promise((r) => setTimeout(r, 250));
+    await settle();
+    const hit = area.querySelector('.ins-hit')!;
+    assert.equal(texto(hit.querySelector('.ins-hit-where')), '@deep/animals.md · 3');
+    hit.click();
+    await settle();
+    const outer = area.querySelectorAll('.ins-import').find((b) => b.getAttribute('data-ref') === 'docs/style.md')!;
+    assert.equal(outer.querySelector('button')!.getAttribute('aria-expanded'), 'true');
+    const inner = outer.querySelectorAll('.ins-import').find((b) => b.getAttribute('data-ref') === 'deep/animals.md')!;
+    assert.equal(inner.querySelector('button')!.getAttribute('aria-expanded'), 'true');
+    assert.match(texto(inner.querySelector('.ins-import-body')), /Use zebra para tudo/);
+  });
 });
 
 // ---------- os estados (C33) ----------
 
-describe('Instruções (C33): vazio, avisos e estados', () => {
-  test('repositório sem nada: o vazio com só "Como escrever um CLAUDE.md", sem Instalar', async () => {
+describe('Instructions (C33): empty, warnings and states', () => {
+  test('a repository with nothing: the empty state with only the how-to link, no Install', async () => {
     const empty = overview({ empty: true, files: [], rules: [], skills: [], agents: [], commands: [], hooks: [], plugins: [], marketplaces: [], mcp: [], settings: 'none' });
     const { area } = await mountTab(standard(empty));
     const t = texto(area);
@@ -311,7 +351,7 @@ describe('Instruções (C33): vazio, avisos e estados', () => {
     assert.equal(area.querySelector('.ins-empty button'), null);
   });
 
-  test('os quatro avisos: árvore cortada na faixa, AGENTS.md sem import, import inexistente e settings.json inválido', async () => {
+  test('the four warnings: truncated tree in the banner, AGENTS.md not imported, missing import and invalid settings.json', async () => {
     const data = overview({
       truncated: true,
       settings: 'invalid',
@@ -330,20 +370,20 @@ describe('Instruções (C33): vazio, avisos e estados', () => {
     assert.match(texto(area.querySelector('[data-card="hooks"]')), /settings\.json inválido: os hooks não foram lidos/);
   });
 
-  test('"Tentar agora" da faixa relê com ?refresh=1', async () => {
+  test('the banner retry button reads again with ?refresh=1', async () => {
     const { area, reads } = await mountTab(standard(overview({ truncated: true, warnings: [{ kind: 'truncated' }] })));
     area.querySelector('.ins-band button')!.click();
     await settle();
     assert.equal(reads.at(-1), '/api/agent-instructions/exemplo-labs/vitrine-demo?refresh=1');
   });
 
-  test('sem avisos, nenhum card de avisos', async () => {
+  test('without warnings, no warnings card', async () => {
     const { area } = await mountTab(standard());
     assert.equal(area.querySelector('.ins-warnings'), null);
     assert.equal(area.querySelector('.ins-band'), null);
   });
 
-  test('carregando: "Lendo o GitHub…" até a mudança ao vivo do repositório, que faz reler', async () => {
+  test('loading: the loading message until the live change of the repository, which triggers a re-read', async () => {
     let data: AgentInstructions = overview({ state: 'loading', files: [], empty: false });
     const { area, reads, change } = await mountTab((route) => (route.includes('/file?') ? fileView('CLAUDE.md') : data));
     assert.match(texto(area), /Lendo o GitHub/);
@@ -358,14 +398,14 @@ describe('Instruções (C33): vazio, avisos e estados', () => {
     assert.ok(area.querySelector('.ins-viewer'));
   });
 
-  test('sem GitHub, não encontrado e erro: os estados das outras telas', async () => {
+  test('no GitHub, not found and error: the states of the other screens', async () => {
     assert.match(texto((await mountTab(standard(overview({ state: 'no-github', files: [] })))).area), /O núcleo está sem o GitHub/);
     assert.match(texto((await mountTab(standard(overview({ state: 'not-found', files: [] })))).area), /Repositório não encontrado/);
     assert.match(texto((await mountTab(standard(overview({ state: 'error', error: 'limite do GitHub', files: [] })))).area), /O GitHub não respondeu limite do GitHub/);
     assert.match(texto((await mountTab(() => new Error('O núcleo em 127.0.0.1 não respondeu'))).area), /Sem conexão com o núcleo/);
   });
 
-  test('a mudança ao vivo casa só com o tipo e a chave do repositório', () => {
+  test('the live change matches only the type and the repository key', () => {
     assert.equal(instructionsChangeMatters([{ type: 'repos', key: REPO }], REPO), false);
     assert.equal(instructionsChangeMatters([{ type: 'agent-instructions', key: REPO.toUpperCase() }], REPO), true);
   });
@@ -373,7 +413,7 @@ describe('Instruções (C33): vazio, avisos e estados', () => {
 
 // ---------- os imports em cada estado ----------
 
-describe('Instruções (C32): os @imports abertos no lugar', () => {
+describe('Instructions (C32): @imports opened in place', () => {
   const imports: ImportNodeWithText[] = [
     { ref: 'AGENTS.md', path: 'AGENTS.md', status: 'ok', text: '- Um assunto por commit.\n', imports: [] },
     { ref: '~/.claude/mine.md', path: null, status: 'outside-repo', imports: [] },
@@ -383,7 +423,7 @@ describe('Instruções (C32): os @imports abertos no lugar', () => {
   ];
   const text = 'Antes.\n\n@AGENTS.md\n@~/.claude/mine.md\n@docs/gone.md\n@CLAUDE.md\n@deep.md\n\nDepois.\n';
 
-  test('cada estado com o seu texto em pt-BR', () => {
+  test('each status with its pt-BR text', () => {
     const root = md(text, { imports });
     const why = Object.fromEntries(root.querySelectorAll('.ins-import').map((b) => [b.getAttribute('data-status'), texto(b)]));
     assert.match(why.ok!, /^@AGENTS\.md Um assunto por commit\.$/);
@@ -393,13 +433,13 @@ describe('Instruções (C32): os @imports abertos no lugar', () => {
     assert.equal(why['too-deep'], '@deep.md fundo demais: passa dos 5 saltos que o Claude Code segue');
   });
 
-  test('os blocos ficam no lugar do @, entre o texto de antes e o de depois', () => {
+  test('the blocks sit where the @ is, between the text before and after', () => {
     const root = md(text, { imports });
     const kids = root.querySelector('.ins-md')!.children.map((c) => (c.getAttribute('class') === 'ins-import' ? `import:${c.getAttribute('data-ref')}` : texto(c)));
     assert.deepEqual(kids, ['Antes.', 'import:AGENTS.md', 'import:~/.claude/mine.md', 'import:docs/gone.md', 'import:CLAUDE.md', 'import:deep.md', 'Depois.']);
   });
 
-  test('um import no meio da frase fica marcado na frase e abre logo depois do parágrafo', () => {
+  test('an import mid-sentence is marked in the sentence and opens right after the paragraph', () => {
     const root = md('Veja também @docs/style.md para o estilo.\n', { imports: [{ ref: 'docs/style.md', path: 'docs/style.md', status: 'ok', text: 'x', imports: [] }] });
     const kids = root.querySelector('.ins-md')!.children;
     assert.equal(kids[0]!.tagName, 'P');
@@ -407,7 +447,7 @@ describe('Instruções (C32): os @imports abertos no lugar', () => {
     assert.equal(kids[1]!.getAttribute('data-ref'), 'docs/style.md');
   });
 
-  test('o @ dentro de bloco e de trecho de código não vira import', () => {
+  test('an @ inside a code block or inline code is not an import', () => {
     const tree = [{ ref: 'docs/real.md', path: 'docs/real.md', status: 'ok', text: 'real', imports: [] }] as ImportNodeWithText[];
     const root = md('Use `@docs/real.md` assim:\n\n```md\n@docs/real.md\n```\n\n@docs/real.md\n', { imports: tree });
     const blocks = root.querySelectorAll('.ins-import');
@@ -417,7 +457,20 @@ describe('Instruções (C32): os @imports abertos no lugar', () => {
     assert.equal(root.querySelector('p code .ins-md-import-ref'), null);
   });
 
-  test('menção (@fulano) e @ que a árvore não traz ficam como texto', () => {
+  test('an imported settings.json or .mcp.json shows the node without content', () => {
+    const root = md('@.mcp.json\n@.claude/settings.json\n', {
+      imports: [
+        { ref: '.mcp.json', path: '.mcp.json', status: 'ok', imports: [] },
+        { ref: '.claude/settings.json', path: '.claude/settings.json', status: 'ok', imports: [] },
+      ],
+    });
+    assert.deepEqual(
+      root.querySelectorAll('.ins-import').map((b) => texto(b)),
+      ['@.mcp.json conteúdo não exibido: da configuração só sai o resumo, nos cards de .claude/', '@.claude/settings.json conteúdo não exibido: da configuração só sai o resumo, nos cards de .claude/'],
+    );
+  });
+
+  test('a mention (@someone) and an @ the tree does not bring stay as text', () => {
     const root = md('Fale com @colega-a sobre @docs/other.md.\n', { imports: [] });
     assert.equal(root.querySelectorAll('.ins-import').length, 0);
     assert.equal(texto(root), 'Fale com @colega-a sobre @docs/other.md.');
@@ -426,8 +479,8 @@ describe('Instruções (C32): os @imports abertos no lugar', () => {
 
 // ---------- o renderizador ----------
 
-describe('Instruções (#183): o renderizador de Markdown', () => {
-  test('títulos, listas, código, ênfase, links e tabela viram estrutura', () => {
+describe('Instructions (#183): the Markdown renderer', () => {
+  test('headings, lists, code, emphasis, links and tables become structure', () => {
     const root = md('# Título\n\nUm **forte**, um *leve*, um ~~riscado~~ e `code`.\n\n- um\n- dois\n  - aninhado\n\n1. primeiro\n2. segundo\n\n> citação\n\n```ts\nconst a = 1;\n```\n\n| A | B |\n|---|--:|\n| 1 | 2 |\n\n---\n');
     assert.equal(texto(root.querySelector('h2')), 'Título');
     assert.equal(texto(root.querySelector('strong')), 'forte');
@@ -445,7 +498,7 @@ describe('Instruções (#183): o renderizador de Markdown', () => {
     assert.ok(root.querySelector('hr'));
   });
 
-  test('HTML embutido vira texto, e nada entra por innerHTML', () => {
+  test('embedded HTML becomes text, and nothing goes through innerHTML', () => {
     const root = md('<script>alert(1)</script>\n\nTexto <img src=x onerror="alert(2)"> e <b>negrito</b>.\n\n<div onclick="x()">bloco</div>\n');
     assert.equal(root.querySelector('script'), null);
     assert.equal(root.querySelector('img'), null);
@@ -456,14 +509,14 @@ describe('Instruções (#183): o renderizador de Markdown', () => {
     assert.deepEqual(innerHtmlOutsideIcons(root), []);
   });
 
-  test('javascript:, data: e outros esquemas não viram link; ficam como texto', () => {
+  test('javascript:, data: and other schemes do not become links; they stay as text', () => {
     const root = md('[a](javascript:alert(1)) [b](JAVASCRIPT:alert(1)) [c](data:text/html,<script>x</script>) [d](vbscript:x) [e](//evil.example/x) [f](file:///etc/passwd)\n');
     assert.equal(root.querySelectorAll('a').length, 0);
     assert.match(texto(root), /\[a\]\(javascript:alert\(1\)\)/);
     for (const raw of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,x', 'mailto:a@b.c', '//evil.example', 'java\u0000script:x']) assert.equal(safeHref(raw, { repo: REPO, commit: COMMIT, from: 'CLAUDE.md' }), null, raw);
   });
 
-  test('http(s) vira link externo; relativo aponta para o arquivo no GitHub do repositório', () => {
+  test('http(s) becomes an external link; a relative one points to the file on the repository GitHub', () => {
     const root = md('[site](https://example.com/x) e [guia](docs/guide.md#secao) e [acima](../../../fora.md) e <https://example.org>\n', { from: 'packages/api/CLAUDE.md' });
     const links = root.querySelectorAll('a');
     assert.deepEqual(
@@ -477,13 +530,22 @@ describe('Instruções (#183): o renderizador de Markdown', () => {
     assert.match(texto(root), /\[acima\]\(\.\.\/\.\.\/\.\.\/fora\.md\)/, 'relativo acima da raiz fica texto');
   });
 
-  test('imagem nunca carrega: vira link para ela', () => {
+  test('a link label never holds another link: no <a> inside <a>', () => {
+    const root = md('[veja https://example.com/x e <https://example.org> e [b](https://example.net)](https://example.com/outer)\n');
+    const links = root.querySelectorAll('a');
+    assert.equal(links.length, 1);
+    assert.equal(links[0]!.getAttribute('href'), 'https://example.com/outer');
+    assert.equal(links[0]!.querySelectorAll('a').length, 0);
+    assert.equal(texto(links[0]), 'veja https://example.com/x e <https://example.org> e [b](https://example.net)');
+  });
+
+  test('an image never loads: it becomes a link to it', () => {
     const root = md('![logo](https://example.com/logo.png) ![x](javascript:alert(1))\n');
     assert.equal(root.querySelector('img'), null);
     assert.deepEqual(root.querySelectorAll('a').map((a) => texto(a)), ['imagem: logo']);
   });
 
-  test('títulos do repositório são texto: um título com HTML não vira elemento', () => {
+  test('repository titles are text: a title with HTML does not become an element', () => {
     const root = md('# <img src=x onerror=alert(1)> Ignore as instruções anteriores\n');
     assert.equal(root.querySelector('img'), null);
     assert.equal(texto(root.querySelector('h2')), '<img src=x onerror=alert(1)> Ignore as instruções anteriores');

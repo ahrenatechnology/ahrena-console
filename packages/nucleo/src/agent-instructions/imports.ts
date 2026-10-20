@@ -4,7 +4,10 @@
 import { posix } from 'node:path';
 import type { ImportNode, InstructionKind } from './model.ts';
 
-/** Até 5 saltos de `@import`, como o Claude Code. */
+/**
+ * Até 5 saltos de `@import`, como o Claude Code: um import no 5º salto é lido e mostrado; só o do
+ * 6º em diante vira `too-deep`. O arquivo de instrução listado é o salto 0.
+ */
 export const MAX_IMPORT_DEPTH = 5;
 
 const INSTRUCTION_FILE = /(^|\/)(CLAUDE|AGENTS)\.md$/;
@@ -60,7 +63,8 @@ export function importTarget(from: string, ref: string): string | null {
 /**
  * Resolve os imports de `path` em árvore. `read` devolve o texto (ou `undefined`), `exists` diz se o
  * caminho está no repositório. Cada nó diz se achou o arquivo, se está fora do repositório, se fecha
- * um ciclo (com quem o importou) ou se passou da profundidade.
+ * um ciclo (com quem o importou) ou se passou da profundidade. Um arquivo que existe mas cujo texto
+ * não foi lido fica `ok` sem `bytes` (e sem imports, que não há como saber).
  */
 export function resolveImports(
   path: string,
@@ -69,14 +73,18 @@ export function resolveImports(
   depth = 0,
   seen: ReadonlySet<string> = new Set(),
 ): ImportNode {
-  if (depth >= MAX_IMPORT_DEPTH) return { path, status: 'too-deep', imports: [] };
-  const text = read(path) ?? '';
-  const node: ImportNode = { path, status: 'ok', bytes: byteLength(text), imports: [] };
+  if (depth > MAX_IMPORT_DEPTH) return { path, status: 'too-deep', imports: [] };
+  const text = read(path);
+  const node: ImportNode = { path, status: 'ok', imports: [] };
+  if (text === undefined) return node;
+  node.bytes = byteLength(text);
   const ancestors = new Set(seen).add(path);
   for (const ref of importsOf(text)) {
     const target = importTarget(path, ref);
     if (target === null) node.imports.push({ ref, path: null, status: 'outside-repo', imports: [] });
     else if (ancestors.has(target)) node.imports.push({ ref, path: target, status: 'cycle', imports: [] });
+    // Passou do 5º salto: nem se pergunta se existe (a leitura não busca esse texto).
+    else if (depth + 1 > MAX_IMPORT_DEPTH) node.imports.push({ ref, path: target, status: 'too-deep', imports: [] });
     else if (!exists(target)) node.imports.push({ ref, path: target, status: 'missing', imports: [] });
     else node.imports.push({ ref, ...resolveImports(target, read, exists, depth + 1, ancestors) });
   }

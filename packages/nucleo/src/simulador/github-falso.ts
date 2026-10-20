@@ -239,34 +239,34 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
   };
   const achar = (dono: string, nome: string) => dados.repos.find((x) => x.dono.toLowerCase() === dono.toLowerCase() && x.nome.toLowerCase() === nome.toLowerCase()) ?? null;
   const rateLimit = { cost: 1, remaining: 4999, resetAt: iso(t0 + 3_600_000) };
-  const gits = new Map<string, GitFalso>();
-  const gitDe = (repo: RepoFalso) => {
+  const gitsByRepo = new Map<string, GitFake>();
+  const gitOf = (repo: RepoFalso) => {
     const k = `${repo.dono}/${repo.nome}`;
-    let g = gits.get(k);
-    if (!g) gits.set(k, (g = montarGit(repo)));
+    let g = gitsByRepo.get(k);
+    if (!g) gitsByRepo.set(k, (g = buildGit(repo)));
     return g;
   };
   /** A descoberta: o commit, um apelido por arquivo da raiz e `.claude/` em 3 níveis. */
-  const descoberta = (repo: RepoFalso) => {
-    const g = gitDe(repo);
-    const blob = (path: string) => (g.oids.has(path) ? { oid: g.oids.get(path) } : g.pastas.has(path) ? {} : null);
-    const entradas = (pasta: string, nivel: number): unknown[] => {
-      const nomes = new Set<string>();
-      for (const p of [...Object.keys(g.arquivos), ...g.pastas]) if (p.startsWith(`${pasta}/`)) nomes.add(p.slice(pasta.length + 1).split('/')[0]);
-      return [...nomes].sort().map((nome) => {
-        const path = `${pasta}/${nome}`;
-        if (!g.pastas.has(path)) return { name: nome, type: 'blob', oid: g.oids.get(path) };
-        return { name: nome, type: 'tree', oid: oidDe(`tree ${path}`), ...(nivel < 3 ? { object: { entries: entradas(path, nivel + 1) } } : {}) };
+  const discovery = (repo: RepoFalso) => {
+    const g = gitOf(repo);
+    const blob = (path: string) => (g.oids.has(path) ? { oid: g.oids.get(path) } : g.folders.has(path) ? {} : null);
+    const entries = (folder: string, level: number): unknown[] => {
+      const names = new Set<string>();
+      for (const p of [...Object.keys(g.files), ...g.folders]) if (p.startsWith(`${folder}/`)) names.add(p.slice(folder.length + 1).split('/')[0]);
+      return [...names].sort().map((name) => {
+        const path = `${folder}/${name}`;
+        if (!g.folders.has(path)) return { name, type: 'blob', oid: g.oids.get(path) };
+        return { name, type: 'tree', oid: oidOf(`tree ${path}`), ...(level < 3 ? { object: { entries: entries(path, level + 1) } } : {}) };
       });
     };
     return {
       nameWithOwner: `${repo.dono}/${repo.nome}`,
-      head: { oid: g.commit, tree: { oid: g.arvore } },
+      head: { oid: g.commit, tree: { oid: g.tree } },
       claudeMd: blob('CLAUDE.md'),
       agentsMd: blob('AGENTS.md'),
       dotClaudeMd: blob('.claude/CLAUDE.md'),
       mcpJson: blob('.mcp.json'),
-      claudeDir: g.pastas.has('.claude') ? { entries: entradas('.claude', 1) } : null,
+      claudeDir: g.folders.has('.claude') ? { entries: entries('.claude', 1) } : null,
     };
   };
 
@@ -286,27 +286,27 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
     }
     if (op === 'RepoFilesDiscovery') {
       const repo = achar(v.owner, v.name);
-      return { rateLimit, repository: repo ? descoberta(repo) : null };
+      return { rateLimit, repository: repo ? discovery(repo) : null };
     }
     if (op === 'RepoBlobs') {
       const repo = achar(v.owner, v.name);
       if (!repo) return { rateLimit, repository: null };
-      const g = gitDe(repo);
+      const g = gitOf(repo);
       const out: Record<string, unknown> = {};
-      for (const [k, valor] of Object.entries(v)) {
+      for (const [k, value] of Object.entries(v)) {
         const m = /^([oe])(\d+)$/.exec(k);
         if (!m) continue;
-        let caminho: string | undefined;
-        if (m[1] === 'o') caminho = [...g.oids].find(([, oid]) => oid === valor)?.[0];
+        let path: string | undefined;
+        if (m[1] === 'o') path = [...g.oids].find(([, oid]) => oid === value)?.[0];
         else {
-          const [commit, ...resto] = valor.split(':');
-          caminho = commit === g.commit ? resto.join(':') : undefined;
+          const [commit, ...rest] = value.split(':');
+          path = commit === g.commit ? rest.join(':') : undefined;
         }
-        const texto = caminho === undefined ? undefined : g.arquivos[caminho];
+        const text = path === undefined ? undefined : g.files[path];
         out[`b${m[2]}`] =
-          texto !== undefined
-            ? { oid: g.oids.get(caminho!), byteSize: Buffer.byteLength(texto), isBinary: false, text: texto }
-            : caminho !== undefined && g.pastas.has(caminho)
+          text !== undefined
+            ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, text }
+            : path !== undefined && g.folders.has(path)
               ? {}
               : null;
       }
@@ -359,12 +359,12 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
     const s = seriesDe(repo);
     const k = `${repo.dono}/${repo.nome}`;
     if (recurso === 'git/trees/HEAD') {
-      const g = gitDe(repo);
-      const todos = [...g.pastas].map((path) => ({ path, mode: '040000', type: 'tree', sha: oidDe(`tree ${k}:${path}`) }))
-        .concat(Object.keys(g.arquivos).map((path) => ({ path, mode: '100644', type: 'blob', sha: g.oids.get(path)!, size: Buffer.byteLength(g.arquivos[path]) })))
+      const g = gitOf(repo);
+      const all = [...g.folders].map((path) => ({ path, mode: '040000', type: 'tree', sha: oidOf(`tree ${k}:${path}`) }))
+        .concat(Object.keys(g.files).map((path) => ({ path, mode: '100644', type: 'blob', sha: g.oids.get(path)!, size: Buffer.byteLength(g.files[path]) })))
         .sort((a, b) => a.path.localeCompare(b.path));
-      const tree = repo.truncatedTree ? todos.filter((e) => e.path.split('/').length <= 2) : todos;
-      return { status: 200, corpo: { sha: g.arvore, truncated: repo.truncatedTree === true, tree } };
+      const tree = repo.truncatedTree ? all.filter((e) => e.path.split('/').length <= 2) : all;
+      return { status: 200, corpo: { sha: g.tree, truncated: repo.truncatedTree === true, tree } };
     }
     const stat = /^stats\/(\w+)$/.exec(recurso)?.[1];
     if (stat && repo.calcularPrimeiro?.includes(stat) && !jaCalculou.has(`${k}:${stat}`)) {
@@ -429,31 +429,31 @@ export function criarGithubFalso(dados: DadosDoGithubFalso, { agora = Date.now, 
   return { fetch: falso as typeof fetch, chamadas };
 }
 
-interface GitFalso {
-  arquivos: Record<string, string>;
+interface GitFake {
+  files: Record<string, string>;
   oids: Map<string, string>;
-  pastas: Set<string>;
-  arvore: string;
+  folders: Set<string>;
+  tree: string;
   commit: string;
 }
 
-const oidDe = (texto: string) => createHash('sha1').update(texto).digest('hex');
+const oidOf = (text: string) => createHash('sha1').update(text).digest('hex');
 
 /** O `oid` do Git de um arquivo: SHA-1 de `blob <bytes>\0<texto>`. */
-export function oidDoBlob(texto: string): string {
-  return createHash('sha1').update(`blob ${Buffer.byteLength(texto)}\0`).update(texto).digest('hex');
+export function blobOid(text: string): string {
+  return createHash('sha1').update(`blob ${Buffer.byteLength(text)}\0`).update(text).digest('hex');
 }
 
-function montarGit(repo: RepoFalso): GitFalso {
-  const arquivos = repo.files ?? { 'README.md': `# ${repo.nome}\n` };
-  const oids = new Map(Object.entries(arquivos).map(([p, t]) => [p, oidDoBlob(t)] as const));
-  const pastas = new Set<string>();
-  for (const p of Object.keys(arquivos)) {
-    const partes = p.split('/');
-    for (let i = 1; i < partes.length; i++) pastas.add(partes.slice(0, i).join('/'));
+function buildGit(repo: RepoFalso): GitFake {
+  const files = repo.files ?? { 'README.md': `# ${repo.nome}\n` };
+  const oids = new Map(Object.entries(files).map(([p, t]) => [p, blobOid(t)] as const));
+  const folders = new Set<string>();
+  for (const p of Object.keys(files)) {
+    const parts = p.split('/');
+    for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join('/'));
   }
-  const arvore = oidDe(`tree ${[...oids].sort().map(([p, o]) => `${p}:${o}`).join('\n')}`);
-  return { arquivos, oids, pastas, arvore, commit: oidDe(`commit ${repo.dono}/${repo.nome}:${arvore}`) };
+  const tree = oidOf(`tree ${[...oids].sort().map(([p, o]) => `${p}:${o}`).join('\n')}`);
+  return { files, oids, folders, tree, commit: oidOf(`commit ${repo.dono}/${repo.nome}:${tree}`) };
 }
 
 const vazia = () => ({ issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] });
@@ -541,7 +541,7 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
   },
 };
 
-const comArquivos = (repo: RepoFalso): RepoFalso => {
+const withFiles = (repo: RepoFalso): RepoFalso => {
   const extra = DEMO_INSTRUCTION_FILES[`${repo.dono}/${repo.nome}`];
   return extra ? { ...repo, files: extra.files, ...(extra.truncatedTree ? { truncatedTree: true } : {}) } : repo;
 };
@@ -561,7 +561,7 @@ export const DADOS_DA_DEMO: DadosDoGithubFalso = {
     { dono: 'estudio-ficticio', nome: 'catalogo-exemplo', privado: false, linguagem: 'TypeScript', permissao: 'READ', pushMin: 4, issues: 3, prs: 1, ci: 'SUCCESS', ritmo: 6, estrelas: 42, forks: 7, observadores: 6, licenca: 'Apache-2.0', release: { tag: 'v3.0.0', diasAtras: 12 }, releases: 9 },
     { dono: 'dev-sintetico', nome: 'cli-de-notas', privado: false, linguagem: 'Rust', permissao: 'ADMIN', pushMin: 2 * 24 * 60, issues: 2, prs: 0, ci: 'SUCCESS', ritmo: 4, estrelas: 17, forks: 2, observadores: 1, licenca: 'MIT', release: { tag: 'v0.2.0', diasAtras: 30 }, releases: 4, dependabot: 0, codeScanning: 0 },
     { dono: 'dev-sintetico', nome: 'blog-estatico', privado: false, linguagem: 'Astro', permissao: 'ADMIN', pushMin: 60, issues: 1, prs: 1, ci: 'SUCCESS', ritmo: 3, estrelas: 5, forks: 1, observadores: 1, licenca: 'MIT', release: null, releases: 0, dependabot: 1, codeScanning: 0 },
-  ] as RepoFalso[]).map(comArquivos),
+  ] as RepoFalso[]).map(withFiles),
 };
 
 /** git falso da demonstração: `/simulacao/<projeto>` é clone do repositório de mesmo nome, se houver. */

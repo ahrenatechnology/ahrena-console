@@ -2,7 +2,7 @@
 // contra um repositório sintético em memória, mais os avisos da tela (C33).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { importsOf, importTarget, kindOf, MAX_IMPORT_DEPTH, neededPaths, readInstructions, resolveImports, withTexts } from '../../src/agent-instructions/index.ts';
+import { CONFIG_PATHS, configShape, importsOf, importTarget, kindOf, MAX_IMPORT_DEPTH, neededPaths, readInstructions, resolveImports, withTexts } from '../../src/agent-instructions/index.ts';
 
 // CLAUDE.md que importa AGENTS.md e um guia, uma subpasta com o seu CLAUDE.md, e um .claude com
 // regra, skill, agente, comando, hook e plugin.
@@ -124,22 +124,77 @@ describe('#183 empty and broken repositories', () => {
 });
 
 describe('#183 imports', () => {
-  test('outside code, without mentions; cycle; maximum depth', () => {
+  test('outside code, without mentions; cycle', () => {
     assert.deepEqual(importsOf(REPO['CLAUDE.md']), ['AGENTS.md', 'docs/style-guide.md', '~/.claude/personal.md']);
     assert.deepEqual(importsOf('mail me at dev@example.invalid, or @someone.\n~~~\n@fenced.md\n~~~\n@ok.md.'), ['ok.md']);
     const cycle: Record<string, string> = { 'a.md': '@b.md', 'b.md': '@a.md' };
     const t = resolveImports('a.md', (p) => cycle[p], (p) => p in cycle);
     assert.equal(t.imports[0].imports[0].status, 'cycle');
+  });
+
+  test('maximum depth: the 5th hop is read and shown; too-deep only from the 6th', () => {
     const deep: Record<string, string> = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`n${i}.md`, `@n${i + 1}.md`]));
     deep['n8.md'] = 'end';
-    let n = resolveImports('n0.md', (p) => deep[p], (p) => p in deep);
-    let depth = 0;
-    while (n.imports.length) {
-      n = n.imports[0];
-      depth++;
-    }
-    assert.equal(depth, MAX_IMPORT_DEPTH);
-    assert.equal(n.status, 'too-deep');
+    const reads: string[] = [];
+    let n = resolveImports(
+      'n0.md',
+      (p) => (reads.push(p), deep[p]),
+      (p) => p in deep,
+    );
+    const chain = [n];
+    while (n.imports.length) chain.push((n = n.imports[0]));
+    assert.equal(MAX_IMPORT_DEPTH, 5);
+    assert.deepEqual(
+      chain.map((c) => [c.path, c.status]),
+      [
+        ['n0.md', 'ok'],
+        ['n1.md', 'ok'],
+        ['n2.md', 'ok'],
+        ['n3.md', 'ok'],
+        ['n4.md', 'ok'],
+        ['n5.md', 'ok'],
+        ['n6.md', 'too-deep'],
+      ],
+    );
+    assert.equal(chain[5].bytes, Buffer.byteLength('@n6.md'), 'the 5th hop carries its size');
+    assert.deepEqual(reads, ['n0.md', 'n1.md', 'n2.md', 'n3.md', 'n4.md', 'n5.md'], 'the 6th hop is never read');
+    // Passou do 5º salto: `too-deep` mesmo que o alvo nem exista.
+    const gone = resolveImports('n0.md', (p) => (p === 'n5.md' ? '@nowhere.md' : deep[p]), (p) => p in deep);
+    let g = gone;
+    for (let k = 0; k < 5; k++) g = g.imports[0];
+    assert.deepEqual([g.imports[0].path, g.imports[0].status], ['nowhere.md', 'too-deep']);
+  });
+
+  test('a file that exists but whose text was not read: ok, without bytes', () => {
+    const t = resolveImports('CLAUDE.md', (p) => (p === 'CLAUDE.md' ? '@AGENTS.md\n' : undefined), (p) => p === 'AGENTS.md');
+    assert.deepEqual(t.imports[0], { ref: 'AGENTS.md', path: 'AGENTS.md', status: 'ok', imports: [] });
+    assert.equal(withTexts(t, () => undefined).imports[0].text, undefined);
+  });
+
+  test('settings.json and .mcp.json: only the shape is kept, and an import of them carries no text or size', () => {
+    const shape = JSON.parse(configShape(REPO['.claude/settings.json']));
+    assert.deepEqual(shape, {
+      hooks: { PostToolUse: [{ matcher: 'Edit|Write', hooks: [{}] }], Stop: [{ hooks: [{}] }] },
+      enabledPlugins: { 'review@team': true },
+      extraKnownMarketplaces: { team: {} },
+    });
+    assert.deepEqual(JSON.parse(configShape(REPO['.mcp.json'])), { mcpServers: { tracker: {}, store: {} } });
+    assert.equal(configShape('{ broken'), '');
+    assert.equal(configShape('[1]'), '');
+    // A leitura a partir da forma dá o mesmo que a partir do texto bruto.
+    const shaped = (p: string) => (CONFIG_PATHS.has(p) ? configShape(REPO[p]) : REPO[p]);
+    const fromShape = readInstructions(Object.keys(REPO), shaped);
+    const fromRaw = readInstructions(Object.keys(REPO), read);
+    assert.deepEqual([fromShape.hooks, fromShape.plugins, fromShape.marketplaces, fromShape.mcp, fromShape.settings], [fromRaw.hooks, fromRaw.plugins, fromRaw.marketplaces, fromRaw.mcp, fromRaw.settings]);
+    // Importados por um CLAUDE.md: o nó aparece, sem texto e sem tamanho.
+    const files: Record<string, string> = { 'CLAUDE.md': '@.mcp.json\n@.claude/settings.json\n', '.mcp.json': REPO['.mcp.json'], '.claude/settings.json': REPO['.claude/settings.json'] };
+    const tree = readInstructions(Object.keys(files), (p) => files[p]).files[0].tree;
+    assert.deepEqual(tree.imports.map((i) => [i.path, i.status, i.bytes]), [
+      ['.mcp.json', 'ok', undefined],
+      ['.claude/settings.json', 'ok', undefined],
+    ]);
+    const t = withTexts(tree, (p) => files[p]);
+    assert.deepEqual(t.imports.map((i) => i.text), [undefined, undefined]);
   });
 
   test('outside the repository: home, absolute path and .. above the root', () => {

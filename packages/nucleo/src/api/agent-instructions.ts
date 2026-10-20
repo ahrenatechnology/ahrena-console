@@ -22,11 +22,16 @@
 //
 // - `repo-files:<owner>/<repo>`: a descoberta (commit, raiz, `.claude/`), TTL de 15 min;
 // - `instructions:tree:<owner>/<repo>`: os caminhos que interessam da árvore recursiva (instruções,
-//   `.claude/`, `.mcp.json` e os `.md`, alvos prováveis de import), com ETag,
-//   TTL de 15 min, relida na hora quando a árvore do commit mudou;
-// - `blob:<oid>`: o texto de cada arquivo, sem TTL (o hash do Git é o conteúdo);
-// - `instructions:paths:<owner>/<repo>:<commit>`: onde cada import fora desses caminhos caiu
-//   (o `oid`, ou `null` quando não existe), sem TTL (o commit não muda).
+//   `.claude/`, `.mcp.json` e os `.md`, alvos prováveis de import), com ETag e TTL de 15 min. A
+//   chave é uma por repositório, não por commit: quando o sha da árvore guardada diverge do da
+//   descoberta, ela é relida na hora e substituída;
+// - `blob:<oid>`: o texto de cada arquivo, sem TTL (o hash do Git é o conteúdo). Não há expurgo: o
+//   cache SQLite do núcleo não expurga, e o blob de uma versão antiga fica até o banco ser apagado;
+// - `config-shape:<oid>`: de `.claude/settings.json` e `.mcp.json`, só a forma que os cards usam
+//   (`configShape`), nunca o texto bruto; também sem TTL e sem expurgo;
+// - `instructions:paths:<owner>/<repo>`: `{ commit, located }`, onde cada import fora desses
+//   caminhos caiu no commit lido (o `oid`, ou `null` quando não existe). Um valor só por
+//   repositório, substituído quando o commit muda.
 // Com o GitHub fora ou limitado, serve o que há no cache com a hora da leitura (`readAt`) e o motivo
 // (`error`). Todas as chamadas passam pela fila do GitHub do núcleo, uma de cada vez.
 //
@@ -38,7 +43,7 @@
 import type { ServerResponse } from 'node:http';
 import { importsOf, importTarget, isInstructionFile, MAX_IMPORT_DEPTH } from '../agent-instructions/imports.ts';
 import type { AgentInstructions, InstructionFileView, InstructionsContent, InstructionsState } from '../agent-instructions/model.ts';
-import { neededPaths, readInstructions, withTexts } from '../agent-instructions/read.ts';
+import { CONFIG_PATHS, configShape, neededPaths, readInstructions, withTexts } from '../agent-instructions/read.ts';
 import { GithubCache, MemoryCacheStore, NoDataError, type CacheResult } from '../github/cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
 import { isInterestingPath, MAX_TREE_PATHS, RepoFilesSource, validPath, type BlobRequest, type RepoBlob, type RepoFilesDiscovery, type RepoTreeSummary } from '../github/repo-files-source.ts';
@@ -65,6 +70,15 @@ interface StoredBlob {
   text: string;
   bytes: number;
 }
+
+/** O que `instructions:paths:<owner>/<repo>` guarda: os imports localizados no commit lido. */
+interface LocatedPaths {
+  commit: string;
+  located: Record<string, string | null>;
+}
+
+/** A chave do texto de um arquivo no cache: a configuração (`CONFIG_PATHS`) só guarda a forma. */
+const textKey = (path: string, oid: string) => (CONFIG_PATHS.has(path) ? `config-shape:${oid}` : `blob:${oid}`);
 
 interface Entry {
   value: AgentInstructions | null;
@@ -166,9 +180,11 @@ export class AgentInstructionsService {
     const file = v.files.find((f) => f.path === path);
     if (!file) return { status: 404, body: { error: 'não é um arquivo de instrução deste repositório' } };
     const read = (p: string) => e.texts.get(p);
+    const text = read(file.path);
+    if (text === undefined) return { status: 503, body: { error: 'o texto do arquivo não foi lido' } };
     return {
       status: 200,
-      body: { state: v.state, error: v.error, repo: v.repo, readAt: v.readAt, path: file.path, kind: file.kind, text: read(file.path) ?? '', tree: withTexts(file.tree, read) },
+      body: { state: v.state, error: v.error, repo: v.repo, readAt: v.readAt, path: file.path, kind: file.kind, text, tree: withTexts(file.tree, read) },
     };
   }
 
@@ -292,7 +308,8 @@ export class AgentInstructionsService {
    * O texto dos arquivos que a leitura usa e dos `@imports` deles, até a profundidade máxima. Do
    * cache pelo `oid` quando há; o resto em lotes de 50. Um import fora dos caminhos que a árvore guarda
    * (`isInterestingPath`: instruções, `.claude/`, `.mcp.json` e os `.md`) é pedido pelo caminho no
-   * lote seguinte, e o resultado (achado ou não) fica guardado para o commit.
+   * lote seguinte, e o resultado (achado ou não) fica guardado para o commit. De `.claude/settings.json`
+   * e `.mcp.json` só fica a forma (`configShape`), no mapa e no cache.
    */
   private async readTexts(
     owner: string,
@@ -304,9 +321,11 @@ export class AgentInstructionsService {
     errors: string[],
   ): Promise<{ text: Map<string, string>; paths: Set<string> }> {
     const text = new Map<string, string>();
-    const pathsKey = `instructions:paths:${key}:${commit}`;
-    const located: Record<string, string | null> = { ...(((await this.cache.store.get(pathsKey))?.value as Record<string, string | null> | undefined) ?? {}) };
-    let locatedChanged = false;
+    const pathsKey = `instructions:paths:${key}`;
+    const stored = (await this.cache.store.get(pathsKey))?.value as LocatedPaths | undefined;
+    // Outro commit: o que foi localizado no anterior não vale; o valor é substituído no fim.
+    const located: Record<string, string | null> = stored?.commit === commit ? { ...stored.located } : {};
+    let locatedChanged = stored !== undefined && stored.commit !== commit;
     const oidOf = (p: string) => known.get(p) ?? located[p];
 
     const ensure = async (paths: readonly string[]) => {
@@ -319,7 +338,7 @@ export class AgentInstructionsService {
         // Com a árvore inteira, um `.md` que não está nela não existe: nada a pedir.
         if (oid === undefined && treeComplete && isInterestingPath(p)) continue;
         if (oid !== undefined) {
-          const hit = (await this.cache.store.get(`blob:${oid}`))?.value as StoredBlob | undefined;
+          const hit = (await this.cache.store.get(textKey(p, oid)))?.value as StoredBlob | undefined;
           if (hit) {
             text.set(p, hit.text);
             continue;
@@ -346,13 +365,16 @@ export class AgentInstructionsService {
           locatedChanged = true;
         }
         if (!b) continue;
-        text.set(p, b.text);
-        await this.cache.put(`blob:${b.oid}`, { text: b.text, bytes: b.bytes } satisfies StoredBlob);
+        const kept = CONFIG_PATHS.has(p) ? configShape(b.text) : b.text;
+        text.set(p, kept);
+        await this.cache.put(textKey(p, b.oid), { text: kept, bytes: b.bytes } satisfies StoredBlob);
       }
     };
 
     await ensure(neededPaths([...known.keys()]));
-    // Os imports, um salto por lote: os alvos de cada arquivo já lido entram no lote seguinte.
+    // Os imports, um salto por lote: os alvos de cada arquivo já lido entram no lote seguinte. A
+    // volta `depth` busca os alvos do salto `depth + 1`, então se lê do 1º ao 5º salto: exatamente o
+    // que `resolveImports` mostra (o 6º vira `too-deep` sem texto).
     const expanded = new Set<string>();
     let frontier = [...known.keys()].filter(isInstructionFile);
     for (let depth = 0; depth < MAX_IMPORT_DEPTH && frontier.length; depth++) {
@@ -370,7 +392,7 @@ export class AgentInstructionsService {
       await ensure([...targets]);
       frontier = [...targets].filter((p) => text.has(p));
     }
-    if (locatedChanged) await this.cache.put(pathsKey, located);
+    if (locatedChanged) await this.cache.put(pathsKey, { commit, located } satisfies LocatedPaths);
 
     const paths = new Set(known.keys());
     for (const [p, oid] of Object.entries(located)) if (oid) paths.add(p);

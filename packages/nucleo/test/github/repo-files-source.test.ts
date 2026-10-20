@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { BLOB_BATCH, blobsQuery, RepoFilesSource, validPath } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
-import { criarGithubFalso, oidDoBlob, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
+import { criarGithubFalso, blobOid, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
 
 const base: Omit<RepoFalso, 'dono' | 'nome'> = { privado: false, linguagem: 'TypeScript', permissao: 'READ', pushMin: 5, issues: 0, prs: 0, ci: null, ritmo: 1 };
 
@@ -39,7 +39,7 @@ describe('#183 repo files source', () => {
     assert.equal(d.nameWithOwner, 'org-a/repo');
     assert.match(d.commit!, /^[0-9a-f]{40}$/);
     assert.deepEqual(d.files.map((f) => f.path).sort(), ['.claude/settings.json', '.claude/skills/release/SKILL.md', '.mcp.json', 'AGENTS.md', 'CLAUDE.md']);
-    assert.equal(d.files.find((f) => f.path === 'AGENTS.md')!.oid, oidDoBlob('# a\n'));
+    assert.equal(d.files.find((f) => f.path === 'AGENTS.md')!.oid, blobOid('# a\n'));
     assert.deepEqual(calls, ['GRAPHQL RepoFilesDiscovery']);
     assert.equal(await source.discover('org-a', 'nope'), null);
   });
@@ -68,7 +68,7 @@ describe('#183 repo files source', () => {
     for (let i = 0; i < 60; i++) many[`docs/f${i}.md`] = `file ${i}\n`;
     const { source, calls, bodies } = setup(many);
     const d = (await source.discover('org-a', 'repo'))!;
-    const requests = [{ oid: oidDoBlob('file 0\n') }, ...Array.from({ length: 59 }, (_, i) => ({ commit: d.commit!, path: `docs/f${i + 1}.md` })), { commit: d.commit!, path: 'docs/none.md' }, { commit: d.commit!, path: 'docs' }];
+    const requests = [{ oid: blobOid('file 0\n') }, ...Array.from({ length: 59 }, (_, i) => ({ commit: d.commit!, path: `docs/f${i + 1}.md` })), { commit: d.commit!, path: 'docs/none.md' }, { commit: d.commit!, path: 'docs' }];
     const blobs = await source.blobs('org-a', 'repo', requests);
     assert.equal(blobs.length, 62);
     assert.equal(blobs[0]!.text, 'file 0\n');

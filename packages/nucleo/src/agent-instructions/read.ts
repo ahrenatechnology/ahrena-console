@@ -5,12 +5,53 @@
 // matter, dos hooks e dos plugins é a do Agent Config (src/agent-config/parse.ts).
 
 import { posix } from 'node:path';
-import { hooksOf, marketplacesOf, mcpServersOf, parseJsonObject, pluginsOf, readFrontmatter, readFrontmatterLists } from '../agent-config/parse.ts';
+import { asObject, hooksOf, keysOf, marketplacesOf, mcpServersOf, parseJsonObject, pluginsOf, readFrontmatter, readFrontmatterLists } from '../agent-config/parse.ts';
 import { isInstructionFile, kindOf, resolveImports } from './imports.ts';
 import type { CommandEntry, DescribedEntry, ImportNode, ImportNodeWithText, InstructionFile, InstructionsContent, InstructionWarning, RuleEntry } from './model.ts';
 
 export const SETTINGS_PATH = '.claude/settings.json';
 export const MCP_PATH = '.mcp.json';
+
+/**
+ * A configuração cujo texto bruto nunca é guardado nem devolvido: dela só sai a forma que os cards
+ * usam (`configShape`). Mesmo importada por um CLAUDE.md, o nó aparece sem texto e sem tamanho.
+ */
+export const CONFIG_PATHS: ReadonlySet<string> = new Set([SETTINGS_PATH, MCP_PATH]);
+
+/**
+ * A forma de `.claude/settings.json` ou `.mcp.json` que a leitura usa, como texto JSON: os eventos de
+ * `hooks` com os matchers que são texto e um item vazio por comando (nunca o comando), as chaves de
+ * `enabledPlugins` com `true`, as de `extraKnownMarketplaces` e os nomes de `mcpServers`. Nenhum
+ * outro valor (`env`, `command`, `url`, tokens) sobra. `''` quando não é um objeto JSON, que a
+ * leitura dá como inválido.
+ */
+export function configShape(text: string): string {
+  const json = parseJsonObject(text);
+  if (!json) return '';
+  const shape: Record<string, unknown> = {};
+  const hooks = asObject(json.hooks);
+  if (hooks) {
+    shape.hooks = Object.fromEntries(
+      Object.entries(hooks).map(([event, groups]) => [
+        event,
+        Array.isArray(groups)
+          ? groups.map((g) => {
+              const group = asObject(g);
+              return {
+                ...(typeof group?.matcher === 'string' ? { matcher: group.matcher } : {}),
+                ...(Array.isArray(group?.hooks) ? { hooks: (group.hooks as unknown[]).map(() => ({})) } : {}),
+              };
+            })
+          : null,
+      ]),
+    );
+  }
+  const plugins = asObject(json.enabledPlugins);
+  if (plugins) shape.enabledPlugins = Object.fromEntries(Object.keys(plugins).filter((k) => plugins[k] === true).map((k) => [k, true]));
+  if (asObject(json.extraKnownMarketplaces)) shape.extraKnownMarketplaces = Object.fromEntries(keysOf(json.extraKnownMarketplaces).map((k) => [k, {}]));
+  if (asObject(json.mcpServers)) shape.mcpServers = Object.fromEntries(keysOf(json.mcpServers).map((k) => [k, {}]));
+  return JSON.stringify(shape);
+}
 
 const SKILL = /^\.claude\/skills\/[^/]+\/SKILL\.md$/;
 const AGENT = /^\.claude\/agents\/.+\.md$/;
@@ -40,7 +81,7 @@ export function readInstructions(paths: readonly string[], read: (path: string) 
 
   const reachedBy = new Map<string, Set<string>>();
   const files: InstructionFile[] = sorted.filter(isInstructionFile).map((path) => {
-    const tree = resolveImports(path, read, exists);
+    const tree = hideConfigSize(resolveImports(path, read, exists));
     const reached = new Set<string>();
     const walk = (n: ImportNode) =>
       n.imports.forEach((c) => {
@@ -129,9 +170,22 @@ export function warningsOf(content: Omit<InstructionsContent, 'warnings' | 'empt
   return warnings;
 }
 
-/** A árvore com o texto de cada nó `ok`, para a rota do arquivo. */
+/** Um import de configuração (`CONFIG_PATHS`) sem o tamanho: o texto lido é só a forma, não o arquivo. */
+function hideConfigSize(node: ImportNode): ImportNode {
+  if (node.path && CONFIG_PATHS.has(node.path)) delete node.bytes;
+  node.imports.forEach(hideConfigSize);
+  return node;
+}
+
+/**
+ * A árvore com o texto de cada nó `ok` cujo texto foi lido, para a rota do arquivo. A configuração
+ * (`CONFIG_PATHS`) nunca leva texto: a tela mostra o nó sem conteúdo.
+ */
 export function withTexts(node: ImportNode, read: (path: string) => string | undefined): ImportNodeWithText {
   const out: ImportNodeWithText = { ...node, imports: node.imports.map((c) => withTexts(c, read)) };
-  if (node.status === 'ok' && node.path) out.text = read(node.path) ?? '';
+  if (node.status === 'ok' && node.path && !CONFIG_PATHS.has(node.path)) {
+    const text = read(node.path);
+    if (text !== undefined) out.text = text;
+  }
   return out;
 }

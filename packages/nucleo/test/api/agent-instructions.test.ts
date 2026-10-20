@@ -11,7 +11,7 @@ import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { RepoFilesSource } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
 import { CursorDeMudancas } from '../../src/mudancas/cursor.ts';
-import { criarGithubFalso, DADOS_DA_DEMO, DEMO_INSTRUCTION_FILES, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
+import { blobOid, criarGithubFalso, DADOS_DA_DEMO, DEMO_INSTRUCTION_FILES, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
 
 const T0 = Date.parse('2026-10-20T12:00:00Z');
 const TOKEN = 'token-that-must-not-leak';
@@ -34,7 +34,8 @@ function data(files: Record<string, string> = FULL): DadosDoGithubFalso {
   };
 }
 
-type Mode = 'ok' | 'down';
+/** `no-blobs`: só os lotes de conteúdo (`RepoBlobs`) falham. */
+type Mode = 'ok' | 'down' | 'no-blobs';
 
 interface Setup {
   service: AgentInstructionsService;
@@ -45,6 +46,8 @@ interface Setup {
   changes: () => Promise<{ type: string; key: string }[]>;
   /** Troca os dados do GitHub falso (um push). */
   push: (files: Record<string, string>) => void;
+  /** O cache em memória, para ver o que ficou guardado. */
+  store: MemoryCacheStore;
 }
 
 function setup({ token = TOKEN as string | (() => Promise<string>), noSource = false } = {}): Setup {
@@ -56,6 +59,7 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
   const mode = { current: 'ok' as Mode };
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     if (mode.current === 'down') throw new Error('rede fora');
+    if (mode.current === 'no-blobs' && String(init?.body ?? '').includes('RepoBlobs')) throw new Error('lote de conteúdo fora');
     const before = gh.chamadas.length;
     const r = await gh.fetch(input, init);
     all.push(...gh.chamadas.slice(before));
@@ -65,9 +69,10 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
   const transport = new GithubReposSource({ token, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid' });
   const cursor = new CursorDeMudancas({ geracao: 'g', agruparMs: 0, intervaloMinimoMs: 0 });
   const start = cursor.atual;
+  const store = new MemoryCacheStore();
   const service = new AgentInstructionsService({
     source: noSource ? null : new RepoFilesSource(transport),
-    cache: new GithubCache({ store: new MemoryCacheStore(), now }),
+    cache: new GithubCache({ store, now }),
     changes: cursor,
     now,
   });
@@ -81,6 +86,7 @@ function setup({ token = TOKEN as string | (() => Promise<string>), noSource = f
     push: (files) => {
       gh = criarGithubFalso(data(files), { agora: now });
     },
+    store,
   };
 }
 
@@ -255,6 +261,76 @@ describe('#183 the Instructions tab, through the service', () => {
     const f = await s.service.file('org-a', 'full', 'packages/api/CLAUDE.md');
     assert.equal(f.status, 200);
     assert.equal((f.body as InstructionFileView).tree.imports[0].text, FULL['packages/api/AGENTS.md']);
+  });
+
+  test('imports: the 5th hop is fetched and shown; the 6th is too-deep and never fetched', async () => {
+    const s = setup();
+    const chain: Record<string, string> = { 'CLAUDE.md': '@d1.md\n' };
+    for (let k = 1; k <= 6; k++) chain[`d${k}.md`] = `# d${k}\n\n@d${k + 1}.md\n`;
+    chain['d7.md'] = '# d7\n';
+    s.push(chain);
+    await ready(s);
+    const f = await s.service.file('org-a', 'full', 'CLAUDE.md');
+    let n = (f.body as InstructionFileView).tree;
+    for (let k = 1; k <= 5; k++) {
+      n = n.imports[0];
+      assert.deepEqual([n.path, n.status, n.text], [`d${k}.md`, 'ok', chain[`d${k}.md`]], `hop ${k}`);
+    }
+    assert.deepEqual([n.imports[0].path, n.imports[0].status, n.imports[0].text], ['d6.md', 'too-deep', undefined]);
+    assert.ok(s.store.entries.has(`blob:${blobOid(chain['d5.md'])}`), 'the 5th hop was fetched');
+    assert.ok(!s.store.entries.has(`blob:${blobOid(chain['d6.md'])}`), 'the 6th hop was not');
+  });
+
+  test('settings.json and .mcp.json imported by a CLAUDE.md: no text on the file route, and the cache keeps only the shape', async () => {
+    const s = setup();
+    s.push({ ...FULL, 'CLAUDE.md': '# x\n\n@.mcp.json\n@.claude/settings.json\n' });
+    const r = await ready(s);
+    assert.deepEqual(r.mcp, ['tracker', 'docs']);
+    assert.deepEqual(r.plugins, [{ name: 'review-kit', marketplace: 'team-tools' }]);
+    assert.deepEqual(r.hooks, [
+      { event: 'PostToolUse', count: 1, matchers: ['Edit|Write'] },
+      { event: 'Stop', count: 1, matchers: [] },
+    ]);
+    const f = await s.service.file('org-a', 'full', 'CLAUDE.md');
+    assert.equal(f.status, 200);
+    const tree = (f.body as InstructionFileView).tree;
+    assert.deepEqual(tree.imports.map((i) => [i.path, i.status, i.text, i.bytes]), [
+      ['.mcp.json', 'ok', undefined, undefined],
+      ['.claude/settings.json', 'ok', undefined, undefined],
+    ]);
+    const body = JSON.stringify(f.body);
+    for (const secret of ['tracker-mcp-sintetico', 'docs.example.invalid', 'format.sh', 'Bash(npm test)', 'exemplo-labs/team-tools']) assert.ok(!body.includes(secret), `the route leaks ${secret}`);
+    const cached = JSON.stringify([...s.store.entries]);
+    for (const secret of ['tracker-mcp-sintetico', 'docs.example.invalid', 'sh .claude/hooks/format.sh', 'Bash(npm test)', 'exemplo-labs/team-tools']) assert.ok(!cached.includes(secret), `the cache keeps ${secret}`);
+    assert.ok(!s.store.entries.has(`blob:${blobOid(FULL['.mcp.json'])}`));
+    assert.ok(s.store.entries.has(`config-shape:${blobOid(FULL['.mcp.json'])}`));
+  });
+
+  test('a listed file whose text was not read: the node has no bytes, and the file route answers 503', async () => {
+    const s = setup();
+    s.mode.current = 'no-blobs';
+    const r = await ready(s);
+    assert.equal(r.state, 'ready');
+    assert.match(r.error!, /lote de conteúdo fora/);
+    const claude = r.files.find((x) => x.path === 'CLAUDE.md')!;
+    assert.equal(claude.tree.status, 'ok');
+    assert.equal(claude.tree.bytes, undefined);
+    const f = await s.service.file('org-a', 'full', 'CLAUDE.md');
+    assert.deepEqual(f, { status: 503, body: { error: 'o texto do arquivo não foi lido' } });
+  });
+
+  test('instructions:paths is one value per repository, { commit, located }, replaced when the commit changes', async () => {
+    const s = setup();
+    s.push({ ...FULL, 'CLAUDE.md': '@notes/team.txt\n', 'notes/team.txt': 'equipe\n' });
+    const r1 = await ready(s);
+    const key = 'instructions:paths:org-a/full';
+    assert.deepEqual(s.store.entries.get(key)?.value, { commit: r1.commit, located: { 'notes/team.txt': blobOid('equipe\n') } });
+    s.push({ ...FULL, 'CLAUDE.md': '@notes/team.txt\n', 'notes/team.txt': 'equipe nova\n' });
+    s.clock.now += AGENT_INSTRUCTIONS_TTL.discovery + 1;
+    const r2 = await ready(s);
+    assert.notEqual(r2.commit, r1.commit);
+    assert.deepEqual(s.store.entries.get(key)?.value, { commit: r2.commit, located: { 'notes/team.txt': blobOid('equipe nova\n') } });
+    assert.deepEqual([...s.store.entries.keys()].filter((k) => k.startsWith('instructions:paths:')), [key], 'no line per commit');
   });
 
   test('the calls share the GitHub queue with the repositories: never two at once', async () => {
