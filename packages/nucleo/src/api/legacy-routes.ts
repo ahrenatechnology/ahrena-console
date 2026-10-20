@@ -140,7 +140,40 @@ const ENGLISH_VALUES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Re
     status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
     order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
   },
+  // Phase 2b layer 5: the Workflows filter and graph node ids are English in `/api/workflows?filter=&node=`
+  // (no old path; the old parameter names `filtro`/`no` are global); both value sets accepted.
+  '/api/workflows': {
+    filter: { todas: 'all', ativas: 'active', concluidas: 'completed' },
+    node: {
+      principal: 'main',
+      'origem:prompt': 'origin:prompt',
+      'origem:retomada': 'origin:resume',
+      'compactacao:sem': 'compaction:none',
+      'compactacao:compactou': 'compaction:compacted',
+      'resultado:concluida': 'outcome:completed',
+      'resultado:erro': 'outcome:error',
+      'resultado:andamento': 'outcome:active',
+      'resultado:abandonada': 'outcome:abandoned',
+      // A subagent with no type: its old node was `subagente:subagente`.
+      'subagente:subagente': 'subagent:subagent',
+    },
+  },
 };
+
+/**
+ * Query values whose old prefix carries data after it, by the route's NEW path: an old graph node
+ * `subagente:<type>` is `subagent:<type>` (the type is the subagent's own, kept as it came).
+ */
+const ENGLISH_PREFIXES_BY_PATH: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>> = {
+  '/api/workflows': { node: { 'subagente:': 'subagent:' } },
+};
+
+/** One query value in the names the handler reads: the exact map first, then an old prefix. */
+function englishValue(value: string, values: Readonly<Record<string, string>> | undefined, prefixes: Readonly<Record<string, string>> | undefined): string {
+  if (values && Object.hasOwn(values, value)) return values[value]!;
+  for (const [old, next] of Object.entries(prefixes ?? {})) if (value.startsWith(old)) return next + value.slice(old.length);
+  return value;
+}
 
 /** The new path of an old one; any other path comes back as it is. */
 export function normalizeLegacyPath(pathname: string): string {
@@ -158,13 +191,15 @@ export function normalizeLegacyPath(pathname: string): string {
 export function normalizeLegacyQuery(query: URLSearchParams, pathname = ''): URLSearchParams {
   const out = new URLSearchParams();
   const routeValues = Object.hasOwn(ENGLISH_VALUES_BY_PATH, pathname) ? ENGLISH_VALUES_BY_PATH[pathname] : undefined;
+  const routePrefixes = Object.hasOwn(ENGLISH_PREFIXES_BY_PATH, pathname) ? ENGLISH_PREFIXES_BY_PATH[pathname] : undefined;
   for (const [name, value] of query) {
     const next = LEGACY_PARAMS[name];
     if (next !== undefined && query.has(next)) continue;
     const key = next ?? name;
     const values = routeValues?.[key] ?? ENGLISH_VALUES[key];
+    const prefixes = routePrefixes?.[key];
     // A list parameter (`?type=sessao,estado`) has each of its values translated.
-    out.append(key, values ? value.split(',').map((v) => (Object.hasOwn(values, v) ? values[v] : v)).join(',') : value);
+    out.append(key, values || prefixes ? value.split(',').map((v) => englishValue(v, values, prefixes)).join(',') : value);
   }
   return out;
 }
@@ -775,6 +810,187 @@ const HISTORY: LegacyBodySpec = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// The session Detail and the workflows (phase 2b layer 5): `GET /api/sessions/<id>` (old
+// `/api/sessoes/<id>`), its tabs `/agents`, `/conversation`, `/events` (old `/agentes`, `/conversa`,
+// `/eventos`; src/api/detalhe.ts) and `/workflow`, and `GET /api/workflows` (no old path;
+// src/api/workflows.ts). The decisions tab is the next layer's.
+//
+// `GET /api/sessions/<id>` (CabecaDoDetalhe), keys old → new: versao → version, geradoEm →
+// generatedAt, sessao → session (the panel's session card), custo → cost (the panel's), abreSessao →
+// opensSession, comando → command, encerradaEm → endedAt, contagens → counts (agentes → agents,
+// eventos → events) (branch, local stay). Errors unchanged (`id de sessão inválido`, `o núcleo não
+// conhece esta sessão`).
+//
+// `/agents` (AgentesDoDetalhe), keys old → new: numeros → numbers (eventos → events, porMinuto →
+// perMinute, ferramentas → tools, ferramentasUnicas → uniqueTools, subagentes → subagents, compactacoes
+// → compactions, erros → errors, duracaoMin → durationMin, rodando → running); ferramentas → tools
+// (nome → name, n stays); tarefas → tasks (the panel's plan); tokens: cacheLido → cacheRead,
+// cacheGravado → cacheWrite, entrada → input, saida → output (total stays); agentes → agents: tipo →
+// type, nome → name, tarefa → task, modelo → model, turnos → turns, inicio → start, fim → end, custoUsd
+// → costUsd, pai → parent (id, status stay). Values: agents.type principal → main, subagente → subagent.
+//
+// `/conversation` (ConversaDoDetalhe), keys old → new: agentes → agents (nome → name), agente → agent,
+// mensagens → messages (total stays); each message: papel → role, em → at, texto → text, modelo →
+// model, tokens (entrada → input, saida → output), ferramentas → tools; each tool: nome → name, resumo →
+// summary, estado → state, entrada → input, resultado → result. Values: role voce → you, assistente →
+// assistant; tool state erro → error, permissao → permission, rodando → running (ok stays). The message
+// text and the tool summary, input and result are the session's DATA: opaque, never translated.
+//
+// `/events` (EventosDoDetalhe), keys old → new: filtrados → filtered, itens → items, proximo → next,
+// opcoes → options (total stays); each item: em → at, tipo → type, ferramenta → tool, resumo → summary,
+// agente → agent (nome → name), dados → data (id, status stay); options: tipos → types, ferramentas →
+// tools, agentes → agents (nome → name) (status stays). The event types, tools and statuses were English
+// already. The tab has no error that names a parameter: an invalid filter is ignored.
+//
+// `/workflow` (WorkflowDaSessao), keys old → new: sessaoId → sessionId, inicio → start, fim → end,
+// duracaoMs → durationMs, resumo → summary, nos → nodes, arestas → edges, rodadasDeReview →
+// reviewRounds, ajustes → changesRequested, linhaDoTempo → timeline; nodes: nome → name, tipo → type,
+// rodada → round, tarefa → task, modelo → model, duracaoMs → durationMs, estado → state, ajustes →
+// changesRequested, inicio → start, fim → end; edges: de → from, para → to, tipo → type, rotulo → label;
+// timeline: inicio → start, fim → end, faixas → lanes (noId → nodeId, rotulo → label, trechos → spans:
+// noId → nodeId, inicio → start, fim → end, estado → state). Values: node and span state ativo → active,
+// concluido → completed, erro → error; edge type abriu → opened, entregou → delivered, ajustes →
+// changes-requested (the PR review's word). The edge labels (`plano`, `diff`, `ajustes`) are screen text.
+//
+// `GET /api/workflows` (RespostaDosWorkflows), no old path, keys old → new: filtro → filter, no → node,
+// geradoEm → generatedAt, sessoes → sessions, truncado → truncated, maximo → max, grafo → graph (kpis,
+// runs stay); kpis: profundidadeMedia → averageDepth, subagentesPorSessao → subagentsPerSession,
+// sucessoSubagentes → subagentSuccess, fluxoComum → commonFlow (rotulo → label, fracao → fraction),
+// rodadasPorPr → roundsPerPr, duracaoMediaMs → averageDurationMs; runs: nome → name, estado → state,
+// modelo → model, projeto → project, sessaoId → sessionId, ferramentas → tools, duracaoMs → durationMs,
+// inicio → start, fim → end, fases → phases (nome → name), volta → loop, agentes → agents (rotulo →
+// label, tipo → type, fase → phase, estado → state, ajustes → changesRequested, ferramentas → tools,
+// duracaoMs → durationMs); graph: colunas → columns (rotulo → label), nos → nodes (coluna → column,
+// rotulo → label), arestas → edges (de → from, para → to). Values: filter todas → all, ativas →
+// active, concluidas → completed; run state ativa → active, concluida → completed, erro → error; run
+// agent state concluido → completed, rodando → running, ajustes → changes-requested, erro → error;
+// column ids origem → origin, principal → main, subagente → subagent, compactacao → compaction,
+// resultado → outcome; node ids origem:prompt → origin:prompt, origem:retomada → origin:resume,
+// principal → main, compactacao:sem → compaction:none, compactacao:compactou → compaction:compacted,
+// resultado:concluida|erro|andamento|abandonada → outcome:completed|error|active|abandoned,
+// subagente:<type> → subagent:<type>. `?filter=` and `?node=` take both (ENGLISH_VALUES_BY_PATH and
+// ENGLISH_PREFIXES_BY_PATH); the errors cite the new names: `filter: all, active ou completed`, `node: um
+// id de nó do grafo (ex.: subagent:Explore)`.
+// ---------------------------------------------------------------------------------------------
+
+const AGENT_NAME = { name: 'nome' };
+
+/** `GET /api/sessions/<id>`, new → old: the top, with the panel's session card and cost. */
+const SESSION_TOP: LegacyBodySpec = merge(
+  {
+    keys: {
+      ...scoped('', {
+        version: 'versao',
+        generatedAt: 'geradoEm',
+        session: 'sessao',
+        cost: 'custo',
+        opensSession: 'abreSessao',
+        command: 'comando',
+        endedAt: 'encerradaEm',
+        counts: 'contagens',
+      }),
+      ...scoped('counts', { agents: 'agentes', events: 'eventos' }),
+      ...scoped('cost', { series: 'serie', estimate: 'estimativa' }),
+    },
+  },
+  sessionCard('session'),
+);
+
+/** `/api/sessions/<id>/agents`, new → old: the numbers, the tools, the panel's plan, the tokens and the agent tree. */
+const SESSION_AGENTS: LegacyBodySpec = merge(
+  {
+    keys: {
+      ...scoped('', { numbers: 'numeros', tools: 'ferramentas', tasks: 'tarefas', agents: 'agentes' }),
+      ...scoped('numbers', {
+        events: 'eventos',
+        perMinute: 'porMinuto',
+        tools: 'ferramentas',
+        uniqueTools: 'ferramentasUnicas',
+        subagents: 'subagentes',
+        compactions: 'compactacoes',
+        errors: 'erros',
+        durationMin: 'duracaoMin',
+        running: 'rodando',
+      }),
+      ...scoped('tools', AGENT_NAME),
+      ...scoped('tokens', { cacheRead: 'cacheLido', cacheWrite: 'cacheGravado', input: 'entrada', output: 'saida' }),
+      ...scoped('agents', { type: 'tipo', name: 'nome', task: 'tarefa', model: 'modelo', turns: 'turnos', start: 'inicio', end: 'fim', costUsd: 'custoUsd', parent: 'pai' }),
+    },
+    values: { 'agents.type': { main: 'principal', subagent: 'subagente' } },
+  },
+  plan('tasks'),
+);
+
+/** `/api/sessions/<id>/conversation`, new → old; what the session said and ran is data. */
+const SESSION_CONVERSATION: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { agents: 'agentes', agent: 'agente', messages: 'mensagens' }),
+    ...scoped('agents', AGENT_NAME),
+    ...scoped('messages', { role: 'papel', at: 'em', text: 'texto', model: 'modelo', tools: 'ferramentas' }),
+    ...scoped('tokens', { input: 'entrada', output: 'saida' }),
+    ...scoped('tools', { name: 'nome', summary: 'resumo', state: 'estado', input: 'entrada', result: 'resultado' }),
+  },
+  values: {
+    'messages.role': { you: 'voce', assistant: 'assistente' },
+    'tools.state': { error: 'erro', permission: 'permissao', running: 'rodando' },
+  },
+  opaque: ['messages.text', 'tools.summary', 'tools.input', 'tools.result'],
+};
+
+/** `/api/sessions/<id>/events`, new → old: the page of the timeline and its filter options. */
+const SESSION_EVENTS: LegacyBodySpec = {
+  keys: {
+    ...scoped('', { filtered: 'filtrados', items: 'itens', next: 'proximo', options: 'opcoes' }),
+    ...scoped('items', { at: 'em', type: 'tipo', tool: 'ferramenta', summary: 'resumo', agent: 'agente', data: 'dados' }),
+    ...scoped('agent', AGENT_NAME),
+    ...scoped('options', { types: 'tipos', tools: 'ferramentas', agents: 'agentes' }),
+    ...scoped('agents', AGENT_NAME),
+  },
+  opaque: ['items.summary', 'items.data'],
+};
+
+const WORKFLOW_NODE_STATES = { active: 'ativo', completed: 'concluido', error: 'erro' };
+
+/** `/api/sessions/<id>/workflow`, new → old: the agents' graph, the review loop and the timeline. */
+const SESSION_WORKFLOW: LegacyBodySpec = {
+  keys: {
+    ...scoped('', {
+      sessionId: 'sessaoId',
+      start: 'inicio',
+      end: 'fim',
+      durationMs: 'duracaoMs',
+      summary: 'resumo',
+      nodes: 'nos',
+      edges: 'arestas',
+      reviewRounds: 'rodadasDeReview',
+      changesRequested: 'ajustes',
+      timeline: 'linhaDoTempo',
+    }),
+    ...scoped('nodes', {
+      name: 'nome',
+      type: 'tipo',
+      round: 'rodada',
+      task: 'tarefa',
+      model: 'modelo',
+      durationMs: 'duracaoMs',
+      state: 'estado',
+      changesRequested: 'ajustes',
+      start: 'inicio',
+      end: 'fim',
+    }),
+    ...scoped('edges', { from: 'de', to: 'para', type: 'tipo', label: 'rotulo' }),
+    ...scoped('timeline', { start: 'inicio', end: 'fim', lanes: 'faixas' }),
+    ...scoped('lanes', { nodeId: 'noId', label: 'rotulo', spans: 'trechos' }),
+    ...scoped('spans', { nodeId: 'noId', start: 'inicio', end: 'fim', state: 'estado' }),
+  },
+  values: {
+    'nodes.state': WORKFLOW_NODE_STATES,
+    'spans.state': WORKFLOW_NODE_STATES,
+    'edges.type': { opened: 'abriu', delivered: 'entregou', 'changes-requested': 'ajustes' },
+  },
+};
+
 /**
  * The spec of every old route. Empty is the identity: the layers that turn a route's keys English
  * fill its entry, and the goldens prove the old body did not move.
@@ -788,13 +1004,11 @@ export const LEGACY_BODIES: Readonly<Record<LegacyRoute, LegacyRouteSpec>> = {
   events: { response: EVENTS },
   load: { response: LOAD },
   sessions: { response: SESSIONS },
-  // The Detail's top: the session card and the cost are the panel's.
-  session: { response: merge(sessionCard('sessao'), { keys: scoped('custo', { series: 'serie', estimate: 'estimativa' }) }) },
-  // The Detail's agents tab: the task progress is the panel's plan.
-  'session/agents': { response: plan('tarefas') },
-  'session/conversation': {},
-  'session/events': {},
-  'session/workflow': {},
+  session: { response: SESSION_TOP },
+  'session/agents': { response: SESSION_AGENTS },
+  'session/conversation': { response: SESSION_CONVERSATION },
+  'session/events': { response: SESSION_EVENTS },
+  'session/workflow': { response: SESSION_WORKFLOW },
   // The Detail's decisions tab: its scope, the counts by scope and the /ui's decision cards.
   'session/decisions': {
     response: merge(

@@ -43,27 +43,32 @@ describe('Workflows na API, com a demonstração do p4', () => {
   });
 
   test('#97/AC-1 #97/AC-2 #97/AC-4 Dado a sessão do laço, quando abro a aba Workflow, vejo os agentes, a volta do review e as contas', async () => {
-    const primeiro = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
+    const primeiro = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
     assert.equal(primeiro.status, 200);
     await trabalho.esperar();
-    const { corpo } = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
+    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
     const w = corpo as WorkflowDaSessao;
     assert.deepEqual(
-      w.nos.map((n) => `${n.nome}${n.rodada ? `·r${n.rodada}` : ''}:${n.estado}`),
-      ['Principal:ativo', 'Explore:concluido', 'Plan:concluido', 'dev·r1:concluido', 'review·r1:concluido', 'dev·r2:concluido', 'review·r2:ativo', 'test-runner:ativo', 'Explore:ativo'],
+      w.nodes.map((n) => `${n.name}${n.round ? `·r${n.round}` : ''}:${n.state}`),
+      ['Principal:active', 'Explore:completed', 'Plan:completed', 'dev·r1:completed', 'review·r1:completed', 'dev·r2:completed', 'review·r2:active', 'test-runner:active', 'Explore:active'],
     );
-    assert.deepEqual(w.arestas.filter((e) => e.tipo !== 'abriu').map((e) => e.rotulo), ['plano', 'diff', 'ajustes', 'v2', null]);
-    assert.equal(w.nos.find((n) => n.nome === 'review' && n.rodada === 1)!.ajustes, 3, 'lido da última mensagem do review');
-    assert.deepEqual([w.rodadasDeReview, w.ajustes], [2, 3]);
-    assert.equal(w.resumo, 'dev → review até aprovar · termina no PR #90');
-    assert.equal(w.duracaoMs, 28 * 60_000);
+    assert.deepEqual(w.edges.filter((e) => e.type !== 'opened').map((e) => e.label), ['plano', 'diff', 'ajustes', 'v2', null]);
+    assert.equal(w.nodes.find((n) => n.name === 'review' && n.round === 1)!.changesRequested, 3, 'lido da última mensagem do review');
+    assert.deepEqual([w.reviewRounds, w.changesRequested], [2, 3]);
+    assert.equal(w.summary, 'dev → review até aprovar · termina no PR #90');
+    assert.equal(w.durationMs, 28 * 60_000);
+    // The old route answers the old body: the same graph, Portuguese keys and values.
+    const antigo = (await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow')).corpo;
+    assert.deepEqual(antigo.nos.map((n: any) => n.estado), w.nodes.map((n) => ({ active: 'ativo', completed: 'concluido', error: 'erro' })[n.state]));
+    assert.deepEqual(antigo.arestas.map((e: any) => e.tipo), w.edges.map((e) => ({ opened: 'abriu', delivered: 'entregou', 'changes-requested': 'ajustes' })[e.type]));
+    assert.deepEqual([antigo.rodadasDeReview, antigo.ajustes, antigo.linhaDoTempo.faixas.length], [2, 3, w.timeline.lanes.length]);
   });
 
   test('#97/AC-3 Dado a sessão do laço, a linha do tempo vai do início dela até agora, uma faixa por agente', async () => {
-    const { corpo } = await pedir(api.url, '/api/sessoes/sim-wf-pagamentos/workflow');
+    const { corpo } = await pedir(api.url, '/api/sessions/sim-wf-pagamentos/workflow');
     const w = corpo as WorkflowDaSessao;
-    assert.equal(w.linhaDoTempo.fim, T0);
-    assert.deepEqual(w.linhaDoTempo.faixas.map((f) => [f.rotulo, f.trechos.length]), [
+    assert.equal(w.timeline.end, T0);
+    assert.deepEqual(w.timeline.lanes.map((f) => [f.label, f.spans.length]), [
       ['Agente principal', 1], ['Explore', 2], ['Plan', 1], ['dev · r1', 1], ['review · r1', 1], ['dev · r2', 1], ['review · r2', 1], ['test-runner', 1],
     ]);
   });
@@ -81,61 +86,79 @@ describe('Workflows na API, com a demonstração do p4', () => {
     const { status, corpo } = await pedir(api.url, '/api/workflows');
     assert.equal(status, 200);
     const r = corpo as RespostaDosWorkflows;
-    assert.equal(r.filtro, 'todas');
-    assert.equal(r.no, null);
-    assert.equal(r.truncado, false);
-    assert.equal(r.maximo, MAXIMO_DE_SESSOES, 'o teto usado vai no JSON');
+    assert.equal(r.filter, 'all');
+    assert.equal(r.node, null);
+    assert.equal(r.truncated, false);
+    assert.equal(r.max, MAXIMO_DE_SESSOES, 'o teto usado vai no JSON');
     for (const k of Object.keys(r.kpis) as (keyof typeof r.kpis)[]) assert.notEqual(r.kpis[k], null, `KPI ${k}`);
-    assert.equal(r.kpis.fluxoComum!.rotulo, 'dev → review');
-    assert.deepEqual(r.runs.map((x) => [x.nome, x.estado, x.projeto]), [
-      ['dev-review', 'ativa', 'motor-de-regras'],
-      ['triagem-de-bugs', 'concluida', 'vitrine-demo'],
-      ['comparar-bibliotecas', 'concluida', 'gateway-sandbox'],
+    assert.equal(r.kpis.commonFlow!.label, 'dev → review');
+    assert.deepEqual(r.runs.map((x) => [x.name, x.state, x.project]), [
+      ['dev-review', 'active', 'motor-de-regras'],
+      ['triagem-de-bugs', 'completed', 'vitrine-demo'],
+      ['comparar-bibliotecas', 'completed', 'gateway-sandbox'],
     ]);
     const dev = r.runs[0];
-    assert.deepEqual(dev.fases.map((f) => f.nome), ['Implementar', 'Revisar', 'Corrigir', 'Testar']);
-    assert.deepEqual(dev.agentes.map((a) => [a.rotulo, a.fase, a.estado, a.tokens, a.ferramentas]), [
-      ['dev:r1', 'Implementar', 'concluido', 88_000, 14],
-      ['review:r1', 'Revisar', 'ajustes', 41_000, 6],
-      ['dev:r2', 'Corrigir', 'concluido', 52_000, 9],
-      ['review:r2', 'Revisar', 'rodando', 30_000, 4],
-      ['test', 'Testar', 'rodando', 12_000, 3],
+    assert.deepEqual(dev.phases.map((f) => f.name), ['Implementar', 'Revisar', 'Corrigir', 'Testar']);
+    assert.deepEqual(dev.agents.map((a) => [a.label, a.phase, a.state, a.tokens, a.tools]), [
+      ['dev:r1', 'Implementar', 'completed', 88_000, 14],
+      ['review:r1', 'Revisar', 'changes-requested', 41_000, 6],
+      ['dev:r2', 'Corrigir', 'completed', 52_000, 9],
+      ['review:r2', 'Revisar', 'running', 30_000, 4],
+      ['test', 'Testar', 'running', 12_000, 3],
     ]);
-    assert.deepEqual([dev.agentes.length, dev.ferramentas, dev.tokens, dev.modelo], [5, 36, 223_000, 'claude-opus-5-5']);
+    assert.deepEqual([dev.agents.length, dev.tools, dev.tokens, dev.model], [5, 36, 223_000, 'claude-opus-5-5']);
   });
 
   test('#96/AC-3 #96/AC-4 Dado o grafo, o clique num nó e o filtro valem para a tela inteira', async () => {
     const todas = (await pedir(api.url, '/api/workflows')).corpo as RespostaDosWorkflows;
-    const total = todas.sessoes;
-    assert.equal(todas.truncado, false);
+    const total = todas.sessions;
+    assert.equal(todas.truncated, false);
     assert.ok(total >= SESSOES_DOS_WORKFLOWS.length);
-    assert.deepEqual(todas.grafo.colunas.map((c) => c.id), ['origem', 'principal', 'subagente', 'compactacao', 'resultado']);
-    for (const id of ['origem:prompt', 'origem:retomada', 'compactacao:sem', 'compactacao:compactou', 'resultado:concluida', 'resultado:erro']) {
-      assert.ok(todas.grafo.nos.some((n) => n.id === id && n.volume > 0), id);
+    assert.deepEqual(todas.graph.columns.map((c) => c.id), ['origin', 'main', 'subagent', 'compaction', 'outcome']);
+    for (const id of ['origin:prompt', 'origin:resume', 'compaction:none', 'compaction:compacted', 'outcome:completed', 'outcome:error']) {
+      assert.ok(todas.graph.nodes.some((n) => n.id === id && n.volume > 0), id);
     }
-    const ativas = (await pedir(api.url, '/api/workflows?filtro=ativas')).corpo as RespostaDosWorkflows;
-    const concluidas = (await pedir(api.url, '/api/workflows?filtro=concluidas')).corpo as RespostaDosWorkflows;
-    assert.equal(ativas.sessoes + concluidas.sessoes, total);
-    assert.deepEqual(ativas.runs.map((x) => x.nome), ['dev-review']);
-    const retomadas = (await pedir(api.url, '/api/workflows?no=origem:retomada')).corpo as RespostaDosWorkflows;
-    assert.equal(retomadas.no, 'origem:retomada');
-    assert.equal(retomadas.grafo.nos.find((n) => n.id === 'principal')!.volume, retomadas.sessoes);
-    assert.deepEqual(retomadas.runs.map((x) => x.nome), ['triagem-de-bugs']);
-    assert.equal((await pedir(api.url, '/api/workflows?filtro=x')).status, 400);
-    assert.equal((await pedir(api.url, '/api/workflows?no=qualquer')).status, 400);
+    const ativas = (await pedir(api.url, '/api/workflows?filter=active')).corpo as RespostaDosWorkflows;
+    const concluidas = (await pedir(api.url, '/api/workflows?filter=completed')).corpo as RespostaDosWorkflows;
+    assert.equal(ativas.sessions + concluidas.sessions, total);
+    assert.deepEqual(ativas.runs.map((x) => x.name), ['dev-review']);
+    const retomadas = (await pedir(api.url, '/api/workflows?node=origin:resume')).corpo as RespostaDosWorkflows;
+    assert.equal(retomadas.node, 'origin:resume');
+    assert.equal(retomadas.graph.nodes.find((n) => n.id === 'main')!.volume, retomadas.sessions);
+    assert.deepEqual(retomadas.runs.map((x) => x.name), ['triagem-de-bugs']);
+    const filtroRuim = await pedir(api.url, '/api/workflows?filter=x');
+    assert.deepEqual([filtroRuim.status, filtroRuim.corpo.error], [400, 'filter: all, active ou completed']);
+    const noRuim = await pedir(api.url, '/api/workflows?node=qualquer');
+    assert.deepEqual([noRuim.status, noRuim.corpo.error], [400, 'node: um id de nó do grafo (ex.: subagent:Explore)']);
+  });
+
+  test('#96 Dado os nomes e valores antigos da query, a resposta é a mesma, em inglês', async () => {
+    const pares: [string, string][] = [
+      ['/api/workflows?filtro=ativas', '/api/workflows?filter=active'],
+      ['/api/workflows?filter=concluidas', '/api/workflows?filter=completed'],
+      ['/api/workflows?filtro=todas&no=origem:retomada', '/api/workflows?filter=all&node=origin:resume'],
+      ['/api/workflows?no=principal', '/api/workflows?node=main'],
+      ['/api/workflows?no=resultado:erro', '/api/workflows?node=outcome:error'],
+      ['/api/workflows?no=compactacao:compactou', '/api/workflows?node=compaction:compacted'],
+      ['/api/workflows?no=subagente:Explore', '/api/workflows?node=subagent:Explore'],
+    ];
+    for (const [antigo, novo] of pares) {
+      const [a, b] = [(await pedir(api.url, antigo)).corpo, (await pedir(api.url, novo)).corpo];
+      assert.deepEqual({ ...a, generatedAt: null }, { ...b, generatedAt: null }, antigo);
+    }
   });
 
   test('#96 Dado mais sessões que o teto, a leitura diz que cortou', async () => {
-    const todas = await lerSessoesDosWorkflows(storage, 'todas');
+    const todas = await lerSessoesDosWorkflows(storage, 'all');
     assert.equal(todas.truncado, false);
     const n = todas.sessoes.length;
     assert.ok(n >= 3);
-    const cortada = await lerSessoesDosWorkflows(storage, 'todas', n - 1);
+    const cortada = await lerSessoesDosWorkflows(storage, 'all', n - 1);
     assert.deepEqual([cortada.sessoes.length, cortada.truncado], [n - 1, true]);
-    const exata = await lerSessoesDosWorkflows(storage, 'todas', n);
+    const exata = await lerSessoesDosWorkflows(storage, 'all', n);
     assert.deepEqual([exata.sessoes.length, exata.truncado], [n, false], 'o teto exato não corta');
     assert.deepEqual(
-      (({ truncado, maximo }) => [truncado, maximo])(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado, maximo: n - 1 })),
+      (({ truncated, max }) => [truncated, max])(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado, maximo: n - 1 })),
       [true, n - 1],
     );
   });

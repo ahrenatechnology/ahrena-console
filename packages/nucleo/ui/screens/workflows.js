@@ -1,8 +1,8 @@
 // Workflows (#96, C14): as KPIs de orquestração, os runs do Workflow tool (fases e agentes) e o grafo
-// de orquestração, sobre `GET /api/workflows?filtro=&no=` (src/api/workflows.ts). O filtro do topo e o
+// de orquestração, sobre `GET /api/workflows?filter=&node=` (src/api/workflows.ts). O filtro do topo e o
 // clique num nó do grafo valem para a tela inteira: os dois vão para a API, que devolve tudo filtrado.
 //
-// Ao vivo: relê a cada mudança `sessao` ou `estado` (de qualquer sessão) e quando a moldura manda
+// Ao vivo: relê a cada mudança `session` ou `state` (de qualquer sessão) e quando a moldura manda
 // reler. Subagente que começa ou termina não gera mudança, então, enquanto houver run ativo ou sessão
 // em andamento, relê a cada 10 s.
 //
@@ -16,9 +16,9 @@ const SVG = 'http://www.w3.org/2000/svg';
 const REREAD_ACTIVE_MS = 10_000;
 
 export const FILTERS = [
-  { id: 'todas', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
-  { id: 'ativas', rotulo: 'Só ativas', resumo: 'só as ativas' },
-  { id: 'concluidas', rotulo: 'Concluídas', resumo: 'só as concluídas' },
+  { id: 'all', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
+  { id: 'active', rotulo: 'Só ativas', resumo: 'só as ativas' },
+  { id: 'completed', rotulo: 'Concluídas', resumo: 'só as concluídas' },
 ];
 
 // ---------- Partes puras (testadas no node) ----------
@@ -33,38 +33,38 @@ export function workflowsRoute(filter, node) {
 /** As seis KPIs do C14, já escritas: `{ id, rotulo, valor, sub, icone, cor }`. `null` vira "—". */
 export function writtenKpis(k) {
   return [
-    { id: 'depth', rotulo: 'Profundidade', valor: decimal(k.profundidadeMedia), sub: 'níveis de agente', icone: 'subagent', cor: 'accent' },
-    { id: 'subagents', rotulo: 'Subagentes', valor: decimal(k.subagentesPorSessao), sub: 'por sessão', icone: 'people', cor: 'accent' },
-    { id: 'success', rotulo: 'Sucesso', valor: percent(k.sucessoSubagentes), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
-    { id: 'flow', rotulo: 'Fluxo comum', valor: k.fluxoComum?.rotulo ?? '—', sub: k.fluxoComum ? `${percent(k.fluxoComum.fracao)} das sessões` : null, icone: 'repeat', cor: 'accent' },
-    { id: 'rounds', rotulo: 'Rodadas', valor: decimal(k.rodadasPorPr), sub: 'de review por PR', icone: 'refresh', cor: 'accent' },
-    { id: 'duration', rotulo: 'Duração', valor: duration(k.duracaoMediaMs), sub: 'média', icone: 'timer', cor: 'wait' },
+    { id: 'depth', rotulo: 'Profundidade', valor: decimal(k.averageDepth), sub: 'níveis de agente', icone: 'subagent', cor: 'accent' },
+    { id: 'subagents', rotulo: 'Subagentes', valor: decimal(k.subagentsPerSession), sub: 'por sessão', icone: 'people', cor: 'accent' },
+    { id: 'success', rotulo: 'Sucesso', valor: percent(k.subagentSuccess), sub: 'dos subagentes', icone: 'ok', cor: 'ok' },
+    { id: 'flow', rotulo: 'Fluxo comum', valor: k.commonFlow?.label ?? '—', sub: k.commonFlow ? `${percent(k.commonFlow.fraction)} das sessões` : null, icone: 'repeat', cor: 'accent' },
+    { id: 'rounds', rotulo: 'Rodadas', valor: decimal(k.roundsPerPr), sub: 'de review por PR', icone: 'refresh', cor: 'accent' },
+    { id: 'duration', rotulo: 'Duração', valor: duration(k.averageDurationMs), sub: 'média', icone: 'timer', cor: 'wait' },
   ];
 }
 
 /** "motor-de-regras · 5 agentes · 36 ferramentas · 223 k tokens · 28 min" e, se acabou, "· ontem". */
 export function runMeta(run, now = new Date()) {
-  const n = run.agentes.length;
+  const n = run.agents.length;
   const parts = [
-    run.projeto,
+    run.project,
     `${num(n)} ${n === 1 ? 'agente' : 'agentes'}`,
-    `${num(run.ferramentas)} ${run.ferramentas === 1 ? 'ferramenta' : 'ferramentas'}`,
+    `${num(run.tools)} ${run.tools === 1 ? 'ferramenta' : 'ferramentas'}`,
     `${tokens(run.tokens)} tokens`,
-    duration(run.duracaoMs),
-    run.estado === 'ativa' ? null : when(run.fim ?? run.inicio, now),
+    duration(run.durationMs),
+    run.state === 'active' ? null : when(run.end ?? run.start, now),
   ];
   return parts.filter(Boolean).join(' · ');
 }
 
-const RUN_STATE = { ativa: ['Ativa', 'active'], concluida: ['Concluída', 'completed'], erro: ['Erro', 'error'] };
+const RUN_STATE = { active: ['Ativa', 'active'], completed: ['Concluída', 'completed'], error: ['Erro', 'error'] };
 
 /** O estado de um agente do run: `[texto, cor]`. */
 export function agentState(a) {
-  if (a.estado === 'concluido') return ['Concluído', 'completed'];
-  if (a.estado === 'rodando') return ['Rodando', 'active'];
-  if (a.estado === 'erro') return ['Erro', 'error'];
-  if (a.ajustes === null || a.ajustes === undefined) return ['Ajustes', 'error'];
-  return [`${num(a.ajustes)} ${a.ajustes === 1 ? 'ajuste' : 'ajustes'}`, 'error'];
+  if (a.state === 'completed') return ['Concluído', 'completed'];
+  if (a.state === 'running') return ['Rodando', 'active'];
+  if (a.state === 'error') return ['Erro', 'error'];
+  if (a.changesRequested === null || a.changesRequested === undefined) return ['Ajustes', 'error'];
+  return [`${num(a.changesRequested)} ${a.changesRequested === 1 ? 'ajuste' : 'ajustes'}`, 'error'];
 }
 
 /** Espessura de uma aresta pelo volume, entre 1,2 e 22 (a mais grossa é a de maior volume). */
@@ -82,14 +82,14 @@ const LETTER = 5.8; // largura de um caractere do rótulo (mono, 9,5 px)
  * O desenho do grafo de orquestração na `largura` do painel, em px, sem escala: as colunas, na ordem da
  * API, dividem a largura; os nós ficam empilhados no meio de cada coluna; as arestas vão em curva da
  * direita de um nó à esquerda do outro, com espessura pelo volume. O rótulo que não cabe no nó encolhe
- * com reticências (`texto`); o inteiro fica em `rotulo`.
+ * com reticências (`texto`); o inteiro fica em `label`.
  */
 export function orchestrationLayout(graph, width = WIDTH) {
-  const columns = graph.colunas;
+  const columns = graph.columns;
   const n = Math.max(1, columns.length);
   const NODE_W = Math.round(Math.min(152, Math.max(104, (width - 20) / n - 18)));
   const stepX = columns.length > 1 ? (width - 20 - NODE_W) / (columns.length - 1) : 0;
-  const byColumn = columns.map((c) => graph.nos.filter((node) => node.coluna === c.id));
+  const byColumn = columns.map((c) => graph.nodes.filter((node) => node.column === c.id));
   const height = Math.max(1, ...byColumn.map((l) => l.length)) * STEP;
   const pos = new Map();
   const nodes = [];
@@ -103,35 +103,35 @@ export function orchestrationLayout(graph, width = WIDTH) {
       const volume = num(node.volume);
       const fits = Math.max(4, Math.floor((NODE_W - 22 - volume.length * LETTER) / LETTER));
       pos.set(node.id, { x, y });
-      nodes.push({ ...node, x, y, texto: node.rotulo.length > fits ? `${node.rotulo.slice(0, fits - 1)}…` : node.rotulo, volumeEscrito: volume });
+      nodes.push({ ...node, x, y, texto: node.label.length > fits ? `${node.label.slice(0, fits - 1)}…` : node.label, volumeEscrito: volume });
     });
   });
-  const largest = Math.max(0, ...graph.arestas.map((a) => a.volume));
-  const edges = graph.arestas
-    .filter((a) => pos.has(a.de) && pos.has(a.para))
+  const largest = Math.max(0, ...graph.edges.map((a) => a.volume));
+  const edges = graph.edges
+    .filter((a) => pos.has(a.from) && pos.has(a.to))
     .map((a) => {
-      const A = pos.get(a.de);
-      const B = pos.get(a.para);
+      const A = pos.get(a.from);
+      const B = pos.get(a.to);
       const x1 = A.x + NODE_W;
       const y1 = A.y + NODE_H / 2;
       const x2 = B.x;
       const y2 = B.y + NODE_H / 2;
       const m = (x1 + x2) / 2;
-      return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: thickness(a.volume, largest), erro: a.para === 'resultado:erro' };
+      return { ...a, d: `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`, espessura: thickness(a.volume, largest), erro: a.to === 'outcome:error' };
     });
   return {
     largura: width,
     altura: height,
-    colunas: columns.map((c, i) => ({ ...c, x: Math.round(10 + i * stepX + NODE_W / 2) })),
-    nos: nodes,
-    arestas: edges,
+    columns: columns.map((c, i) => ({ ...c, x: Math.round(10 + i * stepX + NODE_W / 2) })),
+    nodes,
+    edges,
     no: { largura: NODE_W, altura: NODE_H },
   };
 }
 
 /** Há o que mudar sem aviso? Run ativo ou sessão em andamento: a tela relê de tempos em tempos. */
 export function hasActive(data) {
-  return data.runs.some((r) => r.estado === 'ativa') || data.grafo.nos.some((n) => n.id === 'resultado:andamento' && n.volume > 0);
+  return data.runs.some((r) => r.state === 'active') || data.graph.nodes.some((n) => n.id === 'outcome:active' && n.volume > 0);
 }
 
 // ---------- DOM ----------
@@ -178,9 +178,9 @@ function chip(text, extra = '') {
 }
 
 function runRow(run, isOpen, toggleOne, ctx) {
-  const [label, color] = RUN_STATE[run.estado] ?? RUN_STATE.concluida;
-  const target = `/ui/sessions/${encodeURIComponent(run.sessaoId)}`;
-  const link = el('a', { class: 'wf-run-link', href: `${target}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.nome}` }, icon('external'));
+  const [label, color] = RUN_STATE[run.state] ?? RUN_STATE.completed;
+  const target = `/ui/sessions/${encodeURIComponent(run.sessionId)}`;
+  const link = el('a', { class: 'wf-run-link', href: `${target}#workflow`, title: 'Abrir a sessão', 'aria-label': `Abrir a sessão de ${run.name}` }, icon('external'));
   // A moldura troca de tela pelo caminho e deixaria o `#workflow` para trás: o hash vai antes.
   link.addEventListener('click', (ev) => {
     if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
@@ -195,22 +195,22 @@ function runRow(run, isOpen, toggleOne, ctx) {
       'button',
       { type: 'button', class: 'wf-run-expand', 'data-run': run.id, 'aria-expanded': isOpen ? 'true' : 'false', onClick: toggleOne },
       el('span', { class: 'wf-mute' }, icon(isOpen ? 'chevron-down' : 'chevron-right')),
-      el('b', {}, run.nome),
+      el('b', {}, run.name),
       badgeEl(label, color),
-      isOpen && run.modelo ? chip(modelName(run.modelo), ' wf-chip-model mono') : null,
+      isOpen && run.model ? chip(modelName(run.model), ' wf-chip-model mono') : null,
       el('span', { class: 'wf-meta' }, runMeta(run)),
     ),
     link,
   );
   if (!isOpen) return el('div', { class: 'wf-run' }, head);
 
-  const phases = run.fases.length
+  const phases = run.phases.length
     ? el(
         'div',
         { class: 'wf-phases' },
         el('span', { class: 'wf-mute' }, icon('layers')),
-        ...run.fases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icon('arrow-right')) : null, chip(f.nome)]),
-        run.volta ? el('span', { class: 'wf-back' }, run.volta) : null,
+        ...run.phases.flatMap((f, i) => [i ? el('span', { class: 'wf-mute' }, icon('arrow-right')) : null, chip(f.name)]),
+        run.loop ? el('span', { class: 'wf-back' }, run.loop) : null,
       )
     : null;
 
@@ -222,17 +222,17 @@ function runRow(run, isOpen, toggleOne, ctx) {
     el(
       'tbody',
       {},
-      ...run.agentes.map((a) => {
+      ...run.agents.map((a) => {
         const [text, c] = agentState(a);
         return el(
           'tr',
           {},
-          el('td', { title: a.tipo ? `${a.rotulo} · ${a.tipo}` : a.rotulo }, el('span', { class: 'mono' }, a.rotulo), a.tipo ? el('span', { class: 'wf-type' }, `· ${a.tipo}`) : null),
-          el('td', {}, a.fase ? chip(a.fase) : el('span', { class: 'wf-mute' }, '—')),
+          el('td', { title: a.type ? `${a.label} · ${a.type}` : a.label }, el('span', { class: 'mono' }, a.label), a.type ? el('span', { class: 'wf-type' }, `· ${a.type}`) : null),
+          el('td', {}, a.phase ? chip(a.phase) : el('span', { class: 'wf-mute' }, '—')),
           el('td', {}, el('span', { class: `wf-pill b-${c}` }, text)),
           el('td', { class: 'wf-num mono' }, tokens(a.tokens)),
-          el('td', { class: 'wf-num mono' }, num(a.ferramentas)),
-          el('td', { class: 'wf-num mono' }, duration(a.duracaoMs)),
+          el('td', { class: 'wf-num mono' }, num(a.tools)),
+          el('td', { class: 'wf-num mono' }, duration(a.durationMs)),
         );
       }),
     ),
@@ -244,14 +244,14 @@ function graphSvg(graph, width, selected, choose) {
   const g = orchestrationLayout(graph, width);
   const { largura: W, altura: H } = g.no;
   const root = svg('svg', { class: 'wf-orch', viewBox: `0 -26 ${g.largura} ${g.altura + 30}`, width: g.largura, height: g.altura + 30, role: 'group', 'aria-label': 'Grafo de orquestração' });
-  for (const c of g.colunas) root.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.rotulo.toUpperCase()));
-  for (const a of g.arestas) root.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
-  for (const n of g.nos) {
-    const cls = ['wf-node', n.id === 'resultado:concluida' ? 'wf-node-ok' : '', n.id === 'resultado:erro' ? 'wf-node-error' : '', n.id === selected ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
+  for (const c of g.columns) root.append(svg('text', { class: 'wf-orch-col', x: c.x, y: -10, 'text-anchor': 'middle' }, c.label.toUpperCase()));
+  for (const a of g.edges) root.append(svg('path', { class: `wf-edge${a.erro ? ' wf-edge-error' : ''}`, d: a.d, 'stroke-width': a.espessura }, svg('title', {}, `${a.volume}`)));
+  for (const n of g.nodes) {
+    const cls = ['wf-node', n.id === 'outcome:completed' ? 'wf-node-ok' : '', n.id === 'outcome:error' ? 'wf-node-error' : '', n.id === selected ? 'wf-node-sel' : ''].filter(Boolean).join(' ');
     const group = svg(
       'g',
-      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selected ? 'true' : 'false', 'aria-label': `${n.rotulo}: ${n.volume}. ${n.id === selected ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
-      svg('title', {}, `${n.rotulo} · ${n.id === selected ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
+      { class: cls, 'data-node': n.id, tabindex: 0, role: 'button', 'aria-pressed': n.id === selected ? 'true' : 'false', 'aria-label': `${n.label}: ${n.volume}. ${n.id === selected ? 'Limpar o filtro' : 'Filtrar a tela por este nó'}` },
+      svg('title', {}, `${n.label} · ${n.id === selected ? 'clique para limpar o filtro' : 'clique para filtrar a tela'}`),
       svg('rect', { x: n.x, y: n.y, width: W, height: H, rx: 7 }),
       svg('text', { class: 'wf-node-label', x: n.x + 8, y: n.y + 19 }, n.texto),
       svg('text', { class: 'wf-node-vol', x: n.x + W - 8, y: n.y + 19, 'text-anchor': 'end' }, n.volumeEscrito),
@@ -271,7 +271,7 @@ function graphSvg(graph, width, selected, choose) {
 
 export async function mount(area, ctx) {
   loadCss();
-  let filter = 'todas';
+  let filter = 'all';
   let node = null;
   let data = null;
   let failure = null;
@@ -309,7 +309,7 @@ export async function mount(area, ctx) {
     const width = Math.floor(graphBox.clientWidth);
     if (!data || !graphBox.isConnected || width <= 0) return;
     graphWidth = width;
-    graphBox.replaceChildren(graphSvg(data.grafo, width, data.no, chooseNode));
+    graphBox.replaceChildren(graphSvg(data.graph, width, data.node, chooseNode));
   }
   const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
     if (Math.floor(graphBox.clientWidth) !== graphWidth) drawGraph();
@@ -319,7 +319,7 @@ export async function mount(area, ctx) {
   function draw() {
     const d = data;
     // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
-    if (!d.sessoes && d.filtro === 'todas' && !d.no) {
+    if (!d.sessions && d.filter === 'all' && !d.node) {
       area.replaceChildren(
         ...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
         empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
@@ -327,9 +327,9 @@ export async function mount(area, ctx) {
       return;
     }
     if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
-    const nodeLabel = node ? (d.grafo.nos.find((n) => n.id === node)?.rotulo ?? node) : null;
+    const nodeLabel = node ? (d.graph.nodes.find((n) => n.id === node)?.label ?? node) : null;
     // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
-    const summary = `${FILTERS.find((f) => f.id === d.filtro)?.resumo ?? 'todas as sessões'}${d.truncado ? `, das ${d.maximo ?? 500} mais recentes` : ''}`;
+    const summary = `${FILTERS.find((f) => f.id === d.filter)?.resumo ?? 'todas as sessões'}${d.truncated ? `, das ${d.max ?? 500} mais recentes` : ''}`;
 
     const runs = d.runs.length
       ? d.runs.map((r) =>
@@ -339,10 +339,10 @@ export async function mount(area, ctx) {
             [...area.querySelectorAll('.wf-run-expand')].find((b) => b.getAttribute('data-run') === r.id)?.focus();
           }, ctx),
         )
-      : [el('p', { class: 'wf-none' }, d.sessoes ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
+      : [el('p', { class: 'wf-none' }, d.sessions ? 'Nenhum run do Workflow tool nestas sessões.' : 'Nenhuma sessão neste filtro.')];
 
     // O grafo é desenhado depois, na largura que o painel tem na tela (e de novo quando ela muda).
-    const graph = d.grafo.nos.length
+    const graph = d.graph.nodes.length
       ? graphBox
       : el(
           'div',
@@ -363,7 +363,7 @@ export async function mount(area, ctx) {
       ),
     ];
     area.replaceChildren(...parts.filter(Boolean));
-    if (d.grafo.nos.length) drawGraph();
+    if (d.graph.nodes.length) drawGraph();
     if (focusTarget) {
       [...area.querySelectorAll('.wf-node')].find((g) => g.getAttribute('data-node') === focusTarget)?.focus();
       focusTarget = null;

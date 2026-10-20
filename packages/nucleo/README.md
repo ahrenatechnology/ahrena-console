@@ -107,6 +107,20 @@ node scripts/medir-carga.mjs --rota painel --sessoes 20 --abertos 1
 
 O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das ferramentas do plano (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `update_plan`), cortada como os outros textos; a de nenhuma outra.
 
+### Detalhe da sessão e Workflows
+
+O Detalhe da sessão (#29, #30 e #97) lê, só do banco ([src/api/detalhe.ts](src/api/detalhe.ts) e [src/api/workflows.ts](src/api/workflows.ts)):
+
+- `GET /api/sessions/<id>`: `{ version: 1, generatedAt, session, cost, branch, local, opensSession, command, endedAt, counts: { agents, events } }`, com o card e o custo do painel.
+- `GET /api/sessions/<id>/agents`: `numbers` (`events`, `perMinute`, `tools`, `uniqueTools`, `subagents`, `compactions`, `errors`, `durationMin`, `running`), `tools` (`{ name, n }`), `tasks` (o plano do painel), `tokens` (`cacheRead`, `cacheWrite`, `input`, `output`, `total`) e `agents` (`type` `main | subagent`, `name`, `task`, `model`, `turns`, `status`, `start`, `end`, `costUsd`, `parent`).
+- `GET /api/sessions/<id>/conversation?agent=&limit=`: `{ agents, agent, total, messages }`; cada mensagem tem `role` (`you | assistant`), `at`, `text`, `model`, `tokens` (`input`, `output`) e `tools` (`name`, `summary`, `state` `ok | error | permission | running`, `input`, `result`).
+- `GET /api/sessions/<id>/events?q=&type=&tool=&agent=&status=&from=&to=&limit=&before=`: `{ total, filtered, items, next, options: { types, tools, agents, status } }`; cada item tem `at`, `type`, `tool`, `summary`, `agent` (`id`, `name`), `status` e `data` (o `data` do evento em JSON, cortado). Filtro malformado é ignorado.
+- `GET /api/sessions/<id>/workflow`: `{ sessionId, start, end, durationMs, summary, nodes, edges, reviewRounds, changesRequested, timeline: { start, end, lanes: [{ nodeId, label, spans }] } }`; o nó tem `state` `active | completed | error` e `changesRequested` (os ajustes pedidos por um review); a aresta, `type` `opened | delivered | changes-requested` e `label` (o texto da tela: `plano`, `diff`, `v2`, `ajustes`).
+
+`GET /api/workflows?filter=all|active|completed&node=<id>` (#96) responde `{ filter, node, generatedAt, sessions, truncated, max, kpis, runs, graph }`: `kpis` (`averageDepth`, `subagentsPerSession`, `subagentSuccess`, `commonFlow: { label, fraction }`, `roundsPerPr`, `averageDurationMs`), `runs` (`name`, `state` `active | completed | error`, `model`, `project`, `sessionId`, `tools`, `tokens`, `durationMs`, `start`, `end`, `phases`, `loop`, `agents` com `state` `completed | running | changes-requested | error`) e `graph` (`columns` `origin | main | subagent | compaction | outcome`, `nodes` e `edges` `{ from, to, volume }`). Os nós são `origin:prompt`, `origin:resume`, `main`, `subagent:<tipo>`, `compaction:none`, `compaction:compacted` e `outcome:completed|error|active|abandoned`.
+
+As rotas antigas `/api/sessoes/<id>[/agentes|/conversa|/eventos|/workflow]` continuam respondendo o corpo antigo, com as chaves e os valores em português; `/api/workflows` não tem caminho antigo, mas ainda aceita `?filtro=`/`?no=` e os valores antigos (`todas`, `ativas`, `concluidas`, `principal`, `subagente:<tipo>`…) (#173).
+
 ## Agent Config (#63)
 
 A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem configurado nesta máquina e edita skills. A leitura mora em [src/agent-config/](src/agent-config/), as rotas em [src/api/agent-config.ts](src/api/agent-config.ts); o contrato está em [src/agent-config/model.ts](src/agent-config/model.ts).

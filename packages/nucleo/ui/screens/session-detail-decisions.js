@@ -102,7 +102,7 @@ export function create(ctx, base, { head: headEl = () => null, setLabel = () => 
 
   function paint(r) {
     const { barra: bar, lista: list, lado: side, grade: grid } = pieces();
-    const session = r.sessao ?? headEl()?.sessao?.id;
+    const session = r.sessao ?? headEl()?.session?.id;
     const now = Date.now();
     list.replaceChildren(...(r.itens.length ? r.itens.map((d) => decisionCard(d, { sessao: session, aoMudar: draw, agora: now })) : [nothing(r)]));
     side.replaceChildren(injectionCard(r.injecao), mcpCard(r.mcp), promoteCard());

@@ -148,7 +148,7 @@ export async function mount(area, ctx) {
     tabs.replaceChildren(
       ...TABS_LIST.map((a) => {
         // Até a aba dizer o dela, Agentes e Linha do tempo usam as contagens do topo.
-        const fallback = { agents: headData?.contagens.agentes, timeline: headData ? num(headData.contagens.eventos) : null }[a.id];
+        const fallback = { agents: headData?.counts.agents, timeline: headData ? num(headData.counts.events) : null }[a.id];
         const label = labels[a.id] ?? fallback;
         const suffix = label === undefined || label === null ? '' : ` (${label})`;
         const b = el('button', { type: 'button', role: 'tab', class: `sd-tab${a.id === tab ? ' on' : ''}`, 'aria-selected': a.id === tab ? 'true' : 'false', 'data-tab': a.id }, icon(a.icone), `${a.rotulo}${suffix}`);
@@ -171,7 +171,7 @@ export async function mount(area, ctx) {
   async function readHead() {
     try {
       headData = await ctx.read(base);
-      ctx.title(headData.sessao.title);
+      ctx.title(headData.session.title);
       top.replaceChildren(...drawTop(headData, refreshAll));
       drawTabs();
       return true;
@@ -194,7 +194,7 @@ export async function mount(area, ctx) {
   async function first() {
     area.replaceChildren(loading({ label: 'Carregando a sessão' }));
     if (!(await readHead())) return;
-    tab ??= headData.sessao.status === 'waiting' ? 'conversation' : 'agents';
+    tab ??= headData.session.status === 'waiting' ? 'conversation' : 'agents';
     area.replaceChildren(top, tabs, body);
     drawTabs();
     body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
@@ -223,10 +223,10 @@ export async function mount(area, ctx) {
 // ---------- Topo (A5) ----------
 
 function drawTop(c, refresh) {
-  const s = c.sessao;
+  const s = c.session;
   const now = Date.now();
   const reason = reasonOf(s);
-  const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.encerradaEm ?? s.since);
+  const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.endedAt ?? s.since);
   const row1 = el(
     'div',
     { class: 'sd-row' },
@@ -242,7 +242,7 @@ function drawTop(c, refresh) {
     pill(null, s.id.slice(0, 12), copyButton(s.id, 'o id da sessão')),
     s.model ? pill('port', modelName(s.model)) : null,
     pill('clock', `${when(s.startedAt)} (${duration(end - Date.parse(s.startedAt))})`),
-    c.custo ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.custo.usd)) : null,
+    c.cost ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.cost.usd)) : null,
     c.branch ? pill('branch', c.branch) : null,
   );
   const folder = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), copyButton(s.cwd, 'a pasta')) : null;
@@ -256,12 +256,11 @@ function withCommand(text, command) {
   return [text.slice(0, i), el('code', { class: 'sd-code' }, command), text.slice(i + command.length)];
 }
 
-// The class of each tool state (the API value stays as it comes); the band's type is its class.
-const TOOL_STATE_CLASS = { ok: 'ok', erro: 'error', permissao: 'permission', rodando: 'running' };
+// The class of each tool state and of the band is its API value (`sd-e-<state>`, `sd-t-<type>`).
 const BAND_TITLE = { permission: 'Esperando você · Pede permissão.', question: 'Esperando você · Pergunta.', error: 'Erro.' };
 
 function band(c) {
-  const f = c.sessao.banner;
+  const f = c.session.banner;
   const notice = el('span', { class: 'sd-notice', role: 'status' });
   const button = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
   button.addEventListener('click', async () => {
@@ -278,7 +277,7 @@ function band(c) {
     'section',
     { class: `sd-band sd-t-${f.type}`, role: f.type === 'error' ? 'alert' : 'status' },
     icon(f.type === 'error' ? 'error' : 'shield'),
-    el('p', {}, el('b', {}, BAND_TITLE[f.type] ?? ''), ' ', ...withCommand(f.text, c.comando), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
+    el('p', {}, el('b', {}, BAND_TITLE[f.type] ?? ''), ' ', ...withCommand(f.text, c.command), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
     button,
   );
 }
@@ -311,37 +310,37 @@ function number(iconName, label, value, detail) {
 }
 
 function agents(a) {
-  const n = a.numeros;
+  const n = a.numbers;
   const numbers = el(
     'div',
     { class: 'sd-numbers' },
-    number('bolt', 'Eventos', num(n.eventos), `${num(n.porMinuto)}/min`),
-    number('key', 'Ferramentas', num(n.ferramentas), `${num(n.ferramentasUnicas)} únicas`),
-    number('subagent', 'Subagentes', num(n.subagentes), '+1 principal'),
-    number('layers', 'Compactações', num(n.compactacoes)),
-    number('alert', 'Erros', num(n.erros)),
-    number('timer', 'Duração', `${num(n.duracaoMin)} min`, n.rodando ? 'rodando' : null),
+    number('bolt', 'Eventos', num(n.events), `${num(n.perMinute)}/min`),
+    number('key', 'Ferramentas', num(n.tools), `${num(n.uniqueTools)} únicas`),
+    number('subagent', 'Subagentes', num(n.subagents), '+1 principal'),
+    number('layers', 'Compactações', num(n.compactions)),
+    number('alert', 'Erros', num(n.errors)),
+    number('timer', 'Duração', `${num(n.durationMin)} min`, n.running ? 'rodando' : null),
   );
 
-  const largest = Math.max(1, ...a.ferramentas.map((f) => f.n));
+  const largest = Math.max(1, ...a.tools.map((f) => f.n));
   const tools = el(
     'section',
     { class: 'card sd-block' },
-    el('header', {}, el('div', { class: 'eyebrow' }, icon('key'), 'Ferramentas mais usadas'), el('small', {}, `${num(n.ferramentasUnicas)} no total`)),
-    a.ferramentas.length
+    el('header', {}, el('div', { class: 'eyebrow' }, icon('key'), 'Ferramentas mais usadas'), el('small', {}, `${num(n.uniqueTools)} no total`)),
+    a.tools.length
       ? el(
           'ul',
           { class: 'sd-bars' },
-          ...a.ferramentas.map((f) => {
+          ...a.tools.map((f) => {
             const bar = el('span', { class: 'sd-full' });
             bar.style.setProperty('--w', `${(f.n / largest) * 100}%`);
-            return el('li', {}, el('span', { class: 'sd-ico' }, icon(TOOL_ICON[f.nome] ?? 'key')), el('span', { class: 'mono sd-name' }, f.nome), el('span', { class: 'sd-rail' }, bar), el('span', { class: 'mono sd-n' }, num(f.n)));
+            return el('li', {}, el('span', { class: 'sd-ico' }, icon(TOOL_ICON[f.name] ?? 'key')), el('span', { class: 'mono sd-name' }, f.name), el('span', { class: 'sd-rail' }, bar), el('span', { class: 'mono sd-n' }, num(f.n)));
           }),
         )
       : el('p', { class: 'sd-none' }, 'Nenhuma ferramenta ainda.'),
   );
 
-  const t = a.tarefas;
+  const t = a.tasks;
   const tasks = el(
     'section',
     { class: 'card sd-block' },
@@ -360,8 +359,8 @@ function agents(a) {
   const tree = el(
     'section',
     { class: 'sd-tree' },
-    el('div', { class: 'eyebrow' }, icon('robot'), `Agentes · ${a.agentes.length}`),
-    ...a.agentes.map((g) => node(g)),
+    el('div', { class: 'eyebrow' }, icon('robot'), `Agentes · ${a.agents.length}`),
+    ...a.agents.map((g) => node(g)),
   );
 
   return [numbers, el('div', { class: 'sd-two' }, tools, tasks), flow, tree];
@@ -408,10 +407,10 @@ function progress(t) {
 
 function tokenFlow(k) {
   const parts = [
-    ['read', 'Cache lido', k.cacheLido],
-    ['written', 'Cache gravado', k.cacheGravado],
-    ['input', 'Entrada', k.entrada],
-    ['output', 'Saída', k.saida],
+    ['read', 'Cache lido', k.cacheRead],
+    ['written', 'Cache gravado', k.cacheWrite],
+    ['input', 'Entrada', k.input],
+    ['output', 'Saída', k.output],
   ];
   const bar = el('div', { class: 'sd-flow', role: 'img', 'aria-label': parts.map(([, r, v]) => `${r} ${tokens(v)}`).join(', ') });
   for (const [cls, , v] of parts) {
@@ -424,17 +423,17 @@ function tokenFlow(k) {
 }
 
 function node(g) {
-  const end = g.fim ? Date.parse(g.fim) : Date.now();
+  const end = g.end ? Date.parse(g.end) : Date.now();
   const sub =
-    g.tipo === 'principal'
-      ? [modelName(g.modelo), g.turnos !== null ? `${num(g.turnos)} turno${g.turnos === 1 ? '' : 's'}` : null]
-      : [g.tarefa, duration(end - Date.parse(g.inicio))];
+    g.type === 'main'
+      ? [modelName(g.model), g.turns !== null ? `${num(g.turns)} turno${g.turns === 1 ? '' : 's'}` : null]
+      : [g.task, duration(end - Date.parse(g.start))];
   return el(
     'div',
-    { class: `card sd-node${g.tipo === 'subagente' ? ' sd-sub' : ''}` },
-    el('span', { class: 'sd-ico' }, icon(g.tipo === 'principal' ? 'robot' : 'subagent')),
-    el('div', { class: 'sd-text' }, el('b', {}, g.nome), el('small', {}, sub.filter(Boolean).join(' · '))),
-    el('span', { class: 'mono sd-cost' }, g.custoUsd === null ? '' : usd(g.custoUsd)),
+    { class: `card sd-node${g.type === 'subagent' ? ' sd-sub' : ''}` },
+    el('span', { class: 'sd-ico' }, icon(g.type === 'main' ? 'robot' : 'subagent')),
+    el('div', { class: 'sd-text' }, el('b', {}, g.name), el('small', {}, sub.filter(Boolean).join(' · '))),
+    el('span', { class: 'mono sd-cost' }, g.costUsd === null ? '' : usd(g.costUsd)),
     statusPill(g.status),
   );
 }
@@ -443,9 +442,9 @@ function node(g) {
 
 const TOOL_STATE = {
   ok: { rotulo: 'OK', icone: 'ok' },
-  erro: { rotulo: 'Erro', icone: 'error' },
-  permissao: { rotulo: 'Aguardando permissão', icone: 'hourglass' },
-  rodando: { rotulo: 'Rodando', icone: 'clock' },
+  error: { rotulo: 'Erro', icone: 'error' },
+  permission: { rotulo: 'Aguardando permissão', icone: 'hourglass' },
+  running: { rotulo: 'Rodando', icone: 'clock' },
 };
 
 function conversationTab(ctx, base) {
@@ -465,10 +464,10 @@ function conversationTab(ctx, base) {
   async function draw() {
     try {
       const c = await ctx.read(`${base}/conversation${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`);
-      agent = c.agente;
-      selector.replaceChildren(...c.agentes.map((a) => el('option', { value: a.id, selected: a.id === c.agente }, a.nome)));
+      agent = c.agent;
+      selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
       count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
-      list.replaceChildren(...(c.mensagens.length ? c.mensagens.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
+      list.replaceChildren(...(c.messages.length ? c.messages.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
       target?.replaceChildren(bar, list);
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -477,7 +476,7 @@ function conversationTab(ctx, base) {
   }
 
   function message(m) {
-    const you = m.papel === 'voce';
+    const you = m.role === 'you';
     return el(
       'article',
       { class: `sd-msg ${you ? 'sd-you' : 'sd-assistant'}` },
@@ -489,34 +488,34 @@ function conversationTab(ctx, base) {
           'header',
           {},
           el('b', {}, you ? 'Você' : 'Assistente'),
-          m.modelo ? el('span', { class: 'sd-pill mono' }, modelName(m.modelo)) : null,
-          m.tokens ? el('span', { class: 'sd-pill mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.entrada)} · ↑ ${tokens(m.tokens.saida)}`) : null,
-          el('time', { class: 'mono', datetime: m.em }, HOUR.format(new Date(m.em))),
+          m.model ? el('span', { class: 'sd-pill mono' }, modelName(m.model)) : null,
+          m.tokens ? el('span', { class: 'sd-pill mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.input)} · ↑ ${tokens(m.tokens.output)}`) : null,
+          el('time', { class: 'mono', datetime: m.at }, HOUR.format(new Date(m.at))),
         ),
-        m.texto ? el('p', {}, ...withCode(m.texto)) : null,
-        ...m.ferramentas.map(tool),
+        m.text ? el('p', {}, ...withCode(m.text)) : null,
+        ...m.tools.map(tool),
       ),
     );
   }
 
   function tool(f) {
     // A que pede permissão já vem aberta, como no C5; a pessoa pode fechar.
-    const isOpen = opened.has(f.id) || (f.estado === 'permissao' && !closed.has(f.id));
-    const st = TOOL_STATE[f.estado];
+    const isOpen = opened.has(f.id) || (f.state === 'permission' && !closed.has(f.id));
+    const st = TOOL_STATE[f.state];
     const detail = el(
       'div',
       { class: 'sd-tool-body', hidden: !isOpen },
-      f.entrada ? el('div', {}, el('div', { class: 'eyebrow' }, 'Entrada'), el('pre', { class: 'mono sd-pre' }, f.entrada)) : null,
-      f.resultado ? el('div', {}, el('div', { class: 'eyebrow' }, 'Resultado'), el('pre', { class: 'mono sd-pre' }, f.resultado)) : null,
-      !f.entrada && !f.resultado ? el('p', { class: 'sd-none' }, 'Sem entrada nem resultado guardados.') : null,
+      f.input ? el('div', {}, el('div', { class: 'eyebrow' }, 'Entrada'), el('pre', { class: 'mono sd-pre' }, f.input)) : null,
+      f.result ? el('div', {}, el('div', { class: 'eyebrow' }, 'Resultado'), el('pre', { class: 'mono sd-pre' }, f.result)) : null,
+      !f.input && !f.result ? el('p', { class: 'sd-none' }, 'Sem entrada nem resultado guardados.') : null,
     );
     const headData = el(
       'button',
       { type: 'button', class: 'sd-tool-head', 'aria-expanded': isOpen ? 'true' : 'false' },
       icon(isOpen ? 'chevron-down' : 'chevron-right'),
-      el('b', { class: 'mono sd-name' }, f.nome),
-      el('span', { class: 'mono sd-summary' }, f.resumo ?? ''),
-      st ? el('span', { class: `mono sd-situation sd-e-${TOOL_STATE_CLASS[f.estado] ?? f.estado}` }, icon(st.icone), st.rotulo) : null,
+      el('b', { class: 'mono sd-name' }, f.name),
+      el('span', { class: 'mono sd-summary' }, f.summary ?? ''),
+      st ? el('span', { class: `mono sd-situation sd-e-${f.state}` }, icon(st.icone), st.rotulo) : null,
     );
     headData.addEventListener('click', () => {
       const open = detail.hidden;
@@ -526,7 +525,7 @@ function conversationTab(ctx, base) {
       (open ? opened : closed).add(f.id);
       (open ? closed : opened).delete(f.id);
     });
-    return el('div', { class: `sd-tool${f.estado === 'permissao' ? ' sd-asks' : ''}` }, headData, detail);
+    return el('div', { class: `sd-tool${f.state === 'permission' ? ' sd-asks' : ''}` }, headData, detail);
   }
 
   return {
@@ -548,24 +547,24 @@ function timelineTab(ctx, base, { setLabel }) {
   let last = null;
   let howMany = PER_PAGE;
   const expanded = new Set();
-  const filters = { q: '', de: '', ate: '', status: '', tipo: '', ferramenta: '', agente: '' };
+  const filters = { q: '', from: '', to: '', status: '', type: '', tool: '', agent: '' };
 
   const search = el('input', { type: 'search', class: 'sd-field', placeholder: 'Buscar no resumo, ferramenta, conteúdo…', 'aria-label': 'Buscar' });
   const from = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'De' });
   const until = el('input', { type: 'datetime-local', class: 'sd-field sd-date', 'aria-label': 'Até' });
   const selects = {
     status: el('select', { class: 'sd-chip mono', 'aria-label': 'Status' }),
-    tipo: el('select', { class: 'sd-chip mono', 'aria-label': 'Tipo de evento' }),
-    ferramenta: el('select', { class: 'sd-chip mono', 'aria-label': 'Ferramenta' }),
-    agente: el('select', { class: 'sd-chip mono', 'aria-label': 'Agente' }),
+    type: el('select', { class: 'sd-chip mono', 'aria-label': 'Tipo de evento' }),
+    tool: el('select', { class: 'sd-chip mono', 'aria-label': 'Ferramenta' }),
+    agent: el('select', { class: 'sd-chip mono', 'aria-label': 'Agente' }),
   };
   let pause = null;
   search.addEventListener('input', () => {
     clearTimeout(pause);
     pause = setTimeout(() => ((filters.q = search.value.trim()), restart()), 250);
   });
-  from.addEventListener('change', () => ((filters.de = from.value), restart()));
-  until.addEventListener('change', () => ((filters.ate = until.value), restart()));
+  from.addEventListener('change', () => ((filters.from = from.value), restart()));
+  until.addEventListener('change', () => ((filters.to = until.value), restart()));
   for (const [k, s] of Object.entries(selects)) s.addEventListener('change', () => ((filters[k] = s.value), restart()));
 
   const filtersPanel = el(
@@ -584,10 +583,9 @@ function timelineTab(ctx, base, { setLabel }) {
 
   function query() {
     const p = new URLSearchParams();
-    // The filter state keeps its names; the API reads the English parameters.
-    for (const [k, name] of [['q', 'q'], ['status', 'status'], ['tipo', 'type'], ['ferramenta', 'tool'], ['agente', 'agent']]) if (filters[k]) p.set(name, filters[k]);
+    for (const k of ['q', 'status', 'type', 'tool', 'agent']) if (filters[k]) p.set(k, filters[k]);
     // `datetime-local` é a hora do lugar; a API quer ISO em UTC.
-    for (const [k, name] of [['de', 'from'], ['ate', 'to']]) if (filters[k]) p.set(name, new Date(filters[k]).toISOString());
+    for (const k of ['from', 'to']) if (filters[k]) p.set(k, new Date(filters[k]).toISOString());
     p.set('limit', String(howMany));
     return `${base}/events?${p}`;
   }
@@ -601,16 +599,16 @@ function timelineTab(ctx, base, { setLabel }) {
     try {
       const r = await ctx.read(query());
       last = r;
-      setLabel(`${num(r.filtrados)}/${num(r.total)}`);
-      options(selects.status, 'Status', r.opcoes.status.map((s) => [s, STATUS[s]]), filters.status);
-      options(selects.tipo, 'Tipo de evento', r.opcoes.tipos.map((t) => [t, t]), filters.tipo);
-      options(selects.ferramenta, 'Ferramenta', r.opcoes.ferramentas.map((t) => [t, t]), filters.ferramenta);
-      options(selects.agente, 'Agente', r.opcoes.agentes.map((a) => [a.id, a.nome]), filters.agente);
-      list.replaceChildren(...(r.itens.length ? r.itens.map(row) : [el('p', { class: 'sd-none' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
+      setLabel(`${num(r.filtered)}/${num(r.total)}`);
+      options(selects.status, 'Status', r.options.status.map((s) => [s, STATUS[s]]), filters.status);
+      options(selects.type, 'Tipo de evento', r.options.types.map((t) => [t, t]), filters.type);
+      options(selects.tool, 'Ferramenta', r.options.tools.map((t) => [t, t]), filters.tool);
+      options(selects.agent, 'Agente', r.options.agents.map((a) => [a.id, a.name]), filters.agent);
+      list.replaceChildren(...(r.items.length ? r.items.map(row) : [el('p', { class: 'sd-none' }, r.total ? 'Nenhum evento com esses filtros.' : 'Nenhum evento ainda.')]));
       footer.replaceChildren(
         ...[
-          r.itens.length ? el('small', {}, `Mostrando ${num(r.itens.length)} de ${num(r.filtrados)}`) : null,
-          r.proximo ? el('button', { type: 'button', class: 'btn outline', onClick: () => ((howMany += PER_PAGE), draw()) }, 'Carregar mais') : null,
+          r.items.length ? el('small', {}, `Mostrando ${num(r.items.length)} de ${num(r.filtered)}`) : null,
+          r.next ? el('button', { type: 'button', class: 'btn outline', onClick: () => ((howMany += PER_PAGE), draw()) }, 'Carregar mais') : null,
         ].filter(Boolean),
       );
       target?.replaceChildren(filtersPanel, list, footer);
@@ -622,16 +620,16 @@ function timelineTab(ctx, base, { setLabel }) {
 
   function row(e) {
     const isOpen = expanded.has(e.id);
-    const data = el('pre', { class: 'mono sd-pre sd-data', hidden: !isOpen }, e.dados ?? 'Sem dados guardados.');
+    const data = el('pre', { class: 'mono sd-pre sd-data', hidden: !isOpen }, e.data ?? 'Sem dados guardados.');
     const head = el(
       'button',
       { type: 'button', class: 'sd-event-head', 'aria-expanded': isOpen ? 'true' : 'false' },
       icon(isOpen ? 'chevron-down' : 'chevron-right'),
-      el('time', { class: 'mono', datetime: e.em, title: new Date(e.em).toLocaleString('pt-BR') }, ago(e.em)),
+      el('time', { class: 'mono', datetime: e.at, title: new Date(e.at).toLocaleString('pt-BR') }, ago(e.at)),
       statusPill(e.status),
-      el('span', { class: 'mono sd-type' }, e.tipo),
-      el('span', { class: 'sd-summary' }, e.resumo ?? ''),
-      e.ferramenta ? el('span', { class: 'sd-chip mono' }, e.ferramenta) : null,
+      el('span', { class: 'mono sd-type' }, e.type),
+      el('span', { class: 'sd-summary' }, e.summary ?? ''),
+      e.tool ? el('span', { class: 'sd-chip mono' }, e.tool) : null,
     );
     head.addEventListener('click', () => {
       const open = data.hidden;

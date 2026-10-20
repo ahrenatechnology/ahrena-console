@@ -37,111 +37,118 @@ const MAX_TEXTO = 2_000;
 const MAX_FERRAMENTAS = 8;
 
 // ---------- Contrato ----------
+//
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5); the old
+// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` answer their old bodies through src/api/legacy-routes.ts.
+// Names shown on the screen (`Agente principal`) stay pt-BR.
 
 export interface CabecaDoDetalhe {
-  versao: 1;
-  geradoEm: string;
-  sessao: SessaoDoPainel;
-  custo: CustoDoPainel | null;
+  version: 1;
+  generatedAt: string;
+  session: SessaoDoPainel;
+  cost: CustoDoPainel | null;
   /** O branch: o do Desktop ou do hook, senão o do git da pasta. */
   branch: string | null;
   /** `local_…` do Claude Desktop, para o "Abrir no Claude Desktop"; `null` na sessão só de terminal. */
   local: string | null;
   /** A API abre a conversa no Claude Desktop (`POST /open/<local_…>`): no macOS. */
-  abreSessao: boolean;
+  opensSession: boolean;
   /** O comando ou o alvo da ferramenta que pede permissão, para a faixa mostrar em código; `null` sem pedido. */
-  comando: string | null;
+  command: string | null;
   /** Quando acabou: o fim gravado, ou a última atividade da que não está mais ativa. `null` ativa. */
-  encerradaEm: string | null;
-  contagens: { agentes: number; eventos: number };
+  endedAt: string | null;
+  counts: { agents: number; events: number };
 }
 
 export interface AgenteDoDetalhe {
   id: string;
-  tipo: 'principal' | 'subagente';
+  type: (typeof DETAIL_AGENT_TYPES)[number];
   /** "Agente principal", ou o tipo do subagente ("Explore"). */
-  nome: string;
-  tarefa: string | null;
-  modelo: string | null;
+  name: string;
+  task: string | null;
+  model: string | null;
   /** Prompts do principal; `null` nos subagentes. */
-  turnos: number | null;
+  turns: number | null;
   status: Agent['status'];
-  inicio: string;
-  fim: string | null;
+  start: string;
+  end: string | null;
   /** `null`: há uso sem preço, ou nenhum uso medido. */
-  custoUsd: number | null;
-  pai: string | null;
+  costUsd: number | null;
+  parent: string | null;
 }
 
 export interface AgentesDoDetalhe {
-  numeros: {
-    eventos: number;
+  numbers: {
+    events: number;
     /** Eventos por minuto, na duração da sessão. */
-    porMinuto: number;
-    ferramentas: number;
-    ferramentasUnicas: number;
-    subagentes: number;
-    compactacoes: number;
-    erros: number;
-    duracaoMin: number;
-    rodando: boolean;
+    perMinute: number;
+    tools: number;
+    uniqueTools: number;
+    subagents: number;
+    compactions: number;
+    errors: number;
+    durationMin: number;
+    running: boolean;
   };
   /** As mais usadas, até 8, da mais para a menos usada. */
-  ferramentas: { nome: string; n: number }[];
-  tarefas: PlanoDoPainel | null;
-  tokens: { cacheLido: number; cacheGravado: number; entrada: number; saida: number; total: number } | null;
-  agentes: AgenteDoDetalhe[];
+  tools: { name: string; n: number }[];
+  tasks: PlanoDoPainel | null;
+  tokens: { cacheRead: number; cacheWrite: number; input: number; output: number; total: number } | null;
+  agents: AgenteDoDetalhe[];
 }
 
-export type EstadoDaFerramenta = 'ok' | 'erro' | 'permissao' | 'rodando' | null;
+export const DETAIL_AGENT_TYPES = ['main', 'subagent'] as const;
+export const TOOL_STATES = ['ok', 'error', 'permission', 'running'] as const;
+export type EstadoDaFerramenta = (typeof TOOL_STATES)[number] | null;
+export const MESSAGE_ROLES = ['you', 'assistant'] as const;
 
 export interface FerramentaNaConversa {
   id: string;
-  nome: string;
-  resumo: string | null;
-  estado: EstadoDaFerramenta;
+  name: string;
+  summary: string | null;
+  state: EstadoDaFerramenta;
   /** A entrada e o resultado, como texto; o navegador mostra por `textContent`. */
-  entrada: string | null;
-  resultado: string | null;
+  input: string | null;
+  result: string | null;
 }
 
 export interface MensagemDaConversa {
   id: string;
-  papel: 'voce' | 'assistente';
-  em: string;
-  texto: string | null;
-  modelo: string | null;
-  tokens: { entrada: number; saida: number } | null;
-  ferramentas: FerramentaNaConversa[];
+  role: (typeof MESSAGE_ROLES)[number];
+  at: string;
+  text: string | null;
+  model: string | null;
+  tokens: { input: number; output: number } | null;
+  tools: FerramentaNaConversa[];
 }
 
 export interface ConversaDoDetalhe {
-  agentes: { id: string; nome: string }[];
-  agente: string;
-  /** Mensagens do agente, todas; `mensagens` traz só as últimas `limite`. */
+  agents: { id: string; name: string }[];
+  agent: string;
+  /** Mensagens do agente, todas; `messages` traz só as últimas `limit`. */
   total: number;
-  mensagens: MensagemDaConversa[];
+  messages: MensagemDaConversa[];
 }
 
 export interface EventoDoDetalhe {
   id: string;
-  em: string;
-  tipo: string;
-  ferramenta: string | null;
-  resumo: string | null;
-  agente: { id: string; nome: string } | null;
+  at: string;
+  type: string;
+  tool: string | null;
+  summary: string | null;
+  agent: { id: string; name: string } | null;
   status: Extract<DisplayStatus, 'active' | 'waiting' | 'error'>;
   /** O `data` do evento em JSON, cortado: o expandir da linha. */
-  dados: string | null;
+  data: string | null;
 }
 
 export interface EventosDoDetalhe {
   total: number;
-  filtrados: number;
-  itens: EventoDoDetalhe[];
-  /** O `antes=` da próxima página; `null` quando acabou. */
-  proximo: string | null;
-  opcoes: { tipos: string[]; ferramentas: string[]; agentes: { id: string; nome: string }[]; status: EventoDoDetalhe['status'][] };
+  filtered: number;
+  items: EventoDoDetalhe[];
+  /** O `before=` da próxima página; `null` quando acabou. */
+  next: string | null;
+  options: { types: string[]; tools: string[]; agents: { id: string; name: string }[]; status: EventoDoDetalhe['status'][] };
 }
 
 // ---------- Leitura ----------
@@ -234,8 +241,8 @@ class Agentes {
   }
 
   /** O principal e os subagentes, na ordem em que começaram. */
-  opcoes(): { id: string; nome: string }[] {
-    return [{ id: this.principal, nome: 'Agente principal' }, ...this.lista.filter((a) => a.type !== 'main').map((a) => ({ id: a.id, nome: this.nome(a.id) }))];
+  opcoes(): { id: string; name: string }[] {
+    return [{ id: this.principal, name: 'Agente principal' }, ...this.lista.filter((a) => a.type !== 'main').map((a) => ({ id: a.id, name: this.nome(a.id) }))];
   }
 }
 
@@ -280,16 +287,16 @@ export class LeiturasDoDetalhe {
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
     const pede = painel.session?.banner?.type === 'permission' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
-      versao: 1,
-      geradoEm: new Date(this.agora()).toISOString(),
-      sessao: painel.session!,
-      custo: painel.cost,
+      version: 1,
+      generatedAt: new Date(this.agora()).toISOString(),
+      session: painel.session!,
+      cost: painel.cost,
       branch: painel.session?.branch ?? painel.work?.branch ?? null,
       local: local && LOCAL.test(local) ? local : null,
-      abreSessao: painel.api.opensSession,
-      comando: pede?.resumo ?? null,
-      encerradaEm: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
-      contagens: { agentes: agentes.length, eventos: eventos.length },
+      opensSession: painel.api.opensSession,
+      command: pede?.resumo ?? null,
+      endedAt: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
+      counts: { agents: agentes.length, events: eventos.length },
     };
   }
 
@@ -319,7 +326,7 @@ export class LeiturasDoDetalhe {
       }
       porFerramenta.set(e.toolName, (porFerramenta.get(e.toolName) ?? 0) + 1);
     }
-    const ferramentas = [...porFerramenta].map(([nome, n]) => ({ nome, n })).sort((a, b) => b.n - a.n || a.nome.localeCompare(b.nome));
+    const ferramentas = [...porFerramenta].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
     const chamadas = ferramentas.reduce((s, f) => s + f.n, 0);
 
     const inicio = Date.parse(session.startedAt);
@@ -328,15 +335,15 @@ export class LeiturasDoDetalhe {
 
     let tokens: AgentesDoDetalhe['tokens'] = null;
     if (buckets.length) {
-      tokens = { cacheLido: 0, cacheGravado: 0, entrada: 0, saida: 0, total: 0 };
+      tokens = { cacheRead: 0, cacheWrite: 0, input: 0, output: 0, total: 0 };
       for (const b of buckets) {
         const t = effectiveTokens(b);
-        tokens.cacheLido += t.cacheRead;
-        tokens.cacheGravado += t.cacheWrite5m + t.cacheWrite1h;
-        tokens.entrada += t.input;
-        tokens.saida += t.output;
+        tokens.cacheRead += t.cacheRead;
+        tokens.cacheWrite += t.cacheWrite5m + t.cacheWrite1h;
+        tokens.input += t.input;
+        tokens.output += t.output;
       }
-      tokens.total = tokens.cacheLido + tokens.cacheGravado + tokens.entrada + tokens.saida;
+      tokens.total = tokens.cacheRead + tokens.cacheWrite + tokens.input + tokens.output;
     }
 
     // Custo por nó: o uso sem agente (o piso da compactação) fica com o principal.
@@ -351,50 +358,50 @@ export class LeiturasDoDetalhe {
     const agentes: AgenteDoDetalhe[] = [
       {
         id: quem.principal,
-        tipo: 'principal',
-        nome: 'Agente principal',
-        tarefa: null,
-        modelo: session.model,
-        turnos: painel.session?.turn ?? 0,
+        type: 'main',
+        name: 'Agente principal',
+        task: null,
+        model: session.model,
+        turns: painel.session?.turn ?? 0,
         status: main?.status ?? (session.awaitingInputSince ? 'waiting' : session.status === 'error' ? 'error' : session.status === 'active' ? 'working' : 'completed'),
-        inicio: main?.startedAt ?? session.startedAt,
-        fim: main?.endedAt ?? session.endedAt,
-        custoUsd: custoDe.get(quem.principal) ?? null,
-        pai: null,
+        start: main?.startedAt ?? session.startedAt,
+        end: main?.endedAt ?? session.endedAt,
+        costUsd: custoDe.get(quem.principal) ?? null,
+        parent: null,
       },
       ...lista
         .filter((a) => a.type !== 'main')
         .map((a) => ({
           id: a.id,
-          tipo: 'subagente' as const,
-          nome: quem.nome(a.id),
-          tarefa: a.task ?? (a.subagentType ? a.name : null),
-          modelo: str(obj(a.metadata)?.model),
-          turnos: null,
+          type: 'subagent' as const,
+          name: quem.nome(a.id),
+          task: a.task ?? (a.subagentType ? a.name : null),
+          model: str(obj(a.metadata)?.model),
+          turns: null,
           status: a.status,
-          inicio: a.startedAt,
-          fim: a.endedAt,
-          custoUsd: custoDe.get(a.id) ?? null,
-          pai: a.parentAgentId ?? quem.principal,
+          start: a.startedAt,
+          end: a.endedAt,
+          costUsd: custoDe.get(a.id) ?? null,
+          parent: a.parentAgentId ?? quem.principal,
         })),
     ];
 
     return {
-      numeros: {
-        eventos: eventos.length,
-        porMinuto: duracaoMin ? Math.round(eventos.length / duracaoMin) : eventos.length,
-        ferramentas: chamadas,
-        ferramentasUnicas: ferramentas.length,
-        subagentes: agentes.length - 1,
-        compactacoes: painel.context ? painel.context.overflows + painel.context.manualCompactions : compactacoes,
-        erros,
-        duracaoMin,
-        rodando: session.status === 'active',
+      numbers: {
+        events: eventos.length,
+        perMinute: duracaoMin ? Math.round(eventos.length / duracaoMin) : eventos.length,
+        tools: chamadas,
+        uniqueTools: ferramentas.length,
+        subagents: agentes.length - 1,
+        compactions: painel.context ? painel.context.overflows + painel.context.manualCompactions : compactacoes,
+        errors: erros,
+        durationMin: duracaoMin,
+        running: session.status === 'active',
       },
-      ferramentas: ferramentas.slice(0, MAX_FERRAMENTAS),
-      tarefas: painel.plan,
+      tools: ferramentas.slice(0, MAX_FERRAMENTAS),
+      tasks: painel.plan,
       tokens,
-      agentes,
+      agents: agentes,
     };
   }
 
@@ -410,7 +417,7 @@ export class LeiturasDoDetalhe {
     let ultimaChamada: FerramentaNaConversa | null = null;
     const atual = (e: SessionEvent): MensagemDaConversa => {
       const ultima = mensagens.at(-1);
-      if (ultima?.papel === 'assistente') return ultima;
+      if (ultima?.role === 'assistant') return ultima;
       const nova = mensagemDoAssistente(e, null);
       mensagens.push(nova);
       return nova;
@@ -421,9 +428,9 @@ export class LeiturasDoDetalhe {
       if (PROMPTS.has(e.type)) {
         const texto = cortar(textoDoPrompt(e), MAX_TEXTO);
         // O hook e o transcript contam o mesmo prompt: o segundo, igual e logo depois, não entra.
-        const anterior = [...mensagens].reverse().find((m) => m.papel === 'voce');
-        if (anterior && anterior.texto === texto && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.em)) < 120_000) continue;
-        mensagens.push({ id: e.id, papel: 'voce', em: e.createdAt, texto, modelo: null, tokens: null, ferramentas: [] });
+        const anterior = [...mensagens].reverse().find((m) => m.role === 'you');
+        if (anterior && anterior.text === texto && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.at)) < 120_000) continue;
+        mensagens.push({ id: e.id, role: 'you', at: e.createdAt, text: texto, model: null, tokens: null, tools: [] });
       } else if (e.type === 'AssistantMessage' && e.summary) {
         mensagens.push(mensagemDoAssistente(e, cortar(e.summary, MAX_TEXTO)));
       } else if (CHAMADAS.has(e.type) && e.toolName) {
@@ -431,29 +438,29 @@ export class LeiturasDoDetalhe {
         const ja = chamadas.get(id);
         const entrada = emJson(obj(e.data)?.tool_input ?? null);
         if (ja) {
-          ja.entrada ??= entrada;
+          ja.input ??= entrada;
           continue;
         }
-        const f: FerramentaNaConversa = { id, nome: e.toolName, resumo: e.summary, estado: null, entrada, resultado: null };
+        const f: FerramentaNaConversa = { id, name: e.toolName, summary: e.summary, state: null, input: entrada, result: null };
         chamadas.set(id, f);
-        atual(e).ferramentas.push(f);
+        atual(e).tools.push(f);
         ultimaChamada = f;
       } else if (RESULTADOS.has(e.type)) {
         const id = idDaChamada(e);
         const f = id ? chamadas.get(id) : null;
         if (!f) continue;
-        f.estado = falhou(e) ? 'erro' : 'ok';
-        f.resultado ??= e.type === 'ToolResult' ? cortar(e.summary, MAX_DADOS) : emJson(obj(e.data)?.tool_response ?? null);
+        f.state = falhou(e) ? 'error' : 'ok';
+        f.result ??= e.type === 'ToolResult' ? cortar(e.summary, MAX_DADOS) : emJson(obj(e.data)?.tool_response ?? null);
       }
     }
     // A última chamada sem resultado: é ela que pede permissão, ou a que está rodando.
     const ultima = ultimaChamada as FerramentaNaConversa | null;
-    if (ultima && ultima.estado === null && agente === quem.principal) {
-      if (session.awaitingInputSince && session.awaitingReason === 'notification') ultima.estado = 'permissao';
-      else if (session.status === 'active' && !session.awaitingInputSince) ultima.estado = 'rodando';
+    if (ultima && ultima.state === null && agente === quem.principal) {
+      if (session.awaitingInputSince && session.awaitingReason === 'notification') ultima.state = 'permission';
+      else if (session.status === 'active' && !session.awaitingInputSince) ultima.state = 'running';
     }
 
-    return { agentes: opcoes, agente, total: mensagens.length, mensagens: mensagens.slice(-limite) };
+    return { agents: opcoes, agent: agente, total: mensagens.length, messages: mensagens.slice(-limite) };
   }
 
   async eventos(session: Session, params: URLSearchParams): Promise<EventosDoDetalhe> {
@@ -478,7 +485,7 @@ export class LeiturasDoDetalhe {
       if (f.ate && e.createdAt > f.ate) continue;
       const dados = emJson(e.data);
       if (f.q && ![e.summary, e.toolName, e.type, dados].some((t) => t?.toLowerCase().includes(f.q!))) continue;
-      itens.push({ id: e.id, em: e.createdAt, tipo: e.type, ferramenta: e.toolName, resumo: e.summary, agente: { id: agente, nome: quem.nome(agente) }, status, dados });
+      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, data: dados });
     }
 
     const comeco = f.antes ? itens.findIndex((e) => e.id === f.antes) + 1 : 0;
@@ -486,10 +493,10 @@ export class LeiturasDoDetalhe {
     const fim = comeco + pagina.length;
     return {
       total: todos.length,
-      filtrados: itens.length,
-      itens: pagina,
-      proximo: fim < itens.length && pagina.length ? pagina.at(-1)!.id : null,
-      opcoes: { tipos: [...tipos].sort(), ferramentas: [...ferramentas].sort(), agentes: quem.opcoes(), status: ['active', 'waiting', 'error'] },
+      filtered: itens.length,
+      items: pagina,
+      next: fim < itens.length && pagina.length ? pagina.at(-1)!.id : null,
+      options: { types: [...tipos].sort(), tools: [...ferramentas].sort(), agents: quem.opcoes(), status: ['active', 'waiting', 'error'] },
     };
   }
 }
@@ -503,13 +510,13 @@ function mensagemDoAssistente(e: SessionEvent, texto: string | null): MensagemDa
   const t = obj(usage?.tokens);
   return {
     id: e.id,
-    papel: 'assistente',
-    em: e.createdAt,
-    texto,
-    modelo: str(usage?.model),
+    role: 'assistant',
+    at: e.createdAt,
+    text: texto,
+    model: str(usage?.model),
     // ↓ o que entrou de novo (sem a leitura de cache) · ↑ o que saiu.
-    tokens: t ? { entrada: num(t.input) + num(t.cacheWrite5m) + num(t.cacheWrite1h), saida: num(t.output) } : null,
-    ferramentas: [],
+    tokens: t ? { input: num(t.input) + num(t.cacheWrite5m) + num(t.cacheWrite1h), output: num(t.output) } : null,
+    tools: [],
   };
 }
 
