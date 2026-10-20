@@ -15,7 +15,7 @@ export {
   type MachineMemory,
   type BackgroundProcess,
 } from './rules.ts';
-export { DEFAULT_LIMITS, normalizeDir, watch, type WatcherLimits, type WatcherRule, type WatcherFinding } from './watcher.ts';
+export { DEFAULT_LIMITS, normalizeDir, checkWatcherRules, type WatcherLimits, type WatcherRule, type WatcherFinding } from './watcher.ts';
 export {
   dirsFromLsof,
   isClaude,

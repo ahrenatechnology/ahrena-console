@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { readInbox, transition, watch, type SessionState } from '../../src/states/index.ts';
+import { readInbox, transition, checkWatcherRules, type SessionState } from '../../src/states/index.ts';
 import { displayStatus, type Session } from '../../src/model.ts';
 import { gerarCenario, type Roteiro } from '../../src/simulador/index.ts';
 
@@ -45,7 +45,7 @@ function run(index: number): Run {
   }
   assert.ok(state && final);
   // One watcher pass at the end of the window (no probe: the processes are fake).
-  const finding = watch(state, new Date(START + last), null);
+  const finding = checkWatcherRules(state, new Date(START + last), null);
   if (finding) state = transition(state, finding.event);
   return { script: scenario.roteiros[index], final, state, wentThroughDelegating };
 }

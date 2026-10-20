@@ -46,7 +46,7 @@ export function normalizeDir(dir: string): string {
  * Decides whether a watcher rule applies now.
  * `liveDirs` is the set of directories with a live `claude` process; `null` when the probe is off or failed.
  */
-export function watch(
+export function checkWatcherRules(
   state: SessionState,
   now: Date,
   liveDirs: ReadonlySet<string> | null,

@@ -13,7 +13,10 @@ import type { Agent, AwaitingReason, Session, SessionEvent } from '../model.ts';
  */
 export const MEMORY_KEY = 'estados';
 
-/** An `Agent`/`Task` call in progress on the main agent (foreground subagent). Persisted fields. */
+/**
+ * An `Agent`/`Task` call in progress on the main agent (foreground subagent).
+ * Its fields are the persisted shape in session metadata (`MachineMemory.delegacoes`): do not rename them.
+ */
 export interface Delegation {
   desde: string;
   descricao: string | null;

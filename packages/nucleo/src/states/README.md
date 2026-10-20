@@ -5,7 +5,7 @@ Decide o estado de cada sessão e dos agentes dela a partir dos eventos de hook 
 | Arquivo | O quê |
 | --- | --- |
 | [rules.ts](rules.ts) | `transition(state, event)`: função pura, uma regra por tipo de evento |
-| [watcher.ts](watcher.ts) | `watch(state, now, liveDirs)`: turno morto, sonda e abandono, também puro |
+| [watcher.ts](watcher.ts) | `checkWatcherRules(state, now, liveDirs)`: turno morto, sonda e abandono, também puro |
 | [probe.ts](probe.ts) | Sonda de processo vivo (`systemProcessProbe`): `ps` + `lsof` no macOS, `/proc` no Linux, desligada no resto. Reconhece o `claude` do Claude Desktop, cujo caminho tem espaço (`Application Support`) |
 | [inbox.ts](inbox.ts) | `readInbox(session, agents)`: o que o inbox mostra, com delegando e background |
 | [machine.ts](machine.ts) | `SessionStateMachine`: lê e grava pela porta, em série |

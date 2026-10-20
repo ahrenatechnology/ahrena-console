@@ -11,7 +11,7 @@ import type { StoragePort } from '../storage-port.ts';
 import { readInbox, type InboxState } from './inbox.ts';
 import { MEMORY_KEY, readMemory, transition, type SessionState } from './rules.ts';
 import { systemProcessProbe, type ProcessProbe } from './probe.ts';
-import { DEFAULT_LIMITS, watch, type WatcherLimits, type WatcherRule } from './watcher.ts';
+import { DEFAULT_LIMITS, checkWatcherRules, type WatcherLimits, type WatcherRule } from './watcher.ts';
 
 /** How often the watcher sweeps. */
 export const WATCHER_INTERVAL_MS = 15_000;
@@ -118,7 +118,7 @@ export class SessionStateMachine {
 
     const state = await this.load(s.id);
     if (!state) return synced;
-    const finding = watch(state, this.now(), liveDirs, this.limits);
+    const finding = checkWatcherRules(state, this.now(), liveDirs, this.limits);
     if (!finding) return synced;
     await this.storage.appendEvent(finding.event);
     return (await this.save(state, transition(state, finding.event), finding.event.type, finding.rule)) ?? synced;
