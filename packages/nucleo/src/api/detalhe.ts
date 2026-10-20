@@ -46,6 +46,8 @@ export interface CabecaDoDetalhe {
   local: string | null;
   /** A API abre a conversa no Claude Desktop (`POST /abrir/<local_…>`): no macOS. */
   abreSessao: boolean;
+  /** O comando ou o alvo da ferramenta que pede permissão, para a faixa mostrar em código; `null` sem pedido. */
+  comando: string | null;
   /** Quando acabou: o fim gravado, ou a última atividade da que não está mais ativa. `null` ativa. */
   encerradaEm: string | null;
   contagens: { agentes: number; eventos: number };
@@ -273,6 +275,7 @@ export class LeiturasDoDetalhe {
     const painel = await this.montador.montar({ sessionId: session.id }, { literal: true });
     const [agentes, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
+    const pede = painel.sessao?.faixa?.tipo === 'permissao' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
       versao: 1,
       geradoEm: new Date(this.agora()).toISOString(),
@@ -281,6 +284,7 @@ export class LeiturasDoDetalhe {
       branch: painel.sessao?.branch ?? painel.trabalho?.branch ?? null,
       local: local && LOCAL.test(local) ? local : null,
       abreSessao: painel.api.abreSessao,
+      comando: pede?.resumo ?? null,
       encerradaEm: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
       contagens: { agentes: agentes.length, eventos: eventos.length },
     };

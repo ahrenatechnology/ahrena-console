@@ -105,10 +105,16 @@ function pilula(icon, ...filhos) {
 
 // ---------- A tela ----------
 
+// O registro das abas, na ordem da barra. Uma aba nova é uma linha aqui e um módulo em
+// `ui/telas/detalhe-<aba>.js` que exporta `criar(ctx, base, { cabeca, rotular })` e devolve
+// `{ mostrar(corpo), esconder(), atualizar() }`:
+// - `base` é `/api/sessoes/<id>`; `cabeca()` é o topo já lido (`GET /api/sessoes/<id>`);
+// - `rotular(texto)` põe o "(…)" ao lado do nome da aba; `null` tira.
+// A aba carrega o próprio CSS, se tiver.
 const ABAS = [
-  { id: 'agentes', rotulo: 'Agentes', icone: 'robo' },
-  { id: 'conversa', rotulo: 'Conversa', icone: 'conversa' },
-  { id: 'tempo', rotulo: 'Linha do tempo', icone: 'lista' },
+  { id: 'agentes', rotulo: 'Agentes', icone: 'robo', criar: abaAgentes },
+  { id: 'conversa', rotulo: 'Conversa', icone: 'conversa', criar: abaConversa },
+  { id: 'tempo', rotulo: 'Linha do tempo', icone: 'lista', criar: abaTempo },
 ];
 
 let cssCarregado = false;
@@ -130,12 +136,17 @@ export async function montar(area, ctx) {
   let cabeca = null;
   let aba = (location.hash.slice(1) && ABAS.some((a) => a.id === location.hash.slice(1))) ? location.hash.slice(1) : null;
   const rotulos = {};
-  const telas = { agentes: abaAgentes(ctx, base), conversa: abaConversa(ctx, base, () => cabeca), tempo: abaTempo(ctx, base, (t) => (rotulos.tempo = t, desenharAbas())) };
+  const telas = Object.fromEntries(
+    ABAS.map((a) => [a.id, a.criar(ctx, base, { cabeca: () => cabeca, rotular: (t) => ((rotulos[a.id] = t ?? undefined), desenharAbas()) })]),
+  );
 
   function desenharAbas() {
     abas.replaceChildren(
       ...ABAS.map((a) => {
-        const sufixo = a.id === 'agentes' && cabeca ? ` (${cabeca.contagens.agentes})` : a.id === 'tempo' ? ` (${rotulos.tempo ?? (cabeca ? num(cabeca.contagens.eventos) : '…')})` : '';
+        // Até a aba dizer o dela, Agentes e Linha do tempo usam as contagens do topo.
+        const padrao = { agentes: cabeca?.contagens.agentes, tempo: cabeca ? num(cabeca.contagens.eventos) : null }[a.id];
+        const rotulo = rotulos[a.id] ?? padrao;
+        const sufixo = rotulo === undefined || rotulo === null ? '' : ` (${rotulo})`;
         const b = el('button', { type: 'button', role: 'tab', class: `det-aba${a.id === aba ? ' on' : ''}`, 'aria-selected': a.id === aba ? 'true' : 'false', 'data-aba': a.id }, icone(a.icone), `${a.rotulo}${sufixo}`);
         b.addEventListener('click', () => trocar(a.id));
         return b;
@@ -234,6 +245,13 @@ function desenharTopo(c, atualizar) {
   return [linha1, pilulas, pasta, s.faixa ? faixa(c) : null].filter(Boolean);
 }
 
+/** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
+function comComando(texto, comando) {
+  const i = comando ? texto.indexOf(comando) : -1;
+  if (i < 0) return comCodigo(texto);
+  return [texto.slice(0, i), el('code', {}, comando), texto.slice(i + comando.length)];
+}
+
 const TITULO_DA_FAIXA = { permissao: 'Esperando você · Pede permissão.', pergunta: 'Esperando você · Pergunta.', erro: 'Erro.' };
 
 function faixa(c) {
@@ -254,7 +272,7 @@ function faixa(c) {
     'section',
     { class: `det-faixa t-${f.tipo}`, role: f.tipo === 'erro' ? 'alert' : 'status' },
     icone(f.tipo === 'erro' ? 'erro' : 'escudo'),
-    el('p', {}, el('b', {}, TITULO_DA_FAIXA[f.tipo] ?? ''), ' ', ...comCodigo(f.texto), `. Há ${ha(f.desde).replace('agora', 'menos de 1 min')}.`, aviso),
+    el('p', {}, el('b', {}, TITULO_DA_FAIXA[f.tipo] ?? ''), ' ', ...comComando(f.texto, c.comando), `. Há ${ha(f.desde).replace('agora', 'menos de 1 min')}.`, aviso),
     botao,
   );
 }
@@ -519,7 +537,7 @@ function abaConversa(ctx, base) {
 
 const POR_PAGINA = 50;
 
-function abaTempo(ctx, base, rotular) {
+function abaTempo(ctx, base, { rotular }) {
   let alvo = null;
   let ultimo = null;
   let quantos = POR_PAGINA;

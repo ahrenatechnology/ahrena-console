@@ -66,6 +66,7 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     assert.equal(c.sessao.cwd, '/simulacao/motor-de-regras');
     assert.equal(c.branch, 'feat/58-pedidos');
     assert.equal(c.local, LOCAL_DO_DETALHE);
+    assert.equal(c.comando, 'npm run migrate', 'a faixa mostra o comando em código');
     assert.ok(c.custo && c.custo.usd! > 1, 'o custo das mensagens da sessão');
     assert.equal(c.encerradaEm, null);
     assert.deepEqual(c.contagens, { agentes: 2, eventos: (await storage.listEvents(SESSAO_DO_DETALHE, { limit: 500 })).items.length });
@@ -74,6 +75,7 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     assert.equal(p4.sessao.titulo, 'Separar pagamentos em serviços');
     assert.equal(p4.local, null, 'sessão sem Desktop: sem local');
     assert.equal(p4.sessao.faixa, null);
+    assert.equal(p4.comando, null);
   });
 
   test('id inválido dá 400; sessão desconhecida, 404; a lista sem id não é desta rota', async () => {
