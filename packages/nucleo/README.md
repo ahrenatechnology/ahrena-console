@@ -25,7 +25,7 @@ TypeScript rodado direto pelo Node 24 (type stripping), sem build e sem dependê
 | [src/mudancas/](src/mudancas/) | Cursor de mudanças e long polling: `aguardarMudancas`, `GET /api/mudancas` e a ferramenta MCP `wait_for_changes` (item 2.4, seção abaixo) |
 | [src/plano/](src/plano/) | Plano da sessão: TodoWrite, TaskCreate, TaskUpdate e `update_plan`, com o dono de cada passo (item 1.9, seção abaixo) |
 | [src/historico/](src/historico/) | Histórico das sessões encerradas: por dia no fuso da máquina, com busca, custo e a ligação depois do /clear (#33, C15) |
-| [src/config/](src/config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
+| [src/agent-config/](src/agent-config/) | A tela Agent Config: o que há nas pastas de configuração do Claude Code e a edição de uma skill, com backup (#63, seção abaixo) |
 | [src/dono/](src/dono/README.md) | Núcleo com dono único: a trava `~/.ahrena-console/nucleo.json`, a adoção e a saída quando o pai some (#86) |
 
 ## API local
@@ -57,11 +57,11 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | `GET /api/historico?antes=<AAAA-MM-DD>&dias=<N>&busca=<texto>` | As sessões encerradas por dia, do mais recente ao mais antigo, com o detalhe de cada uma e a anterior e a seguinte pelo /clear; `proximo` vai como `?antes=` na próxima página. `dias` padrão 7, máximo 31; `busca` até 100 caracteres; inválido dá 400. No `--demo`, o P4 traz oito encerradas em vários dias. Contrato em [src/api/historico.ts](src/api/historico.ts) (#33) |
 | `GET /ui` e `/ui/*` | A interface do console: a janela do app desktop e, depois, o artefato ([ui/](ui/README.md), #26) |
 | `GET /api/kanban?visao=sessoes\|agentes&coluna=<id>&pagina=<n>` | O Kanban só leitura (#31): as sessões (Ativa, Esperando você, Concluída, Com erro, Abandonada) ou os agentes (Trabalhando, Esperando, Concluídos, Erro) em colunas, 10 por página, a mais recente primeiro. Sem `coluna`, todas na página 1; com ela, só aquela, na `pagina` pedida. Parâmetro inválido dá 400. Contrato e regras de status em [src/api/kanban.ts](src/api/kanban.ts) |
-| `GET /api/config?projeto=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
-| `GET /api/config/skill?raiz=<id>&nome=<nome>` | O `SKILL.md` de uma skill, com a `versao` |
-| `POST /api/config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `criar: true`, só cria (409 se já existe) |
+| `GET /api/agent-config?project=<abs>` | A tela Agent Config: raízes, resumo e as listas de skills, subagentes, comandos, memória, MCP, plugins, hooks e arquivos de configuração, e `backups` (a pasta dos backups) (#63, seção abaixo) |
+| `GET /api/agent-config/skill?root=<id>&name=<nome>` | O `SKILL.md` de uma skill, com a `version` |
+| `POST /api/agent-config/skill` | Cria ou troca o `SKILL.md` de uma skill, com backup antes; com `create: true`, só cria (409 se já existe) |
 
-`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa, e o `POST /api/config/skill` vindo dela.
+`?conta=`, `?org=`, `?local=`, `?modelo=` e `?cwd=` são o que o painel lê da própria sessão. Pedido com `Origin` ou com `Host` de fora dá 403 (decisão 0003); só um `GET` da própria `/ui` (`Origin` igual a `http://<Host>`) passa, e o `POST /api/agent-config/skill` vindo dela.
 
 | Arquivo | O quê |
 | --- | --- |
@@ -75,7 +75,7 @@ npm run nucleo -- status|subir|parar     # subir: adota ou sobe em segundo plano
 | [historico.ts](src/api/historico.ts) | `GET /api/historico`: lê o pedido e responde a página de [src/historico/](src/historico/) (#33) |
 | [kanban.ts](src/api/kanban.ts) | O Kanban (#31): as colunas das duas visões, o status de cada agente, a página de cada coluna; custo e último prompt só para os cards devolvidos |
 | [servidor.ts](src/api/servidor.ts) | As rotas |
-| [config.ts](src/api/config.ts) | As rotas da tela Agent Config, sobre [src/config/](src/config/) |
+| [agent-config.ts](src/api/agent-config.ts) | As rotas da tela Agent Config, sobre [src/agent-config/](src/agent-config/) |
 | [ui.ts](src/api/ui.ts) | Serve a pasta [ui/](ui/README.md) em `/ui`, com a política de conteúdo que só deixa a página falar com o núcleo |
 
 **Consumo.** Nada varre transcripts por pedido: o seguidor importa só o que mudou (na API, a varredura de reserva é a cada 30 s, `--varredura`; o `fs.watch` avisa cada escrita na hora), o resumo de cada sessão lê só os eventos novos desde o último pedido, o custo é recalculado no máximo a cada 30 s, "precisam de você" é uma consulta por índice (esperando ou com erro) guardada por 4 s para todos os painéis, e o índice do Desktop e o arquivo de rótulos são conferidos no máximo a cada 30 s. O GitHub e o git respondem por trás, com o último dado no pedido. Para medir:
@@ -99,7 +99,7 @@ O transcript passou a guardar a entrada de `AskUserQuestion` (a pergunta) e das 
 
 ## Agent Config (#63)
 
-A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem configurado nesta máquina e edita skills. A leitura mora em [src/config/](src/config/), as rotas em [src/api/config.ts](src/api/config.ts); o contrato está em [src/config/modelo.ts](src/config/modelo.ts).
+A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem configurado nesta máquina e edita skills. A leitura mora em [src/agent-config/](src/agent-config/), as rotas em [src/api/agent-config.ts](src/api/agent-config.ts); o contrato está em [src/agent-config/model.ts](src/agent-config/model.ts).
 
 **De onde lê.** As raízes de usuário são todas as pastas de configuração que os perfis conhecem (decisão [0006](../../docs/decisoes/0006-multiplas-contas.md): `~/.claude`, as `~/.claude-*`, as de `perfis.json` e as que os hooks revelaram), cada uma com o seu `.claude.json` (`~/.claude.json` para a padrão, `<pasta>/.claude.json` para as outras). A raiz do projeto é `<projeto>/.claude`. De cada uma:
 
@@ -114,22 +114,22 @@ A tela Agent Config (wireframes C16 e C17) mostra o que o Claude Code tem config
 | Plugins | `enabledPlugins` dos settings | As chaves ligadas (`nome@marketplace`) |
 | Configurações | `settings.json`, `settings.local.json` e o `.claude.json` | Quais existem, com o caminho |
 
-Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta. Um `SKILL.md` ou `agents/*.md` que é symlink para fora da própria pasta continua listado, mas o frontmatter dele não é lido (`descricao: null`): um link (symlink ou hardlink) para o `.credentials.json` não vaza pela descrição.
+Os JSON são lidos sem valores: o próprio parse descarta todo texto e número, então `env`, `command`, `args`, `url`, headers, o `oauthAccount` e o e-mail nunca existem no objeto lido. O `.credentials.json` não é aberto. Arquivo ilegível ou JSON quebrado tira só aquela parte da resposta. Um `SKILL.md` ou `agents/*.md` que é symlink para fora da própria pasta continua listado, mas o frontmatter dele não é lido (`description: null`): um link (symlink ou hardlink) para o `.credentials.json` não vaza pela descrição.
 
-**O projeto.** `projetos` são os `cwd` das sessões que o núcleo já viu, das mais recentes para as mais velhas, sem repetir, até 50, só pastas que existem nesta máquina ([projetos.ts](src/config/projetos.ts)). Sem `?projeto=`, vale o primeiro (ou nenhum, com `projeto: null`); `?projeto=` fora da lista dá 400, para o pedido nunca escolher uma pasta qualquer do disco. As rotas da skill aceitam o mesmo `projeto` (na query do `GET`, no corpo do `POST`) para a raiz `p`.
+**O projeto.** `projects` são os `cwd` das sessões que o núcleo já viu, das mais recentes para as mais velhas, sem repetir, até 50, só pastas que existem nesta máquina ([projects.ts](src/agent-config/projects.ts)). Sem `?project=`, vale o primeiro (ou nenhum, com `project: null`); `?project=` fora da lista dá 400, para o pedido nunca escolher uma pasta qualquer do disco. As rotas da skill aceitam o mesmo `project` (na query do `GET`, no corpo do `POST`) para a raiz `p`.
 
-**As raízes.** Ids opacos: `u0`, `u1`… para cada pasta de configuração de usuário (`home`), `c0`, `c1`… para o `.claude.json` dela (`configuracao`, só se existe), `p` para `<projeto>/.claude` (`claude-projeto`) e `r` para o projeto (`projeto`). Só `home` e `claude-projeto` recebem skill. O projeto que é a pasta pai de uma home (o próprio `$HOME`) não tem `p`: `<projeto>/.claude` é a home, já lida como usuário, e não sai de novo como projeto (nem o `.claude/CLAUDE.md`); o `POST` na raiz `p` dá 400.
+**As raízes.** Ids opacos: `u0`, `u1`… para cada pasta de configuração de usuário (`kind: home`), `c0`, `c1`… para o `.claude.json` dela (`claude-json`, só se existe), `p` para `<projeto>/.claude` (`project-claude`) e `r` para o projeto (`project`). Só `home` e `project-claude` recebem skill. O projeto que é a pasta pai de uma home (o próprio `$HOME`) não tem `p`: `<projeto>/.claude` é a home, já lida como usuário, e não sai de novo como projeto (nem o `.claude/CLAUDE.md`); o `POST` na raiz `p` dá 400.
 
-**A edição de uma skill.** `GET /api/config/skill?raiz=&nome=` devolve `{ raiz, nome, escopo, caminho, conteudo, versao, editadoEm }`, com `versao` = sha256 do conteúdo. `POST /api/config/skill` com `{ raiz, nome, conteudo, versao?, criar? }` grava:
+**A edição de uma skill.** `GET /api/agent-config/skill?root=&name=` devolve `{ root, name, scope, path, content, version, editedAt }`, com `version` = sha256 do conteúdo. `POST /api/agent-config/skill` com `{ root, name, content, version?, project?, create? }` grava e responde `{ ok, path, version, editedAt, backup }`:
 
 - skill que existe: copia o `SKILL.md` atual para `~/.ahrena-console/backups/<aaaa-mm-dd>/<pasta>-<hash>/<nome>/SKILL.md.bak-<data>-<sufixo>` e só então troca, por um temporário na mesma pasta e `rename`;
 - skill que não existe: cria `skills/<nome>/SKILL.md` (o botão "Nova"), com `backup: null`; na raiz `p`, cria a `.claude` do projeto se faltar;
-- `versao` que não bate com a atual, ou que veio para uma skill que não existe: 409, nada gravado;
-- `criar: true` (o "Nova" da tela) com a skill existindo: 409, nada gravado. A conferência corre dentro da fila do arquivo e a criação usa `link` em vez de `rename`, então de dois "Nova" juntos um passa e o outro dá 409.
+- `version` que não bate com a atual, ou que veio para uma skill que não existe: 409, nada gravado;
+- `create: true` (o "Nova" da tela) com a skill existindo: 409, nada gravado. A conferência corre dentro da fila do arquivo e a criação usa `link` em vez de `rename`, então de dois "Nova" juntos um passa e o outro dá 409.
 
-Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `raiz` só um id conhecido de tipo `home` ou `claude-projeto` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz (e o `SKILL.md`, dentro da pasta da skill), o `SKILL.md` não pode ser symlink nem para ler nem para gravar, mesmo apontando para dentro da raiz, e a `.claude` do projeto tem de ficar dentro do projeto (403; a listagem marca essas skills com `editavel: false`); duas gravações no mesmo arquivo passam uma de cada vez, então a segunda com a mesma `versao` dá 409; só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); corpo do `POST` acima do limite: 413 assim que passa, sem ler o resto, e a conexão fecha; `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
+Defesas: nome `^[a-z0-9][a-z0-9._-]{0,63}$` sem `..` (400); `root` só um id conhecido de tipo `home` ou `project-claude` (400); a pasta `skills`, a da skill e o `SKILL.md` têm o caminho real dentro do caminho real da raiz (e o `SKILL.md`, dentro da pasta da skill), o `SKILL.md` não pode ser symlink nem para ler nem para gravar, mesmo apontando para dentro da raiz, e a `.claude` do projeto tem de ficar dentro do projeto (403; a listagem marca essas skills com `editable: false`); duas gravações no mesmo arquivo passam uma de cada vez, então a segunda com a mesma `version` dá 409; só se escreve `SKILL.md`; conteúdo em texto até 256 KiB (413); corpo do `POST` acima do limite: 413 assim que passa, sem ler o resto, e a conexão fecha; `Content-Type: application/json` (415). A origem segue a decisão [0003](../../docs/decisoes/0003-responder-sessao.md): Host nosso, e `Origin` ausente ou exatamente `http://<Host>` (a própria `/ui`). Apagar uma skill fica fora desta entrega.
 
-**Na `--demo`.** Nada da `~/.claude` real é lido: a API monta num temporário do sistema uma pasta de configuração e um projeto fictícios (`motor-de-regras`), com as skills do wireframe, agentes, comandos, `CLAUDE.md`, settings com hooks e plugins, `.claude.json` e `.mcp.json` ([demo.ts](src/config/demo.ts)). Os backups também ficam lá, e a pasta é apagada quando a API sai.
+**Na `--demo`.** Nada da `~/.claude` real é lido: a API monta num temporário do sistema uma pasta de configuração e um projeto fictícios (`motor-de-regras`), com as skills do wireframe, agentes, comandos, `CLAUDE.md`, settings com hooks e plugins, `.claude.json` e `.mcp.json` ([demo.ts](src/agent-config/demo.ts)). Os backups também ficam lá, e a pasta é apagada quando a API sai.
 
 ## Importação do histórico
 

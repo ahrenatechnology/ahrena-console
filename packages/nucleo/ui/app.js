@@ -99,7 +99,7 @@ iniciarAoVivo({
 let saida = null;
 let telaComErro = false;
 
-// `rota` pode trazer a query (`/ui/config?aba=skills`): ela fica na URL para a tela ler.
+// `rota` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
 function navegar(rota) {
   if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();

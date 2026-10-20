@@ -19,7 +19,7 @@ import { iniciarAoVivo } from '../../ui/ao-vivo.js';
 // @ts-expect-error: idem
 import { acharTela, TELAS } from '../../ui/telas.js';
 // @ts-expect-error: idem
-import * as telaConfig from '../../ui/telas/config.js';
+import * as agentConfigScreen from '../../ui/telas/agent-config.js';
 
 interface Resposta {
   status: number;
@@ -71,7 +71,7 @@ describe('/ui no núcleo', () => {
 
   test('/ui, /ui/sessoes e /ui/sessoes/<id> devolvem a mesma página, com a política de conteúdo', async () => {
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
-    for (const caminho of ['/ui', '/ui/', '/ui/sessoes', `/ui/sessoes/${SESSAO_DO_PAINEL}`, '/ui/qualquer/coisa', '/ui/config', '/ui/config?aba=skills&projeto=%2Fx']) {
+    for (const caminho of ['/ui', '/ui/', '/ui/sessoes', `/ui/sessoes/${SESSAO_DO_PAINEL}`, '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
       const r = await pedir(api.url, caminho);
       assert.equal(r.status, 200, caminho);
       assert.match(String(r.headers['content-type']), /^text\/html/);
@@ -87,12 +87,12 @@ describe('/ui no núcleo', () => {
     assert.equal(js.status, 200);
     assert.match(String(js.headers['content-type']), /^text\/javascript/);
     assert.match(String((await pedir(api.url, '/ui/marca.css')).headers['content-type']), /^text\/css/);
-    // A tela Agent Config (#63): o módulo em telas/ e o CSS próprio.
-    const tela = await pedir(api.url, '/ui/telas/config.js');
-    assert.equal(tela.status, 200);
-    assert.match(String(tela.headers['content-type']), /^text\/javascript/);
-    assert.match(tela.corpo, /export async function montar/);
-    const css = await pedir(api.url, '/ui/config.css');
+    // The Agent Config screen (#63): the module in telas/ and its own CSS.
+    const screen = await pedir(api.url, '/ui/telas/agent-config.js');
+    assert.equal(screen.status, 200);
+    assert.match(String(screen.headers['content-type']), /^text\/javascript/);
+    assert.match(screen.corpo, /export async function montar/);
+    const css = await pedir(api.url, '/ui/agent-config.css');
     assert.equal(css.status, 200);
     assert.match(String(css.headers['content-type']), /^text\/css/);
     for (const caminho of ['/ui/nada.js', '/ui/telas/nada.js', '/ui/index.html', '/ui/README.md', '/ui/%2e%2e/src/api/ui.ts', '/ui/..%2fpackage.json']) {
@@ -118,7 +118,7 @@ describe('/ui no núcleo', () => {
   test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
     // A pasta inteira, telas/ incluída.
     const arquivos = readdirSync(PASTA_DA_UI, { recursive: true, encoding: 'utf8' }).filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
-    assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('telas/config.js') && arquivos.includes('config.css'));
+    assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('telas/agent-config.js') && arquivos.includes('agent-config.css'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
@@ -214,7 +214,7 @@ describe('/ui no núcleo', () => {
 
 describe('registro das telas', () => {
   test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics, Histórico e Agent Config; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'historico', 'config']);
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'historico', 'agent-config']);
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
     assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
@@ -231,97 +231,97 @@ describe('registro das telas', () => {
   });
 });
 
-describe('escrever(rota, corpo): a escrita da /ui (#63)', () => {
-  test('POST JSON à própria origem; erro vira ErroDeLeitura com o status; só a API do núcleo local', async () => {
-    const pedidos: { url: string; init: RequestInit }[] = [];
-    const respostas = [new Response(JSON.stringify({ ok: true, backup: '/b/x' }), { status: 200 }), new Response(JSON.stringify({ error: 'a skill mudou desde a leitura' }), { status: 409 })];
-    const escrever = escritorHttp({ base: 'http://127.0.0.1:4720', fetch: async (url: URL, init: RequestInit) => (pedidos.push({ url: String(url), init }), respostas.shift()!) });
-    assert.deepEqual(await escrever('/api/config/skill', { raiz: 'u0', nome: 'x', conteudo: 'oi' }), { ok: true, backup: '/b/x' });
-    assert.equal(pedidos[0]!.url, 'http://127.0.0.1:4720/api/config/skill');
-    assert.equal(pedidos[0]!.init.method, 'POST');
-    assert.equal((pedidos[0]!.init.headers as Record<string, string>)['content-type'], 'application/json');
-    assert.deepEqual(JSON.parse(String(pedidos[0]!.init.body)), { raiz: 'u0', nome: 'x', conteudo: 'oi' });
-    assert.equal(pedidos[0]!.init.credentials, 'omit');
-    await assert.rejects(escrever('/api/config/skill', {}), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura && e.status === 409 && /mudou/.test(e.message));
-    await assert.rejects(escrever('/ui', {}), /rota fora da API/);
-    await assert.rejects(escrever('/api/../../ui', {}), /rota fora do núcleo/);
+describe('escrever(rota, corpo): the /ui write (#63)', () => {
+  test('POSTs JSON to its own origin; an error becomes ErroDeLeitura with the status; only the local core API', async () => {
+    const requests: { url: string; init: RequestInit }[] = [];
+    const responses = [new Response(JSON.stringify({ ok: true, backup: '/b/x' }), { status: 200 }), new Response(JSON.stringify({ error: 'a skill mudou desde a leitura' }), { status: 409 })];
+    const write = escritorHttp({ base: 'http://127.0.0.1:4720', fetch: async (url: URL, init: RequestInit) => (requests.push({ url: String(url), init }), responses.shift()!) });
+    assert.deepEqual(await write('/api/agent-config/skill', { root: 'u0', name: 'x', content: 'oi' }), { ok: true, backup: '/b/x' });
+    assert.equal(requests[0]!.url, 'http://127.0.0.1:4720/api/agent-config/skill');
+    assert.equal(requests[0]!.init.method, 'POST');
+    assert.equal((requests[0]!.init.headers as Record<string, string>)['content-type'], 'application/json');
+    assert.deepEqual(JSON.parse(String(requests[0]!.init.body)), { root: 'u0', name: 'x', content: 'oi' });
+    assert.equal(requests[0]!.init.credentials, 'omit');
+    await assert.rejects(write('/api/agent-config/skill', {}), (e: InstanceType<typeof ErroDeLeitura>) => e instanceof ErroDeLeitura && e.status === 409 && /mudou/.test(e.message));
+    await assert.rejects(write('/ui', {}), /rota fora da API/);
+    await assert.rejects(write('/api/../../ui', {}), /rota fora do núcleo/);
     assert.throws(() => escritorHttp({ base: 'http://exemplo.com:4720' }), /só escreve no núcleo local/);
-    assert.equal(pedidos.length, 2);
+    assert.equal(requests.length, 2);
   });
 });
 
-describe('tela Agent Config (#63): registro e funções puras', () => {
-  // O CSS de cada tela fica carregado depois que ela abre uma vez: um seletor sem a classe própria
-  // (`cfg-…`) vazaria para as outras telas (regras da /ui, item 1).
-  test('todo seletor de config.css passa por uma classe cfg-', () => {
-    const css = readFileSync(`${PASTA_DA_UI}config.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const seletores = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1]!.split(',')).map((s) => s.trim()).filter((s) => s && !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s));
-    assert.ok(seletores.length > 20);
-    assert.deepEqual(seletores.filter((s) => !s.includes('.cfg-')), []);
+describe('Agent Config screen (#63): registration and pure functions', () => {
+  // Each screen's CSS stays loaded after it opens once: a selector without the screen's own class
+  // (`ac-…`) would leak into the other screens (/ui rules, item 1).
+  test('every selector in agent-config.css goes through an ac- class', () => {
+    const css = readFileSync(`${PASTA_DA_UI}agent-config.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1]!.split(',')).map((s) => s.trim()).filter((s) => s && !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s));
+    assert.ok(selectors.length > 20);
+    assert.deepEqual(selectors.filter((s) => !s.includes('.ac-')), []);
   });
 
-  test('registrada em /ui/config, com o item Agent Config (ícone bot) e o arquivo em telas/', () => {
-    const achada = acharTela('/ui/config');
-    assert.equal(achada.tela.id, 'config');
-    assert.equal(achada.tela.arquivo, '/ui/telas/config.js');
-    assert.deepEqual(achada.tela.item, { rotulo: 'Agent Config', icone: 'bot' });
-    assert.equal(acharTela('/ui/config/').tela.id, 'config');
+  test('registered at /ui/agent-config, with the Agent Config item (bot icon) and the file in telas/', () => {
+    const found = acharTela('/ui/agent-config');
+    assert.equal(found.tela.id, 'agent-config');
+    assert.equal(found.tela.arquivo, '/ui/telas/agent-config.js');
+    assert.deepEqual(found.tela.item, { rotulo: 'Agent Config', icone: 'bot' });
+    assert.equal(acharTela('/ui/agent-config/').tela.id, 'agent-config');
   });
 
-  test('a aba e o projeto na URL, ida e volta', () => {
-    const { lerUrl, urlDa } = telaConfig;
-    assert.deepEqual(lerUrl(''), { aba: 'visao', projeto: null });
-    assert.deepEqual(lerUrl('?aba=skills&projeto=%2Fa%2Fb'), { aba: 'skills', projeto: '/a/b' });
-    assert.deepEqual(lerUrl('?aba=inventada'), { aba: 'visao', projeto: null });
-    assert.equal(urlDa({ aba: 'visao' }), '/ui/config');
-    assert.equal(urlDa({ aba: 'skills', projeto: '/a b' }), '/ui/config?aba=skills&projeto=%2Fa+b');
-    assert.deepEqual(lerUrl(urlDa({ aba: 'hooks', projeto: '/x/y' }).split('?')[1]), { aba: 'hooks', projeto: '/x/y' });
+  test('tab and project in the URL, round trip', () => {
+    const { readUrl, urlFor } = agentConfigScreen;
+    assert.deepEqual(readUrl(''), { tab: 'overview', project: null });
+    assert.deepEqual(readUrl('?tab=skills&project=%2Fa%2Fb'), { tab: 'skills', project: '/a/b' });
+    assert.deepEqual(readUrl('?tab=made-up'), { tab: 'overview', project: null });
+    assert.equal(urlFor({ tab: 'overview' }), '/ui/agent-config');
+    assert.equal(urlFor({ tab: 'skills', project: '/a b' }), '/ui/agent-config?tab=skills&project=%2Fa+b');
+    assert.deepEqual(readUrl(urlFor({ tab: 'hooks', project: '/x/y' }).split('?')[1]), { tab: 'hooks', project: '/x/y' });
   });
 
-  test('escopo e busca filtram no cliente', () => {
-    const { doEscopo, buscarSkills } = telaConfig;
+  test('scope and search filter on the client', () => {
+    const { inScope, searchSkills } = agentConfigScreen;
     const skills = [
-      { nome: 'revisar-pr', nomeDeclarado: null, descricao: 'Revisa um PR contra o guia', escopo: 'usuario' },
-      { nome: 'migracao-segura', nomeDeclarado: 'Migração', descricao: 'Escreve migrações com volta', escopo: 'projeto' },
+      { name: 'revisar-pr', declaredName: null, description: 'Revisa um PR contra o guia', scope: 'user' },
+      { name: 'migracao-segura', declaredName: 'Migração', description: 'Escreve migrações com volta', scope: 'project' },
     ];
-    assert.equal(doEscopo(skills, 'todos').length, 2);
-    assert.deepEqual(doEscopo(skills, 'projeto').map((s: { nome: string }) => s.nome), ['migracao-segura']);
-    assert.deepEqual(buscarSkills(skills, '  MIGRAÇÃO ').map((s: { nome: string }) => s.nome), ['migracao-segura']);
-    assert.deepEqual(buscarSkills(skills, 'guia').map((s: { nome: string }) => s.nome), ['revisar-pr']);
-    assert.equal(buscarSkills(skills, '').length, 2);
+    assert.equal(inScope(skills, 'all').length, 2);
+    assert.deepEqual(inScope(skills, 'project').map((s: { name: string }) => s.name), ['migracao-segura']);
+    assert.deepEqual(searchSkills(skills, '  MIGRAÇÃO ').map((s: { name: string }) => s.name), ['migracao-segura']);
+    assert.deepEqual(searchSkills(skills, 'guia').map((s: { name: string }) => s.name), ['revisar-pr']);
+    assert.equal(searchSkills(skills, '').length, 2);
   });
 
   test('"editado há N dias"', () => {
-    const { editadoHa } = telaConfig;
-    const agora = Date.parse('2026-10-20T12:00:00Z');
-    assert.equal(editadoHa(agora - 10_000, agora), 'editado agora');
-    assert.equal(editadoHa(agora + 60_000, agora), 'editado agora');
-    assert.equal(editadoHa(agora - 5 * 60_000, agora), 'editado há 5 min');
-    assert.equal(editadoHa(agora - 3 * 3600_000, agora), 'editado há 3 h');
-    assert.equal(editadoHa(agora - 26 * 3600_000, agora), 'editado há 1 dia');
-    assert.equal(editadoHa(agora - 3 * 86400_000, agora), 'editado há 3 dias');
-    assert.equal(editadoHa(undefined, agora), '');
+    const { editedAgo } = agentConfigScreen;
+    const now = Date.parse('2026-10-20T12:00:00Z');
+    assert.equal(editedAgo(now - 10_000, now), 'editado agora');
+    assert.equal(editedAgo(now + 60_000, now), 'editado agora');
+    assert.equal(editedAgo(now - 5 * 60_000, now), 'editado há 5 min');
+    assert.equal(editedAgo(now - 3 * 3600_000, now), 'editado há 3 h');
+    assert.equal(editedAgo(now - 26 * 3600_000, now), 'editado há 1 dia');
+    assert.equal(editedAgo(now - 3 * 86400_000, now), 'editado há 3 dias');
+    assert.equal(editedAgo(undefined, now), '');
   });
 
-  test('o nome de uma skill nova segue o padrão do núcleo e não repete a pasta', async () => {
-    const { validarNomeDeSkill, NOME_DE_SKILL, modeloDeSkill } = telaConfig;
-    const { NOME_DE_SKILL: doNucleo } = await import('../../src/config/skills.ts');
-    assert.equal(String(NOME_DE_SKILL), String(doNucleo));
-    assert.equal(validarNomeDeSkill('revisar-pr'), null);
-    assert.equal(validarNomeDeSkill('v1.2_ok'), null);
-    assert.match(validarNomeDeSkill(''), /Dê um nome/);
-    for (const ruim of ['Maiuscula', '-comeca', 'com espaco', 'a/b', '..', 'x'.repeat(65)]) assert.match(validarNomeDeSkill(ruim), /minúsculas/, ruim);
-    assert.match(validarNomeDeSkill('revisar-pr', new Set(['revisar-pr'])), /Já existe/);
-    assert.match(modeloDeSkill('minha'), /^---\nname: minha\ndescription: .+\n---\n/);
+  test("a new skill's name follows the core's pattern and does not repeat the folder", async () => {
+    const { validateSkillName, SKILL_NAME, skillTemplate } = agentConfigScreen;
+    const { SKILL_NAME: fromCore } = await import('../../src/agent-config/skills.ts');
+    assert.equal(String(SKILL_NAME), String(fromCore));
+    assert.equal(validateSkillName('revisar-pr'), null);
+    assert.equal(validateSkillName('v1.2_ok'), null);
+    assert.match(validateSkillName(''), /Dê um nome/);
+    for (const bad of ['Maiuscula', '-comeca', 'com espaco', 'a/b', '..', 'x'.repeat(65)]) assert.match(validateSkillName(bad), /minúsculas/, bad);
+    assert.match(validateSkillName('revisar-pr', new Set(['revisar-pr'])), /Já existe/);
+    assert.match(skillTemplate('minha'), /^---\nname: minha\ndescription: .+\n---\n/);
   });
 
-  test('o resumo: total e "N do usuário · M do projeto", ou o escopo filtrado', () => {
-    const { numeroDo, legendaDo } = telaConfig;
-    const c = { total: 24, usuario: 18, projeto: 6 };
-    assert.equal(numeroDo(c, 'todos'), 24);
-    assert.equal(numeroDo(c, 'usuario'), 18);
-    assert.equal(numeroDo(c, 'projeto'), 6);
-    assert.equal(legendaDo(c, 'todos'), '18 do usuário · 6 do projeto');
-    assert.equal(legendaDo(c, 'projeto'), 'do projeto');
+  test('the summary: total and "N do usuário · M do projeto", or the filtered scope', () => {
+    const { countFor, captionFor } = agentConfigScreen;
+    const c = { total: 24, user: 18, project: 6 };
+    assert.equal(countFor(c, 'all'), 24);
+    assert.equal(countFor(c, 'user'), 18);
+    assert.equal(countFor(c, 'project'), 6);
+    assert.equal(captionFor(c, 'all'), '18 do usuário · 6 do projeto');
+    assert.equal(captionFor(c, 'project'), 'do projeto');
   });
 });

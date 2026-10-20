@@ -44,8 +44,8 @@ import { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
-import { montarConfigDaDemo, projetosConhecidos } from '../config/index.ts';
-import { criarRotaDaConfig } from './config.ts';
+import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
+import { createAgentConfigRoute } from './agent-config.ts';
 import { Contas } from './contas.ts';
 import { QuadroKanban } from './kanban.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
@@ -280,12 +280,12 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
-// A tela Agent Config (#63): as pastas dos perfis e os cwd das sessões; na demo, pastas fictícias.
-const configDaDemo = demo ? montarConfigDaDemo() : null;
-if (configDaDemo) process.once('exit', configDaDemo.apagar);
-const config = configDaDemo
-  ? criarRotaDaConfig({ pastas: async () => configDaDemo.pastas, projetos: async () => [configDaDemo.projeto], backups: configDaDemo.backups, log })
-  : criarRotaDaConfig({ pastas: () => perfis!.listar(), projetos: () => projetosConhecidos(storage), log });
+// The Agent Config screen (#63): the profiles' folders and the sessions' cwd; in the demo, fictitious folders.
+const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
+if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
+const agentConfig = demoAgentConfig
+  ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
+  : createAgentConfigRoute({ folders: () => perfis!.listar(), projects: () => knownProjects(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
@@ -333,7 +333,7 @@ const api: ApiLocal = await iniciarApiLocal({
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
-  config,
+  agentConfig,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

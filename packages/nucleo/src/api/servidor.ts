@@ -26,7 +26,7 @@
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
-// | `GET /api/config`, `GET` e `POST /api/config/skill` | A tela Agent Config (api/config.ts, src/config, #63): o que há nas pastas de configuração e a edição de uma skill, com backup |
+// | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -34,8 +34,8 @@
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
 // até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo três, só com `Origin`
 // exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`,
-// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e o `POST /api/config/skill` da
-// tela Agent Config (api/config.ts). A escrita nas
+// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e o `POST /api/agent-config/skill` da
+// tela Agent Config (api/agent-config.ts). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -56,7 +56,7 @@ import { ROTA_DO_HISTORICO, responderHistorico } from './historico.ts';
 import type { HistoricoDeSessoes } from '../historico/leitura.ts';
 import { responderKanban, ROTA_DO_KANBAN, type QuadroKanban } from './kanban.ts';
 import { ROTA_DOS_EVENTOS, responderEventos, type FeedDeEventos } from './eventos.ts';
-import { escritaDaConfigNaMesmaOrigem, ROTA_DA_CONFIG, type RotaDaConfig } from './config.ts';
+import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
@@ -103,8 +103,8 @@ export interface OpcoesDaApi {
   historico?: HistoricoDeSessoes;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
-  /** A tela Agent Config (`criarRotaDaConfig`); sem ela, `/api/config` dá 404. */
-  config?: RotaDaConfig;
+  /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
+  agentConfig?: AgentConfigRoute;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -253,7 +253,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !escritaDaConfigNaMesmaOrigem(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !agentConfigWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -265,7 +265,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
-    if (opts.config && (url.pathname === ROTA_DA_CONFIG || url.pathname.startsWith(`${ROTA_DA_CONFIG}/`))) return opts.config(req, res, url);
+    if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);
