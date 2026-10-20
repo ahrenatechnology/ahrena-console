@@ -9,6 +9,7 @@ import { ToolError, McpServer, type Tool } from './protocol.ts';
 export * from './protocol.ts';
 export { MCP_PATH, createMcpRoute, type McpRoute } from './http.ts';
 export { serveStdio, httpBridge, type MessageHandler, type StdioOptions } from './stdio.ts';
+export { CoreResolver, chooseInstance, shouldStartOwn, type CoreTarget, type ResolverOptions } from './target.ts';
 export { FleetReader, classify, matchesAccountFilter, type Attention, type McpAttentionGroup, type McpAttentionReason, type FleetOptions, type FleetSession } from './fleet.ts';
 export { COMMON_ARGS, BYTES_PER_PAGE, MAX_LIMIT, DEFAULT_LIMIT, objectSchema, parseCommonArgs, paginate, safeTitle } from './output.ts';
 export { sessionsNeedingAttention, type AttentionItem } from './tools/attention.ts';

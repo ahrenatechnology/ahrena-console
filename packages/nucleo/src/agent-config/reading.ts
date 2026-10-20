@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import type { ConfigFolder } from '../profiles/discovery.ts';
-import { readFrontmatter } from './frontmatter.ts';
+import { asObject, enabledPluginKeys, ENABLED_MARK, hooksOf, keysOf, parseJsonShape, readFrontmatter } from './parse.ts';
 import {
   AgentConfigError,
   type AgentConfig,
@@ -131,13 +131,13 @@ export async function readAgentConfig(request: AgentConfigRequest): Promise<Agen
       if (settings === undefined) continue;
       r.settings.push({ file, scope: root.scope, path });
       if (!settings) continue;
-      for (const [event, count] of hooksOf(settings)) {
+      for (const [event, count] of hookCounts(settings)) {
         const k = `${root.scope}\0${event}`;
         const h = hooks.get(k) ?? { event, count: 0, scope: root.scope };
         h.count += count;
         hooks.set(k, h);
       }
-      for (const name of pluginsOf(settings)) if (once(`plugin\0${root.scope}\0${name}`)) r.plugins.push({ name, scope: root.scope });
+      for (const name of enabledPluginKeys(settings, ENABLED_MARK)) if (once(`plugin\0${root.scope}\0${name}`)) r.plugins.push({ name, scope: root.scope });
     }
   }
 
@@ -150,7 +150,7 @@ export async function readAgentConfig(request: AgentConfigRequest): Promise<Agen
     if (claudeJson !== undefined) r.settings.push({ file: '.claude.json', scope: 'user', path: f.claudeJson });
     if (claudeJson) {
       for (const name of keysOf(claudeJson.mcpServers)) if (once(`mcp\0user\0.claude.json\0${name}`)) r.mcp.push({ name, scope: 'user', source: '.claude.json' });
-      const ofProject = project ? object(object(claudeJson.projects)?.[project]) : null;
+      const ofProject = project ? asObject(asObject(claudeJson.projects)?.[project]) : null;
       for (const name of keysOf(ofProject?.mcpServers)) if (once(`mcp\0project\0.claude.json\0${name}`)) r.mcp.push({ name, scope: 'project', source: '.claude.json' });
     }
     if (project) r.memory.push(...(await readAutoMemory(f.dir, project)));
@@ -261,31 +261,20 @@ async function readAutoMemory(dir: string, project: string): Promise<ListedMemor
   return list;
 }
 
-/** The `hooks` events and how many hooks each has (`hooks.<Event>[].hooks[]`). No command leaves. */
-function hooksOf(settings: Record<string, unknown>): [string, number][] {
-  const hooks = object(settings.hooks);
-  if (!hooks) return [];
-  const events: [string, number][] = [];
-  for (const [event, groups] of Object.entries(hooks)) {
-    if (!Array.isArray(groups)) continue;
-    const count = groups.reduce((n: number, g) => n + (Array.isArray(object(g)?.hooks) ? (object(g)!.hooks as unknown[]).length : 0), 0);
-    if (count > 0) events.push([event, count]);
-  }
-  return events;
+/**
+ * The `hooks` events and how many hooks each has (`hooks.<Event>[].hooks[]`), from parse.ts; an
+ * event with no hook stays out. No command leaves (the value-free parse below has none).
+ */
+function hookCounts(settings: Record<string, unknown>): [string, number][] {
+  return hooksOf(settings)
+    .filter((h) => h.count > 0)
+    .map((h) => [h.event, h.count]);
 }
-
-/** The enabled `enabledPlugins` keys. The value-free parse (below) swaps `true` for a marker. */
-function pluginsOf(settings: Record<string, unknown>): string[] {
-  const enabled = object(settings.enabledPlugins);
-  return enabled ? Object.keys(enabled).filter((k) => enabled[k] === ENABLED) : [];
-}
-
-const ENABLED = 1;
 
 /**
- * Reads a JSON keeping only its shape: objects, arrays, keys and the `ENABLED` marker in place of
- * `true`. Every string and number becomes nothing during the parse itself, so no value (`env`,
- * `command`, `url`, tokens, the `oauthAccount` e-mail) exists in the object that leaves here.
+ * Reads a JSON keeping only its shape (parse.ts, `parseJsonShape`): objects, arrays, keys and the
+ * `ENABLED_MARK` in place of `true`, so no value (`env`, `command`, `url`, tokens, the
+ * `oauthAccount` e-mail) exists in the object that leaves here.
  * `undefined`: the file does not exist; `null`: it exists but is unreadable, too big or not a JSON object.
  */
 async function readJsonWithoutValues(path: string): Promise<Record<string, unknown> | null | undefined> {
@@ -293,20 +282,10 @@ async function readJsonWithoutValues(path: string): Promise<Record<string, unkno
   if (!info?.isFile()) return undefined;
   if (info.size > MAX_JSON) return null;
   try {
-    const o: unknown = JSON.parse(await readFile(path, 'utf8'), (_k, v: unknown) => (v === true ? ENABLED : v !== null && typeof v === 'object' ? v : undefined));
-    return object(o);
+    return parseJsonShape(await readFile(path, 'utf8'));
   } catch {
     return null;
   }
-}
-
-function object(v: unknown): Record<string, unknown> | null {
-  return v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-}
-
-function keysOf(v: unknown): string[] {
-  const o = object(v);
-  return o ? Object.keys(o) : [];
 }
 
 function text(v: string | undefined): string | null {

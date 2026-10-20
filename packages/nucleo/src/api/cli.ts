@@ -23,6 +23,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { GithubCallQueue } from '../github/call-queue.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
@@ -73,6 +74,7 @@ import {
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
+import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { FeedDeEventos } from './events.ts';
@@ -107,8 +109,8 @@ const AJUDA = `Uso: npm run api -- [opções]
                       avisa cada escrita na hora; a varredura só cobre o aviso perdido
   --sem-desktop       Não lê o índice de sessões do Claude Desktop
   --sem-github        O trabalho mostra só o branch, sem chamar o GitHub, o kanban do
-                      projeto (/api/project) responde 503 e os repositórios (/api/repos)
-                      respondem "sem-github"
+                      projeto (/api/project) responde 503 e os repositórios (/api/repos) e as
+                      instruções dos agentes (/api/agent-instructions) respondem "sem-github"
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
@@ -420,7 +422,11 @@ relerPerfis?.unref();
 // New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
 const mcp = createMcpServer({ storage, accounts: contas, desktop, log });
 mcp.server.register(waitForChanges({ changes: mudancas, accounts: contas }));
-const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log });
+// Uma fila só para as chamadas ao GitHub por trás das telas (decisão 0001, item 6): repositórios e instruções.
+const githubQueue = new GithubCallQueue();
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], cache: cacheDoGithub, frota: mcp.fleet, mudancas, log, queue: githubQueue });
+// The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o['sem-github'], cache: cacheDoGithub, changes: mudancas, queue: githubQueue, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -522,6 +528,7 @@ const api: ApiLocal = await iniciarApiLocal({
   historico,
   kanban: new QuadroKanban({ storage, contas, desktop }),
   repos: repos.rota,
+  agentInstructions: agentInstructions.route,
   // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
   ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
