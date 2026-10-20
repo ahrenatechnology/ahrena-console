@@ -19,17 +19,19 @@
 // `<owner>/<repo>` in lower case. Only the HTTP route exposes it; MCP's `wait_for_changes` filters it out (mcp.ts).
 // `agent-instructions` (#183): a repository's Instructions tab changed; the key is `<owner>/<repo>` in
 // lower case. Like `repos`, only the HTTP route exposes it.
+// `framework-install` (#184): a repository's framework install plan or its pull request changed; the key
+// is `<owner>/<repo>` in lower case. Only the HTTP route exposes it.
 // `alert` (#175, src/telemetry): a machine alert that enters or exits; the key is `<machine>:<alert>`,
 // with no session and no account.
 // The values are English since #173 phase 2b; the old ones (`sessao`, `estado`, `precisa-de-voce`, `plano`,
 // `decisao`, `conta`) are still accepted in `?type=` and answered on the old route (src/api/legacy-routes.ts).
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
   seq: number;
   type: ChangeType;
-  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions`, `<owner>/<repo>`. */
+  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions` and `framework-install`, `<owner>/<repo>`. */
   key: string;
   /** The session the change belongs to; `null` for account and repository changes (and for `alert`). */
   sessionId: string | null;

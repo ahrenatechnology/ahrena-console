@@ -29,6 +29,7 @@
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-instructions/<owner>/<repo>` and `/file?path=` | A repository's Instructions tab: instruction files, `@imports`, `.claude/` and `.mcp.json` (`?refresh=1`; api/agent-instructions.ts, #183) |
+// | `GET /api/framework-install/<owner>/<repo>/plan`, `/pull-request` and `POST /api/framework-install/<owner>/<repo>` | Install the Ahrena Framework in a repository through a PR: the preview with the diff, the PR state and opening the PR (api/framework-install.ts, #184) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
@@ -50,9 +51,10 @@
 // even on a same-origin `fetch`). A write with `Origin` is still refused, except three, only with `Origin`
 // exactly `http://<Host>` and the exact path (no query): the Detail's "Abrir no Claude Desktop",
 // `POST /open/<local_…>`, the project Kanban's `POST /api/project/move` (api/project.ts) and the
-// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`, and
-// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), and the machine screen's
-// Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
+// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`,
+// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
+// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
+// screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
 // decision 0012). The old aliases
 // (`/abrir/…`, `/api/projeto/mover`, `/api/decisoes/<id>/<action>`) go through the same rules.
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
@@ -90,6 +92,7 @@ import { RotaAnalytics } from './analytics-route.ts';
 import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
+import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
@@ -147,6 +150,8 @@ export interface ApiOptions {
   repos?: RotaDosRepos;
   /** The Instructions tab of a repository (api/agent-instructions.ts, #183); without it, `/api/agent-instructions` gives 404. */
   agentInstructions?: AgentInstructionsRoute;
+  /** Instalar o Ahrena Framework num repositório por PR (api/framework-install.ts, #184); sem ela, `/api/framework-install` dá 404. */
+  frameworkInstall?: FrameworkInstallRoute;
   /**
    * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
    * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
@@ -343,7 +348,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     // through its back-translator (new → old keys and values).
     const toLegacy = legacyResponseFor(raw.pathname);
     if (toLegacy) rewriteJsonBodies(res, toLegacy);
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
     // its live refresh work with the current id.
     if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
@@ -362,6 +367,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
+    if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });

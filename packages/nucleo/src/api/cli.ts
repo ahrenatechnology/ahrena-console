@@ -79,6 +79,7 @@ import {
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
+import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { FeedDeEventos } from './events.ts';
@@ -354,6 +355,8 @@ const githubQueue = new GithubCallQueue();
 const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
 // The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
+// Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
+const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -477,6 +480,7 @@ const api: LocalApi = await startLocalApi({
   kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
   repos: repos.rota,
   agentInstructions: agentInstructions.route,
+  frameworkInstall: frameworkInstall.route,
   // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
   ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
