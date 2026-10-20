@@ -59,13 +59,14 @@ import { gridHeight, CARD_BORDER, SPACE, CARD_LINES, textLines } from './height'
 import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type GraphLine } from './graph'
 import { paleta, status as STATUS_COR } from './brand'
 import { charsFor, columns, fit, kids, type Node } from './fit'
+import { LEGACY_PORT } from './discover'
 
 export const CARD_W = 34
 /** Todo card tem a mesma altura, ~190 px no Desktop (ver CARD_LINES): a borda e as linhas de conteúdo. */
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.33'
+export const PLUGIN_VERSION = '0.0.34'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -389,7 +390,7 @@ const opensDirectly = (c: DrawContext, local: string | null | undefined) => !!lo
 
 export function sessionUrl(c: Pick<DrawContext, 'core'>, local: string | null | undefined): string | null {
   if (!local || !DESKTOP_LOCAL.test(local)) return null
-  const port = c.core.split(':')[1] ?? '4720'
+  const port = c.core.split(':')[1] ?? String(LEGACY_PORT)
   return `http://localhost:${port}/open/${local}`
 }
 
