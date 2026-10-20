@@ -203,7 +203,8 @@ describe('Detalhe da sessão: /api/sessoes/<id>', () => {
     assert.equal((await post(`/abrir/${local}?x=1`, { ...json, origin: `http://${host}` })).status, 403);
     const hook = JSON.stringify({ session_id: 'x', hook_event_name: 'SessionStart' });
     assert.equal((await fetch(`${api.url}/api/hooks`, { method: 'POST', headers: { ...json, origin: `http://${host}` }, body: hook })).status, 403);
-    assert.equal((await post('/api/decisoes/d1/confirmar', { ...json, origin: `http://${host}` })).status, 403);
+    // As decisões têm a exceção própria (#103), mas só com o caminho exato: query continua 403.
+    assert.equal((await post('/api/decisoes/d1/confirmar?x=1', { ...json, origin: `http://${host}` })).status, 403);
     assert.equal(abertos.length, 1);
   });
 

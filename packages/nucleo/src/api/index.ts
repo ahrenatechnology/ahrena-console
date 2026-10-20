@@ -2,6 +2,19 @@
 export * from './tipos.ts';
 export { Contas, arquivoPadraoDeContas, type OpcoesDasContas } from './contas.ts';
 export { IndiceDoDesktop, raizPadraoDoDesktop, type OpcoesDoIndice, type SessaoDoDesktop } from './indice-desktop.ts';
+export {
+  DecisoesDaUi,
+  responderDecisoesDaUi,
+  slugDaDecisao,
+  type AgrupamentoDasDecisoes,
+  type DecisaoDaUi,
+  type DecisoesDaAba,
+  type DecisoesDaPagina,
+  type FiltroDeEstado,
+  type GrupoDeDecisoes,
+  type OpcoesDasDecisoesDaUi,
+  type RascunhoDeRegistro,
+} from './decisoes-ui.ts';
 export { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao, type AlvoDasDecisoes, type RegistroDoPainel } from './decisoes.ts';
 export { MontadorDoPainel, atividadeDe, subagentesDe, LIMITE_PADRAO_DE_CONTEXTO, type LeituraDaSessao, type OpcoesDoPainel, type PedidoDoPainel } from './painel.ts';
 export { MontadorDoMural, ehAberta, muralDoPainel, responderMural, RECENTE_DO_MURAL_MS, ROTA_DO_MURAL, type OpcoesDoMural } from './mural.ts';

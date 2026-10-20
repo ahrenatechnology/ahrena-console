@@ -34,6 +34,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | Repositório (C23) | `/ui/repos/:dono/:repo` | `GET /api/repos/<dono>/<repo>?periodo=30d\|90d\|1a` | `telas/repo.js` |
 
 O Analytics tem duas abas, que são a mesma tela: em `telas.js`, a entrada `analytics` (item da barra) e a `analytics-aba` (`/ui/analytics/:aba`, acende Analytics). A tela lê `ctx.params.aba`: só `custo` é aba; outra coisa mostra "Aba não encontrada". As abas são `<a href>`, então trocar de aba não recarrega a página. O fuso vai sempre o do navegador. O uso da tela está em [docs/analytics.md](../../../docs/analytics.md).
+| `decisoes.css` | O estilo das Decisões (C20 e C21). Toda classe é `dec-*`; `decisoes-comum.js` põe o `<link>` no `<head>` ao montar |
 
 ## Registrar uma tela
 
@@ -114,4 +115,6 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?visao=`. A mo
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `marca.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
+- **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.mot`, `.leve`, `.p`).
+- **Nada rola na horizontal** em 1100 nem em 1440 de janela: `min-width: 0` nos filhos de flex e grid, `overflow-wrap: anywhere` em título, branch, caminho e mono, `pre` com `white-space: pre-wrap`, sem `overflow-x: auto`.
 - Exceção: nos Repositórios, a largura das barras que vem de dado entra por variável CSS via CSSOM (`el.style.setProperty('--w', …)`), nunca por atributo `style` no HTML.

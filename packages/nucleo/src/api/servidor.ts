@@ -27,17 +27,20 @@
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
+// | `GET /api/decisoes`, `GET /api/sessoes/<id>/decisoes` e `POST /api/decisoes/<id>/promover` | A página e a aba Decisões da /ui e o "Promover a registro" (api/decisoes-ui.ts, #103) |
 // | `GET /api/repos` e `/api/repos/<dono>/<repo>` | Repositórios do GitHub e métricas (api/repos.ts, #104, #105) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo duas, só com `Origin`
-// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`, e
-// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts). A escrita nas
-// decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
-// alcança uma decisão que essa sessão enxerga, da conta dela.
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo três, só com `Origin`
+// exatamente `http://<Host>` e caminho exato (sem query): o "Abrir no Claude Desktop" do Detalhe,
+// `POST /abrir/<local_…>`, o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e as
+// decisões pela /ui (#103), `POST /api/decisoes/<id>/(confirmar|descartar|ajustar|desfazer|promover)`.
+// Um site de fora não consegue esse `Origin`, nem mandar JSON sem o preflight de CORS, e o núcleo não
+// responde CORS. A escrita nas decisões pede ainda `Content-Type: application/json` e o corpo
+// `{ "sessao": "<id>" }`, e só alcança uma decisão que essa sessão enxerga, da conta dela.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -45,6 +48,7 @@ import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteO
 import type { CursorDeMudancas } from '../mudancas/cursor.ts';
 import { ROTA_DAS_MUDANCAS, responderMudancas } from '../mudancas/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisoes.ts';
+import { responderDecisoesDaUi, type DecisoesDaUi } from './decisoes-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './painel.ts';
 import type { EscopoDasDecisoes } from './tipos.ts';
 import { VERSAO_DA_API } from './versao.ts';
@@ -104,6 +108,8 @@ export interface OpcoesDaApi {
   historico?: HistoricoDeSessoes;
   /** O Kanban (#31); liga `GET /api/kanban`. */
   kanban?: QuadroKanban;
+  /** A página e a aba Decisões da /ui e o Promover (api/decisoes-ui.ts, #103). Sem ela, essas rotas dão 404. */
+  decisoesUi?: DecisoesDaUi;
   /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
   repos?: RotaDosRepos;
 }
@@ -140,6 +146,13 @@ const mesmaOrigemLendo = (req: IncomingMessage, port: number): boolean => req.me
  */
 const mesmaOrigemAbrindo = (req: IncomingMessage, port: number): boolean =>
   req.method === 'POST' && /^\/abrir\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && daPropriaUi(req, port);
+
+/**
+ * A própria `/ui` decidindo (#103): só `POST /api/decisoes/<id>/<ação>`, com o caminho cru exato
+ * (query dá 403) e da mesma origem. O id começa por alfanumérico: `/api/decisoes/../confirmar` não passa. O JSON obrigatório continua com quem responde (415).
+ */
+const mesmaOrigemDecidindo = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && /^\/api\/decisoes\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/(confirmar|descartar|ajustar|desfazer|promover)$/.test(req.url ?? '') && daPropriaUi(req, port);
 
 const escopoDe = (v: string | null): EscopoDasDecisoes | null => (ESCOPOS_DAS_DECISOES.includes(v as EscopoDasDecisoes) ? (v as EscopoDasDecisoes) : null);
 
@@ -254,11 +267,12 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !mesmaOrigemDecidindo(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
     if (direto && req.method === 'POST') return abrirDireto(req, res, decodeURIComponent(direto[1]));
+    if (opts.decisoesUi && (await responderDecisoesDaUi(req, res, url, opts.decisoesUi, log))) return;
     const escrita = /^\/api\/decisoes\/([^/]+)\/(confirmar|descartar|ajustar|desfazer)$/.exec(url.pathname);
     if (escrita) {
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });

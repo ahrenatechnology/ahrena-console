@@ -105,14 +105,21 @@ describe('/ui no núcleo', () => {
     assert.equal((await pedir(api.url, '/api/hooks', { method: 'POST', headers: { origin: `http://${host}`, 'content-type': 'application/json' }, corpo: hook })).status, 403);
   });
 
-  test('a página e as telas não chamam nada fora da própria origem e não escrevem cor à mão', () => {
-    const arquivos = [...readdirSync(PASTA_DA_UI), ...readdirSync(`${PASTA_DA_UI}telas`).map((a) => `telas/${a}`)].filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
+  test('a página não chama nada fora da própria origem e não escreve cor à mão', () => {
+    // A pasta e as telas (`telas/`): as regras valem para todo arquivo servido.
+    const arquivos = readdirSync(PASTA_DA_UI, { recursive: true })
+      .map(String)
+      .filter((a) => /\.(js|css|html)$/.test(a) && a !== 'marca.css');
     assert.ok(arquivos.includes('index.html') && arquivos.includes('app.js') && arquivos.includes('telas/repos.js'));
     for (const a of arquivos) {
       const texto = readFileSync(`${PASTA_DA_UI}${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
+      assert.doesNotMatch(texto, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
+      if (a !== 'ler.js') assert.doesNotMatch(texto, /\bfetch\(/, `${a} chama fetch: só ler.js fala com o núcleo`);
+      // `innerHTML` só nos ícones (constantes de dom.js), nunca com dado.
+      if (a !== 'dom.js') assert.doesNotMatch(texto, /innerHTML|outerHTML|insertAdjacentHTML/, `${a} monta HTML com texto`);
     }
     // As telas, em ui/telas/: a mesma regra, e nada de estilo inline, innerHTML ou fetch direto.
     const telas = readdirSync(`${PASTA_DA_UI}telas`).filter((a) => /\.(js|css)$/.test(a));
@@ -214,8 +221,9 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows e Histórico; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Repositórios, Analytics, Workflows, Histórico e Decisões; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'repos', 'analytics', 'workflows', 'historico', 'decisoes']);
+    assert.equal(acharTela('/ui/decisoes').tela.arquivo, '/ui/telas/decisoes.js');
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
     assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
     assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
