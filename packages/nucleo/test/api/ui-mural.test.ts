@@ -166,11 +166,11 @@ async function montarTela(ler: (rota: string) => Promise<unknown>) {
 // ---------- Formatação ----------
 
 describe('Mural: formatação', () => {
-  test('custo em pt-BR, sempre com "~"; sem preço quando o núcleo não tem', () => {
-    assert.equal(custo(1.84), '~US$ 1,84');
-    assert.equal(custo(0), '~US$ 0,00');
-    assert.equal(custo(1234.5), '~US$ 1.234,50');
-    assert.equal(custo(null), 'sem preço');
+  test('custo em pt-BR, sempre com "~" e sem "US$", como no wireframe; sem preço é traço', () => {
+    assert.equal(custo(1.84), '~1,84');
+    assert.equal(custo(0), '~0,00');
+    assert.equal(custo(1234.5), '~1.234,50');
+    assert.equal(custo(null), '—');
   });
   test('modelo pela primeira palavra; esforço em português; sem valor é traço', () => {
     assert.equal(nomeDoModelo('claude-opus-5-5'), 'Opus');
@@ -218,7 +218,7 @@ describe('Mural: a tela montada', () => {
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
       assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
-      assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~US\$ 1,84Plano 3\/5contexto 31%$/);
+      assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%$/);
       const [plano, contexto] = comClasse(cards[0]!, 'mu-barra');
       assert.equal(plano!.tag, 'progress');
       assert.deepEqual([plano!.getAttribute('value'), plano!.getAttribute('max')], ['3', '5']);
@@ -237,8 +237,8 @@ describe('Mural: a tela montada', () => {
       assert.match(cards[3]!.textContent, /Com erro.*API 529 · overloaded_error/);
       assert.ok(comClasse(cards[3]!, 'mu-barra')[1]!.classes.includes('alto'));
 
-      // Concluída: "Terminou sem erro", sem modelo é traço, sem preço.
-      assert.match(cards[4]!.textContent, /Terminou sem erro.*Modelo—.*Custosem preço/);
+      // Concluída: "Terminou sem erro", sem modelo é traço, sem preço é traço.
+      assert.match(cards[4]!.textContent, /Terminou sem erro.*Modelo—.*Custo—/);
       assert.ok(head.todos((e) => e.getAttribute('href') === '/ui/mural.css').length === 1, 'a tela carrega o próprio CSS');
     } finally {
       await sair();

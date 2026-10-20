@@ -37,8 +37,8 @@ export const FILTROS = [
 
 const dolar = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Sempre com "~": é estimativa. `null` é "sem preço". */
-export const custo = (usd) => (usd === null || usd === undefined ? 'sem preço' : `~US$ ${dolar.format(usd)}`);
+/** Em dólar, como no wireframe ("~1,84"), sempre com "~": é estimativa. `null` (uso sem preço) é traço. */
+export const custo = (usd) => (usd === null || usd === undefined ? '—' : `~${dolar.format(usd)}`);
 
 /** Só a família: "claude-opus-5-5" → "Opus"; "Sonnet 5.5" → "Sonnet"; sem modelo, traço. */
 export function nomeDoModelo(id) {
@@ -123,7 +123,7 @@ function card(c) {
       'div',
       { class: 'mu-gr' },
       ...v.grade.map(([rotulo, valor]) =>
-        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : {}, rotulo, el('b', { class: 'mu-trunc' }, valor)),
+        el('div', rotulo === 'Agentes' ? { title: `${v.agentes.ativos} ativos de ${v.agentes.total}` } : rotulo === 'Custo' ? { title: valor === '—' ? 'Sem preço para o modelo' : `US$ ${valor.slice(1)}, estimado` } : {}, rotulo, el('b', { class: 'mu-trunc' }, valor)),
       ),
     ),
     el('div', { class: 'mu-linhaplano' }, el('span', { title: v.plano.atual ?? null }, v.plano.rotulo), el('span', {}, v.contexto.rotulo)),
