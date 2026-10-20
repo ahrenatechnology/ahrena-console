@@ -45,8 +45,33 @@ pub struct Aviso {
 pub enum Origin {
     /// "Abrir", "Abrir no Claude Desktop" and "Silenciar" (A3).
     Session,
+    /// A session on a remote machine (#180, decision 0008 section 5): "Abrir" and "Silenciar",
+    /// no "Abrir no Claude Desktop", since this Mac's Claude Desktop does not know it.
+    RemoteSession,
     /// A machine alert (#180): only "Abrir".
     Machine,
+}
+
+/// An action button of a notification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// "Abrir": the app window at the notice's `path`.
+    Open,
+    /// "Abrir no Claude Desktop": `POST /open/<local_…>`.
+    OpenInDesktop,
+    /// "Silenciar": silences the session.
+    Silence,
+}
+
+impl Origin {
+    /// The actions this kind of notice offers, in the order the notification shows them.
+    pub fn actions(self) -> &'static [Action] {
+        match self {
+            Origin::Session => &[Action::Open, Action::OpenInDesktop, Action::Silence],
+            Origin::RemoteSession => &[Action::Open, Action::Silence],
+            Origin::Machine => &[Action::Open],
+        }
+    }
 }
 
 impl Aviso {
@@ -58,7 +83,7 @@ impl Aviso {
             sessao: i.sessao.clone(),
             local: i.local.clone(),
             path: caminho_da_sessao(&i.sessao),
-            origin: Origin::Session,
+            origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
         }
     }
 
@@ -120,7 +145,11 @@ impl MachineAlertDetector {
 
 /// O título do A3: a sessão e o motivo ("motor-de-regras pede permissão").
 pub fn titulo(i: &ItemDaAtencao) -> String {
-    let t = &i.titulo;
+    // A remote session carries its machine's label (#180): "motor-de-regras · Workstation pede permissão".
+    let t = match &i.machine {
+        Some(m) => format!("{} · {}", i.titulo, m.label),
+        None => i.titulo.clone(),
+    };
     match i.motivo.as_str() {
         "permissao" => format!("{t} pede permissão"),
         "pergunta" => format!("{t} fez uma pergunta"),
@@ -560,6 +589,40 @@ mod testes {
         assert!(a.alternar());
         let avisos = a.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
         assert_eq!(ids(&avisos), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
+    }
+
+    fn remote(sessao: &str, titulo: &str, motivo: &str) -> ItemDaAtencao {
+        ItemDaAtencao { machine: Some(crate::menu::SessionMachine { id: "workstation".into(), label: "Workstation".into() }), ..item(sessao, titulo, motivo) }
+    }
+
+    #[test]
+    fn remote_session_title_carries_the_machine_label() {
+        let av = Aviso::do_item(&remote("s1", "motor-de-regras", "permissao"));
+        assert_eq!(av.titulo, "motor-de-regras · Workstation pede permissão");
+        assert_eq!(titulo(&remote("s3", "fila-de-tarefas", "sua-vez")), "fila-de-tarefas · Workstation: sua vez");
+    }
+
+    #[test]
+    fn remote_session_has_no_desktop_action() {
+        let av = Aviso::do_item(&remote("s1", "motor-de-regras", "permissao"));
+        assert_eq!(av.origin, Origin::RemoteSession);
+        assert_eq!(av.origin.actions(), [Action::Open, Action::Silence], "Silenciar stays, Abrir no Claude Desktop goes");
+        assert_eq!((av.path.as_str(), av.sessao.as_str(), av.local.as_deref()), ("/ui/sessions/s1", "s1", None), "the click opens the session screen");
+        let mut a = Avisos::abrir(None);
+        a.ler(&atencao(vec![]));
+        a.silenciar("s1");
+        assert!(a.ler(&atencao(vec![remote("s1", "motor-de-regras", "permissao")])).is_empty(), "Silenciar works as for a local session");
+    }
+
+    #[test]
+    fn local_session_notice_is_unchanged() {
+        let mut i = item("s1", "motor-de-regras", "permissao");
+        i.local = Some("local_00000000-0000-4000-8000-000000000001".into());
+        let av = Aviso::do_item(&i);
+        assert_eq!(av.titulo, "motor-de-regras pede permissão");
+        assert_eq!(av.origin, Origin::Session);
+        assert_eq!(av.origin.actions(), [Action::Open, Action::OpenInDesktop, Action::Silence]);
+        assert_eq!(Origin::Machine.actions(), [Action::Open]);
     }
 
     #[test]

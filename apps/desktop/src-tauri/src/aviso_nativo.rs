@@ -28,12 +28,14 @@ use objc2_user_notifications::{
 };
 use tauri::AppHandle;
 
-use crate::notificacoes::{self, Aviso, Origin};
+use crate::notificacoes::{self, Action, Aviso, Origin};
 
 const CATEGORIA: &str = "sessao";
 /// A machine alert (#180): only "Abrir", the machine has no Claude Desktop conversation to open
 /// nor a session to silence.
 const MACHINE_CATEGORY: &str = "machine";
+/// A remote session (#180): "Abrir" and "Silenciar", no "Abrir no Claude Desktop".
+const REMOTE_SESSION_CATEGORY: &str = "remote-session";
 const ACAO_ABRIR: &str = "abrir";
 const ACAO_NO_DESKTOP: &str = "abrir-no-desktop";
 const ACAO_SILENCIAR: &str = "silenciar";
@@ -116,15 +118,20 @@ pub fn iniciar(app: &AppHandle, acoes: Acoes, _principal: MainThreadMarker) -> b
     DELEGADO.with(|d| *d.borrow_mut() = Some(delegado));
 
     let acao = |id: &str, titulo: &str, opcoes| UNNotificationAction::actionWithIdentifier_title_options(&NSString::from_str(id), &NSString::from_str(titulo), opcoes);
-    let acoes = NSArray::from_retained_slice(&[
-        acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground),
-        acao(ACAO_NO_DESKTOP, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
-        acao(ACAO_SILENCIAR, "Silenciar", UNNotificationActionOptions::empty()),
-    ]);
-    let categoria = UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(CATEGORIA), &acoes, &NSArray::new(), UNNotificationCategoryOptions::empty());
-    let so_abrir = NSArray::from_retained_slice(&[acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground)]);
-    let maquina = UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(MACHINE_CATEGORY), &so_abrir, &NSArray::new(), UNNotificationCategoryOptions::empty());
-    centro.setNotificationCategories(&NSSet::from_retained_slice(&[categoria, maquina]));
+    let botao = |a: Action| match a {
+        Action::Open => acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground),
+        Action::OpenInDesktop => acao(ACAO_NO_DESKTOP, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
+        Action::Silence => acao(ACAO_SILENCIAR, "Silenciar", UNNotificationActionOptions::empty()),
+    };
+    // One category per kind of notice, with the actions `Origin::actions` gives it.
+    let categorias: Vec<_> = [Origin::Session, Origin::RemoteSession, Origin::Machine]
+        .into_iter()
+        .map(|o| {
+            let acoes = NSArray::from_retained_slice(&o.actions().iter().map(|a| botao(*a)).collect::<Vec<_>>());
+            UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(category(o)), &acoes, &NSArray::new(), UNNotificationCategoryOptions::empty())
+        })
+        .collect();
+    centro.setNotificationCategories(&NSSet::from_retained_slice(&categorias));
 
     let ao_autorizar = RcBlock::new(|ok: Bool, erro: *mut NSError| {
         // Negadas (ou um bundle sem assinatura que o macOS recusa): cai no plugin, que ainda mostra o aviso.
@@ -148,11 +155,7 @@ pub fn enviar(a: &Aviso) {
     let conteudo = UNMutableNotificationContent::new();
     conteudo.setTitle(&NSString::from_str(&a.titulo));
     conteudo.setBody(&NSString::from_str(&a.corpo));
-    let categoria = match a.origin {
-        Origin::Session => CATEGORIA,
-        Origin::Machine => MACHINE_CATEGORY,
-    };
-    conteudo.setCategoryIdentifier(&NSString::from_str(categoria));
+    conteudo.setCategoryIdentifier(&NSString::from_str(category(a.origin)));
     conteudo.setThreadIdentifier(&NSString::from_str(&a.sessao));
     if a.som {
         conteudo.setSound(Some(&UNNotificationSound::defaultSound()));
@@ -177,6 +180,15 @@ pub fn enviar(a: &Aviso) {
         }
     });
     UNUserNotificationCenter::currentNotificationCenter().addNotificationRequest_withCompletionHandler(&pedido, Some(&ao_enviar));
+}
+
+/// The notification category of each kind of notice.
+fn category(o: Origin) -> &'static str {
+    match o {
+        Origin::Session => CATEGORIA,
+        Origin::RemoteSession => REMOTE_SESSION_CATEGORY,
+        Origin::Machine => MACHINE_CATEGORY,
+    }
 }
 
 fn descrever(erro: *mut NSError) -> String {
