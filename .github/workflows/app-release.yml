@@ -87,10 +87,17 @@ jobs:
           fi
           # Publicar o rascunho criado pelo "Run workflow" cria a tag, e o push dela dispara este
           # workflow de novo. O tauri-action reaproveitaria a release já publicada e trocaria os
-          # assets dela. Se a release da tag já está publicada, só builda. Se ela não existe (o
-          # `gh` falha), segue criando.
+          # assets dela. Se a release da tag já está publicada, só builda. Só o 404 conta como "não
+          # existe"; qualquer outro erro do `gh` (rede, limite da API) para o job.
           if [ "$EVENTO" = push ] && [ "$TIPO_DA_REF" = tag ] && [ "$release" = true ]; then
-            rascunho=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
+            if resposta=$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq .draft 2>&1); then
+              rascunho=$resposta
+            elif printf '%s' "$resposta" | grep -q 'HTTP 404'; then
+              rascunho=
+            else
+              echo "::error::Não deu para saber se a release $TAG já existe: $resposta"
+              exit 1
+            fi
             if [ "$rascunho" = false ]; then
               echo "::notice::A release $TAG já está publicada: só a build, sem mexer na release."
               release=false

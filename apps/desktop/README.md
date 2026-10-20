@@ -98,7 +98,7 @@ Para mantenedores. A release sai do [app-release.yml](../../.github/workflows/ap
 3. A release sai como **rascunho**, com os DMGs (e, com a chave do updater, os `.app.tar.gz`, `.sig` e o `latest.json`).
 4. Antes de publicar o rascunho à mão, abra o `latest.json` dele e confira que tem as duas plataformas, `darwin-aarch64` e `darwin-x86_64`: os dois jobs da matriz o atualizam em paralelo, e um pode sobrescrever o outro.
 
-Sem tag, "Run workflow" na aba Actions builda e deixa os DMGs como artefatos do workflow; com `criar_release` marcado, cria a release como no passo 3. Num PR, o workflow roda só a build, quando o PR mexe nele ou no `tauri.conf.json`: é assim que ele é provado antes de chegar ao main.
+Sem tag, "Run workflow" na aba Actions builda e deixa os DMGs como artefatos do workflow; com `criar_release` marcado, cria a release como no passo 3. Num PR, o workflow roda só a build, quando o PR mexe nele ou no `tauri.conf.json`: é assim que ele é provado antes de chegar ao main. "Run workflow" a partir de uma tag já publicada refaz os assets dela: use só para isso.
 
 ### A chave do updater
 
