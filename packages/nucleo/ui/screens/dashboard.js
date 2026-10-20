@@ -95,7 +95,9 @@ export function cards(numbers) {
 export function inboxCards(attention, agents) {
   const bySession = new Map((agents ?? []).map((a) => [a.sessao, a]));
   return attention.itens.slice(0, IN_INBOX).map((i) => {
-    const a = bySession.get(i.sessao);
+    const machine = i.machine && typeof i.machine.id === 'string' ? { id: i.machine.id, label: typeof i.machine.label === 'string' && i.machine.label ? i.machine.label : i.machine.id } : null;
+    // A remote session is not in this core's agents: its model would be another session's.
+    const a = machine ? undefined : bySession.get(i.sessao);
     return {
       sessao: i.sessao,
       motivo: i.motivo,
@@ -104,8 +106,11 @@ export function inboxCards(attention, agents) {
       idade: i.minutos < 1 ? 'agora' : `${i.minutos} min`,
       nome: i.projeto ?? i.titulo,
       texto: (i.motivo === 'permissao' && a?.tarefa) || i.motivoLongo,
-      pe: modelName(a?.modelo) ?? i.conta?.rotulo ?? '',
-      href: `/ui/sessions/${encodeURIComponent(i.sessao)}`,
+      pe: machine ? machine.label : (modelName(a?.modelo) ?? i.conta?.rotulo ?? ''),
+      // A remote session (issue 178): this core does not serve its detail, so the card names the machine
+      // and does not link.
+      machine,
+      href: machine ? null : `/ui/sessions/${encodeURIComponent(i.sessao)}`,
     };
   });
 }
@@ -144,12 +149,12 @@ function inbox(attention, agents) {
   if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, title);
   const mini = inboxCards(attention, agents).map((c) =>
     el(
-      'a',
-      { class: 'card mini', href: c.href, 'data-session': c.sessao },
+      c.href ? 'a' : 'div',
+      { class: 'card mini', href: c.href, 'data-session': c.sessao, 'data-machine': c.machine?.id },
       el('div', { class: 'l1' }, reasonChip(c), el('span', { class: 'age' }, c.idade)),
       el('div', { class: 'n trunc' }, c.nome),
       el('div', { class: 'x trunc' }, c.texto),
-      el('div', { class: 'foot' }, el('span', {}, c.pe), el('b', {}, 'Abrir ›')),
+      el('div', { class: 'foot' }, c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.pe}` }, icon('server'), ` ${c.pe}`) : el('span', {}, c.pe), c.href ? el('b', {}, 'Abrir ›') : null),
     ),
   );
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));

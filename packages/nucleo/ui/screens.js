@@ -153,8 +153,73 @@ export const SCREENS = [
     icon: 'decision',
     file: '/ui/screens/decisions.js', // issue 103
   },
+  {
+    // This machine (C24, issue 178): always in the sidebar, before the remote ones.
+    id: 'this-machine',
+    route: '/ui/machines/local',
+    item: { label: 'Esta máquina', icon: 'monitor', section: 'machines' },
+    title: 'Esta máquina',
+    sub: 'A telemetria medida pelo núcleo daqui',
+    icon: 'monitor',
+    file: '/ui/screens/machine.js',
+  },
+  {
+    // A remote machine (C25, C26): one sidebar item per machine of `GET /api/machines`, which the
+    // shell adds with `machineItems()` (below); the open one stays lit through `highlights(params)`.
+    id: 'machine',
+    route: '/ui/machines/:id',
+    highlights: (params) => machineItemId(params.id),
+    title: 'Máquina',
+    sub: null,
+    icon: 'server',
+    file: '/ui/screens/machine.js',
+  },
   { id: 'agent-config', route: '/ui/agent-config', item: { label: 'Agent Config', icon: 'bot', section: 'control' }, title: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icon: 'bot', file: '/ui/screens/agent-config.js' }, // #63
 ];
+
+// ---------- The remote machines in the sidebar (issue 178) ----------
+//
+// The registry is static; the remote machines come from `machines.json`, which only the core reads.
+// So the shell reads `GET /api/machines` and passes `[...SCREENS, ...machineItems(list)]` to
+// `sidebarSections`: each remote becomes an item of the `machines` block, after "Esta máquina", in
+// the core's order, with its state for the dot. Without remotes, the list adds nothing.
+
+/** The core route the shell reads for the remote items. */
+export const MACHINES_ROUTE = '/api/machines';
+
+/** The sidebar id of a remote machine's item. */
+export const machineItemId = (id) => `machine-${id}`;
+
+// The machine id of the core (src/telemetry/model.ts `MACHINE_ID`).
+const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MACHINE_STATES = new Set(['connected', 'unreachable', 'incompatible-version', 'not-configured']);
+
+/** The sidebar entries of the remote machines in `GET /api/machines` (this machine is in SCREENS). */
+export function machineItems(machines) {
+  if (!Array.isArray(machines)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const m of machines.slice(0, 50)) {
+    if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !MACHINE_ID.test(m.id) || m.id === 'local' || seen.has(m.id)) continue;
+    seen.add(m.id);
+    const label = typeof m.label === 'string' && m.label.trim() ? m.label.slice(0, 40) : m.id;
+    out.push({
+      id: machineItemId(m.id),
+      route: `/ui/machines/${m.id}`,
+      item: { label, icon: 'server', section: 'machines' },
+      state: MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
+      title: label,
+      icon: 'server',
+    });
+  }
+  return out;
+}
+
+/** The item a screen lights: its own, or the one its `highlights` names (a function of the params). */
+export function litItem(screen, params = {}) {
+  if (screen.item) return screen.id;
+  return typeof screen.highlights === 'function' ? screen.highlights(params) : (screen.highlights ?? null);
+}
 
 /**
  * The sidebar blocks with their items, in `SECTIONS` order; empty blocks are left out. An item
