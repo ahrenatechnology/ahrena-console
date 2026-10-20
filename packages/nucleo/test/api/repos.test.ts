@@ -275,6 +275,25 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.equal(l.error, 'lista incompleta: 4 de 9 repositórios lidos, o resto falhou (GitHub respondeu 502: HTTP 502)');
   });
 
+  test('#269: a cut list never replaces a longer one already shown; the old one stays, with the reason', async () => {
+    const cut = { on: false };
+    class CutSource extends GithubReposSource {
+      override async lista() {
+        const l = await super.lista();
+        return cut.on ? { ...l, repos: l.repos.slice(0, 2), incomplete: { read: 2, total: 4, error: 'GitHub respondeu 502: HTTP 502' } } : l;
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => m.relogio.agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    assert.equal((await listaPronta(m)).summary.repositories, 4);
+    cut.on = true;
+    m.relogio.agora += TTL_DOS_REPOS.lista + MIN;
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.equal(l.summary.repositories, 4);
+    assert.match(l.error ?? '', /^lista incompleta: 2 de 4 repositórios lidos/);
+  });
+
   test('sem GitHub (desligado ou sem token do gh): estado "sem-github"', async () => {
     const desligado = await montar({ fonteNula: true });
     assert.equal((await desligado.repos.lista()).state, 'no-github');

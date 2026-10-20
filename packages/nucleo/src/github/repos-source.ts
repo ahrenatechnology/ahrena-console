@@ -72,6 +72,10 @@ export interface ListaCrua {
   incomplete?: { read: number; total: number; error: string };
 }
 
+/** The screen text for a list cut by a page that kept failing. */
+export const incompleteListMessage = ({ read, total, error }: NonNullable<ListaCrua['incomplete']>) =>
+  `lista incompleta: ${read} de ${total} repositórios lidos, o resto falhou (${error})`;
+
 export interface ResumoCru {
   esperandoReview: number;
   fechadasNaSemana: number;
@@ -292,8 +296,8 @@ export class GithubReposSource implements FonteDosRepos {
     if (!data.repository) return null;
     const incomplete: string[] = [];
     const prs = await this.resto(buscas.prs, data.prs, PAGINAS_DA_BUSCA.prs, size, 'PRs', incomplete);
-    const fechadas = await this.resto(buscas.fechadas, data.fechadas, PAGINAS_DA_BUSCA.fechadas, 100, 'issues fechadas', incomplete);
-    const abertas = await this.resto(buscas.abertas, data.abertas, PAGINAS_DA_BUSCA.abertas, 100, 'issues abertas', incomplete);
+    const closedIssues = await this.resto(buscas.fechadas, data.fechadas, PAGINAS_DA_BUSCA.fechadas, 100, 'issues fechadas', incomplete);
+    const openIssues = await this.resto(buscas.abertas, data.abertas, PAGINAS_DA_BUSCA.abertas, 100, 'issues abertas', incomplete);
     return {
       repo: data.repository,
       contagens: {
@@ -304,8 +308,8 @@ export class GithubReposSource implements FonteDosRepos {
         fechadosSemMerge: data.fechadosSemMerge.issueCount,
       },
       prs: prs as PrCru[],
-      fechadas: fechadas as IssueCrua[],
-      abertas: abertas as IssueCrua[],
+      fechadas: closedIssues as IssueCrua[],
+      abertas: openIssues as IssueCrua[],
       ...(incomplete.length ? { incomplete } : {}),
     };
   }

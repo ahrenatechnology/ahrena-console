@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { RateLimitedError } from '../../src/github/cache.ts';
+import { GithubDevConsoleSource } from '../../src/dev-console/source.ts';
 import { GithubGatewayError, GithubGraphqlSource, retryOnGateway } from '../../src/github/github-source.ts';
 import { GithubReposSource, LIST_PAGE_SIZE, MIN_PAGE_SIZE, PR_PAGE_SIZE } from '../../src/github/repos-source.ts';
 
@@ -94,11 +95,13 @@ describe('#269 AC-1: the repository list in pages GitHub answers in time', () =>
     assert.deepEqual(sleeps, [1_000, 3_000]);
   });
 
-  test('the page never shrinks below the minimum', async () => {
-    const gh = fakeGithub({ repos: 3, maxPage: 0 });
-    const s = new GithubReposSource({ token: 't', fetch: gh.fetch, url: 'https://example.invalid/graphql', sleep: async () => {} });
-    await assert.rejects(s.lista(), GithubGatewayError);
-    assert.ok(pages(gh.calls, 'ReposLista').every((first) => Number(first) >= MIN_PAGE_SIZE));
+  test('a page already shrunk to 6 that fails again asks for the minimum, never less', async () => {
+    const gh = fakeGithub({ repos: 20, maxPage: 6, fails: (c) => c.variables.after !== null });
+    const { s } = source(gh.fetch);
+    const list = await s.lista();
+    assert.equal(list.repos.length, 6);
+    // First page: 25 → 12 → 6 answers. Second: 6 → 3 and 1 would go below the floor, so 5 and 5.
+    assert.deepEqual(pages(gh.calls, 'ReposLista'), [25, 12, 6, 6, MIN_PAGE_SIZE, MIN_PAGE_SIZE]);
   });
 });
 
@@ -189,7 +192,20 @@ describe('#269 AC-2: retrying 502/503/504 reads, and only those', () => {
     assert.equal(n, 1 + 3);
   });
 
-  test('the work source (Kanban, Dev Console) retries a 502 on its reads', async () => {
+  test('the Dev Console source retries a 502 on its reads', async () => {
+    let n = 0;
+    const fetch = (async () => {
+      if (n++ === 0) return gateway();
+      return Response.json({ data: { rateLimit: { cost: 1, remaining: 1 }, repository: { refs: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ name: 'main' }] } } } });
+    }) as typeof globalThis.fetch;
+    const sleeps: number[] = [];
+    const s = new GithubDevConsoleSource({ token: 't', fetch, url: 'https://example.invalid/graphql', sleep: async (ms) => void sleeps.push(ms) });
+    assert.deepEqual((await s.branches('org-0/repo-0')).names, ['main']);
+    assert.equal(n, 2);
+    assert.deepEqual(sleeps, [1_000]);
+  });
+
+  test('the work source (Kanban) retries a 502 on its reads', async () => {
     let n = 0;
     const fetch = (async () => {
       if (n++ === 0) return gateway();
