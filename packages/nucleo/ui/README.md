@@ -15,7 +15,6 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `marca.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `moldura.css` |
 | `telas/` | As telas, uma por arquivo. `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/atencao` |
-| `telas/` | As telas, uma por arquivo |
 | `analytics.css` | O estilo da tela Analytics, carregado por `<link>` pela própria tela |
 
 ## As telas
