@@ -154,6 +154,15 @@ const evento = (id: string, s: number, extra: Record<string, unknown> = {}) => (
 });
 
 describe('Feed de atividade: estado', () => {
+  test('row pill: the event attention says blocked or idle; waiting without it is idle; never the old waiting label (issue 245)', () => {
+    assert.deepEqual(E.rowPill({ status: 'waiting', attention: { level: 'blocked', reason: 'permission' } }), { attention: { level: 'blocked', reason: 'permission' } });
+    assert.deepEqual(E.rowPill({ status: 'waiting', attention: { level: 'idle', reason: 'turn_ended' } }), { attention: { level: 'idle', reason: 'turn_ended' } });
+    assert.deepEqual(E.rowPill({ status: 'error', attention: { level: 'blocked', reason: 'error' } }), { attention: { level: 'blocked', reason: 'error' } });
+    assert.deepEqual(E.rowPill({ status: 'waiting', attention: null }), { attention: { level: 'idle', reason: null } });
+    assert.deepEqual(E.rowPill({ status: 'active', attention: null }), { status: 'active' });
+    assert.deepEqual(E.rowPill({ status: 'weird' }), { status: 'completed' });
+    assert.ok(!Object.values(E.STATUS).some((label) => /Esperando/.test(String(label))));
+  });
   test('tempo relativo, hora e data local', () => {
     const t = Date.parse('2026-10-18T23:12:04Z');
     assert.equal(E.relativeTime(new Date(t).toISOString(), t + 2000), 'agora');
@@ -271,7 +280,7 @@ describe('Feed de atividade: a tela', () => {
     const ataque = '<script>alert(1)</script><img src=x onerror=alert(2)>';
     let fila: unknown[] = [
       {
-        events: [evento('e2', 12, { summary: ataque, session: { id: '../fora', title: ataque, project: null } }), evento('e1', 70, { status: 'waiting', tool: null })],
+        events: [evento('e2', 12, { summary: ataque, session: { id: '../fora', title: ataque, project: null } }), evento('e1', 70, { status: 'waiting', attention: { level: 'blocked', reason: 'permission' }, tool: null })],
         cursor: 'k2',
         older: null,
         options: { types: ['PreToolUse', 'Stop'], tools: ['Bash'], sessions: [{ id: 'c3f09b52-4e1', title: 'Separar pagamentos em serviços', project: 'motor-de-regras' }] },
@@ -285,7 +294,8 @@ describe('Feed de atividade: a tela', () => {
     assert.ok(documento.head.querySelector('link[data-screen="feed"]'), 'o CSS da tela entrou no head');
     assert.deepEqual(linhasDe(area), ['e2', 'e1']);
     const [l2, l1] = area.querySelectorAll('.feed-item');
-    assert.match(l1!.textContent, /Esperando você/);
+    assert.match(l1!.textContent, /Precisa de você/);
+    assert.doesNotMatch(area.textContent, /Esperando/);
     assert.match(l1!.textContent, /motor-de-regras › Separar pagamentos em serviços › test-runner/);
     assert.match(l1!.textContent, /1 min/);
     assert.equal(l1!.querySelector('a')!.getAttribute('href'), '/ui/sessions/c3f09b52-4e1');

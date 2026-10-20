@@ -5,12 +5,15 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
 
-// The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173).
+// The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
+// old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
 export const PILLS = [
   ['all', 'Todas'],
   ['active', 'Ativas'],
-  ['waiting', 'Esperando'],
+  ['blocked', 'Precisam de você'],
+  ['idle', 'Ociosas'],
   ['completed', 'Concluídas'],
   ['error', 'Erro'],
   ['abandoned', 'Abandonadas'],
@@ -25,19 +28,13 @@ const ORDERS = {
 
 export const STATUS = {
   active: 'Ativa',
-  waiting: 'Esperando você',
   completed: 'Concluída',
   error: 'Com erro',
   abandoned: 'Abandonada',
 };
 
-// Os motivos da espera, como no wireframe: os dois primeiros travam a sessão (urgentes).
-export const REASONS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
-  session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
-};
+/** An old bookmark's `?status=waiting` (or `esperando`) opens the ones that need you. */
+const STATUS_ALIASES = { waiting: 'blocked' };
 
 const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
@@ -48,7 +45,7 @@ const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direct
 export function stateFromQuery(query) {
   const p = new URLSearchParams(query);
   const page = Number(p.get('page'));
-  const status = p.get('status');
+  const status = STATUS_ALIASES[p.get('status') ?? ''] ?? p.get('status');
   const order = p.get('order');
   return {
     status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
@@ -135,12 +132,19 @@ function selector(label, options, value, onChange) {
   return el('label', { class: 'field' }, s, icon('open-list'));
 }
 
-function badgeEl(status, reason) {
-  const m = reason ? REASONS[reason] : null;
-  return [
-    el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status] ?? status),
-    m ? el('span', { class: m.urgente ? 'reason' : 'reason soft' }, icon(m.icone), m.rotulo) : null,
-  ];
+/** The status cell: the attention pill and its reason (issue 245), or the status badge. */
+export function badgeEl(status, attention) {
+  if (attentionOf(attention)) return attentionBadges(attention);
+  // Waiting without attention does not wait on the person (delegating…): "Ativa". Nothing raw on screen.
+  const st = statusWithoutAttention(status);
+  if (!Object.hasOwn(STATUS, st)) return [];
+  return [el('span', { class: `badge b-${st}` }, el('span', { class: 'p' }), STATUS[st])];
+}
+
+/** "Precisam de você 5": the pill label and the count of `counts` (none when the core did not say). */
+export function pillCount(counts, status) {
+  const n = counts?.[status];
+  return Number.isInteger(n) ? String(n) : null;
 }
 
 function account(c) {
@@ -180,17 +184,21 @@ export async function mount(area, ctx) {
   const orderSlot = el('span', { class: 'order-slot' });
   const invert = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => change({ direction: state.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
   const pills = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
-  for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label));
+  for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label, el('b', { class: 'sessions-pill-count' })));
   const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, pills);
 
   const body = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
   area.replaceChildren(head, filters, body);
 
-  function drawFilters(directories) {
+  function drawFilters(directories, counts = null) {
     const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
     dirSlot.replaceChildren(selector('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, lastPart(d)])], state.dir, (dir) => change({ dir, page: 1 })));
     orderSlot.replaceChildren(selector('Ordenar por', Object.entries(ORDERS).map(([v, r]) => [v, r[state.direction]]), state.order, (order) => change({ order: order, page: 1 })));
-    for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.status === state.status));
+    for (const b of pills.children) {
+      b.setAttribute('aria-pressed', String(b.dataset.status === state.status));
+      const n = b.querySelector('.sessions-pill-count');
+      if (n) n.replaceChildren(pillCount(counts, b.dataset.status) ?? '');
+    }
   }
 
   function change(partial) {
@@ -206,7 +214,7 @@ export async function mount(area, ctx) {
       'tr',
       { class: 'session-row' },
       el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account))),
-      el('td', { class: 'st' }, ...badgeEl(s.status, s.reason)),
+      el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
       el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, duration(s.durationMs))),
@@ -252,7 +260,7 @@ export async function mount(area, ctx) {
       state = { ...state, page: list.page };
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
-    drawFilters(list.directories);
+    drawFilters(list.directories, list.counts);
     if (list.items.length) return body.replaceChildren(table(list), footer(list));
     const filtering = state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(

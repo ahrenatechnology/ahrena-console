@@ -55,6 +55,13 @@ export const BLOCKING_NOTIFICATIONS: readonly string[] = [
 ];
 /** Without `notification_type`, decide by the text. */
 const BLOCKING_TEXT = /permiss|approv|aprova|needs your (input|attention|approval)|precisa da sua/i;
+
+/** A `Notification` that blocks the agent: by its `notification_type` or, without one, by its text. */
+export function isBlockingNotification(type: string | null, summary: string | null, data: Readonly<Record<string, unknown>>): boolean {
+  if (type) return BLOCKING_NOTIFICATIONS.includes(type);
+  const message = typeof data.message === 'string' && data.message.length > 0 ? data.message : null;
+  return BLOCKING_TEXT.test(message ?? summary ?? '');
+}
 const INTERRUPTION_TEXT = /^\[Request interrupted by user/;
 
 /** Progress events: they prove the session moved on and heal an earlier error. */
@@ -384,9 +391,7 @@ class Transition {
   }
 
   private blocking(): boolean {
-    const type = str(this.d.notification_type);
-    if (type) return BLOCKING_NOTIFICATIONS.includes(type);
-    return BLOCKING_TEXT.test(str(this.d.message) ?? this.e.summary ?? '');
+    return isBlockingNotification(str(this.d.notification_type), this.e.summary, this.d);
   }
 
   private toolUseId(): string | null {

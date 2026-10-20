@@ -16,6 +16,10 @@
 // `createdAt` like the rest; whoever shows it decides where it fits. If the batch came full
 // (`events.length === limit`), there is more: ask again with the new `cursor`.
 //
+// #245: each event carries `attention` (`blocked` or `idle`, with the reason, or `null`): the state that
+// event alone stands for, by the same rule as the sessions' (`eventAttention`, src/api/attention.ts).
+// `status` keeps `waiting` for both; the old route answers no `attention`.
+//
 // The body is English since phase 2b of #173 (`{ events, cursor, older, options }`); the old route
 // `/api/eventos` answers it in the old keys (src/api/legacy-routes.ts).
 
@@ -23,6 +27,7 @@ import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent } from '../model.ts';
+import { eventAttention, type SessionAttention } from './attention.ts';
 import type { ListRecentEventsQuery, RecentEventsPage, StoragePort } from '../storage-port.ts';
 import { fraseDoEvento, type ContextoDaFrase } from './event-phrase.ts';
 
@@ -66,6 +71,8 @@ export interface EventoDoFeed {
   createdAt: string;
   type: string;
   status: StatusDoEvento;
+  /** #245: `blocked` (a permission, a question, an error) or `idle` (the turn ended, Esc); `null` for the rest. */
+  attention: SessionAttention | null;
   tool: string | null;
   summary: string | null;
   session: SessaoDoFeed;
@@ -324,6 +331,7 @@ export class FeedDeEventos {
           createdAt: e.createdAt,
           type: textoDeUmaLinha(e.type, MAX.tipo) ?? '',
           status: statusDoEvento(e.type),
+          attention: eventAttention(e),
           tool: textoDeUmaLinha(e.toolName, MAX.ferramenta),
           // A frase legível; sem uma, o resumo cru do evento, e por fim o tipo.
           summary: textoDeUmaLinha(fraseDoEvento(e, ctx) ?? e.summary ?? e.type, MAX.resumo),

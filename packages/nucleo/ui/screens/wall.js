@@ -1,6 +1,6 @@
 // Mural ao vivo (C2, #34): um card por sessão aberta nesta máquina, do mesmo tamanho, três por linha.
-// Lê `GET /api/wall`, que já vem ordenado pelo núcleo; o seletor Todas/Esperando/Ativas filtra no
-// cliente, sem novo pedido. Ao vivo: qualquer mudança relê o mural (com uma pequena espera, para
+// Lê `GET /api/wall`, que já vem ordenado pelo núcleo (issue 245: blocked, idle, then the rest); the
+// selector Todas / Precisam de você / Ociosas / Ativas filters on the client, without a new request. Ao vivo: qualquer mudança relê o mural (com uma pequena espera, para
 // juntar a rajada); `aoReiniciar` relê na hora.
 //
 // As barras são `<progress>`: a largura sai do `value`, sem estilo inline (a CSP bloqueia).
@@ -8,6 +8,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 
 const STYLE = '/ui/wall.css';
 export const WALL_ROUTE = '/api/wall';
@@ -16,22 +17,22 @@ export const DEBOUNCE_MS = 400;
 /** Contexto a partir daqui pinta a barra com a cor de erro. */
 export const HIGH_CONTEXT = 80;
 
-export const STATUS_LABEL = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
-// Os motivos do "esperando", como no wireframe: urgente em negrito, o resto leve.
-const REASONS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
-  session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
-};
+export const STATUS_LABEL = { active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 const EFFORTS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
 
+// The same groups as the core's `count` (issue 245): blocked (errors included), idle, active.
 export const FILTERS = [
-  { id: 'todas', rotulo: 'Todas', passa: () => true, vazio: 'Nenhuma sessão aberta' },
-  // Os mesmos grupos do `count` do núcleo: o erro também precisa de você.
-  { id: 'esperando', rotulo: 'Esperando', passa: (c) => c.state === 'waiting' || c.state === 'error', vazio: 'Nenhuma sessão esperando você' },
-  { id: 'ativas', rotulo: 'Ativas', passa: (c) => ['active', 'delegating', 'background'].includes(c.state), vazio: 'Nenhuma sessão ativa' },
+  { id: 'all', rotulo: 'Todas', passa: () => true, vazio: 'Nenhuma sessão aberta' },
+  { id: 'blocked', rotulo: 'Precisam de você', count: 'blocked', passa: (c) => isBlocked(c.attention), vazio: 'Ninguém precisa de você agora' },
+  { id: 'idle', rotulo: 'Ociosas', count: 'idle', passa: (c) => isIdle(c.attention), vazio: 'Nenhuma sessão ociosa' },
+  { id: 'active', rotulo: 'Ativas', passa: (c) => !attentionOf(c.attention) && ['active', 'delegating', 'background'].includes(c.state), vazio: 'Nenhuma sessão ativa' },
 ];
+
+/** The selector label: "Precisam de você · 5" with the core's count; without it, the label alone. */
+export function filterLabel(filter, count) {
+  const n = filter.count ? count?.[filter.count] : undefined;
+  return Number.isInteger(n) ? `${filter.rotulo} · ${n}` : filter.rotulo;
+}
 
 // ---------- Formatação ----------
 
@@ -62,7 +63,8 @@ export function cardContent(c) {
   const plan = c.plan ?? { done: 0, total: 0 };
   const pct = c.context ? limit(c.context.pct) : null;
   let row;
-  if (c.status === 'waiting') row = { tipo: 'pede', motivo: REASONS[c.reason] ?? null, texto: c.activity?.text ?? '' };
+  const attention = attentionOf(c.attention);
+  if (attention && attention.reason !== 'error') row = { tipo: 'pede', attention, texto: c.activity?.text ?? '' };
   else if (c.status === 'error') row = { tipo: 'erro', texto: c.activity?.text ?? '' };
   else if (c.status === 'completed') row = { tipo: 'concluida', texto: 'Terminou sem erro' };
   else if (c.status === 'abandoned') row = { tipo: 'parada', texto: c.activity?.text ?? '' };
@@ -71,6 +73,8 @@ export function cardContent(c) {
     id: c.id,
     href: `/ui/sessions/${encodeURIComponent(c.id)}`,
     status: c.status,
+    attention,
+    tone: attentionTone(attention) ?? statusWithoutAttention(c.status),
     title: c.title,
     origem: [c.project, c.branch].filter(Boolean).join(' · ') || '—',
     linha: row,
@@ -93,13 +97,15 @@ function useStyle() {
   document.head.append(el('link', { rel: 'stylesheet', href: STYLE }));
 }
 
-const badge = (status) => el('span', { class: `wall-badge wall-b-${status}` }, el('span', { class: 'p' }), STATUS_LABEL[status] ?? status);
+/** The pill: the attention (Precisa de você, Ociosa, Com erro) or the status. */
+function badge(v) {
+  if (v.attention) return attentionPill(v.attention, { extraClass: 'wall-pill' });
+  const st = statusWithoutAttention(v.status);
+  return el('span', { class: `wall-badge wall-pill wall-b-${st}` }, el('span', { class: 'p' }), STATUS_LABEL[st] ?? '');
+}
 
 function cardRow(l) {
-  if (l.tipo === 'pede') {
-    const chip = l.motivo ? el('span', { class: `wall-reason${l.motivo.urgente ? '' : ' soft'}` }, icon(l.motivo.icone), l.motivo.rotulo) : null;
-    return el('div', { class: 'wall-row' }, chip, el('span', { class: 'wall-trunc wall-muted' }, l.texto));
-  }
+  if (l.tipo === 'pede') return el('div', { class: 'wall-row' }, reasonChip(l.attention), el('span', { class: 'wall-trunc wall-muted' }, l.texto));
   if (l.tipo === 'erro') return el('div', { class: 'wall-row wall-error' }, icon('error'), el('span', { class: 'wall-trunc' }, l.texto));
   if (l.tipo === 'concluida') return el('div', { class: 'wall-row wall-completed' }, icon('wall-check'), el('span', { class: 'wall-trunc' }, l.texto));
   if (l.tipo === 'parada') return el('div', { class: 'wall-row wall-muted' }, el('span', { class: 'wall-trunc' }, l.texto));
@@ -115,8 +121,8 @@ function card(c) {
   const v = cardContent(c);
   return el(
     'a',
-    { class: `card wall-card wall-st-${v.status}`, href: v.href, 'data-session': v.id },
-    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.title }, v.title), badge(v.status)),
+    { class: `card wall-card wall-st-${v.tone}`, href: v.href, 'data-session': v.id },
+    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.title }, v.title), badge(v)),
     el('div', { class: 'wall-prj wall-trunc' }, v.origem),
     cardRow(v.linha),
     el(
@@ -140,13 +146,13 @@ function card(c) {
 
 export async function mount(area, ctx) {
   useStyle();
-  let filter = 'todas';
+  let filter = 'all';
   let wall = null;
   let failure = null;
   let request = 0;
   let wait = null;
 
-  // O seletor só com os rótulos, como no wireframe: o `count` do núcleo não aparece.
+  // The selector with the core's `count` on "Precisam de você" and "Ociosas" (C2, issue 245).
   const buttons = new Map();
   const selector = el(
     'div',
@@ -171,13 +177,14 @@ export async function mount(area, ctx) {
       area.replaceChildren(head, failure ? error({ text: failure.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
       return;
     }
+    for (const f of FILTERS) buttons.get(f.id).replaceChildren(filterLabel(f, wall.count));
     const f = FILTERS.find((x) => x.id === filter);
     const cards = (wall.cards ?? []).filter(f.passa);
     const band = failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
     const nodes = cards.map(card);
     const body = cards.length
       ? el('div', { class: 'wall-grid' }, ...nodes)
-      : empty({ icon: 'wall', title: f.vazio, text: filter === 'todas' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+      : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     const focused = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
     area.replaceChildren(...[head, band, body].filter(Boolean));

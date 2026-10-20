@@ -21,6 +21,7 @@ import { effectiveTokens } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
+import { eventAttention, type SessionAttention } from './attention.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
@@ -136,6 +137,8 @@ export interface EventoDoDetalhe {
   summary: string | null;
   agent: { id: string; name: string } | null;
   status: Extract<DisplayStatus, 'active' | 'waiting' | 'error'>;
+  /** #245: what the event alone stands for (a blocking ask or an error, `blocked`; a turn end or Esc, `idle`), as in `/api/events`. */
+  attention: SessionAttention | null;
   /** O `data` do evento em JSON, cortado: o expandir da linha. */
   data: string | null;
 }
@@ -483,7 +486,7 @@ export class LeiturasDoDetalhe {
       if (f.ate && e.createdAt > f.ate) continue;
       const dados = emJson(e.data);
       if (f.q && ![e.summary, e.toolName, e.type, dados].some((t) => t?.toLowerCase().includes(f.q!))) continue;
-      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, data: dados });
+      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, attention: eventAttention(e), data: dados });
     }
 
     const comeco = f.antes ? itens.findIndex((e) => e.id === f.antes) + 1 : 0;

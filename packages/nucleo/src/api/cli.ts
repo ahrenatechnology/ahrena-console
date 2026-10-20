@@ -83,6 +83,7 @@ import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-inst
 import { createCoreDecisions } from './adrs.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
+import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
 import { TrabalhoPorBranch } from './work.ts';
 import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
@@ -325,6 +326,9 @@ if (demo) {
   await seedDetail(storage);
   await seedPanelHistory(storage, decisions, scenario);
 }
+// #245: the Sessions list and the Kanban read the same event summaries (a waiting session's attention,
+// the last prompt), each session's events once; apart from the panel's, so as not to sweep its 64.
+const listSummaries = new ResumosDeSessao(storage, { maximo: 256 });
 const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
@@ -491,9 +495,9 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop }),
+  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries }),
   history,
-  kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
+  kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: repos.rota,
   agentInstructions: agentInstructions.route,
   frameworkInstall: frameworkInstall.route,

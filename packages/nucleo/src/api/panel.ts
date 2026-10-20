@@ -25,7 +25,7 @@ import type { Accounts } from './accounts.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisions.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
 import { ResumosDeSessao, iniciosDosTurnos, type ResumoDosEventos } from './summary.ts';
-import { atencaoDe, type MotivoDaAtencao, type NivelDeAtencao } from './attention.ts';
+import { atencaoDe, sessionAttention, type MotivoDaAtencao, type NivelDeAtencao } from './attention.ts';
 import type {
   SessionActivity,
   PanelAccount,
@@ -344,6 +344,7 @@ export class MontadorDoPainel {
       state: inbox.state,
       reason: inbox.reason,
       urgent: inbox.urgent,
+      attention: sessionAttention(inbox, r),
       since: desde,
       turn: Math.max(r.promptsHook, r.promptsTranscript),
       activity: atividade,
@@ -366,6 +367,7 @@ export class MontadorDoPainel {
       state: 'waiting',
       reason: 'session_start',
       urgent: false,
+      attention: sessionAttention({ status: 'waiting', state: 'waiting', reason: 'session_start', needsYou: true }, null),
       since: iso,
       turn: 0,
       activity: { type: 'prompt', text: 'esperando o primeiro prompt' },
@@ -532,7 +534,7 @@ export class MontadorDoPainel {
         account: this.contas.ofSession(c.session, c.desktop),
       });
     }
-    // Quem precisa de você antes de quem só está na sua vez (#140); dentro de cada nível, as urgentes
+    // Quem precisa de você antes das ociosas (#140, #245); dentro de cada nível, as urgentes
     // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
     const peso = (i: NeedsYouItem) => (i.level === 'needs' ? 1 : 0)
     itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgent) - Number(a.urgent) || b.since.localeCompare(a.since));

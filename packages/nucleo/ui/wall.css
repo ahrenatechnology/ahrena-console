@@ -4,7 +4,7 @@
 .wall-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wall-muted { color: var(--muted); }
 
-/* ---------- seletor Todas / Esperando / Ativas ---------- */
+/* ---------- seletor Todas / Precisam de você / Ociosas / Ativas ---------- */
 .wall-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
 .wall-seg button { font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .wall-seg button:hover { color: var(--text); }
@@ -15,13 +15,9 @@
 .wall-badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
 .wall-badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .wall-b-active { background: var(--status-active-badge); color: var(--status-active-text); }
-.wall-b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .wall-b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
 .wall-b-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .wall-b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
-.wall-reason { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; flex: none;
-  background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
-.wall-reason.soft { font-weight: var(--weight-medium); }
 
 /* ---------- a grade: cards do mesmo tamanho, três por linha ---------- */
 .wall-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -29,11 +25,12 @@
 .wall-card:hover { background: var(--raised); }
 .wall-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wall-card.wall-st-active { border-top-color: var(--status-active-dot); }
-.wall-card.wall-st-waiting { border-top-color: var(--status-waiting-dot); }
+.wall-card.wall-st-blocked { border-top-color: var(--status-waiting-dot); }
+.wall-card.wall-st-idle { border-top-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
 .wall-card.wall-st-error { border-top-color: var(--status-error-dot); }
 
 .wall-l1 { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.wall-l1 .wall-badge { margin-left: auto; }
+.wall-l1 .wall-pill { margin-left: auto; }
 .wall-tt { font-size: 13.5px; font-weight: var(--weight-semibold); }
 .wall-prj { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 

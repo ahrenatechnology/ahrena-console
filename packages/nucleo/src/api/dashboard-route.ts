@@ -9,11 +9,17 @@
 // - Cost: `aggregateCost` of the last 30 days and of the live sessions, at most every `custoMs`.
 // - The whole response holds for `cacheMs`: a burst of changes does not redo the math on every request.
 //
+// #245: the session numbers split `blocked` ("Precisam de você", the errors included) from `idle`
+// ("Ociosas"), each active-agent card and each waiting activity row carries `attention` (src/api/attention.ts).
+// The "precisam de você" inbox itself is `GET /api/attention`: its items carry the same `attention`, and
+// its `blocked` and `idle` counts are the inbox's and the neutral row's.
+//
 // Conversation text: only the one-line summary the core already keeps (the prompt, cut), in the
 // card's last two messages, as C1 asks. Never the agent's answer.
 
 import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import type { InboxState } from '../states/inbox.ts';
+import { eventAttention, type SessionAttention } from './attention.ts';
 import { fraseDoEvento } from './event-phrase.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
 import { minutesSince, projectOf, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
@@ -27,7 +33,16 @@ export type StatusDoBadge = 'active' | 'waiting' | 'completed' | 'error' | 'aban
 // The JSON is English since #173 phase 2b (layer 3); the route never had a Portuguese alias.
 export interface NumerosDoDashboard {
   /** Todas as sessões do banco; as vivas por estado. */
-  sessions: { total: number; active: number; waiting: number; withError: number };
+  sessions: {
+    total: number;
+    active: number;
+    waiting: number;
+    withError: number;
+    /** #245: as vivas que precisam de você (`attention.level` `blocked`, as de erro incluídas). */
+    blocked: number;
+    /** #245: as vivas ociosas (`attention.level` `idle`). */
+    idle: number;
+  };
   /** Agentes principais trabalhando, e em quantas sessões. */
   agents: { active: number; sessions: number };
   subagents: { active: number; sessions: number };
@@ -51,6 +66,8 @@ export interface AgenteDoDashboard {
   project: string | null;
   status: StatusDoBadge;
   state: InboxState;
+  /** #245: `blocked` ou `idle`, com o motivo; `null` quando não espera você nem está com erro. */
+  attention: SessionAttention | null;
   model: string | null;
   costUsd: number | null;
   lastActivity: string;
@@ -67,6 +84,8 @@ export interface AtividadeDoDashboard {
   session: string;
   project: string | null;
   status: StatusDoBadge;
+  /** #245: a da linha que espera você (`blocked`: o pedido ou o erro; `idle`: o Esc); `null` nas outras. */
+  attention: SessionAttention | null;
   text: string;
   at: string;
 }
@@ -111,7 +130,7 @@ interface Leitura {
   mensagens: string[];
   ultimoPrompt: number | null;
   ultimaFerramenta: { nome: string | null; resumo: string | null } | null;
-  atividade: { texto: string; status: StatusDoBadge; em: string }[];
+  atividade: { texto: string; status: StatusDoBadge; attention: SessionAttention | null; em: string }[];
 }
 
 const novaLeitura = (updatedAt: string, agora: number): Leitura => ({
@@ -198,7 +217,7 @@ export class MontadorDoDashboard {
     const { mes, vivas: custoDasVivas } = await this.custos(vivas.map((v) => v.session.id), hoje);
     const custoPorSessao = new Map(custoDasVivas.bySession.map((l) => [l.key, l.costUsd]));
 
-    const sessoes = { total: totalDeSessoes, active: 0, waiting: 0, withError: 0 };
+    const sessoes = { total: totalDeSessoes, active: 0, waiting: 0, withError: 0, blocked: 0, idle: 0 };
     const agentes = { active: 0, sessions: 0 };
     const subagentes = { active: 0, sessions: 0 };
     const cards: AgenteDoDashboard[] = [];
@@ -207,6 +226,8 @@ export class MontadorDoDashboard {
       if (estado === 'waiting') sessoes.waiting++;
       else if (estado === 'error') sessoes.withError++;
       else sessoes.active++;
+      const attention = await this.frota.sessionAttention(v);
+      if (attention) sessoes[attention.level]++;
       const lista = await this.storage.listAgents(v.session.id);
       const principais = lista.filter((a) => a.type === 'main' && a.status === 'working').length;
       if (principais > 0 && estado !== 'waiting' && estado !== 'error') {
@@ -217,7 +238,7 @@ export class MontadorDoDashboard {
         subagentes.active += v.inbox.activeSubagents;
         subagentes.sessions++;
       }
-      cards.push(await this.card(v, lista, custoPorSessao.has(v.session.id) ? (custoPorSessao.get(v.session.id) ?? null) : 0, agora));
+      cards.push(await this.card(v, lista, attention, custoPorSessao.has(v.session.id) ? (custoPorSessao.get(v.session.id) ?? null) : 0, agora));
     }
     // Trabalhando primeiro, depois quem espera, depois os erros; dentro, a atividade mais recente.
     const ordem: Record<StatusDoBadge, number> = { active: 0, waiting: 1, error: 2, completed: 3, abandoned: 4 };
@@ -226,12 +247,12 @@ export class MontadorDoDashboard {
     const atividade: AtividadeDoDashboard[] = [];
     for (const r of recentes) {
       const l = this.leituras.get(r.id);
-      for (const a of l?.atividade ?? []) atividade.push({ session: r.id, project: r.projeto, status: a.status, text: a.texto, at: a.em });
+      for (const a of l?.atividade ?? []) atividade.push({ session: r.id, project: r.projeto, status: a.status, attention: a.attention, text: a.texto, at: a.em });
     }
     // A interrupção (Esc) não deixa evento: ela vem do estado da sessão viva.
     for (const v of vivas) {
       if (v.session.awaitingReason === 'interrupted' && v.session.awaitingInputSince) {
-        atividade.push({ session: v.session.id, project: projectOf(v.session), status: 'waiting', text: 'Interrompida (Esc)', at: v.session.awaitingInputSince });
+        atividade.push({ session: v.session.id, project: projectOf(v.session), status: 'waiting', attention: { level: 'idle', reason: 'interrupted' }, text: 'Interrompida (Esc)', at: v.session.awaitingInputSince });
       }
     }
     atividade.sort((a, b) => b.at.localeCompare(a.at));
@@ -253,7 +274,7 @@ export class MontadorDoDashboard {
     };
   }
 
-  private async card(v: FleetSession, lista: Agent[], custoUsd: number | null, agora: number): Promise<AgenteDoDashboard> {
+  private async card(v: FleetSession, lista: Agent[], attention: SessionAttention | null, custoUsd: number | null, agora: number): Promise<AgenteDoDashboard> {
     const s = v.session;
     const l = this.leituras.get(s.id);
     const status = badgeDe(v.inbox.state);
@@ -268,6 +289,7 @@ export class MontadorDoDashboard {
       project: projectOf(s),
       status,
       state: v.inbox.state,
+      attention,
       model: s.model,
       costUsd: custoUsd === null ? null : Math.round(custoUsd * 100) / 100,
       lastActivity: s.updatedAt,
@@ -369,7 +391,7 @@ function aplicar(l: Leitura, e: SessionEvent, agora: number): void {
     case 'Notification': {
       const tipo = str(d?.notification_type);
       if (tipo === 'elicitation_dialog' || tipo === 'permission_prompt') {
-        anotar(l, fraseDoEvento(e, { ultimaFerramenta: l.ultimaFerramenta })!, 'waiting', e.createdAt);
+        anotar(l, fraseDoEvento(e, { ultimaFerramenta: l.ultimaFerramenta })!, 'waiting', e.createdAt, eventAttention(e));
       }
       return;
     }
@@ -378,7 +400,7 @@ function aplicar(l: Leitura, e: SessionEvent, agora: number): void {
       return;
     case 'APIError':
     case 'StopFailure':
-      anotar(l, fraseDoEvento(e)!, 'error', e.createdAt);
+      anotar(l, fraseDoEvento(e)!, 'error', e.createdAt, eventAttention(e));
       return;
     case 'SessionStart':
       anotar(l, fraseDoEvento(e)!, 'active', e.createdAt);
@@ -389,8 +411,8 @@ function aplicar(l: Leitura, e: SessionEvent, agora: number): void {
   }
 }
 
-function anotar(l: Leitura, texto: string, status: StatusDoBadge, em: string): void {
-  l.atividade.unshift({ texto: cortar(texto, MAX_TEXTO) ?? texto, status, em });
+function anotar(l: Leitura, texto: string, status: StatusDoBadge, em: string, attention: SessionAttention | null = null): void {
+  l.atividade.unshift({ texto: cortar(texto, MAX_TEXTO) ?? texto, status, attention, em });
   if (l.atividade.length > MAX_ATIVIDADE_POR_SESSAO) l.atividade.length = MAX_ATIVIDADE_POR_SESSAO;
 }
 
