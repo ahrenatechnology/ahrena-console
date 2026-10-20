@@ -227,7 +227,7 @@ Issue #131. A sessão abre vários planos; cada um fica guardado como `PlanRecor
 - **TaskCreate depois das tarefas feitas:** as tarefas antigas continuam na lista da ferramenta, mas são do plano anterior; o novo leva só as novas.
 - **Plano gravado antes da #131:** vira o primeiro do histórico na próxima mudança. O estado fica em `metadata.historico`.
 - **`wrap_up`:** no Claude Desktop, o fechamento do turno dá por feita a lista do `update_plan`. O `wrap_up` do principal marca os passos que faltam; sem isso, quase todo plano do Desktop ficava abandonado.
-- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`rebuildPlan`, em [src/api/reprocessing.ts](src/api/reprocessing.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessamentos` (migração 6).
+- **Sessões importadas antes:** a importação antiga não guardou a entrada das ferramentas do plano. Uma vez por banco, depois da importação inicial, a API refaz o plano e o histórico de cada sessão com os eventos gravados e os mesmos eventos relidos do transcript (`rebuildPlan`, em [src/api/reprocessing.ts](src/api/reprocessing.ts)), e captura as decisões do transcript. A marca fica na tabela `reprocessings` (migração 6, renomeada na 10).
 
 ## Contas
 
@@ -237,7 +237,9 @@ A precedência fica em `accountSourceOverrides(nova, gravada)` e `applySessionAc
 
 ## Migrações
 
-Cada mudança de esquema é uma migração nova no fim de `MIGRATIONS`. A versão aplicada fica em `PRAGMA user_version`; cada migração roda na própria transação e, se falhar, o banco fica na versão anterior.
+Cada mudança de esquema é uma migração nova no fim de `MIGRATIONS`. A versão aplicada fica em `PRAGMA user_version`; cada migração roda na própria transação e, se falhar, o banco fica na versão anterior. O que SQL sozinho não faz (hash, JSON) vai no `up(db)` da migração, na mesma transação.
+
+A migração 10 (#173, decisão 0009) passa o esquema para o inglês: `reprocessamentos(nome, feito_em)` vira `reprocessings(name, done_at)`, o gatilho `events_seq_faltando` vira `events_seq_missing`, e os valores gravados em `context_meters`, `decisions` e `session_links` passam para o inglês. Como o SQLite não muda um CHECK, essas tabelas são recriadas (tabela nova, cópia com os valores mapeados, `DROP`, `RENAME`, índices de volta). A prova está em [test/migration/](test/migration/): um banco da versão 9 com todos os valores antigos passa pela migração sem perder linha.
 
 ## Trabalho do GitHub
 

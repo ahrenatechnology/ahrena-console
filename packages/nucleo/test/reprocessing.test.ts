@@ -91,7 +91,7 @@ describe('reprocessamento das sessões já importadas', () => {
     assert.deepEqual([r.sessoes, r.comPlano, r.planos], [1, 1, 3]);
     assert.deepEqual(await historico(), [[3, 'current', '0/1'], [2, 'abandoned', '0/2'], [1, 'completed', '2/2']]);
     const d = await decisoes.listDecisions({ sessionId: S });
-    assert.equal(d.items.filter((x) => x.origin === 'pergunta').length, 2);
+    assert.equal(d.items.filter((x) => x.origin === 'question').length, 2);
     assert.equal(r.decisoes, d.items.length);
 
     // De novo: nada duplica.
@@ -101,9 +101,9 @@ describe('reprocessamento das sessões já importadas', () => {
   });
 
   test('marca feito uma vez por banco (migração 6, aditiva)', () => {
-    assert.equal(store.reprocessado('x'), false);
-    store.marcarReprocessado('x', at(1));
-    assert.equal(store.reprocessado('x'), true);
+    assert.equal(store.isReprocessed('x'), false);
+    store.markReprocessed('x', at(1));
+    assert.equal(store.isReprocessed('x'), true);
     const m = MIGRATIONS.find((x) => x.sql.includes('CREATE TABLE reprocessamentos'))!;
     assert.doesNotMatch(m.sql, /\b(DROP|ALTER)\b/);
     const db = new DatabaseSync(':memory:');
@@ -151,23 +151,23 @@ describe('ruído nas decisões (#131)', () => {
 
   test('a limpeza tira das listas a dispensada e a "correção" que é conversa, e encurta a que fica', async () => {
     await store.putSession({ id: S, name: null, status: 'active', cwd: '/repo/app', model: null, source: 'startup', startedAt: at(0), endedAt: null, awaitingInputSince: null, awaitingReason: null, updatedAt: at(0), accountId: null, accountSource: null, metadata: {} });
-    const base = { sessionId: S, repo: '/repo/app', branch: 'main', alternatives: [], decidedBy: 'usuario' as const, decidedAt: at(1) };
-    const reg = async (sourceKey: string, extra: object) => (await registerDecision(decisoes, { ...base, sourceKey, topic: null, context: null, choice: 'x', origin: 'pergunta', inferred: false, ...extra } as never, at(1))).decision;
-    const dispensada = await reg('q1', { choice: DISPENSADA, topic: 'pergunta:qual banco' });
-    const conversa = await reg('prompt:p1', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Vou subir o Postgres.', choice: 'Não sei se é possível, mas seria legal, né? A gente marcar os planos já executados' });
-    const real = await reg('prompt:p2', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Sigo com o merge e crio a tag?', choice: 'Não, não solta a tag ainda. Espera o review do time.' });
-    const tocada = await reg('prompt:p3', { origin: 'correcao', inferred: true, state: 'a_confirmar', context: 'Vou subir o Postgres.', choice: 'Não, calma.', metadata: { painel: { acao: 'descartar' } } });
+    const base = { sessionId: S, repo: '/repo/app', branch: 'main', alternatives: [], decidedBy: 'user' as const, decidedAt: at(1) };
+    const reg = async (sourceKey: string, extra: object) => (await registerDecision(decisoes, { ...base, sourceKey, topic: null, context: null, choice: 'x', origin: 'question', inferred: false, ...extra } as never, at(1))).decision;
+    const dispensada = await reg('q1', { choice: DISPENSADA, topic: 'question:qual banco' });
+    const conversa = await reg('prompt:p1', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Vou subir o Postgres.', choice: 'Não sei se é possível, mas seria legal, né? A gente marcar os planos já executados' });
+    const real = await reg('prompt:p2', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Sigo com o merge e crio a tag?', choice: 'Não, não solta a tag ainda. Espera o review do time.' });
+    const tocada = await reg('prompt:p3', { origin: 'correction', inferred: true, state: 'to_confirm', context: 'Vou subir o Postgres.', choice: 'Não, calma.', metadata: { painel: { acao: 'descartar' } } });
 
     const r = await limparDecisoes(store, decisoes, at(5));
     assert.deepEqual(r, { ruido: 2, encurtadas: 1 });
-    assert.equal((await decisoes.getDecision(dispensada.id))?.state, 'descartada');
+    assert.equal((await decisoes.getDecision(dispensada.id))?.state, 'dismissed');
     assert.equal((await decisoes.getDecision(dispensada.id))?.metadata.ruido, 'pergunta fechada sem resposta');
-    assert.equal((await decisoes.getDecision(conversa.id))?.state, 'descartada');
+    assert.equal((await decisoes.getDecision(conversa.id))?.state, 'dismissed');
     const ficou = (await decisoes.getDecision(real.id))!;
-    assert.equal(ficou.state, 'a_confirmar');
+    assert.equal(ficou.state, 'to_confirm');
     assert.equal(ficou.choice, 'Não, não solta a tag ainda.');
     assert.equal(ficou.metadata.texto, 'Não, não solta a tag ainda. Espera o review do time.');
-    assert.equal((await decisoes.getDecision(tocada.id))?.state, 'a_confirmar', 'a que a pessoa já mexeu fica');
+    assert.equal((await decisoes.getDecision(tocada.id))?.state, 'to_confirm', 'a que a pessoa já mexeu fica');
     assert.deepEqual(await limparDecisoes(store, decisoes, at(6)), { ruido: 0, encurtadas: 0 });
   });
 });

@@ -154,9 +154,9 @@ export class DevConsoleSessions {
         push(dependsOnYou, repo, { kind: 'session', sessionId: s.session.id, title: s.title, repo, issue, reason, reasonText: w.reasonText, since: w.waitingSince, minutes: w.waitingMinutes });
       }
       if (!this.decisions) continue;
-      const page = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['a_confirmar'], limit: 50 });
+      const page = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['to_confirm'], limit: 50 });
       for (const d of page.items) {
-        if (d.origin !== 'sugerida') continue;
+        if (d.origin !== 'suggested') continue;
         push(dependsOnYou, repo, {
           kind: 'suggested-decision',
           decisionId: d.id,
@@ -201,7 +201,7 @@ export class DevConsoleSessions {
    */
   private async decisionsTakenToday(sessionId: string, repo: string, today: string, now: number, push: (item: DecisionTodayItem) => void): Promise<void> {
     if (!this.decisions) return;
-    const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
+    const page = await this.decisions.listDecisions({ sessionId, states: ['current'], limit: 50 });
     for (const d of page.items) {
       if (dayOf(d.decidedAt, this.frota.timeZone) !== today) break;
       push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutesSince(d.decidedAt, now) });

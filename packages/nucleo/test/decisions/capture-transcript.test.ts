@@ -35,7 +35,7 @@ describe('decisions: capture through the transcript', () => {
 
   test('CA1: answered question, with branch, repository and the answer line', () => {
     const [database, screens] = extractTranscriptDecisions(jsonl(ask), { transcriptPath: '/t/s1.jsonl' });
-    assert.equal(database.origin, 'pergunta');
+    assert.equal(database.origin, 'question');
     assert.equal(database.choice, 'Postgres no Docker');
     assert.deepEqual(database.alternatives, ['SQLite em memória']);
     assert.equal(database.branch, 'feat/42-kanban');
@@ -60,13 +60,13 @@ describe('decisions: capture through the transcript', () => {
         tx.toolResult({ uuid: 'p4', minute: 4 }, 'toolu_p2', 'User has approved your plan. You can now start coding.', { toolUseResult: { plan: PLAN, isAgent: false } }),
       ]),
     );
-    assert.deepEqual(d.map((x) => [x.origin, x.choice, x.state ?? 'vigente', x.inferred]), [
-      ['correcao', 'sem arrastar: o kanban é só leitura', 'vigente', false],
-      ['plano', 'Kanban só leitura', 'vigente', false],
+    assert.deepEqual(d.map((x) => [x.origin, x.choice, x.state ?? 'current', x.inferred]), [
+      ['correction', 'sem arrastar: o kanban é só leitura', 'current', false],
+      ['plan', 'Kanban só leitura', 'current', false],
     ]);
     assert.deepEqual(d[0].alternatives, ['Kanban com arrastar']);
     assert.deepEqual(d[1].alternatives, ['Kanban com arrastar']);
-    assert.equal(d[0].topic, 'plano');
+    assert.equal(d[0].topic, 'plan');
   });
 
   test('a plan rejected without text is not a decision', () => {
@@ -89,7 +89,7 @@ describe('decisions: capture through the transcript', () => {
       ]),
     );
     assert.equal(d.length, 1);
-    assert.equal(d[0].origin, 'permissao');
+    assert.equal(d[0].origin, 'permission');
     assert.equal(d[0].choice, 'Negar Bash: git push --force');
     assert.equal(d[0].message?.uuid, 'b2');
   });
@@ -105,9 +105,9 @@ describe('decisions: capture through the transcript', () => {
     ];
     const d = extractTranscriptDecisions(jsonl(lines));
     const corr = d.at(-1)!;
-    assert.equal(corr.origin, 'correcao');
+    assert.equal(corr.origin, 'correction');
     assert.equal(corr.inferred, true);
-    assert.equal(corr.state, 'a_confirmar');
+    assert.equal(corr.state, 'to_confirm');
     assert.equal(corr.choice, 'Não, use SQLite em memória nos testes');
     assert.deepEqual(corr.alternatives, ['Subo o Postgres no Docker para os testes?']);
     assert.equal(corr.topic, d[0].topic, 'the topic is the one of the turn\'s only decision');
@@ -118,11 +118,11 @@ describe('decisions: capture through the transcript', () => {
     const rep = await captureTranscriptFile(ctx.decisions, path, at(10));
     assert.equal(rep.created.length, 2);
     const c = rep.created.at(-1)!;
-    assert.equal(c.state, 'a_confirmar');
+    assert.equal(c.state, 'to_confirm');
     assert.equal(c.message.transcriptPath, path);
 
     // It only counts once confirmed; then it replaces the previous answer on the same topic.
-    const before = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'sessao');
+    const before = await currentDecisionsFor(ctx.decisions, { sessionId: 's1' }, 'session');
     assert.ok(!before.some((x) => x.id === c.id));
     await confirmDecision(ctx.decisions, c.id, at(11));
     const database = rep.created[0];
@@ -137,7 +137,7 @@ describe('decisions: capture through the transcript', () => {
       jsonl([...ask, tx.say({ uuid: 'a1', minute: 3 }, 'Vou com Postgres?'), tx.prompt({ uuid: 'c1', minute: 4 }, 'na verdade, use SQLite em memória')]),
     );
     assert.equal(d.length, 3);
-    assert.equal(d[2].origin, 'correcao');
+    assert.equal(d[2].origin, 'correction');
     assert.equal(d[2].topic, null);
   });
 

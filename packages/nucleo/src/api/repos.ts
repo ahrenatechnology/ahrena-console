@@ -381,7 +381,7 @@ export class ReposDoGithub {
     const agora = this.agora();
     let crua: { value: ListaCrua; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      crua = await this.graphql('repos:lista', TTL_DOS_REPOS.lista, e.forcar, (f) => f.lista());
+      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, (f) => f.lista());
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : listaVazia(this.estadoDaFalha(), msg), LIST_CHANGE_KEY);
@@ -401,7 +401,7 @@ export class ReposDoGithub {
 
     let resumo: ResumoCru | null = e.valor ? { esperandoReview: e.valor.summary.prsAwaitingReview, fechadasNaSemana: e.valor.summary.issuesClosedThisWeek } : null;
     try {
-      const r = await this.graphql('repos:resumo', TTL_DOS_REPOS.resumo, e.forcar, (f) => f.resumo(crua.value.login, crua.value.organizacoes, diaIso(agora - 7 * DIA_MS)));
+      const r = await this.graphql('repos:summary', TTL_DOS_REPOS.resumo, e.forcar, (f) => f.resumo(crua.value.login, crua.value.organizacoes, diaIso(agora - 7 * DIA_MS)));
       resumo = r.value;
       if (r.stale && r.staleReason) erros.push(r.staleReason);
     } catch (err) {
@@ -440,7 +440,7 @@ export class ReposDoGithub {
     const desde = inicioDoPeriodo(periodo, agora);
     let detalhe: { value: DetalheCru | null; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
-      detalhe = await this.graphql(`repos:detalhe:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
+      detalhe = await this.graphql(`repos:detail:${chave}:${periodo}`, TTL_DOS_REPOS.detalhe, e.forcar, (f) => f.detalhe(dono, nome, diaIso(desde)));
     } catch (err) {
       const msg = this.semToken ?? motivo(err);
       this.publicar(e, e.valor ? { ...e.valor, error: msg } : metricasVazias(this.estadoDaFalha(), periodo, msg), chave);

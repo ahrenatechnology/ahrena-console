@@ -478,19 +478,19 @@ export async function seedPanelDecisions(port: DecisionPort, scenario: PanelScen
     registerDecision(
       port,
       {
-        sourceKey: `sim:p9:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
+        sourceKey: `sim:p9:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'user', inferred: false,
         message: { toolUseId: `sim-toolu-p9-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...d,
       },
       nowIso,
     );
-  await decide(P9_PARENT, 20 * 60, { origin: 'pergunta', topic: 'pergunta:kanban arrasta', choice: 'Kanban só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await decide(P9_PARENT, 20 * 60, { origin: 'question', topic: 'question:kanban arrasta', choice: 'Kanban só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
   await linkSession(port, { sessionId: PANEL_SESSION, parentSessionId: P9_PARENT, reason: 'clear', linkedAt: iso(now, 45) }, nowIso);
-  await decide(PANEL_SESSION, 40, { origin: 'plano', topic: 'plano', choice: 'Plano de 5 passos aprovado', alternatives: ['plano com drag-and-drop'] });
-  await decide(PANEL_SESSION, 33, { origin: 'pergunta', topic: 'pergunta:banco nos testes', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'] });
-  await decide(PANEL_SESSION, 14, { origin: 'correcao', topic: 'pergunta:banco nos testes', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'] });
-  await decide(PANEL_SESSION, 21, { origin: 'permissao', topic: 'permissao:Bash npm test', choice: 'Permitir npm test sem perguntar', alternatives: ['perguntar a cada vez'] });
+  await decide(PANEL_SESSION, 40, { origin: 'plan', topic: 'plan', choice: 'Plano de 5 passos aprovado', alternatives: ['plano com drag-and-drop'] });
+  await decide(PANEL_SESSION, 33, { origin: 'question', topic: 'question:banco nos testes', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'] });
+  await decide(PANEL_SESSION, 14, { origin: 'correction', topic: 'question:banco nos testes', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'] });
+  await decide(PANEL_SESSION, 21, { origin: 'permission', topic: 'permission:Bash npm test', choice: 'Permitir npm test sem perguntar', alternatives: ['perguntar a cada vez'] });
   await decide(PANEL_SESSION, 6, {
-    origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:cards por coluna',
+    origin: 'suggested', decidedBy: 'agent', inferred: true, topic: 'kanban:cards por coluna',
     choice: '10 cards por coluna, com "mostrar mais"', alternatives: ['20 por coluna', 'rolagem infinita'],
   });
   await seedDecisionsPage(port, now);
@@ -549,7 +549,7 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
     const { decision } = await registerDecision(
       port,
       {
-        sourceKey: `sim:c21:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'usuario', inferred: false,
+        sourceKey: `sim:c21:${++n}`, sessionId, agentId: `${sessionId}:main`, repo, branch, context: null, decidedBy: 'user', inferred: false,
         message: { toolUseId: `sim-toolu-c21-${n}` }, decidedAt: iso(now, minAgo), metadata: { simulado: true }, ...rest,
       },
       nowIso,
@@ -559,45 +559,45 @@ async function seedDecisionsPage(port: DecisionPort, now: number): Promise<void>
 
   const vitrine = (sessionId: string, d: DemoDraft) => decide(sessionId, `${ROOT}/vitrine-demo`, 'feat/42-kanban', d);
   const kanban = 'sim-panel-vitrine-demo';
-  await vitrine(VITRINE_PARENT, { minAgo: 26 * 60, origin: 'pergunta', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
+  await vitrine(VITRINE_PARENT, { minAgo: 26 * 60, origin: 'question', topic: 'kanban:arrastar', choice: 'Cards só leitura, sem arrastar', alternatives: ['arrastar muda o status'] });
   await linkSession(port, { sessionId: kanban, parentSessionId: VITRINE_PARENT, reason: 'clear', linkedAt: iso(now, 60) }, nowIso);
-  await vitrine(kanban, { minAgo: 50, origin: 'plano', topic: 'plano', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'sessao' });
-  await vitrine(kanban, { minAgo: 45, origin: 'pergunta', topic: 'kanban:banco', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'], scope: 'sessao' });
-  await vitrine(kanban, { minAgo: 30, origin: 'permissao', topic: 'permissao:Bash npm run build', choice: 'Permitir npm run build sem perguntar', alternatives: ['perguntar a cada vez'], scope: 'sessao' });
+  await vitrine(kanban, { minAgo: 50, origin: 'plan', topic: 'plan', choice: 'Plano de 4 passos aprovado', alternatives: ['plano com drag-and-drop'], scope: 'session' });
+  await vitrine(kanban, { minAgo: 45, origin: 'question', topic: 'kanban:banco', choice: 'Postgres no Docker nos testes', alternatives: ['SQLite em memória'], scope: 'session' });
+  await vitrine(kanban, { minAgo: 30, origin: 'permission', topic: 'permission:Bash npm run build', choice: 'Permitir npm run build sem perguntar', alternatives: ['perguntar a cada vez'], scope: 'session' });
   await vitrine(kanban, {
-    minAgo: 25, origin: 'pergunta', topic: 'kanban:atualizar', choice: 'Kanban atualiza por long polling', alternatives: ['recarregar a cada 5 s'], scope: 'branch',
+    minAgo: 25, origin: 'question', topic: 'kanban:atualizar', choice: 'Kanban atualiza por long polling', alternatives: ['recarregar a cada 5 s'], scope: 'branch',
     promotedTo: recordPath('vitrine-demo', 0),
   });
-  await vitrine(kanban, { minAgo: 20, origin: 'pergunta', topic: 'kanban:card', choice: 'Card com 3 linhas: título, branch e PR', alternatives: ['card com o resumo da conversa'] });
-  await vitrine(kanban, { minAgo: 16, origin: 'correcao', topic: 'kanban:banco', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'], scope: 'sessao' });
+  await vitrine(kanban, { minAgo: 20, origin: 'question', topic: 'kanban:card', choice: 'Card com 3 linhas: título, branch e PR', alternatives: ['card com o resumo da conversa'] });
+  await vitrine(kanban, { minAgo: 16, origin: 'correction', topic: 'kanban:banco', choice: 'SQLite em memória nos testes', alternatives: ['Postgres no Docker'], scope: 'session' });
   await vitrine(kanban, {
-    minAgo: 8, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'kanban:encerradas', scope: 'sessao',
+    minAgo: 8, origin: 'suggested', decidedBy: 'agent', inferred: true, topic: 'kanban:encerradas', scope: 'session',
     choice: 'Esconder sessões encerradas há mais de 7 dias', alternatives: ['mostrar todas'],
   });
 
   const payments = (d: DemoDraft) => decide('sim-panel-motor-de-regras', `${ROOT}/motor-de-regras`, 'refactor/pagamentos', d);
   await payments({
-    minAgo: 60, origin: 'pergunta', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
+    minAgo: 60, origin: 'question', topic: 'pagamentos:cobranca', choice: 'Cobrança vira um serviço à parte', alternatives: ['manter no módulo de pagamentos'],
     promotedTo: recordPath('motor-de-regras', 0),
   });
-  await payments({ minAgo: 50, origin: 'pergunta', topic: 'pagamentos:pr', choice: 'Abrir o PR direto', alternatives: ['review antes do PR'] });
+  await payments({ minAgo: 50, origin: 'question', topic: 'pagamentos:pr', choice: 'Abrir o PR direto', alternatives: ['review antes do PR'] });
   await payments({
-    minAgo: 40, origin: 'plano', topic: 'plano', choice: 'Contrato da API de cobrança antes do código', alternatives: ['começar pelo código'],
+    minAgo: 40, origin: 'plan', topic: 'plan', choice: 'Contrato da API de cobrança antes do código', alternatives: ['começar pelo código'],
     promotedTo: recordPath('motor-de-regras', 1),
   });
-  await payments({ minAgo: 35, origin: 'pergunta', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
-  await payments({ minAgo: 27, origin: 'correcao', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
+  await payments({ minAgo: 35, origin: 'question', topic: 'pagamentos:eventos', choice: 'Eventos de cobrança pela fila', alternatives: ['chamada direta entre serviços'], scope: 'branch' });
+  await payments({ minAgo: 27, origin: 'correction', topic: 'pagamentos:pr', choice: 'Review por code-reviewer antes do PR', alternatives: ['abrir o PR direto'] });
 
   const report = (d: DemoDraft) => decide('sim-panel-painel-de-metricas', `${ROOT}/painel-de-metricas`, 'perf/47-relatorio', d);
-  await report({ minAgo: 90, origin: 'plano', topic: 'plano', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
-  await report({ minAgo: 70, origin: 'pergunta', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
-  await report({ minAgo: 55, origin: 'correcao', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });
+  await report({ minAgo: 90, origin: 'plan', topic: 'plan', choice: 'Medir antes de otimizar', alternatives: ['reescrever a consulta direto'] });
+  await report({ minAgo: 70, origin: 'question', topic: 'relatorio:granularidade', choice: 'Consulta por dia', alternatives: ['consulta por mês'] });
+  await report({ minAgo: 55, origin: 'correction', topic: 'relatorio:granularidade', choice: 'Consulta por mês, não por dia', alternatives: ['consulta por dia'] });
   await report({
-    minAgo: 45, origin: 'pergunta', topic: 'relatorio:cache', choice: 'Cachear o total do mês por 5 min', alternatives: ['sem cache'], scope: 'branch',
+    minAgo: 45, origin: 'question', topic: 'relatorio:cache', choice: 'Cachear o total do mês por 5 min', alternatives: ['sem cache'], scope: 'branch',
     promotedTo: recordPath('painel-de-metricas', 0),
   });
   await report({
-    minAgo: 40, origin: 'sugerida', decidedBy: 'agente', inferred: true, topic: 'relatorio:indice', scope: 'sessao',
+    minAgo: 40, origin: 'suggested', decidedBy: 'agent', inferred: true, topic: 'relatorio:indice', scope: 'session',
     choice: 'Índice composto em (mes, conta)', alternatives: ['view materializada'],
   });
 }
