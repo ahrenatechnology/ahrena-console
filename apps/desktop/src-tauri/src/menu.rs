@@ -3,8 +3,12 @@
 // Fica separado do Tauri para ser testado sem abrir o app: `montar` devolve a lista de itens na
 // ordem dos wireframes A1 (0 esperando), A2 (3 esperando) e A4 (núcleo parado), e `main.rs` só a
 // traduz para o menu nativo.
+//
+// #180 adds the "Máquinas" block of A6 and A7 (machines.rs) and the remote sessions' label (A2).
 
 use serde::Deserialize;
+
+use crate::machines;
 
 /// Um item de `GET /api/attention` (packages/nucleo/src/api/rota-atencao.ts).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -21,6 +25,17 @@ pub struct ItemDaAtencao {
     pub motivo_longo: String,
     pub minutos: u64,
     pub local: Option<String>,
+    /// The remote machine the session runs on (#176); `None` for this machine and for a core
+    /// from before the remote machines.
+    #[serde(default)]
+    pub machine: Option<SessionMachine>,
+}
+
+/// `machine: { id, label }` of a remote session in `/api/attention`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SessionMachine {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -73,7 +88,11 @@ pub enum Item {
     /// Cabeçalho de seção; com ⌥, vira `alternativo`.
     Cabecalho { texto: String, alternativo: String },
     /// Uma sessão. O clique abre no Claude Desktop pelo `local`; com ⌥, o item `alternativo`.
-    Sessao { id: String, texto: String, alternativo: String, ponto: Ponto, dica: String, local: Option<String> },
+    /// A remote session (#180) has no alternative: this Mac's Claude Desktop does not know it.
+    Sessao { id: String, texto: String, alternativo: Option<String>, ponto: Ponto, dica: String, local: Option<String> },
+    /// A machine row or one of its open alerts (#180): the click opens the window at
+    /// `/ui/machines/<id>`.
+    Machine { id: String, text: String, dot: Ponto },
     Acao { id: &'static str, texto: String, atalho: Option<&'static str> },
     Marcavel { id: &'static str, texto: &'static str, marcado: bool },
     Separador,
@@ -89,6 +108,10 @@ pub struct Entrada<'a> {
     pub versao: &'a str,
     /// A versão nova que o updater achou e ainda não foi instalada.
     pub atualizacao: Option<&'a str>,
+    /// The machines of `/api/machines` (#180); `None` when the core has no telemetry (404).
+    pub machines: Option<&'a [machines::Machine]>,
+    /// Now, in ms since the epoch: the age of an unreachable machine and of an alert.
+    pub now_ms: u64,
 }
 
 pub const ID_ABRIR: &str = "abrir";
@@ -101,6 +124,8 @@ pub const ID_ATUALIZAR: &str = "atualizar";
 /// Prefixos dos ids das sessões: o principal e o alternativo (⌥).
 pub const SESSAO: &str = "sessao:";
 pub const SESSAO_NO_DESKTOP: &str = "desktop:";
+/// Prefix of the ids of the machine rows and alerts (#180).
+pub const MACHINE: &str = "machine:";
 
 /// O número ao lado do ícone: esperando e com erro. Zero ou núcleo parado: só o ícone.
 pub fn titulo_da_bandeja(nucleo: &EstadoDoNucleo, atencao: Option<&Atencao>) -> Option<String> {
@@ -136,7 +161,8 @@ pub fn montar(e: &Entrada) -> Vec<Item> {
             if e.sem_atencao && e.atencao.is_none() {
                 m.push(Item::Detalhe("Este núcleo não lista quem precisa de você: atualize-o".into()));
             } else {
-                sessoes(&mut m, e.atencao);
+                let block = e.machines.map(|ms| machines_block(ms, e.now_ms)).unwrap_or_default();
+                sessoes(&mut m, e.atencao, block);
             }
         }
         EstadoDoNucleo::Procurando => {
@@ -165,7 +191,9 @@ pub fn montar(e: &Entrada) -> Vec<Item> {
     m
 }
 
-fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
+/// `machines`: the "Máquinas" block (A6, A7), empty when there is nothing to show. It goes between
+/// the "precisam de você" list and the active count; in A1 (nobody waiting), after the three lines.
+fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>, machines: Vec<Item>) {
     let Some(a) = atencao else {
         m.push(Item::Texto { texto: "Lendo as sessões…".into(), ponto: None });
         return;
@@ -176,6 +204,10 @@ fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
         m.push(Item::Texto { texto: "Ninguém precisa de você".into(), ponto: Some(Ponto::Vazio) });
         m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
         m.push(Item::Texto { texto: "nenhuma com erro".into(), ponto: Some(Ponto::Vermelho) });
+        if !machines.is_empty() {
+            m.push(Item::Separador);
+            m.extend(machines);
+        }
         return;
     }
     let n = a.itens.len();
@@ -183,17 +215,60 @@ fn sessoes(m: &mut Vec<Item>, atencao: Option<&Atencao>) {
     m.push(Item::Cabecalho { texto: format!("{quem} · abrir na janela"), alternativo: format!("{quem} · abrir no Claude Desktop") });
     for i in &a.itens {
         let conta = i.conta.as_ref().map(|c| c.rotulo.as_str()).unwrap_or("Sem conta");
+        let (texto, alternativo) = match &i.machine {
+            Some(machine) => (format!("{} · {} · {} · {}", i.titulo, machine.label, i.motivo_curto, tempo(i.minutos)), None),
+            None => (format!("{} · {} · {}", i.titulo, i.motivo_curto, tempo(i.minutos)), Some(format!("{} · Abrir no Claude Desktop", i.titulo))),
+        };
         m.push(Item::Sessao {
             id: i.sessao.clone(),
-            texto: format!("{} · {} · {}", i.titulo, i.motivo_curto, tempo(i.minutos)),
-            alternativo: format!("{} · Abrir no Claude Desktop", i.titulo),
+            texto,
+            alternativo,
             ponto: ponto_da_sessao(i),
             dica: format!("{conta} · {}", i.motivo_longo),
             local: i.local.clone(),
         });
     }
     m.push(Item::Separador);
+    if !machines.is_empty() {
+        m.extend(machines);
+        m.push(Item::Separador);
+    }
     m.push(Item::Texto { texto: ativas(a.ativas), ponto: Some(Ponto::Laranja) });
+}
+
+/// The "Máquinas" block (A6, A7): a header, one row per machine and one item per open alert of a
+/// connected machine. Empty without machines to show, so a core without telemetry shows no block.
+fn machines_block(ms: &[machines::Machine], now_ms: u64) -> Vec<Item> {
+    let mut b = Vec::new();
+    for x in ms.iter().filter(|x| x.summary.state != "not-configured") {
+        let s = &x.summary;
+        let label = machines::display_label(s);
+        let row = |text: String, dot: Ponto| Item::Machine { id: s.id.clone(), text, dot };
+        let reading = x.telemetry.as_ref().and_then(|t| t.current.as_ref());
+        match s.state.as_str() {
+            "unreachable" => {
+                let age = s.last_read_at.as_deref().and_then(|t| machines::minutes_since(t, now_ms));
+                let since = age.map(|m| format!("sem conexão {}", machines::ago(m))).unwrap_or_else(|| "sem conexão".into());
+                b.push(row(format!("{label} · {since}"), Ponto::Vazio));
+                if let Some(reason) = machines::unreachable_reason(s) {
+                    b.push(Item::Detalhe(reason));
+                }
+            }
+            "incompatible-version" => b.push(row(format!("{label} · versão incompatível do núcleo"), Ponto::Vazio)),
+            _ => {
+                let figures = reading.map(machines::figures).unwrap_or_default();
+                b.push(row(if figures.is_empty() { label.to_string() } else { format!("{label} · {figures}") }, Ponto::Verde));
+                for a in x.telemetry.iter().flat_map(|t| &t.alerts).filter(|a| a.kind != machines::UNREACHABLE_KIND) {
+                    let dot = if a.level == "error" { Ponto::Vermelho } else { Ponto::Amarelo };
+                    b.push(row(format!("{} · {label}", machines::alert_text(a, reading, now_ms)), dot));
+                }
+            }
+        }
+    }
+    if !b.is_empty() {
+        b.insert(0, Item::Texto { texto: "Máquinas".into(), ponto: None });
+    }
+    b
 }
 
 fn ativas(n: u64) -> String {
@@ -228,13 +303,13 @@ mod testes {
     const ZERO: &str = r#"{ "cursor": "c1", "total": 0, "precisam": 0, "suaVez": 0, "ativas": 4, "comErro": 0, "itens": [] }"#;
 
     fn entrada<'a>(nucleo: &'a EstadoDoNucleo, atencao: Option<&'a Atencao>) -> Entrada<'a> {
-        Entrada { nucleo, atencao, sem_atencao: false, notificacoes: true, login: false, versao: "0.0.1", atualizacao: None }
+        Entrada { nucleo, atencao, sem_atencao: false, notificacoes: true, login: false, versao: "0.0.1", atualizacao: None, machines: None, now_ms: 0 }
     }
 
     fn textos(m: &[Item]) -> Vec<String> {
         m.iter()
             .map(|i| match i {
-                Item::Texto { texto, .. } | Item::Cabecalho { texto, .. } | Item::Sessao { texto, .. } | Item::Acao { texto, .. } => texto.clone(),
+                Item::Texto { texto, .. } | Item::Cabecalho { texto, .. } | Item::Sessao { texto, .. } | Item::Acao { texto, .. } | Item::Machine { text: texto, .. } => texto.clone(),
                 Item::Detalhe(t) => format!("  {t}"),
                 Item::Marcavel { texto, marcado, .. } => format!("{}{texto}", if *marcado { "✓ " } else { "" }),
                 Item::Separador => "—".into(),
@@ -281,7 +356,7 @@ mod testes {
         let sessoes: Vec<_> = m
             .iter()
             .filter_map(|i| match i {
-                Item::Sessao { alternativo, ponto, dica, local, .. } => Some((alternativo.as_str(), *ponto, dica.as_str(), local.is_some())),
+                Item::Sessao { alternativo, ponto, dica, local, .. } => Some((alternativo.as_deref().unwrap_or(""), *ponto, dica.as_str(), local.is_some())),
                 _ => None,
             })
             .collect();
@@ -361,6 +436,241 @@ mod testes {
         let t = textos(&m);
         assert_eq!(&t[t.len() - 4..], ["—", "Ahrena Console 0.0.1", "Atualizar para a versão 0.0.2", "Sair do Ahrena Console"]);
         assert!(m.iter().any(|i| matches!(i, Item::Acao { id: ID_ATUALIZAR, .. })));
+    }
+
+    // ---- #180: the "Máquinas" block (wireframes A6 and A7) ----
+
+    /// 2026-10-18T23:10:00Z, the wireframes' clock.
+    const NOW_MS: u64 = 1_792_365_000_000;
+
+    /// A2 with two of the three sessions on the remote Workstation (`machine` set, `local: null`).
+    const REMOTE_THREE: &str = r##"{
+      "cursor": "c43", "total": 3, "precisam": 2, "suaVez": 1, "ativas": 4, "comErro": 1,
+      "itens": [
+        { "sessao": "s1", "titulo": "motor-de-regras", "projeto": null, "conta": { "rotulo": "equipe", "cor": "#f47c20" },
+          "nivel": "precisa", "motivo": "permissao", "motivoCurto": "Pede permissão", "motivoLongo": "pede permissão para usar Bash",
+          "desde": "2026-10-18T23:08:00.000Z", "minutos": 2, "local": null, "machine": { "id": "workstation", "label": "Workstation" } },
+        { "sessao": "s2", "titulo": "painel-de-metricas", "projeto": null, "conta": null,
+          "nivel": "precisa", "motivo": "erro", "motivoCurto": "Com erro", "motivoLongo": "parou num erro",
+          "desde": "2026-10-18T23:07:00.000Z", "minutos": 3, "local": null, "machine": { "id": "workstation", "label": "Workstation" } },
+        { "sessao": "s3", "titulo": "fila-de-tarefas", "projeto": null, "conta": { "rotulo": "cliente", "cor": "#3b82f6" },
+          "nivel": "sua-vez", "motivo": "sua-vez", "motivoCurto": "Sua vez", "motivoLongo": "terminou o turno, sua vez",
+          "desde": "2026-10-18T23:09:00.000Z", "minutos": 1, "local": "local_00000000-0000-4000-8000-000000000003", "machine": null }
+      ]
+    }"##;
+
+    const ONE_LOCAL: &str = r##"{
+      "cursor": "c44", "total": 1, "precisam": 0, "suaVez": 1, "ativas": 1, "comErro": 0,
+      "itens": [
+        { "sessao": "s3", "titulo": "fila-de-tarefas", "projeto": null, "conta": null,
+          "nivel": "sua-vez", "motivo": "sua-vez", "motivoCurto": "Sua vez", "motivoLongo": "terminou o turno, sua vez",
+          "desde": "2026-10-18T23:09:00.000Z", "minutos": 1, "local": null, "machine": null }
+      ]
+    }"##;
+
+    /// `GET /api/telemetry` of a machine, synthetic: CPU, load, cores, volumes and alerts.
+    fn telemetry(used_pct: f64, load: f64, cores: u32, volumes: &[(&str, f64)], alerts: &str) -> machines::Telemetry {
+        let vols: Vec<String> = volumes.iter().map(|(m, p)| format!(r#"{{ "mount": "{m}", "totalBytes": 100, "usedBytes": 1, "freeBytes": 1, "usedPct": {p} }}"#)).collect();
+        let json = format!(
+            r#"{{ "version": 1, "hours": 1, "series": {{}},
+                 "current": {{ "takenAt": "2026-10-18T23:09:40.000Z", "cpu": {{ "cores": {cores}, "model": null, "usedPct": {used_pct}, "load": {{ "one": {load}, "five": 1, "fifteen": 1 }} }},
+                              "disk": {{ "volumes": [{}] }} }},
+                 "alerts": [{alerts}] }}"#,
+            vols.join(",")
+        );
+        machines::telemetry_from_json(&json).expect("synthetic telemetry parses")
+    }
+
+    fn summaries(json: &str) -> Vec<machines::MachineSummary> {
+        machines::summaries_from_json(json).expect("synthetic machines parse")
+    }
+
+    const LOCAL_SUMMARY: &str = r#"{ "id": "local", "label": "Esta máquina", "state": "connected", "reason": null, "version": 1, "port": null, "lastReadAt": "2026-10-18T23:09:40.000Z", "alerts": 0 }"#;
+
+    const LOAD_ALERT: &str = r#"{ "id": "load-high", "kind": "load-high", "level": "error", "message": "CPU saturada: carga de 24,6 em 16 núcleos", "detail": null, "since": "2026-10-18T22:58:00.000Z" }"#;
+    const VOLUME_ALERT: &str = r#"{ "id": "volume-full:/", "kind": "volume-full", "level": "warning", "message": "O volume / passou de 85%", "detail": null, "since": "2026-10-18T22:00:00.000Z" }"#;
+    const UNREACHABLE_ALERT: &str = r#"{ "id": "machine-unreachable", "kind": "machine-unreachable", "level": "error", "message": "Workstation sem conexão", "detail": "A porta 14720 deste Mac não aceita conexão: o túnel está caído", "since": "2026-10-18T22:56:30.000Z" }"#;
+
+    /// A6: this Mac and the Workstation connected, with the load and volume alerts open.
+    fn a6_machines() -> Vec<machines::Machine> {
+        let s = summaries(&format!(
+            r#"[{LOCAL_SUMMARY},
+               {{ "id": "workstation", "label": "Workstation", "state": "connected", "reason": null, "version": 1, "port": 14720, "lastReadAt": "2026-10-18T23:09:50.000Z", "alerts": 2 }}]"#
+        ));
+        vec![
+            machines::Machine { summary: s[0].clone(), telemetry: Some(telemetry(34.2, 2.1, 10, &[("/", 61.0), ("/System/Volumes/Data", 40.0)], "")) },
+            machines::Machine { summary: s[1].clone(), telemetry: Some(telemetry(97.0, 24.6, 16, &[("/", 86.0), ("/data", 30.0)], &format!("{LOAD_ALERT},{VOLUME_ALERT}"))) },
+        ]
+    }
+
+    /// A7: the Workstation unreachable for 14 min, port closed.
+    fn a7_machines(reason: &str) -> Vec<machines::Machine> {
+        let s = summaries(&format!(
+            r#"[{LOCAL_SUMMARY},
+               {{ "id": "workstation", "label": "Workstation", "state": "unreachable", "reason": "{reason}", "version": 1, "port": 14720, "lastReadAt": "2026-10-18T22:56:00.000Z", "alerts": 1 }}]"#
+        ));
+        vec![
+            machines::Machine { summary: s[0].clone(), telemetry: Some(telemetry(34.0, 2.1, 10, &[("/", 61.0)], "")) },
+            machines::Machine { summary: s[1].clone(), telemetry: Some(telemetry(20.0, 1.0, 16, &[("/", 86.0)], UNREACHABLE_ALERT)) },
+        ]
+    }
+
+    fn with_machines<'a>(nucleo: &'a EstadoDoNucleo, atencao: Option<&'a Atencao>, ms: Option<&'a [machines::Machine]>) -> Entrada<'a> {
+        Entrada { machines: ms, now_ms: NOW_MS, ..entrada(nucleo, atencao) }
+    }
+
+    const FOOTER: [&str; 6] = ["Abrir o console", "✓ Notificações", "Abrir no login", "—", "Ahrena Console 0.0.1", "Sair do Ahrena Console"];
+
+    fn with_footer(head: &[&str]) -> Vec<String> {
+        head.iter().chain(FOOTER.iter()).map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn criterion_1_a6_machines_block_between_the_list_and_the_footer() {
+        let a = Atencao::do_json(REMOTE_THREE).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let ms = a6_machines();
+        let m = montar(&with_machines(&n, Some(&a), Some(&ms)));
+        assert_eq!(
+            textos(&m),
+            with_footer(&[
+                "Ahrena Console",
+                "Núcleo de pé · 127.0.0.1:4720",
+                "—",
+                "3 precisam de você · abrir na janela",
+                "motor-de-regras · Workstation · Pede permissão · 2 min",
+                "painel-de-metricas · Workstation · Com erro · 3 min",
+                "fila-de-tarefas · Sua vez · 1 min",
+                "—",
+                "Máquinas",
+                "Este Mac · CPU 34% · disco 61%",
+                "Workstation · carga 24,6 de 16 · disco 86%",
+                "CPU saturada há 12 min · Workstation",
+                "Volume / em 86% · Workstation",
+                "—",
+                "4 ativas",
+                "—",
+            ])
+        );
+    }
+
+    #[test]
+    fn criterion_1_rows_and_alerts_open_the_machine_screen() {
+        let a = Atencao::do_json(REMOTE_THREE).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let ms = a6_machines();
+        let m = montar(&with_machines(&n, Some(&a), Some(&ms)));
+        let rows: Vec<_> = m
+            .iter()
+            .filter_map(|i| match i {
+                Item::Machine { id, dot, .. } => Some((id.as_str(), *dot)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rows, [("local", Ponto::Verde), ("workstation", Ponto::Verde), ("workstation", Ponto::Vermelho), ("workstation", Ponto::Amarelo)]);
+        assert_eq!(machines::machine_path("local"), "/ui/machines/local");
+    }
+
+    #[test]
+    fn criterion_1_cpu_percent_when_load_fits_the_cores() {
+        let r = telemetry(34.4, 16.0, 16, &[("/", 10.0), ("/data", 70.4)], "").current.unwrap();
+        assert_eq!(machines::figures(&r), "CPU 34% · disco 70%", "load equal to cores is not saturated; the fullest volume wins");
+        let r = telemetry(90.0, 16.1, 16, &[], "").current.unwrap();
+        assert_eq!(machines::figures(&r), "carga 16,1 de 16");
+    }
+
+    #[test]
+    fn criterion_2_a2_remote_sessions_carry_the_label_and_no_desktop_alternative() {
+        let a = Atencao::do_json(REMOTE_THREE).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let m = montar(&entrada(&n, Some(&a)));
+        let sessions: Vec<_> = m
+            .iter()
+            .filter_map(|i| match i {
+                Item::Sessao { texto, alternativo, dica, .. } => Some((texto.as_str(), alternativo.as_deref(), dica.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            sessions,
+            [
+                ("motor-de-regras · Workstation · Pede permissão · 2 min", None, "equipe · pede permissão para usar Bash"),
+                ("painel-de-metricas · Workstation · Com erro · 3 min", None, "Sem conta · parou num erro"),
+                ("fila-de-tarefas · Sua vez · 1 min", Some("fila-de-tarefas · Abrir no Claude Desktop"), "cliente · terminou o turno, sua vez"),
+            ]
+        );
+    }
+
+    #[test]
+    fn criterion_3_machine_alerts_do_not_add_to_the_menu_bar_number() {
+        let a = Atencao::do_json(REMOTE_THREE).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        assert_eq!(titulo_da_bandeja(&n, Some(&a)).as_deref(), Some("3"), "3 sessions; the 2 Workstation alerts do not count");
+        let zero = Atencao::do_json(ZERO).unwrap();
+        assert_eq!(titulo_da_bandeja(&n, Some(&zero)), None, "alerts alone never put a number in the bar");
+    }
+
+    #[test]
+    fn criterion_4_a7_unreachable_remote_is_grey_with_age_and_reason() {
+        let a = Atencao::do_json(ONE_LOCAL).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let ms = a7_machines("port-closed");
+        let m = montar(&with_machines(&n, Some(&a), Some(&ms)));
+        assert_eq!(
+            textos(&m),
+            with_footer(&[
+                "Ahrena Console",
+                "Núcleo de pé · 127.0.0.1:4720",
+                "—",
+                "1 precisa de você · abrir na janela",
+                "fila-de-tarefas · Sua vez · 1 min",
+                "—",
+                "Máquinas",
+                "Este Mac · CPU 34% · disco 61%",
+                "Workstation · sem conexão há 14 min",
+                "  A porta 14720 não aceita conexão: o túnel parece caído",
+                "—",
+                "1 ativa",
+                "—",
+            ])
+        );
+        assert!(m.iter().any(|i| matches!(i, Item::Machine { id, dot: Ponto::Vazio, .. } if id == "workstation")), "grey dot");
+        let actions: Vec<_> = m.iter().filter_map(|i| if let Item::Acao { id, .. } = i { Some(*id) } else { None }).collect();
+        assert_eq!(actions, [ID_ABRIR, ID_SAIR], "no item brings a tunnel up");
+        assert!(m.iter().any(|i| matches!(i, Item::Detalhe(t) if t.contains("túnel parece caído"))), "the reason is a disabled line");
+    }
+
+    #[test]
+    fn criterion_4_no_response_reason() {
+        let a = Atencao::do_json(ONE_LOCAL).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let ms = a7_machines("no-response");
+        let t = textos(&montar(&with_machines(&n, Some(&a), Some(&ms))));
+        assert!(t.contains(&"  O túnel está de pé, mas o núcleo de lá não respondeu".to_string()), "{t:?}");
+    }
+
+    #[test]
+    fn criterion_7_only_this_mac_without_machines_json() {
+        let a = Atencao::do_json(ZERO).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let ms = vec![machines::Machine { summary: summaries(&format!("[{LOCAL_SUMMARY}]")).remove(0), telemetry: Some(telemetry(34.0, 1.0, 10, &[("/", 61.0)], "")) }];
+        let t = textos(&montar(&with_machines(&n, Some(&a), Some(&ms))));
+        assert_eq!(
+            &t[..10],
+            ["Ahrena Console", "Núcleo de pé · 127.0.0.1:4720", "—", "Ninguém precisa de você", "4 ativas", "nenhuma com erro", "—", "Máquinas", "Este Mac · CPU 34% · disco 61%", "—"]
+        );
+    }
+
+    #[test]
+    fn criterion_7_no_block_without_telemetry() {
+        let a = Atencao::do_json(TRES).unwrap();
+        let n = EstadoDoNucleo::DePe { porta: 4720 };
+        let none = textos(&montar(&with_machines(&n, Some(&a), None)));
+        let empty = textos(&montar(&with_machines(&n, Some(&a), Some(&[]))));
+        let before = textos(&montar(&entrada(&n, Some(&a))));
+        assert_eq!(none, before, "/api/machines 404: the menu is the A2 of before");
+        assert_eq!(empty, before, "/api/machines empty: same");
+        assert!(!none.iter().any(|t| t == "Máquinas"));
     }
 
     #[test]

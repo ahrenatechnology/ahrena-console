@@ -8,6 +8,8 @@
 // 4. o clique numa sessão a abre no Claude Desktop (`POST /open/<local_…>`); "Abrir o console"
 //    abre a `/ui` do núcleo numa janela;
 // 5. avisa por notificação do sistema quem passa a precisar de você (A3, notificacoes.rs);
+// 5a. reads the machines and their telemetry (`/api/machines`, `/api/telemetry`) for the "Máquinas"
+//     block (A6, A7, machines.rs) and notifies, silently, a new machine alert (#180);
 // 6. com a chave do updater no tauri.conf.json, procura versão nova ao abrir e a cada 6 h
 //    (atualizacao.rs) e a oferece no menu;
 // 7. aberto à mão, abre também o console; aberto pelo login, fica só na bandeja (login.rs).
@@ -18,6 +20,7 @@ mod atualizacao;
 mod aviso_nativo;
 mod http;
 mod login;
+mod machines;
 mod menu;
 #[cfg(target_os = "macos")]
 mod nativo;
@@ -29,7 +32,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, IconMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -37,6 +40,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
 use login::Registro;
+use machines::Machine;
 use menu::{Atencao, EstadoDoNucleo, Item, Ponto};
 use notificacoes::{Aviso, Avisos};
 
@@ -49,6 +53,10 @@ struct Estado {
     nucleo: EstadoDoNucleo,
     atencao: Option<Atencao>,
     sem_atencao: bool,
+    /// The machines of `/api/machines` with their telemetry (#180); `None` without telemetry.
+    machines: Option<Vec<Machine>>,
+    /// Consecutive reads of `/api/machines` that did not answer; see `count_machine_misses`.
+    machine_misses: u32,
     /// O detector e o silêncio das notificações; a marca "Notificações" é `avisos.silencio.ligadas`.
     avisos: Avisos,
     /// O status do `SMAppService` é `enabled` (login.rs), relido a cada menu.
@@ -72,6 +80,8 @@ fn main() {
         nucleo: EstadoDoNucleo::Procurando,
         atencao: None,
         sem_atencao: false,
+        machines: None,
+        machine_misses: 0,
         avisos: Avisos::default(),
         login: false,
         locais: HashMap::new(),
@@ -100,7 +110,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let principal = objc2::MainThreadMarker::new().expect("o setup do Tauri roda na thread principal");
-                aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: abrir_console_na_sessao, no_desktop: abrir_no_desktop, silenciar }, principal);
+                aviso_nativo::iniciar(app.handle(), aviso_nativo::Acoes { abrir: open_window_at, no_desktop: abrir_no_desktop, silenciar }, principal);
             }
             TrayIconBuilder::with_id(BANDEJA)
                 .icon(Image::from_bytes(ICONE)?)
@@ -158,7 +168,9 @@ fn acompanhar(app: AppHandle, estado: Compartilhado, pasta: PathBuf, sinais: std
             e.nucleo = EstadoDoNucleo::Procurando;
             e.atencao = None;
             e.sem_atencao = false;
+            e.machines = None;
             e.avisos.detector.zerar();
+            e.avisos.machines.reset();
         });
         let r = nucleo::adotar_ou_subir(&pasta);
         let abrir = std::mem::take(&mut abrir_na_partida);
@@ -196,11 +208,37 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
             Some(r) if r.status == 200 => {
                 let Some(atencao) = Atencao::do_json(&r.corpo) else { return };
                 cursor = atencao.cursor.clone().or(cursor);
+                // Sessions first: a slow `/api/machines` must not hold back their notices.
                 let mut novos = Vec::new();
                 mudar(app, estado, |e| {
                     novos = e.avisos.ler(&atencao);
                     e.atencao = Some(atencao);
                     e.sem_atencao = false;
+                });
+                avisar(app, &novos);
+                let read = read_machines(porta);
+                let mut novos = Vec::new();
+                mudar(app, estado, |e| {
+                    let (misses, drop) = count_machine_misses(e.machine_misses, matches!(read, MachinesRead::NoAnswer));
+                    e.machine_misses = misses;
+                    match read {
+                        MachinesRead::Read(ms) => {
+                            novos = e.avisos.read_machines(&ms);
+                            e.machines = Some(ms);
+                        }
+                        MachinesRead::NoTelemetry => {
+                            e.machines = None;
+                            e.avisos.machines.reset();
+                        }
+                        // A hiccup keeps the last block and its detector, so it neither hides nor
+                        // re-notifies; a run of them drops the block instead of showing it stale.
+                        MachinesRead::NoAnswer => {
+                            if drop {
+                                e.machines = None;
+                                e.avisos.machines.reset();
+                            }
+                        }
+                    }
                 });
                 avisar(app, &novos);
             }
@@ -209,7 +247,9 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
                 mudar(app, estado, |e| {
                     e.atencao = None;
                     e.sem_atencao = true;
+                    e.machines = None;
                     e.avisos.detector.zerar();
+                    e.avisos.machines.reset();
                 });
                 let _ = sinais.recv_timeout(Duration::from_secs(30));
                 if !nucleo::responde(porta) {
@@ -238,6 +278,74 @@ fn seguir(app: &AppHandle, estado: &Compartilhado, porta: u16, sinais: &std::syn
     }
 }
 
+/// What one read of the machines gave (#180).
+enum MachinesRead {
+    Read(Vec<Machine>),
+    /// `/api/machines` is 404 (a core without telemetry) or lists no machine: no "Máquinas" block.
+    NoTelemetry,
+    /// The route did not answer or did not parse.
+    NoAnswer,
+}
+
+/// `GET /api/machines`, then `GET /api/telemetry?machine=<id>` for each one. A telemetry that does
+/// not come leaves that machine with its summary only.
+fn read_machines(porta: u16) -> MachinesRead {
+    let wait = Duration::from_secs(5);
+    let r = match http::get_com_status(porta, "/api/machines", wait) {
+        Some(r) if r.status == 404 => return MachinesRead::NoTelemetry,
+        Some(r) if r.status == 200 => r,
+        Some(r) => {
+            eprintln!("[ahrena-console] máquinas: /api/machines respondeu {}", r.status);
+            return MachinesRead::NoAnswer;
+        }
+        None => {
+            eprintln!("[ahrena-console] máquinas: /api/machines sem resposta");
+            return MachinesRead::NoAnswer;
+        }
+    };
+    let summaries = match machines::summaries_from_json(&r.corpo) {
+        Ok(summaries) => summaries,
+        Err(err) => {
+            eprintln!("[ahrena-console] máquinas: /api/machines não leu: {err}");
+            return MachinesRead::NoAnswer;
+        }
+    };
+    if summaries.is_empty() {
+        return MachinesRead::NoTelemetry;
+    }
+    MachinesRead::Read(
+        summaries
+            .into_iter()
+            .map(|summary| {
+                let path = format!("/api/telemetry?machine={}", http::codificar(&summary.id));
+                let telemetry = http::get(porta, &path, wait).and_then(|t| {
+                    machines::telemetry_from_json(&t)
+                        .map_err(|err| eprintln!("[ahrena-console] máquinas: telemetria de {}: {err}", summary.id))
+                        .ok()
+                });
+                Machine { summary, telemetry }
+            })
+            .collect(),
+    )
+}
+
+/// Consecutive `NoAnswer` reads after which the "Máquinas" block is dropped rather than kept stale.
+const MACHINE_MISSES_TO_DROP: u32 = 3;
+
+/// The miss count after one read of `/api/machines`, and whether the kept block must now be dropped.
+/// Any read that answered resets the count.
+fn count_machine_misses(misses: u32, no_answer: bool) -> (u32, bool) {
+    if !no_answer {
+        return (0, false);
+    }
+    let misses = misses.saturating_add(1);
+    (misses, misses >= MACHINE_MISSES_TO_DROP)
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
 fn mudar(app: &AppHandle, estado: &Compartilhado, f: impl FnOnce(&mut Estado)) {
     f(&mut estado.lock().unwrap());
     redesenhar(app, estado);
@@ -252,7 +360,7 @@ fn redesenhar(app: &AppHandle, estado: &Compartilhado) {
         // Relido sempre: o usuário pode tirar o item em Ajustes.
         e.login = login::marcado(login::DoSistema.status());
         let versao = handle.package_info().version.to_string();
-        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.avisos.silencio.ligadas, login: e.login, versao: &versao, atualizacao: e.atualizacao.as_deref() });
+        let itens = menu::montar(&menu::Entrada { nucleo: &e.nucleo, atencao: e.atencao.as_ref(), sem_atencao: e.sem_atencao, notificacoes: e.avisos.silencio.ligadas, login: e.login, versao: &versao, atualizacao: e.atualizacao.as_deref(), machines: e.machines.as_deref(), now_ms: now_ms() });
         let titulo = menu::titulo_da_bandeja(&e.nucleo, e.atencao.as_ref());
         if e.ultimo.as_ref() == Some(&(itens.clone(), titulo.clone())) {
             return;
@@ -290,9 +398,17 @@ fn nativo_do_menu(app: &AppHandle, itens: &[Item]) -> tauri::Result<Menu<Wry>> {
                 Box::new(MenuItem::with_id(app, id("cabecalho-alt"), alternativo, false, None::<&str>)?)
             }
             Item::Sessao { id: sessao, texto, alternativo, ponto, local, .. } => {
-                nativos.push(Box::new(IconMenuItem::with_id(app, format!("{}{sessao}", menu::SESSAO), texto, true, Some(bolinha(*ponto)), None::<&str>)?));
+                let principal = Box::new(IconMenuItem::with_id(app, format!("{}{sessao}", menu::SESSAO), texto, true, Some(bolinha(*ponto)), None::<&str>)?);
+                // A remote session has no ⌥ item: this Mac's Claude Desktop does not know it.
+                let Some(alternativo) = alternativo else {
+                    nativos.push(principal);
+                    continue;
+                };
+                nativos.push(principal);
                 Box::new(IconMenuItem::with_id(app, format!("{}{sessao}", menu::SESSAO_NO_DESKTOP), alternativo, local.is_some(), Some(bolinha(*ponto)), None::<&str>)?)
             }
+            // The row and the alerts of one machine share its id; `#n` keeps each menu id unique.
+            Item::Machine { id: machine, text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, Some(bolinha(*dot)), None::<&str>)?),
             Item::Acao { id, texto, atalho } => Box::new(MenuItem::with_id(app, *id, texto, true, *atalho)?),
             Item::Marcavel { id, texto, marcado } => Box::new(CheckMenuItem::with_id(app, *id, *texto, true, *marcado, None::<&str>)?),
             Item::Separador => Box::new(PredefinedMenuItem::separator(app)?),
@@ -311,9 +427,11 @@ fn ajustes(itens: &[Item]) -> Vec<nativo::Ajuste> {
         match i {
             Item::Cabecalho { alternativo, .. } => a.push(Ajuste::Alternativo(alternativo.clone())),
             Item::Sessao { texto, alternativo, dica, .. } => {
-                a.push(Ajuste::Alternativo(alternativo.clone()));
                 a.push(Ajuste::Dica { titulo: texto.clone(), dica: dica.clone() });
-                a.push(Ajuste::Dica { titulo: alternativo.clone(), dica: dica.clone() });
+                if let Some(alternativo) = alternativo {
+                    a.push(Ajuste::Alternativo(alternativo.clone()));
+                    a.push(Ajuste::Dica { titulo: alternativo.clone(), dica: dica.clone() });
+                }
             }
             Item::Detalhe(t) => a.push(Ajuste::Recuo(t.clone())),
             _ => {}
@@ -383,6 +501,10 @@ fn clique(app: &AppHandle, id: &str) {
         menu::ID_INSTALAR_NODE => {
             let _ = std::process::Command::new("open").arg("https://nodejs.org/en/download").spawn();
         }
+        _ if id.starts_with(menu::MACHINE) => {
+            let machine = id[menu::MACHINE.len()..].split('#').next().unwrap_or("");
+            open_window_at(app, &machines::machine_path(machine));
+        }
         _ => {
             let sessao = id.strip_prefix(menu::SESSAO).or_else(|| id.strip_prefix(menu::SESSAO_NO_DESKTOP));
             if let Some(sessao) = sessao {
@@ -421,10 +543,10 @@ fn abrir_console(app: &AppHandle) {
     abrir_janela(app, None);
 }
 
-/// O clique na notificação: a janela no detalhe da sessão, navegando a que já estiver aberta.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn abrir_console_na_sessao(app: &AppHandle, sessao: &str) {
-    abrir_janela(app, Some(&notificacoes::caminho_da_sessao(sessao)));
+/// The window at a `/ui` path (a session's or a machine's screen), navigating the one already
+/// open: the click on a notification and on a machine row.
+fn open_window_at(app: &AppHandle, path: &str) {
+    abrir_janela(app, Some(path));
 }
 
 fn abrir_janela(app: &AppHandle, caminho: Option<&str>) {
@@ -471,5 +593,24 @@ fn avisar(app: &AppHandle, avisos: &[Aviso]) {
         if let Err(err) = n.show() {
             eprintln!("[ahrena-console] notificação: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::count_machine_misses;
+
+    #[test]
+    fn machine_block_drops_after_three_consecutive_misses() {
+        assert_eq!(count_machine_misses(0, true), (1, false));
+        assert_eq!(count_machine_misses(1, true), (2, false));
+        assert_eq!(count_machine_misses(2, true), (3, true));
+        assert_eq!(count_machine_misses(3, true), (4, true), "stays dropped while it keeps missing");
+    }
+
+    #[test]
+    fn any_answer_resets_the_miss_count() {
+        assert_eq!(count_machine_misses(2, false), (0, false));
+        assert_eq!(count_machine_misses(0, false), (0, false));
     }
 }
