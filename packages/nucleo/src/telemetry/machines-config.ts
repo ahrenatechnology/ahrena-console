@@ -23,8 +23,8 @@
 // invalid file keeps the last good reading (on the first read, no remote machine, as before).
 
 import { readFile, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { consoleHome } from '../owner/installation.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID } from './model.ts';
 
 export interface ReconnectConfig {
@@ -75,8 +75,9 @@ export function parseReconnect(v: unknown): ReconnectConfig | string {
   return { command: [...(command as string[])], timeoutSeconds: timeout };
 }
 
-export function defaultMachinesFile(): string {
-  return join(homedir(), '.ahrena-console', 'machines.json');
+/** In the console home (`AHRENA_CONSOLE_HOME`, or `~/.ahrena-console`), like the instance registry. */
+export function defaultMachinesFile(env: NodeJS.ProcessEnv = process.env): string {
+  return join(consoleHome(env), 'machines.json');
 }
 
 /**

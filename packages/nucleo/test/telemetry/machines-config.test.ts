@@ -77,7 +77,11 @@ describe('#176/AC-1 the remote machines come from machines.json', () => {
   });
 
   test('#176/AC-1 the default path is ~/.ahrena-console/machines.json, like contas.json', () => {
-    assert.match(defaultMachinesFile(), /[\\/]\.ahrena-console[\\/]machines\.json$/);
+    assert.match(defaultMachinesFile({}), /[\\/]\.ahrena-console[\\/]machines\.json$/);
+  });
+
+  test('#244 the default path follows AHRENA_CONSOLE_HOME, like the instance registry', () => {
+    assert.equal(defaultMachinesFile({ AHRENA_CONSOLE_HOME: '/tmp/console-home' }), join('/tmp/console-home', 'machines.json'));
   });
 });
 
