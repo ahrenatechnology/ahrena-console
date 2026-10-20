@@ -237,14 +237,11 @@ describe('registro das telas', () => {
     }
   });
 
-  test('toda tela com arquivo ou folha de estilo aponta para um arquivo que existe em ui/', () => {
-    const existe = (rota: string) => {
-      assert.match(rota, /^\/ui\/(?:telas\/)?[a-z0-9-]+\.(js|css)$/, rota);
-      readFileSync(`${PASTA_DA_UI}${rota.slice('/ui/'.length)}`);
-    };
-    for (const t of TELAS as { id: string; arquivo?: string | null; css?: string }[]) {
-      if (t.arquivo) existe(t.arquivo);
-      if (t.css) existe(t.css);
+  test('toda tela com arquivo aponta para um arquivo que existe em ui/telas/', () => {
+    for (const t of TELAS as { id: string; arquivo?: string | null }[]) {
+      if (!t.arquivo) continue;
+      assert.match(t.arquivo, /^\/ui\/telas\/[a-z0-9-]+\.js$/, t.id);
+      readFileSync(`${PASTA_DA_UI}${t.arquivo.slice('/ui/'.length)}`);
     }
   });
 });

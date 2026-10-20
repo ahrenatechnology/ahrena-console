@@ -25,20 +25,21 @@ export function decimal(n) {
   return vazio(n) ? TRACO : NF1.format(n);
 }
 
-/** "48,3 mil", "1,2 mi"; abaixo de mil, o número inteiro. Sem sinal. */
+/** "48,3 mil", "1,2 mi"; abaixo de mil, o número inteiro. Sem sinal. Arredonda antes de escolher a
+ * escala: 999,6 é "1,0 mil", não "1.000". */
 export function mil(n) {
   if (vazio(n)) return TRACO;
   const a = Math.abs(n);
-  if (a >= 1e6) return `${NF1.format(a / 1e6)} mi`;
-  if (a >= 1e3) return `${NF1.format(a / 1e3)} mil`;
+  if (Math.round(a / 1e5) >= 10) return `${NF1.format(a / 1e6)} mi`;
+  if (Math.round(a) >= 1e3) return `${NF1.format(a / 1e3)} mil`;
   return NF0.format(Math.round(a));
 }
 
-/** "61,4 k" a partir de mil; abaixo, o inteiro ("212"). Sem sinal. */
+/** "61,4 k" a partir de mil (arredondado: 999,6 é "1,0 k"); abaixo, o inteiro ("212"). Sem sinal. */
 export function kilo(n) {
   if (vazio(n)) return TRACO;
   const a = Math.abs(n);
-  return a >= 1e3 ? `${NF1.format(a / 1e3)} k` : NF0.format(Math.round(a));
+  return Math.round(a) >= 1e3 ? `${NF1.format(a / 1e3)} k` : NF0.format(Math.round(a));
 }
 
 /** O número com "+" ou "−" na frente (zero fica sem sinal), no formato dado. */
@@ -225,3 +226,77 @@ export function linguagens(lista, max = 4) {
   if (resto > 0) topo.push({ nome: 'Outras', pct: (resto / total) * 100 });
   return topo;
 }
+
+// ---------- o que a tela mostra ----------
+
+/** O texto do estado `sem-github`, igual nas duas telas. */
+export const SEM_GITHUB = {
+  titulo: 'O núcleo está sem o GitHub',
+  texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --sem-github.',
+};
+
+export const CALCULANDO = 'calculando…';
+
+/** A lista tem dado: já veio do GitHub alguma vez ou tem grupos. */
+export const temLista = (dados) => Boolean(dados && (dados.atualizadoEm !== null || dados.grupos?.length));
+/** As métricas têm dado: o cabeçalho do repositório já veio. */
+export const temRepo = (dados) => Boolean(dados?.repo);
+
+/**
+ * O que a tela desenha a partir da última resposta (`dados`), da última falha de leitura (`falha`)
+ * e de se há dado para mostrar (`temDado`, de `temLista` ou `temRepo`):
+ *
+ * - `tela`: `carregando` (a primeira leitura não voltou), `lendo` (o núcleo ainda lê o GitHub),
+ *   `sem-github`, `nao-encontrado`, `erro`, `vazio` (pronto e sem nada) ou `dados`.
+ * - `faixa`: com dado na tela, `conexao` (a leitura falhou) ou `github` (o núcleo mandou `erro`).
+ * - `reler`: o núcleo ainda monta ou o GitHub ainda calcula; a tela relê em 5 s.
+ */
+export function estadoDaTela({ dados = null, falha = null, temDado = false }) {
+  if (!temDado) {
+    if (falha) return { tela: 'erro', faixa: null, reler: false };
+    if (!dados) return { tela: 'carregando', faixa: null, reler: false };
+    if (dados.estado === 'sem-github' || dados.estado === 'nao-encontrado' || dados.estado === 'erro') return { tela: dados.estado, faixa: null, reler: false };
+    if (dados.estado === 'carregando') return { tela: 'lendo', faixa: null, reler: true };
+    return { tela: 'vazio', faixa: null, reler: false };
+  }
+  return {
+    tela: 'dados',
+    faixa: falha ? 'conexao' : dados.erro ? 'github' : null,
+    reler: dados.estado === 'carregando' || Boolean(dados.calculando?.length),
+  };
+}
+
+/** O campo ainda vai chegar: o núcleo monta (`carregando`) ou o GitHub calcula (`calculando`). */
+export const pendente = (dados, campo) => dados?.estado === 'carregando' || Boolean(dados?.calculando?.includes(campo));
+
+/** O valor formatado, ou "calculando…" se pendente, ou "—". Número nenhum é inventado. */
+export function valorOuPendente(valor, dados, campo, formatar = (v) => String(v)) {
+  if (valor !== null && valor !== undefined) return { texto: formatar(valor), pendente: false };
+  const p = pendente(dados, campo);
+  return { texto: p ? CALCULANDO : TRACO, pendente: p };
+}
+
+/**
+ * A mudança do Ao vivo que pede releitura: `repos`/`lista` sempre; nas métricas, também a chave do
+ * repositório (`dono/repo`), comparada sem caixa.
+ */
+export function mudancaInteressa(mudancas, chave = null) {
+  const minha = chave ? chave.toLowerCase() : null;
+  return (mudancas ?? []).some((m) => m.tipo === 'repos' && (m.chave === 'lista' || (minha !== null && String(m.chave).toLowerCase() === minha)));
+}
+
+/** O card do fim das métricas: com escrita, `trafego` ("Tráfego e segurança"); sem, `comunidade`. */
+export const cardDeTrafego = (dados) => (dados?.escrita ? 'trafego' : 'comunidade');
+
+/** Endereço do GitHub vindo do dado, só se for https em github.com; fora disso, `null` (sem link). */
+export function urlDoGithub(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname === 'github.com' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A resposta ainda vale: é do último pedido e do período que está na tela. */
+export const respostaAtual = ({ pedido, ultimo, periodo = null, periodoAtual = null }) => pedido === ultimo && periodo === periodoAtual;

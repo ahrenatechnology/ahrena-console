@@ -1,9 +1,22 @@
 // Os formatos, os filtros e as escalas das telas Repositórios (C22, #104) e Repositório (C23, #105),
 // em ui/repos-formato.js: puros, sem DOM.
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
+import { PASTA_DA_UI } from '../../src/api/ui.ts';
 import {
   barras,
+  CALCULANDO,
+  cardDeTrafego,
+  estadoDaTela,
+  mudancaInteressa,
+  pendente,
+  respostaAtual,
+  SEM_GITHUB,
+  temLista,
+  temRepo,
+  urlDoGithub,
+  valorOuPendente,
   comSinal,
   decimal,
   duracao,
@@ -101,6 +114,13 @@ describe('repos na /ui: os números', () => {
     assert.equal(comSinal(212), '+212');
     assert.equal(comSinal(-64), '−64');
     assert.equal(kilo(999), '999');
+  });
+
+  test('#105 critério 1: mil e k arredondam antes de escolher a escala', () => {
+    assert.equal(kilo(999.6), '1,0 k');
+    assert.equal(mil(999.6), '1,0 mil');
+    assert.equal(mil(999_960), '1,0 mi');
+    assert.equal(kilo(999.4), '999');
   });
 
   test('#105 critério 3: durações a partir de ms', () => {
@@ -246,5 +266,119 @@ describe('repos na /ui: as escalas dos gráficos', () => {
     assert.equal(Math.round(l[4].pct), 3);
     assert.deepEqual(linguagens(null), []);
     assert.equal(linguagens([{ nome: 'Go', bytes: 10, fatia: 1 }]).length, 1, 'sem resto, sem "Outras"');
+  });
+});
+
+describe('repos na /ui: o que a tela mostra', () => {
+  const lista = (o = {}) => ({ estado: 'pronto', atualizadoEm: '2026-10-20T10:00:00Z', erro: null, grupos: [], ...o });
+  const metricas = (o = {}) => ({ estado: 'pronto', erro: null, calculando: [], repo: { completo: 'a/b' }, ...o });
+
+  test('#104 critério 3: estado da tela sem dado (carregando, lendo, sem GitHub, erro)', () => {
+    assert.deepEqual(estadoDaTela({}), { tela: 'carregando', faixa: null, reler: false });
+    const semDado = lista({ atualizadoEm: null });
+    assert.equal(temLista(semDado), false);
+    assert.deepEqual(estadoDaTela({ dados: { ...semDado, estado: 'carregando' }, temDado: false }), { tela: 'lendo', faixa: null, reler: true });
+    assert.equal(estadoDaTela({ dados: { ...semDado, estado: 'sem-github' }, temDado: false }).tela, 'sem-github');
+    assert.equal(estadoDaTela({ dados: { ...semDado, estado: 'erro', erro: 'limite' }, temDado: false }).tela, 'erro');
+    assert.equal(estadoDaTela({ falha: new Error('sem núcleo'), temDado: false }).tela, 'erro');
+    assert.equal(estadoDaTela({ dados: semDado, temDado: false }).tela, 'vazio');
+  });
+
+  test('#104 critério 3: erro com dado anterior mostra a faixa e os dados', () => {
+    const d = lista({ erro: 'dado de 24 h', grupos: [{ dono: 'x', tipo: 'org', repos: [] }] });
+    assert.equal(temLista(d), true);
+    assert.deepEqual(estadoDaTela({ dados: d, temDado: true }), { tela: 'dados', faixa: 'github', reler: false });
+    assert.equal(estadoDaTela({ dados: d, falha: new Error('caiu'), temDado: true }).faixa, 'conexao');
+    assert.equal(estadoDaTela({ dados: lista(), temDado: true }).faixa, null);
+  });
+
+  test('#105: estado das métricas (não encontrado, montagem parcial, calculando)', () => {
+    assert.equal(estadoDaTela({ dados: metricas({ estado: 'nao-encontrado', repo: null }), temDado: false }).tela, 'nao-encontrado');
+    const parcial = metricas({ estado: 'carregando' });
+    assert.equal(temRepo(parcial), true);
+    assert.deepEqual(estadoDaTela({ dados: parcial, temDado: true }), { tela: 'dados', faixa: null, reler: true });
+    assert.equal(estadoDaTela({ dados: metricas({ calculando: ['commits'] }), temDado: true }).reler, true);
+    assert.equal(estadoDaTela({ dados: metricas(), temDado: true }).reler, false);
+  });
+
+  test('#105 critério 1: valor, "calculando…" ou "—", nunca número inventado', () => {
+    const d = metricas({ calculando: ['linhas'] });
+    assert.deepEqual(valorOuPendente(48_300, d, 'linhas', mil), { texto: '48,3 mil', pendente: false });
+    assert.deepEqual(valorOuPendente(0, d, 'commits', inteiro), { texto: '0', pendente: false }, 'zero é valor');
+    assert.deepEqual(valorOuPendente(null, d, 'linhas'), { texto: CALCULANDO, pendente: true });
+    assert.deepEqual(valorOuPendente(null, d, 'commits'), { texto: TRACO, pendente: false });
+    assert.equal(valorOuPendente(null, metricas({ estado: 'carregando' }), 'prs').texto, CALCULANDO, 'montagem parcial');
+    assert.equal(pendente(metricas(), 'linhas'), false);
+  });
+
+  test('#104 e #105: a mudança do Ao vivo que pede releitura (lista e a chave sem caixa)', () => {
+    assert.equal(mudancaInteressa([{ tipo: 'repos', chave: 'lista' }]), true);
+    assert.equal(mudancaInteressa([{ tipo: 'repos', chave: 'exemplo-labs/vitrine-demo' }]), false, 'a lista só relê por `lista`');
+    assert.equal(mudancaInteressa([{ tipo: 'sessao', chave: 'lista' }]), false);
+    assert.equal(mudancaInteressa([{ tipo: 'repos', chave: 'exemplo-labs/vitrine-demo' }], 'Exemplo-Labs/Vitrine-Demo'), true);
+    assert.equal(mudancaInteressa([{ tipo: 'repos', chave: 'lista' }], 'a/b'), true);
+    assert.equal(mudancaInteressa([{ tipo: 'repos', chave: 'a/c' }], 'a/b'), false);
+    assert.equal(mudancaInteressa([], 'a/b'), false);
+  });
+
+  test('#105 critério 5: o card de tráfego só com escrita; sem ela, "Comunidade"', () => {
+    assert.equal(cardDeTrafego(metricas({ escrita: true, trafego: { visitas: 1 }, seguranca: {} })), 'trafego');
+    // Com escrita e a montagem ainda sem as chaves: o card fica, com "calculando…".
+    const parcial = metricas({ estado: 'carregando', escrita: true });
+    assert.equal(cardDeTrafego(parcial), 'trafego');
+    assert.equal(valorOuPendente(parcial.trafego, parcial, 'trafego').texto, CALCULANDO);
+    assert.equal(cardDeTrafego(metricas({ escrita: false })), 'comunidade');
+  });
+
+  test('#105: link externo só https em github.com', () => {
+    assert.equal(urlDoGithub('https://github.com/exemplo-labs/vitrine-demo'), 'https://github.com/exemplo-labs/vitrine-demo');
+    for (const url of ['http://github.com/a/b', 'https://github.com.exemplo.com/a/b', 'https://exemplo.com/a/b', 'javascript:alert(1)', '', null, 'lixo']) assert.equal(urlDoGithub(url), null, String(url));
+  });
+
+  test('#105 critério 6: resposta de período trocado ou de pedido velho é descartada', () => {
+    assert.equal(respostaAtual({ pedido: 2, ultimo: 2, periodo: '90d', periodoAtual: '90d' }), true);
+    assert.equal(respostaAtual({ pedido: 2, ultimo: 2, periodo: '90d', periodoAtual: '30d' }), false);
+    assert.equal(respostaAtual({ pedido: 1, ultimo: 2, periodo: '90d', periodoAtual: '90d' }), false);
+  });
+
+  test('sem GitHub: um texto só, que diz como configurar', () => {
+    assert.match(SEM_GITHUB.texto, /gh auth login/);
+    assert.match(SEM_GITHUB.texto, /--sem-github/);
+    assert.match(SEM_GITHUB.titulo, /sem o GitHub/);
+  });
+});
+
+// O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
+// telas desmonta a outra. Toda classe própria começa com `repo-`; as comuns são as da moldura e os
+// selos de status.
+describe('repos na /ui: as classes', () => {
+  const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+  const classesDoCss = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+  const daMoldura = classesDoCss('moldura.css');
+  const permitida = (c: string) => c.startsWith('repo-') || SELOS.has(c) || daMoldura.has(c);
+
+  test('toda classe de repos.css começa com repo-, é selo ou é da moldura', () => {
+    assert.deepEqual([...classesDoCss('repos.css')].filter((c) => !permitida(c)), []);
+  });
+
+  test('repos.css não estiliza classe de outra tela, fora selos e moldura', () => {
+    const minhas = new Set([...classesDoCss('repos.css')].filter((c) => !daMoldura.has(c)));
+    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['repos.css', 'moldura.css', 'marca.css'].includes(a))) {
+      assert.deepEqual([...classesDoCss(outra)].filter((c) => minhas.has(c) && !SELOS.has(c)), [], `repos.css e ${outra} estilizam as mesmas classes`);
+    }
+  });
+
+  test('as telas só usam classe da moldura, selo ou repo-', () => {
+    for (const arquivo of ['telas/repos.js', 'telas/repo.js']) {
+      const fonte = readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8');
+      const usadas = new Set<string>();
+      for (const [, , valor] of fonte.matchAll(/class:\s*(['`])(.*?)\1/g)) for (const c of valor!.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/)) if (c) usadas.add(c);
+      // Classes passadas por variável (`barraH(pct, 'repo-k-ok')`, as cores): toda string que parece classe.
+      for (const [, c] of fonte.matchAll(/'(repo-[a-z0-9-]+)'/g)) usadas.add(c!);
+      assert.ok(usadas.size > 10, arquivo);
+      assert.deepEqual([...usadas].filter((c) => !permitida(c)), [], arquivo);
+      const css = classesDoCss('repos.css');
+      assert.deepEqual([...usadas].filter((c) => c.startsWith('repo-') && !css.has(c)), [], `${arquivo} usa classe que repos.css não tem`);
+    }
   });
 });

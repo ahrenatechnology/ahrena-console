@@ -5,8 +5,6 @@
 //   fica aceso quando ela está aberta (o Detalhe acende Sessões, como no A5).
 // - `arquivo`: o módulo da tela em `ui/telas/`. Sem ele, a moldura mostra o cabeçalho e o estado vazio.
 // - `titulo`, `sub` e `icone`: o cabeçalho do estado vazio e o título da janela.
-// - `css`: a folha de estilo própria da tela, em `ui/`. A moldura põe um `<link>` no head ao abrir a
-//   tela, um por arquivo, e o reaproveita nas próximas vezes.
 
 export const TELAS = [
   {
@@ -44,7 +42,6 @@ export const TELAS = [
     sub: 'Organizações e repositórios da sua conta do GitHub',
     icone: 'repos',
     arquivo: '/ui/telas/repos.js', // C22
-    css: '/ui/repos.css',
   },
   {
     id: 'repo',
@@ -54,7 +51,6 @@ export const TELAS = [
     sub: null,
     icone: 'repos',
     arquivo: '/ui/telas/repo.js', // C23
-    css: '/ui/repos.css',
   },
 ];
 
