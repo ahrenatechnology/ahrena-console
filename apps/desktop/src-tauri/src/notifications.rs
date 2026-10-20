@@ -25,7 +25,9 @@ use crate::machines;
 use crate::menu::{Attention, AttentionItem};
 
 /// The name of the silence file in the app's data folder.
-pub const FILE: &str = "notificacoes.json";
+pub const FILE: &str = "notifications.json";
+/// Its name before #173 (phase 4): read once, when `FILE` does not exist yet, and then removed.
+pub const LEGACY_FILE: &str = "notificacoes.json";
 
 /// A notification to show.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub struct Notice {
     /// Where the click and "Abrir" take the app window: the session's or the machine's screen.
     pub path: String,
     pub origin: Origin,
+    /// The machine of a machine notice, for "Reconectar" (#244); `None` for a session.
+    pub machine: Option<String>,
 }
 
 /// What a notice is about: it decides the actions the notification offers.
@@ -52,6 +56,8 @@ pub enum Origin {
     RemoteSession,
     /// A machine alert (#180): only "Abrir".
     Machine,
+    /// "<label> sem conexão" of a machine with a reconnect command (#244, A8): "Reconectar" and "Abrir".
+    MachineReconnect,
 }
 
 /// An action button of a notification.
@@ -63,6 +69,8 @@ pub enum Action {
     OpenInDesktop,
     /// "Silenciar": silences the session.
     Silence,
+    /// "Reconectar": `POST /api/machines/<id>/reconnect` (#244).
+    Reconnect,
 }
 
 impl Origin {
@@ -72,6 +80,7 @@ impl Origin {
             Origin::Session => &[Action::Open, Action::OpenInDesktop, Action::Silence],
             Origin::RemoteSession => &[Action::Open, Action::Silence],
             Origin::Machine => &[Action::Open],
+            Origin::MachineReconnect => &[Action::Reconnect, Action::Open],
         }
     }
 }
@@ -86,6 +95,7 @@ impl Notice {
             local: i.local.clone(),
             path: session_path(&i.session),
             origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
+            machine: None,
         }
     }
 
@@ -99,7 +109,9 @@ impl Notice {
             "volume-full" => (format!("{label}: disco quase cheio"), a.message.clone()),
             _ => (format!("{label}: {}", a.message), a.detail.clone().unwrap_or_default()),
         };
-        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin: Origin::Machine }
+        // "Reconectar" only on the "sem conexão" of a machine with a command in machines.json (A8 c).
+        let origin = if a.kind == machines::UNREACHABLE_KIND && m.id != machines::LOCAL_ID && m.reconnect_configured() { Origin::MachineReconnect } else { Origin::Machine };
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()) }
     }
 }
 
@@ -197,9 +209,10 @@ impl Detector {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Silence {
     /// The "Notificações" check in the menu; off, nothing notifies.
-    #[serde(rename = "ligadas", default = "enabled_by_default")]
+    /// `alias`: the keys of the file written before #173 (phase 4).
+    #[serde(alias = "ligadas", default = "enabled_by_default")]
     pub enabled: bool,
-    #[serde(rename = "sessoes", default)]
+    #[serde(alias = "sessoes", default)]
     pub sessions: BTreeSet<String>,
 }
 
@@ -254,7 +267,7 @@ pub struct Notices {
 
 impl Notices {
     pub fn open(file: Option<PathBuf>) -> Notices {
-        let silence = file.as_deref().map(Silence::load).unwrap_or_default();
+        let silence = file.as_deref().map(load_or_migrate).unwrap_or_default();
         Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
     }
 
@@ -292,6 +305,23 @@ impl Notices {
     }
 }
 
+/// The silence in `file`; when it does not exist yet, the one in `LEGACY_FILE` next to it, saved as
+/// `file` and removed, so the switch and the silenced sessions survive the rename.
+fn load_or_migrate(file: &Path) -> Silence {
+    let legacy = file.with_file_name(LEGACY_FILE);
+    if file.exists() || !legacy.exists() {
+        return Silence::load(file);
+    }
+    let silence = Silence::load(&legacy);
+    match silence.save(file) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&legacy);
+        }
+        Err(err) => eprintln!("[ahrena-console] migrate {}: {err}", legacy.display()),
+    }
+    silence
+}
+
 /// The session's detail screen in the core's `/ui`, where "Abrir" leads. Empty, "." or ".." do not
 /// make a path segment: then, the `/ui`.
 pub fn session_path(session: &str) -> String {
@@ -307,9 +337,10 @@ pub fn valid_local(local: &str) -> bool {
     (8..=64).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
-/// Where the JSON lives: in `AHRENA_DADOS_DIR`, if set, or in the app's data folder.
+/// Where the JSON lives: in `AHRENA_CONSOLE_DATA_DIR` (old name `AHRENA_DADOS_DIR`), if set, or in
+/// the app's data folder. Only this file: the app's core always uses the app's data folder (core.rs).
 pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
-    let dir = std::env::var_os("AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
+    let dir = crate::core::env_var("AHRENA_CONSOLE_DATA_DIR", "AHRENA_DADOS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).or(app_data)?;
     Some(dir.join(FILE))
 }
 
@@ -507,7 +538,7 @@ mod tests {
 
     fn machine(id: &str, label: &str, state: &str, alerts: Option<Vec<machines::Alert>>) -> machines::Machine {
         machines::Machine {
-            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None },
+            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None, reconnect: None },
             telemetry: alerts.map(|alerts| machines::Telemetry { current: None, alerts }),
         }
     }
@@ -593,6 +624,36 @@ mod tests {
         assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
     }
 
+    fn configured(mut m: machines::Machine) -> machines::Machine {
+        m.summary.reconnect = Some(machines::Reconnect { configured: true, state: Some("idle".into()), started_at: None });
+        m
+    }
+
+    #[test]
+    fn a8_unreachable_notice_offers_reconnect_only_when_configured() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[configured(machine("workstation", "Workstation", "connected", Some(vec![])))]);
+        let notices = d.observe(&[configured(machine("workstation", "Workstation", "unreachable", Some(vec![down()])))]);
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.origin, n.machine.as_deref()), ("Workstation sem conexão", Origin::MachineReconnect, Some("workstation")));
+        assert_eq!(n.origin.actions(), [Action::Reconnect, Action::Open], "Abrir stays");
+        assert_eq!(n.path, "/ui/machines/workstation");
+
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        let notices = d.observe(&[machine("workstation", "Workstation", "unreachable", Some(vec![down()]))]);
+        assert_eq!(notices[0].origin, Origin::Machine, "without reconnect, as in A7");
+        assert_eq!(notices[0].origin.actions(), [Action::Open]);
+    }
+
+    #[test]
+    fn a8_other_machine_alerts_never_offer_reconnect() {
+        let mut d = MachineAlertDetector::default();
+        d.observe(&[configured(machine("workstation", "Workstation", "connected", Some(vec![])))]);
+        let notices = d.observe(&[configured(machine("workstation", "Workstation", "connected", Some(vec![load()])))]);
+        assert_eq!(notices[0].origin, Origin::Machine);
+    }
+
     fn remote(session: &str, title: &str, reason: &str) -> AttentionItem {
         AttentionItem { machine: Some(crate::menu::SessionMachine { id: "workstation".into(), label: "Workstation".into() }), ..item(session, title, reason) }
     }
@@ -643,5 +704,38 @@ mod tests {
         assert_eq!(Silence::load(&bad), Silence::default());
         std::fs::write(&bad, r#"{ "sessoes": ["s9"] }"#).unwrap();
         assert_eq!(Silence::load(&bad), Silence { enabled: true, sessions: ["s9".to_string()].into() });
+    }
+
+    #[test]
+    fn saves_the_english_keys_and_reads_the_old_ones() {
+        let p = TempDir::new("keys");
+        let file = p.0.join(FILE);
+        Silence { enabled: false, sessions: ["s1".to_string()].into() }.save(&file).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.contains("\"enabled\"") && text.contains("\"sessions\""), "{text}");
+        std::fs::write(&file, r#"{ "ligadas": false, "sessoes": ["s2"] }"#).unwrap();
+        assert_eq!(Silence::load(&file), Silence { enabled: false, sessions: ["s2".to_string()].into() });
+    }
+
+    #[test]
+    fn migrates_the_file_from_before_the_rename() {
+        let p = TempDir::new("migrate");
+        std::fs::create_dir_all(&p.0).unwrap();
+        let legacy = p.0.join(LEGACY_FILE);
+        std::fs::write(&legacy, r#"{ "ligadas": false, "sessoes": ["s1"] }"#).unwrap();
+        let file = p.0.join(FILE);
+        let n = Notices::open(Some(file.clone()));
+        assert_eq!(n.silence, Silence { enabled: false, sessions: ["s1".to_string()].into() });
+        assert!(file.exists() && !legacy.exists(), "saved under the new name, the old one removed");
+        assert_eq!(Silence::load(&file), n.silence);
+    }
+
+    #[test]
+    fn the_new_file_wins_over_the_old_one() {
+        let p = TempDir::new("both");
+        std::fs::create_dir_all(&p.0).unwrap();
+        std::fs::write(p.0.join(LEGACY_FILE), r#"{ "ligadas": false }"#).unwrap();
+        std::fs::write(p.0.join(FILE), r#"{ "enabled": true, "sessions": ["s3"] }"#).unwrap();
+        assert_eq!(Notices::open(Some(p.0.join(FILE))).silence, Silence { enabled: true, sessions: ["s3".to_string()].into() });
     }
 }

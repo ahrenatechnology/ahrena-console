@@ -6,7 +6,7 @@
 // The body is the one of the new route, `GET /api/panel/<session>` (#173 phase 2b, #187): English
 // keys and values, exactly what the mod reads since 0.0.31.
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, ESCOPOS_DAS_DECISOES, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
+import { Accounts, ESCOPOS_DAS_DECISOES, MontadorDoPainel, TrabalhoPorBranch } from '../../src/api/index.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { PANEL_SCENARIOS, SimulatorWorkSource, PANEL_SESSION, seedPanelScenario, seedPanelDecisions } from '../../src/simulator/panel.ts';
 import { T0 } from '../fixtures.ts';
@@ -21,7 +21,7 @@ for (const name of PANEL_SCENARIOS) {
   await seedPanelDecisions(decisions, name, NOW);
   const work = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => NOW });
   const builder = new MontadorDoPainel({
-    storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: work, decisoes: decisions, agora: () => NOW, apelido: () => PANEL_SESSION,
+    storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: work, decisoes: decisions, agora: () => NOW, apelido: () => PANEL_SESSION,
   });
   const request = { sessionId: 'sessao-teste', modelo: 'claude-sonnet-5-5', cwd: '/simulacao/cli-de-notas' };
   await builder.montar(request);

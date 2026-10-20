@@ -25,12 +25,10 @@ import type { Session, SessionEvent } from '../model.ts';
 import { dayOf, sessionCostSlices, costReport, type CostLine, type CostSlice } from '../cost/aggregation.ts';
 import { currentPrices } from '../cost/table.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from './accounts.ts';
+import type { Accounts } from './accounts.ts';
 
-export const ROTA_DO_ANALYTICS = '/api/analytics';
+export const ANALYTICS_ROUTE = '/api/analytics';
 export const COST_ROUTE = '/api/analytics/cost';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_CUSTO = '/api/analytics/custo';
 export const DIAS_DO_CUSTO = [7, 30, 90] as const;
 /** Janela dos números da Visão geral. */
 export const DIAS_DA_VISAO = 30;
@@ -50,7 +48,7 @@ type Porta = Pick<StoragePort, 'listSessions' | 'listAgents' | 'listEvents' | 'l
 export interface OpcoesDoAnalytics {
   storage: Porta;
   /** Rótulo e cor das contas, as mesmas do painel. Sem ela, "conta 1", "conta 2"… sem cor. */
-  contas?: Pick<Contas, 'atualizar' | 'daSessao'> | null;
+  contas?: Pick<Accounts, 'refresh' | 'ofSession'> | null;
   agora?: () => number;
   /** Quanto a resposta da Visão geral fica em memória mesmo com mudanças. Padrão 30 s. */
   cacheMsDaVisao?: number;
@@ -185,7 +183,7 @@ function idDaChamada(e: SessionEvent): string | null {
 
 export class RotaAnalytics {
   private readonly porta: Porta;
-  private readonly contas: Pick<Contas, 'atualizar' | 'daSessao'> | null;
+  private readonly contas: Pick<Accounts, 'refresh' | 'ofSession'> | null;
   private readonly agora: () => number;
   private readonly cacheMs: { visao: number; custo: number };
   private readonly versao: (() => string) | null;
@@ -201,14 +199,14 @@ export class RotaAnalytics {
 
   /** `true` quando o caminho é desta rota. */
   static atende(pathname: string): boolean {
-    return pathname === ROTA_DO_ANALYTICS || pathname.startsWith(`${ROTA_DO_ANALYTICS}/`);
+    return pathname === ANALYTICS_ROUTE || pathname.startsWith(`${ANALYTICS_ROUTE}/`);
   }
 
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
       const fuso = validarFuso(url.searchParams.get('tz'));
       const hoje = dayOf(new Date(this.agora()).toISOString(), fuso);
-      if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
+      if (url.pathname === ANALYTICS_ROUTE) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
       if (url.pathname === COST_ROUTE) {
         const dias = Number(url.searchParams.get('days') ?? 30);
         if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido(DAYS_ERROR);
@@ -238,7 +236,7 @@ export class RotaAnalytics {
 
   private contaDe(s: Session): ContaDoAnalytics {
     if (!this.contas) return s.accountId ? { id: s.accountId, label: s.accountId, color: null } : { id: null, label: SEM_CONTA, color: null };
-    const c = this.contas.daSessao(s, null);
+    const c = this.contas.ofSession(s, null);
     return c ? { id: c.id, label: c.label, color: c.color } : { id: null, label: SEM_CONTA, color: null };
   }
 
@@ -247,7 +245,7 @@ export class RotaAnalytics {
    * `guardarDesde`. `aoLer` vê todo evento lido, guardado ou não (o heatmap conta por ele).
    */
   private async lerJanela(desde: string, guardarDesde: string, fuso: string, aoLer: ((e: SessionEvent) => void) | null = null): Promise<SessaoLida[]> {
-    await this.contas?.atualizar();
+    await this.contas?.refresh();
     const sessoes = await sessoesDesde(this.porta, desde, fuso);
     return emParalelo(sessoes, LEITURAS_EM_PARALELO, async (sessao) => {
       const guardar = dayOf(sessao.updatedAt, fuso) >= guardarDesde;

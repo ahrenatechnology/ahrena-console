@@ -35,8 +35,8 @@ import type { Decision, DecisionScope, DecisionState } from '../decisions/model.
 import type { DecisionPort, ListDecisionsQuery } from '../decisions/port.ts';
 import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../decisions/registry.ts';
 import type { Page, StoragePort } from '../storage-port.ts';
-import { DecisoesDaSessao, ErroDaDecisao, API_SCOPE, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisions.ts';
-import type { DecisaoDoPainel, EscopoDasDecisoes } from './types.ts';
+import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisions.ts';
+import type { PanelDecision, PanelDecisionScope } from './types.ts';
 import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
 /** The Decisions page of the /ui (C21). */
@@ -45,11 +45,11 @@ export const DECISIONS_PAGE_ROUTE = '/api/decisions';
 export type AgrupamentoDasDecisoes = 'branch' | 'family' | 'session';
 export type FiltroDeEstado = 'all' | 'current' | 'to_confirm';
 
-/** O card de uma decisão, igual na página e na aba: the panel's decision (`DecisaoDoPainel`) and what the /ui adds. */
-export interface DecisaoDaUi extends DecisaoDoPainel {
+/** O card de uma decisão, igual na página e na aba: the panel's decision (`PanelDecision`) and what the /ui adds. */
+export interface DecisaoDaUi extends PanelDecision {
   sessionId: string;
   /** Até onde vale ("escopo: sessão"). */
-  scope: EscopoDasDecisoes;
+  scope: PanelDecisionScope;
   /** O "D2" da decisão que esta substituiu. */
   supersedes: string | null;
   /** `docs/decisoes/NNNN-slug.md`, quando virou registro. */
@@ -91,16 +91,16 @@ export interface DecisoesDaPagina {
 /** `GET /api/sessions/<id>/decisions` (C20). */
 export interface DecisoesDaAba {
   session: string;
-  scope: EscopoDasDecisoes;
+  scope: PanelDecisionScope;
   state: FiltroDeEstado;
   q: string | null;
   /** Vigentes e a confirmar em cada escopo. */
-  byScope: Record<EscopoDasDecisoes, number>;
+  byScope: Record<PanelDecisionScope, number>;
   /** Vigentes e a confirmar no escopo pedido: o "(4)" da aba. */
   total: number;
   items: DecisaoDaUi[];
   /** O card "No início de cada sessão" (#100). */
-  injection: { enabled: boolean; scope: EscopoDasDecisoes; decisions: number; tokens: number; text: string };
+  injection: { enabled: boolean; scope: PanelDecisionScope; decisions: number; tokens: number; text: string };
   /** O card "Quando o agente perguntar" (#101); `call` é texto de tela, com o argumento como a ferramenta vai pedir. */
   mcp: { tool: 'session_decisions'; exists: boolean; call: string; response: string };
 }
@@ -138,8 +138,8 @@ export interface OpcoesDasDecisoesDaUi {
   mcpExiste?: boolean;
 }
 
-const NA_LISTA: readonly DecisionState[] = ['vigente', 'a_confirmar', 'substituida'];
-const DO_FILTRO: Record<FiltroDeEstado, readonly DecisionState[]> = { all: NA_LISTA, current: ['vigente'], to_confirm: ['a_confirmar'] };
+const NA_LISTA: readonly DecisionState[] = ['current', 'to_confirm', 'superseded'];
+const DO_FILTRO: Record<FiltroDeEstado, readonly DecisionState[]> = { all: NA_LISTA, current: ['current'], to_confirm: ['to_confirm'] };
 const ITENS_POR_GRUPO = 3;
 const MAX_BUSCA = 200;
 const DIA = 86_400_000;
@@ -147,18 +147,18 @@ const PREFIXO: Record<AgrupamentoDasDecisoes, string> = { branch: 'b', family: '
 const CAMINHO_DO_REGISTRO = /^docs\/decisoes\/(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 /** Um registro na pasta, de qualquer slug: o número dele. */
 const REGISTRO_NUMERADO = /^(\d{4})-.*\.md$/;
-const ESCOPO_POR_EXTENSO: Record<DecisionScope, string> = { sessao: 'sessão', familia: 'família', branch: 'branch' };
-const TIPO: Record<Decision['origin'], string> = { sugerida: 'Sugerida', correcao: 'Correção sua', permissao: 'Permissão', pergunta: 'Pergunta', plano: 'Plano' };
+const ESCOPO_POR_EXTENSO: Record<DecisionScope, string> = { session: 'sessão', family: 'família', branch: 'branch' };
+const TIPO: Record<Decision['origin'], string> = { suggested: 'Sugerida', correction: 'Correção sua', permission: 'Permissão', question: 'Pergunta', plan: 'Plano' };
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 const maisRecentes = (a: Decision, b: Decision) => (a.decidedAt === b.decidedAt ? b.seq - a.seq : a.decidedAt < b.decidedAt ? 1 : -1);
 const chave = (tipo: AgrupamentoDasDecisoes, bruta: string) => `${PREFIXO[tipo]}.${Buffer.from(bruta).toString('base64url')}`;
 
 function quem(d: Decision): string {
-  if (d.origin === 'sugerida') return 'agente propôs';
-  if (d.origin === 'correcao') return 'você corrigiu';
-  if (d.origin === 'plano') return 'você aprovou';
-  return d.decidedBy === 'agente' ? 'agente' : 'você';
+  if (d.origin === 'suggested') return 'agente propôs';
+  if (d.origin === 'correction') return 'você corrigiu';
+  if (d.origin === 'plan') return 'você aprovou';
+  return d.decidedBy === 'agent' ? 'agente' : 'você';
 }
 
 async function todasDa(port: DecisionPort, query: ListDecisionsQuery): Promise<Decision[]> {
@@ -174,7 +174,7 @@ async function todasDa(port: DecisionPort, query: ListDecisionsQuery): Promise<D
 
 function casa(d: Decision, q: string | null): boolean {
   if (!q) return true;
-  const texto = typeof d.metadata?.texto === 'string' ? d.metadata.texto : '';
+  const texto = typeof d.metadata?.text === 'string' ? d.metadata.text : '';
   return semAcento([d.choice, d.context ?? '', ...d.alternatives, texto, d.branch ?? '', decisionLabel(d)].join('\n')).includes(semAcento(q));
 }
 
@@ -260,7 +260,7 @@ export class DecisoesDaUi {
     return {
       ...paraOPainel(d, ref.sessionId, ref.familyId, ref.mae, await this.rotuloDe(d.supersededBy, lidas)),
       sessionId: d.sessionId,
-      scope: API_SCOPE[d.scope],
+      scope: d.scope,
       supersedes: await this.rotuloDe(d.supersedes, lidas),
       promotedTo: d.promotedTo,
       branch: d.branch,
@@ -274,13 +274,13 @@ export class DecisoesDaUi {
     const { decisoes, sessoes } = await this.todas();
     const lidas = new Map(decisoes.map((d) => [d.id, d]));
     const listadas = decisoes.filter((d) => NA_LISTA.includes(d.state)).sort(maisRecentes);
-    const vigentes = listadas.filter((d) => d.state === 'vigente');
+    const vigentes = listadas.filter((d) => d.state === 'current');
     const desde = new Date(this.agora() - 30 * DIA).toISOString();
     const counts = {
       current: vigentes.length,
       branches: new Set(vigentes.filter((d) => d.branch).map((d) => `${d.repo ?? ''}\0${d.branch}`)).size,
-      toConfirm: listadas.filter((d) => d.state === 'a_confirmar').length,
-      superseded30d: listadas.filter((d) => d.state === 'substituida' && d.updatedAt >= desde).length,
+      toConfirm: listadas.filter((d) => d.state === 'to_confirm').length,
+      superseded30d: listadas.filter((d) => d.state === 'superseded' && d.updatedAt >= desde).length,
       promoted: decisoes.filter((d) => d.promotedTo !== null).length,
     };
 
@@ -319,8 +319,8 @@ export class DecisoesDaUi {
         title: g.titulo,
         repo,
         folder: repo ? basename(repo) : null,
-        current: g.decisoes.filter((d) => d.state === 'vigente').length,
-        toConfirm: g.decisoes.filter((d) => d.state === 'a_confirmar').length,
+        current: g.decisoes.filter((d) => d.state === 'current').length,
+        toConfirm: g.decisoes.filter((d) => d.state === 'to_confirm').length,
         total: g.decisoes.length,
         items: itens,
         more: g.decisoes.length - mostradas.length,
@@ -341,7 +341,7 @@ export class DecisoesDaUi {
   }
 
   /** A aba C20; `null` quando a sessão não existe. */
-  async aba(sessionId: string, p: { scope: EscopoDasDecisoes; state: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
+  async aba(sessionId: string, p: { scope: PanelDecisionScope; state: FiltroDeEstado; q: string | null }): Promise<DecisoesDaAba | null> {
     const alvo = await this.alvo(sessionId);
     if (!alvo) return null;
     const doEscopo = await this.sessao.doEscopo(alvo, p.scope);
@@ -353,7 +353,7 @@ export class DecisoesDaUi {
     for (const d of doEscopo) if (DO_FILTRO[p.state].includes(d.state) && casa(d, p.q)) itens.push(await this.paraUi(d, ref, lidas));
 
     // O que a injeção (#100) e a ferramenta MCP (#101) consultariam: as vigentes do branch.
-    const nivel: DecisionScope = alvo.branch ? 'branch' : 'familia';
+    const nivel: DecisionScope = alvo.branch ? 'branch' : 'family';
     const vigentes = (await currentDecisionsFor(this.port, alvo, nivel)).reverse();
     const linhas: string[] = [];
     const cadeias: string[] = [];
@@ -377,7 +377,7 @@ export class DecisoesDaUi {
       byScope: porEscopo,
       total: porEscopo[p.scope],
       items: itens,
-      injection: { enabled: this.injecaoLigada, scope: API_SCOPE[nivel], decisions: n, tokens: Math.ceil(texto.length / 4), text: texto },
+      injection: { enabled: this.injecaoLigada, scope: nivel, decisions: n, tokens: Math.ceil(texto.length / 4), text: texto },
       mcp: {
         tool: 'session_decisions',
         exists: this.mcpExiste,
@@ -428,13 +428,13 @@ export class DecisoesDaUi {
     const anterior = d.supersedes ? await this.port.getDecision(d.supersedes) : null;
     const local = await this.localDe(d.sessionId);
     const escopo = ESCOPO_POR_EXTENSO[d.scope];
-    const status = d.state === 'a_confirmar' ? 'proposta' : d.state === 'substituida' ? 'substituída' : 'aceita';
+    const status = d.state === 'to_confirm' ? 'proposta' : d.state === 'superseded' ? 'substituída' : 'aceita';
     const umaLinha = (s: string) => s.replace(/\s*\n\s*/g, ' ');
     const conversa = `\`/ui/sessions/${d.sessionId}\` no console${local ? ` · [abrir no Claude Desktop](claude://claude.ai/epitaxy/${local})` : ''}`;
     const vale =
-      d.scope === 'sessao'
+      d.scope === 'session'
         ? 'só a sessão que decidiu a segue'
-        : d.scope === 'familia'
+        : d.scope === 'family'
           ? 'segue a sessão pelo /clear, pela compactação e nas sessões filhas'
           : `vale para as sessões do branch \`${d.branch ?? 'sem branch'}\` nesta pasta`;
     const linhas = [
@@ -452,7 +452,7 @@ export class DecisoesDaUi {
       '',
       '## Decisão',
       '',
-      typeof d.metadata?.texto === 'string' ? d.metadata.texto : d.choice,
+      typeof d.metadata?.text === 'string' ? d.metadata.text : d.choice,
       '',
       '## Alternativas consideradas',
       '',
@@ -595,7 +595,7 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' }), true;
     const sessao = decodificado(aba[1]!);
     if (!sessao || !ID.test(sessao)) return send(res, 400, { error: 'id de sessão inválido' }), true;
-    const scope = (url.searchParams.get('scope') ?? 'family') as EscopoDasDecisoes;
+    const scope = (url.searchParams.get('scope') ?? 'family') as PanelDecisionScope;
     if (!ESCOPOS_DAS_DECISOES.includes(scope)) return send(res, 400, { error: 'scope: session, family ou branch' }), true;
     const f = filtrosDe(url);
     if (typeof f === 'string') return send(res, 400, { error: f }), true;

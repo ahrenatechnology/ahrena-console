@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import { describe, test } from 'node:test';
-import { PASTA_DA_UI, responderUi } from '../../src/api/ui.ts';
+import { UI_FOLDER, respondUi } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
 import { SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
@@ -55,9 +55,9 @@ describe('Histórico: registro e arquivo', () => {
   });
 
   test('o arquivo existe e o núcleo o serve como JavaScript', async () => {
-    assert.ok(existsSync(`${PASTA_DA_UI}screens/history.js`));
+    assert.ok(existsSync(`${UI_FOLDER}screens/history.js`));
     const res = respostaFalsa();
-    await responderUi(res as unknown as ServerResponse, '/ui/screens/history.js');
+    await respondUi(res as unknown as ServerResponse, '/ui/screens/history.js');
     assert.equal(res.status, 200);
     assert.match(String(res.headers['content-type']), /^text\/javascript/);
     assert.match(res.corpo, /export function mount\(/);
@@ -65,7 +65,7 @@ describe('Histórico: registro e arquivo', () => {
 
   test('history.js segue as regras da página', () => {
     for (const a of ['history.js']) {
-      const texto = readFileSync(`${PASTA_DA_UI}screens/${a}`, 'utf8');
+      const texto = readFileSync(`${UI_FOLDER}screens/${a}`, 'utf8');
       const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
@@ -76,7 +76,7 @@ describe('Histórico: registro e arquivo', () => {
   });
 
   test('o histórico não desenha a sessão seguinte e limita a busca ao que o núcleo aceita', () => {
-    const texto = readFileSync(`${PASTA_DA_UI}screens/history.js`, 'utf8');
+    const texto = readFileSync(`${UI_FOLDER}screens/history.js`, 'utf8');
     // The session's `next` (after the /clear) is not drawn; the page's `next` cursor is `r?.next`.
     assert.doesNotMatch(texto, /\b(s|item|session)\.next\b/);
     assert.equal(MAX_SEARCH, 100);
@@ -85,22 +85,22 @@ describe('Histórico: registro e arquivo', () => {
   });
 
   test('history.css não escreve cor à mão, a tela o carrega e shell.css não tem nada do histórico', () => {
-    const css = readFileSync(`${PASTA_DA_UI}history.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}history.css`, 'utf8');
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i);
     for (const classe of ['.badge', '.b-completed', '.hist-search', '.hist-rows', '.hist-row', '.hist-target::after', '.hist-previous']) assert.ok(css.includes(classe), classe);
-    assert.match(readFileSync(`${PASTA_DA_UI}screens/history.js`, 'utf8'), /href: '\/ui\/history\.css', 'data-screen': 'history'/);
-    assert.doesNotMatch(readFileSync(`${PASTA_DA_UI}shell.css`, 'utf8'), /\.hist-/);
+    assert.match(readFileSync(`${UI_FOLDER}screens/history.js`, 'utf8'), /href: '\/ui\/history\.css', 'data-screen': 'history'/);
+    assert.doesNotMatch(readFileSync(`${UI_FOLDER}shell.css`, 'utf8'), /\.hist-/);
   });
 
   // O CSS de cada tela fica carregado quando se troca de tela: uma classe com o mesmo nome em duas
   // telas desmonta a outra. Fora os selos de status, toda classe própria leva `hist-`.
   test('history.css só estiliza classes hist-, os selos em comum e as da moldura', () => {
-    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const minhas = [...classes('history.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
     assert.deepEqual(minhas.filter((c) => !c.startsWith('hist-')), [], 'classe própria sem o prefixo hist-');
-    const outras = readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['history.css', 'shell.css', 'brand.css'].includes(a));
+    const outras = readdirSync(UI_FOLDER).filter((a) => a.endsWith('.css') && !['history.css', 'shell.css', 'brand.css'].includes(a));
     for (const outra of outras) {
       const comuns = [...classes(outra)].filter((c) => minhas.includes(c));
       assert.deepEqual(comuns, [], `history.css e ${outra} estilizam as mesmas classes`);
@@ -108,7 +108,7 @@ describe('Histórico: registro e arquivo', () => {
   });
 
   test('os ícones novos estão em dom.js', () => {
-    const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
+    const dom = readFileSync(`${UI_FOLDER}dom.js`, 'utf8');
     for (const nome of ['history', 'calendar', 'continued', "'chevron-right'", 'search']) assert.match(dom, new RegExp(`^\\s+${nome}: '<`, 'm'), nome);
   });
 });

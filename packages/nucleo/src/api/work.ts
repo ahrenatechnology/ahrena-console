@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { GITHUB_TTL, GithubCache, MemoryCacheStore } from '../github/cache.ts';
 import type { WorkSource } from '../github/source.ts';
 import { workKey, type LinkedPullRequest } from '../github/work.ts';
-import type { TrabalhoDoPainel } from './types.ts';
+import type { PanelWork } from './types.ts';
 
 export type Git = (cwd: string, args: string[]) => Promise<string | null>;
 
@@ -31,7 +31,7 @@ export function repoDoRemote(remote: string): string | null {
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
-type PrDoPainel = NonNullable<TrabalhoDoPainel['pr']>;
+type PrDoPainel = NonNullable<PanelWork['pr']>;
 
 export type PrCi = NonNullable<PrDoPainel['ci']>;
 export type PrReview = NonNullable<PrDoPainel['review']>;
@@ -46,7 +46,7 @@ export function reviewDoPr(p: Pick<LinkedPullRequest, 'review' | 'state'>): PrRe
   return p.review === 'APPROVED' ? 'approved' : p.review === 'CHANGES_REQUESTED' ? 'changes-requested' : p.state === 'OPEN' ? 'pending' : null;
 }
 
-function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
+function prDoPainel(prs: readonly LinkedPullRequest[]): PanelWork['pr'] {
   const p = prs.find((x) => x.state === 'OPEN') ?? prs.find((x) => x.state === 'MERGED') ?? prs[0];
   if (!p) return null;
   const state = p.state === 'MERGED' ? 'merged' : p.state === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : 'open';
@@ -55,7 +55,7 @@ function prDoPainel(prs: readonly LinkedPullRequest[]): TrabalhoDoPainel['pr'] {
 }
 
 interface Entrada {
-  valor: TrabalhoDoPainel | null;
+  valor: PanelWork | null;
   em: number;
   rodando: Promise<void> | null;
 }
@@ -90,7 +90,7 @@ export class TrabalhoPorBranch {
   }
 
   /** O último trabalho conhecido de `cwd` (e do branch do Desktop, se houver); atualiza por trás se venceu. */
-  ler(cwd: string | null, branchDoDesktop: string | null): TrabalhoDoPainel | null {
+  ler(cwd: string | null, branchDoDesktop: string | null): PanelWork | null {
     if (!cwd && !branchDoDesktop) return null;
     const chave = `${cwd ?? ''}\0${branchDoDesktop ?? ''}`;
     let e = this.entradas.get(chave);
@@ -114,7 +114,7 @@ export class TrabalhoPorBranch {
   }
 
   /** O último trabalho conhecido de `cwd`, sem atualizar: quem lê muitas pastas (o mural) não dispara git nem GitHub. */
-  espiar(cwd: string | null, branchDoDesktop: string | null = null): TrabalhoDoPainel | null {
+  espiar(cwd: string | null, branchDoDesktop: string | null = null): PanelWork | null {
     if (!cwd && !branchDoDesktop) return null;
     return this.entradas.get(`${cwd ?? ''}\0${branchDoDesktop ?? ''}`)?.valor ?? null;
   }
@@ -155,21 +155,21 @@ export class TrabalhoPorBranch {
     return this.git(cwd, args);
   }
 
-  private async montar(cwd: string | null, branchDoDesktop: string | null, anterior: TrabalhoDoPainel | null): Promise<TrabalhoDoPainel | null> {
+  private async montar(cwd: string | null, branchDoDesktop: string | null, anterior: PanelWork | null): Promise<PanelWork | null> {
     const branch = branchDoDesktop ?? (cwd ? await this.rodarGit(cwd, ['branch', '--show-current']) : null);
     if (!branch) return null;
     const remote = cwd ? await this.rodarGit(cwd, ['remote', 'get-url', 'origin']) : null;
     const repo = remote ? repoDoRemote(remote) : null;
     const notPushed = cwd ? (await this.rodarGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])) === null : false;
     const numero = issueDoBranch(branch);
-    const base: TrabalhoDoPainel = { branch, repo, issue: null, pr: null, notPushed, error: null };
+    const base: PanelWork = { branch, repo, issue: null, pr: null, notPushed, error: null };
     if (!repo || numero === null || !this.fonte) return base;
 
     const key = workKey(repo, numero);
     const fonte = this.fonte;
     try {
       this.chamadas.github++;
-      const nos = await this.cache.get(`painel:issue:${key}`, GITHUB_TTL.issues, async () => ({ value: await fonte.nodes([key]) }));
+      const nos = await this.cache.get(`panel:issue:${key}`, GITHUB_TTL.issues, async () => ({ value: await fonte.nodes([key]) }));
       const no = nos.value.find((n) => n.key === key);
       if (!no) return base;
       const detalhe = await this.cache.get(`github:detail:${key}`, GITHUB_TTL.detail, async () => ({ value: await fonte.detail(key) }));

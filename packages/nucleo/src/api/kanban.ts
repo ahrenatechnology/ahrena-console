@@ -31,12 +31,12 @@ import { currentPrices } from '../cost/table.ts';
 import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type Agent, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { Contas } from './accounts.ts';
-import type { IndiceDoDesktop, SessaoDoDesktop } from './desktop-index.ts';
+import type { Accounts } from './accounts.ts';
+import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { custoDaSessao, duracaoDe, tituloDe } from './sessions.ts';
 
-export const ROTA_DO_KANBAN = '/api/kanban';
+export const KANBAN_ROUTE = '/api/kanban';
 export const POR_PAGINA = 10;
 /** O último prompt e a descrição do subagente, numa linha, até aqui. */
 export const TEXTO_MAXIMO = 120;
@@ -174,8 +174,8 @@ export function rotuloDoModelo(modelo: string | null | undefined): string | null
 
 export interface OpcoesDoKanban {
   storage: StoragePort;
-  contas: Contas;
-  desktop?: IndiceDoDesktop | null;
+  contas: Accounts;
+  desktop?: DesktopIndex | null;
   /** Os resumos de eventos (o último prompt). Sem eles, o Kanban tem os seus (256), para não varrer o cache do painel (64). */
   resumos?: ResumosDeSessao;
   agora?: () => number;
@@ -184,14 +184,14 @@ export interface OpcoesDoKanban {
 interface SessaoLida {
   s: Session;
   status: DisplayStatus;
-  desktop: SessaoDoDesktop | null;
+  desktop: DesktopSession | null;
   titulo: string;
 }
 
 export class QuadroKanban {
   private readonly storage: StoragePort;
-  private readonly contas: Contas;
-  private readonly desktop: IndiceDoDesktop | null;
+  private readonly contas: Accounts;
+  private readonly desktop: DesktopIndex | null;
   private readonly resumos: ResumosDeSessao;
   private readonly agora: () => number;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
@@ -217,7 +217,7 @@ export class QuadroKanban {
   }
 
   async montar(pedido: PedidoDoKanban): Promise<KanbanHttp> {
-    await Promise.all([this.contas.atualizar(), this.desktop?.atualizar()]);
+    await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
     const sessoes = await this.lerSessoes();
     const colunas =
       pedido.visao === 'sessions' ? await this.colunasDeSessoes(sessoes, pedido, await currentPrices(this.storage)) : await this.colunasDeAgentes(sessoes, pedido);
@@ -230,7 +230,7 @@ export class QuadroKanban {
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
-        const desktop = this.desktop?.sessaoPorCli(s.id) ?? null;
+        const desktop = this.desktop?.sessionByCli(s.id) ?? null;
         todas.push({ s, status: displayStatus(s), desktop, titulo: tituloDe(s, desktop) });
       }
       cursor = page.nextCursor;
@@ -257,7 +257,7 @@ export class QuadroKanban {
   }
 
   private async cardDeSessao({ s, status, desktop, titulo }: SessaoLida, agora: number, precos: ModelPricing[]): Promise<CardDeSessao> {
-    const conta = this.contas.daSessao(s, desktop);
+    const conta = this.contas.ofSession(s, desktop);
     const resumo = await this.resumos.ler(s.id, s.updatedAt);
     return {
       id: s.id,

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, iniciarApiLocal } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { SIMULATED_WORKSTATION, seedTelemetry, SimulatedCollector, simulatedReading } from '../../src/simulator/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
@@ -32,8 +32,8 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
     await new TelemetrySampler({ machineId: m.id, collector: new SimulatedCollector(m.id === 'local' ? 'local' : 'workstation', () => NOW), store, tracker }).sampleOnce();
   }
   const telemetry = opts.withTelemetry === false ? undefined : new TelemetryService({ store, tracker, machines, now: () => NOW });
-  const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null });
-  const api = await iniciarApiLocal({ montador, hooks: { storage }, port: 0, log: () => {}, mudancas: cursor, telemetry });
+  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
+  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry });
   return {
     api,
     store,
@@ -67,8 +67,8 @@ describe('#175/AC-4 GET /api/machines', () => {
       assert.equal(r.status, 200);
       const body = (await r.json()) as unknown[];
       assert.deepEqual(body, [
-        { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 2 },
-        { id: 'workstation', label: 'Workstation', state: 'connected', reason: null, version: 1, port: 14720, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 3 },
+        { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 2, reconnect: null },
+        { id: 'workstation', label: 'Workstation', state: 'connected', reason: null, version: 1, port: 14720, lastReadAt: '2026-11-02T12:00:00.000Z', alerts: 3, reconnect: null },
       ]);
       assert.deepEqual([...MACHINE_STATES], ['connected', 'unreachable', 'not-configured', 'incompatible-version']);
     } finally {

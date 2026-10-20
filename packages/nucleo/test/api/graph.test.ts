@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, MontadorDoPainel, aplicarEvento, iniciosDosTurnos, resumoVazio, subagentesDe } from '../../src/api/index.ts';
+import { Accounts, MontadorDoPainel, aplicarEvento, iniciosDosTurnos, resumoVazio, subagentesDe } from '../../src/api/index.ts';
 import { PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { T0, agent, at, event, session } from '../fixtures.ts';
 
@@ -70,7 +70,7 @@ describe('painel: o grafo montado dos eventos gravados', () => {
     await storage.putAgent(sub('gp', 12, { subagentType: 'general-purpose' }));
     await storage.putAgent(sub('explore', 13, { parentAgentId: 's1:gp', status: 'completed', endedAt: at(15) }));
     for (const [i, m] of [0, 10].entries()) await storage.appendEvent(event({ id: `p${i}`, type: 'UserPromptSubmit', agentId: null, toolName: null, createdAt: at(m) }));
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(30)) });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => Date.parse(at(30)) });
     const p = await montador.montar({ sessionId: 's1' });
     const de = (id: string) => p.subagents.items.find((i) => i.id === `s1:${id}`)!;
     assert.deepEqual([de('plan').parent, de('plan').wave], [null, 1]);
@@ -83,7 +83,7 @@ describe('painel: o grafo montado dos eventos gravados', () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const agora = Date.parse(T0);
     await seedPanelScenario(storage, 'p13', agora);
-    const montador = new MontadorDoPainel({ storage, contas: new Contas({ storage, arquivo: null }), desktop: null, trabalho: null, agora: () => agora, apelido: () => PANEL_SESSION });
+    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => agora, apelido: () => PANEL_SESSION });
     const p = await montador.montar({ sessionId: 'qualquer' });
     const itens = p.subagents.items;
     assert.equal(itens.length, 25);

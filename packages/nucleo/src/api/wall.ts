@@ -1,6 +1,6 @@
 // Builds the response of `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): one card per session
 // open on this machine, across all accounts, with status, model, effort, plan, agents, context and
-// cost. The contract is in api/types.ts (`Mural`, `CardDoMural`).
+// cost. The contract is in api/types.ts (`Wall`, `WallCard`).
 //
 // An OPEN session (the wall's criterion):
 // - is not archived in the Claude Desktop (the person removed it from the sidebar); and
@@ -25,8 +25,8 @@
 // scans transcripts (decision 0004). The whole response is kept for `cacheMs` (2 s), and concurrent
 // requests wait for the same build, like the panel's "precisam de você".
 //
-// Effort: the `effort` of the Claude Desktop index (`local_*.json`, already read by IndiceDoDesktop) and,
-// without it, `metadata.esforco` (the simulator writes it; the terminal ingestion does not know the effort yet).
+// Effort: the `effort` of the Claude Desktop index (`local_*.json`, already read by DesktopIndex) and,
+// without it, `metadata.effort` (the simulator writes it; the terminal ingestion does not know the effort yet).
 // A terminal-only session: `null`.
 //
 // Branch: the Desktop's or `metadata.branch`; without them, what the work-by-branch already knows and,
@@ -38,13 +38,11 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { DEFAULT_LIMITS } from '../states/watcher.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
-import type { SessaoDoDesktop } from './desktop-index.ts';
+import type { DesktopSession } from './desktop-index.ts';
 import type { LeituraDaSessao, MontadorDoPainel } from './panel.ts';
-import type { CardDoMural, Mural } from './types.ts';
+import type { WallCard, Wall } from './types.ts';
 
 export const WALL_ROUTE = '/api/wall';
-/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
-export const ROTA_DO_MURAL = '/api/mural';
 /** Quanto tempo a sessão encerrada continua no mural depois da última atividade: o abandono do vigia. */
 export const RECENTE_DO_MURAL_MS = DEFAULT_LIMITS.abandonMs;
 const PAGINA = 200;
@@ -60,8 +58,8 @@ export interface OpcoesDoMural {
 }
 
 /** O critério de "aberta" (comentário do módulo), sem a porta: para o teste e para quem quiser. */
-export function ehAberta(session: Pick<Session, 'status' | 'endedAt' | 'updatedAt'>, desktop: Pick<SessaoDoDesktop, 'arquivada'> | null, agora: number, recenteMs = RECENTE_DO_MURAL_MS): boolean {
-  if (desktop?.arquivada) return false;
+export function ehAberta(session: Pick<Session, 'status' | 'endedAt' | 'updatedAt'>, desktop: Pick<DesktopSession, 'archived'> | null, agora: number, recenteMs = RECENTE_DO_MURAL_MS): boolean {
+  if (desktop?.archived) return false;
   if (session.status === 'abandoned') return false;
   if (session.status === 'active') return true;
   if (session.status === 'error' && !session.endedAt) return true;
@@ -77,8 +75,8 @@ export class MontadorDoMural {
   private readonly agora: () => number;
   private readonly cacheMs: number;
   private readonly recenteMs: number;
-  private cache: { em: number; mural: Mural } | null = null;
-  private rodando: Promise<Mural> | null = null;
+  private cache: { em: number; mural: Wall } | null = null;
+  private rodando: Promise<Wall> | null = null;
 
   constructor({ painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS }: OpcoesDoMural) {
     this.painel = painel;
@@ -88,7 +86,7 @@ export class MontadorDoMural {
     this.recenteMs = recenteMs;
   }
 
-  async montar(): Promise<Mural> {
+  async montar(): Promise<Wall> {
     if (this.cache && this.agora() - this.cache.em < this.cacheMs) return this.cache.mural;
     this.rodando ??= this.montarAgora().finally(() => {
       this.rodando = null;
@@ -96,7 +94,7 @@ export class MontadorDoMural {
     return this.rodando;
   }
 
-  private async montarAgora(): Promise<Mural> {
+  private async montarAgora(): Promise<Wall> {
     const agora = this.agora();
     await this.painel.atualizarFontes();
     const lidas: { leitura: LeituraDaSessao; updatedAt: string }[] = [];
@@ -113,7 +111,7 @@ export class MontadorDoMural {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     const cards = lidas.map(({ leitura }) => cardDe(leitura));
-    const mural: Mural = {
+    const mural: Wall = {
       version: 1,
       generatedAt: new Date(agora).toISOString(),
       count: {
@@ -151,13 +149,13 @@ export class MontadorDoMural {
   }
 }
 
-/** Urgente: a espera `notification` ou `interrupted`, e o erro (como o `PrecisaDeVoce` do painel). */
+/** Urgente: a espera `notification` ou `interrupted`, e o erro (como o `NeedsYouItem` do painel). */
 const urgenteDe = (l: LeituraDaSessao) => l.inbox.urgent || l.inbox.state === 'error';
 
 /** O agente principal conta como um dos agentes da sessão (o wireframe mostra "1" na sessão sem subagentes). */
-const principalRodando = (estado: CardDoMural['state']) => estado === 'active' || estado === 'delegating' || estado === 'background';
+const principalRodando = (estado: WallCard['state']) => estado === 'active' || estado === 'delegating' || estado === 'background';
 
-function cardDe(leitura: LeituraDaSessao): CardDoMural {
+function cardDe(leitura: LeituraDaSessao): WallCard {
   const { sessao, desktop, branch, custo, plano, contexto, subagentes } = leitura;
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {

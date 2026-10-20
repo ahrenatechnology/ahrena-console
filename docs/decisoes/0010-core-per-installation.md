@@ -36,7 +36,12 @@ Em 20/10 o Fernando decidiu: **um núcleo por instalação, em porta aleatória.
 4. **Hooks em leque.** O `forward.mjs` manda cada evento para todos os núcleos vivos do registro, ao mesmo tempo, dentro do prazo curto de hoje (800 ms no total). Cada núcleo tem o retrato inteiro das sessões. Nenhum vivo: desiste calado, como hoje. `AHRENA_CONSOLE_URL` ou `AHRENA_CONSOLE_PORT` definidos mandam para aquele núcleo só.
 5. **Quem acha o núcleo.** O app sobe o próprio núcleo (pasta do app, porta `0`, `--parent` no pid do app) e a bandeja só fala com ele; ao sair, encerra só esse. O mod e o MCP leem o registro e preferem o núcleo da própria instalação; sem ele, o vivo que subiu primeiro. A ponte do MCP da extensão, sem nenhum vivo da instalação dela, sobe o próprio, como hoje.
 6. **Migração.** Ninguém perde dados: `~/.ahrena-console/nucleo.sqlite` continua sendo o banco do `dev`. O app começa com banco próprio e, na primeira subida, importa o histórico dos transcripts como já faz.
-7. **Transição.** O mod publicado ainda manda os hooks para a 4720. Até sair o mod com o leque, quem quiser os hooks no núcleo de desenvolvimento o sobe com `--port 4720`.
+7. **Transição.** Os núcleos publicados antes da #221 (o app 0.0.1, um checkout antigo) ouvem na 4720 e não gravam o registro, e o mod publicado ainda manda os hooks só para a 4720. Até todo núcleo publicado gravar o registro:
+   - os hooks mandam também para a 4720, além dos núcleos do registro, a menos que um núcleo do registro já esteja nela; ninguém ouvindo na 4720 é o normal e não vira linha de log;
+   - o painel, sem nenhum núcleo vivo no registro, tenta a 4720 e a usa se `/api/overview` responder como núcleo;
+   - quem quiser os hooks do mod antigo num núcleo de desenvolvimento o sobe com `--port 4720`.
+
+   A ordem de merge e de publicação é: o núcleo com o registro, o app que sobe o próprio núcleo, e o mod por último. Com o fallback, atualizar o mod antes do app não deixa ninguém sem hooks nem sem painel.
 
 ## Consequências
 

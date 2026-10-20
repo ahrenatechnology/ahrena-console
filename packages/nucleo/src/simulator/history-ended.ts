@@ -58,7 +58,7 @@ export async function seedPanelHistory(storage: StoragePort, decisions: Decision
     const s: Session = {
       id, name: e.title, status: e.status, cwd: `${ROOT}/${e.project}`, model: e.model, source: 'startup',
       startedAt: iso(e.endMin + e.durationMin), endedAt: end, awaitingInputSince: null, awaitingReason: null, updatedAt: end,
-      accountId: null, accountSource: null, metadata: { simulado: true },
+      accountId: null, accountSource: null, metadata: { simulated: true },
     };
     await storage.putSession(s);
     if (e.cost) {

@@ -2,7 +2,7 @@
 // árvore recursiva com ETag e os lotes de conteúdo. Nenhuma chamada à API real.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { BLOB_BATCH, blobsQuery, RepoFilesSource, validPath } from '../../src/github/repo-files-source.ts';
+import { BLOB_BATCH, blobsQuery, discoveryQuery, DISCOVERY_BATCH, RepoFilesSource, validPath } from '../../src/github/repo-files-source.ts';
 import { GithubReposSource } from '../../src/github/repos-source.ts';
 import { createFakeGithub, blobOid, type FakeGithubData, type FakeRepo } from '../../src/simulator/fake-github.ts';
 
@@ -42,6 +42,37 @@ describe('#183 repo files source', () => {
     assert.equal(d.files.find((f) => f.path === 'AGENTS.md')!.oid, blobOid('# a\n'));
     assert.deepEqual(calls, ['GRAPHQL RepoFilesDiscovery']);
     assert.equal(await source.discover('org-a', 'nope'), null);
+  });
+
+  test('discovery (#174): the decision folders, first level only, without index nor template', async () => {
+    const { source } = setup({
+      ...FILES,
+      'docs/adr/0001-a.md': '# 1. A\n',
+      'docs/adr/README.md': '# index\n',
+      'docs/adr/template.md': '# t\n',
+      'docs/adr/old/0000-x.md': '# x\n',
+      'docs/adr/notes.txt': 'x',
+      'docs/pdr/PDR-001-b.md': '# PDR-001: B\n',
+      'docs/decisoes/0001-c.md': '# 0001 · C\n',
+    });
+    const d = (await source.discover('org-a', 'repo'))!;
+    assert.deepEqual(d.decisionFolders, ['docs/adr', 'docs/decisoes', 'docs/pdr']);
+    assert.deepEqual(d.decisions!.map((f) => f.path), ['docs/adr/0001-a.md', 'docs/decisoes/0001-c.md', 'docs/pdr/PDR-001-b.md']);
+    assert.equal(d.decisions![0].oid, blobOid('# 1. A\n'));
+  });
+
+  test('discovery (#174): up to 20 repositories per query, one result per repository in order', async () => {
+    const { source, calls, bodies } = setup(FILES);
+    const asked = [{ owner: 'org-a', name: 'repo' }, ...Array.from({ length: 21 }, (_, i) => ({ owner: 'org-a', name: `missing-${i}` }))];
+    const out = await source.discoverMany(asked);
+    assert.equal(out.length, 22);
+    assert.equal(out[0]!.nameWithOwner, 'org-a/repo');
+    assert.ok(out.slice(1).every((d) => d === null));
+    assert.deepEqual(calls, ['GRAPHQL RepoFilesDiscovery', 'GRAPHQL RepoFilesDiscovery']);
+    assert.ok(bodies.every((b) => !JSON.parse(b).query.includes('missing-')), 'names go as variables');
+    assert.equal(DISCOVERY_BATCH, 20);
+    assert.throws(() => discoveryQuery([]));
+    assert.match(discoveryQuery([{ owner: 'a', name: 'b' }]).query, /dir22: object\(expression: "HEAD:product-decisions"\)/);
   });
 
   test('tree: only the interesting paths, the ETag, and 304 on the second read', async () => {

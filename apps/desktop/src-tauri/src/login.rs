@@ -71,7 +71,8 @@ pub fn opens_window_at_launch(o: LaunchOrigin) -> bool {
     o == LaunchOrigin::Manual
 }
 
-/// `AHRENA_ORIGEM=login|manual` fakes the origin, for testing by hand.
+/// `AHRENA_CONSOLE_LAUNCH_ORIGIN=login|manual` (old name `AHRENA_ORIGEM`) fakes the origin, for
+/// testing by hand.
 pub fn origin_from_variable(v: Option<&str>) -> Option<LaunchOrigin> {
     match v?.trim() {
         "login" => Some(LaunchOrigin::Login),

@@ -12,7 +12,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Contas, iniciarApiLocal, MontadorDoPainel, type ApiLocal } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import { createMcpServer } from '../../src/mcp/index.ts';
 import { seedPanelScenario } from '../../src/simulator/panel.ts';
 import { NOW, seed } from './helpers.ts';
@@ -62,13 +62,13 @@ for (const [name, seedWith] of [
 ] as const) {
   describe(`contract with the official client: ${name}`, () => {
     let storage: SqliteStorage;
-    let api: ApiLocal;
+    let api: LocalApi;
     before(async () => {
       storage = openSqliteStorage({ path: ':memory:' });
       await seedWith(storage);
-      const accounts = new Contas({ storage, arquivo: null });
+      const accounts = new Accounts({ storage, file: null });
       const { server } = createMcpServer({ storage, accounts, now: () => NOW, timeZone: 'UTC' });
-      api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+      api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
     });
     after(async () => {
       await api.close();
@@ -91,8 +91,8 @@ for (const [name, seedWith] of [
 test('stdio without the core: the official client connects, lists the tools and the call comes back with isError', async () => {
   // A port nobody listens on: start and stop an API to get a free one.
   const storage = openSqliteStorage({ path: ':memory:' });
-  const accounts = new Contas({ storage, arquivo: null });
-  const api = await iniciarApiLocal({ montador: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
+  const accounts = new Accounts({ storage, file: null });
+  const api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
   const port = new URL(api.url).port;
   await api.close();
   await storage.close();

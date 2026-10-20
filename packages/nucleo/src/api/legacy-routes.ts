@@ -324,7 +324,7 @@ function merge(...specs: LegacyBodySpec[]): LegacyBodySpec {
 // - the decision scope is `session | family | branch`; a relation between sessions is `parent |
 //   child | sibling`, and a decision's own session `this | parent | family | branch`.
 //
-// `GET /api/panel` (Painel, src/api/types.ts), keys old → new:
+// `GET /api/panel` (Panel, src/api/types.ts), keys old → new:
 // - top: versao → version, geradoEm → generatedAt, sessao → session, contexto → context, custo →
 //   cost, plano → plan, planos → plans, subagentes → subagents, filhas → children, trabalho → work,
 //   precisam → needYou, decisoes → decisions (api, tokens, background, prs stay);
@@ -355,7 +355,7 @@ function merge(...specs: LegacyBodySpec[]): LegacyBodySpec {
 //   mesmoProjeto → sameProject, conta → account;
 // - prs.itens → items: numero → number, titulo → title, sessao → session (titulo → title);
 // - decisions: vigentes → current, aConfirmar → toConfirm, retomada → resume (de → from), lista → list;
-// - the decision list (ListaDeDecisoes): escopo → scope, vigentes → current, aConfirmar →
+// - the decision list (PanelDecisionList): escopo → scope, vigentes → current, aConfirmar →
 //   toConfirm, itens → items, porEscopo → byScope;
 // - a decision: rotulo → label, origem → origin, estado → state, titulo → title, texto → text,
 //   contexto → context, desfazer → undo, nao → rejected, decididaPor → decidedBy, decididaEm →
@@ -408,7 +408,7 @@ const SCOPE_ERRORS = { 'scope: session, family ou branch': 'escopo: sessao, fami
 const SESSION_CARD_KEYS = { title: 'titulo', model: 'modelo', startedAt: 'iniciadaEm', state: 'estado', reason: 'motivo', urgent: 'urgente', since: 'desde', turn: 'turno', activity: 'atividade', banner: 'faixa', account: 'conta' };
 const ACCOUNT_KEYS = { label: 'rotulo', color: 'cor', source: 'fonte' };
 
-/** The session card (`SessaoDoPainel`) held by `parent`, with its activity, banner and account. */
+/** The session card (`PanelSession`) held by `parent`, with its activity, banner and account. */
 const sessionCard = (parent: string): LegacyBodySpec => ({
   keys: {
     ...scoped(parent, SESSION_CARD_KEYS),
@@ -419,7 +419,7 @@ const sessionCard = (parent: string): LegacyBodySpec => ({
   values: { 'activity.type': ACTIVITY_TYPES, 'banner.type': ACTIVITY_TYPES },
 });
 
-/** The plan (`PlanoDoPainel`) held by `parent`, with its steps and owners. */
+/** The plan (`PanelPlan`) held by `parent`, with its steps and owners. */
 const plan = (parent: string): LegacyBodySpec => {
   const owner = { type: 'tipo', name: 'nome', agentId: 'agenteId' };
   return {
@@ -451,7 +451,7 @@ const DECISION_KEYS = {
 /** What the /ui's decision card (`DecisaoDaUi`) adds to the panel's. */
 const DECISION_UI_KEYS = { scope: 'escopo', supersedes: 'substitui', promotedTo: 'promovidaPara', conversation: 'conversa' };
 
-/** A decision (`DecisaoDoPainel`, or with `ui` the /ui's `DecisaoDaUi`) held by `parent` (an object, or an array of them). */
+/** A decision (`PanelDecision`, or with `ui` the /ui's `DecisaoDaUi`) held by `parent` (an object, or an array of them). */
 const decision = (parent: string, ui = false): LegacyBodySpec => ({
   keys: scoped(parent, ui ? { ...DECISION_KEYS, ...DECISION_UI_KEYS } : DECISION_KEYS),
   values: scoped<Readonly<Record<string, string>>>(parent, {
@@ -464,7 +464,7 @@ const decision = (parent: string, ui = false): LegacyBodySpec => ({
   }),
 });
 
-/** The decision list of a scope (`ListaDeDecisoes`), held by `parent` (`''` at the top level). */
+/** The decision list of a scope (`PanelDecisionList`), held by `parent` (`''` at the top level). */
 const decisionList = (parent: string): LegacyBodySpec =>
   merge(
     {
@@ -475,7 +475,7 @@ const decisionList = (parent: string): LegacyBodySpec =>
     decision('items'),
   );
 
-/** The panel (`Painel`), new → old: the whole body. */
+/** The panel (`Panel`), new → old: the whole body. */
 const PANEL: LegacyBodySpec = merge(
   {
     keys: {
@@ -607,12 +607,12 @@ const DECISION_WRITE: LegacyRouteSpec = {
 // `GET /api/changes` (WaitResult, src/changes/cursor.ts), keys old → new: mudancas → changes,
 // reiniciar → reset, expirou → timedOut (cursor stays); each change: tipo → type, chave → key
 // (sessionId, accountId, seq stay). The type values: sessao → session, estado → state,
-// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert and
-// agent-instructions stay);
+// precisa-de-voce → needs-you, plano → plan, decisao → decision, conta → account (repos, alert,
+// agent-instructions and framework-install stay);
 // `?type=` takes both (ENGLISH_VALUES). The errors cite the new parameter: `wait inválida`, `type: um
 // de …`, `session inválida`, `account inválida`.
 //
-// `GET /api/wall` (Mural, src/api/types.ts), keys old → new: versao → version, geradoEm →
+// `GET /api/wall` (Wall, src/api/types.ts), keys old → new: versao → version, geradoEm →
 // generatedAt, contagem → count (todas → all, esperando → waiting, ativas → active); each card:
 // titulo → title, projeto → project, estado → state, motivo → reason, urgente → urgent, desde →
 // since, atividade → activity, modelo → model, esforco → effort, agentes → agents (ativos → active),
@@ -670,7 +670,8 @@ const CHANGES: LegacyBodySpec = {
       'session inválida': 'sessao inválida',
       'account inválida': 'conta inválida',
       'wait inválida': 'espera inválida',
-      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions': 'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions',
+      'type: um de session, state, needs-you, plan, decision, account, repos, alert, agent-instructions, framework-install, adrs':
+        'tipo: um de sessao, estado, precisa-de-voce, plano, decisao, conta, repos, alert, agent-instructions, framework-install, adrs',
     },
   },
 };

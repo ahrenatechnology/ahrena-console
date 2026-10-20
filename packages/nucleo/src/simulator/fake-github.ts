@@ -5,15 +5,25 @@
 //
 // It imitates what the screens depend on from GitHub: ETag and 304 with `If-None-Match`, 202 while a
 // statistic "computes" (`computeFirst`), 403 on traffic and on alerts without write access.
-// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`), the content
+// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`, up to 20 repositories
+// per query, with the 23 decision folders of #174), the content
 // batches (`RepoBlobs`, by `oid` or by `<commit>:<path>`) and the recursive tree
 // (`git/trees/HEAD?recursive=1`), with Git's `oid` (SHA-1 of `blob <size>\0<text>`).
+// The framework install (#184) adds the writes: `FrameworkInstallTarget` (permission, the default
+// branch's HEAD, the install branch and its PRs) and the mutations `CreateInstallBranch`,
+// `CommitInstallFiles` and `OpenInstallPullRequest`. Each write is recorded in `writes` (the tests read
+// it); the default branch is never moved by them. An opened PR's CI and review evolve with the clock
+// (`pullRequestTimeline`), synthetically.
 // Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
 // `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
 import { createHash } from 'node:crypto';
 import { SeededRandom, hash32 } from './random.ts';
 import { ROOT } from './vocabulary.ts';
+import { catalogSnapshot, MARKETPLACE_PATH } from '../framework-install/catalog.ts';
+import { DEFAULT_FRAMEWORK_REPO } from '../framework-install/model.ts';
+import { DECISION_DIRS } from '../adrs/parse.ts';
+import { DEMO_DECISION_FILES } from './demo-decisions.ts';
 
 export interface FakeRepo {
   owner: string;
@@ -44,6 +54,8 @@ export interface FakeRepo {
   files?: Record<string, string>;
   /** The recursive tree comes truncated (`truncated: true`), without files 3 or more folders deep. */
   truncatedTree?: boolean;
+  /** Arquivos que o GitHub não entrega inteiros no lote de conteúdo (#184): `binary` (`isBinary`) ou `truncated` (`isTruncated`, texto cortado). */
+  unreadable?: Record<string, 'binary' | 'truncated'>;
 }
 
 export interface FakeGithubData {
@@ -54,16 +66,71 @@ export interface FakeGithubData {
   closedThisWeek: number;
 }
 
+/** How an opened PR evolves with the clock (#184): CI and review, synthetic. Without it, CI stays pending and the review required. */
+export interface PullRequestTimeline {
+  /** After this many ms the CI finishes, with `checksResult` (default `SUCCESS`). */
+  checksAfterMs?: number;
+  checksResult?: 'SUCCESS' | 'FAILURE';
+  /** After this many ms the review is approved. */
+  approvedAfterMs?: number;
+}
+
 export interface FakeGithubOptions {
   now?: () => number;
   /** Delay of each answer, in ms (the demo shows the "loading"). */
   delayMs?: number;
+  pullRequestTimeline?: PullRequestTimeline;
+}
+
+/** A write the fake received (#184), in order. */
+export interface FakeWrite {
+  operation: 'createRef' | 'createCommitOnBranch' | 'createPullRequest';
+  /** `owner/name`. */
+  repo: string;
+  branch: string;
+  /** createCommitOnBranch: the paths written. */
+  paths?: string[];
+  /** createPullRequest. */
+  base?: string;
+  title?: string;
+  body?: string;
+}
+
+/** A pull request opened in the fake (#184); tests may change `state` (`MERGED`, `CLOSED`). */
+export interface FakePullRequest {
+  repo: string;
+  number: number;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  createdAt: number;
+  /** The files of the head branch, path → text. */
+  files: Record<string, string>;
 }
 
 export interface FakeGithub {
   fetch: typeof fetch;
   /** `GRAPHQL <operation>` or `GET <path>`, in order. */
   calls: string[];
+  /** The writes, in order (#184). */
+  writes: FakeWrite[];
+  /** The PRs opened in the fake (#184). */
+  pullRequests: FakePullRequest[];
+  /** A repository's branches, name → commit (`main` included). */
+  refs(owner: string, name: string): Record<string, string>;
+  /** A próxima mutação com este nome (`CreateInstallBranch`, `CommitInstallFiles`, `OpenInstallPullRequest`) falha, sem escrever (#184). */
+  failNext(operation: string): void;
+}
+
+/** A GraphQL error the fake answers with (`errors`), as GitHub does for a refused mutation. */
+class FakeGraphqlError extends Error {
+  readonly type: string;
+  constructor(type: string, message: string) {
+    super(message);
+    this.type = type;
+  }
 }
 
 const DAY = 24 * 60 * 60_000;
@@ -227,8 +294,11 @@ const searchSince = (q: string, field: string) => {
 };
 const withoutInternals = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
 
-export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0 }: FakeGithubOptions = {}): FakeGithub {
+export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0, pullRequestTimeline = {} }: FakeGithubOptions = {}): FakeGithub {
   const calls: string[] = [];
+  const writes: FakeWrite[] = [];
+  const pullRequests: FakePullRequest[] = [];
+  const branchesByRepo = new Map<string, Map<string, { oid: string; files: Record<string, string> }>>();
   const series = new Map<string, Series>();
   const alreadyComputed = new Set<string>();
   const t0 = now();
@@ -268,16 +338,128 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       dotClaudeMd: blob('.claude/CLAUDE.md'),
       mcpJson: blob('.mcp.json'),
       claudeDir: g.folders.has('.claude') ? { entries: entries('.claude', 1) } : null,
+      // As 23 pastas de decisão (#174), um apelido por pasta: só o primeiro nível, como o GitHub.
+      ...Object.fromEntries(DECISION_DIRS.map((dir, k) => [`dir${k}`, g.folders.has(dir) ? { entries: entries(dir, 3) } : g.oids.has(dir) ? {} : null])),
     };
   };
 
+  /** The repository's branches (#184): `main` at the commit of its files, plus what the writes created. */
+  const branchesOf = (repo: FakeRepo) => {
+    const k = `${repo.owner}/${repo.name}`;
+    let b = branchesByRepo.get(k);
+    if (!b) branchesByRepo.set(k, (b = new Map([['main', { oid: gitOf(repo).commit, files: gitOf(repo).files }]])));
+    return b;
+  };
+  const repoById = (id: string) => data.repos.find((x) => `R_${x.owner}/${x.name}` === id) ?? null;
+  /** A PR as GraphQL answers it: CI and review from the timeline. */
+  const rawPullRequest = (pr: FakePullRequest) => {
+    const age = now() - pr.createdAt;
+    const t = pullRequestTimeline;
+    const checksDone = t.checksAfterMs !== undefined && age >= t.checksAfterMs;
+    const approved = t.approvedAfterMs !== undefined && age >= t.approvedAfterMs;
+    const events = [pr.createdAt, checksDone ? pr.createdAt + t.checksAfterMs! : 0, approved ? pr.createdAt + t.approvedAfterMs! : 0];
+    return {
+      number: pr.number,
+      url: `https://github.com/${pr.repo}/pull/${pr.number}`,
+      title: pr.title,
+      state: pr.state,
+      headRefName: pr.head,
+      baseRefName: pr.base,
+      updatedAt: iso(Math.max(...events)),
+      reviewDecision: approved ? 'APPROVED' : 'REVIEW_REQUIRED',
+      commits: { nodes: [{ commit: { statusCheckRollup: { state: checksDone ? (t.checksResult ?? 'SUCCESS') : 'PENDING' } } }] },
+    };
+  };
+  const prsOf = (repo: FakeRepo, head: string) =>
+    pullRequests.filter((p) => p.repo === `${repo.owner}/${repo.name}` && p.head === head).sort((a, b) => b.number - a.number);
+
+  /** The install's read and the three writes (#184). */
+  const failures = new Set<string>();
+  function installOperation(op: string, v: Record<string, unknown>): unknown {
+    if (failures.delete(op)) throw new FakeGraphqlError('INTERNAL', `falha simulada em ${op}`);
+    if (op === 'FrameworkInstallTarget') {
+      const repo = find(String(v.owner), String(v.name));
+      if (!repo) return { rateLimit, repository: null };
+      const branches = branchesOf(repo);
+      const branch = String(v.branch);
+      const prs = prsOf(repo, branch);
+      return {
+        rateLimit,
+        repository: {
+          id: `R_${repo.owner}/${repo.name}`,
+          nameWithOwner: `${repo.owner}/${repo.name}`,
+          viewerPermission: repo.permission,
+          defaultBranchRef: { name: 'main', target: { oid: branches.get('main')!.oid } },
+          installRef: branches.has(branch) ? { target: { oid: branches.get(branch)!.oid } } : null,
+          open: { nodes: prs.filter((p) => p.state === 'OPEN').slice(0, 1).map(rawPullRequest) },
+          latest: { nodes: prs.slice(0, 1).map(rawPullRequest) },
+        },
+      };
+    }
+    if (op === 'CreateInstallBranch') {
+      const repo = repoById(String(v.repositoryId));
+      if (!repo) throw new FakeGraphqlError('NOT_FOUND', 'Could not resolve to a node with the global id');
+      if (!canWrite(repo)) throw new FakeGraphqlError('FORBIDDEN', 'Resource not accessible by integration');
+      const name = String(v.name).replace(/^refs\/heads\//, '');
+      const branches = branchesOf(repo);
+      if (branches.has(name)) throw new FakeGraphqlError('UNPROCESSABLE', `A ref named "refs/heads/${name}" already exists in the repository.`);
+      const from = [...branches.values()].find((b) => b.oid === v.oid);
+      if (!from) throw new FakeGraphqlError('UNPROCESSABLE', 'Object does not exist');
+      branches.set(name, { oid: from.oid, files: from.files });
+      writes.push({ operation: 'createRef', repo: `${repo.owner}/${repo.name}`, branch: name });
+      return { createRef: { ref: { name: `refs/heads/${name}` } } };
+    }
+    if (op === 'CommitInstallFiles') {
+      const input = v.input as { branch: { repositoryNameWithOwner: string; branchName: string }; expectedHeadOid: string; message: { headline: string }; fileChanges: { additions: { path: string; contents: string }[] } };
+      const [owner, name] = input.branch.repositoryNameWithOwner.split('/');
+      const repo = find(owner, name);
+      if (!repo) throw new FakeGraphqlError('NOT_FOUND', 'Could not resolve to a Repository');
+      if (!canWrite(repo)) throw new FakeGraphqlError('FORBIDDEN', 'Resource not accessible by integration');
+      const branches = branchesOf(repo);
+      const current = branches.get(input.branch.branchName);
+      if (!current) throw new FakeGraphqlError('NOT_FOUND', `A ref named "${input.branch.branchName}" does not exist`);
+      if (current.oid !== input.expectedHeadOid) throw new FakeGraphqlError('STALE_DATA', `Expected branch to point to "${input.expectedHeadOid}" but it did not`);
+      const files = { ...current.files };
+      for (const a of input.fileChanges.additions) files[a.path] = Buffer.from(a.contents, 'base64').toString('utf8');
+      const oid = oidOf(`commit ${input.branch.branchName}:${current.oid}:${JSON.stringify(files)}`);
+      branches.set(input.branch.branchName, { oid, files });
+      writes.push({ operation: 'createCommitOnBranch', repo: `${repo.owner}/${repo.name}`, branch: input.branch.branchName, paths: input.fileChanges.additions.map((a) => a.path) });
+      return { createCommitOnBranch: { commit: { oid } } };
+    }
+    if (op === 'OpenInstallPullRequest') {
+      const input = v.input as { repositoryId: string; baseRefName: string; headRefName: string; title: string; body: string };
+      const repo = repoById(input.repositoryId);
+      if (!repo) throw new FakeGraphqlError('NOT_FOUND', 'Could not resolve to a node with the global id');
+      if (!canWrite(repo)) throw new FakeGraphqlError('FORBIDDEN', 'Resource not accessible by integration');
+      const head = branchesOf(repo).get(input.headRefName);
+      if (!head) throw new FakeGraphqlError('UNPROCESSABLE', 'Head sha can\'t be blank');
+      if (prsOf(repo, input.headRefName).some((p) => p.state === 'OPEN')) throw new FakeGraphqlError('UNPROCESSABLE', `A pull request already exists for ${input.headRefName}.`);
+      const pr: FakePullRequest = {
+        repo: `${repo.owner}/${repo.name}`,
+        number: 100 + repo.prs + pullRequests.filter((p) => p.repo === `${repo.owner}/${repo.name}`).length + 1,
+        title: input.title,
+        body: input.body,
+        head: input.headRefName,
+        base: input.baseRefName,
+        state: 'OPEN',
+        createdAt: now(),
+        files: head.files,
+      };
+      pullRequests.push(pr);
+      writes.push({ operation: 'createPullRequest', repo: pr.repo, branch: pr.head, base: pr.base, title: pr.title, body: pr.body });
+      return { createPullRequest: { pullRequest: rawPullRequest(pr) } };
+    }
+    return null;
+  }
 
   // The operation names, variables and response aliases (`fechadas`, `abertas`, `mergeados`,
   // `fechadosSemMerge`) are the ones src/github/repos-source.ts sends: they stay as they are.
   function graphql(body: { query: string; variables: Record<string, string> }): unknown {
-    const op = /query (\w+)/.exec(body.query)?.[1] ?? '?';
+    const op = /(?:query|mutation) (\w+)/.exec(body.query)?.[1] ?? '?';
     calls.push(`GRAPHQL ${op}`);
     const v = body.variables ?? {};
+    const install = installOperation(op, v);
+    if (install !== null) return install;
     if (op === 'ReposLista') {
       return {
         rateLimit,
@@ -289,8 +471,13 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       };
     }
     if (op === 'RepoFilesDiscovery') {
-      const repo = find(v.owner, v.name);
-      return { rateLimit, repository: repo ? discovery(repo) : null };
+      // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).
+      const out: Record<string, unknown> = { rateLimit };
+      for (let i = 0; typeof v[`o${i}`] === 'string'; i++) {
+        const repo = find(v[`o${i}`], v[`n${i}`]);
+        out[`r${i}`] = repo ? discovery(repo) : null;
+      }
+      return out;
     }
     if (op === 'RepoBlobs') {
       const repo = find(v.owner, v.name);
@@ -307,9 +494,14 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
           path = commit === g.commit ? rest.join(':') : undefined;
         }
         const text = path === undefined ? undefined : g.files[path];
+        const how = path === undefined ? undefined : repo.unreadable?.[path];
         out[`b${m[2]}`] =
           text !== undefined
-            ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, text }
+            ? how === 'binary'
+              ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: true, isTruncated: false, text: null }
+              : how === 'truncated'
+                ? { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, isTruncated: true, text: text.slice(0, Math.floor(text.length / 2)) }
+                : { oid: g.oids.get(path!), byteSize: Buffer.byteLength(text), isBinary: false, isTruncated: false, text }
             : path !== undefined && g.folders.has(path)
               ? {}
               : null;
@@ -417,7 +609,13 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     if (url.pathname.endsWith('/graphql') && init?.method === 'POST') {
-      const answer = graphql(JSON.parse(String(init.body)));
+      let answer: unknown;
+      try {
+        answer = graphql(JSON.parse(String(init.body)));
+      } catch (err) {
+        if (err instanceof FakeGraphqlError) return Response.json({ data: null, errors: [{ type: err.type, message: err.message }] }, { status: 200 });
+        throw err;
+      }
       if (answer === null) return Response.json({ errors: [{ message: 'operação desconhecida no GitHub falso' }] }, { status: 200 });
       return Response.json({ data: answer });
     }
@@ -430,7 +628,17 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     if (asked === etag) return new Response(null, { status: 304, headers: { etag } });
     return new Response(text, { status: 200, headers: { etag, 'content-type': 'application/json' } });
   };
-  return { fetch: fake as typeof fetch, calls };
+  return {
+    fetch: fake as typeof fetch,
+    calls,
+    writes,
+    pullRequests,
+    failNext: (operation) => void failures.add(operation),
+    refs: (owner, name) => {
+      const repo = find(owner, name);
+      return repo ? Object.fromEntries([...branchesOf(repo)].map(([b, x]) => [b, x.oid])) : {};
+    },
+  };
 }
 
 interface GitFake {
@@ -464,12 +672,16 @@ const empty = () => ({ issueCount: 0, pageInfo: { hasNextPage: false, endCursor:
 const page = (nodes: unknown[]) => ({ issueCount: nodes.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes });
 
 /**
- * The demo repositories' files in the Instructions tab (#183, C32 and C33). Synthetic.
+ * The demo repositories' files in the Instructions tab (#183, C32 and C33) and in the framework
+ * install (#184, C36 and C37). Synthetic.
  * - `exemplo-labs/vitrine-demo`: everything the tab shows, no warning;
  * - `exemplo-labs/motor-de-regras`: the four warnings (truncated tree, broken settings.json,
- *   AGENTS.md without import and an import that does not exist);
+ *   AGENTS.md without import and an import that does not exist); the install is blocked by the JSON;
  * - `estudio-ficticio/app-receitas`: only AGENTS.md, brought in by CLAUDE.md;
- * - the others (like `dev-sintetico/blog-estatico`): only a README, the empty case.
+ * - `exemplo-labs/painel-de-metricas`: instructions without the framework, Python with FastAPI, tests
+ *   and CI: the install creates AGENTS.md and merges CLAUDE.md and settings.json;
+ * - `exemplo-labs/gateway-sandbox`: a Go service the account only reads: no install button;
+ * - the others (like `dev-sintetico/blog-estatico`): only a README, the empty case (C33 offers Install).
  */
 export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, string>; truncatedTree?: boolean }> = {
   'exemplo-labs/vitrine-demo': {
@@ -536,6 +748,27 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
       'services/billing/workers/AGENTS.md': '# workers\n\nFilas idempotentes.\n',
     },
   },
+  'exemplo-labs/painel-de-metricas': {
+    files: {
+      'README.md': '# painel-de-metricas\n\nPainel sintético de métricas da demonstração.\n',
+      'CLAUDE.md': '# painel-de-metricas\n\nUse o ambiente virtual do projeto e rode `pytest` antes do PR.\n',
+      '.claude/settings.json': `${JSON.stringify({ permissions: { allow: ['Bash(pytest)', 'Bash(ruff check .)'] } }, null, 2)}\n`,
+      'pyproject.toml': '[project]\nname = "painel-de-metricas"\nversion = "0.3.0"\ndependencies = [\n  "fastapi>=0.115",\n  "uvicorn>=0.30",\n]\n\n[project.optional-dependencies]\ndev = ["pytest>=8", "ruff>=0.6"]\n',
+      'app/main.py': 'from fastapi import FastAPI\n\napp = FastAPI()\n',
+      'app/metrics.py': 'def total(values):\n    return sum(values)\n',
+      'tests/test_metrics.py': 'from app.metrics import total\n\n\ndef test_total():\n    assert total([1, 2]) == 3\n',
+      '.github/workflows/ci.yml': 'name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: pytest\n',
+    },
+  },
+  'exemplo-labs/gateway-sandbox': {
+    files: {
+      'README.md': '# gateway-sandbox\n\nGateway sintético de testes.\n',
+      'go.mod': 'module example.invalid/gateway-sandbox\n\ngo 1.23\n',
+      'cmd/gateway/main.go': 'package main\n\nfunc main() {}\n',
+      'internal/route/route.go': 'package route\n',
+      'internal/route/route_test.go': 'package route\n',
+    },
+  },
   'estudio-ficticio/app-receitas': {
     files: {
       'README.md': '# app-receitas\n',
@@ -546,8 +779,13 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
 };
 
 const withFiles = (repo: FakeRepo): FakeRepo => {
-  const extra = DEMO_INSTRUCTION_FILES[`${repo.owner}/${repo.name}`];
-  return extra ? { ...repo, files: extra.files, ...(extra.truncatedTree ? { truncatedTree: true } : {}) } : repo;
+  const key = `${repo.owner}/${repo.name}`;
+  const extra = DEMO_INSTRUCTION_FILES[key];
+  // Os registros de decisão (#174) somam-se aos arquivos de instrução; sem nenhum dos dois, fica só o README.
+  const decisions = DEMO_DECISION_FILES[key];
+  if (!extra && !decisions) return repo;
+  const files = { ...(extra?.files ?? { 'README.md': `# ${repo.name}\n` }), ...decisions };
+  return { ...repo, files, ...(extra?.truncatedTree ? { truncatedTree: true } : {}) };
 };
 
 /** The demo, as in wireframe C22: two orgs, the personal account and eight repositories. */
@@ -567,6 +805,31 @@ export const DEMO_GITHUB_DATA: FakeGithubData = {
     { owner: 'dev-sintetico', name: 'blog-estatico', isPrivate: false, language: 'Astro', permission: 'ADMIN', pushMin: 60, issues: 1, prs: 1, ci: 'SUCCESS', commitsPerWeek: 3, stars: 5, forks: 1, watchers: 1, license: 'MIT', release: null, releases: 0, dependabot: 1, codeScanning: 0 },
   ] as FakeRepo[]).map(withFiles),
 };
+
+/**
+ * The framework's repository in the fake (#184): `.claude-plugin/marketplace.json` and each plugin's
+ * rules with their frontmatter, rebuilt from the package's snapshot (src/framework-install/catalog-snapshot.json).
+ * Not in the Repositories screen: only the framework install reads it.
+ */
+export function fakeFrameworkRepo(fullName: string = DEFAULT_FRAMEWORK_REPO): FakeRepo {
+  const [owner, name] = fullName.split('/');
+  const catalog = catalogSnapshot();
+  const files: Record<string, string> = {
+    'README.md': '# ahrena-framework\n\nSynthetic copy of the framework catalog for the demo.\n',
+    [MARKETPLACE_PATH]: `${JSON.stringify(
+      {
+        name: catalog.marketplace,
+        plugins: catalog.plugins.map((p) => ({ name: p.name, description: p.description, keywords: p.keywords, source: { source: 'git-subdir', url: `https://github.com/${fullName}.git`, path: p.path } })),
+      },
+      null,
+      2,
+    )}\n`,
+  };
+  for (const p of catalog.plugins) {
+    for (const r of p.rules) files[r.path] = `---\nid: ${r.id}\ntitle: ${r.title}\nstatement: ${r.statement}\nenforcement: ${r.enforcement}\n---\n\n# ${r.title}\n\n${r.statement}\n`;
+  }
+  return { owner, name, isPrivate: false, language: 'Markdown', permission: 'READ', pushMin: 60, issues: 0, prs: 0, ci: 'SUCCESS', commitsPerWeek: 5, files };
+}
 
 /** The demo's fake git: `/simulacao/<project>` is a clone of the repository with the same name, if there is one. */
 export function demoGit(data: FakeGithubData = DEMO_GITHUB_DATA) {

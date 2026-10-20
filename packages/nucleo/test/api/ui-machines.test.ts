@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { PASTA_DA_UI } from '../../src/api/ui.ts';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { seedTelemetry, SimulatedCollector } from '../../src/simulator/telemetry.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
@@ -217,6 +217,39 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.equal(part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!.getAttribute('aria-pressed'), 'true');
   });
 
+  test('#255 rule 9: the alerts and the Claude processes stack beside the tunnel, and the ports take the whole row', async () => {
+    const m = mount(null);
+    await m.ready;
+    const grid = m.area.querySelector('.tm-grid')!;
+    const column = grid.querySelector('.card-column')!;
+    assert.equal(column.parentNode, grid);
+    assert.ok(column.classList.contains('tm-side'));
+    assert.equal(column.children.length, 2);
+    assert.ok(column.children[0]!.querySelector('.tm-alerts'), 'O que pede atenção first, as in the wireframe');
+    assert.equal(column.children[1]!.getAttribute('data-part'), 'claude');
+    // The wireframe order: chart, volumes, tunnel, the stacked column, then the ports on their own row.
+    assert.deepEqual(
+      grid.children.map((c) => c.getAttribute('data-part') ?? (c.classList.contains('card-column') ? 'column' : c.querySelector('.tm-meter') ? 'volumes' : '?')),
+      ['chart', 'volumes', 'tunnel', 'column', 'ports'],
+    );
+    assert.ok(part(m.area, 'ports')!.classList.contains('tm-span-full'));
+  });
+
+  test('#255 rule 9: without a tunnel reading nothing stacks; the alerts take one column and the Claude processes the other two', async () => {
+    const noTunnel = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, tunnels: null } } : r;
+    };
+    const m = mount(null, noTunnel);
+    await m.ready;
+    assert.equal(part(m.area, 'tunnel'), null);
+    assert.equal(m.area.querySelector('.card-column'), null);
+    const grid = m.area.querySelector('.tm-grid')!;
+    assert.ok(grid.children.some((c) => c.querySelector('.tm-alerts')), 'O que pede atenção is a plain grid item');
+    assert.equal(part(m.area, 'claude')!.parentNode, grid);
+    assert.ok(part(m.area, 'claude')!.classList.contains('tm-span-wide'));
+  });
+
   test('12 h: the toggle reads hours=12, keeps it in the URL and the axis follows', async () => {
     const m = mount(null);
     await m.ready;
@@ -349,6 +382,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     assert.match(texto(m.area.querySelector('.cc-head')), /Conectando/);
   });
 
+  // Decision 0012 (issue 244) adds one write, Reconectar, which runs the user's own command and only
+  // when machines.json has one (test/api/ui-machine-reconnect.test.ts); without it, nothing changes here.
   test('no button starts, stops or forwards a tunnel: the app only shows', async () => {
     const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo']);
     for (const [state, reason] of [['connected', null], ['unreachable', 'port-closed'], ['unreachable', 'no-response'], ['incompatible-version', null], ['unreachable', null]] as const) {
@@ -360,8 +395,9 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
         assert.deepEqual(labels.filter((b) => !allowed.has(b)), [], `${state} ${reason} ${id}`);
       }
     }
-    const source = readFileSync(`${PASTA_DA_UI}screens/machine.js`, 'utf8');
-    assert.doesNotMatch(source, /ctx\.write|write\(/, 'the machine screen never writes');
+    const source = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
+    const writes = [...source.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]);
+    assert.deepEqual(writes, ['reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/reconnect');
   });
 });
 
@@ -542,7 +578,7 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
 // ---------- files, classes and icons ----------
 
 const FILES = ['screens/machine.js', 'screens/machine-format.js', 'screens/machine.css'];
-const classesOfCss = (file: string) => new Set([...readFileSync(`${PASTA_DA_UI}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+const classesOfCss = (file: string) => new Set([...readFileSync(`${UI_FOLDER}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const SEALS = new Set(['badge', 'p', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 
 describe('#178 the screen\'s files, CSS, classes and icons', () => {
@@ -551,14 +587,22 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
     const own = [...classesOfCss('screens/machine.css')].filter((c) => !shell.has(c) && !SEALS.has(c));
     assert.ok(own.length > 30);
     assert.deepEqual(own.filter((c) => !c.startsWith('tm-')), []);
-    const js = readFileSync(`${PASTA_DA_UI}screens/machine.js`, 'utf8');
+    const js = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
     const used = [...js.matchAll(/class: [`'"]([^`'"]+)[`'"]/g)].flatMap((m) => m[1]!.split(/\s+/)).map((c) => (c.includes('${') ? c.slice(0, c.indexOf('${')) : c)).filter((c) => /^[a-z][a-z0-9-]*$/.test(c));
     assert.ok(used.length > 20);
     assert.deepEqual(used.filter((c) => !c.startsWith('tm-') && !shell.has(c) && !SEALS.has(c) && !['card', 'btn', 'outline', 'mono', 'eyebrow', 'badge', 'error-band'].includes(c)), []);
   });
 
+  test('#255 rule 9: the stacked column is plain grid items in two columns and a flex column in three; a stretched chart grows', () => {
+    const css = readFileSync(`${UI_FOLDER}screens/machine.css`, 'utf8');
+    const wide = css.slice(css.indexOf('@media (min-width: 1300px)'));
+    assert.match(css, /\.tm-side \{ display: contents; \}/);
+    assert.match(wide.slice(0, wide.indexOf('}\n}')), /\.tm-side \{ display: flex; \}/);
+    assert.match(css, /\.tm-chart \{[^}]*flex: 1 0 120px;/);
+  });
+
   test('criterion 4 (static part): nothing scrolls horizontally: fixed tables, wrapping text, no overflow-x', () => {
-    const css = readFileSync(`${PASTA_DA_UI}screens/machine.css`, 'utf8');
+    const css = readFileSync(`${UI_FOLDER}screens/machine.css`, 'utf8');
     assert.doesNotMatch(css, /overflow-x/);
     assert.match(css, /\.tm-table \{[^}]*table-layout: fixed/);
     assert.match(css, /\.tm-grid \{[^}]*minmax\(0, 1fr\)/);
@@ -567,7 +611,7 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
   });
 
   test('criterion 5: the files exist, the screen loads its CSS by data-screen and removes it on leaving', async () => {
-    for (const f of FILES) readFileSync(`${PASTA_DA_UI}${f}`);
+    for (const f of FILES) readFileSync(`${UI_FOLDER}${f}`);
     const m = mount(null);
     await m.ready;
     assert.ok(document.head.querySelector('link[data-screen="machine"]'));
@@ -578,10 +622,10 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
   });
 
   test('criterion 5: every icon the screen uses exists; the new ones are not a drawing already there', () => {
-    const js = FILES.filter((f) => f.endsWith('.js')).map((f) => readFileSync(`${PASTA_DA_UI}${f}`, 'utf8')).join('\n');
+    const js = FILES.filter((f) => f.endsWith('.js')).map((f) => readFileSync(`${UI_FOLDER}${f}`, 'utf8')).join('\n');
     const used = new Set([...js.matchAll(/icon\('([a-z-]+)'\)|iconName: '([a-z-]+)'|icon: '([a-z-]+)'/g)].map((m) => m[1] ?? m[2] ?? m[3]));
     for (const name of [...used, 'monitor', 'server', 'memory-stick', 'hard-drive', 'wifi', 'monitor-dot', 'container', 'cable', 'radio-tower', 'server-off', 'git-compare']) assert.ok(ICON_NAMES.includes(name), `missing icon ${name}`);
-    const dom = readFileSync(`${PASTA_DA_UI}dom.js`, 'utf8');
+    const dom = readFileSync(`${UI_FOLDER}dom.js`, 'utf8');
     const drawings = [...dom.matchAll(/^\s+'?([\w-]+)'?: '(<[^']*)',$/gm)];
     for (const name of ['monitor', 'monitor-dot', 'memory-stick', 'hard-drive', 'wifi', 'container', 'cable', 'radio-tower', 'server-off', 'git-compare']) {
       const mine = drawings.find((d) => d[1] === name)![2];

@@ -1,4 +1,4 @@
-// The machine screens (C24, C25, C26, issue 178) without the DOM: what each card shows, read from
+// The machine screens (C24, C25, C26, issue 178; C50, issue 244) without the DOM: what each card shows, read from
 // `GET /api/telemetry?machine=<id>&hours=1|12` and `GET /api/machines` (src/telemetry/model.ts).
 //
 // A remote machine's groups (`gpu`, `network`, `claude`, `docker`, `topProcesses`, `ports`, `tunnels`)
@@ -115,6 +115,7 @@ export function normalizeMachine(m) {
     port: num(m.port),
     lastReadAt: str(m.lastReadAt, 40),
     alerts: num(m.alerts) ?? 0,
+    reconnect: normalizeReconnect(m.reconnect),
   };
 }
 
@@ -534,6 +535,7 @@ export function headerLine(reading, machine, { local, offline, now = Date.now() 
 
 /** The state pill of a remote machine in the header. */
 export function statePill(machine) {
+  if (machine.reconnect?.state === 'running') return ['b-waiting', 'Reconectando'];
   if (machine.state === 'connected') return ['b-completed', 'Conectada'];
   if (machine.state === 'incompatible-version') return ['b-waiting', 'Versão diferente'];
   if (machine.state === 'unreachable' && !machine.reason) return ['b-abandoned', 'Conectando'];
@@ -559,6 +561,129 @@ export function bandText(machine, reading, now = Date.now()) {
   const port = machine.port ? `A porta ${machine.port} deste Mac não aceita conexão: o túnel parece caído.` : 'O túnel parece caído.';
   const last = reading?.takenAt ? ` Abaixo, a última leitura, de ${clockTime(reading.takenAt)} (${ago(reading.takenAt, now)}).` : ' Ainda não há leitura dela guardada.';
   return { title: `Sem conexão com a ${machine.label}.`, text: `${port}${last} Tentamos de novo a cada 30 s.` };
+}
+
+// ---------- Reconectar (C50, issue 244, decision 0012) ----------
+//
+// `GET /api/machines` gives each remote a `reconnect` (null on this machine and on a core that does
+// not have it): whether `machines.json` has a command, the command itself (to show what runs, never
+// its output) and the state of the last run. The screen only POSTs and DELETEs the machine's id.
+
+export const RECONNECT_STATES = ['idle', 'running', 'succeeded', 'failed', 'timed-out', 'canceled'];
+/** How long the green "Reconectada às …" band stays after a run that brought the machine back. */
+export const RECONNECTED_SHOWN_MS = 10 * 60_000;
+
+export const reconnectRoute = (id) => `${MACHINES_ROUTE}/${encodeURIComponent(id)}/reconnect`;
+
+/** The `reconnect` of a machine, or `null` when the core sent none (or not an object). */
+export function normalizeReconnect(r) {
+  if (!isObject(r)) return null;
+  const command = Array.isArray(r.command) ? r.command.slice(0, 32).filter((a) => typeof a === 'string').map((a) => a.slice(0, 1024)) : [];
+  const timeout = num(r.timeoutSeconds);
+  return {
+    configured: r.configured === true && command.length > 0,
+    command: command.length ? command : null,
+    timeoutSeconds: timeout !== null && timeout > 0 ? timeout : null,
+    state: RECONNECT_STATES.includes(r.state) ? r.state : 'idle',
+    startedAt: str(r.startedAt, 40),
+    endedAt: str(r.endedAt, 40),
+    exitCode: Number.isInteger(r.exitCode) ? r.exitCode : null,
+    startedBy: r.startedBy === 'ui' || r.startedBy === 'local' ? r.startedBy : null,
+    logFile: str(r.logFile, 1024),
+  };
+}
+
+/** "42 s", "1 min 26 s", "3 min". */
+export function spanText(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
+}
+
+/** The elapsed clock, "1:12" (and "1:02:05" past an hour, which the limit never allows). */
+export function clockOf(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const two = (n) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+}
+
+/** Milliseconds between two ISO times, or `null`. */
+function between(from, to) {
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, b - a) : null;
+}
+
+/** The running clock against the limit: `{ elapsed: "1:12", limit: "3:00", seconds, max }`. */
+export function reconnectClock(rc, now = Date.now()) {
+  const ms = between(rc.startedAt, new Date(now).toISOString()) ?? 0;
+  const max = rc.timeoutSeconds ?? 0;
+  const seconds = Math.min(Math.floor(ms / 1000), max || Infinity);
+  return { elapsed: clockOf(seconds * 1000), limit: max ? clockOf(max * 1000) : null, seconds, max };
+}
+
+/** The mono line under the band: "Roda: /caminho/para/conectar.sh tunnel restart · até 3 min". */
+export function commandLine(rc) {
+  if (!rc?.command) return null;
+  return `Roda: ${rc.command.join(' ')}${rc.timeoutSeconds ? ` · até ${spanText(rc.timeoutSeconds * 1000)}` : ''}`;
+}
+
+/** Where the command's output went, never the output itself (variant A of C50). */
+export const logLine = (rc) => (rc.logFile ? `A saída ficou no log da instalação: ${rc.logFile}` : 'A saída ficou no reconnect.log da instalação.');
+
+/**
+ * What the reconnect part of a remote shows (C50), or `null` for the C25/C26 screen as it was:
+ * - `running` (2, and 6 when the tray started it): whatever the connection says;
+ * - with the tunnel down (the C26 band): `offer` (1, maybe with a `note` about the last run),
+ *   `failed` and `timed-out` (4), `setup` (5, no command in machines.json);
+ * - connected: `succeeded` (3) for a while after the run that brought it back.
+ * A core without `reconnect` (null) keeps C26 as it was.
+ */
+export function reconnectView(machine, now = Date.now()) {
+  const rc = machine?.reconnect;
+  if (!rc || machine.id === LOCAL_ID) return null;
+  if (rc.state === 'running') return { kind: 'running', fromTray: rc.startedBy === 'local' };
+  const condition = remoteCondition(machine);
+  if (condition === null) {
+    if (rc.state !== 'succeeded') return null;
+    const ended = Date.parse(rc.endedAt ?? '');
+    return Number.isFinite(ended) && now - ended < RECONNECTED_SHOWN_MS ? { kind: 'succeeded' } : null;
+  }
+  if (condition !== 'band') return null;
+  if (!rc.configured) return { kind: 'setup' };
+  if (rc.state === 'failed') return { kind: 'failed' };
+  if (rc.state === 'timed-out') return { kind: 'timed-out' };
+  if (rc.state === 'succeeded') return { kind: 'offer', note: `O comando terminou bem, mas a ${machine.label} não respondeu. Tentamos de novo a cada 30 s.` };
+  if (rc.state === 'canceled') return { kind: 'offer', note: rc.endedAt ? `A última reconexão foi cancelada às ${clockTime(rc.endedAt)}.` : 'A última reconexão foi cancelada.' };
+  return { kind: 'offer', note: null };
+}
+
+/** The title and text of the bands that end a run: 3 (`succeeded`) and 4 (`failed`, `timed-out`). */
+export function reconnectResult(machine, kind) {
+  const rc = machine.reconnect;
+  const took = between(rc.startedAt, rc.endedAt);
+  const after = took === null ? '' : ` depois de ${spanText(took)}`;
+  if (kind === 'succeeded') {
+    return { title: `Reconectada às ${clockTime(rc.endedAt)}`, text: `· a leitura voltou. O comando saiu com o código 0${after}, e o núcleo leu a ${machine.label} na hora.` };
+  }
+  if (kind === 'timed-out') {
+    const limit = rc.timeoutSeconds ? `passou de ${spanText(rc.timeoutSeconds * 1000)}` : 'passou do tempo limite';
+    return { title: 'Não reconectou.', text: `O comando ${limit} e foi encerrado. Se um login ficou aberto no navegador, ele não conta mais.` };
+  }
+  const code = rc.exitCode === null ? 'terminou sem código de saída' : `saiu com o código ${rc.exitCode}`;
+  return { title: 'Não reconectou.', text: `O comando ${code}${after}. A ${machine.label} continua sem conexão.` };
+}
+
+/** The setup card's example (5), for this machine, with a generic script: no provider, host or account. */
+export function reconnectExample(machine) {
+  const port = machine.port ? `, "port": ${machine.port}` : '';
+  return [
+    '~/.ahrena-console/machines.json',
+    `{ "machines": [ { "id": ${JSON.stringify(machine.id)}, "label": ${JSON.stringify(machine.label)}${port},`,
+    '    "reconnect": { "command": ["/caminho/para/conectar.sh", "tunnel", "restart"],',
+    '                   "timeoutSeconds": 180 } } ] }',
+  ].join('\n');
 }
 
 /** The pill of a session in the attention list: with error, needing you, or your turn. */
