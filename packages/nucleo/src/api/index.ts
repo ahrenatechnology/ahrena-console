@@ -7,3 +7,4 @@ export { MontadorDoPainel, atividadeDe, LIMITE_PADRAO_DE_CONTEXTO, type OpcoesDo
 export { ResumosDeSessao, aplicarEvento, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './resumo.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './trabalho.ts';
 export { iniciarApiLocal, VERSAO_DA_API, type ApiLocal, type OpcoesDaApi } from './servidor.ts';
+export { montarAtencao, MOTIVO_CURTO, ROTA_DA_ATENCAO, type ItemDaAtencao, type RespostaDaAtencao } from './rota-atencao.ts';

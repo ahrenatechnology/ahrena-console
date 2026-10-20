@@ -272,6 +272,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  frota: mcp.frota,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
