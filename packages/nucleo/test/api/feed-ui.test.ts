@@ -1,7 +1,7 @@
 // O Feed de atividade na /ui (#94): o estado (lista, pausa, cursor, tempo) e a tela montada sobre um
 // DOM mínimo, com um `ctx` falso que devolve respostas fixas de `GET /api/eventos`.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { PASTA_DA_UI } from '../../src/api/ui.ts';
 // @ts-expect-error: módulos do navegador, em JavaScript puro
@@ -395,6 +395,20 @@ describe('Feed de atividade: a tela', () => {
     soltar(Object.assign(new Error('saiu'), { name: 'AbortError' }));
     await montado;
     assert.equal(documento.head.querySelectorAll('link').length, antes, 'o link do CSS saiu');
+  });
+
+  // O CSS de cada tela fica carregado depois que ela abre: classe com o mesmo nome em duas telas quebra
+  // a outra. As do Feed levam o prefixo `feed-`; em comum, só as da moldura e os selos de status.
+  test('o feed.css só estiliza classes com o prefixo feed-, e nenhuma de outra tela', () => {
+    const classes = (arquivo: string) => new Set([...readFileSync(`${PASTA_DA_UI}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
+    const SELOS = new Set(['badge', 'p', 'mot', 'leve', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
+    const daMoldura = classes('moldura.css');
+    const minhas = [...classes('feed.css')].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
+    assert.deepEqual(minhas.filter((c) => !c.startsWith('feed-')), [], 'classe própria sem o prefixo feed-');
+    for (const outra of readdirSync(PASTA_DA_UI).filter((a) => a.endsWith('.css') && !['feed.css', 'moldura.css', 'marca.css'].includes(a))) {
+      const delas = classes(outra);
+      assert.deepEqual(minhas.filter((c) => delas.has(c)), [], `feed.css e ${outra} estilizam as mesmas classes`);
+    }
   });
 
   test('a tela não usa fetch, innerHTML nem estilo inline', () => {

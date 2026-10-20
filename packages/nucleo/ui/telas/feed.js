@@ -159,7 +159,7 @@ export async function montar(area, ctx) {
     const seta = el(
       'button',
       { type: 'button', class: 'feed-seta', 'aria-expanded': aberta ? 'true' : 'false', 'aria-label': aberta ? 'Fechar o detalhe' : 'Abrir o detalhe' },
-      icone(aberta ? 'seta-aberta' : 'seta-fechada'),
+      icone(aberta ? 'chevron-baixo' : 'chevron-direita'),
     );
     seta.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -168,7 +168,7 @@ export async function montar(area, ctx) {
     const caminho = trilha(ev);
     const cabeca = el(
       'div',
-      { class: `feed-linha${aberta ? ' aberta' : ''}` },
+      { class: `feed-linha${aberta ? ' feed-aberta' : ''}` },
       seta,
       el('span', { class: 'feed-o mono feed-hora' }, horaCurta(ev.criadoEm)),
       el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status]),
@@ -176,7 +176,7 @@ export async function montar(area, ctx) {
       el('span', { class: 'feed-trunc feed-resumo', title: ev.resumo ?? ev.tipo ?? '' }, ev.resumo ?? ev.tipo ?? ''),
       ev.ferramenta ? el('span', { class: 'feed-chip' }, ev.ferramenta) : null,
       el('span', { class: 'feed-o feed-rel', title: dataHora(ev.criadoEm) }, tempoRelativo(ev.criadoEm)),
-      rota ? el('a', { class: 'btn contorno feed-sessao', href: rota }, 'Sessão', icone('abrir')) : null,
+      rota ? el('a', { class: 'btn contorno feed-sessao', href: rota }, 'Sessão', icone('externo')) : null,
     );
     cabeca.addEventListener('click', (e) => {
       if (e.target?.closest?.('a, button')) return;
