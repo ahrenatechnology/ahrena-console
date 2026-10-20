@@ -220,16 +220,16 @@ test(`0.0.14: nothing cut and no raw markdown; the org's e-mail never shows`, as
     // O e-mail não aparece em lugar nenhum; a org pessoal é "conta pessoal".
     expect(texts.some((t) => t.includes('@'))).toBe(false)
     expect(texts.some((t) => /conta pessoal/.test(t))).toBe(true)
-    // A última mensagem sem o markdown cru.
-    expect(texts.some((t) => t.includes('Fechei o #131 com tudo verde e o npm test ok'))).toBe(true)
+    // A última mensagem sem o markdown cru, numa linha só, encurtada pelo mod (0.0.32).
+    expect(texts.some((t) => /"Fechei o #131 com tudo verde e o npm\S*…$/.test(t))).toBe(true)
     expect(texts.some((t) => /\]\(|\*\*|`/.test(t))).toBe(false)
     // As faixas de uma linha quebram em vez de cortar.
     const needYou = await ui.find({ key: 'need-you' })
     expect(needYou?.text).toMatch(/○ ninguém mais precisa de você · 2 na sua vez/)
     expect((await ui.findAll({ type: 'Text' })).find((t) => /ninguém mais precisa de você/.test(t.text ?? ''))?.props.wrap).toBe('wrap')
     expect((await ui.find({ key: 'prs' }))?.text).toMatch(base === PANE ? /⇄ 1 PR p\/ aprovar/ : /⇄ 1 PR aguardando sua aprovação/)
-    // O branch inteiro, no card ou no resumo.
-    expect(texts.some((t) => t.includes('feat/podium-replay-com-um-nome-sintetico-bem-comprido'))).toBe(true)
+    // O branch numa linha, com reticências no fim (P1), encurtado pelo mod (0.0.32).
+    expect(texts.some((t) => /⎇ feat\/podium-replay-com-um-nome-\S*…$/.test(t))).toBe(true)
     expect(texts.some((t) => /feat\/podium-rep[^l]*…/.test(t))).toBe(false)
     await ui.unmount()
   }
@@ -723,8 +723,9 @@ test('height: the six P1 cards always show, whole and the same size, at any heig
         expect([card?.props.width, card?.props.height]).toEqual([34, 10])
       }
       expect(await ui.find({ key: 'summaries' })).toBeUndefined()
-      // No card de altura fixa, o título corta com reticências, como no P1.
-      expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
+      // O título nunca corta (0.0.32, regra do Fernando): quebra em até 2 linhas, sem reticências.
+      const title = await ui.find({ type: 'Text', text: /título bem comprido/ })
+      expect([title?.props.wrap, /…/.test(title?.text ?? '')]).toEqual(['wrap', false])
       await ui.unmount()
     }
   }

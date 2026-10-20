@@ -58,13 +58,14 @@ import {
 import { gridHeight, CARD_BORDER, SPACE, CARD_LINES, textLines } from './height'
 import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type GraphLine } from './graph'
 import { paleta, status as STATUS_COR } from './brand'
+import { charsFor, columns, fit, kids, type Node } from './fit'
 
 export const CARD_W = 34
 /** Todo card tem a mesma altura, ~190 px no Desktop (ver CARD_LINES): a borda e as linhas de conteúdo. */
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.31'
+export const PLUGIN_VERSION = '0.0.32'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -509,6 +510,29 @@ const activityText = (s: PanelSession) => stripMarkdown(s.activity.type === 'err
  */
 export const UNCUT_COLUMNS = USABLE - 2
 
+/** O título do card Esta sessão nunca é cortado: quebra em até 2 linhas (0.0.32, regra do Fernando). */
+export const TITLE_LINES = 2
+
+/**
+ * O título do card Esta sessão: inteiro em até TITLE_LINES linhas do card; se não couber,
+ * encurtado por palavra, sem reticências e nunca no meio de uma palavra.
+ */
+export function sessionTitle(title: string): { text: string; lines: number } {
+  const words = title.split(/\s+/).filter(Boolean)
+  for (let n = words.length; n > 0; n--) {
+    const text = n === words.length ? words.join(' ') : words.slice(0, n).join(' ').replace(/\s*[·:,;–—-]$/, '')
+    const lines = textLines(text, charsFor(USABLE, 'body'))
+    if (lines <= TITLE_LINES) return { text, lines }
+  }
+  return { text: words[0] ?? '', lines: TITLE_LINES }
+}
+
+/** A última mensagem no card Esta sessão: uma linha só, encurtada no fim pelo próprio mod. */
+export function sessionMessage(glyph: string, text: string, max = charsFor(USABLE, 'footnote')): string {
+  const room = max - (glyph ? columns(glyph) + 1 : 0)
+  return columns(text) > room ? `${[...text].slice(0, Math.max(1, room - 1)).join('').trimEnd()}…` : text
+}
+
 /**
  * A linha do modelo no card Esta sessão, que nunca corta com reticências: inteira se couber; senão o
  * modelo sem a versão ("Opus 5.5" → "Opus"); depois o turno curto ("turno 262" → "t262"). Se nem
@@ -534,7 +558,8 @@ function sessionCard(c: DrawContext, s: PanelSession) {
   const a = s.activity
   const activityColor =
     a.type === 'error' ? RED_TEXT : a.type === 'tool' || a.type === 'delegating' ? ORANGE : a.type === 'completed' || a.type === 'abandoned' ? undefined : YELLOW
-  const glyph = ACTIVITY_GLYPH[a.type]
+  const glyph = ACTIVITY_GLYPH[a.type] ?? ''
+  const title = sessionTitle(s.title)
   return cardBox(
     c,
     'card-session',
@@ -547,19 +572,22 @@ function sessionCard(c: DrawContext, s: PanelSession) {
           i === 0 ? pill(c, 'status', x.text, color.color, color.background) : pill(c, 'reason', x.text, YELLOW, BADGE.yellow, REASONS[s.reason!].urgent),
         )}
       </Box>,
-      <Text mono weight="bold" wrap="truncate-end">
-        {s.title}
+      // O título nunca corta: até 2 linhas; com 2, a última mensagem sai para o card não crescer.
+      <Text mono weight="bold" wrap="wrap">
+        {title.text}
       </Text>,
       // Nunca com reticências: encurta e, em último caso, quebra (ver linhaDoModelo).
       <Text mono size="footnote" dimColor wrap="wrap">
         {modelLine(s, c.now)}
       </Text>,
-      <Text mono size="footnote" wrap="truncate-end">
-        {glyph ? <Text color={activityColor ?? GRAY}>{glyph} </Text> : null}
-        <Text color={a.type === 'error' ? RED_TEXT : undefined} dimColor={!activityColor && a.type !== 'error'}>
-          {activityText(s)}
+      title.lines < TITLE_LINES ? (
+        <Text mono size="footnote" wrap="truncate-end">
+          {glyph ? <Text color={activityColor ?? GRAY}>{glyph} </Text> : null}
+          <Text color={a.type === 'error' ? RED_TEXT : undefined} dimColor={!activityColor && a.type !== 'error'}>
+            {sessionMessage(glyph, activityText(s))}
+          </Text>
         </Text>
-      </Text>,
+      ) : null,
     ],
     color.border,
     tinted ? color.background : CARD_BG,
@@ -1131,7 +1159,7 @@ function childLine(c: DrawContext, f: PanelChild, max: number, full = false, wit
       </Box>
       {doing ? (
         <Box flexShrink={2} minWidth={0}>
-          <Text mono size="footnote" dimColor wrap="truncate-end">
+          <Text mono size="footnote" dimColor wrap={full ? 'wrap' : 'truncate-end'}>
             {' '}· {textWithPrs(c, doing)}
           </Text>
         </Box>
@@ -2265,8 +2293,24 @@ export function viewLines(c: DrawContext, p: Panel): number {
   return linesOutsideGrid(p, g, narrow, c.view?.compact) + questionLines(c, g.width) + gridHeight(inside.map(() => CARD_LINES), g.perRow)
 }
 
-/** O painel inteiro, no desktop. */
+/**
+ * O painel inteiro, no desktop, encaixado (0.0.32): o desenho é gravado como dados, todo texto de
+ * uma linha que passa das colunas que tem é encurtado pelo próprio mod (hooks/fit.ts), e só então
+ * vira os elementos da superfície. O Desktop deixou de encurtar o `wrap="truncate-end"`.
+ */
 export function draw(c: DrawContext): RenderElement {
+  const record = Object.fromEntries(Object.keys(c.el).map((t) => [t, (props: Record<string, unknown>) => ({ t, props })])) as unknown as Elements
+  const tree = drawTree({ ...c, el: record }) as unknown as Node
+  const rebuild = (n: Node, children: (Node | string)[]): Node => ({ t: n.t, props: { ...n.props, children } })
+  const toElement = (n: Node | string): unknown => {
+    if (typeof n === 'string') return n
+    const { children: _, ...props } = (n.props ?? {}) as Record<string, unknown>
+    return h(c.el[n.t as keyof Elements] as never, props, ...kids(n).map(toElement))
+  }
+  return toElement(fit(tree, c.cols, rebuild)) as RenderElement
+}
+
+function drawTree(c: DrawContext): RenderElement {
   const { Box } = c.el
   const g = grid(c.cols)
   const narrow = g.perRow === 1
