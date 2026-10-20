@@ -233,7 +233,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
-        "checks": null,
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -713,7 +718,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/91",
         "estado": "aberto",
         "ci": "ok",
-        "checks": null,
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -1074,7 +1084,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/90",
         "estado": "aberto",
         "ci": "rodando",
-        "checks": null,
+        "checks": {
+          "total": 7,
+          "ok": 3,
+          "falhas": 0,
+          "rodando": 4
+        },
         "review": "aprovado"
       },
       "semPush": false,
@@ -1332,7 +1347,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/88",
         "estado": "aberto",
         "ci": "falhou",
-        "checks": null,
+        "checks": {
+          "total": 7,
+          "ok": 5,
+          "falhas": 2,
+          "rodando": 0
+        },
         "review": "ajustes"
       },
       "semPush": false,
@@ -1670,7 +1690,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
-        "checks": null,
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,
@@ -2047,7 +2072,12 @@ export const CENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | '
         "url": "https://github.com/exemplo/simulacao/pull/78",
         "estado": "rascunho",
         "ci": "ok",
-        "checks": null,
+        "checks": {
+          "total": 6,
+          "ok": 6,
+          "falhas": 0,
+          "rodando": 0
+        },
         "review": "pendente"
       },
       "semPush": false,

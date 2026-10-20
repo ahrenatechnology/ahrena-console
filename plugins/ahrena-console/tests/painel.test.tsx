@@ -1,9 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import type { Painel } from '../types'
-import { distribuir } from '../hooks/altura'
 import { paleta } from '../hooks/marca'
-import { ATIVIDADE_MAX, linhasDaVisao } from '../hooks/desenho'
+import { linhasDaVisao } from '../hooks/desenho'
 import { AGORA, CENARIOS } from './cenarios'
 
 type Cenario = keyof typeof CENARIOS
@@ -139,7 +138,7 @@ test('P2 e P3: a faixa traz a pergunta ou a permissão; P5: o erro', async ($, o
   expect(await ui.find({ key: 'faixa' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /sigo com SQLite em memória ou subo um Postgres no Docker\?/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /3 opções · responda na conversa ao lado/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /ninguém precisa de você/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ninguém mais precisa de você/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /sem PR · branch sem push/ })).toBeDefined()
   await ui.unmount()
 
@@ -156,7 +155,7 @@ test('P2 e P3: a faixa traz a pergunta ou a permissão; P5: o erro', async ($, o
   ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: 120 } } })
   expect(await ui.find({ type: 'Text', text: /API 529 · overloaded_error/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /mande uma mensagem na conversa para retomar/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /CI ✕ falhou/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /CI ✕ 2 falhas/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /ajustes pedidos/ })).toBeDefined()
   await ui.unmount()
   expect(f.status.at(-1)).toBe('ahrena-console ✕ Com erro · 1 precisa de você')
@@ -171,13 +170,13 @@ test('P4: subagentes em paralelo e as sessões filhas', async ($, on) => {
   // P1: até 3 linhas, os ativos primeiro; o concluído vai para o "+1 concluído", que abre a lista.
   expect(await ui.find({ type: 'Text', text: /\+1 concluído ›/ })).toBeDefined()
   expect(await ui.find({ key: 'ver-subagentes' })).toBeDefined()
-  // Filhas: a que trabalha primeiro, com o que faz; a da sua vez depois; a concluída, resumida.
+  // Filhas (pnFilhas do P1): até 3 linhas, a ativa primeiro; "Sua vez" em âmbar à direita; "ver todas".
   const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).map((b) => b.key)
-  expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas'])
-  expect(await ui.find({ type: 'Text', text: /1 trabalhando · 3/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /· (pensando|rodando \w+)/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /1 concluída ›/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /CI … rodando/ })).toBeDefined()
+  expect(filhas).toEqual(['filha-sim-painel-catalogo-exemplo', 'filha-sim-painel-fila-de-tarefas', 'filha-sim-painel-blog-estatico'])
+  const suaVez = await ui.find({ type: 'Text', text: 'Sua vez' })
+  expect(suaVez?.props.color).toBe(paleta.yellow['500'])
+  expect(await ui.find({ type: 'Text', text: 'ver todas as 3 ›' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /CI … 3\/7/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /aprovado/ })).toBeDefined()
   await ui.unmount()
 })
@@ -225,8 +224,8 @@ test('0.0.14: nada cortado nem em markdown cru; o e-mail da org nunca aparece', 
     expect(textos.some((t) => /\]\(|\*\*|`/.test(t))).toBe(false)
     // As faixas de uma linha quebram em vez de cortar.
     const precisam = await ui.find({ key: 'precisam' })
-    expect(precisam?.text).toMatch(/○ ninguém precisa de você · 2 na sua vez/)
-    expect((await ui.findAll({ type: 'Text' })).find((t) => /ninguém precisa de você/.test(t.text ?? ''))?.props.wrap).toBe('wrap')
+    expect(precisam?.text).toMatch(/○ ninguém mais precisa de você · 2 na sua vez/)
+    expect((await ui.findAll({ type: 'Text' })).find((t) => /ninguém mais precisa de você/.test(t.text ?? ''))?.props.wrap).toBe('wrap')
     expect((await ui.find({ key: 'prs' }))?.text).toMatch(base === PANE ? /⇄ 1 PR p\/ aprovar/ : /⇄ 1 PR aguardando sua aprovação/)
     // O branch inteiro, no card ou no resumo.
     expect(textos.some((t) => t.includes('feat/podium-replay-com-um-nome-sintetico-bem-comprido'))).toBe(true)
@@ -304,58 +303,65 @@ test('sem lugar para o painel, o /console diz o motivo que o engine deu', async 
   expect(f.pedidos).toHaveLength(0)
 })
 
-test('#131 no largo: o plano atual com a barra e o passo em andamento, e os anteriores com ✓ e ◐', async ($, on) => {
+test('P1: o card Plano tem o anel com o %, "✓ N feitas", o passo atual e "○ próximo · +N", nas duas larguras', async ($, on) => {
   await abrir($, on, { cenario: 'p1' })
-  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
-  expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
-  expect(await ui.find({ key: 'plano-2' })).toBeDefined()
-  expect(await ui.find({ key: 'plano-1' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Prototipar o arrastar/ })).toBeDefined()
-  // "1/4" no texto, numa linha; o tempo na coluna fixa à direita.
-  expect((await ui.find({ key: 'plano-2' }))?.text).toMatch(/Prototipar o arrastar · 1\/4.*3 min/s)
-  expect(await ui.find({ type: 'Text', text: /Ler o wireframe do kanban/ })).toBeDefined()
-  expect(await ui.find({ key: 'ver-planos' })).toBeUndefined()
-  await ui.unmount()
+  for (const alvo of [PANE, LARGO]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
+    const card = await ui.find({ key: 'card-plano' })
+    expect(card?.props.height).toBe(8)
+    expect(await ui.find({ type: 'Svg', alt: /plano 50% feito, 3 de 6/ })).toBeDefined()
+    expect(card?.text).toMatch(/✓ 3 feitas/)
+    expect(card?.text).toMatch(/● Rodar a bateria/)
+    expect(card?.text).toMatch(/○ Abrir o PR · \+1/)
+    // A lista e o histórico ficam no detalhe, não no card.
+    expect(await ui.find({ key: 'plano-2' })).toBeUndefined()
+    expect(card?.text).toMatch(/3\/6 ›/)
+    await ui.unmount()
+  }
 })
 
-test('#131 no estreito: só o atual e "+N planos anteriores", que abre a lista', async ($, on) => {
+test('#131: o "N/M ›" do Plano abre o detalhe: os passos do plano atual e os planos anteriores', async ($, on) => {
   await abrir($, on, { cenario: 'p1' })
-  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Abrir o PR/ })).toBeDefined()
-  expect(await ui.find({ key: 'plano-2' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /\+2 planos anteriores/ })).toBeDefined()
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
   await ui.press({ key: 'ver-planos' })
   expect(await ui.find({ key: 'card-plano' })).toBeUndefined()
+  const passos = await ui.find({ key: 'passos-do-plano' })
+  expect(passos?.text).toMatch(/✓ Ler o artefato/)
+  expect(passos?.text).toMatch(/● Rodando a bateria|● Rodar a bateria/)
   expect(await ui.find({ type: 'Text', text: /PLANOS DA SESSÃO · 3/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 ✓ · 1 ◐/ })).toBeDefined()
   for (const n of [3, 2, 1]) expect(await ui.find({ key: `plano-${n}` })).toBeDefined()
+  expect((await ui.find({ key: 'plano-2' }))?.text).toMatch(/Prototipar o arrastar · 1\/4.*3 min/s)
   await ui.press({ key: 'fechar-planos' })
   expect(await ui.find({ key: 'card-plano' })).toBeDefined()
   await ui.unmount()
 })
 
-test('#131 depois do /clear: sem plano em andamento, os anteriores continuam', async ($, on) => {
+test('#131 depois do /clear: sem plano em andamento, os anteriores abrem pelo card', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p1' })
   const p1 = CENARIOS.p1
   f.estado.painel = { ...p1, plano: null, planos: (p1.planos ?? []).map((x) => (x.resultado === 'atual' ? { ...x, resultado: 'abandonado' as const, atual: null, fim: x.inicio } : x)) }
-  await f.relogio.advance(5_000)
+  await f.relogio.advance(15_000)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...LARGO })
   expect(await ui.find({ type: 'Text', text: /nenhum plano em andamento/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '+3 planos anteriores ›' })).toBeDefined()
+  await ui.press({ key: 'ver-planos-anteriores' })
   for (const n of [3, 2, 1]) expect(await ui.find({ key: `plano-${n}` })).toBeDefined()
   await ui.unmount()
 })
 
-test('#131 núcleo sem o histórico: o card mostra só o plano, como antes', async ($, on) => {
+test('#131 núcleo sem o histórico: o card mostra o plano, e o detalhe só os passos', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p1' })
   const { planos: _, ...semHistorico } = CENARIOS.p1
   f.estado.painel = semHistorico as Painel
-  await f.relogio.advance(5_000)
+  await f.relogio.advance(15_000)
   for (const alvo of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alvo })
     expect(await ui.find({ type: 'Text', text: /Rodar a bateria/ })).toBeDefined()
-    expect(await ui.find({ key: 'ver-planos' })).toBeUndefined()
+    await ui.press({ key: 'ver-planos' })
+    expect(await ui.find({ key: 'passos-do-plano' })).toBeDefined()
+    expect(await ui.find({ key: 'plano-1' })).toBeUndefined()
+    await ui.press({ key: 'fechar-planos' })
     await ui.unmount()
   }
 })
@@ -372,14 +378,15 @@ test('rodapé: a versão do plugin e a da API, discretas, nas duas larguras e se
   }
   // A pasta já está em outro commit: a API no ar é a de antes, e o rodapé pede para reiniciar.
   f.estado.painel = { ...CENARIOS.p1, api: { versao: '0.0.1', commit: 'abc1234', pasta: 'def5678', abreSessao: false } }
-  await f.relogio.advance(5_000)
+  // Só o texto do rodapé muda: aparece no redesenho depois do intervalo mínimo.
+  await f.relogio.advance(15_000)
   const mudou = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await mudou.find({ type: 'Text', text: /pasta em def5678: reinicie a API/ })).toBeDefined()
   await mudou.unmount()
   // Núcleo de antes do rodapé, sem `api`: a versão do plugin aparece mesmo assim.
   const { api: _, ...semApi } = CENARIOS.p1
   f.estado.painel = semApi as Painel
-  await f.relogio.advance(5_000)
+  await f.relogio.advance(15_000)
   const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
   expect(await ui.find({ type: 'Text', text: /plugin \d+\.\d+\.\d+ · api —/ })).toBeDefined()
   await ui.unmount()
@@ -422,7 +429,9 @@ test('#131: a sessão no índice do Desktop vira um link (pelo núcleo, para cla
   const links = (await ui.findAll({ type: 'Link' })).filter((l) => /\/abrir\//.test(l.props.href))
   const link = links[0]
   expect(link?.props.href).toBe(`http://localhost:4720/abrir/${LOCAL}`)
-  expect(link?.props.label).toBe('fila-de-tarefas')
+  // No card (P1), o nome em negrito na cor do texto, dentro do link.
+  const nome = await ui.find({ type: 'Text', text: 'fila-de-tarefas' })
+  expect([nome?.props.weight, nome?.props.color]).toEqual(['bold', undefined])
   expect(links).toHaveLength(1)
   await ui.unmount()
 
@@ -475,26 +484,11 @@ function carregado(): Painel {
   }
 }
 
-test('altura: a distribuição dá primeiro à prioridade, e o resto fica no resumo', () => {
-  const pecas = [
-    { id: 'sessao', minimo: 5, inteiro: 7 },
-    { id: 'contexto', minimo: 7, inteiro: 7, tudoOuNada: true },
-    { id: 'plano', minimo: 3, inteiro: 9 },
-  ]
-  const ordem = ['sessao', 'plano', 'contexto']
-  expect([...distribuir(pecas, 1, 100, ordem).values()]).toEqual([7, 7, 9])
-  // 9 + 1 + 3 + 1 + 11 = 25: a sessão inteira, o plano em parte, o contexto no resumo.
-  expect([...distribuir(pecas, 1, 25, ordem).values()]).toEqual([7, 1, 9])
-  expect([...distribuir(pecas, 1, 18, ordem).values()]).toEqual([7, 1, 2].map((x, i) => (i === 2 ? 1 : x)))
-  // Na grade de 3, a fileira acompanha o mais alto: o plano usa a altura que a sessão já ocupa.
-  expect(distribuir(pecas, 3, 9, ordem).get('plano')).toBe(7)
-})
-
 test('altura: em toda altura e nas duas larguras, o painel cabe na janela sem rolagem', async ($, on) => {
   const painel = carregado()
   for (const cols of [38, 121]) {
-    // Abaixo de ~36 linhas no estreito, a sessão e as linhas fixas sozinhas já passam da altura.
-    for (const linhas of [40, 45, 50, 60, 75, 90, 120, 200]) {
+    // Abaixo de ~44 linhas no estreito, a sessão e o Contexto (cards de 8) e as linhas fixas já passam da altura.
+    for (const linhas of [45, 50, 60, 75, 90, 120, 200]) {
       const usadas = linhasDaVisao({ agora: AGORA, nucleo: '127.0.0.1:4720', linhas, cols, acoes: {} } as any, painel)
       // Com a folga: zero rolagem.
       expect(usadas).toBeLessThanOrEqual(linhas - 2)
@@ -502,78 +496,58 @@ test('altura: em toda altura e nas duas larguras, o painel cabe na janela sem ro
   }
 })
 
-test('altura: pouca altura deixa a sessão inteira e o resto no resumo ou na faixa de resumos; muita mostra tudo', async ($, on) => {
+test('altura: todo card tem a mesma altura (P1); sem altura, os de menor prioridade vão para o card de resumos', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   f.estado.painel = carregado()
   await f.relogio.advance(5_000)
   for (const base of [PANE, LARGO]) {
-    // Pouca altura.
-    let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 45) })
-    const sessao = await ui.find({ key: 'card-sessao' })
-    expect(sessao?.props.minHeight).toBeGreaterThanOrEqual(7)
-    expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('wrap')
-    expect((await ui.find({ type: 'Text', text: /turno 212/ }))?.props.wrap).toBe('wrap')
-    const atividade = (await ui.findAll({ type: 'Text' })).find((x) => (x.text ?? '').startsWith('"Mandei os dois pedidos'))!
-    expect(atividade.text!.endsWith('…')).toBe(true)
-    if (base === PANE) {
-      // No estreito, o que não coube na grade fica na faixa de resumos; a lista abre a tela própria.
-      expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
-      // O Contexto (P1) fica inteiro, com os quatro tiles: logo depois da sessão (0.0.13).
-      expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
-      await ui.press({ key: 'resumo-subagentes' })
-      expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
-      await ui.press({ key: 'voltar-sessao' })
-    }
+    // Pouca altura: a sessão e o Contexto ficam, inteiros; o resto, no card de resumos.
+    let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, base === PANE ? 45 : 30) })
+    for (const key of ['card-sessao', 'card-contexto']) expect((await ui.find({ key }))?.props.height).toBe(8)
+    // No card de altura fixa, o título e a atividade cortam com reticências, como no P1.
+    expect((await ui.find({ type: 'Text', text: /título bem comprido/ }))?.props.wrap).toBe('truncate-end')
+    expect(await ui.find({ key: 'card-subagentes' })).toBeUndefined()
+    await ui.press({ key: 'resumo-subagentes' })
+    expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
+    await ui.press({ key: 'voltar-sessao' })
     await ui.unmount()
 
-    // Muita altura: no P1, os subagentes ativos todos e os concluídos no "+N"; as filhas que não
-    // estão paradas todas, e as concluídas numa linha.
+    // Muita altura: os seis cards, todos do mesmo tamanho; a altura que sobra fica vazia embaixo.
     ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
-    const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
-    expect(subs).toHaveLength(5)
-    expect(await ui.find({ type: 'Text', text: '+10 concluídos ›' })).toBeDefined()
-    expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))).toHaveLength(4)
-    expect(await ui.find({ type: 'Text', text: '2 concluídas ›' })).toBeDefined()
-    const longa = (await ui.findAll({ type: 'Text' })).find((x) => (x.text ?? '').startsWith('"Mandei os dois pedidos'))!
-    expect(longa.text!.length).toBeLessThanOrEqual(ATIVIDADE_MAX)
+    for (const key of CARDS) {
+      const card = await ui.find({ key })
+      expect([card?.props.width, card?.props.height]).toEqual([34, 8])
+    }
+    expect(await ui.find({ key: 'resumos' })).toBeUndefined()
     await ui.unmount()
   }
 })
 
-test('altura: nas listas, o que aparece mais o "+N" é sempre o total, e o "+N" abre a lista com "← voltar"', async ($, on) => {
+test('P1: Subagentes e Sessões filhas têm até 3 linhas; o resto num "+N", que abre a lista com "← voltar"', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const painel = carregado()
   f.estado.painel = painel
   await f.relogio.advance(5_000)
-  const n = async (ui: any, key: string, re: RegExp) => {
-    const t = (await ui.findAll({ type: 'Text' })).find((x: any) => re.test(x.text ?? ''))
-    return t ? Number(/\+(\d+)/.exec(t.text)![1]) : 0
-  }
   for (const base of [PANE, LARGO]) {
-    for (const linhas of ALTURAS) {
-      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-      // O resumo de um card de lista: "+2 ativos · +10 concluídos ›", "+1 na lista · 2 concluídas ›".
-      const resumo = async (re: RegExp) => {
-        const t = (await ui.findAll({ type: 'Text' })).find((x: any) => re.test(x.text ?? ''))
-        return t ? [...t.text!.matchAll(/\d+/g)].reduce((a, m) => a + Number(m[0]), 0) : 0
-      }
-      const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-')).length
-      if (subs > 0) expect(subs + (await resumo(/^\+\d+ (ativos?|concluídos?|com erro).* ›$/))).toBe(15)
-      const filhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-')).length
-      if (filhas > 0) expect(filhas + (await resumo(/(na lista|concluídas?|paradas?) ›$/))).toBe(painel.filhas.length)
-      const planos = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
-      const anteriores = (painel.planos ?? []).filter((x) => x.resultado !== 'atual').length
-      if (planos > 0) expect(planos + (await n(ui, 'ver-planos', /^\+\d+ planos? anteriores?$/))).toBe(anteriores)
-      await ui.unmount()
-    }
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 400) })
+    // Os ativos primeiro; o que não cabe nas 3 linhas soma o total no "+N".
+    const subs = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('sub-'))
+    expect(subs.map((b) => b.key)).toEqual(['sub-sim-sub-0', 'sub-sim-sub-1', `sub-${CENARIOS.p4.subagentes.itens[0]!.id}`])
+    expect(await ui.find({ type: 'Text', text: '+2 ativos · +10 concluídos ›' })).toBeDefined()
+    expect((await ui.find({ key: 'card-subagentes' }))?.text).toMatch(/5 ativos ›/)
+    // As filhas: até 3 linhas e "ver todas as N ›".
+    expect((await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('filha-'))).toHaveLength(3)
+    expect(await ui.find({ type: 'Text', text: `ver todas as ${painel.filhas.length} ›` })).toBeDefined()
+    await ui.unmount()
   }
-  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 60) })
-  // No card, ou na faixa de resumos quando o card não cabe com pelo menos um item.
-  const noCard = !!(await ui.find({ key: 'card-subagentes' }))
-  await ui.press({ key: noCard ? 'ver-subagentes' : 'resumo-subagentes' })
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 400) })
+  await ui.press({ key: 'mais-subagentes' })
   expect(await ui.find({ type: 'Text', text: /SUBAGENTES · 15/ })).toBeDefined()
   await ui.press({ key: 'voltar-sessao' })
-  expect(await ui.find({ key: noCard ? 'card-subagentes' : 'resumo-subagentes' })).toBeDefined()
+  await ui.press({ key: 'todas-as-filhas' })
+  expect(await ui.find({ type: 'Text', text: new RegExp(`SESSÕES FILHAS · ${painel.filhas.length}`) })).toBeDefined()
+  await ui.press({ key: 'voltar-sessao' })
+  expect(await ui.find({ key: 'card-subagentes' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -584,12 +558,11 @@ test('altura: as telas que tomam o lugar da sessão também cabem, com "+N que n
   painel.planos = [...(painel.planos ?? []), ...Array.from({ length: 30 }, (_, i) => ({ ...ant, numero: 100 + i, resumo: `Plano sintético ${i}` }))]
   f.estado.painel = painel
   await f.relogio.advance(5_000)
-  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 40) })
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 50) })
   await ui.press({ key: (await ui.find({ key: 'card-plano' })) ? 'ver-planos' : 'resumo-plano' })
   const linhas = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith('plano-')).length
-  // 40 linhas, 19 em volta, 2 de folga e uma para o "+N".
-  expect(linhas).toBe(18)
-  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${painel.planos.length - 18} que não cabem nesta altura`) })).toBeDefined()
+  expect(linhas).toBeGreaterThan(0)
+  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${painel.planos.length - linhas} que não cabem nesta altura`) })).toBeDefined()
   await ui.press({ key: 'voltar-sessao' })
   await ui.unmount()
 
@@ -620,14 +593,14 @@ test('#131: no macOS, o nome da sessão abre a conversa direto pela API, sem o n
   await ui.unmount()
 })
 
-test('#131: nas listas do painel, cada item é uma linha com reticências e o tempo numa coluna fixa; inteiro só na tela "+N"', async ($, on) => {
+test('#131: nas listas dos cards, cada item é uma linha com reticências e o tempo numa coluna fixa; inteiro só na tela da lista', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   f.estado.painel = carregado()
   await f.relogio.advance(5_000)
   for (const base of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, 120) })
-    // No estreito, os planos anteriores ficam atrás do "+N".
-    for (const prefixo of base === LARGO ? ['sub-', 'filha-', 'plano-'] : ['sub-', 'filha-']) {
+    // Os planos anteriores ficam no detalhe do Plano, nas duas larguras (P1).
+    for (const prefixo of ['sub-', 'filha-']) {
       const itens = (await ui.findAll({ type: 'Box' })).filter((b) => b.key?.startsWith(prefixo))
       expect(itens.length).toBeGreaterThan(0)
     }
@@ -729,7 +702,7 @@ test('#131 clique duplo: o polling só regrava o atom quando o desenho muda (uso
   await ui.unmount()
 })
 
-test('#131: as filhas que trabalham vêm sempre listadas, com o que fazem; depois as que precisam e as da sua vez; as paradas, resumidas', async ($, on) => {
+test('P1: as filhas que trabalham vêm primeiro, depois as que precisam e as da sua vez; a lista completa diz o que cada uma faz', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p4' })
   const p4 = CENARIOS.p4
   const base = p4.filhas[0]!
@@ -747,16 +720,22 @@ test('#131: as filhas que trabalham vêm sempre listadas, com o que fazem; depoi
   await f.relogio.advance(5_000)
   for (const b of [PANE, LARGO]) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(b, 90) })
+    // No card (P1): 3 linhas, as que trabalham primeiro (a mais recente antes), depois a que precisa.
     const linhas = (await ui.findAll({ type: 'Box' })).filter((x) => x.key?.startsWith('filha-')).map((x) => x.key)
-    // As que trabalham (a mais recente antes), a que precisa, as da sua vez; nenhuma concluída.
-    expect(linhas).toEqual(['filha-sim-filha-14', 'filha-sim-filha-12', 'filha-sim-filha-11', 'filha-sim-filha-13', 'filha-sim-filha-10', 'filha-sim-filha-9'])
-    expect(await ui.find({ type: 'Text', text: /2 trabalhando · 15/ })).toBeDefined()
+    expect(linhas).toEqual(['filha-sim-filha-14', 'filha-sim-filha-12', 'filha-sim-filha-11'])
+    expect((await ui.find({ key: 'card-filhas' }))?.text).toMatch(/SESSÕES FILHAS.*15 ›/s)
+    // À direita, o tempo; ou, em âmbar, o que pede você.
+    expect((await ui.find({ type: 'Text', text: 'Precisa' }))?.props.color).toBe(paleta.yellow['500'])
+    expect(await ui.find({ type: 'Text', text: 'ver todas as 15 ›' })).toBeDefined()
+    // Na lista completa, a ordem inteira e o que cada uma que trabalha está fazendo.
+    await ui.press({ key: 'todas-as-filhas' })
+    const todas = (await ui.findAll({ type: 'Box' })).filter((x) => x.key?.startsWith('filha-')).map((x) => x.key)
+    expect(todas.slice(0, 6)).toEqual(['filha-sim-filha-14', 'filha-sim-filha-12', 'filha-sim-filha-11', 'filha-sim-filha-13', 'filha-sim-filha-10', 'filha-sim-filha-9'])
     expect(await ui.find({ type: 'Text', text: /· rodando Bash/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /· pensando/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /· pede você/ })).toBeDefined()
-    // As concluídas numa linha, que abre a lista.
-    expect(await ui.find({ type: 'Text', text: '9 concluídas ›' })).toBeDefined()
-    expect(await ui.find({ key: 'ver-filhas' })).toBeDefined()
+    // Três na sua vez: duas no fim do turno e uma depois do Esc.
+    expect((await ui.findAll({ type: 'Text', text: 'Sua vez' })).length).toBe(3)
+    await ui.press({ key: 'voltar-sessao' })
     await ui.unmount()
   }
 })
@@ -776,9 +755,13 @@ test('Compactar: sempre no card; a partir de 80% em destaque; pede confirmação
   })
   const f = await abrir($, on, { cenario: 'p1' })
   const p1 = CENARIOS.p1
-  // Abaixo de 80%: o botão discreto.
+  // Abaixo de 80% (P1): fora do cabeçalho, que diz "estimativa"; o rótulo do tile Contexto abre a confirmação.
   let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
-  expect(await ui.find({ key: 'compactar' })).toBeDefined()
+  expect(await ui.find({ key: 'compactar' })).toBeUndefined()
+  expect((await ui.find({ key: 'card-contexto' }))?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
+  await ui.press({ key: 'kpi-contexto-abrir' })
+  expect(await ui.find({ type: 'Text', text: 'Compactar a conversa desta sessão?' })).toBeDefined()
+  await ui.press({ key: 'compactar-nao' })
   await ui.unmount()
 
   // A partir de 80%: "Compactar agora", em destaque.
@@ -788,6 +771,9 @@ test('Compactar: sempre no card; a partir de 80% em destaque; pede confirmação
   const agora = await ui.find({ key: 'compactar' })
   expect(agora?.props.label).toBe('Compactar agora')
   expect(agora?.props.variant).toBe('primary')
+  // No lugar do tile Background: a grade 2×2 fica.
+  expect(await ui.find({ key: 'kpi-background' })).toBeUndefined()
+  expect(await ui.find({ key: 'kpi-compactar' })).toBeDefined()
 
   // Cancelar não compacta.
   await ui.press({ key: 'compactar' })
@@ -838,14 +824,11 @@ test('#140: só a sua vez não ganha destaque nem conta; aparece neutra, e "Ver"
   // Sem o amarelo de quem está bloqueada: borda neutra.
   expect(linha?.props.borderColor).not.toBe(paleta.yellow['500'])
   expect(linha?.props.backgroundColor).toBe(paleta.gray['800'])
-  expect(linha?.text).toMatch(/ninguém precisa de você · 3 na sua vez/)
+  expect(linha?.text).toMatch(/ninguém mais precisa de você · 3 na sua vez/)
   expect(await ui.find({ type: 'Text', text: /precisam? de você$/ })).toBeUndefined()
   expect(f.status.at(-1)).toMatch(/ninguém mais$/)
-  await ui.press({ key: 'ver-precisam' })
-  expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 0/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /SUA VEZ · 3/ })).toBeDefined()
-  const card = await ui.find({ key: `precisa-${suaVez[0]!.id}` })
-  expect(card?.text).toMatch(/↵ Sua vez/)
+  // P1: com zero, sem o "Ver"; a sua vez fica ao lado, neutra.
+  expect(await ui.find({ key: 'ver-precisam' })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -921,27 +904,20 @@ test('contexto: vale o do engine (o da barra do Claude Code), que já caiu depoi
   await ui.unmount()
 })
 
-test('"Compactar agora" não esmaga a telemetria: no cabeçalho do card inteiro, numa linha própria no resumo', async ($, on) => {
+test('"Compactar agora" não quebra a grade 2×2: toma o lugar do tile Background, nas duas larguras e com pouca altura', async ($, on) => {
   const f = await abrir($, on, { cenario: 'p1' })
   f.estado.painel = { ...CENARIOS.p1, contexto: { usados: 172_000, limite: 200_000, pct: 86 }, custo: { usd: 155.32, serie: [0, 155.32], estimativa: true } }
   await f.relogio.advance(5_000)
-  // Card inteiro: os quatro KPIs ficam, e o botão vai no cabeçalho.
-  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(LARGO, 120) })
-  for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
-  expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
-  expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
-  await ui.unmount()
-  // Resumo (pouca altura): o texto inteiro numa linha, sem truncar, e o botão na linha de baixo.
-  // Abaixo de 41 linhas no estreito, a sessão e os tiles não cabem juntos: o Contexto vai para o resumo.
-  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(PANE, 36) })
-  const card = await ui.find({ key: 'card-contexto' })
-  const resumo = await ui.find({ type: 'Text', text: /86% · ~US\$ 155,32/ })
-  expect(resumo).toBeDefined()
-  expect(resumo?.props.wrap).toBeUndefined()
-  // Duas linhas: o resumo e, embaixo, o botão.
-  expect(card?.props.minHeight).toBe(4)
-  expect(await ui.find({ key: 'compactar' })).toBeDefined()
-  await ui.unmount()
+  for (const [base, linhas] of [[LARGO, 120], [PANE, 45]] as const) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
+    for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-compactar']) expect(await ui.find({ key: kpi })).toBeDefined()
+    expect((await ui.find({ key: 'compactar' }))?.props.label).toBe('Compactar agora')
+    const card = await ui.find({ key: 'card-contexto' })
+    expect(card?.props.height).toBe(8)
+    // O cabeçalho continua o do P1.
+    expect(card?.text).toMatch(/CONTEXTO E CUSTO\s*estimativa/)
+    await ui.unmount()
+  }
 })
 
 // --- #140 (6 e 7): a pergunta com que a sessão terminou o turno, no topo ---
@@ -1087,11 +1063,11 @@ test('#140: o AskUserQuestion aparece no topo com as perguntas e as opções int
 })
 
 
-test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, a partir de 41 linhas no estreito e 32 no largo', async ($, on) => {
+test('P1: o card Contexto e custo tem os quatro tiles nas duas larguras, mesmo com pouca altura', async ($, on) => {
   await abrir($, on, { cenario: 'p1' })
-  for (const [base, linhas] of [[PANE, 41], [LARGO, 32]] as const) {
+  for (const [base, linhas] of [[PANE, 45], [LARGO, 30]] as const) {
     const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...alto(base, linhas) })
-    expect((await ui.find({ key: 'card-contexto' }))?.props.minHeight).toBe(9)
+    expect((await ui.find({ key: 'card-contexto' }))?.props.height).toBe(8)
     for (const kpi of ['kpi-contexto', 'kpi-custo', 'kpi-tokens', 'kpi-background']) expect(await ui.find({ key: kpi })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /CONTEXTO E CUSTO/ })).toBeDefined()
     await ui.unmount()

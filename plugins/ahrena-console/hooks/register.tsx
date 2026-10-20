@@ -547,7 +547,7 @@ export const register: Register = (on, options) => {
               </Text>
               <Text dimColor>{s ? s.atividade.texto : ''}</Text>
               {l.painel.decisoes?.vigentes ? <Text>⊸ {decisoesTexto(l.painel.decisoes.vigentes)}</Text> : null}
-              <Text>{l.painel.precisam.total ? `⚠ ${precisamTexto(l.painel.precisam.total)}` : 'ninguém precisa de você'}</Text>
+              <Text>{l.painel.precisam.total ? `⚠ ${precisamTexto(l.painel.precisam.total)}` : 'ninguém mais precisa de você'}</Text>
             </Box>
           )}
         </Box>
