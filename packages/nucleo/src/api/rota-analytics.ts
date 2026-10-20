@@ -1,9 +1,9 @@
-// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral, C12) e `GET /api/analytics/custo` (Custo, C13).
+// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral, C12) e `GET /api/analytics/cost` (Custo, C13).
 //
 // Tudo sai da porta de armazenamento, só leitura:
 // - custo e tokens pelas parcelas e pelo relatório de custo (src/custo/agregacao.ts), com a tabela
 //   vigente; o que não tem preço fica `null` e a lista dos modelos sem preço vai junto;
-// - dias pelo `diaDe` no fuso pedido (`?fuso=<IANA>`, padrão UTC);
+// - dias pelo `diaDe` no fuso pedido (`?tz=<IANA>`, padrão UTC);
 // - somar só o que soma (decisão 0006): custo e contagens somam, sempre com a divisão por conta ao lado.
 //
 // Definições:
@@ -28,6 +28,8 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 
 export const ROTA_DO_ANALYTICS = '/api/analytics';
+export const COST_ROUTE = '/api/analytics/cost';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_CUSTO = '/api/analytics/custo';
 export const DIAS_DO_CUSTO = [7, 30, 90] as const;
 /** Janela dos números da Visão geral. */
@@ -199,11 +201,11 @@ export class RotaAnalytics {
 
   async responder(url: URL): Promise<RespostaDoAnalytics> {
     try {
-      const fuso = validarFuso(url.searchParams.get('fuso'));
+      const fuso = validarFuso(url.searchParams.get('tz'));
       const hoje = diaDe(new Date(this.agora()).toISOString(), fuso);
       if (url.pathname === ROTA_DO_ANALYTICS) return { status: 200, corpo: await this.emCache(`visao?${fuso}&${hoje}`, this.cacheMs.visao, () => this.visaoGeral(fuso)) };
-      if (url.pathname === ROTA_DO_CUSTO) {
-        const dias = Number(url.searchParams.get('dias') ?? 30);
+      if (url.pathname === COST_ROUTE) {
+        const dias = Number(url.searchParams.get('days') ?? 30);
         if (!DIAS_DO_CUSTO.includes(dias as (typeof DIAS_DO_CUSTO)[number])) throw new ParametroInvalido('dias: 7, 30 ou 90');
         return { status: 200, corpo: await this.emCache(`custo?${dias}&${fuso}&${hoje}`, this.cacheMs.custo, () => this.custo(dias, fuso)) };
       }

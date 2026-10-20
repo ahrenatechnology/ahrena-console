@@ -1,14 +1,16 @@
-// A lista de sessões da tela Sessões (C3, #28): `GET /api/sessoes`, paginada e com os filtros no
+// A lista de sessões da tela Sessões (C3, #28): `GET /api/sessions`, paginada e com os filtros no
 // servidor.
 //
 // | Parâmetro | Valores                                                              | Padrão      |
 // | --------- | -------------------------------------------------------------------- | ----------- |
 // | `status`  | `todas`, `ativas`, `esperando`, `concluidas`, `erro`, `abandonadas`   | `todas`     |
-// | `busca`   | texto: título, id ou diretório, sem diferença de caixa                | —           |
+// | `search`  | texto: título, id ou diretório, sem diferença de caixa                | —           |
 // | `dir`     | um diretório exato (os de `diretorios` na resposta)                   | —           |
-// | `ordem`   | `atividade`, `duracao` ou `custo`                                     | `atividade` |
-// | `sentido` | `desc` ou `asc`                                                       | `desc`      |
-// | `pagina`  | a partir de 1, com `POR_PAGINA` itens                                 | 1           |
+// | `order`   | `atividade`, `duracao` ou `custo`                                     | `atividade` |
+// | `direction` | `desc` ou `asc`                                                       | `desc`      |
+// | `page`    | a partir de 1, com `POR_PAGINA` itens                                 | 1           |
+//
+// The old parameter names (and route) are aliases: src/api/legacy-routes.ts.
 //
 // Tudo pela porta e por caches em memória (decisão 0004). O custo de uma sessão é refeito só quando
 // o `updatedAt` dela muda, e só para as sessões da página, a não ser que a ordem seja por custo.
@@ -26,6 +28,8 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Contas } from './contas.ts';
 import type { IndiceDoDesktop, SessaoDoDesktop } from './indice-desktop.ts';
 
+export const SESSIONS_ROUTE = '/api/sessions';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DAS_SESSOES = '/api/sessoes';
 export const POR_PAGINA = 10;
 
@@ -89,23 +93,24 @@ const CAMINHO = /^\/[^\0\n]{0,1023}$/;
 /** Os parâmetros da URL, validados; parâmetro inválido lança `ErroDoPedido` (400). */
 export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
   const p = url.searchParams;
-  const um = <T extends string>(nome: string, validos: readonly T[], padrao: T): T => {
+  // `rotulo`: the name the error message shows, kept as it was (the message is the same on the old route).
+  const um = <T extends string>(nome: string, validos: readonly T[], padrao: T, rotulo = nome): T => {
     const v = p.get(nome) || padrao;
-    if (!validos.includes(v as T)) throw new ErroDoPedido(`${nome}: um de ${validos.join(', ')}`);
+    if (!validos.includes(v as T)) throw new ErroDoPedido(`${rotulo}: um de ${validos.join(', ')}`);
     return v as T;
   };
-  const busca = (p.get('busca') ?? '').trim();
+  const busca = (p.get('search') ?? '').trim();
   if (busca.length > BUSCA_MAXIMA) throw new ErroDoPedido('busca grande demais');
   const dir = p.get('dir') || null;
   if (dir !== null && !CAMINHO.test(dir)) throw new ErroDoPedido('dir: um caminho absoluto');
-  const pagina = Number(p.get('pagina') || 1);
+  const pagina = Number(p.get('page') || 1);
   if (!Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) throw new ErroDoPedido('pagina: um inteiro a partir de 1');
   return {
     status: um('status', FILTROS_DE_STATUS, 'todas'),
     busca: busca || null,
     dir,
-    ordem: um('ordem', ORDENS, 'atividade'),
-    sentido: um('sentido', ['desc', 'asc'] as const, 'desc'),
+    ordem: um('order', ORDENS, 'atividade', 'ordem'),
+    sentido: um('direction', ['desc', 'asc'] as const, 'desc', 'sentido'),
     pagina,
   };
 }
@@ -217,7 +222,7 @@ export function tituloDe(s: Session, d: SessaoDoDesktop | null): string {
   return tituloSeguro(d?.titulo) ?? tituloSeguro(s.name) ?? (s.cwd ? tituloSeguro(basename(s.cwd)) : null) ?? s.id.slice(0, 8);
 }
 
-/** `GET /api/sessoes`: 400 com a explicação quando um parâmetro não vale. */
+/** `GET /api/sessions`: 400 com a explicação quando um parâmetro não vale. */
 export async function responderSessoes(res: ServerResponse, url: URL, lista: ListaDeSessoes): Promise<void> {
   let pedido: PedidoDeSessoes;
   try {

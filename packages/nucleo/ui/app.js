@@ -5,7 +5,7 @@ import { escrever, ler } from './ler.js';
 import { iniciarAoVivo } from './ao-vivo.js';
 import { cabecalho, el, icone } from './dom.js';
 import { erro, vazio } from './estados.js';
-import { acharTela, TELAS } from './telas.js';
+import { acharTela, sidebarSections } from './telas.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('conteudo');
@@ -16,12 +16,22 @@ porta.textContent = location.host;
 
 // ---------- Barra lateral ----------
 
+// Um bloco por seção (C1, C24): as telas do dia a dia sem título, depois Máquinas e Controle.
 const itens = new Map();
-for (const tela of TELAS.filter((t) => t.item)) {
-  const q = el('span', { class: 'q', hidden: true });
-  const a = el('a', { class: 'cc-nav', href: tela.rota, 'data-tela': tela.id }, icone(tela.item.icone), el('span', {}, tela.item.rotulo), q);
-  itens.set(tela.id, { a, q });
-  nav.append(a);
+for (const section of sidebarSections()) {
+  const titleId = section.label ? `cc-nav-title-${section.id}` : null;
+  const group = el(
+    'div',
+    { class: 'cc-nav-section', 'data-section': section.id, role: titleId && 'group', 'aria-labelledby': titleId },
+    titleId && el('div', { class: 'cc-nav-title olhinho', id: titleId }, section.label),
+  );
+  for (const tela of section.items) {
+    const q = el('span', { class: 'q', hidden: true });
+    const a = el('a', { class: 'cc-nav', href: tela.rota, 'data-tela': tela.id }, icone(tela.item.icone), el('span', {}, tela.item.rotulo), q);
+    itens.set(tela.id, { a, q });
+    group.append(a);
+  }
+  nav.append(group);
 }
 
 function acender(id) {
@@ -99,6 +109,7 @@ iniciarAoVivo({
 let saida = null;
 let telaComErro = false;
 
+// `rota` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
 function navegar(rota) {
   if (rota !== location.pathname + location.search) history.pushState(null, '', rota);
   abrir();

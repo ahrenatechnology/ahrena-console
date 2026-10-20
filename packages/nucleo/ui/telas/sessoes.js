@@ -1,5 +1,5 @@
 // A tela Sessões (C3, #28): a tabela das sessões com busca, filtro por diretório, ordenação, as
-// pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessoes`,
+// pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessions`,
 // src/api/sessoes.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
 // A linha leva ao Detalhe, `/ui/sessoes/<id>`.
 
@@ -64,10 +64,10 @@ export function queryDoEstado(estado) {
 
 /** A rota da API para o estado: sempre com status, ordem, sentido e página. */
 export function rotaDaLista(estado) {
-  const p = new URLSearchParams({ status: estado.status, ordem: estado.ordem, sentido: estado.sentido, pagina: String(estado.pagina) });
-  if (estado.busca.trim()) p.set('busca', estado.busca.trim());
+  const p = new URLSearchParams({ status: estado.status, order: estado.ordem, direction: estado.sentido, page: String(estado.pagina) });
+  if (estado.busca.trim()) p.set('search', estado.busca.trim());
   if (estado.dir) p.set('dir', estado.dir);
-  return `/api/sessoes?${p}`;
+  return `/api/sessions?${p}`;
 }
 
 /** "agora", "há 2 min", "há 1 h", "há 3 d". */

@@ -260,8 +260,8 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
 });
 
 test('as rotas da tela são as do núcleo', async () => {
-  const { ROTA_DA_ATENCAO, ROTA_DO_DASHBOARD } = await import('../../src/api/index.ts');
-  assert.equal(tela.ROTA_DA_ATENCAO, ROTA_DA_ATENCAO);
+  const { ATTENTION_ROUTE, ROTA_DO_DASHBOARD } = await import('../../src/api/index.ts');
+  assert.equal(tela.ROTA_DA_ATENCAO, ATTENTION_ROUTE);
   assert.equal(tela.ROTA_DO_DASHBOARD, ROTA_DO_DASHBOARD);
 });
 

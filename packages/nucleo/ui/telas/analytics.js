@@ -1,7 +1,7 @@
 // A tela Analytics (#95 e #32, C12 e C13): a Visão geral em /ui/analytics e o Custo em
 // /ui/analytics/custo. As duas abas são a mesma tela; a aba vem de `ctx.params.aba`.
 //
-// - Lê `GET /api/analytics?fuso=` (Visão geral) e `GET /api/analytics/custo?dias=&fuso=` (Custo),
+// - Lê `GET /api/analytics?tz=` (Visão geral) e `GET /api/analytics/cost?days=&tz=` (Custo),
 //   sempre por `ctx.ler`, com o fuso do navegador.
 // - Ao vivo: uma mudança relê depois de alguns segundos (uma releitura por rajada); reiniciar relê já.
 // - Os gráficos são SVG desenhado aqui, sem biblioteca. Tamanho e posição são atributos SVG; cor só
@@ -13,7 +13,7 @@ import { cabecalho, el, icone } from '../dom.js';
 import { carregando, erro, faixaDeErro, vazio } from '../estados.js';
 
 export const ROTA_DA_VISAO = '/api/analytics';
-export const ROTA_DO_CUSTO = '/api/analytics/custo';
+export const ROTA_DO_CUSTO = '/api/analytics/cost';
 export const PERIODOS = [7, 30, 90];
 const ESTILO = '/ui/analytics.css';
 const RELER_MS = 4000;
@@ -571,7 +571,7 @@ export async function montar(area, ctx, { releituraMs = RELER_MS } = {}) {
     const minha = ++vez;
     if (!silencioso) area.replaceChildren(cab(aba === 'custo' ? [seletor()] : []), ...(aba === 'custo' ? [abas('custo')] : []), carregando());
     const z = encodeURIComponent(fuso);
-    const rota = aba === 'custo' ? `${ROTA_DO_CUSTO}?dias=${dias}&fuso=${z}` : `${ROTA_DA_VISAO}?fuso=${z}`;
+    const rota = aba === 'custo' ? `${ROTA_DO_CUSTO}?days=${dias}&tz=${z}` : `${ROTA_DA_VISAO}?tz=${z}`;
     try {
       const dados = await ctx.ler(rota);
       if (minha !== vez) return;

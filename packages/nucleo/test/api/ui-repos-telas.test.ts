@@ -302,14 +302,14 @@ describe('Repositório (C23) montada', () => {
     const pendentes = new Map<string, (d: MetricasDoRepo) => void>();
     const m = montar(
       montarRepo,
-      (rota) => new Promise((resolver) => pendentes.set(new URLSearchParams(rota.split('?')[1]).get('periodo')!, resolver as (d: MetricasDoRepo) => void)),
+      (rota) => new Promise((resolver) => pendentes.set(new URLSearchParams(rota.split('?')[1]).get('period')!, resolver as (d: MetricasDoRepo) => void)),
       { dono: 'exemplo-labs', repo: 'vitrine-demo' },
     );
-    assert.deepEqual(m.leituras, ['/api/repos/exemplo-labs/vitrine-demo?periodo=90d']);
+    assert.deepEqual(m.leituras, ['/api/repos/exemplo-labs/vitrine-demo?period=90d']);
 
     const botao = (rotulo: string) => m.area.querySelectorAll('.repo-seg button').find((b) => texto(b) === rotulo)!;
     botao('30 dias').click();
-    assert.deepEqual(m.leituras.at(-1), '/api/repos/exemplo-labs/vitrine-demo?periodo=30d');
+    assert.deepEqual(m.leituras.at(-1), '/api/repos/exemplo-labs/vitrine-demo?period=30d');
     assert.equal(local.search, '?periodo=30d');
     assert.equal(botao('30 dias').getAttribute('aria-pressed'), 'true');
     assert.equal(botao('90 dias').getAttribute('aria-pressed'), 'false');

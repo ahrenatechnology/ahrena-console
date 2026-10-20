@@ -10,6 +10,7 @@ import {
   paginaDoHistorico,
   type SessaoEncerrada,
 } from '../../src/historico/modelo.ts';
+import { normalizeLegacyQuery } from '../../src/api/legacy-routes.ts';
 import { session } from '../fixtures.ts';
 
 function encerrada(id: string, fim: string, over: Partial<SessaoEncerrada> = {}): SessaoEncerrada {
@@ -112,7 +113,8 @@ describe('histórico: busca', () => {
 });
 
 describe('histórico: o pedido', () => {
-  const ler = (q: string) => lerPedidoDoHistorico(new URLSearchParams(q));
+  // The old parameter names pass through the alias map, as on the server.
+  const ler = (q: string) => lerPedidoDoHistorico(normalizeLegacyQuery(new URLSearchParams(q)));
 
   test('sem parâmetros: do mais recente, 7 dias, sem busca', () => {
     assert.deepEqual(ler(''), { ok: true, pedido: { antes: null, dias: 7, busca: null } });

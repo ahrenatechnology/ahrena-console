@@ -272,6 +272,6 @@ describe('#31 GET /api/kanban com o simulador', () => {
       assert.equal(status, 400, q);
       assert.equal(typeof corpo.error, 'string', q);
     }
-    assert.throws(() => pedidoDoKanban(new URL('http://x/api/kanban?pagina=1')));
+    assert.throws(() => pedidoDoKanban(new URL('http://x/api/kanban?page=1')));
   });
 });

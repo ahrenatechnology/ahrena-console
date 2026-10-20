@@ -1,5 +1,5 @@
 // Repositório (C23, issue 105): as métricas que a API do GitHub dá, num período (30 dias, 90 dias, 1
-// ano) que vale para a tela inteira. Lê `GET /api/repos/<dono>/<repo>?periodo=` (src/api/repos-tipos.ts).
+// ano) que vale para a tela inteira. Lê `GET /api/repos/<dono>/<repo>?period=` (src/api/repos-tipos.ts).
 //
 // - O período mora em `?periodo=` (padrão 90d): trocar reescreve a URL sem histórico novo e relê.
 // - Campo `null` vira "—"; se o GitHub ainda calcula (`calculando`) ou o núcleo ainda monta
@@ -439,7 +439,7 @@ export async function montar(area, ctx) {
     // Resposta de um pedido velho ou de um período que a pessoa já trocou: descartada.
     const vale = () => respostaAtual({ pedido: n, ultimo: pedido, periodo: p, periodoAtual: periodo });
     try {
-      const d = await ctx.ler(`/api/repos/${encodeURIComponent(dono)}/${encodeURIComponent(nome)}?periodo=${p}`);
+      const d = await ctx.ler(`/api/repos/${encodeURIComponent(dono)}/${encodeURIComponent(nome)}?period=${p === '1a' ? '1y' : p}`);
       if (!vale()) return;
       dados = d;
       falha = null;

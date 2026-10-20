@@ -28,10 +28,10 @@ export function queryDaVisao(visao) {
 
 /** A rota da API: o quadro todo, ou uma página de uma coluna. */
 export function rotaDoKanban(visao, coluna = null, pagina = null) {
-  const q = new URLSearchParams({ visao });
+  const q = new URLSearchParams({ view: visao === 'agentes' ? 'agents' : 'sessions' });
   if (coluna) {
-    q.set('coluna', coluna);
-    q.set('pagina', String(pagina ?? 1));
+    q.set('column', coluna);
+    q.set('page', String(pagina ?? 1));
   }
   return `/api/kanban?${q}`;
 }

@@ -1,11 +1,11 @@
-// O feed de atividade (C8, #94): `GET /api/eventos`, os eventos de todas as sessões, mais novos
-// primeiro, com filtros, a página para trás (`antes`) e o ao vivo (`depois`).
+// O feed de atividade (C8, #94): `GET /api/events`, os eventos de todas as sessões, mais novos
+// primeiro, com filtros, a página para trás (`before`) e o ao vivo (`after`).
 //
 // Parâmetros (todos opcionais; inválido dá 400 `{ error }`):
-// - `limite` 1..200 (padrão 50); `depois` e `antes`, cursores opacos que não se combinam;
-// - `tipo` (o `type` do evento), `sessao`, `ferramenta`, `status` (active|waiting|error|completed);
-// - `busca` (≤ 100 caracteres, no resumo e na ferramenta, sem curinga);
-// - `de` e `ate`, ISO 8601. Data sem hora é o dia em UTC, e o `ate` com data só inclui o dia todo.
+// - `limit` 1..200 (padrão 50); `after` e `before`, cursores opacos que não se combinam;
+// - `type` (o `type` do evento), `session`, `tool`, `status` (active|waiting|error|completed);
+// - `search` (≤ 100 caracteres, no resumo e na ferramenta, sem curinga);
+// - `from` e `to`, ISO 8601. Data sem hora é o dia em UTC, e o `to` com data só inclui o dia todo.
 //
 // O conteúdo do transcript NÃO é confiável: todo texto sai numa linha só, cortado aqui (por code
 // point, sem partir par substituto), e do `data` só sai o id da chamada e uma linha da entrada da
@@ -14,7 +14,7 @@
 // O cursor do ao vivo segue a ordem de GRAVAÇÃO (ver `ListRecentEventsQuery` na porta): o evento
 // que o transcript grava atrasado, com `createdAt` mais velho, também chega. O lote do ao vivo vem
 // ordenado por `createdAt` como o resto; quem mostra decide onde encaixá-lo. Se o lote veio cheio
-// (`eventos.length === limite`), há mais: peça de novo com o `cursor` novo.
+// (`eventos.length === limit`), há mais: peça de novo com o `cursor` novo.
 
 import type { ServerResponse } from 'node:http';
 import { basename } from 'node:path';
@@ -23,6 +23,8 @@ import type { Agent, Session, SessionEvent } from '../model.ts';
 import type { ListRecentEventsQuery, RecentEventsPage, StoragePort } from '../storage-port.ts';
 import { fraseDoEvento, type ContextoDaFrase } from './frase-do-evento.ts';
 
+export const EVENTS_ROUTE = '/api/events';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DOS_EVENTOS = '/api/eventos';
 
 export const STATUS_DO_EVENTO = ['active', 'waiting', 'error', 'completed'] as const;
@@ -158,15 +160,15 @@ function lerPedido(p: URLSearchParams): Pedido {
   };
   const query: ListRecentEventsQuery = { limit: LIMITE_PADRAO };
 
-  const limite = v('limite');
+  const limite = v('limit');
   if (limite !== null) {
     const n = NUMERO.test(limite) ? Number(limite) : 0;
     if (n < 1 || n > LIMITE_MAXIMO) throw new ErroDoPedido(`limite: um inteiro de 1 a ${LIMITE_MAXIMO}`);
     query.limit = n;
   }
 
-  const depois = v('depois');
-  const antes = v('antes');
+  const depois = v('after');
+  const antes = v('before');
   if (depois !== null && antes !== null) throw new ErroDoPedido('depois e antes não se combinam');
   for (const [nome, c] of [['depois', depois], ['antes', antes]] as const) {
     if (c !== null && !CURSOR.test(c)) throw new ErroDoPedido(`${nome}: cursor inválido`);
@@ -174,14 +176,14 @@ function lerPedido(p: URLSearchParams): Pedido {
   if (depois !== null) query.after = depois;
   if (antes !== null) query.before = antes;
 
-  const tipo = v('tipo');
+  const tipo = v('type');
   if (tipo !== null && !TIPO.test(tipo)) throw new ErroDoPedido('tipo: só letras, números e _, até 64');
-  const sessao = v('sessao');
+  const sessao = v('session');
   if (sessao !== null) {
     if (!ID.test(sessao)) throw new ErroDoPedido('sessao: id de sessão inválido');
     query.sessionId = sessao;
   }
-  const ferramenta = v('ferramenta');
+  const ferramenta = v('tool');
   if (ferramenta !== null) {
     if (!FERRAMENTA.test(ferramenta)) throw new ErroDoPedido('ferramenta: nome de ferramenta inválido');
     query.toolName = ferramenta;
@@ -201,7 +203,7 @@ function lerPedido(p: URLSearchParams): Pedido {
     query.types = [tipo];
   }
 
-  const busca = p.get('busca');
+  const busca = p.get('search');
   if (busca !== null) {
     if (CONTROLES.test(busca)) throw new ErroDoPedido('busca: sem quebras de linha nem caracteres de controle');
     const t = busca.trim();
@@ -209,8 +211,8 @@ function lerPedido(p: URLSearchParams): Pedido {
     if (t) query.text = t;
   }
 
-  const de = v('de');
-  const ate = v('ate');
+  const de = v('from');
+  const ate = v('to');
   const inicio = de === null ? null : dataDoParametro('de', de).inicio;
   let fim: number | null = null;
   if (ate !== null) {

@@ -211,8 +211,8 @@ describe('formatos e registro', () => {
   });
 
   test('a rota leva o filtro e o nó', () => {
-    assert.equal(rotaDosWorkflows('todas', null), '/api/workflows?filtro=todas');
-    assert.equal(rotaDosWorkflows('ativas', 'subagente:code-reviewer'), '/api/workflows?filtro=ativas&no=subagente%3Acode-reviewer');
+    assert.equal(rotaDosWorkflows('todas', null), '/api/workflows?filter=todas');
+    assert.equal(rotaDosWorkflows('ativas', 'subagente:code-reviewer'), '/api/workflows?filter=ativas&node=subagente%3Acode-reviewer');
   });
 
   test('Workflows está na barra depois de Analytics, como no wireframe, e todo ícone usado existe', () => {
@@ -220,7 +220,7 @@ describe('formatos e registro', () => {
     assert.deepEqual(t, {
       id: 'workflows',
       rota: '/ui/workflows',
-      item: { rotulo: 'Workflows', icone: 'workflows' },
+      item: { rotulo: 'Workflows', icone: 'workflows', section: 'main' },
       titulo: 'Workflows',
       sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
       icone: 'workflows',

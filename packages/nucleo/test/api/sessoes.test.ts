@@ -184,7 +184,7 @@ describe('#28 GET /api/sessoes com o simulador', () => {
 
   test('pedidoDeSessoes: os padrões', () => {
     assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessoes')), PADRAO);
-    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessoes?busca=%20oi%20&dir=/a/b&pagina=3')), { ...PADRAO, busca: 'oi', dir: '/a/b', pagina: 3 });
+    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessions?search=%20oi%20&dir=/a/b&page=3')), { ...PADRAO, busca: 'oi', dir: '/a/b', pagina: 3 });
   });
 });
 
@@ -209,9 +209,9 @@ describe('#28 a tela Sessões', () => {
   test('a rota da API leva os filtros que o servidor entende', () => {
     const rota = rotaDaLista({ status: 'erro', busca: ' a b ', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
-    assert.equal(url.pathname, '/api/sessoes');
+    assert.equal(url.pathname, '/api/sessions');
     assert.deepEqual(pedidoDeSessoes(url), { status: 'erro', busca: 'a b', dir: '/d', ordem: 'duracao', sentido: 'desc', pagina: 2 });
-    assert.ok(!new URL(rotaDaLista(estadoDaQuery('')), 'http://x').searchParams.has('busca'));
+    assert.ok(!new URL(rotaDaLista(estadoDaQuery('')), 'http://x').searchParams.has('search'));
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {

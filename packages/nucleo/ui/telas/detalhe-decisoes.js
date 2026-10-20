@@ -1,5 +1,5 @@
 // A aba Decisões do Detalhe da sessão (C20, issue 103), num módulo à parte para o detalhe.js (#29 e #30)
-// só importar. Lê `GET /api/sessoes/<id>/decisoes?escopo=&estado=&q=` (src/api/decisoes-ui.ts).
+// só importar. Lê `GET /api/sessions/<id>/decisions?scope=&state=&q=` (src/api/decisoes-ui.ts).
 //
 // Contrato com o detalhe.js, igual às outras abas:
 //   const aba = criar(ctx, base, { cabeca: () => cabeca, rotular: (texto) => … });
@@ -10,7 +10,7 @@
 
 import { el, icone } from '../dom.js';
 import { erro } from '../estados.js';
-import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao } from './decisoes-comum.js';
+import { alternador, campoDeBusca, carregarCssDasDecisoes, cartaoDeDecisao, VALOR_DA_API } from './decisoes-comum.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
 const num = (n) => NUM.format(n ?? 0);
@@ -19,10 +19,10 @@ const ESCOPOS = { sessao: 'Sessão', familia: 'Família', branch: 'Branch' };
 
 /** A rota da leitura da aba. */
 export function rotaDaAba(base, { escopo = 'sessao', estado = 'todas', q = '' } = {}) {
-  const p = new URLSearchParams({ escopo });
-  if (estado !== 'todas') p.set('estado', estado);
+  const p = new URLSearchParams({ scope: VALOR_DA_API[escopo] ?? escopo });
+  if (estado !== 'todas') p.set('state', estado);
   if (q) p.set('q', q.slice(0, 200));
-  return `${base}/decisoes?${p}`;
+  return `${base}/decisions?${p}`;
 }
 
 /** A chamada do MCP em duas partes: o nome da ferramenta (em destaque) e os argumentos. */

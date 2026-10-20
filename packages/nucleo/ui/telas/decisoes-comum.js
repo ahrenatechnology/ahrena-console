@@ -67,13 +67,17 @@ export function haQuanto(iso, agora = Date.now()) {
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const ACOES = new Set(['confirmar', 'descartar', 'promover']);
+/** The action of the screen → the segment of the English route. */
+const SEGMENTO = { confirmar: 'confirm', descartar: 'dismiss', promover: 'promote' };
+/** Scope and grouping values of the screen → the English values of the API. */
+export const VALOR_DA_API = { sessao: 'session', familia: 'family', branch: 'branch' };
 
 /** O pedido de uma escrita: a rota e o corpo JSON. Id ou ação estranhos são recusados aqui. */
 export function pedidoDaAcao(id, acao, corpo) {
   if (!ID.test(String(id))) throw new Error(`id de decisão inválido: ${id}`);
   if (!ACOES.has(acao)) throw new Error(`ação desconhecida: ${acao}`);
   if (typeof corpo?.sessao !== 'string' || !ID.test(corpo.sessao)) throw new Error('a escrita precisa da sessão');
-  return { rota: `/api/decisoes/${id}/${acao}`, corpo };
+  return { rota: `/api/decisions/${id}/${SEGMENTO[acao]}`, corpo };
 }
 
 /**

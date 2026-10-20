@@ -113,15 +113,15 @@ export type LeituraDoPedido = { ok: true; pedido: PedidoDoHistorico } | { ok: fa
 
 /** Lê `antes`, `dias` e `busca` da query; o erro diz qual parâmetro e por quê. */
 export function lerPedidoDoHistorico(q: URLSearchParams): LeituraDoPedido {
-  const antes = q.get('antes');
+  const antes = q.get('before');
   if (antes !== null && !diaValido(antes)) return { ok: false, erro: 'antes: um dia AAAA-MM-DD' };
-  const dias = q.get('dias');
+  const dias = q.get('days');
   let n = DIAS_PADRAO;
   if (dias !== null) {
     n = /^\d{1,2}$/.test(dias) ? Number(dias) : NaN;
     if (!(n >= 1 && n <= DIAS_MAXIMO)) return { ok: false, erro: `dias: um inteiro de 1 a ${DIAS_MAXIMO}` };
   }
-  const busca = q.get('busca');
+  const busca = q.get('search');
   if (busca !== null && busca.length > BUSCA_MAXIMA) return { ok: false, erro: `busca: até ${BUSCA_MAXIMA} caracteres` };
   return { ok: true, pedido: { antes, dias: n, busca: busca?.trim() || null } };
 }

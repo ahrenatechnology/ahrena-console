@@ -1,4 +1,4 @@
-// Monta a resposta de `GET /api/mural` (#34, wireframe C2 "Mural ao vivo"): um card por sessão
+// Monta a resposta de `GET /api/wall` (#34, wireframe C2 "Mural ao vivo"): um card por sessão
 // aberta nesta máquina, em todas as contas, com status, modelo, esforço, plano, agentes, contexto e
 // custo. O contrato está em api/tipos.ts (`Mural`, `CardDoMural`).
 //
@@ -42,6 +42,8 @@ import type { SessaoDoDesktop } from './indice-desktop.ts';
 import type { LeituraDaSessao, MontadorDoPainel } from './painel.ts';
 import type { CardDoMural, Mural } from './tipos.ts';
 
+export const WALL_ROUTE = '/api/wall';
+/** The old route, still answered as an alias (src/api/legacy-routes.ts) until phase 6 of #173. */
 export const ROTA_DO_MURAL = '/api/mural';
 /** Quanto tempo a sessão encerrada continua no mural depois da última atividade: o abandono do vigia. */
 export const RECENTE_DO_MURAL_MS = LIMITES_PADRAO.abandonoMs;
@@ -183,7 +185,7 @@ export function muralDoPainel(painel: MontadorDoPainel, opcoes: Pick<OpcoesDoMur
   return new MontadorDoMural({ painel, storage: painel.storage, agora: painel.agora, ...opcoes });
 }
 
-/** O handler de `GET /api/mural`: a única linha que servidor.ts precisa. */
+/** O handler de `GET /api/wall`: a única linha que servidor.ts precisa. */
 export async function responderMural(res: ServerResponse, montador: Pick<MontadorDoMural, 'montar'>): Promise<void> {
   send(res, 200, await montador.montar());
 }
