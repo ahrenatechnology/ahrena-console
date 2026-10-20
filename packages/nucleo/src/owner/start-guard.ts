@@ -47,8 +47,12 @@ function tryCreate(dir: string): boolean {
   }
 }
 
-/** Moves a stale guard (dead or unreadable holder) out of the way; a live one goes back in place. */
-function clearIfStale(dir: string): void {
+/**
+ * Moves the stale guard (held by `stale`, a dead pid, or `null` for an unreadable one) out of the
+ * way. If what it moved is not that guard (another start recovered it and created its own in
+ * between), it goes back in place: it keeps trying until it is back, so a live guard is never lost.
+ */
+async function clearIfStale(dir: string, stale: number | null): Promise<void> {
   const moved = tempPath(dir, 'old');
   try {
     renameSync(guardPath(dir), moved);
@@ -57,11 +61,16 @@ function clearIfStale(dir: string): void {
     throw e;
   }
   const pid = holderOf(moved);
-  if (pid !== null && isPidAlive(pid)) {
+  const wasTheStaleOne = pid === stale || pid === null || !isPidAlive(pid);
+  for (let attempt = 0; !wasTheStaleOne; attempt++) {
     try {
       linkSync(moved, guardPath(dir));
+      break;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      // Someone created a guard meanwhile: wait for it to go, then put the live one back.
+      if (attempt > 600) throw new Error(`could not put back the start guard of pid ${pid}`);
+      await sleep(100);
     }
   }
   rmSync(moved, { force: true });
@@ -79,7 +88,7 @@ export async function acquireStartGuard(dir: string, o: { timeoutMs?: number } =
     if (tryCreate(dir)) break;
     const pid = holderOf(guardPath(dir));
     if (pid === null || !isPidAlive(pid)) {
-      clearIfStale(dir);
+      await clearIfStale(dir, pid);
       continue;
     }
     waited = true;

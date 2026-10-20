@@ -356,6 +356,19 @@ describe('cores per installation', { timeout: 120_000 }, () => {
     assert.match(s.stdout, new RegExp(`127\\.0\\.0\\.1:${t.port} · versão .* \\(adotado\\)`));
     assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.pid), [t.pid]);
     assert.ok(!existsSync(join(consoleDir, START_GUARD_FILE_NAME)), 'the start guard is released');
+    assert.doesNotMatch(s.stderr, /listening on port/, 'the loser never opened the database nor listened');
+  });
+
+  test('a forced-port start and a port-0 start of one installation at the same time give a single core', async () => {
+    const port = await freePort();
+    const runs = [api('--port', String(port)), api()];
+    const t = await liveLock(consoleDir);
+    const other = runs.find((r) => r.proc.pid !== t.pid)!;
+    const s = await other.done;
+    assert.equal(s.code, 0, s.stderr);
+    assert.match(s.stdout, /\(adotado\)/);
+    assert.doesNotMatch(s.stderr, /listening on port/);
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.pid), [t.pid]);
   });
 
   test('a forced port still works: --port and AHRENA_CONSOLE_CORE_PORT', async () => {

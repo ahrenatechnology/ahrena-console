@@ -25,7 +25,7 @@ Um núcleo por **instalação**, em porta aleatória (issue #221; decisão [0010
 | `app` | `~/Library/Application Support/dev.ahrena.console/` (fora do macOS, `$XDG_DATA_HOME` ou `~/.local/share`, e `%APPDATA%` no Windows) |
 | `mcpb` (extensão) | `~/.ahrena-console/installations/mcpb/`, até a extensão passar a pasta dela com `--data-dir` |
 
-Na pasta de dados ficam o banco (`nucleo.sqlite`, a menos que `--db` ou `AHRENA_CONSOLE_DB` digam outro), o log (`nucleo.log`), os clientes (`clientes/`), a trava (`nucleo.json`) e a guarda de subida (`core.starting`). A pasta é 0700, como antes.
+Na pasta de dados ficam o banco (`nucleo.sqlite`, a menos que `--db` ou `AHRENA_CONSOLE_DB` digam outro; fora da pasta de dados, o núcleo avisa no log, porque `AHRENA_CONSOLE_DB` exportado vale para qualquer instalação e duas usariam o mesmo arquivo), o log (`nucleo.log`), os clientes (`clientes/`), a trava (`nucleo.json`) e a guarda de subida (`core.starting`). A pasta é 0700, como antes.
 
 Fica em `~/.ahrena-console/` (a pasta do usuário, `consoleHome()`; `AHRENA_CONSOLE_HOME` a troca, para testes) o que não é dado de um núcleo: o registro de instâncias, `contas.json`, `machines.json`, `dev-console.json`, `perfis.json`, `backups/` e o `hooks.log`. Na instalação `dev`, as duas pastas são a mesma.
 
@@ -44,6 +44,7 @@ Cada núcleo com trava grava `~/.ahrena-console/instances/<id>.json` depois que 
 - `listInstances()` devolve as entradas vivas (pid existe), da mais antiga para a mais nova (`startedAt`); as de pid morto e as ilegíveis saem da lista e o arquivo é apagado. Um núcleo morto com SIGKILL deixa a entrada, e só quem lê a limpa.
 - `pickInstance({ installation })` devolve a entrada viva da instalação pedida, senão a primeira viva, senão `null`.
 - `verifyInstance(i)` confere que a porta responde `/api/overview` com aquele pid. Use antes de mandar algo que muda estado: um pid vivo pode ser um número reaproveitado.
+- Uma falha ao gravar o registro vai para o log e não derruba o núcleo; um arquivo que não dá para ler agora (permissão, uma pasta) é pulado, não apagado.
 - `--demo` e `--no-lock` (`--sem-trava`) **não** se registram: não são o núcleo da instalação, e ninguém deve achá-los por ali.
 
 ```ts
@@ -70,7 +71,7 @@ As chaves do arquivo continuam em português, porque outros núcleos instalados 
 ## Subir ou adotar
 
 1. Lê a trava da pasta de dados. Se está viva, **adota**: imprime porta e versão e sai com 0, sem abrir o banco.
-2. Com a porta `0`, pega a **guarda de subida** (`core.starting`, criada de forma exclusiva). Quem a acha presa por um pid vivo espera, e depois lê a trava de novo e adota o núcleo que acabou de subir. Guarda de pid morto é recuperada.
+2. Pega a **guarda de subida** da pasta de dados (`core.starting`, criada de forma exclusiva), com qualquer porta: com a porta `0`, e com uma subida na `0` e outra numa porta forçada, as portas não decidem mais quem abre o banco. Quem a acha presa por um pid vivo espera; com a guarda na mão, lê a trava de novo e adota o núcleo que subiu nesse meio-tempo. Guarda de pid morto é recuperada. Um sinal antes do fim da subida sai pelo `exit`, que solta a guarda e tira a entrada do registro.
 3. **Prende a porta** em 127.0.0.1 antes de abrir o banco (com `0`, a que o sistema der). Com uma porta forçada, é o sistema que garante um núcleo só quando dois sobem ao mesmo tempo: só um consegue a porta. O outro espera o núcleo responder e o adota.
 4. Abre o banco e sobe a API **no mesmo socket** que prendeu (sem soltar a porta no meio, por isso ninguém a pega antes), grava a trava, solta a guarda e grava a entrada do registro.
 

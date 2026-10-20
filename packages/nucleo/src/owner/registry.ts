@@ -94,9 +94,9 @@ function readEntry(file: string): Instance | 'invalid' | null {
   let text: string;
   try {
     text = readFileSync(file, 'utf8');
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    return 'invalid';
+  } catch {
+    // Gone meanwhile, or not readable right now (EACCES, EMFILE, a folder): skipped, never deleted.
+    return null;
   }
   try {
     return toInstance(JSON.parse(text)) ?? 'invalid';
@@ -145,7 +145,13 @@ export function listInstances(o: { home?: string; clean?: boolean } = {}): Insta
     if (e === null) continue;
     const ok = e !== 'invalid' && name === `${e.id}.json` && isPidAlive(e.pid);
     if (ok) live.push(e);
-    else if (o.clean !== false) rmSync(file, { force: true });
+    else if (o.clean !== false) {
+      try {
+        rmSync(file, { force: true });
+      } catch {
+        /* not a file: left alone */
+      }
+    }
   }
   return live.sort((a, b) => (a.startedAt < b.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : a.id.localeCompare(b.id)));
 }

@@ -9,7 +9,7 @@
 // in the instance registry (~/.ahrena-console/instances/).
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -175,7 +175,7 @@ if (o.help) {
 }
 
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
-// The port asked for; 0 (the default) lets the system pick. `portaOuvida` is the one it got.
+// The port asked for; 0 (the default) lets the system pick. `boundPort`, below, is the one it got.
 const porta = resolvePort(o.port ?? o.porta);
 const installation = parseInstallation(o.installation);
 const dataDir = resolveDataDir({ installation, dataDir: o['data-dir'] });
@@ -185,9 +185,16 @@ const pai = parentOption === undefined ? null : Number(parentOption);
 if (pai !== null && !(Number.isInteger(pai) && pai > 0)) throw new Error('--parent: um pid');
 if (pai !== null && !isPidAlive(pai)) throw new Error(`--parent: o pid ${pai} não existe`);
 const comTrava = !demo && !o['no-lock'] && !o['sem-trava'];
-const substituir = o.replace || o.substituir;
+const replace = o.replace || o.substituir;
 const commit = commitDoCheckout();
 const codigo = { version: VERSAO_DA_API, commit, isOlderCommit };
+/** The start guard of the data folder, held from before the database opens until the lock is written. */
+let startGuard: StartGuard | null = null;
+// Until the shutdown below is ready, a signal still exits through `exit`, whose handlers release the
+// start guard and the registry entry.
+const exitOnSignal = (signal: NodeJS.Signals) => process.exit(signal === 'SIGINT' ? 130 : 143);
+process.on('SIGINT', exitOnSignal);
+process.on('SIGTERM', exitOnSignal);
 
 function adotar(p: number, versao: string, aviso: string | null = null): never {
   if (aviso) log(`atenção: ${aviso}`);
@@ -198,20 +205,25 @@ function adotar(p: number, versao: string, aviso: string | null = null): never {
 }
 
 // Antes de abrir o banco: adota o núcleo vivo da trava desta instalação, ou a recupera se for órfã.
-async function planejar(): Promise<void> {
-  const plano = await planStart({ ...codigo, dir: dataDir, replace: substituir, log });
+async function planOrAdopt(): Promise<void> {
+  const plano = await planStart({ ...codigo, dir: dataDir, replace, log });
   if (plano.action === 'adopt') adotar(plano.lock.port, plano.lock.version, plano.warning);
   if (plano.recovered) log(`trava órfã recuperada: ${plano.recovered}`);
 }
-let startGuard: StartGuard | null = null;
-if (comTrava) await planejar();
-// With port 0 two starts of this installation get different ports, so the port no longer decides
-// who opens the database: the start guard of the data folder does. Whoever waited for it looks at
-// the lock again, and adopts the core that started meanwhile.
-if (comTrava && porta === 0) {
-  startGuard = await acquireStartGuard(dataDir);
+if (comTrava) await planOrAdopt();
+// With port 0 two starts of this installation get different ports, and a port-0 start and a
+// forced-port start of the same folder do too: the port no longer decides who opens the database.
+// The start guard of the data folder does. Whoever holds it looks at the lock again (another start
+// may have finished between the first look and the guard), and adopts the core it finds.
+if (comTrava) {
   process.once('exit', () => startGuard?.release());
-  if (startGuard.waited) await planejar();
+  try {
+    startGuard = await acquireStartGuard(dataDir);
+  } catch (e) {
+    await planOrAdopt();
+    throw e;
+  }
+  await planOrAdopt();
 }
 
 // A porta é de um só: quem não a prende espera o núcleo que a prendeu e o adota.
@@ -230,7 +242,7 @@ async function adotarQuemTemAPorta(): Promise<never> {
       else await new Promise((r) => setTimeout(r, 100));
     }
     // A core of another installation is never adopted (decision 0010): it has its own database.
-    if (semTrava && deOutraInstalacao(v.pid)) {
+    if (semTrava && isOtherInstallation(v.pid)) {
       log(`port ${porta} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
       process.exit(1);
     }
@@ -244,20 +256,34 @@ function travaDaPorta(): number | null {
   const t = readLock(dataDir);
   return t && t !== 'invalid' && t.port === porta ? t.pid : null;
 }
+/** The same folder, even through a symbolic link (/tmp and /private/tmp on macOS). */
+function sameDir(a: string, b: string): boolean {
+  const real = (d: string) => {
+    try {
+      return realpathSync(d);
+    } catch {
+      return resolve(d);
+    }
+  };
+  return real(a) === real(b);
+}
 /** The pid is the core of another data folder: in the registry, or holding the `dev` folder's lock. */
-function deOutraInstalacao(pid: number | null): boolean {
+function isOtherInstallation(pid: number | null): boolean {
   if (pid === null) return false;
   const registered = listInstances().find((i) => i.pid === pid);
-  if (registered) return resolve(registered.dataDir) !== dataDir;
+  if (registered) return !sameDir(registered.dataDir, dataDir);
   const devDir = defaultDataDir('dev');
-  if (devDir === dataDir) return false;
+  if (sameDir(devDir, dataDir)) return false;
   const t = readLock(devDir);
   return t !== null && t !== 'invalid' && t.pid === pid;
 }
-const reservada = await reservePort(porta);
-const reserva = reservada === 'in-use' ? await adotarQuemTemAPorta() : reservada;
-const portaOuvida = (reserva.address() as AddressInfo).port;
+const reserved = await reservePort(porta);
+const reserva = reserved === 'in-use' ? await adotarQuemTemAPorta() : reserved;
+const boundPort = (reserva.address() as AddressInfo).port;
 const banco = demo ? ':memory:' : resolve(o.db ?? o.banco ?? process.env.AHRENA_CONSOLE_DB ?? join(dataDir, 'nucleo.sqlite'));
+// AHRENA_CONSOLE_DB applies to any installation: two installations with it exported would share a
+// database under two locks. Say so.
+if (banco !== ':memory:' && !sameDir(dirname(banco), dataDir)) log(`warning: the database ${banco} is outside the data folder ${dataDir} (--db or AHRENA_CONSOLE_DB); another installation must not use the same file`);
 if (banco !== ':memory:') {
   // A pasta de dados fecha em 0700 (o banco mora nela); outra pasta dada em --db fica como está.
   if (dirname(banco) === dataDir) prepareDir(dataDir);
@@ -429,7 +455,7 @@ if (demo) {
   const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
   for (const config of machinesConfig.machines) {
-    if (config.port === portaOuvida) {
+    if (config.port === boundPort) {
       log(`machines: ${config.id} uses port ${config.port}, this núcleo's own; skipped`);
       continue;
     }
@@ -477,7 +503,7 @@ const api: ApiLocal = await iniciarApiLocal({
     },
     log,
   },
-  port: portaOuvida,
+  port: boundPort,
   log,
   abrirNoDesktop,
   mcp: mcp.server,
@@ -507,9 +533,9 @@ const api: ApiLocal = await iniciarApiLocal({
   await releasePort(reserva).catch(() => undefined);
   throw e;
 });
-const portaDaApi = (api.server.address() as AddressInfo).port;
+const apiPort = (api.server.address() as AddressInfo).port;
 
-const trava = comTrava ? await claimLock({ dir: dataDir, port: portaDaApi, version: VERSAO_DA_API, parent: pai }) : null;
+const trava = comTrava ? await claimLock({ dir: dataDir, port: apiPort, version: VERSAO_DA_API, parent: pai }) : null;
 if (trava && 'conflict' in trava) {
   await api.close().catch(() => undefined);
   await storage.close();
@@ -518,22 +544,27 @@ if (trava && 'conflict' in trava) {
 startGuard?.release();
 // The instance registry (decision 0010, item 3): only cores with a lock. A --demo or a --no-lock
 // core is not this installation's core, so nobody should find it there.
-const instancia = trava
-  ? { id: instanceId(installation), installation, pid: process.pid, port: portaDaApi, version: VERSAO_DA_API, commit, dataDir, startedAt: trava.startedAt }
+const instance = trava
+  ? { id: instanceId(installation), installation, pid: process.pid, port: apiPort, version: VERSAO_DA_API, commit, dataDir, startedAt: trava.startedAt }
   : null;
-const tirarDoRegistro = () => {
-  if (!instancia) return;
+const unregister = () => {
+  if (!instance) return;
   try {
-    removeInstance(instancia.id, { pid: process.pid });
+    removeInstance(instance.id, { pid: process.pid });
   } catch (e) {
     log(`registry: ${(e as Error).message}`);
   }
 };
-if (instancia) {
-  writeInstance(instancia);
-  process.once('exit', tirarDoRegistro);
+if (instance) {
+  process.once('exit', unregister);
+  // The registry is only for finding the core: a failure here is logged, it does not stop the core.
+  try {
+    writeInstance(instance);
+  } catch (e) {
+    log(`registry: could not write ${instance.id}: ${(e as Error).message}`);
+  }
 }
-log(`listening on port ${portaDaApi} · installation ${installation} · data ${demo ? '(demo, in memory)' : dataDir}${instancia ? ` · instance ${instancia.id}` : ''}`);
+log(`listening on port ${apiPort} · installation ${installation} · data ${demo ? '(demo, in memory)' : dataDir}${instance ? ` · instance ${instance.id}` : ''}`);
 log(`API local em ${api.url} · MCP em ${api.url}/mcp${demo ? ` (demo ${o.cenario}: dados sintéticos do simulador)` : ` · banco ${banco}`}`);
 
 const pararDeVigiarPai =
@@ -589,7 +620,7 @@ async function desligar() {
   pararVigia();
   if (relerPerfis) clearInterval(relerPerfis);
   pararDeVigiarPai();
-  tirarDoRegistro();
+  unregister();
   if (trava && !('conflict' in trava)) releaseLock(trava.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
@@ -598,5 +629,7 @@ async function desligar() {
   if (pastaDaDemo) rmSync(pastaDaDemo, { recursive: true, force: true });
   process.exit(0);
 }
+process.off('SIGINT', exitOnSignal);
+process.off('SIGTERM', exitOnSignal);
 process.on('SIGINT', () => void desligar());
 process.on('SIGTERM', () => void desligar());
