@@ -61,8 +61,14 @@ export const PDRS_ROUTE = '/api/pdrs';
 
 /** A descoberta: a mesma chave e o mesmo TTL das instruções (`repo-files:`). */
 export const DECISIONS_DISCOVERY_TTL = 15 * 60_000;
-/** Repositórios guardados em memória; acima disso sai o lido há mais tempo. */
+/**
+ * Repositórios abertos fora da lista da conta guardados em memória; acima disso sai o lido há mais
+ * tempo. Os da lista (até 500, a de C22) nunca saem: a lista geral precisa de todos.
+ */
 export const MAX_DECISION_REPOS = 200;
+
+/** O `id` de um registro: o nome do arquivo sem `.md`, acento e espaço inclusive; nunca barra nem controle. */
+export const RECORD_ID = /^[^/\u0000-\u001f]{1,200}$/u;
 /** A chave da mudança da lista inteira. */
 export const DECISIONS_LIST_KEY = 'list';
 
@@ -194,7 +200,8 @@ export interface DecisionsOptions {
   log?: (message: string) => void;
 }
 
-export type RecordAnswer = { status: 200; body: DecisionRecordView } | { status: 400 | 404 | 503; body: { error: string } };
+/** No 404 de um registro do outro tipo, `kind` diz qual é, para a tela ir para a rota certa. */
+export type RecordAnswer = { status: 200; body: DecisionRecordView } | { status: 400 | 404 | 503; body: { error: string; kind?: DecisionKind } };
 
 const KIND_LABEL: Record<DecisionKind, string> = { adr: 'uma ADR', pdr: 'uma PDR' };
 
@@ -209,6 +216,10 @@ export class DecisionsService {
   private readonly log: (message: string) => void;
   private readonly index: Entry<IndexValue> = newEntry();
   private readonly repos = new Map<string, Entry<RepoRead>>();
+  /** As chaves da lista da conta, da última montagem ou da que está rodando: não saem da memória. */
+  private listed = new Set<string>();
+  /** O último push de cada repositório da lista, para a aba e o registro também invalidarem por ele. */
+  private readonly lastPush = new Map<string, string | null>();
   private noToken: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   calls = { source: 0 };
@@ -247,7 +258,7 @@ export class DecisionsService {
       e.at = -Infinity;
       e.force = true;
     }
-    this.triggerRepo(e, { owner, name, lastPush: null });
+    this.triggerRepo(e, this.ref(owner, name));
     const v = e.value;
     if (!v) return emptyRepoDecisions(kind, label, 'loading', null);
     if (v.state !== 'ready') return { ...emptyRepoDecisions(kind, v.repo, v.state, v.error), readAt: v.readAt };
@@ -279,10 +290,10 @@ export class DecisionsService {
 
   /** Um registro, estruturado, com o Markdown original. Espera a montagem que está rodando. */
   async record(kind: DecisionKind, owner: string, name: string, id: string): Promise<RecordAnswer> {
-    if (!/^[A-Za-z0-9_.:-]{1,200}$/.test(id)) return { status: 400, body: { error: 'id: o nome do arquivo, sem .md' } };
+    if (!RECORD_ID.test(id) || id === '.' || id === '..') return { status: 400, body: { error: 'id: o nome do arquivo, sem .md' } };
     if (!this.source) return { status: 503, body: { error: NO_GITHUB } };
     const e = this.entry(decisionsRepoKey(owner, name));
-    this.triggerRepo(e, { owner, name, lastPush: null });
+    this.triggerRepo(e, this.ref(owner, name));
     if (!e.value && e.running) await e.running;
     const v = e.value;
     if (!v) return { status: 503, body: { error: 'a leitura do repositório ainda não terminou' } };
@@ -290,7 +301,7 @@ export class DecisionsService {
     if (v.state !== 'ready') return { status: 503, body: { error: v.error ?? NO_GITHUB } };
     const r = v.records.find((x) => x.id === id);
     if (!r) return { status: 404, body: { error: `registro não encontrado em ${v.repo}` } };
-    if (r.kind !== kind) return { status: 404, body: { error: `${id} não é ${KIND_LABEL[kind]}: é ${KIND_LABEL[r.kind]}` } };
+    if (r.kind !== kind) return { status: 404, body: { error: `${id} não é ${KIND_LABEL[kind]}: é ${KIND_LABEL[r.kind]}`, kind: r.kind } };
     const byId = new Map(v.records.map((x) => [x.id, x]));
     return {
       status: 200,
@@ -335,6 +346,11 @@ export class DecisionsService {
 
   // ---------- a montagem ----------
 
+  /** O repositório com o último push que a lista da conta conhece (sem lista, `null`: vale o TTL). */
+  private ref(owner: string, name: string): AccountRepo {
+    return { owner, name, lastPush: this.lastPush.get(decisionsRepoKey(owner, name)) ?? null };
+  }
+
   private retryAt(): string | null {
     return this.cache.pauseLeftMs() > 0 ? new Date(this.cache.pausedUntil).toISOString() : null;
   }
@@ -344,9 +360,9 @@ export class DecisionsService {
     if (e) this.repos.delete(key);
     else e = newEntry<RepoRead>();
     this.repos.set(key, e);
-    if (this.repos.size > MAX_DECISION_REPOS) {
-      const [old] = [...this.repos].find(([, x]) => !x.running) ?? [...this.repos][0];
-      this.repos.delete(old);
+    if (this.repos.size > MAX_DECISION_REPOS + this.listed.size) {
+      const old = [...this.repos].find(([k, x]) => !x.running && !this.listed.has(k) && k !== key)?.[0];
+      if (old) this.repos.delete(old);
     }
     return e;
   }
@@ -398,6 +414,8 @@ export class DecisionsService {
       }
     }
     const refs = list.repos.filter((r) => NOME_DO_DONO.test(r.owner) && NOME_DO_REPO.test(r.name));
+    this.listed = new Set(refs.map((r) => decisionsRepoKey(r.owner, r.name)));
+    for (const r of refs) this.lastPush.set(decisionsRepoKey(r.owner, r.name), r.lastPush);
     await this.readRepos(refs, force);
     const errors = refs.map((r) => this.repos.get(decisionsRepoKey(r.owner, r.name))?.value?.error).filter(Boolean);
     this.publishIndex({ state: 'ready', error: list.error ?? (errors[0] as string | undefined) ?? null, account: list.account, repos: refs.map((r) => decisionsRepoKey(r.owner, r.name)) });
@@ -457,25 +475,28 @@ export class DecisionsService {
     }
     for (let i = 0; i < misses.length; i += DISCOVERY_BATCH) {
       const batch = misses.slice(i, i + DISCOVERY_BATCH);
-      let result: (RepoFilesDiscovery | null)[] | null = null;
+      let result: ({ value: RepoFilesDiscovery | null } | { error: string })[] | null = null;
       let failure: string | null = null;
       if (this.cache.pauseLeftMs() > 0) failure = LIMITED;
       else {
         try {
-          result = await this.call((s) => s.discoverMany(batch));
+          // Um repositório com erro não leva o lote: a fonte divide e devolve o erro só dele.
+          result = await this.call((s) => s.discoverEach(batch));
         } catch (err) {
           failure = err instanceof SemGithubError ? err.message : reason(err);
         }
       }
       for (let j = 0; j < batch.length; j++) {
         const key = decisionsRepoKey(batch[j].owner, batch[j].name);
-        if (result) {
-          await this.cache.put(`repo-files:${key}`, result[j]);
-          found.set(key, { d: result[j], fetchedAt: this.now(), stale: null });
+        const one = result?.[j];
+        if (one && 'value' in one) {
+          await this.cache.put(`repo-files:${key}`, one.value);
+          found.set(key, { d: one.value, fetchedAt: this.now(), stale: null });
           continue;
         }
+        const why = one && 'error' in one ? one.error : failure;
         const old = await this.cache.peek<RepoFilesDiscovery | null>(`repo-files:${key}`);
-        found.set(key, usable(old) ? { d: old.value, fetchedAt: old.fetchedAt, stale: failure } : { failed: failure ?? LIMITED });
+        found.set(key, usable(old) ? { d: old.value, fetchedAt: old.fetchedAt, stale: why } : { failed: why ?? LIMITED });
       }
     }
     for (const r of refs) {

@@ -274,6 +274,9 @@ describe('registro das telas', () => {
     const adr = findScreen('/ui/adrs/exemplo-labs/motor-de-regras/0008-regras-em-tabela');
     assert.deepEqual([adr.screen.id, adr.screen.highlights, adr.params], ['adr', 'adrs', { owner: 'exemplo-labs', repo: 'motor-de-regras', id: '0008-regras-em-tabela' }]);
     assert.equal(findScreen('/ui/pdrs/a/b/PDR-001-x').screen.highlights, 'pdrs');
+    // O id do registro é o nome do arquivo: acento e espaço valem ali, e só ali.
+    assert.equal(findScreen(`/ui/adrs/a/b/${encodeURIComponent('0004-decisão de fila')}`).params.id, '0004-decisão de fila');
+    assert.equal(findScreen(`/ui/repos/${encodeURIComponent('dono ruim')}/b`), null);
     assert.equal(findScreen('/ui/repos/a/b/adrs').screen.id, 'repo-tab');
     assert.equal(findScreen('/ui/wall').screen.id, 'wall');
     assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');

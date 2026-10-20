@@ -12,7 +12,9 @@
 
 import { isInstructionFile } from '../agent-instructions/imports.ts';
 import { DECISION_DIRS, isDecisionFile } from '../adrs/parse.ts';
-import type { RespostaRest } from './repos-source.ts';
+import { RateLimitedError } from './cache.ts';
+import { GithubScopeError } from './github-source.ts';
+import { SemGithubError, type RespostaRest } from './repos-source.ts';
 
 /** Até quantos arquivos cabem numa consulta de conteúdo. */
 export const BLOB_BATCH = 50;
@@ -187,6 +189,29 @@ export class RepoFilesSource {
       const data = await this.transport.query<Record<string, RawRepository | null>>('RepoFilesDiscovery', query, variables);
       batch.forEach((_r, j) => out.push(readDiscovery(data?.[`r${j}`] ?? null)));
     }
+    return out;
+  }
+
+  /**
+   * A descoberta repositório a repositório, para quem lê muitos de uma vez (as ADRs, #174): um erro num
+   * repositório (FORBIDDEN de uma organização com SAML, tempo de servidor numa árvore enorme) não leva
+   * os outros do lote. O lote que falha se divide ao meio e tenta de novo, até sobrar o repositório do
+   * erro, que volta como `{ error }`. Limite, escopo e falta de token valem para todos: sobem.
+   */
+  async discoverEach(repos: readonly { owner: string; name: string }[]): Promise<({ value: RepoFilesDiscovery | null } | { error: string })[]> {
+    const out: ({ value: RepoFilesDiscovery | null } | { error: string })[] = [];
+    const run = async (batch: readonly { owner: string; name: string }[]): Promise<void> => {
+      try {
+        for (const value of await this.discoverMany(batch)) out.push({ value });
+      } catch (err) {
+        if (err instanceof RateLimitedError || err instanceof GithubScopeError || err instanceof SemGithubError) throw err;
+        if (batch.length === 1) return void out.push({ error: err instanceof Error ? err.message : String(err) });
+        const half = Math.ceil(batch.length / 2);
+        await run(batch.slice(0, half));
+        await run(batch.slice(half));
+      }
+    };
+    for (let i = 0; i < repos.length; i += DISCOVERY_BATCH) await run(repos.slice(i, i + DISCOVERY_BATCH));
     return out;
   }
 

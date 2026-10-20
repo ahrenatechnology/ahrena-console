@@ -29,7 +29,7 @@ function folder(name: string, at: string): Record<string, string> {
 
 const REPOS: Record<string, Record<string, string>> = {
   madr: { 'README.md': '# madr\n', ...folder('madr4', 'docs/adr'), 'docs/adr/README.md': '# índice\n' },
-  mixed: { 'README.md': '# mixed\n', ...folder('mixed-pt', 'docs/decisoes') },
+  mixed: { 'README.md': '# mixed\n', ...folder('mixed-pt', 'docs/decisoes'), 'docs/decisoes/0004-decisão de fila.md': '# 0004 · Decisão de fila\n\n- **Status:** proposta\n' },
   product: { 'README.md': '# product\n', ...folder('pdr', 'docs/pdr'), ...folder('nygard', 'doc/adr') },
   none: { 'README.md': '# none\n' },
 };
@@ -38,7 +38,7 @@ function data(repos = REPOS): FakeGithubData {
   return { login: 'dev-sintetico', organizations: ['org-a'], awaitingReview: 0, closedThisWeek: 0, repos: Object.entries(repos).map(([name, files]) => ({ ...base, owner: 'org-a', name, files })) };
 }
 
-type Mode = 'ok' | 'down' | 'limited' | 'no-blobs';
+type Mode = 'ok' | 'down' | 'limited' | 'no-blobs' | 'forbidden';
 
 interface Setup {
   service: DecisionsService;
@@ -66,6 +66,9 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
     if (mode.current === 'down') throw new Error('rede fora');
     if (mode.current === 'limited') return new Response(JSON.stringify({ message: 'API rate limit exceeded' }), { status: 403, headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor((clock.now + 120_000) / 1000)) } });
     if (mode.current === 'no-blobs' && body.includes('RepoBlobs')) throw new Error('lote de conteúdo fora');
+    // Uma organização com SAML não autorizado: a consulta que pede `mixed` falha inteira, como no GitHub.
+    if (mode.current === 'forbidden' && body.includes('RepoFilesDiscovery') && Object.values(JSON.parse(body).variables).includes('mixed'))
+      return new Response(JSON.stringify({ data: null, errors: [{ type: 'FORBIDDEN', message: 'Resource protected by organization SAML enforcement' }] }), { status: 200 });
     const n = gh.calls.length;
     const r = await gh.fetch(input, init);
     all.push(...gh.calls.slice(n));
@@ -120,11 +123,11 @@ describe('#174 the decision list, through the service', () => {
     assert.equal(l.account, 'dev-sintetico');
     assert.deepEqual(l.groups.map((g) => [g.repo, g.folders, g.total]), [
       ['org-a/madr', ['docs/adr'], 2],
-      ['org-a/mixed', ['docs/decisoes'], 2],
+      ['org-a/mixed', ['docs/decisoes'], 3],
       ['org-a/product', ['doc/adr'], 3],
     ]);
     assert.deepEqual(l.without, ['org-a/none']);
-    assert.equal(l.totals.records, 7);
+    assert.equal(l.totals.records, 8);
     assert.equal(l.totals.reposWith, 3);
     assert.equal(l.totals.reposRead, 4);
     assert.equal(l.readAt, new Date(T0).toISOString());
@@ -202,13 +205,43 @@ describe('#174 the decision list, through the service', () => {
     assert.deepEqual(l.groups.flatMap((g) => g.records.map((r) => r.id)), ['0001-event-queue'], 'cobrança, sem acento');
     l = await list(s, 'adr', { status: 'superseded' });
     assert.deepEqual(l.groups.flatMap((g) => g.records.map((r) => `${g.repo}:${r.number}`)), ['org-a/madr:2', 'org-a/product:2']);
-    assert.equal(l.counts.all, 7);
+    assert.equal(l.counts.all, 8);
     assert.equal(l.counts.superseded, 2);
     l = await list(s, 'adr', { repo: 'org-a/mixed' });
     assert.deepEqual(l.groups.map((g) => g.repo), ['org-a/mixed']);
-    assert.equal(l.totals.records, 7, 'the cards stay on the whole list');
+    assert.equal(l.totals.records, 8, 'the cards stay on the whole list');
     l = await list(s, 'adr', { repo: 'org-a' });
     assert.equal(l.groups.length, 3, 'only the owner: the organization');
+  });
+
+  test('more than 200 repositories: every one stays in the list (the account list goes up to 500)', async () => {
+    const s = setup({ many: 246 });
+    const l = await list(s);
+    assert.equal(l.totals.reposRead, 250);
+    assert.equal(l.without.length, 247);
+    assert.ok(l.without.includes('org-a/extra-0') && l.without.includes('org-a/extra-245'));
+    assert.equal(s.calls().filter((c) => c === 'GRAPHQL RepoFilesDiscovery').length, 13, '250 repositories: 13 batches of 20');
+  });
+
+  test('one repository with an error does not take the others of its batch', async () => {
+    const s = setup();
+    s.mode.current = 'forbidden';
+    const l = await list(s);
+    assert.deepEqual(l.groups.map((g) => g.repo), ['org-a/madr', 'org-a/product']);
+    assert.match(l.error!, /SAML/);
+    assert.equal((await repo(s, 'mixed')).state, 'error');
+    assert.equal((await repo(s, 'madr')).error, null);
+  });
+
+  test('a push known from the account list also invalidates the repository tab', async () => {
+    const s = setup();
+    await list(s);
+    s.push({ ...REPOS, madr: { ...REPOS.madr, 'docs/adr/0004-new.md': '# 4. New\n' } });
+    s.account.repos[0].lastPush = new Date(T0 + 30_000).toISOString();
+    s.clock.now += 61_000;
+    await list(s);
+    const r = await repo(s, 'madr');
+    assert.deepEqual(r.records.map((x) => x.number), [4, 3, 2]);
   });
 
   test('the account list still loading: loading, and the next request tries again', async () => {
@@ -251,7 +284,7 @@ describe('#174 GitHub limited or down: the cache with its time', () => {
     assert.match(l.error!, /GitHub limitou/);
     assert.equal(l.readAt, new Date(T0).toISOString(), 'the time of the cache');
     assert.ok(l.retryAt && Date.parse(l.retryAt) > s.clock.now);
-    assert.equal(l.totals.records, 7, 'everything still shows');
+    assert.equal(l.totals.records, 8, 'everything still shows');
     const r = await repo(s, 'madr');
     assert.equal(r.fromCache, true);
     assert.match(r.error!, /GitHub limitou/);
@@ -332,7 +365,7 @@ describe('#174 one repository and one record', () => {
   test('a record of the other kind, or that does not exist, is 404 with the reason', async () => {
     const s = setup();
     await repo(s, 'mixed', 'all');
-    assert.deepEqual(await s.service.record('adr', 'org-a', 'mixed', '0002-free-plan'), { status: 404, body: { error: '0002-free-plan não é uma ADR: é uma PDR' } });
+    assert.deepEqual(await s.service.record('adr', 'org-a', 'mixed', '0002-free-plan'), { status: 404, body: { error: '0002-free-plan não é uma ADR: é uma PDR', kind: 'pdr' } });
     assert.equal((await s.service.record('pdr', 'org-a', 'mixed', '0002-free-plan')).status, 200);
     assert.equal((await s.service.record('adr', 'org-a', 'mixed', 'nope')).status, 404);
     assert.equal((await s.service.record('adr', 'org-a', 'mixed', '../x')).status, 400);
@@ -396,6 +429,14 @@ describe('#174 the /api/adrs and /api/pdrs routes', () => {
     assert.equal(one.status, 200);
     assert.match((one.body as unknown as DecisionRecordView).markdown, /SQLite in memory/);
     for (const x of [l, r, one]) assert.ok(!x.text.includes(TOKEN));
+  });
+
+  test('a file name with accent and space is the id, and it opens', async () => {
+    const one = await get(`/api/adrs/org-a/mixed/${encodeURIComponent('0004-decisão de fila')}`);
+    assert.equal(one.status, 200);
+    assert.equal((one.body as unknown as DecisionRecordView).title, 'Decisão de fila');
+    assert.equal((await s.service.record('adr', 'org-a', 'mixed', '..')).status, 400);
+    assert.equal((await s.service.record('adr', 'org-a', 'mixed', 'a\u0000b')).status, 400);
   });
 
   test('the PDR routes filter by kind: pdr', async () => {

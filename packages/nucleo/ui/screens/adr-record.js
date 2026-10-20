@@ -100,7 +100,7 @@ export async function mount(area, ctx) {
         el('span', { class: 'mono adr-head-n' }, recordNumber(r.number)),
         el('h1', { class: 'adr-trunc', title: r.title }, r.title),
         statusPill(r.status),
-        el('span', { class: 'adr-head-r' }, toggle, url ? el('a', { class: 'btn outline', href: url, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), el('span', { class: 'adr-gh-long' }, 'Abrir no '), 'GitHub') : null),
+        el('span', { class: 'adr-head-r' }, toggle, url ? el('a', { class: 'btn outline', href: url, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), el('span', { class: 'adr-gh-long' }, 'Abrir no'), 'GitHub') : null),
       ),
       el('div', { class: 'adr-chips' }, ...chips),
     );
@@ -259,10 +259,10 @@ export async function mount(area, ctx) {
     // 404 e 400 vêm com a mensagem do núcleo: o registro não existe, ou é do outro tipo.
     const status = e?.status;
     const message = e instanceof Error ? e.message : String(e);
-    // Um registro do outro tipo (uma PDR aberta pela rota de ADR): vai para a rota certa.
-    const other = status === 404 ? /é uma (ADR|PDR)$/.exec(message)?.[1] : null;
-    if (other && other.toLowerCase() !== K.kind) {
-      ctx.navigate(recordHref(other.toLowerCase(), key, id));
+    // Um registro do outro tipo (uma PDR aberta pela rota de ADR): o 404 diz o tipo, e a tela vai para a rota certa.
+    const other = status === 404 ? e?.body?.kind : null;
+    if (KINDS[other] && other !== K.kind) {
+      ctx.navigate(recordHref(other, key, id));
       return () => request++;
     }
     if (status === 404 || status === 400) {

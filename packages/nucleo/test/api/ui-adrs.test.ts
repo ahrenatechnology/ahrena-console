@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import type { DecisionList, DecisionRecordView, DecisionSummary, RepoDecisions } from '../../src/adrs/model.ts';
+import { ADR_DIRS, PDR_DIRS } from '../../src/adrs/parse.ts';
 import { ElementoFalso, instalarDomFalso, texto, type NoFalso } from './fake-dom.ts';
 
 instalarDomFalso();
@@ -21,7 +22,7 @@ const { mount: mountRepo } = await import('../../ui/screens/repo.js');
 // @ts-expect-error: idem
 const { tabKindFrom, filterRecords } = await import('../../ui/screens/repo-adrs.js');
 // @ts-expect-error: idem
-const { dateBr, recordHref, recordNumber, decisionsChangeMatters, kindOfPath, rowNote } = await import('../../ui/screens/adrs-common.js');
+const { dateBr, recordHref, recordNumber, decisionsChangeMatters, kindOfPath, rowNote, ADR_FOLDERS, PDR_FOLDERS } = await import('../../ui/screens/adrs-common.js');
 
 const NOW = new Date().toISOString();
 const REPO = 'exemplo-labs/motor-de-regras';
@@ -313,7 +314,7 @@ describe('ADR (C30): the open record, structured', () => {
   });
 
   test('a record of the other kind goes to its route; one that does not exist shows the reason', async () => {
-    const wrong = Object.assign(new Error('0002-free-plan não é uma ADR: é uma PDR'), { status: 404 });
+    const wrong = Object.assign(new Error('0002-free-plan não é uma ADR: é uma PDR'), { status: 404, body: { error: 'x', kind: 'pdr' } });
     const a = await mountWith(mountRecord, '/ui/adrs/org/repo/0002-free-plan', () => wrong, { owner: 'org', repo: 'repo', id: '0002-free-plan' });
     assert.deepEqual(a.navigated, ['/ui/pdrs/org/repo/0002-free-plan']);
     const none = Object.assign(new Error('registro não encontrado em org/repo'), { status: 404 });
@@ -382,6 +383,8 @@ describe('ADR helpers', () => {
     assert.equal(tabKindFrom('?kind=all'), 'all');
     assert.equal(tabKindFrom('?kind=x'), 'adr');
     assert.deepEqual(filterRecords(ROWS, { q: 'COBRANCA', status: '' }).map((r: DecisionSummary) => r.number), [9, 6]);
+    // As pastas que a tela diz ter procurado são as do núcleo.
+    assert.deepEqual([ADR_FOLDERS, PDR_FOLDERS], [[...ADR_DIRS], [...PDR_DIRS]]);
     assert.deepEqual(rowNote(row(5, 'x', { status: 'unknown', missing: ['status', 'date', 'options'] })), { links: '', missing: 'sem data · sem alternativas' });
   });
 });
