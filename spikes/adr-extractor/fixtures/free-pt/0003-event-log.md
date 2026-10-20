@@ -2,7 +2,7 @@
 
 - **Status:** proposta
 - **Data:** 2026-06-01
-- **Substitui:** [0002](0002-fila-de-eventos.md)
+- **Substitui:** [0002](0002-event-queue.md)
 
 ## Contexto
 

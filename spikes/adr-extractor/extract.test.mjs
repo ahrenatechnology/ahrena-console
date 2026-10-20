@@ -76,8 +76,8 @@ test('Y-statement: a frase vira contexto, decisão, opções e consequências', 
 test('livre em pt-BR: substitui e substituída por, com a volta', async () => {
   const d = byId(await readDir(here('fixtures/free-pt')));
   assert.equal(d['0002'].status, 'superseded');
-  assert.ok(d['0003'].links.some((l) => l.kind === 'supersedes' && l.target === '0002-fila-de-eventos'));
-  assert.ok(d['0002'].links.some((l) => l.kind === 'superseded-by' && l.target === '0003-log-de-eventos'));
+  assert.ok(d['0003'].links.some((l) => l.kind === 'supersedes' && l.target === '0002-event-queue'));
+  assert.ok(d['0002'].links.some((l) => l.kind === 'superseded-by' && l.target === '0003-event-log'));
   assert.ok(!d['0001'].links.some((l) => l.kind === 'supersedes')); // "Substitui: nada"
   assert.deepEqual(d['0001'].options, ['Postgres no Docker', 'Repositório falso']);
 });

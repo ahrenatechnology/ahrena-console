@@ -3,7 +3,7 @@
 - **Status:** aceita
 - **Data:** 02/03/2026
 - **Substitui:** nada
-- **Mexe em:** [0002](0002-fila-de-eventos.md)
+- **Mexe em:** [0002](0002-event-queue.md)
 
 ## Contexto
 
