@@ -23,14 +23,16 @@
 // | `GET /api/projeto`            | O kanban do GitHub Project (api/projeto.ts, #80); `?forcar=1` relê |
 // | `POST /api/projeto/mover`     | Muda o Status de um card: `{ itemId, optionId }` (api/projeto.ts) |
 // | `GET /api/sessoes/<id>` e `/agentes`, `/conversa`, `/eventos` | O Detalhe da sessão na /ui (api/detalhe.ts, #29 e #30) |
+// | `GET /api/config`, `GET` e `POST /api/config/skill` | A tela Agent Config (api/config.ts, src/config, #63): o que há nas pastas de configuração e a edição de uma skill, com backup |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
 // Pedido com `Origin` ou com `Host` que não seja o nosso dá 403 (decisão 0003). A exceção é a própria
 // `/ui` lendo: um `GET` cujo `Origin` é exatamente `http://<Host>` (um navegador pode mandar `Origin`
-// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo duas, só com `Origin`
-// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`, e
-// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts). A escrita nas
+// até num `fetch` da mesma origem). Escrita com `Origin` continua recusada, salvo três, só com `Origin`
+// exatamente `http://<Host>` (e JSON): o "Abrir no Claude Desktop" do Detalhe, `POST /abrir/<local_…>`,
+// o `POST /api/projeto/mover` do Kanban do projeto (api/projeto.ts) e o `POST /api/config/skill` da
+// tela Agent Config (api/config.ts). A escrita nas
 // decisões pede ainda `Content-Type: application/json` e o corpo `{ "sessao": "<id>" }`, e só
 // alcança uma decisão que essa sessão enxerga, da conta dela.
 
@@ -47,6 +49,7 @@ import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import { muralDoPainel, ROTA_DO_MURAL, responderMural } from './mural.ts';
 import { ROTA_DAS_SESSOES, responderSessoes, type ListaDeSessoes } from './sessoes.ts';
+import { escritaDaConfigNaMesmaOrigem, ROTA_DA_CONFIG, type RotaDaConfig } from './config.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './projeto.ts';
 import { ROTA_DO_DETALHE, type LeiturasDoDetalhe } from './detalhe.ts';
@@ -87,6 +90,8 @@ export interface OpcoesDaApi {
   analytics?: RotaAnalytics;
   /** A lista da tela Sessões; liga `GET /api/sessoes`. */
   sessoes?: ListaDeSessoes;
+  /** A tela Agent Config (`criarRotaDaConfig`); sem ela, `/api/config` dá 404. */
+  config?: RotaDaConfig;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -235,7 +240,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     contadores.pedidos++;
-    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !mesmaOrigemLendo(req, port) && !mesmaOrigemAbrindo(req, port) && !mesmaOrigemMovendo(req, port) && !escritaDaConfigNaMesmaOrigem(req, port)) return send(res, 403, { error: 'origem não permitida' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const direto = /^\/abrir\/([^/]+)$/.exec(url.pathname);
@@ -247,6 +252,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     }
     if (mcp && url.pathname === CAMINHO_DO_MCP) return mcp(req, res);
     if (ehDoProjeto(url.pathname)) return projeto(req, res, url);
+    if (opts.config && (url.pathname === ROTA_DA_CONFIG || url.pathname.startsWith(`${ROTA_DA_CONFIG}/`))) return opts.config(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (ehDaUi(url.pathname)) return responderUi(res, url.pathname);
     const abrir = /^\/abrir\/(local_[0-9a-f-]{8,64})$/i.exec(url.pathname);

@@ -42,6 +42,8 @@ import {
 import { PROJECT_DO_SIMULADOR, ProjetoDoSimulador } from '../simulador/projeto.ts';
 import { semearHistorico } from '../simulador/historico.ts';
 import { localDaDemo, semearDetalhe } from '../simulador/detalhe.ts';
+import { montarConfigDaDemo, projetosConhecidos } from '../config/index.ts';
+import { criarRotaDaConfig } from './config.ts';
 import { Contas } from './contas.ts';
 import { LeiturasDoDetalhe } from './detalhe.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
@@ -74,7 +76,9 @@ const AJUDA = `Uso: npm run api -- [opções]
   --demo              Banco em memória com um cenário do painel do simulador, sem histórico,
                       sem Desktop e sem GitHub: só dados sintéticos. A sessão do painel,
                       seja qual for, mostra o cenário, e o kanban do projeto é o do
-                      wireframe C11, num GitHub falso (mover vale em memória)
+                      wireframe C11, num GitHub falso (mover vale em memória). A tela
+                      Agent Config lê uma pasta de configuração e um projeto fictícios
+                      num temporário, apagado ao sair
   --cenario <p1..p13> O cenário da demonstração (padrão p1), como nos wireframes
                       A demo grava também o Detalhe da /ui: uma sessão que pede permissão
                       (/ui/sessoes/sim-detalhe-pedidos) e as ferramentas da sessão do cenário
@@ -268,6 +272,12 @@ const sincronizarPerfis = () =>
     .then((ps) => ps.length)
     .catch((e) => (log(`perfis: ${(e as Error).message}`), 0));
 if (perfis) log(`perfis: ${await sincronizarPerfis()} pasta(s) de configuração`);
+// A tela Agent Config (#63): as pastas dos perfis e os cwd das sessões; na demo, pastas fictícias.
+const configDaDemo = demo ? montarConfigDaDemo() : null;
+if (configDaDemo) process.once('exit', configDaDemo.apagar);
+const config = configDaDemo
+  ? criarRotaDaConfig({ pastas: async () => configDaDemo.pastas, projetos: async () => [configDaDemo.projeto], backups: configDaDemo.backups, log })
+  : criarRotaDaConfig({ pastas: () => perfis!.listar(), projetos: () => projetosConhecidos(storage), log });
 const relerPerfis = perfis ? setInterval(() => void sincronizarPerfis(), 60_000) : null;
 relerPerfis?.unref();
 
@@ -312,6 +322,7 @@ const api: ApiLocal = await iniciarApiLocal({
   frota: mcp.frota,
   analytics: new RotaAnalytics({ storage, contas, versao: () => mudancas.atual }),
   sessoes: new ListaDeSessoes({ storage, contas, desktop }),
+  config,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
