@@ -97,7 +97,7 @@ O ganho real é **atenção fora do Claude**: a bandeja e a notificação de "pr
 | Build do zero | segundos (só `tsc` + `electron-builder`) | **167 s** (95 s ao mudar uma linha, por causa do LTO) |
 | Motor da janela | Chromium próprio, igual em todo sistema | WebView do sistema |
 | Núcleo em Node | No mesmo processo (`require`) | Processo à parte (sidecar ou adotado) |
-| Bandeja, notificação, login, instância única | Nativos do Electron | Plugins oficiais (`tray-icon`, `notification`, `autostart`, `single-instance`) |
+| Bandeja, notificação, login, instância única | Nativos do Electron | Plugins oficiais (`tray-icon`, `notification`, `autostart`, `single-instance`; o `autostart` substituído pelo `SMAppService` direto na #89, ver 6.9) |
 | Atualização automática | `electron-updater` (o CCAM não usa) | `tauri-plugin-updater`, assinatura obrigatória, `latest.json` em GitHub Releases (o `tauri-action` gera) |
 | Assinatura e notarização | `electron-builder` + `@electron/notarize` | O bundler assina o app e os sidecars; mesmas variáveis `APPLE_*` |
 
@@ -172,7 +172,7 @@ O que a prova **não** cobre:
 - Assinatura com Developer ID, notarização e o updater (dependem da conta Apple e de uma chave guardada no CI).
 - Windows e Linux.
 - "Precisa de você" de verdade: a prova notifica quando o número de sessões ativas cai, porque o núcleo de teste não tem a máquina de estados (1.5) nem o 2.1.
-- O "Abrir no login" do plugin `autostart` grava um LaunchAgent em `~/Library/LaunchAgents`; não liguei na prova, para não mexer no escopo do usuário.
+- O "Abrir no login" do plugin `autostart` grava um LaunchAgent em `~/Library/LaunchAgents`; não liguei na prova, para não mexer no escopo do usuário (substituído pelo `SMAppService` direto na #89, ver 6.9).
 
 ## O que entra no backlog
 
@@ -183,7 +183,7 @@ No épico [#7](https://github.com/ahrenatechnology/ahrena-console/issues/7) · D
 | 6.6 | Tech task | Núcleo com dono único: arquivo de trava com pid e porta, adoção pela extensão, pelo app e pelo terminal, saída quando o pai some | 1.1 |
 | 6.7 | User story, frontend | App desktop (Tauri) na bandeja: "N precisam de você" na barra de menus, menu com as sessões esperando e clique que abre a sessão; janela que abre a interface do núcleo | 2.1, 2.4, 6.6 |
 | 6.8 | User story, frontend | Notificações do sistema quando uma sessão passa a esperar, com o motivo (pergunta, plano, permissão), ligadas por padrão e com silêncio por sessão | 6.7, 1.5 |
-| 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja. O plugin `autostart` 2.7 só oferece LaunchAgent (um plist em `~/Library/LaunchAgents`) e AppleScript, embora a crate `auto-launch` 0.6 por baixo já suporte SMAppService | 6.7 |
+| 6.9 | Tech task | Abrir no login com SMAppService, começando só na bandeja. O plugin `autostart` 2.7 só oferece LaunchAgent (um plist em `~/Library/LaunchAgents`) e AppleScript, embora a crate `auto-launch` 0.6 por baixo já suporte SMAppService. Feito sem o plugin: o `SMAppService.mainApp` direto, pelo objc2 (`objc2-service-management`) | 6.7 |
 | 6.10 | Tech task | Release assinado e notarizado (Developer ID), updater com `latest.json` no GitHub Releases, build no CI com `tauri-action` | 6.7, 6.3 |
 
 Ficam de fora, de propósito: telas próprias no app, cliente MCP, instalação de hooks, terminal embutido, Node embutido e Windows/Linux antes de o Mac estar estável.
