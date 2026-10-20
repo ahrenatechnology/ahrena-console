@@ -73,17 +73,17 @@ describe('discovery of the configuration folders', () => {
 
     const pastas = await discoverFolders({ home, file: arquivo, revealed: [revelada, join(home, '.claude')] });
     assert.deepEqual(
-      pastas.map((p) => [p.dir, p.origem, p.padrao]),
+      pastas.map((p) => [p.dir, p.origin, p.isDefault]),
       [
-        [join(home, '.claude'), 'padrao', true],
-        [join(home, '.claude-cliente'), 'nome', false],
-        [configurada, 'configurada', false],
+        [join(home, '.claude'), 'default', true],
+        [join(home, '.claude-cliente'), 'name', false],
+        [configurada, 'configured', false],
         [revelada, 'hook', false],
       ],
     );
     assert.equal(pastas[0].claudeJson, join(home, '.claude.json'), 'na pasta padrão, o .claude.json fica no HOME');
     assert.equal(pastas[1].claudeJson, join(home, '.claude-cliente', '.claude.json'));
-    assert.equal(pastas[1].projetos, join(home, '.claude-cliente', 'projects'));
+    assert.equal(pastas[1].projectsDir, join(home, '.claude-cliente', 'projects'));
   });
 
   test('HOME without any folder: empty list', async () => {
@@ -102,7 +102,7 @@ describe('Profiles in the port', () => {
 
     const lista = await perfis.sync();
     assert.deepEqual(
-      lista.map((p) => [p.dir, p.accountId, p.projetos]),
+      lista.map((p) => [p.dir, p.accountId, p.projectsDir]),
       [
         [join(home, '.claude'), `${UUID_A}/${ORG_A}`, join(home, '.claude', 'projects')],
         [join(home, '.claude-cliente'), `${UUID_B}/${ORG_B}`, join(home, '.claude-cliente', 'projects')],
@@ -130,7 +130,7 @@ describe('Profiles in the port', () => {
     const a = await perfis.accountForFolder(dir);
     assert.equal(a?.id, `${UUID_C}/${ORG_C}`);
     assert.deepEqual([a?.label, a?.organizationName], [null, 'Org Sintética'], 'o label só existe quando a pessoa edita');
-    assert.deepEqual((await perfis.list()).map((p) => [p.dir, p.origem]), [[dir, 'hook']], 'a pasta revelada entra na lista');
+    assert.deepEqual((await perfis.list()).map((p) => [p.dir, p.origin]), [[dir, 'hook']], 'a pasta revelada entra na lista');
 
     await storage.putAccount({ ...a!, label: 'meu rótulo', color: '#123456' });
     const depois = await perfis.accountForFolder(dir);
