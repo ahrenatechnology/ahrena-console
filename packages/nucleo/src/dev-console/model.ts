@@ -1,0 +1,308 @@
+// Dev Console (decisão 0008, seção 4): o domínio, sem GitHub, sem sessões lidas e sem HTTP.
+// Tudo aqui é derivado de fatos já lidos (PRs, issues, branches no remoto e as sessões do
+// contexto); nada é anotado à mão. Funções puras: quem lê e quem serve ficam fora.
+
+import { issueDoBranch } from '../api/trabalho.ts';
+import type { CiState, ReviewDecision } from '../github/work.ts';
+
+// ---------- fatos lidos do GitHub ----------
+
+/** `mergeable` do GitHub: `UNKNOWN` enquanto ele ainda calcula. */
+export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+
+export interface PullRequestFact {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  isDraft: boolean;
+  mergeable: Mergeable;
+  /** `mergeStateStatus`: `BEHIND` quando a base andou e a proteção pede o branch em dia. */
+  mergeStateStatus: string | null;
+  baseRefName: string;
+  headRefName: string;
+  createdAt: string;
+  /** `statusCheckRollup.state` do último commit; `null` sem checagens. */
+  ci: CiState | null;
+  review: ReviewDecision | null;
+  /** Issues que o PR fecha (`closingIssuesReferences`), do mesmo repositório. */
+  closes: number[];
+}
+
+export interface MergedPullRequestFact {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  mergedAt: string;
+}
+
+export interface IssueFact {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  state: 'OPEN' | 'CLOSED';
+  labels: string[];
+  /** Só nas fechadas. */
+  closedAt: string | null;
+}
+
+// ---------- fatos lidos das sessões ----------
+
+/** Uma sessão viva de um repositório do contexto. */
+export interface ContextSession {
+  id: string;
+  title: string;
+  repo: string;
+  branch: string | null;
+  /** Trabalhando agora (não espera você nem parou num erro). */
+  working: boolean;
+  /** Espera você numa pergunta, num plano ou numa decisão. */
+  waitingOnYou: boolean;
+}
+
+// ---------- o que o Dev Console mostra ----------
+
+export const NOT_READY_REASONS = ['draft', 'conflict', 'ci-failing', 'changes-requested', 'behind', 'ci-running', 'no-ci', 'stacked'] as const;
+/** Por que um PR aberto não está na fila. A ordem é a de prioridade: o primeiro motivo é o que a tela mostra. */
+export type NotReadyReason = (typeof NOT_READY_REASONS)[number];
+
+export type CiSummary = 'ok' | 'failing' | 'running' | null;
+
+export interface QueueItem {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  createdAt: string;
+  ci: CiSummary;
+  review: ReviewDecision | null;
+  closes: number[];
+  /** O PR aberto em cujo branch este se apoia (empilhado), ou `null`. */
+  stackedOn: number | null;
+}
+
+export interface NotReadyItem extends QueueItem {
+  reason: NotReadyReason;
+  /** Todos os motivos, na ordem de prioridade. */
+  reasons: NotReadyReason[];
+}
+
+export interface MergeQueue {
+  ready: QueueItem[];
+  notReady: NotReadyItem[];
+}
+
+export const BOARD_COLUMNS = ['todo', 'delegated', 'in-progress', 'in-review', 'blocked', 'done'] as const;
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
+
+export interface BoardCard {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  session: { id: string; title: string; waitingOnYou: boolean } | null;
+  pullRequest: { number: number; url: string; isDraft: boolean } | null;
+  ci: CiSummary;
+}
+
+export type Board = Record<BoardColumn, BoardCard[]>;
+
+export interface Scoreboard {
+  ready: number;
+  ciRunning: number;
+  ciFailingOrConflict: number;
+  sessionsWorking: number;
+  waitingOnYou: number;
+}
+
+export const DEFAULT_BLOCKED_LABELS: readonly string[] = ['blocked'];
+export const DONE_WINDOW_MS = 24 * 60 * 60_000;
+
+export function ciSummary(ci: CiState | null): CiSummary {
+  if (!ci) return null;
+  if (ci === 'SUCCESS') return 'ok';
+  if (ci === 'FAILURE' || ci === 'ERROR') return 'failing';
+  return 'running';
+}
+
+const prKey = (repo: string, number: number) => `${repo}#${number}`;
+
+/** O PR aberto do mesmo repositório cujo branch é a base deste: este está empilhado nele. */
+function stackBases(prs: readonly PullRequestFact[]): Map<string, PullRequestFact> {
+  const byHead = new Map(prs.map((p) => [`${p.repo}\0${p.headRefName}`, p]));
+  const out = new Map<string, PullRequestFact>();
+  for (const p of prs) {
+    const base = byHead.get(`${p.repo}\0${p.baseRefName}`);
+    if (base && base.number !== p.number) out.set(prKey(p.repo, p.number), base);
+  }
+  return out;
+}
+
+/** Os motivos próprios do PR, sem olhar a pilha. Vazio: pronto por si. */
+export function ownReasons(p: PullRequestFact): NotReadyReason[] {
+  const r: NotReadyReason[] = [];
+  const ci = ciSummary(p.ci);
+  if (p.isDraft) r.push('draft');
+  if (p.mergeable === 'CONFLICTING') r.push('conflict');
+  if (ci === 'failing') r.push('ci-failing');
+  if (p.review === 'CHANGES_REQUESTED') r.push('changes-requested');
+  if (p.mergeStateStatus === 'BEHIND') r.push('behind');
+  if (ci === 'running') r.push('ci-running');
+  if (ci === null) r.push('no-ci');
+  return r;
+}
+
+const byAge = (a: { createdAt: string; repo: string; number: number }, b: { createdAt: string; repo: string; number: number }) =>
+  a.createdAt.localeCompare(b.createdAt) || a.repo.localeCompare(b.repo) || a.number - b.number;
+
+/**
+ * A fila de merge: prontos (CI verde, sem conflito, fora de rascunho, sem pedido de mudança, em
+ * dia com a base), o mais antigo primeiro, e o empilhado logo depois da base. Um empilhado só
+ * entra se a base entrou; senão fica fora com `stacked`.
+ */
+export function buildMergeQueue(prs: readonly PullRequestFact[]): MergeQueue {
+  const bases = stackBases(prs);
+  const own = new Map(prs.map((p) => [prKey(p.repo, p.number), ownReasons(p)]));
+  // Pronto: sem motivo próprio e, se empilhado, com a base pronta (subindo a pilha inteira).
+  const readyMemo = new Map<string, boolean>();
+  const isReady = (p: PullRequestFact, seen = new Set<string>()): boolean => {
+    const k = prKey(p.repo, p.number);
+    const memo = readyMemo.get(k);
+    if (memo !== undefined) return memo;
+    if (seen.has(k)) return false; // ciclo de branches: ninguém entra
+    seen.add(k);
+    const base = bases.get(k);
+    const ok = own.get(k)!.length === 0 && (!base || isReady(base, seen));
+    readyMemo.set(k, ok);
+    return ok;
+  };
+
+  const item = (p: PullRequestFact): QueueItem => ({
+    repo: p.repo,
+    number: p.number,
+    title: p.title,
+    url: p.url,
+    createdAt: p.createdAt,
+    ci: ciSummary(p.ci),
+    review: p.review,
+    closes: [...p.closes],
+    stackedOn: bases.get(prKey(p.repo, p.number))?.number ?? null,
+  });
+
+  // Ordem: as raízes prontas pelo mais antigo; cada uma seguida dos empilhados nela, também pelo mais antigo.
+  const ready = prs.filter((p) => isReady(p));
+  const children = new Map<string, PullRequestFact[]>();
+  const roots: PullRequestFact[] = [];
+  for (const p of ready) {
+    const base = bases.get(prKey(p.repo, p.number));
+    if (base) {
+      const k = prKey(base.repo, base.number);
+      children.set(k, [...(children.get(k) ?? []), p]);
+    } else roots.push(p);
+  }
+  const ordered: QueueItem[] = [];
+  const visit = (p: PullRequestFact) => {
+    ordered.push(item(p));
+    for (const c of (children.get(prKey(p.repo, p.number)) ?? []).sort(byAge)) visit(c);
+  };
+  for (const r of roots.sort(byAge)) visit(r);
+
+  const notReady: NotReadyItem[] = prs
+    .filter((p) => !isReady(p))
+    .map((p) => {
+      const reasons = [...own.get(prKey(p.repo, p.number))!];
+      if (bases.has(prKey(p.repo, p.number))) reasons.push('stacked');
+      return { ...item(p), reason: reasons[0], reasons };
+    })
+    .sort(byAge);
+  return { ready: ordered, notReady };
+}
+
+export interface BoardInput {
+  openIssues: readonly IssueFact[];
+  closedIssues: readonly IssueFact[];
+  openPullRequests: readonly PullRequestFact[];
+  /** Branches no remoto, por repositório. */
+  remoteBranches: ReadonlyMap<string, readonly string[]>;
+  sessions: readonly ContextSession[];
+  blockedLabels?: readonly string[];
+  now: number;
+}
+
+/**
+ * A coluna de uma issue aberta, na ordem de quem vence: `blocked` (a etiqueta), `in-review` (PR
+ * aberto que a fecha), `in-progress` (branch com o número dela no remoto), `delegated` (sessão
+ * aberta num branch com o número dela, ainda sem push), senão `todo`.
+ */
+export function columnOf(
+  issue: IssueFact,
+  facts: { pullRequest: PullRequestFact | null; remoteBranch: boolean; session: ContextSession | null },
+  blockedLabels: readonly string[] = DEFAULT_BLOCKED_LABELS,
+): Exclude<BoardColumn, 'done'> {
+  const blocked = new Set(blockedLabels.map((l) => l.toLowerCase()));
+  if (issue.labels.some((l) => blocked.has(l.toLowerCase()))) return 'blocked';
+  if (facts.pullRequest) return 'in-review';
+  if (facts.remoteBranch) return 'in-progress';
+  if (facts.session) return 'delegated';
+  return 'todo';
+}
+
+const branchHasIssue = (branch: string | null, number: number) => branch !== null && issueDoBranch(branch) === number;
+
+export function buildBoard(input: BoardInput): Board {
+  const board: Board = { todo: [], delegated: [], 'in-progress': [], 'in-review': [], blocked: [], done: [] };
+  const sessionFor = (i: IssueFact) =>
+    input.sessions.filter((s) => s.repo === i.repo && branchHasIssue(s.branch, i.number)).sort((a, b) => Number(b.waitingOnYou) - Number(a.waitingOnYou))[0] ?? null;
+  const prFor = (i: IssueFact) =>
+    input.openPullRequests.filter((p) => p.repo === i.repo && p.closes.includes(i.number)).sort((a, b) => Number(a.isDraft) - Number(b.isDraft) || a.number - b.number)[0] ??
+    null;
+  const card = (i: IssueFact, pr: PullRequestFact | null, s: ContextSession | null): BoardCard => ({
+    repo: i.repo,
+    number: i.number,
+    title: i.title,
+    url: i.url,
+    session: s ? { id: s.id, title: s.title, waitingOnYou: s.waitingOnYou } : null,
+    pullRequest: pr ? { number: pr.number, url: pr.url, isDraft: pr.isDraft } : null,
+    ci: pr ? ciSummary(pr.ci) : null,
+  });
+
+  for (const i of input.openIssues) {
+    const branches = input.remoteBranches.get(i.repo) ?? [];
+    const pr = prFor(i);
+    const remoteBranch = branches.some((b) => branchHasIssue(b, i.number));
+    // Delegada é a sessão no branch da issue que ainda não subiu: com o branch no remoto, a coluna já é outra.
+    const s = sessionFor(i);
+    const delegatedSession = s && s.branch && !branches.includes(s.branch) ? s : null;
+    const column = columnOf(i, { pullRequest: pr, remoteBranch, session: delegatedSession }, input.blockedLabels);
+    board[column].push(card(i, pr, s));
+  }
+  const since = input.now - DONE_WINDOW_MS;
+  for (const i of input.closedIssues) {
+    if (i.closedAt && Date.parse(i.closedAt) >= since) board.done.push(card(i, null, null));
+  }
+  for (const c of BOARD_COLUMNS) board[c].sort((a, b) => a.repo.localeCompare(b.repo) || a.number - b.number);
+  board.done.sort((a, b) => {
+    const at = (c: BoardCard) => input.closedIssues.find((i) => i.repo === c.repo && i.number === c.number)?.closedAt ?? '';
+    return at(b).localeCompare(at(a));
+  });
+  return board;
+}
+
+/** Os mesclados nas últimas 24 h, o mais recente primeiro. */
+export function mergedSince(merged: readonly MergedPullRequestFact[], now: number): MergedPullRequestFact[] {
+  const since = now - DONE_WINDOW_MS;
+  return merged.filter((m) => Date.parse(m.mergedAt) >= since).sort((a, b) => b.mergedAt.localeCompare(a.mergedAt) || a.repo.localeCompare(b.repo));
+}
+
+export function buildScoreboard(input: { queue: MergeQueue; openPullRequests: readonly PullRequestFact[]; sessions: readonly ContextSession[]; dependsOnYou: number }): Scoreboard {
+  const open = input.openPullRequests.filter((p) => !p.isDraft);
+  return {
+    ready: input.queue.ready.length,
+    ciRunning: open.filter((p) => ciSummary(p.ci) === 'running').length,
+    ciFailingOrConflict: open.filter((p) => ciSummary(p.ci) === 'failing' || p.mergeable === 'CONFLICTING').length,
+    sessionsWorking: input.sessions.filter((s) => s.working).length,
+    waitingOnYou: input.dependsOnYou,
+  };
+}
