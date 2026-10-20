@@ -687,7 +687,7 @@ test('a failed quiet re-read after a new choice does not bring back the old peri
   }
 });
 
-test('an a11y pass: the kind icon is an image, a zero cell is read as "nenhum"', async () => {
+test('an a11y pass: the kind icon is an image, a zero cell is read as "nenhum" (#266/AC-4, AC-11)', async () => {
   const { area, cleanup } = await mountTab({ read: async (r) => routeFor(r) });
   try {
     const kind = withClass(area, 'an-dl-kind')[0]!;
