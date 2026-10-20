@@ -31,3 +31,4 @@ export { montarDashboard, MontadorDoDashboard, ROTA_DO_DASHBOARD, type RespostaD
 export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessoes.ts';
 export { QuadroKanban, pedidoDoKanban, rotuloDoModelo, colunaDoAgente, COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, type CardDeAgente, type CardDeSessao, type Coluna, type KanbanHttp, type PedidoDoKanban } from './kanban.ts';
 export { createAgentConfigRoute, agentConfigWriteFromSameOrigin, MAX_SKILL_BODY, AGENT_CONFIG_ROUTE, SKILL_ROUTE, type AgentConfigOptions, type AgentConfigRoute } from './agent-config.ts';
+export { MACHINES_ROUTE, TELEMETRY_ROUTE, isTelemetryRoute, readTelemetryRequest, respondTelemetry } from './telemetry.ts';

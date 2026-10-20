@@ -1,0 +1,7 @@
+Filesystem     512-blocks      Used  Available Capacity  Mounted on
+/dev/disk3s3s1 1195312500  20000000  453125000     5%    /
+devfs                 414       414          0   100%    /dev
+/dev/disk3s6   1195312500   2000000  453125000     1%    /System/Volumes/VM
+/dev/disk3s1   1195312500 720000000  453125000    62%    /System/Volumes/Data
+map auto_home           0         0          0   100%    /System/Volumes/Data/home
+/dev/disk5s1   3906250000 1757812500 2148437500    45%    /Volumes/Dados Externos
