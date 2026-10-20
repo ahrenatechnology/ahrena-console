@@ -38,8 +38,10 @@ import {
   semearDecisoesDoPainel,
   type CenarioDoPainel,
 } from '../simulador/painel.ts';
+import { semearHistorico } from '../simulador/historico.ts';
 import { Contas } from './contas.ts';
 import { IndiceDoDesktop } from './indice-desktop.ts';
+import { RotaAnalytics } from './rota-analytics.ts';
 import { MontadorDoPainel } from './painel.ts';
 import {
   capturarDoTranscript,
@@ -222,6 +224,8 @@ if (demo) {
   if (!CENARIOS_DO_PAINEL.includes(cenario)) throw new Error(`--cenario: um de ${CENARIOS_DO_PAINEL.join(', ')}`);
   await semearCenariosDoPainel(storage, cenario);
   await semearDecisoesDoPainel(decisoes, cenario);
+  // Histórico simulado (semente fixa, de ontem para trás) para os gráficos da tela Analytics.
+  await semearHistorico(storage);
 }
 
 // Perfis: a conta atual de cada pasta de configuração vai para a porta, com o nome da org como
@@ -273,6 +277,7 @@ const api: ApiLocal = await iniciarApiLocal({
   commit,
   mudancas,
   frota: mcp.frota,
+  analytics: new RotaAnalytics({ storage, contas }),
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,
