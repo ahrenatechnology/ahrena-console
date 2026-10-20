@@ -11,7 +11,7 @@
 // GraphQL has no ETag (decision 0001): the key stores `etag: null` and the TTL does the work.
 // Every connection reads `pageInfo.hasNextPage`: with more than one page, the read is `truncated`.
 
-import { ghCliToken, githubGraphql, type GithubGraphqlSourceOptions } from '../github/github-source.ts';
+import { ghCliToken, githubGraphql, retryOnGateway, type GithubGraphqlSourceOptions } from '../github/github-source.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
 import type { IssueFact, Mergeable, MergedPullRequestFact, PullRequestFact } from './model.ts';
 
@@ -181,8 +181,10 @@ export class GithubDevConsoleSource implements DevConsoleSource {
       if (res.status === 401) unauthorized = true;
       return res;
     };
+    const token = this.tokenValue;
     try {
-      return await githubGraphql<T>({ ...this.opts, fetch: watching, token: this.tokenValue }, operation, query, variables);
+      // Every Dev Console call is a read, so a 502/503/504 is retried (#269).
+      return await retryOnGateway(() => githubGraphql<T>({ ...this.opts, fetch: watching, token }, operation, query, variables), { sleep: this.opts.sleep });
     } catch (err) {
       if (unauthorized) this.tokenValue = null;
       throw err;

@@ -261,6 +261,39 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.match(l.error ?? '', /rede fora/);
   });
 
+  test('#269 AC-3: a list cut by a page that kept failing is ready, and the error says how many came and why', async () => {
+    class CutSource extends GithubReposSource {
+      override async lista() {
+        return { ...(await super.lista()), incomplete: { read: 4, total: 9, error: 'GitHub respondeu 502: HTTP 502' } };
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.equal(l.groups.flatMap((g) => g.repos).length, 4);
+    assert.equal(l.error, 'lista incompleta: 4 de 9 repositórios lidos, o resto falhou (GitHub respondeu 502: HTTP 502)');
+  });
+
+  test('#269: a cut list never replaces a longer one already shown; the old one stays, with the reason', async () => {
+    const cut = { on: false };
+    class CutSource extends GithubReposSource {
+      override async lista() {
+        const l = await super.lista();
+        return cut.on ? { ...l, repos: l.repos.slice(0, 2), incomplete: { read: 2, total: 4, error: 'GitHub respondeu 502: HTTP 502' } } : l;
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => m.relogio.agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    assert.equal((await listaPronta(m)).summary.repositories, 4);
+    cut.on = true;
+    m.relogio.agora += TTL_DOS_REPOS.lista + MIN;
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.equal(l.summary.repositories, 4);
+    assert.match(l.error ?? '', /^lista incompleta: 2 de 4 repositórios lidos/);
+  });
+
   test('sem GitHub (desligado ou sem token do gh): estado "sem-github"', async () => {
     const desligado = await montar({ fonteNula: true });
     assert.equal((await desligado.repos.lista()).state, 'no-github');
@@ -472,6 +505,21 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     const depois = await m.repos.metricas('org-a', 'motor-de-regras');
     assert.deepEqual(depois.computing, []);
     assert.ok(depois.contributors && depois.lines);
+  });
+
+  test('#269 AC-4: a PR sample cut by a page that kept failing still gives the metrics, and the error names the part', async () => {
+    class CutSource extends GithubReposSource {
+      override async detalhe(dono: string, nome: string, desde: string) {
+        const d = await super.detalhe(dono, nome, desde);
+        return d && { ...d, incomplete: ['amostra de PRs incompleta: 50 lidos, o resto falhou (GitHub respondeu 502: HTTP 502)'] };
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    const r = await metricasProntas(m, 'org-a', 'motor-de-regras');
+    assert.equal(r.state, 'ready');
+    assert.ok(r.prs);
+    assert.equal(r.error, 'amostra de PRs incompleta: 50 lidos, o resto falhou (GitHub respondeu 502: HTTP 502)');
   });
 
   test('repositório que não existe: "nao-encontrado"', async () => {
