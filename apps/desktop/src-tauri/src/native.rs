@@ -1,11 +1,12 @@
-// O que o menu do Tauri não expõe e o AppKit tem: o item alternativo do ⌥, a dica e o recuo.
+// What Tauri's menu does not expose and AppKit has: the ⌥ alternate item, the tooltip and the indent.
 //
-// O Tauri (muda) não dá acesso ao `NSMenu` da bandeja. O app ouve `NSMenuDidAddItemNotification`,
-// que o AppKit posta a cada item inserido com o próprio menu como objeto, e assim acha o `NSMenu`
-// recém-montado. Tudo roda na thread principal: a montagem do menu e a notificação também.
+// Tauri (muda) gives no access to the tray's `NSMenu`. The app listens to
+// `NSMenuDidAddItemNotification`, which AppKit posts for every inserted item with the menu itself as
+// the object, and so finds the freshly built `NSMenu`. Everything runs on the main thread: the menu
+// building and the notification too.
 //
-// Um item alternativo (`setAlternate`) toma o lugar do item de cima enquanto ⌥ está pressionado;
-// os dois precisam do mesmo atalho (aqui, nenhum) e de máscaras diferentes (⌘ e ⌥).
+// An alternate item (`setAlternate`) takes the place of the item above while ⌥ is pressed; both
+// need the same key equivalent (here, none) and different masks (⌘ and ⌥).
 
 use std::cell::RefCell;
 use std::ptr::NonNull;
@@ -18,61 +19,61 @@ use objc2_app_kit::{NSBitmapImageRep, NSEventModifierFlags, NSImage, NSMenu, NSM
 use objc2_foundation::{NSData, NSNotification, NSNotificationCenter, NSObjectProtocol, NSSize, NSString};
 
 thread_local! {
-    static NOVOS: RefCell<Vec<Retained<NSMenu>>> = const { RefCell::new(Vec::new()) };
-    static OUVINTE: RefCell<Option<Retained<ProtocolObject<dyn NSObjectProtocol>>>> = const { RefCell::new(None) };
+    static NEW_MENUS: RefCell<Vec<Retained<NSMenu>>> = const { RefCell::new(Vec::new()) };
+    static OBSERVER: RefCell<Option<Retained<ProtocolObject<dyn NSObjectProtocol>>>> = const { RefCell::new(None) };
 }
 
 #[derive(Debug, Clone)]
-pub enum Ajuste {
-    /// O item com este título vira o alternativo (⌥) do item de cima.
-    Alternativo(String),
-    Dica { titulo: String, dica: String },
-    Recuo(String),
+pub enum Tweak {
+    /// The item with this title becomes the alternate (⌥) of the item above.
+    Alternate(String),
+    Tooltip { title: String, tooltip: String },
+    Indent(String),
 }
 
-/// Começa a ouvir. Na thread principal, antes de montar o primeiro menu.
-pub fn ouvir() {
-    let bloco = RcBlock::new(|n: NonNull<NSNotification>| {
-        // SAFETY: o AppKit entrega uma notificação válida durante a chamada.
+/// Starts listening. On the main thread, before building the first menu.
+pub fn listen() {
+    let block = RcBlock::new(|n: NonNull<NSNotification>| {
+        // SAFETY: AppKit hands a valid notification during the call.
         let n = unsafe { n.as_ref() };
         let Some(menu) = n.object().and_then(|o| o.downcast::<NSMenu>().ok()) else { return };
-        NOVOS.with(|v| {
+        NEW_MENUS.with(|v| {
             let mut v = v.borrow_mut();
             if !v.iter().any(|m| Retained::as_ptr(m) == Retained::as_ptr(&menu)) {
                 v.push(menu);
             }
         });
     });
-    // SAFETY: nome e bloco válidos; sem fila, o bloco roda na thread que posta (a principal).
-    let ouvinte = unsafe { NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(Some(NSMenuDidAddItemNotification), None, None, &bloco) };
-    OUVINTE.with(|o| *o.borrow_mut() = Some(ouvinte));
+    // SAFETY: valid name and block; without a queue, the block runs on the posting thread (the main one).
+    let observer = unsafe { NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(Some(NSMenuDidAddItemNotification), None, None, &block) };
+    OBSERVER.with(|o| *o.borrow_mut() = Some(observer));
 }
 
-/// Aplica os ajustes no menu montado desde a última chamada que tem o item `marca`.
-pub fn ajustar(marca: &str, ajustes: &[Ajuste]) {
-    let menus = NOVOS.with(|v| std::mem::take(&mut *v.borrow_mut()));
-    let marca = NSString::from_str(marca);
-    let Some(menu) = menus.iter().rev().find(|m| m.itemArray().iter().any(|i| i.title().isEqualToString(&marca))) else { return };
-    let itens = menu.itemArray();
-    let achar = |t: &str| {
+/// Applies the tweaks to the menu built since the last call that has the item `marker`.
+pub fn apply(marker: &str, tweaks: &[Tweak]) {
+    let menus = NEW_MENUS.with(|v| std::mem::take(&mut *v.borrow_mut()));
+    let marker = NSString::from_str(marker);
+    let Some(menu) = menus.iter().rev().find(|m| m.itemArray().iter().any(|i| i.title().isEqualToString(&marker))) else { return };
+    let items = menu.itemArray();
+    let find = |t: &str| {
         let t = NSString::from_str(t);
-        itens.iter().find(|i| i.title().isEqualToString(&t))
+        items.iter().find(|i| i.title().isEqualToString(&t))
     };
-    for a in ajustes {
-        match a {
-            Ajuste::Alternativo(t) => {
-                if let Some(i) = achar(t) {
+    for tweak in tweaks {
+        match tweak {
+            Tweak::Alternate(t) => {
+                if let Some(i) = find(t) {
                     i.setKeyEquivalentModifierMask(NSEventModifierFlags::Option);
                     i.setAlternate(true);
                 }
             }
-            Ajuste::Dica { titulo, dica } => {
-                if let Some(i) = achar(titulo) {
-                    i.setToolTip(Some(&NSString::from_str(dica)));
+            Tweak::Tooltip { title, tooltip } => {
+                if let Some(i) = find(title) {
+                    i.setToolTip(Some(&NSString::from_str(tooltip)));
                 }
             }
-            Ajuste::Recuo(t) => {
-                if let Some(i) = achar(t) {
+            Tweak::Indent(t) => {
+                if let Some(i) = find(t) {
                     i.setIndentationLevel(1);
                 }
             }
@@ -80,20 +81,20 @@ pub fn ajustar(marca: &str, ajustes: &[Ajuste]) {
     }
 }
 
-/// O ícone da bandeja como template, com as duas resoluções (18 px e 36 px para 18 pt): o
-/// `tray-icon` aceita uma imagem só, e o macOS escolhe a nítida para cada tela e a pinta conforme
-/// a barra.
-pub fn icone_template(item: &NSStatusItem, resolucoes: &[&[u8]]) {
+/// The tray icon as a template, with both resolutions (18 px and 36 px for 18 pt): `tray-icon`
+/// takes a single image, and macOS picks the sharp one for each screen and paints it to match the
+/// bar.
+pub fn template_icon(item: &NSStatusItem, resolutions: &[&[u8]]) {
     let Some(mtm) = MainThreadMarker::new() else { return };
-    let Some(botao) = item.button(mtm) else { return };
-    let tamanho = NSSize::new(18.0, 18.0);
-    let imagem = NSImage::initWithSize(NSImage::alloc(), tamanho);
-    for png in resolucoes {
+    let Some(button) = item.button(mtm) else { return };
+    let size = NSSize::new(18.0, 18.0);
+    let image = NSImage::initWithSize(NSImage::alloc(), size);
+    for png in resolutions {
         if let Some(rep) = NSBitmapImageRep::imageRepWithData(&NSData::with_bytes(png)) {
-            rep.setSize(tamanho);
-            imagem.addRepresentation(&rep);
+            rep.setSize(size);
+            image.addRepresentation(&rep);
         }
     }
-    imagem.setTemplate(true);
-    botao.setImage(Some(&imagem));
+    image.setTemplate(true);
+    button.setImage(Some(&image));
 }

@@ -296,7 +296,7 @@ pub fn caminho_da_sessao(sessao: &str) -> String {
     if matches!(sessao, "" | "." | "..") {
         return "/ui".into();
     }
-    format!("/ui/sessions/{}", http::codificar(sessao))
+    format!("/ui/sessions/{}", http::encode(sessao))
 }
 
 /// O `local_…` que o `POST /open/` do núcleo aceita: `local_` e de 8 a 64 de `[0-9a-fA-F-]`.

@@ -1,11 +1,13 @@
-// O updater (issue #90): ao abrir e a cada 6 h, pergunta ao `latest.json` da última release do
-// GitHub se há versão nova. Se há, guarda o `Update` e avisa `main.rs`, que põe no menu
-// "Atualizar para a versão X"; o clique baixa, confere a assinatura, instala e relança.
+// The updater (issue #90): on opening and every 6 h, asks the `latest.json` of GitHub's latest
+// release whether there is a new version. If there is, it keeps the `Update` and tells `main.rs`,
+// which puts "Atualizar para a versão X" in the menu; the click downloads, checks the signature,
+// installs and relaunches.
 //
-// Só liga com a chave pública em `plugins.updater.pubkey` do tauri.conf.json. Vazia (o padrão até
-// o projeto ter a chave, e em toda build local), o plugin nem é registrado: o plugin aceitaria a
-// chave vazia ao abrir, mas cada atualização falharia na conferência da assinatura depois de baixar.
-// Erros (rede, assinatura) só vão para o stderr: o menu fica como estava.
+// It only turns on with the public key in `plugins.updater.pubkey` of tauri.conf.json. Empty (the
+// default until the project has the key, and in every local build), the plugin is not even
+// registered: the plugin would accept the empty key on opening, but every update would then fail
+// the signature check after downloading. Errors (network, signature) only go to stderr: the menu
+// stays as it was.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -13,50 +15,51 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-const INTERVALO: Duration = Duration::from_secs(6 * 60 * 60);
+const INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
-/// A atualização achada e ainda não instalada.
-struct Pendente(Mutex<Option<Update>>);
+/// The update found and not installed yet.
+struct Pending(Mutex<Option<Update>>);
 
-/// A chave pública do updater no tauri.conf.json, se não estiver vazia.
-fn chave_publica(app: &AppHandle) -> Option<String> {
-    let chave = app.config().plugins.0.get("updater")?.get("pubkey")?.as_str()?.trim();
-    (!chave.is_empty()).then(|| chave.to_string())
+/// The updater's public key in tauri.conf.json, if it is not empty.
+fn public_key(app: &AppHandle) -> Option<String> {
+    let key = app.config().plugins.0.get("updater")?.get("pubkey")?.as_str()?.trim();
+    (!key.is_empty()).then(|| key.to_string())
 }
 
-/// Registra o updater e checa numa thread; `achou` recebe a versão nova. Sem chave, não faz nada.
-pub fn vigiar(app: &AppHandle, achou: impl Fn(&AppHandle, String) + Send + 'static) -> tauri::Result<()> {
-    if chave_publica(app).is_none() {
+/// Registers the updater and checks on a thread; `found` receives the new version. Without a key,
+/// it does nothing.
+pub fn watch(app: &AppHandle, found: impl Fn(&AppHandle, String) + Send + 'static) -> tauri::Result<()> {
+    if public_key(app).is_none() {
         return Ok(());
     }
     app.plugin(tauri_plugin_updater::Builder::new().build())?;
-    app.manage(Pendente(Mutex::new(None)));
+    app.manage(Pending(Mutex::new(None)));
     let app = app.clone();
     std::thread::spawn(move || loop {
         match app.updater().map(|u| tauri::async_runtime::block_on(u.check())) {
             Ok(Ok(Some(update))) => {
-                let versao = update.version.clone();
-                *app.state::<Pendente>().0.lock().unwrap() = Some(update);
-                achou(&app, versao);
+                let version = update.version.clone();
+                *app.state::<Pending>().0.lock().unwrap() = Some(update);
+                found(&app, version);
             }
             Ok(Ok(None)) => {}
-            Ok(Err(e)) | Err(e) => eprintln!("[ahrena-console] atualização: {e}"),
+            Ok(Err(e)) | Err(e) => eprintln!("[ahrena-console] update: {e}"),
         }
-        std::thread::sleep(INTERVALO);
+        std::thread::sleep(INTERVAL);
     });
     Ok(())
 }
 
-/// Baixa, instala e relança. Se falhar, a atualização volta a ficar pendente no menu.
-pub fn instalar(app: &AppHandle) {
-    let Some(pendente) = app.try_state::<Pendente>() else { return };
-    let Some(update) = pendente.0.lock().unwrap().take() else { return };
+/// Downloads, installs and relaunches. If it fails, the update is pending in the menu again.
+pub fn install(app: &AppHandle) {
+    let Some(pending) = app.try_state::<Pending>() else { return };
+    let Some(update) = pending.0.lock().unwrap().take() else { return };
     let app = app.clone();
     std::thread::spawn(move || match tauri::async_runtime::block_on(update.download_and_install(|_, _| {}, || {})) {
         Ok(()) => app.restart(),
         Err(e) => {
-            eprintln!("[ahrena-console] instalar a atualização {}: {e}", update.version);
-            *app.state::<Pendente>().0.lock().unwrap() = Some(update);
+            eprintln!("[ahrena-console] install update {}: {e}", update.version);
+            *app.state::<Pending>().0.lock().unwrap() = Some(update);
         }
     });
 }
