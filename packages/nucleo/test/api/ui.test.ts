@@ -121,6 +121,20 @@ describe('/ui in the core', () => {
     assert.equal((await fetchPath(api.url, '/api/hooks', { method: 'POST', headers: { origin: `http://${host}`, 'content-type': 'application/json' }, body: hook })).status, 403);
   });
 
+  // Addresses that only become the `href` of a link the person opens (new tab, `noopener`), never a call:
+  // the Instructions tab (#183) points to the file on GitHub and to the CLAUDE.md documentation.
+  // Each is the exact piece the URL search catches and appears exactly once in the file: the
+  // `blobUrl` template does not open the door to another github.com address.
+  const LINK_TARGETS: Record<string, string[]> = {
+    'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
+    'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
+  };
+  const externalUrls = (file: string, text: string) => {
+    const allowed = LINK_TARGETS[file] ?? [];
+    const found = text.match(/https?:\/\/[^\s"'`)]+/g) ?? [];
+    for (const l of allowed) assert.equal(found.filter((u) => u === l).length, 1, `${file}: ${l} must appear exactly once`);
+    return found.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.includes(u));
+  };
   test('the page calls nothing outside its own origin and writes no color by hand', () => {
     // The folder and the screens (`screens/`): the rules hold for every served file.
     const files = readdirSync(UI_FOLDER, { recursive: true })
@@ -129,7 +143,7 @@ describe('/ui in the core', () => {
     assert.ok(files.includes('index.html') && files.includes('app.js') && files.includes('screens/repos.js'));
     for (const a of files) {
       const text = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
-      const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      const urls = externalUrls(a, text);
       assert.deepEqual(urls, [], `${a} cita endereço externo`);
       assert.doesNotMatch(text, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `${a} escreve cor à mão`);
       assert.doesNotMatch(text, /\sstyle\s*=|setAttribute\(\s*['"]style/, `${a} usa estilo inline`);
@@ -141,7 +155,7 @@ describe('/ui in the core', () => {
     const screens = readdirSync(`${UI_FOLDER}screens`).filter((a) => /\.(js|css)$/.test(a));
     for (const a of screens) {
       const text = readFileSync(`${UI_FOLDER}screens/${a}`, 'utf8');
-      const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      const urls = externalUrls(`screens/${a}`, text);
       assert.deepEqual(urls, [], `screens/${a} cita endereço externo`);
       assert.doesNotMatch(text, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `screens/${a} escreve cor à mão`);
       if (a.endsWith('.js')) {
@@ -376,9 +390,17 @@ describe('screen registry', () => {
   });
 
   test('#105: a strange repository path matches nothing', () => {
-    for (const path of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c', '/ui/sessions/..']) {
+    for (const path of ['/ui/repos/a/..', '/ui/repos/a/.', '/ui/repos/../x', '/ui/repos/a/%2e%2e', '/ui/repos/a%20b/x', '/ui/repos/a%2Fb/x', '/ui/repos/a', '/ui/repos/a/b/c/d', '/ui/repos/a/b/..', '/ui/sessions/..']) {
       assert.equal(findScreen(path), null, path);
     }
+  });
+
+  test('#183: the Instructions tab has its own URL, on the same screen as the repository', () => {
+    const found = findScreen('/ui/repos/exemplo-labs/vitrine-demo/instructions');
+    assert.equal(found?.screen.id, 'repo-tab');
+    assert.equal(found?.screen.file, '/ui/screens/repo.js');
+    assert.deepEqual(found?.params, { owner: 'exemplo-labs', repo: 'vitrine-demo', tab: 'instructions' });
+    assert.equal(litItem(found!.screen, found!.params), 'repos');
   });
 
   test('every screen with a file points to a file that exists in ui/screens/', () => {

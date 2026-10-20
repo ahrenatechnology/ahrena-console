@@ -105,7 +105,7 @@ test('stdio without the core: the official client connects, lists the tools and 
     assert.equal(tools.length, 2);
     const r = await client.callTool({ name: 'sessions_needing_attention', arguments: {} });
     assert.equal(r.isError, true);
-    assert.match((r.content as { text: string }[])[0].text, /npm run api/);
+    assert.match((r.content as { text: string }[])[0].text, /npm run api -- --porta/);
   } finally {
     await client.close();
   }

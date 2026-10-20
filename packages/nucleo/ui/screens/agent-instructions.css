@@ -1,0 +1,147 @@
+/* A aba Instruções de um repositório (C32 e C33, issue 183). Toda classe própria tem o prefixo `ins-`. */
+
+.ins-tab { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ins-bands { display: flex; flex-direction: column; gap: 8px; }
+.ins-bands:empty { display: none; }
+.ins-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ins-muted { color: var(--muted); font-size: 12px; }
+.ins-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ins-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ins-accent { color: var(--accent-text); display: inline-flex; }
+.ins-tone-wait { color: var(--status-waiting-text); display: inline-flex; }
+.ins-tone-error { color: var(--status-error-text); display: inline-flex; }
+.ins-eyebrow { display: flex; gap: 6px; align-items: center; padding: 6px 8px 4px; }
+.ins-chip { flex: none; height: 18px; padding: 0 7px; border-radius: 6px; font-size: 10px; display: inline-flex; align-items: center; color: var(--muted); background: var(--raised); border: 1px solid var(--border); }
+
+/* ---------- a faixa da árvore cortada (C33) ---------- */
+.ins-band { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--status-waiting-text) 55%, var(--border)); background: var(--status-waiting-badge); font-size: 12.5px; }
+.ins-band > .icon { color: var(--status-waiting-text); flex: none; font-size: 16px; }
+.ins-band p { margin: 0; flex: 1; min-width: 0; line-height: 1.5; }
+.ins-band b { color: var(--status-waiting-text); }
+.ins-band code, .ins-empty code { font-family: var(--font-mono); font-size: 11.5px; }
+
+/* ---------- avisos (C33) ---------- */
+.ins-warnings { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ins-warn { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px dashed var(--border); background: var(--bg); font-size: 12px; }
+.ins-warn-name { white-space: nowrap; font-size: 11.5px; }
+.ins-warn-text { color: var(--muted); min-width: 0; }
+.ins-foot { color: var(--muted); font-size: 11.5px; }
+
+/* ---------- vazio (C33) ---------- */
+.ins-empty { min-height: 300px; }
+.ins-empty p { max-width: 60ch; }
+.ins-none { margin: 0; padding: 12px 14px; color: var(--muted); font-size: 12px; }
+
+/* ---------- busca e hora da leitura ---------- */
+.ins-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.ins-field { flex: 1 1 260px; display: flex; gap: 8px; align-items: center; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; min-width: 0; }
+.ins-field input { flex: 1; min-width: 0; height: 100%; padding: 0; background: none; border: 0; color: var(--text); font: inherit; outline: none; }
+.ins-field input::placeholder { color: var(--muted); }
+.ins-field:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ins-read { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* ---------- a grade: lista | arquivo, com .claude/ embaixo (1100) ou à direita (largo) ---------- */
+.ins-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr); grid-template-areas: "nav main" "nav side"; grid-template-rows: auto 1fr; gap: 12px; align-items: start; }
+.ins-nav { grid-area: nav; }
+.ins-main { grid-area: main; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ins-side { grid-area: side; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ins-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.ins-cards-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (min-width: 1300px) {
+  .ins-grid { grid-template-columns: 260px minmax(0, 1fr) 290px; grid-template-areas: "nav main side"; grid-template-rows: auto; }
+  .ins-side .ins-cards { grid-template-columns: minmax(0, 1fr); }
+  .ins-side .ins-cards-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .ins-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "nav" "main" "side"; grid-template-rows: auto; }
+}
+
+/* ---------- a lista dos arquivos ---------- */
+.ins-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ins-nav-item, .ins-nav-sub { display: flex; gap: 8px; align-items: center; width: 100%; min-width: 0; padding: 6px 8px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.ins-nav-item > .icon { color: var(--muted); flex: none; }
+.ins-nav-item > .ins-trunc { flex: 1; }
+.ins-nav-item:hover, .ins-nav-sub:hover { background: var(--raised); }
+.ins-nav-item[aria-current="true"] { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+.ins-nav-item[aria-current="true"] > .icon { color: var(--accent-text); }
+.ins-nav-sub { padding-left: 22px; font-size: 11px; color: var(--muted); }
+.ins-nav-sub > .ins-trunc { flex: 1; }
+.ins-nav-arrow { flex: none; }
+.ins-nav-item:focus-visible, .ins-nav-sub:focus-visible, .ins-hit:focus-visible, .ins-hit-file:focus-visible, .ins-import-head:focus-visible, .ins-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ins-count { color: var(--muted); font-size: 11px; flex: none; }
+.ins-folder { display: flex; gap: 6px; align-items: center; padding: 8px 8px 2px; color: var(--muted); font-size: 11px; min-width: 0; }
+.ins-folder > .icon { flex: none; }
+
+/* ---------- o arquivo aberto ---------- */
+.ins-viewer { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ins-viewer-head { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--border); min-width: 0; }
+.ins-viewer-path { font-size: 13px; overflow-wrap: anywhere; }
+.ins-viewer-role { color: var(--muted); font-size: 12px; flex: 1 1 160px; min-width: 0; }
+.ins-viewer-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.ins-icon-btn { padding: 0 9px; height: 28px; }
+.ins-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.ins-seg button { font: inherit; font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 3px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.ins-seg button:hover { color: var(--text); }
+.ins-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.ins-viewer-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ins-raw { margin: 0; padding: 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- o Markdown renderizado ---------- */
+.ins-md { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.ins-md-h { margin: 6px 0 0; font-weight: var(--weight-semibold); line-height: 1.35; }
+.ins-md-h1 { font-size: 17px; margin-top: 0; }
+.ins-md-h2 { font-size: 14px; }
+.ins-md-h3, .ins-md-h4, .ins-md-h5, .ins-md-h6 { font-size: 13px; }
+.ins-md-p { margin: 0; }
+.ins-md-list { margin: 0; padding-left: 20px; }
+.ins-md-list li > .ins-md-p { margin: 0; }
+.ins-md-list li { margin: 1px 0; }
+.ins-md-task { list-style: none; margin-left: -18px; }
+.ins-md-check { margin-right: 6px; color: var(--muted); }
+.ins-md-code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: var(--raised); }
+.ins-md-pre { margin: 2px 0; padding: 10px 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ins-md-front { color: var(--muted); }
+.ins-md-quote { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--border); color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.ins-md-hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
+.ins-md-link { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+.ins-md-unsafe { color: var(--muted); }
+.ins-md-table-wrap { max-width: 100%; }
+.ins-md-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.ins-md-table th, .ins-md-table td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.ins-md-table th { background: var(--raised); font-weight: var(--weight-semibold); }
+.ins-md-table .ins-md-center { text-align: center; }
+.ins-md-table .ins-md-right { text-align: right; }
+.ins-md-import-ref { font-size: 11.5px; color: var(--accent-text); }
+.ins-md-rest { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+
+/* ---------- os @imports abertos no lugar (borda laranja, C32) ---------- */
+.ins-import { border-left: 2px solid var(--border); padding: 4px 0 4px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ins-import[data-status="ok"] { border-left-color: var(--accent); }
+.ins-import-head { display: flex; gap: 8px; align-items: center; font: inherit; font-size: 12px; color: var(--text); background: none; border: 0; padding: 2px 0; text-align: left; min-width: 0; flex-wrap: wrap; }
+button.ins-import-head { cursor: pointer; }
+.ins-import-head > .icon, .ins-import-chev { color: var(--muted); flex: none; display: inline-flex; }
+.ins-import[data-status="ok"] .ins-import-chev { color: var(--accent-text); }
+.ins-import[data-status="missing"] .ins-import-head > .icon, .ins-import[data-status="cycle"] .ins-import-head > .icon, .ins-import[data-status="too-deep"] .ins-import-head > .icon { color: var(--status-error-text); }
+.ins-import-ref { font-size: 11.5px; overflow-wrap: anywhere; }
+.ins-import-why { color: var(--muted); }
+.ins-import-sum { color: var(--muted); font-size: 12px; }
+.ins-import-body { min-width: 0; }
+
+/* ---------- busca ---------- */
+.ins-hits { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-top: 1px solid var(--border); }
+.ins-hits:first-child { border-top: 0; }
+.ins-hit-file, .ins-hit { display: flex; gap: 8px; align-items: baseline; width: 100%; min-width: 0; padding: 5px 6px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.ins-hit-file { align-items: center; font-weight: var(--weight-semibold); }
+.ins-hit-file:hover, .ins-hit:hover { background: var(--raised); }
+.ins-hit-where { flex: none; color: var(--muted); font-size: 11px; }
+.ins-hit-text { min-width: 0; overflow-wrap: anywhere; }
+.ins-mark { background: var(--status-active-badge); color: var(--accent-text); border-radius: 3px; padding: 0 1px; }
+
+/* ---------- os cards de .claude/ ---------- */
+.ins-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ins-ttl { margin: 0 0 2px; font-size: 13px; font-weight: var(--weight-semibold); display: flex; gap: 8px; align-items: center; min-width: 0; }
+.ins-ttl > .icon { color: var(--muted); flex: none; }
+.ins-ttl-r { margin-left: auto; font-size: 11.5px; font-weight: var(--weight-medium); color: var(--muted); white-space: nowrap; }
+.ins-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; min-width: 0; }
+.ins-row-name { font-size: 11.5px; white-space: nowrap; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.ins-row-desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

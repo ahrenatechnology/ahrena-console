@@ -27,6 +27,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
+import { GithubCallQueue } from '../github/call-queue.ts';
 import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
@@ -77,6 +78,7 @@ import {
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
+import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { FeedDeEventos } from './events.ts';
@@ -345,7 +347,11 @@ profileTimer?.unref();
 // New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
 const mcp = createMcpServer({ storage, accounts, desktop, log });
 mcp.server.register(waitForChanges({ changes, accounts }));
-const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log });
+// A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
+const githubQueue = new GithubCallQueue();
+const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
+// The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
+const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -447,6 +453,7 @@ const api: LocalApi = await startLocalApi({
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
   repos: repos.rota,
+  agentInstructions: agentInstructions.route,
   // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
   ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
   devConsole,
