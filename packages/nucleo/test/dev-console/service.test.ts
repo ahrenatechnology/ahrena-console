@@ -7,6 +7,7 @@ import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
 import { createDevConsole, DEV_CONSOLE_TTL, parseContexts, type DevConsole, type DevConsoleOverview, type DevConsoleView } from '../../src/dev-console/index.ts';
+import { DEPENDS_ON_YOU_REASONS } from '../../src/dev-console/sessions.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import type { Session } from '../../src/model.ts';
@@ -92,7 +93,7 @@ describe('Dev Console of one context', () => {
 
   test('#177/AC-2 the scoreboard: ready, CI running, CI failing or conflict, sessions working and waiting on you', async () => {
     const v = (await devConsole.view('loja'))!;
-    assert.deepEqual(v.scoreboard, { ready: 3, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 2, waitingOnYou: 3 });
+    assert.deepEqual(v.scoreboard, { ready: 3, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 2, waitingOnYou: 3, idle: 0 });
   });
 
   test('#177/AC-2 depends on you: the context sessions that need you (the plan and the permission), with the readable reason, and the unanswered suggested decision', async () => {
@@ -124,14 +125,14 @@ describe('Dev Console of one context', () => {
     assert.deepEqual(numbers(v.board.blocked), [55]);
     assert.deepEqual(numbers(v.board.done), [52, 50, 49]);
     // Two sessions on #68's branch: the card shows the one waiting on you.
-    assert.deepEqual(v.board.delegated[0].session, { id: 'permission', title: 'Rodar a migração', waitingOnYou: true });
+    assert.deepEqual(v.board.delegated[0].session, { id: 'permission', title: 'Rodar a migração', waitingOnYou: true, attention: { level: 'blocked', reason: 'permission' } });
     const review = v.board['in-review'];
     assert.deepEqual(review.map((c) => [c.number, c.pullRequest?.number, c.ci]), [
       [31, 81, 'ok'],
       [47, 77, 'failing'],
       [58, 79, 'ok'],
     ]);
-    assert.deepEqual(review[2].session, { id: 'plan', title: 'Migração do esquema', waitingOnYou: true });
+    assert.deepEqual(review[2].session, { id: 'plan', title: 'Migração do esquema', waitingOnYou: true, attention: { level: 'blocked', reason: 'plan' } });
     assert.deepEqual(Object.keys(v.board.todo[0]).sort(), ['ci', 'number', 'pullRequest', 'repo', 'session', 'title', 'url']);
   });
 
@@ -311,5 +312,29 @@ describe('GET /api/dev-console', () => {
     const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/dev-console`)).status, 404);
     await outra.close();
+  });
+});
+
+describe('#245 Dev Console: blocked depends on you, idle does not', () => {
+  test('#245/AC-3 an interrupted session and one whose turn ended are idle: out of "depende de você", counted apart', async () => {
+    await live({ id: 'interrompida', name: 'Filtro por categoria', cwd: '/sim/vitrine-demo', awaitingInputSince: at(-4), awaitingReason: 'interrupted' });
+    await live({ id: 'sua-vez', name: 'Retry com backoff', cwd: '/sim/motor-de-regras', awaitingInputSince: at(-3), awaitingReason: 'stop' });
+    const v = (await devConsole.view('loja'))!;
+    assert.deepEqual(
+      v.dependsOnYou.filter((d) => d.kind === 'session').map((d) => d.sessionId),
+      ['plan', 'permission'],
+    );
+    assert.deepEqual(v.scoreboard, { ready: 3, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 2, waitingOnYou: 3, idle: 2 });
+  });
+
+  test('#245/AC-4 a board card carries the session attention: blocked with the reason', async () => {
+    const v = (await devConsole.view('loja'))!;
+    assert.deepEqual(v.board.delegated[0].session?.attention, { level: 'blocked', reason: 'permission' });
+    assert.deepEqual(v.board['in-review'][2].session?.attention, { level: 'blocked', reason: 'plan' });
+    assert.equal(v.board['in-progress'][0].session?.attention, null, 'working');
+  });
+
+  test('the depends-on-you reasons are the blocked ones', () => {
+    assert.deepEqual([...DEPENDS_ON_YOU_REASONS], ['permission', 'question', 'plan', 'decision', 'error']);
   });
 });

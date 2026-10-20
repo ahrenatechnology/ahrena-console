@@ -2,6 +2,7 @@
 // Everything here is derived from facts already read (PRs, issues, remote branches and the
 // context's sessions); nothing is annotated by hand. Pure functions: reading and serving live outside.
 
+import type { SessionAttention } from '../api/attention.ts';
 import { issueDoBranch } from '../api/work.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
 
@@ -60,8 +61,10 @@ export interface ContextSession {
   branch: string | null;
   /** Working now (not waiting on you and not stopped on an error). */
   working: boolean;
-  /** Needs you: one of the depends-on-you reasons (permission, question, plan, decision, error, interrupted). */
+  /** Needs you: one of the depends-on-you reasons (permission, question, plan, decision, error), #245's `blocked`. */
   waitingOnYou: boolean;
+  /** #245: `blocked` or `idle`, with the reason (src/api/attention.ts); `null` when it does not need you. */
+  attention: SessionAttention | null;
 }
 
 // ---------- what the Dev Console shows ----------
@@ -108,7 +111,7 @@ export interface BoardCard {
   number: number;
   title: string;
   url: string;
-  session: { id: string; title: string; waitingOnYou: boolean } | null;
+  session: { id: string; title: string; waitingOnYou: boolean; attention: SessionAttention | null } | null;
   pullRequest: { number: number; url: string; isDraft: boolean } | null;
   ci: CiSummary;
 }
@@ -121,6 +124,8 @@ export interface Scoreboard {
   ciFailingOrConflict: number;
   sessionsWorking: number;
   waitingOnYou: number;
+  /** #245: the context's idle sessions (the turn ended, Esc, at the prompt): shown apart, never in `waitingOnYou`. */
+  idle: number;
 }
 
 /** The labels of the `blocked` column (decision 0008, section 4), configurable in `dev-console.json`. */
@@ -284,7 +289,7 @@ export function buildBoard(input: BoardInput): Board {
     number: i.number,
     title: i.title,
     url: i.url,
-    session: s ? { id: s.id, title: s.title, waitingOnYou: s.waitingOnYou } : null,
+    session: s ? { id: s.id, title: s.title, waitingOnYou: s.waitingOnYou, attention: s.attention } : null,
     pullRequest: pr ? { number: pr.number, url: pr.url, isDraft: pr.isDraft } : null,
     ci: pr ? ciSummary(pr.ci) : null,
   });
@@ -325,5 +330,6 @@ export function buildScoreboard(input: { queue: MergeQueue; openPullRequests: re
     ciFailingOrConflict: open.filter((p) => ciSummary(p.ci) === 'failing' || p.mergeable === 'CONFLICTING').length,
     sessionsWorking: input.sessions.filter((s) => s.working).length,
     waitingOnYou: input.dependsOnYou,
+    idle: input.sessions.filter((s) => s.attention?.level === 'idle').length,
   };
 }
