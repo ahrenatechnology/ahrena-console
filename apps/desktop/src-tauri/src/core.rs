@@ -22,7 +22,7 @@ use std::time::Duration;
 use serde::Deserialize;
 
 use crate::http;
-use crate::menu::EstadoDoNucleo;
+use crate::menu::CoreState;
 
 pub const NO_NODE: &str = "Node não encontrado no PATH do login";
 
@@ -80,30 +80,35 @@ impl Core {
 /// The result of starting: the tray's state, the core when it is up, and whether this app started it.
 #[derive(Debug, PartialEq)]
 pub struct Outcome {
-    pub state: EstadoDoNucleo,
+    pub state: CoreState,
     pub core: Option<Core>,
     pub started: bool,
 }
 
 impl Outcome {
     fn stopped(reason: impl Into<String>) -> Self {
-        Outcome { state: EstadoDoNucleo::Parado { motivo: reason.into(), sem_node: false }, core: None, started: false }
+        Outcome { state: CoreState::Stopped { reason: reason.into(), no_node: false }, core: None, started: false }
     }
 
     fn up(core: Core, started: bool) -> Self {
-        Outcome { state: EstadoDoNucleo::DePe { porta: core.port }, core: Some(core), started }
+        Outcome { state: CoreState::Up { port: core.port }, core: Some(core), started }
     }
 }
 
 /// The `--json` line of the owner's `start` (src/owner/start.ts, `StartOutput`). The keys it had
-/// before #221 stay in Portuguese; `installation` and `dataDir` are new, in English.
+/// before #221 are still in Portuguese on the core's side (they move with the core's phase of #173);
+/// `installation` and `dataDir` are new, in English.
 #[derive(Debug, Deserialize)]
 struct StartLine {
-    estado: String,
-    porta: Option<u16>,
+    #[serde(rename = "estado")]
+    state: String,
+    #[serde(rename = "porta")]
+    port: Option<u16>,
     pid: Option<u32>,
-    subiu: Option<bool>,
-    motivo: Option<String>,
+    #[serde(rename = "subiu")]
+    started: Option<bool>,
+    #[serde(rename = "motivo")]
+    reason: Option<String>,
     installation: Option<String>,
     #[serde(rename = "dataDir")]
     data_dir: Option<String>,
@@ -116,9 +121,9 @@ pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
     let Ok(s) = serde_json::from_str::<StartLine>(line) else {
         return Outcome::stopped("O núcleo não respondeu ao subir");
     };
-    let port = match (s.estado.as_str(), s.porta) {
+    let port = match (s.state.as_str(), s.port) {
         ("de-pe", Some(port)) if port != 0 => port,
-        _ => return Outcome::stopped(s.motivo.map(|m| format!("O núcleo não subiu: {m}")).unwrap_or_else(|| "O núcleo não subiu".into())),
+        _ => return Outcome::stopped(s.reason.map(|m| format!("O núcleo não subiu: {m}")).unwrap_or_else(|| "O núcleo não subiu".into())),
     };
     if s.installation.as_deref() != Some(INSTALLATION) {
         let other = s.installation.as_deref().unwrap_or("sem instalação");
@@ -131,7 +136,7 @@ pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
             got => return Outcome::stopped(format!("O núcleo que respondeu usa outra pasta de dados ({})", got.unwrap_or("sem pasta"))),
         }
     }
-    Outcome::up(Core { port, pid: s.pid }, s.subiu.unwrap_or(false))
+    Outcome::up(Core { port, pid: s.pid }, s.started.unwrap_or(false))
 }
 
 /// The arguments after `node`: the owner's `start` for the app's installation, on a random port.
@@ -219,7 +224,7 @@ pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
                 Outcome::stopped(format!("Nada responde como núcleo na porta {port} (AHRENA_CONSOLE_DEMO_PORT)"))
             }
         }
-        Plan::Stopped { reason, no_node } => Outcome { state: EstadoDoNucleo::Parado { motivo: reason, sem_node: no_node }, core: None, started: false },
+        Plan::Stopped { reason, no_node } => Outcome { state: CoreState::Stopped { reason, no_node }, core: None, started: false },
         Plan::Start { node } => {
             let mut command = Command::new(node);
             command.args(start_args(&cli, data_dir, std::process::id())).current_dir(core).stdin(Stdio::null()).stderr(Stdio::null());
@@ -296,7 +301,7 @@ mod tests {
         let dev = r#"{"estado":"de-pe","porta":4720,"pid":1,"subiu":false,"installation":"dev","dataDir":"/Users/x/.ahrena-console"}"#;
         let r = read_start(dev, Some(Path::new(DIR)));
         assert_eq!(r.core, None);
-        assert!(matches!(r.state, EstadoDoNucleo::Parado { ref motivo, sem_node: false } if motivo.contains("dev")));
+        assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("dev")));
         let old = r#"{"estado":"de-pe","porta":4720,"pid":1,"subiu":false}"#;
         assert_eq!(read_start(old, Some(Path::new(DIR))).core, None, "a core from before #221 does not say it is the app's");
         let folder = r#"{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"/tmp/other"}"#;
@@ -310,8 +315,8 @@ mod tests {
         let stopped = r#"{"estado":"parado","motivo":"o núcleo saiu com código 1","installation":"app"}"#;
         let r = read_start(stopped, Some(Path::new(DIR)));
         assert!(!r.started);
-        assert!(matches!(r.state, EstadoDoNucleo::Parado { ref motivo, sem_node: false } if motivo.contains("código 1")));
-        assert!(matches!(read_start("", None).state, EstadoDoNucleo::Parado { .. }));
+        assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("código 1")));
+        assert!(matches!(read_start("", None).state, CoreState::Stopped { .. }));
         assert_eq!(read_start(r#"{"estado":"de-pe","porta":0,"installation":"app"}"#, None).core, None);
     }
 

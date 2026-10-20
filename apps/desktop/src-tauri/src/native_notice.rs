@@ -1,17 +1,25 @@
-// A notificação do A3 com clique e ações, direto no `UNUserNotificationCenter`.
+// The A3 notification with click and actions, straight on `UNUserNotificationCenter`.
 //
-// O plugin de notificação do Tauri tem `on_action` e `register_action_types` no desktop, mas no
-// macOS só reporta o clique pelo `NSUserNotification` (obsoleto), com as ações num menu "Opções".
-// Aqui o app usa o `UNUserNotificationCenter`: registra a categoria com "Abrir", "Abrir no Claude
-// Desktop" e "Silenciar", põe a sessão e o `local_…` no `userInfo`, pede a apresentação também com
-// o app em primeiro plano e responde pelo delegate.
+// Tauri's notification plugin has `on_action` and `register_action_types` on desktop, but on macOS
+// it only reports the click through `NSUserNotification` (deprecated), with the actions in an
+// "Opções" menu. Here the app uses `UNUserNotificationCenter`: it registers the category with
+// "Abrir", "Abrir no Claude Desktop" and "Silenciar", puts the session and the `local_…` in
+// `userInfo`, asks for the presentation also with the app in the foreground and answers through
+// the delegate.
 //
-// O `UNUserNotificationCenter` derruba o processo quando o app não roda de um bundle (um
-// `cargo run` puro: o `mainBundle` sem `bundleIdentifier`). Nesse caso este módulo não liga, e o
-// main.rs cai no plugin; o app não registra `on_action` nele, por isso fica sem clique nem ações.
+// `UNUserNotificationCenter` kills the process when the app does not run from a bundle (a plain
+// `cargo run`: the `mainBundle` without `bundleIdentifier`). In that case this module does not turn
+// on, and main.rs falls back to the plugin; the app registers no `on_action` there, so it has no
+// click nor actions.
 //
-// O centro só guarda referência fraca ao delegate: ele fica vivo num `thread_local` da thread
-// principal (o `MainThreadMarker` de `iniciar` garante a thread). Os callbacks podem chegar fora dela; o trabalho de janela vai por `run_on_main_thread`.
+// The center only keeps a weak reference to the delegate: it lives in a `thread_local` of the main
+// thread (the `MainThreadMarker` of `start` guarantees the thread). The callbacks may arrive off
+// it; window work goes through `run_on_main_thread`.
+//
+// Notifications already delivered stay in the Notification Center across an app update. Those of a
+// version from before #173 (phase 4) carry the Portuguese category, action ids and `userInfo` key:
+// the legacy category is still registered and `respond` still reads them, until the end of the
+// aliases (#173 phase 6).
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,204 +36,215 @@ use objc2_user_notifications::{
 };
 use tauri::AppHandle;
 
-use crate::notifications::{self, Action, Aviso, Origin};
+use crate::notifications::{self, Action, Notice, Origin};
 
-const CATEGORIA: &str = "sessao";
+const SESSION_CATEGORY: &str = "session";
 /// A machine alert (#180): only "Abrir", the machine has no Claude Desktop conversation to open
 /// nor a session to silence.
 const MACHINE_CATEGORY: &str = "machine";
 /// A remote session (#180): "Abrir" and "Silenciar", no "Abrir no Claude Desktop".
 const REMOTE_SESSION_CATEGORY: &str = "remote-session";
-const ACAO_ABRIR: &str = "abrir";
-const ACAO_NO_DESKTOP: &str = "abrir-no-desktop";
-const ACAO_SILENCIAR: &str = "silenciar";
-const CHAVE_SESSAO: &str = "sessao";
-const CHAVE_LOCAL: &str = "local";
+const OPEN_ACTION: &str = "open";
+const OPEN_IN_DESKTOP_ACTION: &str = "open-in-desktop";
+const SILENCE_ACTION: &str = "silence";
+const SESSION_KEY: &str = "session";
+const LOCAL_KEY: &str = "local";
 /// The `/ui` path "Abrir" leads to (#180); without it, the session's screen.
 const PATH_KEY: &str = "path";
 
-/// O que cada resposta faz; vem do main.rs, que tem o estado e a janela.
-pub struct Acoes {
-    /// Clique na notificação ou "Abrir": a janela do app no caminho do aviso (a sessão ou a máquina).
-    pub abrir: fn(&AppHandle, &str),
-    /// "Abrir no Claude Desktop", com o `local_…` do aviso (sem ele, o console).
-    pub no_desktop: fn(&AppHandle, Option<String>),
-    /// "Silenciar": cala a sessão e grava.
-    pub silenciar: fn(&AppHandle, &str),
+/// The session category, the action ids and the session key of a notification delivered by an app
+/// from before #173 (phase 4).
+const LEGACY_SESSION_CATEGORY: &str = "sessao";
+const LEGACY_OPEN_ACTION: &str = "abrir";
+const LEGACY_OPEN_IN_DESKTOP_ACTION: &str = "abrir-no-desktop";
+const LEGACY_SILENCE_ACTION: &str = "silenciar";
+const LEGACY_SESSION_KEY: &str = "sessao";
+
+/// What each answer does; it comes from main.rs, which has the state and the window.
+pub struct Handlers {
+    /// A click on the notification or "Abrir": the app window at the notice's path (the session or the machine).
+    pub open: fn(&AppHandle, &str),
+    /// "Abrir no Claude Desktop", with the notice's `local_…` (without it, the console).
+    pub open_in_desktop: fn(&AppHandle, Option<String>),
+    /// "Silenciar": silences the session and saves.
+    pub silence: fn(&AppHandle, &str),
 }
 
-static APP: OnceLock<(AppHandle, Acoes)> = OnceLock::new();
-static ATIVO: AtomicBool = AtomicBool::new(false);
+static APP: OnceLock<(AppHandle, Handlers)> = OnceLock::new();
+static ACTIVE: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
-    static DELEGADO: RefCell<Option<Retained<Delegado>>> = const { RefCell::new(None) };
+    static DELEGATE: RefCell<Option<Retained<Delegate>>> = const { RefCell::new(None) };
 }
 
 define_class!(
-    // SAFETY: NSObject não tem exigências para subclasses, e `Delegado` não implementa `Drop`.
+    // SAFETY: NSObject has no requirements for subclasses, and `Delegate` does not implement `Drop`.
     #[unsafe(super(NSObject))]
-    #[name = "AhrenaConsoleDelegadoDeAvisos"]
-    struct Delegado;
+    #[name = "AhrenaConsoleNoticeDelegate"]
+    struct Delegate;
 
-    // SAFETY: `NSObjectProtocol` não tem exigências.
-    unsafe impl NSObjectProtocol for Delegado {}
+    // SAFETY: `NSObjectProtocol` has no requirements.
+    unsafe impl NSObjectProtocol for Delegate {}
 
-    // SAFETY: as assinaturas são as do protocolo (objc2-user-notifications 0.3), e cada método
-    // chama o completion handler exatamente uma vez. O `Delegado` não tem ivars nem estado da
-    // thread principal, então pode ser chamado de qualquer fila.
-    unsafe impl UNUserNotificationCenterDelegate for Delegado {
-        /// Com o app em primeiro plano (a janela do console aberta), o macOS não mostraria nada.
+    // SAFETY: the signatures are the protocol's (objc2-user-notifications 0.3), and each method
+    // calls the completion handler exactly once. `Delegate` has no ivars nor main-thread state, so
+    // it may be called from any queue.
+    unsafe impl UNUserNotificationCenterDelegate for Delegate {
+        /// With the app in the foreground (the console window open), macOS would show nothing.
         #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
-        fn ao_apresentar(&self, _centro: &UNUserNotificationCenter, _n: &UNNotification, pronto: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>) {
-            pronto.call((UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::Sound | UNNotificationPresentationOptions::List,));
+        fn will_present(&self, _center: &UNUserNotificationCenter, _n: &UNNotification, done: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>) {
+            done.call((UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::Sound | UNNotificationPresentationOptions::List,));
         }
 
         #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
-        fn ao_responder(&self, _centro: &UNUserNotificationCenter, resposta: &UNNotificationResponse, pronto: &DynBlock<dyn Fn()>) {
-            pronto.call(());
-            responder(resposta);
+        fn did_receive(&self, _center: &UNUserNotificationCenter, response: &UNNotificationResponse, done: &DynBlock<dyn Fn()>) {
+            done.call(());
+            respond(response);
         }
     }
 );
 
-impl Delegado {
+impl Delegate {
     fn new() -> Retained<Self> {
         let this = Self::alloc().set_ivars(());
-        // SAFETY: `init` de NSObject sobre um objeto recém-alocado.
+        // SAFETY: NSObject's `init` on a freshly allocated object.
         unsafe { msg_send![super(this), init] }
     }
 }
 
-/// O app roda de um bundle com identificador: sem isso o `UNUserNotificationCenter` aborta.
-fn tem_bundle() -> bool {
+/// The app runs from a bundle with an identifier: without it `UNUserNotificationCenter` aborts.
+fn has_bundle() -> bool {
     NSBundle::mainBundle().bundleIdentifier().is_some()
 }
 
-/// Liga o centro: delegate, categoria com as ações do A3 e o pedido de autorização (alerta e som).
-/// Na thread principal, no `setup` (o `MainThreadMarker` prova): o `thread_local` do delegate é o
-/// dela. Devolve `false` sem bundle; aí o main.rs usa o plugin.
-pub fn iniciar(app: &AppHandle, acoes: Acoes, _principal: MainThreadMarker) -> bool {
-    if !tem_bundle() {
-        eprintln!("[ahrena-console] sem bundle: notificações sem clique (plugin do Tauri)");
+/// Turns the center on: delegate, categories with the A3 actions and the authorization request
+/// (alert and sound). On the main thread, in `setup` (the `MainThreadMarker` proves it): the
+/// delegate's `thread_local` is that thread's. Returns `false` without a bundle; then main.rs uses
+/// the plugin.
+pub fn start(app: &AppHandle, handlers: Handlers, _main: MainThreadMarker) -> bool {
+    if !has_bundle() {
+        eprintln!("[ahrena-console] no bundle: notifications without click (Tauri plugin)");
         return false;
     }
-    if APP.set((app.clone(), acoes)).is_err() {
-        return ATIVO.load(Ordering::Relaxed);
+    if APP.set((app.clone(), handlers)).is_err() {
+        return ACTIVE.load(Ordering::Relaxed);
     }
-    let centro = UNUserNotificationCenter::currentNotificationCenter();
-    let delegado = Delegado::new();
-    centro.setDelegate(Some(ProtocolObject::from_ref(&*delegado)));
-    DELEGADO.with(|d| *d.borrow_mut() = Some(delegado));
+    let center = UNUserNotificationCenter::currentNotificationCenter();
+    let delegate = Delegate::new();
+    center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+    DELEGATE.with(|d| *d.borrow_mut() = Some(delegate));
 
-    let acao = |id: &str, titulo: &str, opcoes| UNNotificationAction::actionWithIdentifier_title_options(&NSString::from_str(id), &NSString::from_str(titulo), opcoes);
-    let botao = |a: Action| match a {
-        Action::Open => acao(ACAO_ABRIR, "Abrir", UNNotificationActionOptions::Foreground),
-        Action::OpenInDesktop => acao(ACAO_NO_DESKTOP, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
-        Action::Silence => acao(ACAO_SILENCIAR, "Silenciar", UNNotificationActionOptions::empty()),
+    let action = |id: &str, title: &str, options| UNNotificationAction::actionWithIdentifier_title_options(&NSString::from_str(id), &NSString::from_str(title), options);
+    let button = |a: Action| match a {
+        Action::Open => action(OPEN_ACTION, "Abrir", UNNotificationActionOptions::Foreground),
+        Action::OpenInDesktop => action(OPEN_IN_DESKTOP_ACTION, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
+        Action::Silence => action(SILENCE_ACTION, "Silenciar", UNNotificationActionOptions::empty()),
     };
-    // One category per kind of notice, with the actions `Origin::actions` gives it.
-    let categorias: Vec<_> = [Origin::Session, Origin::RemoteSession, Origin::Machine]
+    // One category per kind of notice, with the actions `Origin::actions` gives it, plus the legacy
+    // session category, so a notification delivered before the update keeps its buttons.
+    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::Session, LEGACY_SESSION_CATEGORY)]
         .into_iter()
-        .map(|o| {
-            let acoes = NSArray::from_retained_slice(&o.actions().iter().map(|a| botao(*a)).collect::<Vec<_>>());
-            UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(category(o)), &acoes, &NSArray::new(), UNNotificationCategoryOptions::empty())
+        .map(|(o, id)| {
+            let actions = NSArray::from_retained_slice(&o.actions().iter().map(|a| button(*a)).collect::<Vec<_>>());
+            UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(&NSString::from_str(id), &actions, &NSArray::new(), UNNotificationCategoryOptions::empty())
         })
         .collect();
-    centro.setNotificationCategories(&NSSet::from_retained_slice(&categorias));
+    center.setNotificationCategories(&NSSet::from_retained_slice(&categories));
 
-    let ao_autorizar = RcBlock::new(|ok: Bool, erro: *mut NSError| {
-        // Negadas (ou um bundle sem assinatura que o macOS recusa): cai no plugin, que ainda mostra o aviso.
+    let on_authorization = RcBlock::new(|ok: Bool, error: *mut NSError| {
+        // Denied (or an unsigned bundle macOS refuses): fall back to the plugin, which still shows the notice.
         if !ok.as_bool() {
-            eprintln!("[ahrena-console] notificações não autorizadas{}; usando o plugin do Tauri", descrever(erro));
-            ATIVO.store(false, Ordering::Relaxed);
+            eprintln!("[ahrena-console] notifications not authorized{}; using the Tauri plugin", describe(error));
+            ACTIVE.store(false, Ordering::Relaxed);
         }
     });
-    ATIVO.store(true, Ordering::Relaxed);
-    centro.requestAuthorizationWithOptions_completionHandler(UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound, &ao_autorizar);
+    ACTIVE.store(true, Ordering::Relaxed);
+    center.requestAuthorizationWithOptions_completionHandler(UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound, &on_authorization);
     true
 }
 
-/// O centro está ligado (e o `enviar` daqui vale).
-pub fn ativo() -> bool {
-    ATIVO.load(Ordering::Relaxed)
+/// The center is on (and `send` here applies).
+pub fn active() -> bool {
+    ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Mostra o aviso. O identificador é a sessão: um aviso novo dela substitui o anterior.
-pub fn enviar(a: &Aviso) {
-    let conteudo = UNMutableNotificationContent::new();
-    conteudo.setTitle(&NSString::from_str(&a.titulo));
-    conteudo.setBody(&NSString::from_str(&a.corpo));
-    conteudo.setCategoryIdentifier(&NSString::from_str(category(a.origin)));
-    conteudo.setThreadIdentifier(&NSString::from_str(&a.sessao));
-    if a.som {
-        conteudo.setSound(Some(&UNNotificationSound::defaultSound()));
+/// Shows the notice. The identifier is the session: a new notice of it replaces the previous one.
+pub fn send(n: &Notice) {
+    let content = UNMutableNotificationContent::new();
+    content.setTitle(&NSString::from_str(&n.title));
+    content.setBody(&NSString::from_str(&n.body));
+    content.setCategoryIdentifier(&NSString::from_str(category(n.origin)));
+    content.setThreadIdentifier(&NSString::from_str(&n.session));
+    if n.sound {
+        content.setSound(Some(&UNNotificationSound::defaultSound()));
     }
-    let mut chaves = vec![NSString::from_str(CHAVE_SESSAO), NSString::from_str(PATH_KEY)];
-    let mut valores = vec![NSString::from_str(&a.sessao), NSString::from_str(&a.path)];
-    if let Some(local) = &a.local {
-        chaves.push(NSString::from_str(CHAVE_LOCAL));
-        valores.push(NSString::from_str(local));
+    let mut keys = vec![NSString::from_str(SESSION_KEY), NSString::from_str(PATH_KEY)];
+    let mut values = vec![NSString::from_str(&n.session), NSString::from_str(&n.path)];
+    if let Some(local) = &n.local {
+        keys.push(NSString::from_str(LOCAL_KEY));
+        values.push(NSString::from_str(local));
     }
-    let chaves: Vec<&NSString> = chaves.iter().map(|c| &**c).collect();
-    let valores: Vec<&NSString> = valores.iter().map(|v| &**v).collect();
-    let info = NSDictionary::<NSString, NSString>::from_slices(&chaves, &valores);
-    // SAFETY: chaves e valores são NSString, tipos de property list, como o `userInfo` exige; o
-    // cast só alarga os genéricos para `AnyObject`.
-    unsafe { conteudo.setUserInfo(info.cast_unchecked::<AnyObject, AnyObject>()) };
+    let keys: Vec<&NSString> = keys.iter().map(|k| &**k).collect();
+    let values: Vec<&NSString> = values.iter().map(|v| &**v).collect();
+    let info = NSDictionary::<NSString, NSString>::from_slices(&keys, &values);
+    // SAFETY: keys and values are NSString, property-list types, as `userInfo` requires; the cast
+    // only widens the generics to `AnyObject`.
+    unsafe { content.setUserInfo(info.cast_unchecked::<AnyObject, AnyObject>()) };
 
-    let pedido = UNNotificationRequest::requestWithIdentifier_content_trigger(&NSString::from_str(&a.sessao), &conteudo, None);
-    let ao_enviar = RcBlock::new(|erro: *mut NSError| {
-        if !erro.is_null() {
-            eprintln!("[ahrena-console] notificação{}", descrever(erro));
+    let request = UNNotificationRequest::requestWithIdentifier_content_trigger(&NSString::from_str(&n.session), &content, None);
+    let on_send = RcBlock::new(|error: *mut NSError| {
+        if !error.is_null() {
+            eprintln!("[ahrena-console] notification{}", describe(error));
         }
     });
-    UNUserNotificationCenter::currentNotificationCenter().addNotificationRequest_withCompletionHandler(&pedido, Some(&ao_enviar));
+    UNUserNotificationCenter::currentNotificationCenter().addNotificationRequest_withCompletionHandler(&request, Some(&on_send));
 }
 
 /// The notification category of each kind of notice.
 fn category(o: Origin) -> &'static str {
     match o {
-        Origin::Session => CATEGORIA,
+        Origin::Session => SESSION_CATEGORY,
         Origin::RemoteSession => REMOTE_SESSION_CATEGORY,
         Origin::Machine => MACHINE_CATEGORY,
     }
 }
 
-fn descrever(erro: *mut NSError) -> String {
-    // SAFETY: o UserNotifications passa nulo ou um NSError válido durante a chamada.
-    match unsafe { erro.as_ref() } {
+fn describe(error: *mut NSError) -> String {
+    // SAFETY: UserNotifications passes null or a valid NSError during the call.
+    match unsafe { error.as_ref() } {
         Some(e) => format!(": {}", e.localizedDescription()),
         None => String::new(),
     }
 }
 
-fn ler(info: &NSDictionary, chave: &str) -> Option<String> {
-    let chave = NSString::from_str(chave);
-    let valor = info.objectForKey(&chave)?.downcast::<NSString>().ok()?;
-    Some(valor.to_string())
+fn read(info: &NSDictionary, key: &str) -> Option<String> {
+    let key = NSString::from_str(key);
+    let value = info.objectForKey(&key)?.downcast::<NSString>().ok()?;
+    Some(value.to_string())
 }
 
-/// O clique na notificação ou numa das ações.
-fn responder(resposta: &UNNotificationResponse) {
-    let Some((app, acoes)) = APP.get() else { return };
-    let info = resposta.notification().request().content().userInfo();
-    let Some(sessao) = ler(&info, CHAVE_SESSAO) else { return };
-    let local = ler(&info, CHAVE_LOCAL);
+/// The click on the notification or on one of its actions.
+fn respond(response: &UNNotificationResponse) {
+    let Some((app, handlers)) = APP.get() else { return };
+    let info = response.notification().request().content().userInfo();
+    let Some(session) = read(&info, SESSION_KEY).or_else(|| read(&info, LEGACY_SESSION_KEY)) else { return };
+    let local = read(&info, LOCAL_KEY);
     // A notice from before #180 has no path: the session's screen, as then.
-    let path = ler(&info, PATH_KEY).unwrap_or_else(|| notifications::caminho_da_sessao(&sessao));
-    let acao = resposta.actionIdentifier();
-    // SAFETY: constante do UserNotifications, lida depois de o framework carregar.
-    let padrao = unsafe { UNNotificationDefaultActionIdentifier };
-    let (abrir, no_desktop, silenciar) = (acoes.abrir, acoes.no_desktop, acoes.silenciar);
+    let path = read(&info, PATH_KEY).unwrap_or_else(|| notifications::session_path(&session));
+    let action = response.actionIdentifier();
+    let is = |ids: [&str; 2]| ids.iter().any(|id| action.isEqualToString(&NSString::from_str(id)));
+    // SAFETY: a UserNotifications constant, read after the framework has loaded.
+    let default = unsafe { UNNotificationDefaultActionIdentifier };
+    let (open, open_in_desktop, silence) = (handlers.open, handlers.open_in_desktop, handlers.silence);
     let handle = app.clone();
-    let trabalho: Box<dyn FnOnce() + Send> = if acao.isEqualToString(padrao) || acao.isEqualToString(&NSString::from_str(ACAO_ABRIR)) {
-        Box::new(move || abrir(&handle, &path))
-    } else if acao.isEqualToString(&NSString::from_str(ACAO_NO_DESKTOP)) {
-        Box::new(move || no_desktop(&handle, local))
-    } else if acao.isEqualToString(&NSString::from_str(ACAO_SILENCIAR)) {
-        Box::new(move || silenciar(&handle, &sessao))
+    let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is([OPEN_ACTION, LEGACY_OPEN_ACTION]) {
+        Box::new(move || open(&handle, &path))
+    } else if is([OPEN_IN_DESKTOP_ACTION, LEGACY_OPEN_IN_DESKTOP_ACTION]) {
+        Box::new(move || open_in_desktop(&handle, local))
+    } else if is([SILENCE_ACTION, LEGACY_SILENCE_ACTION]) {
+        Box::new(move || silence(&handle, &session))
     } else {
         return;
     };
-    let _ = app.run_on_main_thread(trabalho);
+    let _ = app.run_on_main_thread(work);
 }

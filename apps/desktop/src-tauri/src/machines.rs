@@ -129,12 +129,12 @@ pub fn decimal(x: f64) -> String {
     format!("{x:.1}").replace('.', ",")
 }
 
-/// "há 12 min", from `tempo` in menu.rs, with "menos de 1 min" for zero.
+/// "há 12 min", from `elapsed` in menu.rs, with "menos de 1 min" for zero.
 pub fn ago(minutes: u64) -> String {
     if minutes == 0 {
         "há menos de 1 min".into()
     } else {
-        format!("há {}", crate::menu::tempo(minutes))
+        format!("há {}", crate::menu::elapsed(minutes))
     }
 }
 
