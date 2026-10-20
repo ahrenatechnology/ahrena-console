@@ -1,14 +1,14 @@
-// O protocolo MCP do núcleo, sem transporte: recebe uma mensagem JSON-RPC e devolve a resposta.
-// O HTTP (http.ts) e o stdio (stdio.ts) só levam e trazem as mensagens.
+// The core's MCP protocol, without a transport: takes a JSON-RPC message and returns the answer.
+// HTTP (http.ts) and stdio (stdio.ts) only carry the messages back and forth.
 //
-// Feito à mão, sem o SDK oficial: o servidor só lista e chama ferramentas de leitura, e isso é
-// `initialize`, `ping`, `tools/list` e `tools/call`. O SDK traria o zod e um transporte com
-// sessão que, no modo stateless, é criado e jogado fora a cada pedido (era assim no spike).
+// Hand-made, without the official SDK: the server only lists and calls read-only tools, and that is
+// `initialize`, `ping`, `tools/list` and `tools/call`. The SDK would bring zod and a transport with
+// a session that, in stateless mode, is created and thrown away on every request (as in the spike).
 //
-// Versões: responde às duas em circulação (2025-03-26 e 2025-06-18), à de 2025-11-25 e à antiga
-// 2024-11-05. Quem pede uma que conhecemos recebe a mesma; quem pede outra recebe a mais nova,
-// como manda a spec. `structuredContent` e `outputSchema` são de 2025-06-18 em diante; o cliente
-// mais velho os ignora e lê o texto.
+// Versions: answers the two in circulation (2025-03-26 and 2025-06-18), 2025-11-25 and the old
+// 2024-11-05. Whoever asks for one we know gets the same; whoever asks for another gets the newest,
+// as the spec says. `structuredContent` and `outputSchema` are from 2025-06-18 on; an older client
+// ignores them and reads the text.
 
 export const VERSOES_DO_PROTOCOLO = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 export type VersaoDoProtocolo = (typeof VERSOES_DO_PROTOCOLO)[number];

@@ -1,13 +1,13 @@
-// O que as ferramentas leem da máquina: as sessões vivas com estado, motivo e conta, as
-// encerradas hoje e o custo de hoje. Tudo pela porta e por caches em memória, como o painel
-// (decisão 0004): nenhuma chamada varre transcripts.
+// What the tools read from the machine: the live sessions with state, reason and account, the ones
+// ended today and today's cost. All through the port and in-memory caches, like the panel
+// (decision 0004): no call scans transcripts.
 //
-// - Vivas: as `active` e `error` da porta, com `readInbox` (1.5). Guardadas por `cacheMs`, e
-//   chamadas ao mesmo tempo esperam a mesma leitura.
-// - Encerradas hoje: `completed` e `abandoned` com a última atividade hoje, no fuso da máquina.
+// - Live: the port's `active` and `error` ones, with `readInbox` (1.5). Kept for `cacheMs`, and
+//   concurrent calls wait for the same read.
+// - Ended today: `completed` and `abandoned` with the last activity today, in the machine's time zone.
 // - Today's cost: the day's `aggregateCost` (1.6), recomputed at most every `custoMs`.
-// - Conta: `Contas.daSessao` (decisão 0006), a mesma instância do painel quando o núcleo a
-//   passa, para o rótulo "conta 1" ser o mesmo nas duas superfícies.
+// - Account: `Contas.daSessao` (decision 0006), the same instance as the panel when the core passes
+//   it, so that the "conta 1" label is the same on both surfaces.
 
 import { basename } from 'node:path';
 import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
@@ -19,7 +19,7 @@ import type { IndiceDoDesktop, SessaoDoDesktop } from '../api/indice-desktop.ts'
 import { atencaoDe, type MotivoDaAtencao } from '../api/atencao.ts';
 import { ResumosDeSessao, type ResumoDosEventos } from '../api/resumo.ts';
 import type { ContaDoPainel } from '../api/tipos.ts';
-import { ferramentaSegura, tituloSeguro } from './saida.ts';
+import { ferramentaSegura, tituloSeguro } from './output.ts';
 
 /**
  * Por que a sessão precisa de você. A divisão é a do painel (`atencaoDe`, #140): as cinco
@@ -46,7 +46,7 @@ export interface SessaoDaFrota {
   inbox: InboxReading;
   desktop: SessaoDoDesktop | null;
   conta: ContaDoPainel | null;
-  /** Já limpo (saida.ts). */
+  /** Já limpo (output.ts). */
   titulo: string;
 }
 

@@ -6,7 +6,7 @@
 
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
-import { ERROS, erro, type RespostaJsonRpc } from './protocolo.ts';
+import { ERROS, erro, type RespostaJsonRpc } from './protocol.ts';
 
 export type Atender = (mensagem: unknown) => Promise<RespostaJsonRpc | RespostaJsonRpc[] | null>;
 

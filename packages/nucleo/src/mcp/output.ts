@@ -1,15 +1,15 @@
-// O que toda ferramenta faz igual: ler os argumentos, paginar por tamanho e limpar o texto que
-// vem das sessões.
+// What every tool does the same way: read the arguments, paginate by size and clean the text that
+// comes from the sessions.
 //
-// Paginação por tamanho (proposta 0.0.1, feature 9): uma página para no `limit` de itens ou
-// quando o JSON dos itens passa de `BYTES_POR_PAGINA`, o que vier primeiro, e devolve
-// `nextCursor`. O cursor é opaco para o cliente.
+// Pagination by size (proposal 0.0.1, feature 9): a page stops at `limit` items or when the
+// items' JSON goes past `BYTES_POR_PAGINA`, whichever comes first, and returns `nextCursor`. The
+// cursor is opaque to the client.
 //
-// Transcript é conteúdo não confiável (proposta, feature 11; 2.5): as ferramentas não devolvem
-// texto de conversa (prompts, respostas, perguntas, comandos). O que sai das sessões é o título,
-// curto e sem caractere de controle, e nomes de ferramenta que passam por um padrão estrito.
+// A transcript is untrusted content (proposal, feature 11; 2.5): the tools return no conversation
+// text (prompts, answers, questions, commands). What comes out of the sessions is the title, short
+// and without control characters, and tool names that pass a strict pattern.
 
-import { ErroDeArgumento, type Esquema, type Json, type ObjetoJson } from './protocolo.ts';
+import { ErroDeArgumento, type Esquema, type Json, type ObjetoJson } from './protocol.ts';
 
 export const LIMITE_PADRAO = 10;
 export const LIMITE_MAXIMO = 50;
@@ -45,7 +45,7 @@ export const lista = (items: Json): ObjetoJson => ({ type: 'array', items });
 export const ouNulo = (e: ObjetoJson): ObjetoJson => ({ anyOf: [e, { type: 'null' }] });
 export const T = { texto: { type: 'string' }, inteiro: { type: 'integer', minimum: 0 }, numero: { type: 'number' }, booleano: { type: 'boolean' } } satisfies Record<string, ObjetoJson>;
 
-/** A conta como sai (ferramentas/comum.ts), ou `null` para "Sem conta". */
+/** A conta como sai (tools/common.ts), ou `null` para "Sem conta". */
 export const ESQUEMA_DA_CONTA = ouNulo(objeto({ label: T.texto, color: T.texto, source: T.texto }));
 
 export interface Comuns {

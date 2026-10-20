@@ -41,9 +41,9 @@ O stdio é uma ponte para o `/mcp` do núcleo que já roda: o mesmo servidor, e 
 | HTTP | `POST /mcp` com JSON-RPC (mensagem ou lote) → `application/json`. Só notificações → 202. `GET` e `DELETE` → 405: não há stream nem `Mcp-Session-Id`. `MCP-Protocol-Version` desconhecida → 400 |
 | Segurança | Bind só em `127.0.0.1`. Pedido com `Origin`, ou com `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>`, dá 403 ([decisão 0003](../../../../docs/decisoes/0003-responder-sessao.md)) |
 | Métodos | `initialize`, `ping`, `tools/list`, `tools/call`. Os outros dão -32601 |
-| Resultado | `content` com um texto curto em pt-BR e `structuredContent` com o mesmo dado em JSON, descrito no `outputSchema`. O esquema declara todos os campos (`objeto()` em [saida.ts](saida.ts): obrigatórios e nada a mais), porque o cliente oficial valida e recusa a chamada com campo sobrando |
+| Resultado | `content` com um texto curto em pt-BR e `structuredContent` com o mesmo dado em JSON, descrito no `outputSchema`. O esquema declara todos os campos (`objeto()` em [output.ts](output.ts): obrigatórios e nada a mais), porque o cliente oficial valida e recusa a chamada com campo sobrando |
 
-**Sem o SDK oficial no servidor.** Servir ferramentas de leitura sem sessão é `initialize`, `ping`, `tools/list` e `tools/call` sobre JSON-RPC; o [protocolo.ts](protocolo.ts) faz isso em menos de 200 linhas. O SDK traria o `zod` e um transporte com sessão que, no modo stateless, é criado e descartado a cada pedido (era assim no spike `nucleo-teste`), e o núcleo segue sem dependência de execução. O SDK entra só como devDependency, na versão que o Claude Code usa, para o teste de contrato.
+**Sem o SDK oficial no servidor.** Servir ferramentas de leitura sem sessão é `initialize`, `ping`, `tools/list` e `tools/call` sobre JSON-RPC; o [protocol.ts](protocol.ts) faz isso em menos de 200 linhas. O SDK traria o `zod` e um transporte com sessão que, no modo stateless, é criado e descartado a cada pedido (era assim no spike `nucleo-teste`), e o núcleo segue sem dependência de execução. O SDK entra só como devDependency, na versão que o Claude Code usa, para o teste de contrato.
 
 ## O que as ferramentas devolvem
 
@@ -78,10 +78,10 @@ Delegando (esperando subagentes) e em background (processo rodando depois do tur
 
 O ponto de registro é `ServidorMcp.registrar(ferramenta)`. É por ele que a 2.4 (`wait_for_changes`) entra.
 
-1. Crie `src/mcp/ferramentas/<nome>.ts` com uma função que recebe o que a ferramenta lê e devolve uma `Ferramenta` ([protocolo.ts](protocolo.ts)): `nome` em `snake_case`, `titulo`, `descricao`, `entrada` e `saida` (JSON Schema, com `esquema()` de [saida.ts](saida.ts)) e `executar(args, ctx)`, que devolve `{ texto, dados }`.
+1. Crie `src/mcp/tools/<nome>.ts` com uma função que recebe o que a ferramenta lê e devolve uma `Ferramenta` ([protocol.ts](protocol.ts)): `nome` em `snake_case`, `titulo`, `descricao`, `entrada` e `saida` (JSON Schema, com `esquema()` de [output.ts](output.ts)) e `executar(args, ctx)`, que devolve `{ texto, dados }`.
 2. Leia os argumentos com `lerComuns(args, permitidos)` e lance `ErroDeArgumento` para argumento errado: volta como `isError`, para o modelo corrigir.
 3. Registre em [src/api/cli.ts](../api/cli.ts), logo depois de `criarServidorMcp`, com `mcp.servidor.registrar(...)`; ou, se ela for padrão em todo núcleo, em `criarServidorMcp` ([index.ts](index.ts)). `criarServidorMcp({ extras })` também aceita uma lista.
-4. Declare em `saida` todos os campos que `dados` traz, com `objeto()`, e acrescente as chamadas da ferramenta em `CHAMADAS` de [test/mcp/contrato-sdk.test.ts](../../test/mcp/contrato-sdk.test.ts): o cliente oficial recusa campo fora do esquema.
+4. Declare em `saida` todos os campos que `dados` traz, com `objeto()`, e acrescente as chamadas da ferramenta em `CHAMADAS` de [test/mcp/sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts): o cliente oficial recusa campo fora do esquema.
 5. Ferramenta longa (long polling) ouve `ctx.sinal`: ele aborta quando o cliente fecha a conexão HTTP. A resposta sai no próprio `POST`, sem SSE.
 
 O servidor recusa nome repetido, nome fora do padrão e a 11ª ferramenta. Toda ferramenta sai com `readOnlyHint: true`: ferramenta de escrita fica fora da 0.0.1 (2.5).
@@ -90,12 +90,12 @@ O servidor recusa nome repetido, nome fora do padrão e a 11ª ferramenta. Toda 
 
 | Arquivo | O quê |
 | --- | --- |
-| [protocolo.ts](protocolo.ts) | `ServidorMcp`: JSON-RPC, negociação de versão, registro e chamada de ferramentas |
+| [protocol.ts](protocol.ts) | `ServidorMcp`: JSON-RPC, negociação de versão, registro e chamada de ferramentas |
 | [http.ts](http.ts) | A rota `/mcp` que o servidor da API monta |
 | [stdio.ts](stdio.ts) | Uma mensagem por linha, e a ponte para o HTTP |
 | [cli.ts](cli.ts) | `npm run mcp`: o stdio para o Claude Desktop |
-| [frota.ts](frota.ts) | O que as ferramentas leem: vivas com estado e conta, encerradas hoje, custo de hoje, e o motivo de cada espera |
-| [saida.ts](saida.ts) | Argumentos comuns, paginação por tamanho e limpeza do texto |
-| [ferramentas/](ferramentas/) | Uma ferramenta por arquivo |
+| [fleet.ts](fleet.ts) | O que as ferramentas leem: vivas com estado e conta, encerradas hoje, custo de hoje, e o motivo de cada espera |
+| [output.ts](output.ts) | Argumentos comuns, paginação por tamanho e limpeza do texto |
+| [tools/](tools/) | Uma ferramenta por arquivo |
 
-Testes em [test/mcp](../../test/mcp/), com fixtures e o cenário do simulador. O [contrato-sdk.test.ts](../../test/mcp/contrato-sdk.test.ts) liga o cliente oficial (`@modelcontextprotocol/sdk` 1.20.2) por HTTP e por stdio e valida cada saída contra o `outputSchema`; ele pede `npm install` em `packages/nucleo` antes do `npm test`.
+Testes em [test/mcp](../../test/mcp/), com fixtures e o cenário do simulador. O [sdk-contract.test.ts](../../test/mcp/sdk-contract.test.ts) liga o cliente oficial (`@modelcontextprotocol/sdk` 1.20.2) por HTTP e por stdio e valida cada saída contra o `outputSchema`; ele pede `npm install` em `packages/nucleo` antes do `npm test`.

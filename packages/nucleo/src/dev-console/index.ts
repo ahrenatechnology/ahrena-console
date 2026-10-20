@@ -4,7 +4,7 @@
 import type { Git } from '../api/trabalho.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import type { GithubCache } from '../github/cache.ts';
-import type { LeituraDaFrota } from '../mcp/frota.ts';
+import type { LeituraDaFrota } from '../mcp/fleet.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { DevConsoleContexts, defaultDevConsoleFile, type DevConsoleContext } from './contexts.ts';
 import { DevConsoleGithub } from './reader.ts';

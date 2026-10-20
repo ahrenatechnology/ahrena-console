@@ -16,7 +16,7 @@ import { aggregateCost, dayOf, type CostReport } from '../cost/aggregation.ts';
 import type { InboxState } from '../states/inbox.ts';
 import { fraseDoEvento } from './frase-do-evento.ts';
 import type { Agent, AgentStatus, SessionEvent } from '../model.ts';
-import { minutosDesde, projetoDe, type LeituraDaFrota, type SessaoDaFrota } from '../mcp/frota.ts';
+import { minutosDesde, projetoDe, type LeituraDaFrota, type SessaoDaFrota } from '../mcp/fleet.ts';
 import type { StoragePort } from '../storage-port.ts';
 
 export const ROTA_DO_DASHBOARD = '/api/dashboard';

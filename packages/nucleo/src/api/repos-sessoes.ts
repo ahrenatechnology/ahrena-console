@@ -9,7 +9,7 @@
 // cursor e a tela relê). O remote de cada cwd vale por `remoteMs`.
 
 import { dayOf } from '../cost/aggregation.ts';
-import type { LeituraDaFrota } from '../mcp/frota.ts';
+import type { LeituraDaFrota } from '../mcp/fleet.ts';
 import type { SessoesDoRepo } from './repos-tipos.ts';
 import { gitDoSistema, repoDoRemote, type Git } from './trabalho.ts';
 

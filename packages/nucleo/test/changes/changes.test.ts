@@ -30,7 +30,7 @@ import {
 import { T0, account, agent, session } from '../fixtures.ts';
 import { draft } from '../decisions/helpers.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
-import { ErroDaFerramenta, ErroDeArgumento } from '../../src/mcp/protocolo.ts';
+import { ErroDaFerramenta, ErroDeArgumento } from '../../src/mcp/protocol.ts';
 
 /** Manual clock: `advance(ms)` fires, in order, the timers that are due. */
 class FakeClock implements Clock {

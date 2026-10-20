@@ -1,7 +1,7 @@
-// Contrato com o cliente oficial do MCP (@modelcontextprotocol/sdk, devDependency na versão que o
-// Claude Code usa): ele valida cada `structuredContent` contra o `outputSchema` da ferramenta e
-// derruba a chamada com -32602 se um campo sobra ou falta. Pelo HTTP (/mcp) e pelo stdio (a ponte
-// do Desktop), com dados sintéticos.
+// Contract with the official MCP client (@modelcontextprotocol/sdk, a devDependency at the version
+// Claude Code uses): it validates each `structuredContent` against the tool's `outputSchema` and
+// fails the call with -32602 if a field is extra or missing. Over HTTP (/mcp) and over stdio (the
+// Desktop bridge), with synthetic data.
 
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';

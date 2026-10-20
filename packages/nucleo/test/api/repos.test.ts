@@ -9,7 +9,7 @@ import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, ty
 import { SessoesPorRepo } from '../../src/api/repos-sessoes.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
-import { LeituraDaFrota } from '../../src/mcp/frota.ts';
+import { LeituraDaFrota } from '../../src/mcp/fleet.ts';
 import { ChangeCursor, type RecordedChange } from '../../src/changes/cursor.ts';
 import { criarGithubFalso, gitDaDemo, type DadosDoGithubFalso, type RepoFalso } from '../../src/simulador/github-falso.ts';
 import { semearCenariosDoPainel } from '../../src/simulador/painel.ts';
