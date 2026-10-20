@@ -50,6 +50,7 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessamento.ts';
+import { criarReposDoNucleo } from './repos.ts';
 import { iniciarApiLocal, VERSAO_DA_API, type ApiLocal } from './servidor.ts';
 import { TrabalhoPorBranch } from './trabalho.ts';
 
@@ -239,6 +240,7 @@ relerPerfis?.unref();
 // Ferramentas novas (ex.: `wait_for_changes`, 2.4) entram com `mcp.servidor.registrar(...)` aqui.
 const mcp = criarServidorMcp({ storage, contas, desktop, log });
 mcp.servidor.registrar(waitForChanges({ mudancas, contas }));
+const repos = criarReposDoNucleo({ demo, semGithub: o['sem-github'], store: new SqliteCacheStore(storage.db), frota: mcp.frota, mudancas });
 
 let historicoPronto = false;
 const follower =
@@ -272,6 +274,7 @@ const api: ApiLocal = await iniciarApiLocal({
   mcp: mcp.servidor,
   commit,
   mudancas,
+  repos: repos.rota,
   carga: () => ({
     historico: follower ? (historicoPronto ? 'pronto' : 'importando') : 'desligado',
     seguidor: follower?.stats() ?? null,

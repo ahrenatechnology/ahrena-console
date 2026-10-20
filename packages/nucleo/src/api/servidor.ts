@@ -15,6 +15,7 @@
 // | `POST /mcp`                   | O servidor MCP (src/mcp), quando `mcp` é passado           |
 // | `GET /api/mudancas`           | Long polling das mudanças (src/mudancas, item 2.4)         |
 // | `GET /ui` e `/ui/*`           | A interface do console (api/ui.ts, pasta `ui/`, #26)       |
+// | `GET /api/repos` e `/api/repos/<dono>/<repo>` | Repositórios do GitHub e métricas (api/repos.ts, #104, #105) |
 //
 // `?local=`, `?conta=`, `?org=`, `?modelo=` e `?cwd=` no painel são o que ele lê da própria sessão;
 // `?decisoes=<escopo>` traz a lista de decisões aberta no mesmo pedido.
@@ -36,6 +37,7 @@ import { VERSAO_DA_API } from './versao.ts';
 import { CAMINHO_DO_MCP, criarRotaMcp } from '../mcp/http.ts';
 import { ehDaUi, responderUi } from './ui.ts';
 import type { ServidorMcp } from '../mcp/protocolo.ts';
+import { ROTA_DOS_REPOS, type RotaDosRepos } from './repos.ts';
 
 export { VERSAO_DA_API };
 
@@ -59,6 +61,8 @@ export interface OpcoesDaApi {
   commit?: string | null;
   /** O cursor de mudanças; liga `GET /api/mudancas`. */
   mudancas?: CursorDeMudancas;
+  /** Repositórios do GitHub e métricas (api/repos.ts); sem ela, `/api/repos` dá 404. */
+  repos?: RotaDosRepos;
 }
 
 /** O id `local_<uuid>` do índice do Claude Desktop, e nada mais. */
@@ -213,6 +217,7 @@ export function iniciarApiLocal(opts: OpcoesDaApi): Promise<ApiLocal> {
     // `pid` prova a posse da porta: quem lê a trava só para o núcleo se o pid dela é este (src/dono).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, nome: 'ahrena-console', versao: VERSAO_DA_API, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === ROTA_DAS_MUDANCAS && opts.mudancas) return responderMudancas(res, url, opts.mudancas);
+    if (opts.repos && (url.pathname === ROTA_DOS_REPOS || url.pathname.startsWith(`${ROTA_DOS_REPOS}/`))) return opts.repos(res, url);
     if (url.pathname === '/api/carga') {
       return send(res, 200, {
         ...contadores,

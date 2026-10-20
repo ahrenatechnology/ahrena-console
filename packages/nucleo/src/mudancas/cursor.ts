@@ -14,15 +14,16 @@
 //   outra geração, ou mais velho que a fila, volta na hora com `reiniciar: true` (releia tudo).
 // - Relógio injetável, para os testes serem determinísticos.
 
-export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta'] as const;
+// `repos` (#104, #105): a lista ou as métricas de um repositório mudaram; chave `lista` ou `<dono>/<repo>`.
+export const TIPOS_DE_MUDANCA = ['sessao', 'estado', 'precisa-de-voce', 'plano', 'decisao', 'conta', 'repos'] as const;
 export type TipoDeMudanca = (typeof TIPOS_DE_MUDANCA)[number];
 
 export interface MudancaRegistrada {
   seq: number;
   tipo: TipoDeMudanca;
-  /** O que mudou: o id da sessão, da decisão ou da conta. */
+  /** O que mudou: o id da sessão, da decisão ou da conta; em `repos`, `lista` ou `<dono>/<repo>`. */
   chave: string;
-  /** A sessão a que a mudança pertence; `null` em mudança de conta. */
+  /** A sessão a que a mudança pertence; `null` em mudança de conta e de repositórios. */
   sessionId: string | null;
   /** A conta da sessão; `null` é "Sem conta". */
   accountId: string | null;
