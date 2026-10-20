@@ -1,0 +1,15 @@
+    1 10-02:03:04 /sbin/launchd
+  401    03:12:00 node --disable-warning=ExperimentalWarning src/api/cli.ts
+  402    01:02:03 claude
+  403       12:00 /Users/dev/.local/bin/claude --resume
+  410  2-01:00:00 /Applications/Claude.app/Contents/MacOS/Claude
+  411  2-01:00:00 /Applications/Claude.app/Contents/Frameworks/Claude Helper (Renderer).app/Contents/MacOS/Claude Helper (Renderer) --type=renderer
+  412    00:40:00 /Users/dev/Library/Application Support/Claude/claude-code/2.1.0/claude --output-format stream-json
+  420    05:00:00 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  430    03:12:00 ssh -fN -L 14720:127.0.0.1:4720 -L 13000:localhost:3000 -L15173:127.0.0.1:5173 -o ExitOnForwardFailure=no -L 18080:127.0.0.1:8080 ws-exemplo
+  431       05:00 ssh ws-exemplo
+  432    03:12:01 ssh: /Users/dev/.ssh/cm-ws-exemplo [mux]
+  440 10-02:00:00 /usr/sbin/mds
+  450  1-00:00:00 /opt/homebrew/opt/postgresql@16/bin/postgres -D /opt/homebrew/var/postgresql@16
+  460    00:20:00 node server.js
+  470    04:00:00 /Applications/Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper --type=utility
