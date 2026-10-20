@@ -1,0 +1,53 @@
+/* A aba Workflow do detalhe (C7). Toda cor vem de marca.css: nenhuma é escrita aqui. Toda classe
+   própria tem o prefixo wfd-, porque o CSS fica carregado depois que a aba sai. */
+
+.wfd-painel { flex: none; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wfd-ttl { font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; }
+.wfd-ttl-r { margin-left: auto; font-size: 12px; font-weight: var(--weight-medium); color: var(--muted); text-align: right; }
+.wfd-rolar { overflow-x: auto; min-width: 0; padding: 6px 0; }
+
+/* ---------- grafo de agentes ---------- */
+/* O SVG encolhe para caber; só um grafo largo demais (mais de 720 px) para de encolher e rola. */
+.wfd-grafo { display: block; font-family: var(--font-sans); max-width: 100%; height: auto; }
+.wfd-grafo.wfd-largo { min-width: 720px; }
+.wfd-aresta { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.wfd-aresta.wfd-aj { stroke: var(--status-error-dot); stroke-dasharray: 5 4; }
+.wfd-ponta { fill: var(--muted); }
+.wfd-ponta.wfd-aj { fill: var(--status-error-dot); }
+.wfd-rotulo { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.wfd-rotulo.wfd-aj { fill: var(--status-error-text); }
+
+.wfd-caixa { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+.wfd-borda { fill: var(--status-completed-dot); }
+.wfd-e-ativo .wfd-borda { fill: var(--status-active-dot); }
+.wfd-e-erro .wfd-borda { fill: var(--status-error-dot); }
+.wfd-no-nome { fill: var(--text); font-size: 12.5px; font-weight: var(--weight-semibold); }
+.wfd-no-det { fill: var(--muted); font-size: 11.5px; }
+.wfd-no-det.wfd-aj { fill: var(--status-error-text); }
+.wfd-no-estado { font-size: 11px; fill: var(--status-completed-text); }
+.wfd-e-ativo .wfd-no-estado { fill: var(--status-active-text); }
+.wfd-e-erro .wfd-no-estado { fill: var(--status-error-text); }
+.wfd-no-ponto { fill: var(--status-active-dot); }
+
+.wfd-legenda { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; font-size: 12px; color: var(--muted); }
+.wfd-legenda span { display: inline-flex; align-items: center; gap: 7px; }
+.wfd-legenda b { color: var(--text); font-weight: var(--weight-semibold); }
+.wfd-bola { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.wfd-bola.wfd-e-ativo { background: var(--status-active-dot); }
+.wfd-bola.wfd-e-concluido { background: var(--status-completed-dot); }
+.wfd-tracejado line { stroke: var(--status-error-dot); stroke-width: 2; stroke-dasharray: 4 3; }
+
+/* ---------- linha do tempo ---------- */
+.wfd-faixa { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 11.5px; }
+.wfd-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wfd-pista { display: block; }
+.wfd-fundo { fill: var(--bg); }
+.wfd-trecho { fill: var(--status-completed-dot); opacity: .6; }
+.wfd-trecho.wfd-e-ativo { fill: var(--status-active-dot); opacity: 1; }
+.wfd-trecho.wfd-e-erro { fill: var(--status-error-dot); opacity: 1; }
+.wfd-eixo { font-size: 10px; color: var(--muted); }
+.wfd-eixo > div { display: flex; justify-content: space-between; }
+
+@media (max-width: 640px) {
+  .wfd-faixa { grid-template-columns: 96px minmax(0, 1fr); }
+}

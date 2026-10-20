@@ -90,6 +90,24 @@ export const TELAS = [
     arquivo: '/ui/telas/analytics.js',
   },
   {
+    id: 'workflows',
+    rota: '/ui/workflows',
+    item: { rotulo: 'Workflows', icone: 'workflows' },
+    titulo: 'Workflows',
+    sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado',
+    icone: 'workflows',
+    arquivo: '/ui/telas/workflows.js', // #96
+  },
+  {
+    id: 'historico',
+    rota: '/ui/historico',
+    item: { rotulo: 'Histórico', icone: 'historico' },
+    titulo: 'Histórico',
+    sub: 'Sessões encerradas, por dia',
+    icone: 'historico',
+    arquivo: '/ui/telas/historico.js', // #33
+  },
+  {
     id: 'decisoes',
     rota: '/ui/decisoes',
     item: { rotulo: 'Decisões', icone: 'decisao' },

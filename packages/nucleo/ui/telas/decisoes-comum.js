@@ -22,7 +22,7 @@ export function carregarCssDasDecisoes() {
 
 const TIPOS = {
   sugerida: { rotulo: 'Sugerida', icone: 'sugerida' },
-  correcao: { rotulo: 'Correção sua', icone: 'correcao' },
+  correcao: { rotulo: 'Correção sua', icone: 'continuou' },
   permissao: { rotulo: 'Permissão', icone: 'permissao' },
   pergunta: { rotulo: 'Pergunta', icone: 'pergunta' },
   plano: { rotulo: 'Plano', icone: 'plano' },

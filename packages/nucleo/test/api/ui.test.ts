@@ -121,6 +121,20 @@ describe('/ui no núcleo', () => {
       // `innerHTML` só nos ícones (constantes de dom.js), nunca com dado.
       if (a !== 'dom.js') assert.doesNotMatch(texto, /innerHTML|outerHTML|insertAdjacentHTML/, `${a} monta HTML com texto`);
     }
+    // As telas, em ui/telas/: a mesma regra, e nada de estilo inline, innerHTML ou fetch direto.
+    const telas = readdirSync(`${PASTA_DA_UI}telas`).filter((a) => /\.(js|css)$/.test(a));
+    for (const a of telas) {
+      const texto = readFileSync(`${PASTA_DA_UI}telas/${a}`, 'utf8');
+      const urls = (texto.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
+      assert.deepEqual(urls, [], `telas/${a} cita endereço externo`);
+      assert.doesNotMatch(texto, /#[0-9a-f]{3,8}\b(?![\w-])|rgba?\(|hsla?\(/i, `telas/${a} escreve cor à mão`);
+      if (a.endsWith('.js')) {
+        // O que a CSP (`style-src 'self'`) bloqueia é o atributo `style`: `{ style: … }` no el(),
+        // `style="…"` e `setAttribute('style', …)`. O CSSOM (`x.style.setProperty`) ela deixa passar.
+        assert.doesNotMatch(texto, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `telas/${a} usa estilo inline, HTML ou fetch`);
+        for (const [, css] of texto.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(telas.includes(css!), `telas/${a} carrega ${css}, que não existe`);
+      }
+    }
     const pagina = readFileSync(`${PASTA_DA_UI}index.html`, 'utf8');
     for (const [, ref] of pagina.matchAll(/(?:href|src)="\/ui\/([^"]+)"/g)) assert.ok(readdirSync(PASTA_DA_UI).includes(ref!), `index.html cita ${ref}, que não existe`);
   });
@@ -207,14 +221,16 @@ describe('/ui no núcleo', () => {
 });
 
 describe('registro das telas', () => {
-  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics e Decisões; o Detalhe abre por uma sessão e acende Sessões', () => {
-    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'decisoes']);
+  test('a barra tem Dashboard, Mural ao vivo, Sessões, o Feed, Kanban, o Kanban do projeto, Analytics, Workflows, Histórico e Decisões; o Detalhe abre por uma sessão e acende Sessões', () => {
+    assert.deepEqual(TELAS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'mural', 'sessoes', 'feed', 'kanban', 'projeto', 'analytics', 'workflows', 'historico', 'decisoes']);
     assert.equal(acharTela('/ui/decisoes').tela.arquivo, '/ui/telas/decisoes.js');
     assert.equal(acharTela('/ui/mural').tela.id, 'mural');
+    assert.equal(acharTela('/ui/workflows').tela.id, 'workflows');
     assert.equal(acharTela('/ui/feed').tela.arquivo, '/ui/telas/feed.js');
     assert.equal(acharTela('/ui').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/').tela.id, 'dashboard');
     assert.equal(acharTela('/ui/sessoes').tela.id, 'sessoes');
+    assert.equal(acharTela('/ui/historico').tela.id, 'historico');
     const d = acharTela('/ui/sessoes/b91d04aa-4e1');
     assert.equal(d.tela.id, 'detalhe');
     assert.equal(d.tela.acende, 'sessoes');

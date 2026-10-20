@@ -77,7 +77,7 @@ export async function montar(area, ctx) {
     numeros.replaceChildren(
       numero({ rotulo: 'Vigentes', valor: c.vigentes, detalhe: `em ${num(c.branches)} ${c.branches === 1 ? 'branch' : 'branches'}`, icone: 'ok', cor: 'completed' }),
       numero({ rotulo: 'A confirmar', valor: c.aConfirmar, detalhe: 'sugeridas pelo agente', icone: 'sugerida', cor: 'waiting' }),
-      numero({ rotulo: 'Substituídas', valor: c.substituidas30d, detalhe: 'nos últimos 30 dias', icone: 'substituida', cor: 'muted' }),
+      numero({ rotulo: 'Substituídas', valor: c.substituidas30d, detalhe: 'nos últimos 30 dias', icone: 'repetir', cor: 'muted' }),
       numero({ rotulo: 'Promovidas', valor: c.promovidas, detalhe: 'viraram registro de decisão no repositório', icone: 'promover', cor: 'accent' }),
     );
     const total = c.vigentes + c.aConfirmar + c.substituidas30d;

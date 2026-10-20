@@ -128,7 +128,7 @@ export class MontadorDoPainel {
   readonly storage: Porta;
   private readonly contas: Contas;
   private readonly desktop: IndiceDoDesktop | null;
-  private readonly trabalho: TrabalhoPorBranch | null;
+  readonly trabalho: TrabalhoPorBranch | null;
   readonly agora: () => number;
   private readonly custoMs: number;
   private readonly precisamMs: number;

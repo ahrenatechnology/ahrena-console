@@ -35,7 +35,7 @@ function contaSintetica(n: string, label: string, color: string, tipo: string, s
   return { accountUuid, organizationUuid, id: claudeAccountId(accountUuid, organizationUuid), label, color, tipo, source };
 }
 // Cores da marca (packages/marca): rosa e verde, que não se confundem com os status.
-const CONTAS = {
+export const CONTAS = {
   equipe: contaSintetica('0e', 'equipe', paleta.rose['500'], 'claude_team', 'env'),
   cliente: contaSintetica('0c', 'cliente-exemplo', paleta.green['500'], 'claude_enterprise', 'config'),
 } as const;
