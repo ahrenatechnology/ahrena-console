@@ -1,5 +1,5 @@
 // Repositório (C23, issue 105): as métricas que a API do GitHub dá, num período (30 dias, 90 dias, 1
-// ano) que vale para a tela inteira. Lê `GET /api/repos/<dono>/<repo>?period=` (src/api/repos-tipos.ts).
+// ano) que vale para a tela inteira. Lê `GET /api/repos/<dono>/<repo>?period=` (src/api/repos-types.ts).
 //
 // - The period lives in `?period=` (default 90d; `1y` is the year): switching rewrites the URL without a new history entry and re-reads.
 // - Campo `null` vira "—"; se o GitHub ainda calcula (`computing`) ou o núcleo ainda monta

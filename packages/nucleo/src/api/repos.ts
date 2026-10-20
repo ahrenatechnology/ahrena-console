@@ -1,6 +1,6 @@
 // Repositórios da conta do GitHub (C22, #104) e as métricas de um repositório (C23, #105).
 //
-// | Rota                                          | Resposta (src/api/repos-tipos.ts) |
+// | Rota                                          | Resposta (src/api/repos-types.ts) |
 // | --------------------------------------------- | --------------------------------- |
 // | `GET /api/repos`                              | `ListaDeRepos`                    |
 // | `GET /api/repos/<dono>/<repo>?period=90d`     | `MetricasDoRepo`                  |
@@ -47,7 +47,7 @@
 // de 7 dias do resumo soma os workflow runs concluídos dos repositórios com push nos 7 dias.
 // Métricas: `RepoDetalhe` (GraphQL: o repositório e as releases, PRs, issues fechadas e abertas do
 // período, e os totais pelo `issueCount`) e o REST listado em src/github/repos-source.ts. As
-// sessões vêm do próprio núcleo (repos-sessoes.ts).
+// sessões vêm do próprio núcleo (repos-sessions.ts).
 
 import type { ServerResponse } from 'node:http';
 import { GithubCache, MemoryCacheStore } from '../github/cache.ts';
@@ -89,10 +89,10 @@ import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS } from '../simulator/fake-github.ts';
-import { chaveDoRepo, SessoesPorRepo } from './repos-sessoes.ts';
-import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-tipos.ts';
+import { chaveDoRepo, SessoesPorRepo } from './repos-sessions.ts';
+import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-types.ts';
 
-export * from './repos-tipos.ts';
+export * from './repos-types.ts';
 export { NOME_DO_DONO, NOME_DO_REPO };
 
 /** TTLs das chaves do cache, além da tabela da decisão 0001. */

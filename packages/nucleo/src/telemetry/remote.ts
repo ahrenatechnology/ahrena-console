@@ -12,7 +12,7 @@
 //   ("Workstation sem conexão") while it cannot be read. Each one that enters or exits is published,
 //   like this machine's (sampler.ts), so a machine that goes down or comes back reaches `/api/changes`.
 // - Its sessions that need you: the remote's attention answer, kept while connected and handed to
-//   the attention route (api/rota-atencao.ts), which marks them with this machine. A session that
+//   the attention route (api/attention-route.ts), which marks them with this machine. A session that
 //   enters or leaves it is published too, so the tray refreshes.
 // - `GET` only, never overlapping, injectable timers and clock; in tests, `pollOnce()` directly.
 
@@ -25,7 +25,7 @@ import { systemTimers, type SamplerTimers } from './sampler.ts';
 import type { MachineEntry, MachineStatus } from './service.ts';
 
 export const REMOTE_TELEMETRY_PATH = '/api/telemetry';
-/** The remote núcleo's attention route (src/api/rota-atencao.ts `ATTENTION_ROUTE`). */
+/** The remote núcleo's attention route (src/api/attention-route.ts `ATTENTION_ROUTE`). */
 export const REMOTE_ATTENTION_PATH = '/api/attention';
 
 export interface RemoteSessionChange {
@@ -141,7 +141,7 @@ const OLD_ATTENTION_REASONS: Readonly<Record<string, string>> = {
 };
 const englishValue = (map: Readonly<Record<string, string>>, v: unknown) => (typeof v === 'string' && Object.hasOwn(map, v) ? map[v] : v);
 
-/** A remote attention answer with the English keys and values (src/api/rota-atencao.ts `RespostaDaAtencao`). */
+/** A remote attention answer with the English keys and values (src/api/attention-route.ts `RespostaDaAtencao`). */
 export function englishAttentionBody(body: Record<string, unknown>): Record<string, unknown> {
   if (Array.isArray(body.items) || !Array.isArray(body.itens)) return body;
   const items = body.itens.slice(0, 200).map((i) =>

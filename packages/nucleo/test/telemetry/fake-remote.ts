@@ -1,7 +1,7 @@
 // A FAKE remote núcleo for the #176 tests, on loopback and a free port: no external network, no
 // real machine. It answers `GET /api/telemetry` and `GET /api/attention` with what the test sets,
 // refuses any Host other than the remote's own `127.0.0.1:4720` (the decision 0003 defense, as
-// src/api/servidor.ts does) and records every request, so a test can prove nothing was written.
+// src/api/server.ts does) and records every request, so a test can prove nothing was written.
 //
 // http.Server is a net.Server, so the helpers below take either.
 //

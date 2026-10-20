@@ -1,6 +1,6 @@
 // A tela Sessões (C3, #28): a tabela das sessões com busca, filtro por diretório, ordenação, as
 // pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessions`,
-// src/api/sessoes.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
+// src/api/sessions.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
 // A linha leva ao Detalhe, `/ui/sessions/<id>`.
 
 import { header, el, icon } from '../dom.js';

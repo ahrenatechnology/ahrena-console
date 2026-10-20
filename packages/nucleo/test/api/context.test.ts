@@ -2,8 +2,8 @@
 // window stays the same. Synthetic events.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { contextoDe } from '../../src/api/painel.ts';
-import { aplicarEvento, resumoVazio } from '../../src/api/resumo.ts';
+import { contextoDe } from '../../src/api/panel.ts';
+import { aplicarEvento, resumoVazio } from '../../src/api/summary.ts';
 import { at, event } from '../fixtures.ts';
 
 const S = 'sess-contexto';

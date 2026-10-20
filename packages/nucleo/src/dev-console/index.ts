@@ -1,7 +1,7 @@
 // Dev Console in the núcleo (#177, decision 0008 section 4): contexts, merge queue, issue board
 // and depends-on-you, derived from GitHub (the 0001 cache) and from the sessions.
 
-import type { Git } from '../api/trabalho.ts';
+import type { Git } from '../api/work.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import type { GithubCache } from '../github/cache.ts';
 import type { FleetReader } from '../mcp/fleet.ts';

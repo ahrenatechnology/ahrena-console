@@ -1,5 +1,5 @@
 // A aba Decisões do Detalhe da sessão (C20, issue 103), num módulo à parte para o session-detail.js (#29 e #30)
-// só importar. Lê `GET /api/sessions/<id>/decisions?scope=&state=&q=` (src/api/decisoes-ui.ts).
+// só importar. Lê `GET /api/sessions/<id>/decisions?scope=&state=&q=` (src/api/decisions-ui.ts).
 //
 // Contrato com o session-detail.js, igual às outras abas:
 //   const tab = create(ctx, base, { head: () => head, setLabel: (text) => … });

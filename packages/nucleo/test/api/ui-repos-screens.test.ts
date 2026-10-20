@@ -1,9 +1,9 @@
 // As telas Repositórios (C22, #104) e Repositório (C23, #105) montadas no DOM falso, com um `ctx.ler`
-// falso que devolve respostas no formato de src/api/repos-tipos.ts (dados inventados).
+// falso que devolve respostas no formato de src/api/repos-types.ts (dados inventados).
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import type { ListaDeRepos, MetricasDoRepo, RepoDaLista } from '../../src/api/repos-tipos.ts';
-import { ElementoFalso, instalarDomFalso, texto } from './dom-falso.ts';
+import type { ListaDeRepos, MetricasDoRepo, RepoDaLista } from '../../src/api/repos-types.ts';
+import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
 

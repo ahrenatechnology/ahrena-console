@@ -6,7 +6,7 @@ import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Contas, iniciarApiLocal, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type ApiLocal } from '../../src/api/index.ts';
-import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/rota-analytics.ts';
+import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/analytics-route.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { seedHistory } from '../../src/simulator/history.ts';
 import { seedPanelScenario } from '../../src/simulator/panel.ts';

@@ -4,7 +4,7 @@
 // remote, the branch from the Claude Desktop index or from git.
 
 import { dayOf } from '../cost/aggregation.ts';
-import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/trabalho.ts';
+import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/work.ts';
 import type { DecisionPort } from '../decisions/port.ts';
 import { decisionLabel } from '../decisions/registry.ts';
 import { needingYou } from '../mcp/tools/attention.ts';

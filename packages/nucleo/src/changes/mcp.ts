@@ -11,7 +11,7 @@
 // enum and the wait always filters by the MCP types, so that a repository build does not wake up
 // whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
 
-import type { Contas } from '../api/contas.ts';
+import type { Contas } from '../api/accounts.ts';
 import { matchesAccountFilter } from '../mcp/fleet.ts';
 import { ToolError, ArgumentError, type Tool, type JsonObject } from '../mcp/protocol.ts';
 import { objectSchema, arrayOf, strictObject, nullable, T } from '../mcp/output.ts';
