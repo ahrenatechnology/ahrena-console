@@ -34,7 +34,7 @@ import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
-import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
 import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
@@ -138,7 +138,11 @@ function adopt(p: number, version: string, warning: string | null = null): never
 // Before opening the database: adopts the live core of this installation's lock, or recovers the lock
 // if it is an orphan.
 async function planOrAdopt(): Promise<void> {
-  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log });
+  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log }).catch((e: unknown) => {
+    if (!(e instanceof ReplaceError)) throw e;
+    log(e.reason);
+    process.exit(1);
+  });
   if (plan.action === 'adopt') adopt(plan.lock.port, plan.lock.version, plan.warning);
   if (plan.recovered) log(`orphan lock recovered: ${plan.recovered}`);
 }

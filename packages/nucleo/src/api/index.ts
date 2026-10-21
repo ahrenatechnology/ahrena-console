@@ -27,7 +27,7 @@ export { LeiturasDoDetalhe, DETAIL_ROUTE, filtroDe, type CabecaDoDetalhe, type A
 export { FeedDeEventos, EVENTS_ROUTE, statusDoEvento, TIPOS_POR_STATUS, type EventoDoFeed, type RespostaDoFeed, type StatusDoEvento } from './events.ts';
 export { montarAtencao, MOTIVO_CURTO, remoteAttentionItems, ATTENTION_ROUTE, type ItemDaAtencao, type RemoteAttentionSource, type RespostaDaAtencao } from './attention-route.ts';
 export { montarDashboard, MontadorDoDashboard, DASHBOARD_ROUTE, type RespostaDoDashboard, type AgenteDoDashboard, type AtividadeDoDashboard, type NumerosDoDashboard } from './dashboard-route.ts';
-export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessions.ts';
+export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, PER_PAGE_MAX, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessions.ts';
 export { QuadroKanban, pedidoDoKanban, rotuloDoModelo, colunaDoAgente, sessionColumnOf, COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, type CardDeAgente, type CardDeSessao, type Coluna, type KanbanHttp, type PedidoDoKanban } from './kanban.ts';
 export {
   createFrameworkInstallRoute,
