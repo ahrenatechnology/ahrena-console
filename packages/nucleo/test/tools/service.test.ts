@@ -70,6 +70,16 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(item(o, 'rust').actions, [], 'rustup is not installed through the catalog');
   });
 
+  test('the session-manager-plugin cask installs a .pkg: its install is admin and not runnable', async () => {
+    const { service } = macService();
+    const o = (await service.overview())!;
+    const [install] = item(o, 'session-manager-plugin').actions;
+    assert.deepEqual(
+      [install!.id, install!.steps, install!.runnable, install!.admin, install!.blockedReason],
+      ['install', [['brew', 'install', '--cask', 'session-manager-plugin']], false, true, 'admin'],
+    );
+  });
+
   test('the containers card: Colima running, its VM, the context, the counts, the disk and Stop', async () => {
     const { service } = macService();
     const c = (await service.overview())!.containers;
