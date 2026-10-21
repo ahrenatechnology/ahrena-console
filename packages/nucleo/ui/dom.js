@@ -151,6 +151,8 @@ const ICONS = {
   'file-warning': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   'folder-search': '<path d="M10.7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v4.1"/><path d="m21 21-1.9-1.9"/><circle cx="17" cy="17" r="3"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  // Conexões (issue 241): Desconectar.
+  'log-out': '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
 };
 // The detail's Workflow tab registers the icon as `graph`: the same drawing as `workflows`.
 ICONS.graph = ICONS.workflows;
