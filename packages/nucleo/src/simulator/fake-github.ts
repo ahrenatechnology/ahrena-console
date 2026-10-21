@@ -14,6 +14,8 @@
 // `CommitInstallFiles` and `OpenInstallPullRequest`. Each write is recorded in `writes` (the tests read
 // it); the default branch is never moved by them. An opened PR's CI and review evolve with the clock
 // (`pullRequestTimeline`), synthetically.
+// With `auth` (#241) it also answers the console's own connection: the OAuth device flow, `/user`,
+// `/user/orgs` and the org access check (fake-github-auth.ts).
 // Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
 // `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
@@ -24,6 +26,9 @@ import { catalogSnapshot, MARKETPLACE_PATH } from '../framework-install/catalog.
 import { DEFAULT_FRAMEWORK_REPO } from '../framework-install/model.ts';
 import { DECISION_DIRS } from '../adrs/parse.ts';
 import { DEMO_DECISION_FILES } from './demo-decisions.ts';
+import { createFakeGithubAuthRoutes, type FakeGithubAuth, type FakeGithubAuthState } from './fake-github-auth.ts';
+
+export type { FakeGithubAuth, FakeGithubAuthState } from './fake-github-auth.ts';
 
 export interface FakeRepo {
   owner: string;
@@ -80,6 +85,8 @@ export interface FakeGithubOptions {
   /** Delay of each answer, in ms (the demo shows the "loading"). */
   delayMs?: number;
   pullRequestTimeline?: PullRequestTimeline;
+  /** The console's own connection (#241): device flow, `/user`, `/user/orgs`, `/orgs/<org>/repos`. */
+  auth?: FakeGithubAuth;
 }
 
 /** A write the fake received (#184), in order. */
@@ -122,6 +129,8 @@ export interface FakeGithub {
   refs(owner: string, name: string): Record<string, string>;
   /** A próxima mutação com este nome (`CreateInstallBranch`, `CommitInstallFiles`, `OpenInstallPullRequest`) falha, sem escrever (#184). */
   failNext(operation: string): void;
+  /** With `auth` (#241): the device codes handed out and the polls per code. */
+  auth: FakeGithubAuthState | null;
 }
 
 /** A GraphQL error the fake answers with (`errors`), as GitHub does for a refused mutation. */
@@ -294,7 +303,7 @@ const searchSince = (q: string, field: string) => {
 };
 const withoutInternals = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
 
-export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0, pullRequestTimeline = {} }: FakeGithubOptions = {}): FakeGithub {
+export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0, pullRequestTimeline = {}, auth }: FakeGithubOptions = {}): FakeGithub {
   const calls: string[] = [];
   const writes: FakeWrite[] = [];
   const pullRequests: FakePullRequest[] = [];
@@ -637,9 +646,28 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     return { status: 404, body: { message: 'Not Found' } };
   }
 
+  const authRoutes = auth
+    ? createFakeGithubAuthRoutes(auth, {
+        now,
+        calls,
+        organizations: () => data.organizations,
+        repoNames: (org) => {
+          const names = data.repos.filter((r) => r.owner.toLowerCase() === org.toLowerCase()).map((r) => r.name);
+          return names.length > 0 || data.organizations.includes(org) ? names : null;
+        },
+      })
+    : null;
   const fake = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (authRoutes) {
+      const answer = authRoutes.answer(url, init);
+      if (answer) return answer;
+      if (!authRoutes.authorized(init)) {
+        calls.push(`UNAUTHORIZED ${url.pathname}`);
+        return Response.json({ message: 'Bad credentials' }, { status: 401 });
+      }
+    }
     if (url.pathname.endsWith('/graphql') && init?.method === 'POST') {
       let answer: unknown;
       try {
@@ -666,6 +694,7 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     writes,
     pullRequests,
     failNext: (operation) => void failures.add(operation),
+    auth: authRoutes?.state ?? null,
     refs: (owner, name) => {
       const repo = find(owner, name);
       return repo ? Object.fromEntries([...branchesOf(repo)].map(([b, x]) => [b, x.oid])) : {};

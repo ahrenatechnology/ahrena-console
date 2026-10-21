@@ -6,3 +6,5 @@ export * from './keychain-vault.ts';
 export * from './secret-service-vault.ts';
 export * from './choose-vault.ts';
 export { findOnPath, isExecutable, runCommand, type CommandResult, type RunCommand } from './run-command.ts';
+export * from './device-flow.ts';
+export * from './connection.ts';
