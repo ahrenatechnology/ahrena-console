@@ -82,6 +82,13 @@ import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreDecisions } from './adrs.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
+import { createMessagingRoute } from './messaging.ts';
+import { Messaging } from '../messaging/service.ts';
+import { demoMessaging } from '../messaging/demo.ts';
+import { SessionsDirectory } from '../messaging/adapters/sessions-dir.ts';
+import { SocketInbox } from '../messaging/adapters/socket-inbox.ts';
+import { TranscriptTurns } from '../messaging/adapters/transcript-turns.ts';
+import { AuditFile, messagingAuditFile } from '../messaging/adapters/audit-file.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
@@ -474,6 +481,18 @@ if (demo) {
 const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
 const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
+// Sending a message to a live session (#61): the inbox of each profile folder's `sessions/`, the
+// transcript for the confirmation, and the audit in the data folder. Synthetic in the demo.
+const messaging = demo
+  ? demoMessaging(storage, log)
+  : new Messaging({
+      live: new SessionsDirectory({ folders: () => profiles!.list() }),
+      inbox: new SocketInbox(),
+      turns: new TranscriptTurns(),
+      audit: new AuditFile(messagingAuditFile(dataDir), log),
+      log,
+    });
+
 let historyReady = false;
 const follower =
   demo || o.noHistory
@@ -526,6 +545,7 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
+  messaging: createMessagingRoute({ messaging, sessions: storage }),
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -621,6 +641,7 @@ async function reprocessOnce() {
 
 async function shutdown() {
   stopWatcher();
+  messaging.close();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();
   unregister();
