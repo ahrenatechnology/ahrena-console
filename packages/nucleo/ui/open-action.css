@@ -24,11 +24,11 @@
 /* full (Detail header): the state wraps beside the button, never pushing the row sideways. */
 .open-size-full .open-status { max-width: 320px; }
 
-/* small (wall foot): one line; the full text is in the title. */
+/* small (wall foot): the foot has no room for a sentence, so the state opens above the button, like the
+   icon's below it; the foot keeps its height and the card's neighbours keep theirs (rule 9). */
 .open-size-small { flex: 1 1 auto; }
 .open-size-small .open-button { height: 26px; padding: 0 9px; font-size: 12px; gap: 6px; flex: none; min-width: 0; }
-.open-size-small .open-status { flex: 1 1 auto; }
-.open-size-small .open-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.open-size-small .open-status { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 3; width: max-content; max-width: min(260px, 100%); padding: 7px 9px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); white-space: normal; text-align: left; }
 
 /* icon (Sessions row, Dashboard inbox): the icon alone; the state opens below it, to the left. */
 .open-icon { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); flex: none; cursor: pointer; font: inherit; }
