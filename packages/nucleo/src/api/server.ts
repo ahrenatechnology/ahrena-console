@@ -26,6 +26,7 @@
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-instructions/<owner>/<repo>` and `/file?path=` | A repository's Instructions tab: instruction files, `@imports`, `.claude/` and `.mcp.json` (`?refresh=1`; api/agent-instructions.ts, #183) |
@@ -46,7 +47,8 @@
 // exactly `http://<Host>` and the exact path (no query): the Detail's "Abrir no Claude Desktop",
 // `POST /open/<local_…>`, the project Kanban's `POST /api/project/move` (api/project.ts) and the
 // decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`,
-// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
+// the "Abrir no Claude Desktop / no terminal / Ir para o terminal" of #285, `POST /api/sessions/<uuid>/open`
+// (api/session-open-route.ts), the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
 // install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
 // decision 0012).
@@ -79,7 +81,10 @@ import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './project.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
+import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
+import { SessionOpenDescriber } from './session-open.ts';
+import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
@@ -113,6 +118,17 @@ export interface ApiOptions {
    * `POST /open/<local_…>` answers 501 and the panel keeps the fallback link.
    */
   openInDesktop?: ((url: string) => Promise<void>) | null;
+  /**
+   * #285: the `open` of the wall, the attention items and `POST /api/sessions/<id>/open`, with this
+   * machine's live `claude` processes. Without it, no session is `terminal-live`.
+   */
+  openDescriber?: SessionOpenDescriber;
+  /** #285: opens a terminal resuming a session; without it, a terminal session gets 501 with the command. */
+  openTerminal?: TerminalOpener | null;
+  /** #285: brings forward the terminal of a live session; without it, 409 with the command. */
+  focusTerminal?: TerminalFocuser | null;
+  /** #285: the Claude Desktop's `local_…` of a session for the open route; default the panel builder's index. */
+  localOf?: (sessionId: string) => Promise<string | null> | string | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: McpServer;
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
@@ -204,6 +220,19 @@ const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.meth
 const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
   req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && fromOwnUi(req, port);
 
+/** #285's open button: only `POST /api/sessions/<uuid>/open`, the exact raw path (a query gives 403), from the same origin. */
+const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && SESSION_OPEN_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
+
+/** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
+function decodeSegment(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 /**
  * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>`, with the exact raw path (a query gives 403) and from the same origin. The id
  * starts with an alphanumeric: `/api/decisions/../confirm` does not pass. The mandatory JSON stays with the handler (415).
@@ -253,7 +282,24 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
-  const wall = muralDoPainel(opts.panelBuilder);
+  const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
+  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
+  const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
+  const sessionOpen = createSessionOpenRoute({
+    storage: opts.panelBuilder.storage,
+    localOf:
+      opts.localOf ??
+      (async (id) => {
+        await opts.panelBuilder.atualizarFontes();
+        return opts.panelBuilder.localDe(id);
+      }),
+    describer: openDescriber,
+    openInDesktop: opts.openInDesktop,
+    openTerminal: opts.openTerminal,
+    focusTerminal: opts.focusTerminal,
+    isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
+    log,
+  });
   const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
@@ -328,10 +374,12 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
+    const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
+    if (sessionOpenMatch) return sessionOpen(req, res, decodeSegment(sessionOpenMatch[1]!));
     if (opts.decisionsUi && (await responderDecisoesDaUi(req, res, url, opts.decisionsUi, log))) return;
     const actionMatch = DECISION_ACTION.exec(url.pathname);
     if (actionMatch) {
@@ -353,7 +401,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
-    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : opts.remoteAttention));
+    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);

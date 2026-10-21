@@ -127,7 +127,7 @@ describe('GET /api/attention', () => {
     const r = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
     assert.deepEqual(Object.keys(r), ['generatedAt', 'cursor', 'total', 'needs', 'yourTurn', 'blocked', 'idle', 'active', 'withError', 'items']);
     assert.ok(r.items.length > 0);
-    assert.deepEqual(Object.keys(r.items[0]!), ['session', 'title', 'project', 'account', 'level', 'reason', 'attention', 'shortReason', 'longReason', 'since', 'minutes', 'local', 'machine']);
+    assert.deepEqual(Object.keys(r.items[0]!), ['session', 'title', 'project', 'account', 'level', 'reason', 'attention', 'shortReason', 'longReason', 'since', 'minutes', 'local', 'machine', 'open']);
     const antiga = await fetch(`${api.url}/api/atencao`);
     assert.equal(antiga.status, 404);
     assert.deepEqual(await antiga.json(), { error: 'não encontrado' });

@@ -58,6 +58,9 @@ class Elemento extends No {
   getAttribute(k: string) {
     return this.atributos.get(k) ?? null;
   }
+  removeAttribute(k: string) {
+    this.atributos.delete(k);
+  }
   addEventListener(tipo: string, f: (e: unknown) => void) {
     this.ouvintes.set(tipo, [...(this.ouvintes.get(tipo) ?? []), f]);
   }
@@ -209,9 +212,10 @@ describe('Mural: a tela montada', () => {
 
       const cards = comClasse(area, 'wall-card');
       assert.equal(cards.length, 5);
-      assert.ok(cards.every((c) => c.tag === 'a'));
+      // issue 285: the card is a div; its title is the link to the Detail, stretched over the card.
+      assert.ok(cards.every((c) => c.tag === 'div'));
       assert.deepEqual(
-        cards.map((c) => c.getAttribute('href')),
+        cards.map((c) => comClasse(c, 'wall-link')[0]!.getAttribute('href')),
         ['/ui/sessions/ativa-1', '/ui/sessions/espera-1', '/ui/sessions/espera-2', '/ui/sessions/erro-1', '/ui/sessions/feita-1'],
       );
       assert.ok(cards[1]!.classes.includes('wall-st-blocked'));
@@ -221,7 +225,7 @@ describe('Mural: a tela montada', () => {
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
       assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
-      assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%$/);
+      assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%Detalhe ›$/);
       const [plano, contexto] = comClasse(cards[0]!, 'wall-bar');
       assert.equal(plano!.tag, 'progress');
       assert.deepEqual([plano!.getAttribute('value'), plano!.getAttribute('max')], ['3', '5']);
@@ -237,7 +241,7 @@ describe('Mural: a tela montada', () => {
       // Idle: neutral "Ociosa" pill and a light chip.
       assert.deepEqual(comClasse(cards[2]!, 'attention-pill-idle').map((p) => p.textContent), ['Ociosa']);
       assert.ok(comClasse(cards[2]!, 'attention-chip')[0]!.classes.includes('attention-chip-light'), 'Sua vez is light');
-      assert.match(cards[2]!.textContent, /Sua vezRodo os testes\?.*contexto —$/);
+      assert.match(cards[2]!.textContent, /Sua vezRodo os testes\?.*contexto —Detalhe ›$/);
 
       // Erro: o texto do erro; contexto 84% pinta a barra de erro.
       assert.match(cards[3]!.textContent, /Com erro.*API 529 · overloaded_error/);
@@ -372,7 +376,7 @@ describe('Mural: a tela montada', () => {
       for (const f of ouvintes.mudar) f([{ type: 'plan', key: 'nova-1' }]);
       await ate(() => comClasse(area, 'wall-card').length === 6);
       assert.equal(rotas.length, 2, 'a rajada vira uma leitura só');
-      assert.equal(comClasse(area, 'wall-card')[0]!.getAttribute('href'), '/ui/sessions/nova-1');
+      assert.equal(comClasse(comClasse(area, 'wall-card')[0]!, 'wall-link')[0]!.getAttribute('href'), '/ui/sessions/nova-1');
 
       dados = MURAL;
       for (const f of ouvintes.reiniciar) f();
@@ -397,6 +401,57 @@ describe('Mural: ao vivo com atividade contínua', () => {
       assert.ok(rotas.length >= 3, `releu ${rotas.length - 1} vez(es) em 1,5 s`);
     } finally {
       await sair();
+    }
+  });
+
+  test('issue 285: each card has a foot with the open action and "Detalhe ›"; the button is never inside a link and does not navigate', async () => {
+    const UUID = '4d2a9c35-1b7e-4c11-9d0a-2f6c8e1a7b30';
+    const withOpen = {
+      ...MURAL,
+      cards: [
+        cardDeExemplo(UUID, { open: { target: 'desktop', command: null } }),
+        cardDeExemplo('ao-vivo-1', { open: { target: 'terminal-live', command: 'x' } }),
+        cardDeExemplo('remota-1', { open: { target: 'remote', command: null } }),
+        cardDeExemplo('sem-1', { open: { target: 'none', command: null } }),
+      ],
+    };
+    const writes: string[] = [];
+    const navigated: string[] = [];
+    const area = new Elemento('main');
+    const leave = new AbortController();
+    const ready = mount(area, {
+      params: {},
+      signal: leave.signal,
+      read: async () => withOpen,
+      write: async (route: string) => (writes.push(route), { ok: true, opened: 'desktop' }),
+      onChange: () => {},
+      onRestart: () => {},
+      counter: () => {},
+      title: () => {},
+      navigate: (r: string) => void navigated.push(r),
+      liveState: () => 'live',
+    });
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 4);
+      const feet = comClasse(area, 'wall-foot');
+      assert.equal(feet.length, 4, 'every card has the foot');
+      assert.deepEqual(
+        feet.map((p) => p.textContent),
+        ['Abrir no Claude DesktopDetalhe ›', 'Ir para o terminalDetalhe ›', 'Roda em outra máquinaDetalhe ›', 'Detalhe ›'],
+        'remote: the disabled button says where, and the card still links to the Detail like its title; none: no button',
+      );
+      assert.equal(comClasse(feet[2]!, 'open-button')[0]!.getAttribute('aria-disabled'), 'true');
+      assert.equal(comClasse(feet[0]!, 'wall-detail')[0]!.getAttribute('href'), `/ui/sessions/${UUID}`);
+      for (const a of area.todos((e) => e.tag === 'a')) assert.equal(a.todos((e) => e.tag === 'button').length, 0, 'no button inside a link');
+      comClasse(feet[0]!, 'open-button')[0]!.click();
+      await ate(() => writes.length === 1);
+      assert.deepEqual(writes, [`/api/sessions/${UUID}/open`]);
+      assert.deepEqual(navigated, [], 'the click does not navigate');
+      await ate(() => comClasse(feet[0]!, 'open-ok').length === 1);
+      assert.equal(comClasse(feet[0]!, 'open-ok')[0]!.textContent, 'Aberta no Claude Desktop');
+    } finally {
+      leave.abort();
+      (await ready)();
     }
   });
 
