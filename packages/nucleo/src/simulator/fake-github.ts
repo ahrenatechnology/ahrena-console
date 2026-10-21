@@ -469,6 +469,7 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     const v = body.variables ?? {};
     const install = installOperation(op, v);
     if (install !== null) return install;
+    if (op === 'ProjectOptions') return projectOptions(data, rateLimit);
     if (op === 'ReposLista') {
       return {
         rateLimit,
@@ -698,6 +699,35 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     refs: (owner, name) => {
       const repo = find(owner, name);
       return repo ? Object.fromEntries([...branchesOf(repo)].map(([b, x]) => [b, x.oid])) : {};
+    },
+  };
+}
+
+/**
+ * The Projects the fake account sees (#241, `ProjectOptions`): the simulator's Project `exemplo/3`
+ * (organization, with Status), one of the person's without a Status field and one closed.
+ */
+function projectOptions(data: FakeGithubData, rateLimit: unknown): unknown {
+  const node = (owner: string, type: 'User' | 'Organization', number: number, title: string, items: number, status: boolean, closed = false) => ({
+    number,
+    title,
+    url: `https://github.com/${type === 'User' ? 'users' : 'orgs'}/${owner}/projects/${number}`,
+    closed,
+    owner: { __typename: type, login: owner },
+    items: { totalCount: items },
+    field: status ? { __typename: 'ProjectV2SingleSelectField' } : null,
+  });
+  return {
+    rateLimit,
+    viewer: {
+      login: data.login,
+      projectsV2: { nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
+      organizations: {
+        nodes: [
+          { login: 'exemplo', projectsV2: { nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
+          ...data.organizations.map((login) => ({ login, projectsV2: { nodes: [] } })),
+        ],
+      },
     },
   };
 }
