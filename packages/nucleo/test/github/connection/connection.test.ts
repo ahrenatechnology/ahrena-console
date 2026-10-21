@@ -30,6 +30,8 @@ class SpyVault implements CredentialVault {
   readonly inner: MemoryVault;
   calls: string[] = [];
   fail = new Set<string>();
+  /** While set, `set` waits for it (a test races an action against the vault write). */
+  setGate: Promise<void> | null = null;
   constructor(seed: Record<string, string> = {}) {
     this.inner = new MemoryVault(seed);
   }
@@ -43,6 +45,7 @@ class SpyVault implements CredentialVault {
   }
   async set(a: string, s: string) {
     this.check('set');
+    if (this.setGate) await this.setGate;
     return this.inner.set(a, s);
   }
   async delete(a: string) {
@@ -80,6 +83,14 @@ function setup(o: Setup = {}) {
     queued.push('run');
     return run(fn);
   };
+  const setTimer = (fn: () => void, ms: number) => {
+    timers.push({ id: ++seq, fn, ms });
+    return seq;
+  };
+  const clearTimer = (id: unknown) => {
+    const i = timers.findIndex((x) => x.id === id);
+    if (i >= 0) timers.splice(i, 1);
+  };
   const conn = new GithubConnection({
     vault,
     settings,
@@ -91,14 +102,8 @@ function setup(o: Setup = {}) {
     ghInstalled: () => false,
     ghToken: () => assert.fail('gh must not run in this test'),
     now: () => t,
-    setTimer: (fn, ms) => {
-      timers.push({ id: ++seq, fn, ms });
-      return seq;
-    },
-    clearTimer: (id) => {
-      const i = timers.findIndex((x) => x.id === id);
-      if (i >= 0) timers.splice(i, 1);
-    },
+    setTimer,
+    clearTimer,
     queue,
     onChange: () => void events.change++,
     onIdentityChange: () => void events.identity++,
@@ -115,6 +120,9 @@ function setup(o: Setup = {}) {
     logs,
     queued,
     timers,
+    setTimer,
+    clearTimer,
+    now: () => t,
     advance: (ms: number) => (t += ms),
     /** Runs the next timer (advancing the clock by its delay) and waits for the poll to settle. */
     async fire() {
@@ -572,7 +580,9 @@ describe('#241/AC-2 the gh source (opt-in)', () => {
 
   test('the default gh token function never runs gh under node --test', async () => {
     const s = setup();
+    // only the injected env counts: the guard must not depend on this process's NODE_TEST_CONTEXT
     const conn = new GithubConnection({ ...connOptions(s), env: { AHRENA_CONSOLE_GITHUB_SOURCE: 'gh', NODE_TEST_CONTEXT: 'child-v8' }, ghInstalled: () => true, ghToken: undefined });
+    assert.equal(conn.ghGuarded, true);
     const st = await conn.status();
     assert.deepEqual([st.state, st.reason], ['unavailable', 'gh-not-authenticated']);
   });
@@ -622,10 +632,206 @@ function connOptions(s: ReturnType<typeof setup>): GithubConnectionOptions {
     env: {},
     ghInstalled: () => false,
     ghToken: () => assert.fail('gh must not run in this test'),
-    setTimer: (fn, ms) => {
-      s.timers.push({ id: 1000 + s.timers.length, fn, ms });
-      return 1000 + s.timers.length;
-    },
-    clearTimer: () => undefined,
+    now: s.now,
+    setTimer: s.setTimer,
+    clearTimer: s.clearTimer,
   };
 }
+
+/** Starts a flow and runs polls until the vault write is reached and held. */
+async function heldAtVaultWrite(s: ReturnType<typeof setup>) {
+  let release!: () => void;
+  s.vault.setGate = new Promise<void>((r) => (release = r));
+  await s.conn.start();
+  while (s.timers.length) {
+    const next = s.timers.shift()!;
+    s.advance(next.ms);
+    next.fn();
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    if (s.vault.calls.includes('set')) break;
+  }
+  assert.ok(s.vault.calls.includes('set'), 'the flow reached the vault write');
+  return () => {
+    release();
+    return s.conn.idle();
+  };
+}
+
+describe('#241/AC-2 review B1: no action is undone by a flow finishing behind it', () => {
+  test('cancel during the vault write: stays disconnected, the entry just written is removed', async () => {
+    const s = setup();
+    const release = await heldAtVaultWrite(s);
+    await s.conn.cancel();
+    await release();
+    const st = await s.conn.status();
+    assert.equal(st.state, 'disconnected');
+    await assert.rejects(s.conn.token(), GithubNotConnectedError);
+    assert.deepEqual(await s.vault.inner.list(), []);
+    assert.equal(s.settings.get('github.login'), null);
+  });
+
+  test('disconnect during the vault write: stays disconnected, nothing stored', async () => {
+    const s = setup();
+    const release = await heldAtVaultWrite(s);
+    await s.conn.disconnect();
+    await release();
+    assert.equal((await s.conn.status()).state, 'disconnected');
+    assert.deepEqual(await s.vault.inner.list(), []);
+    assert.equal(s.settings.get('github.login'), null);
+  });
+
+  test('setSource(gh) during the vault write: the console token is never served under gh', async () => {
+    const s = setup({ options: { ghInstalled: () => true, ghToken: async () => OTHER_TOKEN } });
+    const release = await heldAtVaultWrite(s);
+    await s.conn.setSource('gh');
+    await release();
+    // gh's token is not one the fake GitHub accepts, so gh may end not authenticated; never the flow's token
+    assert.notEqual(await s.conn.token().catch(() => null), TOKEN);
+    assert.equal((await s.conn.status()).source, 'gh');
+    assert.deepEqual(await s.vault.inner.list(), []);
+  });
+
+  test('the entry of the active login is not deleted when its reconnect is cancelled at the vault write', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    assert.equal(await s.conn.token(), TOKEN);
+    s.auth.token = OTHER_TOKEN; // same login, new token
+    const release = await heldAtVaultWrite(s);
+    await s.conn.cancel();
+    await release();
+    assert.equal(await s.conn.token(), TOKEN, 'the old credential still serves');
+    assert.deepEqual(await s.vault.inner.list(), ['dev-sintetico']);
+  });
+
+  for (const action of ['cancel', 'disconnect', 'setSource'] as const) {
+    test(`${action} while the device code is being requested: no flow starts`, async () => {
+      const s = setup({ options: { ghInstalled: () => true, ghToken: async () => OTHER_TOKEN } });
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const conn = new GithubConnection({
+        ...connOptions(s),
+        ghInstalled: () => true,
+        ghToken: async () => OTHER_TOKEN,
+        fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+          if (String(input).endsWith('/login/device/code')) await gate;
+          return s.gh.fetch(input, init);
+        }) as typeof fetch,
+      });
+      const starting = conn.start().catch(() => null);
+      await new Promise((r) => setImmediate(r));
+      if (action === 'cancel') await conn.cancel();
+      if (action === 'disconnect') await conn.disconnect();
+      if (action === 'setSource') await conn.setSource('gh');
+      release();
+      await starting;
+      await conn.idle();
+      assert.notEqual((await conn.status()).state, 'pending');
+      assert.equal(s.timers.length, 0, 'no poll scheduled');
+    });
+  }
+
+  test('401 from /user after the token: github-error, nothing stored', async () => {
+    const s = setup();
+    const conn = new GithubConnection({
+      ...connOptions(s),
+      fetch: (async (input: string | URL | Request, init?: RequestInit) =>
+        String(input).endsWith('/user') ? Response.json({ message: 'Bad credentials' }, { status: 401 }) : s.gh.fetch(input, init)) as typeof fetch,
+    });
+    await conn.start();
+    while (s.timers.length) {
+      const next = s.timers.shift()!;
+      next.fn();
+      await conn.idle();
+    }
+    const st = await conn.status();
+    assert.deepEqual([st.state, st.lastError], ['disconnected', 'github-error']);
+    assert.deepEqual(await s.vault.inner.list(), []);
+  });
+});
+
+describe('#241/AC-4 review Q1: a disconnect survives a restart', () => {
+  const restart = (s: ReturnType<typeof setup>) => new GithubConnection(connOptions(s));
+
+  test('after disconnect, a new core over the same settings does not adopt a single vault entry', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    await s.conn.token();
+    await s.conn.disconnect();
+    await s.vault.inner.set('dev-sintetico', TOKEN); // another installation reconnected meanwhile
+    assert.equal((await restart(s).status()).state, 'disconnected');
+    assert.equal(s.settings.get('github.login'), null);
+  });
+
+  test('after a failed vault delete the restart stays disconnected too', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    await s.conn.token();
+    s.vault.fail.add('delete');
+    await s.conn.disconnect();
+    s.vault.fail.clear();
+    assert.equal((await restart(s).status()).state, 'disconnected');
+  });
+
+  test('first boot (no github.login key at all) still adopts; a vanished entry is not re-adopted', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    assert.equal((await s.conn.status()).state, 'connected');
+    const gone = setup({ seed: { other: OTHER_TOKEN }, settings: new MemoryInstallationSettings({ 'github.login': 'gone-user' }) });
+    assert.equal((await gone.conn.status()).state, 'disconnected');
+    assert.equal((await restart(gone).status()).state, 'disconnected', 'the single remaining entry is not adopted');
+  });
+});
+
+describe('#241/AC-2 review L1, L2, L6', () => {
+  test('a GitHub 5xx while polling keeps the flow pending', async () => {
+    const s = setup();
+    let fail = true;
+    const conn = new GithubConnection({
+      ...connOptions(s),
+      fetch: (async (input: string | URL | Request, init?: RequestInit) =>
+        fail && String(input).endsWith('/login/oauth/access_token') ? new Response('', { status: 502 }) : s.gh.fetch(input, init)) as typeof fetch,
+    });
+    await conn.start();
+    let t = s.timers.shift()!;
+    t.fn();
+    await conn.idle();
+    assert.equal((await conn.status()).state, 'pending');
+    assert.equal(s.timers.length, 1);
+    fail = false;
+    while (s.timers.length) {
+      t = s.timers.shift()!;
+      t.fn();
+      await conn.idle();
+    }
+    assert.equal((await conn.status()).state, 'connected');
+  });
+
+  test('the interval is at least 5 s (minIntervalS lowers it for the demo); slow_down never shortens it', async () => {
+    const fast = setup({ auth: { interval: 1 } });
+    await fast.conn.start();
+    assert.deepEqual(fast.timers.map((x) => x.ms), [5000]);
+    const demo = setup({ auth: { interval: 1 }, options: { minIntervalS: 1 } });
+    await demo.conn.start();
+    assert.deepEqual(demo.timers.map((x) => x.ms), [1000]);
+    const s = setup({ auth: { interval: 5 } });
+    let first = true;
+    const conn = new GithubConnection({
+      ...connOptions(s),
+      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+        if (first && String(input).endsWith('/login/oauth/access_token')) {
+          first = false;
+          return Response.json({ error: 'slow_down', interval: 3 });
+        }
+        return s.gh.fetch(input, init);
+      }) as typeof fetch,
+    });
+    await conn.start();
+    s.timers.shift()!.fn();
+    await conn.idle();
+    assert.deepEqual(s.timers.map((x) => x.ms), [10_000]);
+  });
+
+  test('setSource to the source already chosen and disconnect with no login change no identity', async () => {
+    const s = setup();
+    await s.conn.setSource('console');
+    await s.conn.disconnect();
+    assert.equal(s.events.identity, 0);
+  });
+});

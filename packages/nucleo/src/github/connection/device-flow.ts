@@ -99,7 +99,8 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
     const error = machineCode(body?.error);
     if (status !== 200 || error) throw new GithubAuthError(error ?? `http-${status}`, status);
     const { device_code, user_code, verification_uri, expires_in, interval } = body ?? {};
-    if (typeof device_code !== 'string' || typeof user_code !== 'string' || typeof verification_uri !== 'string') {
+    // The user code and the address go to the screen: a short code, and https on GitHub (or the configured host).
+    if (typeof device_code !== 'string' || device_code === '' || !isUserCode(user_code) || !this.isVerificationUri(verification_uri)) {
       throw new GithubAuthError('invalid-response', status);
     }
     return {
@@ -129,7 +130,7 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
 
   async user(token: string): Promise<{ login: string; scopes: string[] }> {
     const res = await this.get('/user', token);
-    const body = await readJson(res);
+    const body = asObject(await readJson(res));
     if (res.status !== 200) throw new GithubAuthError(res.status === 401 ? 'unauthorized' : `http-${res.status}`, res.status);
     if (typeof body?.login !== 'string') throw new GithubAuthError('invalid-response', res.status);
     return { login: body.login, scopes: parseScopes(res.headers.get('x-oauth-scopes')) };
@@ -139,7 +140,7 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
     const res = await this.get('/user/orgs?per_page=100', token);
     const body = await readJson(res);
     if (res.status !== 200 || !Array.isArray(body)) throw new GithubAuthError(res.status === 401 ? 'unauthorized' : `http-${res.status}`, res.status);
-    return body.map((o: { login?: unknown }) => o?.login).filter((l): l is string => typeof l === 'string');
+    return body.map((o) => asObject(o)?.login).filter((l): l is string => typeof l === 'string');
   }
 
   /** `blocked` only for GitHub's "OAuth App access restrictions" 403; any other failure is `unknown`. */
@@ -147,11 +148,22 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
     try {
       const res = await this.get(`/orgs/${encodeURIComponent(org)}/repos?per_page=1`, token);
       if (res.status === 200) return 'ok';
-      const body = await readJson(res);
+      const body = asObject(await readJson(res));
       if (res.status === 403 && typeof body?.message === 'string' && /OAuth App access restrictions/i.test(body.message)) return 'blocked';
       return 'unknown';
     } catch {
       return 'unknown';
+    }
+  }
+
+  private isVerificationUri(value: unknown): value is string {
+    if (typeof value !== 'string') return false;
+    try {
+      const url = new URL(value);
+      const allowed = new Set(['github.com', new URL(this.oauthUrl).host]);
+      return url.protocol === 'https:' && allowed.has(url.host);
+    } catch {
+      return false;
     }
   }
 
@@ -161,8 +173,7 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
       headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'ahrena-console' },
       body: new URLSearchParams(fields).toString(),
     });
-    const body = await readJson(res);
-    return { status: res.status, body: body && typeof body === 'object' && !Array.isArray(body) ? body : null };
+    return { status: res.status, body: asObject(await readJson(res)) };
   }
 
   private get(path: string, token: string): Promise<Response> {
@@ -191,10 +202,19 @@ function positive(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-async function readJson(res: Response): Promise<any> {
+async function readJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
     return null;
   }
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+/** GitHub's user codes look like `WDJB-MJHT`: letters, digits and a hyphen. */
+function isUserCode(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9-]{4,16}$/.test(value);
 }

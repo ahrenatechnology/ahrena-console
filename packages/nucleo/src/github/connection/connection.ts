@@ -118,6 +118,8 @@ export interface GithubConnectionOptions {
   ghInstalled?: () => boolean;
   /** `--no-github`: unavailable `github-off`. */
   off?: boolean;
+  /** The shortest poll interval honoured, in seconds. Default 5; the demo lowers it. */
+  minIntervalS?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -149,6 +151,9 @@ export class GithubConnection {
   private readonly ghToken: () => Promise<string>;
   private readonly ghInstalled: () => boolean;
   private readonly off: boolean;
+  private readonly minIntervalS: number;
+  /** Whether the default gh token function is refused (the injected env has NODE_TEST_CONTEXT). */
+  readonly ghGuarded: boolean;
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
@@ -172,6 +177,8 @@ export class GithubConnection {
   private orgs: { checked: boolean; blocked: string[] } = { checked: false, blocked: [] };
   private flow: Flow | null = null;
   private starting: Promise<void> | null = null;
+  /** Bumped by cancel, disconnect and setSource: a flow being started or finished behind them gives up. */
+  private actions = 0;
   private readonly background = new Set<Promise<unknown>>();
 
   constructor(o: GithubConnectionOptions) {
@@ -180,10 +187,12 @@ export class GithubConnection {
     this.vault = o.vault;
     this.settings = o.settings;
     this.client = o.client ?? new GithubDeviceFlowClient({ clientId: this.clientId ?? '', fetch: o.fetch, oauthUrl: o.oauthUrl, apiUrl: o.apiUrl });
-    const underTest = Boolean(this.env.NODE_TEST_CONTEXT || process.env.NODE_TEST_CONTEXT);
-    this.ghToken = o.ghToken ?? (underTest ? () => Promise.reject(new Error('gh is not run under node --test')) : () => ghCliToken());
+    // Only the injected env decides: cli.ts passes process.env, tests pass their own.
+    this.ghGuarded = !o.ghToken && Boolean(this.env.NODE_TEST_CONTEXT);
+    this.ghToken = o.ghToken ?? (this.ghGuarded ? () => Promise.reject(new Error('gh is not run under node --test')) : () => ghCliToken());
     this.ghInstalled = o.ghInstalled ?? (() => findOnPath('gh', this.env) !== null);
     this.off = o.off ?? false;
+    this.minIntervalS = o.minIntervalS ?? 5;
     this.now = o.now ?? Date.now;
     this.setTimer =
       o.setTimer ??
@@ -248,6 +257,7 @@ export class GithubConnection {
 
   /** Drops the pending flow (no-op without one). */
   async cancel(): Promise<GithubConnectionStatus> {
+    this.actions++;
     if (this.flow) {
       this.dropFlow();
       this.log('github: device flow cancelled');
@@ -260,11 +270,19 @@ export class GithubConnection {
   async disconnect(): Promise<GithubConnectionStatus> {
     if (this.sourceInfo().source === 'gh') throw new GithubConnectionError('source-is-gh');
     if (this.off) throw new GithubConnectionError('github-unavailable', 'github-off');
+    this.actions++;
+    const hadFlow = this.flow !== null;
     this.dropFlow();
     const login = this.settings.get('github.login') ?? this.login;
+    // A stored null survives a restart: the single vault entry is adopted only on a first boot.
+    this.settings.set('github.login', null);
+    if (!login && this.credential === null) {
+      this.credentialLoad = Promise.resolve();
+      if (hadFlow) this.onChange();
+      return this.status();
+    }
     this.forget();
     this.credentialLoad = Promise.resolve(); // known: nothing; no adoption again in this process
-    this.settings.delete('github.login');
     if (login && this.vault) {
       try {
         await this.vault.delete(login);
@@ -283,6 +301,8 @@ export class GithubConnection {
   async setSource(source: GithubCredentialSource): Promise<GithubConnectionStatus> {
     if (source !== 'console' && source !== 'gh') throw new GithubConnectionError('invalid');
     if (source === 'gh' && !this.ghInstalled()) throw new GithubConnectionError('gh-not-installed');
+    if ((this.settings.get('github.source') ?? 'console') === source) return this.status();
+    this.actions++;
     this.settings.set('github.source', source);
     this.dropFlow();
     this.forget();
@@ -354,6 +374,8 @@ export class GithubConnection {
     try {
       let login = this.settings.get('github.login');
       if (!login) {
+        // Adopt only on a first boot: a stored null is a disconnect (or a vanished entry).
+        if (this.settings.has('github.login')) return;
         const accounts = await vault.list();
         if (stale()) return;
         if (accounts.length !== 1) return;
@@ -364,7 +386,7 @@ export class GithubConnection {
       const secret = await vault.get(login);
       if (stale()) return;
       if (!secret) {
-        this.settings.delete('github.login');
+        this.settings.set('github.login', null);
         this.log(`github: the vault has no entry for ${login}`);
         return;
       }
@@ -429,6 +451,8 @@ export class GithubConnection {
   }
 
   private async beginFlow(): Promise<void> {
+    const actions = this.actions;
+    const generation = this.generation;
     let code;
     try {
       code = await this.client.requestCode();
@@ -436,12 +460,14 @@ export class GithubConnection {
       this.log(`github: the device code request failed (${err instanceof GithubAuthError ? err.code : 'error'})`);
       throw new GithubConnectionError('github-error');
     }
+    // Cancelled, disconnected or switched to gh while the code was requested: no flow starts.
+    if (actions !== this.actions || generation !== this.generation || this.sourceInfo().source !== 'console') return;
     const flow: Flow = {
       deviceCode: code.deviceCode,
       userCode: code.userCode,
       verificationUri: code.verificationUri,
       expiresAt: this.now() + code.expiresIn * 1000,
-      interval: code.interval,
+      interval: Math.max(this.minIntervalS, code.interval),
       timer: null,
       hasTimer: false,
     };
@@ -475,13 +501,14 @@ export class GithubConnection {
       case 'pending':
         return this.schedule(flow);
       case 'slow-down':
-        flow.interval = result.interval > 0 ? result.interval : flow.interval + 5;
+        flow.interval = Math.max(flow.interval + 5, result.interval);
         return this.schedule(flow);
       case 'expired':
         return this.endFlow(flow, 'expired');
       case 'denied':
         return this.endFlow(flow, 'denied');
       case 'error':
+        if (/^http-5\d\d$/.test(result.code)) return this.schedule(flow); // GitHub having a bad moment, like a network blip
         this.log(`github: the device flow failed (${result.code})`);
         return this.endFlow(flow, 'github-error');
       case 'token':
@@ -498,11 +525,19 @@ export class GithubConnection {
     }
     if (this.flow !== flow) return;
     if (!isValidAccount(user.login)) return this.endFlow(flow, 'github-error');
+    const actions = this.actions;
     try {
       await this.vault!.set(user.login, token);
     } catch {
       this.log('github: the vault could not store the credential');
       return this.endFlow(flow, 'vault-error');
+    }
+    if (this.flow !== flow || actions !== this.actions) {
+      // An action ended this flow during the write: undo it, unless it is the active login's entry.
+      if (user.login !== this.login) {
+        await this.vault!.delete(user.login).catch(() => this.log('github: the vault entry could not be deleted'));
+      }
+      return;
     }
     const changed = this.login !== user.login || this.credential !== token;
     this.dropFlow();

@@ -3,6 +3,8 @@
 // adapters are the user's Keychain (macOS, keychain-vault.ts), the Secret Service (Linux,
 // secret-service-vault.ts) and an in-memory one for tests and the demo, which never persists.
 
+import { isGithubLogin } from '../login.ts';
+
 export const GITHUB_VAULT_SERVICE = 'dev.ahrena.console.github';
 
 export type VaultKind = 'keychain' | 'secret-service' | 'memory';
@@ -27,13 +29,12 @@ export class VaultError extends Error {
   }
 }
 
-/** A GitHub login: letters, digits and single hyphens, up to 39, not starting with a hyphen. */
-const ACCOUNT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 /** The token charset: tight enough that no quoting or injection is possible in `security -i`. */
 const SECRET = /^[A-Za-z0-9_.-]{1,255}$/;
 
+/** A vault account is a GitHub login (src/github/login.ts). */
 export function isValidAccount(account: unknown): account is string {
-  return typeof account === 'string' && ACCOUNT.test(account);
+  return isGithubLogin(account);
 }
 
 export function assertAccount(account: string): void {

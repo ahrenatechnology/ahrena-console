@@ -62,6 +62,27 @@ describe('#241/AC-2 device flow client', () => {
     assert.equal(String(r.init?.body), 'client_id=test-client-id&scope=repo+read%3Aorg+project');
   });
 
+  test('review L3: a verification address off GitHub or an odd user code is refused (invalid-response)', async () => {
+    const answer = (body: Record<string, unknown>) =>
+      new GithubDeviceFlowClient({
+        clientId: 'test-client-id',
+        oauthUrl: OAUTH,
+        apiUrl: API,
+        fetch: (async () => Response.json({ device_code: 'fake-device-code-x', user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5, ...body })) as never,
+      });
+    assert.equal((await answer({}).requestCode()).userCode, 'ABCD-1234');
+    assert.equal((await answer({ verification_uri: 'https://fake-github.test/login/device' }).requestCode()).verificationUri, 'https://fake-github.test/login/device', 'the configured host is fine');
+    for (const bad of [
+      { verification_uri: 'http://github.com/login/device' },
+      { verification_uri: 'https://evil.example/login/device' },
+      { verification_uri: 'javascript:alert(1)' },
+      { user_code: '<script>' },
+      { user_code: 'A'.repeat(40) },
+    ]) {
+      await assert.rejects(answer(bad).requestCode(), (e: GithubAuthError) => e.code === 'invalid-response', JSON.stringify(bad));
+    }
+  });
+
   test('a wrong client id rejects with GitHub\'s error code', async () => {
     const { gh } = setup();
     const client = new GithubDeviceFlowClient({ clientId: 'not-the-app', fetch: gh.fetch, oauthUrl: OAUTH, apiUrl: API });

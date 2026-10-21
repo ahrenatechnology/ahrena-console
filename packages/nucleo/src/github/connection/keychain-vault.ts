@@ -40,9 +40,8 @@ export class KeychainVault implements CredentialVault {
     const line = `add-generic-password -U -s "${GITHUB_VAULT_SERVICE}" -a "${account}" -w "${secret}"\n`;
     const r = await this.exec(['-i'], line);
     if (r.code !== 0) throw new VaultError(`keychain: write failed (exit ${r.code})`);
-    // `security -i` may exit 0 when a command inside failed: confirm the item exists (attributes only, no -w).
-    const check = await this.exec(['find-generic-password', '-s', GITHUB_VAULT_SERVICE, '-a', account]);
-    if (check.code !== 0) throw new VaultError(`keychain: write failed (exit ${check.code})`);
+    // `security -i` may exit 0 when a command inside failed: read it back (on stdout, never argv) and compare.
+    if ((await this.get(account)) !== secret) throw new VaultError('keychain: write failed (not stored)');
   }
 
   async delete(account: string): Promise<void> {
@@ -67,13 +66,23 @@ export class KeychainVault implements CredentialVault {
   }
 }
 
+/**
+ * A blob attribute of a dump item: `"acct"<blob>="text"`, or the hex form `"acct"<blob>=0x…  "text"`
+ * that `security` prints when the value has bytes it will not show plainly (then the text carries
+ * escapes and is not a valid login anyway).
+ */
+function attribute(item: string, name: string): string | undefined {
+  const m = new RegExp(`^\\s*"${name}"<blob>=(?:"([^"]*)"|0x[0-9A-Fa-f]+\\s+"([^"]*)")\\s*$`, 'm').exec(item);
+  return m ? (m[1] ?? m[2]) : undefined;
+}
+
 /** The accounts of the generic items of `GITHUB_VAULT_SERVICE` in a `security dump-keychain` output. */
 export function parseDumpKeychain(text: string): string[] {
   const accounts = new Set<string>();
   for (const item of text.split(/^keychain: /m)) {
     if (!/^class: "genp"$/m.test(item)) continue;
-    const service = /^\s*"svce"<blob>="([^"]*)"$/m.exec(item)?.[1];
-    const account = /^\s*"acct"<blob>="([^"]*)"$/m.exec(item)?.[1];
+    const service = attribute(item, 'svce');
+    const account = attribute(item, 'acct');
     if (service === GITHUB_VAULT_SERVICE && isValidAccount(account)) accounts.add(account);
   }
   return [...accounts];

@@ -32,6 +32,16 @@ function contract(name: string, make: () => InstallationSettings) {
       assert.equal(s.get('github.login'), 'other');
     });
 
+    test('#241/AC-4 github.login may be stored as null (after a disconnect): has() tells it from absent', () => {
+      const s = make();
+      assert.equal(s.has('github.login'), false);
+      s.set('github.login', null);
+      assert.equal(s.has('github.login'), true);
+      assert.equal(s.get('github.login'), null);
+      s.delete('github.login');
+      assert.equal(s.has('github.login'), false);
+    });
+
     test('delete removes the key; deleting a missing key is fine', () => {
       const s = make();
       s.set('github.login', 'octo-cat');

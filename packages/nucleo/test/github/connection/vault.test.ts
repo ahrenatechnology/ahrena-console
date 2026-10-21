@@ -8,6 +8,8 @@ import {
   GITHUB_VAULT_SERVICE,
   KeychainVault,
   MemoryVault,
+  parseDumpKeychain,
+  VaultError,
   SecretServiceVault,
   type CredentialVault,
 } from '../../../src/github/connection/index.ts';
@@ -137,6 +139,28 @@ describe('#241/AC-3 KeychainVault talks to `security` without the secret in argv
     }
   });
 
+  test('review M2: `security -i` exiting 0 without writing is a write failure (checked by reading it back)', async () => {
+    tool.seed({});
+    tool.dropWrites(true);
+    try {
+      await assert.rejects(vault.set('octo-cat', SECRET), (err: Error) => err instanceof VaultError && !err.message.includes(SECRET));
+    } finally {
+      tool.dropWrites(false);
+    }
+    await vault.set('octo-cat', SECRET);
+    const check = tool.calls().at(-1)!;
+    assert.deepEqual(check.argv, ['find-generic-password', '-s', SVC, '-a', 'octo-cat', '-w'], 'read back on stdout, never in argv');
+  });
+
+  test('parseDumpKeychain reads the hex form of an attribute and skips what is not a login', () => {
+    const dump = [
+      'keychain: "/fake/login.keychain-db"\nclass: "genp"\nattributes:\n    "acct"<blob>=0x6F63746F2D636174  "octo-cat"\n    "svce"<blob>=0x6465762E616872656E61  "dev.ahrena.console.github"\n',
+      'keychain: "/fake/login.keychain-db"\nclass: "genp"\nattributes:\n    "acct"<blob>=0x61620A  "ab\\012"\n    "svce"<blob>="dev.ahrena.console.github"\n',
+      'keychain: "/fake/login.keychain-db"\nclass: "inet"\nattributes:\n    "acct"<blob>="web-user"\n    "svce"<blob>="dev.ahrena.console.github"\n',
+    ].join('');
+    assert.deepEqual(parseDumpKeychain(dump), ['octo-cat']);
+  });
+
   test('an executable that does not exist rejects (no PATH fallback)', async () => {
     const missing = new KeychainVault({ bin: `${tool.dir}/does-not-exist` });
     await assert.rejects(missing.get('octo-cat'));
@@ -159,6 +183,24 @@ describe('#241/AC-3 SecretServiceVault talks to `secret-tool` without the secret
     assert.deepEqual(store.argv, ['store', '--label=Ahrena Console (GitHub)', 'service', SVC, 'account', 'octo-cat']);
     assert.equal(store.stdin, SECRET);
     for (const c of tool.calls()) assert.ok(!c.argv.join(' ').includes(SECRET));
+  });
+
+  test('review M1: exit 1 with an error on stderr is a failure, not "not found"; the message carries no output', async () => {
+    tool.seed({ [`${SVC}|octo-cat`]: SECRET });
+    tool.failWith(1, `secret-tool: Cannot autolaunch D-Bus ${SECRET}\n`);
+    try {
+      for (const op of [() => vault.get('octo-cat'), () => vault.delete('octo-cat'), () => vault.list(), () => vault.set('octo-cat', SECRET)]) {
+        await assert.rejects(op(), (err: Error) => err instanceof VaultError && !err.message.includes(SECRET) && !err.message.includes('D-Bus'));
+      }
+    } finally {
+      tool.failWith(null);
+    }
+    tool.failWith(1);
+    try {
+      assert.equal(await vault.get('octo-cat'), null, 'exit 1 with no output at all is "not found"');
+    } finally {
+      tool.failWith(null);
+    }
   });
 
   test('lookup, clear and search use the service/account attributes; search keeps only account lines', async () => {

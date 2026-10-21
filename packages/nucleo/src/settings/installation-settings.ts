@@ -4,6 +4,7 @@
 // here by mistake (a token is not a login, and there is no key for one).
 
 import type { DatabaseSync } from 'node:sqlite';
+import { GITHUB_LOGIN, isGithubLogin } from '../github/login.ts';
 
 export interface ProjectSelection {
   owner: string;
@@ -15,7 +16,8 @@ export interface ProjectSelection {
 export type GithubCredentialSource = 'console' | 'gh';
 
 export interface InstallationSettingValues {
-  'github.login': string;
+  /** The active vault account; `null` (kept) after a disconnect, so a restart does not adopt an entry again. */
+  'github.login': string | null;
   'github.source': GithubCredentialSource;
   'project.selection': ProjectSelection;
 }
@@ -28,10 +30,12 @@ export interface InstallationSettings {
   get<K extends InstallationSettingKey>(key: K): InstallationSettingValues[K] | null;
   set<K extends InstallationSettingKey>(key: K, value: InstallationSettingValues[K]): void;
   delete(key: InstallationSettingKey): void;
+  /** Whether the key is stored at all (a stored `null` counts). */
+  has(key: InstallationSettingKey): boolean;
 }
 
-/** A GitHub login or organization: letters, digits and hyphens, up to 39, not starting with a hyphen. */
-export const GITHUB_OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+/** A GitHub login or organization (src/github/login.ts). */
+export const GITHUB_OWNER = GITHUB_LOGIN;
 
 /** Whether `value` is a valid Project selection: owner like a login, number 1..999999999, field 1..100 printable chars. */
 export function isProjectSelection(value: unknown): value is ProjectSelection {
@@ -51,7 +55,7 @@ export function isProjectSelection(value: unknown): value is ProjectSelection {
 }
 
 const VALIDATORS: { [K in InstallationSettingKey]: (v: unknown) => v is InstallationSettingValues[K] } = {
-  'github.login': (v): v is string => typeof v === 'string' && GITHUB_OWNER.test(v),
+  'github.login': (v): v is string | null => v === null || isGithubLogin(v),
   'github.source': (v): v is GithubCredentialSource => v === 'console' || v === 'gh',
   'project.selection': isProjectSelection,
 };
@@ -92,6 +96,11 @@ export class MemoryInstallationSettings implements InstallationSettings {
     assertKey(key);
     this.values.delete(key);
   }
+
+  has(key: InstallationSettingKey): boolean {
+    assertKey(key);
+    return this.values.has(key);
+  }
 }
 
 /** On the core's `storage.db`; the table comes from the storage's migrations. */
@@ -129,5 +138,10 @@ export class SqliteInstallationSettings implements InstallationSettings {
   delete(key: InstallationSettingKey): void {
     assertKey(key);
     this.db.prepare('DELETE FROM installation_settings WHERE key = ?').run(key);
+  }
+
+  has(key: InstallationSettingKey): boolean {
+    assertKey(key);
+    return this.db.prepare('SELECT 1 FROM installation_settings WHERE key = ?').get(key) !== undefined;
   }
 }

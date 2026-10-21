@@ -21,8 +21,10 @@ export interface FakeTool {
   /** The stored items, `service|account` → secret. */
   items(): Record<string, string>;
   seed(items: Record<string, string>): void;
-  /** Every next call exits with this code and no output (`null` back to normal). */
-  failWith(code: number | null): void;
+  /** Every next call exits with this code and no stdout, with `stderr` if given (`null` back to normal). */
+  failWith(code: number | null, stderr?: string): void;
+  /** `security -i` exits 0 without writing anything. */
+  dropWrites(on: boolean): void;
   cleanup(): void;
 }
 
@@ -40,7 +42,11 @@ process.stdin.on('end', () => {
   const stdin = Buffer.concat(chunks).toString('utf8');
   fs.appendFileSync(path.join(dir, 'calls.jsonl'), JSON.stringify({ argv, stdin }) + '\n');
   const mode = path.join(dir, 'fail.json');
-  if (fs.existsSync(mode)) process.exit(JSON.parse(fs.readFileSync(mode, 'utf8')).code);
+  if (fs.existsSync(mode)) {
+    const f = JSON.parse(fs.readFileSync(mode, 'utf8'));
+    if (f.stderr) process.stderr.write(f.stderr);
+    process.exit(f.code);
+  }
   main(stdin);
 });
 const opt = (args, flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
@@ -58,6 +64,7 @@ function main(stdin) {
   const items = read();
   const [cmd, ...rest] = argv;
   if (cmd === '-i') {
+    if (fs.existsSync(path.join(dir, 'drop.json'))) process.exit(0); // a write that silently did nothing
     for (const line of stdin.split('\n').filter(Boolean)) {
       const [c, ...args] = tokens(line);
       if (c !== 'add-generic-password') { process.stderr.write('unknown command\n'); continue; }
@@ -150,10 +157,15 @@ function createFakeTool(name: string, body: string): FakeTool {
     },
     items: () => (existsSync(store) ? JSON.parse(readFileSync(store, 'utf8')) : {}),
     seed: (items) => writeFileSync(store, JSON.stringify(items)),
-    failWith: (code) => {
+    failWith: (code, stderr) => {
       const f = join(dir, 'fail.json');
       if (code === null) rmSync(f, { force: true });
-      else writeFileSync(f, JSON.stringify({ code }));
+      else writeFileSync(f, JSON.stringify({ code, stderr }));
+    },
+    dropWrites: (on) => {
+      const f = join(dir, 'drop.json');
+      if (on) writeFileSync(f, '{}');
+      else rmSync(f, { force: true });
     },
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
