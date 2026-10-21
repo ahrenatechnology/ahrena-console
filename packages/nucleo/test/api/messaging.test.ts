@@ -10,7 +10,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFile
 import { request } from 'node:http';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -52,7 +52,7 @@ interface Boot {
  * A core with one known session. `processes`: how many live processes claim it (each a fake inbox).
  * `confirm`: the fake inbox writes the peer turn to the transcript. `fakeClock`: the window passes at once.
  */
-async function boot({ processes = 1, confirm = true, fakeClock = false, remoteControl = true, awaiting = null as Session['awaitingReason'] } = {}): Promise<Boot> {
+async function boot({ processes = 1, confirm = true, fakeClock = false, remoteControl = true, awaiting = null as Session['awaitingReason'], accountId = null as string | null } = {}): Promise<Boot> {
   const id = ++n;
   const sessionId = `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`;
   const configDir = join(root, `c${id}`);
@@ -96,7 +96,7 @@ async function boot({ processes = 1, confirm = true, fakeClock = false, remoteCo
   const clock = () => Date.now() + skew;
   const auditFile = join(root, `data${id}`, 'messaging-audit.jsonl');
   const messaging = new Messaging({
-    live: new SessionsDirectory({ folders: async () => [{ dir: configDir }] }),
+    live: new SessionsDirectory({ folders: async () => [{ dir: configDir, accountId }] }),
     inbox: new SocketInbox(),
     turns: new TranscriptTurns({ now: clock }),
     audit: new AuditFile(auditFile, log),
@@ -104,8 +104,9 @@ async function boot({ processes = 1, confirm = true, fakeClock = false, remoteCo
     log,
     ...(fakeClock ? { now: clock, sleep: async (ms: number) => void (skew += ms * 200, await new Promise((r) => setTimeout(r, 1))) } : {}),
   });
-  const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log, messaging: createMessagingRoute({ messaging, sessions: storage }) });
+  const accounts = new Accounts({ storage, file: null });
+  const montador = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
+  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log, messaging: createMessagingRoute({ messaging, sessions: storage, accounts }) });
   const port = Number(new URL(api.url).port);
   return {
     url: api.url,
@@ -162,8 +163,23 @@ describe('#61/AC-1 GET /api/sessions/<id>/messaging', () => {
     try {
       const r = await call(b.url, 'GET', `/api/sessions/${b.sessionId}/messaging`, { origin: `http://${b.host}` });
       assert.equal(r.status, 200);
-      assert.deepEqual(r.json, { version: 1, sessionId: b.sessionId, available: true, reason: null, entrypoint: 'claude-desktop', remoteControl: true, processes: 1, inFlight: null, blockedOnPerson: false });
+      assert.deepEqual(r.json, { version: 1, sessionId: b.sessionId, available: true, reason: null, entrypoint: 'claude-desktop', remoteControl: true, configDir: basename(b.configDir), account: null, processes: 1, inFlight: null, blockedOnPerson: false });
       assert.equal(/\.sock|bridge-secret|"pid"/.test(r.text), false);
+      assert.equal(r.text.includes(root), false);
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#61/AC-1 Given the live process is in a profile folder with an account, Then the box names the account by its label, never the folder path', async () => {
+    const b = await boot({ accountId: 'acc-x/org-x' });
+    try {
+      const r = await call(b.url, 'GET', `/api/sessions/${b.sessionId}/messaging`);
+      assert.equal(r.json.account.id, 'acc-x/org-x');
+      assert.match(r.json.account.label, /^conta \d+$/);
+      assert.match(r.json.account.color, /^#[0-9a-f]{6}$/i);
+      assert.deepEqual(Object.keys(r.json.account).sort(), ['color', 'id', 'label']);
+      assert.equal(r.text.includes(root), false);
     } finally {
       await b.close();
     }

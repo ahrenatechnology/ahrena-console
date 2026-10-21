@@ -11,6 +11,7 @@
 //   The records here keep its SHA-256 only. Messages live in memory: a restart forgets them.
 
 import { createHash, randomUUID } from 'node:crypto';
+import { basename } from 'node:path';
 import {
   BurstLimit,
   CONFIRM_WINDOW_MS,
@@ -49,6 +50,10 @@ export interface MessagingAvailability {
   entrypoint: string | null;
   /** Remote Control is on in the live process; `false` unless available. */
   remoteControl: boolean;
+  /** The name of the configuration folder that listed the live process (`.claude`, `.claude-team`), never its path; `null` unless available. */
+  configDir: string | null;
+  /** `ClaudeAccount.id` logged in to that folder; `null` when unknown or not available. */
+  accountId: string | null;
   /** How many processes say they are the session (2 or more with `ambiguous`). */
   processes: number;
   /** The id of the message still in flight to this session, if any. */
@@ -98,8 +103,11 @@ export class Messaging {
     const processes = otherMachine || this.platform === 'win32' ? [] : await this.live.find(sessionId).catch((e: unknown) => (this.log(`session ${sessionId}: cannot list the live processes (${(e as Error)?.name ?? 'error'})`), [] as LiveProcess[]));
     const a = resolveAvailability({ platform: this.platform, otherMachine, processes });
     const inFlight = this.inFlight.get(sessionId) ?? null;
-    if (a.available) return { available: true, reason: null, entrypoint: a.process.entrypoint, remoteControl: a.process.remoteControl, processes: 1, inFlight };
-    return { available: false, reason: a.reason, entrypoint: null, remoteControl: false, processes: a.processes, inFlight };
+    if (a.available) {
+      const p = a.process;
+      return { available: true, reason: null, entrypoint: p.entrypoint, remoteControl: p.remoteControl, configDir: basename(p.configDir), accountId: p.accountId, processes: 1, inFlight };
+    }
+    return { available: false, reason: a.reason, entrypoint: null, remoteControl: false, configDir: null, accountId: null, processes: a.processes, inFlight };
   }
 
   /** Sends what a person typed to the session's one live process on this machine. */

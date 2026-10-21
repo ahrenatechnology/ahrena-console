@@ -17,6 +17,7 @@ const proc = (pid: number, extra: Partial<LiveProcess> = {}): LiveProcess => ({
   pid,
   socketPath: `/tmp/fake/${pid}.sock`,
   configDir: '/tmp/fake-config',
+  accountId: null,
   entrypoint: 'claude-desktop',
   remoteControl: false,
   ...extra,

@@ -9,7 +9,7 @@ import { Messaging } from '../../src/messaging/service.ts';
 
 const SECRET = 'texto-secreto-que-nunca-vai-para-log-42';
 const sha = (t: string) => createHash('sha256').update(t, 'utf8').digest('hex');
-const proc = (pid: number, extra: Partial<LiveProcess> = {}): LiveProcess => ({ pid, socketPath: `/fake/${pid}.sock`, configDir: '/fake/config', entrypoint: 'claude-desktop', remoteControl: false, ...extra });
+const proc = (pid: number, extra: Partial<LiveProcess> = {}): LiveProcess => ({ pid, socketPath: `/fake/${pid}.sock`, configDir: '/fake/config', accountId: null, entrypoint: 'claude-desktop', remoteControl: false, ...extra });
 
 interface Setup {
   processes?: LiveProcess[];
@@ -77,12 +77,19 @@ describe('Messaging.availability (#61/AC-1)', () => {
   test('one live process: available, with entrypoint and Remote Control, no socket nor pid', async () => {
     const { messaging } = setup({ processes: [proc(41, { remoteControl: true })] });
     const a = await messaging.availability('s1');
-    assert.deepEqual(a, { available: true, reason: null, entrypoint: 'claude-desktop', remoteControl: true, processes: 1, inFlight: null });
+    assert.deepEqual(a, { available: true, reason: null, entrypoint: 'claude-desktop', remoteControl: true, configDir: 'config', accountId: null, processes: 1, inFlight: null });
+    assert.equal(JSON.stringify(a).includes('/fake'), false);
+  });
+
+  test('the folder name and the account of the live process, never the folder path', async () => {
+    const { messaging } = setup({ processes: [proc(41, { configDir: '/home/x/.claude-team', accountId: 'acc/org' })] });
+    const a = await messaging.availability('s1');
+    assert.deepEqual([a.configDir, a.accountId], ['.claude-team', 'acc/org']);
   });
 
   test('none, two and another machine say why', async () => {
     assert.equal((await setup({ processes: [] }).messaging.availability('s1')).reason, 'no_live_process');
-    assert.deepEqual(await setup({ processes: [proc(1), proc(2)] }).messaging.availability('s1'), { available: false, reason: 'ambiguous', entrypoint: null, remoteControl: false, processes: 2, inFlight: null });
+    assert.deepEqual(await setup({ processes: [proc(1), proc(2)] }).messaging.availability('s1'), { available: false, reason: 'ambiguous', entrypoint: null, remoteControl: false, configDir: null, accountId: null, processes: 2, inFlight: null });
     assert.equal((await setup().messaging.availability('s1', { otherMachine: true })).reason, 'other_machine');
     assert.equal((await setup({ platform: 'win32' }).messaging.availability('s1')).reason, 'unsupported_platform');
   });

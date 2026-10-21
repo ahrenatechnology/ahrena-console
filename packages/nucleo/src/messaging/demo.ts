@@ -16,7 +16,7 @@ export function demoMessaging(storage: Pick<StoragePort, 'getSession'>, log?: (m
     live: {
       async find(sessionId) {
         const s = await storage.getSession(sessionId);
-        return s?.status === 'active' ? [{ pid: 1, socketPath: '/demo/inbox.sock', configDir: '/demo', entrypoint: 'claude-desktop', remoteControl: true }] : [];
+        return s?.status === 'active' ? [{ pid: 1, socketPath: '/demo/inbox.sock', configDir: '/demo/.claude', accountId: null, entrypoint: 'claude-desktop', remoteControl: true }] : [];
       },
     },
     inbox: {

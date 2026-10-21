@@ -43,6 +43,8 @@ export interface LiveProcess {
   socketPath: string;
   /** The configuration folder whose `sessions/` listed it (its transcripts live under it). */
   configDir: string;
+  /** `ClaudeAccount.id` logged in to that folder (the profile's), or `null`. */
+  accountId: string | null;
   /** `claude-desktop`, `cli`, `sdk-cli`…, as the file says; `null` when absent or odd. */
   entrypoint: string | null;
   /** Remote Control is on: the file has a `bridgeSessionId` (its value is never kept). */

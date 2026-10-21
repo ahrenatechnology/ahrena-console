@@ -8,6 +8,7 @@ No Detalhe de uma sessão, na aba Conversa, a caixa de mensagem manda um texto q
 
 A mensagem entra pela caixa de entrada da mensageria entre sessões do Claude Code. Toda sessão com processo vivo anuncia um socket em `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`; o núcleo escreve nele uma linha com o texto.
 
+- Ao lado do destino, a tela mostra onde a sessão está aberta (Claude Desktop, terminal…), a conta da pasta de configuração em que o processo vivo foi achado e se o Remote Control está ligado.
 - Sessão ociosa: a mensagem vira um turno novo. Ocupada: o Claude lê entre uma ferramenta e outra.
 - Ela chega marcada como **mensagem de outra sessão**. Não aprova permissão, não roda comando e não muda configuração. `/compact` e `/clear` mandados como mensagem chegam como texto: os botões desses comandos dependem do mod e ficam desligados.
 - Com uma permissão pendente, a caixa continua ligada, mas a mensagem não responde à permissão: permitir ou negar continua no Claude Desktop ou no terminal.

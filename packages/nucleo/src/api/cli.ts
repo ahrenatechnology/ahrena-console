@@ -545,7 +545,7 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
-  messaging: createMessagingRoute({ messaging, sessions: storage }),
+  messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,

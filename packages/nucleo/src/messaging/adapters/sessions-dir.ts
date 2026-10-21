@@ -23,9 +23,15 @@ const SESSION_FILE = /^(\d{1,10})\.json$/;
 const MAX_FILE_BYTES = 64 * 1024;
 const ENTRYPOINT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
+/** A configuration folder, and the `ClaudeAccount.id` logged in to it when known. */
+export interface SessionsFolder {
+  dir: string;
+  accountId?: string | null;
+}
+
 export interface SessionsDirectoryOptions {
-  /** The configuration folders to look in (the profiles), re-read on every call. */
-  folders: () => Promise<readonly { dir: string }[]>;
+  /** The configuration folders to look in (the profiles, with each one's account), re-read on every call. */
+  folders: () => Promise<readonly SessionsFolder[]>;
   /** Whether the pid is a live process of this user. */
   isAlive?: (pid: number) => boolean;
   /** The core's uid; `null` skips the owner check (a platform without `getuid`). */
@@ -46,7 +52,7 @@ type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export class SessionsDirectory implements LiveSessions {
-  private readonly folders: () => Promise<readonly { dir: string }[]>;
+  private readonly folders: () => Promise<readonly SessionsFolder[]>;
   private readonly isAlive: (pid: number) => boolean;
   private readonly uid: number | null;
 
@@ -58,20 +64,20 @@ export class SessionsDirectory implements LiveSessions {
 
   async find(sessionId: string): Promise<LiveProcess[]> {
     const found: LiveProcess[] = [];
-    for (const { dir } of await this.folders()) {
+    for (const { dir, accountId = null } of await this.folders()) {
       const sessionsDir = join(dir, 'sessions');
       const names = await readdir(sessionsDir).catch(() => [] as string[]);
       for (const name of names.sort()) {
         const m = SESSION_FILE.exec(name);
         if (!m) continue;
-        const p = await this.candidate(join(sessionsDir, name), Number(m[1]), dir, sessionId);
+        const p = await this.candidate(join(sessionsDir, name), Number(m[1]), dir, accountId, sessionId);
         if (p) found.push(p);
       }
     }
     return found;
   }
 
-  private async candidate(file: string, pid: number, configDir: string, sessionId: string): Promise<LiveProcess | null> {
+  private async candidate(file: string, pid: number, configDir: string, accountId: string | null, sessionId: string): Promise<LiveProcess | null> {
     try {
       const st = await lstat(file);
       if (!st.isFile() || st.size > MAX_FILE_BYTES) return null;
@@ -85,7 +91,7 @@ export class SessionsDirectory implements LiveSessions {
       if (this.uid !== null && sock.uid !== this.uid) return null;
       const entrypoint = typeof o.entrypoint === 'string' && ENTRYPOINT.test(o.entrypoint) ? o.entrypoint : null;
       const remoteControl = typeof o.bridgeSessionId === 'string' && o.bridgeSessionId.length > 0;
-      return { pid, socketPath, configDir, entrypoint, remoteControl };
+      return { pid, socketPath, configDir, accountId, entrypoint, remoteControl };
     } catch {
       // Gone between readdir and read, half-written, not JSON, no socket: not a candidate.
       return null;

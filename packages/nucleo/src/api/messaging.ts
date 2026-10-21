@@ -4,7 +4,7 @@
 //
 // | Route                                          | What                                                      |
 // | ---------------------------------------------- | --------------------------------------------------------- |
-// | `GET /api/sessions/<id>/messaging`             | Whether the box can send: `available` or `reason`, `entrypoint`, `remoteControl`, `processes`, `inFlight`, `blockedOnPerson` (`?machine=<id>` of a session of another machine gives `other_machine`) |
+// | `GET /api/sessions/<id>/messaging`             | Whether the box can send: `available` or `reason`, `entrypoint`, `remoteControl`, `configDir` (name), `account`, `processes`, `inFlight`, `blockedOnPerson` (`?machine=<id>` of a session of another machine gives `other_machine`) |
 // | `POST /api/sessions/<id>/messages`             | `{ "text": "<what the person typed>" }` → 202 `{ messageId, state, … }` |
 // | `GET /api/sessions/<id>/messages/<messageId>`  | The message's state (the /ui polls it while `sending`)    |
 //
@@ -47,6 +47,16 @@ export function messagesWriteFromSameOrigin(req: IncomingMessage, port: number):
 export interface MessagingRouteOptions {
   messaging: Messaging;
   sessions: { getSession(id: string): Promise<Session | null> };
+  /** The label and color of the live process's account (api/accounts.ts); without it, `account` is `null`. */
+  accounts?: { ofId(id: string): Promise<{ id: string; label: string; color: string }> } | null;
+  log?: (message: string) => void;
+}
+
+/** The account logged in to the configuration folder of the live process: label and color, as the rest of the /ui shows it. */
+export interface MessagingAccount {
+  id: string;
+  label: string;
+  color: string;
 }
 
 export type MessagingRoute = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
@@ -59,6 +69,10 @@ export interface MessagingAvailabilityBody {
   reason: UnavailableReason | null;
   entrypoint: string | null;
   remoteControl: boolean;
+  /** The name (never the path) of the configuration folder whose `sessions/` listed the live process: `.claude`, `.claude-team`. */
+  configDir: string | null;
+  /** The account logged in to that folder; `null` when unknown or not available. */
+  account: MessagingAccount | null;
   processes: number;
   inFlight: string | null;
   /** The session is blocked on a person (a permission, a question or a plan): a message does not answer it. */
@@ -110,7 +124,17 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   send(res, 413, { error: 'Mensagem grande demais: até 16 KiB.' });
 }
 
-export function createMessagingRoute({ messaging, sessions }: MessagingRouteOptions): MessagingRoute {
+export function createMessagingRoute({ messaging, sessions, accounts = null, log = () => {} }: MessagingRouteOptions): MessagingRoute {
+  const accountOf = async (id: string | null): Promise<MessagingAccount | null> => {
+    if (id === null || !accounts) return null;
+    try {
+      const { label, color } = await accounts.ofId(id);
+      return { id, label, color };
+    } catch (e) {
+      log(`messaging: cannot read the account label (${(e as Error)?.name ?? 'error'})`);
+      return null;
+    }
+  };
   return async (req, res, url) => {
     const m = MESSAGING_ROUTE.exec(url.pathname)!;
     const sessionId = safeDecode(m[1]);
@@ -166,8 +190,20 @@ export function createMessagingRoute({ messaging, sessions }: MessagingRouteOpti
     const otherMachine = machine !== null && machine !== LOCAL_MACHINE_ID;
     // A session of another machine is not in this core's store (#243): its id comes with `?machine=`.
     if (!session && !otherMachine) return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
-    const a = await messaging.availability(sessionId, { otherMachine });
-    const answer: MessagingAvailabilityBody = { version: 1, sessionId, ...a, blockedOnPerson: session?.awaitingReason === 'notification' };
+    const { accountId, ...a } = await messaging.availability(sessionId, { otherMachine });
+    const answer: MessagingAvailabilityBody = {
+      version: 1,
+      sessionId,
+      available: a.available,
+      reason: a.reason,
+      entrypoint: a.entrypoint,
+      remoteControl: a.remoteControl,
+      configDir: a.configDir,
+      account: await accountOf(accountId),
+      processes: a.processes,
+      inFlight: a.inFlight,
+      blockedOnPerson: session?.awaitingReason === 'notification',
+    };
     send(res, 200, answer);
   };
 }

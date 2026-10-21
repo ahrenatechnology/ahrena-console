@@ -115,6 +115,12 @@ export class Accounts {
     return this.build(candidates[0].id, candidates[0].source);
   }
 
+  /** The account with this id as a profile folder knows it (`profile`), with the same label and color as everywhere. */
+  async ofId(id: string): Promise<PanelAccount> {
+    await this.refresh();
+    return this.build(id, 'profile');
+  }
+
   /** The account's label and color: the label file, then the port's account, then "conta N". */
   private build(id: string, source: AccountSource): PanelAccount {
     if (!this.order.includes(id)) this.order.push(id);

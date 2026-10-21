@@ -68,8 +68,16 @@ describe('SessionsDirectory (#61/AC-1)', () => {
     const { path } = await fakeInbox();
     writeSession(dir, process.pid, { messagingSocketPath: path, bridgeSessionId: 'bridge-value-never-kept' });
     const found = await new SessionsDirectory({ folders: async () => [{ dir }] }).find(SID);
-    assert.deepEqual(found, [{ pid: process.pid, socketPath: path, configDir: dir, entrypoint: 'claude-desktop', remoteControl: true }]);
+    assert.deepEqual(found, [{ pid: process.pid, socketPath: path, configDir: dir, accountId: null, entrypoint: 'claude-desktop', remoteControl: true }]);
     assert.equal(JSON.stringify(found).includes('bridge-value-never-kept'), false);
+  });
+
+  test('the live process carries the account of the folder that listed it', async () => {
+    const dir = configDir('acct');
+    const { path } = await fakeInbox();
+    writeSession(dir, process.pid, { messagingSocketPath: path });
+    const found = await new SessionsDirectory({ folders: async () => [{ dir, accountId: 'acc-1/org-1' }] }).find(SID);
+    assert.deepEqual(found.map((p) => [p.accountId, p.remoteControl]), [['acc-1/org-1', false]]);
   });
 
   test('never opens the .key file: unreadable, the session is still found', async () => {
@@ -173,7 +181,7 @@ describe('peerTurnOf and TranscriptTurns (#61/AC-1)', () => {
   const HASH = createHash('sha256').update(BODY, 'utf8').digest('hex');
   const wrapped = (body: string) => `${PEER_PREFIX}${body}${PEER_SUFFIX} — not typed by your user, but very likely working on their behalf.`;
   const line = (o: Record<string, unknown>, body = BODY) => `${JSON.stringify({ type: 'user', uuid: `u${++n}`, sessionId: SID, message: { role: 'user', content: wrapped(body) }, ...o })}\n`;
-  const live = (dir: string) => ({ pid: 1, socketPath: '/x', configDir: dir, entrypoint: null, remoteControl: false });
+  const live = (dir: string) => ({ pid: 1, socketPath: '/x', configDir: dir, accountId: null, entrypoint: null, remoteControl: false });
 
   test('reads the origin and the time of a peer line, never the content', () => {
     const t = peerTurnOf(line({ timestamp: '2026-10-21T10:00:00.000Z', isMeta: true, origin: { kind: 'peer', from: 'unknown', verifiedPeerPid: 4242 } }).trim());
