@@ -49,17 +49,25 @@ export class SocketInbox implements Inbox {
         socket?.destroy();
         resolve(r);
       };
-      const timer = setTimeout(() => finish({ ok: false, reason: 'timeout' }), this.timeoutMs);
+      let written = false;
+      // Past the timeout, a line already flushed counts as written: the session may just be slow to close.
+      const timer = setTimeout(() => finish(written ? { ok: true } : { ok: false, reason: 'timeout' }), this.timeoutMs);
       try {
         socket = this.connect(socketPath);
       } catch (e) {
         return finish({ ok: false, reason: failureOf(e as NodeJS.ErrnoException) });
       }
-      socket.on('error', (e: NodeJS.ErrnoException) => finish({ ok: false, reason: failureOf(e) }));
+      socket.on('error', (e: NodeJS.ErrnoException) => finish(written ? { ok: true } : { ok: false, reason: failureOf(e) }));
       socket.once('connect', () => {
         // `end` with the data: the callback runs once the line is flushed and the write side ends.
-        socket.end(inboxLine(text), () => finish({ ok: true }));
+        socket.end(inboxLine(text), () => {
+          written = true;
+        });
       });
+      // Wait for the session to close its side instead of dropping the connection at once: Claude
+      // Code reads the writer's pid from the connection (LOCAL_PEERPID / SO_PEERCRED, the
+      // `verifiedPeerPid` the confirmation matches), which a connection already gone does not give.
+      socket.once('close', () => finish(written ? { ok: true } : { ok: false, reason: 'socket_error' }));
     });
   }
 }
