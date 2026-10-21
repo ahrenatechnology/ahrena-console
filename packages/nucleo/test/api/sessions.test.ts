@@ -11,12 +11,12 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { simulate } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
+import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute, fitRows, pageKeepingRow, roomForRows, MIN_ROWS } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
 import { findScreen } from '../../ui/screens.js';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
-const PADRAO: PedidoDeSessoes = { status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1 };
+const PADRAO: PedidoDeSessoes = { status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 };
 
 function pedir(url: string, caminho: string, headers: Record<string, string> = {}): Promise<{ status: number; corpo: string }> {
   const { hostname, port } = new URL(url);
@@ -80,6 +80,15 @@ describe('#28 GET /api/sessions com o simulador', () => {
     const alem = await listar({ pagina: 99 });
     assert.equal(alem.page, p1.pages);
     assert.ok(alem.items.length > 0);
+  });
+
+  test('#279/AC-4: perPage sets the page size, and the pages follow it', async () => {
+    const p = await listar({ perPage: 7, pagina: 2 });
+    assert.equal(p.perPage, 7);
+    assert.equal(p.items.length, 7);
+    assert.equal(p.pages, Math.ceil(sessoes.length / 7));
+    const { itens } = await tudo();
+    assert.deepEqual(p.items.map((s) => s.id), itens.slice(7, 14).map((s) => s.id));
   });
 
   test('cada pílula traz só o seu status, e as cinco somam o total', async () => {
@@ -178,6 +187,9 @@ describe('#28 GET /api/sessions com o simulador', () => {
       'direction=lado': 'direction: um de desc, asc',
       'page=0': 'page: um inteiro a partir de 1',
       'page=1.5': 'page: um inteiro a partir de 1',
+      'perPage=0': 'perPage: um inteiro de 1 a 100',
+      'perPage=101': 'perPage: um inteiro de 1 a 100',
+      'perPage=2.5': 'perPage: um inteiro de 1 a 100',
       'dir=relativo': 'dir: um caminho absoluto',
       [`search=${'x'.repeat(201)}`]: 'search grande demais',
       // The old Portuguese values are refused (#173, phase 6).
@@ -233,8 +245,33 @@ describe('#28 a tela Sessões', () => {
     const rota = listRoute({ status: 'error', search: ' a b ', dir: '/d', order: 'duration', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
-    assert.deepEqual(pedidoDeSessoes(url), { status: 'error', busca: 'a b', dir: '/d', ordem: 'duration', sentido: 'desc', pagina: 2 });
+    assert.deepEqual(pedidoDeSessoes(url), { status: 'error', busca: 'a b', dir: '/d', ordem: 'duration', sentido: 'desc', pagina: 2, perPage: 10 });
+    const sized = new URL(listRoute(stateFromQuery(''), 17), 'http://x');
+    assert.equal(pedidoDeSessoes(sized).perPage, 17, '#279: the screen sends the rows that fit');
     assert.ok(!new URL(listRoute(stateFromQuery('')), 'http://x').searchParams.has('search'));
+  });
+
+  test('#279/AC-1, AC-2: the rows that fit the window, never below 10 nor above 100', () => {
+    // 1920×1080 in the demo: rows start at 183.5 px, the area is 1080 tall with 24 px of padding.
+    const room = roomForRows({ rowsTop: 183.5, areaBottom: 1080, paddingBottom: 24, gap: 12, footerHeight: 30 });
+    assert.equal(room, 829.5);
+    assert.equal(fitRows({ available: room, rowHeight: 50 }), 16);
+    // 1100×760: fewer than 10 fit, the page keeps the old 10.
+    assert.equal(fitRows({ available: 420, rowHeight: 66 }), MIN_ROWS);
+    assert.equal(fitRows({ available: 100_000, rowHeight: 50 }), 100);
+    // Nothing measured (hidden, no style yet): the minimum, never NaN or 0.
+    assert.equal(fitRows({ available: NaN, rowHeight: 50 }), MIN_ROWS);
+    assert.equal(fitRows({ available: 800, rowHeight: 0 }), MIN_ROWS);
+    assert.equal(fitRows({ available: -50, rowHeight: 50 }), MIN_ROWS);
+  });
+
+  test('#279/AC-3: a new page size keeps the first row on screen, not the page number', () => {
+    // Page 3 of 16 starts at row 33; with 10 per page, row 33 is on page 4 (31–40).
+    assert.equal(pageKeepingRow({ page: 3, perPage: 16, nextPerPage: 10 }), 4);
+    // Page 4 of 10 starts at row 31; with 16 per page, row 31 is on page 2 (17–32).
+    assert.equal(pageKeepingRow({ page: 4, perPage: 10, nextPerPage: 16 }), 2);
+    assert.equal(pageKeepingRow({ page: 1, perPage: 10, nextPerPage: 16 }), 1);
+    assert.equal(pageKeepingRow({ page: 2, perPage: 10, nextPerPage: 10 }), 2);
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {
