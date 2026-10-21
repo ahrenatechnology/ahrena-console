@@ -2,11 +2,13 @@
 // pílulas de status e as linhas que cabem na altura da janela (issue 279; no mínimo 10). Filtro, ordem
 // e página vão para o servidor (`GET /api/sessions`, src/api/sessions.ts) e ficam na query da URL, para
 // o Voltar do Detalhe cair no mesmo lugar.
-// A linha leva ao Detalhe, `/ui/sessions/<id>`.
+// A linha leva ao Detalhe, `/ui/sessions/<id>`. The last column is the icon that opens the session
+// where it runs (C71, issue 285); its click stays in the cell and never navigates the row.
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
+import { openAction } from '../open-action.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
 // old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
@@ -152,7 +154,7 @@ export const COLUMNS = [
   ['c-agents', 'Agentes'],
   ['c-cost', 'Custo'],
   ['c-dir', 'Diretório'],
-  ['c-arrow', ''],
+  ['c-open', ''],
 ];
 
 const COLOR = /^#[0-9a-f]{3,8}$/i;
@@ -308,7 +310,8 @@ export async function mount(area, ctx) {
       el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
-      el('td', { class: 'c-muted arrow' }, icon('chevron-right')),
+      // Empty when there is nothing to open: the column keeps its width, the others stay aligned.
+      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open }, { size: 'icon', write: ctx.write })),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
