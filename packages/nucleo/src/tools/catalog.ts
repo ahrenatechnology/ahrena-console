@@ -499,7 +499,7 @@ export const CATALOG: readonly ToolEntry[] = [
         manager: 'winget',
         latest: null,
         actions: {
-          install: { steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']], timeoutSeconds: 900 },
+          install: { steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']], timeoutSeconds: 900 },
           start: { steps: [['podman', 'machine', 'start']], timeoutSeconds: 600 },
           stop: { steps: [['podman', 'machine', 'stop']], timeoutSeconds: 300 },
         },

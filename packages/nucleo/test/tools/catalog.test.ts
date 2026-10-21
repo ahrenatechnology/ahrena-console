@@ -71,7 +71,7 @@ const EXPECTED: Row[] = [
   ['container-docker-engine', 'linux', 'arm64', 'apt', 'stop', [['sudo', 'systemctl', 'stop', 'docker']], true],
   ['container-docker-rootless', 'linux', 'arm64', 'official', 'start', [['systemctl', '--user', 'start', 'docker']], false],
   ['container-docker-rootless', 'linux', 'arm64', 'official', 'stop', [['systemctl', '--user', 'stop', 'docker']], false],
-  ['container-podman', 'win32', 'arm64', 'winget', 'install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']], false],
+  ['container-podman', 'win32', 'arm64', 'winget', 'install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']], false],
   ['container-podman', 'win32', 'arm64', 'winget', 'start', [['podman', 'machine', 'start']], false],
   ['container-podman', 'win32', 'arm64', 'winget', 'stop', [['podman', 'machine', 'stop']], false],
   ...all('playwright', 'npm', 'update', [

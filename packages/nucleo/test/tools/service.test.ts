@@ -135,7 +135,7 @@ describe('#280 ToolsService.overview without a check', () => {
     const missing = (await win({}, {}).overview())!;
     assert.equal(missing.machine.os?.startsWith('Windows '), true);
     assert.equal(item(missing, 'colima').state, 'na');
-    assert.deepEqual(missing.containers.actions.map((a) => [a.id, a.steps]), [['install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']]]]);
+    assert.deepEqual(missing.containers.actions.map((a) => [a.id, a.steps]), [['install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']]]]);
     assert.equal(missing.containers.actions[0]!.blockedReason, 'no-manager');
     const podman = (await win({ 'C:\\bin\\podman.exe': 'C:\\bin\\podman.exe', 'C:\\bin\\winget.exe': 'C:\\bin\\winget.exe' }, { 'C:\\bin\\podman.exe --version': 'podman version 5.6.2\n', 'C:\\bin\\podman.exe machine inspect': '[{"Name":"podman-machine-default","State":"running"}]' }).overview())!;
     assert.deepEqual([podman.containers.runtime, podman.containers.state, podman.containers.version], ['podman', 'running', 'Podman 5.6.2']);
