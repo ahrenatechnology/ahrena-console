@@ -160,7 +160,7 @@ describe('GET /api/project', () => {
       const r = await pedir(s.api, '/api/project');
       assert.equal(r.status, 200);
       const q = r.json;
-      assert.deepEqual(Object.keys(q).sort(), ['fetchedAt', 'lanes', 'milestones', 'project', 'reason', 'source', 'stale', 'total'].sort());
+      assert.deepEqual(Object.keys(q).sort(), ['envOverride', 'fetchedAt', 'lanes', 'milestones', 'project', 'reason', 'selection', 'source', 'stale', 'total'].sort());
       assert.deepEqual(q.project, { owner: 'exemplo', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', field: 'Status' });
       assert.deepEqual(q.lanes.map((l: Raia) => [l.name, l.cards.map((c) => c.number)]), [
         ['Backlog', [80, 87, 89]],
@@ -512,7 +512,8 @@ describe('GET /api/project and POST /api/project/move: the English body', () => 
     const s = await subir({ kanban, fonte: 'demo' });
     try {
       const q = (await pedir(s.api, '/api/project')).json as QuadroDoProjeto;
-      assert.deepEqual(Object.keys(q), ['project', 'lanes', 'milestones', 'total', 'fetchedAt', 'stale', 'reason', 'source']);
+      assert.deepEqual(Object.keys(q), ['project', 'lanes', 'milestones', 'total', 'fetchedAt', 'stale', 'reason', 'source', 'selection', 'envOverride']);
+      assert.deepEqual([q.selection, q.envOverride], [{ owner: 'exemplo', number: 3, field: 'Status', from: 'demo' }, null]);
       assert.deepEqual(q.project, { owner: 'exemplo', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', field: 'Status' });
       assert.deepEqual(Object.keys(q.lanes[0]!), ['id', 'name', 'color', 'cards']);
       const card = q.lanes[2]!.cards[0]!;

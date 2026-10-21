@@ -4,6 +4,11 @@
 // | ----------------------------- | -------------------------------------------------------------- |
 // | `GET /api/project`            | The board: lanes, cards, milestones. `?refresh=1` re-reads (at least 30 s apart) |
 // | `POST /api/project/move`      | `{ itemId, optionId }`: changes the Status on GitHub and returns the board |
+// | `GET /api/project/options`    | The Projects the account sees, the selection and the env override (#241); `?refresh=1` re-reads |
+//
+// #241: the board's Project comes from the resolver (src/github/project-selection.ts):
+// `AHRENA_CONSOLE_PROJECT` > the setting chosen on the screen > the demo's > none. The board answer says
+// which (`selection.from`) and whether the env overrides the screen (`envOverride`).
 //
 // The JSON keys and the error `code` values are English since #173 phase 2b.
 //
@@ -24,10 +29,13 @@ import {
   type ProjectMoveResult,
 } from '../github/project.ts';
 import { send } from '../ingest/hooks/receiver.ts';
+import type { ProjectOptions } from '../github/project-options.ts';
+import type { ProjectEnvOverride, ResolvedProjectSelection } from '../github/project-selection.ts';
 import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './work.ts';
 
 export const PROJECT_ROUTE = '/api/project';
 export const PROJECT_MOVE_ROUTE = '/api/project/move';
+export const PROJECT_OPTIONS_ROUTE = '/api/project/options';
 /** O comando que dá ao token do `gh` o escopo `project`. */
 export const COMANDO_DO_ESCOPO = 'gh auth refresh -s project';
 
@@ -51,6 +59,17 @@ export interface OpcoesDoProjeto {
   /** `demo` quando o kanban é o GitHub falso do simulador. */
   fonte: 'github' | 'demo';
   log?: (mensagem: string) => void;
+  /** #241: the kanban of the current selection; when given, `kanban` and `semProjeto` are not used. */
+  resolver?: ProjectKanbanResolver | null;
+  /** #241: the Projects the account sees (`GET /api/project/options`); without it, 503 `off`. */
+  options?: Pick<ProjectOptions, 'list'> | null;
+}
+
+/** What the routes use from the Project resolver (src/github/project-selection.ts). */
+export interface ProjectKanbanResolver {
+  kanban(): KanbanDoProjeto | null;
+  selection(): ResolvedProjectSelection | null;
+  envOverride(): ProjectEnvOverride | null;
 }
 
 export interface CardDoProjeto {
@@ -79,6 +98,10 @@ export interface QuadroDoProjeto {
   stale: boolean;
   reason: string | null;
   source: 'github' | 'demo';
+  /** #241: where the Project came from. */
+  selection?: ResolvedProjectSelection;
+  /** #241: `AHRENA_CONSOLE_PROJECT` overrides what the screen chose. */
+  envOverride?: ProjectEnvOverride | null;
 }
 
 /** The `code` of an error of the two routes (beside the pt-BR `error`). */
@@ -131,7 +154,7 @@ export function mesmaOrigemMovendo(req: IncomingMessage, port: number): boolean 
   return origem === `http://${host}`;
 }
 
-export const ehDoProjeto = (caminho: string) => caminho === PROJECT_ROUTE || caminho === PROJECT_MOVE_ROUTE;
+export const ehDoProjeto = (caminho: string) => caminho === PROJECT_ROUTE || caminho === PROJECT_MOVE_ROUTE || caminho === PROJECT_OPTIONS_ROUTE;
 
 type Erro = { status: number; code: ProjectErrorCode; error: string; headers?: Record<string, string>; extra?: Record<string, unknown> };
 
@@ -160,7 +183,7 @@ const DESLIGADO: Erro = { status: 503, code: 'off', error: 'o núcleo subiu sem 
 const SEM_PROJETO: Erro = {
   status: 503,
   code: 'no-project',
-  error: 'nenhum GitHub Project escolhido: suba o núcleo com AHRENA_CONSOLE_PROJECT=dono/número',
+  error: 'nenhum GitHub Project escolhido: escolha um Project na tela do Kanban do projeto',
   extra: { variable: 'AHRENA_CONSOLE_PROJECT' },
 };
 
@@ -191,16 +214,36 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 const deOutroSite = (req: IncomingMessage) => /^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''));
 
 /** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
-export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = () => {} }: OpcoesDoProjeto) {
-  const parado = semProjeto ? SEM_PROJETO : DESLIGADO;
+export function criarRotaDoProjeto({ kanban: fixo, fonte, semProjeto = false, log = () => {}, resolver = null, options = null }: OpcoesDoProjeto) {
+  const atual = () => (resolver ? resolver.kanban() : fixo);
+  const parado = () => (resolver || semProjeto ? SEM_PROJETO : DESLIGADO);
+  const origem = (kanban: KanbanDoProjeto): { selection: ResolvedProjectSelection; envOverride: ProjectEnvOverride | null } =>
+    resolver?.selection()
+      ? { selection: resolver.selection()!, envOverride: resolver.envOverride() }
+      : { selection: { ...kanban.project, from: fonte === 'demo' ? 'demo' : 'env' }, envOverride: null };
   async function ler(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (deOutroSite(req)) return send(res, 403, { error: 'origem não permitida' });
-    if (!kanban) return enviarErro(res, parado);
+    const kanban = atual();
+    if (!kanban) return enviarErro(res, parado());
     const forcar = url.searchParams.get('refresh') === '1';
     try {
-      send(res, 200, quadroDe(await kanban.board({ force: forcar }), fonte));
+      send(res, 200, { ...quadroDe(await kanban.board({ force: forcar }), fonte), ...origem(kanban) });
     } catch (err) {
       enviarErro(res, erroDe(err, kanban, 'github-down'));
+    }
+  }
+
+  async function opcoes(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (deOutroSite(req)) return send(res, 403, { error: 'origem não permitida' });
+    if (!options) return enviarErro(res, DESLIGADO);
+    try {
+      const l = await options.list({ refresh: url.searchParams.get('refresh') === '1' });
+      send(res, 200, { projects: l.projects, selection: resolver?.selection() ?? null, envOverride: resolver?.envOverride() ?? null, fetchedAt: l.fetchedAt, stale: l.stale, reason: l.reason });
+    } catch (err) {
+      const causa = err instanceof NoDataError ? err.cause : err;
+      if (causa instanceof RateLimitedError) return enviarErro(res, { status: 429, code: 'rate-limited', error: 'o GitHub limitou as chamadas; tente de novo em instantes', headers: { 'retry-after': segundos(causa.retryAfterMs) } });
+      const motivo = causa instanceof Error ? causa.message : String(causa);
+      enviarErro(res, { status: 502, code: 'github-down', error: `o GitHub não respondeu e não há lista no cache: ${motivo}` });
     }
   }
 
@@ -223,11 +266,12 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
     const optionId = corpo?.optionId;
     if (typeof itemId !== 'string' || !ITEM.test(itemId)) return send(res, 400, { error: 'itemId inválido: o id do item no Project (PVTI_…)', code: 'invalid' });
     if (typeof optionId !== 'string' || !OPCAO.test(optionId)) return send(res, 400, { error: 'optionId inválido: o id da raia de destino', code: 'invalid' });
-    if (!kanban) return enviarErro(res, parado);
+    const kanban = atual();
+    if (!kanban) return enviarErro(res, parado());
     try {
       const r = await kanban.move(itemId, optionId);
       log(`projeto: ${itemId} de ${r.moved.from ?? 'sem status'} para ${r.moved.to ?? 'sem status'}`);
-      send(res, 200, { board: quadroDe(r, fonte), moved: { itemId: r.moved.itemId, from: r.moved.from, to: r.moved.to } });
+      send(res, 200, { board: { ...quadroDe(r, fonte), ...origem(kanban) }, moved: { itemId: r.moved.itemId, from: r.moved.from, to: r.moved.to } });
     } catch (err) {
       enviarErro(res, erroDe(err, kanban, 'github-refused'));
     }
@@ -239,6 +283,7 @@ export function criarRotaDoProjeto({ kanban, fonte, semProjeto = false, log = ()
       return mover(req, res);
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET', code: 'invalid' });
+    if (url.pathname === PROJECT_OPTIONS_ROUTE) return opcoes(req, res, url);
     return ler(req, res, url);
   };
 }

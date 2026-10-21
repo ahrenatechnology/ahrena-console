@@ -34,6 +34,16 @@
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
+// | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
+// | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
+// | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
+// | `POST /api/project/selection` | Stores the chosen Project: `{ owner, number, field? }` (#241) |
+//
+// #241 (decision 0011 §6): the five writes `POST /api/connections/github/(start|cancel|disconnect|source)`
+// and `POST /api/project/selection` are accepted ONLY from the /ui itself: exact path, our Host, `Origin`
+// exactly `http://<Host>`, JSON, at most 4 KiB, no cross-site or same-site `Sec-Fetch-Site`. A request
+// without `Origin` is 403 there, unlike the other writes. While GitHub is not connected, every
+// GitHub-backed screen route answers 409 `{ "error": "github-not-connected" }` without calling GitHub.
 //
 // The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
 // aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
@@ -90,6 +100,8 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
+import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
 
@@ -155,6 +167,31 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
+  /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
+  connection?: GithubConnection | null;
+  /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
+  projectSelection?: ProjectSelectionTarget | null;
+  /**
+   * #241: whether GitHub is connected (the connection's `connected()`, no network). When given and false,
+   * every GitHub-backed screen route answers 409 `github-not-connected` before any GitHub call. Not
+   * given under --no-github, so those routes keep their `off` / `no-github` answers.
+   */
+  githubConnected?: (() => Promise<boolean>) | null;
+}
+
+/** The GitHub-backed screen routes the 409 `github-not-connected` gate covers (#241). */
+export function isGithubScreenRoute(pathname: string): boolean {
+  const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  return (
+    under(REPOS_ROUTE) ||
+    pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`) ||
+    under(ADRS_ROUTE) ||
+    under(PDRS_ROUTE) ||
+    pathname === DEV_CONSOLE_ROUTE ||
+    (ehDoProjeto(pathname)) ||
+    pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`) ||
+    pathname === '/api/analytics/delivery'
+  );
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -328,7 +365,16 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    // #241: the five writes only the /ui itself makes, checked before anything else.
+    if (STRICT_WRITE_ROUTES.has(url.pathname)) {
+      const refusal = strictWriteRefusal(req, port, url.pathname);
+      if (refusal) return send(res, refusal.status, refusal.body);
+      if (url.pathname === PROJECT_SELECTION_ROUTE) return respondProjectSelection(req, res, opts.projectSelection ?? null);
+      if (!opts.connection) return send(res, 404, { error: 'not-found' });
+      return respondConnections(req, res, url.pathname, opts.connection);
+    }
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
@@ -339,6 +385,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return decide(req, res, decodeURIComponent(actionMatch[1]!), DECISION_ACTIONS[actionMatch[2]!]!, url);
     }
     if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
+    if (url.pathname === CONNECTIONS_ROUTE && opts.connection) return respondConnections(req, res, url.pathname, opts.connection);
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
