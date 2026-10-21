@@ -274,10 +274,12 @@ export class ToolsExecutor implements ToolsControl {
     if (!p) {
       p = this.o.service.check(machine);
       this.checks.set(machine, p);
-      p.catch(() => null).finally(() => {
-        this.checks.delete(machine);
-        this.changed(machine);
-      });
+      void p
+        .catch(() => null)
+        .then((body) => {
+          this.checks.delete(machine);
+          if (body) this.changed(machine);
+        });
     }
     let timer: ReturnType<typeof setTimeout> | null = null;
     const waited = await Promise.race([

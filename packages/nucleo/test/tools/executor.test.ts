@@ -294,6 +294,29 @@ describe('#280 ToolsExecutor', () => {
     assert.equal(out.includes('$ brew upgrade gh'), false, 'the oldest lines left');
   });
 
+  test('Verificar agora: a slow check answers `running` with the current body, one check at a time, a change when it ends', async () => {
+    const { host } = fakeHost({});
+    let calls = 0;
+    let finish: (b: ToolsOverview) => void = () => {};
+    host.check = () => {
+      calls++;
+      return new Promise((r) => (finish = r));
+    };
+    const changes: string[] = [];
+    const executor = new ToolsExecutor({ service: host, logFile: join(dir, 'check.log'), checkWaitMs: 5, onChange: (m) => changes.push(m) });
+    const [a, b] = await Promise.all([executor.checkNow('local'), executor.checkNow('local')]);
+    assert.deepEqual([a.kind, b.kind, calls], ['running', 'running', 1]);
+    assert.deepEqual(changes, []);
+    finish({ version: 1 } as unknown as ToolsOverview);
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(changes, ['local']);
+    const done = await (async () => {
+      host.check = async () => ({ version: 1 }) as unknown as ToolsOverview;
+      return executor.checkNow('local');
+    })();
+    assert.equal(done.kind, 'done');
+  });
+
   test('a `tools` change keyed by the machine on each transition; MCP does not expose the type', async () => {
     const { executor, sp, changes } = boot({ 'gh update': action([['brew', 'upgrade', 'gh']]) });
     await executor.act('local', 'gh', 'update', '0123456789abcdef');
