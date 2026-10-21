@@ -89,7 +89,7 @@ const MAC_ROWS: Row[] = [
   ['jq', 'jq', 'cli', 'jq', 'Homebrew', '1.8.1', '1.8.1', 'homebrew', 'ok', null, []],
   ['rg', 'ripgrep', 'cli', 'rg', 'Homebrew', '15.1.0', '15.1.0', 'homebrew', 'ok', null, []],
   ['node', 'Node.js', 'runtime', 'node', 'fnm', '24.10.0', '24.11.0', 'fnm', 'outdated', 'LTS 24 · a 22 também está instalada', [{ id: 'update', steps: [['fnm', 'install', '24.11.0'], ['fnm', 'default', '24.11.0']], targetVersion: '24.11.0' }]],
-  ['typescript', 'TypeScript', 'runtime', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'npm', 'ok', 'o de cada projeto fica no package.json dele', []],
+  ['tsc', 'TypeScript', 'runtime', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'npm', 'ok', 'o de cada projeto fica no package.json dele', []],
   ['python', 'Python', 'runtime', 'python3', 'uv · também pyenv (3.11.9)', '3.13.9', '3.14.0', 'uv', 'outdated', 'não troca o Python dos projetos', [{ id: 'update', steps: [['uv', 'python', 'install', '3.14.0']], targetVersion: '3.14.0' }]],
   ['rust', 'Rust', 'runtime', 'rustc', 'rustup · stable', '1.91.0', '1.91.0', 'rustup', 'ok', 'cargo 1.91.0', []],
   ['go', 'Go', 'runtime', 'go', 'Homebrew', '1.25.3', '1.25.3', 'homebrew', 'ok', 'o toolchain do go.mod baixa sozinho', []],
@@ -108,7 +108,7 @@ const WS_ROWS: Row[] = [
   ['jq', 'jq', 'cli', 'jq', 'apt · Ubuntu', '1.7.1', '1.7.1', 'apt', 'ok', null, []],
   ['rg', 'ripgrep', 'cli', 'rg', 'apt · Ubuntu', '14.1.0', '14.1.0', 'apt', 'ok', null, []],
   ['node', 'Node.js', 'runtime', 'node', 'fnm', '24.11.0', '24.11.0', 'fnm', 'ok', 'LTS 24', []],
-  ['typescript', 'TypeScript', 'runtime', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'npm', 'ok', 'o de cada projeto fica no package.json dele', []],
+  ['tsc', 'TypeScript', 'runtime', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'npm', 'ok', 'o de cada projeto fica no package.json dele', []],
   ['python', 'Python', 'runtime', 'python3', 'uv', '3.14.0', '3.14.0', 'uv', 'ok', 'o python3 do Ubuntu (3.12) fica para o sistema', []],
   ['rust', 'Rust', 'runtime', 'rustc', 'rustup · stable', '1.90.0', '1.91.0', 'rustup', 'outdated', 'cargo 1.90.0', [{ id: 'update', steps: [['rustup', 'update', 'stable']], timeoutSeconds: 900, targetVersion: '1.91.0' }]],
   ['go', 'Go', 'runtime', 'go', 'tarball oficial em /usr/local/go', '1.25.1', '1.25.3', 'official', 'manual', 'em /usr/local, do root', [{ id: 'update', steps: [['sudo', 'rm', '-rf', '/usr/local/go'], ['sudo', 'tar', '-C', '/usr/local', '-xzf', 'go1.25.3.linux-amd64.tar.gz']], admin: true, targetVersion: '1.25.3' }]],
@@ -125,7 +125,7 @@ function mcpServers(machine: string, gate: { allowed: boolean; offline: boolean;
     latest: '0.0.43',
     actions: remote
       ? []
-      : [action(machine, 'mcp:playwright', 'npm', { id: 'update', targetVersion: '0.0.43', steps: [['claude', 'mcp', 'remove', '-s', 'user', 'playwright'], ['claude', 'mcp', 'add', '-s', 'user', 'playwright', '--', 'npx', '-y', '@playwright/mcp@0.0.43']] }, gate)],
+      : [action(machine, 'playwright', 'npm', { id: 'update', targetVersion: '0.0.43', steps: [['claude', 'mcp', 'remove', '-s', 'user', 'playwright'], ['claude', 'mcp', 'add', '-s', 'user', 'playwright', '--', 'npx', '-y', '@playwright/mcp@0.0.43']] }, gate)],
   });
   const own = server({ id: 'ahrena-console', name: 'ahrena-console', command: 'ahrena-console', version: '0.0.32', note: 'este app · atualiza junto com ele' });
   const github = server({ id: 'github', name: 'github', transport: 'http', host: 'api.githubcopilot.com', headerCount: 1, headerNames: ['Authorization'] });
@@ -208,7 +208,7 @@ function containersOf(scenario: ToolsDemoScenario, machine: string, gate: { allo
     const stopped = scenario === 'linux-engine-stopped';
     return {
       ...base,
-      id: 'docker-engine',
+      toolId: 'container-docker-engine',
       runtime: 'docker-engine',
       state: stopped ? 'stopped' : 'running',
       version: 'Docker Engine 28.5.1 · systemd · containerd 2.1',
@@ -217,36 +217,36 @@ function containersOf(scenario: ToolsDemoScenario, machine: string, gate: { allo
       note: stopped
         ? 'O serviço é do sistema: iniciar pede sudo, e o console não roda sudo. Docker sem root (rootless) é a alternativa que dispensa a senha.'
         : null,
-      actions: [action(machine, 'docker-engine', 'apt', stopped ? { id: 'start', steps: [['sudo', 'systemctl', 'start', 'docker']], admin: true } : { id: 'stop', steps: [['sudo', 'systemctl', 'stop', 'docker']], admin: true }, gate)],
+      actions: [action(machine, 'container-docker-engine', 'apt', stopped ? { id: 'start', steps: [['sudo', 'systemctl', 'start', 'docker']], admin: true } : { id: 'stop', steps: [['sudo', 'systemctl', 'stop', 'docker']], admin: true }, gate)],
     };
   }
   if (scenario === 'windows-no-winget') {
     return {
       ...base,
-      id: 'podman-desktop',
+      toolId: 'container-podman',
       runtime: null,
       state: 'missing',
       version: null,
       note: 'O Docker Desktop é comum, mas pede licença paga em empresa maior. O Podman Desktop é código aberto, e o docker continua funcionando pelo socket compatível. Ligar o WSL 2 pede administrador: se faltar, a tela mostra o comando.',
       detected: [{ runtime: 'docker-desktop', version: '4.48', state: 'running' }],
-      actions: [action(machine, 'podman-desktop', 'winget', { id: 'install', steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']] }, gate)],
+      actions: [action(machine, 'container-podman', 'winget', { id: 'install', steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']] }, gate)],
     };
   }
   if (scenario === 'no-runtime') {
     return {
       ...base,
-      id: 'colima',
+      toolId: 'container-colima',
       runtime: null,
       state: 'missing',
       version: null,
       note: 'A proposta é o Colima com o Docker CLI: código aberto e sem licença por empresa. Achamos o Docker Desktop? O console mostra o estado dele, mas não o inicia nem o atualiza.',
-      actions: [action(machine, 'colima', 'homebrew', { id: 'install', steps: [['brew', 'install', 'colima', 'docker']] }, gate)],
+      actions: [action(machine, 'container-colima', 'homebrew', { id: 'install', steps: [['brew', 'install', 'colima', 'docker']] }, gate)],
     };
   }
   const state = scenario === 'colima-stopped' ? 'stopped' : scenario === 'colima-starting' ? 'starting' : 'running';
   return {
     ...base,
-    id: 'colima',
+    toolId: 'container-colima',
     runtime: 'colima',
     state,
     version: 'Colima 0.9.1 · Docker CLI 28.5.1 · perfil default',
@@ -254,7 +254,7 @@ function containersOf(scenario: ToolsDemoScenario, machine: string, gate: { allo
     diskUsedBytes: 31 * GB,
     dockerContext: 'colima',
     containers: state === 'running' ? { running: 3, stopped: 5 } : { running: 0, stopped: 8 },
-    actions: state === 'starting' ? [] : [action(machine, 'colima', 'homebrew', state === 'running' ? { id: 'stop', steps: [['colima', 'stop']], timeoutSeconds: 180 } : { id: 'start', steps: [['colima', 'start']], timeoutSeconds: 180 }, gate)],
+    actions: state === 'starting' ? [] : [action(machine, 'container-colima', 'homebrew', state === 'running' ? { id: 'stop', steps: [['colima', 'stop']], timeoutSeconds: 180 } : { id: 'start', steps: [['colima', 'start']], timeoutSeconds: 180 }, gate)],
     ...(state === 'starting' ? { startingJob: true, at: now } : {}),
   };
 }
@@ -323,9 +323,9 @@ export function createToolsDemo({ scenario = 'default', now = () => Date.now() }
     const item = items.find((i) => i.id === toolId);
     if (item) return item;
     const c = body.containers as Json;
-    if (c?.id === toolId) return c;
+    if (c?.toolId === toolId) return c;
     const mcp = (body.mcp as Json).servers as Json[];
-    return mcp.find((s) => `mcp:${s.id}` === toolId) ?? null;
+    return mcp.find((s) => s.id === toolId) ?? null;
   };
 
   function finish(machine: string, job: DemoJob, at: number) {
@@ -342,7 +342,7 @@ export function createToolsDemo({ scenario = 'default', now = () => Date.now() }
       const running = job.actionId === 'start';
       target.state = running ? 'running' : 'stopped';
       target.containers = running ? { running: 3, stopped: 5 } : { running: 0, stopped: 8 };
-      target.actions = [action(machine, String(target.id), 'homebrew', running ? { id: 'stop', steps: [['colima', 'stop']], timeoutSeconds: 180 } : { id: 'start', steps: [['colima', 'start']], timeoutSeconds: 180 }, { allowed: true, offline: false, noManager: false })];
+      target.actions = [action(machine, String(target.toolId), 'homebrew', running ? { id: 'stop', steps: [['colima', 'stop']], timeoutSeconds: 180 } : { id: 'start', steps: [['colima', 'start']], timeoutSeconds: 180 }, { allowed: true, offline: false, noManager: false })];
     } else if (target) {
       target.version = job.targetVersion;
       target.actions = [];
@@ -363,7 +363,7 @@ export function createToolsDemo({ scenario = 'default', now = () => Date.now() }
         q.current = next;
         const body = bodyOf(machine)!;
         const c = body.containers as Json;
-        if (c?.id === next.toolId && next.actionId === 'start') c.state = 'starting';
+        if (c?.toolId === next.toolId && next.actionId === 'start') c.state = 'starting';
       }
       const job = q.current;
       const started = Date.parse(job.startedAt!);
