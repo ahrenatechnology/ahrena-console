@@ -17,6 +17,8 @@ export const CONNECTIONS_ROUTE = '/api/connections';
 export const CONNECTIONS_UI = '/ui/connections';
 /** Conexões starting the device flow at once (the C42 button). */
 export const CONNECT_UI = '/ui/connections?start=1';
+/** The history state the C42 button navigates with: only it lets `?start=1` start a flow (the review of issue 241). */
+export const CONNECT_STATE = Object.freeze({ startConnect: true });
 export const GITHUB_NOT_CONNECTED = 'github-not-connected';
 
 /** The read or write failed because the console is not connected to GitHub (409 `github-not-connected`). */
@@ -57,7 +59,7 @@ export const CONNECT_TEXT = {
  * already with the code. `navigate` is the shell's (`ctx.navigate`).
  */
 export function connectEmpty({ what, navigate }) {
-  const go = () => navigate(CONNECT_UI);
+  const go = () => navigate(CONNECT_UI, CONNECT_STATE);
   return el(
     'section',
     { class: 'card state center ghc-empty', 'data-github': 'not-connected' },

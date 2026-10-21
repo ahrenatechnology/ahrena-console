@@ -44,7 +44,8 @@ describe('github-connect.js: the pure parts', () => {
 
   test('the empty state: the screen sentence, one button to /ui/connections?start=1 and the note', () => {
     const went: string[] = [];
-    const node = gc.connectEmptyFor('repos', (r: string) => went.push(r));
+    const states: unknown[] = [];
+    const node = gc.connectEmptyFor('repos', (r: string, state?: unknown) => (went.push(r), states.push(state)));
     assert.equal(texto(node.querySelector('h2')), 'Conecte o console ao GitHub');
     assert.equal(texto(node.querySelector('.ghc-what')), gc.CONNECT_TEXT.repos);
     assert.match(texto(node.querySelector('.ghc-note')), /^Uma vez para todas as telas\. Abre Conexões já com o código/);
@@ -52,6 +53,7 @@ describe('github-connect.js: the pure parts', () => {
     assert.equal(texto(b), 'Conectar ao GitHub');
     b.click();
     assert.deepEqual(went, ['/ui/connections?start=1']);
+    assert.deepEqual(states, [{ startConnect: true }], 'the history state that lets Conexões start the flow');
   });
 
   test('the footer says "GitHub · conectar", "esperando" or "<login> · conectado" (ghFooter)', () => {

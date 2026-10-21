@@ -12,7 +12,7 @@ const here = { pathname: '/ui/connections', search: '' };
 const replaced: string[] = [];
 Object.assign(globalThis, {
   location: here,
-  history: { state: null, replaceState: (_s: unknown, _t: string, url: string) => (replaced.push(url), (here.search = new URL(url, 'http://x').search)) },
+  history: { state: null as unknown, replaceState(s: unknown, _t: string, url: string) { this.state = s; replaced.push(url); here.search = new URL(url, 'http://x').search; } },
 });
 
 // @ts-expect-error: browser module, plain JavaScript
@@ -51,8 +51,9 @@ interface Mounted {
 const open: Mounted[] = [];
 afterEach(() => open.splice(0).forEach((m) => m.leave()));
 
-async function mountWith({ read, write, search = '' }: { read: (route: string) => Promise<unknown>; write?: (route: string, body: unknown) => Promise<unknown>; search?: string }): Promise<Mounted> {
+async function mountWith({ read, write, search = '', state = null }: { read: (route: string) => Promise<unknown>; write?: (route: string, body: unknown) => Promise<unknown>; search?: string; state?: unknown }): Promise<Mounted> {
   here.search = search;
+  (globalThis as unknown as { history: { state: unknown } }).history.state = state;
   replaced.length = 0;
   const area = new ElementoFalso('main');
   const reads: string[] = [];
@@ -422,7 +423,7 @@ describe('Conexões: state (live, poll, countdown, ?start=1)', () => {
   });
 
   test('?start=1 (the C42 button) starts the flow once and takes the flag out of the URL', async () => {
-    const m = await mountWith({ read: answer(disconnected()), write: async () => ({ github: pending() }), search: '?start=1' });
+    const m = await mountWith({ read: answer(disconnected()), write: async () => ({ github: pending() }), search: '?start=1', state: { startConnect: true } });
     assert.deepEqual(m.writes, [{ route: START_ROUTE, body: {} }]);
     assert.deepEqual(replaced, ['/ui/connections']);
     assert.equal(card(m).getAttribute('data-state'), 'pending');
@@ -430,8 +431,15 @@ describe('Conexões: state (live, poll, countdown, ?start=1)', () => {
 
   test('?start=1 when already connected or pending writes nothing', async () => {
     for (const github of [connected(), pending(), unavailable('no-client-id')]) {
-      const m = await mountWith({ read: answer(github), search: '?start=1' });
+      const m = await mountWith({ read: answer(github), search: '?start=1', state: { startConnect: true } });
       assert.deepEqual(m.writes, [], String(github.state));
     }
+  });
+
+  test('?start=1 on a cold load (a link another site opened, no history state) starts nothing', async () => {
+    const m = await mountWith({ read: answer(disconnected()), write: async () => ({ github: pending() }), search: '?start=1' });
+    assert.deepEqual(m.writes, []);
+    assert.deepEqual(replaced, ['/ui/connections'], 'the flag still leaves the URL');
+    assert.equal(card(m).getAttribute('data-state'), 'disconnected');
   });
 });

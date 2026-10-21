@@ -94,8 +94,10 @@ let leaving = null;
 let screenFailed = false;
 
 // `route` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
-function navigate(route) {
-  if (route !== location.pathname + location.search) history.pushState(null, '', route);
+// `state` goes into the history entry: a screen can tell a navigation from this page apart from a link
+// another site opened (Conexões starts the device flow only on the C42 button's state).
+function navigate(route, state = null) {
+  if (state || route !== location.pathname + location.search) history.pushState(state, '', route);
   open();
 }
 

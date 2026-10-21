@@ -508,11 +508,13 @@ export async function mount(area, ctx) {
   area.replaceChildren(head, loading({ label: 'Lendo a conexão' }));
   await read();
 
-  // The C42 button lands here with `?start=1`: start the flow once, and take the flag out of the URL.
+  // The C42 button lands here with `?start=1` and its history state: start the flow once, and take the
+  // flag out of the URL. A cold load with the flag (a link another site opened) only shows the screen.
   const query = new URLSearchParams(globalThis.location?.search ?? '');
   if (query.get('start') === '1') {
-    globalThis.history?.replaceState?.(globalThis.history.state ?? null, '', CONNECTIONS_UI);
-    if (github?.state === 'disconnected' && github.source !== 'gh') await start();
+    const fromButton = globalThis.history?.state?.startConnect === true;
+    globalThis.history?.replaceState?.(null, '', CONNECTIONS_UI);
+    if (fromButton && github?.state === 'disconnected' && github.source !== 'gh') await start();
   }
 
   return () => {
