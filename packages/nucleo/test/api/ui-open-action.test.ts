@@ -416,6 +416,12 @@ describe('Sessions: the open icon in the row (C71)', () => {
   test('monitor, terminal and square terminal by target; none leaves the cell empty; the click opens without navigating the row', async () => {
     // Sessões measures the window to fit its rows (issue 279): a ResizeObserver that never fires is enough here.
     Object.assign(globalThis, { location: { hash: '', pathname: '/ui/sessions', search: '' }, history: { replaceState() {} }, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } });
+    // Sessões waits for its stylesheet before the first read (issue 279); the fake DOM never loads it, so the sheet is already there.
+    if (!documentoFalso.querySelector('link[data-screen="sessions"]')) {
+      const sheet = documentoFalso.createElement('link');
+      sheet.setAttribute('data-screen', 'sessions');
+      documentoFalso.head.append(sheet);
+    }
     // @ts-expect-error: browser module, plain JavaScript
     const { mount } = await import('../../ui/screens/sessions.js');
     const area = documentoFalso.createElement('main');
