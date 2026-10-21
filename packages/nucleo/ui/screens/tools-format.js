@@ -514,7 +514,7 @@ export function confirmView(o, target, action, { changed = false } = {}) {
 /** The confirm of "Atualizar N": every command, in the order they will run. */
 export function bulkConfirmView(o, list) {
   const remote = isRemote(o);
-  const left = o.items.filter((i) => (i.group === 'cli' || i.group === 'runtime') && i.state === 'outdated' && mainAction(i)?.admin);
+  const left = o.items.filter((i) => (i.group === 'cli' || i.group === 'runtime') && i.latest && i.installed && i.latest !== i.installed && mainAction(i)?.admin);
   return {
     title: `Atualizar ${plural(list.length, 'item', 'itens')}${remote ? ` na ${o.machine.label}` : ''}`,
     rows: [

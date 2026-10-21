@@ -554,6 +554,14 @@ export async function mount(area, ctx) {
     for (const s of servers) {
       const a = mcpAction(data, s, now(), { frozen });
       const key = `mcp:${s.id}`;
+      if (remote) {
+        // The remote's list is short and sits in one column at 1100 (C75): name, a line, the state.
+        const cell = a.kind === 'none' ? null : actionCell(s, a, key);
+        rows.push(el('tr', { 'data-mcp': s.id }, el('td', { class: 'tl-name' }, el('div', {}, el('b', {}, s.name), el('small', {}, [s.transport, mcpSource(s)].join(' · ')))), el('td', { class: 'tl-r' }, el('div', { class: 'tl-cell-end' }, badge(mcpBadge(s)), cell))));
+        const extra = extraRow(s, a, 2, key);
+        if (extra) rows.push(extra);
+        continue;
+      }
       rows.push(
         el(
           'tr',
@@ -568,7 +576,7 @@ export async function mount(area, ctx) {
       const extra = extraRow(s, a, 5, key);
       if (extra) rows.push(extra);
     }
-    const table = el('table', { class: 'tl-table tl-cols-mcp' }, el('thead', {}, el('tr', {}, ...['Servidor', 'Escopo · transporte', 'De onde', 'Estado'].map((h) => el('th', {}, h)), el('th', { class: 'tl-r' }, 'Ação'))), el('tbody', {}, ...rows));
+    const table = remote ? el('table', { class: 'tl-table tl-cols-mcp-remote' }, el('tbody', {}, ...rows)) : el('table', { class: 'tl-table tl-cols-mcp' }, el('thead', {}, el('tr', {}, ...['Servidor', 'Escopo · transporte', 'De onde', 'Estado'].map((h) => el('th', {}, h)), el('th', { class: 'tl-r' }, 'Ação'))), el('tbody', {}, ...rows));
     return card('plug', remote ? 'Servidores MCP lá' : 'Servidores MCP do Claude Code', parts, servers.length ? table : el('p', { class: 'tl-muted' }, 'Nenhum servidor MCP configurado no Claude Code.'), remote ? 'tl-mcp tl-mcp-remote' : 'tl-mcp tl-span-full');
   }
 
