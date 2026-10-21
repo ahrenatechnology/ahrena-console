@@ -303,28 +303,35 @@ describe('#28 a tela Sessões', () => {
   });
 
   // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),
-  // a tabela tem 830 px; abaixo de 900 px de janela, 610 px e sem o Diretório. Cada coluna precisa
-  // do mínimo que o texto mais largo dela pede (medido no navegador), senão corta ou rola.
-  test('a tabela cabe em 1100 px sem rolagem horizontal, e abaixo de 900 px sem o Diretório', () => {
+  // a tabela tem 830 px; abaixo de 900 px de janela, 610 px. Cada coluna precisa do mínimo que o texto
+  // mais largo dela pede (medido no navegador), senão corta ou rola. #61 (C53): the Mensagem column
+  // takes the room of the Diretório and of the arrow up to 1240 px of window (971 px of table above
+  // it); below 900 px it keeps only the icon.
+  test('a tabela cabe em 1100 px sem rolagem horizontal; até 1240 px a Mensagem toma o lugar do Diretório e da seta, e abaixo de 900 px fica só o ícone', () => {
     const css = readFileSync(`${UI_FOLDER}sessions.css`, 'utf8');
+    const medio = css.indexOf('@media (max-width: 1240px)');
     const corte = css.indexOf('@media (max-width: 900px)');
-    assert.ok(corte > 0, 'falta a faixa de 900 px');
+    assert.ok(medio > 0 && corte > medio, 'faltam as faixas de 1240 e de 900 px');
     const larguras = (trecho: string) => Object.fromEntries([...trecho.matchAll(/\.table \.(c-[a-z]+) \{ width: (\d+)%; \}/g)].map(([, c, w]) => [c!, Number(w)]));
-    const largas = larguras(css.slice(0, corte));
-    const estreitas = { ...largas, ...larguras(css.slice(corte)) };
+    const largas = larguras(css.slice(0, medio));
+    const medias = { ...largas, ...larguras(css.slice(medio, corte)) };
+    const estreitas = { ...medias, ...larguras(css.slice(corte)) };
     const classes = COLUMNS.map(([c]: [string]) => c);
+    const semDiretorio = classes.filter((c: string) => c !== 'c-dir' && c !== 'c-arrow');
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
-    assert.equal(classes.filter((c: string) => c !== 'c-dir').reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'sem o Diretório, o resto soma 100');
+    assert.equal(semDiretorio.reduce((t: number, c: string) => t + medias[c]!, 0), 100, 'sem o Diretório e a seta, o resto soma 100');
+    assert.equal(semDiretorio.reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'abaixo de 900 px também');
     assert.match(css, /\.table \{ table-layout: fixed; \}/);
-    assert.match(css.slice(corte), /\.table \.c-dir, \.table \.dir \{ display: none; \}/);
+    assert.match(css.slice(medio, corte), /\.table \.c-dir, \.table \.dir, \.table \.c-arrow, \.table \.arrow \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-arrow': 24 };
-    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
-    for (const c of classes) {
-      assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
-      if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
+    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-message': 145, 'c-arrow': 24 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80, 'c-message': 36 };
+    for (const c of classes) assert.ok((largas[c]! / 100) * 971 >= MINIMO[c]!, `${c} em 1241: ${(largas[c]! / 100) * 971} px`);
+    for (const c of semDiretorio) {
+      assert.ok((medias[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(medias[c]! / 100) * 830} px`);
+      assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
     }
   });
 

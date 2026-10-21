@@ -7,6 +7,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
+import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
 // old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
@@ -152,8 +153,21 @@ export const COLUMNS = [
   ['c-agents', 'Agentes'],
   ['c-cost', 'Custo'],
   ['c-dir', 'Diretório'],
+  ['c-message', 'Mensagem'],
   ['c-arrow', ''],
 ];
+
+/**
+ * #61: whether a row can have a live process to message. A completed session ended its process, so
+ * it is "sem processo vivo" without asking the core; the others are asked (only the rows on screen).
+ */
+export const mayHaveLiveProcess = (s) => s.status !== 'completed';
+
+/** The Mensagem cell's content: the action, "sem processo vivo", or nothing while unknown. */
+export function messageCell(s, availability, navigate) {
+  if (!mayHaveLiveProcess(s)) return el('span', { class: 'sm-none', title: 'Sem processo vivo nesta máquina' }, 'sem processo vivo');
+  return messageAction(s.id, availability, navigate);
+}
 
 const COLOR = /^#[0-9a-f]{3,8}$/i;
 const lastPart = (cwd) => cwd.replace(/\/+$/, '').split('/').pop() || cwd;
@@ -196,6 +210,7 @@ export async function mount(area, ctx) {
     sheet.loaded = new Promise((done) => (sheet.onload = sheet.onerror = done));
     document.head.append(sheet);
   }
+  useMessageStyle();
 
   let state = stateFromQuery(location.search);
   let last = null;
@@ -294,6 +309,20 @@ export async function mount(area, ctx) {
   }
 
   // ---------- tabela ----------
+  // #61: the Mensagem cell of each row on screen, filled as its availability comes back.
+  let messageCells = new Map();
+  const fillMessage = (s, td, a) => {
+    const content = messageCell(s, a, ctx.navigate);
+    td.replaceChildren(...(content ? [content] : []));
+  };
+  function askAvailability(items) {
+    const ids = items.filter(mayHaveLiveProcess).map((s) => s.id);
+    loadAvailability(ctx.read, ids, (id, a) => {
+      const cell = messageCells.get(id);
+      if (cell) fillMessage(cell.s, cell.td, a);
+    }).catch(() => {});
+  }
+
   function row(s) {
     const target = `/ui/sessions/${encodeURIComponent(s.id)}`;
     const tr = el(
@@ -308,6 +337,7 @@ export async function mount(area, ctx) {
       el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
+      messageTd(s),
       el('td', { class: 'c-muted arrow' }, icon('chevron-right')),
     );
     tr.addEventListener('click', (ev) => {
@@ -315,6 +345,13 @@ export async function mount(area, ctx) {
       ctx.navigate(target);
     });
     return tr;
+  }
+
+  function messageTd(s) {
+    const td = el('td', { class: 'msg' });
+    fillMessage(s, td, lastAvailability(s.id));
+    messageCells.set(s.id, { s, td });
+    return td;
   }
 
   function table(list) {
@@ -348,7 +385,9 @@ export async function mount(area, ctx) {
     }
     drawFilters(list.directories, list.counts);
     if (list.items.length) {
+      messageCells = new Map();
       body.replaceChildren(table(list), footer(list));
+      askAvailability(list.items);
       // The first table measures the real rows; a different count reads the page again, once.
       if (!fitted && refit()) read();
       return;

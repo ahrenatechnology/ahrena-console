@@ -4,6 +4,12 @@ Issue [#61](https://github.com/ahrenatechnology/ahrena-console/issues/61), prime
 
 No Detalhe de uma sessão, na aba Conversa, a caixa de mensagem manda um texto que você escreveu para a sessão do Claude Code que está aberta **nesta máquina**: no Claude Desktop, num terminal ou num `claude -p`. Não precisa do mod nem do terminal.
 
+## Onde fica na tela
+
+- **Detalhe, aba Conversa:** a caixa fica no pé da conversa. A linha "Para" diz a sessão, onde ela está aberta (Claude Desktop, terminal…), a conta da pasta de configuração e se o Remote Control está ligado. O contador mostra o tamanho em bytes, até 16 KiB. Enviar com o botão ou com ⌘↵ (Ctrl↵ fora do Mac).
+- **Dashboard e Sessões:** os itens de "Precisam de você" e as linhas de Sessões com processo vivo ganham **Mandar mensagem**, que abre o Detalhe na Conversa com a caixa em foco. Sem processo vivo, a linha diz "sem processo vivo". Para não sobrecarregar o núcleo, as listas só perguntam pelas sessões que estão na tela e que podem ter processo (uma sessão concluída não pergunta), quatro de cada vez, e guardam a resposta por 15 s.
+- Em Sessões, até 1240 px de janela a coluna Mensagem ocupa o lugar do Diretório e da seta; abaixo de 900 px fica só o ícone.
+
 ## Como chega
 
 A mensagem entra pela caixa de entrada da mensageria entre sessões do Claude Code. Toda sessão com processo vivo anuncia um socket em `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`; o núcleo escreve nele uma linha com o texto.

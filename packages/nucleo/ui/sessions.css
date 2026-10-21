@@ -47,16 +47,18 @@
  * O layout é fixo e as colunas dividem a largura em porcentagem, então nada empurra a tabela para
  * fora: o título quebra em até duas linhas, o motivo desce para baixo do status, o tempo da
  * duração desce para baixo do "rodando" e o diretório corta no começo, com o caminho inteiro no
- * title. Abaixo de 900 px o Diretório sai.
+ * title. #61 (C53): the Mensagem column takes the room of the Diretório and of the arrow up to
+ * 1240 px of window, as in the wireframe; below 900 px it keeps only the icon.
  */
 .table { table-layout: fixed; }
-.table .c-session { width: 22%; }
-.table .c-status { width: 20%; }
-.table .c-activity { width: 11%; }
-.table .c-duration { width: 11%; }
-.table .c-agents { width: 9%; }
-.table .c-cost { width: 11%; }
-.table .c-dir { width: 13%; }
+.table .c-session { width: 20%; }
+.table .c-status { width: 15%; }
+.table .c-activity { width: 10%; }
+.table .c-duration { width: 9%; }
+.table .c-agents { width: 8%; }
+.table .c-cost { width: 9%; }
+.table .c-dir { width: 11%; }
+.table .c-message { width: 15%; }
 .table .c-arrow { width: 3%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
 .table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
@@ -65,17 +67,27 @@
 .table .dur > span { white-space: nowrap; }
 .table .dir { direction: rtl; text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .table .arrow { padding-left: 0; text-align: right; }
+.table .msg { padding-left: 4px; }
+@media (max-width: 1240px) {
+  .table .c-dir, .table .dir, .table .c-arrow, .table .arrow { display: none; }
+  .table .c-session { width: 22%; }
+  .table .c-status { width: 17%; }
+  .table .c-activity { width: 11%; }
+  .table .c-duration { width: 11%; }
+  .table .c-agents { width: 9%; }
+  .table .c-cost { width: 11%; }
+  .table .c-message { width: 19%; }
+}
 @media (max-width: 900px) {
-  .table .c-dir, .table .dir { display: none; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
   .table th { letter-spacing: .04em; }
-  .table .c-session { width: 23%; }
+  .table .c-session { width: 22%; }
   .table .c-status { width: 23%; }
   .table .c-activity { width: 12%; }
   .table .c-duration { width: 13%; }
-  .table .c-agents { width: 11%; }
+  .table .c-agents { width: 10%; }
   .table .c-cost { width: 14%; }
-  .table .c-arrow { width: 4%; }
+  .table .c-message { width: 6%; }
 }
 
 .table .session-row { cursor: pointer; }

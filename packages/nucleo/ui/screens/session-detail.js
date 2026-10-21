@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { openInDesktop } from '../api.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
+import { createComposeBox } from './session-message.js';
 import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
 
 // ---------- Formatos ----------
@@ -267,14 +268,22 @@ function openButton(c, notice) {
   button.addEventListener('click', async () => {
     notice.textContent = '';
     try {
-      await openInDesktop(c.local);
+      await openLocal(c.local);
     } catch (e) {
-      // Sem quem abra (fora do macOS, ou a demonstração): o link de reserva leva ao `claude://`.
-      if (e.status === 501) return void (location.href = `/open/${c.local}`);
       notice.textContent = e.message;
     }
   });
   return button;
+}
+
+/** Opens the `local_…` conversation in Claude Desktop; without anyone to open it (outside macOS, or the demo), the fallback link goes to `claude://`. */
+async function openLocal(local) {
+  try {
+    await openInDesktop(local);
+  } catch (e) {
+    if (e.status === 501) return void (location.href = `/open/${local}`);
+    throw e;
+  }
 }
 
 function idleLine(c) {
@@ -476,9 +485,19 @@ const TOOL_STATE = {
   running: { rotulo: 'Rodando', icone: 'clock' },
 };
 
-function conversationTab(ctx, base) {
+function conversationTab(ctx, base, { head } = {}) {
   let target = null;
   let agent = null;
+  // #61: the compose box at the foot of the tab. It is made once and survives every re-draw of the
+  // list, so the text being typed and the message in flight stay.
+  let compose = null;
+  const composeBox = () =>
+    (compose ??= createComposeBox(ctx, ctx.params.id, {
+      head: () => head?.() ?? null,
+      openInDesktop: openLocal,
+      onDelivered: () => draw(),
+      onShowConversation: () => draw().then(() => list.lastElementChild?.scrollIntoView?.({ block: 'end' })),
+    }));
   const opened = new Set();
   const closed = new Set();
   const list = el('div', { class: 'card sd-messages' });
@@ -497,10 +516,10 @@ function conversationTab(ctx, base) {
       selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
       count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
       list.replaceChildren(...(c.messages.length ? c.messages.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
-      target?.replaceChildren(bar, list);
+      target?.replaceChildren(bar, list, composeBox().node);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      target?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
+      target?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }), composeBox().node);
     }
   }
 
@@ -558,12 +577,17 @@ function conversationTab(ctx, base) {
   }
 
   return {
-    show(node) {
+    async show(node) {
       target = node;
-      return draw();
+      await draw();
+      // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
+      if (new URLSearchParams(location.search).get('focus') === 'message') {
+        history.replaceState(null, '', `${location.pathname}${location.hash}`);
+        composeBox().focus();
+      }
     },
     hide: () => (target = null),
-    refresh: () => draw(),
+    refresh: () => (compose?.refresh(), draw()),
   };
 }
 
