@@ -275,3 +275,33 @@ function compactOf(v: unknown): EventData['compact'] | null {
   const tokens = (t: unknown) => (Number.isInteger(t) && (t as number) >= 0 ? (t as number) : null);
   return { trigger: str(v.trigger), preTokens: tokens(v.preTokens), postTokens: tokens(v.postTokens) };
 }
+
+/** A turn another process started through the session's cross-session inbox (#61). */
+export interface PeerTurn {
+  /** The line's time, in ms. */
+  at: number;
+  /** The pid of the process that wrote to the socket, as Claude Code verified it; `null` when the line has none. */
+  verifiedPeerPid: number | null;
+}
+
+/**
+ * The line of a message that arrived through the cross-session inbox: a `user` line whose `origin`
+ * is `{ kind: "peer", verifiedPeerPid }` (Claude Code 2.1.302 also marks it `isMeta`, which is why
+ * `parseLine` gives it no event). Only the origin and the time are read; the content, which has the
+ * message's text, is not returned. `null` for any other line.
+ */
+export function peerTurnOf(raw: string): PeerTurn | null {
+  // Cheap filter first: most lines are not peer turns, and some are large.
+  if (!raw.includes('"peer"')) return null;
+  let o: unknown;
+  try {
+    o = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isObj(o) || o.type !== 'user' || !isObj(o.origin) || o.origin.kind !== 'peer') return null;
+  const timestamp = isoTimestamp(o.timestamp);
+  if (!timestamp) return null;
+  const pid = o.origin.verifiedPeerPid;
+  return { at: Date.parse(timestamp), verifiedPeerPid: Number.isInteger(pid) && (pid as number) > 0 ? (pid as number) : null };
+}
