@@ -9,6 +9,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { openAction } from '../open-action.js';
 
 const STYLE = '/ui/wall.css';
 export const WALL_ROUTE = '/api/wall';
@@ -72,6 +73,7 @@ export function cardContent(c) {
   return {
     id: c.id,
     href: `/ui/sessions/${encodeURIComponent(c.id)}`,
+    open: c.open ?? null,
     status: c.status,
     attention,
     tone: attentionTone(attention) ?? statusWithoutAttention(c.status),
@@ -117,12 +119,18 @@ function bar({ valor: value, max, rotulo: label, alto: high = false, tipo: type 
   return el('progress', { class: `wall-bar${high ? ' wall-high' : ''}`, 'data-bar': type, max: max > 0 ? max : 1, value: max > 0 ? Math.min(value, max) : 0, 'aria-label': label });
 }
 
-function card(c) {
+/**
+ * A card: the title is the link to the Detail and stretches over the whole card (`wall-link`), so the
+ * card stays clickable without wrapping the foot's button in an `<a>` (C71, issue 285).
+ * Returns the card and its link (the one the keyboard focus goes back to).
+ */
+function card(c, write) {
   const v = cardContent(c);
-  return el(
-    'a',
-    { class: `card wall-card wall-st-${v.tone}`, href: v.href, 'data-session': v.id },
-    el('div', { class: 'wall-l1' }, el('span', { class: 'wall-tt wall-trunc', title: v.title }, v.title), badge(v)),
+  const link = el('a', { class: 'wall-tt wall-trunc wall-link', href: v.href, title: v.title, 'data-session': v.id }, v.title);
+  const node = el(
+    'div',
+    { class: `card wall-card wall-st-${v.tone}`, 'data-session': v.id },
+    el('div', { class: 'wall-l1' }, link, badge(v)),
     el('div', { class: 'wall-prj wall-trunc' }, v.origem),
     cardRow(v.linha),
     el(
@@ -139,7 +147,16 @@ function card(c) {
       bar({ tipo: 'plan', valor: v.plan.done, max: v.plan.total, rotulo: `Plano: ${v.plan.done} de ${v.plan.total}` }),
       bar({ tipo: 'context', valor: v.context.pct ?? 0, max: 100, alto: v.context.high, rotulo: v.context.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.context.pct}%` }),
     ),
+    foot(v, write),
   );
+  return { node, link };
+}
+
+/** The foot (C71): the open action with its label and "Detalhe ›"; a remote session has no Detail here. */
+function foot(v, write) {
+  const action = openAction({ id: v.id, open: v.open }, { size: 'small', write });
+  const remote = v.open?.target === 'remote';
+  return el('div', { class: 'wall-foot' }, action, remote ? null : el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›'));
 }
 
 // ---------- A tela ----------
@@ -181,14 +198,17 @@ export async function mount(area, ctx) {
     const f = FILTERS.find((x) => x.id === filter);
     const cards = (wall.cards ?? []).filter(f.passa);
     const band = failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
-    const nodes = cards.map(card);
+    const built = cards.map((c) => card(c, ctx.write));
+    const nodes = built.map((b) => b.node);
+    // The keyboard lands on the card's link (the title stretched over the card).
+    const links = built.map((b) => b.link);
     const body = cards.length
       ? el('div', { class: 'wall-grid' }, ...nodes)
       : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     const focused = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
     area.replaceChildren(...[head, band, body].filter(Boolean));
-    if (focused) nodes.find((n) => n.getAttribute('data-session') === focused)?.focus();
+    if (focused) links.find((n) => n.getAttribute('data-session') === focused)?.focus();
   }
 
   async function read() {
