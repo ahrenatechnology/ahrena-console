@@ -1,4 +1,5 @@
-// One core per machine (decision 0005; issue #86). Whoever starts first serves; the others adopt.
+// One core per installation (decision 0010; issue #86). Whoever starts first serves; the others
+// adopt, unless the live core is of an older version (issue #220): then it is replaced.
 //
 //   1. `examine`: the lock says pid and port. It is alive if the port answers as a core **with the
 //      same pid** (`/api/overview` says who it is). Otherwise the lock is an orphan, and whoever is
@@ -59,7 +60,7 @@ export function codeWarning(running: { version: string; commit: string | null; p
   const c = compareCode(running, mine);
   const who = `o núcleo de pé${running.pid ? ` (pid ${running.pid})` : ''}`;
   if (c === 'older' && compareVersions(running.version, mine.version) < 0) {
-    return `${who} é a versão ${running.version}, mais velha que esta (${mine.version}). Ele continua servindo; para trocar, suba com --replace`;
+    return `${who} é a versão ${running.version}, mais velha que esta (${mine.version}). Ele continua servindo; para trocar, pare-o (npm run core -- stop)`;
   }
   if (c === 'older') {
     return `${who} roda o commit ${running.commit}, mais velho que este (${mine.commit}). Ele continua servindo; para trocar, suba com --replace`;
@@ -76,7 +77,10 @@ export type StartPlan =
 
 export interface StartPlanOptions extends CodeIdentity {
   dir?: string;
-  /** If the live core is older (version or ancestor commit), stops it and starts this one. */
+  /**
+   * If the live core runs an ancestor commit of the same version, stops it and starts this one. A
+   * live core of an older **version** is always replaced (issue #220), with or without it.
+   */
   replace?: boolean;
   log?: (m: string) => void;
 }
@@ -88,12 +92,26 @@ export async function planStart(o: StartPlanOptions): Promise<StartPlan> {
   if (ex.state === 'absent') return { action: 'start', recovered: null, replaced: null };
   if (ex.state === 'orphan') return { action: 'start', recovered: ex.reason, replaced: null };
   const running = { version: ex.lock.version, commit: ex.view.commit, pid: ex.lock.pid };
-  if (compareCode(running, o) !== 'older' || !o.replace) {
+  // Issue #220: an updated app found its installation's core of the previous version still up (kept
+  // alive by the MCP bridges registered as its clients) and adopted it, so the window showed the old
+  // /ui. An older version is replaced on its own; an ancestor commit of the same version (two
+  // checkouts) only with `replace`, and other code never.
+  const olderVersion = compareVersions(running.version, o.version) < 0;
+  if (compareCode(running, o) !== 'older' || !(olderVersion || o.replace)) {
     return { action: 'adopt', lock: ex.lock, view: ex.view, warning: codeWarning(running, o) };
   }
-  o.log?.(`replacing the core ${running.version}${running.commit ? ` (${running.commit})` : ''}, pid ${running.pid}, with this one`);
-  if (!(await stopCore(ex.lock, { dir }))) throw new Error(`the old core (pid ${running.pid}) did not exit`);
+  o.log?.(`replacing the core ${running.version}${running.commit ? ` (${running.commit})` : ''}, pid ${running.pid}, with this one (${o.version})`);
+  if (!(await stopCore(ex.lock, { dir }))) throw new ReplaceError(running);
   return { action: 'start', recovered: null, replaced: ex.lock };
+}
+
+/** The older core did not exit when asked to. `reason` is pt-BR: it reaches the app's tray. */
+export class ReplaceError extends Error {
+  readonly reason: string;
+  constructor(running: { version: string; pid: number | null }) {
+    super(`the old core (version ${running.version}, pid ${running.pid}) did not exit`);
+    this.reason = `o núcleo antigo (versão ${running.version}, pid ${running.pid}) não saiu para dar lugar a este`;
+  }
 }
 
 /**

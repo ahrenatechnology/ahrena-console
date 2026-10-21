@@ -9,6 +9,7 @@ export {
   compareCode,
   codeWarning,
   PARENT_CHECK_INTERVAL_MS,
+  ReplaceError,
   type Examination,
   type StartPlan,
   type StartPlanOptions,

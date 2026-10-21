@@ -37,8 +37,9 @@ export const HELP = `Usage: npm run api -- [options]
                          (/ui/sessions/sim-detail-orders) and the tools of the scenario's session
   --parent <pid>         Exits when this process goes away (the app or the extension), unless
                          another client is registered. When adopting, registers the pid as a client
-  --replace              If the running core is older than this one (version, or a commit that is
-                         an ancestor of this one), stops it and starts this one. Other code: only warns
+  --replace              Also replaces a running core of this version on an ancestor commit. A
+                         running core of an older version is always stopped and replaced (#220).
+                         Other code: only warns
   --no-lock              Neither reads nor writes <data-dir>/nucleo.json nor the instance registry
                          (measurements on a separate port). --demo is already lock-free. Both fail if
                          the port has an owner
