@@ -1,6 +1,7 @@
 // A tela Sessões (C3, #28): a tabela das sessões com busca, filtro por diretório, ordenação, as
-// pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessions`,
-// src/api/sessions.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
+// pílulas de status e as linhas que cabem na altura da janela (issue 279; no mínimo 10). Filtro, ordem
+// e página vão para o servidor (`GET /api/sessions`, src/api/sessions.ts) e ficam na query da URL, para
+// o Voltar do Detalhe cair no mesmo lugar.
 // A linha leva ao Detalhe, `/ui/sessions/<id>`. The last column is the icon that opens the session
 // where it runs (C71, issue 285); its click stays in the cell and never navigates the row.
 
@@ -67,9 +68,10 @@ export function queryFromState(state) {
   return q ? `?${q}` : '';
 }
 
-/** A rota da API para o estado: sempre com status, ordem, sentido e página. */
-export function listRoute(state) {
+/** A rota da API para o estado: sempre com status, ordem, sentido e página; `perPage` quando há. */
+export function listRoute(state, perPage = null) {
   const p = new URLSearchParams({ status: state.status, order: state.order, direction: state.direction, page: String(state.page) });
+  if (perPage) p.set('perPage', String(perPage));
   if (state.search.trim()) p.set('search', state.search.trim());
   if (state.dir) p.set('dir', state.dir);
   return `/api/sessions?${p}`;
@@ -105,6 +107,37 @@ export function band({ total, page, perPage }) {
   if (!total) return '0 de 0';
   const from = (page - 1) * perPage + 1;
   return `${from}–${Math.min(total, page * perPage)} de ${total}`;
+}
+
+// Issue 279: the page size follows the window height, never below the old 10 nor above the API's 100.
+export const MIN_ROWS = 10;
+export const MAX_ROWS = 100;
+
+/** How many rows of `rowHeight` fit in `available` pixels, between `min` and `max`. */
+export function fitRows({ available, rowHeight, min = MIN_ROWS, max = MAX_ROWS }) {
+  if (!(rowHeight > 0) || !Number.isFinite(available)) return min;
+  return Math.min(max, Math.max(min, Math.floor(available / rowHeight)));
+}
+
+/** The page that still shows the first row of `page` once the page size goes from `perPage` to `nextPerPage`. */
+export function pageKeepingRow({ page, perPage, nextPerPage }) {
+  return Math.floor(((page - 1) * perPage) / nextPerPage) + 1;
+}
+
+/**
+ * The page after a new page size. The first measure only corrects the CSS estimate: the page in the URL
+ * was written under the real size (Voltar from the Detalhe, a reload), so it stays. A resize keeps the row.
+ */
+export function pageAfterRefit({ page, perPage, nextPerPage, first }) {
+  return first ? page : pageKeepingRow({ page, perPage, nextPerPage });
+}
+
+/**
+ * The room the rows have, in pixels: from the top of the rows to the bottom of the scrolling area,
+ * minus its bottom padding, the gap and the pager below the table, and the card's bottom border.
+ */
+export function roomForRows({ rowsTop, areaBottom, paddingBottom, gap, footerHeight, border = 1 }) {
+  return areaBottom - paddingBottom - rowsTop - gap - footerHeight - border;
 }
 
 /** O id curto da linha: os 8 primeiros de um UUID; o id inteiro nos outros casos. */
@@ -157,14 +190,21 @@ function account(c) {
 }
 
 export async function mount(area, ctx) {
-  // O estilo da tela, uma vez por página.
-  if (!document.querySelector('link[data-screen="sessions"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' }));
+  // O estilo da tela, uma vez por página. Issue 279: the row count measures the styled screen, so the first
+  // read waits for it.
+  let sheet = document.querySelector('link[data-screen="sessions"]');
+  if (!sheet) {
+    sheet = el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' });
+    sheet.loaded = new Promise((done) => (sheet.onload = sheet.onerror = done));
+    document.head.append(sheet);
   }
 
   let state = stateFromQuery(location.search);
   let last = null;
   let request = 0;
+  // Issue 279: the rows that fit; measured again after the first table and on every resize.
+  let perPage = MIN_ROWS;
+  let fitted = false;
 
   const head = header({
     icon: 'sessions',
@@ -202,6 +242,52 @@ export async function mount(area, ctx) {
       if (n) n.replaceChildren(pillCount(counts, b.dataset.status) ?? '');
     }
   }
+
+  /** The rows that fit now: real row heights once a table is on screen, the CSS sizes before that. */
+  function rowsThatFit() {
+    const scroller = area.closest('.cc-main');
+    if (!scroller || !body.isConnected) return perPage;
+    const css = getComputedStyle(body);
+    const px = (name) => parseFloat(css.getPropertyValue(name)) || 0;
+    const tbody = body.querySelector('.table tbody');
+    const rows = tbody ? [...tbody.rows] : [];
+    const top = scroller.getBoundingClientRect().top - scroller.scrollTop;
+    const rowsTop = tbody ? tbody.getBoundingClientRect().top : body.getBoundingClientRect().top + px('--sessions-head-height');
+    const rowHeight = rows.length ? rows.reduce((sum, r) => sum + r.getBoundingClientRect().height, 0) / rows.length : px('--sessions-row-height');
+    const available = roomForRows({
+      rowsTop: rowsTop - top,
+      areaBottom: scroller.clientHeight,
+      paddingBottom: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+      gap: px('row-gap'),
+      footerHeight: body.querySelector('.sessions-footer')?.getBoundingClientRect().height || px('--sessions-footer-height'),
+    });
+    return fitRows({ available, rowHeight });
+  }
+
+  /** A new page size keeps the first row on screen: the page follows the row, not its number. */
+  function refit() {
+    const first = !fitted;
+    fitted = true;
+    const next = rowsThatFit();
+    if (next === perPage) return false;
+    const page = pageAfterRefit({ page: state.page, perPage, nextPerPage: next, first });
+    perPage = next;
+    if (page !== state.page) {
+      state = { ...state, page };
+      history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
+    }
+    return true;
+  }
+
+  // The scrolling area changes size with the window (and the filters wrap with its width).
+  let resizeWait = null;
+  const resizing = new ResizeObserver(() => {
+    clearTimeout(resizeWait);
+    resizeWait = setTimeout(() => {
+      if (last?.items.length && refit()) read();
+    }, 150);
+  });
+  resizing.observe(area.closest('.cc-main') ?? area);
 
   function change(partial) {
     state = { ...state, ...partial };
@@ -264,7 +350,12 @@ export async function mount(area, ctx) {
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
     drawFilters(list.directories, list.counts);
-    if (list.items.length) return body.replaceChildren(table(list), footer(list));
+    if (list.items.length) {
+      body.replaceChildren(table(list), footer(list));
+      // The first table measures the real rows; a different count reads the page again, once.
+      if (!fitted && refit()) read();
+      return;
+    }
     const filtering = state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(
       filtering
@@ -276,7 +367,7 @@ export async function mount(area, ctx) {
   async function read() {
     const mine = ++request;
     try {
-      const list = await ctx.read(listRoute(state));
+      const list = await ctx.read(listRoute(state, perPage));
       if (mine !== request) return;
       last = list;
       draw(list);
@@ -302,8 +393,13 @@ export async function mount(area, ctx) {
   ctx.onRestart(() => read());
 
   drawFilters([]);
+  await sheet.loaded;
+  // Before the first table, the CSS sizes give the count, so the first read already fills the window.
+  perPage = rowsThatFit();
   await read();
   return () => {
+    resizing.disconnect();
+    clearTimeout(resizeWait);
     clearTimeout(searchWait);
     clearTimeout(liveWait);
   };
