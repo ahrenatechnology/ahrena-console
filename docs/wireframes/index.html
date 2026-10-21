@@ -629,6 +629,33 @@ body.captura .palco { overflow: visible; }
 .detail-idle-note { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); padding: 2px 2px; }
 .dev-card.idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
 .legend-attn { display: flex; flex-direction: column; gap: 8px; }
+/* ---------- open the session where it runs (C70 and C71) ---------- */
+.os-col { display: flex; flex-direction: column; gap: 6px; }
+.os-act { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none; position: relative; }
+.os-act + .c-muted { margin-left: 0 !important; }
+.btn.os-off { opacity: .5; cursor: not-allowed; }
+.os-why { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.os-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+.os-icon.os-sm { width: 24px; height: 24px; border-radius: 6px; }
+.os-tip { position: absolute; right: 0; top: 36px; z-index: 2; width: 330px; padding: 9px 11px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); font-size: 11.5px; line-height: 1.5; color: var(--muted); white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.os-tip code { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+.os-case { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.os-case .olhinho { margin-bottom: 2px; }
+.os-case.os-tall { padding-bottom: 92px; }
+.os-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.os-state { padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 1.45; min-width: 0; }
+.os-state svg { flex: none; }
+.os-state .btn { margin-left: auto; height: 26px; flex: none; }
+.os-state.os-ok svg, .os-state.os-ok b { color: var(--status-completed-text); }
+.os-state.os-fail svg, .os-state.os-fail b { color: var(--status-error-text); }
+.os-state.os-busy svg, .os-state.os-busy b { color: var(--accent-text); }
+.os-wall .mc { height: 252px; }
+.os-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; padding-top: 9px; border-top: 1px solid var(--border); min-width: 0; }
+.os-foot .btn { height: 26px; padding: 0 9px; font-size: 12px; }
+.os-foot .os-why { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+.os-foot .os-detail { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
+.os-pe { display: flex; align-items: center; gap: 6px; }
+.os-pe b { margin-left: 0; }
 .legend-attn .legend-attn-g { font-size: 11.5px; color: var(--muted); }
 </style>
 
@@ -2521,6 +2548,93 @@ const APP = {
 }
 
 // =====================================================================
+// Open the session where it runs (C70 and C71): Claude Desktop, a terminal resuming it, or nothing on
+// another machine. The núcleo picks the target: a session the Claude Desktop index knows (its local_…)
+// opens there; a session with only a transcript resumes in a terminal. Synthetic data only.
+// =====================================================================
+// Where each synthetic session runs. 'cli-live' = a `claude` process still running in a terminal here.
+const OS_WHERE = { b91d04aa: 'desktop', '8e17b6f2': 'desktop', e04b7d93: 'desktop', '2c8e6f10': 'desktop', f5e2a6d0: 'desktop', '4d2a9c35': 'cli-live', '7f3a2c1e': 'cli-live', '5a61c2bf': 'cli', c3f09b52: 'remote', '91aa3e07': 'cli', d6c0e4a9: 'desktop', '0d7e81c4': 'cli' }
+const osCol = (label, body) => `<div class="os-col"><div class="rotulo">${label}</div>${body}</div>`
+const osResume = s => `cd /simulacao/${s.pj} && claude --resume ${s.id}-4e1…`
+const osTip = s => `<span class="os-tip">Abre o app de terminal padrão e roda <code>claude --resume ${s.id}-4e1…</code> em <code>/simulacao/${s.pj}</code>. O comando é montado pelo núcleo com o id e a pasta da sessão.</span>`
+/** The action for one session, in the Detail header (`size` 'full') or a wall card foot ('small'). */
+function osAction(s, { size = 'full', tip = false } = {}) {
+  const w = OS_WHERE[s.id] ?? 'desktop'
+  const sm = size === 'small'
+  if (w === 'desktop') return `<span class="btn contorno">${ic('monitor')}Abrir no Claude Desktop${sm ? '' : ' ' + ic('external-link')}</span>`
+  if (w === 'cli') return `<span class="btn contorno">${ic('terminal')}Abrir no terminal${sm ? '' : ' ' + ic('external-link')}</span>${tip ? osTip(s) : ''}`
+  if (w === 'cli-live') return `<span class="btn contorno" title="Já roda num terminal (pid 4182): traz a janela dele à frente">${ic('terminal-square')}Ir para o terminal</span>`
+  if (sm) return `<span class="btn contorno os-off" title="A sessão roda em outra máquina">${ic('server')}Roda em ws-exemplo</span><span class="os-icon os-sm" title="Copiar comando">${ic('copy')}</span>`
+  return `<span class="btn contorno os-off">${ic('terminal')}Abrir no terminal</span><span class="os-why">${ic('server')}roda em ws-exemplo</span><span class="os-icon" title="Copiar comando">${ic('copy')}</span>`
+}
+/** The Detail header with the open action beside Atualizar. */
+const osDetCab = (s, opts = {}) => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4 class="trunc">${s.nome}</h4>${badge(s.st, s.mot)}<span class="os-act">${osAction(s, opts)}</span><span class="c-muted">${ic('refresh-cw')}</span></div>
+  <div class="chips"><span class="chip">${s.id}-4e1 ${ic('copy')}</span><span class="chip">${ic('cpu')}${s.mo}</span><span class="chip">${ic('clock')}hoje, 22:41 (${s.dur})</span><span class="chip custo">~US$ ${s.custo}</span><span class="chip">${ic('git-branch')}${s.br}</span></div>
+  <div class="cwd">${ic('folder')}/simulacao/${s.pj} ${ic('copy')}</div></div>`
+
+function openDetailScreen() {
+  const s = byId('e04b7d93')
+  return `${osDetCab(s)}
+  <div class="detail-idle-note"><span class="ponto d-idle"></span><span>Ociosa · o turno terminou há 1 min e a vez é sua. Nada trava a sessão.</span></div>
+  ${abas(1, 1, '96/412')}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">23:04</span></div><div class="corpo">quebre o retry em uma função e faz o commit</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="chip">↓ 1,8 k · ↑ 420</span><span class="h">23:09</span></div>
+      <div class="corpo">Extraí <code>comBackoff()</code> em <code>src/fila/retry.ts</code> e fiz o commit. Rodo os testes?</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">git commit -m "retry: extract backoff"</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
+  </div>`
+}
+
+function openDetailCasesScreen() {
+  const caseOf = (n, title, s, opts = {}, extra = '') => `<div class="cartao os-case${opts.tip ? ' os-tall' : ''}"><div class="olhinho">${n} · ${title}</div>${osDetCab(s, opts)}${extra}</div>`
+  const state = (kind, icon, html, action = '') => `<div class="cartao os-state os-${kind}">${ic(icon)}<div>${html}</div>${action}</div>`
+  const copy = `<span class="btn contorno">${ic('copy')}Copiar comando</span>`
+  return `${cab('external-link', 'Abrir a sessão · cada caso', 'O botão do cabeçalho muda pelo lugar onde a sessão roda; quem decide é o núcleo')}
+  ${caseOf(1, 'Claude Desktop: o índice do Desktop conhece a sessão', byId('b91d04aa'))}
+  ${caseOf(2, 'Terminal: só há o transcript, nenhum processo vivo', byId('5a61c2bf'), { tip: true })}
+  ${caseOf(3, 'Terminal com o claude ainda rodando nesta máquina', byId('4d2a9c35'))}
+  ${caseOf(4, 'Outra máquina: o botão fica desligado e diz onde roda', byId('c3f09b52'))}
+  <div class="olhinho">${ic('mouse-pointer-click')}Depois do clique, ao lado do botão</div>
+  <div class="os-states">
+    ${state('busy', 'loader-2', '<b>Abrindo…</b> O núcleo pediu ao sistema para abrir.')}
+    ${state('ok', 'check-circle-2', '<b>Aberta no Terminal às 23:14.</b> Some em 4 s.')}
+    ${state('fail', 'x-circle', '<b>Não abriu.</b> Nenhum app de terminal respondeu. Cole o comando num terminal.', copy)}
+    ${state('', 'info', '<b>Fora do macOS sem terminal conhecido</b> (Linux sem <code>x-terminal-emulator</code>): o botão vira Copiar comando.', copy)}
+  </div>`
+}
+
+function openWallScreen() {
+  const vivos = ['b91d04aa', '4d2a9c35', '8e17b6f2', '5a61c2bf', '7f3a2c1e', 'c3f09b52', 'e04b7d93', '2c8e6f10', 'f5e2a6d0'].map(byId)
+  return `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Precisam de você · 5</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`)}
+  <div class="mural os-wall">${vivos.map(s => `<div class="cartao mc st-${s.st}">
+    <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
+    <div class="pj trunc">${s.pj} · ${s.br}</div>
+    ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span></div>` : s.erro ? `<div class="c-error" style="font-size:11.5px">${ic('x-circle')} ${s.erro}</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`}
+    <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
+    <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${barra(s.plano[1] ? s.plano[0] / s.plano[1] * 100 : 0)}${barra(s.ctx, s.ctx >= 80 ? 'var(--status-error-dot)' : 'var(--accent)')}</div>
+    <div class="os-foot">${osAction(s, { size: 'small' })}${OS_WHERE[s.id] === 'remote' ? '' : '<span class="os-detail">Detalhe ›</span>'}</div>
+  </div>`).join('')}</div>`
+}
+
+function openRowsScreen() {
+  const iconOf = s => { const w = OS_WHERE[s.id]; return w === 'desktop' ? ['monitor', 'Abrir no Claude Desktop'] : w === 'cli' ? ['terminal', 'Abrir no terminal'] : w === 'cli-live' ? ['terminal-square', 'Ir para o terminal'] : ['copy', 'Roda em ws-exemplo: copiar comando'] }
+  const btn = (s, sm) => { const [i, t] = iconOf(s); return `<span class="os-icon${sm ? ' os-sm' : ''}" title="${t}">${ic(i)}</span>` }
+  const need = PRECISAM.map(s => `<div class="cartao mini"><div style="display:flex;min-width:0">${sessionChip(s)}</div>
+      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo} · ${s.idade}</span><span class="os-pe">${btn(s, true)}<b>Abrir ›</b></span></div></div>`).join('')
+  const rows = ['7f3a2c1e', 'b91d04aa', '4d2a9c35', '5a61c2bf', 'c3f09b52', 'e04b7d93', '0d7e81c4'].map(byId)
+  return `${cab('folder-open', 'Sessões e Dashboard · a mesma ação, só o ícone', 'Na linha não cabe o rótulo: o ícone diz o alvo e o título dele diz o resto')}
+  <div class="cartao inbox">
+    <div class="ttl">${ic('bell')}<span class="c-blocked">5 precisam de você</span><span class="r">Dashboard · o ícone abre a sessão; "Abrir ›" continua levando ao Detalhe</span></div>
+    <div class="grade4 dash-inbox-grid">${need}</div>
+  </div>
+  <div class="cartao"><table class="tabela sessions-table"><thead><tr><th>Sessão</th><th>Status</th><th>Atividade</th><th>Duração</th><th>Custo</th><th></th></tr></thead><tbody>
+  ${rows.map(s => `<tr><td class="nm"><b class="trunc" style="display:block;max-width:190px">${s.nome}</b><small class="trunc" style="display:block;max-width:190px">${s.id} · /simulacao/${s.pj}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
+    <td class="mono">${['active', 'blocked', 'idle'].includes(s.st) ? '<span class="c-active">rodando</span> · ' : ''}${s.dur}</td><td class="mono">~US$ ${s.custo}</td><td>${btn(s)}</td></tr>`).join('')}
+  </tbody></table></div>`
+}
+
+// =====================================================================
 // Catálogo de telas
 // =====================================================================
 const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do CCAM</h4><ul>${ccam.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Onde diverge, e por quê</h4><ul>${diverge.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
@@ -2663,6 +2777,10 @@ const TELAS = [
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
   { id: 'console-pdrs', cod: 'C38', nome: 'PDR · decisões de produto', sub: 'A irmã de ADR (C28): as decisões de produto dos repositórios, com a mesma lista, a mesma busca e o mesmo filtro por status. Vêm de pastas só de PDR (docs/product-decisions) e das pastas mistas, pelo campo Tipo. A PDR aberta é a C30, com outro rótulo. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'pdrs', telaPdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'pdrs', telaPdrs(true))}</div>`,
     n: N(['A tela de ADR (C28), inteira: a mesma função desenha as duas.'], ['No grupo Decisões da barra ficam três itens: Das sessões (C20 e C21), ADR e PDR.', 'Numa pasta mista, como docs/decisoes, o campo Tipo separa: a linha do grupo diz isso.', 'Sem nenhum sinal, o registro fica como ADR.']) },
+  { id: 'console-open-detail', cod: 'C70', nome: 'Detalhe · Abrir a sessão', sub: 'O cabeçalho do Detalhe ganha, ao lado de Atualizar, o botão que leva à própria sessão, precise ela de você ou não. O rótulo diz o alvo: <b>Abrir no Claude Desktop</b> para a sessão que o Desktop conhece; <b>Abrir no terminal</b> para a do <code>claude</code> no terminal, que abre o terminal padrão retomando a sessão na pasta dela. Embaixo, os quatro casos (Desktop, terminal, terminal ainda rodando, outra máquina com o botão desligado) e o que aparece depois do clique. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · sessão do Claude Desktop, ociosa', frameAt(1100, 'sessoes', openDetailScreen()))}${osCol('1100 px · os casos', frameAt(1100, 'sessoes', openDetailCasesScreen()))}${osCol('1440 px', frameAt(1440, 'sessoes', openDetailScreen()))}</div>`,
+    n: N(['O cabeçalho do Session Detail com os chips (C5); o "Abrir no Claude Desktop" que já existe na faixa e na linha de ociosa.'], ['O botão sai da faixa e da linha de ociosa e vai para o cabeçalho, sempre no mesmo lugar, inclusive em sessão ativa ou concluída.', 'O alvo vem do núcleo: sessão no índice do Claude Desktop (tem <code>local_…</code>) abre lá pelo <code>/open/&lt;local_…&gt;</code> que o mod e a bandeja já usam; sessão só com transcript retoma no terminal.', 'Terminal: o núcleo monta <code>claude --resume &lt;id&gt;</code> na pasta da sessão, com o id e a pasta que ele mesmo leu, nunca com texto da tela. No macOS abre no app de terminal padrão; no Linux e no Windows, o terminal conhecido, senão Copiar comando.', 'Terminal com o <code>claude</code> ainda rodando: retomar abriria uma segunda cópia da mesma sessão. A proposta é <b>Ir para o terminal</b> (traz à frente a janela do Terminal ou do iTerm2 que tem o processo), e Copiar comando quando não achar.', 'Outra máquina: desligado, com "roda em ws-exemplo", e Copiar comando para rodar lá.', 'POST da mesma origem (decisão 0003), como o <code>/open</code> de hoje.']) },
+  { id: 'console-open-wall', cod: 'C71', nome: 'Mural, Sessões e Dashboard · Abrir a sessão', sub: 'Cada card do Mural ao vivo ganha um pé com a mesma ação do Detalhe, com o rótulo do alvo, e "Detalhe ›" ao lado. Em Sessões e no "precisam de você" do Dashboard não cabe o rótulo: vai só o ícone (monitor para o Claude Desktop, terminal para o terminal), com o título dizendo a ação. Mural em 1100 e 1440; Sessões e Dashboard em 1100.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · Mural ao vivo', frameAt(1100, 'mural', openWallScreen()))}${osCol('1440 px · Mural ao vivo', frameAt(1440, 'mural', openWallScreen()))}${osCol('1100 px · Dashboard e Sessões', frameAt(1100, 'sessoes', openRowsScreen()))}</div>`,
+    n: N(['O card do Mural (C2), a tabela de Sessões (C3) e o inbox do Dashboard (C1).'], ['No Mural o card cresce uma linha para caber o pé; os cards da mesma linha continuam com a mesma altura (regra 9).', 'O clique no botão abre a sessão; o resto do card continua levando ao Detalhe.', 'Na sessão de outra máquina o pé diz onde ela roda e oferece só Copiar comando.', 'Em Sessões o ícone toma o lugar da seta do fim da linha (a linha inteira continua levando ao Detalhe), para nada rolar na horizontal em 1100; no Dashboard o ícone fica ao lado de "Abrir ›", que segue indo ao Detalhe.']) },
 ]
 
 // =====================================================================
